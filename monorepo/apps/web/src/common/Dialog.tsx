@@ -8,15 +8,14 @@ import TextField from "@mui/material/TextField";
 
 type Props = {
   open: boolean;
-  onSubmit: (formJson: Record<string, string>) => void;
+  onSubmit: (formJson: { email: string }) => void;
+  onClose: () => void;
 };
 
-const DialogComponent = ({ open, onSubmit }: Props) => {
-  const handleClose = () => {};
-
+const DialogComponent = ({ open, onSubmit, onClose }: Props) => {
   return (
     <Dialog
-      onClose={handleClose}
+      onClose={onClose}
       open={open}
       PaperProps={{
         component: "form",
@@ -26,29 +25,31 @@ const DialogComponent = ({ open, onSubmit }: Props) => {
           const formJson: any = Object.fromEntries(formData.entries());
 
           onSubmit(formJson);
-          handleClose();
+          onClose();
         },
       }}
     >
-      <DialogTitle>Sua opinião é importante</DialogTitle>
+      <DialogTitle>Increva-se</DialogTitle>
       <DialogContent>
         <DialogContentText>
-          Quais são seus maiores desafios como vendedor do Mercado Livre?
+          Tenha acesso antecipado a plataforma e comece a automatizar a sua vida
+          financeira em um click! Você será notificado quando a plataforma
+          estiver no ar.
         </DialogContentText>
         <TextField
           autoFocus
           required
           margin="dense"
           id="name"
-          name="suggestion"
-          label="Sugestão"
-          type="text"
+          name="email"
+          label="Email"
+          type="email"
           fullWidth
           variant="outlined"
         />
       </DialogContent>
       <DialogActions>
-        <Button onClick={handleClose}>Cancelar</Button>
+        <Button onClick={onClose}>Cancelar</Button>
         <Button type="submit">Enviar</Button>
       </DialogActions>
     </Dialog>

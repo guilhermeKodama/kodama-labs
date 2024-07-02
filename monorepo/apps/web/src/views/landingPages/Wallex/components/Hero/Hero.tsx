@@ -1,26 +1,30 @@
-import React from 'react';
-import { useTheme } from '@mui/material/styles';
-import useMediaQuery from '@mui/material/useMediaQuery';
-import Box from '@mui/material/Box';
-import Button from '@mui/material/Button';
-import Typography from '@mui/material/Typography';
-import Grid from '@mui/material/Grid';
-import CreditCardsIllustration from 'svg/illustrations/CreditCards';
+import React from "react";
+import { useTheme } from "@mui/material/styles";
+import useMediaQuery from "@mui/material/useMediaQuery";
+import Box from "@mui/material/Box";
+import Button from "@mui/material/Button";
+import Typography from "@mui/material/Typography";
+import Grid from "@mui/material/Grid";
+import CreditCardsIllustration from "svg/illustrations/CreditCards";
 
-const Hero = () => {
+type Props = {
+  onClick: () => void;
+};
+
+const Hero = ({ onClick }: Props) => {
   const theme = useTheme();
-  const isMd = useMediaQuery(theme.breakpoints.up('md'), {
+  const isMd = useMediaQuery(theme.breakpoints.up("md"), {
     defaultMatches: true,
   });
 
   return (
     <Grid container spacing={4}>
       <Grid item xs={12} md={6}>
-        <Box data-aos={isMd ? 'fade-right' : 'fade-up'}>
+        <Box data-aos={isMd ? "fade-right" : "fade-up"}>
           <Box marginBottom={2}>
             <Typography
               variant="h2"
-              component={'h2'}
+              component={"h2"}
               sx={{
                 fontWeight: 700,
               }}
@@ -37,8 +41,8 @@ const Hero = () => {
           </Box>
           <Box
             display="flex"
-            flexDirection={{ xs: 'column', sm: 'row' }}
-            alignItems={{ xs: 'stretched', sm: 'flex-start' }}
+            flexDirection={{ xs: "column", sm: "row" }}
+            alignItems={{ xs: "stretched", sm: "flex-start" }}
           >
             <Box
               component={Button}
@@ -46,6 +50,7 @@ const Hero = () => {
               color="primary"
               size="large"
               fullWidth={!isMd}
+              onClick={onClick}
             >
               Saiba mais
             </Box>
@@ -57,6 +62,7 @@ const Hero = () => {
               fullWidth={!isMd}
               marginTop={{ xs: 1, sm: 0 }}
               marginLeft={{ sm: 2 }}
+              onClick={onClick}
             >
               Inscreva-se
             </Box>
@@ -65,18 +71,18 @@ const Hero = () => {
       </Grid>
       <Grid item xs={12} md={6}>
         <Box
-          height={'100%'}
-          width={'100%'}
-          display={'flex'}
-          justifyContent={'center'}
-          data-aos={isMd ? 'fade-left' : 'fade-up'}
+          height={"100%"}
+          width={"100%"}
+          display={"flex"}
+          justifyContent={"center"}
+          data-aos={isMd ? "fade-left" : "fade-up"}
         >
           <Box
-            height={'100%'}
-            width={'100%'}
-            maxWidth={{ xs: 500, md: '100%' }}
+            height={"100%"}
+            width={"100%"}
+            maxWidth={{ xs: 500, md: "100%" }}
           >
-            <CreditCardsIllustration width={'100%'} height={'100%'} />
+            <CreditCardsIllustration width={"100%"} height={"100%"} />
           </Box>
         </Box>
       </Grid>
