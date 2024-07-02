@@ -29,7 +29,7 @@ const DialogComponent = ({ open, onSubmit, onClose }: Props) => {
         },
       }}
     >
-      <DialogTitle>Increva-se</DialogTitle>
+      <DialogTitle>Inscreva-se</DialogTitle>
       <DialogContent>
         <DialogContentText>
           Tenha acesso antecipado a plataforma e comece a automatizar a sua vida

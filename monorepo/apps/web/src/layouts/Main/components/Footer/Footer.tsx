@@ -58,7 +58,7 @@ const Footer = () => (
               href="https://material-ui.com/store/items/webbee-landing-page/"
               size="small"
             >
-              Increva-se Agora
+              Inscreva-se Agora
             </Button>
           </Box>
         </Box>
