@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import PropTypes from "prop-types";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
@@ -6,8 +6,55 @@ import Button from "@mui/material/Button";
 // import IconButton from "@mui/material/IconButton";
 // import MenuIcon from "@mui/icons-material/Menu";
 import WebbeeLogo from "svg/logos/Webbee";
+import { Alert, Snackbar } from "@mui/material";
+import supabase from "common/supabase";
+import Dialog from "common/Dialog";
 
-const Topbar = ({ themeMode, themeToggler, onSidebarOpen }) => {
+type Props = {
+  themeMode: any;
+  themeToggler: any;
+  onSidebarOpen: any;
+};
+
+const Topbar = ({ themeMode, themeToggler, onSidebarOpen }: Props) => {
+  /**
+   * State
+   */
+
+  const [isOpen, setIsOpen] = useState(false);
+  const [alertMessage, setAlertMessage] = useState("");
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
+
+  /**
+   * Handlers
+   */
+
+  const onDialogSubmit = async (data: { email: string }) => {
+    const { error } = await supabase
+      .from("User")
+      .insert({ email: data.email })
+      .select();
+
+    if (error) {
+      console.error("error", error);
+      return;
+    }
+
+    setAlertMessage("Email cadastrado com sucesso!");
+
+    setIsOpen(true);
+    setIsDialogOpen(false);
+  };
+
+  const onRegisterClick = () => {
+    setIsDialogOpen(true);
+  };
+
+  const handleClose = () => {
+    setIsOpen(false);
+    setIsDialogOpen(false);
+  };
+
   return (
     <Box
       display={"flex"}
@@ -15,6 +62,26 @@ const Topbar = ({ themeMode, themeToggler, onSidebarOpen }) => {
       alignItems={"center"}
       width={"100%"}
     >
+      <Dialog
+        open={isDialogOpen}
+        onSubmit={onDialogSubmit}
+        onClose={handleClose}
+      />
+      <Snackbar
+        open={isOpen}
+        autoHideDuration={6000}
+        onClose={handleClose}
+        anchorOrigin={{ vertical: "top", horizontal: "center" }}
+      >
+        <Alert
+          onClose={handleClose}
+          severity="success"
+          variant="filled"
+          sx={{ width: "100%" }}
+        >
+          {alertMessage}
+        </Alert>
+      </Snackbar>
       <Box display={"flex"} alignItems={"center"}>
         <Box marginRight={{ xs: 1, sm: 2 }}>
           {/* <IconButton onClick={onSidebarOpen} aria-label="Menu">
@@ -25,7 +92,6 @@ const Topbar = ({ themeMode, themeToggler, onSidebarOpen }) => {
           display={"flex"}
           alignItems="baseline"
           component="a"
-          underline="none"
           href="/"
           title="webbee"
           height={{ xs: 28, md: 32 }}
@@ -98,7 +164,7 @@ const Topbar = ({ themeMode, themeToggler, onSidebarOpen }) => {
               color="primary"
               component="a"
               target="blank"
-              href="https://material-ui.com/store/items/webbee-landing-page/"
+              onClick={onRegisterClick}
               size="large"
             >
               Inscreva-se Agora
