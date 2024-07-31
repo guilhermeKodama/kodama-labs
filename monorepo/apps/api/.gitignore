@@ -34,3 +34,5 @@ lerna-debug.log*
 !.vscode/launch.json
 !.vscode/extensions.json
 .vercel
+
+wallex-fde93-firebase-adminsdk-c4sv5-6b9ce074aa.json

@@ -1,46 +1,54 @@
-# Getting Started with Create React App
+## Prerequisites
 
-This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
+- Node.js 20.x (Recommended)
 
-## Available Scripts
+## Installation
 
-In the project directory, you can run:
+**Using Yarn (Recommended)**
 
-### `npm start`
+```sh
+yarn install
+yarn dev
+```
 
-Runs the app in the development mode.\
-Open [http://localhost:3000](http://localhost:3000) to view it in the browser.
+**Using Npm**
 
-The page will reload if you make edits.\
-You will also see any lint errors in the console.
+```sh
+npm i
+npm run dev
+```
 
-### `npm test`
+## Build
 
-Launches the test runner in the interactive watch mode.\
-See the section about [running tests](https://facebook.github.io/create-react-app/docs/running-tests) for more information.
+```sh
+yarn build
+# or
+npm run build
+```
 
-### `npm run build`
+## Mock server
 
-Builds the app for production to the `build` folder.\
-It correctly bundles React in production mode and optimizes the build for the best performance.
+By default we provide demo data from : `https://api-dev-minimal-[version].vercel.app`
 
-The build is minified and the filenames include the hashes.\
-Your app is ready to be deployed!
+To set up your local server:
 
-See the section about [deployment](https://facebook.github.io/create-react-app/docs/deployment) for more information.
+- **Guide:** [https://docs.minimals.cc/mock-server](https://docs.minimals.cc/mock-server).
 
-### `npm run eject`
+- **Resource:** [Download](https://www.dropbox.com/sh/6ojn099upi105tf/AACpmlqrNUacwbBfVdtt2t6va?dl=0).
 
-**Note: this is a one-way operation. Once you `eject`, you can’t go back!**
+## Full version
 
-If you aren’t satisfied with the build tool and configuration choices, you can `eject` at any time. This command will remove the single build dependency from your project.
+- Create React App ([migrate to CRA](https://docs.minimals.cc/migrate-to-cra/)).
+- Next.js
+- Vite.js
 
-Instead, it will copy all the configuration files and the transitive dependencies (webpack, Babel, ESLint, etc) right into your project so you have full control over them. All of the commands except `eject` will still work, but they will point to the copied scripts so you can tweak them. At this point you’re on your own.
+## Starter version
 
-You don’t have to ever use `eject`. The curated feature set is suitable for small and middle deployments, and you shouldn’t feel obligated to use this feature. However we understand that this tool wouldn’t be useful if you couldn’t customize it when you are ready for it.
+- To remove unnecessary components. This is a simplified version ([https://starter.minimals.cc/](https://starter.minimals.cc/))
+- Good to start a new project. You can copy components from the full version.
+- Make sure to install the dependencies exactly as compared to the full version.
 
-## Learn More
+---
 
-You can learn more in the [Create React App documentation](https://facebook.github.io/create-react-app/docs/getting-started).
-
-To learn React, check out the [React documentation](https://reactjs.org/).
+**NOTE:**
+_When copying folders remember to also copy hidden files like .env. This is important because .env files often contain environment variables that are crucial for the application to run correctly._
