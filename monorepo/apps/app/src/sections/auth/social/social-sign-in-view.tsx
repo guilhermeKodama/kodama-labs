@@ -36,7 +36,7 @@ export function SocialSignInView() {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const tokenFromParam = params.get('token');
-    console.log('[🍓]', { tokenFromParam });
+
     if (tokenFromParam) {
       setToken(tokenFromParam);
     }
@@ -45,7 +45,6 @@ export function SocialSignInView() {
   useEffect(() => {
     const setSessionAndCheckUser = async () => {
       if (token) {
-        console.log('[🍓]', { token });
         setSession(token);
         await checkUserSession?.();
       }

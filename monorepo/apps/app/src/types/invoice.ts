@@ -23,6 +23,8 @@ export type IInvoiceItem = {
 export type IInvoice = {
   id: string;
   sent: number;
+  description: string;
+  category: string;
   taxes: number;
   status: string;
   subtotal: number;

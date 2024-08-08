@@ -59,7 +59,7 @@ export function InvoiceAnalytic({ title, total, icon, color, percent, price }: P
         <Typography variant="subtitle1">{title}</Typography>
 
         <Box component="span" sx={{ color: 'text.disabled', typography: 'body2' }}>
-          {fShortenNumber(total)} invoices
+          {fShortenNumber(total)} transações
         </Box>
 
         <Typography variant="subtitle2">{fCurrency(price)}</Typography>

@@ -79,33 +79,8 @@ export function InvoiceTableToolbar({ filters, options, dateError, onResetPage }
         direction={{ xs: 'column', md: 'row' }}
         sx={{ p: 2.5, pr: { xs: 2.5, md: 1 } }}
       >
-        <FormControl sx={{ flexShrink: 0, width: { xs: 1, md: 180 } }}>
-          <InputLabel htmlFor="invoice-filter-service-select-label">Service</InputLabel>
-
-          <Select
-            multiple
-            value={filters.state.service}
-            onChange={handleFilterService}
-            input={<OutlinedInput label="Service" />}
-            renderValue={(selected) => selected.map((value) => value).join(', ')}
-            inputProps={{ id: 'invoice-filter-service-select-label' }}
-            sx={{ textTransform: 'capitalize' }}
-          >
-            {options.services.map((option) => (
-              <MenuItem key={option} value={option}>
-                <Checkbox
-                  disableRipple
-                  size="small"
-                  checked={filters.state.service.includes(option)}
-                />
-                {option}
-              </MenuItem>
-            ))}
-          </Select>
-        </FormControl>
-
         <DatePicker
-          label="Start date"
+          label="Data de inicio"
           value={filters.state.endDate}
           onChange={handleFilterStartDate}
           slotProps={{ textField: { fullWidth: true } }}
@@ -113,7 +88,7 @@ export function InvoiceTableToolbar({ filters, options, dateError, onResetPage }
         />
 
         <DatePicker
-          label="End date"
+          label="Data final"
           value={filters.state.endDate}
           onChange={handleFilterEndDate}
           slotProps={{
@@ -137,7 +112,7 @@ export function InvoiceTableToolbar({ filters, options, dateError, onResetPage }
             fullWidth
             value={filters.state.name}
             onChange={handleFilterName}
-            placeholder="Search customer or invoice number..."
+            placeholder="Busque pela descrição..."
             InputProps={{
               startAdornment: (
                 <InputAdornment position="start">
@@ -167,7 +142,7 @@ export function InvoiceTableToolbar({ filters, options, dateError, onResetPage }
               }}
             >
               <Iconify icon="solar:printer-minimalistic-bold" />
-              Print
+              Imprimir
             </MenuItem>
 
             <MenuItem
@@ -176,7 +151,7 @@ export function InvoiceTableToolbar({ filters, options, dateError, onResetPage }
               }}
             >
               <Iconify icon="solar:import-bold" />
-              Import
+              Importar
             </MenuItem>
 
             <MenuItem
@@ -185,7 +160,7 @@ export function InvoiceTableToolbar({ filters, options, dateError, onResetPage }
               }}
             >
               <Iconify icon="solar:export-bold" />
-              Export
+              Exportar
             </MenuItem>
           </MenuList>
         </MenuList>

@@ -36,7 +36,7 @@ module.exports = {
     'no-restricted-exports': 0,
     'no-promise-executor-return': 0,
     'import/prefer-default-export': 0,
-    'prefer-destructuring': [1, { object: true, array: false }],
+    'prefer-destructuring': [1, { object: false, array: false }],
     // typescript
     '@typescript-eslint/naming-convention': 0,
     '@typescript-eslint/no-use-before-define': 0,

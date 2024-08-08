@@ -3,9 +3,10 @@ import { Helmet } from 'react-helmet-async';
 import { useParams } from 'src/routes/hooks';
 
 import { CONFIG } from 'src/config-global';
-import { _invoices } from 'src/_mock/_invoice';
 
 import { InvoiceEditView } from 'src/sections/invoice/view';
+import { TransactionContext } from './transaction-context';
+import { useContext } from 'react';
 
 // ----------------------------------------------------------------------
 
@@ -14,7 +15,9 @@ const metadata = { title: `Invoice edit | Dashboard - ${CONFIG.site.name}` };
 export default function Page() {
   const { id = '' } = useParams();
 
-  const currentInvoice = _invoices.find((invoice) => invoice.id === id);
+  const { transactions } = useContext(TransactionContext);
+
+  const currentTransaction = transactions.find((transaction) => transaction.id === id);
 
   return (
     <>
@@ -22,7 +25,7 @@ export default function Page() {
         <title> {metadata.title}</title>
       </Helmet>
 
-      <InvoiceEditView invoice={currentInvoice} />
+      <InvoiceEditView transaction={currentTransaction} />
     </>
   );
 }

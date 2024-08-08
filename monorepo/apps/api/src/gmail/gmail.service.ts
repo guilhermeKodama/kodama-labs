@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { google } from 'googleapis';
+import { gmail_v1, google } from 'googleapis';
 import { OAuth2Client } from 'google-auth-library';
 import { Email } from './interfaces/gmail.interface';
 import * as pdfParse from 'pdf-parse';
@@ -7,6 +7,7 @@ import * as pdfParse from 'pdf-parse';
 @Injectable()
 export class GmailService {
   private readonly logger = new Logger(GmailService.name);
+  readonly BANKS_DOMAINS = ['nubank.com.br', 'inter.co', 'xpi.com.br'];
 
   private createOAuth2Client(
     accessToken: string,
@@ -54,13 +55,19 @@ export class GmailService {
     return '';
   }
 
-  async getEmails(accessToken: string, refreshToken: string): Promise<Email[]> {
+  async getEmails(
+    accessToken: string,
+    refreshToken: string,
+    senderDomains: string[],
+  ): Promise<Email[]> {
     const oauth2Client = this.createOAuth2Client(accessToken, refreshToken);
     const gmail = google.gmail({ version: 'v1', auth: oauth2Client });
 
     const now = new Date();
-    const thirtyDaysAgo = new Date(now.setDate(now.getDate() - 30));
-    const query = `after:${Math.floor(thirtyDaysAgo.getTime() / 1000)}`;
+    const thirtyDaysAgo = new Date(now.setDate(now.getDate() - 100));
+    const query = `after:${Math.floor(
+      thirtyDaysAgo.getTime() / 1000,
+    )} (${senderDomains.map((domain) => `from:${domain}`).join(' OR ')})`;
 
     let emails: Email[] = [];
     let pageToken: string | undefined;
@@ -85,6 +92,7 @@ export class GmailService {
               let body = payload.body?.data || '';
               let senderEmail = '';
               let pdfText = '';
+              let hasPDF = false;
 
               if (payload.headers) {
                 const fromHeader = payload.headers.find(
@@ -110,7 +118,7 @@ export class GmailService {
                       oauth2Client,
                     );
 
-                    // Extract text from PDF
+                    hasPDF = true;
                     pdfText = await this.extractTextFromPdf(pdfBuffer);
                   } else if (part.body?.data) {
                     body += part.body.data;
@@ -122,15 +130,14 @@ export class GmailService {
 
               return {
                 id: msg.data.id,
-                threadId: msg.data.threadId,
-                labelIds: msg.data.labelIds,
                 snippet: msg.data.snippet,
-                historyId: msg.data.historyId,
                 internalDate: msg.data.internalDate,
                 sizeEstimate: msg.data.sizeEstimate,
                 body: decodedBody,
                 senderEmail: senderEmail,
                 pdfText: pdfText,
+                hasPDF,
+                raw: msg as gmail_v1.Schema$Message,
               };
             }),
           );

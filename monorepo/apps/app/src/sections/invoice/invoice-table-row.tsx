@@ -23,11 +23,13 @@ import { Label } from 'src/components/label';
 import { Iconify } from 'src/components/iconify';
 import { ConfirmDialog } from 'src/components/custom-dialog';
 import { usePopover, CustomPopover } from 'src/components/custom-popover';
+import { Transaction } from 'src/types/api';
+import { StatusLabels } from './constants';
 
 // ----------------------------------------------------------------------
 
 type Props = {
-  row: IInvoice;
+  row: Transaction;
   selected: boolean;
   onSelectRow: () => void;
   onViewRow: () => void;
@@ -60,13 +62,13 @@ export function InvoiceTableRow({
 
         <TableCell>
           <Stack spacing={2} direction="row" alignItems="center">
-            <Avatar alt={row.invoiceTo.name}>{row.invoiceTo.name.charAt(0).toUpperCase()}</Avatar>
+            <Avatar alt={row.description}>{row.description.charAt(0).toUpperCase()}</Avatar>
 
             <ListItemText
               disableTypography
               primary={
                 <Typography variant="body2" noWrap>
-                  {row.invoiceTo.name}
+                  {row.description}
                 </Typography>
               }
               secondary={
@@ -76,7 +78,7 @@ export function InvoiceTableRow({
                   onClick={onViewRow}
                   sx={{ color: 'text.disabled', cursor: 'pointer' }}
                 >
-                  {row.invoiceNumber}
+                  {row.description}
                 </Link>
               }
             />
@@ -85,8 +87,8 @@ export function InvoiceTableRow({
 
         <TableCell>
           <ListItemText
-            primary={fDate(row.createDate)}
-            secondary={fTime(row.createDate)}
+            primary={fDate(row.createdAt)}
+            secondary={fTime(row.createdAt)}
             primaryTypographyProps={{ typography: 'body2', noWrap: true }}
             secondaryTypographyProps={{ mt: 0.5, component: 'span', typography: 'caption' }}
           />
@@ -94,28 +96,26 @@ export function InvoiceTableRow({
 
         <TableCell>
           <ListItemText
-            primary={fDate(row.dueDate)}
-            secondary={fTime(row.dueDate)}
+            primary={fDate(row.dueAt)}
+            secondary={fTime(row.dueAt)}
             primaryTypographyProps={{ typography: 'body2', noWrap: true }}
             secondaryTypographyProps={{ mt: 0.5, component: 'span', typography: 'caption' }}
           />
         </TableCell>
 
-        <TableCell>{fCurrency(row.totalAmount)}</TableCell>
-
-        <TableCell align="center">{row.sent}</TableCell>
+        <TableCell>{fCurrency(row.amount)}</TableCell>
 
         <TableCell>
           <Label
             variant="soft"
             color={
-              (row.status === 'paid' && 'success') ||
-              (row.status === 'pending' && 'warning') ||
-              (row.status === 'overdue' && 'error') ||
+              (row.status.toLowerCase() === 'paid' && 'success') ||
+              (row.status.toLowerCase() === 'pending' && 'warning') ||
+              (row.status.toLowerCase() === 'overdue' && 'error') ||
               'default'
             }
           >
-            {row.status}
+            {StatusLabels[row.status]}
           </Label>
         </TableCell>
 
@@ -133,7 +133,7 @@ export function InvoiceTableRow({
         slotProps={{ arrow: { placement: 'right-top' } }}
       >
         <MenuList>
-          <MenuItem
+          {/* <MenuItem
             onClick={() => {
               onViewRow();
               popover.onClose();
@@ -141,7 +141,7 @@ export function InvoiceTableRow({
           >
             <Iconify icon="solar:eye-bold" />
             View
-          </MenuItem>
+          </MenuItem> */}
 
           <MenuItem
             onClick={() => {
@@ -150,7 +150,7 @@ export function InvoiceTableRow({
             }}
           >
             <Iconify icon="solar:pen-bold" />
-            Edit
+            Editar
           </MenuItem>
 
           <Divider sx={{ borderStyle: 'dashed' }} />
@@ -163,7 +163,7 @@ export function InvoiceTableRow({
             sx={{ color: 'error.main' }}
           >
             <Iconify icon="solar:trash-bin-trash-bold" />
-            Delete
+            Deletar
           </MenuItem>
         </MenuList>
       </CustomPopover>

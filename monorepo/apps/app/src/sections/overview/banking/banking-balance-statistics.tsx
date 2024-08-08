@@ -1,7 +1,7 @@
 import type { CardProps } from '@mui/material/Card';
 import type { ChartOptions } from 'src/components/chart';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 
 import Card from '@mui/material/Card';
 import { useTheme } from '@mui/material/styles';
@@ -30,10 +30,36 @@ type Props = CardProps & {
   };
 };
 
+// Calculates percentual variance
+const calculatePercentualVariance = (numbers: number[]): number => {
+  if (numbers.length === 0) {
+    return 0; // or another appropriate value for your use case
+  }
+
+  // Calculate the mean
+  const mean = numbers.reduce((sum, num) => sum + num, 0) / numbers.length;
+
+  // Handle case where mean is zero to avoid division by zero
+  if (mean === 0) {
+    return 0;
+  }
+
+  // Calculate the variance
+  const variance = numbers.reduce((sum, num) => sum + Math.pow(num - mean, 2), 0) / numbers.length;
+
+  // Calculate the standard deviation
+  const standardDeviation = Math.sqrt(variance);
+
+  // Calculate the percentual variance
+  const percentualVariance = (standardDeviation / mean) * 100;
+
+  return percentualVariance;
+};
+
 export function BankingBalanceStatistics({ title, subheader, chart, ...other }: Props) {
   const theme = useTheme();
 
-  const [selectedSeries, setSelectedSeries] = useState('Yearly');
+  const [selectedSeries, setSelectedSeries] = useState('Mensal');
 
   const currentSeries = chart.series.find((i) => i.name === selectedSeries);
 
@@ -47,6 +73,11 @@ export function BankingBalanceStatistics({ title, subheader, chart, ...other }: 
     stroke: { width: 2, colors: ['transparent'] },
     colors: chartColors,
     xaxis: { categories: currentSeries?.categories },
+    yaxis: {
+      labels: {
+        formatter: (value: number) => fCurrency(value),
+      },
+    },
     tooltip: { y: { formatter: (value: number) => fCurrency(value) } },
     ...chart.options,
   });
@@ -54,6 +85,34 @@ export function BankingBalanceStatistics({ title, subheader, chart, ...other }: 
   const handleChangeSeries = useCallback((newValue: string) => {
     setSelectedSeries(newValue);
   }, []);
+
+  // Calculates percentual variance for each dataset in the series
+  const percentualVariances = useMemo(() => {
+    if (!currentSeries) return [];
+
+    return currentSeries.data.map((item) => {
+      const variance = calculatePercentualVariance(item.data);
+      return variance;
+    });
+  }, [currentSeries]);
+
+  // Format percentual variances for display
+  const sublabels = useMemo(() => {
+    return percentualVariances.map((variance) =>
+      variance >= 0 ? `+${fPercent(variance)}` : `-${fPercent(variance)}`
+    );
+  }, [percentualVariances]);
+
+  // Calculate the sum for each dataset
+  const values = useMemo(() => {
+    if (!currentSeries) return [];
+
+    return currentSeries.data.map((item) =>
+      fCurrency(item.data.reduce((sum, value) => sum + value, 0))
+    );
+  }, [currentSeries]);
+
+  console.log({ chartOptions });
 
   return (
     <Card {...other}>
@@ -72,9 +131,9 @@ export function BankingBalanceStatistics({ title, subheader, chart, ...other }: 
 
       <ChartLegends
         colors={chartOptions?.colors}
-        labels={chart.series[0].data.map((item) => item.name)}
-        sublabels={[`+${fPercent(43)}`, `+${fPercent(3)}`, `+${fPercent(8)}`]}
-        values={[fCurrency(6789), fCurrency(1234), fCurrency(1012)]}
+        labels={currentSeries?.data.map((item) => item.name) ?? []}
+        sublabels={sublabels} // Display the percentual variances
+        values={values}
         sx={{ px: 3, gap: 3 }}
       />
 

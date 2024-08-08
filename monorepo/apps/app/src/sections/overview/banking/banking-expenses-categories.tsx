@@ -10,12 +10,15 @@ import CardHeader from '@mui/material/CardHeader';
 import { fCurrency } from 'src/utils/format-number';
 
 import { Chart, useChart, ChartLegends } from 'src/components/chart';
+import { ShortCategoryLabels } from 'src/sections/invoice/constants';
 
 // ----------------------------------------------------------------------
 
 type Props = CardProps & {
   title?: string;
   subheader?: string;
+  total: number;
+  categoriesTotal: number;
   chart: {
     colors?: string[];
     icons?: React.ReactNode[];
@@ -27,37 +30,64 @@ type Props = CardProps & {
   };
 };
 
-export function BankingExpensesCategories({ title, subheader, chart, ...other }: Props) {
+export function BankingExpensesCategories({
+  title,
+  subheader,
+  total,
+  categoriesTotal,
+  chart,
+  ...other
+}: Props) {
   const theme = useTheme();
 
-  const chartColors = chart.colors ?? [
-    theme.palette.secondary.dark,
-    theme.palette.error.main,
-    theme.palette.primary.main,
-    theme.palette.warning.main,
-    theme.palette.info.dark,
-    theme.palette.info.main,
-    theme.palette.success.main,
-    theme.palette.warning.dark,
-  ];
-
-  const chartSeries = chart.series.map((item) => item.value);
+  // Calculate percentage data for each category for chart visualization
+  const chartSeries = chart.series.map((item) => (item.value / total) * 100);
 
   const chartOptions = useChart({
     chart: { offsetY: 12 },
-    colors: chartColors,
-    labels: chart.series.map((item) => item.label),
+    colors: chart.colors ?? [
+      theme.palette.warning.main, // Leisure & Entertainment
+      theme.palette.primary.light, // Transportation
+      theme.palette.error.main, // Food
+      theme.palette.success.dark, // Housing
+      theme.palette.info.main, // Education
+      theme.palette.secondary.main, // Health
+      theme.palette.secondary.light, // Personal Expenses
+      theme.palette.success.main, // Insurance & Pensions
+      theme.palette.warning.light, // Investments
+      theme.palette.primary.main, // Debts & Loans
+      theme.palette.error.dark, // Credit Card
+      theme.palette.info.dark, // Clothing & Accessories
+    ],
+    labels: chart.series.map((item) => ShortCategoryLabels[item.label]),
     stroke: { width: 1, colors: [theme.palette.background.paper] },
     fill: { opacity: 0.88 },
-    tooltip: { y: { formatter: (value: number) => fCurrency(value) } },
-    plotOptions: { pie: { donut: { labels: { show: false } } } },
+    tooltip: {
+      y: {
+        formatter: function (value, { seriesIndex }) {
+          // Calculate actual value from percentage
+          const actualValue = (value / 100) * total;
+          return `${fCurrency(actualValue)} (${value.toFixed(2)}%)`;
+        },
+      },
+    },
+    plotOptions: {
+      pie: {
+        donut: { labels: { show: false } },
+        dataLabels: {
+          enabled: true,
+          formatter: function (value) {
+            return `${value.toFixed(2)}%`;
+          },
+        },
+      },
+    },
     ...chart.options,
   });
 
   return (
     <Card {...other}>
       <CardHeader title={title} subheader={subheader} />
-
       <Box
         sx={{
           pt: 4,
@@ -71,13 +101,12 @@ export function BankingExpensesCategories({ title, subheader, chart, ...other }:
         }}
       >
         <Chart
-          type="polarArea"
+          type="pie"
           series={chartSeries}
           options={chartOptions}
           width={{ xs: 240, md: 280 }}
           height={{ xs: 240, md: 280 }}
         />
-
         <ChartLegends
           colors={chartOptions?.colors}
           labels={chartOptions?.labels}
@@ -86,21 +115,19 @@ export function BankingExpensesCategories({ title, subheader, chart, ...other }:
           sx={{ gap: 2.5, display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)' }}
         />
       </Box>
-
       <Divider sx={{ borderStyle: 'dashed' }} />
-
       <Box
         display="grid"
         gridTemplateColumns="repeat(2, 1fr)"
         sx={{ textAlign: 'center', typography: 'h4' }}
       >
         <Box sx={{ py: 2, borderRight: `dashed 1px ${theme.vars.palette.divider}` }}>
-          <Box sx={{ mb: 1, typography: 'body2', color: 'text.secondary' }}>Categories</Box>9
+          <Box sx={{ mb: 1, typography: 'body2', color: 'text.secondary' }}>Categorias</Box>
+          {categoriesTotal}
         </Box>
-
         <Box sx={{ py: 2 }}>
-          <Box sx={{ mb: 1, typography: 'body2', color: 'text.secondary' }}>Categories</Box>
-          $18,765
+          <Box sx={{ mb: 1, typography: 'body2', color: 'text.secondary' }}>Total</Box>
+          {fCurrency(total)}
         </Box>
       </Box>
     </Card>

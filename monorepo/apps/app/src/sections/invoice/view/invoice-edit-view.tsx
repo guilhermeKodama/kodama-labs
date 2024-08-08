@@ -7,14 +7,15 @@ import { DashboardContent } from 'src/layouts/dashboard';
 import { CustomBreadcrumbs } from 'src/components/custom-breadcrumbs';
 
 import { InvoiceNewEditForm } from '../invoice-new-edit-form';
+import { Transaction } from 'src/types/api';
 
 // ----------------------------------------------------------------------
 
 type Props = {
-  invoice?: IInvoice;
+  transaction?: Transaction;
 };
 
-export function InvoiceEditView({ invoice }: Props) {
+export function InvoiceEditView({ transaction }: Props) {
   return (
     <DashboardContent>
       <CustomBreadcrumbs
@@ -22,12 +23,12 @@ export function InvoiceEditView({ invoice }: Props) {
         links={[
           { name: 'Dashboard', href: paths.dashboard.root },
           { name: 'Invoice', href: paths.dashboard.invoice.root },
-          { name: invoice?.invoiceNumber },
+          { name: transaction?.id },
         ]}
         sx={{ mb: { xs: 3, md: 5 } }}
       />
 
-      <InvoiceNewEditForm currentInvoice={invoice} />
+      <InvoiceNewEditForm currentTransaction={transaction} />
     </DashboardContent>
   );
 }

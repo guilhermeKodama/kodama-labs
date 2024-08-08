@@ -14,7 +14,7 @@ export type IAddressItem = {
   name: string;
   company?: string;
   primary?: boolean;
-  fullAddress: string;
+  fullAddress?: string;
   phoneNumber?: string;
   addressType?: string;
 };

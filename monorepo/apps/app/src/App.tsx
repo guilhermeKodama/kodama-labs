@@ -15,6 +15,7 @@ import { MotionLazy } from 'src/components/animate/motion-lazy';
 import { SettingsDrawer, defaultSettings, SettingsProvider } from 'src/components/settings';
 
 import { AuthProvider } from 'src/auth/context/jwt';
+import { TransactionProvider } from './pages/dashboard/invoice/transaction-context';
 
 // ----------------------------------------------------------------------
 
@@ -27,11 +28,13 @@ export default function App() {
         <AuthProvider>
           <SettingsProvider settings={defaultSettings}>
             <ThemeProvider>
-              <MotionLazy>
-                <ProgressBar />
-                <SettingsDrawer />
-                <Router />
-              </MotionLazy>
+              <TransactionProvider>
+                <MotionLazy>
+                  <ProgressBar />
+                  <SettingsDrawer />
+                  <Router />
+                </MotionLazy>
+              </TransactionProvider>
             </ThemeProvider>
           </SettingsProvider>
         </AuthProvider>

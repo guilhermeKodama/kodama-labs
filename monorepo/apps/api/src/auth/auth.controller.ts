@@ -13,6 +13,7 @@ import { Response } from 'express';
 import { NERService } from 'src/nlp/ner/ner.service';
 import { UsersService } from 'src/users/users.service';
 import { JwtService } from '@nestjs/jwt';
+import { TransactionCategory, TransactionStatus } from '@prisma/client';
 
 @Controller('auth')
 export class AuthController {
@@ -62,27 +63,49 @@ export class AuthController {
       });
     }
 
-    // const emails = await this.gmailService.getEmails(
-    //   req.user.accessToken,
-    //   req.user.refreshToken,
-    // );
+    const emails = await this.gmailService.getEmails(
+      req.user.accessToken,
+      req.user.refreshToken,
+      this.gmailService.BANKS_DOMAINS,
+    );
 
-    // const bankEmails = this.nerService.filterBankEmails(emails);
-    // const creditCardEmails = this.nerService.filterCreditCardEmails(bankEmails);
+    const creditCardEmails = this.nerService.filterCreditCardEmails(emails);
 
-    // for (const email of creditCardEmails) {
-    //   const values = this.nerService.extractValues(
-    //     `${email.snippet}  ${email.body} ${email.pdfText}`,
-    //   );
+    for (const email of creditCardEmails) {
+      const emailRecord = await this.usersService.saveEmail({
+        body: email.body,
+        pdfText: email.pdfText,
+        pdfNeedsPassword: email.hasPDF && !email.pdfText,
+        snippet: email.snippet,
+        internalDate: new Date(parseInt(email.internalDate)).toISOString(),
+        messageId: email.id,
+        sender: email.senderEmail,
+        user: { connect: { id: user.id } },
+        raw: JSON.stringify(email.raw),
+      });
 
-    //   this.logger.debug({
-    //     date: email.internalDate,
-    //     sender: email.senderEmail,
-    //     summary: email.snippet,
-    //     pdfText: email.pdfText,
-    //     values,
-    //   });
-    // }
+      const values = this.nerService.extractValues(
+        `${email.snippet}  ${email.body} ${email.pdfText}`,
+      );
+
+      await this.usersService.saveTransactionFromEmail({
+        status: TransactionStatus.PENDING,
+        amount: values[0],
+        dueAt: emailRecord.internalDate,
+        description: emailRecord.sender,
+        category: TransactionCategory.CREDIT_CARD,
+        email: { connect: { id: emailRecord.id } },
+        user: { connect: { id: user.id } },
+      });
+
+      this.logger.debug({
+        date: email.internalDate,
+        sender: email.senderEmail,
+        summary: email.snippet,
+        pdfText: email.pdfText,
+        values,
+      });
+    }
 
     const token = this.jwtService.sign({ id: user.id });
     const redirectUrl = `http://localhost:8081/auth/jwt/sign-in?token=${token}`;

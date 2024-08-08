@@ -37,8 +37,6 @@ export function AuthProvider({ children }: Props) {
       if (accessToken) {
         const res = await axios.get(endpoints.auth.me);
 
-        console.log('[🎸]', { res });
-
         const { user } = res.data;
 
         setState({ user: { ...user, accessToken }, loading: false });
@@ -76,8 +74,6 @@ export function AuthProvider({ children }: Props) {
     }),
     [checkUserSession, state.user, status]
   );
-  console.log('[🏆]', JSON.stringify({ state }));
-  console.log('[🏆]', JSON.stringify({ memoizedValue }));
 
   return <AuthContext.Provider value={memoizedValue}>{children}</AuthContext.Provider>;
 }

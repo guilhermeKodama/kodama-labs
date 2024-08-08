@@ -9,18 +9,8 @@ import { Email } from 'src/gmail/interfaces/gmail.interface';
 
 @Injectable()
 export class NERService {
-  private readonly BANKS_DOMAINS = ['nubank.com.br', 'inter.co', 'xpi.com.br'];
   private readonly CREDIT_CARD_KEY_TERMS = ['fatura'];
   private readonly logger = new Logger(NERService.name);
-
-  filterBankEmails(emails: Email[]): Email[] {
-    const bankEmails = emails.filter((email) => {
-      const senderDomain = email.senderEmail.split('@')[1];
-      return this.BANKS_DOMAINS.includes(senderDomain);
-    });
-
-    return bankEmails;
-  }
 
   filterCreditCardEmails(emails: Email[]): Email[] {
     const bankEmails = emails.filter((email) => {

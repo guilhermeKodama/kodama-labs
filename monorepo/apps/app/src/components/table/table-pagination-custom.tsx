@@ -26,13 +26,14 @@ export function TablePaginationCustom({
       <TablePagination
         rowsPerPageOptions={rowsPerPageOptions}
         component="div"
+        labelRowsPerPage="Linhas por página:"
         {...other}
         sx={{ borderTopColor: 'transparent' }}
       />
 
       {onChangeDense && (
         <FormControlLabel
-          label="Dense"
+          label="Denso"
           control={<Switch name="dense" checked={dense} onChange={onChangeDense} />}
           sx={{
             pl: 2,

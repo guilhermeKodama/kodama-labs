@@ -9,6 +9,7 @@ import Chip from '@mui/material/Chip';
 import { fDateRangeShortLabel } from 'src/utils/format-time';
 
 import { chipProps, FiltersBlock, FiltersResult } from 'src/components/filters-result';
+import { StatusLabels } from './constants';
 
 // ----------------------------------------------------------------------
 
@@ -56,7 +57,7 @@ export function InvoiceTableFiltersResult({ filters, totalResults, onResetPage, 
       <FiltersBlock label="Status:" isShow={filters.state.status !== 'all'}>
         <Chip
           {...chipProps}
-          label={filters.state.status}
+          label={StatusLabels[filters.state.status]}
           onDelete={handleRemoveStatus}
           sx={{ textTransform: 'capitalize' }}
         />

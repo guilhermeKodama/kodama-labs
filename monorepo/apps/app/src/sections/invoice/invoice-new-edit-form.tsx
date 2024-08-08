@@ -1,5 +1,3 @@
-import type { IInvoice } from 'src/types/invoice';
-
 import { z as zod } from 'zod';
 import { useMemo } from 'react';
 import { useForm } from 'react-hook-form';
@@ -14,59 +12,45 @@ import { useRouter } from 'src/routes/hooks';
 
 import { useBoolean } from 'src/hooks/use-boolean';
 
-import { today, fIsAfter } from 'src/utils/format-time';
+import { today } from 'src/utils/format-time';
 
 import { _addressBooks } from 'src/_mock';
 
 import { Form, schemaHelper } from 'src/components/hook-form';
 
-import { InvoiceNewEditDetails } from './invoice-new-edit-details';
-import { InvoiceNewEditAddress } from './invoice-new-edit-address';
+import axios, { endpoints } from 'src/utils/axios';
 import { InvoiceNewEditStatusDate } from './invoice-new-edit-status-date';
+import { InvoiceNewEditCategoryTotal } from './invoice-new-edit-category-total';
+import { InvoiceNewEditDescription } from './invoice-new-edit-description';
+import { Transaction } from 'src/types/api';
 
 // ----------------------------------------------------------------------
 
 export type NewInvoiceSchemaType = zod.infer<typeof NewInvoiceSchema>;
 
-export const NewInvoiceSchema = zod
-  .object({
-    invoiceTo: zod
-      .custom<IInvoice['invoiceTo'] | null>()
-      .refine((data) => data !== null, { message: 'Invoice to is required!' }),
-    createDate: schemaHelper.date({ message: { required_error: 'Create date is required!' } }),
-    dueDate: schemaHelper.date({ message: { required_error: 'Due date is required!' } }),
-    items: zod.array(
-      zod.object({
-        title: zod.string().min(1, { message: 'Title is required!' }),
-        service: zod.string().min(1, { message: 'Service is required!' }),
-        quantity: zod.number().min(1, { message: 'Quantity must be more than 0' }),
-        // Not required
-        price: zod.number(),
-        total: zod.number(),
-        description: zod.string(),
-      })
-    ),
-    // Not required
-    taxes: zod.number(),
-    status: zod.string(),
-    discount: zod.number(),
-    shipping: zod.number(),
-    totalAmount: zod.number(),
-    invoiceNumber: zod.string(),
-    invoiceFrom: zod.custom<IInvoice['invoiceFrom']>().nullable(),
-  })
-  .refine((data) => !fIsAfter(data.createDate, data.dueDate), {
-    message: 'Due date cannot be earlier than create date!',
-    path: ['dueDate'],
-  });
+export const NewInvoiceSchema = zod.object({
+  createdAt: schemaHelper.date({ message: { required_error: 'Data de criação é obrigatório!' } }),
+  dueAt: schemaHelper.date({ message: { required_error: 'Data de vencimento é obrigatório!' } }),
+  // Not required
+  category: zod.string().optional(),
+  description: zod.string().refine((val) => val !== '', { message: 'Descrição é obrigatório!' }),
+  status: zod.string().refine((val) => val !== '', { message: 'Status é obrigatório!' }),
+  amount: zod.number().refine((val) => val !== 0, {
+    message: 'Valor é obrigatório.',
+  }),
+});
+// .refine((data) => !fIsAfter(data.createdAt, data.dueAt), {
+//   message: 'Data de vencimento não pode ser antes da data de criação!',
+//   path: ['dueDate'],
+// });
 
 // ----------------------------------------------------------------------
 
 type Props = {
-  currentInvoice?: IInvoice;
+  currentTransaction?: Transaction;
 };
 
-export function InvoiceNewEditForm({ currentInvoice }: Props) {
+export function InvoiceNewEditForm({ currentTransaction }: Props) {
   const router = useRouter();
 
   const loadingSave = useBoolean();
@@ -75,28 +59,14 @@ export function InvoiceNewEditForm({ currentInvoice }: Props) {
 
   const defaultValues = useMemo(
     () => ({
-      invoiceNumber: currentInvoice?.invoiceNumber || 'INV-1990',
-      createDate: currentInvoice?.createDate || today(),
-      dueDate: currentInvoice?.dueDate || null,
-      taxes: currentInvoice?.taxes || 0,
-      shipping: currentInvoice?.shipping || 0,
-      status: currentInvoice?.status || 'draft',
-      discount: currentInvoice?.discount || 0,
-      invoiceFrom: currentInvoice?.invoiceFrom || _addressBooks[0],
-      invoiceTo: currentInvoice?.invoiceTo || null,
-      totalAmount: currentInvoice?.totalAmount || 0,
-      items: currentInvoice?.items || [
-        {
-          title: '',
-          description: '',
-          service: '',
-          quantity: 1,
-          price: 0,
-          total: 0,
-        },
-      ],
+      description: currentTransaction?.description || '',
+      category: currentTransaction?.category || '',
+      createdAt: currentTransaction?.createdAt || today(),
+      dueAt: currentTransaction?.dueAt || null,
+      status: currentTransaction?.status || 'draft',
+      amount: currentTransaction?.amount || 0,
     }),
-    [currentInvoice]
+    [currentTransaction]
   );
 
   const methods = useForm<NewInvoiceSchemaType>({
@@ -108,7 +78,7 @@ export function InvoiceNewEditForm({ currentInvoice }: Props) {
   const {
     reset,
     handleSubmit,
-    formState: { isSubmitting },
+    formState: { isSubmitting, isLoading, isDirty, isValid, errors },
   } = methods;
 
   const handleSaveAsDraft = handleSubmit(async (data) => {
@@ -128,13 +98,26 @@ export function InvoiceNewEditForm({ currentInvoice }: Props) {
 
   const handleCreateAndSend = handleSubmit(async (data) => {
     loadingSend.onTrue();
-
     try {
-      await new Promise((resolve) => setTimeout(resolve, 500));
+      if (currentTransaction) {
+        await axios.put(endpoints.user.updateTransaction, {
+          ...data,
+          category: data.category === '' ? null : data.category,
+          status: data.status.toUpperCase(),
+          id: currentTransaction.id,
+        });
+      } else {
+        await axios.post(endpoints.user.createTransaction, {
+          ...data,
+          category: data.category === '' ? null : data.category,
+          status: data.status.toUpperCase(),
+        });
+      }
+
       reset();
       loadingSend.onFalse();
+
       router.push(paths.dashboard.invoice.root);
-      console.info('DATA', JSON.stringify(data, null, 2));
     } catch (error) {
       console.error(error);
       loadingSend.onFalse();
@@ -144,11 +127,11 @@ export function InvoiceNewEditForm({ currentInvoice }: Props) {
   return (
     <Form methods={methods}>
       <Card>
-        <InvoiceNewEditAddress />
+        <InvoiceNewEditDescription />
 
         <InvoiceNewEditStatusDate />
 
-        <InvoiceNewEditDetails />
+        <InvoiceNewEditCategoryTotal />
       </Card>
 
       <Stack justifyContent="flex-end" direction="row" spacing={2} sx={{ mt: 3 }}>
@@ -159,7 +142,7 @@ export function InvoiceNewEditForm({ currentInvoice }: Props) {
           loading={loadingSave.value && isSubmitting}
           onClick={handleSaveAsDraft}
         >
-          Save as draft
+          Salvar como rascunho
         </LoadingButton>
 
         <LoadingButton
@@ -168,7 +151,7 @@ export function InvoiceNewEditForm({ currentInvoice }: Props) {
           loading={loadingSend.value && isSubmitting}
           onClick={handleCreateAndSend}
         >
-          {currentInvoice ? 'Update' : 'Create'} & send
+          {currentTransaction ? 'Atualizar' : 'Salvar'}
         </LoadingButton>
       </Stack>
     </Form>

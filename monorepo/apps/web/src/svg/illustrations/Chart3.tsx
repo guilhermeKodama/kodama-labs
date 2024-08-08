@@ -12,7 +12,6 @@ const Chart3 = ({ width = 274, height = 208 }: Props) => {
   const colorPaper = theme.palette.background.paper;
   const colorPrimaryMain = theme.palette.primary.main;
 
-  console.log({ colorPaper, colorPrimaryMain });
   return (
     <svg
       xmlns="http://www.w3.org/2000/svg"

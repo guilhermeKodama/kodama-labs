@@ -49,4 +49,11 @@ export const endpoints = {
   auth: {
     me: '/auth/me',
   },
+  user: {
+    transactions: '/user/transactions',
+    createTransaction: '/user/transaction',
+    updateTransaction: '/user/transaction',
+    deleteTransaction: '/user/transaction',
+    deleteTransactions: '/user/transactions',
+  },
 };

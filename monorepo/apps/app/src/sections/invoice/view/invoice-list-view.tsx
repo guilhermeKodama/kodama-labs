@@ -1,6 +1,6 @@
 import type { IInvoice, IInvoiceTableFilters } from 'src/types/invoice';
 
-import { useState, useCallback } from 'react';
+import { useCallback, useContext } from 'react';
 
 import Box from '@mui/material/Box';
 import Tab from '@mui/material/Tab';
@@ -27,7 +27,7 @@ import { fIsAfter, fIsBetween } from 'src/utils/format-time';
 
 import { varAlpha } from 'src/theme/styles';
 import { DashboardContent } from 'src/layouts/dashboard';
-import { _invoices, INVOICE_SERVICE_OPTIONS } from 'src/_mock';
+import { INVOICE_SERVICE_OPTIONS } from 'src/_mock';
 
 import { Label } from 'src/components/label';
 import { toast } from 'src/components/snackbar';
@@ -47,19 +47,21 @@ import {
   TablePaginationCustom,
 } from 'src/components/table';
 
+import axios, { endpoints } from 'src/utils/axios';
+import { TransactionContext } from 'src/pages/dashboard/invoice/transaction-context';
 import { InvoiceAnalytic } from '../invoice-analytic';
 import { InvoiceTableRow } from '../invoice-table-row';
 import { InvoiceTableToolbar } from '../invoice-table-toolbar';
 import { InvoiceTableFiltersResult } from '../invoice-table-filters-result';
+import { Transaction } from 'src/types/api';
 
 // ----------------------------------------------------------------------
 
 const TABLE_HEAD = [
-  { id: 'invoiceNumber', label: 'Customer' },
-  { id: 'createDate', label: 'Create' },
-  { id: 'dueDate', label: 'Due' },
-  { id: 'price', label: 'Amount' },
-  { id: 'sent', label: 'Sent', align: 'center' },
+  { id: 'description', label: 'Descrição' },
+  { id: 'createdAt', label: 'Criado' },
+  { id: 'dueAt', label: 'Vencimento' },
+  { id: 'amount', label: 'Valor' },
   { id: 'status', label: 'Status' },
   { id: '' },
 ];
@@ -75,7 +77,7 @@ export function InvoiceListView() {
 
   const confirm = useBoolean();
 
-  const [tableData, setTableData] = useState<IInvoice[]>(_invoices);
+  const { transactions, setTransactions } = useContext(TransactionContext);
 
   const filters = useSetState<IInvoiceTableFilters>({
     name: '',
@@ -88,7 +90,7 @@ export function InvoiceListView() {
   const dateError = fIsAfter(filters.state.startDate, filters.state.endDate);
 
   const dataFiltered = applyFilter({
-    inputData: tableData,
+    inputData: transactions,
     comparator: getComparator(table.order, table.orderBy),
     filters: filters.state,
     dateError,
@@ -105,75 +107,91 @@ export function InvoiceListView() {
   const notFound = (!dataFiltered.length && canReset) || !dataFiltered.length;
 
   const getInvoiceLength = (status: string) =>
-    tableData.filter((item) => item.status === status).length;
+    transactions.filter((item) => item.status === status).length;
 
   const getTotalAmount = (status: string) =>
     sumBy(
-      tableData.filter((item) => item.status === status),
-      (invoice) => invoice.totalAmount
+      transactions.filter((item) => item.status === status),
+      (invoice) => invoice.amount
     );
 
   const getPercentByStatus = (status: string) =>
-    (getInvoiceLength(status) / tableData.length) * 100;
+    (getInvoiceLength(status) / transactions.length) * 100;
 
   const TABS = [
     {
       value: 'all',
-      label: 'All',
+      label: 'Todos',
       color: 'default',
-      count: tableData.length,
+      count: transactions.length,
     },
     {
       value: 'paid',
-      label: 'Paid',
+      label: 'Pago',
       color: 'success',
       count: getInvoiceLength('paid'),
     },
     {
       value: 'pending',
-      label: 'Pending',
+      label: 'Pendente',
       color: 'warning',
       count: getInvoiceLength('pending'),
     },
     {
       value: 'overdue',
-      label: 'Overdue',
+      label: 'Vencido',
       color: 'error',
       count: getInvoiceLength('overdue'),
     },
     {
       value: 'draft',
-      label: 'Draft',
+      label: 'Rascunho',
       color: 'default',
       count: getInvoiceLength('draft'),
     },
   ] as const;
 
   const handleDeleteRow = useCallback(
-    (id: string) => {
-      const deleteRow = tableData.filter((row) => row.id !== id);
+    async (id: string) => {
+      try {
+        await axios.delete(`${endpoints.user.deleteTransaction}/${id}`);
 
-      toast.success('Delete success!');
+        const deleteRow = transactions.filter((row) => row.id !== id);
 
-      setTableData(deleteRow);
+        toast.success('Deletado com sucesso!');
 
-      table.onUpdatePageDeleteRow(dataInPage.length);
+        setTransactions(deleteRow);
+
+        table.onUpdatePageDeleteRow(dataInPage.length);
+      } catch (e) {
+        console.error(e);
+        toast.error('Não foi possível deletar essa transação!');
+      }
     },
-    [dataInPage.length, table, tableData]
+    [dataInPage.length, table, transactions, setTransactions]
   );
 
-  const handleDeleteRows = useCallback(() => {
-    const deleteRows = tableData.filter((row) => !table.selected.includes(row.id));
+  const handleDeleteRows = useCallback(async () => {
+    try {
+      await axios.delete(endpoints.user.deleteTransactions, {
+        params: { ids: table.selected.join(',') },
+      });
 
-    toast.success('Delete success!');
+      const deleteRows = transactions.filter((row) => !table.selected.includes(row.id));
 
-    setTableData(deleteRows);
+      toast.success('Deletado com sucesso!');
 
-    table.onUpdatePageDeleteRows({
-      totalRowsInPage: dataInPage.length,
-      totalRowsFiltered: dataFiltered.length,
-    });
-  }, [dataFiltered.length, dataInPage.length, table, tableData]);
+      setTransactions(deleteRows);
+
+      table.onUpdatePageDeleteRows({
+        totalRowsInPage: dataInPage.length,
+        totalRowsFiltered: dataFiltered.length,
+      });
+    } catch (e) {
+      console.error(e);
+      toast.error('Não foi possível deletar essa transações!');
+    }
+  }, [dataFiltered.length, dataInPage.length, table, transactions, setTransactions]);
 
   const handleEditRow = useCallback(
     (id: string) => {
@@ -214,7 +232,7 @@ export function InvoiceListView() {
               variant="contained"
               startIcon={<Iconify icon="mingcute:add-line" />}
             >
-              New invoice
+              Nova transação
             </Button>
           }
           sx={{ mb: { xs: 3, md: 5 } }}
@@ -229,15 +247,15 @@ export function InvoiceListView() {
             >
               <InvoiceAnalytic
                 title="Total"
-                total={tableData.length}
+                total={transactions.length}
                 percent={100}
-                price={sumBy(tableData, (invoice) => invoice.totalAmount)}
+                price={sumBy(transactions, (invoice) => invoice.amount)}
                 icon="solar:bill-list-bold-duotone"
                 color={theme.vars.palette.info.main}
               />
 
               <InvoiceAnalytic
-                title="Paid"
+                title="Pago"
                 total={getInvoiceLength('paid')}
                 percent={getPercentByStatus('paid')}
                 price={getTotalAmount('paid')}
@@ -246,7 +264,7 @@ export function InvoiceListView() {
               />
 
               <InvoiceAnalytic
-                title="Pending"
+                title="Pendente"
                 total={getInvoiceLength('pending')}
                 percent={getPercentByStatus('pending')}
                 price={getTotalAmount('pending')}
@@ -255,7 +273,7 @@ export function InvoiceListView() {
               />
 
               <InvoiceAnalytic
-                title="Overdue"
+                title="Vencido"
                 total={getInvoiceLength('overdue')}
                 percent={getPercentByStatus('overdue')}
                 price={getTotalAmount('overdue')}
@@ -264,7 +282,7 @@ export function InvoiceListView() {
               />
 
               <InvoiceAnalytic
-                title="Draft"
+                title="Rascunho"
                 total={getInvoiceLength('draft')}
                 percent={getPercentByStatus('draft')}
                 price={getTotalAmount('draft')}
@@ -449,7 +467,7 @@ export function InvoiceListView() {
 
 type ApplyFilterProps = {
   dateError: boolean;
-  inputData: IInvoice[];
+  inputData: Transaction[];
   filters: IInvoiceTableFilters;
   comparator: (a: any, b: any) => number;
 };
@@ -470,8 +488,8 @@ function applyFilter({ inputData, comparator, filters, dateError }: ApplyFilterP
   if (name) {
     inputData = inputData.filter(
       (invoice) =>
-        invoice.invoiceNumber.toLowerCase().indexOf(name.toLowerCase()) !== -1 ||
-        invoice.invoiceTo.name.toLowerCase().indexOf(name.toLowerCase()) !== -1
+        invoice.description.toLowerCase().indexOf(name.toLowerCase()) !== -1 ||
+        invoice.description.toLowerCase().indexOf(name.toLowerCase()) !== -1
     );
   }
 
@@ -479,15 +497,9 @@ function applyFilter({ inputData, comparator, filters, dateError }: ApplyFilterP
     inputData = inputData.filter((invoice) => invoice.status === status);
   }
 
-  if (service.length) {
-    inputData = inputData.filter((invoice) =>
-      invoice.items.some((filterItem) => service.includes(filterItem.service))
-    );
-  }
-
   if (!dateError) {
     if (startDate && endDate) {
-      inputData = inputData.filter((invoice) => fIsBetween(invoice.createDate, startDate, endDate));
+      inputData = inputData.filter((invoice) => fIsBetween(invoice.createdAt, startDate, endDate));
     }
   }
 

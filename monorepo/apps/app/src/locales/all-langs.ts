@@ -25,6 +25,16 @@ import {
 
 export const allLangs = [
   {
+    value: 'pt',
+    label: 'Portugês',
+    countryCode: 'BR',
+    adapterLocale: 'pt',
+    numberFormat: { code: 'pt-BR', currency: 'BRL' },
+    systemValue: {
+      components: { ...frFRCore.components, ...frFRDate.components, ...frFRDataGrid.components },
+    },
+  },
+  {
     value: 'en',
     label: 'English',
     countryCode: 'GB',
