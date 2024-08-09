@@ -65,11 +65,6 @@ export class UserController {
       throw new UnauthorizedException('User not found');
     }
 
-    /**
-     * Throw error if dont meet business logic
-     */
-    createTransactionDto.validateCategory();
-
     const transaction = await this.usersService.createTransaction({
       ...createTransactionDto,
       user: { connect: { id: userId } },
@@ -88,11 +83,6 @@ export class UserController {
     if (!userId) {
       throw new UnauthorizedException('User not found');
     }
-
-    /**
-     * Throw error if dont meet business logic
-     */
-    updateTransactionDto.validateCategory();
 
     const { id, ...data } = updateTransactionDto;
 

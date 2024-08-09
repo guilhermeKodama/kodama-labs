@@ -6,6 +6,7 @@ import InputAdornment from '@mui/material/InputAdornment';
 import { NumericFormat } from 'react-number-format';
 import { Field } from 'src/components/hook-form';
 import { CategoryLabels } from './constants';
+import { ExpenseCategory, IncomeCategory, TransactionType } from 'src/types/api';
 
 // ----------------------------------------------------------------------
 
@@ -13,6 +14,16 @@ export function InvoiceNewEditCategoryTotal() {
   const { watch, setValue, control } = useFormContext();
 
   const values = watch();
+
+  // Determine which categories to display based on the transaction type
+  const categoryOptions =
+    values.type === TransactionType.INCOME
+      ? Object.entries(CategoryLabels).filter(([key]) =>
+          Object.values(IncomeCategory).includes(key as IncomeCategory)
+        )
+      : Object.entries(CategoryLabels).filter(([key]) =>
+          Object.values(ExpenseCategory).includes(key as ExpenseCategory)
+        );
 
   /**
    * Callbacks
@@ -31,7 +42,7 @@ export function InvoiceNewEditCategoryTotal() {
         InputLabelProps={{ shrink: true }}
         value={values.category || ''}
       >
-        {Object.entries(CategoryLabels).map(([value, label]) => (
+        {categoryOptions.map(([value, label]) => (
           <MenuItem key={value} value={value} sx={{ textTransform: 'capitalize' }}>
             {label}
           </MenuItem>
