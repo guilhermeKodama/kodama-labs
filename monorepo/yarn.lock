@@ -12886,7 +12886,7 @@ prompts@^2.0.1, prompts@^2.4.2:
     kleur "^3.0.3"
     sisteransi "^1.0.5"
 
-prop-types@^15.6.0, prop-types@^15.6.2, prop-types@^15.8.1:
+prop-types@^15.6.0, prop-types@^15.6.2, prop-types@^15.7.2, prop-types@^15.8.1:
   version "15.8.1"
   resolved "https://registry.npmjs.org/prop-types/-/prop-types-15.8.1.tgz"
   integrity sha512-oj87CgZICdulUohogVAR7AjlC0327U4el4L6eAvOqCeudMDVU0NThNaV+b9Df4dXgSP1gXMTnPdhfe/2qDH5cg==
@@ -13335,6 +13335,13 @@ react-lazy-load-image-component@^1.6.2:
   dependencies:
     lodash.debounce "^4.0.8"
     lodash.throttle "^4.1.1"
+
+react-number-format@^5.4.0:
+  version "5.4.0"
+  resolved "https://registry.yarnpkg.com/react-number-format/-/react-number-format-5.4.0.tgz#8c1e97add1970d1a2f372ca286bcdaa49632ba5c"
+  integrity sha512-NWdICrqLhI7rAS8yUeLVd6Wr4cN7UjJ9IBTS0f/a9i7UB4x4Ti70kGnksBtZ7o4Z7YRbvCMMR/jQmkoOBa/4fg==
+  dependencies:
+    prop-types "^15.7.2"
 
 react-phone-number-input@^3.4.4:
   version "3.4.4"

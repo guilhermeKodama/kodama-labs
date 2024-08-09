@@ -13,6 +13,7 @@ import TableCell from '@mui/material/TableCell';
 import IconButton from '@mui/material/IconButton';
 import Typography from '@mui/material/Typography';
 import ListItemText from '@mui/material/ListItemText';
+import Tooltip from '@mui/material/Tooltip';
 
 import { useBoolean } from 'src/hooks/use-boolean';
 
@@ -23,8 +24,8 @@ import { Label } from 'src/components/label';
 import { Iconify } from 'src/components/iconify';
 import { ConfirmDialog } from 'src/components/custom-dialog';
 import { usePopover, CustomPopover } from 'src/components/custom-popover';
-import { Transaction } from 'src/types/api';
-import { StatusLabels } from './constants';
+import { Transaction, TransactionType } from 'src/types/api';
+import { ShortTypeLabels, StatusLabels } from './constants';
 
 // ----------------------------------------------------------------------
 
@@ -117,6 +118,21 @@ export function InvoiceTableRow({
           >
             {StatusLabels[row.status]}
           </Label>
+        </TableCell>
+
+        <TableCell>
+          <Tooltip title={row.type === TransactionType.INCOME ? 'Receita' : 'Despesa'}>
+            <Label
+              variant="soft"
+              color={
+                (row.type === TransactionType.INCOME && 'success') ||
+                (row.type === TransactionType.EXPENSE && 'error') ||
+                'default'
+              }
+            >
+              {ShortTypeLabels[row.type]}
+            </Label>
+          </Tooltip>
         </TableCell>
 
         <TableCell align="right" sx={{ px: 1 }}>

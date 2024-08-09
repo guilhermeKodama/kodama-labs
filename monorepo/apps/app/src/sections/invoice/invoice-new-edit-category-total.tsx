@@ -1,31 +1,26 @@
-import { useFormContext } from 'react-hook-form';
-
+import { useFormContext, Controller } from 'react-hook-form';
 import Box from '@mui/material/Box';
 import Stack from '@mui/material/Stack';
-
-import { Field } from 'src/components/hook-form';
 import MenuItem from '@mui/material/MenuItem';
-import { useCallback } from 'react';
 import InputAdornment from '@mui/material/InputAdornment';
+import { NumericFormat } from 'react-number-format';
+import { Field } from 'src/components/hook-form';
 import { CategoryLabels } from './constants';
 
 // ----------------------------------------------------------------------
 
 export function InvoiceNewEditCategoryTotal() {
-  const { watch, setValue } = useFormContext();
+  const { watch, setValue, control } = useFormContext();
 
   const values = watch();
 
   /**
    * Callbacks
    */
-
-  const handleChangePrice = useCallback(
-    (event: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-      setValue('amount', Number(event.target.value));
-    },
-    [setValue, values.amount]
-  );
+  const handleChangePrice = (values: { floatValue: number | undefined }) => {
+    const amount = values.floatValue || 0; // Use float value for amount
+    setValue('amount', amount); // Set amount as a float
+  };
 
   const renderTotal = (
     <Stack spacing={2} direction={{ xs: 'column', sm: 'row' }}>
@@ -42,19 +37,31 @@ export function InvoiceNewEditCategoryTotal() {
           </MenuItem>
         ))}
       </Field.Select>
-      <Field.Text
-        type="number"
+      <Controller
         name="amount"
-        label="Valor"
-        placeholder="0.00"
-        onChange={(event) => handleChangePrice(event)}
-        InputProps={{
-          startAdornment: (
-            <InputAdornment position="start">
-              <Box sx={{ typography: 'subtitle2', color: 'text.disabled' }}>R$</Box>
-            </InputAdornment>
-          ),
-        }}
+        control={control}
+        render={({ field: { onChange, ...field } }) => (
+          <NumericFormat
+            {...field}
+            customInput={Field.Text}
+            thousandSeparator="."
+            decimalSeparator=","
+            decimalScale={2}
+            fixedDecimalScale
+            allowNegative={false}
+            onValueChange={handleChangePrice}
+            placeholder="0,00"
+            InputProps={{
+              startAdornment: (
+                <InputAdornment position="start">
+                  <Box sx={{ typography: 'subtitle2', color: 'text.disabled' }}>R$</Box>
+                </InputAdornment>
+              ),
+            }}
+            fullWidth
+            label="Valor"
+          />
+        )}
       />
     </Stack>
   );

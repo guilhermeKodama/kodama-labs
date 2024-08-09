@@ -5,7 +5,6 @@ import { DashboardContent } from 'src/layouts/dashboard';
 
 import { Iconify } from 'src/components/iconify/iconify';
 
-import { BankingOverview } from '../banking-overview';
 import { BankingBalanceStatistics } from '../banking-balance-statistics';
 import { BankingExpensesCategories } from '../banking-expenses-categories';
 import { Transaction, TransactionCategory, TransactionType } from 'src/types/api';
@@ -91,16 +90,16 @@ const transformTransactions = (transactions: Transaction[]): TransformedData => 
   };
 
   const weeklySeries = [
-    { name: 'Income', data: transformData(groupedByWeek, TransactionType.INCOME) },
-    { name: 'Expense', data: transformData(groupedByWeek, TransactionType.EXPENSE) },
+    { name: 'Receitas', data: transformData(groupedByWeek, TransactionType.INCOME) },
+    { name: 'Despesas', data: transformData(groupedByWeek, TransactionType.EXPENSE) },
   ];
   const monthlySeries = [
-    { name: 'Income', data: transformData(groupedByMonth, TransactionType.INCOME) },
-    { name: 'Expense', data: transformData(groupedByMonth, TransactionType.EXPENSE) },
+    { name: 'Receitas', data: transformData(groupedByMonth, TransactionType.INCOME) },
+    { name: 'Despesas', data: transformData(groupedByMonth, TransactionType.EXPENSE) },
   ];
   const yearlySeries = [
-    { name: 'Income', data: transformData(groupedByYear, TransactionType.INCOME) },
-    { name: 'Expense', data: transformData(groupedByYear, TransactionType.EXPENSE) },
+    { name: 'Receitas', data: transformData(groupedByYear, TransactionType.INCOME) },
+    { name: 'Despesas', data: transformData(groupedByYear, TransactionType.EXPENSE) },
   ];
 
   const expenseTransactions = transactions.filter(
@@ -146,7 +145,7 @@ export function OverviewBankingView() {
 
           <BankingBalanceStatistics
             title="Fluxo de caixa"
-            subheader="Estatísticas de renda vs gastos"
+            subheader="Estatísticas de receitas vs despesas"
             chart={{
               series: [
                 {

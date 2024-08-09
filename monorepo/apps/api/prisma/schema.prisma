@@ -28,21 +28,6 @@ enum TransactionStatus {
   DRAFT
 }
 
-enum TransactionCategory {
-  CREDIT_CARD
-  FOOD
-  HOUSING
-  TRANSPORTATION
-  HEALTH
-  EDUCATION
-  LEISURE_ENTERTAINMENT
-  CLOTHING_ACCESSORIES
-  PERSONAL_EXPENSES
-  INSURANCE_PENSIONS
-  INVESTMENTS
-  DEBTS_LOANS
-}
-
 enum TransactionType {
   INCOME
   EXPENSE
@@ -55,7 +40,7 @@ model Transaction {
   description String
   dueAt       DateTime
   type        TransactionType  @default(EXPENSE)
-  category    TransactionCategory?
+  category    String?
   status      TransactionStatus
   emailId     String?
   email       Email?            @relation(fields: [emailId], references: [id])

@@ -1,4 +1,4 @@
-import type { IInvoice, IInvoiceTableFilters } from 'src/types/invoice';
+import type { IInvoiceTableFilters } from 'src/types/invoice';
 
 import { useCallback, useContext } from 'react';
 
@@ -63,6 +63,7 @@ const TABLE_HEAD = [
   { id: 'dueAt', label: 'Vencimento' },
   { id: 'amount', label: 'Valor' },
   { id: 'status', label: 'Status' },
+  { id: 'type', label: 'Tipo' },
   { id: '' },
 ];
 
@@ -473,7 +474,7 @@ type ApplyFilterProps = {
 };
 
 function applyFilter({ inputData, comparator, filters, dateError }: ApplyFilterProps) {
-  const { name, status, service, startDate, endDate } = filters;
+  const { name, status, startDate, endDate } = filters;
 
   const stabilizedThis = inputData.map((el, index) => [el, index] as const);
 

@@ -13,7 +13,8 @@ import { Response } from 'express';
 import { NERService } from 'src/nlp/ner/ner.service';
 import { UsersService } from 'src/users/users.service';
 import { JwtService } from '@nestjs/jwt';
-import { TransactionCategory, TransactionStatus } from '@prisma/client';
+import { TransactionStatus } from '@prisma/client';
+import { ExpenseCategory } from 'src/users/types/transaction.enum';
 
 @Controller('auth')
 export class AuthController {
@@ -93,7 +94,7 @@ export class AuthController {
         amount: values[0],
         dueAt: emailRecord.internalDate,
         description: emailRecord.sender,
-        category: TransactionCategory.CREDIT_CARD,
+        category: ExpenseCategory.CREDIT_CARD,
         email: { connect: { id: emailRecord.id } },
         user: { connect: { id: user.id } },
       });

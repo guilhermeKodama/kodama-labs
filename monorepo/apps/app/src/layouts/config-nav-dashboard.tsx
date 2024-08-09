@@ -47,7 +47,7 @@ export const navData = [
    */
   {
     subheader: 'Visão Geral',
-    items: [{ title: 'Entradas e Saídas', path: paths.dashboard.banking, icon: ICONS.analytics }],
+    items: [{ title: 'Receitas e Despesas', path: paths.dashboard.banking, icon: ICONS.analytics }],
   },
   /**
    * Management

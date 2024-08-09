@@ -14,8 +14,8 @@ import {
 } from '@nestjs/common';
 import { JwtAuthGuard } from 'src/auth/guards';
 import { UsersService } from './users.service';
-import { CreateTransactionDto } from './dto/create-transaction.dto';
-import { UpdateTransactionDto } from './dto/update-transaction.dto';
+import { CreateTransactionDto } from './types/create-transaction.dto';
+import { UpdateTransactionDto } from './types/update-transaction.dto';
 
 @Controller('user')
 export class UserController {
@@ -65,6 +65,11 @@ export class UserController {
       throw new UnauthorizedException('User not found');
     }
 
+    /**
+     * Throw error if dont meet business logic
+     */
+    createTransactionDto.validateCategory();
+
     const transaction = await this.usersService.createTransaction({
       ...createTransactionDto,
       user: { connect: { id: userId } },
@@ -83,6 +88,11 @@ export class UserController {
     if (!userId) {
       throw new UnauthorizedException('User not found');
     }
+
+    /**
+     * Throw error if dont meet business logic
+     */
+    updateTransactionDto.validateCategory();
 
     const { id, ...data } = updateTransactionDto;
 

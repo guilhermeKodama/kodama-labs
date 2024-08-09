@@ -22,13 +22,15 @@ import axios, { endpoints } from 'src/utils/axios';
 import { InvoiceNewEditStatusDate } from './invoice-new-edit-status-date';
 import { InvoiceNewEditCategoryTotal } from './invoice-new-edit-category-total';
 import { InvoiceNewEditDescription } from './invoice-new-edit-description';
-import { Transaction } from 'src/types/api';
+import { Transaction, TransactionType } from 'src/types/api';
+import { InvoiceNewEditType } from './invoice-new-edit-type';
 
 // ----------------------------------------------------------------------
 
 export type NewInvoiceSchemaType = zod.infer<typeof NewInvoiceSchema>;
 
 export const NewInvoiceSchema = zod.object({
+  type: zod.string().refine((val) => val !== '', { message: 'Tipo é obrigatório!' }),
   createdAt: schemaHelper.date({ message: { required_error: 'Data de criação é obrigatório!' } }),
   dueAt: schemaHelper.date({ message: { required_error: 'Data de vencimento é obrigatório!' } }),
   // Not required
@@ -59,6 +61,7 @@ export function InvoiceNewEditForm({ currentTransaction }: Props) {
 
   const defaultValues = useMemo(
     () => ({
+      type: currentTransaction?.type || TransactionType.EXPENSE,
       description: currentTransaction?.description || '',
       category: currentTransaction?.category || '',
       createdAt: currentTransaction?.createdAt || today(),
@@ -78,7 +81,7 @@ export function InvoiceNewEditForm({ currentTransaction }: Props) {
   const {
     reset,
     handleSubmit,
-    formState: { isSubmitting, isLoading, isDirty, isValid, errors },
+    formState: { isSubmitting },
   } = methods;
 
   const handleSaveAsDraft = handleSubmit(async (data) => {
@@ -98,6 +101,7 @@ export function InvoiceNewEditForm({ currentTransaction }: Props) {
 
   const handleCreateAndSend = handleSubmit(async (data) => {
     loadingSend.onTrue();
+    console.log({ data });
     try {
       if (currentTransaction) {
         await axios.put(endpoints.user.updateTransaction, {
@@ -127,6 +131,8 @@ export function InvoiceNewEditForm({ currentTransaction }: Props) {
   return (
     <Form methods={methods}>
       <Card>
+        <InvoiceNewEditType />
+
         <InvoiceNewEditDescription />
 
         <InvoiceNewEditStatusDate />
