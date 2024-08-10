@@ -7,8 +7,8 @@ import { Iconify } from 'src/components/iconify/iconify';
 
 import { BankingBalanceStatistics } from '../banking-balance-statistics';
 import { BankingExpensesCategories } from '../banking-expenses-categories';
-import { Transaction, TransactionCategory, TransactionType } from 'src/types/api';
-import { useContext, useMemo } from 'react';
+import { ExpenseCategory, Transaction, TransactionCategory, TransactionType } from 'src/types/api';
+import { ReactElement, useContext, useMemo } from 'react';
 import { TransactionContext } from 'src/pages/dashboard/invoice/transaction-context';
 
 // ----------------------------------------------------------------------
@@ -31,6 +31,22 @@ export type TransformedData = {
   yearlySeries: { name: string; data: number[] }[];
   yearlyCategories: string[];
   expenseSeries: ExpenseCategoryData[];
+};
+
+const categoryIcons: { [key in ExpenseCategory]: ReactElement } = {
+  CREDIT_CARD: <Iconify icon="mdi:credit-card-outline" />,
+  FOOD: <Iconify icon="ion:fast-food" />,
+  HOUSING: <Iconify icon="mdi:home-outline" />,
+  TRANSPORTATION: <Iconify icon="maki:car" />,
+  HEALTH: <Iconify icon="solar:medical-kit-bold" />,
+  EDUCATION: <Iconify icon="mdi:school-outline" />,
+  LEISURE_ENTERTAINMENT: <Iconify icon="streamline:dices-entertainment-gaming-dices-solid" />,
+  CLOTHING_ACCESSORIES: <Iconify icon="mdi:wardrobe-outline" />,
+  PERSONAL_EXPENSES: <Iconify icon="mdi:currency-usd-circle-outline" />,
+  INSURANCE_PENSIONS: <Iconify icon="mdi:shield-account-outline" />,
+  INVESTMENTS: <Iconify icon="mdi:finance" />,
+  DEBTS_LOANS: <Iconify icon="mdi:account-cash-outline" />,
+  TAXES: <Iconify icon="bi:receipt-cutoff" />,
 };
 
 const groupBy = (arr: any[], key: string) =>
@@ -60,6 +76,13 @@ const getWeek = (dateStr: string) => {
 
 const getMonth = (dateStr: string) => new Date(dateStr).getMonth();
 const getYear = (dateStr: string) => new Date(dateStr).getFullYear();
+
+const getExpenseSeriesWithIcons = (expenseSeries: ExpenseCategoryData[]) => {
+  return {
+    series: expenseSeries,
+    icons: expenseSeries.map((item) => categoryIcons[item.label as ExpenseCategory]),
+  };
+};
 
 const transformTransactions = (transactions: Transaction[]): TransformedData => {
   const transactionsWithKeys = transactions.map((transaction) => ({
@@ -135,7 +158,7 @@ export function OverviewBankingView() {
     expenseSeries,
   } = useMemo<TransformedData>(() => transformTransactions(transactions), [transactions]);
 
-  console.log({ expenseSeries });
+  const expenseSeriesWithIcons = getExpenseSeriesWithIcons(expenseSeries);
 
   return (
     <DashboardContent maxWidth="xl">
@@ -171,23 +194,7 @@ export function OverviewBankingView() {
             title="Despesas por categoria"
             total={expenseSeries.reduce((sum, item) => sum + item.value, 0)}
             categoriesTotal={expenseSeries.length}
-            chart={{
-              series: expenseSeries,
-              icons: [
-                <Iconify icon="ion:fast-food" />, // Food
-                <Iconify icon="mdi:home-outline" />, // Housing
-                <Iconify icon="maki:car" />, // Transportation
-                <Iconify icon="solar:medical-kit-bold" />, // Health
-                <Iconify icon="mdi:school-outline" />, // Education
-                <Iconify icon="streamline:dices-entertainment-gaming-dices-solid" />, // Leisure_Entertainment
-                <Iconify icon="mdi:wardrobe-outline" />, // Clothing_Accessories
-                <Iconify icon="mdi:currency-usd-circle-outline" />, // Personal_Expenses
-                <Iconify icon="mdi:shield-account-outline" />, // Insurance_Pensions
-                <Iconify icon="mdi:finance" />, // Investments
-                <Iconify icon="mdi:account-cash-outline" />, // Debts_Loans
-                <Iconify icon="mdi:credit-card-outline" />, // Credit_Card
-              ],
-            }}
+            chart={expenseSeriesWithIcons}
           />
         </Box>
       </Grid>

@@ -51,9 +51,10 @@ export function InvoiceNewEditCategoryTotal() {
       <Controller
         name="amount"
         control={control}
-        render={({ field: { onChange, ...field } }) => (
+        render={({ field: { onChange, value, ...field } }) => (
           <NumericFormat
             {...field}
+            value={value === 0 || value === null ? '' : value}
             customInput={Field.Text}
             thousandSeparator="."
             decimalSeparator=","
