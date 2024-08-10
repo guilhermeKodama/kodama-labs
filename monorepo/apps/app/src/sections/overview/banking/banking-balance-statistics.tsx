@@ -30,30 +30,20 @@ type Props = CardProps & {
   };
 };
 
-// Calculates percentual variance
-const calculatePercentualVariance = (numbers: number[]): number => {
-  if (numbers.length === 0) {
-    return 0; // or another appropriate value for your use case
+const calculatePercentChange = (numbers: number[]): number => {
+  if (numbers.length < 2) {
+    return 0; // Not enough data to calculate a change
   }
 
-  // Calculate the mean
-  const mean = numbers.reduce((sum, num) => sum + num, 0) / numbers.length;
+  const first = numbers[0];
+  const last = numbers[numbers.length - 1];
 
-  // Handle case where mean is zero to avoid division by zero
-  if (mean === 0) {
-    return 0;
+  // If the first number is zero, handle this case to avoid division by zero
+  if (first === 0) {
+    return last !== 0 ? Infinity : 0; // Return infinity or zero percent change
   }
 
-  // Calculate the variance
-  const variance = numbers.reduce((sum, num) => sum + Math.pow(num - mean, 2), 0) / numbers.length;
-
-  // Calculate the standard deviation
-  const standardDeviation = Math.sqrt(variance);
-
-  // Calculate the percentual variance
-  const percentualVariance = (standardDeviation / mean) * 100;
-
-  return percentualVariance;
+  return ((last - first) / first) * 100;
 };
 
 export function BankingBalanceStatistics({ title, subheader, chart, ...other }: Props) {
@@ -91,16 +81,14 @@ export function BankingBalanceStatistics({ title, subheader, chart, ...other }: 
     if (!currentSeries) return [];
 
     return currentSeries.data.map((item) => {
-      const variance = calculatePercentualVariance(item.data);
+      const variance = calculatePercentChange(item.data);
       return variance;
     });
   }, [currentSeries]);
 
   // Format percentual variances for display
   const sublabels = useMemo(() => {
-    return percentualVariances.map((variance) =>
-      variance >= 0 ? `+${fPercent(variance)}` : `-${fPercent(variance)}`
-    );
+    return percentualVariances.map((variance) => (variance !== Infinity ? fPercent(variance) : ''));
   }, [percentualVariances]);
 
   // Calculate the sum for each dataset

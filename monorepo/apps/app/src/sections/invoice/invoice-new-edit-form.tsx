@@ -66,7 +66,7 @@ export function InvoiceNewEditForm({ currentTransaction }: Props) {
       category: currentTransaction?.category || '',
       createdAt: currentTransaction?.createdAt || today(),
       dueAt: currentTransaction?.dueAt || null,
-      status: currentTransaction?.status || 'draft',
+      status: currentTransaction?.status || 'pending',
       amount: currentTransaction?.amount || 0,
     }),
     [currentTransaction]
