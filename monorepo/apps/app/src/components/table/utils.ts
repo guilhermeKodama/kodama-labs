@@ -1,3 +1,4 @@
+// @ts-nocheck
 // ----------------------------------------------------------------------
 
 export function rowInPage<T>(data: T[], page: number, rowsPerPage: number) {

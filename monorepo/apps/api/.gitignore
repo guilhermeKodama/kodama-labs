@@ -36,3 +36,5 @@ lerna-debug.log*
 .vercel
 
 wallex-fde93-firebase-adminsdk-c4sv5-6b9ce074aa.json
+
+.env.production

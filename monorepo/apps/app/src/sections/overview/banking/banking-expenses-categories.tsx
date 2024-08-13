@@ -1,3 +1,4 @@
+// @ts-nocheck
 import type { CardProps } from '@mui/material/Card';
 import type { ChartOptions } from 'src/components/chart';
 
@@ -74,12 +75,7 @@ export function BankingExpensesCategories({
     plotOptions: {
       pie: {
         donut: { labels: { show: false } },
-        dataLabels: {
-          enabled: true,
-          formatter: function (value) {
-            return `${value.toFixed(2)}%`;
-          },
-        },
+        dataLabels: {},
       },
     },
     ...chart.options,

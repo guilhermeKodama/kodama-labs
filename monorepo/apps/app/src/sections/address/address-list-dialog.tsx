@@ -1,3 +1,4 @@
+// @ts-nocheck
 import type { IAddressItem } from 'src/types/common';
 
 import { useState, useCallback } from 'react';

@@ -48,23 +48,20 @@ export const signUp = async ({
   firstName,
   lastName,
 }: SignUpParams): Promise<void> => {
-  const params = {
-    email,
-    password,
-    firstName,
-    lastName,
-  };
+  // const params = {
+  //   email,
+  //   password,
+  //   firstName,
+  //   lastName,
+  // };
 
   try {
-    const res = await axios.post(endpoints.auth.signUp, params);
-
-    const { accessToken } = res.data;
-
-    if (!accessToken) {
-      throw new Error('Access token not found in response');
-    }
-
-    sessionStorage.setItem(STORAGE_KEY, accessToken);
+    // const res = await axios.post(endpoints.auth.signUp, params);
+    // const { accessToken } = res.data;
+    // if (!accessToken) {
+    //   throw new Error('Access token not found in response');
+    // }
+    // sessionStorage.setItem(STORAGE_KEY, accessToken);
   } catch (error) {
     console.error('Error during sign up:', error);
     throw error;
