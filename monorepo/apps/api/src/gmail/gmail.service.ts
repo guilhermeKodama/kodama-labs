@@ -7,7 +7,18 @@ import * as pdfParse from 'pdf-parse';
 @Injectable()
 export class GmailService {
   private readonly logger = new Logger(GmailService.name);
-  readonly BANKS_DOMAINS = ['nubank.com.br', 'inter.co', 'xpi.com.br'];
+  readonly BANKS_DOMAINS = [
+    'nubank.com.br',
+    'inter.co',
+    'xpi.com.br',
+    'itau.com.br',
+    'bb.com.br',
+    'caixa.gov.br',
+    'santander.com.br',
+    'banco.bradesco',
+    'c6bank.com.br',
+    'inter.co',
+  ];
 
   private createOAuth2Client(
     accessToken: string,

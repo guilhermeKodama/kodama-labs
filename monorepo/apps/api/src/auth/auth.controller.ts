@@ -109,7 +109,7 @@ export class AuthController {
     }
 
     const token = this.jwtService.sign({ id: user.id });
-    const redirectUrl = `http://localhost:8081/auth/jwt/sign-in?token=${token}`;
+    const redirectUrl = `${process.env.APP_URL}/auth/jwt/sign-in?token=${token}`;
 
     return res.redirect(redirectUrl);
   }
