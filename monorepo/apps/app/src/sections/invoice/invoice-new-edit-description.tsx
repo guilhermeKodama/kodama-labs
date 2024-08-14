@@ -6,7 +6,6 @@ import Divider from '@mui/material/Divider';
 
 import { useResponsive } from 'src/hooks/use-responsive';
 
-import { _addressBooks } from 'src/_mock';
 
 import { Field } from 'src/components/hook-form';
 
@@ -20,8 +19,7 @@ export function InvoiceNewEditDescription() {
   const values = watch();
 
   return (
-    <>
-      <Stack
+    <Stack
         spacing={{ xs: 3, md: 5 }}
         direction={{ xs: 'column', md: 'row' }}
         divider={
@@ -39,6 +37,5 @@ export function InvoiceNewEditDescription() {
           </Stack>
         </Stack>
       </Stack>
-    </>
   );
 }

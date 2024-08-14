@@ -1,7 +1,8 @@
+import type {
+  TransactionCategory} from 'src/types/api';
 import {
   ExpenseCategory,
   IncomeCategory,
-  TransactionCategory,
   TransactionType,
 } from 'src/types/api';
 

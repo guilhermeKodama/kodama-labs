@@ -5,8 +5,8 @@ import MenuItem from '@mui/material/MenuItem';
 import InputAdornment from '@mui/material/InputAdornment';
 import { NumericFormat } from 'react-number-format';
 import { Field } from 'src/components/hook-form';
-import { CategoryLabels } from './constants';
 import { ExpenseCategory, IncomeCategory, TransactionType } from 'src/types/api';
+import { CategoryLabels } from './constants';
 
 // ----------------------------------------------------------------------
 
@@ -28,8 +28,8 @@ export function InvoiceNewEditCategoryTotal() {
   /**
    * Callbacks
    */
-  const handleChangePrice = (values: { floatValue: number | undefined }) => {
-    const amount = values.floatValue || 0; // Use float value for amount
+  const handleChangePrice = (fieldValues: { floatValue: number | undefined }) => {
+    const amount = fieldValues.floatValue || 0; // Use float value for amount
     setValue('amount', amount); // Set amount as a float
   };
 

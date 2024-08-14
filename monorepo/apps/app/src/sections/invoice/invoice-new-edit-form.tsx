@@ -14,15 +14,15 @@ import { useBoolean } from 'src/hooks/use-boolean';
 
 import { today } from 'src/utils/format-time';
 
-import { _addressBooks } from 'src/_mock';
 
 import { Form, schemaHelper } from 'src/components/hook-form';
 
 import axios, { endpoints } from 'src/utils/axios';
+import type { Transaction} from 'src/types/api';
+import { TransactionType } from 'src/types/api';
 import { InvoiceNewEditStatusDate } from './invoice-new-edit-status-date';
 import { InvoiceNewEditCategoryTotal } from './invoice-new-edit-category-total';
 import { InvoiceNewEditDescription } from './invoice-new-edit-description';
-import { Transaction, TransactionType } from 'src/types/api';
 import { InvoiceNewEditType } from './invoice-new-edit-type';
 
 // ----------------------------------------------------------------------

@@ -65,7 +65,7 @@ export function BankingExpensesCategories({
     fill: { opacity: 0.88 },
     tooltip: {
       y: {
-        formatter: function (value, { seriesIndex }) {
+        formatter (value, { seriesIndex }) {
           // Calculate actual value from percentage
           const actualValue = (value / 100) * total;
           return `${fCurrency(actualValue)} (${value.toFixed(2)}%)`;

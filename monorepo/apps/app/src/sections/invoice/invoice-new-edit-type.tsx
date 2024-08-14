@@ -8,7 +8,6 @@ import Paper from '@mui/material/Paper';
 
 import { useResponsive } from 'src/hooks/use-responsive';
 
-import { _addressBooks } from 'src/_mock';
 import { Iconify } from 'src/components/iconify';
 import { TransactionType } from 'src/types/api';
 
@@ -24,8 +23,7 @@ export function InvoiceNewEditType() {
   console.log({ values });
 
   return (
-    <>
-      <Stack
+    <Stack
         spacing={{ xs: 3, md: 5 }}
         direction={{ xs: 'column', md: 'row' }}
         divider={
@@ -82,6 +80,5 @@ export function InvoiceNewEditType() {
           </Stack>
         </Stack>
       </Stack>
-    </>
   );
 }

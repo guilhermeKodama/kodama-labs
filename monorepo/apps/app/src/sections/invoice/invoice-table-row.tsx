@@ -1,4 +1,3 @@
-import type { IInvoice } from 'src/types/invoice';
 
 import Link from '@mui/material/Link';
 import Stack from '@mui/material/Stack';
@@ -24,7 +23,8 @@ import { Label } from 'src/components/label';
 import { Iconify } from 'src/components/iconify';
 import { ConfirmDialog } from 'src/components/custom-dialog';
 import { usePopover, CustomPopover } from 'src/components/custom-popover';
-import { Transaction, TransactionType } from 'src/types/api';
+import type { Transaction} from 'src/types/api';
+import { TransactionType } from 'src/types/api';
 import { ShortTypeLabels, StatusLabels } from './constants';
 
 // ----------------------------------------------------------------------

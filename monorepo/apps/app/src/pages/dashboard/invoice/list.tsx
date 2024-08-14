@@ -4,9 +4,9 @@ import { Helmet } from 'react-helmet-async';
 import { CONFIG } from 'src/config-global';
 
 import { InvoiceListView } from 'src/sections/invoice/view';
-import { TransactionContext } from './transaction-context';
 import axios, { endpoints } from 'src/utils/axios';
-import { Transaction, UserTransactionsReponse } from 'src/types/api';
+import type { Transaction, UserTransactionsReponse } from 'src/types/api';
+import { TransactionContext } from './transaction-context';
 
 // ----------------------------------------------------------------------
 

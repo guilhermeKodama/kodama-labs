@@ -1,12 +1,6 @@
-import React, {
-  createContext,
-  useState,
-  ReactNode,
-  Dispatch,
-  SetStateAction,
-  useEffect,
-} from 'react';
-import { Transaction } from 'src/types/api';
+import type { ReactNode, Dispatch, SetStateAction } from 'react';
+import React, { createContext, useState, useEffect, useMemo } from 'react';
+import type { Transaction } from 'src/types/api';
 
 interface TransactionContextType {
   transactions: Transaction[];
@@ -34,9 +28,7 @@ export const TransactionProvider: React.FC<TransactionProviderProps> = ({ childr
     localStorage.setItem('transactions', JSON.stringify(transactions));
   }, [transactions]);
 
-  return (
-    <TransactionContext.Provider value={{ transactions, setTransactions }}>
-      {children}
-    </TransactionContext.Provider>
-  );
+  const value = useMemo(() => ({ transactions, setTransactions }), [transactions, setTransactions]);
+
+  return <TransactionContext.Provider value={value}>{children}</TransactionContext.Provider>;
 };

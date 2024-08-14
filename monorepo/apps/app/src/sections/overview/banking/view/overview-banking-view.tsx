@@ -5,11 +5,13 @@ import { DashboardContent } from 'src/layouts/dashboard';
 
 import { Iconify } from 'src/components/iconify/iconify';
 
-import { BankingBalanceStatistics } from '../banking-balance-statistics';
-import { BankingExpensesCategories } from '../banking-expenses-categories';
-import { ExpenseCategory, Transaction, TransactionCategory, TransactionType } from 'src/types/api';
-import { ReactElement, useContext, useMemo } from 'react';
+import type { ExpenseCategory, Transaction, TransactionCategory } from 'src/types/api';
+import { TransactionType } from 'src/types/api';
+import type { ReactElement } from 'react';
+import { useContext, useMemo } from 'react';
 import { TransactionContext } from 'src/pages/dashboard/invoice/transaction-context';
+import { BankingExpensesCategories } from '../banking-expenses-categories';
+import { BankingBalanceStatistics } from '../banking-balance-statistics';
 
 // ----------------------------------------------------------------------
 
@@ -77,12 +79,10 @@ const getWeek = (dateStr: string) => {
 const getMonth = (dateStr: string) => new Date(dateStr).getMonth();
 const getYear = (dateStr: string) => new Date(dateStr).getFullYear();
 
-const getExpenseSeriesWithIcons = (expenseSeries: ExpenseCategoryData[]) => {
-  return {
-    series: expenseSeries,
-    icons: expenseSeries.map((item) => categoryIcons[item.label as ExpenseCategory]),
-  };
-};
+const getExpenseSeriesWithIcons = (expenseSeries: ExpenseCategoryData[]) => ({
+  series: expenseSeries,
+  icons: expenseSeries.map((item) => categoryIcons[item.label as ExpenseCategory]),
+});
 
 const transformTransactions = (transactions: Transaction[]): TransformedData => {
   const transactionsWithKeys = transactions.map((transaction) => ({
@@ -98,7 +98,7 @@ const transformTransactions = (transactions: Transaction[]): TransformedData => 
 
   const weeklyCategories = Object.keys(groupedByWeek).map((week) => `Week ${week}`);
   const monthlyCategories = Object.keys(groupedByMonth).map((month) =>
-    new Date(0, parseInt(month)).toLocaleString('default', { month: 'short' })
+    new Date(0, parseInt(month, 10)).toLocaleString('default', { month: 'short' })
   );
   const yearlyCategories = Object.keys(groupedByYear);
 

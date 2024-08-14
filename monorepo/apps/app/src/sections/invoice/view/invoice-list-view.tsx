@@ -49,11 +49,11 @@ import {
 
 import axios, { endpoints } from 'src/utils/axios';
 import { TransactionContext } from 'src/pages/dashboard/invoice/transaction-context';
+import type { Transaction } from 'src/types/api';
 import { InvoiceAnalytic } from '../invoice-analytic';
 import { InvoiceTableRow } from '../invoice-table-row';
 import { InvoiceTableToolbar } from '../invoice-table-toolbar';
 import { InvoiceTableFiltersResult } from '../invoice-table-filters-result';
-import { Transaction } from 'src/types/api';
 
 // ----------------------------------------------------------------------
 
