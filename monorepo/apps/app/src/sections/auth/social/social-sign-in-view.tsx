@@ -15,6 +15,8 @@ import { Form } from 'src/components/hook-form';
 import { setSession } from 'src/auth/context/jwt';
 import { useAuthContext } from 'src/auth/hooks';
 
+import { CONFIG } from 'src/config-global';
+
 export type SignInSchemaType = zod.infer<typeof SignInSchema>;
 
 export const SignInSchema = zod.object({
@@ -70,7 +72,7 @@ export function SocialSignInView() {
 
   const onSubmit = handleSubmit(async () => {
     try {
-      window.location.href = 'http://localhost:4000/auth/google/login';
+      window.location.href = `${CONFIG.site.serverUrl}/auth/google/login`;
     } catch (error) {
       console.error(error);
       setErrorMsg(error instanceof Error ? error.message : error);
