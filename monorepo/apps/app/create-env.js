@@ -1,4 +1,4 @@
-import { writeFileSync } from 'fs';
+import { readdirSync, statSync, writeFileSync } from 'fs';
 import { resolve } from 'path';
 
 // Log to confirm the script is running
