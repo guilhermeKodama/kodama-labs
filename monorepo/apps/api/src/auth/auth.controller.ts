@@ -13,7 +13,7 @@ import { Response } from 'express';
 import { NERService } from 'src/nlp/ner/ner.service';
 import { UsersService } from 'src/users/users.service';
 import { JwtService } from '@nestjs/jwt';
-import { TransactionStatus } from '@prisma/client';
+import { TransactionStatus, User } from '@prisma/client';
 import { ExpenseCategory } from 'src/users/types/transaction.enum';
 
 @Controller('auth')
@@ -27,46 +27,10 @@ export class AuthController {
     private readonly jwtService: JwtService,
   ) {}
 
-  @Get('google/login')
-  @UseGuards(GoogleAuthGuard)
-  googleLogin(@Req() req) {
-    return req.user;
-  }
-
-  @Get('google/redirect')
-  @UseGuards(GoogleAuthGuard)
-  async googleAuthRedirect(
-    @Req()
-    req: {
-      user?: {
-        googleId: string;
-        displayName: string;
-        email: string;
-        photo: string;
-        accessToken: string;
-        refreshToken?: string;
-      };
-    },
-    @Res() res: Response,
-  ) {
-    this.logger.debug({ user: req.user });
-
-    let user = await this.usersService.user({ email: req.user.email });
-
-    if (!user) {
-      user = await this.usersService.createUser({
-        email: req.user.email,
-        googleId: req.user.googleId,
-        name: req.user.displayName,
-        photo: req.user.photo,
-        accessToken: req.user.accessToken,
-        refreshToken: req.user.refreshToken,
-      });
-    }
-
+  async processEmailTransactions(user: User) {
     const emails = await this.gmailService.getEmails(
-      req.user.accessToken,
-      req.user.refreshToken,
+      user.accessToken,
+      user.refreshToken,
       this.gmailService.BANKS_DOMAINS,
     );
 
@@ -107,6 +71,52 @@ export class AuthController {
         values,
       });
     }
+  }
+
+  @Get('google/login')
+  @UseGuards(GoogleAuthGuard)
+  googleLogin(@Req() req) {
+    return req.user;
+  }
+
+  @Get('google/redirect')
+  @UseGuards(GoogleAuthGuard)
+  async googleAuthRedirect(
+    @Req()
+    req: {
+      user?: {
+        googleId: string;
+        displayName: string;
+        email: string;
+        photo: string;
+        accessToken: string;
+        refreshToken?: string;
+      };
+    },
+    @Res() res: Response,
+  ) {
+    this.logger.debug({ user: req.user });
+
+    let user = await this.usersService.user({ email: req.user.email });
+
+    if (!user) {
+      user = await this.usersService.createUser({
+        email: req.user.email,
+        googleId: req.user.googleId,
+        name: req.user.displayName,
+        photo: req.user.photo,
+        accessToken: req.user.accessToken,
+        refreshToken: req.user.refreshToken,
+      });
+    }
+
+    this.processEmailTransactions(user)
+      .then(() => {
+        this.logger.debug('Transactions processed');
+      })
+      .catch((error) => {
+        this.logger.error(error);
+      });
 
     const token = this.jwtService.sign({ id: user.id });
     const redirectUrl = `${process.env.APP_URL}/auth/jwt/sign-in?token=${token}`;
