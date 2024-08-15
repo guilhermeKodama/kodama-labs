@@ -8,7 +8,7 @@ VITE_ASSET_URL=${process.env.VITE_ASSET_URL}
 `;
 
 // Write the .env file in the correct directory
-const envFilePath = resolve('apps/app/.env'); // Adjust path as needed
+const envFilePath = resolve('./.env'); // Adjust path as needed
 
 writeFileSync(envFilePath, envVariables, (err) => {
   if (err) {
