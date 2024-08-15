@@ -16,11 +16,13 @@ console.log('[🍓]', `VITE_SERVER_URL=${process.env.VITE_SERVER_URL}`);
 console.log('[🍓]', `VITE_ASSET_URL=${process.env.VITE_ASSET_URL}`);
 
 // Write the .env file in the correct directory
-const envFilePath = resolve('./.env'); // Adjust path as needed
+const PATHS = [resolve('./.env'), resolve('apps/app/.env'), resolve('monorepo/apps/app/.env')];
 
 try {
-  writeFileSync(envFilePath, envVariables);
-  console.log('[🍓]', `.env file created successfully at ${envFilePath}`);
+  for (const path of PATHS) {
+    writeFileSync(path, envVariables);
+    console.log('[🍓]', `.env file created successfully at ${path}`);
+  }
 } catch (err) {
   console.error('[🍓]', 'Error writing .env file:', err);
 }
