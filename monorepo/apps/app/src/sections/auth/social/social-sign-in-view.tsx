@@ -35,8 +35,6 @@ export function SocialSignInView() {
   const [token, setToken] = useState('');
   const { checkUserSession } = useAuthContext();
 
-  console.log('[🍓]', { env: process.env });
-
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const tokenFromParam = params.get('token');

@@ -39,8 +39,8 @@ export type ConfigValue = {
 export const CONFIG: ConfigValue = {
   site: {
     name: 'Minimals',
-    serverUrl: import.meta.env.VITE_SERVER_URL ?? '',
-    assetURL: import.meta.env.VITE_ASSET_URL ?? '',
+    serverUrl: import.meta.env.VITE_SERVER_URL ?? process?.env?.VITE_SERVER_URL,
+    assetURL: import.meta.env.VITE_ASSET_URL ?? process?.env?.VITE_ASSET_URL,
     basePath: import.meta.env.VITE_BASE_PATH ?? '',
     version: packageJson.version,
   },
