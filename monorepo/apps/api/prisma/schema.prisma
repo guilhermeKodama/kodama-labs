@@ -3,8 +3,9 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 model User {
@@ -33,13 +34,12 @@ enum TransactionType {
   EXPENSE
 }
 
-
 model Transaction {
   id          String            @id @default(uuid())
   amount      Float
   description String
   dueAt       DateTime
-  type        TransactionType  @default(EXPENSE)
+  type        TransactionType   @default(EXPENSE)
   category    String?
   status      TransactionStatus
   emailId     String?
