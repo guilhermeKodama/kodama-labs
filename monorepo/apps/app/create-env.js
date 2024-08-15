@@ -26,3 +26,27 @@ for (const path of PATHS) {
     console.error('[🍓]', 'Error writing .env file:', err);
   }
 }
+
+/**
+ * LIST DIR
+ */
+
+function listDirContents(dir) {
+  const fullPath = resolve(dir);
+  console.log('[🍓]', `Listing directory: ${fullPath}`);
+
+  const files = readdirSync(fullPath);
+  files.forEach((file) => {
+    const filePath = resolve(fullPath, file);
+    const stat = statSync(filePath);
+
+    if (stat.isDirectory()) {
+      console.log('[🍓]', `[DIR]  ${filePath}`);
+      listDirContents(filePath); // Recursively list subdirectories
+    } else {
+      console.log('[🍓]', `[FILE] ${filePath}`);
+    }
+  });
+}
+
+listDirContents('./');
