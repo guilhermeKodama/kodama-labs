@@ -1,5 +1,5 @@
-const fs = require('fs');
-const path = require('path');
+import { writeFileSync } from 'fs';
+import { resolve } from 'path';
 
 // Define the environment variables you want to write
 const envVariables = `
@@ -8,9 +8,9 @@ VITE_ASSET_URL=${process.env.VITE_ASSET_URL}
 `;
 
 // Write the .env file in the correct directory
-const envFilePath = path.resolve(__dirname, './.env'); // Adjust path as needed
+const envFilePath = resolve('apps/app/.env'); // Adjust path as needed
 
-fs.writeFileSync(envFilePath, envVariables, (err) => {
+writeFileSync(envFilePath, envVariables, (err) => {
   if (err) {
     console.error('Error writing .env file', err);
   } else {
