@@ -16,6 +16,7 @@ import { setSession } from 'src/auth/context/jwt';
 import { useAuthContext } from 'src/auth/hooks';
 
 import { CONFIG } from 'src/config-global';
+import { Link } from '@mui/material';
 
 export type SignInSchemaType = zod.infer<typeof SignInSchema>;
 
@@ -101,6 +102,37 @@ export function SocialSignInView() {
       </LoadingButton>
     </Stack>
   );
+  const renderTerms = (
+    <Typography
+      component="div"
+      sx={{
+        mt: 3,
+        textAlign: 'center',
+        typography: 'caption',
+        color: 'text.secondary',
+      }}
+    >
+      {'Ao me cadastrar, eu concordo com '}
+      <Link
+        underline="always"
+        color="text.primary"
+        href="https://www.wallex.com.br/page-terms"
+        target="_blank"
+      >
+        Termos de Serviço
+      </Link>
+      {' e '}
+      <Link
+        underline="always"
+        color="text.primary"
+        href="https://www.wallex.com.br/page-privacy"
+        target="_blank"
+      >
+        Política de Privacidade
+      </Link>
+      .
+    </Typography>
+  );
 
   return (
     <>
@@ -115,6 +147,8 @@ export function SocialSignInView() {
       <Form methods={methods} onSubmit={onSubmit}>
         {renderForm}
       </Form>
+
+      {renderTerms}
     </>
   );
 }

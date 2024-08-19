@@ -4,7 +4,11 @@ import Box from "@mui/material/Box";
 
 type Props = {
   children: React.ReactNode;
+  paddingX?: any;
   paddingY?: any;
+  paddingTop?: any;
+  position?: any;
+  top?: any;
 };
 
 const Container = ({ children, ...rest }: Props) => (
