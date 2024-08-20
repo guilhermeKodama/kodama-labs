@@ -5,7 +5,7 @@ import Button from "@mui/material/Button";
 // import Link from "@mui/material/Link";
 import Typography from "@mui/material/Typography";
 import WebbeeLogo from "svg/logos/Webbee";
-import { Alert, Snackbar } from "@mui/material";
+import { Alert, Link, Snackbar } from "@mui/material";
 import supabase from "common/supabase";
 import Dialog from "common/Dialog";
 
@@ -39,14 +39,44 @@ const Footer = () => {
     setIsDialogOpen(false);
   };
 
-  const onRegisterClick = () => {
-    setIsDialogOpen(true);
-  };
-
   const handleClose = () => {
     setIsOpen(false);
     setIsDialogOpen(false);
   };
+
+  const renderTerms = (
+    <Typography
+      component="div"
+      sx={{
+        mt: 3,
+        textAlign: "center",
+        typography: "caption",
+        color: "text.secondary",
+      }}
+    >
+      {
+        "Ao visitar ou interagir com nossos sites, serviços ou ferramentas, eu concordo com os "
+      }
+      <Link
+        underline="always"
+        color="text.primary"
+        href="https://www.wallex.com.br/page-terms"
+        target="_blank"
+      >
+        Termos de Serviço
+      </Link>
+      {" e a "}
+      <Link
+        underline="always"
+        color="text.primary"
+        href="https://www.wallex.com.br/page-privacy"
+        target="_blank"
+      >
+        Política de Privacidade
+      </Link>
+      .
+    </Typography>
+  );
 
   return (
     <Grid container spacing={2}>
@@ -116,8 +146,7 @@ const Footer = () => {
                 variant="outlined"
                 color="primary"
                 component="a"
-                target="blank"
-                onClick={onRegisterClick}
+                href="https://app.wallex.com.br"
                 size="small"
               >
                 Inscreva-se Agora
@@ -146,6 +175,7 @@ const Footer = () => {
           armazenar informações que ajudem a fornecer uma experiência melhor,
           mais rápida e mais segura, além de para fins de marketing.
         </Typography>
+        {renderTerms}
       </Grid>
     </Grid>
   );

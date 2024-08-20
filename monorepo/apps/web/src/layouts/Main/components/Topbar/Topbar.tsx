@@ -46,10 +46,6 @@ const Topbar = ({ themeMode, themeToggler, onSidebarOpen }: Props) => {
     setIsDialogOpen(false);
   };
 
-  const onRegisterClick = () => {
-    setIsDialogOpen(true);
-  };
-
   const handleClose = () => {
     setIsOpen(false);
     setIsDialogOpen(false);
@@ -163,8 +159,7 @@ const Topbar = ({ themeMode, themeToggler, onSidebarOpen }: Props) => {
               variant="contained"
               color="primary"
               component="a"
-              target="blank"
-              onClick={onRegisterClick}
+              href="https://app.wallex.com.br"
               size="large"
             >
               Inscreva-se Agora

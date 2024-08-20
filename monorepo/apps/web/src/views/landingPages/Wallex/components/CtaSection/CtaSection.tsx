@@ -22,14 +22,10 @@ const CtaSection = ({ onClick }: Props) => (
         Você está a um passo de simplificar a sua vida financeira.
       </Typography>
     </Box>
-    <Box
-      component={Button}
-      marginTop={{ xs: 2, sm: 0 }}
-      variant="contained"
-      size={"large"}
-      onClick={onClick}
-    >
-      Inscreva-se agora
+    <Box marginTop={{ xs: 2, sm: 0 }}>
+      <Button variant="contained" size="large" href="https://app.wallex.com.br">
+        Inscreva-se agora
+      </Button>
     </Box>
   </Box>
 );

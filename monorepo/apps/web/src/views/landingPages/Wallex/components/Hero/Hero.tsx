@@ -55,16 +55,21 @@ const Hero = ({ onClick }: Props) => {
               Saiba mais
             </Box>
             <Box
-              component={Button}
-              variant="contained"
-              color="primary"
-              size="large"
-              fullWidth={!isMd}
-              marginTop={{ xs: 1, sm: 0 }}
-              marginLeft={{ sm: 2 }}
-              onClick={onClick}
+              sx={{
+                width: !isMd ? "100%" : "auto",
+                marginTop: { xs: 1, sm: 0 },
+                marginLeft: { sm: 2 },
+              }}
             >
-              Inscreva-se
+              <Button
+                variant="contained"
+                color="primary"
+                size="large"
+                fullWidth={!isMd} // Ensure the Button's fullWidth matches the Box's condition
+                href="https://app.wallex.com.br"
+              >
+                Inscreva-se
+              </Button>
             </Box>
           </Box>
         </Box>
