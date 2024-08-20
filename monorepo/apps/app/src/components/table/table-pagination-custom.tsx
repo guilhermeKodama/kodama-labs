@@ -18,7 +18,7 @@ export function TablePaginationCustom({
   sx,
   dense,
   onChangeDense,
-  rowsPerPageOptions = [5, 10, 25],
+  rowsPerPageOptions = [25, 50, 100],
   ...other
 }: TablePaginationCustomProps) {
   return (
