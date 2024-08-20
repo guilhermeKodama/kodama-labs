@@ -32,6 +32,7 @@ export const SignInSchema = zod.object({
 });
 
 export function SocialSignInView() {
+  const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   const [token, setToken] = useState('');
   const { checkUserSession } = useAuthContext();
@@ -66,13 +67,11 @@ export function SocialSignInView() {
     defaultValues,
   });
 
-  const {
-    handleSubmit,
-    formState: { isSubmitting },
-  } = methods;
+  const { handleSubmit } = methods;
 
   const onSubmit = handleSubmit(async () => {
     try {
+      setLoading(true);
       window.location.href = `${CONFIG.site.serverUrl}/auth/google/login`;
     } catch (error) {
       console.error(error);
@@ -95,10 +94,10 @@ export function SocialSignInView() {
         size="large"
         type="submit"
         variant="contained"
-        loading={isSubmitting}
-        loadingIndicator="Sign in..."
+        loading={loading}
+        loadingIndicator="Entrando..."
       >
-        Continue com o Google
+        Entrar com o Google
       </LoadingButton>
     </Stack>
   );
