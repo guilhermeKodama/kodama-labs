@@ -20,7 +20,7 @@ export function CustomBreadcrumbs({
   sx,
   ...other
 }: CustomBreadcrumbsProps) {
-  const lastLink = links[links.length - 1].name;
+  const lastLink = links.length > 0 ? links[links.length - 1].name : '';
 
   const renderHeading = (
     <Typography variant="h4" sx={{ mb: 2, ...slotProps?.heading }}>

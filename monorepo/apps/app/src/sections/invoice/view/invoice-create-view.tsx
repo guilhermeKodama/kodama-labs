@@ -4,22 +4,46 @@ import { DashboardContent } from 'src/layouts/dashboard';
 
 import { CustomBreadcrumbs } from 'src/components/custom-breadcrumbs';
 
+import { IconButton, useMediaQuery, useTheme } from '@mui/material';
+import { Iconify } from 'src/components/iconify/iconify';
+import { useRouter } from 'src/routes/hooks';
 import { InvoiceNewEditForm } from '../invoice-new-edit-form';
 
 // ----------------------------------------------------------------------
 
 export function InvoiceCreateView() {
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+  const router = useRouter();
+
+  const handleBack = () => {
+    router.back();
+  };
+
   return (
     <DashboardContent>
-      <CustomBreadcrumbs
-        heading="Create a new invoice"
-        links={[
-          { name: 'Dashboard', href: paths.dashboard.root },
-          { name: 'Invoice', href: paths.dashboard.invoice.root },
-          { name: 'New invoice' },
-        ]}
-        sx={{ mb: { xs: 3, md: 5 } }}
-      />
+      {isMobile ? (
+        <IconButton
+          onClick={handleBack}
+          aria-label="back"
+          sx={{
+            mb: 3,
+            ml: 0,
+            justifyContent: 'flex-start',
+          }}
+        >
+          <Iconify icon="eva:arrow-back-outline" width={24} height={24} />
+        </IconButton>
+      ) : (
+        <CustomBreadcrumbs
+          heading="Criar transação"
+          links={[
+            { name: 'Transações', href: paths.dashboard.invoice.root },
+            { name: 'Nova transação' },
+          ]}
+          sx={{ mb: { xs: 3, md: 5 } }}
+        />
+      )}
 
       <InvoiceNewEditForm />
     </DashboardContent>
