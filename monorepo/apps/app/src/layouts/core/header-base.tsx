@@ -122,7 +122,6 @@ export function HeaderBase({
         leftArea: (
           <>
             {slots?.leftAreaStart}
-
             {/* -- Menu button -- */}
             {menuButton && (
               <MenuButton
@@ -131,16 +130,12 @@ export function HeaderBase({
                 sx={{ mr: 1, ml: -1, [theme.breakpoints.up(layoutQuery)]: { display: 'none' } }}
               />
             )}
-
             {/* -- Logo -- */}
             <Logo data-slot="logo" />
-
             {/* -- Divider -- */}
             <StyledDivider data-slot="divider" />
-
             {/* -- Workspace popover -- */}
             {workspaces && <WorkspacesPopover data-slot="workspaces" data={data?.workspaces} />}
-
             {slots?.leftAreaEnd}
           </>
         ),

@@ -1,9 +1,9 @@
-import React from 'react';
-import { useTheme } from '@mui/material/styles';
-import Box from '@mui/material/Box';
-import Typography from '@mui/material/Typography';
-import Avatar from '@mui/material/Avatar';
-import Grid from '@mui/material/Grid';
+import React from "react";
+import { useTheme } from "@mui/material/styles";
+import Box from "@mui/material/Box";
+import Typography from "@mui/material/Typography";
+import Avatar from "@mui/material/Avatar";
+import Grid from "@mui/material/Grid";
 
 const HowItWorks = () => {
   const theme = useTheme();
@@ -13,20 +13,20 @@ const HowItWorks = () => {
       <Box marginBottom={4}>
         <Typography
           sx={{
-            textTransform: 'uppercase',
-            fontWeight: 'medium',
+            textTransform: "uppercase",
+            fontWeight: "medium",
           }}
           gutterBottom
-          color={'secondary'}
-          align={'center'}
+          color={"secondary"}
+          align={"center"}
         >
           Passo a Passo
         </Typography>
         <Box
           component={Typography}
           fontWeight={700}
-          variant={'h3'}
-          align={'center'}
+          variant={"h3"}
+          align={"center"}
         >
           Como funciona
         </Box>
@@ -34,9 +34,9 @@ const HowItWorks = () => {
       <Grid container spacing={4}>
         {[
           {
-            title: 'Entre com o seu email',
+            title: "Entre com o seu email",
             subtitle:
-              'Nós escaneamos o seu email e identificamos suas contas a pagar.',
+              "Nós escaneamos o seu email e identificamos suas faturas de cartão de credito.",
             icon: (
               <svg
                 width={24}
@@ -59,9 +59,9 @@ const HowItWorks = () => {
             ),
           },
           {
-            title: 'Organizamos tudo em nossa aplicação',
+            title: "Organizamos tudo em nossa aplicação",
             subtitle:
-              'Todas as suas contas para pagar são organizadas em um único lugar e você pode controlar o que ja foi pago e o que ainda falta pagar.',
+              "Todas as compras das suas faturas são organizadas em um único lugar e você pode controlar faturas e contas a pagar.",
             icon: (
               <svg
                 width={24}
@@ -84,9 +84,9 @@ const HowItWorks = () => {
             ),
           },
           {
-            title: 'Integramos com o seu calendário',
+            title: "Integramos com o seu calendário",
             subtitle:
-              'Tudo fica sincronizado com o seu calendário para que você nunca mais esqueça de pagar uma conta.',
+              "Tudo fica sincronizado com o seu calendário para que você nunca mais esqueça de pagar uma conta.",
             icon: (
               <svg
                 width={24}
@@ -109,7 +109,7 @@ const HowItWorks = () => {
             ),
           },
         ].map((item, i) => (
-          <Grid key={i} item xs={12} md={4} data-aos={'fade-up'}>
+          <Grid key={i} item xs={12} md={4} data-aos={"fade-up"}>
             <Box
               component={Avatar}
               marginBottom={2}
@@ -118,10 +118,10 @@ const HowItWorks = () => {
             >
               <Box>{item.icon}</Box>
             </Box>
-            <Typography variant="h6" align={'left'} gutterBottom>
+            <Typography variant="h6" align={"left"} gutterBottom>
               {item.title}
             </Typography>
-            <Typography color="text.secondary" align={'left'} component="p">
+            <Typography color="text.secondary" align={"left"} component="p">
               {item.subtitle}
             </Typography>
           </Grid>
