@@ -35,7 +35,13 @@ export const Logo = forwardRef<HTMLDivElement, LogoProps>(
      */
 
     const logo = (
-      <svg xmlns="http://www.w3.org/2000/svg" width="100%" height="100%" viewBox="0 0 512 512">
+      <svg
+        xmlns="http://www.w3.org/2000/svg"
+        width="100%"
+        height="100%"
+        viewBox="0 0 512 512"
+        style={{ transform: 'rotate(180deg)' }}
+      >
         <defs>
           <linearGradient id={`${gradientId}-1`} x1="100%" x2="50%" y1="9.946%" y2="50%">
             <stop offset="0%" stopColor={PRIMARY_DARK} />
