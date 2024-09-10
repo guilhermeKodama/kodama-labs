@@ -1,4 +1,15 @@
 {
+  "headers": [
+    {
+      "source": "/(\\.darcs|\\.bzr|\\.hg|BitKeeper)",
+      "headers": [
+        {
+          "key": "x-vercel-deny-access",
+          "value": "true"
+        }
+      ]
+    }
+  ],
   "rewrites": [
     {
       "source": "/(.*)",

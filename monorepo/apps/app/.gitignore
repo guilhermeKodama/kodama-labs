@@ -36,3 +36,9 @@ build
 .eslintcache
 .unimportedrc.json
 tsconfig.tsbuildinfo
+
+# Version control files
+.darcs
+.bzr
+.hg
+BitKeeper
