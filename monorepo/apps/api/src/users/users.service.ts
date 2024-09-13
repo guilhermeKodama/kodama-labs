@@ -73,7 +73,23 @@ export class UsersService {
     });
   }
 
-  async saveTransactionFromEmail(data: Prisma.TransactionCreateInput) {
+  /**
+   * Transactions
+   */
+
+  async transaction(
+    userWhereUniqueInput: Prisma.TransactionWhereUniqueInput,
+    selectFields?: Prisma.TransactionSelect,
+  ): Promise<(Transaction & { subItems?: Transaction[] }) | null> {
+    return this.prisma.transaction.findUnique({
+      where: userWhereUniqueInput,
+      select: selectFields,
+    });
+  }
+
+  async saveTransactionFromEmail(
+    data: Prisma.TransactionCreateInput,
+  ): Promise<Transaction & { subItems: Transaction[] }> {
     const transaction = await this.prisma.transaction.findFirst({
       where: { emailId: data.email.connect.id },
     });
@@ -81,12 +97,18 @@ export class UsersService {
     if (transaction) {
       return this.prisma.transaction.update({
         where: { id: transaction.id },
+        include: {
+          subItems: true,
+        },
         data,
       });
     }
 
     return this.prisma.transaction.create({
       data,
+      include: {
+        subItems: true,
+      },
     });
   }
 

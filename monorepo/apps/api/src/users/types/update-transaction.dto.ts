@@ -1,7 +1,34 @@
 import { TransactionStatus, TransactionType } from '@prisma/client';
-import { IsNumber, IsString, IsNotEmpty, IsDate } from 'class-validator';
-import { ExpenseCategory, IncomeCategory } from './transaction.enum';
+import {
+  IsNumber,
+  IsString,
+  IsNotEmpty,
+  IsDate,
+  IsArray,
+  ValidateNested,
+} from 'class-validator';
 import { IsValidCategory } from '../decorators/is-category-valid.decorator';
+import { Type } from 'class-transformer';
+
+export class UpdateSubItemDto {
+  @IsString()
+  @IsNotEmpty()
+  id: string;
+
+  @IsString()
+  @IsNotEmpty()
+  description: string;
+
+  @IsString()
+  @IsValidCategory({
+    message: 'Category is not valid for the subItem.',
+  })
+  category: string;
+
+  @IsNumber()
+  @IsNotEmpty()
+  amount: number;
+}
 
 export class UpdateTransactionDto {
   @IsString()
@@ -33,4 +60,9 @@ export class UpdateTransactionDto {
     message: 'Category is not valid for the given transaction type.',
   })
   category: string;
+
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => UpdateSubItemDto)
+  subItems: UpdateSubItemDto[];
 }

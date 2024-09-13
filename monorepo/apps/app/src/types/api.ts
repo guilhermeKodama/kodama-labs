@@ -63,8 +63,11 @@ type Email = {
   sender: string;
   snippet: string;
   internalDate: string;
+  pdfNeedsPassword: boolean;
   createdAt: string;
 };
+
+export type TransactionSubItem = Omit<Transaction, 'subItems'>;
 
 export type Transaction = {
   id: string;
@@ -79,6 +82,7 @@ export type Transaction = {
   userId: string;
   createdAt: string;
   updatedAt: string;
+  subItems: TransactionSubItem[];
 };
 
 export type UserTransactionsReponse = {

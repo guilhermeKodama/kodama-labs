@@ -14,16 +14,16 @@ import { useBoolean } from 'src/hooks/use-boolean';
 
 import { today } from 'src/utils/format-time';
 
-
 import { Form, schemaHelper } from 'src/components/hook-form';
 
 import axios, { endpoints } from 'src/utils/axios';
-import type { Transaction} from 'src/types/api';
+import type { Transaction } from 'src/types/api';
 import { TransactionType } from 'src/types/api';
 import { InvoiceNewEditStatusDate } from './invoice-new-edit-status-date';
 import { InvoiceNewEditCategoryTotal } from './invoice-new-edit-category-total';
 import { InvoiceNewEditDescription } from './invoice-new-edit-description';
 import { InvoiceNewEditType } from './invoice-new-edit-type';
+import { InvoiceNewEditSubItems } from './invoice-new-edit-subitems';
 
 // ----------------------------------------------------------------------
 
@@ -40,11 +40,18 @@ export const NewInvoiceSchema = zod.object({
   amount: zod.number().refine((val) => val !== 0, {
     message: 'Valor é obrigatório.',
   }),
+  subItems: zod
+    .array(
+      zod.object({
+        description: zod
+          .string()
+          .refine((val) => val !== '', { message: 'Descrição é obrigatório!' }),
+        amount: zod.number().refine((val) => val !== 0, { message: 'Preço é obrigatório!' }),
+        category: zod.string().optional(),
+      })
+    )
+    .optional(),
 });
-// .refine((data) => !fIsAfter(data.createdAt, data.dueAt), {
-//   message: 'Data de vencimento não pode ser antes da data de criação!',
-//   path: ['dueDate'],
-// });
 
 // ----------------------------------------------------------------------
 
@@ -68,6 +75,7 @@ export function InvoiceNewEditForm({ currentTransaction }: Props) {
       dueAt: currentTransaction?.dueAt || null,
       status: currentTransaction?.status || 'pending',
       amount: currentTransaction?.amount || 0,
+      subItems: currentTransaction?.subItems || [],
     }),
     [currentTransaction]
   );
@@ -81,8 +89,10 @@ export function InvoiceNewEditForm({ currentTransaction }: Props) {
   const {
     reset,
     handleSubmit,
-    formState: { isSubmitting },
+    formState: { isSubmitting, isValid, errors },
   } = methods;
+
+  console.log('[♥️]', { isValid, errors });
 
   const handleSaveAsDraft = handleSubmit(async (data) => {
     loadingSave.onTrue();
@@ -138,6 +148,8 @@ export function InvoiceNewEditForm({ currentTransaction }: Props) {
         <InvoiceNewEditStatusDate />
 
         <InvoiceNewEditCategoryTotal />
+
+        <InvoiceNewEditSubItems />
       </Card>
 
       <Stack justifyContent="flex-end" direction="row" spacing={2} sx={{ mt: 3 }}>

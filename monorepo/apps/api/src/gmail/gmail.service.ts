@@ -3,21 +3,21 @@ import { gmail_v1, google } from 'googleapis';
 import { OAuth2Client } from 'google-auth-library';
 import { Email } from './interfaces/gmail.interface';
 import * as pdfParse from 'pdf-parse';
+import { BankDomains } from './interfaces/bank.interface';
 
 @Injectable()
 export class GmailService {
   private readonly logger = new Logger(GmailService.name);
   readonly BANKS_DOMAINS = [
-    'nubank.com.br',
-    'inter.co',
-    'xpi.com.br',
-    'itau.com.br',
-    'bb.com.br',
-    'caixa.gov.br',
-    'santander.com.br',
-    'banco.bradesco',
-    'c6bank.com.br',
-    'inter.co',
+    BankDomains.NUBANK,
+    BankDomains.INTER,
+    BankDomains.XP,
+    BankDomains.ITAU,
+    BankDomains.BB,
+    BankDomains.CAIXA,
+    BankDomains.SANTANDER,
+    BankDomains.BRADESCO,
+    BankDomains.C6,
   ];
 
   private createOAuth2Client(
@@ -71,7 +71,11 @@ export class GmailService {
     refreshToken: string,
     senderDomains: string[],
   ): Promise<Email[]> {
-    const oauth2Client = this.createOAuth2Client(accessToken, refreshToken);
+    const oauth2Client = this.createOAuth2Client(
+      'ya29.a0AcM612zCeaPKJlbCUf1vlhbGlTpdGPZhaeGUHDm7LGpy2RN58cATOw9bjo2Krzv3vJJn-TiGIspHT31f5Z5NUMdo45vBZf-F9cdAgCgNWDy1XurOu-94mB6Uc96E-bkPoQlLDzBoAeLKDj9PNrSukBfrR7LG-bj1QJU27QHxaCgYKAUsSARASFQHGX2Mishvo5fuzbAEcABt20Cx16Q0175',
+      '1//04oOzGtElgjxXCgYIARAAGAQSNwF-L9IrfQRZm61-yRTXHRA9JoM2mhzjffFyOB59fiocP1ycUNSA-oXFEMrbgNYy55Xww7l8t38',
+    );
+
     const gmail = google.gmail({ version: 'v1', auth: oauth2Client });
 
     const now = new Date();
@@ -90,6 +94,8 @@ export class GmailService {
           q: query,
           pageToken: pageToken,
         });
+
+        this.logger.debug({ emails: res.data.messages?.length });
 
         if (res.data.messages) {
           const fetchedEmails = await Promise.all(

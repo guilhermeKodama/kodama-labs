@@ -49,19 +49,70 @@ export class AuthController {
         raw: JSON.stringify(email.raw),
       });
 
+      /**
+       * Extract total valu
+       */
       const values = this.nerService.extractValues(
         `${email.snippet}  ${email.body} ${email.pdfText}`,
       );
 
-      await this.usersService.saveTransactionFromEmail({
-        status: TransactionStatus.PENDING,
-        amount: values[0],
-        dueAt: emailRecord.internalDate,
-        description: emailRecord.sender,
-        category: ExpenseCategory.CREDIT_CARD,
-        email: { connect: { id: emailRecord.id } },
-        user: { connect: { id: user.id } },
-      });
+      /**
+       * Extract due date
+       */
+
+      const dueDates = this.nerService.extractDates(email.body);
+
+      let dueAt = null;
+
+      if (dueDates.length > 0) {
+        dueAt = dueDates[0];
+      } else {
+        dueAt = new Date(
+          emailRecord.internalDate.getTime() + 5 * 24 * 60 * 60 * 1000,
+        );
+      }
+
+      this.logger.debug({ email: emailRecord.sender, dueDates, dueAt });
+
+      /**
+       * Extract sub items
+       */
+
+      const subItems = this.nerService.extractSubItems(email);
+
+      console.log({ subItems });
+
+      /**
+       * Parent transaction
+       */
+
+      const parentTransaction =
+        await this.usersService.saveTransactionFromEmail({
+          status: TransactionStatus.PENDING,
+          amount: values[0],
+          dueAt: dueAt,
+          createdAt: emailRecord.internalDate,
+          description: this.nerService.getDescriptionFromCreditCardBill(email),
+          category: ExpenseCategory.CREDIT_CARD,
+          email: { connect: { id: emailRecord.id } },
+          user: { connect: { id: user.id } },
+        });
+
+      if (subItems.length > 0 && parentTransaction.subItems.length === 0) {
+        for (const subItem of subItems) {
+          await this.usersService.createTransaction({
+            parent: { connect: { id: parentTransaction.id } },
+            status: TransactionStatus.PENDING,
+            amount: subItem.value,
+            dueAt: dueAt,
+            createdAt: subItem.date,
+            description: subItem.description,
+            category: ExpenseCategory.CREDIT_CARD,
+            email: { connect: { id: emailRecord.id } },
+            user: { connect: { id: user.id } },
+          });
+        }
+      }
 
       this.logger.debug({
         date: email.internalDate,

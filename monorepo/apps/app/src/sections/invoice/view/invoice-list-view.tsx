@@ -76,7 +76,7 @@ export function InvoiceListView() {
 
   const router = useRouter();
 
-  const table = useTable({ defaultOrderBy: 'createDate' });
+  const table = useTable({ defaultOrderBy: 'createdAt', defaultOrder: 'desc' });
 
   const confirm = useBoolean();
 
