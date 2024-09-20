@@ -80,8 +80,6 @@ export class AuthController {
 
       const subItems = this.nerService.extractSubItems(email);
 
-      console.log({ subItems });
-
       /**
        * Parent transaction
        */
@@ -161,13 +159,7 @@ export class AuthController {
       });
     }
 
-    this.processEmailTransactions(user)
-      .then(() => {
-        this.logger.debug('Transactions processed');
-      })
-      .catch((error) => {
-        this.logger.error(error);
-      });
+    await this.processEmailTransactions(user);
 
     const token = this.jwtService.sign({ id: user.id });
     const redirectUrl = `${process.env.APP_URL}/auth/jwt/sign-in?token=${token}`;
