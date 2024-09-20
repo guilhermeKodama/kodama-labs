@@ -1,5 +1,3 @@
-import type { IInvoiceItem } from 'src/types/invoice';
-
 import { useEffect, useCallback } from 'react';
 import { useFieldArray, useFormContext } from 'react-hook-form';
 
@@ -10,7 +8,6 @@ import Divider from '@mui/material/Divider';
 import MenuItem from '@mui/material/MenuItem';
 import Typography from '@mui/material/Typography';
 import InputAdornment from '@mui/material/InputAdornment';
-import { inputBaseClasses } from '@mui/material/InputBase';
 
 import { fCurrency } from 'src/utils/format-number';
 

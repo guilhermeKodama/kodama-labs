@@ -1,7 +1,6 @@
 import Link from '@mui/material/Link';
 import Stack from '@mui/material/Stack';
 import Button from '@mui/material/Button';
-import Avatar from '@mui/material/Avatar';
 import Divider from '@mui/material/Divider';
 import MenuList from '@mui/material/MenuList';
 import MenuItem from '@mui/material/MenuItem';
@@ -24,8 +23,8 @@ import { ConfirmDialog } from 'src/components/custom-dialog';
 import { usePopover, CustomPopover } from 'src/components/custom-popover';
 import type { Transaction } from 'src/types/api';
 import { ExpenseCategory, TransactionType } from 'src/types/api';
-import { ShortTypeLabels, StatusLabels } from './constants';
 import { useTheme } from '@emotion/react';
+import { ShortTypeLabels, StatusLabels } from './constants';
 
 // ----------------------------------------------------------------------
 
@@ -65,6 +64,8 @@ export function InvoiceTableRowDesktop({
     if (row.category === ExpenseCategory.CREDIT_CARD) {
       return <Iconify icon="ic:baseline-credit-card" width={24} height={24} />;
     }
+
+    return null;
   };
 
   return (

@@ -41,7 +41,7 @@ module.exports = {
     '@typescript-eslint/naming-convention': 0,
     '@typescript-eslint/no-use-before-define': 0,
     '@typescript-eslint/consistent-type-exports': 1,
-    '@typescript-eslint/consistent-type-imports': 1,
+    '@typescript-eslint/consistent-type-imports': 0,
     '@typescript-eslint/no-unused-vars': [1, { args: 'none' }],
     '@typescript-eslint/no-shadow': 0,
     // react
