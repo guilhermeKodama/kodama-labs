@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { User, Prisma, Transaction } from '@prisma/client';
+import { User, Prisma, Transaction, Email } from '@prisma/client';
 import { PrismaService } from 'src/database/prisma.service';
 
 @Injectable()
@@ -80,7 +80,9 @@ export class UsersService {
   async transaction(
     userWhereUniqueInput: Prisma.TransactionWhereUniqueInput,
     selectFields?: Prisma.TransactionSelect,
-  ): Promise<(Transaction & { subItems?: Transaction[] }) | null> {
+  ): Promise<
+    (Transaction & { subItems?: Transaction[]; email?: Email }) | null
+  > {
     return this.prisma.transaction.findUnique({
       where: userWhereUniqueInput,
       select: selectFields,

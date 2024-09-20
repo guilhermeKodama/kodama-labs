@@ -71,10 +71,7 @@ export class GmailService {
     refreshToken: string,
     senderDomains: string[],
   ): Promise<Email[]> {
-    const oauth2Client = this.createOAuth2Client(
-      'ya29.a0AcM612zCeaPKJlbCUf1vlhbGlTpdGPZhaeGUHDm7LGpy2RN58cATOw9bjo2Krzv3vJJn-TiGIspHT31f5Z5NUMdo45vBZf-F9cdAgCgNWDy1XurOu-94mB6Uc96E-bkPoQlLDzBoAeLKDj9PNrSukBfrR7LG-bj1QJU27QHxaCgYKAUsSARASFQHGX2Mishvo5fuzbAEcABt20Cx16Q0175',
-      '1//04oOzGtElgjxXCgYIARAAGAQSNwF-L9IrfQRZm61-yRTXHRA9JoM2mhzjffFyOB59fiocP1ycUNSA-oXFEMrbgNYy55Xww7l8t38',
-    );
+    const oauth2Client = this.createOAuth2Client(accessToken, refreshToken);
 
     const gmail = google.gmail({ version: 'v1', auth: oauth2Client });
 

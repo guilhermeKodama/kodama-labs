@@ -18,6 +18,7 @@ import { JwtAuthGuard } from 'src/auth/guards';
 import { UsersService } from './users.service';
 import { CreateTransactionDto } from './types/create-transaction.dto';
 import { UpdateTransactionDto } from './types/update-transaction.dto';
+import { UnlockPDFDto } from './types/unlock-pdf.dto';
 
 const TransactionSubItemSelect = {
   select: {
@@ -35,6 +36,17 @@ const TransactionSubItemSelect = {
         internalDate: true,
       },
     },
+  },
+};
+
+const TransactionEmailSelect = {
+  select: {
+    id: true,
+    sender: true,
+    snippet: true,
+    internalDate: true,
+    pdfNeedsPassword: true,
+    createdAt: true,
   },
 };
 
@@ -57,16 +69,7 @@ export class UserController {
         transactions: {
           where: { parentId: null },
           include: {
-            email: {
-              select: {
-                id: true,
-                sender: true,
-                snippet: true,
-                internalDate: true,
-                pdfNeedsPassword: true,
-                createdAt: true,
-              },
-            },
+            email: TransactionEmailSelect,
             subItems: TransactionSubItemSelect,
           },
         },
@@ -231,5 +234,37 @@ export class UserController {
     });
 
     return { transactions };
+  }
+
+  @Post('/pdf/unlock')
+  @UseGuards(JwtAuthGuard)
+  async unlockPDFPassword(
+    @Req() request: Request & { user: { id: string } },
+    @Body() unlockPDFDto: UnlockPDFDto,
+  ) {
+    const userId = request.user.id;
+    if (!userId) {
+      throw new UnauthorizedException('User not found');
+    }
+
+    const { transactionId, password } = unlockPDFDto;
+
+    const transaction = await this.usersService.transaction(
+      {
+        id: transactionId,
+        userId,
+      },
+      { email: TransactionEmailSelect },
+    );
+
+    if (!transaction) {
+      throw new NotFoundException('Transaction not found');
+    }
+
+    if (!transaction.email?.pdfNeedsPassword) {
+      throw new BadRequestException('PDF does not need a password');
+    }
+
+    return { success: true };
   }
 }
