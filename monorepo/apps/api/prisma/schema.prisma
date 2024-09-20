@@ -46,8 +46,14 @@ model Transaction {
   email       Email?            @relation(fields: [emailId], references: [id])
   userId      String
   user        User              @relation(fields: [userId], references: [id])
-  createdAt   DateTime          @default(now())
-  updatedAt   DateTime          @updatedAt
+
+  // Self-referencing relation for parent-child transactions
+  parentId String? // Optional parent transaction
+  parent   Transaction?  @relation("SubTransactions", fields: [parentId], references: [id], onDelete: Cascade)
+  subItems Transaction[] @relation("SubTransactions")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model Email {

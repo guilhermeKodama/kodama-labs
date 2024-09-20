@@ -48,33 +48,37 @@ export function InvoiceNewEditCategoryTotal() {
           </MenuItem>
         ))}
       </Field.Select>
-      <Controller
-        name="amount"
-        control={control}
-        render={({ field: { onChange, value, ...field } }) => (
-          <NumericFormat
-            {...field}
-            value={value === 0 || value === null ? '' : value}
-            customInput={Field.Text}
-            thousandSeparator="."
-            decimalSeparator=","
-            decimalScale={2}
-            fixedDecimalScale
-            allowNegative={false}
-            onValueChange={handleChangePrice}
-            placeholder="0,00"
-            InputProps={{
-              startAdornment: (
-                <InputAdornment position="start">
-                  <Box sx={{ typography: 'subtitle2', color: 'text.disabled' }}>R$</Box>
-                </InputAdornment>
-              ),
-            }}
-            fullWidth
-            label="Valor"
-          />
-        )}
-      />
+
+      {values.subItems.length === 0 && (
+        <Controller
+          disabled={values.subItems.length > 0}
+          name="amount"
+          control={control}
+          render={({ field: { onChange, value, ...field } }) => (
+            <NumericFormat
+              {...field}
+              value={value === 0 || value === null ? '' : value}
+              customInput={Field.Text}
+              thousandSeparator="."
+              decimalSeparator=","
+              decimalScale={2}
+              fixedDecimalScale
+              allowNegative={false}
+              onValueChange={handleChangePrice}
+              placeholder="0,00"
+              InputProps={{
+                startAdornment: (
+                  <InputAdornment position="start">
+                    <Box sx={{ typography: 'subtitle2', color: 'text.disabled' }}>R$</Box>
+                  </InputAdornment>
+                ),
+              }}
+              fullWidth
+              label="Valor"
+            />
+          )}
+        />
+      )}
     </Stack>
   );
 

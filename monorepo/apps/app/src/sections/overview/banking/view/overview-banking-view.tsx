@@ -84,8 +84,34 @@ const getExpenseSeriesWithIcons = (expenseSeries: ExpenseCategoryData[]) => ({
   icons: expenseSeries.map((item) => categoryIcons[item.label as ExpenseCategory]),
 });
 
+const flattenTransactions = (transactions: Transaction[]): Transaction[] => {
+  const flattened: Transaction[] = [];
+
+  transactions.forEach((transaction) => {
+    if (transaction.subItems && transaction.subItems.length > 0) {
+      // Add all subItems as separate transactions
+      flattened.push(
+        ...transaction.subItems.map((subItem) => ({
+          ...subItem,
+          type: transaction.type, // inherit type from parent
+          category: subItem.category || transaction.category, // inherit category if not set
+          dueAt: transaction.dueAt, // inherit dueAt from parent\
+          subItems: [],
+        }))
+      );
+    } else {
+      // If no subItems, add the transaction itself
+      flattened.push(transaction);
+    }
+  });
+
+  return flattened;
+};
+
 const transformTransactions = (transactions: Transaction[]): TransformedData => {
-  const transactionsWithKeys = transactions.map((transaction) => ({
+  const flattenedTransactions = flattenTransactions(transactions);
+
+  const transactionsWithKeys = flattenedTransactions.map((transaction) => ({
     ...transaction,
     week: getWeek(transaction.dueAt),
     month: getMonth(transaction.dueAt),
@@ -125,7 +151,7 @@ const transformTransactions = (transactions: Transaction[]): TransformedData => 
     { name: 'Despesas', data: transformData(groupedByYear, TransactionType.EXPENSE) },
   ];
 
-  const expenseTransactions = transactions.filter(
+  const expenseTransactions = flattenedTransactions.filter(
     (transaction) => transaction.type === TransactionType.EXPENSE
   );
   const groupedByCategory = groupBy(expenseTransactions, 'category');

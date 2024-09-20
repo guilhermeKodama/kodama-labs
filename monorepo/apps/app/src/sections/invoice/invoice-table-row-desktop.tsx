@@ -23,8 +23,9 @@ import { Iconify } from 'src/components/iconify';
 import { ConfirmDialog } from 'src/components/custom-dialog';
 import { usePopover, CustomPopover } from 'src/components/custom-popover';
 import type { Transaction } from 'src/types/api';
-import { TransactionType } from 'src/types/api';
+import { ExpenseCategory, TransactionType } from 'src/types/api';
 import { ShortTypeLabels, StatusLabels } from './constants';
+import { useTheme } from '@emotion/react';
 
 // ----------------------------------------------------------------------
 
@@ -49,6 +50,23 @@ export function InvoiceTableRowDesktop({
 
   const popover = usePopover();
 
+  const theme = useTheme();
+
+  const renderRowIcon = () => {
+    if (row.email?.pdfNeedsPassword) {
+      return (
+        <Tooltip title={'PDF necessita senha para extrair items da fatura.'}>
+          {/* @ts-ignore */}
+          <Iconify icon="mdi:alert" width={24} height={24} color={theme.palette.warning.main} />
+        </Tooltip>
+      );
+    }
+
+    if (row.category === ExpenseCategory.CREDIT_CARD) {
+      return <Iconify icon="ic:baseline-credit-card" width={24} height={24} />;
+    }
+  };
+
   return (
     <>
       <TableRow hover selected={selected}>
@@ -62,7 +80,9 @@ export function InvoiceTableRowDesktop({
 
         <TableCell>
           <Stack spacing={2} direction="row" alignItems="center">
-            <Avatar alt={row.description}>{row.description.charAt(0).toUpperCase()}</Avatar>
+            {renderRowIcon()}
+
+            {/* <Avatar alt={row.description}>{row.description.charAt(0).toUpperCase()}</Avatar> */}
 
             <ListItemText
               disableTypography

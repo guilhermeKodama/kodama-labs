@@ -9,6 +9,7 @@ import { PassportModule } from '@nestjs/passport';
 import { GoogleStrategy } from './auth/passport/google.strategy';
 import { NlpModule } from './nlp/nlp.module';
 import { DatabaseModule } from './database/database.module';
+import { SecurityModule } from './security/security.module';
 
 @Module({
   imports: [
@@ -23,6 +24,7 @@ import { DatabaseModule } from './database/database.module';
     GmailModule,
     NlpModule,
     DatabaseModule,
+    SecurityModule,
   ],
   controllers: [AppController],
   providers: [AppService, GoogleStrategy],
