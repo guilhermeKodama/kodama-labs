@@ -54,7 +54,7 @@ export function InvoiceTableRowDesktop({
   const renderRowIcon = () => {
     if (row.email?.pdfNeedsPassword) {
       return (
-        <Tooltip title={'PDF necessita senha para extrair items da fatura.'}>
+        <Tooltip title="PDF necessita senha para extrair items da fatura.">
           {/* @ts-ignore */}
           <Iconify icon="mdi:alert" width={24} height={24} color={theme.palette.warning.main} />
         </Tooltip>

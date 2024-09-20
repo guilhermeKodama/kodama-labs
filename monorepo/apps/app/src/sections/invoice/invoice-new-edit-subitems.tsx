@@ -1,4 +1,4 @@
-import { useEffect, useCallback } from 'react';
+import { useEffect } from 'react';
 import { useFieldArray, useFormContext } from 'react-hook-form';
 
 import Box from '@mui/material/Box';
@@ -10,8 +10,6 @@ import Typography from '@mui/material/Typography';
 import InputAdornment from '@mui/material/InputAdornment';
 
 import { fCurrency } from 'src/utils/format-number';
-
-import { INVOICE_SERVICE_OPTIONS } from 'src/_mock';
 
 import { Field } from 'src/components/hook-form';
 import { Iconify } from 'src/components/iconify';
@@ -65,29 +63,16 @@ export function InvoiceNewEditSubItems() {
     remove(index);
   };
 
-  const handleClearService = useCallback(
-    (index: number) => {
-      setValue(`subItems[${index}].amount`, 0);
-    },
-    [setValue]
-  );
+  const handleClearService = (index: number) => {
+    setValue(`subItems[${index}].amount`, 0);
+  };
 
-  const handleSelectService = useCallback(
-    (index: number, option: string) => {
-      setValue(
-        `subItems[${index}].amount`,
-        INVOICE_SERVICE_OPTIONS.find((service) => service.name === option)?.price
-      );
-    },
-    [setValue, values.subItems]
-  );
-
-  const handleChangePrice = useCallback(
-    (event: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>, index: number) => {
-      setValue(`subItems[${index}].amount`, Number(event.target.value));
-    },
-    [setValue, values.subItems]
-  );
+  const handleChangePrice = (
+    event: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>,
+    index: number
+  ) => {
+    setValue(`subItems[${index}].amount`, Number(event.target.value));
+  };
 
   const renderTotal = (
     <Stack
