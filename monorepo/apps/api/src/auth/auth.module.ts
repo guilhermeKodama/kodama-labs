@@ -15,6 +15,8 @@ import { JwtModule } from '@nestjs/jwt';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { JwtStrategy } from './passport/jwt.strategy';
 import { PassportModule } from '@nestjs/passport';
+import { NubankNERService } from 'src/nlp/ner/nubank-ner.service';
+import { XPNERService } from 'src/nlp/ner/xp-ner.service';
 
 @Module({
   imports: [
@@ -41,6 +43,8 @@ import { PassportModule } from '@nestjs/passport';
     GoogleStrategy,
     SessionSerializer,
     NERService,
+    NubankNERService,
+    XPNERService,
     UsersService,
     PrismaService,
     JwtStrategy,

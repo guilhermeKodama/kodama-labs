@@ -14,6 +14,8 @@ export class GoogleStrategy extends PassportStrategy(Strategy, 'google') {
         'profile',
         'https://www.googleapis.com/auth/gmail.readonly',
       ],
+      accessType: 'offline', // This requests the refresh token
+      prompt: 'consent', // This forces the consent screen to show up again to issue a refresh token
     });
   }
 

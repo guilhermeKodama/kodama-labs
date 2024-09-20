@@ -4,7 +4,7 @@ export type TableProps = {
   dense: boolean;
   page: number;
   rowsPerPage: number;
-  order: 'asc' | 'desc';
+  order: 'desc' | 'asc';
   orderBy: string;
   //
   selected: string[];
