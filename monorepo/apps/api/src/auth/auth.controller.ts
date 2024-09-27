@@ -11,10 +11,11 @@ import { GmailService } from 'src/gmail/gmail.service';
 import { GoogleAuthGuard, JwtAuthGuard } from './guards';
 import { Response } from 'express';
 import { NERService } from 'src/nlp/ner/ner.service';
-import { UsersService } from 'src/users/users.service';
+import { UsersService } from 'src/users/services/users.service';
 import { JwtService } from '@nestjs/jwt';
-import { TransactionStatus, User } from '@prisma/client';
-import { ExpenseCategory } from 'src/users/types/transaction.enum';
+import { User } from '@prisma/client';
+import { StorageService } from 'src/storage/services/storage.service';
+import { TransactionsService } from 'src/users/services/transactios.service';
 
 @Controller('auth')
 export class AuthController {
@@ -25,6 +26,8 @@ export class AuthController {
     private readonly nerService: NERService,
     private readonly usersService: UsersService,
     private readonly jwtService: JwtService,
+    private readonly storageService: StorageService,
+    private readonly transactionsService: TransactionsService,
   ) {}
 
   async processEmailTransactions(user: User) {
@@ -49,83 +52,45 @@ export class AuthController {
         raw: JSON.stringify(email.raw),
       });
 
+      this.logger.debug({ file: `${emailRecord.id}.pdf` });
+
+      if (email.pdfBuffer) {
+        await this.storageService.uploadFile(
+          `${emailRecord.id}.pdf`,
+          email.pdfBuffer,
+        );
+      }
+
       /**
-       * Extract total valu
+       * Extract total value
        */
-      const values = this.nerService.extractValues(
-        `${email.snippet}  ${email.body} ${email.pdfText}`,
-      );
+
+      const total = this.transactionsService.extractTotalFromEmail(emailRecord);
 
       /**
        * Extract due date
        */
 
-      const dueDates = this.nerService.extractDates(email.body);
+      const dueAt = this.transactionsService.extractDueAtFromEmail(emailRecord);
 
-      let dueAt = null;
+      this.logger.debug({ email: emailRecord.sender, dueAt });
 
-      if (dueDates.length > 0) {
-        dueAt = dueDates[0];
-      } else {
-        dueAt = new Date(
-          emailRecord.internalDate.getTime() + 5 * 24 * 60 * 60 * 1000,
-        );
-      }
-
-      this.logger.debug({ email: emailRecord.sender, dueDates, dueAt });
-
-      /**
-       * Extract sub items
-       */
-
-      const subItems = this.nerService.extractSubItems(email);
-
-      /**
-       * Parent transaction
-       */
-
-      const parentTransaction =
-        await this.usersService.saveTransactionFromEmail({
-          status: TransactionStatus.PENDING,
-          amount: values[0],
-          dueAt: dueAt,
-          createdAt: emailRecord.internalDate,
-          description: this.nerService.getDescriptionFromCreditCardBill(email),
-          category: ExpenseCategory.CREDIT_CARD,
-          email: { connect: { id: emailRecord.id } },
-          user: { connect: { id: user.id } },
-        });
-
-      if (subItems.length > 0 && parentTransaction.subItems.length === 0) {
-        for (const subItem of subItems) {
-          await this.usersService.createTransaction({
-            parent: { connect: { id: parentTransaction.id } },
-            status: TransactionStatus.PENDING,
-            amount: subItem.value,
-            dueAt: dueAt,
-            createdAt: subItem.date,
-            description: subItem.description,
-            category: ExpenseCategory.CREDIT_CARD,
-            email: { connect: { id: emailRecord.id } },
-            user: { connect: { id: user.id } },
-          });
-        }
-      }
-
-      this.logger.debug({
-        date: email.internalDate,
-        sender: email.senderEmail,
-        summary: email.snippet,
-        pdfText: email.pdfText,
-        values,
-      });
+      await this.transactionsService.saveTransactionsFromEmail(
+        emailRecord,
+        user,
+        total,
+        dueAt,
+      );
     }
   }
 
   @Get('google/login')
-  @UseGuards(GoogleAuthGuard)
-  googleLogin(@Req() req) {
-    return req.user;
+  googleLogin(@Res() res) {
+    res.redirect(
+      `https://accounts.google.com/o/oauth2/v2/auth?client_id=${
+        process.env.GOOGLE_CLIENT_ID
+      }&redirect_uri=${`${process.env.API_URL}/auth/google/redirect`}&response_type=code&scope=email profile https://www.googleapis.com/auth/gmail.readonly&access_type=offline`, // &prompt=consent - to force the consent screen
+    );
   }
 
   @Get('google/redirect')
@@ -157,9 +122,23 @@ export class AuthController {
         accessToken: req.user.accessToken,
         refreshToken: req.user.refreshToken,
       });
+    } else {
+      user = await this.usersService.updateUser({
+        where: { id: user.id },
+        data: {
+          accessToken: req.user.accessToken,
+          refreshToken: req.user.refreshToken || user.refreshToken,
+        },
+      });
     }
 
-    await this.processEmailTransactions(user);
+    this.processEmailTransactions(user)
+      .then(() => {
+        this.logger.debug('Transactions processed');
+      })
+      .catch((error) => {
+        this.logger.error(error);
+      });
 
     const token = this.jwtService.sign({ id: user.id });
     const redirectUrl = `${process.env.APP_URL}/auth/jwt/sign-in?token=${token}`;

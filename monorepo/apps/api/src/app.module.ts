@@ -10,6 +10,7 @@ import { GoogleStrategy } from './auth/passport/google.strategy';
 import { NlpModule } from './nlp/nlp.module';
 import { DatabaseModule } from './database/database.module';
 import { SecurityModule } from './security/security.module';
+import { StorageModule } from './storage/storage.module';
 
 @Module({
   imports: [
@@ -25,6 +26,7 @@ import { SecurityModule } from './security/security.module';
     NlpModule,
     DatabaseModule,
     SecurityModule,
+    StorageModule,
   ],
   controllers: [AppController],
   providers: [AppService, GoogleStrategy],

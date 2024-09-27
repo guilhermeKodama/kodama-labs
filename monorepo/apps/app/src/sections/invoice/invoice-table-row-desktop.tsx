@@ -21,10 +21,15 @@ import { Label } from 'src/components/label';
 import { Iconify } from 'src/components/iconify';
 import { ConfirmDialog } from 'src/components/custom-dialog';
 import { usePopover, CustomPopover } from 'src/components/custom-popover';
-import type { Transaction } from 'src/types/api';
+import type { Transaction, UserTransactionsReponse } from 'src/types/api';
 import { ExpenseCategory, TransactionType } from 'src/types/api';
 import { useTheme } from '@emotion/react';
 import { ShortTypeLabels, StatusLabels } from './constants';
+import { TextField } from '@mui/material';
+import { FormEventHandler, useContext, useState } from 'react';
+import { FormDialog } from 'src/components/form-dialog';
+import axios, { endpoints } from 'src/utils/axios';
+import { TransactionContext } from 'src/pages/dashboard/invoice/transaction-context';
 
 // ----------------------------------------------------------------------
 
@@ -45,11 +50,15 @@ export function InvoiceTableRowDesktop({
   onEditRow,
   onDeleteRow,
 }: Props) {
+  const { setTransactions } = useContext(TransactionContext);
+
   const confirm = useBoolean();
 
   const popover = usePopover();
 
   const theme = useTheme();
+
+  const dialog = useBoolean();
 
   const renderRowIcon = () => {
     if (row.email?.pdfNeedsPassword) {
@@ -68,8 +77,62 @@ export function InvoiceTableRowDesktop({
     return null;
   };
 
+  const renderSecondaryText = () => {
+    if (row.email?.pdfNeedsPassword && !row.email?.isPasswordSet) {
+      return (
+        <Button onClick={dialog.onTrue} variant="text">
+          Enviar senha do PDF
+        </Button>
+      );
+    }
+
+    if (row.email?.pdfNeedsPassword && row.email?.isPasswordSet) {
+      return (
+        <Typography variant="caption" noWrap>
+          PDF está na fila de processamento.
+        </Typography>
+      );
+    }
+
+    return null;
+  };
+
+  const handleSubmitPassword = async (password: string) => {
+    await axios.post(endpoints.user.setPDFPassword, {
+      transactionId: row.id,
+      password,
+    });
+
+    axios.get(endpoints.user.transactions).then((response) => {
+      const data: UserTransactionsReponse = response.data;
+
+      const STATUS_MAP = {
+        PENDING: 'pending',
+        PAID: 'paid',
+        OVERDUE: 'overdue',
+        DRAFT: 'draft',
+      };
+
+      const transactionsMapped: Transaction[] = data.transactions.map((transaction) => ({
+        ...transaction,
+        status: STATUS_MAP[transaction.status as keyof typeof STATUS_MAP] || STATUS_MAP.DRAFT,
+      }));
+
+      setTransactions(transactionsMapped);
+    });
+
+    dialog.onFalse();
+  };
+
   return (
     <>
+      <FormDialog
+        open={dialog.value}
+        content="Digite a senha para destravar o PDF e extrair os detalhes da fatura."
+        onClose={dialog.onFalse}
+        onCancel={dialog.onFalse}
+        onConfirm={handleSubmitPassword}
+      />
       <TableRow hover selected={selected}>
         <TableCell padding="checkbox">
           <Checkbox
@@ -92,16 +155,7 @@ export function InvoiceTableRowDesktop({
                   {row.description}
                 </Typography>
               }
-              secondary={
-                <Link
-                  noWrap
-                  variant="body2"
-                  onClick={onViewRow}
-                  sx={{ color: 'text.disabled', cursor: 'pointer' }}
-                >
-                  {row.description}
-                </Link>
-              }
+              secondary={renderSecondaryText()}
             />
           </Stack>
         </TableCell>

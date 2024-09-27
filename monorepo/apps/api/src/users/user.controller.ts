@@ -12,13 +12,22 @@ import {
   Query,
   Req,
   UnauthorizedException,
+  UploadedFile,
   UseGuards,
+  UseInterceptors,
 } from '@nestjs/common';
 import { JwtAuthGuard } from 'src/auth/guards';
-import { UsersService } from './users.service';
+import { UsersService } from './services/users.service';
 import { CreateTransactionDto } from './types/create-transaction.dto';
 import { UpdateTransactionDto } from './types/update-transaction.dto';
+import { SetPDFDto } from './types/set-pdf-password.dto';
+import { EncryptionService } from 'src/security/services/encription.service';
+import { PdfService } from 'src/nlp/ner/pdf.service';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { UnlockPDFDto } from './types/unlock-pdf.dto';
+import { StorageService } from 'src/storage/services/storage.service';
+import { TransactionsService } from './services/transactios.service';
+import { Email, Transaction } from '@prisma/client';
 
 const TransactionSubItemSelect = {
   select: {
@@ -46,6 +55,7 @@ const TransactionEmailSelect = {
     snippet: true,
     internalDate: true,
     pdfNeedsPassword: true,
+    pdfPassword: true,
     createdAt: true,
   },
 };
@@ -54,7 +64,13 @@ const TransactionEmailSelect = {
 export class UserController {
   private readonly logger = new Logger(UserController.name);
 
-  constructor(private readonly usersService: UsersService) {}
+  constructor(
+    private readonly usersService: UsersService,
+    private readonly encryptionService: EncryptionService,
+    private readonly pdfService: PdfService,
+    private readonly storageService: StorageService,
+    private readonly transactionsService: TransactionsService,
+  ) {}
   @Get('transactions')
   @UseGuards(JwtAuthGuard)
   async getProfile(@Req() request: Request & { user: { id } }) {
@@ -80,7 +96,19 @@ export class UserController {
       throw new UnauthorizedException('User not found');
     }
 
-    return { transactions: user.transactions || [] };
+    return {
+      transactions:
+        user.transactions.map(
+          (transaction: Transaction & { email: Email }) => ({
+            ...transaction,
+            email: {
+              ...transaction.email,
+              pdfPassword: undefined,
+              isPasswordSet: !!transaction.email.pdfPassword,
+            },
+          }),
+        ) || [],
+    };
   }
 
   @Post('/transaction')
@@ -94,7 +122,7 @@ export class UserController {
       throw new UnauthorizedException('User not found');
     }
 
-    const transaction = await this.usersService.createTransaction({
+    const transaction = await this.transactionsService.createTransaction({
       ...createTransactionDto,
       user: { connect: { id: userId } },
       subItems: {
@@ -126,7 +154,7 @@ export class UserController {
 
     const { id, subItems, ...data } = updateTransactionDto;
 
-    const existingTransaction = await this.usersService.transaction(
+    const existingTransaction = await this.transactionsService.transaction(
       {
         id,
         userId,
@@ -155,7 +183,7 @@ export class UserController {
 
     this.logger.debug({ subItemsToDelete });
 
-    const transaction = await this.usersService.updateTransaction({
+    const transaction = await this.transactionsService.updateTransaction({
       where: { id, userId },
       data: {
         ...data,
@@ -198,7 +226,7 @@ export class UserController {
       throw new UnauthorizedException('User not found');
     }
 
-    const transaction = await this.usersService.deleteTransaction({
+    const transaction = await this.transactionsService.deleteTransaction({
       id,
       user: { id: userId },
     });
@@ -226,7 +254,7 @@ export class UserController {
       throw new BadRequestException('No valid transaction IDs provided');
     }
 
-    const transactions = await this.usersService.deleteTransactions({
+    const transactions = await this.transactionsService.deleteTransactions({
       where: {
         id: { in: idsArray },
         userId,
@@ -236,20 +264,20 @@ export class UserController {
     return { transactions };
   }
 
-  @Post('/pdf/unlock')
+  @Post('/pdf/set-password')
   @UseGuards(JwtAuthGuard)
-  async unlockPDFPassword(
+  async setPDFPassword(
     @Req() request: Request & { user: { id: string } },
-    @Body() unlockPDFDto: UnlockPDFDto,
+    @Body() setPDFDto: SetPDFDto,
   ) {
     const userId = request.user.id;
     if (!userId) {
       throw new UnauthorizedException('User not found');
     }
 
-    const { transactionId, password } = unlockPDFDto;
+    const { transactionId, password } = setPDFDto;
 
-    const transaction = await this.usersService.transaction(
+    const transaction = await this.transactionsService.transaction(
       {
         id: transactionId,
         userId,
@@ -261,10 +289,113 @@ export class UserController {
       throw new NotFoundException('Transaction not found');
     }
 
-    if (!transaction.email?.pdfNeedsPassword) {
+    if (!transaction.email || !transaction.email?.pdfNeedsPassword) {
       throw new BadRequestException('PDF does not need a password');
     }
 
+    const encryptedPassword = this.encryptionService.encrypt(password);
+
+    await this.usersService.updateEmail({
+      where: { id: transaction.email.id },
+      data: { pdfPassword: encryptedPassword },
+    });
+
     return { success: true };
+  }
+
+  @Post('/pdf/unlock')
+  @UseGuards(JwtAuthGuard)
+  @UseInterceptors(FileInterceptor('file'))
+  async unlockPDFPassword(
+    @Req() request: Request & { user: { id: string } },
+    @Body() unlockPDFDto: UnlockPDFDto,
+    @UploadedFile() file: Express.Multer.File,
+  ) {
+    const userId = request.user.id;
+    if (!userId) {
+      throw new UnauthorizedException('User not found');
+    }
+
+    if (!file || !file.buffer) {
+      throw new BadRequestException('No file uploaded');
+    }
+
+    let emailRecord = (await this.usersService.email({
+      id: unlockPDFDto.emailId,
+    })) as Email;
+
+    if (!emailRecord) {
+      throw new NotFoundException('Email not found');
+    }
+
+    const userToUpdate = await this.usersService.user({
+      id: emailRecord.userId,
+    });
+
+    /**
+     * Extract text from PDF
+     */
+    const text = await this.pdfService.extractTextFromPdf(file.buffer);
+
+    emailRecord = await this.usersService.updateEmail({
+      where: { id: emailRecord.id },
+      data: { pdfText: text, pdfNeedsPassword: false },
+    });
+
+    /**
+     * Extract total value
+     */
+
+    const total = this.transactionsService.extractTotalFromEmail(emailRecord);
+
+    /**
+     * Extract due date
+     */
+
+    const dueAt = this.transactionsService.extractDueAtFromEmail(emailRecord);
+
+    await this.transactionsService.saveTransactionsFromEmail(
+      emailRecord,
+      userToUpdate,
+      total,
+      dueAt,
+    );
+
+    await this.storageService.uploadFile(
+      `${unlockPDFDto.emailId}.pdf`,
+      file.buffer,
+    );
+
+    return { success: true };
+  }
+
+  @Get('/pdf/pending')
+  @UseGuards(JwtAuthGuard)
+  async getPendingLockedPdfs() {
+    const emails = await this.usersService.emails({
+      where: {
+        pdfNeedsPassword: true,
+        pdfPassword: { not: null },
+        pdfText: '',
+      },
+      select: {
+        id: true,
+        sender: true,
+        pdfPassword: true,
+        user: {
+          select: {
+            id: true,
+            email: true,
+          },
+        },
+      },
+    });
+
+    return {
+      emails: emails.map((email) => ({
+        ...email,
+        pdfPassword: this.encryptionService.decrypt(email.pdfPassword),
+      })),
+    };
   }
 }
