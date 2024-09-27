@@ -1,11 +1,11 @@
 import { IsString, IsNotEmpty } from 'class-validator';
 
-export class UnlockPDFDto {
+export class SetPDFDto {
   @IsString()
   @IsNotEmpty()
-  emailId: string;
+  password: string;
 
   @IsString()
   @IsNotEmpty()
-  updateUserId: string;
+  transactionId: string;
 }

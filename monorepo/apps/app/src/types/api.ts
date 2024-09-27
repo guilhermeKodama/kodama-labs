@@ -64,6 +64,7 @@ type Email = {
   snippet: string;
   internalDate: string;
   pdfNeedsPassword: boolean;
+  isPasswordSet: boolean;
   createdAt: string;
 };
 

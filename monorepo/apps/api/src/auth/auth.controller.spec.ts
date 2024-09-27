@@ -2,7 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { AuthController } from './auth.controller';
 import { GmailService } from 'src/gmail/gmail.service';
 import { NERService } from 'src/nlp/ner/ner.service';
-import { UsersService } from 'src/users/users.service';
+import { UsersService } from 'src/users/services/users.service';
 import { JwtService } from '@nestjs/jwt';
 import { User } from '@prisma/client';
 import { ExpenseCategory } from 'src/users/types/transaction.enum';

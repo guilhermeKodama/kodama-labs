@@ -2,8 +2,9 @@ import { Injectable, Logger } from '@nestjs/common';
 import { gmail_v1, google } from 'googleapis';
 import { OAuth2Client } from 'google-auth-library';
 import { Email } from './interfaces/gmail.interface';
-import * as pdfParse from 'pdf-parse';
+
 import { BankDomains } from './interfaces/bank.interface';
+import { PdfService } from 'src/nlp/ner/pdf.service';
 
 @Injectable()
 export class GmailService {
@@ -20,14 +21,21 @@ export class GmailService {
     BankDomains.C6,
   ];
 
+  constructor(private readonly pdfService: PdfService) {}
+
   private createOAuth2Client(
     accessToken: string,
     refreshToken: string,
   ): OAuth2Client {
+    this.logger.debug({
+      clientId: process.env.GOOGLE_CLIENT_ID,
+      clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+      redirectUri: `${process.env.API_URL}/auth/google/redirect`,
+    });
     const oauth2Client = new google.auth.OAuth2(
       process.env.GOOGLE_CLIENT_ID,
       process.env.GOOGLE_CLIENT_SECRET,
-      process.env.GOOGLE_REDIRECT_URI,
+      `${process.env.API_URL}/auth/google/redirect`,
     );
 
     oauth2Client.setCredentials({
@@ -53,17 +61,6 @@ export class GmailService {
 
     const data = res.data.data || '';
     return Buffer.from(data, 'base64');
-  }
-
-  async extractTextFromPdf(pdfBuffer: Buffer): Promise<string> {
-    try {
-      const data = await pdfParse(pdfBuffer);
-      return data.text;
-    } catch (e) {
-      this.logger.error('Error extracting text from PDF:', e);
-    }
-
-    return '';
   }
 
   async getEmails(
@@ -106,6 +103,7 @@ export class GmailService {
               let body = payload.body?.data || '';
               let senderEmail = '';
               let pdfText = '';
+              let pdfBuffer = null;
               let hasPDF = false;
 
               if (payload.headers) {
@@ -126,14 +124,16 @@ export class GmailService {
                 for (const part of payload.parts) {
                   if (part.filename && part.filename.endsWith('.pdf')) {
                     // Fetch attachment
-                    const pdfBuffer = await this.getAttachmentContent(
+                    pdfBuffer = await this.getAttachmentContent(
                       message.id,
                       part.body.attachmentId,
                       oauth2Client,
                     );
 
                     hasPDF = true;
-                    pdfText = await this.extractTextFromPdf(pdfBuffer);
+                    pdfText = await this.pdfService.extractTextFromPdf(
+                      pdfBuffer,
+                    );
                   } else if (part.body?.data) {
                     body += part.body.data;
                   }
@@ -150,6 +150,7 @@ export class GmailService {
                 body: decodedBody,
                 senderEmail: senderEmail,
                 pdfText: pdfText,
+                pdfBuffer: pdfBuffer,
                 hasPDF,
                 raw: msg as gmail_v1.Schema$Message,
               };
@@ -168,7 +169,8 @@ export class GmailService {
 
       return emails;
     } catch (error) {
-      console.error('Error fetching emails:', error);
+      this.logger.error('Error fetching emails:', error);
+      this.logger.error(error?.response?.data);
       throw new Error('Failed to fetch emails');
     }
   }

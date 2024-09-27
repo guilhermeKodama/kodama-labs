@@ -5,11 +5,12 @@
  */
 
 import { Injectable, Logger } from '@nestjs/common';
-import { Email } from 'src/gmail/interfaces/gmail.interface';
 import { SubItem } from '../types/email.interface';
 import { BankDomains } from 'src/gmail/interfaces/bank.interface';
 import { NubankNERService } from './nubank-ner.service';
 import { XPNERService } from './xp-ner.service';
+import { Email } from '@prisma/client';
+import { Email as GmailEmail } from 'src/gmail/interfaces/gmail.interface';
 
 @Injectable()
 export class NERService {
@@ -26,7 +27,7 @@ export class NERService {
     return this.CREDIT_CARD_BLACK_LIST.some((term) => text.includes(term));
   }
 
-  filterCreditCardEmails(emails: Email[]): Email[] {
+  filterCreditCardEmails(emails: GmailEmail[]): GmailEmail[] {
     const bankEmails = emails.filter((email) => {
       const snippetLower = email.snippet.toLowerCase();
 
@@ -124,16 +125,16 @@ export class NERService {
   }
 
   extractSubItems(email: Email): SubItem[] {
-    if (email.senderEmail.includes(BankDomains.NUBANK)) {
+    if (email.sender.includes(BankDomains.NUBANK)) {
       return this.nubankNerService.extractSubItemsFromCreditCardPDFText(
         email.pdfText,
       );
     }
 
-    if (email.senderEmail.includes(BankDomains.XP)) {
+    if (email.sender.includes(BankDomains.XP)) {
       return this.xpNerService.extractSubItemsFromCreditCardPDFText(
         email.pdfText,
-        new Date(parseInt(email.internalDate)),
+        new Date(email.internalDate),
       );
     }
 
@@ -141,20 +142,20 @@ export class NERService {
   }
 
   getDescriptionFromCreditCardBill(email: Email) {
-    const date = new Date(parseInt(email.internalDate));
+    const date = new Date(email.internalDate);
     const billAt = `${date.getMonth() + 1}/${date
       .getFullYear()
       .toString()
       .slice(-2)}`;
 
-    if (email.senderEmail.includes(BankDomains.NUBANK)) {
+    if (email.sender.includes(BankDomains.NUBANK)) {
       return `Fatura Nubank ${billAt}`;
     }
 
-    if (email.senderEmail.includes(BankDomains.XP)) {
+    if (email.sender.includes(BankDomains.XP)) {
       return `Fatura XP ${billAt}`;
     }
 
-    return `${email.senderEmail}`;
+    return `${email.sender}`;
   }
 }

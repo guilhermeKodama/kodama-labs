@@ -73,83 +73,36 @@ export class UsersService {
     });
   }
 
-  /**
-   * Transactions
-   */
+  async updateEmail(data: Prisma.EmailUpdateArgs) {
+    return this.prisma.email.update(data);
+  }
 
-  async transaction(
-    userWhereUniqueInput: Prisma.TransactionWhereUniqueInput,
-    selectFields?: Prisma.TransactionSelect,
-  ): Promise<
-    (Transaction & { subItems?: Transaction[]; email?: Email }) | null
-  > {
-    return this.prisma.transaction.findUnique({
-      where: userWhereUniqueInput,
+  async email(
+    emailWhereUniqueInput: Prisma.EmailWhereUniqueInput,
+    selectFields?: Prisma.EmailSelect,
+  ) {
+    return this.prisma.email.findUnique({
+      where: emailWhereUniqueInput,
       select: selectFields,
     });
   }
 
-  async saveTransactionFromEmail(
-    data: Prisma.TransactionCreateInput,
-  ): Promise<Transaction & { subItems: Transaction[] }> {
-    const transaction = await this.prisma.transaction.findFirst({
-      where: { emailId: data.email.connect.id },
-    });
-
-    if (transaction) {
-      return this.prisma.transaction.update({
-        where: { id: transaction.id },
-        include: {
-          subItems: true,
-        },
-        data,
-      });
-    }
-
-    return this.prisma.transaction.create({
-      data,
-      include: {
-        subItems: true,
-      },
-    });
-  }
-
-  async updateTransaction(params: {
-    where: Prisma.TransactionWhereUniqueInput;
-    data: Prisma.TransactionUpdateInput;
-  }): Promise<Transaction> {
-    const { where, data } = params;
-    return this.prisma.transaction.update({
-      data,
+  async emails(params: {
+    skip?: number;
+    take?: number;
+    cursor?: Prisma.EmailWhereUniqueInput;
+    where?: Prisma.EmailWhereInput;
+    orderBy?: Prisma.EmailOrderByWithRelationInput;
+    select?: Prisma.EmailSelect;
+  }): Promise<Email[]> {
+    const { skip, take, cursor, where, orderBy, select } = params;
+    return this.prisma.email.findMany({
+      skip,
+      take,
+      cursor,
       where,
-    });
-  }
-
-  async createTransaction(
-    data: Prisma.TransactionCreateInput,
-  ): Promise<Transaction> {
-    return this.prisma.transaction.create({
-      data,
-    });
-  }
-
-  async deleteTransaction(
-    where: Prisma.TransactionWhereUniqueInput,
-  ): Promise<Transaction> {
-    return this.prisma.transaction.delete({
-      where,
-    });
-  }
-
-  async deleteTransactions(params: {
-    where: { id: { in: string[] }; userId: string };
-  }) {
-    const { where } = params;
-    return this.prisma.transaction.deleteMany({
-      where: {
-        id: { in: where.id.in },
-        userId: where.userId,
-      },
+      orderBy,
+      select,
     });
   }
 }

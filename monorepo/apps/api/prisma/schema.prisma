@@ -62,7 +62,8 @@ model Email {
   sender           String
   snippet          String
   body             String
-  pdfText          String
+  pdfText          String?
+  pdfPassword      String?
   pdfNeedsPassword Boolean       @default(false)
   internalDate     DateTime
   raw              Json

@@ -55,5 +55,6 @@ export const endpoints = {
     updateTransaction: '/user/transaction',
     deleteTransaction: '/user/transaction',
     deleteTransactions: '/user/transactions',
+    setPDFPassword: '/user/pdf/set-password',
   },
 };

@@ -8,6 +8,7 @@ export type Email = {
   body: string;
   senderEmail: string;
   pdfText: string;
+  pdfBuffer: Buffer | null;
   hasPDF: boolean;
   raw: gmail_v1.Schema$Message;
 };

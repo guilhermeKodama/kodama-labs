@@ -1,9 +1,10 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { PassportStrategy } from '@nestjs/passport';
 import { Strategy, Profile } from 'passport-google-oauth20';
 
 @Injectable()
 export class GoogleStrategy extends PassportStrategy(Strategy, 'google') {
+  private readonly logger = new Logger(GoogleStrategy.name);
   constructor() {
     super({
       clientID: process.env.GOOGLE_CLIENT_ID,
@@ -14,8 +15,9 @@ export class GoogleStrategy extends PassportStrategy(Strategy, 'google') {
         'profile',
         'https://www.googleapis.com/auth/gmail.readonly',
       ],
-      accessType: 'offline', // This requests the refresh token
-      prompt: 'consent', // This forces the consent screen to show up again to issue a refresh token
+      accessType: 'offline',
+      prompt: 'consent',
+      session: false,
     });
   }
 
@@ -24,7 +26,7 @@ export class GoogleStrategy extends PassportStrategy(Strategy, 'google') {
     refreshToken: string,
     profile: Profile,
   ): Promise<any> {
-    console.log({ accessToken, refreshToken, profile });
+    this.logger.debug({ accessToken, refreshToken, profile });
     const { id, displayName, emails, photos } = profile;
     const user = {
       googleId: id,
