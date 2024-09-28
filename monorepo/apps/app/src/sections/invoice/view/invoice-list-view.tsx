@@ -177,7 +177,7 @@ export function InvoiceListView() {
         // Wait 5 seconds before checking the user session
         timeoutId = setTimeout(async () => {
           if (checkUserSession) await checkUserSession();
-        }, 5000);
+        }, 2000);
       }
 
       if (user?.hasPendingProcess === false) {
