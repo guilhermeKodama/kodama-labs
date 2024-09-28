@@ -51,7 +51,7 @@ export function InvoiceToolbar({ invoice, currentStatus, statusOptions, onChange
         fileName={invoice?.invoiceNumber}
         style={{ textDecoration: 'none' }}
       >
-        {({ loading }) => (
+        {({ loading }: { loading: boolean }) => (
           <Tooltip title="Download">
             <IconButton>
               {loading ? (
