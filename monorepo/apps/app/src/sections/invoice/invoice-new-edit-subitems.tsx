@@ -1,4 +1,3 @@
-import { useEffect } from 'react';
 import { useFieldArray, useFormContext } from 'react-hook-form';
 
 import Box from '@mui/material/Box';
@@ -36,8 +35,6 @@ export function InvoiceNewEditSubItems() {
 
   const totalAmount = subtotal;
 
-  console.log('[🍓]', { totalAmount });
-
   const categoryOptions =
     values.type === TransactionType.INCOME
       ? Object.entries(CategoryLabels).filter(([key]) =>
@@ -46,10 +43,6 @@ export function InvoiceNewEditSubItems() {
       : Object.entries(CategoryLabels).filter(([key]) =>
           Object.values(ExpenseCategory).includes(key as ExpenseCategory)
         );
-
-  useEffect(() => {
-    setValue('amount', totalAmount);
-  }, [setValue, totalAmount]);
 
   const handleAdd = () => {
     append({
