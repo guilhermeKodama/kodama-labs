@@ -11,6 +11,7 @@ import { Logger } from '@nestjs/common';
   cors: {
     origin: ['https://app.wallex.com.br', 'http://localhost:8081'],
   },
+  transports: ['websocket', 'polling'],
 })
 export class EventsGateway implements OnGatewayConnection, OnGatewayDisconnect {
   @WebSocketServer()
