@@ -76,7 +76,6 @@ export function AuthGuard({ children }: Props) {
           setTimeout(() => {
             startPolling();
           }, 1 * 1000);
-          return;
         } else {
           // if there is no pending process, poll again in 10 seconds
           setTimeout(() => {
