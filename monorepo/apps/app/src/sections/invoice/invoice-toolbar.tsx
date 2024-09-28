@@ -52,7 +52,7 @@ export function InvoiceToolbar({ invoice, currentStatus, statusOptions, onChange
         style={{ textDecoration: 'none' }}
       >
         {
-          //@ts-ignore
+          // @ts-ignore
           ({ loading }) => (
             <Tooltip title="Download">
               <IconButton>
