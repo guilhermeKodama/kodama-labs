@@ -28,6 +28,7 @@ import { FormDialog } from 'src/components/form-dialog';
 import axios, { endpoints } from 'src/utils/axios';
 import { TransactionContext } from 'src/pages/dashboard/invoice/transaction-context';
 import { ShortTypeLabels, StatusLabels } from './constants';
+import transactionsService from 'src/modules/transactions/services/transactions.service';
 
 // ----------------------------------------------------------------------
 
@@ -101,23 +102,7 @@ export function InvoiceTableRowDesktop({
       password,
     });
 
-    axios.get(endpoints.user.transactions).then((response) => {
-      const data: UserTransactionsReponse = response.data;
-
-      const STATUS_MAP = {
-        PENDING: 'pending',
-        PAID: 'paid',
-        OVERDUE: 'overdue',
-        DRAFT: 'draft',
-      };
-
-      const transactionsMapped: Transaction[] = data.transactions.map((transaction) => ({
-        ...transaction,
-        status: STATUS_MAP[transaction.status as keyof typeof STATUS_MAP] || STATUS_MAP.DRAFT,
-      }));
-
-      setTransactions(transactionsMapped);
-    });
+    await transactionsService.refetchTransactions(setTransactions);
 
     dialog.onFalse();
   };

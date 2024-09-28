@@ -1,10 +1,14 @@
 import { Injectable } from '@nestjs/common';
 import { User, Prisma, Transaction, Email } from '@prisma/client';
 import { PrismaService } from 'src/database/prisma.service';
+import { EventsGateway } from 'src/events/events.gateway';
 
 @Injectable()
 export class UsersService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private readonly eventsGateway: EventsGateway,
+  ) {}
 
   async user(
     userWhereUniqueInput: Prisma.UserWhereUniqueInput,
@@ -44,10 +48,19 @@ export class UsersService {
     data: Prisma.UserUpdateInput;
   }): Promise<User> {
     const { where, data } = params;
-    return this.prisma.user.update({
+    const updatedUser = await this.prisma.user.update({
       data,
       where,
     });
+
+    if ('hasPendingProcess' in data) {
+      this.eventsGateway.notifyUserHasPendingProcessChanged(
+        updatedUser.id,
+        updatedUser.hasPendingProcess,
+      );
+    }
+
+    return updatedUser;
   }
 
   async deleteUser(where: Prisma.UserWhereUniqueInput): Promise<User> {

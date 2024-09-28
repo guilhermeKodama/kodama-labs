@@ -13,6 +13,7 @@ import { TransactionsService } from './services/transactios.service';
 import { NERService } from 'src/nlp/ner/ner.service';
 import { XPNERService } from 'src/nlp/ner/xp-ner.service';
 import { NubankNERService } from 'src/nlp/ner/nubank-ner.service';
+import { EventsGateway } from 'src/events/events.gateway';
 
 @Module({
   imports: [DatabaseModule, SecurityModule, NlpModule, StorageModule],
@@ -26,6 +27,7 @@ import { NubankNERService } from 'src/nlp/ner/nubank-ner.service';
     NERService,
     XPNERService,
     NubankNERService,
+    EventsGateway,
   ],
   controllers: [UserController],
 })
