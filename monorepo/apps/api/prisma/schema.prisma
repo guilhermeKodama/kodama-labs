@@ -9,17 +9,18 @@ datasource db {
 }
 
 model User {
-  id           String        @id @default(uuid())
-  email        String        @unique
-  name         String
-  photo        String?
-  accessToken  String?
-  refreshToken String?
-  googleId     String?
-  transactions Transaction[]
-  emails       Email[]
-  createdAt    DateTime      @default(now())
-  updatedAt    DateTime      @updatedAt
+  id                String        @id @default(uuid())
+  email             String        @unique
+  name              String
+  photo             String?
+  accessToken       String?
+  refreshToken      String?
+  googleId          String?
+  hasPendingProcess Boolean       @default(false)
+  transactions      Transaction[]
+  emails            Email[]
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
 }
 
 enum TransactionStatus {

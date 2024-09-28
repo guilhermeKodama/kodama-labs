@@ -82,6 +82,11 @@ export class AuthController {
         dueAt,
       );
     }
+
+    await this.usersService.updateUser({
+      where: { id: user.id },
+      data: { hasPendingProcess: false },
+    });
   }
 
   @Get('google/login')
@@ -131,6 +136,11 @@ export class AuthController {
         },
       });
     }
+
+    await this.usersService.updateUser({
+      where: { id: user.id },
+      data: { hasPendingProcess: true },
+    });
 
     this.processEmailTransactions(user)
       .then(() => {

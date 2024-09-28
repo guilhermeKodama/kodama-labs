@@ -71,6 +71,27 @@ export class UserController {
     private readonly storageService: StorageService,
     private readonly transactionsService: TransactionsService,
   ) {}
+
+  /**
+   * This is a hack to overcome the limitations of vercel lambda functions architecture
+   */
+  @Get('pooling')
+  @UseGuards(JwtAuthGuard)
+  async getPoolingResponse(
+    @Req() request: Request & { user: { id: string } },
+  ): Promise<{ hasPendingProcess: boolean }> {
+    const user = await this.usersService.user({ id: request.user.id });
+
+    if (!user) {
+      throw new UnauthorizedException('User not found');
+    }
+
+    return new Promise((resolve) => {
+      setTimeout(() => {
+        resolve({ hasPendingProcess: user.hasPendingProcess });
+      }, 8000);
+    });
+  }
   @Get('transactions')
   @UseGuards(JwtAuthGuard)
   async getProfile(@Req() request: Request & { user: { id } }) {

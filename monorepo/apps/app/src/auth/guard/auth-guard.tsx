@@ -7,6 +7,8 @@ import { CONFIG } from 'src/config-global';
 
 import { SplashScreen } from 'src/components/loading-screen';
 
+import axios, { endpoints } from 'src/utils/axios';
+
 import { useAuthContext } from '../hooks';
 
 // ----------------------------------------------------------------------
@@ -25,6 +27,8 @@ export function AuthGuard({ children }: Props) {
   const { authenticated, loading } = useAuthContext();
 
   const [isChecking, setIsChecking] = useState<boolean>(true);
+
+  const [isPolling, setIsPolling] = useState(false);
 
   const createQueryString = useCallback(
     (name: string, value: string) => {
@@ -60,6 +64,37 @@ export function AuthGuard({ children }: Props) {
 
     setIsChecking(false);
   };
+
+  const startPolling = useCallback(() => {
+    setIsPolling(true);
+    axios
+      .get(endpoints.user.pooling)
+      .then((res: { data: { hasPendingProcess: boolean } }) => {
+        console.log({ data: res.data });
+        if (res.data.hasPendingProcess) {
+          // if there is a pending process, poll again in 1 second
+          setTimeout(() => {
+            startPolling();
+          }, 1 * 1000);
+          return;
+        } else {
+          // if there is no pending process, poll again in 10 seconds
+          setTimeout(() => {
+            startPolling();
+          }, 10 * 1000);
+        }
+      })
+      .catch((error) => {
+        console.error('Error during polling:', error);
+      });
+  }, []);
+
+  useEffect(() => {
+    if (authenticated && !isPolling) {
+      startPolling(); // Start polling after authentication
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [authenticated]);
 
   useEffect(() => {
     checkPermissions();
