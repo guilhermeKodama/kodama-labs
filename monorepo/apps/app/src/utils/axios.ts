@@ -56,5 +56,6 @@ export const endpoints = {
     deleteTransaction: '/user/transaction',
     deleteTransactions: '/user/transactions',
     setPDFPassword: '/user/pdf/set-password',
+    pooling: '/user/pooling',
   },
 };
