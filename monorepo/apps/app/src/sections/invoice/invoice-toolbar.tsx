@@ -1,4 +1,3 @@
-//@ts-nocheck
 import type { IInvoice } from 'src/types/invoice';
 
 import { useCallback } from 'react';
