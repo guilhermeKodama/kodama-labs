@@ -163,7 +163,7 @@ export class AuthController {
 
     const user = await this.usersService.user(
       { id: userId },
-      { id: true, email: true, photo: true },
+      { id: true, email: true, photo: true, hasPendingProcess: true },
     );
 
     if (!user) {

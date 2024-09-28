@@ -20,6 +20,7 @@ import { PdfService } from 'src/nlp/ner/pdf.service';
 import { StorageModule } from 'src/storage/storage.module';
 import { StorageService } from 'src/storage/services/storage.service';
 import { TransactionsService } from 'src/users/services/transactios.service';
+import { EventsGateway } from 'src/events/events.gateway';
 
 @Module({
   imports: [
@@ -54,6 +55,7 @@ import { TransactionsService } from 'src/users/services/transactios.service';
     PdfService,
     StorageService,
     TransactionsService,
+    EventsGateway,
   ],
 })
 export class AuthModule {}

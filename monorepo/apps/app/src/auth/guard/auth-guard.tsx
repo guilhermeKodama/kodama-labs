@@ -70,7 +70,6 @@ export function AuthGuard({ children }: Props) {
     axios
       .get(endpoints.user.pooling)
       .then((res: { data: { hasPendingProcess: boolean } }) => {
-        console.log({ data: res.data });
         if (res.data.hasPendingProcess) {
           // if there is a pending process, poll again in 1 second
           setTimeout(() => {

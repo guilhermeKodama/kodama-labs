@@ -1,6 +1,6 @@
 import type { IInvoiceTableFilters } from 'src/types/invoice';
 
-import { useCallback, useContext } from 'react';
+import { useCallback, useContext, useEffect, useState } from 'react';
 
 import Box from '@mui/material/Box';
 import Tab from '@mui/material/Tab';
@@ -51,10 +51,13 @@ import axios, { endpoints } from 'src/utils/axios';
 import { TransactionContext } from 'src/pages/dashboard/invoice/transaction-context';
 import type { Transaction } from 'src/types/api';
 import { useMediaQuery } from '@mui/material';
+import { useAuthContext } from 'src/auth/hooks';
 import { InvoiceAnalytic } from '../invoice-analytic';
 import { InvoiceTableRow } from '../invoice-table-row';
 import { InvoiceTableToolbar } from '../invoice-table-toolbar';
 import { InvoiceTableFiltersResult } from '../invoice-table-filters-result';
+import socketio from 'src/utils/socketio';
+import transactionsService from 'src/modules/transactions/services/transactions.service';
 
 // ----------------------------------------------------------------------
 
@@ -81,6 +84,8 @@ export function InvoiceListView() {
   const confirm = useBoolean();
 
   const { transactions, setTransactions } = useContext(TransactionContext);
+
+  const { user, checkUserSession } = useAuthContext();
 
   const filters = useSetState<IInvoiceTableFilters>({
     name: '',
@@ -153,6 +158,50 @@ export function InvoiceListView() {
       count: getInvoiceLength('draft'),
     },
   ] as const;
+
+  /**
+   * Use effects
+   */
+
+  useEffect(() => {
+    if (user?.hasPendingProcess === true) {
+      toast.loading('Processando emails...', {
+        id: 'process-emails',
+        closeButton: false,
+        position: 'top-center',
+      });
+    }
+    // Initialize Socket.io connection
+    const socketConnection = socketio.connect({
+      query: { userId: user?.id },
+    });
+
+    // Listen for the 'taskCompleted' event
+    socketConnection.on(
+      'hasProcessingPendingChanged',
+      async (data: { hasPendingProcess: boolean }) => {
+        if (data.hasPendingProcess === true) return;
+
+        if (checkUserSession) await checkUserSession();
+
+        await transactionsService.refetchTransactions(setTransactions);
+
+        toast.success('Emails processados com sucesso!', {
+          id: 'process-emails',
+          closeButton: false,
+          position: 'top-center',
+        });
+      }
+    );
+
+    return () => {
+      socketConnection.disconnect(); // Clean up the socket connection on component unmount
+    };
+  }, []);
+
+  /**
+   * Handlers
+   */
 
   const handleDeleteRow = useCallback(
     async (id: string) => {

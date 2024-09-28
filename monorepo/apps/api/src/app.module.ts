@@ -11,6 +11,8 @@ import { NlpModule } from './nlp/nlp.module';
 import { DatabaseModule } from './database/database.module';
 import { SecurityModule } from './security/security.module';
 import { StorageModule } from './storage/storage.module';
+import { EventsModule } from './events/events.module';
+import { EventsGateway } from './events/events.gateway';
 
 @Module({
   imports: [
@@ -27,8 +29,9 @@ import { StorageModule } from './storage/storage.module';
     DatabaseModule,
     SecurityModule,
     StorageModule,
+    EventsModule,
   ],
   controllers: [AppController],
-  providers: [AppService, GoogleStrategy],
+  providers: [AppService, GoogleStrategy, EventsGateway],
 })
 export class AppModule {}
