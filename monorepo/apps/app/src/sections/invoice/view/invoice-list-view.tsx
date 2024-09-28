@@ -1,6 +1,6 @@
 import type { IInvoiceTableFilters } from 'src/types/invoice';
 
-import { useCallback, useContext, useEffect, useState } from 'react';
+import { useCallback, useContext, useEffect } from 'react';
 
 import Box from '@mui/material/Box';
 import Tab from '@mui/material/Tab';
@@ -52,12 +52,12 @@ import { TransactionContext } from 'src/pages/dashboard/invoice/transaction-cont
 import type { Transaction } from 'src/types/api';
 import { useMediaQuery } from '@mui/material';
 import { useAuthContext } from 'src/auth/hooks';
+import socketio from 'src/utils/socketio';
+import transactionsService from 'src/modules/transactions/services/transactions.service';
 import { InvoiceAnalytic } from '../invoice-analytic';
 import { InvoiceTableRow } from '../invoice-table-row';
 import { InvoiceTableToolbar } from '../invoice-table-toolbar';
 import { InvoiceTableFiltersResult } from '../invoice-table-filters-result';
-import socketio from 'src/utils/socketio';
-import transactionsService from 'src/modules/transactions/services/transactions.service';
 
 // ----------------------------------------------------------------------
 
@@ -197,6 +197,7 @@ export function InvoiceListView() {
     return () => {
       socketConnection.disconnect(); // Clean up the socket connection on component unmount
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   /**

@@ -20,15 +20,15 @@ import { Label } from 'src/components/label';
 import { Iconify } from 'src/components/iconify';
 import { ConfirmDialog } from 'src/components/custom-dialog';
 import { usePopover, CustomPopover } from 'src/components/custom-popover';
-import type { Transaction, UserTransactionsReponse } from 'src/types/api';
+import type { Transaction } from 'src/types/api';
 import { ExpenseCategory, TransactionType } from 'src/types/api';
 import { useTheme } from '@emotion/react';
 import { useContext } from 'react';
 import { FormDialog } from 'src/components/form-dialog';
 import axios, { endpoints } from 'src/utils/axios';
 import { TransactionContext } from 'src/pages/dashboard/invoice/transaction-context';
-import { ShortTypeLabels, StatusLabels } from './constants';
 import transactionsService from 'src/modules/transactions/services/transactions.service';
+import { ShortTypeLabels, StatusLabels } from './constants';
 
 // ----------------------------------------------------------------------
 
