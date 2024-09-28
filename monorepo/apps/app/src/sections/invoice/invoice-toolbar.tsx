@@ -51,17 +51,20 @@ export function InvoiceToolbar({ invoice, currentStatus, statusOptions, onChange
         fileName={invoice?.invoiceNumber}
         style={{ textDecoration: 'none' }}
       >
-        {({ loading }: { loading: boolean }) => (
-          <Tooltip title="Download">
-            <IconButton>
-              {loading ? (
-                <CircularProgress size={24} color="inherit" />
-              ) : (
-                <Iconify icon="eva:cloud-download-fill" />
-              )}
-            </IconButton>
-          </Tooltip>
-        )}
+        {
+          //@ts-ignore
+          ({ loading }) => (
+            <Tooltip title="Download">
+              <IconButton>
+                {loading ? (
+                  <CircularProgress size={24} color="inherit" />
+                ) : (
+                  <Iconify icon="eva:cloud-download-fill" />
+                )}
+              </IconButton>
+            </Tooltip>
+          )
+        }
       </PDFDownloadLink>
     </NoSsr>
   );
