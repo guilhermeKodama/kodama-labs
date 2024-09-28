@@ -101,11 +101,13 @@ export class UserController {
         user.transactions.map(
           (transaction: Transaction & { email: Email }) => ({
             ...transaction,
-            email: {
-              ...transaction.email,
-              pdfPassword: undefined,
-              isPasswordSet: !!transaction.email.pdfPassword,
-            },
+            email: transaction.email
+              ? {
+                  ...transaction.email,
+                  pdfPassword: undefined,
+                  isPasswordSet: !!transaction.email.pdfPassword,
+                }
+              : null,
           }),
         ) || [],
     };
