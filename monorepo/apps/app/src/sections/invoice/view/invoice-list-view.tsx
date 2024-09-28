@@ -52,7 +52,6 @@ import { TransactionContext } from 'src/pages/dashboard/invoice/transaction-cont
 import type { Transaction } from 'src/types/api';
 import { useMediaQuery } from '@mui/material';
 import { useAuthContext } from 'src/auth/hooks';
-import socketio from 'src/utils/socketio';
 import transactionsService from 'src/modules/transactions/services/transactions.service';
 import { InvoiceAnalytic } from '../invoice-analytic';
 import { InvoiceTableRow } from '../invoice-table-row';
@@ -164,41 +163,46 @@ export function InvoiceListView() {
    */
 
   useEffect(() => {
-    if (user?.hasPendingProcess === true) {
-      toast.loading('Processando emails...', {
-        id: 'process-emails',
-        closeButton: false,
-        position: 'top-center',
-      });
-    }
-    // Initialize Socket.io connection
-    const socketConnection = socketio.connect({
-      query: { userId: user?.id },
-    });
+    let timeoutId: NodeJS.Timeout;
 
-    // Listen for the 'taskCompleted' event
-    socketConnection.on(
-      'hasProcessingPendingChanged',
-      async (data: { hasPendingProcess: boolean }) => {
-        if (data.hasPendingProcess === true) return;
+    const processEmails = async () => {
+      if (user?.hasPendingProcess === true) {
+        // Show loading toast
+        toast.loading('Processando emails...', {
+          id: 'process-emails',
+          closeButton: false,
+          position: 'top-center',
+        });
 
-        if (checkUserSession) await checkUserSession();
+        // Wait 5 seconds before checking the user session
+        timeoutId = setTimeout(async () => {
+          if (checkUserSession) await checkUserSession();
+        }, 5000);
+      }
 
+      if (user?.hasPendingProcess === false) {
+        // Refetch transactions
         await transactionsService.refetchTransactions(setTransactions);
 
+        // Complete the toast with success message
         toast.success('Emails processados com sucesso!', {
           id: 'process-emails',
           closeButton: false,
           position: 'top-center',
         });
       }
-    );
+    };
+
+    // Call the processEmails function when the component renders
+    processEmails();
 
     return () => {
-      socketConnection.disconnect(); // Clean up the socket connection on component unmount
+      // Clean up timeout on unmount
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+      }
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [user, checkUserSession, setTransactions]);
 
   /**
    * Handlers
