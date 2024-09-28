@@ -1,6 +1,6 @@
 import type { IInvoiceTableFilters } from 'src/types/invoice';
 
-import { useCallback, useContext, useEffect } from 'react';
+import { useCallback, useContext, useEffect, useState } from 'react';
 
 import Box from '@mui/material/Box';
 import Tab from '@mui/material/Tab';
@@ -85,6 +85,8 @@ export function InvoiceListView() {
   const { transactions, setTransactions } = useContext(TransactionContext);
 
   const { user, checkUserSession } = useAuthContext();
+
+  const [isProcessingToastVisible, setIsProcessingToastVisible] = useState(false);
 
   const filters = useSetState<IInvoiceTableFilters>({
     name: '',
@@ -174,13 +176,15 @@ export function InvoiceListView() {
           position: 'top-center',
         });
 
+        setIsProcessingToastVisible(true);
+
         // Wait 5 seconds before checking the user session
         timeoutId = setTimeout(async () => {
           if (checkUserSession) await checkUserSession();
         }, 2000);
       }
 
-      if (user?.hasPendingProcess === false) {
+      if (user?.hasPendingProcess === false && isProcessingToastVisible) {
         // Refetch transactions
         await transactionsService.refetchTransactions(setTransactions);
 
@@ -202,7 +206,7 @@ export function InvoiceListView() {
         clearTimeout(timeoutId);
       }
     };
-  }, [user, checkUserSession, setTransactions]);
+  }, [user, checkUserSession, setTransactions, isProcessingToastVisible]);
 
   /**
    * Handlers
