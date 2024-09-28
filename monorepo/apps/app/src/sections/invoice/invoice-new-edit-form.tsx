@@ -89,10 +89,8 @@ export function InvoiceNewEditForm({ currentTransaction }: Props) {
   const {
     reset,
     handleSubmit,
-    formState: { isSubmitting, isValid, errors },
+    formState: { isSubmitting },
   } = methods;
-
-  console.log('[♥️]', { isValid, errors });
 
   const handleSaveAsDraft = handleSubmit(async (data) => {
     loadingSave.onTrue();
@@ -113,9 +111,15 @@ export function InvoiceNewEditForm({ currentTransaction }: Props) {
     loadingSend.onTrue();
     console.log({ data });
     try {
+      let amount = data.amount;
+
+      if (data.subItems && data.subItems.length > 0) {
+        amount = data.subItems.reduce((acc, item) => acc + item.amount, 0);
+      }
       if (currentTransaction) {
         await axios.put(endpoints.user.updateTransaction, {
           ...data,
+          amount,
           category: data.category === '' ? null : data.category,
           status: data.status.toUpperCase(),
           id: currentTransaction.id,
@@ -123,6 +127,7 @@ export function InvoiceNewEditForm({ currentTransaction }: Props) {
       } else {
         await axios.post(endpoints.user.createTransaction, {
           ...data,
+          amount,
           category: data.category === '' ? null : data.category,
           status: data.status.toUpperCase(),
         });
