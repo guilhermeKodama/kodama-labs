@@ -184,16 +184,17 @@ export class UserController {
       throw new NotFoundException('Transaction not found');
     }
 
-    const existingSubItemIds = existingTransaction.subItems.map(
-      (subItem) => subItem.id,
+    // Convert existing and incoming subItem IDs to sets for fast lookup
+    const existingSubItemIds = new Set(
+      existingTransaction.subItems.map((subItem) => subItem.id),
     );
-    const incomingSubItemIds = subItems
-      .map((subItem) => subItem.id)
-      .filter(Boolean);
+    const incomingSubItemIds = new Set(
+      subItems.map((subItem) => subItem.id).filter(Boolean),
+    );
 
     // Find the IDs of subItems that need to be deleted
-    const subItemsToDelete = existingSubItemIds.filter(
-      (subItemId) => !incomingSubItemIds.includes(subItemId),
+    const subItemsToDelete = [...existingSubItemIds].filter(
+      (subItemId) => !incomingSubItemIds.has(subItemId),
     );
 
     this.logger.debug({ subItemsToDelete });
