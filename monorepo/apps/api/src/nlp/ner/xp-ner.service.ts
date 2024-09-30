@@ -99,6 +99,8 @@ export class XPNERService {
       }
     }
 
-    return subItems;
+    return subItems.filter((subItem) =>
+      subItem.description.toLowerCase().includes('pagamentos validos normais'),
+    );
   }
 }
