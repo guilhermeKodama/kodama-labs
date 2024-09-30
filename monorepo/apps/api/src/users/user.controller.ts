@@ -29,17 +29,6 @@ import { StorageService } from 'src/storage/services/storage.service';
 import { TransactionsService } from './services/transactios.service';
 import { Email, Transaction } from '@prisma/client';
 
-const TransactionSubItemLightSelect = {
-  select: {
-    id: true,
-    amount: true,
-    description: true,
-    dueAt: true,
-    status: true,
-    category: true,
-  },
-};
-
 const TransactionSubItemSelect = {
   select: {
     id: true,
@@ -48,14 +37,6 @@ const TransactionSubItemSelect = {
     dueAt: true,
     status: true,
     category: true,
-    email: {
-      select: {
-        id: true,
-        sender: true,
-        snippet: true,
-        internalDate: true,
-      },
-    },
   },
 };
 
@@ -195,7 +176,7 @@ export class UserController {
       },
       {
         id: true,
-        subItems: TransactionSubItemLightSelect,
+        subItems: TransactionSubItemSelect,
       },
     );
 
