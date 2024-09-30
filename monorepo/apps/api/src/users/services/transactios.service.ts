@@ -123,16 +123,18 @@ export class TransactionsService {
      * Parent transaction
      */
 
-    parentTransaction = await this.saveTransactionFromEmail({
-      status: TransactionStatus.PENDING,
-      amount: total,
-      dueAt: dueAt,
-      createdAt: email.internalDate,
-      description: this.nerService.getDescriptionFromCreditCardBill(email),
-      category: ExpenseCategory.CREDIT_CARD,
-      email: { connect: { id: email.id } },
-      user: { connect: { id: user.id } },
-    });
+    if (!parentTransaction) {
+      parentTransaction = await this.saveTransactionFromEmail({
+        status: TransactionStatus.PENDING,
+        amount: total,
+        dueAt: dueAt,
+        createdAt: email.internalDate,
+        description: this.nerService.getDescriptionFromCreditCardBill(email),
+        category: ExpenseCategory.CREDIT_CARD,
+        email: { connect: { id: email.id } },
+        user: { connect: { id: user.id } },
+      });
+    }
 
     if (subItemsRecord.length === 0 && subItems.length > 0) {
       for (const subItem of subItems) {
