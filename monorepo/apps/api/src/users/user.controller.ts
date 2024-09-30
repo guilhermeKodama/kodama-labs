@@ -377,17 +377,19 @@ export class UserController {
 
     const dueAt = this.transactionsService.extractDueAtFromEmail(emailRecord);
 
-    await this.transactionsService.saveTransactionsFromEmail(
-      emailRecord,
-      userToUpdate,
-      total,
-      dueAt,
-    );
-
-    await this.storageService.uploadFile(
-      `${unlockPDFDto.emailId}.pdf`,
-      file.buffer,
-    );
+    this.transactionsService
+      .saveTransactionsFromEmail(emailRecord, userToUpdate, total, dueAt)
+      .then(() => {
+        this.storageService
+          .uploadFile(`${unlockPDFDto.emailId}.pdf`, file.buffer)
+          .then(() => ({}))
+          .catch((error) => {
+            this.logger.error(error);
+          });
+      })
+      .catch((error) => {
+        this.logger.error(error);
+      });
 
     return { success: true };
   }
