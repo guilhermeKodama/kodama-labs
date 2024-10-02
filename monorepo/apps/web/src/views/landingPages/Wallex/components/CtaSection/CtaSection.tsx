@@ -2,32 +2,49 @@ import React from "react";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
 import Typography from "@mui/material/Typography";
+import { sendEvent } from "services/analytics";
 
 type Props = {
   onClick: () => void;
 };
 
-const CtaSection = ({ onClick }: Props) => (
-  <Box
-    display={"flex"}
-    justifyContent={"space-between"}
-    alignItems={{ xs: "flex-start", sm: "center" }}
-    flexDirection={{ xs: "column", sm: "row" }}
-  >
-    <Box>
-      <Typography fontWeight={700} variant={"h6"} gutterBottom>
-        Registre-se hoje e garanta acesso antecipado a platforma.
-      </Typography>
-      <Typography>
-        Você está a um passo de simplificar a sua vida financeira.
-      </Typography>
+const CtaSection = ({ onClick }: Props) => {
+  const handleButtonClick = () => {
+    // Send the event to Google Analytics
+    sendEvent({
+      category: "cta-register-button",
+      action: "click",
+      label: "Inscreva-se Agora",
+    });
+
+    // Redirect to the desired URL
+    window.location.href = "https://app.wallex.com.br";
+
+    onClick();
+  };
+
+  return (
+    <Box
+      display={"flex"}
+      justifyContent={"space-between"}
+      alignItems={{ xs: "flex-start", sm: "center" }}
+      flexDirection={{ xs: "column", sm: "row" }}
+    >
+      <Box>
+        <Typography fontWeight={700} variant={"h6"} gutterBottom>
+          Registre-se hoje e garanta acesso antecipado a platforma.
+        </Typography>
+        <Typography>
+          Você está a um passo de simplificar a sua vida financeira.
+        </Typography>
+      </Box>
+      <Box marginTop={{ xs: 2, sm: 0 }}>
+        <Button variant="contained" size="large" onClick={handleButtonClick}>
+          Inscreva-se agora
+        </Button>
+      </Box>
     </Box>
-    <Box marginTop={{ xs: 2, sm: 0 }}>
-      <Button variant="contained" size="large" href="https://app.wallex.com.br">
-        Inscreva-se agora
-      </Button>
-    </Box>
-  </Box>
-);
+  );
+};
 
 export default CtaSection;

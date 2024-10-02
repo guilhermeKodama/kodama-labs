@@ -6,6 +6,7 @@ import Button from "@mui/material/Button";
 import Typography from "@mui/material/Typography";
 import Grid from "@mui/material/Grid";
 import CreditCardsIllustration from "svg/illustrations/CreditCards";
+import { sendEvent } from "services/analytics";
 
 type Props = {
   onClick: () => void;
@@ -16,6 +17,18 @@ const Hero = ({ onClick }: Props) => {
   const isMd = useMediaQuery(theme.breakpoints.up("md"), {
     defaultMatches: true,
   });
+
+  const handleButtonClick = () => {
+    // Send the event to Google Analytics
+    sendEvent({
+      category: "hero-register-button",
+      action: "click",
+      label: "Inscreva-se",
+    });
+
+    // Redirect to the desired URL
+    window.location.href = "https://app.wallex.com.br";
+  };
 
   return (
     <Grid container spacing={4}>
@@ -66,7 +79,7 @@ const Hero = ({ onClick }: Props) => {
                 color="primary"
                 size="large"
                 fullWidth={!isMd} // Ensure the Button's fullWidth matches the Box's condition
-                href="https://app.wallex.com.br"
+                onClick={handleButtonClick}
               >
                 Inscreva-se
               </Button>
