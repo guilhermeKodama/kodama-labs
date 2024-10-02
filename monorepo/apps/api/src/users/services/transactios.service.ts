@@ -1,9 +1,10 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import {
   Email,
   Prisma,
   Transaction,
   TransactionStatus,
+  TransactionLogStatus,
   User,
 } from '@prisma/client';
 import { PrismaService } from 'src/database/prisma.service';
@@ -12,6 +13,7 @@ import { ExpenseCategory } from '../types/transaction.enum';
 
 @Injectable()
 export class TransactionsService {
+  private readonly logger = new Logger(TransactionsService.name);
   constructor(private prisma: PrismaService, private nerService: NERService) {}
 
   /**
@@ -136,18 +138,59 @@ export class TransactionsService {
       });
     }
 
-    if (subItemsRecord.length === 0 && subItems.length > 0) {
-      for (const subItem of subItems) {
-        await this.createTransaction({
-          parent: { connect: { id: parentTransaction.id } },
-          status: TransactionStatus.PENDING,
-          amount: subItem.value,
-          dueAt: dueAt,
-          createdAt: subItem.date,
-          description: subItem.description,
-          category: ExpenseCategory.CREDIT_CARD,
-          email: { connect: { id: email.id } },
-          user: { connect: { id: user.id } },
+    let subItemsTotal = subItems.reduce(
+      (acc, subItem) => acc + subItem.value,
+      0,
+    );
+
+    subItemsTotal = Math.round(subItemsTotal * 100) / 100;
+    const parentTotal = Math.round(parentTransaction.amount * 100) / 100;
+
+    const truncatedSubItemsTotal = Math.floor(subItemsTotal);
+    const truncatedParentTotal = Math.floor(parentTotal);
+
+    if (truncatedSubItemsTotal !== truncatedParentTotal) {
+      this.logger.error('Subitems total are diff from parent transaction', {
+        subItemsTotal,
+        parentTotal,
+      });
+
+      await this.prisma.transactionLog.upsert({
+        where: {
+          transactionId: parentTransaction.id,
+        },
+        update: {
+          status: TransactionLogStatus.ERROR,
+          data: { subItems, subItemsTotal, parentTotal },
+        },
+        create: {
+          transactionId: parentTransaction.id,
+          status: TransactionLogStatus.ERROR,
+          data: { subItems, subItemsTotal, parentTotal },
+        },
+      });
+    } else {
+      if (subItemsRecord.length === 0 && subItems.length > 0) {
+        for (const subItem of subItems) {
+          await this.createTransaction({
+            parent: { connect: { id: parentTransaction.id } },
+            status: TransactionStatus.PENDING,
+            amount: subItem.value,
+            dueAt: dueAt,
+            createdAt: subItem.date,
+            description: subItem.description,
+            category: ExpenseCategory.CREDIT_CARD,
+            email: { connect: { id: email.id } },
+            user: { connect: { id: user.id } },
+          });
+        }
+
+        await this.prisma.transaction.update({
+          where: { id: parentTransaction.id },
+          data: {
+            amount: total,
+            dueAt: dueAt,
+          },
         });
       }
     }

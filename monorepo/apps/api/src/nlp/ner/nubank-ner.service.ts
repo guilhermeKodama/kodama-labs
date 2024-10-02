@@ -42,7 +42,7 @@ export class NubankNERService {
       });
     }
 
-    // Remove the first transaction if it's not valid (based on your use case)
+    // Remove the first transaction
     transactions.shift();
 
     return transactions.filter((transaction) => !isNaN(transaction.value));

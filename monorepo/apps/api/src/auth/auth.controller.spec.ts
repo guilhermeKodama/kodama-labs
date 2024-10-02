@@ -15,11 +15,16 @@ import * as path from 'path';
 import { NubankNERService } from 'src/nlp/ner/nubank-ner.service';
 import { BankDomains } from 'src/gmail/interfaces/bank.interface';
 import { XPNERService } from 'src/nlp/ner/xp-ner.service';
+import { TransactionsService } from 'src/users/services/transactios.service';
+import { StorageService } from 'src/storage/services/storage.service';
+import { PrismaService } from 'src/database/prisma.service';
 
 describe('AuthController', () => {
   let controller: AuthController;
   let gmailService: GmailService;
   let usersService: UsersService;
+  let transactionsService: TransactionsService;
+  let prismaService: PrismaService;
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -35,12 +40,22 @@ describe('AuthController', () => {
         NERService,
         NubankNERService,
         XPNERService,
+        TransactionsService,
+        NERService,
+        PrismaService,
+        {
+          provide: StorageService,
+          useValue: {
+            uploadFile: jest.fn(),
+          },
+        },
         {
           provide: UsersService,
           useValue: {
+            user: jest.fn(),
+            createUser: jest.fn(),
+            updateUser: jest.fn(),
             saveEmail: jest.fn(),
-            saveTransactionFromEmail: jest.fn(),
-            createTransaction: jest.fn(),
           },
         },
         {
@@ -55,6 +70,21 @@ describe('AuthController', () => {
     controller = module.get<AuthController>(AuthController);
     gmailService = module.get<GmailService>(GmailService);
     usersService = module.get<UsersService>(UsersService);
+    transactionsService = module.get<TransactionsService>(TransactionsService);
+    prismaService = module.get<PrismaService>(PrismaService);
+
+    // Mock the specific Prisma call `findFirst` within saveTransactionFromEmail
+    jest.spyOn(prismaService.transaction, 'findFirst').mockResolvedValue(null); // Mock null to simulate no existing transaction
+    jest.spyOn(prismaService.transaction, 'create').mockResolvedValue({
+      id: '123',
+      subItems: [],
+    } as any);
+    jest
+      .spyOn(prismaService.transaction, 'update')
+      .mockResolvedValue({} as any);
+    jest
+      .spyOn(prismaService.transactionLog, 'upsert')
+      .mockResolvedValue({} as any);
   });
 
   it('should process nubank email and save transaction correctly', async () => {
@@ -65,23 +95,27 @@ describe('AuthController', () => {
       accessToken: 'accessToken',
       refreshToken: 'refreshToken',
     } as User;
+
+    const pdfFilePath = path.join(__dirname, './test/nubank-fatura.pdf');
+
     const mockEmails: Email[] = [
       {
         id: 'emailId',
-        body: 'Chegou a sua fatura de cartão de credito. Valor total: R$ 100,00',
+        body: 'Chegou a sua fatura de cartão de credito. Valor total: R$ 5.979,80',
         pdfText: 'PDF text',
         hasPDF: true,
         sizeEstimate: 1,
         snippet:
-          'Chegou a sua fatura de cartão de credito. Valor total: R$ 100,00',
+          'Chegou a sua fatura de cartão de credito. Valor total: R$ 5.979,80',
         internalDate: '1627849200000',
         senderEmail: `test@${BankDomains.NUBANK}`,
         raw: 'raw email data' as gmail_v1.Schema$Message,
+        pdfBuffer: fs.readFileSync(pdfFilePath),
       },
     ];
 
     // Read the PDF file and extract its text
-    const pdfFilePath = path.join(__dirname, './test/nubank-fatura.pdf');
+
     const pdfBuffer = fs.readFileSync(pdfFilePath);
     const pdfData = await pdfParse(pdfBuffer);
     const extractedPdfText = pdfData.text;
@@ -97,14 +131,26 @@ describe('AuthController', () => {
       id: 1,
       sender: `test@${BankDomains.NUBANK}`,
       internalDate: new Date(1627849200000),
+      snippet:
+        'Chegou a sua fatura de cartão de credito. Valor total: R$ 5.979,80',
+      body: 'Chegou a sua fatura de cartão de credito. Valor total: R$ 5.979,80',
+      pdfText: mockEmails[0].pdfText,
     });
 
     // Mock UsersService.saveTransactionFromEmail
-    (usersService.saveTransactionFromEmail as jest.Mock).mockResolvedValue({
-      id: '123',
-      subItems: [],
-    });
-    (usersService.createTransaction as jest.Mock).mockResolvedValue({});
+    jest
+      .spyOn(transactionsService, 'saveTransactionFromEmail')
+      // @ts-expect-error test
+      .mockResolvedValue({
+        id: '123',
+        amount: 5979.8,
+        subItems: [],
+      });
+
+    jest
+      .spyOn(transactionsService, 'createTransaction')
+      // @ts-expect-error test
+      .mockResolvedValue({});
 
     await controller.processEmailTransactions(mockUser);
 
@@ -125,20 +171,24 @@ describe('AuthController', () => {
       raw: JSON.stringify('raw email data'),
     });
 
-    expect(usersService.saveTransactionFromEmail).toHaveBeenCalledTimes(1);
-    expect(usersService.createTransaction).toHaveBeenCalledTimes(5);
+    expect(transactionsService.saveTransactionFromEmail).toHaveBeenCalledTimes(
+      1,
+    );
+    expect(transactionsService.createTransaction).toHaveBeenCalledTimes(5);
 
-    expect(usersService.saveTransactionFromEmail).toHaveBeenNthCalledWith(1, {
+    expect(
+      transactionsService.saveTransactionFromEmail,
+    ).toHaveBeenNthCalledWith(1, {
       status: TransactionStatus.PENDING,
-      amount: 100.0,
+      amount: 5979.8,
       dueAt: new Date(1627849200000 + 5 * 24 * 60 * 60 * 1000), // Adding 5 days
       createdAt: new Date(1627849200000),
-      description: `test@${BankDomains.NUBANK}`,
+      description: 'Fatura Nubank 8/21',
       category: ExpenseCategory.CREDIT_CARD,
       email: { connect: { id: 1 } },
       user: { connect: { id: mockUser.id } },
     });
-    expect(usersService.createTransaction).toHaveBeenNthCalledWith(1, {
+    expect(transactionsService.createTransaction).toHaveBeenNthCalledWith(1, {
       status: TransactionStatus.PENDING,
       amount: 103.68,
       dueAt: new Date(1627849200000 + 5 * 24 * 60 * 60 * 1000),
@@ -149,7 +199,7 @@ describe('AuthController', () => {
       user: { connect: { id: mockUser.id } },
       parent: { connect: { id: '123' } },
     });
-    expect(usersService.createTransaction).toHaveBeenNthCalledWith(2, {
+    expect(transactionsService.createTransaction).toHaveBeenNthCalledWith(2, {
       status: TransactionStatus.PENDING,
       amount: 4915.0,
       dueAt: new Date(1627849200000 + 5 * 24 * 60 * 60 * 1000),
@@ -160,7 +210,7 @@ describe('AuthController', () => {
       user: { connect: { id: mockUser.id } },
       parent: { connect: { id: '123' } },
     });
-    expect(usersService.createTransaction).toHaveBeenNthCalledWith(3, {
+    expect(transactionsService.createTransaction).toHaveBeenNthCalledWith(3, {
       status: TransactionStatus.PENDING,
       amount: 645.65,
       dueAt: new Date(1627849200000 + 5 * 24 * 60 * 60 * 1000),
@@ -171,7 +221,7 @@ describe('AuthController', () => {
       user: { connect: { id: mockUser.id } },
       parent: { connect: { id: '123' } },
     });
-    expect(usersService.createTransaction).toHaveBeenNthCalledWith(4, {
+    expect(transactionsService.createTransaction).toHaveBeenNthCalledWith(4, {
       status: TransactionStatus.PENDING,
       amount: 169.08,
       dueAt: new Date(1627849200000 + 5 * 24 * 60 * 60 * 1000),
@@ -182,7 +232,7 @@ describe('AuthController', () => {
       user: { connect: { id: mockUser.id } },
       parent: { connect: { id: '123' } },
     });
-    expect(usersService.createTransaction).toHaveBeenNthCalledWith(5, {
+    expect(transactionsService.createTransaction).toHaveBeenNthCalledWith(5, {
       status: TransactionStatus.PENDING,
       amount: 146.4,
       dueAt: new Date(1627849200000 + 5 * 24 * 60 * 60 * 1000),
@@ -202,23 +252,29 @@ describe('AuthController', () => {
       accessToken: 'accessToken',
       refreshToken: 'refreshToken',
     } as User;
+
+    const pdfFilePath = path.join(
+      __dirname,
+      './test/ef63b2ef-acc8-4fe7-b3ff-8817b696070d.pdf',
+    );
+
     const mockEmails: Email[] = [
       {
         id: 'emailId',
-        body: 'Chegou a sua fatura de cartão de credito. Valor total: R$ 100,00',
+        body: 'A fatura do seu Cartão XP Visa Infinite com vencimento em 20/09 fechou! O valor total desta fatura é de R$ 20.149,34',
         pdfText: 'PDF text',
         hasPDF: true,
         sizeEstimate: 1,
         snippet:
-          'Chegou a sua fatura de cartão de credito. Valor total: R$ 100,00',
-        internalDate: '1627849200000',
+          'A fatura do seu Cartão XP Visa Infinite com vencimento em 20/09 fechou! O valor total desta fatura é de R$ 20.149,34',
+        internalDate: '1726790400000',
         senderEmail: `test@${BankDomains.XP}`,
         raw: 'raw email data' as gmail_v1.Schema$Message,
+        pdfBuffer: fs.readFileSync(pdfFilePath),
       },
     ];
 
     // Read the PDF file and extract its text
-    const pdfFilePath = path.join(__dirname, './test/xp-fatura-unlocked.pdf');
     const pdfBuffer = fs.readFileSync(pdfFilePath);
     const pdfData = await pdfParse(pdfBuffer);
     const extractedPdfText = pdfData.text;
@@ -232,17 +288,27 @@ describe('AuthController', () => {
     // Mock UsersService.saveEmail
     (usersService.saveEmail as jest.Mock).mockResolvedValue({
       id: 1,
-      sender: `test@${BankDomains.XP}`,
-      internalDate: new Date(1627849200000),
+      sender: mockEmails[0].senderEmail,
+      internalDate: new Date(1726790400000),
+      body: mockEmails[0].body,
+      snippet: mockEmails[0].snippet,
+      pdfText: mockEmails[0].pdfText,
     });
 
     // Mock UsersService.saveTransactionFromEmail
-    (usersService.saveTransactionFromEmail as jest.Mock).mockResolvedValue({
-      id: '123',
-      subItems: [],
-    });
+    jest
+      .spyOn(transactionsService, 'saveTransactionFromEmail')
+      // @ts-expect-error test
+      .mockResolvedValue({
+        id: '123',
+        amount: 20149.34,
+        subItems: [],
+      });
 
-    (usersService.createTransaction as jest.Mock).mockResolvedValue({});
+    jest
+      .spyOn(transactionsService, 'createTransaction')
+      // @ts-expect-error test
+      .mockResolvedValue({});
 
     await controller.processEmailTransactions(mockUser);
 
@@ -256,43 +322,47 @@ describe('AuthController', () => {
       pdfText: mockEmails[0].pdfText,
       pdfNeedsPassword: false,
       snippet: mockEmails[0].snippet,
-      internalDate: new Date(1627849200000).toISOString(),
+      internalDate: new Date(1726790400000).toISOString(),
       messageId: 'emailId',
       sender: `test@${BankDomains.XP}`,
       user: { connect: { id: mockUser.id } },
       raw: JSON.stringify('raw email data'),
     });
 
-    expect(usersService.saveTransactionFromEmail).toHaveBeenCalledTimes(1);
-    expect(usersService.createTransaction).toHaveBeenCalledTimes(87);
+    expect(transactionsService.saveTransactionFromEmail).toHaveBeenCalledTimes(
+      1,
+    );
+    expect(transactionsService.createTransaction).toHaveBeenCalledTimes(118);
 
-    expect(usersService.saveTransactionFromEmail).toHaveBeenNthCalledWith(1, {
+    expect(
+      transactionsService.saveTransactionFromEmail,
+    ).toHaveBeenNthCalledWith(1, {
       status: TransactionStatus.PENDING,
-      amount: 100.0,
-      dueAt: new Date(1627849200000 + 5 * 24 * 60 * 60 * 1000), // Adding 5 days
-      createdAt: new Date(1627849200000),
-      description: `test@${BankDomains.XP}`,
+      amount: 20149.34,
+      dueAt: new Date(1726790400000 + 5 * 24 * 60 * 60 * 1000), // Adding 5 days
+      createdAt: new Date(1726790400000),
+      description: 'Fatura XP 9/24',
       category: ExpenseCategory.CREDIT_CARD,
       email: { connect: { id: 1 } },
       user: { connect: { id: mockUser.id } },
     });
-    expect(usersService.createTransaction).toHaveBeenNthCalledWith(1, {
+    expect(transactionsService.createTransaction).toHaveBeenNthCalledWith(1, {
       status: TransactionStatus.PENDING,
       amount: 947,
-      dueAt: new Date(1627849200000 + 5 * 24 * 60 * 60 * 1000),
-      createdAt: new Date(1627849200000),
-      description: 'BT SHOP ELDORADO - Parcela 8/12',
+      dueAt: new Date(1726790400000 + 5 * 24 * 60 * 60 * 1000),
+      createdAt: new Date(1726790400000),
+      description: 'BT SHOP ELDORADO - Parcela 9/12',
       category: ExpenseCategory.CREDIT_CARD,
       email: { connect: { id: 1 } },
       user: { connect: { id: mockUser.id } },
       parent: { connect: { id: '123' } },
     });
-    expect(usersService.createTransaction).toHaveBeenNthCalledWith(16, {
+    expect(transactionsService.createTransaction).toHaveBeenNthCalledWith(89, {
       status: TransactionStatus.PENDING,
-      amount: 53.98,
-      dueAt: new Date(1627849200000 + 5 * 24 * 60 * 60 * 1000),
-      createdAt: new Date('2024-07-11T12:00:00.000Z'),
-      description: 'IFD*BAR E RESTAURANTE LAC',
+      amount: 3.35,
+      dueAt: new Date(1726790400000 + 5 * 24 * 60 * 60 * 1000),
+      createdAt: new Date('2024-09-03T12:00:00.000Z'),
+      description: 'IOF Transacoes Exterior R$',
       category: ExpenseCategory.CREDIT_CARD,
       email: { connect: { id: 1 } },
       user: { connect: { id: mockUser.id } },
