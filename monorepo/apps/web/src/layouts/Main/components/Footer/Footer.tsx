@@ -8,6 +8,7 @@ import WebbeeLogo from "svg/logos/Webbee";
 import { Alert, Link, Snackbar } from "@mui/material";
 import supabase from "common/supabase";
 import Dialog from "common/Dialog";
+import { sendEvent } from "services/analytics";
 
 const Footer = () => {
   /**
@@ -42,6 +43,18 @@ const Footer = () => {
   const handleClose = () => {
     setIsOpen(false);
     setIsDialogOpen(false);
+  };
+
+  const handleButtonClick = () => {
+    // Send the event to Google Analytics
+    sendEvent({
+      category: "footer-register-button",
+      action: "click",
+      label: "Inscreva-se Agora",
+    });
+
+    // Redirect to the desired URL
+    window.location.href = "https://app.wallex.com.br";
   };
 
   const renderTerms = (
@@ -146,7 +159,7 @@ const Footer = () => {
                 variant="outlined"
                 color="primary"
                 component="a"
-                href="https://app.wallex.com.br"
+                onClick={handleButtonClick}
                 size="small"
               >
                 Inscreva-se Agora

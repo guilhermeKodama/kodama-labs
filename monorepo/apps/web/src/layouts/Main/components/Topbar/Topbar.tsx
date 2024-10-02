@@ -9,6 +9,7 @@ import WebbeeLogo from "svg/logos/Webbee";
 import { Alert, Snackbar } from "@mui/material";
 import supabase from "common/supabase";
 import Dialog from "common/Dialog";
+import { sendEvent } from "services/analytics";
 
 type Props = {
   themeMode: any;
@@ -49,6 +50,18 @@ const Topbar = ({ themeMode, themeToggler, onSidebarOpen }: Props) => {
   const handleClose = () => {
     setIsOpen(false);
     setIsDialogOpen(false);
+  };
+
+  const handleButtonClick = () => {
+    // Send the event to Google Analytics
+    sendEvent({
+      category: "topbar-register-button",
+      action: "click",
+      label: "Inscreva-se Agora",
+    });
+
+    // Redirect to the desired URL
+    window.location.href = "https://app.wallex.com.br";
   };
 
   return (
@@ -159,7 +172,7 @@ const Topbar = ({ themeMode, themeToggler, onSidebarOpen }: Props) => {
               variant="contained"
               color="primary"
               component="a"
-              href="https://app.wallex.com.br"
+              onClick={handleButtonClick}
               size="large"
             >
               Inscreva-se Agora
