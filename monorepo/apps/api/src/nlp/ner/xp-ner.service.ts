@@ -9,6 +9,21 @@ import { SubItem } from '../types/email.interface';
 @Injectable()
 export class XPNERService {
   private readonly logger = new Logger(XPNERService.name);
+  /**
+   * 18/08/24BACIO DI LATTE-LJ006464,900,00
+   */
+  private readonly BLACK_LIST_TERMS = [/LJ\d{4}/g];
+
+  removeBlackListedTerms(input: string): string {
+    let cleanedString = input;
+
+    // Iterate over each blacklisted term and remove matches
+    for (const term of this.BLACK_LIST_TERMS) {
+      cleanedString = cleanedString.replace(term, '');
+    }
+
+    return cleanedString.trim();
+  }
 
   /**
    * @example Extracts sub-items from a credit card PDF text.
@@ -46,8 +61,9 @@ export class XPNERService {
       /(\d{2}\/\d{2}\/\d{2})\s*([^\d]+?-\s*Parcela\s*\d+\/\d)\s*(\d{1,3}(?:\.\d{3})*,\d{2})/;
 
     // Generic regex pattern for non-parcel items
-    const regexNonParcel =
-      /(\d{2}\/\d{2}\/\d{2})\s*([^\d]+?)\s*(\d{1,3}(?:\.\d{3})*,\d{2})/;
+    const dateRegex = new RegExp(`\\d{2}\\/\\d{2}\\/\\d{2}`); // Matches date (dd/mm/yy)
+    // Updated value regex pattern to ignore the first value (USD) and capture only BRL
+    const valueRegex = /(\d{1,3}(?:\.\d{3})*,\d{2})\d*(?:,\d{2})?/;
 
     // Split the input text into lines
     const lines = text.split('\n');
@@ -55,6 +71,8 @@ export class XPNERService {
       let isParcel = false;
       line = line.trim();
       if (!line) continue; // Skip empty lines
+
+      line = this.removeBlackListedTerms(line);
 
       let match = null;
 
@@ -69,8 +87,41 @@ export class XPNERService {
           match = regexXX.exec(line);
         }
       } else {
-        // Use the generic regex pattern for non-parcel items
-        match = regexNonParcel.exec(line);
+        // Start by matching the value from the end of the string
+        const valueMatch = valueRegex.exec(line);
+
+        if (valueMatch) {
+          const value = parseFloat(
+            valueMatch[1].replace(/\./g, '').replace(',', '.'),
+          );
+
+          // Now match the date from the start of the string
+          const dateMatch = dateRegex.exec(line);
+          if (dateMatch) {
+            const dateString = dateMatch[0].trim();
+            const [day, month, year] = dateString.split('/');
+            const fullYear = parseInt(`20${year}`, 10);
+
+            const dateObject = new Date(
+              Date.UTC(
+                fullYear,
+                parseInt(month, 10) - 1,
+                parseInt(day, 10),
+                12,
+                0,
+                0,
+              ),
+            );
+
+            // Extract the description by removing the date and value from the line
+            const description = line
+              .replace(dateRegex, '')
+              .replace(valueRegex, '')
+              .trim();
+
+            subItems.push({ date: dateObject, description, value });
+          }
+        }
       }
 
       if (match) {
@@ -99,8 +150,11 @@ export class XPNERService {
       }
     }
 
-    return subItems.filter((subItem) =>
-      subItem.description.toLowerCase().includes('pagamentos validos normais'),
+    return subItems.filter(
+      (subItem) =>
+        !subItem.description
+          .toLowerCase()
+          .includes('pagamentos validos normais'),
     );
   }
 }
