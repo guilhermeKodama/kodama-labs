@@ -53,6 +53,7 @@ import type { Transaction } from 'src/types/api';
 import { useMediaQuery } from '@mui/material';
 import { useAuthContext } from 'src/auth/hooks';
 import transactionsService from 'src/modules/transactions/services/transactions.service';
+import { logPageView } from 'src/utils/analytics';
 import { InvoiceAnalytic } from '../invoice-analytic';
 import { InvoiceTableRow } from '../invoice-table-row';
 import { InvoiceTableToolbar } from '../invoice-table-toolbar';
@@ -163,6 +164,11 @@ export function InvoiceListView() {
   /**
    * Use effects
    */
+
+  useEffect(() => {
+    // Registra uma nova visita de página a cada mudança de rota
+    logPageView(window.location.pathname);
+  }, []);
 
   useEffect(() => {
     let timeoutId: NodeJS.Timeout;

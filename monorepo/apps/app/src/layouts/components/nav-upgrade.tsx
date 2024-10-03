@@ -9,26 +9,36 @@ import Avatar from '@mui/material/Avatar';
 import Typography from '@mui/material/Typography';
 import { alpha as hexAlpha } from '@mui/material/styles';
 
-import { paths } from 'src/routes/paths';
-
 import { CONFIG } from 'src/config-global';
 import { varAlpha, bgGradient } from 'src/theme/styles';
 
 import { Label } from 'src/components/label';
 
-import { useMockedUser } from 'src/auth/hooks';
+import { sendEvent } from 'src/utils/analytics';
+import { useAuthContext } from 'src/auth/hooks';
 
 // ----------------------------------------------------------------------
 
 export function NavUpgrade({ sx, ...other }: StackProps) {
-  const { user } = useMockedUser();
+  const { user } = useAuthContext();
+
+  const handleButtonClick = () => {
+    // Send the event to Google Analytics
+    sendEvent({
+      category: 'subscribe-button',
+      action: 'click',
+    });
+
+    // Redirect to the desired URL
+    window.location.href = 'https://buy.stripe.com/aEU7sP7w78Kq6088ww?locale=pt-PT';
+  };
 
   return (
     <Stack sx={{ px: 2, py: 5, textAlign: 'center', ...sx }} {...other}>
       <Stack alignItems="center">
         <Box sx={{ position: 'relative' }}>
-          <Avatar src={user?.photoURL} alt={user?.displayName} sx={{ width: 48, height: 48 }}>
-            {user?.displayName?.charAt(0).toUpperCase()}
+          <Avatar src={user?.photo} alt={user?.name} sx={{ width: 48, height: 48 }}>
+            {user?.name?.charAt(0).toUpperCase()}
           </Avatar>
 
           <Label
@@ -53,7 +63,7 @@ export function NavUpgrade({ sx, ...other }: StackProps) {
             noWrap
             sx={{ color: 'var(--layout-nav-text-primary-color)' }}
           >
-            {user?.displayName}
+            {user?.name}
           </Typography>
 
           <Typography
@@ -65,8 +75,8 @@ export function NavUpgrade({ sx, ...other }: StackProps) {
           </Typography>
         </Stack>
 
-        <Button variant="contained" href={paths.minimalStore} target="_blank" rel="noopener">
-          Upgrade to Pro
+        <Button variant="contained" onClick={handleButtonClick} rel="noopener">
+          Assinar Premium
         </Button>
       </Stack>
     </Stack>
@@ -76,6 +86,14 @@ export function NavUpgrade({ sx, ...other }: StackProps) {
 // ----------------------------------------------------------------------
 
 export function UpgradeBlock({ sx, ...other }: StackProps) {
+  const handleButtonClick = () => {
+    // Send the event to Google Analytics
+    sendEvent({
+      category: 'nav-subscribe-button',
+      action: 'click',
+    });
+  };
+
   return (
     <Stack
       sx={{
@@ -129,8 +147,8 @@ export function UpgradeBlock({ sx, ...other }: StackProps) {
           Power up Productivity!
         </Box>
 
-        <Button variant="contained" size="small" color="warning">
-          Upgrade to Pro
+        <Button onClick={handleButtonClick} variant="contained" size="small" color="warning">
+          Assinar Premium
         </Button>
       </Stack>
     </Stack>

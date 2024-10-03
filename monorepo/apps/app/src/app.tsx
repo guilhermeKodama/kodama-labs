@@ -16,11 +16,20 @@ import { MotionLazy } from 'src/components/animate/motion-lazy';
 import { SettingsDrawer, defaultSettings, SettingsProvider } from 'src/components/settings';
 
 import { AuthProvider } from 'src/auth/context/jwt';
+import { useEffect } from 'react';
 import { TransactionProvider } from './pages/dashboard/invoice/transaction-context';
+import { initGA, logPageView } from './utils/analytics';
 
 // ----------------------------------------------------------------------
 
 export default function App() {
+  useEffect(() => {
+    initGA(); // Inicializa o Google Analytics
+
+    // Registra uma nova visita de página a cada mudança de rota
+    logPageView(window.location.pathname);
+  }, []);
+
   useScrollToTop();
 
   return (
