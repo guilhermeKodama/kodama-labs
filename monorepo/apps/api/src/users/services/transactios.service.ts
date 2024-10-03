@@ -31,28 +31,15 @@ export class TransactionsService {
     });
   }
 
-  async saveTransactionFromEmail(
-    data: Prisma.TransactionCreateInput,
-  ): Promise<Transaction & { subItems: Transaction[] }> {
-    const transaction = await this.prisma.transaction.findFirst({
-      where: { emailId: data.email.connect.id },
-    });
-
-    if (transaction) {
-      return this.prisma.transaction.update({
-        where: { id: transaction.id },
-        include: {
-          subItems: true,
-        },
-        data,
-      });
-    }
-
-    return this.prisma.transaction.create({
-      data,
-      include: {
-        subItems: true,
-      },
+  async upsertTransaction(input: {
+    where: Prisma.TransactionWhereUniqueInput;
+    create: Prisma.TransactionCreateInput;
+    update: Prisma.TransactionUpdateInput;
+  }) {
+    return this.prisma.transaction.upsert({
+      where: input.where,
+      create: input.create,
+      update: input.update,
     });
   }
 
@@ -71,6 +58,12 @@ export class TransactionsService {
     data: Prisma.TransactionCreateInput,
   ): Promise<Transaction> {
     return this.prisma.transaction.create({
+      data,
+    });
+  }
+
+  async createTransactions(data: Prisma.TransactionCreateManyInput[]) {
+    return this.prisma.transaction.createMany({
       data,
     });
   }
@@ -121,12 +114,17 @@ export class TransactionsService {
 
     const subItems = this.nerService.extractSubItems(email);
 
+    this.logger.debug({
+      parentTransaction: parentTransaction?.id,
+      subItems: subItems.length,
+    });
+
     /**
      * Parent transaction
      */
 
     if (!parentTransaction) {
-      parentTransaction = await this.saveTransactionFromEmail({
+      parentTransaction = await this.createTransaction({
         status: TransactionStatus.PENDING,
         amount: total,
         dueAt: dueAt,
@@ -171,28 +169,28 @@ export class TransactionsService {
       });
     } else {
       if (subItemsRecord.length === 0 && subItems.length > 0) {
-        for (const subItem of subItems) {
-          await this.createTransaction({
-            parent: { connect: { id: parentTransaction.id } },
-            status: TransactionStatus.PENDING,
-            amount: subItem.value,
-            dueAt: dueAt,
-            createdAt: subItem.date,
-            description: subItem.description,
-            category: ExpenseCategory.CREDIT_CARD,
-            email: { connect: { id: email.id } },
-            user: { connect: { id: user.id } },
-          });
-        }
+        const transactionsInput = subItems.map((subItem) => ({
+          parentId: parentTransaction.id,
+          status: TransactionStatus.PENDING,
+          amount: subItem.value,
+          dueAt: dueAt,
+          createdAt: subItem.date,
+          description: subItem.description,
+          category: ExpenseCategory.CREDIT_CARD,
+          userId: user.id,
+          emailId: email.id,
+        }));
 
-        await this.prisma.transaction.update({
-          where: { id: parentTransaction.id },
-          data: {
-            amount: total,
-            dueAt: dueAt,
-          },
-        });
+        await this.createTransactions(transactionsInput);
       }
+
+      await this.prisma.transaction.update({
+        where: { id: parentTransaction.id },
+        data: {
+          amount: total,
+          dueAt: dueAt,
+        },
+      });
     }
   }
 

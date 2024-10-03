@@ -43,11 +43,13 @@ export const NewInvoiceSchema = zod.object({
   subItems: zod
     .array(
       zod.object({
+        id: zod.string().optional(),
         description: zod
           .string()
           .refine((val) => val !== '', { message: 'Descrição é obrigatório!' }),
         amount: zod.number().refine((val) => val !== 0, { message: 'Preço é obrigatório!' }),
         category: zod.string().optional(),
+        hasChanged: zod.boolean().optional(),
       })
     )
     .optional(),

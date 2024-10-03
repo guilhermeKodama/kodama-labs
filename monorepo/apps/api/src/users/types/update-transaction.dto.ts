@@ -6,6 +6,8 @@ import {
   IsDate,
   IsArray,
   ValidateNested,
+  IsBoolean,
+  IsOptional,
 } from 'class-validator';
 import { IsValidCategory } from '../decorators/is-category-valid.decorator';
 import { Type } from 'class-transformer';
@@ -28,6 +30,10 @@ export class UpdateSubItemDto {
   @IsNumber()
   @IsNotEmpty()
   amount: number;
+
+  @IsBoolean()
+  @IsOptional()
+  hasChanged: boolean;
 }
 
 export class UpdateTransactionDto {

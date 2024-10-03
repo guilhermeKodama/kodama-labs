@@ -169,6 +169,7 @@ export class UserController {
 
     const { id, subItems, ...data } = updateTransactionDto;
 
+    // Fetch existing transaction with subItems
     const existingTransaction = await this.transactionsService.transaction(
       {
         id,
@@ -176,7 +177,7 @@ export class UserController {
       },
       {
         id: true,
-        subItems: TransactionSubItemSelect,
+        subItems: { select: { id: true } }, // Fetch only the IDs of subItems
       },
     );
 
@@ -184,28 +185,35 @@ export class UserController {
       throw new NotFoundException('Transaction not found');
     }
 
-    // Convert existing and incoming subItem IDs to sets for fast lookup
+    // 1. Find sub-items to delete: existing in DB but not in incoming request
     const existingSubItemIds = new Set(
       existingTransaction.subItems.map((subItem) => subItem.id),
     );
     const incomingSubItemIds = new Set(
-      subItems.map((subItem) => subItem.id).filter(Boolean),
+      subItems.map((subItem) => subItem.id).filter(Boolean), // Filter only subItems with an ID
     );
-
-    // Find the IDs of subItems that need to be deleted
     const subItemsToDelete = [...existingSubItemIds].filter(
       (subItemId) => !incomingSubItemIds.has(subItemId),
     );
 
-    this.logger.debug({ subItemsToDelete });
+    // 2. Find sub-items to create: sub-items with no ID in the incoming request
+    const subItemsToCreate = subItems.filter((subItem) => !subItem.id);
 
+    // 3. Find sub-items to update: sub-items with a valid ID in both incoming and existing data
+    const subItemsToUpdate = subItems.filter(
+      (subItem) => subItem.id && subItem.hasChanged,
+    );
+
+    this.logger.debug({ subItemsToDelete, subItemsToCreate, subItemsToUpdate });
+
+    // 4. Perform the update transaction, with upsert and deleteMany
     const transaction = await this.transactionsService.updateTransaction({
       where: { id, userId },
       data: {
         ...data,
         subItems: {
-          upsert: subItems.map((subItem) => ({
-            where: { id: subItem.id || '' }, // `id` of the subItem (if exists)
+          upsert: subItemsToUpdate.map((subItem) => ({
+            where: { id: subItem.id }, // `id` of the subItem for update
             update: {
               description: subItem.description,
               amount: subItem.amount,
@@ -215,14 +223,23 @@ export class UserController {
               description: subItem.description,
               amount: subItem.amount,
               category: subItem.category || updateTransactionDto.category,
-              type: updateTransactionDto.type, // inherit type from the parent
-              status: updateTransactionDto.status, // inherit status from the parent
-              dueAt: updateTransactionDto.dueAt, // inherit due date
+              type: updateTransactionDto.type,
+              status: updateTransactionDto.status,
+              dueAt: updateTransactionDto.dueAt,
               user: { connect: { id: userId } },
             },
           })),
+          create: subItemsToCreate.map((subItem) => ({
+            description: subItem.description,
+            amount: subItem.amount,
+            category: subItem.category || updateTransactionDto.category,
+            type: updateTransactionDto.type,
+            status: updateTransactionDto.status,
+            dueAt: updateTransactionDto.dueAt,
+            user: { connect: { id: userId } },
+          })),
           deleteMany: {
-            id: { in: subItemsToDelete }, // Delete subItems that are not in the DTO
+            id: { in: subItemsToDelete }, // Deletes subItems that are not in the DTO
           },
         },
       },
@@ -353,6 +370,12 @@ export class UserController {
      */
     const text = await this.pdfService.extractTextFromPdf(file.buffer);
 
+    this.logger.debug({
+      userToUpdate: userToUpdate.id,
+      emailRecord: emailRecord.id,
+      text: text.length,
+    });
+
     emailRecord = await this.usersService.updateEmail({
       where: { id: emailRecord.id },
       data: { pdfText: text, pdfNeedsPassword: false },
@@ -369,6 +392,11 @@ export class UserController {
      */
 
     const dueAt = this.transactionsService.extractDueAtFromEmail(emailRecord);
+
+    this.logger.debug({
+      total,
+      dueAt,
+    });
 
     await this.transactionsService.saveTransactionsFromEmail(
       emailRecord,

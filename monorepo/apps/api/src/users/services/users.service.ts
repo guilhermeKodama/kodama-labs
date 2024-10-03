@@ -69,20 +69,15 @@ export class UsersService {
     });
   }
 
-  async saveEmail(data: Prisma.EmailCreateInput) {
-    const email = await this.prisma.email.findUnique({
-      where: { messageId: data.messageId },
-    });
-
-    if (email) {
-      return this.prisma.email.update({
-        where: { id: email.id },
-        data,
-      });
-    }
-
-    return this.prisma.email.create({
-      data,
+  async upsertEmail(input: {
+    where: Prisma.EmailWhereUniqueInput;
+    create: Prisma.EmailCreateInput;
+    update: Prisma.EmailUpdateInput;
+  }) {
+    return this.prisma.email.upsert({
+      where: input.where,
+      create: input.create,
+      update: input.update,
     });
   }
 
