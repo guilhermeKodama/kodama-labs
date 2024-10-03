@@ -61,6 +61,10 @@ model Transaction {
   createdAt      DateTime         @default(now())
   updatedAt      DateTime         @updatedAt
   TransactionLog TransactionLog[]
+
+  @@index([emailId])
+  @@index([userId])
+  @@index([parentId])
 }
 
 model TransactionLog {
@@ -89,4 +93,6 @@ model Email {
   createdAt        DateTime      @default(now())
   updatedAt        DateTime      @updatedAt
   Transaction      Transaction[]
+
+  @@index([userId])
 }

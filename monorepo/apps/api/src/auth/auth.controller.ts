@@ -40,16 +40,20 @@ export class AuthController {
     const creditCardEmails = this.nerService.filterCreditCardEmails(emails);
 
     for (const email of creditCardEmails) {
-      const emailRecord = await this.usersService.saveEmail({
-        body: email.body,
-        pdfText: email.pdfText,
-        pdfNeedsPassword: email.hasPDF && !email.pdfText,
-        snippet: email.snippet,
-        internalDate: new Date(parseInt(email.internalDate)).toISOString(),
-        messageId: email.id,
-        sender: email.senderEmail,
-        user: { connect: { id: user.id } },
-        raw: JSON.stringify(email.raw),
+      const emailRecord = await this.usersService.upsertEmail({
+        where: { messageId: email.id },
+        create: {
+          body: email.body,
+          pdfText: email.pdfText,
+          pdfNeedsPassword: email.hasPDF && !email.pdfText,
+          snippet: email.snippet,
+          internalDate: new Date(parseInt(email.internalDate)).toISOString(),
+          messageId: email.id,
+          sender: email.senderEmail,
+          user: { connect: { id: user.id } },
+          raw: JSON.stringify(email.raw),
+        },
+        update: {},
       });
 
       this.logger.debug({ file: `${emailRecord.id}.pdf` });

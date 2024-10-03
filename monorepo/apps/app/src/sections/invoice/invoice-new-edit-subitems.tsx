@@ -60,11 +60,16 @@ export function InvoiceNewEditSubItems() {
     setValue(`subItems[${index}].amount`, 0);
   };
 
+  const handleFieldChange = (index: number, field: string, value: any) => {
+    setValue(`subItems[${index}].${field}`, value); // Update the field value
+    setValue(`subItems[${index}].hasChanged`, true); // Mark the item as changed
+  };
+
   const handleChangePrice = (
     event: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>,
     index: number
   ) => {
-    setValue(`subItems[${index}].amount`, Number(event.target.value));
+    handleFieldChange(index, 'amount', Number(event.target.value));
   };
 
   const renderTotal = (
@@ -95,6 +100,7 @@ export function InvoiceNewEditSubItems() {
                 name={`subItems[${index}].description`}
                 label="Descrição"
                 InputLabelProps={{ shrink: true }}
+                onChange={(event) => handleFieldChange(index, 'description', event.target.value)}
               />
 
               <Field.Select
@@ -103,6 +109,7 @@ export function InvoiceNewEditSubItems() {
                 label="Categoria"
                 InputLabelProps={{ shrink: true }}
                 sx={{ maxWidth: { md: 160 } }}
+                onChange={(event) => handleFieldChange(index, 'category', event.target.value)}
               >
                 <MenuItem
                   value=""
@@ -137,16 +144,13 @@ export function InvoiceNewEditSubItems() {
                 }}
                 sx={{ maxWidth: { md: 96 } }}
               />
+              <Button
+                size="small"
+                color="error"
+                startIcon={<Iconify icon="solar:trash-bin-trash-bold" />}
+                onClick={() => handleRemove(index)}
+              ></Button>
             </Stack>
-
-            <Button
-              size="small"
-              color="error"
-              startIcon={<Iconify icon="solar:trash-bin-trash-bold" />}
-              onClick={() => handleRemove(index)}
-            >
-              Remover
-            </Button>
           </Stack>
         ))}
       </Stack>
