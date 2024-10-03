@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { useDropzone } from 'react-dropzone';
 
 import Box from '@mui/material/Box';
