@@ -3,6 +3,7 @@ export type UserType = {
   email: string;
   name: string;
   photo: string;
+  hasPendingProcess: boolean;
   createdAt: Date;
   updatedAt: Date;
 } | null;

@@ -64,7 +64,6 @@ export function AuthProvider({ children }: Props) {
       user: state.user
         ? {
             ...state.user,
-            role: state.user?.role ?? 'admin',
           }
         : null,
       checkUserSession,

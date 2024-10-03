@@ -9,9 +9,6 @@ import { useTheme } from '@mui/material/styles';
 import Typography from '@mui/material/Typography';
 import IconButton from '@mui/material/IconButton';
 
-import { useRouter } from 'src/routes/hooks';
-
-import { _mock } from 'src/_mock';
 import { varAlpha } from 'src/theme/styles';
 
 import { Iconify } from 'src/components/iconify';
@@ -38,8 +35,6 @@ export type AccountDrawerProps = IconButtonProps & {
 export function AccountDrawer({ data = [], sx, ...other }: AccountDrawerProps) {
   const theme = useTheme();
 
-  const router = useRouter();
-
   const { user } = useAuthContext();
 
   const [open, setOpen] = useState(false);
@@ -51,14 +46,6 @@ export function AccountDrawer({ data = [], sx, ...other }: AccountDrawerProps) {
   const handleCloseDrawer = useCallback(() => {
     setOpen(false);
   }, []);
-
-  const handleClickItem = useCallback(
-    (path: string) => {
-      handleCloseDrawer();
-      router.push(path);
-    },
-    [handleCloseDrawer, router]
-  );
 
   const renderAvatar = (
     <AnimateAvatar
