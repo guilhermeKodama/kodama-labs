@@ -149,7 +149,7 @@ export function InvoiceNewEditSubItems() {
                 color="error"
                 startIcon={<Iconify icon="solar:trash-bin-trash-bold" />}
                 onClick={() => handleRemove(index)}
-              ></Button>
+               />
             </Stack>
           </Stack>
         ))}
