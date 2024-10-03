@@ -8,8 +8,9 @@ import { Iconify } from 'src/components/iconify/iconify';
 import type { ExpenseCategory, Transaction, TransactionCategory } from 'src/types/api';
 import { TransactionType } from 'src/types/api';
 import type { ReactElement } from 'react';
-import { useContext, useMemo } from 'react';
+import { useContext, useEffect, useMemo } from 'react';
 import { TransactionContext } from 'src/pages/dashboard/invoice/transaction-context';
+import { logPageView } from 'src/utils/analytics';
 import { BankingExpensesCategories } from '../banking-expenses-categories';
 import { BankingBalanceStatistics } from '../banking-balance-statistics';
 
@@ -172,6 +173,11 @@ const transformTransactions = (transactions: Transaction[]): TransformedData => 
 };
 
 export function OverviewBankingView() {
+  useEffect(() => {
+    // Registra uma nova visita de página a cada mudança de rota
+    logPageView(window.location.pathname);
+  }, []);
+
   const { transactions } = useContext(TransactionContext);
 
   const {
