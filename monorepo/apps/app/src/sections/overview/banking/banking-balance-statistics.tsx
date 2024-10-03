@@ -87,7 +87,10 @@ export function BankingBalanceStatistics({ title, subheader, chart, ...other }: 
   }, [currentSeries]);
 
   // Format percentual variances for display
-  const sublabels = useMemo(() => percentualVariances.map((variance) => (variance !== Infinity ? fPercent(variance) : '')), [percentualVariances]);
+  const sublabels = useMemo(
+    () => percentualVariances.map((variance) => (variance !== Infinity ? fPercent(variance) : '')),
+    [percentualVariances]
+  );
 
   // Calculate the sum for each dataset
   const values = useMemo(() => {
