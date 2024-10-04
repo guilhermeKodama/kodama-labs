@@ -13,3 +13,19 @@ export const logPageView = (page: any) => {
 export const sendEvent = (data: any) => {
   ReactGA.event(data);
 };
+
+export const logSignUp = () => {
+  ReactGA.event({
+    category: 'engagement',
+    action: 'sign_up',
+    label: 'User Signup',
+  });
+};
+
+export const logPurchase = () => {
+  ReactGA.event({
+    category: 'ecommerce',
+    action: 'purchase',
+    label: 'Purchase Completed',
+  });
+};
