@@ -92,6 +92,9 @@ export function UpgradeBlock({ sx, ...other }: StackProps) {
       category: 'nav-subscribe-button',
       action: 'click',
     });
+
+    // Redirect to the desired URL
+    window.location.href = 'https://buy.stripe.com/aEU7sP7w78Kq6088ww?locale=pt-PT';
   };
 
   return (

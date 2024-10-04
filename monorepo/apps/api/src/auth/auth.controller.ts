@@ -121,6 +121,7 @@ export class AuthController {
     this.logger.debug({ user: req.user });
 
     let user = await this.usersService.user({ email: req.user.email });
+    let signup = false;
 
     if (!user) {
       user = await this.usersService.createUser({
@@ -131,6 +132,7 @@ export class AuthController {
         accessToken: req.user.accessToken,
         refreshToken: req.user.refreshToken,
       });
+      signup = true;
     } else {
       user = await this.usersService.updateUser({
         where: { id: user.id },
@@ -155,7 +157,9 @@ export class AuthController {
       });
 
     const token = this.jwtService.sign({ id: user.id });
-    const redirectUrl = `${process.env.APP_URL}/auth/jwt/sign-in?token=${token}`;
+    const redirectUrl = `${
+      process.env.APP_URL
+    }/auth/jwt/sign-in?token=${token}${signup ? '&signup=true' : ''}`;
 
     return res.redirect(redirectUrl);
   }

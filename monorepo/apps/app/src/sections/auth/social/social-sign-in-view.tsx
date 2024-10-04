@@ -17,6 +17,7 @@ import { useAuthContext } from 'src/auth/hooks';
 
 import { CONFIG } from 'src/config-global';
 import { Link } from '@mui/material';
+import { logSignUp } from 'src/utils/analytics';
 
 export type SignInSchemaType = zod.infer<typeof SignInSchema>;
 
@@ -40,6 +41,11 @@ export function SocialSignInView() {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const tokenFromParam = params.get('token');
+    const isSignUp = params.get('signup');
+
+    if (isSignUp) {
+      logSignUp();
+    }
 
     if (tokenFromParam) {
       setToken(tokenFromParam);
