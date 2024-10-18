@@ -57,6 +57,6 @@ export const logPurchase = () => {
 
 export const identifyUser = (userId: string, email: string) => {
   Hotjar.identify(userId, {
-    email: email,
+    email,
   });
 };
