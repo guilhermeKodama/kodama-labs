@@ -171,7 +171,7 @@ export function InvoiceListView() {
 
     initHotjar();
     if (user?.id) identifyUser(user?.id, user?.email);
-  }, []);
+  }, [user]);
 
   useEffect(() => {
     let timeoutId: NodeJS.Timeout;
