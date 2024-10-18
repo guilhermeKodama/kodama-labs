@@ -53,7 +53,7 @@ import type { Transaction } from 'src/types/api';
 import { useMediaQuery } from '@mui/material';
 import { useAuthContext } from 'src/auth/hooks';
 import transactionsService from 'src/modules/transactions/services/transactions.service';
-import { initHotjar, logPageView } from 'src/utils/analytics';
+import { identifyUser, initHotjar, logPageView } from 'src/utils/analytics';
 import { InvoiceAnalytic } from '../invoice-analytic';
 import { InvoiceTableRow } from '../invoice-table-row';
 import { InvoiceTableToolbar } from '../invoice-table-toolbar';
@@ -170,6 +170,7 @@ export function InvoiceListView() {
     logPageView(window.location.pathname);
 
     initHotjar();
+    if (user?.id) identifyUser(user?.id, user?.email);
   }, []);
 
   useEffect(() => {

@@ -54,3 +54,9 @@ export const logPurchase = () => {
     label: 'Purchase Completed',
   });
 };
+
+export const identifyUser = (userId: string, email: string) => {
+  Hotjar.identify(userId, {
+    email: email,
+  });
+};
