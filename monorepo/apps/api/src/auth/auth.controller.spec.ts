@@ -55,7 +55,7 @@ describe('AuthController', () => {
             user: jest.fn(),
             createUser: jest.fn(),
             updateUser: jest.fn(),
-            saveEmail: jest.fn(),
+            upsertEmail: jest.fn(),
           },
         },
         {
@@ -127,7 +127,7 @@ describe('AuthController', () => {
     (gmailService.getEmails as jest.Mock).mockResolvedValue(mockEmails);
 
     // Mock UsersService.saveEmail
-    (usersService.saveEmail as jest.Mock).mockResolvedValue({
+    (usersService.upsertEmail as jest.Mock).mockResolvedValue({
       id: 1,
       sender: `test@${BankDomains.NUBANK}`,
       internalDate: new Date(1627849200000),
@@ -139,8 +139,7 @@ describe('AuthController', () => {
 
     // Mock UsersService.saveTransactionFromEmail
     jest
-      .spyOn(transactionsService, 'saveTransactionFromEmail')
-      // @ts-expect-error test
+      .spyOn(transactionsService, 'saveTransactionsFromEmail')
       .mockResolvedValue({
         id: '123',
         amount: 5979.8,
@@ -159,7 +158,7 @@ describe('AuthController', () => {
       mockUser.refreshToken,
       gmailService.BANKS_DOMAINS,
     );
-    expect(usersService.saveEmail).toHaveBeenCalledWith({
+    expect(usersService.upsertEmail).toHaveBeenCalledWith({
       body: mockEmails[0].body,
       pdfText: mockEmails[0].pdfText,
       pdfNeedsPassword: false,
@@ -171,13 +170,13 @@ describe('AuthController', () => {
       raw: JSON.stringify('raw email data'),
     });
 
-    expect(transactionsService.saveTransactionFromEmail).toHaveBeenCalledTimes(
+    expect(transactionsService.saveTransactionsFromEmail).toHaveBeenCalledTimes(
       1,
     );
     expect(transactionsService.createTransaction).toHaveBeenCalledTimes(5);
 
     expect(
-      transactionsService.saveTransactionFromEmail,
+      transactionsService.saveTransactionsFromEmail,
     ).toHaveBeenNthCalledWith(1, {
       status: TransactionStatus.PENDING,
       amount: 5979.8,
@@ -286,7 +285,7 @@ describe('AuthController', () => {
     (gmailService.getEmails as jest.Mock).mockResolvedValue(mockEmails);
 
     // Mock UsersService.saveEmail
-    (usersService.saveEmail as jest.Mock).mockResolvedValue({
+    (usersService.upsertEmail as jest.Mock).mockResolvedValue({
       id: 1,
       sender: mockEmails[0].senderEmail,
       internalDate: new Date(1726790400000),
@@ -297,8 +296,7 @@ describe('AuthController', () => {
 
     // Mock UsersService.saveTransactionFromEmail
     jest
-      .spyOn(transactionsService, 'saveTransactionFromEmail')
-      // @ts-expect-error test
+      .spyOn(transactionsService, 'saveTransactionsFromEmail')
       .mockResolvedValue({
         id: '123',
         amount: 20149.34,
@@ -317,7 +315,7 @@ describe('AuthController', () => {
       mockUser.refreshToken,
       gmailService.BANKS_DOMAINS,
     );
-    expect(usersService.saveEmail).toHaveBeenCalledWith({
+    expect(usersService.upsertEmail).toHaveBeenCalledWith({
       body: mockEmails[0].body,
       pdfText: mockEmails[0].pdfText,
       pdfNeedsPassword: false,
@@ -329,13 +327,13 @@ describe('AuthController', () => {
       raw: JSON.stringify('raw email data'),
     });
 
-    expect(transactionsService.saveTransactionFromEmail).toHaveBeenCalledTimes(
+    expect(transactionsService.saveTransactionsFromEmail).toHaveBeenCalledTimes(
       1,
     );
     expect(transactionsService.createTransaction).toHaveBeenCalledTimes(118);
 
     expect(
-      transactionsService.saveTransactionFromEmail,
+      transactionsService.saveTransactionsFromEmail,
     ).toHaveBeenNthCalledWith(1, {
       status: TransactionStatus.PENDING,
       amount: 20149.34,
@@ -368,5 +366,89 @@ describe('AuthController', () => {
       user: { connect: { id: mockUser.id } },
       parent: { connect: { id: '123' } },
     });
+  });
+
+  it.only('should not process nubank email from credit card bill renegotiation', async () => {
+    const mockUser = {
+      id: '123',
+      email: 'test@gmail.com',
+      name: '',
+      accessToken: 'accessToken',
+      refreshToken: 'refreshToken',
+    } as User;
+
+    const mockEmails: Email[] = [
+      {
+        id: 'emailId1',
+        body: '',
+        pdfText: null,
+        hasPDF: true,
+        sizeEstimate: 1,
+        snippet:
+          'A renegociação de pendências do seu cartão foi efetivada com sucesso. Informações importantes sobre seu parcelamento Olá, Loma, O parcelamento da sua fatura foi efetivado com sucesso. Valor Parcelado R',
+        internalDate: '1627849200000',
+        senderEmail: 'todomundo@nubank.com.br',
+        raw: 'raw email data' as gmail_v1.Schema$Message,
+        pdfBuffer: null,
+      },
+      {
+        id: 'emailId2',
+        body: '',
+        pdfText: null,
+        hasPDF: true,
+        sizeEstimate: 1,
+        snippet:
+          'Fatura paga com sucesso Fatura paga com sucesso Olá, Loma O pagamento de R$ 400,00 da sua fatura foi realizado com sucesso. vJUbElOkXm35wbBPL5YD awyt8iyj8it4e3egni7ji3ttfgasby Abraços, Equipe Nubank.',
+        internalDate: '1627849200000',
+        senderEmail: `todomundo@nubank.com.br`,
+        raw: 'raw email data' as gmail_v1.Schema$Message,
+        pdfBuffer: null,
+      },
+      {
+        id: 'emailId3',
+        body: 'Chegou a sua fatura de cartão de credito. Valor total: R$ 5.979,80',
+        pdfText: null,
+        hasPDF: true,
+        sizeEstimate: 1,
+        snippet:
+          'Queremos te ajudar. Olá, Loma! Vamos encontrar uma solução para a sua fatura em atraso? Com a falta de pagamento, os juros estão aumentando a cada dia. Além disso, em até 7 dias seu CPF será negativado',
+        internalDate: '1627849200000',
+        senderEmail: `todomundo@nubank.com.br`,
+        raw: 'raw email data' as gmail_v1.Schema$Message,
+        pdfBuffer: null,
+      },
+    ];
+
+    // Mock GmailService.getEmails
+    (gmailService.getEmails as jest.Mock).mockResolvedValue(mockEmails);
+
+    jest
+      .spyOn(transactionsService, 'createTransaction')
+      // @ts-expect-error test
+      .mockResolvedValue({});
+
+    await controller.processEmailTransactions(mockUser);
+
+    expect(gmailService.getEmails).toHaveBeenCalledWith(
+      mockUser.accessToken,
+      mockUser.refreshToken,
+      gmailService.BANKS_DOMAINS,
+    );
+    expect(usersService.upsertEmail).toHaveBeenCalledWith({
+      body: mockEmails[0].body,
+      pdfText: mockEmails[0].pdfText,
+      pdfNeedsPassword: false,
+      snippet: mockEmails[0].snippet,
+      internalDate: new Date(1627849200000).toISOString(),
+      messageId: 'emailId',
+      sender: `test@${BankDomains.NUBANK}`,
+      user: { connect: { id: mockUser.id } },
+      raw: JSON.stringify('raw email data'),
+    });
+
+    expect(transactionsService.saveTransactionsFromEmail).toHaveBeenCalledTimes(
+      1,
+    );
+    expect(transactionsService.createTransaction).toHaveBeenCalledTimes(0);
   });
 });

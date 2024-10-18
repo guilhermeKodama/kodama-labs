@@ -39,6 +39,9 @@ export function SocialSignInView() {
   const { checkUserSession } = useAuthContext();
 
   useEffect(() => {
+    // @ts-ignore
+    console.log('GTAG:', window.gtag);
+
     const params = new URLSearchParams(window.location.search);
     const tokenFromParam = params.get('token');
     const isSignUp = params.get('signup');
