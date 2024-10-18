@@ -29,6 +29,7 @@
     "@fontsource/nunito-sans": "^5.0.13",
     "@fontsource/public-sans": "^5.0.18",
     "@hookform/resolvers": "^3.6.0",
+    "@hotjar/browser": "^1.0.9",
     "@iconify/react": "^5.0.1",
     "@mui/icons-material": "^5.16.5",
     "@mui/lab": "^5.0.0-alpha.170",

@@ -15,7 +15,11 @@ import { Email as GmailEmail } from 'src/gmail/interfaces/gmail.interface';
 @Injectable()
 export class NERService {
   private readonly CREDIT_CARD_KEY_TERMS = ['fatura'];
-  private readonly CREDIT_CARD_BLACK_LIST = ['débito'];
+  private readonly CREDIT_CARD_BLACK_LIST = [
+    'débito',
+    'renegociação',
+    'negativado',
+  ];
   private readonly logger = new Logger(NERService.name);
 
   constructor(
