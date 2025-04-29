@@ -1,16 +1,11 @@
 {
     "version": 2,
-    "builds": [
-        {
-            "src": "dist/main.js",
-            "use": "@vercel/node"
-        }
-    ],
     "buildCommand": "npx prisma generate && yarn run build && npx prisma migrate deploy",
+    "outputDirectory": "dist",
     "routes": [
         {
             "src": "/(.*)",
-            "dest": "dist/main.js"
+            "dest": "main.js"
         }
     ]
 }
