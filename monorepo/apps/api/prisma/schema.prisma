@@ -33,6 +33,7 @@ enum TransactionStatus {
 enum TransactionType {
   INCOME
   EXPENSE
+  INVESTMENT
 }
 
 enum TransactionLogStatus {

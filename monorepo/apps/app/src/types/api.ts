@@ -51,11 +51,19 @@ export enum IncomeCategory {
   OTHER = 'OTHER',
 }
 
-export type TransactionCategory = ExpenseCategory | IncomeCategory;
+export enum InvestmentCategory {
+  STOCKS = 'STOCKS',
+  FIXED_INCOME = 'FIXED_INCOME',
+  REAL_ESTATE = 'REAL_ESTATE',
+  CRYPTOCURRENCY = 'CRYPTOCURRENCY',
+}
+
+export type TransactionCategory = ExpenseCategory | IncomeCategory | InvestmentCategory;
 
 export enum TransactionType {
   INCOME = 'INCOME',
   EXPENSE = 'EXPENSE',
+  INVESTMENT = 'INVESTMENT',
 }
 
 type Email = {

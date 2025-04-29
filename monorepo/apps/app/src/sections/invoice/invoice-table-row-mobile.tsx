@@ -1,6 +1,7 @@
 import { TableRow, TableCell, Stack, Typography, IconButton, Button } from '@mui/material';
 import { Label } from 'src/components/label';
 import type { Transaction } from 'src/types/api';
+import { TransactionType } from 'src/types/api';
 import { fCurrency } from 'src/utils/format-number';
 import { fDate } from 'src/utils/format-time';
 
@@ -44,17 +45,13 @@ export function InvoiceTableRowMobile({ row, onViewRow, onEditRow, onDeleteRow }
           fontSize={20}
           variant="soft"
           color={
-            (row.type === 'INCOME' && 'success') || (row.type === 'EXPENSE' && 'error') || 'default'
+            (row.type === 'INCOME' && 'success') || (row.type === 'EXPENSE' && 'error') || (row.type === 'INVESTMENT' && 'info') || 'default'
           }
-          sx={{
-            minWidth: 36,
-            minHeight: 36,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-          }}
+          sx={{ minWidth: 36, minHeight: 36, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 0.5 }}
         >
-          {ShortTypeLabels[row.type]}
+          {row.type === TransactionType.INCOME && <Iconify icon="mdi:cash-plus" width={20} />}
+          {row.type === TransactionType.EXPENSE && <Iconify icon="mdi:cash-minus" width={20} />}
+          {row.type === TransactionType.INVESTMENT && <Iconify icon="mdi:finance" width={20} />}
         </Label>
 
         {/* Second Column: Main Content */}

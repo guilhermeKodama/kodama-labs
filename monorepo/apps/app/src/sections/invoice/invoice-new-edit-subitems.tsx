@@ -17,6 +17,7 @@ import {
   IncomeCategory,
   TransactionSubItem,
   TransactionType,
+  InvestmentCategory,
 } from 'src/types/api';
 import { CategoryLabels } from './constants';
 
@@ -40,8 +41,12 @@ export function InvoiceNewEditSubItems() {
       ? Object.entries(CategoryLabels).filter(([key]) =>
           Object.values(IncomeCategory).includes(key as IncomeCategory)
         )
-      : Object.entries(CategoryLabels).filter(([key]) =>
+      : values.type === TransactionType.EXPENSE
+      ? Object.entries(CategoryLabels).filter(([key]) =>
           Object.values(ExpenseCategory).includes(key as ExpenseCategory)
+        )
+      : Object.entries(CategoryLabels).filter(([key]) =>
+          Object.values(InvestmentCategory).includes(key as InvestmentCategory)
         );
 
   const handleAdd = () => {

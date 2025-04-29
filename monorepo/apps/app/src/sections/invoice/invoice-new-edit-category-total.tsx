@@ -5,7 +5,7 @@ import MenuItem from '@mui/material/MenuItem';
 import InputAdornment from '@mui/material/InputAdornment';
 import { NumericFormat } from 'react-number-format';
 import { Field } from 'src/components/hook-form';
-import { ExpenseCategory, IncomeCategory, TransactionType } from 'src/types/api';
+import { ExpenseCategory, IncomeCategory, TransactionType, InvestmentCategory } from 'src/types/api';
 import { CategoryLabels } from './constants';
 
 // ----------------------------------------------------------------------
@@ -21,8 +21,12 @@ export function InvoiceNewEditCategoryTotal() {
       ? Object.entries(CategoryLabels).filter(([key]) =>
           Object.values(IncomeCategory).includes(key as IncomeCategory)
         )
-      : Object.entries(CategoryLabels).filter(([key]) =>
+      : values.type === TransactionType.EXPENSE
+      ? Object.entries(CategoryLabels).filter(([key]) =>
           Object.values(ExpenseCategory).includes(key as ExpenseCategory)
+        )
+      : Object.entries(CategoryLabels).filter(([key]) =>
+          Object.values(InvestmentCategory).includes(key as InvestmentCategory)
         );
 
   /**
