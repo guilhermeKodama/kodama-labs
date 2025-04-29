@@ -4,6 +4,7 @@ import {
   ExpenseCategory,
   IncomeCategory,
   TransactionType,
+  InvestmentCategory,
 } from 'src/types/api';
 
 export const CategoryLabels: { [key in TransactionCategory]: string } = {
@@ -34,6 +35,13 @@ export const CategoryLabels: { [key in TransactionCategory]: string } = {
   [IncomeCategory.PENSION]: 'aposentadoria',
   [IncomeCategory.GIFTS]: 'doação / presente',
   [IncomeCategory.OTHER]: 'outros',
+  /**
+   * Investment
+   */
+  [InvestmentCategory.STOCKS]: 'ações',
+  [InvestmentCategory.FIXED_INCOME]: 'renda fixa',
+  [InvestmentCategory.REAL_ESTATE]: 'imóveis',
+  [InvestmentCategory.CRYPTOCURRENCY]: 'criptomoedas',
 };
 
 export const ShortCategoryLabels: { [key in TransactionCategory]: string } = {
@@ -64,6 +72,13 @@ export const ShortCategoryLabels: { [key in TransactionCategory]: string } = {
   [IncomeCategory.PENSION]: 'aposentadoria',
   [IncomeCategory.GIFTS]: 'doação',
   [IncomeCategory.OTHER]: 'outros',
+  /**
+   * Investment
+   */
+  [InvestmentCategory.STOCKS]: 'ações',
+  [InvestmentCategory.FIXED_INCOME]: 'renda fixa',
+  [InvestmentCategory.REAL_ESTATE]: 'imóveis',
+  [InvestmentCategory.CRYPTOCURRENCY]: 'cripto',
 };
 
 export const StatusLabels: Record<string, string> = {

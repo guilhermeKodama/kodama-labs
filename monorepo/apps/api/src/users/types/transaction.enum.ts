@@ -24,3 +24,19 @@ export enum IncomeCategory {
   GIFTS = 'GIFTS',
   OTHER = 'OTHER',
 }
+
+export enum InvestmentCategory {
+  STOCKS = 'STOCKS',
+  FIXED_INCOME = 'FIXED_INCOME',
+  REAL_ESTATE = 'REAL_ESTATE',
+  CRYPTOCURRENCY = 'CRYPTOCURRENCY',
+}
+
+export enum FixedIncomeType {
+  BOND = 'BOND',
+  CDB = 'CDB',
+  LCI = 'LCI',
+  LCA = 'LCA',
+  TREASURY = 'TREASURY', // Tesouro Direto
+  DEBENTURE = 'DEBENTURE',
+}

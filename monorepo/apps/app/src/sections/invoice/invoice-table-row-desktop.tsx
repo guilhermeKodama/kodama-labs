@@ -178,16 +178,24 @@ export function InvoiceTableRowDesktop({
         </TableCell>
 
         <TableCell>
-          <Tooltip title={row.type === TransactionType.INCOME ? 'Receita' : 'Despesa'}>
+          <Tooltip title={
+            row.type === TransactionType.INCOME ? 'Receita' :
+            row.type === TransactionType.EXPENSE ? 'Despesa' :
+            row.type === TransactionType.INVESTMENT ? 'Investimento' : ''
+          }>
             <Label
               variant="soft"
               color={
                 (row.type === TransactionType.INCOME && 'success') ||
                 (row.type === TransactionType.EXPENSE && 'error') ||
+                (row.type === TransactionType.INVESTMENT && 'info') ||
                 'default'
               }
+              sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 0.5 }}
             >
-              {ShortTypeLabels[row.type]}
+              {row.type === TransactionType.INCOME && <Iconify icon="mdi:cash-plus" width={20} />}
+              {row.type === TransactionType.EXPENSE && <Iconify icon="mdi:cash-minus" width={20} />}
+              {row.type === TransactionType.INVESTMENT && <Iconify icon="mdi:finance" width={20} />}
             </Label>
           </Tooltip>
         </TableCell>
@@ -205,40 +213,38 @@ export function InvoiceTableRowDesktop({
         onClose={popover.onClose}
         slotProps={{ arrow: { placement: 'right-top' } }}
       >
-        <MenuList>
-          {/* <MenuItem
-            onClick={() => {
-              onViewRow();
-              popover.onClose();
-            }}
-          >
-            <Iconify icon="solar:eye-bold" />
-            View
-          </MenuItem> */}
+        {/* <MenuItem
+          onClick={() => {
+            onViewRow();
+            popover.onClose();
+          }}
+        >
+          <Iconify icon="solar:eye-bold" />
+          View
+        </MenuItem> */}
 
-          <MenuItem
-            onClick={() => {
-              onEditRow();
-              popover.onClose();
-            }}
-          >
-            <Iconify icon="solar:pen-bold" />
-            Editar
-          </MenuItem>
+        <MenuItem
+          onClick={() => {
+            onEditRow();
+            popover.onClose();
+          }}
+        >
+          <Iconify icon="solar:pen-bold" />
+          Editar
+        </MenuItem>
 
-          <Divider sx={{ borderStyle: 'dashed' }} />
+        <Divider sx={{ borderStyle: 'dashed' }} />
 
-          <MenuItem
-            onClick={() => {
-              confirm.onTrue();
-              popover.onClose();
-            }}
-            sx={{ color: 'error.main' }}
-          >
-            <Iconify icon="solar:trash-bin-trash-bold" />
-            Deletar
-          </MenuItem>
-        </MenuList>
+        <MenuItem
+          onClick={() => {
+            confirm.onTrue();
+            popover.onClose();
+          }}
+          sx={{ color: 'error.main' }}
+        >
+          <Iconify icon="solar:trash-bin-trash-bold" />
+          Deletar
+        </MenuItem>
       </CustomPopover>
 
       <ConfirmDialog

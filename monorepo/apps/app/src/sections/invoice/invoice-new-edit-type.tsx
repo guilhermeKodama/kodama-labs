@@ -41,7 +41,7 @@ export function InvoiceNewEditType() {
               name="type"
               control={control}
               render={({ field }) => (
-                <Box gap={2} display="grid" gridTemplateColumns="repeat(2, 1fr)">
+                <Box gap={2} display="grid" gridTemplateColumns="repeat(3, 1fr)">
                   {[
                     {
                       label: 'Receita',
@@ -52,6 +52,11 @@ export function InvoiceNewEditType() {
                       label: 'Despesa',
                       value: TransactionType.EXPENSE,
                       icon: <Iconify icon="mdi:cash-minus" width={32} sx={{ mb: 2 }} />,
+                    },
+                    {
+                      label: 'Investimento',
+                      value: TransactionType.INVESTMENT,
+                      icon: <Iconify icon="mdi:finance" width={32} sx={{ mb: 2 }} />,
                     },
                   ].map((item) => (
                     <Paper
