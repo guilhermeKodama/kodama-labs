@@ -8,12 +8,17 @@ import { Iconify } from 'src/components/iconify/iconify';
 import type { ExpenseCategory, Transaction, TransactionCategory } from 'src/types/api';
 import { TransactionType } from 'src/types/api';
 import type { ReactElement } from 'react';
-import { useContext, useEffect, useMemo } from 'react';
+import { useContext, useEffect, useMemo, useState } from 'react';
 import { TransactionContext } from 'src/pages/dashboard/invoice/transaction-context';
 import { logPageView } from 'src/utils/analytics';
 import { BankingExpensesCategories } from '../banking-expenses-categories';
 import { BankingBalanceStatistics } from '../banking-balance-statistics';
 import { useTheme } from '@mui/material/styles';
+import dayjs, { Dayjs } from 'dayjs';
+import isSameOrAfter from 'dayjs/plugin/isSameOrAfter';
+import isSameOrBefore from 'dayjs/plugin/isSameOrBefore';
+dayjs.extend(isSameOrAfter);
+dayjs.extend(isSameOrBefore);
 
 // ----------------------------------------------------------------------
 
@@ -181,6 +186,21 @@ export function OverviewBankingView() {
   }, []);
 
   const { transactions } = useContext(TransactionContext);
+  const theme = useTheme();
+
+  // Date range state
+  const currentYear = dayjs().year();
+  const [startDate, setStartDate] = useState<Dayjs | null>(dayjs(`${currentYear}-01-01`));
+  const [endDate, setEndDate] = useState<Dayjs | null>(dayjs(`${currentYear}-12-31`));
+
+  // Filter transactions by dueAt
+  const filteredTransactions = useMemo(() => {
+    if (!startDate || !endDate) return transactions;
+    return transactions.filter((t) => {
+      const due = dayjs(t.dueAt);
+      return due.isSameOrAfter(startDate, 'day') && due.isSameOrBefore(endDate, 'day');
+    });
+  }, [transactions, startDate, endDate]);
 
   const {
     weeklySeries,
@@ -190,11 +210,9 @@ export function OverviewBankingView() {
     yearlySeries,
     yearlyCategories,
     expenseSeries,
-  } = useMemo<TransformedData>(() => transformTransactions(transactions), [transactions]);
+  } = useMemo<TransformedData>(() => transformTransactions(filteredTransactions), [filteredTransactions]);
 
   const expenseSeriesWithIcons = getExpenseSeriesWithIcons(expenseSeries);
-
-  const theme = useTheme();
 
   return (
     <DashboardContent maxWidth="xl">
@@ -229,6 +247,10 @@ export function OverviewBankingView() {
                 },
               ],
             }}
+            startDate={startDate}
+            endDate={endDate}
+            setStartDate={setStartDate}
+            setEndDate={setEndDate}
           />
 
           <BankingExpensesCategories
