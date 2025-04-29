@@ -6,7 +6,7 @@
             "use": "@vercel/node"
         }
     ],
-    "buildCommand": "npx prisma generate --schema=apps/api/prisma/schema.prisma && yarn run build && npx prisma migrate deploy",
+    "buildCommand": "npx prisma generate && yarn run build && npx prisma migrate deploy",
     "routes": [
         {
             "src": "/(.*)",
