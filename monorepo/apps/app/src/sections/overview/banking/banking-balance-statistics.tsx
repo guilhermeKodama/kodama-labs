@@ -10,6 +10,8 @@ import CardHeader from '@mui/material/CardHeader';
 import { fPercent, fCurrency } from 'src/utils/format-number';
 
 import { Chart, useChart, ChartSelect, ChartLegends } from 'src/components/chart';
+import { DatePicker } from '@mui/x-date-pickers/DatePicker';
+import dayjs, { Dayjs } from 'dayjs';
 
 // ----------------------------------------------------------------------
 
@@ -28,6 +30,10 @@ type Props = CardProps & {
     }[];
     options?: ChartOptions;
   };
+  startDate: Dayjs | null;
+  endDate: Dayjs | null;
+  setStartDate: (date: Dayjs | null) => void;
+  setEndDate: (date: Dayjs | null) => void;
 };
 
 const calculatePercentChange = (numbers: number[]): number => {
@@ -46,7 +52,7 @@ const calculatePercentChange = (numbers: number[]): number => {
   return ((last - first) / first) * 100;
 };
 
-export function BankingBalanceStatistics({ title, subheader, chart, ...other }: Props) {
+export function BankingBalanceStatistics({ title, subheader, chart, startDate, endDate, setStartDate, setEndDate, ...other }: Props) {
   const theme = useTheme();
 
   const [selectedSeries, setSelectedSeries] = useState('Mensal');
@@ -97,11 +103,27 @@ export function BankingBalanceStatistics({ title, subheader, chart, ...other }: 
         title={title}
         subheader={subheader}
         action={
-          <ChartSelect
-            options={chart.series.map((item) => item.name)}
-            value={selectedSeries}
-            onChange={handleChangeSeries}
-          />
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <DatePicker
+              label="Início"
+              value={startDate}
+              onChange={setStartDate}
+              slotProps={{ textField: { size: 'small', sx: { minWidth: 120 } } }}
+              maxDate={endDate ?? undefined}
+            />
+            <DatePicker
+              label="Fim"
+              value={endDate}
+              onChange={setEndDate}
+              slotProps={{ textField: { size: 'small', sx: { minWidth: 120 } } }}
+              minDate={startDate ?? undefined}
+            />
+            <ChartSelect
+              options={chart.series.map((item) => item.name)}
+              value={selectedSeries}
+              onChange={handleChangeSeries}
+            />
+          </div>
         }
         sx={{ mb: 3 }}
       />
