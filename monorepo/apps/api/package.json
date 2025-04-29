@@ -9,7 +9,7 @@
     "deploy": "vercel --prod",
     "prebuild": "prisma generate && nest build && prisma migrate deploy",
     "build": "nest build",
-    "postinstall": "prisma generate && prisma migrate deploy",
+    "postinstall": "prisma generate && prisma migrate deploy && nest build",
     "migrate": "prisma generate && prisma migrate deploy",
     "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
     "start": "nest start",
