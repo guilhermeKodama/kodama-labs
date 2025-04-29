@@ -76,30 +76,18 @@ export function BankingBalanceStatistics({ title, subheader, chart, ...other }: 
     setSelectedSeries(newValue);
   }, []);
 
-  // Calculates percentual variance for each dataset in the series
-  const percentualVariances = useMemo(() => {
-    if (!currentSeries) return [];
-
-    return currentSeries.data.map((item) => {
-      const variance = calculatePercentChange(item.data);
-      return variance;
-    });
-  }, [currentSeries]);
-
-  // Format percentual variances for display
-  const sublabels = useMemo(
-    () => percentualVariances.map((variance) => (variance !== Infinity ? fPercent(variance) : '')),
-    [percentualVariances]
-  );
-
   // Calculate the sum for each dataset
-  const values = useMemo(() => {
+  const sums = useMemo(() => {
     if (!currentSeries) return [];
-
-    return currentSeries.data.map((item) =>
-      fCurrency(item.data.reduce((sum, value) => sum + value, 0))
-    );
+    return currentSeries.data.map((item) => item.data.reduce((sum, value) => sum + value, 0));
   }, [currentSeries]);
+
+  const total = sums.reduce((acc, val) => acc + val, 0);
+
+  const percentages = sums.map((sum) => (total > 0 ? (sum / total) * 100 : 0));
+
+  // Format for display
+  const values = sums.map((sum) => fCurrency(sum));
 
   console.log({ chartOptions });
 
@@ -121,7 +109,7 @@ export function BankingBalanceStatistics({ title, subheader, chart, ...other }: 
       <ChartLegends
         colors={chartOptions?.colors}
         labels={currentSeries?.data.map((item) => item.name) ?? []}
-        sublabels={sublabels} // Display the percentual variances
+        sublabels={percentages.map((percent) => fPercent(percent))} // Display the percentual share
         values={values}
         sx={{ px: 3, gap: 3 }}
       />
