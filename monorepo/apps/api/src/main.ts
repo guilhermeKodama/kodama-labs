@@ -1,36 +1,53 @@
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
-import { CorsOptions } from '@nestjs/common/interfaces/external/cors-options.interface';
+import { ExpressAdapter } from '@nestjs/platform-express';
+import * as express from 'express';
+import { Server } from 'http';
 
-async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+let cachedServer: Server;
 
-  app.use((req, res, next) => {
-    // Set global security headers including X-Content-Type-Options
+const bootstrapServer = async () => {
+  const expressApp = express();
+
+  // Security headers and CORS
+  expressApp.use((req, res, next) => {
     res.setHeader('X-Content-Type-Options', 'nosniff');
-    // Add Anti-clickjacking Headers
     res.setHeader('X-Frame-Options', 'DENY');
-    // Add Cache-Control headers to prevent caching of sensitive content
-    res.setHeader(
-      'Cache-Control',
-      'no-store, no-cache, must-revalidate, private',
-    );
-    res.setHeader('Pragma', 'no-cache'); // For HTTP/1.0 caches
-    res.setHeader('Expires', '0'); // For HTTP/1.0 caches
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
     next();
   });
 
-  // Define CORS options
-  const corsOptions: CorsOptions = {
-    origin: ['https://app.wallex.com.br', 'http://localhost:8081'], // Replace with your trusted domains
-    methods: 'GET,POST,PUT,DELETE', // Specify allowed HTTP methods
+  const app = await NestFactory.create(AppModule, new ExpressAdapter(expressApp));
+
+  app.enableCors({
+    origin: ['https://app.wallex.com.br', 'http://localhost:8081'],
+    methods: 'GET,POST,PUT,DELETE',
     allowedHeaders: 'Content-Type,Authorization',
-    credentials: true, // Allow cookies/auth headers
-  };
+    credentials: true,
+  });
 
-  // Enable CORS with the specified options
-  app.enableCors(corsOptions);
+  await app.init();
+  return expressApp;
+};
 
-  await app.listen(4000);
+// Handler for Vercel serverless
+export default async function handler(req, res) {
+  if (!cachedServer) {
+    const expressApp = await bootstrapServer();
+    cachedServer = expressApp.listen();
+  }
+  return cachedServer.emit('request', req, res);
 }
-bootstrap();
+
+// Local development: run server if not in Vercel
+if (require.main === module) {
+  (async () => {
+    const expressApp = await bootstrapServer();
+    const port = process.env.PORT || 4000;
+    expressApp.listen(port, () => {
+      console.log(`NestJS app listening on port ${port}`);
+    });
+  })();
+}
