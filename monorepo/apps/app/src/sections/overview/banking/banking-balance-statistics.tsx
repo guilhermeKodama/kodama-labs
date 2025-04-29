@@ -6,12 +6,12 @@ import { useState, useCallback, useMemo } from 'react';
 import Card from '@mui/material/Card';
 import { useTheme } from '@mui/material/styles';
 import CardHeader from '@mui/material/CardHeader';
+import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 
 import { fPercent, fCurrency } from 'src/utils/format-number';
 
 import { Chart, useChart, ChartSelect, ChartLegends } from 'src/components/chart';
-import { DatePicker } from '@mui/x-date-pickers/DatePicker';
-import dayjs, { Dayjs } from 'dayjs';
+import { Dayjs } from 'dayjs';
 
 // ----------------------------------------------------------------------
 
@@ -21,7 +21,7 @@ type Props = CardProps & {
   chart: {
     colors?: string[];
     series: {
-      name: string;
+      name: string; 
       categories: string[];
       data: {
         name: string;
@@ -34,22 +34,6 @@ type Props = CardProps & {
   endDate: Dayjs | null;
   setStartDate: (date: Dayjs | null) => void;
   setEndDate: (date: Dayjs | null) => void;
-};
-
-const calculatePercentChange = (numbers: number[]): number => {
-  if (numbers.length < 2) {
-    return 0; // Not enough data to calculate a change
-  }
-
-  const first = numbers[0];
-  const last = numbers[numbers.length - 1];
-
-  // If the first number is zero, handle this case to avoid division by zero
-  if (first === 0) {
-    return last !== 0 ? Infinity : 0; // Return infinity or zero percent change
-  }
-
-  return ((last - first) / first) * 100;
 };
 
 export function BankingBalanceStatistics({ title, subheader, chart, startDate, endDate, setStartDate, setEndDate, ...other }: Props) {

@@ -8,7 +8,7 @@ import { fDate } from 'src/utils/format-time';
 import { Iconify } from 'src/components/iconify/iconify';
 import { ConfirmDialog } from 'src/components/custom-dialog';
 import { useBoolean } from 'src/hooks/use-boolean';
-import { ShortTypeLabels, StatusLabels } from './constants';
+import { StatusLabels } from './constants';
 
 type Props = {
   row: Transaction;

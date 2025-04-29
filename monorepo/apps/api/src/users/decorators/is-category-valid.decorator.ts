@@ -4,7 +4,11 @@ import {
   ValidationArguments,
 } from 'class-validator';
 import { TransactionType } from '@prisma/client';
-import { ExpenseCategory, IncomeCategory, InvestmentCategory } from '../types/transaction.enum';
+import {
+  ExpenseCategory,
+  IncomeCategory,
+  InvestmentCategory,
+} from '../types/transaction.enum';
 
 export function IsValidCategory(validationOptions?: ValidationOptions) {
   return function (object: object, propertyName: string) {
