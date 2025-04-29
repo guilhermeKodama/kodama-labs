@@ -2,15 +2,16 @@ import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { ExpressAdapter } from '@nestjs/platform-express';
 import * as express from 'express';
-import { Server } from 'http';
 
-let cachedServer: Server;
+const server = express();
 
-const bootstrapServer = async () => {
-  const expressApp = express();
+async function bootstrap() {
+  const app = await NestFactory.create(
+    AppModule,
+    new ExpressAdapter(server)
+  );
 
-  // Security headers and CORS
-  expressApp.use((req, res, next) => {
+  app.use((req, res, next) => {
     res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('X-Frame-Options', 'DENY');
     res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
@@ -18,8 +19,6 @@ const bootstrapServer = async () => {
     res.setHeader('Expires', '0');
     next();
   });
-
-  const app = await NestFactory.create(AppModule, new ExpressAdapter(expressApp));
 
   app.enableCors({
     origin: ['https://app.wallex.com.br', 'http://localhost:8081'],
@@ -29,25 +28,19 @@ const bootstrapServer = async () => {
   });
 
   await app.init();
-  return expressApp;
-};
 
-// Handler for Vercel serverless
-export default async function handler(req, res) {
-  if (!cachedServer) {
-    const expressApp = await bootstrapServer();
-    cachedServer = expressApp.listen();
+  // For local development
+  if (process.env.NODE_ENV !== 'production') {
+    const port = process.env.PORT || 4000;
+    await app.listen(port);
+    console.log(`Application is running on: ${port}`);
   }
-  return cachedServer.emit('request', req, res);
+
+  return server;
 }
 
-// Local development: run server if not in Vercel
-if (require.main === module) {
-  (async () => {
-    const expressApp = await bootstrapServer();
-    const port = process.env.PORT || 4000;
-    expressApp.listen(port, () => {
-      console.log(`NestJS app listening on port ${port}`);
-    });
-  })();
+// For Vercel
+export default async function handler(req: any, res: any) {
+  const app = await bootstrap();
+  return app(req, res);
 }
