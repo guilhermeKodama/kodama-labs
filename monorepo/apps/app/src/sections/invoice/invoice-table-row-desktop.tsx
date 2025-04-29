@@ -1,7 +1,6 @@
 import Stack from '@mui/material/Stack';
 import Button from '@mui/material/Button';
 import Divider from '@mui/material/Divider';
-import MenuList from '@mui/material/MenuList';
 import MenuItem from '@mui/material/MenuItem';
 import TableRow from '@mui/material/TableRow';
 import Checkbox from '@mui/material/Checkbox';
@@ -28,7 +27,7 @@ import { FormDialog } from 'src/components/form-dialog';
 import axios, { endpoints } from 'src/utils/axios';
 import { TransactionContext } from 'src/pages/dashboard/invoice/transaction-context';
 import transactionsService from 'src/modules/transactions/services/transactions.service';
-import { ShortTypeLabels, StatusLabels } from './constants';
+import { StatusLabels } from './constants';
 
 // ----------------------------------------------------------------------
 

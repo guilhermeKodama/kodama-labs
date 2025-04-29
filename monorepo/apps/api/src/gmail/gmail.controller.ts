@@ -4,11 +4,8 @@ import {
   HttpException,
   HttpStatus,
   Logger,
-  Req,
-  Res,
 } from '@nestjs/common';
 import { GmailService } from './gmail.service';
-import { google } from 'googleapis';
 
 @Controller('gmail')
 export class GmailController {

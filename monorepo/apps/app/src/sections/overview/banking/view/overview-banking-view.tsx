@@ -11,12 +11,13 @@ import type { ReactElement } from 'react';
 import { useContext, useEffect, useMemo, useState } from 'react';
 import { TransactionContext } from 'src/pages/dashboard/invoice/transaction-context';
 import { logPageView } from 'src/utils/analytics';
-import { BankingExpensesCategories } from '../banking-expenses-categories';
-import { BankingBalanceStatistics } from '../banking-balance-statistics';
 import { useTheme } from '@mui/material/styles';
 import dayjs, { Dayjs } from 'dayjs';
 import isSameOrAfter from 'dayjs/plugin/isSameOrAfter';
 import isSameOrBefore from 'dayjs/plugin/isSameOrBefore';
+import { BankingBalanceStatistics } from '../banking-balance-statistics';
+import { BankingExpensesCategories } from '../banking-expenses-categories';
+
 dayjs.extend(isSameOrAfter);
 dayjs.extend(isSameOrBefore);
 
