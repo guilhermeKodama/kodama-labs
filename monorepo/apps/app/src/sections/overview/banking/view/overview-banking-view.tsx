@@ -13,6 +13,7 @@ import { TransactionContext } from 'src/pages/dashboard/invoice/transaction-cont
 import { logPageView } from 'src/utils/analytics';
 import { BankingExpensesCategories } from '../banking-expenses-categories';
 import { BankingBalanceStatistics } from '../banking-balance-statistics';
+import { useTheme } from '@mui/material/styles';
 
 // ----------------------------------------------------------------------
 
@@ -131,25 +132,26 @@ const transformTransactions = (transactions: Transaction[]): TransformedData => 
 
   const transformData = (data: Record<number, Transaction[]>, type: TransactionType) => {
     const transactionsMatrix = Object.values(data);
-
     const transactionMatrixSum = transactionsMatrix.map((transactions) =>
       sumByType(transactions, type)
     );
-
     return transactionMatrixSum;
   };
 
   const weeklySeries = [
     { name: 'Receitas', data: transformData(groupedByWeek, TransactionType.INCOME) },
     { name: 'Despesas', data: transformData(groupedByWeek, TransactionType.EXPENSE) },
+    { name: 'Investimentos', data: transformData(groupedByWeek, TransactionType.INVESTMENT) },
   ];
   const monthlySeries = [
     { name: 'Receitas', data: transformData(groupedByMonth, TransactionType.INCOME) },
     { name: 'Despesas', data: transformData(groupedByMonth, TransactionType.EXPENSE) },
+    { name: 'Investimentos', data: transformData(groupedByMonth, TransactionType.INVESTMENT) },
   ];
   const yearlySeries = [
     { name: 'Receitas', data: transformData(groupedByYear, TransactionType.INCOME) },
     { name: 'Despesas', data: transformData(groupedByYear, TransactionType.EXPENSE) },
+    { name: 'Investimentos', data: transformData(groupedByYear, TransactionType.INVESTMENT) },
   ];
 
   const expenseTransactions = flattenedTransactions.filter(
@@ -192,6 +194,8 @@ export function OverviewBankingView() {
 
   const expenseSeriesWithIcons = getExpenseSeriesWithIcons(expenseSeries);
 
+  const theme = useTheme();
+
   return (
     <DashboardContent maxWidth="xl">
       <Grid xs={12} md={7} lg={8}>
@@ -202,6 +206,11 @@ export function OverviewBankingView() {
             title="Fluxo de caixa"
             subheader="Estatísticas de receitas vs despesas"
             chart={{
+              colors: [
+                theme.palette.primary.dark, // Receitas
+                theme.palette.warning.main, // Despesas
+                theme.palette.info.main,    // Investimentos (matches the icon color)
+              ],
               series: [
                 {
                   name: 'Semanal',
