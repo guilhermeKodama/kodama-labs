@@ -6,8 +6,8 @@
   "private": true,
   "license": "UNLICENSED",
   "scripts": {
-    "deploy": "vercel --prod",
-    "prebuild": "prisma generate && nest build && prisma migrate deploy",
+    "deploy": "yarn prebuild && yarn build && vercel --prod",
+    "prebuild": "prisma generate && prisma migrate deploy",
     "build": "nest build",
     "postinstall": "prisma generate && prisma migrate deploy && nest build",
     "migrate": "prisma generate && prisma migrate deploy",
