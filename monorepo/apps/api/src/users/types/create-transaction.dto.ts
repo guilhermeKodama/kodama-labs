@@ -6,6 +6,9 @@ import {
   IsDate,
   IsArray,
   ValidateNested,
+  IsDateString,
+  IsEnum,
+  IsOptional,
 } from 'class-validator';
 import { IsValidCategory } from '../decorators/is-category-valid.decorator';
 import { Type } from 'class-transformer';
@@ -24,6 +27,26 @@ export class CreateSubItemDto {
   @IsNumber()
   @IsNotEmpty()
   amount: number;
+}
+
+export class CreateSubTransactionDto {
+  @IsString()
+  description: string;
+
+  @IsNumber()
+  amount: number;
+
+  @IsString()
+  @IsOptional()
+  category?: string;
+
+  @IsString()
+  @IsOptional()
+  symbol?: string;
+
+  @IsNumber()
+  @IsOptional()
+  quantity?: number;
 }
 
 export class CreateTransactionDto {
@@ -53,8 +76,17 @@ export class CreateTransactionDto {
   })
   category: string;
 
+  @IsString()
+  @IsOptional()
+  symbol?: string;
+
+  @IsNumber()
+  @IsOptional()
+  quantity?: number;
+
   @IsArray()
   @ValidateNested({ each: true })
-  @Type(() => CreateSubItemDto)
-  subItems: CreateSubItemDto[];
+  @Type(() => CreateSubTransactionDto)
+  @IsOptional()
+  subItems?: CreateSubTransactionDto[];
 }

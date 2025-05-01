@@ -8,32 +8,40 @@ import {
   ValidateNested,
   IsBoolean,
   IsOptional,
+  IsDateString,
+  IsEnum,
 } from 'class-validator';
 import { IsValidCategory } from '../decorators/is-category-valid.decorator';
 import { Type } from 'class-transformer';
 
 export class UpdateSubItemDto {
   @IsString()
-  @IsNotEmpty()
-  id: string;
+  @IsOptional()
+  id?: string;
 
   @IsString()
   @IsNotEmpty()
   description: string;
 
-  @IsString()
-  @IsValidCategory({
-    message: 'Category is not valid for the subItem.',
-  })
-  category: string;
-
   @IsNumber()
   @IsNotEmpty()
   amount: number;
 
+  @IsString()
+  @IsOptional()
+  category?: string;
+
   @IsBoolean()
   @IsOptional()
-  hasChanged: boolean;
+  hasChanged?: boolean;
+
+  @IsString()
+  @IsOptional()
+  symbol?: string;
+
+  @IsNumber()
+  @IsOptional()
+  quantity?: number;
 }
 
 export class UpdateTransactionDto {
@@ -57,9 +65,9 @@ export class UpdateTransactionDto {
   @IsNotEmpty()
   status: TransactionStatus;
 
-  @IsDate()
+  @IsDateString()
   @IsNotEmpty()
-  dueAt: Date;
+  dueAt: string;
 
   @IsString()
   @IsValidCategory({

@@ -76,7 +76,17 @@ type Email = {
   createdAt: string;
 };
 
-export type TransactionSubItem = Omit<Transaction, 'subItems'>;
+export type TransactionSubItem = {
+  id?: string;
+  description: string;
+  category: string;
+  amount: number;
+  hasChanged?: boolean;
+  // Investment fields
+  symbol?: string;  // Generic symbol/ticker for any financial instrument
+  quantity?: number;
+  pricePerUnit?: number;
+};
 
 export type Transaction = {
   id: string;
