@@ -44,12 +44,14 @@ export const NewInvoiceSchema = zod.object({
     .array(
       zod.object({
         id: zod.string().optional(),
-        description: zod
-          .string()
-          .refine((val) => val !== '', { message: 'Descrição é obrigatório!' }),
-        amount: zod.number().refine((val) => val !== 0, { message: 'Preço é obrigatório!' }),
+        description: zod.string(),
+        amount: zod.number(),
         category: zod.string().optional(),
         hasChanged: zod.boolean().optional(),
+        // Add crypto specific fields
+        symbol: zod.string().optional(),
+        quantity: zod.number().optional(),
+        pricePerUnit: zod.number().optional(),
       })
     )
     .optional(),
@@ -118,6 +120,16 @@ export function InvoiceNewEditForm({ currentTransaction }: Props) {
       if (data.subItems && data.subItems.length > 0) {
         amount = data.subItems.reduce((acc, item) => acc + item.amount, 0);
       }
+
+      // Prepare subItems data
+      const subItems = data.subItems?.map(item => ({
+        ...item,
+        symbol: item.symbol || null,
+        quantity: item.quantity || null,
+        pricePerUnit: item.pricePerUnit || null,
+        category: item.category || null,
+      }));
+
       if (currentTransaction) {
         await axios.put(endpoints.user.updateTransaction, {
           ...data,
@@ -125,6 +137,7 @@ export function InvoiceNewEditForm({ currentTransaction }: Props) {
           category: data.category === '' ? null : data.category,
           status: data.status.toUpperCase(),
           id: currentTransaction.id,
+          subItems,
         });
       } else {
         await axios.post(endpoints.user.createTransaction, {
@@ -132,6 +145,7 @@ export function InvoiceNewEditForm({ currentTransaction }: Props) {
           amount,
           category: data.category === '' ? null : data.category,
           status: data.status.toUpperCase(),
+          subItems,
         });
       }
 

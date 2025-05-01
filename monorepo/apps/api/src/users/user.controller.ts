@@ -37,6 +37,8 @@ const TransactionSubItemSelect = {
     dueAt: true,
     status: true,
     category: true,
+    symbol: true,
+    quantity: true,
   },
 };
 
@@ -148,6 +150,8 @@ export class UserController {
           type: createTransactionDto.type, // inherit type from the parent
           status: createTransactionDto.status, // inherit status from the parent
           dueAt: createTransactionDto.dueAt, // inherit due date
+          symbol: subItem.symbol,
+          quantity: subItem.quantity,
           user: { connect: { id: userId } },
         })),
       },
@@ -218,6 +222,8 @@ export class UserController {
               description: subItem.description,
               amount: subItem.amount,
               category: subItem.category,
+              symbol: subItem.symbol,
+              quantity: subItem.quantity,
             },
             create: {
               description: subItem.description,
@@ -226,6 +232,8 @@ export class UserController {
               type: updateTransactionDto.type,
               status: updateTransactionDto.status,
               dueAt: updateTransactionDto.dueAt,
+              symbol: subItem.symbol,
+              quantity: subItem.quantity,
               user: { connect: { id: userId } },
             },
           })),
@@ -236,6 +244,8 @@ export class UserController {
             type: updateTransactionDto.type,
             status: updateTransactionDto.status,
             dueAt: updateTransactionDto.dueAt,
+            symbol: subItem.symbol,
+            quantity: subItem.quantity,
             user: { connect: { id: userId } },
           })),
           deleteMany: {

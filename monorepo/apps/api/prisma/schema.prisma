@@ -49,6 +49,9 @@ model Transaction {
   type        TransactionType   @default(EXPENSE)
   category    String?
   status      TransactionStatus
+  // Crypto investment fields
+  symbol      String?
+  quantity    Float?
   emailId     String?
   email       Email?            @relation(fields: [emailId], references: [id])
   userId      String
