@@ -37,6 +37,7 @@ const ICONS = {
   analytics: icon('ic-analytics'),
   dashboard: icon('ic-dashboard'),
   parameter: icon('ic-parameter'),
+  investments: icon('ic-banking'),
 };
 
 // ----------------------------------------------------------------------
@@ -59,6 +60,11 @@ export const navData = [
         title: 'Transações',
         path: paths.dashboard.invoice.root,
         icon: ICONS.invoice,
+      },
+      {
+        title: 'Investimentos',
+        path: paths.dashboard.investments,
+        icon: ICONS.investments,
       },
     ],
   },
