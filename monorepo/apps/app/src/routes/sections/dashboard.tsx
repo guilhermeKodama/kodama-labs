@@ -19,6 +19,9 @@ const InvoiceDetailsPage = lazy(() => import('src/pages/dashboard/invoice/detail
 const InvoiceCreatePage = lazy(() => import('src/pages/dashboard/invoice/new'));
 const InvoiceEditPage = lazy(() => import('src/pages/dashboard/invoice/edit'));
 
+// Investments
+const InvestmentsPage = lazy(() => import('src/pages/dashboard/investments'));
+
 const IndexPage = lazy(() => import('src/pages/dashboard/one'));
 const PageTwo = lazy(() => import('src/pages/dashboard/two'));
 const PageThree = lazy(() => import('src/pages/dashboard/three'));
@@ -45,6 +48,7 @@ export const dashboardRoutes = [
       { path: 'two', element: <PageTwo /> },
       { path: 'three', element: <PageThree /> },
       { path: 'banking', element: <OverviewBankingPage /> },
+      { path: 'investments', element: <InvestmentsPage /> },
       {
         path: 'group',
         children: [
