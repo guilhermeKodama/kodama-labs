@@ -44,17 +44,18 @@ export const NewInvoiceSchema = zod.object({
     .array(
       zod.object({
         id: zod.string().optional(),
-        description: zod.string(),
-        amount: zod.number(),
+        description: zod.string().min(1, 'Description is required'),
+        amount: zod.number().min(0.01, 'Amount must be greater than 0'),
         category: zod.string().optional(),
         hasChanged: zod.boolean().optional(),
-        // Add crypto specific fields
-        symbol: zod.string().optional(),
-        quantity: zod.number().optional(),
-        pricePerUnit: zod.number().optional(),
+        // Add crypto specific fields - make them truly optional and nullable
+        symbol: zod.union([zod.string(), zod.null()]).optional(),
+        quantity: zod.union([zod.number(), zod.null()]).optional(),
+        pricePerUnit: zod.union([zod.number(), zod.null()]).optional(),
       })
     )
-    .optional(),
+    .optional()
+    .default([]),
 });
 
 // ----------------------------------------------------------------------
@@ -76,7 +77,7 @@ export function InvoiceNewEditForm({ currentTransaction }: Props) {
       description: currentTransaction?.description || '',
       category: currentTransaction?.category || '',
       createdAt: currentTransaction?.createdAt || today(),
-      dueAt: currentTransaction?.dueAt || null,
+      dueAt: currentTransaction?.dueAt || today(), // Use today() instead of null
       status: currentTransaction?.status || 'pending',
       amount: currentTransaction?.amount || 0,
       subItems: currentTransaction?.subItems || [],
@@ -93,8 +94,18 @@ export function InvoiceNewEditForm({ currentTransaction }: Props) {
   const {
     reset,
     handleSubmit,
-    formState: { isSubmitting },
+    formState: { isSubmitting, errors, isValid },
   } = methods;
+  
+  // Debug current subItems data
+  const currentSubItems = methods.watch('subItems');
+  console.log('Current subItems data:', currentSubItems);
+  console.log('SubItems data types:', currentSubItems?.map(item => ({
+    description: typeof item.description,
+    amount: typeof item.amount,
+    category: typeof item.category,
+    id: typeof item.id,
+  })));
 
   const handleSaveAsDraft = handleSubmit(async (data) => {
     loadingSave.onTrue();
@@ -112,8 +123,11 @@ export function InvoiceNewEditForm({ currentTransaction }: Props) {
   });
 
   const handleCreateAndSend = handleSubmit(async (data) => {
+    console.log('=== FORM SUBMISSION STARTED ===');
     loadingSend.onTrue();
-    console.log({ data });
+    console.log('Form submitted with data:', { data });
+    console.log('Form validation state:', methods.formState);
+    
     try {
       let amount = 0;
 
@@ -122,6 +136,9 @@ export function InvoiceNewEditForm({ currentTransaction }: Props) {
       } else {
         amount = data.amount || 0;
       }
+
+      console.log('Calculated amount:', amount);
+      console.log('About to send API request...');
 
       // Prepare subItems data
       const subItems = data.subItems?.map(item => ({
@@ -132,8 +149,11 @@ export function InvoiceNewEditForm({ currentTransaction }: Props) {
         category: item.category || null,
       }));
 
+      console.log('Prepared subItems:', subItems);
+
       if (currentTransaction) {
-        await axios.put(endpoints.user.updateTransaction, {
+        console.log('Updating existing transaction:', currentTransaction.id);
+        const response = await axios.put(endpoints.user.updateTransaction, {
           ...data,
           amount,
           category: data.category === '' ? null : data.category,
@@ -141,14 +161,17 @@ export function InvoiceNewEditForm({ currentTransaction }: Props) {
           id: currentTransaction.id,
           subItems,
         });
+        console.log('Update response:', response.data);
       } else {
-        await axios.post(endpoints.user.createTransaction, {
+        console.log('Creating new transaction');
+        const response = await axios.post(endpoints.user.createTransaction, {
           ...data,
           amount,
           category: data.category === '' ? null : data.category,
           status: data.status.toUpperCase(),
           subItems,
         });
+        console.log('Create response:', response.data);
       }
 
       reset();
@@ -156,13 +179,13 @@ export function InvoiceNewEditForm({ currentTransaction }: Props) {
 
       router.push(paths.dashboard.invoice.root);
     } catch (error) {
-      console.error(error);
+      console.error('Error during form submission:', error);
       loadingSend.onFalse();
     }
   });
 
   return (
-    <Form methods={methods}>
+    <Form methods={methods} onSubmit={handleCreateAndSend}>
       <Card>
         <InvoiceNewEditType />
 
@@ -189,8 +212,8 @@ export function InvoiceNewEditForm({ currentTransaction }: Props) {
         <LoadingButton
           size="large"
           variant="contained"
+          type="submit"
           loading={loadingSend.value && isSubmitting}
-          onClick={handleCreateAndSend}
         >
           {currentTransaction ? 'Atualizar' : 'Salvar'}
         </LoadingButton>
