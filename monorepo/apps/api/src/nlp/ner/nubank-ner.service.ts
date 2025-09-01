@@ -18,10 +18,8 @@ export class NubankNERService {
     // Looking for patterns like:
     // "15 JUL\n•••• 3308Localiza MeooR$ 181,18"
     // "24 JUL\n•••• 3308sem PararR$ 329,58"
-    // The pattern should start with a date, have some content, and end with a value
-    // We'll be more restrictive to avoid picking up other monetary values
-    // Updated to handle both newline and space separators between date and content
-    const transactionPattern = /(\d{2}\s+[A-Z]{3})\s*(?:\n|[\s]+)(?:.*?)(?:R\$\s*([\d.,]+))/g;
+    // Updated regex to capture: date, description, and amount
+    const transactionPattern = /(\d{2}\s+[A-Z]{3})\s*(?:\n|[\s]+)(.*?)\s*R\$\s*([\d.,]+)/g;
     
     let match;
     let matchCount = 0;
@@ -49,9 +47,9 @@ export class NubankNERService {
 
     while ((match = transactionPattern.exec(text)) !== null) {
       matchCount++;
-      const [fullMatch, date, value] = match;
+      const [fullMatch, date, description, value] = match;
 
-      this.logger.debug(`Match ${matchCount}:`, { fullMatch, date, value });
+      this.logger.debug(`Match ${matchCount}:`, { fullMatch, date, description, value });
 
       // Convert BRL value format to a format that parseFloat can understand
       const numericValue = parseFloat(
@@ -78,34 +76,27 @@ export class NubankNERService {
         Date.UTC(currentYear, month, parseInt(day, 10), 12, 0, 0),
       );
 
-      // Try to extract description from the line
-      // Look for text between the date and the amount
-      const lineStart = text.lastIndexOf(date, match.index);
-      const lineEnd = text.indexOf('\n', match.index);
-      const line = text.substring(lineStart, lineEnd || text.length);
-      
-      // Extract description (remove date, card info, and amount)
-      let description = line
-        .replace(date, '')
-        .replace(/R\$\s*[\d.,]+/, '')
-        .replace(/[•\s]+/, ' ')
+      // Clean up the description: remove card info (•••• 3308) and clean up whitespace
+      let cleanDescription = description
+        .replace(/[•\s]+/, ' ')  // Replace multiple dots and spaces with single space
+        .replace(/\d{4}/, '')    // Remove 4-digit card number
         .trim();
 
-      // If no description found, use a default
-      if (!description || description.length < 3) {
-        description = `Transaction ${matchCount}`;
+      // If no description found or too short, use a default
+      if (!cleanDescription || cleanDescription.length < 3) {
+        cleanDescription = `Transaction ${matchCount}`;
       }
 
       this.logger.debug(`Processing transaction ${matchCount}:`, {
         date: dateObject,
-        description,
+        description: cleanDescription,
         value: numericValue,
-        originalLine: line
+        originalLine: fullMatch
       });
 
       if (!isNaN(numericValue) && numericValue > 0) {
         transactions.push({
-          description,
+          description: cleanDescription,
           date: dateObject,
           value: numericValue,
         });
