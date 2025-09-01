@@ -14,7 +14,9 @@ import { Email as GmailEmail } from 'src/gmail/interfaces/gmail.interface';
 
 @Injectable()
 export class NERService {
-  private readonly CREDIT_CARD_KEY_TERMS = ['fatura'];
+  private readonly CREDIT_CARD_KEY_TERMS = [
+    'fatura'
+  ];
   private readonly CREDIT_CARD_BLACK_LIST = [
     'renegociação',
     'negativado',
@@ -34,7 +36,8 @@ export class NERService {
   }
 
   filterCreditCardEmails(emails: GmailEmail[]): GmailEmail[] {
-    this.logger.debug(`Starting to filter ${emails.length} emails for credit card content`);
+    
+    this.logger.debug(`Filtering ${emails.length} emails for credit card bills`);
     
     const bankEmails = emails.filter((email) => {
       this.logger.debug(`Processing email: ${email.id}`, {
@@ -48,34 +51,23 @@ export class NERService {
       const snippetLower = email.snippet.toLowerCase();
 
       // First check: must contain credit card key terms and no blacklisted terms
-      const hasValidTerms = this.CREDIT_CARD_KEY_TERMS.every(
+      const hasValidTerms = this.CREDIT_CARD_KEY_TERMS.some(
         (term) =>
           snippetLower.includes(term) &&
           !this.hasBlackListedTerms(snippetLower),
       );
 
       if (!hasValidTerms) {
-        this.logger.debug(`Email ${email.id} filtered out - missing credit card terms or has blacklisted terms`, {
-          snippet: email.snippet?.substring(0, 100),
-          hasFatura: snippetLower.includes('fatura'),
-          hasBlacklistedTerms: this.hasBlackListedTerms(snippetLower),
-        });
+        this.logger.debug(`Email ${email.id} failed first check - no valid terms`);
         return false;
       }
-
-      this.logger.debug(`Email ${email.id} passed first check - has valid terms`);
 
       // Second check: must have actual PDF content to process
       // This prevents processing notification emails that just mention "fatura" but have no bill
       const hasPdfContent = email.hasPDF && (email.pdfText || email.pdfBuffer);
       
       if (!hasPdfContent) {
-        this.logger.debug(`Email ${email.id} filtered out - no PDF content`, {
-          snippet: email.snippet?.substring(0, 100),
-          hasPDF: email.hasPDF,
-          pdfTextLength: email.pdfText?.length || 0,
-          hasPdfBuffer: !!email.pdfBuffer,
-        });
+        this.logger.debug(`Email ${email.id} failed second check - no PDF content`);
         return false;
       }
 
@@ -86,28 +78,15 @@ export class NERService {
       const hasBillIndicators = this.hasBillIndicators(email);
       
       if (!hasBillIndicators) {
-        this.logger.debug(`Email ${email.id} filtered out - no bill indicators found`, {
-          snippet: email.snippet?.substring(0, 100),
-          pdfTextLength: email.pdfText?.length || 0,
-        });
+        this.logger.debug(`Email ${email.id} failed third check - no bill indicators`);
         return false;
       }
 
       this.logger.debug(`Email ${email.id} passed all checks - accepting email`);
       return true;
     });
-
+  
     this.logger.debug(`Filtered ${emails.length} emails down to ${bankEmails.length} credit card emails with PDF content`);
-    
-    // Log details of emails that passed the filter
-    if (bankEmails.length > 0) {
-      this.logger.debug('Emails that passed the filter:', bankEmails.map(email => ({
-        id: email.id,
-        snippet: email.snippet?.substring(0, 100),
-        sender: email.senderEmail,
-        pdfTextLength: email.pdfText?.length || 0,
-      })));
-    }
     
     return bankEmails;
   }
@@ -184,6 +163,36 @@ export class NERService {
       
       if (foundBodyIndicators.length > 0) {
         this.logger.debug('Email body has bill indicators, accepting email');
+        return true;
+      }
+    }
+    
+    // Check if the email snippet contains bill indicators (fallback for password-protected PDFs)
+    if (email.snippet) {
+      const snippetText = email.snippet.toLowerCase();
+      
+      const snippetBillIndicators = [
+        'fatura',
+        'valor',
+        'r$',
+        'reais',
+        'total',
+        'vencimento',
+        'cartão',
+        'crédito'
+      ];
+      
+      const foundSnippetIndicators = snippetBillIndicators.filter(indicator => 
+        snippetText.includes(indicator)
+      );
+      
+      this.logger.debug('Email snippet bill indicators check', {
+        foundSnippetIndicators,
+        snippetTextSample: snippetText.substring(0, 200),
+      });
+      
+      if (foundSnippetIndicators.length > 0) {
+        this.logger.debug('Email snippet has bill indicators, accepting email');
         return true;
       }
     }
