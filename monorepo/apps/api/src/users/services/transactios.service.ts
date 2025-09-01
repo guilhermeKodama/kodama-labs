@@ -14,7 +14,10 @@ import { ExpenseCategory } from '../types/transaction.enum';
 @Injectable()
 export class TransactionsService {
   private readonly logger = new Logger(TransactionsService.name);
-  constructor(private prisma: PrismaService, private nerService: NERService) {}
+  constructor(
+    private prisma: PrismaService, 
+    private nerService: NERService
+  ) {}
 
   /**
    * Database
@@ -98,6 +101,16 @@ export class TransactionsService {
     total: number,
     dueAt: Date,
   ) {
+    // Validate that we have a valid total amount
+    if (!total || total <= 0) {
+      this.logger.warn('Cannot process email without valid total amount', {
+        emailId: email.id,
+        total,
+        emailSubject: email.snippet?.substring(0, 100),
+      });
+      return;
+    }
+
     let parentTransaction = await this.prisma.transaction.findFirst({
       where: { emailId: email.id, parentId: null },
     });
@@ -117,6 +130,8 @@ export class TransactionsService {
     this.logger.debug({
       parentTransaction: parentTransaction?.id,
       subItems: subItems.length,
+      pdfTextLength: email.pdfText?.length || 0,
+      hasPdfText: !!email.pdfText,
     });
 
     /**
@@ -147,10 +162,12 @@ export class TransactionsService {
     const truncatedSubItemsTotal = Math.floor(subItemsTotal);
     const truncatedParentTotal = Math.floor(parentTotal);
 
-    if (truncatedSubItemsTotal !== truncatedParentTotal) {
+    // If we have sub-items, validate the totals match
+    if (subItems.length > 0 && truncatedSubItemsTotal !== truncatedParentTotal) {
       this.logger.error('Subitems total are diff from parent transaction', {
         subItemsTotal,
         parentTotal,
+        subItemsCount: subItems.length,
       });
 
       await this.prisma.transactionLog.upsert({
@@ -168,7 +185,10 @@ export class TransactionsService {
         },
       });
     } else {
+      // Only create sub-items if we have them and they don't already exist
       if (subItemsRecord.length === 0 && subItems.length > 0) {
+        this.logger.debug(`Creating ${subItems.length} sub-items for transaction ${parentTransaction.id}`);
+        
         const transactionsInput = subItems.map((subItem) => ({
           parentId: parentTransaction.id,
           status: TransactionStatus.PENDING,
@@ -182,8 +202,15 @@ export class TransactionsService {
         }));
 
         await this.createTransactions(transactionsInput);
+      } else if (subItems.length === 0) {
+        this.logger.log('No sub-items extracted from PDF - transaction will be processed without detailed breakdown', {
+          emailId: email.id,
+          pdfTextLength: email.pdfText?.length || 0,
+          sender: email.sender,
+        });
       }
 
+      // Update the parent transaction with latest data
       await this.prisma.transaction.update({
         where: { id: parentTransaction.id },
         data: {
@@ -195,16 +222,32 @@ export class TransactionsService {
   }
 
   extractTotalFromEmail(email: Email) {
-    const values = this.nerService.extractValues(
+    // Use the NER service wrapper which delegates to the appropriate specialized service
+    const total = this.nerService.extractMainBillTotal(
       `${email.snippet}  ${email.body} ${email.pdfText}`,
+      email.sender
     );
-
-    const total = values[0];
+    
+    // Validate that we have a valid numeric amount
+    if (total === undefined || total === null || isNaN(total) || total <= 0) {
+      this.logger.warn('Could not extract valid amount from email', {
+        emailId: email.id,
+        total,
+        sender: email.sender,
+        snippet: email.snippet?.substring(0, 100),
+        body: email.body?.substring(0, 100),
+        pdfText: email.pdfText?.substring(0, 100),
+      });
+      return null;
+    }
+    
     return total;
   }
 
   extractDueAtFromEmail(email: Email) {
-    const dueDates = this.nerService.extractDates(email.body);
+    // Prioritize PDF text over email body since due dates are typically in the PDF
+    const textToSearch = email.pdfText || email.body;
+    const dueDates = this.nerService.extractDates(textToSearch, email.sender);
 
     let dueAt = null;
 

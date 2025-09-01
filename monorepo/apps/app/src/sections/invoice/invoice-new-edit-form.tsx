@@ -115,10 +115,12 @@ export function InvoiceNewEditForm({ currentTransaction }: Props) {
     loadingSend.onTrue();
     console.log({ data });
     try {
-      let amount = data.amount;
+      let amount = 0;
 
       if (data.subItems && data.subItems.length > 0) {
-        amount = data.subItems.reduce((acc, item) => acc + item.amount, 0);
+        amount = data.subItems.reduce((acc, item) => acc + (item.amount || 0), 0);
+      } else {
+        amount = data.amount || 0;
       }
 
       // Prepare subItems data

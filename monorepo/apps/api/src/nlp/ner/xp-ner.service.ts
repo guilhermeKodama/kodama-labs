@@ -5,6 +5,7 @@
 
 import { Injectable, Logger } from '@nestjs/common';
 import { SubItem } from '../types/email.interface';
+import { Email } from '@prisma/client';
 
 @Injectable()
 export class XPNERService {
@@ -13,6 +14,143 @@ export class XPNERService {
    * 18/08/24BACIO DI LATTE-LJ006464,900,00
    */
   private readonly BLACK_LIST_TERMS = [/LJ\d{4}/g];
+
+  /**
+   * Extract the main bill total from XP PDF text
+   */
+  extractMainBillTotal(text: string): number | null {
+    // First, extract all monetary values from the text
+    const values = this.extractAllMonetaryValues(text);
+    
+    if (values.length === 0) {
+      return null;
+    }
+
+    if (values.length === 1) {
+      return values[0];
+    }
+
+    // If we have multiple values, try to find the most likely total
+    this.logger.debug('Multiple monetary values found, attempting to identify the main total', {
+      allValues: values,
+      valuesCount: values.length,
+    });
+
+    // For XP, we'll use the largest value as the main total since XP PDFs typically
+    // have the total at the bottom and it's usually the largest amount
+    const mainTotal = Math.max(...values);
+    
+    this.logger.debug('Selected largest value as main total for XP PDF', {
+      selectedTotal: mainTotal,
+      allValues: values,
+    });
+    
+    return mainTotal;
+  }
+
+  /**
+   * Extract all monetary values from text (helper method for extractMainBillTotal)
+   */
+  extractAllMonetaryValues(text: string): number[] {
+    // Regular expression to match prices in the format: "123.123,23" (XP format)
+    const priceRegex = /(\d{1,3}(?:\.\d{3})*,\d{2})/g;
+
+    // Array to store matched prices
+    const values: number[] = [];
+
+    // Execute the regex on the text
+    const matches = text.match(priceRegex);
+
+    if (matches) {
+      // Process each match and extract the numeric value
+      for (const match of matches) {
+        const numericValue = parseFloat(
+          match.replace(/\./g, '').replace(',', '.'),
+        );
+
+        if (!isNaN(numericValue)) {
+          values.push(numericValue);
+        }
+      }
+    }
+
+    return values;
+  }
+
+  /**
+   * Extract dates from XP PDF text
+   */
+  extractDates(text: string): Date[] {
+    // XP PDFs use DD/MM/YY format
+    const dateRegex = /(\d{2})\/(\d{2})\/(\d{2})/g;
+    
+    const dates: Date[] = [];
+
+    // Execute the regex on the text
+    const matches = [...text.matchAll(dateRegex)];
+
+    if (matches) {
+      for (const match of matches) {
+        const day = parseInt(match[1], 10);
+        const month = parseInt(match[2], 10) - 1; // Month is 0-indexed
+        const year = parseInt(`20${match[3]}`, 10);
+
+        if (!isNaN(day) && !isNaN(month) && month >= 0 && month <= 11) {
+          // Create date in UTC to avoid timezone issues
+          const date = new Date(Date.UTC(year, month, day));
+          dates.push(date);
+        }
+      }
+    }
+
+    if (dates.length === 0) {
+      this.logger.warn('No dates found in XP PDF text', { 
+        text: text.substring(0, 200),
+        textLength: text.length 
+      });
+    } else {
+      this.logger.debug('Extracted dates from XP PDF text', { 
+        dates: dates.map(d => d.toISOString()),
+        count: dates.length 
+      });
+    }
+
+    return dates;
+  }
+
+  /**
+   * Get description from XP credit card bill
+   */
+  getDescriptionFromCreditCardBill(email: Email): string {
+    // Try to extract a meaningful description from the PDF content first
+    if (email.pdfText) {
+      // Look for patterns that indicate the bill description
+      const pdfText = email.pdfText;
+      
+      // Pattern 1: Look for "FATURA" followed by date
+      const faturaPattern = /FATURA\s+(\d{2}\/\d{2}\/\d{4})/i;
+      const faturaMatch = pdfText.match(faturaPattern);
+      if (faturaMatch) {
+        return `Fatura XP ${faturaMatch[1]}`;
+      }
+      
+      // Pattern 2: Look for "Resumo de Fatura" or similar
+      const resumoPattern = /Resumo de Fatura\s+(\d{2}\/\d{2}\/\d{4})/i;
+      const resumoMatch = pdfText.match(resumoPattern);
+      if (resumoMatch) {
+        return `Fatura XP ${resumoMatch[1]}`;
+      }
+    }
+    
+    // Fallback to the original logic if no meaningful description found
+    const date = new Date(email.internalDate);
+    const billAt = `${date.getMonth() + 1}/${date
+      .getFullYear()
+      .toString()
+      .slice(-2)}`;
+
+    return `Fatura XP ${billAt}`;
+  }
 
   removeBlackListedTerms(input: string): string {
     let cleanedString = input;

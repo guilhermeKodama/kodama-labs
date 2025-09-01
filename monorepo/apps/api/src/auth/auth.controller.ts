@@ -71,6 +71,12 @@ export class AuthController {
 
       const total = this.transactionsService.extractTotalFromEmail(emailRecord);
 
+      this.logger.debug({ 
+        email: emailRecord.sender, 
+        total,
+        emailSubject: emailRecord.snippet?.substring(0, 100)
+      });
+
       /**
        * Extract due date
        */
@@ -79,12 +85,21 @@ export class AuthController {
 
       this.logger.debug({ email: emailRecord.sender, dueAt });
 
-      await this.transactionsService.saveTransactionsFromEmail(
-        emailRecord,
-        user,
-        total,
-        dueAt,
-      );
+      // Only process emails that have a valid total amount
+      if (total && total > 0) {
+        await this.transactionsService.saveTransactionsFromEmail(
+          emailRecord,
+          user,
+          total,
+          dueAt,
+        );
+      } else {
+        this.logger.log('Skipping email processing - no valid total amount found', {
+          emailId: emailRecord.id,
+          sender: emailRecord.sender,
+          subject: emailRecord.snippet?.substring(0, 100),
+        });
+      }
     }
 
     await this.usersService.updateUser({
