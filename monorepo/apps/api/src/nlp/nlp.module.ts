@@ -6,5 +6,6 @@ import { PdfService } from './ner/pdf.service';
 
 @Module({
   providers: [NERService, NubankNERService, XPNERService, PdfService],
+  exports: [NERService, PdfService],
 })
 export class NlpModule {}

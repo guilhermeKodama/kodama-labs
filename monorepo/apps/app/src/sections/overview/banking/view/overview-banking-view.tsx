@@ -101,9 +101,15 @@ const flattenTransactions = (transactions: Transaction[]): Transaction[] => {
       flattened.push(
         ...transaction.subItems.map((subItem) => ({
           ...subItem,
+          id: subItem.id || `sub_${transaction.id}_${Math.random()}`,
           type: transaction.type, // inherit type from parent
-          category: subItem.category || transaction.category, // inherit category if not set
-          dueAt: transaction.dueAt, // inherit dueAt from parent\
+          category: (subItem.category || transaction.category) as TransactionCategory, // inherit category if not set
+          dueAt: transaction.dueAt, // inherit dueAt from parent
+          status: transaction.status,
+          emailId: transaction.emailId,
+          userId: transaction.userId,
+          createdAt: transaction.createdAt,
+          updatedAt: transaction.updatedAt,
           subItems: [],
         }))
       );

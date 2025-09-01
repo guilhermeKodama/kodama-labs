@@ -408,12 +408,21 @@ export class UserController {
       dueAt,
     });
 
-    await this.transactionsService.saveTransactionsFromEmail(
-      emailRecord,
-      userToUpdate,
-      total,
-      dueAt,
-    );
+    // Only process emails that have a valid total amount
+    if (total && total > 0) {
+      await this.transactionsService.saveTransactionsFromEmail(
+        emailRecord,
+        userToUpdate,
+        total,
+        dueAt,
+      );
+    } else {
+      this.logger.log('Skipping email processing - no valid total amount found', {
+        emailId: emailRecord.id,
+        sender: emailRecord.sender,
+        subject: emailRecord.snippet?.substring(0, 100),
+      });
+    }
 
     this.storageService
       .uploadFile(`${unlockPDFDto.emailId}.pdf`, file.buffer)

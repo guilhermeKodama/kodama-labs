@@ -122,7 +122,14 @@ export class GmailService {
 
               if (payload.parts && payload.parts.length) {
                 for (const part of payload.parts) {
-                  if (part.filename && part.filename.endsWith('.pdf')) {
+                  // Check both filename and MIME type for PDF detection
+                  const isPDFByFilename = part.filename && part.filename.toLowerCase().endsWith('.pdf');
+                  const isPDFByMimeType = part.mimeType === 'application/pdf';
+                  const isPDF = isPDFByFilename || isPDFByMimeType;
+                  
+                  if (isPDF) {
+                    this.logger.debug(`Processing PDF attachment: ${part.filename} (MIME: ${part.mimeType})`);
+                    
                     // Fetch attachment
                     pdfBuffer = await this.getAttachmentContent(
                       message.id,
@@ -130,17 +137,68 @@ export class GmailService {
                       oauth2Client,
                     );
 
-                    hasPDF = true;
-                    pdfText = await this.pdfService.extractTextFromPdf(
-                      pdfBuffer,
-                    );
+                    this.logger.debug(`PDF buffer size: ${pdfBuffer?.length || 0} bytes`);
+
+                    // Validate that the buffer actually contains PDF content
+                    if (pdfBuffer && pdfBuffer.length > 0) {
+                      // Check if the buffer starts with PDF magic number (%PDF)
+                      const isActualPDF = pdfBuffer.length >= 4 && 
+                        pdfBuffer[0] === 0x25 && // %
+                        pdfBuffer[1] === 0x50 && // P
+                        pdfBuffer[2] === 0x44 && // D
+                        pdfBuffer[3] === 0x46;   // F
+                      
+                      this.logger.debug(`PDF validation: filename=${part.filename}, size=${pdfBuffer.length}, magicNumber=${pdfBuffer.slice(0, 4).toString()}, isActualPDF=${isActualPDF}`);
+                      
+                      if (isActualPDF) {
+                        hasPDF = true;
+                        pdfText = await this.pdfService.extractTextFromPdf(pdfBuffer);
+                        this.logger.debug(`Extracted PDF text length: ${pdfText?.length || 0} characters`);
+                        
+                        // Additional validation: ensure we got meaningful text, not HTML
+                        if (pdfText && pdfText.includes('<!doctype html>')) {
+                          this.logger.warn(`PDF attachment appears to contain HTML content instead of PDF text: ${part.filename}`);
+                          this.logger.warn(`First 200 characters of extracted text: ${pdfText.substring(0, 200)}`);
+                          pdfText = ''; // Reset since it's not valid PDF text
+                          hasPDF = false;
+                        } else if (pdfText && pdfText.length > 0) {
+                          this.logger.debug(`PDF text preview: ${pdfText.substring(0, 100)}...`);
+                        } else {
+                          this.logger.warn(`PDF parsing returned empty text: ${part.filename}`);
+                          hasPDF = false;
+                        }
+                      } else {
+                        this.logger.warn(`Attachment has PDF extension but doesn't contain valid PDF content: ${part.filename}`);
+                        this.logger.warn(`First 20 bytes: ${pdfBuffer.slice(0, 20).toString('hex')}`);
+                        pdfBuffer = null;
+                      }
+                    } else {
+                      this.logger.warn(`Failed to fetch PDF attachment content: ${part.filename}`);
+                      pdfBuffer = null;
+                    }
                   } else if (part.body?.data) {
                     body += part.body.data;
                   }
                 }
               }
 
+              // If we have a PDF but couldn't extract text, try to get some info from the email body
+              if (hasPDF && !pdfText && body) {
+                this.logger.debug('PDF processing failed, attempting to extract information from email body');
+                // The email body might contain some transaction information even if PDF parsing fails
+              }
+
               const decodedBody = Buffer.from(body, 'base64').toString('utf-8');
+
+              // Log the final email state for debugging
+              this.logger.debug('Final email state', {
+                id: msg.data.id,
+                snippet: msg.data.snippet?.substring(0, 100),
+                hasPDF,
+                pdfTextLength: pdfText?.length || 0,
+                hasPdfBuffer: !!pdfBuffer,
+                senderEmail,
+              });
 
               return {
                 id: msg.data.id,
@@ -166,6 +224,21 @@ export class GmailService {
       if (emails.length === 0) {
         this.logger.debug('No emails found');
       }
+
+      // Log summary of emails with PDFs
+      const emailsWithPdfs = emails.filter(email => email.hasPDF);
+      const emailsWithPdfText = emails.filter(email => email.pdfText && email.pdfText.length > 0);
+      
+      this.logger.debug('Email processing summary', {
+        totalEmails: emails.length,
+        emailsWithPdfs: emailsWithPdfs.length,
+        emailsWithPdfText: emailsWithPdfText.length,
+        pdfEmails: emailsWithPdfs.map(email => ({
+          id: email.id,
+          snippet: email.snippet?.substring(0, 100),
+          pdfTextLength: email.pdfText?.length || 0,
+        })),
+      });
 
       return emails;
     } catch (error) {

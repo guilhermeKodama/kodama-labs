@@ -4,7 +4,6 @@ import React from 'react';
 import Box from '@mui/material/Box';
 import Stack from '@mui/material/Stack';
 import Button from '@mui/material/Button';
-import Divider from '@mui/material/Divider';
 import MenuItem from '@mui/material/MenuItem';
 import Typography from '@mui/material/Typography';
 import InputAdornment from '@mui/material/InputAdornment';
@@ -104,8 +103,6 @@ export function InvoiceNewEditSubItems() {
 
     // If quantity changes, recalculate amount
     if (isCryptoInvestment && field === 'quantity') {
-      const subItem = values.subItems[index];
-      const amount = subItem.amount ?? 0;
       if (value > 0) {
         // Keep the amount as is, just update quantity
         setValue(`subItems[${index}].quantity`, value);
