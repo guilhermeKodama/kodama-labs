@@ -20,7 +20,8 @@ export class NubankNERService {
     // "24 JUL\n•••• 3308sem PararR$ 329,58"
     // The pattern should start with a date, have some content, and end with a value
     // We'll be more restrictive to avoid picking up other monetary values
-    const transactionPattern = /(\d{2}\s+[A-Z]{3})\s*\n(?:.*?)(?:R\$\s*([\d.,]+))/g;
+    // Updated to handle both newline and space separators between date and content
+    const transactionPattern = /(\d{2}\s+[A-Z]{3})\s*(?:\n|[\s]+)(?:.*?)(?:R\$\s*([\d.,]+))/g;
     
     let match;
     let matchCount = 0;
@@ -32,7 +33,7 @@ export class NubankNERService {
 
     // First, let's identify the main bill total to filter out values that are too large
     const mainBillTotal = this.extractMainBillTotal(text);
-    const maxReasonableTransaction = mainBillTotal ? mainBillTotal * 0.8 : 10000; // Max 80% of bill total
+    const maxReasonableTransaction = mainBillTotal ? mainBillTotal * 0.95 : 10000; // Max 95% of bill total (was 80%)
 
     this.logger.debug('Main bill total and max reasonable transaction', {
       mainBillTotal,
@@ -111,19 +112,8 @@ export class NubankNERService {
       }
     }
 
-    this.logger.debug('Sub-items extraction completed', {
-      totalMatches: matchCount,
-      validTransactions: transactions.length,
-      transactions: transactions.map(t => ({
-        description: t.description,
-        date: t.date.toISOString(),
-        value: t.value
-      }))
-    });
-
     // If no transactions were found with the current pattern, let's try a different approach
     if (transactions.length === 0) {
-      this.logger.debug('No transactions found with current pattern, trying alternative approach');
       
       // Look for lines that contain dates and amounts but might not follow the exact pattern
       const alternativePattern = /(\d{2}\s+[A-Z]{3})\s+(.*?)\s+R\$\s*([\d.,]+)/g;
@@ -137,7 +127,6 @@ export class NubankNERService {
         altMatchCount++;
         const [fullAltMatch, altDate, altDescription, altValue] = altMatch;
         
-        this.logger.debug(`Alternative match ${altMatchCount}:`, { fullAltMatch, altDate, altDescription, altValue });
         
         const altNumericValue = parseFloat(
           altValue
@@ -155,12 +144,6 @@ export class NubankNERService {
           
           const cleanDescription = altDescription.trim();
           
-          this.logger.debug(`Alternative transaction ${altMatchCount}:`, {
-            date: altDateObject,
-            description: cleanDescription,
-            value: altNumericValue
-          });
-          
           transactions.push({
             description: cleanDescription || `Transaction ${altMatchCount}`,
             date: altDateObject,
@@ -168,11 +151,6 @@ export class NubankNERService {
           });
         }
       }
-      
-      this.logger.debug('Alternative extraction completed', {
-        alternativeMatches: altMatchCount,
-        totalTransactions: transactions.length
-      });
     }
 
     // If still no transactions found, this might be a summary bill without detailed transactions
@@ -202,12 +180,6 @@ export class NubankNERService {
       return values[0];
     }
 
-    // If we have multiple values, try to find the most likely total
-    this.logger.debug('Multiple monetary values found, attempting to identify the main total', {
-      allValues: values,
-      valuesCount: values.length,
-    });
-
     // Look for the main bill total by checking the text for specific patterns
     let mainTotal = null;
     
@@ -218,10 +190,6 @@ export class NubankNERService {
       const valorAmount = parseFloat(valorMatch[1].replace(/\./g, '').replace(',', '.'));
       if (!isNaN(valorAmount) && values.includes(valorAmount)) {
         mainTotal = valorAmount;
-        this.logger.debug('Found main total using "no valor de" pattern', {
-          pattern: 'no valor de',
-          amount: mainTotal,
-        });
         return mainTotal; // Return immediately for highest priority pattern
       }
     }
@@ -234,10 +202,6 @@ export class NubankNERService {
         const faturaAmount = parseFloat(faturaMatch[1].replace(/\./g, '').replace(',', '.'));
         if (!isNaN(faturaAmount) && values.includes(faturaAmount)) {
           mainTotal = faturaAmount;
-          this.logger.debug('Found main total using "fatura no valor de" pattern', {
-            pattern: 'fatura no valor de',
-            amount: mainTotal,
-          });
         }
       }
     }
@@ -250,10 +214,6 @@ export class NubankNERService {
         const totalAmount = parseFloat(totalMatch[1].replace(/\./g, '').replace(',', '.'));
         if (!isNaN(totalAmount) && values.includes(totalAmount)) {
           mainTotal = totalAmount;
-          this.logger.debug('Found main total using "Total a pagar" pattern', {
-            pattern: 'Total a pagar',
-            amount: mainTotal,
-          });
         }
       }
     }
@@ -269,18 +229,10 @@ export class NubankNERService {
       if (likelyTotals.length > 0) {
         // If we have likely totals, use the largest one as it's usually the main bill
         const fallbackTotal = Math.max(...likelyTotals);
-        this.logger.debug('Selected largest likely total as main amount (fallback)', {
-          selectedTotal: fallbackTotal,
-          allLikelyTotals: likelyTotals,
-        });
         return fallbackTotal;
       } else {
         // If no likely totals, use the largest value
         const fallbackTotal = Math.max(...values);
-        this.logger.debug('No likely totals found, using largest value (fallback)', {
-          selectedTotal: fallbackTotal,
-          allValues: values,
-        });
         return fallbackTotal;
       }
     }
@@ -407,18 +359,6 @@ export class NubankNERService {
           dates.push(date);
         }
       }
-    }
-
-    if (dates.length === 0) {
-      this.logger.warn('No dates found in Nubank PDF text', { 
-        text: text.substring(0, 200),
-        textLength: text.length 
-      });
-    } else {
-      this.logger.debug('Extracted fallback dates from Nubank PDF text', { 
-        dates: dates.map(d => d.toISOString()),
-        count: dates.length 
-      });
     }
 
     return dates;
