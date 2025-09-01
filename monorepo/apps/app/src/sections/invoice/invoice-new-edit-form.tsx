@@ -94,7 +94,7 @@ export function InvoiceNewEditForm({ currentTransaction }: Props) {
   const {
     reset,
     handleSubmit,
-    formState: { isSubmitting, errors, isValid },
+    formState: { isSubmitting },
   } = methods;
   
   // Debug current subItems data
