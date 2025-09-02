@@ -200,11 +200,11 @@ export function CsvUploadDialog({ open, onClose, onUpload }: Props) {
               {validationResult.parsedTransactions.length > 0 && (
                 <Box>
                   <Typography variant="subtitle2" gutterBottom>
-                    Prévia das transações:
+                    Prévia das transações ({validationResult.parsedTransactions.length}):
                   </Typography>
-                  <Box sx={{ maxHeight: 200, overflow: 'auto', border: 1, borderColor: 'divider', borderRadius: 1 }}>
-                    {validationResult.parsedTransactions.slice(0, 5).map((transaction, index) => (
-                      <Box key={index} sx={{ p: 1.5, borderBottom: index < 4 ? 1 : 0, borderColor: 'divider' }}>
+                  <Box sx={{ maxHeight: 300, overflow: 'auto', border: 1, borderColor: 'divider', borderRadius: 1 }}>
+                    {validationResult.parsedTransactions.map((transaction, index) => (
+                      <Box key={index} sx={{ p: 1.5, borderBottom: index < validationResult.parsedTransactions.length - 1 ? 1 : 0, borderColor: 'divider' }}>
                         <Stack direction="row" justifyContent="space-between" alignItems="center">
                           <Typography variant="body2" sx={{ fontWeight: 500 }}>
                             {transaction.description}
@@ -222,13 +222,6 @@ export function CsvUploadDialog({ open, onClose, onUpload }: Props) {
                         </Stack>
                       </Box>
                     ))}
-                    {validationResult.parsedTransactions.length > 5 && (
-                      <Box sx={{ p: 1.5, textAlign: 'center' }}>
-                        <Typography variant="caption" color="text.secondary">
-                          ... e mais {validationResult.parsedTransactions.length - 5} transações
-                        </Typography>
-                      </Box>
-                    )}
                   </Box>
                 </Box>
               )}
