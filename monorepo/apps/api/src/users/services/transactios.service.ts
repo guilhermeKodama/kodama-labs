@@ -4,6 +4,7 @@ import {
   Prisma,
   Transaction,
   TransactionStatus,
+  TransactionType,
   TransactionLogStatus,
   User,
 } from '@prisma/client';
@@ -69,6 +70,47 @@ export class TransactionsService {
     return this.prisma.transaction.createMany({
       data,
     });
+  }
+
+  async createTransactionsFromCsv(params: {
+    transactions: Array<{
+      description: string;
+      dueAt: string;
+      amount: number;
+      category: string;
+      type: TransactionType;
+    }>;
+    userId: string;
+    defaultStatus: TransactionStatus;
+  }): Promise<Transaction[]> {
+    const { transactions, userId, defaultStatus } = params;
+
+    this.logger.log(`Creating ${transactions.length} transactions from CSV for user ${userId}`);
+
+    // Create transactions one by one to get the full objects back
+    const createdTransactions: Transaction[] = [];
+    
+    for (const tx of transactions) {
+      const transaction = await this.prisma.transaction.create({
+        data: {
+          description: tx.description,
+          amount: tx.amount,
+          category: tx.category,
+          type: tx.type,
+          status: defaultStatus,
+          dueAt: new Date(tx.dueAt),
+          user: { connect: { id: userId } },
+        },
+        include: {
+          subItems: true,
+        },
+      });
+      createdTransactions.push(transaction);
+    }
+
+    this.logger.log(`Successfully created ${createdTransactions.length} transactions from CSV`);
+    
+    return createdTransactions;
   }
 
   async deleteTransaction(

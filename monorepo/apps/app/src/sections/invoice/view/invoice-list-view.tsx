@@ -293,19 +293,40 @@ export function InvoiceListView() {
       try {
         console.log('CSV transactions to import:', parsedTransactions);
         
-        // TODO: Implement transaction creation API call
-        // For now, just show success message
-        toast.success(`${parsedTransactions.length} transações importadas com sucesso!`);
+        // Show loading toast
+        toast.loading('Importando transações...', {
+          id: 'csv-import',
+          closeButton: false,
+        });
         
-        // TODO: Refresh transactions list after successful import
-        // await transactionsService.refetchTransactions(setTransactions);
+        // Call the API to import transactions
+        const response = await axios.post(endpoints.user.importCsvTransactions, {
+          transactions: parsedTransactions,
+          defaultStatus: 'PENDING', // Default status for CSV imports
+        });
+        
+        console.log('CSV import response:', response.data);
+        
+        // Success - update the toast
+        toast.success(`${response.data.importedCount} transações importadas com sucesso!`, {
+          id: 'csv-import',
+          closeButton: false,
+        });
+        
+        // Refresh transactions list
+        await transactionsService.refetchTransactions(setTransactions);
         
       } catch (error) {
         console.error('Error importing CSV transactions:', error);
-        toast.error('Erro ao importar transações do CSV');
+        
+        // Error - update the toast
+        toast.error('Erro ao importar transações do CSV', {
+          id: 'csv-import',
+          closeButton: false,
+        });
       }
     },
-    []
+    [setTransactions]
   );
 
   return (
