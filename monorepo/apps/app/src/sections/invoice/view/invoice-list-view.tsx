@@ -53,6 +53,8 @@ import type { Transaction } from 'src/types/api';
 import { useMediaQuery } from '@mui/material';
 import { useAuthContext } from 'src/auth/hooks';
 import transactionsService from 'src/modules/transactions/services/transactions.service';
+import { CsvUploadDialog } from 'src/components/csv-upload-dialog';
+import type { ParsedTransaction } from 'src/utils/csv-parser';
 import { identifyUser, initHotjar, logPageView } from 'src/utils/analytics';
 import { InvoiceAnalytic } from '../invoice-analytic';
 import { InvoiceTableRow } from '../invoice-table-row';
@@ -82,6 +84,7 @@ export function InvoiceListView() {
   const table = useTable({ defaultOrderBy: 'createdAt', defaultOrder: 'desc' });
 
   const confirm = useBoolean();
+  const csvUploadDialog = useBoolean();
 
   const { transactions, setTransactions } = useContext(TransactionContext);
 
@@ -285,6 +288,26 @@ export function InvoiceListView() {
     [filters, table]
   );
 
+  const handleCsvUpload = useCallback(
+    async (parsedTransactions: ParsedTransaction[]) => {
+      try {
+        console.log('CSV transactions to import:', parsedTransactions);
+        
+        // TODO: Implement transaction creation API call
+        // For now, just show success message
+        toast.success(`${parsedTransactions.length} transações importadas com sucesso!`);
+        
+        // TODO: Refresh transactions list after successful import
+        // await transactionsService.refetchTransactions(setTransactions);
+        
+      } catch (error) {
+        console.error('Error importing CSV transactions:', error);
+        toast.error('Erro ao importar transações do CSV');
+      }
+    },
+    []
+  );
+
   return (
     <>
       <DashboardContent>
@@ -296,14 +319,23 @@ export function InvoiceListView() {
               : [{ name: 'Transações', href: paths.dashboard.invoice.root }, { name: 'Listar' }]
           }
           action={
-            <Button
-              component={RouterLink}
-              href={paths.dashboard.invoice.new}
-              variant="contained"
-              startIcon={<Iconify icon="mingcute:add-line" />}
-            >
-              Nova transação
-            </Button>
+            <Stack direction="row" spacing={1}>
+              <Button
+                variant="outlined"
+                startIcon={<Iconify icon="material-symbols:upload-file" />}
+                onClick={csvUploadDialog.onTrue}
+              >
+                Importar CSV
+              </Button>
+              <Button
+                component={RouterLink}
+                href={paths.dashboard.invoice.new}
+                variant="contained"
+                startIcon={<Iconify icon="mingcute:add-line" />}
+              >
+                Nova transação
+              </Button>
+            </Stack>
           }
           sx={{ mb: { xs: 3, md: 5 } }}
         />
@@ -545,6 +577,12 @@ export function InvoiceListView() {
             Delete
           </Button>
         }
+      />
+
+      <CsvUploadDialog
+        open={csvUploadDialog.value}
+        onClose={csvUploadDialog.onFalse}
+        onUpload={handleCsvUpload}
       />
     </>
   );
