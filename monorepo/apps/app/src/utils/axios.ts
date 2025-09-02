@@ -55,6 +55,7 @@ export const endpoints = {
     updateTransaction: '/user/transaction',
     deleteTransaction: '/user/transaction',
     deleteTransactions: '/user/transactions',
+    importCsvTransactions: '/user/transactions/import-csv',
     setPDFPassword: '/user/pdf/set-password',
     pooling: '/user/pooling',
   },

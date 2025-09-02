@@ -20,6 +20,7 @@ import { JwtAuthGuard } from 'src/auth/guards';
 import { UsersService } from './services/users.service';
 import { CreateTransactionDto } from './types/create-transaction.dto';
 import { UpdateTransactionDto } from './types/update-transaction.dto';
+import { ImportCsvTransactionsDto } from './types/import-csv-transactions.dto';
 import { SetPDFDto } from './types/set-pdf-password.dto';
 import { EncryptionService } from 'src/security/services/encription.service';
 import { PdfService } from 'src/nlp/ner/pdf.service';
@@ -158,6 +159,39 @@ export class UserController {
     });
 
     return { transaction };
+  }
+
+  @Post('/transactions/import-csv')
+  @UseGuards(JwtAuthGuard)
+  async importCsvTransactions(
+    @Req() request: Request & { user: { id: string } },
+    @Body() importCsvDto: ImportCsvTransactionsDto,
+  ) {
+    const userId = request.user.id;
+    if (!userId) {
+      throw new UnauthorizedException('User not found');
+    }
+
+    this.logger.log(`Importing ${importCsvDto.transactions.length} transactions from CSV for user ${userId}`);
+
+    try {
+      const createdTransactions = await this.transactionsService.createTransactionsFromCsv({
+        transactions: importCsvDto.transactions,
+        userId,
+        defaultStatus: importCsvDto.defaultStatus,
+      });
+
+      this.logger.log(`Successfully imported ${createdTransactions.length} transactions from CSV`);
+
+      return {
+        success: true,
+        importedCount: createdTransactions.length,
+        transactions: createdTransactions,
+      };
+    } catch (error) {
+      this.logger.error('Error importing CSV transactions:', error);
+      throw new BadRequestException('Failed to import CSV transactions');
+    }
   }
 
   @Put('/transaction')
