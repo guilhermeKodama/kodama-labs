@@ -1,4 +1,4 @@
-import { TransactionType, ExpenseCategory, IncomeCategory, InvestmentCategory } from 'src/types/api';
+import { TransactionType, ExpenseCategory, IncomeCategory, InvestmentCategory, type TransactionCategory } from 'src/types/api';
 
 // ----------------------------------------------------------------------
 
@@ -13,7 +13,7 @@ export interface ParsedTransaction {
   description: string;
   dueAt: string;
   amount: number;
-  category: string;
+  category: TransactionCategory;
   type: TransactionType;
 }
 
@@ -31,95 +31,97 @@ export interface CsvValidationResult {
 /**
  * Maps Portuguese category names to system category enums
  */
-const CATEGORY_MAPPING: Record<string, string> = {
+const CATEGORY_MAPPING: Record<string, TransactionCategory> = {
   // Expense categories
-  'cartão de crédito': 'CREDIT_CARD',
-  'credito': 'CREDIT_CARD',
-  'credit_card': 'CREDIT_CARD',
-  'alimentação': 'FOOD',
-  'alimentacao': 'FOOD',
-  'food': 'FOOD',
-  'moradia': 'HOUSING',
-  'housing': 'HOUSING',
-  'transporte': 'TRANSPORTATION',
-  'transportation': 'TRANSPORTATION',
-  'saúde': 'HEALTH',
-  'saude': 'HEALTH',
-  'health': 'HEALTH',
-  'educação': 'EDUCATION',
-  'educacao': 'EDUCATION',
-  'education': 'EDUCATION',
-  'lazer e entretenimento': 'LEISURE_ENTERTAINMENT',
-  'lazer': 'LEISURE_ENTERTAINMENT',
-  'entretenimento': 'LEISURE_ENTERTAINMENT',
-  'leisure_entertainment': 'LEISURE_ENTERTAINMENT',
-  'vestuário e acessórios': 'CLOTHING_ACCESSORIES',
-  'vestuario': 'CLOTHING_ACCESSORIES',
-  'acessorios': 'CLOTHING_ACCESSORIES',
-  'clothing_accessories': 'CLOTHING_ACCESSORIES',
-  'despesas pessoais': 'PERSONAL_EXPENSES',
-  'pessoais': 'PERSONAL_EXPENSES',
-  'personal_expenses': 'PERSONAL_EXPENSES',
-  'seguros e previdência': 'INSURANCE_PENSIONS',
-  'seguros': 'INSURANCE_PENSIONS',
-  'previdencia': 'INSURANCE_PENSIONS',
-  'insurance_pensions': 'INSURANCE_PENSIONS',
-  'investimentos': 'INVESTMENTS',
-  'investments': 'INVESTMENTS',
-  'dívidas e empréstimos': 'DEBTS_LOANS',
-  'dividas': 'DEBTS_LOANS',
-  'emprestimos': 'DEBTS_LOANS',
-  'debts_loans': 'DEBTS_LOANS',
-  'impostos': 'TAXES',
-  'taxes': 'TAXES',
+  'cartão de crédito': ExpenseCategory.CREDIT_CARD,
+  'credito': ExpenseCategory.CREDIT_CARD,
+  'credit_card': ExpenseCategory.CREDIT_CARD,
+  'alimentação': ExpenseCategory.FOOD,
+  'alimentacao': ExpenseCategory.FOOD,
+  'food': ExpenseCategory.FOOD,
+  'moradia': ExpenseCategory.HOUSING,
+  'housing': ExpenseCategory.HOUSING,
+  'transporte': ExpenseCategory.TRANSPORTATION,
+  'transportation': ExpenseCategory.TRANSPORTATION,
+  'saúde': ExpenseCategory.HEALTH,
+  'saude': ExpenseCategory.HEALTH,
+  'health': ExpenseCategory.HEALTH,
+  'educação': ExpenseCategory.EDUCATION,
+  'educacao': ExpenseCategory.EDUCATION,
+  'education': ExpenseCategory.EDUCATION,
+  'lazer e entretenimento': ExpenseCategory.LEISURE_ENTERTAINMENT,
+  'lazer': ExpenseCategory.LEISURE_ENTERTAINMENT,
+  'entretenimento': ExpenseCategory.LEISURE_ENTERTAINMENT,
+  'leisure_entertainment': ExpenseCategory.LEISURE_ENTERTAINMENT,
+  'vestuário e acessórios': ExpenseCategory.CLOTHING_ACCESSORIES,
+  'vestuario': ExpenseCategory.CLOTHING_ACCESSORIES,
+  'acessorios': ExpenseCategory.CLOTHING_ACCESSORIES,
+  'clothing_accessories': ExpenseCategory.CLOTHING_ACCESSORIES,
+  'despesas pessoais': ExpenseCategory.PERSONAL_EXPENSES,
+  'pessoais': ExpenseCategory.PERSONAL_EXPENSES,
+  'personal_expenses': ExpenseCategory.PERSONAL_EXPENSES,
+  'seguros e previdência': ExpenseCategory.INSURANCE_PENSIONS,
+  'seguros': ExpenseCategory.INSURANCE_PENSIONS,
+  'previdencia': ExpenseCategory.INSURANCE_PENSIONS,
+  'insurance_pensions': ExpenseCategory.INSURANCE_PENSIONS,
+  'investimentos': ExpenseCategory.INVESTMENTS,
+  'investments': ExpenseCategory.INVESTMENTS,
+  'dívidas e empréstimos': ExpenseCategory.DEBTS_LOANS,
+  'dividas': ExpenseCategory.DEBTS_LOANS,
+  'emprestimos': ExpenseCategory.DEBTS_LOANS,
+  'debts_loans': ExpenseCategory.DEBTS_LOANS,
+  'impostos': ExpenseCategory.TAXES,
+  'imposto': ExpenseCategory.TAXES,
+  'taxes': ExpenseCategory.TAXES,
   
   // Income categories
-  'salário': 'SALARY',
-  'salario': 'SALARY',
-  'salary': 'SALARY',
-  'negócio': 'BUSINESS',
-  'negocio': 'BUSINESS',
-  'business': 'BUSINESS',
-  'dividendos': 'DIVIDENDS',
-  'dividends': 'DIVIDENDS',
-  'juros': 'INTEREST',
-  'interest': 'INTEREST',
-  'aluguel': 'RENTAL',
-  'rental': 'RENTAL',
-  'pensão': 'PENSION',
-  'pensao': 'PENSION',
-  'pension': 'PENSION',
-  'presentes': 'GIFTS',
-  'gifts': 'GIFTS',
-  'outros': 'OTHER',
-  'other': 'OTHER',
+  'salário': IncomeCategory.SALARY,
+  'salario': IncomeCategory.SALARY,
+  'salary': IncomeCategory.SALARY,
+  'negócio': IncomeCategory.BUSINESS,
+  'negocio': IncomeCategory.BUSINESS,
+  'business': IncomeCategory.BUSINESS,
+  'dividendos': IncomeCategory.DIVIDENDS,
+  'dividends': IncomeCategory.DIVIDENDS,
+  'juros': IncomeCategory.INTEREST,
+  'interest': IncomeCategory.INTEREST,
+  'aluguel': IncomeCategory.RENTAL,
+  'rental': IncomeCategory.RENTAL,
+  'pensão': IncomeCategory.PENSION,
+  'pensao': IncomeCategory.PENSION,
+  'pension': IncomeCategory.PENSION,
+  'presentes': IncomeCategory.GIFTS,
+  'gifts': IncomeCategory.GIFTS,
+  'outros': IncomeCategory.OTHER,
+  'other': IncomeCategory.OTHER,
   
   // Investment categories
-  'ações': 'STOCKS',
-  'acoes': 'STOCKS',
-  'stocks': 'STOCKS',
-  'renda fixa': 'FIXED_INCOME',
-  'fixed_income': 'FIXED_INCOME',
-  'criptomoedas': 'CRYPTOCURRENCY',
-  'crypto': 'CRYPTOCURRENCY',
-  'cryptocurrency': 'CRYPTOCURRENCY',
+  'ações': InvestmentCategory.STOCKS,
+  'acoes': InvestmentCategory.STOCKS,
+  'stocks': InvestmentCategory.STOCKS,
+  'renda fixa': InvestmentCategory.FIXED_INCOME,
+  'fixed_income': InvestmentCategory.FIXED_INCOME,
+  'imóveis': InvestmentCategory.REAL_ESTATE,
+  'imoveis': InvestmentCategory.REAL_ESTATE,
+  'real_estate': InvestmentCategory.REAL_ESTATE,
+  'criptomoedas': InvestmentCategory.CRYPTOCURRENCY,
+  'crypto': InvestmentCategory.CRYPTOCURRENCY,
+  'cryptocurrency': InvestmentCategory.CRYPTOCURRENCY,
 };
 
 /**
  * Determines transaction type based on category
  */
-function getTransactionType(category: string): TransactionType {
-  const upperCategory = category.toUpperCase();
-  
-  if (Object.values(ExpenseCategory).includes(upperCategory as ExpenseCategory)) {
+function getTransactionType(category: TransactionCategory): TransactionType {
+  if (Object.values(ExpenseCategory).includes(category as ExpenseCategory)) {
     return TransactionType.EXPENSE;
   }
   
-  if (Object.values(IncomeCategory).includes(upperCategory as IncomeCategory)) {
+  if (Object.values(IncomeCategory).includes(category as IncomeCategory)) {
     return TransactionType.INCOME;
   }
   
-  if (Object.values(InvestmentCategory).includes(upperCategory as InvestmentCategory)) {
+  if (Object.values(InvestmentCategory).includes(category as InvestmentCategory)) {
     return TransactionType.INVESTMENT;
   }
   
@@ -310,7 +312,7 @@ function validateCsvRow(row: CsvRow, rowNumber: number): string[] {
   } else {
     const date = parseDate(row.vencimento);
     if (!date || Number.isNaN(date.getTime())) {
-      errors.push(`Linha ${rowNumber}: Data de vencimento inválida (${row.vencimento}). Use o formato DD/MM/AAAA ou AAAA-MM-DD`);
+      errors.push(`Linha ${rowNumber}: Data de vencimento inválida (${row.vencimento}). Use o formato DD/MM/AAAA, AAAA-MM-DD ou apenas o dia (ex: 15)`);
     }
   }
   
@@ -366,6 +368,28 @@ function parseDate(dateStr: string): Date | null {
     return new Date(parseInt(year, 10), parseInt(month, 10) - 1, parseInt(day, 10));
   }
   
+  // Try single number (day of current month/year)
+  const singleDay = /^(\d{1,2})$/.exec(trimmed);
+  if (singleDay) {
+    const day = parseInt(singleDay[1], 10);
+    if (day >= 1 && day <= 31) {
+      const now = new Date();
+      const currentYear = now.getFullYear();
+      const currentMonth = now.getMonth();
+      
+      // Create date for the specified day of current month/year
+      const targetDate = new Date(currentYear, currentMonth, day);
+      
+      // If the day doesn't exist in current month (e.g., Feb 30), 
+      // adjust to the last day of the month
+      if (targetDate.getDate() !== day) {
+        return new Date(currentYear, currentMonth + 1, 0); // Last day of current month
+      }
+      
+      return targetDate;
+    }
+  }
+  
   // Try native Date parsing as fallback
   const nativeDate = new Date(trimmed);
   if (!Number.isNaN(nativeDate.getTime())) {
@@ -416,7 +440,7 @@ function parseAmount(amountStr: string): number {
 /**
  * Maps category string to system category
  */
-function mapCategory(categoryStr: string): string | null {
+function mapCategory(categoryStr: string): TransactionCategory | null {
   const normalized = categoryStr.toLowerCase().trim();
   return CATEGORY_MAPPING[normalized] || null;
 }

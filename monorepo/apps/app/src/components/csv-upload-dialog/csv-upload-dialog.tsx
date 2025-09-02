@@ -86,6 +86,8 @@ export function CsvUploadDialog({ open, onClose, onUpload }: Props) {
           <Typography variant="body2" color="text.secondary">
             Selecione um arquivo CSV com as transações que deseja importar. 
             O arquivo deve conter as colunas: <strong>nome</strong>, <strong>vencimento</strong>, <strong>valor</strong> e <strong>categoria</strong>.
+            <br />
+            <strong>Dica:</strong> Para vencimento, você pode usar DD/MM/AAAA, AAAA-MM-DD ou apenas o dia (ex: 15 para o dia 15 do mês atual).
           </Typography>
 
           <Box>
