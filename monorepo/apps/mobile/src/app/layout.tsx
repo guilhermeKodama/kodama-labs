@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect, useState } from 'react';
 import "./globals.css";
 
 export default function RootLayout({
@@ -7,6 +8,40 @@ export default function RootLayout({
 }: {
   children: React.ReactNode;
 }) {
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  if (!mounted) {
+    return (
+      <html lang="en" className="dark">
+        <head>
+          <title>Wallex - Personal Finance</title>
+          <meta name="description" content="Offline-first personal finance management app" />
+          <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+          <meta name="theme-color" content="#000000" />
+          <meta name="manifest" content="/manifest.json" />
+          <meta name="robots" content="noindex, nofollow" />
+          <meta name="apple-mobile-web-app-capable" content="yes" />
+          <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+          <meta name="apple-mobile-web-app-title" content="Wallex" />
+          <meta name="mobile-web-app-capable" content="yes" />
+          <meta name="format-detection" content="telephone=no" />
+        </head>
+        <body className="h-screen overflow-hidden">
+          <div className="flex items-center justify-center h-screen">
+            <div className="text-center">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white mx-auto mb-4"></div>
+              <p className="text-muted-foreground">Loading...</p>
+            </div>
+          </div>
+        </body>
+      </html>
+    );
+  }
+
   return (
     <html lang="en" className="dark">
       <head>

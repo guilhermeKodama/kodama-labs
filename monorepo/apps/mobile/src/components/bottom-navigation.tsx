@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
+import TransactionsList from './transactions-list';
 import { 
   Receipt, 
   Plus, 
@@ -120,52 +121,7 @@ export function BottomNavigation() {
 function TransactionsTab() {
   return (
     <div className="h-full flex flex-col">
-      {/* Header */}
-      <div className="flex items-center justify-between p-4 border-b border-border">
-        <h1 className="text-xl font-semibold">Transactions</h1>
-        <div className="flex items-center space-x-2">
-          <Button variant="ghost" size="icon">
-            <Search className="h-4 w-4" />
-          </Button>
-          <Button variant="ghost" size="icon">
-            <Filter className="h-4 w-4" />
-          </Button>
-        </div>
-      </div>
-
-      {/* Transaction List */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-3">
-        {/* Sample transactions */}
-        {[
-          { type: 'income', amount: '+$2,500.00', description: 'Salary', date: 'Today' },
-          { type: 'expense', amount: '-$45.20', description: 'Grocery Store', date: 'Today' },
-          { type: 'expense', amount: '-$12.99', description: 'Coffee Shop', date: 'Yesterday' },
-          { type: 'investment', amount: '+$150.00', description: 'Stock Dividend', date: '2 days ago' },
-        ].map((transaction, index) => (
-          <Card key={index} className="p-4 hover:shadow-md transition-shadow">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-3">
-                <div className={`w-3 h-3 rounded-full ${
-                  transaction.type === 'income' ? 'bg-green-500' :
-                  transaction.type === 'expense' ? 'bg-red-500' :
-                  'bg-blue-500'
-                }`} />
-                <div>
-                  <p className="font-medium text-foreground">{transaction.description}</p>
-                  <p className="text-sm text-muted-foreground">{transaction.date}</p>
-                </div>
-              </div>
-              <p className={`font-semibold ${
-                transaction.type === 'income' ? 'text-green-600 dark:text-green-400' :
-                transaction.type === 'expense' ? 'text-red-600 dark:text-red-400' :
-                'text-blue-600 dark:text-blue-400'
-              }`}>
-                {transaction.amount}
-              </p>
-            </div>
-          </Card>
-        ))}
-      </div>
+      <TransactionsList />
     </div>
   );
 }
