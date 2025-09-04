@@ -8,12 +8,24 @@
     "export": "next build && next export",
     "start": "next start",
     "lint": "eslint",
-    "type-check": "tsc --noEmit"
+    "type-check": "tsc --noEmit",
+    "ios:sync": "npx cap sync ios",
+    "ios:open": "npx cap open ios",
+    "ios:build": "yarn build && yarn ios:sync",
+    "ios:run": "yarn ios:build && npx cap run ios"
   },
   "dependencies": {
     "next": "^14.2.0",
     "react": "^18.3.1",
-    "react-dom": "^18.3.1"
+    "react-dom": "^18.3.1",
+    "class-variance-authority": "^0.7.0",
+    "clsx": "^2.0.0",
+    "tailwind-merge": "^2.0.0",
+    "lucide-react": "^0.263.1",
+    "tailwindcss-animate": "^1.0.7",
+    "@capacitor/core": "^5.5.1",
+    "@capacitor/cli": "^5.5.1",
+    "@capacitor/ios": "^5.5.1"
   },
   "devDependencies": {
     "@types/node": "^20.3.1",
