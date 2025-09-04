@@ -4,7 +4,7 @@ import { BottomNavigation } from '@/components/bottom-navigation';
 
 export default function Home() {
   return (
-    <div className="h-full flex flex-col">
+    <div className="h-screen flex flex-col">
       <BottomNavigation />
     </div>
   );

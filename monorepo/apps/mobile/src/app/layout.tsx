@@ -8,7 +8,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en">
+    <html lang="en" className="dark">
       <head>
         <title>Wallex - Personal Finance</title>
         <meta name="description" content="Offline-first personal finance management app" />
@@ -22,7 +22,7 @@ export default function RootLayout({
         <meta name="mobile-web-app-capable" content="yes" />
         <meta name="format-detection" content="telephone=no" />
       </head>
-      <body>
+      <body className="h-screen overflow-hidden">
         {children}
       </body>
     </html>
