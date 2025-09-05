@@ -4,6 +4,8 @@ import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import TransactionsList from './transactions-list';
+import TransactionDialog from './transaction-dialog';
+import { storageService } from '../services/storage';
 import { 
   Receipt, 
   Plus, 
@@ -26,58 +28,6 @@ export function BottomNavigation() {
         {activeTab === 'insights' && <InsightsTab />}
       </div>
 
-      {/* FAB Modal */}
-      {showFabModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-end justify-center z-50">
-          <div className="bg-background rounded-t-2xl w-full max-w-md p-6 space-y-4">
-            <div className="flex items-center justify-between">
-              <h2 className="text-lg font-semibold">Add Transaction</h2>
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => setShowFabModal(false)}
-              >
-                ×
-              </Button>
-            </div>
-                    <div className="grid grid-cols-3 gap-4">
-          <Button
-            variant="outline"
-            className="h-20 flex flex-col items-center space-y-2 border-green-200 dark:border-green-800 hover:bg-green-50 dark:hover:bg-green-950"
-            onClick={() => {
-              // TODO: Handle income
-              setShowFabModal(false);
-            }}
-          >
-            <TrendingUp className="h-6 w-6 text-green-600 dark:text-green-400" />
-            <span className="text-sm text-green-700 dark:text-green-300">Income</span>
-          </Button>
-          <Button
-            variant="outline"
-            className="h-20 flex flex-col items-center space-y-2 border-red-200 dark:border-red-800 hover:bg-red-50 dark:hover:bg-red-950"
-            onClick={() => {
-              // TODO: Handle expense
-              setShowFabModal(false);
-            }}
-          >
-            <Receipt className="h-6 w-6 text-red-600 dark:text-red-400" />
-            <span className="text-sm text-red-700 dark:text-red-300">Expense</span>
-          </Button>
-          <Button
-            variant="outline"
-            className="h-20 flex flex-col items-center space-y-2 border-blue-200 dark:border-blue-800 hover:bg-blue-50 dark:hover:bg-blue-950"
-            onClick={() => {
-              // TODO: Handle investment
-              setShowFabModal(false);
-            }}
-          >
-            <TrendingUp className="h-6 w-6 text-blue-600 dark:text-blue-400" />
-            <span className="text-sm text-blue-700 dark:text-blue-300">Investment</span>
-          </Button>
-        </div>
-          </div>
-        </div>
-      )}
 
       {/* Bottom Navigation */}
       <nav className="flex items-center justify-around p-4 border-t border-border bg-card safe-bottom flex-shrink-0">
@@ -94,13 +44,29 @@ export function BottomNavigation() {
         </Button>
 
         {/* Center FAB */}
-        <Button
-          size="icon"
-          className="h-14 w-14 rounded-full shadow-lg"
-          onClick={() => setShowFabModal(true)}
-        >
-          <Plus className="h-6 w-6" />
-        </Button>
+        <TransactionDialog 
+          onSave={async (transaction) => {
+            try {
+              console.log('Saving transaction:', transaction);
+              await storageService.saveTransaction(transaction);
+              console.log('Transaction saved successfully');
+            } catch (error) {
+              console.error('Failed to save transaction:', error);
+              throw error; // Re-throw to let the dialog handle the error
+            }
+          }}
+          isLoading={false}
+          open={showFabModal}
+          onOpenChange={setShowFabModal}
+          triggerButton={
+            <Button
+              size="icon"
+              className="h-14 w-14 rounded-full shadow-lg"
+            >
+              <Plus className="h-6 w-6" />
+            </Button>
+          }
+        />
 
         {/* Insights Tab */}
         <Button

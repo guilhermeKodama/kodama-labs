@@ -19,6 +19,21 @@ import { WallexRecord } from '../types';
 
 export type { WallexRecord };
 
+// New transaction interface matching the API
+export interface Transaction {
+  id?: number;
+  type: 'EXPENSE' | 'INCOME' | 'INVESTMENT';
+  description: string;
+  amount: number;
+  status: 'PAID' | 'PENDING' | 'OVERDUE' | 'DRAFT';
+  dueAt: string; // ISO date string
+  category?: string;
+  symbol?: string;
+  quantity?: number;
+  timestamp: string;
+  synced: boolean;
+}
+
 class StorageService {
   private db: any = null;
   private sqlite: any = null;
@@ -73,14 +88,16 @@ class StorageService {
       
       // Create table if it doesn't exist
       await this.db.execute(`
-        CREATE TABLE IF NOT EXISTS wallex_records (
+        CREATE TABLE IF NOT EXISTS transactions (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
-          userId TEXT NOT NULL,
-          title TEXT NOT NULL,
-          description TEXT,
-          category TEXT NOT NULL,
+          type TEXT NOT NULL,
+          description TEXT NOT NULL,
           amount REAL NOT NULL,
-          currency TEXT NOT NULL,
+          status TEXT NOT NULL,
+          dueAt TEXT NOT NULL,
+          category TEXT,
+          symbol TEXT,
+          quantity REAL,
           timestamp TEXT NOT NULL,
           synced INTEGER DEFAULT 0
         )
@@ -99,6 +116,58 @@ class StorageService {
       }
       this.isInitialized = true;
     }
+  }
+
+  async saveTransaction(transaction: Omit<Transaction, 'id' | 'timestamp' | 'synced'>): Promise<number> {
+    // Ensure database is initialized
+    if (!this.isInitialized) {
+      await this.initialize();
+    }
+
+    if (this.isWebPlatform) {
+      // Use localStorage for web platform
+      const transactions = this.getWebTransactions();
+      const newTransaction: Transaction = {
+        id: Date.now(), // Simple ID generation for web
+        type: transaction.type,
+        description: transaction.description,
+        amount: transaction.amount,
+        status: transaction.status,
+        dueAt: transaction.dueAt,
+        category: transaction.category,
+        symbol: transaction.symbol,
+        quantity: transaction.quantity,
+        timestamp: new Date().toISOString(),
+        synced: false
+      };
+      transactions.push(newTransaction);
+      localStorage.setItem('transactions', JSON.stringify(transactions));
+      return newTransaction.id!;
+    }
+
+    if (!this.db) {
+      throw new Error('Database not initialized');
+    }
+
+    const timestamp = new Date().toISOString();
+    const query = `
+      INSERT INTO transactions (type, description, amount, status, dueAt, category, symbol, quantity, timestamp, synced)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
+    `;
+
+    const result = await this.db.run(query, [
+      transaction.type,
+      transaction.description,
+      transaction.amount,
+      transaction.status,
+      transaction.dueAt,
+      transaction.category || null,
+      transaction.symbol || null,
+      transaction.quantity || null,
+      timestamp
+    ]);
+
+    return result.changes?.lastId || 0;
   }
 
   async saveRecord(record: Omit<WallexRecord, 'id' | 'timestamp' | 'synced'>): Promise<number> {
@@ -263,12 +332,111 @@ class StorageService {
     }
   }
 
+  async getAllTransactions(): Promise<Transaction[]> {
+    // Ensure database is initialized
+    if (!this.isInitialized) {
+      await this.initialize();
+    }
+
+    if (this.isWebPlatform) {
+      return this.getWebTransactions();
+    }
+
+    if (!this.db) {
+      throw new Error('Database not initialized');
+    }
+
+    const query = 'SELECT * FROM transactions ORDER BY timestamp DESC';
+    const result = await this.db.query(query);
+
+    return result.values?.map((row: Record<string, unknown>) => ({
+      id: row.id as number,
+      type: row.type as 'EXPENSE' | 'INCOME' | 'INVESTMENT',
+      description: row.description as string,
+      amount: row.amount as number,
+      status: row.status as 'PAID' | 'PENDING' | 'OVERDUE' | 'DRAFT',
+      dueAt: row.dueAt as string,
+      category: row.category as string | undefined,
+      symbol: row.symbol as string | undefined,
+      quantity: row.quantity as number | undefined,
+      timestamp: row.timestamp as string,
+      synced: Boolean(row.synced)
+    })) || [];
+  }
+
+  async getUnsyncedTransactions(): Promise<Transaction[]> {
+    // Ensure database is initialized
+    if (!this.isInitialized) {
+      await this.initialize();
+    }
+
+    if (this.isWebPlatform) {
+      const transactions = this.getWebTransactions();
+      return transactions.filter(transaction => !transaction.synced);
+    }
+
+    if (!this.db) {
+      throw new Error('Database not initialized');
+    }
+
+    const query = 'SELECT * FROM transactions WHERE synced = 0 ORDER BY timestamp ASC';
+    const result = await this.db.query(query);
+
+    return result.values?.map((row: Record<string, unknown>) => ({
+      id: row.id as number,
+      type: row.type as 'EXPENSE' | 'INCOME' | 'INVESTMENT',
+      description: row.description as string,
+      amount: row.amount as number,
+      status: row.status as 'PAID' | 'PENDING' | 'OVERDUE' | 'DRAFT',
+      dueAt: row.dueAt as string,
+      category: row.category as string | undefined,
+      symbol: row.symbol as string | undefined,
+      quantity: row.quantity as number | undefined,
+      timestamp: row.timestamp as string,
+      synced: Boolean(row.synced)
+    })) || [];
+  }
+
+  async markTransactionAsSynced(transactionId: number): Promise<void> {
+    // Ensure database is initialized
+    if (!this.isInitialized) {
+      await this.initialize();
+    }
+
+    if (this.isWebPlatform) {
+      const transactions = this.getWebTransactions();
+      const transaction = transactions.find(t => t.id === transactionId);
+      if (transaction) {
+        transaction.synced = true;
+        localStorage.setItem('transactions', JSON.stringify(transactions));
+      }
+      return;
+    }
+
+    if (!this.db) {
+      throw new Error('Database not initialized');
+    }
+
+    const query = 'UPDATE transactions SET synced = 1 WHERE id = ?';
+    await this.db.run(query, [transactionId]);
+  }
+
   private getWebRecords(): WallexRecord[] {
     try {
       const records = localStorage.getItem('wallex_records');
       return records ? JSON.parse(records) : [];
     } catch (error) {
       console.error('Error reading from localStorage:', error);
+      return [];
+    }
+  }
+
+  private getWebTransactions(): Transaction[] {
+    try {
+      const transactions = localStorage.getItem('transactions');
+      return transactions ? JSON.parse(transactions) : [];
+    } catch (error) {
+      console.error('Error reading transactions from localStorage:', error);
       return [];
     }
   }

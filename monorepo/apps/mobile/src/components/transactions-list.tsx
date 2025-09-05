@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { storageService } from '../services/storage';
+import { storageService, Transaction } from '../services/storage';
 import { syncService } from '../services/sync';
 import { WallexRecord } from '../types';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
@@ -9,9 +9,10 @@ import { Badge } from './ui/badge';
 import { Button } from './ui/button';
 import { Separator } from './ui/separator';
 import { Plus, RefreshCw, Wifi, WifiOff, DollarSign, Calendar, Tag } from 'lucide-react';
+import TransactionDialog from './transaction-dialog';
 
 export default function TransactionsList() {
-  const [transactions, setTransactions] = useState<WallexRecord[]>([]);
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [isOnline, setIsOnline] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [isInitialized, setIsInitialized] = useState(false);
@@ -38,7 +39,7 @@ export default function TransactionsList() {
 
   const loadTransactions = async () => {
     try {
-      const allTransactions = await storageService.getAllRecords();
+      const allTransactions = await storageService.getAllTransactions();
       console.log('Loaded transactions:', allTransactions);
       setTransactions(allTransactions);
     } catch (error) {
@@ -73,6 +74,19 @@ export default function TransactionsList() {
     }
   };
 
+  const handleSaveTransaction = async (transactionData: any) => {
+    try {
+      setIsLoading(true);
+      await storageService.saveTransaction(transactionData);
+      await loadTransactions();
+    } catch (error) {
+      console.error('Failed to save transaction:', error);
+      throw error; // Re-throw to let the dialog handle the error
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const syncTransactions = async () => {
     try {
       setIsLoading(true);
@@ -94,10 +108,10 @@ export default function TransactionsList() {
     }
   };
 
-  const formatAmount = (amount: number, currency: string) => {
+  const formatAmount = (amount: number) => {
     return new Intl.NumberFormat('en-US', {
       style: 'currency',
-      currency: currency,
+      currency: 'USD',
     }).format(amount);
   };
 
@@ -125,29 +139,32 @@ export default function TransactionsList() {
     }
   };
 
-  const getCategoryColor = (category: string) => {
+  const getTypeColor = (type: string) => {
     const colors: Record<string, string> = {
-      food: 'bg-orange-100 text-orange-800 border-orange-200',
-      transport: 'bg-blue-100 text-blue-800 border-blue-200',
-      entertainment: 'bg-purple-100 text-purple-800 border-purple-200',
-      shopping: 'bg-pink-100 text-pink-800 border-pink-200',
-      bills: 'bg-red-100 text-red-800 border-red-200',
-      income: 'bg-green-100 text-green-800 border-green-200',
+      EXPENSE: 'bg-red-100 text-red-800 border-red-200',
+      INCOME: 'bg-green-100 text-green-800 border-green-200',
+      INVESTMENT: 'bg-blue-100 text-blue-800 border-blue-200',
     };
-    return colors[category] || 'bg-gray-100 text-gray-800 border-gray-200';
+    return colors[type] || 'bg-gray-100 text-gray-800 border-gray-200';
   };
 
-  const getCategoryIcon = (category: string) => {
-    // For now, we'll use a simple emoji approach
+  const getTypeIcon = (type: string) => {
     const icons: Record<string, string> = {
-      food: '🍽️',
-      transport: '🚗',
-      entertainment: '🎬',
-      shopping: '🛍️',
-      bills: '📄',
-      income: '💰',
+      EXPENSE: '📉',
+      INCOME: '📈',
+      INVESTMENT: '💎',
     };
-    return icons[category] || '📝';
+    return icons[type] || '📝';
+  };
+
+  const getStatusColor = (status: string) => {
+    const colors: Record<string, string> = {
+      PAID: 'bg-green-100 text-green-800',
+      PENDING: 'bg-yellow-100 text-yellow-800',
+      OVERDUE: 'bg-red-100 text-red-800',
+      DRAFT: 'bg-gray-100 text-gray-800',
+    };
+    return colors[status] || 'bg-gray-100 text-gray-800';
   };
 
   const unsyncedCount = transactions.filter(t => !t.synced).length;
@@ -177,7 +194,7 @@ export default function TransactionsList() {
             <div>
               <CardTitle className="text-xl">Transactions</CardTitle>
               <CardDescription>
-                {transactions.length} transactions • {formatAmount(totalAmount, 'USD')}
+                {transactions.length} transactions • {formatAmount(totalAmount)}
               </CardDescription>
             </div>
             <div className="flex items-center space-x-2">
@@ -197,15 +214,10 @@ export default function TransactionsList() {
         </CardHeader>
         <CardContent className="pt-0">
           <div className="flex space-x-2">
-            <Button 
-              onClick={addSampleTransaction} 
-              disabled={isLoading}
-              size="sm"
-              className="flex-1"
-            >
-              <Plus className="h-4 w-4 mr-2" />
-              Add Sample
-            </Button>
+            <TransactionDialog 
+              onSave={handleSaveTransaction}
+              isLoading={isLoading}
+            />
             <Button 
               onClick={syncTransactions} 
               disabled={isLoading || !isOnline || unsyncedCount === 0}
@@ -230,10 +242,12 @@ export default function TransactionsList() {
               <p className="text-muted-foreground">
                 Add your first transaction to get started
               </p>
-              <Button onClick={addSampleTransaction} disabled={isLoading} className="mt-4">
-                <Plus className="h-4 w-4 mr-2" />
-                Add Sample Transaction
-              </Button>
+              <div className="mt-4">
+                <TransactionDialog 
+                  onSave={handleSaveTransaction}
+                  isLoading={isLoading}
+                />
+              </div>
             </div>
           </CardContent>
         </Card>
@@ -245,12 +259,12 @@ export default function TransactionsList() {
                 <div className="flex items-center justify-between">
                   <div className="flex items-center space-x-3 flex-1">
                     <div className="text-2xl">
-                      {getCategoryIcon(transaction.category)}
+                      {getTypeIcon(transaction.type)}
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center space-x-2">
                         <h4 className="font-semibold text-sm truncate">
-                          {transaction.title}
+                          {transaction.description}
                         </h4>
                         {!transaction.synced && (
                           <Badge variant="warning" className="text-xs">
@@ -258,19 +272,28 @@ export default function TransactionsList() {
                           </Badge>
                         )}
                       </div>
-                      {transaction.description && (
-                        <p className="text-xs text-muted-foreground truncate">
-                          {transaction.description}
-                        </p>
-                      )}
                       <div className="flex items-center space-x-2 mt-1">
                         <Badge 
                           variant="outline" 
-                          className={`text-xs ${getCategoryColor(transaction.category)}`}
+                          className={`text-xs ${getTypeColor(transaction.type)}`}
                         >
                           <Tag className="h-3 w-3 mr-1" />
-                          {transaction.category}
+                          {transaction.type}
                         </Badge>
+                        <Badge 
+                          variant="outline" 
+                          className={`text-xs ${getStatusColor(transaction.status)}`}
+                        >
+                          {transaction.status}
+                        </Badge>
+                        {transaction.category && (
+                          <Badge 
+                            variant="outline" 
+                            className="text-xs bg-gray-100 text-gray-800"
+                          >
+                            {transaction.category}
+                          </Badge>
+                        )}
                         <div className="flex items-center text-xs text-muted-foreground">
                           <Calendar className="h-3 w-3 mr-1" />
                           {formatDate(transaction.timestamp)}
@@ -280,13 +303,20 @@ export default function TransactionsList() {
                   </div>
                   <div className="text-right">
                     <div className={`font-semibold ${
-                      transaction.category === 'income' 
+                      transaction.type === 'INCOME' 
                         ? 'text-green-600' 
-                        : 'text-red-600'
+                        : transaction.type === 'EXPENSE'
+                        ? 'text-red-600'
+                        : 'text-blue-600'
                     }`}>
-                      {transaction.category === 'income' ? '+' : '-'}
-                      {formatAmount(transaction.amount, transaction.currency)}
+                      {transaction.type === 'INCOME' ? '+' : transaction.type === 'EXPENSE' ? '-' : '±'}
+                      {formatAmount(transaction.amount)}
                     </div>
+                    {transaction.symbol && (
+                      <div className="text-xs text-muted-foreground">
+                        {transaction.quantity} {transaction.symbol}
+                      </div>
+                    )}
                   </div>
                 </div>
               </CardContent>
