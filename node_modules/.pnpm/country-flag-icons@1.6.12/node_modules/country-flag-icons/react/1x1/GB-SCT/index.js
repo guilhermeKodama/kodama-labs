@@ -1,1 +1,0 @@
-export { GB_SCT as default } from '../index.js'

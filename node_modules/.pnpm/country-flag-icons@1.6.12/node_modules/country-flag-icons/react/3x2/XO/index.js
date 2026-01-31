@@ -1,1 +1,0 @@
-export { XO as default } from '../index.js'

@@ -1,1 +1,0 @@
-export { GB_NIR as default } from '../index.js'
