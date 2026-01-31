@@ -98,9 +98,8 @@ export default function HomePage() {
               </Button>
               <Button
                 asChild
-                variant="outline"
                 size="lg"
-                className="border-slate-700 text-slate-300 hover:bg-slate-800 hover:text-white"
+                className="border border-slate-700 bg-slate-800/50 text-slate-300 hover:bg-slate-800 hover:text-white"
               >
                 <Link href="/settings">
                   <Settings className="mr-2 h-4 w-4" />
