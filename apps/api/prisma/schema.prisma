@@ -1,0 +1,102 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model User {
+  id                String        @id @default(uuid())
+  email             String        @unique
+  name              String
+  photo             String?
+  accessToken       String?
+  refreshToken      String?
+  googleId          String?
+  hasPendingProcess Boolean       @default(false)
+  transactions      Transaction[]
+  emails            Email[]
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+}
+
+enum TransactionStatus {
+  PAID
+  OVERDUE
+  PENDING
+  DRAFT
+}
+
+enum TransactionType {
+  INCOME
+  EXPENSE
+  INVESTMENT
+}
+
+enum TransactionLogStatus {
+  ERROR
+  SUCCESS
+}
+
+model Transaction {
+  id          String            @id @default(uuid())
+  amount      Float
+  description String
+  dueAt       DateTime
+  type        TransactionType   @default(EXPENSE)
+  category    String?
+  status      TransactionStatus
+  // Crypto investment fields
+  symbol      String?
+  quantity    Float?
+  emailId     String?
+  email       Email?            @relation(fields: [emailId], references: [id])
+  userId      String
+  user        User              @relation(fields: [userId], references: [id])
+
+  // Self-referencing relation for parent-child transactions
+  parentId String? // Optional parent transaction
+  parent   Transaction?  @relation("SubTransactions", fields: [parentId], references: [id], onDelete: Cascade)
+  subItems Transaction[] @relation("SubTransactions")
+
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+  TransactionLog TransactionLog[]
+
+  @@index([emailId])
+  @@index([userId])
+  @@index([parentId])
+}
+
+model TransactionLog {
+  id            String               @id @default(uuid())
+  transactionId String               @unique
+  transaction   Transaction          @relation(fields: [transactionId], references: [id])
+  status        TransactionLogStatus
+  data          Json
+  createdAt     DateTime             @default(now())
+  updatedAt     DateTime             @updatedAt
+}
+
+model Email {
+  id               String        @id @default(uuid())
+  messageId        String        @unique
+  sender           String
+  snippet          String
+  body             String
+  pdfText          String?
+  pdfPassword      String?
+  pdfNeedsPassword Boolean       @default(false)
+  internalDate     DateTime
+  raw              Json
+  userId           String
+  user             User          @relation(fields: [userId], references: [id])
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+  Transaction      Transaction[]
+
+  @@index([userId])
+}
