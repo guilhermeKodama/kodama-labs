@@ -1,7 +1,7 @@
 'use client';
 
-import Link from 'next/link';
-import { ArrowLeft, Building2, Construction } from 'lucide-react';
+import { ArrowLeft, User } from 'lucide-react';
+import { useTranslations } from 'next-intl';
 import { Button } from '@/components/ui/button';
 import {
   Card,
@@ -10,8 +10,11 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
+import { Link } from '@/i18n/navigation';
 
-export default function BusinessesPage() {
+export default function PersonalPage() {
+  const t = useTranslations();
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 p-8">
       <div className="mx-auto max-w-4xl">
@@ -22,33 +25,32 @@ export default function BusinessesPage() {
         >
           <Link href="/">
             <ArrowLeft className="mr-2 h-4 w-4" />
-            Back to Home
+            {t('common.backToHome')}
           </Link>
         </Button>
 
         <Card className="border-slate-800 bg-slate-900/50 backdrop-blur-sm">
           <CardHeader className="text-center">
-            <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-blue-500/20 to-indigo-500/20">
-              <Building2 className="h-8 w-8 text-blue-400" />
+            <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-500/20 to-teal-500/20">
+              <User className="h-8 w-8 text-emerald-400" />
             </div>
-            <CardTitle className="text-2xl text-white">Businesses</CardTitle>
+            <CardTitle className="text-2xl text-white">{t('personal.title')}</CardTitle>
             <CardDescription className="text-slate-400">
-              Coming in Phase 1
+              {t('common.comingIn', { phase: t('common.phase1') })}
             </CardDescription>
           </CardHeader>
           <CardContent className="text-center">
             <p className="text-slate-300">
-              Manage your business entities here. Create, edit, and track
-              financial data for each of your businesses.
+              {t('personal.description')}
             </p>
             <div className="mt-6 rounded-lg border border-dashed border-slate-700 bg-slate-800/50 p-6">
-              <h4 className="mb-2 font-medium text-slate-300">Planned Features:</h4>
+              <h4 className="mb-2 font-medium text-slate-300">{t('common.plannedFeatures')}:</h4>
               <ul className="space-y-1 text-sm text-slate-400">
-                <li>• Create multiple businesses</li>
-                <li>• Track income and expenses per business</li>
-                <li>• Business-specific currency settings</li>
-                <li>• Transaction history</li>
-                <li>• Profit/loss calculations</li>
+                <li>• {t('personal.features.incomeTracking')}</li>
+                <li>• {t('personal.features.expenseCategorization')}</li>
+                <li>• {t('personal.features.investmentPortfolio')}</li>
+                <li>• {t('personal.features.profitDistributions')}</li>
+                <li>• {t('personal.features.netWorth')}</li>
               </ul>
             </div>
           </CardContent>

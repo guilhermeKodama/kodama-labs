@@ -1,7 +1,7 @@
 'use client';
 
-import Link from 'next/link';
-import { ArrowLeft, User, Construction } from 'lucide-react';
+import { ArrowLeft, ArrowLeftRight } from 'lucide-react';
+import { useTranslations } from 'next-intl';
 import { Button } from '@/components/ui/button';
 import {
   Card,
@@ -10,8 +10,11 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
+import { Link } from '@/i18n/navigation';
 
-export default function PersonalPage() {
+export default function TransfersPage() {
+  const t = useTranslations();
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 p-8">
       <div className="mx-auto max-w-4xl">
@@ -22,33 +25,32 @@ export default function PersonalPage() {
         >
           <Link href="/">
             <ArrowLeft className="mr-2 h-4 w-4" />
-            Back to Home
+            {t('common.backToHome')}
           </Link>
         </Button>
 
         <Card className="border-slate-800 bg-slate-900/50 backdrop-blur-sm">
           <CardHeader className="text-center">
-            <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-500/20 to-teal-500/20">
-              <User className="h-8 w-8 text-emerald-400" />
+            <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-purple-500/20 to-pink-500/20">
+              <ArrowLeftRight className="h-8 w-8 text-purple-400" />
             </div>
-            <CardTitle className="text-2xl text-white">Personal Account</CardTitle>
+            <CardTitle className="text-2xl text-white">{t('transfers.title')}</CardTitle>
             <CardDescription className="text-slate-400">
-              Coming in Phase 1
+              {t('common.comingIn', { phase: t('common.phase2') })}
             </CardDescription>
           </CardHeader>
           <CardContent className="text-center">
             <p className="text-slate-300">
-              Track your personal finances separately from your businesses.
-              Record personal income, expenses, and investments.
+              {t('transfers.description')}
             </p>
             <div className="mt-6 rounded-lg border border-dashed border-slate-700 bg-slate-800/50 p-6">
-              <h4 className="mb-2 font-medium text-slate-300">Planned Features:</h4>
+              <h4 className="mb-2 font-medium text-slate-300">{t('common.plannedFeatures')}:</h4>
               <ul className="space-y-1 text-sm text-slate-400">
-                <li>• Personal income tracking</li>
-                <li>• Expense categorization</li>
-                <li>• Investment portfolio</li>
-                <li>• Receive profit distributions</li>
-                <li>• Net worth calculation</li>
+                <li>• {t('transfers.features.profitDistribution')}</li>
+                <li>• {t('transfers.features.capitalInjection')}</li>
+                <li>• {t('transfers.features.transferHistory')}</li>
+                <li>• {t('transfers.features.multiCurrency')}</li>
+                <li>• {t('transfers.features.impactTracking')}</li>
               </ul>
             </div>
           </CardContent>

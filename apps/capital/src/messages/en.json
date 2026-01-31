@@ -1,0 +1,115 @@
+{
+  "common": {
+    "appName": "Capital",
+    "tagline": "Financial Management for International Service Providers",
+    "backToHome": "Back to Home",
+    "comingIn": "Coming in {phase}",
+    "phase1": "Phase 1",
+    "phase2": "Phase 2",
+    "plannedFeatures": "Planned Features"
+  },
+  "home": {
+    "hero": {
+      "description": "Track your business and personal finances in one place. Manage multiple currencies, record profit distributions, and gain insights into your financial health.",
+      "getStarted": "Get Started",
+      "settings": "Settings"
+    },
+    "features": {
+      "title": "Everything you need to manage your finances",
+      "subtitle": "Built for freelancers and contractors working internationally",
+      "multipleBusinesses": {
+        "title": "Multiple Businesses",
+        "description": "Manage multiple business entities with separate tracking"
+      },
+      "personalFinance": {
+        "title": "Personal Finance",
+        "description": "Track your personal income, expenses, and investments"
+      },
+      "profitTransfers": {
+        "title": "Profit Transfers",
+        "description": "Record transfers between business and personal accounts"
+      },
+      "multiCurrency": {
+        "title": "Multi-Currency",
+        "description": "Support for multiple currencies with manual exchange rates"
+      },
+      "investmentTracking": {
+        "title": "Investment Tracking",
+        "description": "Track investments across all your entities"
+      },
+      "reports": {
+        "title": "Reports & Insights",
+        "description": "Visualize your financial health with charts and reports"
+      }
+    },
+    "quickNav": {
+      "title": "Quick Navigation",
+      "subtitle": "Jump to any section of the app",
+      "dashboard": "Dashboard",
+      "businesses": "Businesses",
+      "personal": "Personal",
+      "transfers": "Transfers"
+    },
+    "footer": "Capital - Phase 0: Documentation + Project Setup Complete"
+  },
+  "dashboard": {
+    "title": "Dashboard",
+    "description": "The dashboard will display summary cards showing total capital, income, expenses, and recent transactions across all your entities.",
+    "features": {
+      "totalCapital": "Total capital overview",
+      "businessSummaries": "Business summaries",
+      "recentTransactions": "Recent transactions",
+      "quickActions": "Quick actions",
+      "balanceCharts": "Balance charts"
+    }
+  },
+  "businesses": {
+    "title": "Businesses",
+    "description": "Manage your business entities here. Create, edit, and track financial data for each of your businesses.",
+    "features": {
+      "createMultiple": "Create multiple businesses",
+      "trackIncome": "Track income and expenses per business",
+      "currencySettings": "Business-specific currency settings",
+      "transactionHistory": "Transaction history",
+      "profitLoss": "Profit/loss calculations"
+    }
+  },
+  "personal": {
+    "title": "Personal Account",
+    "description": "Track your personal finances separately from your businesses. Record personal income, expenses, and investments.",
+    "features": {
+      "incomeTracking": "Personal income tracking",
+      "expenseCategorization": "Expense categorization",
+      "investmentPortfolio": "Investment portfolio",
+      "profitDistributions": "Receive profit distributions",
+      "netWorth": "Net worth calculation"
+    }
+  },
+  "transfers": {
+    "title": "Transfers",
+    "description": "Record money movements between your business entities and personal account. Track profit distributions and capital injections.",
+    "features": {
+      "profitDistribution": "Profit distribution (Business → Personal)",
+      "capitalInjection": "Capital injection (Personal → Business)",
+      "transferHistory": "Transfer history",
+      "multiCurrency": "Multi-currency transfers",
+      "impactTracking": "Impact tracking on balances"
+    }
+  },
+  "settings": {
+    "title": "Settings",
+    "description": "Configure your app preferences, manage currencies, and customize categories for your transactions.",
+    "features": {
+      "baseCurrency": "Base currency selection",
+      "exchangeRates": "Manual exchange rates",
+      "customCategories": "Custom categories",
+      "themePreferences": "Theme preferences",
+      "dataExport": "Data export/import"
+    }
+  },
+  "language": {
+    "title": "Language",
+    "en": "English",
+    "pt-BR": "Portuguese (BR)"
+  }
+}
