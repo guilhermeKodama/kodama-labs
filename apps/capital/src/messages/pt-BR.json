@@ -1,0 +1,115 @@
+{
+  "common": {
+    "appName": "Capital",
+    "tagline": "Gestão Financeira para Prestadores de Serviços Internacionais",
+    "backToHome": "Voltar ao Início",
+    "comingIn": "Disponível na {phase}",
+    "phase1": "Fase 1",
+    "phase2": "Fase 2",
+    "plannedFeatures": "Funcionalidades Planejadas"
+  },
+  "home": {
+    "hero": {
+      "description": "Acompanhe suas finanças empresariais e pessoais em um só lugar. Gerencie múltiplas moedas, registre distribuições de lucro e obtenha insights sobre sua saúde financeira.",
+      "getStarted": "Começar",
+      "settings": "Configurações"
+    },
+    "features": {
+      "title": "Tudo que você precisa para gerenciar suas finanças",
+      "subtitle": "Desenvolvido para freelancers e prestadores de serviços internacionais",
+      "multipleBusinesses": {
+        "title": "Múltiplas Empresas",
+        "description": "Gerencie várias entidades empresariais com rastreamento separado"
+      },
+      "personalFinance": {
+        "title": "Finanças Pessoais",
+        "description": "Acompanhe sua renda, despesas e investimentos pessoais"
+      },
+      "profitTransfers": {
+        "title": "Transferências de Lucro",
+        "description": "Registre transferências entre contas empresariais e pessoais"
+      },
+      "multiCurrency": {
+        "title": "Multi-Moeda",
+        "description": "Suporte para múltiplas moedas com taxas de câmbio manuais"
+      },
+      "investmentTracking": {
+        "title": "Rastreamento de Investimentos",
+        "description": "Acompanhe investimentos em todas as suas entidades"
+      },
+      "reports": {
+        "title": "Relatórios e Insights",
+        "description": "Visualize sua saúde financeira com gráficos e relatórios"
+      }
+    },
+    "quickNav": {
+      "title": "Navegação Rápida",
+      "subtitle": "Acesse qualquer seção do aplicativo",
+      "dashboard": "Painel",
+      "businesses": "Empresas",
+      "personal": "Pessoal",
+      "transfers": "Transferências"
+    },
+    "footer": "Capital - Fase 0: Documentação + Configuração do Projeto Completa"
+  },
+  "dashboard": {
+    "title": "Painel",
+    "description": "O painel exibirá cartões de resumo mostrando capital total, receitas, despesas e transações recentes de todas as suas entidades.",
+    "features": {
+      "totalCapital": "Visão geral do capital total",
+      "businessSummaries": "Resumos das empresas",
+      "recentTransactions": "Transações recentes",
+      "quickActions": "Ações rápidas",
+      "balanceCharts": "Gráficos de saldo"
+    }
+  },
+  "businesses": {
+    "title": "Empresas",
+    "description": "Gerencie suas entidades empresariais aqui. Crie, edite e acompanhe dados financeiros de cada uma das suas empresas.",
+    "features": {
+      "createMultiple": "Criar múltiplas empresas",
+      "trackIncome": "Rastrear receitas e despesas por empresa",
+      "currencySettings": "Configurações de moeda por empresa",
+      "transactionHistory": "Histórico de transações",
+      "profitLoss": "Cálculos de lucro/prejuízo"
+    }
+  },
+  "personal": {
+    "title": "Conta Pessoal",
+    "description": "Acompanhe suas finanças pessoais separadamente das suas empresas. Registre renda pessoal, despesas e investimentos.",
+    "features": {
+      "incomeTracking": "Rastreamento de renda pessoal",
+      "expenseCategorization": "Categorização de despesas",
+      "investmentPortfolio": "Portfólio de investimentos",
+      "profitDistributions": "Receber distribuições de lucro",
+      "netWorth": "Cálculo de patrimônio líquido"
+    }
+  },
+  "transfers": {
+    "title": "Transferências",
+    "description": "Registre movimentações de dinheiro entre suas entidades empresariais e conta pessoal. Acompanhe distribuições de lucro e aportes de capital.",
+    "features": {
+      "profitDistribution": "Distribuição de lucro (Empresa → Pessoal)",
+      "capitalInjection": "Aporte de capital (Pessoal → Empresa)",
+      "transferHistory": "Histórico de transferências",
+      "multiCurrency": "Transferências multi-moeda",
+      "impactTracking": "Rastreamento de impacto nos saldos"
+    }
+  },
+  "settings": {
+    "title": "Configurações",
+    "description": "Configure suas preferências do aplicativo, gerencie moedas e personalize categorias para suas transações.",
+    "features": {
+      "baseCurrency": "Seleção de moeda base",
+      "exchangeRates": "Taxas de câmbio manuais",
+      "customCategories": "Categorias personalizadas",
+      "themePreferences": "Preferências de tema",
+      "dataExport": "Exportar/importar dados"
+    }
+  },
+  "language": {
+    "title": "Idioma",
+    "en": "Inglês",
+    "pt-BR": "Português (BR)"
+  }
+}

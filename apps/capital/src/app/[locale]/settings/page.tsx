@@ -1,7 +1,7 @@
 'use client';
 
-import Link from 'next/link';
-import { ArrowLeft, Settings, Construction } from 'lucide-react';
+import { ArrowLeft, Settings } from 'lucide-react';
+import { useTranslations } from 'next-intl';
 import { Button } from '@/components/ui/button';
 import {
   Card,
@@ -10,8 +10,11 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
+import { Link } from '@/i18n/navigation';
 
 export default function SettingsPage() {
+  const t = useTranslations();
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 p-8">
       <div className="mx-auto max-w-4xl">
@@ -22,7 +25,7 @@ export default function SettingsPage() {
         >
           <Link href="/">
             <ArrowLeft className="mr-2 h-4 w-4" />
-            Back to Home
+            {t('common.backToHome')}
           </Link>
         </Button>
 
@@ -31,24 +34,23 @@ export default function SettingsPage() {
             <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-slate-500/20 to-zinc-500/20">
               <Settings className="h-8 w-8 text-slate-400" />
             </div>
-            <CardTitle className="text-2xl text-white">Settings</CardTitle>
+            <CardTitle className="text-2xl text-white">{t('settings.title')}</CardTitle>
             <CardDescription className="text-slate-400">
-              Coming in Phase 1
+              {t('common.comingIn', { phase: t('common.phase1') })}
             </CardDescription>
           </CardHeader>
           <CardContent className="text-center">
             <p className="text-slate-300">
-              Configure your app preferences, manage currencies, and customize
-              categories for your transactions.
+              {t('settings.description')}
             </p>
             <div className="mt-6 rounded-lg border border-dashed border-slate-700 bg-slate-800/50 p-6">
-              <h4 className="mb-2 font-medium text-slate-300">Planned Features:</h4>
+              <h4 className="mb-2 font-medium text-slate-300">{t('common.plannedFeatures')}:</h4>
               <ul className="space-y-1 text-sm text-slate-400">
-                <li>• Base currency selection</li>
-                <li>• Manual exchange rates</li>
-                <li>• Custom categories</li>
-                <li>• Theme preferences</li>
-                <li>• Data export/import</li>
+                <li>• {t('settings.features.baseCurrency')}</li>
+                <li>• {t('settings.features.exchangeRates')}</li>
+                <li>• {t('settings.features.customCategories')}</li>
+                <li>• {t('settings.features.themePreferences')}</li>
+                <li>• {t('settings.features.dataExport')}</li>
               </ul>
             </div>
           </CardContent>

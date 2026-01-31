@@ -264,7 +264,7 @@ interface Currency {
 
 | Layer | Technology | Purpose |
 |-------|------------|---------|
-| **Framework** | Next.js 15 (App Router) | React framework with server components |
+| **Framework** | Next.js 16 (App Router) | React framework with server components |
 | **UI Components** | shadcn/ui | Accessible, customizable components |
 | **Styling** | Tailwind CSS | Utility-first CSS framework |
 | **State Management** | Zustand | Lightweight state management |
@@ -273,6 +273,7 @@ interface Currency {
 | **Charts** | Recharts | Data visualization |
 | **Icons** | Lucide React | Icon library |
 | **Date Handling** | date-fns | Date utilities |
+| **Internationalization** | next-intl | Multi-language support (PT-BR, EN) |
 
 ---
 
@@ -283,19 +284,26 @@ apps/capital/
 ├── src/
 │   ├── app/                    # Next.js App Router pages
 │   │   ├── layout.tsx          # Root layout
-│   │   ├── page.tsx            # Home/Dashboard
-│   │   ├── businesses/         # Business management
-│   │   │   ├── page.tsx        # List all businesses
-│   │   │   └── [id]/           # Single business
-│   │   │       ├── page.tsx    # Business detail
-│   │   │       └── transactions/
-│   │   ├── personal/           # Personal account
-│   │   │   ├── page.tsx        # Personal overview
-│   │   │   └── transactions/
-│   │   ├── transfers/          # Transfer management
-│   │   │   └── page.tsx
-│   │   └── settings/           # App settings
-│   │       └── page.tsx
+│   │   └── [locale]/           # Locale-based routing (pt-BR, en)
+│   │       ├── layout.tsx      # Locale layout with i18n provider
+│   │       ├── page.tsx        # Home page
+│   │       ├── dashboard/      # Dashboard
+│   │       ├── businesses/     # Business management
+│   │       │   └── [id]/       # Single business
+│   │       ├── personal/       # Personal account
+│   │       ├── transfers/      # Transfer management
+│   │       └── settings/       # App settings
+│   │
+│   ├── i18n/                   # Internationalization config
+│   │   ├── routing.ts          # Locale routing setup
+│   │   ├── request.ts          # Server-side i18n config
+│   │   └── navigation.ts       # Localized navigation helpers
+│   │
+│   ├── messages/               # Translation files
+│   │   ├── en.json             # English translations
+│   │   └── pt-BR.json          # Portuguese (BR) translations
+│   │
+│   ├── middleware.ts           # Locale detection middleware
 │   │
 │   ├── components/
 │   │   ├── ui/                 # shadcn/ui components
@@ -386,6 +394,11 @@ pnpm lint
 - [x] Create comprehensive documentation
 - [x] Define TypeScript types
 - [x] Set up project structure
+- [x] Internationalization (i18n) with next-intl
+  - [x] Portuguese (BR) as default language
+  - [x] English support
+  - [x] Language switcher component
+  - [x] All pages translated
 
 ### Phase 1: Foundation (MVP)
 
