@@ -1,1 +1,0 @@
-export { GE_OS as default } from '../index.js'

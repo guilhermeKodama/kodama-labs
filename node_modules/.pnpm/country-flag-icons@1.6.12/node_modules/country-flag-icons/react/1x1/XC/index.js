@@ -1,1 +1,0 @@
-export { XC as default } from '../index.js'

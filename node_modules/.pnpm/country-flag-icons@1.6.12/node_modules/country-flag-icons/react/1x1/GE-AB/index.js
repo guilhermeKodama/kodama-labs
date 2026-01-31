@@ -1,1 +1,0 @@
-export { GE_AB as default } from '../index.js'
