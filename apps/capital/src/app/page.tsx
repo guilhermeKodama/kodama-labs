@@ -155,46 +155,34 @@ export default function HomePage() {
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-                <Button
-                  asChild
-                  variant="outline"
-                  className="h-auto flex-col gap-2 border-slate-700 py-4 text-slate-300 hover:bg-slate-800 hover:text-white"
+                <Link
+                  href="/dashboard"
+                  className="flex h-auto flex-col items-center gap-2 rounded-lg border border-slate-700 bg-slate-800/50 py-4 text-slate-300 transition-colors hover:border-slate-600 hover:bg-slate-800 hover:text-white"
                 >
-                  <Link href="/dashboard">
-                    <BarChart3 className="h-5 w-5" />
-                    Dashboard
-                  </Link>
-                </Button>
-                <Button
-                  asChild
-                  variant="outline"
-                  className="h-auto flex-col gap-2 border-slate-700 py-4 text-slate-300 hover:bg-slate-800 hover:text-white"
+                  <BarChart3 className="h-5 w-5" />
+                  Dashboard
+                </Link>
+                <Link
+                  href="/businesses"
+                  className="flex h-auto flex-col items-center gap-2 rounded-lg border border-slate-700 bg-slate-800/50 py-4 text-slate-300 transition-colors hover:border-slate-600 hover:bg-slate-800 hover:text-white"
                 >
-                  <Link href="/businesses">
-                    <Building2 className="h-5 w-5" />
-                    Businesses
-                  </Link>
-                </Button>
-                <Button
-                  asChild
-                  variant="outline"
-                  className="h-auto flex-col gap-2 border-slate-700 py-4 text-slate-300 hover:bg-slate-800 hover:text-white"
+                  <Building2 className="h-5 w-5" />
+                  Businesses
+                </Link>
+                <Link
+                  href="/personal"
+                  className="flex h-auto flex-col items-center gap-2 rounded-lg border border-slate-700 bg-slate-800/50 py-4 text-slate-300 transition-colors hover:border-slate-600 hover:bg-slate-800 hover:text-white"
                 >
-                  <Link href="/personal">
-                    <User className="h-5 w-5" />
-                    Personal
-                  </Link>
-                </Button>
-                <Button
-                  asChild
-                  variant="outline"
-                  className="h-auto flex-col gap-2 border-slate-700 py-4 text-slate-300 hover:bg-slate-800 hover:text-white"
+                  <User className="h-5 w-5" />
+                  Personal
+                </Link>
+                <Link
+                  href="/transfers"
+                  className="flex h-auto flex-col items-center gap-2 rounded-lg border border-slate-700 bg-slate-800/50 py-4 text-slate-300 transition-colors hover:border-slate-600 hover:bg-slate-800 hover:text-white"
                 >
-                  <Link href="/transfers">
-                    <ArrowLeftRight className="h-5 w-5" />
-                    Transfers
-                  </Link>
-                </Button>
+                  <ArrowLeftRight className="h-5 w-5" />
+                  Transfers
+                </Link>
               </div>
             </CardContent>
           </Card>
