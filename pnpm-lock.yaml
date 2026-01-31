@@ -519,6 +519,8 @@ importers:
         specifier: ^15.7.15
         version: 15.7.15
 
+  infrastructure/postgres: {}
+
   packages/eslint-config:
     devDependencies:
       '@typescript-eslint/eslint-plugin':
