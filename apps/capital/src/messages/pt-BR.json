@@ -3,10 +3,42 @@
     "appName": "Capital",
     "tagline": "Gestão Financeira para Prestadores de Serviços Internacionais",
     "backToHome": "Voltar ao Início",
+    "back": "Voltar",
     "comingIn": "Disponível na {phase}",
     "phase1": "Fase 1",
     "phase2": "Fase 2",
-    "plannedFeatures": "Funcionalidades Planejadas"
+    "plannedFeatures": "Funcionalidades Planejadas",
+    "edit": "Editar",
+    "delete": "Excluir",
+    "cancel": "Cancelar",
+    "save": "Salvar",
+    "loading": "Carregando..."
+  },
+  "nav": {
+    "dashboard": "Painel",
+    "businesses": "Empresas",
+    "personal": "Pessoal",
+    "transfers": "Transferências",
+    "settings": "Configurações",
+    "baseCurrency": "Moeda Base"
+  },
+  "theme": {
+    "toggle": "Alternar tema",
+    "light": "Claro",
+    "dark": "Escuro",
+    "system": "Sistema"
+  },
+  "onboarding": {
+    "welcome": "Bem-vindo ao Capital",
+    "welcomeDescription": "Vamos configurar sua conta. Primeiro, nos diga seu nome.",
+    "nameLabel": "Seu nome",
+    "namePlaceholder": "Digite seu nome",
+    "currencyTitle": "Escolha sua moeda base",
+    "currencyDescription": "Esta será usada como referência para todas as suas finanças.",
+    "currencyLabel": "Moeda base",
+    "currencyHint": "Você pode alterar isso depois nas configurações",
+    "next": "Próximo",
+    "finish": "Começar"
   },
   "home": {
     "hero": {
@@ -50,44 +82,135 @@
       "personal": "Pessoal",
       "transfers": "Transferências"
     },
-    "footer": "Capital - Fase 0: Documentação + Configuração do Projeto Completa"
+    "footer": "Capital - Fase 1: Fundação Completa"
   },
   "dashboard": {
     "title": "Painel",
-    "description": "O painel exibirá cartões de resumo mostrando capital total, receitas, despesas e transações recentes de todas as suas entidades.",
-    "features": {
-      "totalCapital": "Visão geral do capital total",
-      "businessSummaries": "Resumos das empresas",
-      "recentTransactions": "Transações recentes",
-      "quickActions": "Ações rápidas",
-      "balanceCharts": "Gráficos de saldo"
-    }
+    "subtitle": "Visão geral da sua saúde financeira",
+    "totalCapital": "Capital Total",
+    "totalIncome": "Receita Total",
+    "totalExpenses": "Despesas Totais",
+    "totalInvestments": "Investimentos Totais",
+    "recentTransactions": "Transações Recentes",
+    "noTransactions": "Nenhuma transação ainda. Adicione sua primeira transação!",
+    "quickActions": "Ações Rápidas",
+    "addBusiness": "Adicionar Empresa",
+    "addTransaction": "Adicionar Transação",
+    "yourBusinesses": "Suas Empresas",
+    "viewAll": "Ver Todas",
+    "noBusinesses": "Você ainda não adicionou nenhuma empresa.",
+    "createFirst": "Crie Sua Primeira Empresa"
   },
   "businesses": {
     "title": "Empresas",
-    "description": "Gerencie suas entidades empresariais aqui. Crie, edite e acompanhe dados financeiros de cada uma das suas empresas.",
-    "features": {
-      "createMultiple": "Criar múltiplas empresas",
-      "trackIncome": "Rastrear receitas e despesas por empresa",
-      "currencySettings": "Configurações de moeda por empresa",
-      "transactionHistory": "Histórico de transações",
-      "profitLoss": "Cálculos de lucro/prejuízo"
+    "description": "Gerencie suas entidades empresariais",
+    "addBusiness": "Adicionar Empresa",
+    "empty": {
+      "title": "Nenhuma empresa ainda",
+      "description": "Crie sua primeira empresa para começar a acompanhar suas finanças."
+    },
+    "form": {
+      "name": "Nome da Empresa",
+      "namePlaceholder": "Minha Empresa",
+      "description": "Descrição",
+      "descriptionPlaceholder": "Breve descrição da sua empresa",
+      "currency": "Moeda Padrão",
+      "color": "Cor",
+      "cancel": "Cancelar",
+      "create": "Criar Empresa",
+      "update": "Atualizar Empresa"
+    },
+    "dialog": {
+      "createTitle": "Criar Empresa",
+      "createDescription": "Adicione uma nova entidade empresarial para acompanhar suas finanças.",
+      "editTitle": "Editar Empresa",
+      "editDescription": "Atualize as informações da sua empresa."
+    },
+    "delete": {
+      "title": "Excluir Empresa?",
+      "description": "Isso excluirá permanentemente {name} e todas as suas transações. Esta ação não pode ser desfeita."
+    },
+    "toast": {
+      "created": "Empresa criada com sucesso!",
+      "updated": "Empresa atualizada com sucesso!",
+      "deleted": "Empresa excluída com sucesso!"
+    },
+    "notFound": {
+      "title": "Empresa não encontrada",
+      "description": "A empresa que você está procurando não existe.",
+      "back": "Voltar para Empresas"
     }
   },
   "personal": {
     "title": "Conta Pessoal",
-    "description": "Acompanhe suas finanças pessoais separadamente das suas empresas. Registre renda pessoal, despesas e investimentos.",
-    "features": {
-      "incomeTracking": "Rastreamento de renda pessoal",
-      "expenseCategorization": "Categorização de despesas",
-      "investmentPortfolio": "Portfólio de investimentos",
-      "profitDistributions": "Receber distribuições de lucro",
-      "netWorth": "Cálculo de patrimônio líquido"
+    "subtitle": "Acompanhe suas finanças pessoais",
+    "netWorth": "Patrimônio Líquido",
+    "setup": {
+      "title": "Conta Pessoal Não Configurada",
+      "description": "Complete o onboarding para configurar sua conta pessoal."
+    }
+  },
+  "transactions": {
+    "title": "Transações",
+    "addTransaction": "Adicionar Transação",
+    "types": {
+      "income": "Receita",
+      "expense": "Despesa",
+      "investment": "Investimento"
+    },
+    "summary": {
+      "balance": "Saldo",
+      "income": "Receita",
+      "expenses": "Despesas",
+      "investments": "Investimentos"
+    },
+    "form": {
+      "type": "Tipo",
+      "description": "Descrição",
+      "descriptionPlaceholder": "Para que é esta transação?",
+      "amount": "Valor",
+      "currency": "Moeda",
+      "category": "Categoria",
+      "categoryPlaceholder": "Selecione uma categoria",
+      "date": "Data",
+      "cancel": "Cancelar",
+      "create": "Adicionar Transação",
+      "update": "Atualizar Transação"
+    },
+    "dialog": {
+      "createTitle": "Adicionar Transação",
+      "createDescription": "Registre uma nova receita, despesa ou investimento.",
+      "editTitle": "Editar Transação",
+      "editDescription": "Atualize os detalhes da transação."
+    },
+    "table": {
+      "date": "Data",
+      "description": "Descrição",
+      "type": "Tipo",
+      "category": "Categoria",
+      "amount": "Valor",
+      "edit": "Editar",
+      "delete": "Excluir",
+      "empty": "Nenhuma transação ainda",
+      "filterAll": "Todos os Tipos"
+    },
+    "delete": {
+      "title": "Excluir Transação?",
+      "description": "Esta ação não pode ser desfeita."
+    },
+    "toast": {
+      "created": "Transação adicionada com sucesso!",
+      "updated": "Transação atualizada com sucesso!",
+      "deleted": "Transação excluída com sucesso!"
     }
   },
   "transfers": {
     "title": "Transferências",
-    "description": "Registre movimentações de dinheiro entre suas entidades empresariais e conta pessoal. Acompanhe distribuições de lucro e aportes de capital.",
+    "subtitle": "Mova dinheiro entre suas contas",
+    "comingSoon": {
+      "title": "Em Breve",
+      "description": "Gerenciamento de transferências estará disponível na Fase 2."
+    },
     "features": {
       "profitDistribution": "Distribuição de lucro (Empresa → Pessoal)",
       "capitalInjection": "Aporte de capital (Pessoal → Empresa)",
@@ -98,13 +221,43 @@
   },
   "settings": {
     "title": "Configurações",
-    "description": "Configure suas preferências do aplicativo, gerencie moedas e personalize categorias para suas transações.",
-    "features": {
-      "baseCurrency": "Seleção de moeda base",
-      "exchangeRates": "Taxas de câmbio manuais",
-      "customCategories": "Categorias personalizadas",
-      "themePreferences": "Preferências de tema",
-      "dataExport": "Exportar/importar dados"
+    "subtitle": "Gerencie suas preferências",
+    "appearance": {
+      "title": "Aparência",
+      "description": "Personalize a aparência do app",
+      "theme": "Tema",
+      "language": "Idioma"
+    },
+    "baseCurrency": {
+      "title": "Moeda Base",
+      "description": "Sua moeda de referência para todos os cálculos",
+      "current": "Moeda base atual"
+    },
+    "currencies": {
+      "title": "Moedas e Taxas de Câmbio",
+      "description": "Gerencie moedas e suas taxas de câmbio",
+      "add": "Adicionar Moeda",
+      "addTitle": "Adicionar Moeda",
+      "addDescription": "Adicione uma nova moeda com sua taxa de câmbio",
+      "selectCurrency": "Moeda",
+      "selectPlaceholder": "Selecione uma moeda",
+      "exchangeRate": "Taxa de Câmbio",
+      "base": "Moeda base",
+      "empty": "Nenhuma moeda configurada",
+      "added": "Moeda adicionada com sucesso!",
+      "invalidCurrency": "Moeda selecionada inválida",
+      "alreadyExists": "Esta moeda já foi adicionada"
+    },
+    "data": {
+      "title": "Gerenciamento de Dados",
+      "description": "Exporte ou redefina seus dados",
+      "export": "Exportar Dados",
+      "exportSuccess": "Dados exportados com sucesso!",
+      "reset": "Redefinir Todos os Dados",
+      "resetTitle": "Redefinir Todos os Dados?",
+      "resetDescription": "Isso excluirá permanentemente todas as suas empresas, transações e configurações. Esta ação não pode ser desfeita.",
+      "confirmReset": "Sim, Redefinir Tudo",
+      "resetSuccess": "Todos os dados foram redefinidos"
     }
   },
   "language": {

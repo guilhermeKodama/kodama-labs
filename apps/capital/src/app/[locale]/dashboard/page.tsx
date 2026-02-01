@@ -1,61 +1,220 @@
 'use client';
 
-import { ArrowLeft, Construction } from 'lucide-react';
+import { useMemo } from 'react';
 import { useTranslations } from 'next-intl';
-import { Button } from '@/components/ui/button';
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card';
+  Wallet,
+  TrendingUp,
+  TrendingDown,
+  PiggyBank,
+  Plus,
+  Building2,
+} from 'lucide-react';
+import { AppShell } from '@/components/layout';
+import { Header } from '@/components/layout/header';
+import { SummaryCard, BusinessCard } from '@/components/cards';
+import { RecentTransactions } from '@/components/tables';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import {
+  useBusinessStore,
+  useTransactionStore,
+  useTransferStore,
+  useSettingsStore,
+} from '@/lib/store';
+import { calculateEntitySummary } from '@/lib/utils/calculations';
 import { Link } from '@/i18n/navigation';
 
 export default function DashboardPage() {
   const t = useTranslations();
+  const { businesses } = useBusinessStore();
+  const { transactions } = useTransactionStore();
+  const { transfers } = useTransferStore();
+  const { settings, personalAccount } = useSettingsStore();
+
+  // Calculate summaries
+  const businessSummaries = useMemo(() => {
+    return businesses.map((business) =>
+      calculateEntitySummary(
+        business.id,
+        'business',
+        business.name,
+        transactions,
+        transfers,
+        settings.baseCurrency
+      )
+    );
+  }, [businesses, transactions, transfers, settings.baseCurrency]);
+
+  const personalSummary = useMemo(() => {
+    if (!personalAccount) return null;
+    return calculateEntitySummary(
+      personalAccount.id,
+      'personal',
+      t('nav.personal'),
+      transactions,
+      transfers,
+      settings.baseCurrency
+    );
+  }, [personalAccount, transactions, transfers, settings.baseCurrency, t]);
+
+  // Calculate totals
+  const totals = useMemo(() => {
+    const allSummaries = [...businessSummaries];
+    if (personalSummary) allSummaries.push(personalSummary);
+
+    return {
+      totalCapital: allSummaries.reduce((sum, s) => sum + s.netWorth, 0),
+      totalIncome: allSummaries.reduce((sum, s) => sum + s.totalIncome, 0),
+      totalExpenses: allSummaries.reduce((sum, s) => sum + s.totalExpenses, 0),
+      totalInvestments: allSummaries.reduce(
+        (sum, s) => sum + s.totalInvestments,
+        0
+      ),
+    };
+  }, [businessSummaries, personalSummary]);
+
+  // Get recent transactions with entity names
+  const recentTransactionsWithNames = useMemo(() => {
+    return transactions.map((t) => {
+      let entityName = '';
+      if (t.entityType === 'business') {
+        const business = businesses.find((b) => b.id === t.entityId);
+        entityName = business?.name || 'Unknown';
+      } else {
+        entityName = 'Personal';
+      }
+      return { ...t, entityName };
+    });
+  }, [transactions, businesses]);
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 p-8">
-      <div className="mx-auto max-w-4xl">
-        <Button
-          asChild
-          variant="ghost"
-          className="mb-8 text-slate-400 hover:text-white"
-        >
-          <Link href="/">
-            <ArrowLeft className="mr-2 h-4 w-4" />
-            {t('common.backToHome')}
-          </Link>
-        </Button>
+    <AppShell>
+      <Header
+        title={t('dashboard.title')}
+        description={t('dashboard.subtitle')}
+      />
 
-        <Card className="border-slate-800 bg-slate-900/50 backdrop-blur-sm">
-          <CardHeader className="text-center">
-            <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-amber-500/20 to-orange-500/20">
-              <Construction className="h-8 w-8 text-amber-400" />
-            </div>
-            <CardTitle className="text-2xl text-white">{t('dashboard.title')}</CardTitle>
-            <CardDescription className="text-slate-400">
-              {t('common.comingIn', { phase: t('common.phase1') })}
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="text-center">
-            <p className="text-slate-300">
-              {t('dashboard.description')}
-            </p>
-            <div className="mt-6 rounded-lg border border-dashed border-slate-700 bg-slate-800/50 p-6">
-              <h4 className="mb-2 font-medium text-slate-300">{t('common.plannedFeatures')}:</h4>
-              <ul className="space-y-1 text-sm text-slate-400">
-                <li>• {t('dashboard.features.totalCapital')}</li>
-                <li>• {t('dashboard.features.businessSummaries')}</li>
-                <li>• {t('dashboard.features.recentTransactions')}</li>
-                <li>• {t('dashboard.features.quickActions')}</li>
-                <li>• {t('dashboard.features.balanceCharts')}</li>
-              </ul>
-            </div>
-          </CardContent>
-        </Card>
+      {/* Summary Cards */}
+      <div className="mb-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <SummaryCard
+          title={t('dashboard.totalCapital')}
+          value={totals.totalCapital}
+          currency={settings.baseCurrency}
+          icon={Wallet}
+          variant="default"
+        />
+        <SummaryCard
+          title={t('dashboard.totalIncome')}
+          value={totals.totalIncome}
+          currency={settings.baseCurrency}
+          icon={TrendingUp}
+          variant="income"
+        />
+        <SummaryCard
+          title={t('dashboard.totalExpenses')}
+          value={totals.totalExpenses}
+          currency={settings.baseCurrency}
+          icon={TrendingDown}
+          variant="expense"
+        />
+        <SummaryCard
+          title={t('dashboard.totalInvestments')}
+          value={totals.totalInvestments}
+          currency={settings.baseCurrency}
+          icon={PiggyBank}
+          variant="investment"
+        />
       </div>
-    </div>
+
+      <div className="grid gap-8 lg:grid-cols-3">
+        {/* Main Content */}
+        <div className="lg:col-span-2 space-y-8">
+          {/* Recent Transactions */}
+          <RecentTransactions
+            transactions={recentTransactionsWithNames}
+            limit={5}
+          />
+        </div>
+
+        {/* Sidebar */}
+        <div className="space-y-6">
+          {/* Quick Actions */}
+          <Card className="border-slate-800 bg-slate-900/50 backdrop-blur-sm">
+            <CardHeader>
+              <CardTitle className="text-lg text-white">
+                {t('dashboard.quickActions')}
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="grid gap-2">
+              <Button
+                asChild
+                variant="outline"
+                className="justify-start border-slate-700 text-slate-300 hover:bg-slate-800 hover:text-white"
+              >
+                <Link href="/businesses">
+                  <Plus className="mr-2 h-4 w-4" />
+                  {t('dashboard.addBusiness')}
+                </Link>
+              </Button>
+              <Button
+                asChild
+                variant="outline"
+                className="justify-start border-slate-700 text-slate-300 hover:bg-slate-800 hover:text-white"
+              >
+                <Link href="/personal">
+                  <Plus className="mr-2 h-4 w-4" />
+                  {t('dashboard.addTransaction')}
+                </Link>
+              </Button>
+            </CardContent>
+          </Card>
+
+          {/* Businesses Overview */}
+          {businesses.length > 0 ? (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <h3 className="font-semibold text-white">
+                  {t('dashboard.yourBusinesses')}
+                </h3>
+                <Button
+                  asChild
+                  variant="ghost"
+                  size="sm"
+                  className="text-slate-400 hover:text-white"
+                >
+                  <Link href="/businesses">{t('dashboard.viewAll')}</Link>
+                </Button>
+              </div>
+              <div className="space-y-3">
+                {businesses.slice(0, 3).map((business, index) => (
+                  <BusinessCard
+                    key={business.id}
+                    business={business}
+                    summary={businessSummaries[index]}
+                  />
+                ))}
+              </div>
+            </div>
+          ) : (
+            <Card className="border-slate-800 bg-slate-900/50 backdrop-blur-sm">
+              <CardContent className="py-8 text-center">
+                <Building2 className="mx-auto mb-4 h-12 w-12 text-slate-600" />
+                <p className="mb-4 text-slate-400">{t('dashboard.noBusinesses')}</p>
+                <Button
+                  asChild
+                  className="bg-gradient-to-r from-emerald-500 to-cyan-500 text-white hover:from-emerald-600 hover:to-cyan-600"
+                >
+                  <Link href="/businesses">
+                    <Plus className="mr-2 h-4 w-4" />
+                    {t('dashboard.createFirst')}
+                  </Link>
+                </Button>
+              </CardContent>
+            </Card>
+          )}
+        </div>
+      </div>
+    </AppShell>
   );
 }

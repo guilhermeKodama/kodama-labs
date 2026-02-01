@@ -11,8 +11,13 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { routing, type Locale } from '@/i18n/routing';
+import { cn } from '@/lib/utils';
 
-export function LanguageSwitcher() {
+interface LanguageSwitcherProps {
+  compact?: boolean;
+}
+
+export function LanguageSwitcher({ compact = false }: LanguageSwitcherProps) {
   const t = useTranslations('language');
   const locale = useLocale();
   const router = useRouter();
@@ -24,8 +29,13 @@ export function LanguageSwitcher() {
 
   return (
     <Select value={locale} onValueChange={handleLocaleChange}>
-      <SelectTrigger className="w-[180px] border-slate-700 bg-slate-800/50 text-slate-300 hover:bg-slate-800 hover:text-white focus:ring-slate-600">
-        <Globe className="mr-2 h-4 w-4" />
+      <SelectTrigger
+        className={cn(
+          'border-slate-700 bg-slate-800/50 text-slate-300 hover:bg-slate-800 hover:text-white focus:ring-slate-600',
+          compact ? 'w-[100px]' : 'w-[180px]'
+        )}
+      >
+        <Globe className="mr-2 h-4 w-4 shrink-0" />
         <SelectValue placeholder={t('title')} />
       </SelectTrigger>
       <SelectContent className="border-slate-700 bg-slate-900">
@@ -35,7 +45,7 @@ export function LanguageSwitcher() {
             value={loc}
             className="text-slate-300 focus:bg-slate-800 focus:text-white"
           >
-            {t(loc)}
+            {compact ? loc.split('-')[0].toUpperCase() : t(loc)}
           </SelectItem>
         ))}
       </SelectContent>
