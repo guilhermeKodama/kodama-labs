@@ -3,10 +3,42 @@
     "appName": "Capital",
     "tagline": "Financial Management for International Service Providers",
     "backToHome": "Back to Home",
+    "back": "Back",
     "comingIn": "Coming in {phase}",
     "phase1": "Phase 1",
     "phase2": "Phase 2",
-    "plannedFeatures": "Planned Features"
+    "plannedFeatures": "Planned Features",
+    "edit": "Edit",
+    "delete": "Delete",
+    "cancel": "Cancel",
+    "save": "Save",
+    "loading": "Loading..."
+  },
+  "nav": {
+    "dashboard": "Dashboard",
+    "businesses": "Businesses",
+    "personal": "Personal",
+    "transfers": "Transfers",
+    "settings": "Settings",
+    "baseCurrency": "Base Currency"
+  },
+  "theme": {
+    "toggle": "Toggle theme",
+    "light": "Light",
+    "dark": "Dark",
+    "system": "System"
+  },
+  "onboarding": {
+    "welcome": "Welcome to Capital",
+    "welcomeDescription": "Let's get you set up. First, tell us your name.",
+    "nameLabel": "Your name",
+    "namePlaceholder": "Enter your name",
+    "currencyTitle": "Choose your base currency",
+    "currencyDescription": "This will be used as the reference for all your finances.",
+    "currencyLabel": "Base currency",
+    "currencyHint": "You can change this later in settings",
+    "next": "Next",
+    "finish": "Get Started"
   },
   "home": {
     "hero": {
@@ -50,44 +82,135 @@
       "personal": "Personal",
       "transfers": "Transfers"
     },
-    "footer": "Capital - Phase 0: Documentation + Project Setup Complete"
+    "footer": "Capital - Phase 1: Foundation Complete"
   },
   "dashboard": {
     "title": "Dashboard",
-    "description": "The dashboard will display summary cards showing total capital, income, expenses, and recent transactions across all your entities.",
-    "features": {
-      "totalCapital": "Total capital overview",
-      "businessSummaries": "Business summaries",
-      "recentTransactions": "Recent transactions",
-      "quickActions": "Quick actions",
-      "balanceCharts": "Balance charts"
-    }
+    "subtitle": "Overview of your financial health",
+    "totalCapital": "Total Capital",
+    "totalIncome": "Total Income",
+    "totalExpenses": "Total Expenses",
+    "totalInvestments": "Total Investments",
+    "recentTransactions": "Recent Transactions",
+    "noTransactions": "No transactions yet. Add your first transaction!",
+    "quickActions": "Quick Actions",
+    "addBusiness": "Add Business",
+    "addTransaction": "Add Transaction",
+    "yourBusinesses": "Your Businesses",
+    "viewAll": "View All",
+    "noBusinesses": "You haven't added any businesses yet.",
+    "createFirst": "Create Your First Business"
   },
   "businesses": {
     "title": "Businesses",
-    "description": "Manage your business entities here. Create, edit, and track financial data for each of your businesses.",
-    "features": {
-      "createMultiple": "Create multiple businesses",
-      "trackIncome": "Track income and expenses per business",
-      "currencySettings": "Business-specific currency settings",
-      "transactionHistory": "Transaction history",
-      "profitLoss": "Profit/loss calculations"
+    "description": "Manage your business entities",
+    "addBusiness": "Add Business",
+    "empty": {
+      "title": "No businesses yet",
+      "description": "Create your first business to start tracking your finances."
+    },
+    "form": {
+      "name": "Business Name",
+      "namePlaceholder": "My Company",
+      "description": "Description",
+      "descriptionPlaceholder": "Brief description of your business",
+      "currency": "Default Currency",
+      "color": "Color",
+      "cancel": "Cancel",
+      "create": "Create Business",
+      "update": "Update Business"
+    },
+    "dialog": {
+      "createTitle": "Create Business",
+      "createDescription": "Add a new business entity to track its finances.",
+      "editTitle": "Edit Business",
+      "editDescription": "Update your business information."
+    },
+    "delete": {
+      "title": "Delete Business?",
+      "description": "This will permanently delete {name} and all its transactions. This action cannot be undone."
+    },
+    "toast": {
+      "created": "Business created successfully!",
+      "updated": "Business updated successfully!",
+      "deleted": "Business deleted successfully!"
+    },
+    "notFound": {
+      "title": "Business not found",
+      "description": "The business you're looking for doesn't exist.",
+      "back": "Back to Businesses"
     }
   },
   "personal": {
     "title": "Personal Account",
-    "description": "Track your personal finances separately from your businesses. Record personal income, expenses, and investments.",
-    "features": {
-      "incomeTracking": "Personal income tracking",
-      "expenseCategorization": "Expense categorization",
-      "investmentPortfolio": "Investment portfolio",
-      "profitDistributions": "Receive profit distributions",
-      "netWorth": "Net worth calculation"
+    "subtitle": "Track your personal finances",
+    "netWorth": "Net Worth",
+    "setup": {
+      "title": "Personal Account Not Set Up",
+      "description": "Complete the onboarding to set up your personal account."
+    }
+  },
+  "transactions": {
+    "title": "Transactions",
+    "addTransaction": "Add Transaction",
+    "types": {
+      "income": "Income",
+      "expense": "Expense",
+      "investment": "Investment"
+    },
+    "summary": {
+      "balance": "Balance",
+      "income": "Income",
+      "expenses": "Expenses",
+      "investments": "Investments"
+    },
+    "form": {
+      "type": "Type",
+      "description": "Description",
+      "descriptionPlaceholder": "What is this transaction for?",
+      "amount": "Amount",
+      "currency": "Currency",
+      "category": "Category",
+      "categoryPlaceholder": "Select a category",
+      "date": "Date",
+      "cancel": "Cancel",
+      "create": "Add Transaction",
+      "update": "Update Transaction"
+    },
+    "dialog": {
+      "createTitle": "Add Transaction",
+      "createDescription": "Record a new income, expense, or investment.",
+      "editTitle": "Edit Transaction",
+      "editDescription": "Update the transaction details."
+    },
+    "table": {
+      "date": "Date",
+      "description": "Description",
+      "type": "Type",
+      "category": "Category",
+      "amount": "Amount",
+      "edit": "Edit",
+      "delete": "Delete",
+      "empty": "No transactions yet",
+      "filterAll": "All Types"
+    },
+    "delete": {
+      "title": "Delete Transaction?",
+      "description": "This action cannot be undone."
+    },
+    "toast": {
+      "created": "Transaction added successfully!",
+      "updated": "Transaction updated successfully!",
+      "deleted": "Transaction deleted successfully!"
     }
   },
   "transfers": {
     "title": "Transfers",
-    "description": "Record money movements between your business entities and personal account. Track profit distributions and capital injections.",
+    "subtitle": "Move money between your accounts",
+    "comingSoon": {
+      "title": "Coming Soon",
+      "description": "Transfer management will be available in Phase 2."
+    },
     "features": {
       "profitDistribution": "Profit distribution (Business → Personal)",
       "capitalInjection": "Capital injection (Personal → Business)",
@@ -98,13 +221,43 @@
   },
   "settings": {
     "title": "Settings",
-    "description": "Configure your app preferences, manage currencies, and customize categories for your transactions.",
-    "features": {
-      "baseCurrency": "Base currency selection",
-      "exchangeRates": "Manual exchange rates",
-      "customCategories": "Custom categories",
-      "themePreferences": "Theme preferences",
-      "dataExport": "Data export/import"
+    "subtitle": "Manage your preferences",
+    "appearance": {
+      "title": "Appearance",
+      "description": "Customize how the app looks",
+      "theme": "Theme",
+      "language": "Language"
+    },
+    "baseCurrency": {
+      "title": "Base Currency",
+      "description": "Your reference currency for all calculations",
+      "current": "Current base currency"
+    },
+    "currencies": {
+      "title": "Currencies & Exchange Rates",
+      "description": "Manage currencies and their exchange rates",
+      "add": "Add Currency",
+      "addTitle": "Add Currency",
+      "addDescription": "Add a new currency with its exchange rate",
+      "selectCurrency": "Currency",
+      "selectPlaceholder": "Select a currency",
+      "exchangeRate": "Exchange Rate",
+      "base": "Base currency",
+      "empty": "No currencies configured",
+      "added": "Currency added successfully!",
+      "invalidCurrency": "Invalid currency selected",
+      "alreadyExists": "This currency is already added"
+    },
+    "data": {
+      "title": "Data Management",
+      "description": "Export or reset your data",
+      "export": "Export Data",
+      "exportSuccess": "Data exported successfully!",
+      "reset": "Reset All Data",
+      "resetTitle": "Reset All Data?",
+      "resetDescription": "This will permanently delete all your businesses, transactions, and settings. This action cannot be undone.",
+      "confirmReset": "Yes, Reset Everything",
+      "resetSuccess": "All data has been reset"
     }
   },
   "language": {

@@ -1,17 +1,17 @@
 'use client';
 
 import { useState, useMemo } from 'react';
+import { useParams } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import {
+  ArrowLeft,
   Plus,
-  User,
+  Building2,
   TrendingUp,
   TrendingDown,
   PiggyBank,
-  Wallet,
 } from 'lucide-react';
 import { AppShell } from '@/components/layout';
-import { Header } from '@/components/layout/header';
 import { SummaryCard } from '@/components/cards';
 import { TransactionsTable } from '@/components/tables';
 import { TransactionDialog } from '@/components/dialogs';
@@ -27,7 +27,9 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
+import { Link } from '@/i18n/navigation';
 import {
+  useBusinessStore,
   useTransactionStore,
   useTransferStore,
   useSettingsStore,
@@ -37,45 +39,57 @@ import { toast } from 'sonner';
 import type { Transaction } from '@/types';
 import type { CreateTransactionFormData } from '@/lib/validations';
 
-export default function PersonalPage() {
+export default function BusinessDetailPage() {
   const t = useTranslations();
+  const params = useParams();
+  const businessId = params.id as string;
+
+  const { getBusiness } = useBusinessStore();
   const { transactions, addTransaction, updateTransaction, deleteTransaction } =
     useTransactionStore();
   const { transfers } = useTransferStore();
-  const { settings, personalAccount } = useSettingsStore();
+  const { settings } = useSettingsStore();
 
+  const business = getBusiness(businessId);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingTransaction, setEditingTransaction] = useState<Transaction | undefined>();
   const [deletingTransaction, setDeletingTransaction] = useState<Transaction | undefined>();
 
-  const personalTransactions = useMemo(() => {
-    if (!personalAccount) return [];
+  const businessTransactions = useMemo(() => {
     return transactions.filter(
-      (t) => t.entityId === personalAccount.id && t.entityType === 'personal'
+      (t) => t.entityId === businessId && t.entityType === 'business'
     );
-  }, [transactions, personalAccount]);
+  }, [transactions, businessId]);
 
   const summary = useMemo(() => {
-    if (!personalAccount) return null;
+    if (!business) return null;
     return calculateEntitySummary(
-      personalAccount.id,
-      'personal',
-      t('nav.personal'),
+      business.id,
+      'business',
+      business.name,
       transactions,
       transfers,
       settings.baseCurrency
     );
-  }, [personalAccount, transactions, transfers, settings.baseCurrency, t]);
+  }, [business, transactions, transfers, settings.baseCurrency]);
 
-  if (!personalAccount) {
+  if (!business) {
     return (
       <AppShell>
         <div className="py-16 text-center">
-          <User className="mx-auto mb-4 h-16 w-16 text-slate-600" />
+          <Building2 className="mx-auto mb-4 h-16 w-16 text-slate-600" />
           <h2 className="mb-2 text-xl font-bold text-white">
-            {t('personal.setup.title')}
+            {t('businesses.notFound.title')}
           </h2>
-          <p className="text-slate-400">{t('personal.setup.description')}</p>
+          <p className="mb-6 text-slate-400">
+            {t('businesses.notFound.description')}
+          </p>
+          <Button asChild>
+            <Link href="/businesses">
+              <ArrowLeft className="mr-2 h-4 w-4" />
+              {t('businesses.notFound.back')}
+            </Link>
+          </Button>
         </div>
       </AppShell>
     );
@@ -114,24 +128,62 @@ export default function PersonalPage() {
 
   return (
     <AppShell>
-      <Header
-        title={t('personal.title')}
-        description={t('personal.subtitle')}
-        action={{
-          label: t('transactions.addTransaction'),
-          onClick: () => setIsDialogOpen(true),
-        }}
-      />
+      {/* Header */}
+      <div className="mb-8">
+        <Button
+          asChild
+          variant="ghost"
+          size="sm"
+          className="mb-4 text-slate-400 hover:text-white"
+        >
+          <Link href="/businesses">
+            <ArrowLeft className="mr-2 h-4 w-4" />
+            {t('common.back')}
+          </Link>
+        </Button>
+
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center gap-4">
+            <div
+              className="flex h-12 w-12 items-center justify-center rounded-xl"
+              style={{
+                backgroundColor: business.color
+                  ? `${business.color}20`
+                  : 'rgb(51 65 85 / 0.5)',
+              }}
+            >
+              <Building2
+                className="h-6 w-6"
+                style={{ color: business.color || '#94a3b8' }}
+              />
+            </div>
+            <div>
+              <h1 className="text-2xl font-bold text-white">{business.name}</h1>
+              {business.description && (
+                <p className="text-sm text-slate-400">{business.description}</p>
+              )}
+            </div>
+          </div>
+
+          <Button
+            onClick={() => setIsDialogOpen(true)}
+            className="bg-gradient-to-r from-emerald-500 to-cyan-500 text-white hover:from-emerald-600 hover:to-cyan-600"
+          >
+            <Plus className="mr-2 h-4 w-4" />
+            {t('transactions.addTransaction')}
+          </Button>
+        </div>
+      </div>
 
       {/* Summary Cards */}
       {summary && (
         <div className="mb-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <SummaryCard
-            title={t('personal.netWorth')}
-            value={summary.netWorth}
+            title={t('transactions.summary.balance')}
+            value={summary.balance}
             currency={settings.baseCurrency}
-            icon={Wallet}
-            variant="default"
+            icon={summary.balance >= 0 ? TrendingUp : TrendingDown}
+            variant={summary.balance >= 0 ? 'income' : 'expense'}
           />
           <SummaryCard
             title={t('transactions.summary.income')}
@@ -166,7 +218,7 @@ export default function PersonalPage() {
         </CardHeader>
         <CardContent>
           <TransactionsTable
-            transactions={personalTransactions}
+            transactions={businessTransactions}
             onEdit={openEditDialog}
             onDelete={setDeletingTransaction}
           />
@@ -177,8 +229,8 @@ export default function PersonalPage() {
       <TransactionDialog
         open={isDialogOpen}
         onOpenChange={closeDialog}
-        entityId={personalAccount.id}
-        entityType="personal"
+        entityId={businessId}
+        entityType="business"
         transaction={editingTransaction}
         onSubmit={editingTransaction ? handleUpdateTransaction : handleCreateTransaction}
       />

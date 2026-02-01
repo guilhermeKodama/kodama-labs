@@ -1,8 +1,23 @@
 'use client';
 
-import { ArrowLeft, Settings } from 'lucide-react';
+import { useState } from 'react';
 import { useTranslations } from 'next-intl';
+import {
+  Settings,
+  Globe,
+  Palette,
+  Database,
+  Trash2,
+  Download,
+  Plus,
+} from 'lucide-react';
+import { AppShell } from '@/components/layout';
+import { Header } from '@/components/layout/header';
+import { ThemeToggle } from '@/components/theme-toggle';
+import { LanguageSwitcher } from '@/components/language-switcher';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import {
   Card,
   CardContent,
@@ -10,52 +25,422 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
-import { Link } from '@/i18n/navigation';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import {
+  useSettingsStore,
+  useBusinessStore,
+  useTransactionStore,
+  useTransferStore,
+} from '@/lib/store';
+import { COMMON_CURRENCIES, getCurrencyByCode } from '@/lib/utils/currency';
+import { toast } from 'sonner';
 
 export default function SettingsPage() {
   const t = useTranslations();
+  const {
+    settings,
+    currencies,
+    updateSettings,
+    addCurrency,
+    updateCurrencyRate,
+    removeCurrency,
+    resetApp,
+  } = useSettingsStore();
+  const { businesses } = useBusinessStore();
+  const { transactions } = useTransactionStore();
+  const { transfers } = useTransferStore();
+
+  const [showResetDialog, setShowResetDialog] = useState(false);
+  const [showCurrencyDialog, setShowCurrencyDialog] = useState(false);
+  const [newCurrencyCode, setNewCurrencyCode] = useState('');
+  const [newCurrencyRate, setNewCurrencyRate] = useState('1');
+
+  const handleAddCurrency = () => {
+    const currencyInfo = getCurrencyByCode(newCurrencyCode);
+    if (!currencyInfo) {
+      toast.error(t('settings.currencies.invalidCurrency'));
+      return;
+    }
+
+    if (currencies.some((c) => c.code === newCurrencyCode)) {
+      toast.error(t('settings.currencies.alreadyExists'));
+      return;
+    }
+
+    addCurrency({
+      code: currencyInfo.code,
+      name: currencyInfo.name,
+      symbol: currencyInfo.symbol,
+      manualRate: parseFloat(newCurrencyRate) || 1,
+    });
+
+    setNewCurrencyCode('');
+    setNewCurrencyRate('1');
+    setShowCurrencyDialog(false);
+    toast.success(t('settings.currencies.added'));
+  };
+
+  const handleReset = () => {
+    resetApp();
+    // Clear other stores
+    useBusinessStore.getState().businesses = [];
+    useTransactionStore.getState().transactions = [];
+    useTransferStore.getState().transfers = [];
+    setShowResetDialog(false);
+    toast.success(t('settings.data.resetSuccess'));
+    // Reload to trigger onboarding
+    window.location.reload();
+  };
+
+  const handleExport = () => {
+    const data = {
+      settings,
+      currencies,
+      businesses,
+      transactions,
+      transfers,
+      exportedAt: new Date().toISOString(),
+    };
+
+    const blob = new Blob([JSON.stringify(data, null, 2)], {
+      type: 'application/json',
+    });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `capital-backup-${new Date().toISOString().split('T')[0]}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    toast.success(t('settings.data.exportSuccess'));
+  };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 p-8">
-      <div className="mx-auto max-w-4xl">
-        <Button
-          asChild
-          variant="ghost"
-          className="mb-8 text-slate-400 hover:text-white"
-        >
-          <Link href="/">
-            <ArrowLeft className="mr-2 h-4 w-4" />
-            {t('common.backToHome')}
-          </Link>
-        </Button>
+    <AppShell>
+      <Header title={t('settings.title')} description={t('settings.subtitle')} />
 
+      <div className="grid gap-6 lg:grid-cols-2">
+        {/* Appearance */}
         <Card className="border-slate-800 bg-slate-900/50 backdrop-blur-sm">
-          <CardHeader className="text-center">
-            <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-slate-500/20 to-zinc-500/20">
-              <Settings className="h-8 w-8 text-slate-400" />
+          <CardHeader>
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-gradient-to-br from-purple-500/20 to-pink-500/20">
+                <Palette className="h-5 w-5 text-purple-400" />
+              </div>
+              <div>
+                <CardTitle className="text-white">
+                  {t('settings.appearance.title')}
+                </CardTitle>
+                <CardDescription className="text-slate-400">
+                  {t('settings.appearance.description')}
+                </CardDescription>
+              </div>
             </div>
-            <CardTitle className="text-2xl text-white">{t('settings.title')}</CardTitle>
-            <CardDescription className="text-slate-400">
-              {t('common.comingIn', { phase: t('common.phase1') })}
-            </CardDescription>
           </CardHeader>
-          <CardContent className="text-center">
-            <p className="text-slate-300">
-              {t('settings.description')}
-            </p>
-            <div className="mt-6 rounded-lg border border-dashed border-slate-700 bg-slate-800/50 p-6">
-              <h4 className="mb-2 font-medium text-slate-300">{t('common.plannedFeatures')}:</h4>
-              <ul className="space-y-1 text-sm text-slate-400">
-                <li>• {t('settings.features.baseCurrency')}</li>
-                <li>• {t('settings.features.exchangeRates')}</li>
-                <li>• {t('settings.features.customCategories')}</li>
-                <li>• {t('settings.features.themePreferences')}</li>
-                <li>• {t('settings.features.dataExport')}</li>
-              </ul>
+          <CardContent className="space-y-4">
+            <div className="flex items-center justify-between">
+              <Label className="text-slate-300">{t('settings.appearance.theme')}</Label>
+              <ThemeToggle />
+            </div>
+            <div className="flex items-center justify-between">
+              <Label className="text-slate-300">{t('settings.appearance.language')}</Label>
+              <LanguageSwitcher />
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Base Currency */}
+        <Card className="border-slate-800 bg-slate-900/50 backdrop-blur-sm">
+          <CardHeader>
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-gradient-to-br from-emerald-500/20 to-cyan-500/20">
+                <Globe className="h-5 w-5 text-emerald-400" />
+              </div>
+              <div>
+                <CardTitle className="text-white">
+                  {t('settings.baseCurrency.title')}
+                </CardTitle>
+                <CardDescription className="text-slate-400">
+                  {t('settings.baseCurrency.description')}
+                </CardDescription>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2">
+              <Label className="text-slate-300">
+                {t('settings.baseCurrency.current')}
+              </Label>
+              <Select
+                value={settings.baseCurrency}
+                onValueChange={(value) => updateSettings({ baseCurrency: value })}
+              >
+                <SelectTrigger className="border-slate-700 bg-slate-800 text-white">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="border-slate-700 bg-slate-900">
+                  {COMMON_CURRENCIES.map((currency) => (
+                    <SelectItem
+                      key={currency.code}
+                      value={currency.code}
+                      className="text-slate-300 focus:bg-slate-800 focus:text-white"
+                    >
+                      {currency.symbol} {currency.code} - {currency.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Currencies & Exchange Rates */}
+        <Card className="border-slate-800 bg-slate-900/50 backdrop-blur-sm lg:col-span-2">
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-gradient-to-br from-amber-500/20 to-orange-500/20">
+                  <Settings className="h-5 w-5 text-amber-400" />
+                </div>
+                <div>
+                  <CardTitle className="text-white">
+                    {t('settings.currencies.title')}
+                  </CardTitle>
+                  <CardDescription className="text-slate-400">
+                    {t('settings.currencies.description')}
+                  </CardDescription>
+                </div>
+              </div>
+              <Button
+                onClick={() => setShowCurrencyDialog(true)}
+                size="sm"
+                className="bg-gradient-to-r from-emerald-500 to-cyan-500 text-white hover:from-emerald-600 hover:to-cyan-600"
+              >
+                <Plus className="mr-2 h-4 w-4" />
+                {t('settings.currencies.add')}
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent>
+            {currencies.length === 0 ? (
+              <p className="py-4 text-center text-slate-400">
+                {t('settings.currencies.empty')}
+              </p>
+            ) : (
+              <div className="space-y-3">
+                {currencies.map((currency) => (
+                  <div
+                    key={currency.code}
+                    className="flex items-center justify-between rounded-lg border border-slate-800 bg-slate-800/50 p-3"
+                  >
+                    <div className="flex items-center gap-3">
+                      <span className="text-lg font-bold text-white">
+                        {currency.symbol}
+                      </span>
+                      <div>
+                        <p className="font-medium text-white">{currency.code}</p>
+                        <p className="text-xs text-slate-400">{currency.name}</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      {currency.code !== settings.baseCurrency && (
+                        <>
+                          <div className="flex items-center gap-2">
+                            <Label className="text-xs text-slate-400">
+                              1 {settings.baseCurrency} =
+                            </Label>
+                            <Input
+                              type="number"
+                              step="0.0001"
+                              value={currency.manualRate}
+                              onChange={(e) =>
+                                updateCurrencyRate(
+                                  currency.code,
+                                  parseFloat(e.target.value) || 1
+                                )
+                              }
+                              className="w-24 border-slate-700 bg-slate-800 text-white"
+                            />
+                            <span className="text-sm text-slate-400">
+                              {currency.code}
+                            </span>
+                          </div>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => removeCurrency(currency.code)}
+                            className="text-slate-400 hover:bg-red-500/10 hover:text-red-400"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </>
+                      )}
+                      {currency.code === settings.baseCurrency && (
+                        <span className="text-xs text-emerald-400">
+                          {t('settings.currencies.base')}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Data Management */}
+        <Card className="border-slate-800 bg-slate-900/50 backdrop-blur-sm lg:col-span-2">
+          <CardHeader>
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-gradient-to-br from-red-500/20 to-rose-500/20">
+                <Database className="h-5 w-5 text-red-400" />
+              </div>
+              <div>
+                <CardTitle className="text-white">
+                  {t('settings.data.title')}
+                </CardTitle>
+                <CardDescription className="text-slate-400">
+                  {t('settings.data.description')}
+                </CardDescription>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="flex flex-wrap gap-3">
+              <Button
+                variant="outline"
+                onClick={handleExport}
+                className="border-slate-700 text-slate-300 hover:bg-slate-800 hover:text-white"
+              >
+                <Download className="mr-2 h-4 w-4" />
+                {t('settings.data.export')}
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => setShowResetDialog(true)}
+                className="border-red-500/50 text-red-400 hover:bg-red-500/10 hover:text-red-400"
+              >
+                <Trash2 className="mr-2 h-4 w-4" />
+                {t('settings.data.reset')}
+              </Button>
             </div>
           </CardContent>
         </Card>
       </div>
-    </div>
+
+      {/* Add Currency Dialog */}
+      <Dialog open={showCurrencyDialog} onOpenChange={setShowCurrencyDialog}>
+        <DialogContent className="border-slate-800 bg-slate-900 sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-white">
+              {t('settings.currencies.addTitle')}
+            </DialogTitle>
+            <DialogDescription className="text-slate-400">
+              {t('settings.currencies.addDescription')}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label className="text-slate-300">
+                {t('settings.currencies.selectCurrency')}
+              </Label>
+              <Select value={newCurrencyCode} onValueChange={setNewCurrencyCode}>
+                <SelectTrigger className="border-slate-700 bg-slate-800 text-white">
+                  <SelectValue placeholder={t('settings.currencies.selectPlaceholder')} />
+                </SelectTrigger>
+                <SelectContent className="border-slate-700 bg-slate-900">
+                  {COMMON_CURRENCIES.filter(
+                    (c) => !currencies.some((ec) => ec.code === c.code)
+                  ).map((currency) => (
+                    <SelectItem
+                      key={currency.code}
+                      value={currency.code}
+                      className="text-slate-300 focus:bg-slate-800 focus:text-white"
+                    >
+                      {currency.symbol} {currency.code} - {currency.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label className="text-slate-300">
+                {t('settings.currencies.exchangeRate')} (1 {settings.baseCurrency} =)
+              </Label>
+              <Input
+                type="number"
+                step="0.0001"
+                value={newCurrencyRate}
+                onChange={(e) => setNewCurrencyRate(e.target.value)}
+                className="border-slate-700 bg-slate-800 text-white"
+              />
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button
+                variant="outline"
+                onClick={() => setShowCurrencyDialog(false)}
+                className="border-slate-700 text-slate-300 hover:bg-slate-800 hover:text-white"
+              >
+                {t('common.cancel')}
+              </Button>
+              <Button
+                onClick={handleAddCurrency}
+                disabled={!newCurrencyCode}
+                className="bg-gradient-to-r from-emerald-500 to-cyan-500 text-white hover:from-emerald-600 hover:to-cyan-600"
+              >
+                {t('settings.currencies.add')}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Reset Confirmation */}
+      <AlertDialog open={showResetDialog} onOpenChange={setShowResetDialog}>
+        <AlertDialogContent className="border-slate-800 bg-slate-900">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-white">
+              {t('settings.data.resetTitle')}
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-slate-400">
+              {t('settings.data.resetDescription')}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="border-slate-700 text-slate-300 hover:bg-slate-800 hover:text-white">
+              {t('common.cancel')}
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleReset}
+              className="bg-red-500 text-white hover:bg-red-600"
+            >
+              {t('settings.data.confirmReset')}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </AppShell>
   );
 }
