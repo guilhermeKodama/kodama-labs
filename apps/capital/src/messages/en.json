@@ -305,7 +305,8 @@
     "noData": "No data for this period",
     "views": {
       "monthly": "Monthly",
-      "categories": "Categories"
+      "categories": "Categories",
+      "insights": "Insights"
     },
     "filters": {
       "all": "All"
@@ -323,6 +324,42 @@
       "success": "Report exported successfully!",
       "noData": "No data to export"
     }
+  },
+  "charts": {
+    "balanceOverTime": "Balance Over Time",
+    "cashFlow": "Cash Flow",
+    "entityComparison": "Entity Comparison",
+    "currencyDistribution": "Currency Distribution",
+    "netWorth": "Net Worth",
+    "balance": "Balance",
+    "noData": "No data available",
+    "viewReports": "View Reports",
+    "inflow": "Inflow",
+    "outflow": "Outflow",
+    "netFlow": "Net Flow",
+    "timeRange": {
+      "1M": "1M",
+      "3M": "3M",
+      "6M": "6M",
+      "1Y": "1Y",
+      "ALL": "All"
+    },
+    "period": {
+      "weekly": "Weekly",
+      "monthly": "Monthly"
+    }
+  },
+  "insights": {
+    "title": "Insights",
+    "noData": "Add transactions to see insights about your finances",
+    "savingsRate": "Savings Rate",
+    "savingsRateDesc": "Percentage of income saved",
+    "topExpense": "Top Expense Category",
+    "topIncome": "Top Income Source",
+    "balanceOverTimeDesc": "Track how your balance changes over time",
+    "cashFlowDesc": "Visualize money coming in and going out",
+    "entityComparisonDesc": "Compare performance across your entities",
+    "currencyDistributionDesc": "See how your money is distributed across currencies"
   },
   "settings": {
     "title": "Settings",

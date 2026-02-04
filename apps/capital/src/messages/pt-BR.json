@@ -305,7 +305,8 @@
     "noData": "Sem dados para este período",
     "views": {
       "monthly": "Mensal",
-      "categories": "Categorias"
+      "categories": "Categorias",
+      "insights": "Insights"
     },
     "filters": {
       "all": "Todos"
@@ -323,6 +324,42 @@
       "success": "Relatório exportado com sucesso!",
       "noData": "Sem dados para exportar"
     }
+  },
+  "charts": {
+    "balanceOverTime": "Saldo ao Longo do Tempo",
+    "cashFlow": "Fluxo de Caixa",
+    "entityComparison": "Comparação de Entidades",
+    "currencyDistribution": "Distribuição por Moeda",
+    "netWorth": "Patrimônio Líquido",
+    "balance": "Saldo",
+    "noData": "Sem dados disponíveis",
+    "viewReports": "Ver Relatórios",
+    "inflow": "Entrada",
+    "outflow": "Saída",
+    "netFlow": "Fluxo Líquido",
+    "timeRange": {
+      "1M": "1M",
+      "3M": "3M",
+      "6M": "6M",
+      "1Y": "1A",
+      "ALL": "Tudo"
+    },
+    "period": {
+      "weekly": "Semanal",
+      "monthly": "Mensal"
+    }
+  },
+  "insights": {
+    "title": "Insights",
+    "noData": "Adicione transações para ver insights sobre suas finanças",
+    "savingsRate": "Taxa de Poupança",
+    "savingsRateDesc": "Percentual da receita economizado",
+    "topExpense": "Principal Categoria de Despesa",
+    "topIncome": "Principal Fonte de Receita",
+    "balanceOverTimeDesc": "Acompanhe como seu saldo muda ao longo do tempo",
+    "cashFlowDesc": "Visualize o dinheiro entrando e saindo",
+    "entityComparisonDesc": "Compare o desempenho das suas entidades",
+    "currencyDistributionDesc": "Veja como seu dinheiro está distribuído entre as moedas"
   },
   "settings": {
     "title": "Configurações",
