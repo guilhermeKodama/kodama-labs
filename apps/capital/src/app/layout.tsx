@@ -27,6 +27,7 @@ export default function RootLayout({
     <html suppressHydrationWarning>
       <body
         className={`${spaceGrotesk.variable} ${jetbrainsMono.variable} font-sans antialiased`}
+        suppressHydrationWarning
       >
         <UserProvider>{children}</UserProvider>
       </body>
