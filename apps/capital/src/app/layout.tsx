@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Space_Grotesk, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
+import { UserProvider } from "@/lib/user-context";
 
 const spaceGrotesk = Space_Grotesk({
   variable: "--font-sans",
@@ -27,7 +28,7 @@ export default function RootLayout({
       <body
         className={`${spaceGrotesk.variable} ${jetbrainsMono.variable} font-sans antialiased`}
       >
-        {children}
+        <UserProvider>{children}</UserProvider>
       </body>
     </html>
   );

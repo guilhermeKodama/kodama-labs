@@ -31,6 +31,7 @@ import {
   useTransferStore,
   useSettingsStore,
 } from '@/lib/store';
+import { useUser } from '@/lib/user-context';
 import { calculateEntitySummary } from '@/lib/utils/calculations';
 import { toast } from 'sonner';
 import type { Business } from '@/types';
@@ -38,6 +39,7 @@ import type { CreateBusinessFormData } from '@/lib/validations';
 
 export default function BusinessesPage() {
   const t = useTranslations();
+  const { userId } = useUser();
   const { businesses, addBusiness, updateBusiness, deleteBusiness } =
     useBusinessStore();
   const { transactions, deleteTransactionsByEntity } = useTransactionStore();
@@ -61,25 +63,26 @@ export default function BusinessesPage() {
     );
   }, [businesses, transactions, transfers, settings.baseCurrency]);
 
-  const handleCreate = (data: CreateBusinessFormData) => {
-    addBusiness(data);
+  const handleCreate = async (data: CreateBusinessFormData) => {
+    if (!userId) return;
+    await addBusiness(userId, data);
     toast.success(t('businesses.toast.created'));
   };
 
-  const handleUpdate = (data: CreateBusinessFormData) => {
+  const handleUpdate = async (data: CreateBusinessFormData) => {
     if (editingBusiness) {
-      updateBusiness(editingBusiness.id, data);
+      await updateBusiness(editingBusiness.id, data);
       setEditingBusiness(undefined);
       toast.success(t('businesses.toast.updated'));
     }
   };
 
-  const handleDelete = () => {
+  const handleDelete = async () => {
     if (deletingBusiness) {
       // Delete all related transactions and transfers
-      deleteTransactionsByEntity(deletingBusiness.id);
-      deleteTransfersByEntity(deletingBusiness.id);
-      deleteBusiness(deletingBusiness.id);
+      await deleteTransactionsByEntity(deletingBusiness.id);
+      await deleteTransfersByEntity(deletingBusiness.id);
+      await deleteBusiness(deletingBusiness.id);
       setDeletingBusiness(undefined);
       toast.success(t('businesses.toast.deleted'));
     }

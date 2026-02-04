@@ -1,6 +1,7 @@
 'use client';
 
 import { useTranslations } from 'next-intl';
+import { useRouter } from 'next/navigation';
 import {
   LayoutDashboard,
   Building2,
@@ -13,6 +14,7 @@ import {
   Repeat,
   Target,
   Receipt,
+  LogOut,
 } from 'lucide-react';
 import { Link, usePathname } from '@/i18n/navigation';
 import { cn } from '@/lib/utils';
@@ -20,8 +22,10 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { useUser } from '@/lib/user-context';
 
 const mainNavItems = [
   { href: '/dashboard', icon: LayoutDashboard, labelKey: 'dashboard' },
@@ -41,11 +45,19 @@ const moreNavItems = [
 
 export function BottomNav() {
   const t = useTranslations('nav');
+  const tAuth = useTranslations('auth');
   const pathname = usePathname();
+  const router = useRouter();
+  const { logout, isAuthenticated } = useUser();
 
   const isMoreActive = moreNavItems.some(
     (item) => pathname === item.href || pathname.startsWith(`${item.href}/`)
   );
+
+  const handleLogout = async () => {
+    await logout();
+    router.push('/login');
+  };
 
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-40 border-t border-slate-800 bg-slate-950/95 backdrop-blur-sm lg:hidden">
@@ -105,6 +117,18 @@ export function BottomNav() {
                 </DropdownMenuItem>
               );
             })}
+            {isAuthenticated && (
+              <>
+                <DropdownMenuSeparator className="bg-slate-700" />
+                <DropdownMenuItem
+                  onClick={handleLogout}
+                  className="flex cursor-pointer items-center gap-2 text-red-400 focus:text-red-400"
+                >
+                  <LogOut className="h-4 w-4" />
+                  {tAuth('logout')}
+                </DropdownMenuItem>
+              </>
+            )}
           </DropdownMenuContent>
         </DropdownMenu>
       </div>

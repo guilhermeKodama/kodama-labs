@@ -1,6 +1,10 @@
 import { PrismaClient, TransactionType } from "@prisma/client";
+import bcrypt from "bcrypt";
 
 const prisma = new PrismaClient();
+
+// Demo user password (for development only)
+const DEMO_PASSWORD = "demo123456";
 
 const DEFAULT_INCOME_CATEGORIES = [
   "Client Payment",
@@ -106,16 +110,22 @@ async function seedDefaultCurrenciesForUser(userId: string) {
 async function main() {
   console.log("Starting seed...");
 
+  // Hash the demo password
+  const passwordHash = await bcrypt.hash(DEMO_PASSWORD, 12);
+
   // Create a demo user if none exists
   const demoUser = await prisma.user.upsert({
     where: { email: "demo@capital.app" },
     update: {},
     create: {
       email: "demo@capital.app",
+      passwordHash,
       name: "Demo User",
       baseCurrency: "USD",
     },
   });
+
+  console.log(`Demo user credentials: demo@capital.app / ${DEMO_PASSWORD}`);
 
   console.log(`Demo user: ${demoUser.id}`);
 

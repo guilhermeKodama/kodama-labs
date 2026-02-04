@@ -1,5 +1,4 @@
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
 import { addDays, addWeeks, addMonths, addYears } from 'date-fns';
 import type {
   RecurringTransaction,
@@ -8,6 +7,7 @@ import type {
   EntityType,
   RecurrenceFrequency,
 } from '@/types';
+import { client } from '@/lib/api-client';
 
 interface RecurringTransactionState {
   recurringTransactions: RecurringTransaction[];
@@ -16,20 +16,24 @@ interface RecurringTransactionState {
 }
 
 interface RecurringTransactionActions {
-  addRecurringTransaction: (input: CreateRecurringTransactionInput) => RecurringTransaction;
-  updateRecurringTransaction: (id: string, input: UpdateRecurringTransactionInput) => void;
-  deleteRecurringTransaction: (id: string) => void;
-  toggleRecurringTransaction: (id: string) => void;
+  fetchRecurringTransactions: (filters?: {
+    businessId?: string;
+    personalAccountId?: string;
+    entityType?: EntityType;
+    isActive?: boolean;
+  }) => Promise<void>;
+  addRecurringTransaction: (input: CreateRecurringTransactionInput) => Promise<RecurringTransaction | null>;
+  updateRecurringTransaction: (id: string, input: UpdateRecurringTransactionInput) => Promise<void>;
+  deleteRecurringTransaction: (id: string) => Promise<void>;
+  toggleRecurringTransaction: (id: string) => Promise<void>;
+  updateLastGeneratedDate: (id: string, date: Date) => Promise<void>;
   getRecurringTransactionsByEntity: (entityId: string, entityType: EntityType) => RecurringTransaction[];
-  updateLastGeneratedDate: (id: string, date: Date) => void;
-  updateNextDueDate: (id: string, date: Date) => void;
   setLoading: (loading: boolean) => void;
   setError: (error: string | null) => void;
+  reset: () => void;
 }
 
 type RecurringTransactionStore = RecurringTransactionState & RecurringTransactionActions;
-
-const generateId = () => crypto.randomUUID();
 
 /**
  * Calculate the next due date based on frequency
@@ -52,124 +56,288 @@ export function calculateNextDueDate(
   }
 }
 
-export const useRecurringTransactionStore = create<RecurringTransactionStore>()(
-  persist(
-    (set, get) => ({
-      // State
-      recurringTransactions: [],
-      isLoading: false,
-      error: null,
+export const useRecurringTransactionStore = create<RecurringTransactionStore>()((set, get) => ({
+  // State
+  recurringTransactions: [],
+  isLoading: false,
+  error: null,
 
-      // Actions
-      addRecurringTransaction: (input) => {
-        const now = new Date();
-        const startDate = new Date(input.startDate);
-        
-        // Calculate initial next due date
-        const nextDueDate = startDate > now ? startDate : calculateNextDueDate(startDate, input.frequency);
+  // Fetch recurring transactions from API
+  fetchRecurringTransactions: async (filters) => {
+    set({ isLoading: true, error: null });
+    try {
+      const res = await client.v1.recurring.$get({
+        query: {
+          businessId: filters?.businessId,
+          personalAccountId: filters?.personalAccountId,
+          entityType: filters?.entityType,
+          isActive: filters?.isActive,
+        },
+      });
 
-        const newRecurring: RecurringTransaction = {
-          id: generateId(),
-          entityId: input.entityId,
+      if (!res.ok) {
+        throw new Error('Failed to fetch recurring transactions');
+      }
+
+      const data = await res.json();
+      set({
+        recurringTransactions: data.map((r) => ({
+          id: r.id,
+          entityId: r.businessId ?? r.personalAccountId ?? '',
+          entityType: r.entityType,
+          type: r.type,
+          amount: r.amount,
+          currency: r.currency,
+          exchangeRate: r.exchangeRate,
+          description: r.description,
+          category: r.category,
+          frequency: r.frequency,
+          startDate: new Date(r.startDate),
+          endDate: r.endDate ? new Date(r.endDate) : undefined,
+          nextDueDate: new Date(r.nextDueDate),
+          lastGeneratedDate: r.lastGeneratedDate ? new Date(r.lastGeneratedDate) : undefined,
+          isActive: r.isActive,
+          createdAt: new Date(r.createdAt),
+          updatedAt: new Date(r.updatedAt),
+        })),
+        isLoading: false,
+      });
+    } catch (error) {
+      set({
+        error: error instanceof Error ? error.message : 'Unknown error',
+        isLoading: false,
+      });
+    }
+  },
+
+  // Create recurring transaction via API
+  addRecurringTransaction: async (input: CreateRecurringTransactionInput) => {
+    set({ isLoading: true, error: null });
+    try {
+      const startDate = input.startDate instanceof Date ? input.startDate : new Date(input.startDate);
+      
+      const res = await client.v1.recurring.$post({
+        json: {
           entityType: input.entityType,
           type: input.type,
           amount: input.amount,
           currency: input.currency,
-          exchangeRate: input.exchangeRate ?? 1,
+          exchangeRate: input.exchangeRate,
           description: input.description,
           category: input.category,
           frequency: input.frequency,
-          startDate: startDate,
-          endDate: input.endDate ? new Date(input.endDate) : undefined,
-          nextDueDate: nextDueDate,
-          lastGeneratedDate: undefined,
-          isActive: true,
-          createdAt: now,
-          updatedAt: now,
-        };
+          startDate: startDate.toISOString(),
+          endDate: input.endDate 
+            ? (input.endDate instanceof Date ? input.endDate.toISOString() : input.endDate)
+            : undefined,
+          businessId: input.entityType === 'business' ? input.entityId : undefined,
+          personalAccountId: input.entityType === 'personal' ? input.entityId : undefined,
+        },
+      });
 
-        set((state) => ({
-          recurringTransactions: [...state.recurringTransactions, newRecurring],
-        }));
+      if (!res.ok) {
+        throw new Error('Failed to create recurring transaction');
+      }
 
-        return newRecurring;
-      },
+      const data = await res.json();
+      const newRecurring: RecurringTransaction = {
+        id: data.id,
+        entityId: data.businessId ?? data.personalAccountId ?? '',
+        entityType: data.entityType,
+        type: data.type,
+        amount: data.amount,
+        currency: data.currency,
+        exchangeRate: data.exchangeRate,
+        description: data.description,
+        category: data.category,
+        frequency: data.frequency,
+        startDate: new Date(data.startDate),
+        endDate: data.endDate ? new Date(data.endDate) : undefined,
+        nextDueDate: new Date(data.nextDueDate),
+        lastGeneratedDate: data.lastGeneratedDate ? new Date(data.lastGeneratedDate) : undefined,
+        isActive: data.isActive,
+        createdAt: new Date(data.createdAt),
+        updatedAt: new Date(data.updatedAt),
+      };
 
-      updateRecurringTransaction: (id, input) => {
-        set((state) => ({
-          recurringTransactions: state.recurringTransactions.map((rt) => {
-            if (rt.id !== id) return rt;
-            
-            const updated = { ...rt, ...input, updatedAt: new Date() };
-            
-            // Recalculate next due date if frequency or start date changed
-            if (input.frequency || input.startDate) {
-              const baseDate = input.startDate 
-                ? new Date(input.startDate) 
-                : rt.lastGeneratedDate 
-                  ? new Date(rt.lastGeneratedDate)
-                  : new Date(rt.startDate);
-              updated.nextDueDate = calculateNextDueDate(baseDate, input.frequency || rt.frequency);
-            }
-            
-            return updated;
-          }),
-        }));
-      },
+      set((state) => ({
+        recurringTransactions: [...state.recurringTransactions, newRecurring],
+        isLoading: false,
+      }));
 
-      deleteRecurringTransaction: (id) => {
-        set((state) => ({
-          recurringTransactions: state.recurringTransactions.filter((rt) => rt.id !== id),
-        }));
-      },
-
-      toggleRecurringTransaction: (id) => {
-        set((state) => ({
-          recurringTransactions: state.recurringTransactions.map((rt) =>
-            rt.id === id
-              ? { ...rt, isActive: !rt.isActive, updatedAt: new Date() }
-              : rt
-          ),
-        }));
-      },
-
-      getRecurringTransactionsByEntity: (entityId, entityType) => {
-        return get().recurringTransactions.filter(
-          (rt) => rt.entityId === entityId && rt.entityType === entityType
-        );
-      },
-
-      updateLastGeneratedDate: (id, date) => {
-        set((state) => ({
-          recurringTransactions: state.recurringTransactions.map((rt) =>
-            rt.id === id
-              ? { 
-                  ...rt, 
-                  lastGeneratedDate: date,
-                  nextDueDate: calculateNextDueDate(date, rt.frequency),
-                  updatedAt: new Date() 
-                }
-              : rt
-          ),
-        }));
-      },
-
-      updateNextDueDate: (id, date) => {
-        set((state) => ({
-          recurringTransactions: state.recurringTransactions.map((rt) =>
-            rt.id === id
-              ? { ...rt, nextDueDate: date, updatedAt: new Date() }
-              : rt
-          ),
-        }));
-      },
-
-      setLoading: (loading) => set({ isLoading: loading }),
-      setError: (error) => set({ error }),
-    }),
-    {
-      name: 'capital-recurring-transactions',
-      partialize: (state) => ({ recurringTransactions: state.recurringTransactions }),
+      return newRecurring;
+    } catch (error) {
+      set({
+        error: error instanceof Error ? error.message : 'Unknown error',
+        isLoading: false,
+      });
+      return null;
     }
-  )
-);
+  },
+
+  // Update recurring transaction via API
+  updateRecurringTransaction: async (id: string, input: UpdateRecurringTransactionInput) => {
+    set({ isLoading: true, error: null });
+    try {
+      const res = await client.v1.recurring[':id'].$put({
+        param: { id },
+        json: {
+          type: input.type,
+          amount: input.amount,
+          currency: input.currency,
+          exchangeRate: input.exchangeRate,
+          description: input.description,
+          category: input.category,
+          frequency: input.frequency,
+          startDate: input.startDate 
+            ? (input.startDate instanceof Date ? input.startDate.toISOString() : input.startDate)
+            : undefined,
+          endDate: input.endDate 
+            ? (input.endDate instanceof Date ? input.endDate.toISOString() : input.endDate)
+            : input.endDate === null ? null : undefined,
+          isActive: input.isActive,
+        },
+      });
+
+      if (!res.ok) {
+        throw new Error('Failed to update recurring transaction');
+      }
+
+      const data = await res.json();
+      set((state) => ({
+        recurringTransactions: state.recurringTransactions.map((rt) =>
+          rt.id === id
+            ? {
+                id: data.id,
+                entityId: data.businessId ?? data.personalAccountId ?? '',
+                entityType: data.entityType,
+                type: data.type,
+                amount: data.amount,
+                currency: data.currency,
+                exchangeRate: data.exchangeRate,
+                description: data.description,
+                category: data.category,
+                frequency: data.frequency,
+                startDate: new Date(data.startDate),
+                endDate: data.endDate ? new Date(data.endDate) : undefined,
+                nextDueDate: new Date(data.nextDueDate),
+                lastGeneratedDate: data.lastGeneratedDate ? new Date(data.lastGeneratedDate) : undefined,
+                isActive: data.isActive,
+                createdAt: new Date(data.createdAt),
+                updatedAt: new Date(data.updatedAt),
+              }
+            : rt
+        ),
+        isLoading: false,
+      }));
+    } catch (error) {
+      set({
+        error: error instanceof Error ? error.message : 'Unknown error',
+        isLoading: false,
+      });
+    }
+  },
+
+  // Delete recurring transaction via API
+  deleteRecurringTransaction: async (id: string) => {
+    set({ isLoading: true, error: null });
+    try {
+      const res = await client.v1.recurring[':id'].$delete({
+        param: { id },
+      });
+
+      if (!res.ok) {
+        throw new Error('Failed to delete recurring transaction');
+      }
+
+      set((state) => ({
+        recurringTransactions: state.recurringTransactions.filter((rt) => rt.id !== id),
+        isLoading: false,
+      }));
+    } catch (error) {
+      set({
+        error: error instanceof Error ? error.message : 'Unknown error',
+        isLoading: false,
+      });
+    }
+  },
+
+  // Toggle recurring transaction via API
+  toggleRecurringTransaction: async (id: string) => {
+    set({ isLoading: true, error: null });
+    try {
+      const res = await client.v1.recurring[':id'].toggle.$post({
+        param: { id },
+      });
+
+      if (!res.ok) {
+        throw new Error('Failed to toggle recurring transaction');
+      }
+
+      const data = await res.json();
+      set((state) => ({
+        recurringTransactions: state.recurringTransactions.map((rt) =>
+          rt.id === id
+            ? {
+                ...rt,
+                isActive: data.isActive,
+                updatedAt: new Date(data.updatedAt),
+              }
+            : rt
+        ),
+        isLoading: false,
+      }));
+    } catch (error) {
+      set({
+        error: error instanceof Error ? error.message : 'Unknown error',
+        isLoading: false,
+      });
+    }
+  },
+
+  // Update the last generated date for a recurring transaction
+  updateLastGeneratedDate: async (id: string, date: Date) => {
+    try {
+      const res = await client.v1.recurring[':id'].$put({
+        param: { id },
+        json: {
+          // The backend will update lastGeneratedDate automatically when we update
+          // For now, we'll just update local state since this is a derived field
+        },
+      });
+
+      // Even if API call fails, update local state for immediate UI feedback
+      // The next sync will correct it
+      set((state) => ({
+        recurringTransactions: state.recurringTransactions.map((rt) =>
+          rt.id === id
+            ? {
+                ...rt,
+                lastGeneratedDate: date,
+                nextDueDate: calculateNextDueDate(date, rt.frequency),
+              }
+            : rt
+        ),
+      }));
+    } catch (error) {
+      console.error('Failed to update last generated date:', error);
+    }
+  },
+
+  getRecurringTransactionsByEntity: (entityId, entityType) => {
+    return get().recurringTransactions.filter(
+      (rt) => rt.entityId === entityId && rt.entityType === entityType
+    );
+  },
+
+  setLoading: (loading) => set({ isLoading: loading }),
+  setError: (error) => set({ error }),
+  
+  reset: () => {
+    set({
+      recurringTransactions: [],
+      isLoading: false,
+      error: null,
+    });
+  },
+}));

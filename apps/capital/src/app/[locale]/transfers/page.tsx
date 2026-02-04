@@ -62,14 +62,14 @@ export default function TransfersPage() {
     };
   }, [transfers]);
 
-  const handleCreateTransfer = (data: CreateTransferFormData) => {
-    addTransfer(data);
+  const handleCreateTransfer = async (data: CreateTransferFormData) => {
+    await addTransfer(data);
     toast.success(t('transfers.toast.created'));
   };
 
-  const handleDeleteTransfer = () => {
+  const handleDeleteTransfer = async () => {
     if (deletingTransfer) {
-      deleteTransfer(deletingTransfer.id);
+      await deleteTransfer(deletingTransfer.id);
       setDeletingTransfer(undefined);
       toast.success(t('transfers.toast.deleted'));
     }

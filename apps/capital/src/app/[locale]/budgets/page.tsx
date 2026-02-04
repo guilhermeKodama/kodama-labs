@@ -101,29 +101,29 @@ export default function BudgetsPage() {
     };
   }, [currentBudgets, currentBudgetProgress, transactions, alerts]);
 
-  const handleCreate = (data: CreateBudgetFormData) => {
-    addBudget(data);
+  const handleCreate = async (data: CreateBudgetFormData) => {
+    await addBudget(data);
     toast.success(t('budgets.toast.created'));
   };
 
-  const handleUpdate = (data: CreateBudgetFormData) => {
+  const handleUpdate = async (data: CreateBudgetFormData) => {
     if (editingBudget) {
-      updateBudget(editingBudget.id, data);
+      await updateBudget(editingBudget.id, data);
       setEditingBudget(undefined);
       toast.success(t('budgets.toast.updated'));
     }
   };
 
-  const handleDelete = () => {
+  const handleDelete = async () => {
     if (deletingBudget) {
-      deleteBudget(deletingBudget.id);
+      await deleteBudget(deletingBudget.id);
       setDeletingBudget(undefined);
       toast.success(t('budgets.toast.deleted'));
     }
   };
 
-  const handleToggle = (budget: Budget) => {
-    toggleBudget(budget.id);
+  const handleToggle = async (budget: Budget) => {
+    await toggleBudget(budget.id);
     toast.success(
       budget.isActive
         ? t('budgets.toast.paused')

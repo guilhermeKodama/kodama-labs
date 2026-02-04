@@ -1,16 +1,17 @@
 import { createRoute, z } from "@hono/zod-openapi";
-import { CREATED, BAD_REQUEST, INTERNAL_SERVER_ERROR } from "stoker/http-status-codes";
+import { OK, UNAUTHORIZED, INTERNAL_SERVER_ERROR } from "stoker/http-status-codes";
 import { jsonContent } from "stoker/openapi/helpers";
+import { setCookie } from "hono/cookie";
 
 import type { AppRouteHandler } from "@capital/server/types";
 import { prisma } from "@capital/server/lib/prisma";
-import { createUser } from "../../services/create-user";
-import { routeConfig } from "../../constants";
+import { login } from "../../services/login";
+import { createSession } from "../../services/session";
+import { routeConfig, SESSION_COOKIE_NAME } from "../../constants";
 
-const CreateUserSchema = z.object({
+const LoginSchema = z.object({
   email: z.string().email(),
-  name: z.string().min(1),
-  baseCurrency: z.string().length(3).optional(),
+  password: z.string().min(1, "Password is required"),
 });
 
 const UserResponseSchema = z.object({
@@ -39,17 +40,17 @@ const ErrorResponseSchema = z.object({
 });
 
 export const route = createRoute({
-  path: "/v1/users",
+  path: "/v1/auth/login",
   method: "post",
   tags: [...routeConfig.v1.defaultTags],
-  summary: "Create a new user",
-  description: "Creates a new user with a personal account",
+  summary: "Log in a user",
+  description: "Authenticates a user with email and password",
   request: {
-    body: jsonContent(CreateUserSchema, "User creation data"),
+    body: jsonContent(LoginSchema, "Login credentials"),
   },
   responses: {
-    [CREATED]: jsonContent(UserResponseSchema, "User created successfully"),
-    [BAD_REQUEST]: jsonContent(ErrorResponseSchema, "Invalid request data"),
+    [OK]: jsonContent(UserResponseSchema, "Login successful"),
+    [UNAUTHORIZED]: jsonContent(ErrorResponseSchema, "Invalid credentials"),
     [INTERNAL_SERVER_ERROR]: jsonContent(
       ErrorResponseSchema,
       "Internal server error"
@@ -60,7 +61,19 @@ export const route = createRoute({
 export const handler: AppRouteHandler<typeof route> = async (c) => {
   try {
     const body = c.req.valid("json");
-    const user = await createUser(body, prisma);
+    const user = await login(body, prisma);
+
+    // Create session
+    const sessionId = await createSession(user.id, prisma);
+
+    // Set session cookie
+    setCookie(c, SESSION_COOKIE_NAME, sessionId, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      path: "/",
+      maxAge: 60 * 60 * 24 * 7, // 7 days
+    });
 
     return c.json(
       {
@@ -80,14 +93,14 @@ export const handler: AppRouteHandler<typeof route> = async (c) => {
             }
           : null,
       },
-      CREATED
+      OK
     );
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "Unknown error";
-    if (message.includes("already exists")) {
+    if (message.includes("Invalid email or password")) {
       return c.json(
-        { error: { code: "BAD_REQUEST", message } },
-        BAD_REQUEST
+        { error: { code: "UNAUTHORIZED", message } },
+        UNAUTHORIZED
       );
     }
     return c.json(
