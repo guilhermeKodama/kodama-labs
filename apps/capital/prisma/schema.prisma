@@ -1,0 +1,301 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================
+// ENUMS
+// ============================================
+
+enum EntityType {
+  business
+  personal
+}
+
+enum TransactionType {
+  income
+  expense
+  investment
+}
+
+enum TransferDirection {
+  profit_distribution
+  capital_injection
+}
+
+enum RecurrenceFrequency {
+  daily
+  weekly
+  monthly
+  yearly
+}
+
+enum BudgetPeriod {
+  monthly
+  yearly
+}
+
+// ============================================
+// USER
+// ============================================
+
+model User {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  name         String
+  baseCurrency String   @default("USD")
+  theme        String   @default("system") // light, dark, system
+  dateFormat   String   @default("yyyy-MM-dd")
+  numberFormat String   @default("en-US") // en-US, pt-BR, de-DE
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  // Relations
+  businesses       Business[]
+  personalAccount  PersonalAccount?
+  categories       Category[]
+  currencies       Currency[]
+
+  @@map("users")
+}
+
+// ============================================
+// BUSINESS
+// ============================================
+
+model Business {
+  id              String   @id @default(uuid())
+  userId          String
+  name            String
+  description     String?
+  defaultCurrency String   @default("USD")
+  color           String?
+  taxRate         Float    @default(0) // Tax rate percentage
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  // Relations
+  user                  User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  transactions          Transaction[]
+  budgets               Budget[]
+  recurringTransactions RecurringTransaction[]
+  transfersFrom         Transfer[]             @relation("TransferFrom")
+  transfersTo           Transfer[]             @relation("TransferTo")
+
+  @@index([userId])
+  @@map("businesses")
+}
+
+// ============================================
+// PERSONAL ACCOUNT
+// ============================================
+
+model PersonalAccount {
+  id              String   @id @default(uuid())
+  userId          String   @unique
+  defaultCurrency String   @default("USD")
+  taxRate         Float    @default(0) // Tax rate percentage
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  // Relations
+  user                  User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  transactions          Transaction[]
+  budgets               Budget[]
+  recurringTransactions RecurringTransaction[]
+  transfersFrom         Transfer[]             @relation("PersonalTransferFrom")
+  transfersTo           Transfer[]             @relation("PersonalTransferTo")
+
+  @@map("personal_accounts")
+}
+
+// ============================================
+// TRANSACTION
+// ============================================
+
+model Transaction {
+  id                     String          @id @default(uuid())
+  entityType             EntityType
+  type                   TransactionType
+  amount                 Float
+  currency               String
+  exchangeRate           Float           @default(1)
+  description            String
+  category               String
+  date                   DateTime
+  isTaxDeductible        Boolean         @default(false)
+  recurringTransactionId String?
+  createdAt              DateTime        @default(now())
+  updatedAt              DateTime        @updatedAt
+
+  // Relations - polymorphic association
+  businessId        String?
+  business          Business?             @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  personalAccountId String?
+  personalAccount   PersonalAccount?      @relation(fields: [personalAccountId], references: [id], onDelete: Cascade)
+  recurringTransaction RecurringTransaction? @relation(fields: [recurringTransactionId], references: [id], onDelete: SetNull)
+
+  @@index([businessId])
+  @@index([personalAccountId])
+  @@index([entityType])
+  @@index([type])
+  @@index([date])
+  @@index([category])
+  @@map("transactions")
+}
+
+// ============================================
+// TRANSFER
+// ============================================
+
+model Transfer {
+  id              String            @id @default(uuid())
+  fromEntityType  EntityType
+  toEntityType    EntityType
+  direction       TransferDirection
+  amount          Float
+  currency        String
+  exchangeRate    Float             @default(1)
+  description     String?
+  date            DateTime
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+
+  // Relations - polymorphic association for from/to entities
+  fromBusinessId        String?
+  fromBusiness          Business?        @relation("TransferFrom", fields: [fromBusinessId], references: [id], onDelete: Cascade)
+  fromPersonalAccountId String?
+  fromPersonalAccount   PersonalAccount? @relation("PersonalTransferFrom", fields: [fromPersonalAccountId], references: [id], onDelete: Cascade)
+  toBusinessId          String?
+  toBusiness            Business?        @relation("TransferTo", fields: [toBusinessId], references: [id], onDelete: Cascade)
+  toPersonalAccountId   String?
+  toPersonalAccount     PersonalAccount? @relation("PersonalTransferTo", fields: [toPersonalAccountId], references: [id], onDelete: Cascade)
+
+  @@index([fromBusinessId])
+  @@index([fromPersonalAccountId])
+  @@index([toBusinessId])
+  @@index([toPersonalAccountId])
+  @@index([date])
+  @@map("transfers")
+}
+
+// ============================================
+// RECURRING TRANSACTION
+// ============================================
+
+model RecurringTransaction {
+  id                String              @id @default(uuid())
+  entityType        EntityType
+  type              TransactionType
+  amount            Float
+  currency          String
+  exchangeRate      Float               @default(1)
+  description       String
+  category          String
+  frequency         RecurrenceFrequency
+  startDate         DateTime
+  endDate           DateTime?
+  nextDueDate       DateTime
+  lastGeneratedDate DateTime?
+  isActive          Boolean             @default(true)
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+
+  // Relations - polymorphic association
+  businessId        String?
+  business          Business?        @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  personalAccountId String?
+  personalAccount   PersonalAccount? @relation(fields: [personalAccountId], references: [id], onDelete: Cascade)
+  
+  // Generated transactions
+  generatedTransactions Transaction[]
+
+  @@index([businessId])
+  @@index([personalAccountId])
+  @@index([entityType])
+  @@index([isActive])
+  @@index([nextDueDate])
+  @@map("recurring_transactions")
+}
+
+// ============================================
+// BUDGET
+// ============================================
+
+model Budget {
+  id         String       @id @default(uuid())
+  entityType EntityType
+  category   String
+  amount     Float
+  currency   String
+  period     BudgetPeriod
+  year       Int
+  month      Int?         // 1-12 for monthly budgets
+  isActive   Boolean      @default(true)
+  createdAt  DateTime     @default(now())
+  updatedAt  DateTime     @updatedAt
+
+  // Relations - polymorphic association
+  businessId        String?
+  business          Business?        @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  personalAccountId String?
+  personalAccount   PersonalAccount? @relation(fields: [personalAccountId], references: [id], onDelete: Cascade)
+
+  @@unique([businessId, category, period, year, month])
+  @@unique([personalAccountId, category, period, year, month])
+  @@index([businessId])
+  @@index([personalAccountId])
+  @@index([entityType])
+  @@index([year, month])
+  @@map("budgets")
+}
+
+// ============================================
+// CATEGORY
+// ============================================
+
+model Category {
+  id        String          @id @default(uuid())
+  userId    String
+  name      String
+  type      TransactionType
+  color     String?
+  icon      String?
+  isDefault Boolean         @default(false)
+  createdAt DateTime        @default(now())
+  updatedAt DateTime        @updatedAt
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, name, type])
+  @@index([userId])
+  @@index([type])
+  @@map("categories")
+}
+
+// ============================================
+// CURRENCY
+// ============================================
+
+model Currency {
+  id         String   @id @default(uuid())
+  userId     String
+  code       String   // ISO 4217 code (e.g., USD, EUR, BRL)
+  name       String
+  symbol     String
+  manualRate Float    @default(1) // Rate relative to user's base currency
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, code])
+  @@index([userId])
+  @@map("currencies")
+}
