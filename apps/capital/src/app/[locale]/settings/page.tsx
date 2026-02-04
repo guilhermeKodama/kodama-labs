@@ -10,14 +10,17 @@ import {
   Trash2,
   Download,
   Plus,
+  Tag,
 } from 'lucide-react';
 import { AppShell } from '@/components/layout';
 import { Header } from '@/components/layout/header';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { LanguageSwitcher } from '@/components/language-switcher';
+import { CategoryDialog } from '@/components/dialogs';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Badge } from '@/components/ui/badge';
 import {
   Card,
   CardContent,
@@ -57,16 +60,20 @@ import {
 } from '@/lib/store';
 import { COMMON_CURRENCIES, getCurrencyByCode } from '@/lib/utils/currency';
 import { toast } from 'sonner';
+import type { TransactionType, Category } from '@/types';
 
 export default function SettingsPage() {
   const t = useTranslations();
   const {
     settings,
     currencies,
+    categories,
     updateSettings,
     addCurrency,
     updateCurrencyRate,
     removeCurrency,
+    addCategory,
+    removeCategory,
     resetApp,
   } = useSettingsStore();
   const { businesses } = useBusinessStore();
@@ -75,8 +82,10 @@ export default function SettingsPage() {
 
   const [showResetDialog, setShowResetDialog] = useState(false);
   const [showCurrencyDialog, setShowCurrencyDialog] = useState(false);
+  const [showCategoryDialog, setShowCategoryDialog] = useState(false);
   const [newCurrencyCode, setNewCurrencyCode] = useState('');
   const [newCurrencyRate, setNewCurrencyRate] = useState('1');
+  const [deletingCategory, setDeletingCategory] = useState<Category | undefined>();
 
   const handleAddCurrency = () => {
     const currencyInfo = getCurrencyByCode(newCurrencyCode);
@@ -103,6 +112,19 @@ export default function SettingsPage() {
     toast.success(t('settings.currencies.added'));
   };
 
+  const handleAddCategory = (name: string, type: TransactionType) => {
+    addCategory(name, type);
+    toast.success(t('settings.categories.added'));
+  };
+
+  const handleDeleteCategory = () => {
+    if (deletingCategory) {
+      removeCategory(deletingCategory.id);
+      setDeletingCategory(undefined);
+      toast.success(t('settings.categories.deleted'));
+    }
+  };
+
   const handleReset = () => {
     resetApp();
     // Clear other stores
@@ -119,6 +141,7 @@ export default function SettingsPage() {
     const data = {
       settings,
       currencies,
+      categories,
       businesses,
       transactions,
       transfers,
@@ -135,6 +158,24 @@ export default function SettingsPage() {
     a.click();
     URL.revokeObjectURL(url);
     toast.success(t('settings.data.exportSuccess'));
+  };
+
+  // Group categories by type
+  const categoriesByType = {
+    income: categories.filter((c) => c.type === 'income'),
+    expense: categories.filter((c) => c.type === 'expense'),
+    investment: categories.filter((c) => c.type === 'investment'),
+  };
+
+  const getCategoryBadgeStyle = (type: TransactionType) => {
+    switch (type) {
+      case 'income':
+        return 'border-emerald-500/50 bg-emerald-500/10 text-emerald-400';
+      case 'expense':
+        return 'border-red-500/50 bg-red-500/10 text-red-400';
+      case 'investment':
+        return 'border-blue-500/50 bg-blue-500/10 text-blue-400';
+    }
   };
 
   return (
@@ -310,6 +351,125 @@ export default function SettingsPage() {
           </CardContent>
         </Card>
 
+        {/* Categories */}
+        <Card className="border-slate-800 bg-slate-900/50 backdrop-blur-sm lg:col-span-2">
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-gradient-to-br from-cyan-500/20 to-blue-500/20">
+                  <Tag className="h-5 w-5 text-cyan-400" />
+                </div>
+                <div>
+                  <CardTitle className="text-white">
+                    {t('settings.categories.title')}
+                  </CardTitle>
+                  <CardDescription className="text-slate-400">
+                    {t('settings.categories.description')}
+                  </CardDescription>
+                </div>
+              </div>
+              <Button
+                onClick={() => setShowCategoryDialog(true)}
+                size="sm"
+                className="bg-gradient-to-r from-cyan-500 to-blue-500 text-white hover:from-cyan-600 hover:to-blue-600"
+              >
+                <Plus className="mr-2 h-4 w-4" />
+                {t('settings.categories.add')}
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent>
+            {categories.length === 0 ? (
+              <p className="py-4 text-center text-slate-400">
+                {t('settings.categories.empty')}
+              </p>
+            ) : (
+              <div className="space-y-6">
+                {/* Income Categories */}
+                {categoriesByType.income.length > 0 && (
+                  <div>
+                    <h4 className="mb-3 text-sm font-medium text-emerald-400">
+                      {t('transactions.types.income')}
+                    </h4>
+                    <div className="flex flex-wrap gap-2">
+                      {categoriesByType.income.map((category) => (
+                        <div
+                          key={category.id}
+                          className="group flex items-center gap-2 rounded-lg border border-slate-800 bg-slate-800/50 px-3 py-2"
+                        >
+                          <span className="text-slate-300">{category.name}</span>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => setDeletingCategory(category)}
+                            className="h-5 w-5 text-slate-500 opacity-0 transition-opacity hover:bg-red-500/10 hover:text-red-400 group-hover:opacity-100"
+                          >
+                            <Trash2 className="h-3 w-3" />
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Expense Categories */}
+                {categoriesByType.expense.length > 0 && (
+                  <div>
+                    <h4 className="mb-3 text-sm font-medium text-red-400">
+                      {t('transactions.types.expense')}
+                    </h4>
+                    <div className="flex flex-wrap gap-2">
+                      {categoriesByType.expense.map((category) => (
+                        <div
+                          key={category.id}
+                          className="group flex items-center gap-2 rounded-lg border border-slate-800 bg-slate-800/50 px-3 py-2"
+                        >
+                          <span className="text-slate-300">{category.name}</span>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => setDeletingCategory(category)}
+                            className="h-5 w-5 text-slate-500 opacity-0 transition-opacity hover:bg-red-500/10 hover:text-red-400 group-hover:opacity-100"
+                          >
+                            <Trash2 className="h-3 w-3" />
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Investment Categories */}
+                {categoriesByType.investment.length > 0 && (
+                  <div>
+                    <h4 className="mb-3 text-sm font-medium text-blue-400">
+                      {t('transactions.types.investment')}
+                    </h4>
+                    <div className="flex flex-wrap gap-2">
+                      {categoriesByType.investment.map((category) => (
+                        <div
+                          key={category.id}
+                          className="group flex items-center gap-2 rounded-lg border border-slate-800 bg-slate-800/50 px-3 py-2"
+                        >
+                          <span className="text-slate-300">{category.name}</span>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => setDeletingCategory(category)}
+                            className="h-5 w-5 text-slate-500 opacity-0 transition-opacity hover:bg-red-500/10 hover:text-red-400 group-hover:opacity-100"
+                          >
+                            <Trash2 className="h-3 w-3" />
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
         {/* Data Management */}
         <Card className="border-slate-800 bg-slate-900/50 backdrop-blur-sm lg:col-span-2">
           <CardHeader>
@@ -416,6 +576,41 @@ export default function SettingsPage() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Add Category Dialog */}
+      <CategoryDialog
+        open={showCategoryDialog}
+        onOpenChange={setShowCategoryDialog}
+        onSubmit={handleAddCategory}
+      />
+
+      {/* Delete Category Confirmation */}
+      <AlertDialog
+        open={!!deletingCategory}
+        onOpenChange={() => setDeletingCategory(undefined)}
+      >
+        <AlertDialogContent className="border-slate-800 bg-slate-900">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-white">
+              {t('settings.categories.deleteTitle')}
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-slate-400">
+              {t('settings.categories.deleteDescription', { name: deletingCategory?.name || '' })}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="border-slate-700 text-slate-300 hover:bg-slate-800 hover:text-white">
+              {t('common.cancel')}
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDeleteCategory}
+              className="bg-red-500 text-white hover:bg-red-600"
+            >
+              {t('common.delete')}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Reset Confirmation */}
       <AlertDialog open={showResetDialog} onOpenChange={setShowResetDialog}>

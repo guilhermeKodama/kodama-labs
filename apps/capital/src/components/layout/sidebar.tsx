@@ -6,6 +6,8 @@ import {
   Building2,
   User,
   ArrowLeftRight,
+  PiggyBank,
+  FileBarChart,
   Settings,
   TrendingUp,
 } from 'lucide-react';
@@ -20,6 +22,8 @@ const navItems = [
   { href: '/businesses', icon: Building2, labelKey: 'businesses' },
   { href: '/personal', icon: User, labelKey: 'personal' },
   { href: '/transfers', icon: ArrowLeftRight, labelKey: 'transfers' },
+  { href: '/investments', icon: PiggyBank, labelKey: 'investments' },
+  { href: '/reports', icon: FileBarChart, labelKey: 'reports' },
   { href: '/settings', icon: Settings, labelKey: 'settings' },
 ] as const;
 

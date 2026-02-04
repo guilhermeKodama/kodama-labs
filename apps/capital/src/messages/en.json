@@ -19,6 +19,8 @@
     "businesses": "Businesses",
     "personal": "Personal",
     "transfers": "Transfers",
+    "investments": "Investments",
+    "reports": "Reports",
     "settings": "Settings",
     "baseCurrency": "Base Currency"
   },
@@ -82,7 +84,7 @@
       "personal": "Personal",
       "transfers": "Transfers"
     },
-    "footer": "Capital - Phase 1: Foundation Complete"
+    "footer": "Capital - Phase 2: Core Features Complete"
   },
   "dashboard": {
     "title": "Dashboard",
@@ -173,6 +175,8 @@
       "category": "Category",
       "categoryPlaceholder": "Select a category",
       "date": "Date",
+      "exchangeRate": "Exchange Rate",
+      "exchangeRateHint": "{amount} {currency} = {converted} {baseCurrency}",
       "cancel": "Cancel",
       "create": "Add Transaction",
       "update": "Update Transaction"
@@ -207,9 +211,59 @@
   "transfers": {
     "title": "Transfers",
     "subtitle": "Move money between your accounts",
-    "comingSoon": {
-      "title": "Coming Soon",
-      "description": "Transfer management will be available in Phase 2."
+    "addTransfer": "Add Transfer",
+    "history": "Transfer History",
+    "directions": {
+      "profitDistribution": "Profit Distribution",
+      "capitalInjection": "Capital Injection"
+    },
+    "summary": {
+      "totalTransfers": "Total Transfers",
+      "profitDistributions": "Profit Distributions",
+      "capitalInjections": "Capital Injections"
+    },
+    "form": {
+      "direction": "Transfer Type",
+      "from": "From",
+      "to": "To",
+      "selectBusiness": "Select business",
+      "personalAccount": "Personal Account",
+      "amount": "Amount",
+      "currency": "Currency",
+      "exchangeRate": "Exchange Rate",
+      "description": "Description",
+      "descriptionPlaceholder": "Optional description",
+      "date": "Date",
+      "create": "Create Transfer",
+      "update": "Update Transfer"
+    },
+    "dialog": {
+      "createTitle": "Create Transfer",
+      "createDescription": "Move money between your business and personal accounts.",
+      "editTitle": "Edit Transfer",
+      "editDescription": "Update the transfer details."
+    },
+    "table": {
+      "date": "Date",
+      "type": "Type",
+      "fromTo": "From / To",
+      "description": "Description",
+      "amount": "Amount",
+      "empty": "No transfers yet",
+      "unknownEntity": "Unknown"
+    },
+    "delete": {
+      "title": "Delete Transfer?",
+      "description": "This action cannot be undone."
+    },
+    "toast": {
+      "created": "Transfer created successfully!",
+      "deleted": "Transfer deleted successfully!"
+    },
+    "noBusinesses": {
+      "title": "No Businesses Found",
+      "description": "You need to create a business before making transfers.",
+      "createBusiness": "Create Business"
     },
     "features": {
       "profitDistribution": "Profit distribution (Business → Personal)",
@@ -217,6 +271,56 @@
       "transferHistory": "Transfer history",
       "multiCurrency": "Multi-currency transfers",
       "impactTracking": "Impact tracking on balances"
+    }
+  },
+  "investments": {
+    "title": "Investments",
+    "subtitle": "Track your investment portfolio",
+    "addInvestment": "Add Investment",
+    "totalInvestments": "Total Investments",
+    "businessInvestments": "Business Investments",
+    "personalInvestments": "Personal Investments",
+    "portfolioBreakdown": "Portfolio Breakdown",
+    "transactionHistory": "Investment Transactions",
+    "empty": "No investments recorded yet",
+    "addFirst": "Add Your First Investment",
+    "unknownEntity": "Unknown Entity",
+    "filters": {
+      "all": "All"
+    }
+  },
+  "reports": {
+    "title": "Reports",
+    "subtitle": "Financial reports and insights",
+    "yearlyBalance": "Yearly Balance",
+    "yearlyIncome": "Yearly Income",
+    "yearlyExpenses": "Yearly Expenses",
+    "yearlyInvestments": "Yearly Investments",
+    "monthlyOverview": "Monthly Overview",
+    "monthlyBreakdown": "Monthly Breakdown",
+    "incomeByCategory": "Income by Category",
+    "expensesByCategory": "Expenses by Category",
+    "allCategories": "All Categories",
+    "noData": "No data for this period",
+    "views": {
+      "monthly": "Monthly",
+      "categories": "Categories"
+    },
+    "filters": {
+      "all": "All"
+    },
+    "table": {
+      "month": "Month",
+      "income": "Income",
+      "expenses": "Expenses",
+      "investments": "Investments",
+      "balance": "Balance",
+      "total": "Total"
+    },
+    "export": {
+      "button": "Export CSV",
+      "success": "Report exported successfully!",
+      "noData": "No data to export"
     }
   },
   "settings": {
@@ -247,6 +351,21 @@
       "added": "Currency added successfully!",
       "invalidCurrency": "Invalid currency selected",
       "alreadyExists": "This currency is already added"
+    },
+    "categories": {
+      "title": "Transaction Categories",
+      "description": "Manage custom categories for transactions",
+      "add": "Add Category",
+      "addTitle": "Add Category",
+      "addDescription": "Create a new category for your transactions",
+      "name": "Category Name",
+      "namePlaceholder": "e.g., Consulting Services",
+      "type": "Category Type",
+      "empty": "No custom categories yet",
+      "added": "Category added successfully!",
+      "deleted": "Category deleted successfully!",
+      "deleteTitle": "Delete Category?",
+      "deleteDescription": "Are you sure you want to delete the category \"{name}\"? This won't affect existing transactions."
     },
     "data": {
       "title": "Data Management",

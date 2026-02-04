@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useTranslations } from 'next-intl';
@@ -21,7 +22,6 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { createTransactionSchema, type CreateTransactionFormData } from '@/lib/validations';
-import { COMMON_CURRENCIES } from '@/lib/utils/currency';
 import { useSettingsStore } from '@/lib/store';
 import type { Transaction, TransactionType, EntityType } from '@/types';
 import {
@@ -50,7 +50,7 @@ export function TransactionForm({
   defaultType = 'income',
 }: TransactionFormProps) {
   const t = useTranslations('transactions');
-  const { settings } = useSettingsStore();
+  const { settings, currencies, categories } = useSettingsStore();
 
   const form = useForm<CreateTransactionFormData>({
     resolver: zodResolver(createTransactionSchema),
@@ -68,8 +68,31 @@ export function TransactionForm({
   });
 
   const selectedType = form.watch('type');
+  const selectedCurrency = form.watch('currency');
+
+  // Auto-update exchange rate when currency changes
+  useEffect(() => {
+    if (selectedCurrency === settings.baseCurrency) {
+      form.setValue('exchangeRate', 1);
+    } else {
+      const currency = currencies.find((c) => c.code === selectedCurrency);
+      if (currency) {
+        form.setValue('exchangeRate', currency.manualRate);
+      }
+    }
+  }, [selectedCurrency, currencies, settings.baseCurrency, form]);
 
   const getCategoriesForType = (type: TransactionType) => {
+    // First check custom categories from store
+    const customCategories = categories
+      .filter((c) => c.type === type)
+      .map((c) => c.name);
+    
+    if (customCategories.length > 0) {
+      return customCategories;
+    }
+    
+    // Fall back to defaults
     switch (type) {
       case 'income':
         return DEFAULT_INCOME_CATEGORIES;
@@ -80,7 +103,8 @@ export function TransactionForm({
     }
   };
 
-  const categories = getCategoriesForType(selectedType);
+  const categoryOptions = getCategoriesForType(selectedType);
+  const showExchangeRate = selectedCurrency !== settings.baseCurrency;
 
   return (
     <Form {...form}>
@@ -188,7 +212,7 @@ export function TransactionForm({
                     </SelectTrigger>
                   </FormControl>
                   <SelectContent className="border-slate-700 bg-slate-900">
-                    {COMMON_CURRENCIES.map((currency) => (
+                    {currencies.map((currency) => (
                       <SelectItem
                         key={currency.code}
                         value={currency.code}
@@ -205,6 +229,40 @@ export function TransactionForm({
           />
         </div>
 
+        {/* Exchange Rate - shown when currency differs from base */}
+        {showExchangeRate && (
+          <FormField
+            control={form.control}
+            name="exchangeRate"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel className="text-slate-300">
+                  {t('form.exchangeRate')} (1 {settings.baseCurrency} = ? {selectedCurrency})
+                </FormLabel>
+                <FormControl>
+                  <Input
+                    {...field}
+                    type="number"
+                    step="0.0001"
+                    min="0"
+                    onChange={(e) => field.onChange(parseFloat(e.target.value) || 1)}
+                    className="border-slate-700 bg-slate-800 text-white"
+                  />
+                </FormControl>
+                <p className="text-xs text-slate-500">
+                  {t('form.exchangeRateHint', {
+                    amount: form.watch('amount') || 0,
+                    currency: selectedCurrency,
+                    converted: ((form.watch('amount') || 0) * (field.value || 1)).toFixed(2),
+                    baseCurrency: settings.baseCurrency,
+                  })}
+                </p>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+        )}
+
         <FormField
           control={form.control}
           name="category"
@@ -220,7 +278,7 @@ export function TransactionForm({
                   </SelectTrigger>
                 </FormControl>
                 <SelectContent className="border-slate-700 bg-slate-900">
-                  {categories.map((category) => (
+                  {categoryOptions.map((category) => (
                     <SelectItem
                       key={category}
                       value={category}

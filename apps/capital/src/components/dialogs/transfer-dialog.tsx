@@ -1,0 +1,55 @@
+'use client';
+
+import { useTranslations } from 'next-intl';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { TransferForm } from '@/components/forms/transfer-form';
+import type { Transfer } from '@/types';
+import type { CreateTransferFormData } from '@/lib/validations';
+
+interface TransferDialogProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  transfer?: Transfer;
+  onSubmit: (data: CreateTransferFormData) => void;
+  isLoading?: boolean;
+}
+
+export function TransferDialog({
+  open,
+  onOpenChange,
+  transfer,
+  onSubmit,
+  isLoading,
+}: TransferDialogProps) {
+  const t = useTranslations('transfers');
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="border-slate-800 bg-slate-900 sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle className="text-white">
+            {transfer ? t('dialog.editTitle') : t('dialog.createTitle')}
+          </DialogTitle>
+          <DialogDescription className="text-slate-400">
+            {transfer ? t('dialog.editDescription') : t('dialog.createDescription')}
+          </DialogDescription>
+        </DialogHeader>
+        <TransferForm
+          transfer={transfer}
+          onSubmit={(data) => {
+            onSubmit(data);
+            onOpenChange(false);
+          }}
+          onCancel={() => onOpenChange(false)}
+          isLoading={isLoading}
+        />
+      </DialogContent>
+    </Dialog>
+  );
+}
