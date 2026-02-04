@@ -380,6 +380,25 @@
       "resetSuccess": "Todos os dados foram redefinidos"
     }
   },
+  "activity": {
+    "title": "Atividade",
+    "empty": "Nenhuma atividade ainda",
+    "filterAll": "Toda Atividade",
+    "transfers": "Transferências",
+    "incomingTransfer": "Entrada",
+    "outgoingTransfer": "Saída",
+    "transferFrom": "Transferência de {name}",
+    "transferTo": "Transferência para {name}",
+    "from": "de",
+    "to": "para",
+    "table": {
+      "date": "Data",
+      "description": "Descrição",
+      "type": "Tipo",
+      "category": "Categoria",
+      "amount": "Valor"
+    }
+  },
   "language": {
     "title": "Idioma",
     "en": "Inglês",

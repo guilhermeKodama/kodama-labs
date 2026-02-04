@@ -13,7 +13,7 @@ import {
 } from 'lucide-react';
 import { AppShell } from '@/components/layout';
 import { SummaryCard } from '@/components/cards';
-import { TransactionsTable } from '@/components/tables';
+import { ActivityTable } from '@/components/tables';
 import { TransactionDialog } from '@/components/dialogs';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -36,7 +36,7 @@ import {
 } from '@/lib/store';
 import { calculateEntitySummary } from '@/lib/utils/calculations';
 import { toast } from 'sonner';
-import type { Transaction } from '@/types';
+import type { Transaction, Transfer } from '@/types';
 import type { CreateTransactionFormData } from '@/lib/validations';
 
 export default function BusinessDetailPage() {
@@ -44,22 +44,43 @@ export default function BusinessDetailPage() {
   const params = useParams();
   const businessId = params.id as string;
 
-  const { getBusiness } = useBusinessStore();
+  const { businesses, getBusiness } = useBusinessStore();
   const { transactions, addTransaction, updateTransaction, deleteTransaction } =
     useTransactionStore();
-  const { transfers } = useTransferStore();
-  const { settings } = useSettingsStore();
+  const { transfers, deleteTransfer } = useTransferStore();
+  const { settings, personalAccount } = useSettingsStore();
 
   const business = getBusiness(businessId);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingTransaction, setEditingTransaction] = useState<Transaction | undefined>();
   const [deletingTransaction, setDeletingTransaction] = useState<Transaction | undefined>();
+  const [deletingTransfer, setDeletingTransfer] = useState<Transfer | undefined>();
 
+  // Get transactions for this business
   const businessTransactions = useMemo(() => {
     return transactions.filter(
       (t) => t.entityId === businessId && t.entityType === 'business'
     );
   }, [transactions, businessId]);
+
+  // Get transfers involving this business
+  const businessTransfers = useMemo(() => {
+    return transfers.filter(
+      (t) => t.fromEntityId === businessId || t.toEntityId === businessId
+    );
+  }, [transfers, businessId]);
+
+  // Build entity names map for display
+  const entityNames = useMemo(() => {
+    const names: Record<string, string> = {};
+    businesses.forEach((b) => {
+      names[b.id] = b.name;
+    });
+    if (personalAccount) {
+      names[personalAccount.id] = t('nav.personal');
+    }
+    return names;
+  }, [businesses, personalAccount, t]);
 
   const summary = useMemo(() => {
     if (!business) return null;
@@ -113,6 +134,14 @@ export default function BusinessDetailPage() {
       deleteTransaction(deletingTransaction.id);
       setDeletingTransaction(undefined);
       toast.success(t('transactions.toast.deleted'));
+    }
+  };
+
+  const handleDeleteTransfer = () => {
+    if (deletingTransfer) {
+      deleteTransfer(deletingTransfer.id);
+      setDeletingTransfer(undefined);
+      toast.success(t('transfers.toast.deleted'));
     }
   };
 
@@ -209,18 +238,23 @@ export default function BusinessDetailPage() {
         </div>
       )}
 
-      {/* Transactions */}
+      {/* Activity (Transactions + Transfers) */}
       <Card className="border-slate-800 bg-slate-900/50 backdrop-blur-sm">
         <CardHeader>
           <CardTitle className="text-lg text-white">
-            {t('transactions.title')}
+            {t('activity.title')}
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <TransactionsTable
+          <ActivityTable
             transactions={businessTransactions}
-            onEdit={openEditDialog}
-            onDelete={setDeletingTransaction}
+            transfers={businessTransfers}
+            entityId={businessId}
+            entityType="business"
+            entityNames={entityNames}
+            onEditTransaction={openEditDialog}
+            onDeleteTransaction={setDeletingTransaction}
+            onDeleteTransfer={setDeletingTransfer}
           />
         </CardContent>
       </Card>
@@ -235,7 +269,7 @@ export default function BusinessDetailPage() {
         onSubmit={editingTransaction ? handleUpdateTransaction : handleCreateTransaction}
       />
 
-      {/* Delete Confirmation */}
+      {/* Delete Transaction Confirmation */}
       <AlertDialog
         open={!!deletingTransaction}
         onOpenChange={() => setDeletingTransaction(undefined)}
@@ -255,6 +289,34 @@ export default function BusinessDetailPage() {
             </AlertDialogCancel>
             <AlertDialogAction
               onClick={handleDeleteTransaction}
+              className="bg-red-500 text-white hover:bg-red-600"
+            >
+              {t('common.delete')}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Delete Transfer Confirmation */}
+      <AlertDialog
+        open={!!deletingTransfer}
+        onOpenChange={() => setDeletingTransfer(undefined)}
+      >
+        <AlertDialogContent className="border-slate-800 bg-slate-900">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-white">
+              {t('transfers.delete.title')}
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-slate-400">
+              {t('transfers.delete.description')}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="border-slate-700 text-slate-300 hover:bg-slate-800 hover:text-white">
+              {t('common.cancel')}
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDeleteTransfer}
               className="bg-red-500 text-white hover:bg-red-600"
             >
               {t('common.delete')}
