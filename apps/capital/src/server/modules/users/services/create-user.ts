@@ -4,6 +4,7 @@ import { fetchUserByEmail } from "../data/queries/fetch-user-by-email";
 
 interface CreateUserInput {
   email: string;
+  passwordHash: string;
   name: string;
   baseCurrency?: string;
 }

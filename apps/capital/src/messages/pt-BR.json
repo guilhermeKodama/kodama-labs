@@ -447,6 +447,29 @@
     "en": "Inglês",
     "pt-BR": "Português (BR)"
   },
+  "auth": {
+    "email": "Email",
+    "password": "Senha",
+    "name": "Nome",
+    "passwordHint": "A senha deve ter pelo menos 8 caracteres",
+    "loggingIn": "Entrando...",
+    "creatingAccount": "Criando conta...",
+    "login": {
+      "title": "Bem-vindo de volta",
+      "subtitle": "Entre na sua conta Capital",
+      "button": "Entrar",
+      "noAccount": "Não tem uma conta?",
+      "signupLink": "Cadastre-se"
+    },
+    "signup": {
+      "title": "Crie sua conta",
+      "subtitle": "Comece a usar o Capital gratuitamente",
+      "button": "Criar Conta",
+      "hasAccount": "Já tem uma conta?",
+      "loginLink": "Entrar"
+    },
+    "logout": "Sair"
+  },
   "recurring": {
     "title": "Transações Recorrentes",
     "subtitle": "Gerencie suas receitas e despesas recorrentes",

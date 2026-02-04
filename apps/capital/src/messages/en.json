@@ -447,6 +447,29 @@
     "en": "English",
     "pt-BR": "Portuguese (BR)"
   },
+  "auth": {
+    "email": "Email",
+    "password": "Password",
+    "name": "Name",
+    "passwordHint": "Password must be at least 8 characters",
+    "loggingIn": "Logging in...",
+    "creatingAccount": "Creating account...",
+    "login": {
+      "title": "Welcome back",
+      "subtitle": "Sign in to your Capital account",
+      "button": "Sign In",
+      "noAccount": "Don't have an account?",
+      "signupLink": "Sign up"
+    },
+    "signup": {
+      "title": "Create your account",
+      "subtitle": "Get started with Capital for free",
+      "button": "Create Account",
+      "hasAccount": "Already have an account?",
+      "loginLink": "Sign in"
+    },
+    "logout": "Log out"
+  },
   "recurring": {
     "title": "Recurring Transactions",
     "subtitle": "Manage your recurring income and expenses",

@@ -94,29 +94,29 @@ export default function RecurringPage() {
     }
   }
 
-  const handleCreate = (data: CreateRecurringTransactionFormData) => {
-    addRecurringTransaction(data);
+  const handleCreate = async (data: CreateRecurringTransactionFormData) => {
+    await addRecurringTransaction(data);
     toast.success(t('recurring.toast.created'));
   };
 
-  const handleUpdate = (data: CreateRecurringTransactionFormData) => {
+  const handleUpdate = async (data: CreateRecurringTransactionFormData) => {
     if (editingRecurring) {
-      updateRecurringTransaction(editingRecurring.id, data);
+      await updateRecurringTransaction(editingRecurring.id, data);
       setEditingRecurring(undefined);
       toast.success(t('recurring.toast.updated'));
     }
   };
 
-  const handleDelete = () => {
+  const handleDelete = async () => {
     if (deletingRecurring) {
-      deleteRecurringTransaction(deletingRecurring.id);
+      await deleteRecurringTransaction(deletingRecurring.id);
       setDeletingRecurring(undefined);
       toast.success(t('recurring.toast.deleted'));
     }
   };
 
-  const handleToggle = (recurring: RecurringTransaction) => {
-    toggleRecurringTransaction(recurring.id);
+  const handleToggle = async (recurring: RecurringTransaction) => {
+    await toggleRecurringTransaction(recurring.id);
     toast.success(
       recurring.isActive
         ? t('recurring.toast.paused')

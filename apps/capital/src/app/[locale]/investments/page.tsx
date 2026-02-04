@@ -100,22 +100,22 @@ export default function InvestmentsPage() {
     return business?.name || t('investments.unknownEntity');
   };
 
-  const handleCreateTransaction = (data: CreateTransactionFormData) => {
-    addTransaction(data);
+  const handleCreateTransaction = async (data: CreateTransactionFormData) => {
+    await addTransaction(data);
     toast.success(t('transactions.toast.created'));
   };
 
-  const handleUpdateTransaction = (data: CreateTransactionFormData) => {
+  const handleUpdateTransaction = async (data: CreateTransactionFormData) => {
     if (editingTransaction) {
-      updateTransaction(editingTransaction.id, data);
+      await updateTransaction(editingTransaction.id, data);
       setEditingTransaction(undefined);
       toast.success(t('transactions.toast.updated'));
     }
   };
 
-  const handleDeleteTransaction = () => {
+  const handleDeleteTransaction = async () => {
     if (deletingTransaction) {
-      deleteTransaction(deletingTransaction.id);
+      await deleteTransaction(deletingTransaction.id);
       setDeletingTransaction(undefined);
       toast.success(t('transactions.toast.deleted'));
     }

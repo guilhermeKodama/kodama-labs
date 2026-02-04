@@ -46,6 +46,7 @@ enum BudgetPeriod {
 model User {
   id           String   @id @default(uuid())
   email        String   @unique
+  passwordHash String
   name         String
   baseCurrency String   @default("USD")
   theme        String   @default("system") // light, dark, system
@@ -59,8 +60,27 @@ model User {
   personalAccount  PersonalAccount?
   categories       Category[]
   currencies       Currency[]
+  sessions         Session[]
 
   @@map("users")
+}
+
+// ============================================
+// SESSION
+// ============================================
+
+model Session {
+  id        String   @id @default(uuid())
+  userId    String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("sessions")
 }
 
 // ============================================

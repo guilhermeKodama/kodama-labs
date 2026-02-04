@@ -1,6 +1,7 @@
 'use client';
 
 import { useTranslations } from 'next-intl';
+import { useRouter } from 'next/navigation';
 import {
   LayoutDashboard,
   Building2,
@@ -13,12 +14,15 @@ import {
   Repeat,
   Target,
   Receipt,
+  LogOut,
 } from 'lucide-react';
 import { Link, usePathname } from '@/i18n/navigation';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { LanguageSwitcher } from '@/components/language-switcher';
 import { cn } from '@/lib/utils';
 import { useSettingsStore } from '@/lib/store';
+import { useUser } from '@/lib/user-context';
+import { Button } from '@/components/ui/button';
 
 const navItems = [
   { href: '/dashboard', icon: LayoutDashboard, labelKey: 'dashboard' },
@@ -35,8 +39,16 @@ const navItems = [
 
 export function Sidebar() {
   const t = useTranslations('nav');
+  const tAuth = useTranslations('auth');
   const pathname = usePathname();
+  const router = useRouter();
   const { settings } = useSettingsStore();
+  const { user, logout, isAuthenticated } = useUser();
+
+  const handleLogout = async () => {
+    await logout();
+    router.push('/login');
+  };
 
   return (
     <aside className="fixed left-0 top-0 z-40 hidden h-screen w-64 flex-col border-r border-slate-800 bg-slate-950 lg:flex">
@@ -75,10 +87,11 @@ export function Sidebar() {
       {/* Bottom section */}
       <div className="border-t border-slate-800 p-4">
         {/* User info */}
-        {settings.userId && (
+        {isAuthenticated && user && (
           <div className="mb-4 rounded-lg bg-slate-800/50 p-3">
-            <p className="text-xs text-slate-500">{t('baseCurrency')}</p>
-            <p className="font-medium text-slate-300">{settings.baseCurrency}</p>
+            <p className="truncate text-sm font-medium text-slate-300">{user.name}</p>
+            <p className="truncate text-xs text-slate-500">{user.email}</p>
+            <p className="mt-2 text-xs text-slate-500">{t('baseCurrency')}: {user.baseCurrency}</p>
           </div>
         )}
 
@@ -86,6 +99,17 @@ export function Sidebar() {
         <div className="flex items-center justify-between">
           <LanguageSwitcher compact />
           <ThemeToggle />
+          {isAuthenticated && (
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={handleLogout}
+              className="h-9 w-9 text-slate-400 hover:bg-slate-800 hover:text-white"
+              title={tAuth('logout')}
+            >
+              <LogOut className="h-4 w-4" />
+            </Button>
+          )}
         </div>
       </div>
     </aside>

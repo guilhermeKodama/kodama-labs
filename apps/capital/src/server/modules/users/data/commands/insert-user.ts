@@ -2,6 +2,7 @@ import type { DbClient } from "@capital/server/lib/prisma";
 
 interface CreateUserData {
   email: string;
+  passwordHash: string;
   name: string;
   baseCurrency?: string;
 }
@@ -10,6 +11,7 @@ export async function insertUser(data: CreateUserData, db: DbClient) {
   return db.user.create({
     data: {
       email: data.email,
+      passwordHash: data.passwordHash,
       name: data.name,
       baseCurrency: data.baseCurrency ?? "USD",
       personalAccount: {
