@@ -4,7 +4,6 @@ import { useState, useMemo } from 'react';
 import { useTranslations } from 'next-intl';
 import { format, startOfYear, endOfYear, eachMonthOfInterval } from 'date-fns';
 import {
-  FileBarChart,
   TrendingUp,
   TrendingDown,
   PiggyBank,
@@ -12,42 +11,50 @@ import {
   Download,
   ChevronLeft,
   ChevronRight,
+  Lightbulb,
 } from 'lucide-react';
 import { AppShell } from '@/components/layout';
 import { Header } from '@/components/layout/header';
 import { SummaryCard } from '@/components/cards';
 import { MonthlyReportTable } from '@/components/tables';
-import { CategoryPieChart, IncomeExpenseChart } from '@/components/charts';
+import {
+  CategoryPieChart,
+  IncomeExpenseChart,
+  BalanceLineChart,
+  CashFlowChart,
+  EntityComparisonChart,
+  CurrencyDistributionChart,
+} from '@/components/charts';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   useTransactionStore,
+  useTransferStore,
   useBusinessStore,
   useSettingsStore,
 } from '@/lib/store';
 import {
   calculateCategoryBreakdown,
   sumTransactionsByType,
+  calculateGrowthRate,
 } from '@/lib/utils/calculations';
 import { exportTransactionsToCSV } from '@/lib/utils/export';
+import { formatCurrency, formatPercent } from '@/lib/utils/format';
+import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import type { TransactionType } from '@/types';
-
-const MONTH_NAMES = [
-  'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-  'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
-];
 
 export default function ReportsPage() {
   const t = useTranslations();
   const { transactions } = useTransactionStore();
+  const { transfers } = useTransferStore();
   const { businesses } = useBusinessStore();
-  const { settings, personalAccount } = useSettingsStore();
+  const { settings, personalAccount, currencies } = useSettingsStore();
 
   const currentYear = new Date().getFullYear();
   const [selectedYear, setSelectedYear] = useState(currentYear);
-  const [selectedView, setSelectedView] = useState<'monthly' | 'categories'>('monthly');
+  const [selectedView, setSelectedView] = useState<'monthly' | 'categories' | 'insights'>('monthly');
   const [selectedType, setSelectedType] = useState<TransactionType | 'all'>('all');
 
   // Filter transactions by year
@@ -55,6 +62,14 @@ export default function ReportsPage() {
     return transactions.filter((t) => {
       const date = new Date(t.date);
       return date.getFullYear() === selectedYear;
+    });
+  }, [transactions, selectedYear]);
+
+  // Previous year transactions for comparison
+  const prevYearTransactions = useMemo(() => {
+    return transactions.filter((t) => {
+      const date = new Date(t.date);
+      return date.getFullYear() === selectedYear - 1;
     });
   }, [transactions, selectedYear]);
 
@@ -70,6 +85,19 @@ export default function ReportsPage() {
       balance: income - expense,
     };
   }, [yearTransactions]);
+
+  // Calculate previous year totals for growth comparison
+  const prevYearTotals = useMemo(() => {
+    const income = sumTransactionsByType(prevYearTransactions, 'income');
+    const expense = sumTransactionsByType(prevYearTransactions, 'expense');
+    return { income, expense };
+  }, [prevYearTransactions]);
+
+  // Calculate growth rates
+  const growthRates = useMemo(() => ({
+    income: calculateGrowthRate(yearlyTotals.income, prevYearTotals.income),
+    expense: calculateGrowthRate(yearlyTotals.expense, prevYearTotals.expense),
+  }), [yearlyTotals, prevYearTotals]);
 
   // Calculate monthly data
   const monthlyData = useMemo(() => {
@@ -131,6 +159,31 @@ export default function ReportsPage() {
       .sort((a, b) => b.value - a.value);
   }, [yearTransactions]);
 
+  // Prepare entities for comparison chart
+  const allEntities = useMemo(() => {
+    const entities: Array<{ id: string; name: string; type: 'business' | 'personal'; color?: string }> = [];
+    
+    businesses.forEach((b) => {
+      entities.push({
+        id: b.id,
+        name: b.name,
+        type: 'business',
+        color: b.color,
+      });
+    });
+
+    if (personalAccount) {
+      entities.push({
+        id: personalAccount.id,
+        name: t('nav.personal'),
+        type: 'personal',
+        color: '#8b5cf6',
+      });
+    }
+
+    return entities;
+  }, [businesses, personalAccount, t]);
+
   const handleExportCSV = () => {
     if (yearTransactions.length === 0) {
       toast.error(t('reports.export.noData'));
@@ -163,6 +216,15 @@ export default function ReportsPage() {
     years.add(currentYear);
     return Array.from(years).sort((a, b) => b - a);
   }, [transactions, currentYear]);
+
+  const hasData = transactions.length > 0;
+  const hasMultipleEntities = allEntities.length > 1;
+  const hasMultipleCurrencies = currencies.length > 1;
+
+  // Top expense category
+  const topExpenseCategory = expenseBreakdown.length > 0 ? expenseBreakdown[0] : null;
+  // Top income category
+  const topIncomeCategory = incomeBreakdown.length > 0 ? incomeBreakdown[0] : null;
 
   return (
     <AppShell>
@@ -221,6 +283,10 @@ export default function ReportsPage() {
           currency={settings.baseCurrency}
           icon={TrendingUp}
           variant="income"
+          trend={prevYearTotals.income > 0 ? {
+            value: growthRates.income,
+            isPositive: growthRates.income >= 0,
+          } : undefined}
         />
         <SummaryCard
           title={t('reports.yearlyExpenses')}
@@ -228,6 +294,10 @@ export default function ReportsPage() {
           currency={settings.baseCurrency}
           icon={TrendingDown}
           variant="expense"
+          trend={prevYearTotals.expense > 0 ? {
+            value: growthRates.expense,
+            isPositive: growthRates.expense <= 0, // Less expense is good
+          } : undefined}
         />
         <SummaryCard
           title={t('reports.yearlyInvestments')}
@@ -252,6 +322,13 @@ export default function ReportsPage() {
             className="data-[state=active]:bg-slate-800 data-[state=active]:text-white"
           >
             {t('reports.views.categories')}
+          </TabsTrigger>
+          <TabsTrigger
+            value="insights"
+            className="data-[state=active]:bg-slate-800 data-[state=active]:text-white"
+          >
+            <Lightbulb className="mr-1.5 h-3.5 w-3.5" />
+            {t('reports.views.insights')}
           </TabsTrigger>
         </TabsList>
 
@@ -367,6 +444,171 @@ export default function ReportsPage() {
               />
             </CardContent>
           </Card>
+        </TabsContent>
+
+        {/* Insights View */}
+        <TabsContent value="insights" className="space-y-6">
+          {/* Key Insights Summary */}
+          {hasData && (
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+              {/* Savings Rate */}
+              <Card className="border-slate-800 bg-slate-900/50 backdrop-blur-sm">
+                <CardContent className="pt-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm text-slate-400">{t('insights.savingsRate')}</p>
+                      <p className={cn(
+                        'text-2xl font-bold',
+                        yearlyTotals.balance >= 0 ? 'text-emerald-400' : 'text-red-400'
+                      )}>
+                        {yearlyTotals.income > 0
+                          ? formatPercent((yearlyTotals.balance / yearlyTotals.income) * 100)
+                          : '0%'}
+                      </p>
+                    </div>
+                    <Wallet className="h-8 w-8 text-slate-600" />
+                  </div>
+                  <p className="mt-2 text-xs text-slate-500">
+                    {t('insights.savingsRateDesc')}
+                  </p>
+                </CardContent>
+              </Card>
+
+              {/* Top Expense */}
+              {topExpenseCategory && (
+                <Card className="border-slate-800 bg-slate-900/50 backdrop-blur-sm">
+                  <CardContent className="pt-6">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm text-slate-400">{t('insights.topExpense')}</p>
+                        <p className="text-lg font-bold text-white">{topExpenseCategory.name}</p>
+                        <p className="text-sm text-red-400">
+                          {formatCurrency(topExpenseCategory.value, settings.baseCurrency)}
+                        </p>
+                      </div>
+                      <TrendingDown className="h-8 w-8 text-red-500/50" />
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* Top Income */}
+              {topIncomeCategory && (
+                <Card className="border-slate-800 bg-slate-900/50 backdrop-blur-sm">
+                  <CardContent className="pt-6">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm text-slate-400">{t('insights.topIncome')}</p>
+                        <p className="text-lg font-bold text-white">{topIncomeCategory.name}</p>
+                        <p className="text-sm text-emerald-400">
+                          {formatCurrency(topIncomeCategory.value, settings.baseCurrency)}
+                        </p>
+                      </div>
+                      <TrendingUp className="h-8 w-8 text-emerald-500/50" />
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+            </div>
+          )}
+
+          {/* Balance Over Time */}
+          <Card className="border-slate-800 bg-slate-900/50 backdrop-blur-sm">
+            <CardHeader>
+              <CardTitle className="text-lg text-white">
+                {t('charts.balanceOverTime')}
+              </CardTitle>
+              <CardDescription className="text-slate-400">
+                {t('insights.balanceOverTimeDesc')}
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <BalanceLineChart
+                transactions={transactions}
+                transfers={transfers}
+                currency={settings.baseCurrency}
+                height={300}
+              />
+            </CardContent>
+          </Card>
+
+          {/* Cash Flow */}
+          <Card className="border-slate-800 bg-slate-900/50 backdrop-blur-sm">
+            <CardHeader>
+              <CardTitle className="text-lg text-white">
+                {t('charts.cashFlow')}
+              </CardTitle>
+              <CardDescription className="text-slate-400">
+                {t('insights.cashFlowDesc')}
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <CashFlowChart
+                transactions={transactions}
+                transfers={transfers}
+                currency={settings.baseCurrency}
+                year={selectedYear}
+                height={300}
+              />
+            </CardContent>
+          </Card>
+
+          <div className="grid gap-6 lg:grid-cols-2">
+            {/* Entity Comparison */}
+            {hasMultipleEntities && (
+              <Card className="border-slate-800 bg-slate-900/50 backdrop-blur-sm">
+                <CardHeader>
+                  <CardTitle className="text-lg text-white">
+                    {t('charts.entityComparison')}
+                  </CardTitle>
+                  <CardDescription className="text-slate-400">
+                    {t('insights.entityComparisonDesc')}
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <EntityComparisonChart
+                    entities={allEntities}
+                    transactions={transactions}
+                    transfers={transfers}
+                    currency={settings.baseCurrency}
+                    height={Math.max(200, allEntities.length * 60)}
+                  />
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Currency Distribution */}
+            {hasMultipleCurrencies && (
+              <Card className="border-slate-800 bg-slate-900/50 backdrop-blur-sm">
+                <CardHeader>
+                  <CardTitle className="text-lg text-white">
+                    {t('charts.currencyDistribution')}
+                  </CardTitle>
+                  <CardDescription className="text-slate-400">
+                    {t('insights.currencyDistributionDesc')}
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <CurrencyDistributionChart
+                    transactions={transactions}
+                    transfers={transfers}
+                    baseCurrency={settings.baseCurrency}
+                    height={300}
+                  />
+                </CardContent>
+              </Card>
+            )}
+          </div>
+
+          {/* No data message */}
+          {!hasData && (
+            <Card className="border-slate-800 bg-slate-900/50 backdrop-blur-sm">
+              <CardContent className="py-12 text-center">
+                <Lightbulb className="mx-auto mb-4 h-12 w-12 text-slate-600" />
+                <p className="text-slate-400">{t('insights.noData')}</p>
+              </CardContent>
+            </Card>
+          )}
         </TabsContent>
       </Tabs>
     </AppShell>
