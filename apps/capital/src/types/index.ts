@@ -12,6 +12,10 @@ export type TransactionType = 'income' | 'expense' | 'investment';
 
 export type TransferDirection = 'profit_distribution' | 'capital_injection';
 
+export type RecurrenceFrequency = 'daily' | 'weekly' | 'monthly' | 'yearly';
+
+export type BudgetPeriod = 'monthly' | 'yearly';
+
 export const TRANSACTION_TYPE_LABELS: Record<TransactionType, string> = {
   income: 'Income',
   expense: 'Expense',
@@ -92,6 +96,8 @@ export interface Transaction {
   description: string;
   category: string;
   date: Date;
+  isTaxDeductible?: boolean; // For tax calculation helpers
+  recurringTransactionId?: string; // Link to recurring transaction if auto-generated
   createdAt: Date;
   updatedAt: Date;
 }
@@ -106,6 +112,8 @@ export interface CreateTransactionInput {
   description: string;
   category: string;
   date: Date;
+  isTaxDeductible?: boolean;
+  recurringTransactionId?: string;
 }
 
 export interface UpdateTransactionInput {
@@ -116,6 +124,7 @@ export interface UpdateTransactionInput {
   description?: string;
   category?: string;
   date?: Date;
+  isTaxDeductible?: boolean;
 }
 
 // --------------------------------------------
@@ -149,6 +158,124 @@ export interface CreateTransferInput {
   exchangeRate?: number;
   description?: string;
   date: Date;
+}
+
+// --------------------------------------------
+// Recurring Transaction
+// --------------------------------------------
+
+export interface RecurringTransaction {
+  id: string;
+  entityId: string;
+  entityType: EntityType;
+  type: TransactionType;
+  amount: number;
+  currency: string;
+  exchangeRate: number;
+  description: string;
+  category: string;
+  frequency: RecurrenceFrequency;
+  startDate: Date;
+  endDate?: Date;
+  nextDueDate: Date;
+  lastGeneratedDate?: Date;
+  isActive: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface CreateRecurringTransactionInput {
+  entityId: string;
+  entityType: EntityType;
+  type: TransactionType;
+  amount: number;
+  currency: string;
+  exchangeRate?: number;
+  description: string;
+  category: string;
+  frequency: RecurrenceFrequency;
+  startDate: Date;
+  endDate?: Date;
+}
+
+export interface UpdateRecurringTransactionInput {
+  type?: TransactionType;
+  amount?: number;
+  currency?: string;
+  exchangeRate?: number;
+  description?: string;
+  category?: string;
+  frequency?: RecurrenceFrequency;
+  startDate?: Date;
+  endDate?: Date;
+  isActive?: boolean;
+}
+
+// --------------------------------------------
+// Budget
+// --------------------------------------------
+
+export interface Budget {
+  id: string;
+  entityId: string;
+  entityType: EntityType;
+  category: string;
+  amount: number;
+  currency: string;
+  period: BudgetPeriod;
+  year: number;
+  month?: number; // 1-12 for monthly budgets
+  isActive: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface CreateBudgetInput {
+  entityId: string;
+  entityType: EntityType;
+  category: string;
+  amount: number;
+  currency: string;
+  period: BudgetPeriod;
+  year: number;
+  month?: number;
+}
+
+export interface UpdateBudgetInput {
+  category?: string;
+  amount?: number;
+  currency?: string;
+  period?: BudgetPeriod;
+  year?: number;
+  month?: number;
+  isActive?: boolean;
+}
+
+export interface BudgetProgress {
+  budget: Budget;
+  spent: number;
+  remaining: number;
+  percentUsed: number;
+  isOverBudget: boolean;
+}
+
+// --------------------------------------------
+// Tax
+// --------------------------------------------
+
+export interface TaxSettings {
+  taxYear: number;
+  entityTaxRates: Record<string, number>; // entityId -> tax rate %
+}
+
+export interface TaxSummary {
+  entityId: string;
+  entityName: string;
+  totalIncome: number;
+  totalDeductible: number;
+  taxableIncome: number;
+  estimatedTax: number;
+  taxRate: number;
 }
 
 // --------------------------------------------
@@ -297,6 +424,7 @@ export interface SettingsStore {
   currencies: Currency[];
   categories: Category[];
   personalAccount: PersonalAccount | null;
+  taxSettings: TaxSettings;
   
   // Actions
   updateSettings: (settings: Partial<AppSettings>) => void;
@@ -304,6 +432,36 @@ export interface SettingsStore {
   updateCurrencyRate: (code: string, rate: number) => void;
   removeCurrency: (code: string) => void;
   initializePersonalAccount: () => void;
+  updateTaxSettings: (settings: Partial<TaxSettings>) => void;
+  setEntityTaxRate: (entityId: string, rate: number) => void;
+}
+
+export interface RecurringTransactionStore {
+  recurringTransactions: RecurringTransaction[];
+  isLoading: boolean;
+  error: string | null;
+  
+  // Actions
+  addRecurringTransaction: (input: CreateRecurringTransactionInput) => RecurringTransaction;
+  updateRecurringTransaction: (id: string, input: UpdateRecurringTransactionInput) => void;
+  deleteRecurringTransaction: (id: string) => void;
+  toggleRecurringTransaction: (id: string) => void;
+  getRecurringTransactionsByEntity: (entityId: string, entityType: EntityType) => RecurringTransaction[];
+  updateLastGeneratedDate: (id: string, date: Date) => void;
+}
+
+export interface BudgetStore {
+  budgets: Budget[];
+  isLoading: boolean;
+  error: string | null;
+  
+  // Actions
+  addBudget: (input: CreateBudgetInput) => Budget;
+  updateBudget: (id: string, input: UpdateBudgetInput) => void;
+  deleteBudget: (id: string) => void;
+  toggleBudget: (id: string) => void;
+  getBudgetsByEntity: (entityId: string, entityType: EntityType) => Budget[];
+  getBudgetsByPeriod: (year: number, month?: number) => Budget[];
 }
 
 // --------------------------------------------

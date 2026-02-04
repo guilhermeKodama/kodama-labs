@@ -8,6 +8,11 @@ import {
   ArrowLeftRight,
   FileBarChart,
   MoreHorizontal,
+  PiggyBank,
+  Settings,
+  Repeat,
+  Target,
+  Receipt,
 } from 'lucide-react';
 import { Link, usePathname } from '@/i18n/navigation';
 import { cn } from '@/lib/utils';
@@ -17,7 +22,6 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { PiggyBank, Settings } from 'lucide-react';
 
 const mainNavItems = [
   { href: '/dashboard', icon: LayoutDashboard, labelKey: 'dashboard' },
@@ -27,8 +31,11 @@ const mainNavItems = [
 ] as const;
 
 const moreNavItems = [
+  { href: '/recurring', icon: Repeat, labelKey: 'recurring' },
   { href: '/investments', icon: PiggyBank, labelKey: 'investments' },
+  { href: '/budgets', icon: Target, labelKey: 'budgets' },
   { href: '/reports', icon: FileBarChart, labelKey: 'reports' },
+  { href: '/tax', icon: Receipt, labelKey: 'tax' },
   { href: '/settings', icon: Settings, labelKey: 'settings' },
 ] as const;
 

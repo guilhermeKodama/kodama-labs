@@ -12,15 +12,21 @@
     "delete": "Delete",
     "cancel": "Cancel",
     "save": "Save",
-    "loading": "Loading..."
+    "create": "Create",
+    "loading": "Loading...",
+    "personal": "Personal",
+    "business": "Business"
   },
   "nav": {
     "dashboard": "Dashboard",
     "businesses": "Businesses",
     "personal": "Personal",
     "transfers": "Transfers",
+    "recurring": "Recurring",
     "investments": "Investments",
+    "budgets": "Budgets",
     "reports": "Reports",
+    "tax": "Tax",
     "settings": "Settings",
     "baseCurrency": "Base Currency"
   },
@@ -440,5 +446,200 @@
     "title": "Language",
     "en": "English",
     "pt-BR": "Portuguese (BR)"
+  },
+  "recurring": {
+    "title": "Recurring Transactions",
+    "subtitle": "Manage your recurring income and expenses",
+    "addRecurring": "Add Recurring",
+    "list": "Recurring Transactions",
+    "frequencies": {
+      "daily": "Daily",
+      "weekly": "Weekly",
+      "monthly": "Monthly",
+      "yearly": "Yearly"
+    },
+    "summary": {
+      "total": "Total Recurring",
+      "active": "Active",
+      "monthlyIncome": "Monthly Income",
+      "monthlyExpense": "Monthly Expense"
+    },
+    "form": {
+      "entityType": "Entity Type",
+      "business": "Business",
+      "selectBusiness": "Select business",
+      "frequency": "Frequency",
+      "startDate": "Start Date",
+      "endDate": "End Date",
+      "hasEndDate": "Set end date",
+      "descriptionPlaceholder": "e.g., Monthly rent, Netflix subscription"
+    },
+    "dialog": {
+      "createTitle": "Create Recurring Transaction",
+      "createDescription": "Set up a transaction that repeats automatically.",
+      "editTitle": "Edit Recurring Transaction",
+      "editDescription": "Update the recurring transaction details."
+    },
+    "table": {
+      "description": "Description",
+      "type": "Type",
+      "entity": "Entity",
+      "frequency": "Frequency",
+      "nextDue": "Next Due",
+      "amount": "Amount",
+      "status": "Status"
+    },
+    "status": {
+      "active": "Active",
+      "paused": "Paused"
+    },
+    "actions": {
+      "pause": "Pause",
+      "resume": "Resume"
+    },
+    "empty": {
+      "title": "No recurring transactions",
+      "description": "Set up recurring transactions to automatically track regular income and expenses."
+    },
+    "delete": {
+      "title": "Delete Recurring Transaction?",
+      "description": "This will stop future transactions from being generated. Existing transactions will not be affected."
+    },
+    "toast": {
+      "created": "Recurring transaction created!",
+      "updated": "Recurring transaction updated!",
+      "deleted": "Recurring transaction deleted!",
+      "paused": "Recurring transaction paused",
+      "resumed": "Recurring transaction resumed"
+    }
+  },
+  "budgets": {
+    "title": "Budgets",
+    "subtitle": "Set and track spending limits",
+    "addBudget": "Add Budget",
+    "currentBudgets": "Current Month Budgets",
+    "allBudgets": "All Budgets",
+    "periods": {
+      "monthly": "Monthly",
+      "yearly": "Yearly"
+    },
+    "summary": {
+      "totalBudget": "Total Budget",
+      "totalSpent": "Total Spent",
+      "onTrack": "On Track",
+      "alerts": "Alerts"
+    },
+    "form": {
+      "entityType": "Entity Type",
+      "business": "Business",
+      "selectBusiness": "Select business",
+      "category": "Category",
+      "selectCategory": "Select category",
+      "amount": "Budget Amount",
+      "currency": "Currency",
+      "period": "Period",
+      "year": "Year",
+      "month": "Month"
+    },
+    "dialog": {
+      "createTitle": "Create Budget",
+      "createDescription": "Set a spending limit for a category.",
+      "editTitle": "Edit Budget",
+      "editDescription": "Update the budget details."
+    },
+    "table": {
+      "category": "Category",
+      "entity": "Entity",
+      "period": "Period",
+      "progress": "Progress",
+      "budget": "Budget",
+      "spent": "Spent",
+      "status": "Status"
+    },
+    "status": {
+      "onTrack": "On Track",
+      "nearLimit": "Near Limit",
+      "overBudget": "Over Budget"
+    },
+    "card": {
+      "spent": "Spent",
+      "remaining": "Remaining",
+      "over": "Over by",
+      "budget": "Budget"
+    },
+    "views": {
+      "current": "Current Month",
+      "all": "All Budgets"
+    },
+    "alerts": {
+      "title": "Budget Alerts"
+    },
+    "actions": {
+      "pause": "Pause",
+      "resume": "Resume"
+    },
+    "empty": {
+      "title": "No budgets set",
+      "description": "Create budgets to track and control your spending."
+    },
+    "delete": {
+      "title": "Delete Budget?",
+      "description": "This will remove the budget. Your transactions will not be affected."
+    },
+    "toast": {
+      "created": "Budget created!",
+      "updated": "Budget updated!",
+      "deleted": "Budget deleted!",
+      "paused": "Budget paused",
+      "resumed": "Budget resumed"
+    }
+  },
+  "tax": {
+    "title": "Tax",
+    "subtitle": "Tax calculations and reports",
+    "summary": {
+      "totalIncome": "Total Income",
+      "totalDeductions": "Total Deductions",
+      "taxableIncome": "Taxable Income",
+      "estimatedTax": "Estimated Tax"
+    },
+    "tabs": {
+      "summary": "Summary",
+      "settings": "Tax Settings"
+    },
+    "card": {
+      "totalIncome": "Total Income",
+      "deductions": "Deductions",
+      "taxableIncome": "Taxable Income",
+      "estimatedTax": "Estimated Tax"
+    },
+    "deductionsByCategory": "Deductions by Category",
+    "incomeByCategory": "Income by Category",
+    "noDeductions": "No tax-deductible expenses for this year",
+    "noIncome": "No income recorded for this year",
+    "table": {
+      "category": "Category",
+      "amount": "Amount"
+    },
+    "settings": {
+      "title": "Entity Tax Rates",
+      "description": "Set the tax rate for each entity to calculate estimated taxes.",
+      "business": "Business",
+      "personalAccount": "Personal Account",
+      "taxRate": "Tax Rate",
+      "noEntities": "No entities found",
+      "taxTips": {
+        "title": "Tax Tips",
+        "tip1": "Mark expenses as tax-deductible when adding transactions to track deductions.",
+        "tip2": "Tax rates vary by country and entity type. Consult a tax professional for accurate rates.",
+        "tip3": "This is an estimate only. Always verify with official tax calculations."
+      }
+    },
+    "export": {
+      "button": "Export Tax Report"
+    },
+    "toast": {
+      "exported": "Tax report exported!"
+    }
   }
 }

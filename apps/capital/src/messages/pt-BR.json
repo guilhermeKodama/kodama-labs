@@ -12,15 +12,21 @@
     "delete": "Excluir",
     "cancel": "Cancelar",
     "save": "Salvar",
-    "loading": "Carregando..."
+    "create": "Criar",
+    "loading": "Carregando...",
+    "personal": "Pessoal",
+    "business": "Empresa"
   },
   "nav": {
     "dashboard": "Painel",
     "businesses": "Empresas",
     "personal": "Pessoal",
     "transfers": "Transferências",
+    "recurring": "Recorrentes",
     "investments": "Investimentos",
+    "budgets": "Orçamentos",
     "reports": "Relatórios",
+    "tax": "Impostos",
     "settings": "Configurações",
     "baseCurrency": "Moeda Base"
   },
@@ -440,5 +446,200 @@
     "title": "Idioma",
     "en": "Inglês",
     "pt-BR": "Português (BR)"
+  },
+  "recurring": {
+    "title": "Transações Recorrentes",
+    "subtitle": "Gerencie suas receitas e despesas recorrentes",
+    "addRecurring": "Adicionar Recorrente",
+    "list": "Transações Recorrentes",
+    "frequencies": {
+      "daily": "Diário",
+      "weekly": "Semanal",
+      "monthly": "Mensal",
+      "yearly": "Anual"
+    },
+    "summary": {
+      "total": "Total de Recorrentes",
+      "active": "Ativos",
+      "monthlyIncome": "Receita Mensal",
+      "monthlyExpense": "Despesa Mensal"
+    },
+    "form": {
+      "entityType": "Tipo de Entidade",
+      "business": "Empresa",
+      "selectBusiness": "Selecione a empresa",
+      "frequency": "Frequência",
+      "startDate": "Data de Início",
+      "endDate": "Data de Término",
+      "hasEndDate": "Definir data de término",
+      "descriptionPlaceholder": "ex: Aluguel mensal, Assinatura Netflix"
+    },
+    "dialog": {
+      "createTitle": "Criar Transação Recorrente",
+      "createDescription": "Configure uma transação que se repete automaticamente.",
+      "editTitle": "Editar Transação Recorrente",
+      "editDescription": "Atualize os detalhes da transação recorrente."
+    },
+    "table": {
+      "description": "Descrição",
+      "type": "Tipo",
+      "entity": "Entidade",
+      "frequency": "Frequência",
+      "nextDue": "Próximo Vencimento",
+      "amount": "Valor",
+      "status": "Status"
+    },
+    "status": {
+      "active": "Ativo",
+      "paused": "Pausado"
+    },
+    "actions": {
+      "pause": "Pausar",
+      "resume": "Retomar"
+    },
+    "empty": {
+      "title": "Nenhuma transação recorrente",
+      "description": "Configure transações recorrentes para rastrear automaticamente receitas e despesas regulares."
+    },
+    "delete": {
+      "title": "Excluir Transação Recorrente?",
+      "description": "Isso impedirá que transações futuras sejam geradas. Transações existentes não serão afetadas."
+    },
+    "toast": {
+      "created": "Transação recorrente criada!",
+      "updated": "Transação recorrente atualizada!",
+      "deleted": "Transação recorrente excluída!",
+      "paused": "Transação recorrente pausada",
+      "resumed": "Transação recorrente retomada"
+    }
+  },
+  "budgets": {
+    "title": "Orçamentos",
+    "subtitle": "Defina e acompanhe limites de gastos",
+    "addBudget": "Adicionar Orçamento",
+    "currentBudgets": "Orçamentos do Mês Atual",
+    "allBudgets": "Todos os Orçamentos",
+    "periods": {
+      "monthly": "Mensal",
+      "yearly": "Anual"
+    },
+    "summary": {
+      "totalBudget": "Orçamento Total",
+      "totalSpent": "Total Gasto",
+      "onTrack": "No Caminho",
+      "alerts": "Alertas"
+    },
+    "form": {
+      "entityType": "Tipo de Entidade",
+      "business": "Empresa",
+      "selectBusiness": "Selecione a empresa",
+      "category": "Categoria",
+      "selectCategory": "Selecione a categoria",
+      "amount": "Valor do Orçamento",
+      "currency": "Moeda",
+      "period": "Período",
+      "year": "Ano",
+      "month": "Mês"
+    },
+    "dialog": {
+      "createTitle": "Criar Orçamento",
+      "createDescription": "Defina um limite de gastos para uma categoria.",
+      "editTitle": "Editar Orçamento",
+      "editDescription": "Atualize os detalhes do orçamento."
+    },
+    "table": {
+      "category": "Categoria",
+      "entity": "Entidade",
+      "period": "Período",
+      "progress": "Progresso",
+      "budget": "Orçamento",
+      "spent": "Gasto",
+      "status": "Status"
+    },
+    "status": {
+      "onTrack": "No Caminho",
+      "nearLimit": "Perto do Limite",
+      "overBudget": "Acima do Orçamento"
+    },
+    "card": {
+      "spent": "Gasto",
+      "remaining": "Restante",
+      "over": "Acima por",
+      "budget": "Orçamento"
+    },
+    "views": {
+      "current": "Mês Atual",
+      "all": "Todos os Orçamentos"
+    },
+    "alerts": {
+      "title": "Alertas de Orçamento"
+    },
+    "actions": {
+      "pause": "Pausar",
+      "resume": "Retomar"
+    },
+    "empty": {
+      "title": "Nenhum orçamento definido",
+      "description": "Crie orçamentos para acompanhar e controlar seus gastos."
+    },
+    "delete": {
+      "title": "Excluir Orçamento?",
+      "description": "Isso removerá o orçamento. Suas transações não serão afetadas."
+    },
+    "toast": {
+      "created": "Orçamento criado!",
+      "updated": "Orçamento atualizado!",
+      "deleted": "Orçamento excluído!",
+      "paused": "Orçamento pausado",
+      "resumed": "Orçamento retomado"
+    }
+  },
+  "tax": {
+    "title": "Impostos",
+    "subtitle": "Cálculos e relatórios fiscais",
+    "summary": {
+      "totalIncome": "Receita Total",
+      "totalDeductions": "Total de Deduções",
+      "taxableIncome": "Renda Tributável",
+      "estimatedTax": "Imposto Estimado"
+    },
+    "tabs": {
+      "summary": "Resumo",
+      "settings": "Configurações de Impostos"
+    },
+    "card": {
+      "totalIncome": "Receita Total",
+      "deductions": "Deduções",
+      "taxableIncome": "Renda Tributável",
+      "estimatedTax": "Imposto Estimado"
+    },
+    "deductionsByCategory": "Deduções por Categoria",
+    "incomeByCategory": "Receita por Categoria",
+    "noDeductions": "Nenhuma despesa dedutível para este ano",
+    "noIncome": "Nenhuma receita registrada para este ano",
+    "table": {
+      "category": "Categoria",
+      "amount": "Valor"
+    },
+    "settings": {
+      "title": "Alíquotas de Imposto por Entidade",
+      "description": "Defina a alíquota de imposto para cada entidade para calcular impostos estimados.",
+      "business": "Empresa",
+      "personalAccount": "Conta Pessoal",
+      "taxRate": "Alíquota",
+      "noEntities": "Nenhuma entidade encontrada",
+      "taxTips": {
+        "title": "Dicas de Impostos",
+        "tip1": "Marque despesas como dedutíveis ao adicionar transações para rastrear deduções.",
+        "tip2": "Alíquotas de impostos variam por país e tipo de entidade. Consulte um profissional de impostos para alíquotas precisas.",
+        "tip3": "Isso é apenas uma estimativa. Sempre verifique com cálculos fiscais oficiais."
+      }
+    },
+    "export": {
+      "button": "Exportar Relatório Fiscal"
+    },
+    "toast": {
+      "exported": "Relatório fiscal exportado!"
+    }
   }
 }

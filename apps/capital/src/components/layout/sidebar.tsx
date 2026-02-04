@@ -10,6 +10,9 @@ import {
   FileBarChart,
   Settings,
   TrendingUp,
+  Repeat,
+  Target,
+  Receipt,
 } from 'lucide-react';
 import { Link, usePathname } from '@/i18n/navigation';
 import { ThemeToggle } from '@/components/theme-toggle';
@@ -22,8 +25,11 @@ const navItems = [
   { href: '/businesses', icon: Building2, labelKey: 'businesses' },
   { href: '/personal', icon: User, labelKey: 'personal' },
   { href: '/transfers', icon: ArrowLeftRight, labelKey: 'transfers' },
+  { href: '/recurring', icon: Repeat, labelKey: 'recurring' },
   { href: '/investments', icon: PiggyBank, labelKey: 'investments' },
+  { href: '/budgets', icon: Target, labelKey: 'budgets' },
   { href: '/reports', icon: FileBarChart, labelKey: 'reports' },
+  { href: '/tax', icon: Receipt, labelKey: 'tax' },
   { href: '/settings', icon: Settings, labelKey: 'settings' },
 ] as const;
 
