@@ -8,13 +8,14 @@ import { formatCurrency } from '@/lib/utils/format';
 interface SummaryCardProps {
   title: string;
   value: number;
-  currency: string;
+  currency?: string;
   icon: LucideIcon;
   trend?: {
     value: number;
     isPositive: boolean;
   };
   variant?: 'default' | 'income' | 'expense' | 'investment';
+  isCount?: boolean;
 }
 
 const variantStyles = {
@@ -43,8 +44,15 @@ export function SummaryCard({
   icon: Icon,
   trend,
   variant = 'default',
+  isCount = false,
 }: SummaryCardProps) {
   const styles = variantStyles[variant];
+
+  const displayValue = isCount
+    ? value.toString()
+    : currency
+      ? formatCurrency(value, currency)
+      : value.toLocaleString();
 
   return (
     <Card className="border-slate-800 bg-slate-900/50 backdrop-blur-sm">
@@ -52,9 +60,7 @@ export function SummaryCard({
         <div className="flex items-start justify-between">
           <div className="space-y-2">
             <p className="text-sm font-medium text-slate-400">{title}</p>
-            <p className="text-2xl font-bold text-white">
-              {formatCurrency(value, currency)}
-            </p>
+            <p className="text-2xl font-bold text-white">{displayValue}</p>
             {trend && (
               <p
                 className={cn(

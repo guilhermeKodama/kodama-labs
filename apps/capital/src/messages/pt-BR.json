@@ -19,6 +19,8 @@
     "businesses": "Empresas",
     "personal": "Pessoal",
     "transfers": "Transferências",
+    "investments": "Investimentos",
+    "reports": "Relatórios",
     "settings": "Configurações",
     "baseCurrency": "Moeda Base"
   },
@@ -82,7 +84,7 @@
       "personal": "Pessoal",
       "transfers": "Transferências"
     },
-    "footer": "Capital - Fase 1: Fundação Completa"
+    "footer": "Capital - Fase 2: Funcionalidades Principais Completas"
   },
   "dashboard": {
     "title": "Painel",
@@ -173,6 +175,8 @@
       "category": "Categoria",
       "categoryPlaceholder": "Selecione uma categoria",
       "date": "Data",
+      "exchangeRate": "Taxa de Câmbio",
+      "exchangeRateHint": "{amount} {currency} = {converted} {baseCurrency}",
       "cancel": "Cancelar",
       "create": "Adicionar Transação",
       "update": "Atualizar Transação"
@@ -207,9 +211,59 @@
   "transfers": {
     "title": "Transferências",
     "subtitle": "Mova dinheiro entre suas contas",
-    "comingSoon": {
-      "title": "Em Breve",
-      "description": "Gerenciamento de transferências estará disponível na Fase 2."
+    "addTransfer": "Adicionar Transferência",
+    "history": "Histórico de Transferências",
+    "directions": {
+      "profitDistribution": "Distribuição de Lucro",
+      "capitalInjection": "Aporte de Capital"
+    },
+    "summary": {
+      "totalTransfers": "Total de Transferências",
+      "profitDistributions": "Distribuições de Lucro",
+      "capitalInjections": "Aportes de Capital"
+    },
+    "form": {
+      "direction": "Tipo de Transferência",
+      "from": "De",
+      "to": "Para",
+      "selectBusiness": "Selecione a empresa",
+      "personalAccount": "Conta Pessoal",
+      "amount": "Valor",
+      "currency": "Moeda",
+      "exchangeRate": "Taxa de Câmbio",
+      "description": "Descrição",
+      "descriptionPlaceholder": "Descrição opcional",
+      "date": "Data",
+      "create": "Criar Transferência",
+      "update": "Atualizar Transferência"
+    },
+    "dialog": {
+      "createTitle": "Criar Transferência",
+      "createDescription": "Mova dinheiro entre suas contas empresariais e pessoais.",
+      "editTitle": "Editar Transferência",
+      "editDescription": "Atualize os detalhes da transferência."
+    },
+    "table": {
+      "date": "Data",
+      "type": "Tipo",
+      "fromTo": "De / Para",
+      "description": "Descrição",
+      "amount": "Valor",
+      "empty": "Nenhuma transferência ainda",
+      "unknownEntity": "Desconhecido"
+    },
+    "delete": {
+      "title": "Excluir Transferência?",
+      "description": "Esta ação não pode ser desfeita."
+    },
+    "toast": {
+      "created": "Transferência criada com sucesso!",
+      "deleted": "Transferência excluída com sucesso!"
+    },
+    "noBusinesses": {
+      "title": "Nenhuma Empresa Encontrada",
+      "description": "Você precisa criar uma empresa antes de fazer transferências.",
+      "createBusiness": "Criar Empresa"
     },
     "features": {
       "profitDistribution": "Distribuição de lucro (Empresa → Pessoal)",
@@ -217,6 +271,56 @@
       "transferHistory": "Histórico de transferências",
       "multiCurrency": "Transferências multi-moeda",
       "impactTracking": "Rastreamento de impacto nos saldos"
+    }
+  },
+  "investments": {
+    "title": "Investimentos",
+    "subtitle": "Acompanhe sua carteira de investimentos",
+    "addInvestment": "Adicionar Investimento",
+    "totalInvestments": "Total em Investimentos",
+    "businessInvestments": "Investimentos Empresariais",
+    "personalInvestments": "Investimentos Pessoais",
+    "portfolioBreakdown": "Composição da Carteira",
+    "transactionHistory": "Transações de Investimento",
+    "empty": "Nenhum investimento registrado ainda",
+    "addFirst": "Adicione Seu Primeiro Investimento",
+    "unknownEntity": "Entidade Desconhecida",
+    "filters": {
+      "all": "Todos"
+    }
+  },
+  "reports": {
+    "title": "Relatórios",
+    "subtitle": "Relatórios financeiros e insights",
+    "yearlyBalance": "Saldo Anual",
+    "yearlyIncome": "Receita Anual",
+    "yearlyExpenses": "Despesas Anuais",
+    "yearlyInvestments": "Investimentos Anuais",
+    "monthlyOverview": "Visão Mensal",
+    "monthlyBreakdown": "Detalhamento Mensal",
+    "incomeByCategory": "Receita por Categoria",
+    "expensesByCategory": "Despesas por Categoria",
+    "allCategories": "Todas as Categorias",
+    "noData": "Sem dados para este período",
+    "views": {
+      "monthly": "Mensal",
+      "categories": "Categorias"
+    },
+    "filters": {
+      "all": "Todos"
+    },
+    "table": {
+      "month": "Mês",
+      "income": "Receita",
+      "expenses": "Despesas",
+      "investments": "Investimentos",
+      "balance": "Saldo",
+      "total": "Total"
+    },
+    "export": {
+      "button": "Exportar CSV",
+      "success": "Relatório exportado com sucesso!",
+      "noData": "Sem dados para exportar"
     }
   },
   "settings": {
@@ -247,6 +351,21 @@
       "added": "Moeda adicionada com sucesso!",
       "invalidCurrency": "Moeda selecionada inválida",
       "alreadyExists": "Esta moeda já foi adicionada"
+    },
+    "categories": {
+      "title": "Categorias de Transação",
+      "description": "Gerencie categorias personalizadas para transações",
+      "add": "Adicionar Categoria",
+      "addTitle": "Adicionar Categoria",
+      "addDescription": "Crie uma nova categoria para suas transações",
+      "name": "Nome da Categoria",
+      "namePlaceholder": "ex: Serviços de Consultoria",
+      "type": "Tipo de Categoria",
+      "empty": "Nenhuma categoria personalizada ainda",
+      "added": "Categoria adicionada com sucesso!",
+      "deleted": "Categoria excluída com sucesso!",
+      "deleteTitle": "Excluir Categoria?",
+      "deleteDescription": "Tem certeza que deseja excluir a categoria \"{name}\"? Isso não afetará transações existentes."
     },
     "data": {
       "title": "Gerenciamento de Dados",
