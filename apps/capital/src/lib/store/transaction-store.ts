@@ -50,6 +50,8 @@ export const useTransactionStore = create<TransactionStore>()(
           description: input.description,
           category: input.category,
           date: input.date,
+          isTaxDeductible: input.isTaxDeductible,
+          recurringTransactionId: input.recurringTransactionId,
           createdAt: new Date(),
           updatedAt: new Date(),
         };

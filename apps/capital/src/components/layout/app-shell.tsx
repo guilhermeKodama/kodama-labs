@@ -5,6 +5,7 @@ import { Sidebar } from './sidebar';
 import { BottomNav } from './bottom-nav';
 import { OnboardingDialog } from '@/components/onboarding/onboarding-dialog';
 import { useSettingsStore } from '@/lib/store';
+import { useRecurringGenerator } from '@/lib/hooks';
 
 interface AppShellProps {
   children: React.ReactNode;
@@ -14,6 +15,9 @@ export function AppShell({ children }: AppShellProps) {
   const { isInitialized } = useSettingsStore();
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [mounted, setMounted] = useState(false);
+
+  // Auto-generate recurring transactions on app load
+  useRecurringGenerator();
 
   useEffect(() => {
     setMounted(true);

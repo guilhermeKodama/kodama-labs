@@ -7,6 +7,7 @@ import type {
   PersonalAccount,
   CreateCurrencyInput,
   TransactionType,
+  TaxSettings,
 } from '@/types';
 import {
   DEFAULT_INCOME_CATEGORIES,
@@ -20,6 +21,7 @@ interface SettingsState {
   currencies: Currency[];
   categories: Category[];
   personalAccount: PersonalAccount | null;
+  taxSettings: TaxSettings;
   isInitialized: boolean;
 }
 
@@ -33,6 +35,8 @@ interface SettingsActions {
   initializePersonalAccount: () => void;
   initializeApp: (baseCurrency: string, userName: string) => void;
   resetApp: () => void;
+  updateTaxSettings: (settings: Partial<TaxSettings>) => void;
+  setEntityTaxRate: (entityId: string, rate: number) => void;
 }
 
 type SettingsStore = SettingsState & SettingsActions;
@@ -77,6 +81,11 @@ const defaultSettings: AppSettings = {
   numberFormat: 'en-US',
 };
 
+const defaultTaxSettings: TaxSettings = {
+  taxYear: new Date().getFullYear(),
+  entityTaxRates: {},
+};
+
 export const useSettingsStore = create<SettingsStore>()(
   persist(
     (set, get) => ({
@@ -85,6 +94,7 @@ export const useSettingsStore = create<SettingsStore>()(
       currencies: [],
       categories: [],
       personalAccount: null,
+      taxSettings: defaultTaxSettings,
       isInitialized: false,
 
       // Actions
@@ -197,8 +207,27 @@ export const useSettingsStore = create<SettingsStore>()(
           currencies: [],
           categories: [],
           personalAccount: null,
+          taxSettings: defaultTaxSettings,
           isInitialized: false,
         });
+      },
+
+      updateTaxSettings: (newTaxSettings) => {
+        set((state) => ({
+          taxSettings: { ...state.taxSettings, ...newTaxSettings },
+        }));
+      },
+
+      setEntityTaxRate: (entityId, rate) => {
+        set((state) => ({
+          taxSettings: {
+            ...state.taxSettings,
+            entityTaxRates: {
+              ...state.taxSettings.entityTaxRates,
+              [entityId]: rate,
+            },
+          },
+        }));
       },
     }),
     {
@@ -208,6 +237,7 @@ export const useSettingsStore = create<SettingsStore>()(
         currencies: state.currencies,
         categories: state.categories,
         personalAccount: state.personalAccount,
+        taxSettings: state.taxSettings,
         isInitialized: state.isInitialized,
       }),
     }
