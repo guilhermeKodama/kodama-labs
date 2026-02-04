@@ -1,9 +1,10 @@
 'use client';
 
+import { useMemo } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useTranslations } from 'next-intl';
-import { ArrowRight } from 'lucide-react';
+import { ArrowRight, Wallet } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   Form,
@@ -22,7 +23,9 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { createTransferSchema, type CreateTransferFormData } from '@/lib/validations';
-import { useSettingsStore, useBusinessStore } from '@/lib/store';
+import { useSettingsStore, useBusinessStore, useTransactionStore, useTransferStore } from '@/lib/store';
+import { calculateEntitySummary } from '@/lib/utils/calculations';
+import { formatCurrency } from '@/lib/utils/format';
 import type { Transfer, TransferDirection } from '@/types';
 
 interface TransferFormProps {
@@ -42,11 +45,13 @@ export function TransferForm({
   const tCommon = useTranslations('common');
   const { settings, personalAccount, currencies } = useSettingsStore();
   const { businesses } = useBusinessStore();
+  const { transactions } = useTransactionStore();
+  const { transfers } = useTransferStore();
 
   const form = useForm<CreateTransferFormData>({
     resolver: zodResolver(createTransferSchema),
     defaultValues: {
-      fromEntityId: transfer?.fromEntityId || '',
+      fromEntityId: transfer?.fromEntityId || businesses[0]?.id || '',
       fromEntityType: transfer?.fromEntityType || 'business',
       toEntityId: transfer?.toEntityId || personalAccount?.id || '',
       toEntityType: transfer?.toEntityType || 'personal',
@@ -61,6 +66,47 @@ export function TransferForm({
 
   const selectedDirection = form.watch('direction');
   const selectedCurrency = form.watch('currency');
+  const selectedFromEntityId = form.watch('fromEntityId');
+
+  // Calculate the balance of the source entity
+  const sourceEntityBalance = useMemo(() => {
+    if (selectedDirection === 'profit_distribution') {
+      // Source is a business
+      const business = businesses.find((b) => b.id === selectedFromEntityId);
+      if (!business) return null;
+      
+      const summary = calculateEntitySummary(
+        business.id,
+        'business',
+        business.name,
+        transactions,
+        transfers,
+        settings.baseCurrency
+      );
+      return {
+        name: business.name,
+        balance: summary.balance,
+        currency: settings.baseCurrency,
+      };
+    } else {
+      // Source is personal account
+      if (!personalAccount) return null;
+      
+      const summary = calculateEntitySummary(
+        personalAccount.id,
+        'personal',
+        t('form.personalAccount'),
+        transactions,
+        transfers,
+        settings.baseCurrency
+      );
+      return {
+        name: t('form.personalAccount'),
+        balance: summary.balance,
+        currency: settings.baseCurrency,
+      };
+    }
+  }, [selectedDirection, selectedFromEntityId, businesses, personalAccount, transactions, transfers, settings.baseCurrency, t]);
 
   // Update from/to entities when direction changes
   const handleDirectionChange = (direction: TransferDirection) => {
@@ -212,6 +258,17 @@ export function TransferForm({
               )}
             </div>
           </div>
+
+          {/* Available Balance */}
+          {sourceEntityBalance && (
+            <div className="mt-4 flex items-center gap-2 rounded-md border border-slate-600 bg-slate-700/30 px-3 py-2">
+              <Wallet className="h-4 w-4 text-slate-400" />
+              <span className="text-sm text-slate-400">{t('form.availableBalance')}:</span>
+              <span className={`text-sm font-semibold ${sourceEntityBalance.balance >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                {formatCurrency(sourceEntityBalance.balance, sourceEntityBalance.currency)}
+              </span>
+            </div>
+          )}
         </div>
 
         {/* Amount and Currency */}
