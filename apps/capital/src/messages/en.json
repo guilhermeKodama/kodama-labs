@@ -380,6 +380,25 @@
       "resetSuccess": "All data has been reset"
     }
   },
+  "activity": {
+    "title": "Activity",
+    "empty": "No activity yet",
+    "filterAll": "All Activity",
+    "transfers": "Transfers",
+    "incomingTransfer": "Transfer In",
+    "outgoingTransfer": "Transfer Out",
+    "transferFrom": "Transfer from {name}",
+    "transferTo": "Transfer to {name}",
+    "from": "from",
+    "to": "to",
+    "table": {
+      "date": "Date",
+      "description": "Description",
+      "type": "Type",
+      "category": "Category",
+      "amount": "Amount"
+    }
+  },
   "language": {
     "title": "Language",
     "en": "English",
