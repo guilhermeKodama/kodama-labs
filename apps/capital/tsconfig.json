@@ -19,7 +19,8 @@
       }
     ],
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./src/*"],
+      "@capital/server/*": ["./src/server/*"]
     }
   },
   "include": [

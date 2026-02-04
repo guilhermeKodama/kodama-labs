@@ -1,0 +1,120 @@
+import type { DbClient } from "@capital/server/lib/prisma";
+import type { EntityType } from "@prisma/client";
+
+export interface EntitySummary {
+  entityId: string;
+  entityType: EntityType;
+  entityName: string;
+  totalIncome: number;
+  totalExpenses: number;
+  totalInvestments: number;
+  balance: number;
+  netWorth: number;
+  currency: string;
+}
+
+interface GetSummaryInput {
+  userId: string;
+  dateFrom?: Date;
+  dateTo?: Date;
+}
+
+export async function getSummary(
+  input: GetSummaryInput,
+  db: DbClient
+): Promise<EntitySummary[]> {
+  const { userId, dateFrom, dateTo } = input;
+
+  // Get user's businesses and personal account
+  const [businesses, personalAccount] = await Promise.all([
+    db.business.findMany({
+      where: { userId },
+    }),
+    db.personalAccount.findFirst({
+      where: { userId },
+    }),
+  ]);
+
+  const summaries: EntitySummary[] = [];
+
+  // Build date filter
+  const dateFilter =
+    dateFrom || dateTo
+      ? {
+          date: {
+            ...(dateFrom && { gte: dateFrom }),
+            ...(dateTo && { lte: dateTo }),
+          },
+        }
+      : {};
+
+  // Calculate summary for each business
+  for (const business of businesses) {
+    const transactions = await db.transaction.findMany({
+      where: {
+        businessId: business.id,
+        ...dateFilter,
+      },
+    });
+
+    const totalIncome = transactions
+      .filter((t) => t.type === "income")
+      .reduce((sum, t) => sum + t.amount, 0);
+
+    const totalExpenses = transactions
+      .filter((t) => t.type === "expense")
+      .reduce((sum, t) => sum + t.amount, 0);
+
+    const totalInvestments = transactions
+      .filter((t) => t.type === "investment")
+      .reduce((sum, t) => sum + t.amount, 0);
+
+    summaries.push({
+      entityId: business.id,
+      entityType: "business",
+      entityName: business.name,
+      totalIncome,
+      totalExpenses,
+      totalInvestments,
+      balance: totalIncome - totalExpenses,
+      netWorth: totalIncome - totalExpenses + totalInvestments,
+      currency: business.defaultCurrency,
+    });
+  }
+
+  // Calculate summary for personal account
+  if (personalAccount) {
+    const transactions = await db.transaction.findMany({
+      where: {
+        personalAccountId: personalAccount.id,
+        ...dateFilter,
+      },
+    });
+
+    const totalIncome = transactions
+      .filter((t) => t.type === "income")
+      .reduce((sum, t) => sum + t.amount, 0);
+
+    const totalExpenses = transactions
+      .filter((t) => t.type === "expense")
+      .reduce((sum, t) => sum + t.amount, 0);
+
+    const totalInvestments = transactions
+      .filter((t) => t.type === "investment")
+      .reduce((sum, t) => sum + t.amount, 0);
+
+    summaries.push({
+      entityId: personalAccount.id,
+      entityType: "personal",
+      entityName: "Personal",
+      totalIncome,
+      totalExpenses,
+      totalInvestments,
+      balance: totalIncome - totalExpenses,
+      netWorth: totalIncome - totalExpenses + totalInvestments,
+      currency: personalAccount.defaultCurrency,
+    });
+  }
+
+  return summaries;
+}
