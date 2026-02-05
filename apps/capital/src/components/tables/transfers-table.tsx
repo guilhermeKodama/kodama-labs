@@ -87,12 +87,16 @@ export function TransfersTable({ transfers, onDelete }: TransfersTableProps) {
                   className={
                     transfer.direction === 'profit_distribution'
                       ? 'border-emerald-500/50 bg-emerald-500/10 text-emerald-400'
-                      : 'border-blue-500/50 bg-blue-500/10 text-blue-400'
+                      : transfer.direction === 'reimbursement'
+                        ? 'border-purple-500/50 bg-purple-500/10 text-purple-400'
+                        : 'border-blue-500/50 bg-blue-500/10 text-blue-400'
                   }
                 >
                   {transfer.direction === 'profit_distribution'
                     ? t('directions.profitDistribution')
-                    : t('directions.capitalInjection')}
+                    : transfer.direction === 'reimbursement'
+                      ? t('directions.reimbursement')
+                      : t('directions.capitalInjection')}
                 </Badge>
               </TableCell>
               <TableCell>
