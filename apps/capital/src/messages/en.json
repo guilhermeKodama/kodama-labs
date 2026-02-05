@@ -514,11 +514,14 @@
     },
     "status": {
       "active": "Active",
-      "paused": "Paused"
+      "paused": "Paused",
+      "dueToday": "Due Today",
+      "overdue": "Overdue"
     },
     "actions": {
       "pause": "Pause",
-      "resume": "Resume"
+      "resume": "Resume",
+      "markPaid": "Mark as Paid"
     },
     "empty": {
       "title": "No recurring transactions",
@@ -533,7 +536,9 @@
       "updated": "Recurring transaction updated!",
       "deleted": "Recurring transaction deleted!",
       "paused": "Recurring transaction paused",
-      "resumed": "Recurring transaction resumed"
+      "resumed": "Recurring transaction resumed",
+      "markedPaid": "Transaction recorded and due date advanced!",
+      "markPaidError": "Failed to mark as paid"
     }
   },
   "budgets": {

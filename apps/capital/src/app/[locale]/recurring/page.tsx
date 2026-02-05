@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import { useTranslations } from 'next-intl';
 import {
   Repeat,
@@ -29,6 +29,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import {
   useRecurringTransactionStore,
+  useTransactionStore,
   useSettingsStore,
 } from '@/lib/store';
 import { toast } from 'sonner';
@@ -43,12 +44,15 @@ export default function RecurringPage() {
     updateRecurringTransaction,
     deleteRecurringTransaction,
     toggleRecurringTransaction,
+    markAsPaid,
   } = useRecurringTransactionStore();
+  const { fetchTransactions } = useTransactionStore();
   const { settings } = useSettingsStore();
 
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingRecurring, setEditingRecurring] = useState<RecurringTransaction | undefined>();
   const [deletingRecurring, setDeletingRecurring] = useState<RecurringTransaction | undefined>();
+  const [markingPaidId, setMarkingPaidId] = useState<string | null>(null);
 
   // Calculate summaries
   const summaries = useMemo(() => {
@@ -124,6 +128,24 @@ export default function RecurringPage() {
     );
   };
 
+  const handleMarkPaid = useCallback(async (recurring: RecurringTransaction) => {
+    setMarkingPaidId(recurring.id);
+    try {
+      const result = await markAsPaid(recurring.id);
+      if (result) {
+        // Refetch transactions to include the new one
+        await fetchTransactions();
+        toast.success(t('recurring.toast.markedPaid'));
+      } else {
+        toast.error(t('recurring.toast.markPaidError'));
+      }
+    } catch (error) {
+      toast.error(t('recurring.toast.markPaidError'));
+    } finally {
+      setMarkingPaidId(null);
+    }
+  }, [markAsPaid, fetchTransactions, t]);
+
   const openEditDialog = (recurring: RecurringTransaction) => {
     setEditingRecurring(recurring);
     setIsDialogOpen(true);
@@ -190,6 +212,8 @@ export default function RecurringPage() {
             onEdit={openEditDialog}
             onDelete={setDeletingRecurring}
             onToggle={handleToggle}
+            onMarkPaid={handleMarkPaid}
+            isMarkingPaid={markingPaidId}
           />
         </CardContent>
       </Card>

@@ -1,7 +1,8 @@
 'use client';
 
+import { useMemo } from 'react';
 import { useTranslations } from 'next-intl';
-import { format } from 'date-fns';
+import { format, isToday, isBefore, startOfDay } from 'date-fns';
 import {
   ArrowDownLeft,
   ArrowUpRight,
@@ -13,6 +14,8 @@ import {
   Play,
   Calendar,
   Repeat,
+  Check,
+  AlertCircle,
 } from 'lucide-react';
 import {
   Table,
@@ -41,6 +44,8 @@ interface RecurringTableProps {
   onEdit?: (recurring: RecurringTransaction) => void;
   onDelete?: (recurring: RecurringTransaction) => void;
   onToggle?: (recurring: RecurringTransaction) => void;
+  onMarkPaid?: (recurring: RecurringTransaction) => void;
+  isMarkingPaid?: string | null; // ID of the recurring being marked as paid
 }
 
 const typeConfig: Record<
@@ -69,6 +74,8 @@ export function RecurringTable({
   onEdit,
   onDelete,
   onToggle,
+  onMarkPaid,
+  isMarkingPaid,
 }: RecurringTableProps) {
   const t = useTranslations('recurring');
   const tCommon = useTranslations('common');
@@ -82,6 +89,29 @@ export function RecurringTable({
     }
     const business = businesses.find((b) => b.id === entityId);
     return business?.name || 'Unknown';
+  };
+
+  // Sort by nextDueDate ascending (soonest first), with overdue at the top
+  const sortedRecurringTransactions = useMemo(() => {
+    return [...recurringTransactions].sort((a, b) => {
+      const dateA = new Date(a.nextDueDate);
+      const dateB = new Date(b.nextDueDate);
+      return dateA.getTime() - dateB.getTime();
+    });
+  }, [recurringTransactions]);
+
+  // Helper to determine due status
+  const getDueStatus = (nextDueDate: Date) => {
+    const today = startOfDay(new Date());
+    const dueDate = startOfDay(new Date(nextDueDate));
+    
+    if (isBefore(dueDate, today)) {
+      return 'overdue';
+    }
+    if (isToday(dueDate)) {
+      return 'due-today';
+    }
+    return 'upcoming';
   };
 
   if (recurringTransactions.length === 0) {
@@ -110,21 +140,32 @@ export function RecurringTable({
           </TableRow>
         </TableHeader>
         <TableBody>
-          {recurringTransactions.map((recurring) => {
+          {sortedRecurringTransactions.map((recurring) => {
             const config = typeConfig[recurring.type];
             const Icon = config.icon;
+            const dueStatus = recurring.isActive ? getDueStatus(recurring.nextDueDate) : null;
+            const isBeingMarkedPaid = isMarkingPaid === recurring.id;
 
             return (
               <TableRow
                 key={recurring.id}
                 className={cn(
                   'border-slate-800 hover:bg-slate-800/50',
-                  !recurring.isActive && 'opacity-50'
+                  !recurring.isActive && 'opacity-50',
+                  dueStatus === 'overdue' && 'bg-red-500/5',
+                  dueStatus === 'due-today' && 'bg-amber-500/5'
                 )}
               >
                 <TableCell className="font-medium text-white">
-                  {recurring.description}
-                  <div className="text-xs text-slate-500">{recurring.category}</div>
+                  <div className="flex items-center gap-2">
+                    {dueStatus === 'overdue' && (
+                      <AlertCircle className="h-4 w-4 text-red-400 flex-shrink-0" />
+                    )}
+                    <div>
+                      {recurring.description}
+                      <div className="text-xs text-slate-500">{recurring.category}</div>
+                    </div>
+                  </div>
                 </TableCell>
                 <TableCell>
                   <Badge
@@ -144,10 +185,28 @@ export function RecurringTable({
                     {t(`frequencies.${recurring.frequency}`)}
                   </Badge>
                 </TableCell>
-                <TableCell className="text-slate-300">
-                  <div className="flex items-center gap-1">
-                    <Calendar className="h-3 w-3 text-slate-500" />
-                    {format(new Date(recurring.nextDueDate), 'MMM d, yyyy')}
+                <TableCell>
+                  <div className="flex items-center gap-2">
+                    <div className={cn(
+                      'flex items-center gap-1',
+                      dueStatus === 'overdue' && 'text-red-400',
+                      dueStatus === 'due-today' && 'text-amber-400',
+                      dueStatus === 'upcoming' && 'text-slate-300',
+                      !recurring.isActive && 'text-slate-500'
+                    )}>
+                      <Calendar className="h-3 w-3" />
+                      {format(new Date(recurring.nextDueDate), 'MMM d, yyyy')}
+                    </div>
+                    {dueStatus === 'due-today' && (
+                      <Badge variant="outline" className="border-0 bg-amber-500/10 text-amber-400 text-xs">
+                        {t('status.dueToday')}
+                      </Badge>
+                    )}
+                    {dueStatus === 'overdue' && (
+                      <Badge variant="outline" className="border-0 bg-red-500/10 text-red-400 text-xs">
+                        {t('status.overdue')}
+                      </Badge>
+                    )}
                   </div>
                 </TableCell>
                 <TableCell
@@ -172,61 +231,89 @@ export function RecurringTable({
                   </Badge>
                 </TableCell>
                 <TableCell>
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
+                  <div className="flex items-center gap-1">
+                    {/* Mark as Paid button - only show for active recurring that are due */}
+                    {onMarkPaid && recurring.isActive && (dueStatus === 'overdue' || dueStatus === 'due-today') && (
                       <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8 text-slate-400 hover:bg-slate-800 hover:text-white"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => onMarkPaid(recurring)}
+                        disabled={isBeingMarkedPaid}
+                        className={cn(
+                          'h-8 border-emerald-600 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 hover:text-emerald-300',
+                          isBeingMarkedPaid && 'opacity-50 cursor-not-allowed'
+                        )}
                       >
-                        <MoreVertical className="h-4 w-4" />
+                        <Check className="mr-1 h-3 w-3" />
+                        {t('actions.markPaid')}
                       </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent
-                      align="end"
-                      className="border-slate-700 bg-slate-900"
-                    >
-                      {onToggle && (
-                        <DropdownMenuItem
-                          onClick={() => onToggle(recurring)}
-                          className="text-slate-300 focus:bg-slate-800 focus:text-white"
+                    )}
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 text-slate-400 hover:bg-slate-800 hover:text-white"
                         >
-                          {recurring.isActive ? (
-                            <>
-                              <Pause className="mr-2 h-4 w-4" />
-                              {t('actions.pause')}
-                            </>
-                          ) : (
-                            <>
-                              <Play className="mr-2 h-4 w-4" />
-                              {t('actions.resume')}
-                            </>
-                          )}
-                        </DropdownMenuItem>
-                      )}
-                      {onEdit && (
-                        <DropdownMenuItem
-                          onClick={() => onEdit(recurring)}
-                          className="text-slate-300 focus:bg-slate-800 focus:text-white"
-                        >
-                          <Pencil className="mr-2 h-4 w-4" />
-                          {tCommon('edit')}
-                        </DropdownMenuItem>
-                      )}
-                      {onDelete && (
-                        <>
-                          <DropdownMenuSeparator className="bg-slate-700" />
+                          <MoreVertical className="h-4 w-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent
+                        align="end"
+                        className="border-slate-700 bg-slate-900"
+                      >
+                        {onMarkPaid && recurring.isActive && (
                           <DropdownMenuItem
-                            onClick={() => onDelete(recurring)}
-                            className="text-red-400 focus:bg-red-500/10 focus:text-red-400"
+                            onClick={() => onMarkPaid(recurring)}
+                            disabled={isBeingMarkedPaid}
+                            className="text-emerald-400 focus:bg-emerald-500/10 focus:text-emerald-400"
                           >
-                            <Trash2 className="mr-2 h-4 w-4" />
-                            {tCommon('delete')}
+                            <Check className="mr-2 h-4 w-4" />
+                            {t('actions.markPaid')}
                           </DropdownMenuItem>
-                        </>
-                      )}
-                    </DropdownMenuContent>
-                  </DropdownMenu>
+                        )}
+                        {onToggle && (
+                          <DropdownMenuItem
+                            onClick={() => onToggle(recurring)}
+                            className="text-slate-300 focus:bg-slate-800 focus:text-white"
+                          >
+                            {recurring.isActive ? (
+                              <>
+                                <Pause className="mr-2 h-4 w-4" />
+                                {t('actions.pause')}
+                              </>
+                            ) : (
+                              <>
+                                <Play className="mr-2 h-4 w-4" />
+                                {t('actions.resume')}
+                              </>
+                            )}
+                          </DropdownMenuItem>
+                        )}
+                        {onEdit && (
+                          <DropdownMenuItem
+                            onClick={() => onEdit(recurring)}
+                            className="text-slate-300 focus:bg-slate-800 focus:text-white"
+                          >
+                            <Pencil className="mr-2 h-4 w-4" />
+                            {tCommon('edit')}
+                          </DropdownMenuItem>
+                        )}
+                        {onDelete && (
+                          <>
+                            <DropdownMenuSeparator className="bg-slate-700" />
+                            <DropdownMenuItem
+                              onClick={() => onDelete(recurring)}
+                              className="text-red-400 focus:bg-red-500/10 focus:text-red-400"
+                            >
+                              <Trash2 className="mr-2 h-4 w-4" />
+                              {tCommon('delete')}
+                            </DropdownMenuItem>
+                          </>
+                        )}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
                 </TableCell>
               </TableRow>
             );

@@ -4,6 +4,7 @@ import { jsonContent } from "stoker/openapi/helpers";
 
 import type { AppRouteHandler } from "@capital/server/types";
 import { prisma } from "@capital/server/lib/prisma";
+import { parseLocalDate } from "@capital/server/lib/date-utils";
 import { createRecurring } from "../../services/create-recurring";
 import { routeConfig } from "../../constants";
 
@@ -75,8 +76,8 @@ export const handler: AppRouteHandler<typeof route> = async (c) => {
     const recurring = await createRecurring(
       {
         ...body,
-        startDate: new Date(body.startDate),
-        endDate: body.endDate ? new Date(body.endDate) : undefined,
+        startDate: parseLocalDate(body.startDate),
+        endDate: body.endDate ? parseLocalDate(body.endDate) : undefined,
       },
       prisma
     );
