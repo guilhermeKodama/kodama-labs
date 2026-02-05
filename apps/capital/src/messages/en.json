@@ -535,6 +535,11 @@
       "type": "Type",
       "category": "Category",
       "amount": "Amount"
+    },
+    "filter": {
+      "thisMonth": "This Month",
+      "lastMonth": "Last Month",
+      "selectDates": "Select dates"
     }
   },
   "language": {

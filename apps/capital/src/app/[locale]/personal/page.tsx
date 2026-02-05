@@ -3,11 +3,24 @@
 import { useState, useMemo } from 'react';
 import { useTranslations } from 'next-intl';
 import {
+  format,
+  startOfMonth,
+  endOfMonth,
+  subMonths,
+  isWithinInterval,
+  startOfDay,
+  endOfDay,
+} from 'date-fns';
+import { ptBR, enUS } from 'date-fns/locale';
+import { useLocale } from 'next-intl';
+import {
   User,
   TrendingUp,
   TrendingDown,
   PiggyBank,
   Wallet,
+  CalendarIcon,
+  X,
 } from 'lucide-react';
 import { AppShell } from '@/components/layout';
 import { Header } from '@/components/layout/header';
@@ -15,6 +28,13 @@ import { SummaryCard } from '@/components/cards';
 import { ActivityTable } from '@/components/tables';
 import { TransactionDialog } from '@/components/dialogs';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Calendar } from '@/components/ui/calendar';
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -32,12 +52,17 @@ import {
   useBusinessStore,
 } from '@/lib/store';
 import { calculateEntitySummary } from '@/lib/utils/calculations';
+import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import type { Transaction, Transfer } from '@/types';
 import type { CreateTransactionFormData } from '@/lib/validations';
+import type { DateRange } from 'react-day-picker';
 
 export default function PersonalPage() {
   const t = useTranslations();
+  const locale = useLocale();
+  const dateLocale = locale === 'pt-BR' ? ptBR : enUS;
+  
   const { transactions, addTransaction, updateTransaction, deleteTransaction } =
     useTransactionStore();
   const { transfers, deleteTransfer } = useTransferStore();
@@ -48,6 +73,7 @@ export default function PersonalPage() {
   const [editingTransaction, setEditingTransaction] = useState<Transaction | undefined>();
   const [deletingTransaction, setDeletingTransaction] = useState<Transaction | undefined>();
   const [deletingTransfer, setDeletingTransfer] = useState<Transfer | undefined>();
+  const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined);
 
   // Get transactions for personal account
   const personalTransactions = useMemo(() => {
@@ -64,6 +90,52 @@ export default function PersonalPage() {
       (t) => t.fromEntityId === personalAccount.id || t.toEntityId === personalAccount.id
     );
   }, [transfers, personalAccount]);
+
+  // Filter transactions and transfers by date range
+  const filteredTransactions = useMemo(() => {
+    if (!dateRange?.from) return personalTransactions;
+    
+    const start = startOfDay(dateRange.from);
+    const end = dateRange.to ? endOfDay(dateRange.to) : endOfDay(dateRange.from);
+    
+    return personalTransactions.filter((t) => {
+      const date = new Date(t.date);
+      return isWithinInterval(date, { start, end });
+    });
+  }, [personalTransactions, dateRange]);
+
+  const filteredTransfers = useMemo(() => {
+    if (!dateRange?.from) return personalTransfers;
+    
+    const start = startOfDay(dateRange.from);
+    const end = dateRange.to ? endOfDay(dateRange.to) : endOfDay(dateRange.from);
+    
+    return personalTransfers.filter((t) => {
+      const date = new Date(t.date);
+      return isWithinInterval(date, { start, end });
+    });
+  }, [personalTransfers, dateRange]);
+
+  // Quick filter presets
+  const setThisMonth = () => {
+    const now = new Date();
+    setDateRange({
+      from: startOfMonth(now),
+      to: endOfMonth(now),
+    });
+  };
+
+  const setLastMonth = () => {
+    const lastMonth = subMonths(new Date(), 1);
+    setDateRange({
+      from: startOfMonth(lastMonth),
+      to: endOfMonth(lastMonth),
+    });
+  };
+
+  const clearFilter = () => {
+    setDateRange(undefined);
+  };
 
   // Build entity names map for display
   const entityNames = useMemo(() => {
@@ -190,14 +262,100 @@ export default function PersonalPage() {
       {/* Activity (Transactions + Transfers) */}
       <Card className="border-slate-800 bg-slate-900/50 backdrop-blur-sm">
         <CardHeader>
-          <CardTitle className="text-lg text-white">
-            {t('activity.title')}
-          </CardTitle>
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <CardTitle className="text-lg text-white">
+              {t('activity.title')}
+            </CardTitle>
+            
+            {/* Date Filters */}
+            <div className="flex flex-wrap items-center gap-2">
+              {/* Quick Presets */}
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={setThisMonth}
+                className={cn(
+                  'border-slate-700 text-slate-300 hover:bg-slate-800 hover:text-white',
+                  dateRange?.from &&
+                    format(dateRange.from, 'yyyy-MM') === format(new Date(), 'yyyy-MM') &&
+                    'bg-slate-800 text-white'
+                )}
+              >
+                {t('activity.filter.thisMonth')}
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={setLastMonth}
+                className={cn(
+                  'border-slate-700 text-slate-300 hover:bg-slate-800 hover:text-white',
+                  dateRange?.from &&
+                    format(dateRange.from, 'yyyy-MM') === format(subMonths(new Date(), 1), 'yyyy-MM') &&
+                    'bg-slate-800 text-white'
+                )}
+              >
+                {t('activity.filter.lastMonth')}
+              </Button>
+
+              {/* Custom Date Range Picker */}
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className={cn(
+                      'border-slate-700 text-slate-300 hover:bg-slate-800 hover:text-white min-w-[200px] justify-start text-left font-normal',
+                      dateRange?.from && 'bg-slate-800 text-white'
+                    )}
+                  >
+                    <CalendarIcon className="mr-2 h-4 w-4" />
+                    {dateRange?.from ? (
+                      dateRange.to ? (
+                        <>
+                          {format(dateRange.from, 'dd MMM', { locale: dateLocale })} -{' '}
+                          {format(dateRange.to, 'dd MMM yyyy', { locale: dateLocale })}
+                        </>
+                      ) : (
+                        format(dateRange.from, 'dd MMM yyyy', { locale: dateLocale })
+                      )
+                    ) : (
+                      t('activity.filter.selectDates')
+                    )}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent
+                  className="w-auto p-0 border-slate-700 bg-slate-900"
+                  align="end"
+                >
+                  <Calendar
+                    mode="range"
+                    selected={dateRange}
+                    onSelect={setDateRange}
+                    numberOfMonths={2}
+                    locale={dateLocale}
+                    className="bg-slate-900 text-white"
+                  />
+                </PopoverContent>
+              </Popover>
+
+              {/* Clear Filter */}
+              {dateRange?.from && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={clearFilter}
+                  className="text-slate-400 hover:text-white hover:bg-slate-800"
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              )}
+            </div>
+          </div>
         </CardHeader>
         <CardContent>
           <ActivityTable
-            transactions={personalTransactions}
-            transfers={personalTransfers}
+            transactions={filteredTransactions}
+            transfers={filteredTransfers}
             entityId={personalAccount.id}
             entityType="personal"
             entityNames={entityNames}
