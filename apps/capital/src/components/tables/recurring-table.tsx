@@ -2,7 +2,6 @@
 
 import { useMemo } from 'react';
 import { useTranslations } from 'next-intl';
-import { format, isToday, isBefore, startOfDay } from 'date-fns';
 import {
   ArrowDownLeft,
   ArrowUpRight,
@@ -36,7 +35,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { cn } from '@/lib/utils';
 import { formatCurrency } from '@/lib/utils/format';
-import type { RecurringTransaction, TransactionType, RecurrenceFrequency } from '@/types';
+import type { RecurringTransaction, TransactionType } from '@/types';
 import { useSettingsStore, useBusinessStore } from '@/lib/store';
 
 interface RecurringTableProps {
@@ -69,6 +68,41 @@ const typeConfig: Record<
   },
 };
 
+/**
+ * Format a date using UTC to avoid timezone shifts.
+ * This ensures the displayed date matches the stored date regardless of user timezone.
+ */
+function formatDateUTC(date: Date): string {
+  return new Intl.DateTimeFormat('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    timeZone: 'UTC',
+  }).format(date);
+}
+
+/**
+ * Compare dates using UTC date parts to determine due status.
+ * This avoids timezone issues where midnight UTC shows as the previous day in negative UTC offsets.
+ */
+function getDueStatus(nextDueDate: Date): 'overdue' | 'due-today' | 'upcoming' {
+  const now = new Date();
+  const todayUTC = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+  const dueDateUTC = Date.UTC(
+    nextDueDate.getUTCFullYear(),
+    nextDueDate.getUTCMonth(),
+    nextDueDate.getUTCDate()
+  );
+
+  if (dueDateUTC < todayUTC) {
+    return 'overdue';
+  }
+  if (dueDateUTC === todayUTC) {
+    return 'due-today';
+  }
+  return 'upcoming';
+}
+
 export function RecurringTable({
   recurringTransactions,
   onEdit,
@@ -80,7 +114,7 @@ export function RecurringTable({
   const t = useTranslations('recurring');
   const tCommon = useTranslations('common');
   const tTransactions = useTranslations('transactions');
-  const { settings, personalAccount } = useSettingsStore();
+  const { settings } = useSettingsStore();
   const { businesses } = useBusinessStore();
 
   const getEntityName = (entityId: string, entityType: string) => {
@@ -99,20 +133,6 @@ export function RecurringTable({
       return dateA.getTime() - dateB.getTime();
     });
   }, [recurringTransactions]);
-
-  // Helper to determine due status
-  const getDueStatus = (nextDueDate: Date) => {
-    const today = startOfDay(new Date());
-    const dueDate = startOfDay(new Date(nextDueDate));
-    
-    if (isBefore(dueDate, today)) {
-      return 'overdue';
-    }
-    if (isToday(dueDate)) {
-      return 'due-today';
-    }
-    return 'upcoming';
-  };
 
   if (recurringTransactions.length === 0) {
     return (
@@ -143,7 +163,7 @@ export function RecurringTable({
           {sortedRecurringTransactions.map((recurring) => {
             const config = typeConfig[recurring.type];
             const Icon = config.icon;
-            const dueStatus = recurring.isActive ? getDueStatus(recurring.nextDueDate) : null;
+            const dueStatus = recurring.isActive ? getDueStatus(new Date(recurring.nextDueDate)) : null;
             const isBeingMarkedPaid = isMarkingPaid === recurring.id;
 
             return (
@@ -195,7 +215,7 @@ export function RecurringTable({
                       !recurring.isActive && 'text-slate-500'
                     )}>
                       <Calendar className="h-3 w-3" />
-                      {format(new Date(recurring.nextDueDate), 'MMM d, yyyy')}
+                      {formatDateUTC(new Date(recurring.nextDueDate))}
                     </div>
                     {dueStatus === 'due-today' && (
                       <Badge variant="outline" className="border-0 bg-amber-500/10 text-amber-400 text-xs">

@@ -1,12 +1,13 @@
 import { prisma } from "@capital/server/lib/prisma";
-import { addDays, addWeeks, addMonths, addYears, startOfDay } from "date-fns";
+import { addDays, addWeeks, addMonths, addYears } from "date-fns";
 import type { RecurrenceFrequency } from "@prisma/client";
+import { toNoonUTC } from "@capital/server/lib/date-utils";
 
 function getNextOccurrence(
   currentDate: Date,
   frequency: RecurrenceFrequency
 ): Date {
-  const date = startOfDay(currentDate);
+  const date = toNoonUTC(currentDate);
   switch (frequency) {
     case "daily":
       return addDays(date, 1);
@@ -36,6 +37,9 @@ export async function markRecurringTransferAsPaid(recurringTransferId: string) {
         throw new Error("Cannot mark a paused recurring transfer as paid");
       }
 
+      // Normalize the date to noon UTC
+      const transferDate = toNoonUTC(recurring.nextDueDate);
+
       // Create the transfer
       const transfer = await tx.transfer.create({
         data: {
@@ -46,7 +50,7 @@ export async function markRecurringTransferAsPaid(recurringTransferId: string) {
           currency: recurring.currency,
           exchangeRate: recurring.exchangeRate,
           description: recurring.description,
-          date: recurring.nextDueDate,
+          date: transferDate,
           recurringTransferId: recurring.id,
           fromBusinessId: recurring.fromBusinessId,
           fromPersonalAccountId: recurring.fromPersonalAccountId,

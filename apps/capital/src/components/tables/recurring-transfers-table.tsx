@@ -1,7 +1,6 @@
 'use client';
 
 import { useTranslations } from 'next-intl';
-import { format, isBefore, isToday, startOfDay } from 'date-fns';
 import {
   ArrowRight,
   MoreVertical,
@@ -69,6 +68,37 @@ const frequencyLabels: Record<RecurrenceFrequency, string> = {
   yearly: 'yearly',
 };
 
+/**
+ * Format a date using UTC to avoid timezone shifts.
+ * This ensures the displayed date matches the stored date regardless of user timezone.
+ */
+function formatDateUTC(date: Date): string {
+  return new Intl.DateTimeFormat('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    timeZone: 'UTC',
+  }).format(date);
+}
+
+/**
+ * Compare dates using UTC date parts to determine due status.
+ * This avoids timezone issues where midnight UTC shows as the previous day in negative UTC offsets.
+ */
+function getDueDateStatus(date: Date): 'overdue' | 'dueToday' | 'upcoming' {
+  const now = new Date();
+  const todayUTC = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+  const dueDateUTC = Date.UTC(
+    date.getUTCFullYear(),
+    date.getUTCMonth(),
+    date.getUTCDate()
+  );
+
+  if (dueDateUTC < todayUTC) return 'overdue';
+  if (dueDateUTC === todayUTC) return 'dueToday';
+  return 'upcoming';
+}
+
 export function RecurringTransfersTable({
   recurringTransfers,
   onEdit,
@@ -80,7 +110,7 @@ export function RecurringTransfersTable({
   const t = useTranslations('transfers.recurring');
   const tDirections = useTranslations('transfers.directions');
   const { businesses } = useBusinessStore();
-  const { personalAccount, settings } = useSettingsStore();
+  const { settings } = useSettingsStore();
 
   const getEntityName = (entityId: string, entityType: 'business' | 'personal') => {
     if (entityType === 'personal') {
@@ -88,14 +118,6 @@ export function RecurringTransfersTable({
     }
     const business = businesses.find((b) => b.id === entityId);
     return business?.name || 'Unknown';
-  };
-
-  const getDueDateStatus = (date: Date) => {
-    const today = startOfDay(new Date());
-    const dueDate = startOfDay(date);
-    if (isBefore(dueDate, today)) return 'overdue';
-    if (isToday(dueDate)) return 'dueToday';
-    return 'upcoming';
   };
 
   if (recurringTransfers.length === 0) {
@@ -168,7 +190,7 @@ export function RecurringTransfersTable({
                 <TableCell className="text-slate-300">
                   <div className="flex items-center gap-1">
                     <Calendar className="h-3 w-3 text-slate-500" />
-                    {format(new Date(rt.nextDueDate), 'MMM d, yyyy')}
+                    {formatDateUTC(new Date(rt.nextDueDate))}
                     {isOverdue && (
                       <Badge variant="destructive" className="ml-2">
                         {t('status.overdue')}

@@ -4,9 +4,9 @@ import {
   addWeeks,
   addMonths,
   addYears,
-  startOfDay,
 } from "date-fns";
 import type { RecurrenceFrequency } from "@prisma/client";
+import { toNoonUTC } from "@capital/server/lib/date-utils";
 
 /**
  * Calculate the next occurrence date based on frequency
@@ -15,7 +15,7 @@ function getNextOccurrence(
   currentDate: Date,
   frequency: RecurrenceFrequency
 ): Date {
-  const date = startOfDay(currentDate);
+  const date = toNoonUTC(currentDate);
   switch (frequency) {
     case "daily":
       return addDays(date, 1);
@@ -45,7 +45,7 @@ export async function markRecurringAsPaid(id: string, db: PrismaClient) {
   }
 
   const now = new Date();
-  const transactionDate = startOfDay(recurring.nextDueDate);
+  const transactionDate = toNoonUTC(recurring.nextDueDate);
   const nextDueDate = getNextOccurrence(transactionDate, recurring.frequency);
 
   // Use a transaction to ensure both operations succeed or fail together

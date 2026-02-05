@@ -535,6 +535,11 @@
       "type": "Tipo",
       "category": "Categoria",
       "amount": "Valor"
+    },
+    "filter": {
+      "thisMonth": "Este Mês",
+      "lastMonth": "Mês Passado",
+      "selectDates": "Selecionar datas"
     }
   },
   "language": {

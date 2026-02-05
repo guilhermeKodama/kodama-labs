@@ -6,17 +6,17 @@ import {
   addWeeks,
   addMonths,
   addYears,
-  startOfDay,
   endOfDay,
   isAfter,
 } from "date-fns";
 import type { RecurrenceFrequency } from "@prisma/client";
+import { toNoonUTC } from "@capital/server/lib/date-utils";
 
 /**
  * Calculate the next occurrence date based on frequency
  */
 function getNextOccurrence(currentDate: Date, frequency: RecurrenceFrequency): Date {
-  const date = startOfDay(currentDate);
+  const date = toNoonUTC(currentDate);
   switch (frequency) {
     case "daily":
       return addDays(date, 1);
@@ -46,7 +46,7 @@ export async function GET(request: NextRequest) {
 
   try {
     const now = new Date();
-    const today = startOfDay(now);
+    const today = toNoonUTC(now);
     const todayEnd = endOfDay(now);
 
     // Find all active recurring transactions that are due
@@ -73,13 +73,13 @@ export async function GET(request: NextRequest) {
 
     // Process each due recurring transaction
     for (const recurring of dueRecurring) {
-      let currentDueDate = startOfDay(recurring.nextDueDate);
+      let currentDueDate = toNoonUTC(recurring.nextDueDate);
       let transactionsForThisRecurring = 0;
 
       // Generate transactions for all due dates up to today (inclusive)
       while (!isAfter(currentDueDate, todayEnd)) {
         // Stop if we've passed the end date
-        if (recurring.endDate && isAfter(currentDueDate, startOfDay(recurring.endDate))) {
+        if (recurring.endDate && isAfter(currentDueDate, toNoonUTC(recurring.endDate))) {
           break;
         }
 
@@ -151,13 +151,13 @@ export async function GET(request: NextRequest) {
 
     // Process each due recurring transfer
     for (const recurringTransfer of dueRecurringTransfers) {
-      let currentDueDate = startOfDay(recurringTransfer.nextDueDate);
+      let currentDueDate = toNoonUTC(recurringTransfer.nextDueDate);
       let transfersForThisRecurring = 0;
 
       // Generate transfers for all due dates up to today (inclusive)
       while (!isAfter(currentDueDate, todayEnd)) {
         // Stop if we've passed the end date
-        if (recurringTransfer.endDate && isAfter(currentDueDate, startOfDay(recurringTransfer.endDate))) {
+        if (recurringTransfer.endDate && isAfter(currentDueDate, toNoonUTC(recurringTransfer.endDate))) {
           break;
         }
 
