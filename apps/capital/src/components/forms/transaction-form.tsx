@@ -70,6 +70,18 @@ export function TransactionForm({
   const selectedType = form.watch('type');
   const selectedCurrency = form.watch('currency');
 
+  // Set default currency when currencies are loaded
+  useEffect(() => {
+    if (currencies.length > 0 && !selectedCurrency) {
+      // Try to use base currency, or fall back to first available
+      const defaultCurrency = currencies.find(c => c.code === settings.baseCurrency) 
+        || currencies[0];
+      if (defaultCurrency) {
+        form.setValue('currency', defaultCurrency.code);
+      }
+    }
+  }, [currencies, selectedCurrency, settings.baseCurrency, form]);
+
   // Auto-update exchange rate when currency changes
   useEffect(() => {
     if (selectedCurrency === settings.baseCurrency) {
@@ -205,22 +217,28 @@ export function TransactionForm({
                 <FormLabel className="text-slate-300">
                   {t('form.currency')}
                 </FormLabel>
-                <Select onValueChange={field.onChange} defaultValue={field.value}>
+                <Select onValueChange={field.onChange} value={field.value}>
                   <FormControl>
                     <SelectTrigger className="border-slate-700 bg-slate-800 text-white">
-                      <SelectValue />
+                      <SelectValue placeholder={t('form.currency')} />
                     </SelectTrigger>
                   </FormControl>
                   <SelectContent className="border-slate-700 bg-slate-900">
-                    {currencies.map((currency) => (
-                      <SelectItem
-                        key={currency.code}
-                        value={currency.code}
-                        className="text-slate-300 focus:bg-slate-800 focus:text-white"
-                      >
-                        {currency.symbol} {currency.code}
+                    {currencies.length === 0 ? (
+                      <SelectItem value="_empty" disabled className="text-slate-500">
+                        No currencies available
                       </SelectItem>
-                    ))}
+                    ) : (
+                      currencies.map((currency) => (
+                        <SelectItem
+                          key={currency.code}
+                          value={currency.code}
+                          className="text-slate-300 focus:bg-slate-800 focus:text-white"
+                        >
+                          {currency.symbol} {currency.code}
+                        </SelectItem>
+                      ))
+                    )}
                   </SelectContent>
                 </Select>
                 <FormMessage />
