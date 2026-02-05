@@ -4,7 +4,23 @@ import { useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useTranslations } from 'next-intl';
+import { format } from 'date-fns';
 import { Button } from '@/components/ui/button';
+
+/**
+ * Parse a date string from an input[type="date"] as a local date (not UTC).
+ */
+function parseLocalDate(dateString: string): Date {
+  const [year, month, day] = dateString.split('-').map(Number);
+  return new Date(year, month - 1, day, 12, 0, 0);
+}
+
+/**
+ * Format a Date to YYYY-MM-DD for input[type="date"]
+ */
+function formatDateForInput(date: Date): string {
+  return format(date, 'yyyy-MM-dd');
+}
 import {
   Form,
   FormControl,
@@ -323,10 +339,10 @@ export function TransactionForm({
                   type="date"
                   value={
                     field.value instanceof Date
-                      ? field.value.toISOString().split('T')[0]
+                      ? formatDateForInput(field.value)
                       : ''
                   }
-                  onChange={(e) => field.onChange(new Date(e.target.value))}
+                  onChange={(e) => field.onChange(parseLocalDate(e.target.value))}
                   className="border-slate-700 bg-slate-800 text-white"
                 />
               </FormControl>

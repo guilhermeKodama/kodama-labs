@@ -15,6 +15,26 @@ interface RecurringTransactionState {
   error: string | null;
 }
 
+interface MarkAsPaidResult {
+  transaction: {
+    id: string;
+    entityId: string;
+    entityType: EntityType;
+    type: 'income' | 'expense' | 'investment';
+    amount: number;
+    currency: string;
+    exchangeRate: number;
+    description: string;
+    category: string;
+    date: Date;
+    isTaxDeductible: boolean;
+    recurringTransactionId?: string;
+    createdAt: Date;
+    updatedAt: Date;
+  };
+  recurring: RecurringTransaction;
+}
+
 interface RecurringTransactionActions {
   fetchRecurringTransactions: (filters?: {
     businessId?: string;
@@ -26,6 +46,7 @@ interface RecurringTransactionActions {
   updateRecurringTransaction: (id: string, input: UpdateRecurringTransactionInput) => Promise<void>;
   deleteRecurringTransaction: (id: string) => Promise<void>;
   toggleRecurringTransaction: (id: string) => Promise<void>;
+  markAsPaid: (id: string) => Promise<MarkAsPaidResult | null>;
   updateLastGeneratedDate: (id: string, date: Date) => Promise<void>;
   getRecurringTransactionsByEntity: (entityId: string, entityType: EntityType) => RecurringTransaction[];
   setLoading: (loading: boolean) => void;
@@ -292,6 +313,86 @@ export const useRecurringTransactionStore = create<RecurringTransactionStore>()(
         error: error instanceof Error ? error.message : 'Unknown error',
         isLoading: false,
       });
+    }
+  },
+
+  // Mark recurring transaction as paid - creates a transaction and advances to next due date
+  markAsPaid: async (id: string) => {
+    set({ isLoading: true, error: null });
+    try {
+      const res = await client.v1.recurring[':id']['mark-paid'].$post({
+        param: { id },
+      });
+
+      if (!res.ok) {
+        throw new Error('Failed to mark recurring transaction as paid');
+      }
+
+      const data = await res.json();
+      
+      // Update the recurring transaction in local state
+      set((state) => ({
+        recurringTransactions: state.recurringTransactions.map((rt) =>
+          rt.id === id
+            ? {
+                ...rt,
+                nextDueDate: new Date(data.recurring.nextDueDate),
+                lastGeneratedDate: data.recurring.lastGeneratedDate 
+                  ? new Date(data.recurring.lastGeneratedDate) 
+                  : undefined,
+                updatedAt: new Date(data.recurring.updatedAt),
+              }
+            : rt
+        ),
+        isLoading: false,
+      }));
+
+      // Return the result so the caller can add the transaction to the transaction store
+      return {
+        transaction: {
+          id: data.transaction.id,
+          entityId: data.transaction.businessId ?? data.transaction.personalAccountId ?? '',
+          entityType: data.transaction.entityType as EntityType,
+          type: data.transaction.type as 'income' | 'expense' | 'investment',
+          amount: data.transaction.amount,
+          currency: data.transaction.currency,
+          exchangeRate: data.transaction.exchangeRate,
+          description: data.transaction.description,
+          category: data.transaction.category,
+          date: new Date(data.transaction.date),
+          isTaxDeductible: data.transaction.isTaxDeductible,
+          recurringTransactionId: data.transaction.recurringTransactionId ?? undefined,
+          createdAt: new Date(data.transaction.createdAt),
+          updatedAt: new Date(data.transaction.updatedAt),
+        },
+        recurring: {
+          id: data.recurring.id,
+          entityId: data.recurring.businessId ?? data.recurring.personalAccountId ?? '',
+          entityType: data.recurring.entityType as EntityType,
+          type: data.recurring.type as 'income' | 'expense' | 'investment',
+          amount: data.recurring.amount,
+          currency: data.recurring.currency,
+          exchangeRate: data.recurring.exchangeRate,
+          description: data.recurring.description,
+          category: data.recurring.category,
+          frequency: data.recurring.frequency as RecurrenceFrequency,
+          startDate: new Date(data.recurring.startDate),
+          endDate: data.recurring.endDate ? new Date(data.recurring.endDate) : undefined,
+          nextDueDate: new Date(data.recurring.nextDueDate),
+          lastGeneratedDate: data.recurring.lastGeneratedDate 
+            ? new Date(data.recurring.lastGeneratedDate) 
+            : undefined,
+          isActive: data.recurring.isActive,
+          createdAt: new Date(data.recurring.createdAt),
+          updatedAt: new Date(data.recurring.updatedAt),
+        },
+      };
+    } catch (error) {
+      set({
+        error: error instanceof Error ? error.message : 'Unknown error',
+        isLoading: false,
+      });
+      return null;
     }
   },
 

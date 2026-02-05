@@ -514,11 +514,14 @@
     },
     "status": {
       "active": "Ativo",
-      "paused": "Pausado"
+      "paused": "Pausado",
+      "dueToday": "Vence Hoje",
+      "overdue": "Atrasado"
     },
     "actions": {
       "pause": "Pausar",
-      "resume": "Retomar"
+      "resume": "Retomar",
+      "markPaid": "Marcar como Pago"
     },
     "empty": {
       "title": "Nenhuma transação recorrente",
@@ -533,7 +536,9 @@
       "updated": "Transação recorrente atualizada!",
       "deleted": "Transação recorrente excluída!",
       "paused": "Transação recorrente pausada",
-      "resumed": "Transação recorrente retomada"
+      "resumed": "Transação recorrente retomada",
+      "markedPaid": "Transação registrada e data avançada!",
+      "markPaidError": "Falha ao marcar como pago"
     }
   },
   "budgets": {

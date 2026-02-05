@@ -4,6 +4,7 @@ import { jsonContent } from "stoker/openapi/helpers";
 
 import type { AppRouteHandler } from "@capital/server/types";
 import { prisma } from "@capital/server/lib/prisma";
+import { parseLocalDate } from "@capital/server/lib/date-utils";
 import { routeConfig } from "../../constants";
 
 const UpdateRecurringSchema = z.object({
@@ -93,8 +94,8 @@ export const handler: AppRouteHandler<typeof route> = async (c) => {
       where: { id },
       data: {
         ...body,
-        startDate: body.startDate ? new Date(body.startDate) : undefined,
-        endDate: body.endDate ? new Date(body.endDate) : body.endDate === null ? null : undefined,
+        startDate: body.startDate ? parseLocalDate(body.startDate) : undefined,
+        endDate: body.endDate ? parseLocalDate(body.endDate) : body.endDate === null ? null : undefined,
       },
     });
 
