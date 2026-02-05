@@ -42,7 +42,13 @@ const getBaseUrl = () => {
  * });
  * ```
  */
-export const client = hc<AppType>(`${getBaseUrl()}/api`);
+export const client = hc<AppType>(`${getBaseUrl()}/api`, {
+  fetch: (input, init) =>
+    fetch(input, {
+      ...init,
+      credentials: "include",
+    }),
+});
 
 /**
  * Helper function to handle API responses with error handling.
