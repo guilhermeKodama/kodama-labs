@@ -196,6 +196,12 @@ export function TransferForm({
                   >
                     {t('directions.capitalInjection')}
                   </SelectItem>
+                  <SelectItem
+                    value="reimbursement"
+                    className="text-purple-400 focus:bg-slate-800 focus:text-purple-400"
+                  >
+                    {t('directions.reimbursement')}
+                  </SelectItem>
                 </SelectContent>
               </Select>
               <FormMessage />
