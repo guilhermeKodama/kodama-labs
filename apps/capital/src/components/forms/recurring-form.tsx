@@ -3,7 +3,7 @@
 import { useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { useTranslations } from 'next-intl';
+import { useTranslations, useLocale } from 'next-intl';
 import { format } from 'date-fns';
 
 /**
@@ -31,6 +31,7 @@ import {
   FormMessage,
 } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
+import { CurrencyInput } from '@/components/ui/currency-input';
 import {
   Select,
   SelectContent,
@@ -71,6 +72,7 @@ export function RecurringForm({
   const t = useTranslations('recurring');
   const tCommon = useTranslations('common');
   const tTransactions = useTranslations('transactions');
+  const locale = useLocale();
   const { settings, currencies, categories, personalAccount } = useSettingsStore();
   const { businesses } = useBusinessStore();
 
@@ -294,12 +296,10 @@ export function RecurringForm({
               <FormItem>
                 <FormLabel className="text-slate-300">{tTransactions('form.amount')}</FormLabel>
                 <FormControl>
-                  <Input
-                    {...field}
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    onChange={(e) => field.onChange(parseFloat(e.target.value) || 0)}
+                  <CurrencyInput
+                    value={field.value}
+                    onChange={field.onChange}
+                    locale={locale}
                     className="border-slate-700 bg-slate-800 text-white"
                   />
                 </FormControl>

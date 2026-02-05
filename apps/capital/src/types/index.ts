@@ -10,7 +10,7 @@ export type EntityType = 'business' | 'personal';
 
 export type TransactionType = 'income' | 'expense' | 'investment';
 
-export type TransferDirection = 'profit_distribution' | 'capital_injection';
+export type TransferDirection = 'profit_distribution' | 'capital_injection' | 'reimbursement';
 
 export type RecurrenceFrequency = 'daily' | 'weekly' | 'monthly' | 'yearly';
 
@@ -25,6 +25,7 @@ export const TRANSACTION_TYPE_LABELS: Record<TransactionType, string> = {
 export const TRANSFER_DIRECTION_LABELS: Record<TransferDirection, string> = {
   profit_distribution: 'Profit Distribution',
   capital_injection: 'Capital Injection',
+  reimbursement: 'Reimbursement',
 };
 
 // --------------------------------------------
@@ -205,6 +206,58 @@ export interface UpdateRecurringTransactionInput {
   exchangeRate?: number;
   description?: string;
   category?: string;
+  frequency?: RecurrenceFrequency;
+  startDate?: Date;
+  endDate?: Date;
+  isActive?: boolean;
+}
+
+// --------------------------------------------
+// Recurring Transfer
+// --------------------------------------------
+
+export interface RecurringTransfer {
+  id: string;
+  fromEntityId: string;
+  fromEntityType: EntityType;
+  toEntityId: string;
+  toEntityType: EntityType;
+  direction: TransferDirection;
+  amount: number;
+  currency: string;
+  exchangeRate: number;
+  description?: string;
+  frequency: RecurrenceFrequency;
+  startDate: Date;
+  endDate?: Date;
+  nextDueDate: Date;
+  lastGeneratedDate?: Date;
+  isActive: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface CreateRecurringTransferInput {
+  fromEntityId: string;
+  fromEntityType: EntityType;
+  toEntityId: string;
+  toEntityType: EntityType;
+  direction: TransferDirection;
+  amount: number;
+  currency: string;
+  exchangeRate?: number;
+  description?: string;
+  frequency: RecurrenceFrequency;
+  startDate: Date;
+  endDate?: Date;
+}
+
+export interface UpdateRecurringTransferInput {
+  direction?: TransferDirection;
+  amount?: number;
+  currency?: string;
+  exchangeRate?: number;
+  description?: string;
   frequency?: RecurrenceFrequency;
   startDate?: Date;
   endDate?: Date;

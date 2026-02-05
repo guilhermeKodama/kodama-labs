@@ -3,7 +3,7 @@
 import { useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { useTranslations } from 'next-intl';
+import { useTranslations, useLocale } from 'next-intl';
 import { format } from 'date-fns';
 import { Button } from '@/components/ui/button';
 
@@ -30,6 +30,7 @@ import {
   FormMessage,
 } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
+import { CurrencyInput } from '@/components/ui/currency-input';
 import {
   Select,
   SelectContent,
@@ -66,6 +67,7 @@ export function TransactionForm({
   defaultType = 'income',
 }: TransactionFormProps) {
   const t = useTranslations('transactions');
+  const locale = useLocale();
   const { settings, currencies, categories } = useSettingsStore();
 
   const form = useForm<CreateTransactionFormData>({
@@ -211,12 +213,10 @@ export function TransactionForm({
                   {t('form.amount')}
                 </FormLabel>
                 <FormControl>
-                  <Input
-                    {...field}
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    onChange={(e) => field.onChange(parseFloat(e.target.value) || 0)}
+                  <CurrencyInput
+                    value={field.value}
+                    onChange={field.onChange}
+                    locale={locale}
                     className="border-slate-700 bg-slate-800 text-white"
                   />
                 </FormControl>

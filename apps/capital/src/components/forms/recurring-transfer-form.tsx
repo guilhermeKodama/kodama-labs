@@ -6,22 +6,8 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { useTranslations, useLocale } from 'next-intl';
 import { format } from 'date-fns';
 import { ArrowRight, Wallet } from 'lucide-react';
+import { z } from 'zod';
 import { Button } from '@/components/ui/button';
-
-/**
- * Parse a date string from an input[type="date"] as a local date (not UTC).
- */
-function parseLocalDate(dateString: string): Date {
-  const [year, month, day] = dateString.split('-').map(Number);
-  return new Date(year, month - 1, day, 12, 0, 0);
-}
-
-/**
- * Format a Date to YYYY-MM-DD for input[type="date"]
- */
-function formatDateForInput(date: Date): string {
-  return format(date, 'yyyy-MM-dd');
-}
 import {
   Form,
   FormControl,
@@ -39,26 +25,58 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { createTransferSchema, type CreateTransferFormData } from '@/lib/validations';
 import { useSettingsStore, useBusinessStore, useTransactionStore, useTransferStore } from '@/lib/store';
 import { calculateEntitySummary } from '@/lib/utils/calculations';
 import { formatCurrency } from '@/lib/utils/format';
-import type { Transfer, TransferDirection } from '@/types';
+import type { RecurringTransfer, TransferDirection, RecurrenceFrequency } from '@/types';
 
-interface TransferFormProps {
-  transfer?: Transfer;
-  onSubmit: (data: CreateTransferFormData) => void;
+/**
+ * Parse a date string from an input[type="date"] as a local date (not UTC).
+ */
+function parseLocalDate(dateString: string): Date {
+  const [year, month, day] = dateString.split('-').map(Number);
+  return new Date(year, month - 1, day, 12, 0, 0);
+}
+
+/**
+ * Format a Date to YYYY-MM-DD for input[type="date"]
+ */
+function formatDateForInput(date: Date): string {
+  return format(date, 'yyyy-MM-dd');
+}
+
+const recurringTransferSchema = z.object({
+  fromEntityId: z.string().min(1, 'Required'),
+  fromEntityType: z.enum(['business', 'personal']),
+  toEntityId: z.string().min(1, 'Required'),
+  toEntityType: z.enum(['business', 'personal']),
+  direction: z.enum(['profit_distribution', 'capital_injection', 'reimbursement']),
+  amount: z.number().positive('Amount must be positive'),
+  currency: z.string().length(3, 'Currency is required'),
+  exchangeRate: z.number().positive().optional(),
+  description: z.string().optional(),
+  frequency: z.enum(['daily', 'weekly', 'monthly', 'yearly']),
+  startDate: z.date(),
+  endDate: z.date().optional().nullable(),
+});
+
+export type RecurringTransferFormData = z.infer<typeof recurringTransferSchema>;
+
+interface RecurringTransferFormProps {
+  recurringTransfer?: RecurringTransfer;
+  onSubmit: (data: RecurringTransferFormData) => void;
   onCancel: () => void;
   isLoading?: boolean;
 }
 
-export function TransferForm({
-  transfer,
+export function RecurringTransferForm({
+  recurringTransfer,
   onSubmit,
   onCancel,
   isLoading,
-}: TransferFormProps) {
-  const t = useTranslations('transfers');
+}: RecurringTransferFormProps) {
+  const t = useTranslations('transfers.recurring');
+  const tTransfers = useTranslations('transfers');
   const tCommon = useTranslations('common');
   const locale = useLocale();
   const { settings, personalAccount, currencies } = useSettingsStore();
@@ -66,19 +84,21 @@ export function TransferForm({
   const { transactions } = useTransactionStore();
   const { transfers } = useTransferStore();
 
-  const form = useForm<CreateTransferFormData>({
-    resolver: zodResolver(createTransferSchema),
+  const form = useForm<RecurringTransferFormData>({
+    resolver: zodResolver(recurringTransferSchema),
     defaultValues: {
-      fromEntityId: transfer?.fromEntityId || businesses[0]?.id || '',
-      fromEntityType: transfer?.fromEntityType || 'business',
-      toEntityId: transfer?.toEntityId || personalAccount?.id || '',
-      toEntityType: transfer?.toEntityType || 'personal',
-      direction: transfer?.direction || 'profit_distribution',
-      amount: transfer?.amount || 0,
-      currency: transfer?.currency || settings.baseCurrency,
-      exchangeRate: transfer?.exchangeRate || 1,
-      description: transfer?.description || '',
-      date: transfer?.date ? new Date(transfer.date) : new Date(),
+      fromEntityId: recurringTransfer?.fromEntityId || businesses[0]?.id || '',
+      fromEntityType: recurringTransfer?.fromEntityType || 'business',
+      toEntityId: recurringTransfer?.toEntityId || personalAccount?.id || '',
+      toEntityType: recurringTransfer?.toEntityType || 'personal',
+      direction: recurringTransfer?.direction || 'reimbursement',
+      amount: recurringTransfer?.amount || 0,
+      currency: recurringTransfer?.currency || settings.baseCurrency,
+      exchangeRate: recurringTransfer?.exchangeRate || 1,
+      description: recurringTransfer?.description || '',
+      frequency: recurringTransfer?.frequency || 'monthly',
+      startDate: recurringTransfer?.startDate ? new Date(recurringTransfer.startDate) : new Date(),
+      endDate: recurringTransfer?.endDate ? new Date(recurringTransfer.endDate) : null,
     },
   });
 
@@ -88,7 +108,7 @@ export function TransferForm({
 
   // Calculate the balance of the source entity
   const sourceEntityBalance = useMemo(() => {
-    if (selectedDirection === 'profit_distribution') {
+    if (selectedDirection === 'reimbursement' || selectedDirection === 'profit_distribution') {
       // Source is a business
       const business = businesses.find((b) => b.id === selectedFromEntityId);
       if (!business) return null;
@@ -113,23 +133,23 @@ export function TransferForm({
       const summary = calculateEntitySummary(
         personalAccount.id,
         'personal',
-        t('form.personalAccount'),
+        tTransfers('form.personalAccount'),
         transactions,
         transfers,
         settings.baseCurrency
       );
       return {
-        name: t('form.personalAccount'),
+        name: tTransfers('form.personalAccount'),
         balance: summary.balance,
         currency: settings.baseCurrency,
       };
     }
-  }, [selectedDirection, selectedFromEntityId, businesses, personalAccount, transactions, transfers, settings.baseCurrency, t]);
+  }, [selectedDirection, selectedFromEntityId, businesses, personalAccount, transactions, transfers, settings.baseCurrency, tTransfers]);
 
   // Update from/to entities when direction changes
   const handleDirectionChange = (direction: TransferDirection) => {
     form.setValue('direction', direction);
-    if (direction === 'profit_distribution') {
+    if (direction === 'profit_distribution' || direction === 'reimbursement') {
       form.setValue('fromEntityType', 'business');
       form.setValue('toEntityType', 'personal');
       form.setValue('toEntityId', personalAccount?.id || '');
@@ -185,16 +205,22 @@ export function TransferForm({
                 </FormControl>
                 <SelectContent className="border-slate-700 bg-slate-900">
                   <SelectItem
+                    value="reimbursement"
+                    className="text-purple-400 focus:bg-slate-800 focus:text-purple-400"
+                  >
+                    {tTransfers('directions.reimbursement')}
+                  </SelectItem>
+                  <SelectItem
                     value="profit_distribution"
                     className="text-emerald-400 focus:bg-slate-800 focus:text-emerald-400"
                   >
-                    {t('directions.profitDistribution')}
+                    {tTransfers('directions.profitDistribution')}
                   </SelectItem>
                   <SelectItem
                     value="capital_injection"
                     className="text-blue-400 focus:bg-slate-800 focus:text-blue-400"
                   >
-                    {t('directions.capitalInjection')}
+                    {tTransfers('directions.capitalInjection')}
                   </SelectItem>
                 </SelectContent>
               </Select>
@@ -209,7 +235,7 @@ export function TransferForm({
             {/* From Entity */}
             <div className="flex-1">
               <p className="mb-2 text-xs text-slate-400">{t('form.from')}</p>
-              {selectedDirection === 'profit_distribution' ? (
+              {selectedDirection === 'profit_distribution' || selectedDirection === 'reimbursement' ? (
                 <FormField
                   control={form.control}
                   name="fromEntityId"
@@ -292,7 +318,7 @@ export function TransferForm({
           {sourceEntityBalance && (
             <div className="mt-4 flex items-center gap-2 rounded-md border border-slate-600 bg-slate-700/30 px-3 py-2">
               <Wallet className="h-4 w-4 text-slate-400" />
-              <span className="text-sm text-slate-400">{t('form.availableBalance')}:</span>
+              <span className="text-sm text-slate-400">{tTransfers('form.availableBalance')}:</span>
               <span className={`text-sm font-semibold ${sourceEntityBalance.balance >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
                 {formatCurrency(sourceEntityBalance.balance, sourceEntityBalance.currency)}
               </span>
@@ -380,6 +406,39 @@ export function TransferForm({
           />
         )}
 
+        {/* Frequency */}
+        <FormField
+          control={form.control}
+          name="frequency"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel className="text-slate-300">{t('form.frequency')}</FormLabel>
+              <Select onValueChange={field.onChange} value={field.value}>
+                <FormControl>
+                  <SelectTrigger className="border-slate-700 bg-slate-800 text-white">
+                    <SelectValue />
+                  </SelectTrigger>
+                </FormControl>
+                <SelectContent className="border-slate-700 bg-slate-900">
+                  <SelectItem value="daily" className="text-slate-300 focus:bg-slate-800 focus:text-white">
+                    {t('form.frequencies.daily')}
+                  </SelectItem>
+                  <SelectItem value="weekly" className="text-slate-300 focus:bg-slate-800 focus:text-white">
+                    {t('form.frequencies.weekly')}
+                  </SelectItem>
+                  <SelectItem value="monthly" className="text-slate-300 focus:bg-slate-800 focus:text-white">
+                    {t('form.frequencies.monthly')}
+                  </SelectItem>
+                  <SelectItem value="yearly" className="text-slate-300 focus:bg-slate-800 focus:text-white">
+                    {t('form.frequencies.yearly')}
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+
         {/* Description */}
         <FormField
           control={form.control}
@@ -399,13 +458,13 @@ export function TransferForm({
           )}
         />
 
-        {/* Date */}
+        {/* Start Date */}
         <FormField
           control={form.control}
-          name="date"
+          name="startDate"
           render={({ field }) => (
             <FormItem>
-              <FormLabel className="text-slate-300">{t('form.date')}</FormLabel>
+              <FormLabel className="text-slate-300">{t('form.startDate')}</FormLabel>
               <FormControl>
                 <Input
                   type="date"
@@ -415,6 +474,36 @@ export function TransferForm({
                       : ''
                   }
                   onChange={(e) => field.onChange(parseLocalDate(e.target.value))}
+                  className="border-slate-700 bg-slate-800 text-white"
+                />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+
+        {/* End Date (optional) */}
+        <FormField
+          control={form.control}
+          name="endDate"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel className="text-slate-300">{t('form.endDate')}</FormLabel>
+              <FormControl>
+                <Input
+                  type="date"
+                  value={
+                    field.value instanceof Date
+                      ? formatDateForInput(field.value)
+                      : ''
+                  }
+                  onChange={(e) => {
+                    if (e.target.value) {
+                      field.onChange(parseLocalDate(e.target.value));
+                    } else {
+                      field.onChange(null);
+                    }
+                  }}
                   className="border-slate-700 bg-slate-800 text-white"
                 />
               </FormControl>
@@ -438,7 +527,7 @@ export function TransferForm({
             disabled={isLoading || businesses.length === 0}
             className="bg-gradient-to-r from-purple-500 to-pink-500 text-white hover:from-purple-600 hover:to-pink-600"
           >
-            {transfer ? t('form.update') : t('form.create')}
+            {recurringTransfer ? t('form.update') : t('form.create')}
           </Button>
         </div>
       </form>

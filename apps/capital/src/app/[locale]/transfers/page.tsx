@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useCallback, useEffect } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import {
   ArrowLeftRight,
@@ -8,14 +9,16 @@ import {
   TrendingUp,
   TrendingDown,
   Building2,
+  Repeat,
 } from 'lucide-react';
 import { AppShell } from '@/components/layout';
 import { Header } from '@/components/layout/header';
 import { SummaryCard } from '@/components/cards';
-import { TransfersTable } from '@/components/tables';
-import { TransferDialog } from '@/components/dialogs';
+import { TransfersTable, RecurringTransfersTable } from '@/components/tables';
+import { TransferDialog, RecurringTransferDialog } from '@/components/dialogs';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -30,20 +33,44 @@ import {
   useTransferStore,
   useBusinessStore,
   useSettingsStore,
+  useRecurringTransferStore,
 } from '@/lib/store';
 import { toast } from 'sonner';
-import type { Transfer } from '@/types';
+import type { Transfer, RecurringTransfer, CreateRecurringTransferInput } from '@/types';
 import type { CreateTransferFormData } from '@/lib/validations';
+import type { RecurringTransferFormData } from '@/components/forms/recurring-transfer-form';
 import { Link } from '@/i18n/navigation';
 
 export default function TransfersPage() {
   const t = useTranslations();
-  const { transfers, addTransfer, deleteTransfer } = useTransferStore();
+  const searchParams = useSearchParams();
+  const { transfers, addTransfer, deleteTransfer, fetchTransfers } = useTransferStore();
   const { businesses } = useBusinessStore();
   const { settings, personalAccount } = useSettingsStore();
+  const {
+    recurringTransfers,
+    addRecurringTransfer,
+    updateRecurringTransfer,
+    deleteRecurringTransfer,
+    toggleRecurringTransfer,
+    markAsPaid,
+  } = useRecurringTransferStore();
 
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [isRecurringDialogOpen, setIsRecurringDialogOpen] = useState(false);
   const [deletingTransfer, setDeletingTransfer] = useState<Transfer | undefined>();
+  const [editingRecurring, setEditingRecurring] = useState<RecurringTransfer | undefined>();
+  const [deletingRecurring, setDeletingRecurring] = useState<RecurringTransfer | undefined>();
+  const [markingPaidId, setMarkingPaidId] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState('history');
+
+  // Handle tab parameter from URL
+  useEffect(() => {
+    const tab = searchParams.get('tab');
+    if (tab === 'recurring') {
+      setActiveTab('recurring');
+    }
+  }, [searchParams]);
 
   // Calculate transfer summaries
   const summaries = useMemo(() => {
@@ -55,12 +82,31 @@ export default function TransfersPage() {
       .filter((t) => t.direction === 'capital_injection')
       .reduce((sum, t) => sum + t.amount * t.exchangeRate, 0);
 
+    const reimbursements = transfers
+      .filter((t) => t.direction === 'reimbursement')
+      .reduce((sum, t) => sum + t.amount * t.exchangeRate, 0);
+
     return {
       profitDistributions,
       capitalInjections,
+      reimbursements,
       totalTransfers: transfers.length,
     };
   }, [transfers]);
+
+  // Calculate recurring summary
+  const recurringSummary = useMemo(() => {
+    const active = recurringTransfers.filter((rt) => rt.isActive);
+    const monthlyTotal = active
+      .filter((rt) => rt.frequency === 'monthly')
+      .reduce((sum, rt) => sum + rt.amount * rt.exchangeRate, 0);
+
+    return {
+      total: recurringTransfers.length,
+      active: active.length,
+      monthlyTotal,
+    };
+  }, [recurringTransfers]);
 
   const handleCreateTransfer = async (data: CreateTransferFormData) => {
     await addTransfer(data);
@@ -73,6 +119,86 @@ export default function TransfersPage() {
       setDeletingTransfer(undefined);
       toast.success(t('transfers.toast.deleted'));
     }
+  };
+
+  const handleCreateRecurringTransfer = async (data: RecurringTransferFormData) => {
+    const input: CreateRecurringTransferInput = {
+      fromEntityId: data.fromEntityId,
+      fromEntityType: data.fromEntityType,
+      toEntityId: data.toEntityId,
+      toEntityType: data.toEntityType,
+      direction: data.direction,
+      amount: data.amount,
+      currency: data.currency,
+      exchangeRate: data.exchangeRate,
+      description: data.description,
+      frequency: data.frequency,
+      startDate: data.startDate,
+      endDate: data.endDate ?? undefined,
+    };
+    await addRecurringTransfer(input);
+    toast.success(t('transfers.recurring.toast.created'));
+  };
+
+  const handleUpdateRecurringTransfer = async (data: RecurringTransferFormData) => {
+    if (editingRecurring) {
+      await updateRecurringTransfer(editingRecurring.id, {
+        direction: data.direction,
+        amount: data.amount,
+        currency: data.currency,
+        exchangeRate: data.exchangeRate,
+        description: data.description,
+        frequency: data.frequency,
+        startDate: data.startDate,
+        endDate: data.endDate ?? undefined,
+      });
+      setEditingRecurring(undefined);
+      toast.success(t('transfers.recurring.toast.updated'));
+    }
+  };
+
+  const handleDeleteRecurringTransfer = async () => {
+    if (deletingRecurring) {
+      await deleteRecurringTransfer(deletingRecurring.id);
+      setDeletingRecurring(undefined);
+      toast.success(t('transfers.recurring.toast.deleted'));
+    }
+  };
+
+  const handleToggleRecurring = async (recurring: RecurringTransfer) => {
+    await toggleRecurringTransfer(recurring.id);
+    toast.success(
+      recurring.isActive
+        ? t('transfers.recurring.toast.paused')
+        : t('transfers.recurring.toast.resumed')
+    );
+  };
+
+  const handleMarkPaid = useCallback(async (recurring: RecurringTransfer) => {
+    setMarkingPaidId(recurring.id);
+    try {
+      const result = await markAsPaid(recurring.id);
+      if (result) {
+        await fetchTransfers();
+        toast.success(t('transfers.recurring.toast.markedPaid'));
+      } else {
+        toast.error(t('transfers.recurring.toast.markPaidError'));
+      }
+    } catch {
+      toast.error(t('transfers.recurring.toast.markPaidError'));
+    } finally {
+      setMarkingPaidId(null);
+    }
+  }, [markAsPaid, fetchTransfers, t]);
+
+  const openEditRecurringDialog = (recurring: RecurringTransfer) => {
+    setEditingRecurring(recurring);
+    setIsRecurringDialogOpen(true);
+  };
+
+  const closeRecurringDialog = () => {
+    setIsRecurringDialogOpen(false);
+    setEditingRecurring(undefined);
   };
 
   // Show message if no businesses exist
@@ -116,13 +242,17 @@ export default function TransfersPage() {
         title={t('transfers.title')}
         description={t('transfers.subtitle')}
         action={{
-          label: t('transfers.addTransfer'),
-          onClick: () => setIsDialogOpen(true),
+          label: activeTab === 'recurring' 
+            ? t('transfers.recurring.addRecurring') 
+            : t('transfers.addTransfer'),
+          onClick: () => activeTab === 'recurring' 
+            ? setIsRecurringDialogOpen(true) 
+            : setIsDialogOpen(true),
         }}
       />
 
       {/* Summary Cards */}
-      <div className="mb-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      <div className="mb-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <SummaryCard
           title={t('transfers.summary.totalTransfers')}
           value={summaries.totalTransfers}
@@ -144,22 +274,68 @@ export default function TransfersPage() {
           icon={TrendingDown}
           variant="investment"
         />
+        <SummaryCard
+          title={t('transfers.recurring.summary.active')}
+          value={recurringSummary.active}
+          icon={Repeat}
+          variant="default"
+          isCount
+        />
       </div>
 
-      {/* Transfers Table */}
-      <Card className="border-slate-800 bg-slate-900/50 backdrop-blur-sm">
-        <CardHeader>
-          <CardTitle className="text-lg text-white">
+      {/* Tabbed Content */}
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
+        <TabsList className="grid w-full max-w-md grid-cols-2 bg-slate-800">
+          <TabsTrigger
+            value="history"
+            className="data-[state=active]:bg-slate-700"
+          >
             {t('transfers.history')}
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <TransfersTable
-            transfers={transfers}
-            onDelete={setDeletingTransfer}
-          />
-        </CardContent>
-      </Card>
+          </TabsTrigger>
+          <TabsTrigger
+            value="recurring"
+            className="data-[state=active]:bg-slate-700"
+          >
+            {t('transfers.recurring.title')}
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="history">
+          <Card className="border-slate-800 bg-slate-900/50 backdrop-blur-sm">
+            <CardHeader>
+              <CardTitle className="text-lg text-white">
+                {t('transfers.history')}
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <TransfersTable
+                transfers={transfers}
+                onDelete={setDeletingTransfer}
+              />
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="recurring">
+          <Card className="border-slate-800 bg-slate-900/50 backdrop-blur-sm">
+            <CardHeader>
+              <CardTitle className="text-lg text-white">
+                {t('transfers.recurring.list')}
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <RecurringTransfersTable
+                recurringTransfers={recurringTransfers}
+                onEdit={openEditRecurringDialog}
+                onDelete={setDeletingRecurring}
+                onToggle={handleToggleRecurring}
+                onMarkPaid={handleMarkPaid}
+                isMarkingPaid={markingPaidId}
+              />
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
 
       {/* Transfer Dialog */}
       <TransferDialog
@@ -168,7 +344,15 @@ export default function TransfersPage() {
         onSubmit={handleCreateTransfer}
       />
 
-      {/* Delete Confirmation */}
+      {/* Recurring Transfer Dialog */}
+      <RecurringTransferDialog
+        open={isRecurringDialogOpen}
+        onOpenChange={closeRecurringDialog}
+        recurringTransfer={editingRecurring}
+        onSubmit={editingRecurring ? handleUpdateRecurringTransfer : handleCreateRecurringTransfer}
+      />
+
+      {/* Delete Transfer Confirmation */}
       <AlertDialog
         open={!!deletingTransfer}
         onOpenChange={() => setDeletingTransfer(undefined)}
@@ -188,6 +372,34 @@ export default function TransfersPage() {
             </AlertDialogCancel>
             <AlertDialogAction
               onClick={handleDeleteTransfer}
+              className="bg-red-500 text-white hover:bg-red-600"
+            >
+              {t('common.delete')}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Delete Recurring Transfer Confirmation */}
+      <AlertDialog
+        open={!!deletingRecurring}
+        onOpenChange={() => setDeletingRecurring(undefined)}
+      >
+        <AlertDialogContent className="border-slate-800 bg-slate-900">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-white">
+              {t('transfers.recurring.delete.title')}
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-slate-400">
+              {t('transfers.recurring.delete.description')}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="border-slate-700 text-slate-300 hover:bg-slate-800 hover:text-white">
+              {t('common.cancel')}
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDeleteRecurringTransfer}
               className="bg-red-500 text-white hover:bg-red-600"
             >
               {t('common.delete')}

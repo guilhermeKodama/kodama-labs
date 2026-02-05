@@ -125,14 +125,95 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    // ============================================
+    // PROCESS RECURRING TRANSFERS
+    // ============================================
+    
+    const dueRecurringTransfers = await prisma.recurringTransfer.findMany({
+      where: {
+        isActive: true,
+        nextDueDate: {
+          lte: todayEnd,
+        },
+        OR: [
+          { endDate: null },
+          { endDate: { gte: today } },
+        ],
+      },
+    });
+
+    let generatedTransferCount = 0;
+    const transferResults: Array<{
+      recurringTransferId: string;
+      transfersGenerated: number;
+      nextDueDate: string;
+    }> = [];
+
+    // Process each due recurring transfer
+    for (const recurringTransfer of dueRecurringTransfers) {
+      let currentDueDate = startOfDay(recurringTransfer.nextDueDate);
+      let transfersForThisRecurring = 0;
+
+      // Generate transfers for all due dates up to today (inclusive)
+      while (!isAfter(currentDueDate, todayEnd)) {
+        // Stop if we've passed the end date
+        if (recurringTransfer.endDate && isAfter(currentDueDate, startOfDay(recurringTransfer.endDate))) {
+          break;
+        }
+
+        // Create the transfer
+        await prisma.transfer.create({
+          data: {
+            fromEntityType: recurringTransfer.fromEntityType,
+            toEntityType: recurringTransfer.toEntityType,
+            direction: recurringTransfer.direction,
+            amount: recurringTransfer.amount,
+            currency: recurringTransfer.currency,
+            exchangeRate: recurringTransfer.exchangeRate,
+            description: recurringTransfer.description,
+            date: currentDueDate,
+            recurringTransferId: recurringTransfer.id,
+            fromBusinessId: recurringTransfer.fromBusinessId,
+            fromPersonalAccountId: recurringTransfer.fromPersonalAccountId,
+            toBusinessId: recurringTransfer.toBusinessId,
+            toPersonalAccountId: recurringTransfer.toPersonalAccountId,
+          },
+        });
+
+        generatedTransferCount++;
+        transfersForThisRecurring++;
+
+        // Move to next occurrence
+        currentDueDate = getNextOccurrence(currentDueDate, recurringTransfer.frequency);
+      }
+
+      // Update the recurring transfer with new nextDueDate and lastGeneratedDate
+      if (transfersForThisRecurring > 0) {
+        await prisma.recurringTransfer.update({
+          where: { id: recurringTransfer.id },
+          data: {
+            nextDueDate: currentDueDate,
+            lastGeneratedDate: today,
+          },
+        });
+
+        transferResults.push({
+          recurringTransferId: recurringTransfer.id,
+          transfersGenerated: transfersForThisRecurring,
+          nextDueDate: currentDueDate.toISOString(),
+        });
+      }
+    }
+
     return NextResponse.json({
       success: true,
-      message: `Generated ${generatedCount} transaction(s) from ${results.length} recurring transaction(s)`,
+      message: `Generated ${generatedCount} transaction(s) from ${results.length} recurring transaction(s) and ${generatedTransferCount} transfer(s) from ${transferResults.length} recurring transfer(s)`,
       processedAt: now.toISOString(),
-      details: results,
+      transactions: results,
+      transfers: transferResults,
     });
   } catch (error) {
-    console.error("Error processing recurring transactions:", error);
+    console.error("Error processing recurring items:", error);
     return NextResponse.json(
       {
         success: false,

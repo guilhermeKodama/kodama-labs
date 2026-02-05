@@ -3,4 +3,5 @@ export { useTransactionStore } from './transaction-store';
 export { useTransferStore } from './transfer-store';
 export { useSettingsStore } from './settings-store';
 export { useRecurringTransactionStore } from './recurring-store';
+export { useRecurringTransferStore } from './recurring-transfer-store';
 export { useBudgetStore } from './budget-store';
