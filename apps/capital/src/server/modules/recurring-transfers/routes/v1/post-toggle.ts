@@ -1,29 +1,13 @@
 import { createRoute, z } from "@hono/zod-openapi";
-import { CREATED, BAD_REQUEST, INTERNAL_SERVER_ERROR } from "stoker/http-status-codes";
+import { OK, NOT_FOUND, INTERNAL_SERVER_ERROR } from "stoker/http-status-codes";
 import { jsonContent } from "stoker/openapi/helpers";
 
 import type { AppRouteHandler } from "@capital/server/types";
 import { prisma } from "@capital/server/lib/prisma";
-import { parseLocalDate } from "@capital/server/lib/date-utils";
-import { createTransfer } from "../../services/create-transfer";
+import { toggleRecurringTransfer } from "../../services/toggle-recurring-transfer";
 import { routeConfig } from "../../constants";
 
-const CreateTransferSchema = z.object({
-  fromEntityType: z.enum(["business", "personal"]),
-  toEntityType: z.enum(["business", "personal"]),
-  direction: z.enum(["profit_distribution", "capital_injection", "reimbursement"]),
-  amount: z.number().positive(),
-  currency: z.string().length(3),
-  exchangeRate: z.number().positive().optional(),
-  description: z.string().optional(),
-  date: z.string(),
-  fromBusinessId: z.string().optional(),
-  fromPersonalAccountId: z.string().optional(),
-  toBusinessId: z.string().optional(),
-  toPersonalAccountId: z.string().optional(),
-});
-
-const TransferSchema = z.object({
+const RecurringTransferSchema = z.object({
   id: z.string(),
   fromEntityType: z.enum(["business", "personal"]),
   toEntityType: z.enum(["business", "personal"]),
@@ -32,7 +16,12 @@ const TransferSchema = z.object({
   currency: z.string(),
   exchangeRate: z.number(),
   description: z.string().nullable(),
-  date: z.string(),
+  frequency: z.enum(["daily", "weekly", "monthly", "yearly"]),
+  startDate: z.string(),
+  endDate: z.string().nullable(),
+  nextDueDate: z.string(),
+  lastGeneratedDate: z.string().nullable(),
+  isActive: z.boolean(),
   fromBusinessId: z.string().nullable(),
   fromPersonalAccountId: z.string().nullable(),
   toBusinessId: z.string().nullable(),
@@ -49,17 +38,19 @@ const ErrorResponseSchema = z.object({
 });
 
 export const route = createRoute({
-  path: "/v1/transfers",
+  path: "/v1/recurring-transfers/{id}/toggle",
   method: "post",
   tags: [...routeConfig.v1.defaultTags],
-  summary: "Create transfer",
-  description: "Creates a new transfer between entities",
+  summary: "Toggle recurring transfer",
+  description: "Toggles the active state of a recurring transfer (pause/resume)",
   request: {
-    body: jsonContent(CreateTransferSchema, "Transfer creation data"),
+    params: z.object({
+      id: z.string(),
+    }),
   },
   responses: {
-    [CREATED]: jsonContent(TransferSchema, "Transfer created"),
-    [BAD_REQUEST]: jsonContent(ErrorResponseSchema, "Invalid request data"),
+    [OK]: jsonContent(RecurringTransferSchema, "Recurring transfer toggled"),
+    [NOT_FOUND]: jsonContent(ErrorResponseSchema, "Recurring transfer not found"),
     [INTERNAL_SERVER_ERROR]: jsonContent(
       ErrorResponseSchema,
       "Internal server error"
@@ -69,14 +60,8 @@ export const route = createRoute({
 
 export const handler: AppRouteHandler<typeof route> = async (c) => {
   try {
-    const body = c.req.valid("json");
-    const transfer = await createTransfer(
-      {
-        ...body,
-        date: parseLocalDate(body.date),
-      },
-      prisma
-    );
+    const { id } = c.req.valid("param");
+    const transfer = await toggleRecurringTransfer(id, prisma);
 
     return c.json(
       {
@@ -88,7 +73,12 @@ export const handler: AppRouteHandler<typeof route> = async (c) => {
         currency: transfer.currency,
         exchangeRate: transfer.exchangeRate,
         description: transfer.description,
-        date: transfer.date.toISOString(),
+        frequency: transfer.frequency,
+        startDate: transfer.startDate.toISOString(),
+        endDate: transfer.endDate?.toISOString() ?? null,
+        nextDueDate: transfer.nextDueDate.toISOString(),
+        lastGeneratedDate: transfer.lastGeneratedDate?.toISOString() ?? null,
+        isActive: transfer.isActive,
         fromBusinessId: transfer.fromBusinessId,
         fromPersonalAccountId: transfer.fromPersonalAccountId,
         toBusinessId: transfer.toBusinessId,
@@ -96,12 +86,12 @@ export const handler: AppRouteHandler<typeof route> = async (c) => {
         createdAt: transfer.createdAt.toISOString(),
         updatedAt: transfer.updatedAt.toISOString(),
       },
-      CREATED
+      OK
     );
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "Unknown error";
-    if (message.includes("required")) {
-      return c.json({ error: { code: "BAD_REQUEST", message } }, BAD_REQUEST);
+    if (message.includes("not found")) {
+      return c.json({ error: { code: "NOT_FOUND", message } }, NOT_FOUND);
     }
     return c.json(
       { error: { code: "INTERNAL_ERROR", message } },

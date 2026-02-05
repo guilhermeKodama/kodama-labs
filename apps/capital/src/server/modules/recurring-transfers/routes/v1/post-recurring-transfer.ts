@@ -5,10 +5,10 @@ import { jsonContent } from "stoker/openapi/helpers";
 import type { AppRouteHandler } from "@capital/server/types";
 import { prisma } from "@capital/server/lib/prisma";
 import { parseLocalDate } from "@capital/server/lib/date-utils";
-import { createTransfer } from "../../services/create-transfer";
+import { createRecurringTransfer } from "../../services/create-recurring-transfer";
 import { routeConfig } from "../../constants";
 
-const CreateTransferSchema = z.object({
+const CreateRecurringTransferSchema = z.object({
   fromEntityType: z.enum(["business", "personal"]),
   toEntityType: z.enum(["business", "personal"]),
   direction: z.enum(["profit_distribution", "capital_injection", "reimbursement"]),
@@ -16,14 +16,16 @@ const CreateTransferSchema = z.object({
   currency: z.string().length(3),
   exchangeRate: z.number().positive().optional(),
   description: z.string().optional(),
-  date: z.string(),
+  frequency: z.enum(["daily", "weekly", "monthly", "yearly"]),
+  startDate: z.string(),
+  endDate: z.string().optional(),
   fromBusinessId: z.string().optional(),
   fromPersonalAccountId: z.string().optional(),
   toBusinessId: z.string().optional(),
   toPersonalAccountId: z.string().optional(),
 });
 
-const TransferSchema = z.object({
+const RecurringTransferSchema = z.object({
   id: z.string(),
   fromEntityType: z.enum(["business", "personal"]),
   toEntityType: z.enum(["business", "personal"]),
@@ -32,7 +34,12 @@ const TransferSchema = z.object({
   currency: z.string(),
   exchangeRate: z.number(),
   description: z.string().nullable(),
-  date: z.string(),
+  frequency: z.enum(["daily", "weekly", "monthly", "yearly"]),
+  startDate: z.string(),
+  endDate: z.string().nullable(),
+  nextDueDate: z.string(),
+  lastGeneratedDate: z.string().nullable(),
+  isActive: z.boolean(),
   fromBusinessId: z.string().nullable(),
   fromPersonalAccountId: z.string().nullable(),
   toBusinessId: z.string().nullable(),
@@ -49,16 +56,16 @@ const ErrorResponseSchema = z.object({
 });
 
 export const route = createRoute({
-  path: "/v1/transfers",
+  path: "/v1/recurring-transfers",
   method: "post",
   tags: [...routeConfig.v1.defaultTags],
-  summary: "Create transfer",
-  description: "Creates a new transfer between entities",
+  summary: "Create recurring transfer",
+  description: "Creates a new recurring transfer",
   request: {
-    body: jsonContent(CreateTransferSchema, "Transfer creation data"),
+    body: jsonContent(CreateRecurringTransferSchema, "Recurring transfer data"),
   },
   responses: {
-    [CREATED]: jsonContent(TransferSchema, "Transfer created"),
+    [CREATED]: jsonContent(RecurringTransferSchema, "Recurring transfer created"),
     [BAD_REQUEST]: jsonContent(ErrorResponseSchema, "Invalid request data"),
     [INTERNAL_SERVER_ERROR]: jsonContent(
       ErrorResponseSchema,
@@ -70,10 +77,11 @@ export const route = createRoute({
 export const handler: AppRouteHandler<typeof route> = async (c) => {
   try {
     const body = c.req.valid("json");
-    const transfer = await createTransfer(
+    const transfer = await createRecurringTransfer(
       {
         ...body,
-        date: parseLocalDate(body.date),
+        startDate: parseLocalDate(body.startDate),
+        endDate: body.endDate ? parseLocalDate(body.endDate) : undefined,
       },
       prisma
     );
@@ -88,7 +96,12 @@ export const handler: AppRouteHandler<typeof route> = async (c) => {
         currency: transfer.currency,
         exchangeRate: transfer.exchangeRate,
         description: transfer.description,
-        date: transfer.date.toISOString(),
+        frequency: transfer.frequency,
+        startDate: transfer.startDate.toISOString(),
+        endDate: transfer.endDate?.toISOString() ?? null,
+        nextDueDate: transfer.nextDueDate.toISOString(),
+        lastGeneratedDate: transfer.lastGeneratedDate?.toISOString() ?? null,
+        isActive: transfer.isActive,
         fromBusinessId: transfer.fromBusinessId,
         fromPersonalAccountId: transfer.fromPersonalAccountId,
         toBusinessId: transfer.toBusinessId,

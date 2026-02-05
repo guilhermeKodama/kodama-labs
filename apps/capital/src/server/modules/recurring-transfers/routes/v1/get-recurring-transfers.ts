@@ -4,10 +4,10 @@ import { jsonContent } from "stoker/openapi/helpers";
 
 import type { AppRouteHandler } from "@capital/server/types";
 import { prisma } from "@capital/server/lib/prisma";
-import { listTransfers } from "../../services/list-transfers";
+import { listRecurringTransfers } from "../../services/list-recurring-transfers";
 import { routeConfig } from "../../constants";
 
-const TransferSchema = z.object({
+const RecurringTransferSchema = z.object({
   id: z.string(),
   fromEntityType: z.enum(["business", "personal"]),
   toEntityType: z.enum(["business", "personal"]),
@@ -16,7 +16,12 @@ const TransferSchema = z.object({
   currency: z.string(),
   exchangeRate: z.number(),
   description: z.string().nullable(),
-  date: z.string(),
+  frequency: z.enum(["daily", "weekly", "monthly", "yearly"]),
+  startDate: z.string(),
+  endDate: z.string().nullable(),
+  nextDueDate: z.string(),
+  lastGeneratedDate: z.string().nullable(),
+  isActive: z.boolean(),
   fromBusinessId: z.string().nullable(),
   fromPersonalAccountId: z.string().nullable(),
   toBusinessId: z.string().nullable(),
@@ -33,23 +38,24 @@ const ErrorResponseSchema = z.object({
 });
 
 export const route = createRoute({
-  path: "/v1/transfers",
+  path: "/v1/recurring-transfers",
   method: "get",
   tags: [...routeConfig.v1.defaultTags],
-  summary: "List transfers",
-  description: "Lists transfers with optional filters",
+  summary: "List recurring transfers",
+  description: "Lists recurring transfers with optional filters",
   request: {
     query: z.object({
       fromBusinessId: z.string().optional(),
       fromPersonalAccountId: z.string().optional(),
       toBusinessId: z.string().optional(),
       toPersonalAccountId: z.string().optional(),
-      dateFrom: z.string().optional(),
-      dateTo: z.string().optional(),
+      fromEntityType: z.enum(["business", "personal"]).optional(),
+      toEntityType: z.enum(["business", "personal"]).optional(),
+      isActive: z.coerce.boolean().optional(),
     }),
   },
   responses: {
-    [OK]: jsonContent(z.array(TransferSchema), "Transfers retrieved"),
+    [OK]: jsonContent(z.array(RecurringTransferSchema), "Recurring transfers"),
     [INTERNAL_SERVER_ERROR]: jsonContent(
       ErrorResponseSchema,
       "Internal server error"
@@ -60,14 +66,7 @@ export const route = createRoute({
 export const handler: AppRouteHandler<typeof route> = async (c) => {
   try {
     const query = c.req.valid("query");
-    const transfers = await listTransfers(
-      {
-        ...query,
-        dateFrom: query.dateFrom ? new Date(query.dateFrom) : undefined,
-        dateTo: query.dateTo ? new Date(query.dateTo) : undefined,
-      },
-      prisma
-    );
+    const transfers = await listRecurringTransfers(query, prisma);
 
     return c.json(
       transfers.map((t) => ({
@@ -79,7 +78,12 @@ export const handler: AppRouteHandler<typeof route> = async (c) => {
         currency: t.currency,
         exchangeRate: t.exchangeRate,
         description: t.description,
-        date: t.date.toISOString(),
+        frequency: t.frequency,
+        startDate: t.startDate.toISOString(),
+        endDate: t.endDate?.toISOString() ?? null,
+        nextDueDate: t.nextDueDate.toISOString(),
+        lastGeneratedDate: t.lastGeneratedDate?.toISOString() ?? null,
+        isActive: t.isActive,
         fromBusinessId: t.fromBusinessId,
         fromPersonalAccountId: t.fromPersonalAccountId,
         toBusinessId: t.toBusinessId,

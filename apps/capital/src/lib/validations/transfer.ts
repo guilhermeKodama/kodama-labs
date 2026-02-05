@@ -3,6 +3,7 @@ import { z } from 'zod';
 export const transferDirectionSchema = z.enum([
   'profit_distribution',
   'capital_injection',
+  'reimbursement',
 ]);
 
 export const createTransferSchema = z.object({

@@ -107,7 +107,19 @@
     "yourBusinesses": "Your Businesses",
     "viewAll": "View All",
     "noBusinesses": "You haven't added any businesses yet.",
-    "createFirst": "Create Your First Business"
+    "createFirst": "Create Your First Business",
+    "pendingThisMonth": {
+      "title": "Pending This Month",
+      "empty": "Nothing pending this month",
+      "dueToday": "Due Today",
+      "overdue": "Overdue",
+      "upcoming": "Upcoming",
+      "expense": "Expense",
+      "income": "Income",
+      "transfer": "Transfer",
+      "viewAll": "View All",
+      "showLess": "Show Less"
+    }
   },
   "businesses": {
     "title": "Businesses",
@@ -221,7 +233,8 @@
     "history": "Transfer History",
     "directions": {
       "profitDistribution": "Profit Distribution",
-      "capitalInjection": "Capital Injection"
+      "capitalInjection": "Capital Injection",
+      "reimbursement": "Reimbursement"
     },
     "summary": {
       "totalTransfers": "Total Transfers",
@@ -278,6 +291,86 @@
       "transferHistory": "Transfer history",
       "multiCurrency": "Multi-currency transfers",
       "impactTracking": "Impact tracking on balances"
+    },
+    "recurring": {
+      "title": "Recurring Transfers",
+      "subtitle": "Automatic scheduled transfers",
+      "addRecurring": "Add Recurring Transfer",
+      "list": "Scheduled Transfers",
+      "empty": "No recurring transfers yet",
+      "status": {
+        "active": "Active",
+        "paused": "Paused",
+        "dueToday": "Due Today",
+        "overdue": "Overdue"
+      },
+      "actions": {
+        "markPaid": "Mark as Paid",
+        "pause": "Pause",
+        "resume": "Resume"
+      },
+      "toast": {
+        "created": "Recurring transfer created successfully!",
+        "updated": "Recurring transfer updated successfully!",
+        "deleted": "Recurring transfer deleted successfully!",
+        "paused": "Recurring transfer paused",
+        "resumed": "Recurring transfer resumed",
+        "markedPaid": "Transfer recorded and next due date updated",
+        "markPaidError": "Failed to mark as paid"
+      },
+      "delete": {
+        "title": "Delete Recurring Transfer?",
+        "description": "This will stop future transfers from being generated. Past transfers will not be affected."
+      },
+      "form": {
+        "direction": "Transfer Type",
+        "from": "From",
+        "to": "To",
+        "selectBusiness": "Select business",
+        "personalAccount": "Personal Account",
+        "amount": "Amount",
+        "currency": "Currency",
+        "exchangeRate": "Exchange Rate",
+        "description": "Description",
+        "descriptionPlaceholder": "e.g., Internet reimbursement (50%)",
+        "frequency": "Frequency",
+        "frequencies": {
+          "daily": "Daily",
+          "weekly": "Weekly",
+          "monthly": "Monthly",
+          "yearly": "Yearly"
+        },
+        "startDate": "Start Date",
+        "endDate": "End Date (optional)",
+        "create": "Create Recurring Transfer",
+        "update": "Update Recurring Transfer"
+      },
+      "dialog": {
+        "createTitle": "Create Recurring Transfer",
+        "createDescription": "Set up automatic scheduled transfers between your accounts.",
+        "editTitle": "Edit Recurring Transfer",
+        "editDescription": "Update the recurring transfer details."
+      },
+      "table": {
+        "description": "Description",
+        "type": "Type",
+        "fromTo": "From / To",
+        "frequency": "Frequency",
+        "nextDueDate": "Next Due",
+        "amount": "Amount",
+        "status": "Status"
+      },
+      "summary": {
+        "total": "Total Scheduled",
+        "active": "Active",
+        "monthlyTotal": "Monthly Total"
+      },
+      "filter": {
+        "thisMonth": "This Month",
+        "nextMonth": "Next Month",
+        "selectDates": "Select dates",
+        "allEntities": "All Entities"
+      }
     }
   },
   "investments": {
@@ -522,6 +615,12 @@
       "pause": "Pause",
       "resume": "Resume",
       "markPaid": "Mark as Paid"
+    },
+    "filter": {
+      "thisMonth": "This Month",
+      "nextMonth": "Next Month",
+      "selectDates": "Select dates",
+      "allEntities": "All Entities"
     },
     "empty": {
       "title": "No recurring transactions",

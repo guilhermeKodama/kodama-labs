@@ -25,6 +25,7 @@ enum TransactionType {
 enum TransferDirection {
   profit_distribution
   capital_injection
+  reimbursement
 }
 
 enum RecurrenceFrequency {
@@ -105,6 +106,8 @@ model Business {
   recurringTransactions RecurringTransaction[]
   transfersFrom         Transfer[]             @relation("TransferFrom")
   transfersTo           Transfer[]             @relation("TransferTo")
+  recurringTransfersFrom RecurringTransfer[]   @relation("RecurringTransferFrom")
+  recurringTransfersTo   RecurringTransfer[]   @relation("RecurringTransferTo")
 
   @@index([userId])
   @@map("businesses")
@@ -129,6 +132,8 @@ model PersonalAccount {
   recurringTransactions RecurringTransaction[]
   transfersFrom         Transfer[]             @relation("PersonalTransferFrom")
   transfersTo           Transfer[]             @relation("PersonalTransferTo")
+  recurringTransfersFrom RecurringTransfer[]   @relation("PersonalRecurringTransferFrom")
+  recurringTransfersTo   RecurringTransfer[]   @relation("PersonalRecurringTransferTo")
 
   @@map("personal_accounts")
 }
@@ -182,6 +187,7 @@ model Transfer {
   exchangeRate    Float             @default(1)
   description     String?
   date            DateTime
+  recurringTransferId String?
   createdAt       DateTime          @default(now())
   updatedAt       DateTime          @updatedAt
 
@@ -194,13 +200,59 @@ model Transfer {
   toBusiness            Business?        @relation("TransferTo", fields: [toBusinessId], references: [id], onDelete: Cascade)
   toPersonalAccountId   String?
   toPersonalAccount     PersonalAccount? @relation("PersonalTransferTo", fields: [toPersonalAccountId], references: [id], onDelete: Cascade)
+  recurringTransfer     RecurringTransfer? @relation("GeneratedFromRecurring", fields: [recurringTransferId], references: [id], onDelete: SetNull)
 
   @@index([fromBusinessId])
   @@index([fromPersonalAccountId])
   @@index([toBusinessId])
   @@index([toPersonalAccountId])
   @@index([date])
+  @@index([recurringTransferId])
   @@map("transfers")
+}
+
+// ============================================
+// RECURRING TRANSFER
+// ============================================
+
+model RecurringTransfer {
+  id                String              @id @default(uuid())
+  fromEntityType    EntityType
+  toEntityType      EntityType
+  direction         TransferDirection
+  amount            Float
+  currency          String
+  exchangeRate      Float               @default(1)
+  description       String?
+  frequency         RecurrenceFrequency
+  startDate         DateTime
+  endDate           DateTime?
+  nextDueDate       DateTime
+  lastGeneratedDate DateTime?
+  isActive          Boolean             @default(true)
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+
+  // Relations - polymorphic association for from/to entities
+  fromBusinessId        String?
+  fromBusiness          Business?        @relation("RecurringTransferFrom", fields: [fromBusinessId], references: [id], onDelete: Cascade)
+  fromPersonalAccountId String?
+  fromPersonalAccount   PersonalAccount? @relation("PersonalRecurringTransferFrom", fields: [fromPersonalAccountId], references: [id], onDelete: Cascade)
+  toBusinessId          String?
+  toBusiness            Business?        @relation("RecurringTransferTo", fields: [toBusinessId], references: [id], onDelete: Cascade)
+  toPersonalAccountId   String?
+  toPersonalAccount     PersonalAccount? @relation("PersonalRecurringTransferTo", fields: [toPersonalAccountId], references: [id], onDelete: Cascade)
+
+  // Generated transfers
+  generatedTransfers Transfer[] @relation("GeneratedFromRecurring")
+
+  @@index([fromBusinessId])
+  @@index([fromPersonalAccountId])
+  @@index([toBusinessId])
+  @@index([toPersonalAccountId])
+  @@index([isActive])
+  @@index([nextDueDate])
+  @@map("recurring_transfers")
 }
 
 // ============================================

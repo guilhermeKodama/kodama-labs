@@ -7,6 +7,7 @@ import { useBusinessStore } from "@/lib/store/business-store";
 import { useTransactionStore } from "@/lib/store/transaction-store";
 import { useTransferStore } from "@/lib/store/transfer-store";
 import { useRecurringTransactionStore } from "@/lib/store/recurring-store";
+import { useRecurringTransferStore } from "@/lib/store/recurring-transfer-store";
 import { useBudgetStore } from "@/lib/store/budget-store";
 
 export function useInitializeData() {
@@ -17,6 +18,7 @@ export function useInitializeData() {
   const fetchTransactions = useTransactionStore((s) => s.fetchTransactions);
   const fetchTransfers = useTransferStore((s) => s.fetchTransfers);
   const fetchRecurringTransactions = useRecurringTransactionStore((s) => s.fetchRecurringTransactions);
+  const fetchRecurringTransfers = useRecurringTransferStore((s) => s.fetchRecurringTransfers);
   const fetchBudgets = useBudgetStore((s) => s.fetchBudgets);
   
   const settingsLoading = useSettingsStore((s) => s.isLoading);
@@ -24,6 +26,7 @@ export function useInitializeData() {
   const transactionLoading = useTransactionStore((s) => s.isLoading);
   const transferLoading = useTransferStore((s) => s.isLoading);
   const recurringLoading = useRecurringTransactionStore((s) => s.isLoading);
+  const recurringTransferLoading = useRecurringTransferStore((s) => s.isLoading);
   const budgetLoading = useBudgetStore((s) => s.isLoading);
   
   const isInitialized = useSettingsStore((s) => s.isInitialized);
@@ -40,6 +43,7 @@ export function useInitializeData() {
       fetchTransactions(),
       fetchTransfers(),
       fetchRecurringTransactions(),
+      fetchRecurringTransfers(),
       fetchBudgets(),
     ]);
   }, [
@@ -49,6 +53,7 @@ export function useInitializeData() {
     fetchTransactions,
     fetchTransfers,
     fetchRecurringTransactions,
+    fetchRecurringTransfers,
     fetchBudgets,
   ]);
 
@@ -65,6 +70,7 @@ export function useInitializeData() {
     transactionLoading ||
     transferLoading ||
     recurringLoading ||
+    recurringTransferLoading ||
     budgetLoading;
 
   return {

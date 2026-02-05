@@ -10,6 +10,7 @@ import v1Categories from "./modules/categories/routes/v1";
 import v1Currencies from "./modules/currencies/routes/v1";
 import v1Budgets from "./modules/budgets/routes/v1";
 import v1Recurring from "./modules/recurring/routes/v1";
+import v1RecurringTransfers from "./modules/recurring-transfers/routes/v1";
 import v1Reports from "./modules/reports/routes/v1";
 
 export function registerRoutes(app: AppOpenAPI) {
@@ -24,6 +25,7 @@ export function registerRoutes(app: AppOpenAPI) {
     v1Currencies,
     v1Budgets,
     v1Recurring,
+    v1RecurringTransfers,
     v1Reports,
   ] as const;
 

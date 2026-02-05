@@ -107,7 +107,19 @@
     "yourBusinesses": "Suas Empresas",
     "viewAll": "Ver Todas",
     "noBusinesses": "Você ainda não adicionou nenhuma empresa.",
-    "createFirst": "Crie Sua Primeira Empresa"
+    "createFirst": "Crie Sua Primeira Empresa",
+    "pendingThisMonth": {
+      "title": "Pendente Este Mês",
+      "empty": "Nada pendente este mês",
+      "dueToday": "Vence Hoje",
+      "overdue": "Atrasado",
+      "upcoming": "Próximo",
+      "expense": "Despesa",
+      "income": "Receita",
+      "transfer": "Transferência",
+      "viewAll": "Ver Tudo",
+      "showLess": "Mostrar Menos"
+    }
   },
   "businesses": {
     "title": "Empresas",
@@ -221,7 +233,8 @@
     "history": "Histórico de Transferências",
     "directions": {
       "profitDistribution": "Distribuição de Lucro",
-      "capitalInjection": "Aporte de Capital"
+      "capitalInjection": "Aporte de Capital",
+      "reimbursement": "Reembolso"
     },
     "summary": {
       "totalTransfers": "Total de Transferências",
@@ -278,6 +291,86 @@
       "transferHistory": "Histórico de transferências",
       "multiCurrency": "Transferências multi-moeda",
       "impactTracking": "Rastreamento de impacto nos saldos"
+    },
+    "recurring": {
+      "title": "Transferências Recorrentes",
+      "subtitle": "Transferências agendadas automáticas",
+      "addRecurring": "Adicionar Transferência Recorrente",
+      "list": "Transferências Agendadas",
+      "empty": "Nenhuma transferência recorrente ainda",
+      "status": {
+        "active": "Ativo",
+        "paused": "Pausado",
+        "dueToday": "Vence Hoje",
+        "overdue": "Atrasado"
+      },
+      "actions": {
+        "markPaid": "Marcar como Pago",
+        "pause": "Pausar",
+        "resume": "Retomar"
+      },
+      "toast": {
+        "created": "Transferência recorrente criada com sucesso!",
+        "updated": "Transferência recorrente atualizada com sucesso!",
+        "deleted": "Transferência recorrente excluída com sucesso!",
+        "paused": "Transferência recorrente pausada",
+        "resumed": "Transferência recorrente retomada",
+        "markedPaid": "Transferência registrada e próxima data atualizada",
+        "markPaidError": "Falha ao marcar como pago"
+      },
+      "delete": {
+        "title": "Excluir Transferência Recorrente?",
+        "description": "Isso interromperá as futuras transferências de serem geradas. Transferências passadas não serão afetadas."
+      },
+      "form": {
+        "direction": "Tipo de Transferência",
+        "from": "De",
+        "to": "Para",
+        "selectBusiness": "Selecione a empresa",
+        "personalAccount": "Conta Pessoal",
+        "amount": "Valor",
+        "currency": "Moeda",
+        "exchangeRate": "Taxa de Câmbio",
+        "description": "Descrição",
+        "descriptionPlaceholder": "Ex: Reembolso de internet (50%)",
+        "frequency": "Frequência",
+        "frequencies": {
+          "daily": "Diário",
+          "weekly": "Semanal",
+          "monthly": "Mensal",
+          "yearly": "Anual"
+        },
+        "startDate": "Data de Início",
+        "endDate": "Data de Término (opcional)",
+        "create": "Criar Transferência Recorrente",
+        "update": "Atualizar Transferência Recorrente"
+      },
+      "dialog": {
+        "createTitle": "Criar Transferência Recorrente",
+        "createDescription": "Configure transferências automáticas agendadas entre suas contas.",
+        "editTitle": "Editar Transferência Recorrente",
+        "editDescription": "Atualize os detalhes da transferência recorrente."
+      },
+      "table": {
+        "description": "Descrição",
+        "type": "Tipo",
+        "fromTo": "De / Para",
+        "frequency": "Frequência",
+        "nextDueDate": "Próximo Vencimento",
+        "amount": "Valor",
+        "status": "Status"
+      },
+      "summary": {
+        "total": "Total Agendado",
+        "active": "Ativos",
+        "monthlyTotal": "Total Mensal"
+      },
+      "filter": {
+        "thisMonth": "Este Mês",
+        "nextMonth": "Próximo Mês",
+        "selectDates": "Selecionar datas",
+        "allEntities": "Todas Entidades"
+      }
     }
   },
   "investments": {
@@ -522,6 +615,12 @@
       "pause": "Pausar",
       "resume": "Retomar",
       "markPaid": "Marcar como Pago"
+    },
+    "filter": {
+      "thisMonth": "Este Mês",
+      "nextMonth": "Próximo Mês",
+      "selectDates": "Selecionar datas",
+      "allEntities": "Todas Entidades"
     },
     "empty": {
       "title": "Nenhuma transação recorrente",
