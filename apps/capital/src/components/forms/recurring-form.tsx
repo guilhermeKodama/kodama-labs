@@ -79,6 +79,17 @@ export function RecurringForm({
   const selectedEntityType = form.watch('entityType');
   const hasEndDate = form.watch('endDate') !== undefined && form.watch('endDate') !== null;
 
+  // Set default currency when currencies are loaded
+  useEffect(() => {
+    if (currencies.length > 0 && !selectedCurrency) {
+      const defaultCurrency = currencies.find(c => c.code === settings.baseCurrency) 
+        || currencies[0];
+      if (defaultCurrency) {
+        form.setValue('currency', defaultCurrency.code);
+      }
+    }
+  }, [currencies, selectedCurrency, settings.baseCurrency, form]);
+
   // Auto-update exchange rate when currency changes
   useEffect(() => {
     if (selectedCurrency === settings.baseCurrency) {

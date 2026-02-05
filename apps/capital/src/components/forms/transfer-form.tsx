@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useMemo, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useTranslations } from 'next-intl';
@@ -132,6 +132,17 @@ export function TransferForm({
       form.setValue('exchangeRate', currency.manualRate);
     }
   };
+
+  // Set default currency when currencies are loaded
+  useEffect(() => {
+    if (currencies.length > 0 && !selectedCurrency) {
+      const defaultCurrency = currencies.find(c => c.code === settings.baseCurrency) 
+        || currencies[0];
+      if (defaultCurrency) {
+        form.setValue('currency', defaultCurrency.code);
+      }
+    }
+  }, [currencies, selectedCurrency, settings.baseCurrency, form]);
 
   const showExchangeRate = selectedCurrency !== settings.baseCurrency;
 
@@ -302,11 +313,11 @@ export function TransferForm({
                 <FormLabel className="text-slate-300">{t('form.currency')}</FormLabel>
                 <Select
                   onValueChange={(value) => handleCurrencyChange(value)}
-                  defaultValue={field.value}
+                  value={field.value}
                 >
                   <FormControl>
                     <SelectTrigger className="border-slate-700 bg-slate-800 text-white">
-                      <SelectValue />
+                      <SelectValue placeholder={t('form.currency')} />
                     </SelectTrigger>
                   </FormControl>
                   <SelectContent className="border-slate-700 bg-slate-900">
