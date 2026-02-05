@@ -217,7 +217,7 @@ export function TransferForm({
             {/* From Entity */}
             <div className="flex-1">
               <p className="mb-2 text-xs text-slate-400">{t('form.from')}</p>
-              {selectedDirection === 'profit_distribution' ? (
+              {selectedDirection === 'profit_distribution' || selectedDirection === 'reimbursement' ? (
                 <FormField
                   control={form.control}
                   name="fromEntityId"
