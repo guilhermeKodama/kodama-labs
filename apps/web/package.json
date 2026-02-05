@@ -29,9 +29,9 @@
     "web-vitals": "^2.1.4"
   },
   "scripts": {
-    "dev": "PORT=3001 react-scripts start",
-    "start": "react-scripts start",
-    "build": "react-scripts build",
+    "dev": "DISABLE_ESLINT_PLUGIN=true PORT=3001 react-scripts start",
+    "start": "DISABLE_ESLINT_PLUGIN=true react-scripts start",
+    "build": "DISABLE_ESLINT_PLUGIN=true react-scripts build",
     "test": "react-scripts test",
     "eject": "react-scripts eject"
   },
