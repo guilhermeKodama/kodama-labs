@@ -1,6 +1,7 @@
 import { NextIntlClientProvider } from 'next-intl';
 import { getMessages, setRequestLocale } from 'next-intl/server';
 import { notFound } from 'next/navigation';
+import { NuqsAdapter } from 'nuqs/adapters/next/app';
 import { Toaster } from '@/components/ui/sonner';
 import { ThemeProvider } from '@/components/theme-provider';
 import { DataInitializer } from '@/components/providers/data-initializer';
@@ -34,17 +35,19 @@ export default async function LocaleLayout({
 
   return (
     <NextIntlClientProvider messages={messages}>
-      <ThemeProvider
-        attribute="class"
-        defaultTheme="dark"
-        enableSystem
-        disableTransitionOnChange
-      >
-        <DataInitializer>
-          {children}
-        </DataInitializer>
-        <Toaster />
-      </ThemeProvider>
+      <NuqsAdapter>
+        <ThemeProvider
+          attribute="class"
+          defaultTheme="dark"
+          enableSystem
+          disableTransitionOnChange
+        >
+          <DataInitializer>
+            {children}
+          </DataInitializer>
+          <Toaster />
+        </ThemeProvider>
+      </NuqsAdapter>
     </NextIntlClientProvider>
   );
 }

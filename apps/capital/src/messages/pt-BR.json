@@ -307,7 +307,9 @@
       "actions": {
         "markPaid": "Marcar como Pago",
         "pause": "Pausar",
-        "resume": "Retomar"
+        "resume": "Retomar",
+        "edit": "Editar",
+        "delete": "Excluir"
       },
       "toast": {
         "created": "Transferência recorrente criada com sucesso!",

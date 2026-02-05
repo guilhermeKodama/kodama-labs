@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useMemo, useCallback, useEffect } from 'react';
-import { useSearchParams } from 'next/navigation';
+import { useState, useMemo, useCallback } from 'react';
+import { useQueryState, parseAsStringLiteral } from 'nuqs';
 import { useTranslations } from 'next-intl';
 import {
   ArrowLeftRight,
@@ -41,9 +41,10 @@ import type { CreateTransferFormData } from '@/lib/validations';
 import type { RecurringTransferFormData } from '@/components/forms/recurring-transfer-form';
 import { Link } from '@/i18n/navigation';
 
+const tabOptions = ['history', 'recurring'] as const;
+
 export default function TransfersPage() {
   const t = useTranslations();
-  const searchParams = useSearchParams();
   const { transfers, addTransfer, deleteTransfer, fetchTransfers } = useTransferStore();
   const { businesses } = useBusinessStore();
   const { settings, personalAccount } = useSettingsStore();
@@ -56,21 +57,18 @@ export default function TransfersPage() {
     markAsPaid,
   } = useRecurringTransferStore();
 
+  // Use nuqs for URL-synced tab state
+  const [activeTab, setActiveTab] = useQueryState(
+    'tab',
+    parseAsStringLiteral(tabOptions).withDefault('history')
+  );
+
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isRecurringDialogOpen, setIsRecurringDialogOpen] = useState(false);
   const [deletingTransfer, setDeletingTransfer] = useState<Transfer | undefined>();
   const [editingRecurring, setEditingRecurring] = useState<RecurringTransfer | undefined>();
   const [deletingRecurring, setDeletingRecurring] = useState<RecurringTransfer | undefined>();
   const [markingPaidId, setMarkingPaidId] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState('history');
-
-  // Handle tab parameter from URL
-  useEffect(() => {
-    const tab = searchParams.get('tab');
-    if (tab === 'recurring') {
-      setActiveTab('recurring');
-    }
-  }, [searchParams]);
 
   // Calculate transfer summaries
   const summaries = useMemo(() => {
@@ -284,7 +282,11 @@ export default function TransfersPage() {
       </div>
 
       {/* Tabbed Content */}
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
+      <Tabs 
+        value={activeTab} 
+        onValueChange={(value) => setActiveTab(value as typeof tabOptions[number])} 
+        className="space-y-4"
+      >
         <TabsList className="grid w-full max-w-md grid-cols-2 bg-slate-800">
           <TabsTrigger
             value="history"
