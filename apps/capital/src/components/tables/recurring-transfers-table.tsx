@@ -216,7 +216,7 @@ export function RecurringTransfersTable({
                       align="end"
                       className="border-slate-700 bg-slate-900"
                     >
-                      {onMarkPaid && rt.isActive && (isOverdue || isDueToday) && (
+                      {onMarkPaid && rt.isActive && (
                         <DropdownMenuItem
                           onClick={() => onMarkPaid(rt)}
                           disabled={isMarkingPaid === rt.id}
@@ -254,7 +254,7 @@ export function RecurringTransfersTable({
                           className="text-slate-300 focus:bg-slate-800 focus:text-white"
                         >
                           <Pencil className="mr-2 h-4 w-4" />
-                          Edit
+                          {t('actions.edit')}
                         </DropdownMenuItem>
                       )}
                       {onDelete && (
@@ -263,7 +263,7 @@ export function RecurringTransfersTable({
                           className="text-red-400 focus:bg-red-500/10 focus:text-red-400"
                         >
                           <Trash2 className="mr-2 h-4 w-4" />
-                          Delete
+                          {t('actions.delete')}
                         </DropdownMenuItem>
                       )}
                     </DropdownMenuContent>
