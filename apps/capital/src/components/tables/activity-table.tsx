@@ -371,11 +371,19 @@ export function ActivityTable({
                     ) : isTransfer ? (
                       <Badge
                         variant="outline"
-                        className="border-purple-700/50 text-purple-400/70"
+                        className={
+                          item.transferType === 'profit_distribution'
+                            ? 'border-emerald-700/50 text-emerald-400/70'
+                            : item.transferType === 'reimbursement'
+                              ? 'border-purple-700/50 text-purple-400/70'
+                              : 'border-blue-700/50 text-blue-400/70'
+                        }
                       >
                         {item.transferType === 'profit_distribution'
                           ? t('transfers.directions.profitDistribution')
-                          : t('transfers.directions.capitalInjection')}
+                          : item.transferType === 'reimbursement'
+                            ? t('transfers.directions.reimbursement')
+                            : t('transfers.directions.capitalInjection')}
                       </Badge>
                     ) : (
                       <span className="text-slate-500">-</span>

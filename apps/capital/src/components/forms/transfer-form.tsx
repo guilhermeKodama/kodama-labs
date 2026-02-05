@@ -129,12 +129,14 @@ export function TransferForm({
   // Update from/to entities when direction changes
   const handleDirectionChange = (direction: TransferDirection) => {
     form.setValue('direction', direction);
-    if (direction === 'profit_distribution') {
+    if (direction === 'profit_distribution' || direction === 'reimbursement') {
+      // Profit distribution & reimbursement: business → personal
       form.setValue('fromEntityType', 'business');
       form.setValue('toEntityType', 'personal');
       form.setValue('toEntityId', personalAccount?.id || '');
       form.setValue('fromEntityId', businesses[0]?.id || '');
     } else {
+      // Capital injection: personal → business
       form.setValue('fromEntityType', 'personal');
       form.setValue('toEntityType', 'business');
       form.setValue('fromEntityId', personalAccount?.id || '');
