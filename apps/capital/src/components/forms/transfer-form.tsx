@@ -88,7 +88,7 @@ export function TransferForm({
 
   // Calculate the balance of the source entity
   const sourceEntityBalance = useMemo(() => {
-    if (selectedDirection === 'profit_distribution') {
+    if (selectedDirection === 'reimbursement' || selectedDirection === 'profit_distribution') {
       // Source is a business
       const business = businesses.find((b) => b.id === selectedFromEntityId);
       if (!business) return null;
