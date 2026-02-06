@@ -22,9 +22,10 @@ interface BillTransactionInput {
   amount: number;
 }
 
-interface CategorizationResult {
+export interface CategorizationResult {
   index: number;
   category: string;
+  suggestedCategory?: string; // AI-suggested new category when none fit well
 }
 
 /**
@@ -70,7 +71,7 @@ async function categorizeBatch(
     )
     .join("\n");
 
-  const prompt = `You are a financial categorization assistant. Categorize each credit card transaction into one of the available categories.
+  const prompt = `You are a financial categorization assistant for Brazilian credit card bills. Categorize each transaction into one of the available categories.
 
 Available categories:
 ${availableCategories.map((c) => `- ${c}`).join("\n")}
@@ -80,23 +81,27 @@ ${transactionList}
 
 Rules:
 - Assign exactly one category per transaction from the available list.
-- Use "Subscriptions" for recurring services (Netflix, Spotify, iCloud, etc.).
-- Use "Groceries" for supermarkets and food stores.
-- Use "Restaurants & Dining" for restaurants, delivery apps, cafes.
-- Use "Transportation" for Uber, gas stations, parking, tolls.
-- Use "Shopping" for retail stores, online shopping (Amazon, etc.).
-- Use "Entertainment" for movies, games, events, streaming services not clearly subscriptions.
-- Use "Health & Pharmacy" for drugstores, medical appointments.
-- Use "Travel" for hotels, flights, travel agencies.
-- Use "Education" for courses, books, school-related.
-- Use "Personal Care" for beauty, gym, wellness.
-- Use "Home" for furniture, maintenance, home improvement.
-- Use "Fees & Charges" for bank fees, interest charges, card fees.
+- Use "Subscriptions" for recurring digital services (Netflix, Spotify, iCloud, Amazon Prime, Disney+, etc.).
+- Use "Groceries" for supermarkets, food stores, mercados, sacolão, açougue (e.g. Shop Fartura, Centro de Abastecimento, Mikami Mercearia).
+- Use "Restaurants & Dining" for restaurants, delivery apps, cafes, bakeries, ice cream shops, lanchonetes (e.g. Beraldo Di Cale, Padaria, Sorveteria).
+- Use "Transportation" for Uber, gas stations (Posto), parking, tolls (Sem Parar), car rental (Localiza).
+- Use "Shopping" for retail stores, online shopping (Amazon, Mercadolivre, Shopee, Cobasi, Centauro, etc.).
+- Use "Entertainment" for movies (Cinemas Kinoplex), games (Steam, PlayStation), events.
+- Use "Health & Pharmacy" for drugstores (Drogasil), medical appointments, pharmacies.
+- Use "Travel" for hotels (Booking, Ibis), flights (Latam, Azul, Decolar), travel agencies.
+- Use "Education" for courses, books, bookstores (Leitura), school-related, libraries.
+- Use "Personal Care" for beauty, gym (Lifebox), wellness, O Boticário.
+- Use "Home" for furniture, maintenance, home improvement (Leroy Merlin).
+- Use "Software & Tools" for developer/work tools (Cursor, GitHub, OpenAI, Anthropic, CompanyHero).
+- Use "Fees & Charges" for bank fees, interest charges, IOF, card fees, "Ajuste a crédito", "Estorno".
 - Use "Utilities" for phone bills, internet, electricity.
-- Use "Other" only if no other category fits.
+- Use "Other" only if absolutely no other category fits.
+- If you assign "Other" because no existing category fits, also provide a suggestedCategory with a short name for what a better category would be.
 
 Respond ONLY with a valid JSON array, no other text:
-[{"index": 0, "category": "CategoryName"}, ...]`;
+[{"index": 0, "category": "Groceries"}, {"index": 1, "category": "Other", "suggestedCategory": "Pet Supplies"}, ...]
+
+Only include "suggestedCategory" when you assign "Other" and believe a new category would be useful.`;
 
   try {
     const response = await client.messages.create({
@@ -122,6 +127,7 @@ Respond ONLY with a valid JSON array, no other text:
     return parsed.map((r) => ({
       index: r.index,
       category: availableCategories.includes(r.category) ? r.category : "Other",
+      suggestedCategory: r.suggestedCategory || undefined,
     }));
   } catch (error) {
     console.error("Claude categorization failed:", error);

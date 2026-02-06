@@ -60,6 +60,7 @@ interface CreditCardActions {
 
   // Bill Transactions
   fetchBillTransactions: (billId: string) => Promise<void>;
+  updateBillTransactionCategory: (id: string, category: string) => Promise<void>;
 
   // Installments
   fetchInstallments: (filters?: {
@@ -363,6 +364,31 @@ export const useCreditCardStore = create<CreditCardStore>()((set, get) => ({
   },
 
   // Fetch bill transactions
+  // Update bill transaction category
+  updateBillTransactionCategory: async (id, category) => {
+    try {
+      const res = await client.v1['credit-cards'].bills.transactions[':id'].$put({
+        param: { id },
+        json: { category },
+      });
+
+      if (!res.ok) throw new Error('Failed to update category');
+
+      const data = await res.json();
+      set((state) => ({
+        billTransactions: state.billTransactions.map((t) =>
+          t.id === id
+            ? { ...t, category: data.category, isAutoCategorized: data.isAutoCategorized }
+            : t
+        ),
+      }));
+    } catch (error) {
+      set({
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+    }
+  },
+
   fetchBillTransactions: async (billId) => {
     set({ isLoading: true, error: null });
     try {
