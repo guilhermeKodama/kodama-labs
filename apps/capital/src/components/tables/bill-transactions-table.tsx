@@ -1,16 +1,30 @@
 'use client';
 
 import { format } from 'date-fns';
-import { Sparkles } from 'lucide-react';
+import { Sparkles, ChevronDown } from 'lucide-react';
 import { formatCurrency } from '@/lib/utils/format';
-import type { BillTransaction } from '@/types';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import type { BillTransaction, Category } from '@/types';
 
 interface BillTransactionsTableProps {
   transactions: BillTransaction[];
   currency: string;
+  categories?: Category[];
+  onUpdateCategory?: (transactionId: string, category: string) => void;
 }
 
-export function BillTransactionsTable({ transactions, currency }: BillTransactionsTableProps) {
+export function BillTransactionsTable({
+  transactions,
+  currency,
+  categories = [],
+  onUpdateCategory,
+}: BillTransactionsTableProps) {
   if (transactions.length === 0) {
     return (
       <div className="py-8 text-center text-slate-400">
@@ -26,6 +40,13 @@ export function BillTransactionsTable({ transactions, currency }: BillTransactio
   }, {});
 
   const sortedCategories = Object.entries(categoryTotals).sort((a, b) => b[1] - a[1]);
+
+  // Get unique expense category names for the dropdown
+  const expenseCategories = categories
+    .filter((c) => c.type === 'expense')
+    .map((c) => c.name);
+  // Deduplicate
+  const uniqueCategories = [...new Set(expenseCategories)].sort();
 
   return (
     <div className="space-y-6">
@@ -69,12 +90,35 @@ export function BillTransactionsTable({ transactions, currency }: BillTransactio
                   )}
                 </td>
                 <td className="py-2.5">
-                  <span className="inline-flex items-center gap-1 text-sm text-slate-300">
-                    {tx.category}
-                    {tx.isAutoCategorized && (
-                      <Sparkles className="h-3 w-3 text-amber-400" />
-                    )}
-                  </span>
+                  {onUpdateCategory && uniqueCategories.length > 0 ? (
+                    <Select
+                      value={tx.category}
+                      onValueChange={(value) => onUpdateCategory(tx.id, value)}
+                    >
+                      <SelectTrigger className="h-7 w-auto min-w-[140px] gap-1 border-0 bg-transparent px-2 text-sm text-slate-300 hover:bg-slate-800 focus:ring-0 focus:ring-offset-0">
+                        <div className="flex items-center gap-1">
+                          <SelectValue />
+                          {tx.isAutoCategorized && (
+                            <Sparkles className="h-3 w-3 shrink-0 text-amber-400" />
+                          )}
+                        </div>
+                      </SelectTrigger>
+                      <SelectContent className="border-slate-700 bg-slate-800 max-h-[300px]">
+                        {uniqueCategories.map((cat) => (
+                          <SelectItem key={cat} value={cat} className="text-sm">
+                            {cat}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  ) : (
+                    <span className="inline-flex items-center gap-1 text-sm text-slate-300">
+                      {tx.category}
+                      {tx.isAutoCategorized && (
+                        <Sparkles className="h-3 w-3 text-amber-400" />
+                      )}
+                    </span>
+                  )}
                 </td>
                 <td className="py-2.5 text-center text-sm text-slate-400">
                   {tx.installmentNumber && tx.totalInstallments

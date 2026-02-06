@@ -63,14 +63,57 @@ export const route = createRoute({
   },
 });
 
+const SYSTEM_EXPENSE_CATEGORIES = [
+  "Credit Card",
+  "Subscriptions",
+  "Groceries",
+  "Restaurants & Dining",
+  "Transportation",
+  "Shopping",
+  "Entertainment",
+  "Health & Pharmacy",
+  "Travel",
+  "Education",
+  "Personal Care",
+  "Home",
+  "Fees & Charges",
+  "Other",
+];
+
+/**
+ * Ensure all system expense categories exist for the user.
+ * Handles users created before system categories were introduced.
+ */
+async function ensureSystemCategories(userId: string) {
+  const existing = await fetchCategoriesByUserId(userId, "expense", prisma);
+  const existingNames = new Set(existing.map((c) => c.name));
+
+  const missing = SYSTEM_EXPENSE_CATEGORIES.filter((name) => !existingNames.has(name));
+  if (missing.length > 0) {
+    await prisma.category.createMany({
+      data: missing.map((name) => ({
+        userId,
+        name,
+        type: "expense" as const,
+        isDefault: true,
+        isSystem: true,
+      })),
+      skipDuplicates: true,
+    });
+  }
+}
+
 export const handler: AppRouteHandler<typeof route> = async (c) => {
   try {
     const userId = requireUserId(c);
     const body = c.req.valid("json");
 
+    // Ensure system categories exist for this user (backfill for older accounts)
+    await ensureSystemCategories(userId);
+
     // Fetch user's expense categories for AI categorization
     const categories = await fetchCategoriesByUserId(userId, "expense", prisma);
-    const categoryNames = categories.map((cat) => cat.name);
+    const categoryNames = [...new Set(categories.map((cat) => cat.name))];
 
     const result = await processBillCsv(
       userId,

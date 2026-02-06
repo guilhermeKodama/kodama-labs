@@ -61,10 +61,11 @@ export default function CreditCardsPage() {
     uploadBill,
     deleteBill,
     createBillExpense,
+    updateBillTransactionCategory,
   } = useCreditCardStore();
   const { transactions } = useTransactionStore();
   const { businesses } = useBusinessStore();
-  const { settings, personalAccount } = useSettingsStore();
+  const { settings, personalAccount, categories } = useSettingsStore();
 
   const [isCardDialogOpen, setIsCardDialogOpen] = useState(false);
   const [isUploadDialogOpen, setIsUploadDialogOpen] = useState(false);
@@ -363,6 +364,10 @@ export default function CreditCardsPage() {
                 <BillTransactionsTable
                   transactions={billTransactions}
                   currency={settings.baseCurrency}
+                  categories={categories}
+                  onUpdateCategory={(txId, category) => {
+                    updateBillTransactionCategory(txId, category);
+                  }}
                 />
               ) : (
                 <div className="py-8 text-center text-slate-400">
