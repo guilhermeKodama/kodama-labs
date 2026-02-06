@@ -11,12 +11,25 @@ interface FetchRecurringTransfersFilters {
   isActive?: boolean;
 }
 
+/**
+ * Fetch recurring transfers filtered by user ownership.
+ * @param userId - REQUIRED: The authenticated user's ID
+ * @param filters - Optional filters to narrow down results
+ */
 export async function fetchRecurringTransfers(
+  userId: string,
   filters: FetchRecurringTransfersFilters,
   db: DbClient
 ) {
   return db.recurringTransfer.findMany({
     where: {
+      // MANDATORY: Always filter by user ownership through business or personalAccount
+      OR: [
+        { fromBusiness: { userId } },
+        { fromPersonalAccount: { userId } },
+        { toBusiness: { userId } },
+        { toPersonalAccount: { userId } },
+      ],
       ...(filters.fromBusinessId && { fromBusinessId: filters.fromBusinessId }),
       ...(filters.fromPersonalAccountId && {
         fromPersonalAccountId: filters.fromPersonalAccountId,
@@ -33,8 +46,48 @@ export async function fetchRecurringTransfers(
   });
 }
 
-export async function fetchRecurringTransferById(id: string, db: DbClient) {
-  return db.recurringTransfer.findUnique({
-    where: { id },
+/**
+ * Fetch a single recurring transfer by ID, scoped to the authenticated user.
+ * @param userId - REQUIRED: The authenticated user's ID
+ * @param id - The recurring transfer ID
+ * @returns The recurring transfer if found and owned by user, null otherwise
+ */
+export async function fetchRecurringTransferById(
+  userId: string,
+  id: string,
+  db: DbClient
+) {
+  return db.recurringTransfer.findFirst({
+    where: {
+      id,
+      // MANDATORY: Verify ownership through business or personalAccount
+      OR: [
+        { fromBusiness: { userId } },
+        { fromPersonalAccount: { userId } },
+        { toBusiness: { userId } },
+        { toPersonalAccount: { userId } },
+      ],
+    },
+  });
+}
+
+/**
+ * Fetch due recurring transfers for the cron job.
+ * This is a system-level function.
+ */
+export async function fetchDueRecurringTransfers(db: DbClient) {
+  return db.recurringTransfer.findMany({
+    where: {
+      isActive: true,
+      nextDueDate: {
+        lte: new Date(),
+      },
+    },
+    include: {
+      fromBusiness: true,
+      fromPersonalAccount: true,
+      toBusiness: true,
+      toPersonalAccount: true,
+    },
   });
 }

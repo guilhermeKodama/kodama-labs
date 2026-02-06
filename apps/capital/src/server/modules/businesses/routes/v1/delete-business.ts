@@ -1,9 +1,10 @@
 import { createRoute, z } from "@hono/zod-openapi";
-import { OK, NOT_FOUND, INTERNAL_SERVER_ERROR } from "stoker/http-status-codes";
+import { OK, NOT_FOUND, UNAUTHORIZED, INTERNAL_SERVER_ERROR } from "stoker/http-status-codes";
 import { jsonContent } from "stoker/openapi/helpers";
 
 import type { AppRouteHandler } from "@capital/server/types";
 import { prisma } from "@capital/server/lib/prisma";
+import { requireUserId } from "@capital/server/lib/auth-middleware";
 import { deleteBusinessService } from "../../services/delete-business";
 import { routeConfig } from "../../constants";
 
@@ -23,7 +24,7 @@ export const route = createRoute({
   method: "delete",
   tags: [...routeConfig.v1.defaultTags],
   summary: "Delete business",
-  description: "Deletes a business entity and all associated data",
+  description: "Deletes a business entity and all associated data for the authenticated user",
   request: {
     params: z.object({
       id: z.string(),
@@ -32,6 +33,7 @@ export const route = createRoute({
   responses: {
     [OK]: jsonContent(SuccessResponseSchema, "Business deleted successfully"),
     [NOT_FOUND]: jsonContent(ErrorResponseSchema, "Business not found"),
+    [UNAUTHORIZED]: jsonContent(ErrorResponseSchema, "Not authenticated"),
     [INTERNAL_SERVER_ERROR]: jsonContent(
       ErrorResponseSchema,
       "Internal server error"
@@ -41,8 +43,9 @@ export const route = createRoute({
 
 export const handler: AppRouteHandler<typeof route> = async (c) => {
   try {
+    const userId = requireUserId(c);
     const { id } = c.req.valid("param");
-    await deleteBusinessService(id, prisma);
+    await deleteBusinessService(userId, id, prisma);
 
     return c.json({ message: "Business deleted successfully" }, OK);
   } catch (error: unknown) {

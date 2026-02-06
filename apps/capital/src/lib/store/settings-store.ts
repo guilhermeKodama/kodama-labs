@@ -22,10 +22,10 @@ interface SettingsState {
 }
 
 interface SettingsActions {
-  // Fetch actions
-  fetchUserData: (userId: string) => Promise<void>;
-  fetchCategories: (userId: string) => Promise<void>;
-  fetchCurrencies: (userId: string) => Promise<void>;
+  // Fetch actions (userId is now taken from session on the backend)
+  fetchUserData: () => Promise<void>;
+  fetchCategories: () => Promise<void>;
+  fetchCurrencies: () => Promise<void>;
   
   // Mutation actions
   updateSettings: (settings: Partial<AppSettings>) => Promise<void>;
@@ -75,13 +75,11 @@ export const useSettingsStore = create<SettingsStore>()((set, get) => ({
   isLoading: false,
   error: null,
 
-  // Fetch user data from API
-  fetchUserData: async (userId: string) => {
+  // Fetch user data from API (userId is now taken from session on the backend)
+  fetchUserData: async () => {
     set({ isLoading: true, error: null });
     try {
-      const res = await client.v1.users[':userId'].$get({
-        param: { userId },
-      });
+      const res = await client.v1.users.me.$get();
 
       if (!res.ok) {
         throw new Error('Failed to fetch user');
@@ -112,8 +110,8 @@ export const useSettingsStore = create<SettingsStore>()((set, get) => ({
 
       // Also fetch categories and currencies
       await Promise.all([
-        get().fetchCategories(userId),
-        get().fetchCurrencies(userId),
+        get().fetchCategories(),
+        get().fetchCurrencies(),
       ]);
     } catch (error) {
       set({
@@ -123,12 +121,10 @@ export const useSettingsStore = create<SettingsStore>()((set, get) => ({
     }
   },
 
-  // Fetch categories from API
-  fetchCategories: async (userId: string) => {
+  // Fetch categories from API (userId is now taken from session on the backend)
+  fetchCategories: async () => {
     try {
-      const res = await client.v1.categories.$get({
-        query: { userId },
-      });
+      const res = await client.v1.categories.$get();
 
       if (!res.ok) {
         throw new Error('Failed to fetch categories');
@@ -149,12 +145,10 @@ export const useSettingsStore = create<SettingsStore>()((set, get) => ({
     }
   },
 
-  // Fetch currencies from API
-  fetchCurrencies: async (userId: string) => {
+  // Fetch currencies from API (userId is now taken from session on the backend)
+  fetchCurrencies: async () => {
     try {
-      const res = await client.v1.currencies.$get({
-        query: { userId },
-      });
+      const res = await client.v1.currencies.$get();
 
       if (!res.ok) {
         throw new Error('Failed to fetch currencies');
@@ -175,15 +169,11 @@ export const useSettingsStore = create<SettingsStore>()((set, get) => ({
     }
   },
 
-  // Update user settings via API
+  // Update user settings via API (userId is now taken from session on the backend)
   updateSettings: async (newSettings: Partial<AppSettings>) => {
-    const { settings } = get();
-    if (!settings.userId) return;
-    
     set({ isLoading: true, error: null });
     try {
-      const res = await client.v1.users[':userId'].$put({
-        param: { userId: settings.userId },
+      const res = await client.v1.users.me.$put({
         json: {
           name: undefined, // Optional
           baseCurrency: newSettings.baseCurrency,
@@ -216,16 +206,12 @@ export const useSettingsStore = create<SettingsStore>()((set, get) => ({
     }
   },
 
-  // Add currency via API
+  // Add currency via API (userId is now taken from session on the backend)
   addCurrency: async (input: CreateCurrencyInput) => {
-    const { settings } = get();
-    if (!settings.userId) return;
-    
     set({ isLoading: true, error: null });
     try {
       const res = await client.v1.currencies.$post({
         json: {
-          userId: settings.userId,
           code: input.code,
           name: input.name,
           symbol: input.symbol,
@@ -258,16 +244,13 @@ export const useSettingsStore = create<SettingsStore>()((set, get) => ({
     }
   },
 
-  // Update currency rate via API
+  // Update currency rate via API (userId is now taken from session on the backend)
   updateCurrencyRate: async (code: string, rate: number) => {
-    const { settings } = get();
-    if (!settings.userId) return;
-    
     set({ isLoading: true, error: null });
     try {
       const res = await client.v1.currencies[':code'].$put({
         param: { code },
-        json: { userId: settings.userId, manualRate: rate },
+        json: { manualRate: rate },
       });
 
       if (!res.ok) {
@@ -291,10 +274,9 @@ export const useSettingsStore = create<SettingsStore>()((set, get) => ({
     }
   },
 
-  // Remove currency via API
+  // Remove currency via API (userId is now taken from session on the backend)
   removeCurrency: async (code: string) => {
     const { settings } = get();
-    if (!settings.userId) return;
     
     // Don't allow removing base currency
     if (code === settings.baseCurrency) return;
@@ -303,7 +285,6 @@ export const useSettingsStore = create<SettingsStore>()((set, get) => ({
     try {
       const res = await client.v1.currencies[':code'].$delete({
         param: { code },
-        query: { userId: settings.userId },
       });
 
       if (!res.ok) {
@@ -322,16 +303,12 @@ export const useSettingsStore = create<SettingsStore>()((set, get) => ({
     }
   },
 
-  // Add category via API
+  // Add category via API (userId is now taken from session on the backend)
   addCategory: async (name: string, type: TransactionType, color?: string) => {
-    const { settings } = get();
-    if (!settings.userId) return;
-    
     set({ isLoading: true, error: null });
     try {
       const res = await client.v1.categories.$post({
         json: {
-          userId: settings.userId,
           name,
           type,
           color,
@@ -411,13 +388,9 @@ export const useSettingsStore = create<SettingsStore>()((set, get) => ({
   
   // Initialize app - called during onboarding to set user preferences
   initializeApp: async (baseCurrency: string, name: string) => {
-    const { settings } = get();
-    if (!settings.userId) return;
-    
     set({ isLoading: true, error: null });
     try {
-      const res = await client.v1.users[':userId'].$put({
-        param: { userId: settings.userId },
+      const res = await client.v1.users.me.$put({
         json: {
           name,
           baseCurrency,
@@ -432,6 +405,7 @@ export const useSettingsStore = create<SettingsStore>()((set, get) => ({
       set((state) => ({
         settings: {
           ...state.settings,
+          userId: userData.id,
           baseCurrency: userData.baseCurrency,
         },
         isInitialized: true,

@@ -1,5 +1,5 @@
 import { createRoute, z } from "@hono/zod-openapi";
-import { OK, NOT_FOUND, INTERNAL_SERVER_ERROR } from "stoker/http-status-codes";
+import { OK, NOT_FOUND, UNAUTHORIZED, INTERNAL_SERVER_ERROR } from "stoker/http-status-codes";
 import { jsonContent } from "stoker/openapi/helpers";
 
 import type { AppRouteHandler } from "@capital/server/types";
@@ -33,6 +33,7 @@ export const route = createRoute({
   responses: {
     [OK]: jsonContent(SuccessResponseSchema, "Recurring transfer deleted"),
     [NOT_FOUND]: jsonContent(ErrorResponseSchema, "Recurring transfer not found"),
+    [UNAUTHORIZED]: jsonContent(ErrorResponseSchema, "Unauthorized"),
     [INTERNAL_SERVER_ERROR]: jsonContent(
       ErrorResponseSchema,
       "Internal server error"
@@ -42,8 +43,16 @@ export const route = createRoute({
 
 export const handler: AppRouteHandler<typeof route> = async (c) => {
   try {
+    const userId = c.get("userId");
+    if (!userId) {
+      return c.json(
+        { error: { code: "UNAUTHORIZED", message: "User not authenticated" } },
+        UNAUTHORIZED
+      );
+    }
+
     const { id } = c.req.valid("param");
-    await deleteRecurringTransfer(id, prisma);
+    await deleteRecurringTransfer(userId, id, prisma);
 
     return c.json(
       { success: true, message: "Recurring transfer deleted successfully" },

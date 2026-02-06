@@ -10,6 +10,10 @@ interface ListTransfersInput {
   dateTo?: Date;
 }
 
-export async function listTransfers(filters: ListTransfersInput, db: DbClient) {
-  return fetchTransfers(filters, db);
+export async function listTransfers(
+  userId: string,
+  filters: ListTransfersInput,
+  db: DbClient
+) {
+  return fetchTransfers(userId, filters, db);
 }

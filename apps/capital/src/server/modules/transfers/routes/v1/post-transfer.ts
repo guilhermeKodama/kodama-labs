@@ -1,9 +1,10 @@
 import { createRoute, z } from "@hono/zod-openapi";
-import { CREATED, BAD_REQUEST, INTERNAL_SERVER_ERROR } from "stoker/http-status-codes";
+import { CREATED, BAD_REQUEST, UNAUTHORIZED, INTERNAL_SERVER_ERROR } from "stoker/http-status-codes";
 import { jsonContent } from "stoker/openapi/helpers";
 
 import type { AppRouteHandler } from "@capital/server/types";
 import { prisma } from "@capital/server/lib/prisma";
+import { requireUserId } from "@capital/server/lib/auth-middleware";
 import { parseLocalDate } from "@capital/server/lib/date-utils";
 import { createTransfer } from "../../services/create-transfer";
 import { routeConfig } from "../../constants";
@@ -53,13 +54,14 @@ export const route = createRoute({
   method: "post",
   tags: [...routeConfig.v1.defaultTags],
   summary: "Create transfer",
-  description: "Creates a new transfer between entities",
+  description: "Creates a new transfer between entities for the authenticated user",
   request: {
     body: jsonContent(CreateTransferSchema, "Transfer creation data"),
   },
   responses: {
     [CREATED]: jsonContent(TransferSchema, "Transfer created"),
     [BAD_REQUEST]: jsonContent(ErrorResponseSchema, "Invalid request data"),
+    [UNAUTHORIZED]: jsonContent(ErrorResponseSchema, "Not authenticated"),
     [INTERNAL_SERVER_ERROR]: jsonContent(
       ErrorResponseSchema,
       "Internal server error"
@@ -69,8 +71,10 @@ export const route = createRoute({
 
 export const handler: AppRouteHandler<typeof route> = async (c) => {
   try {
+    const userId = requireUserId(c);
     const body = c.req.valid("json");
     const transfer = await createTransfer(
+      userId,
       {
         ...body,
         date: parseLocalDate(body.date),
@@ -100,7 +104,7 @@ export const handler: AppRouteHandler<typeof route> = async (c) => {
     );
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "Unknown error";
-    if (message.includes("required")) {
+    if (message.includes("required") || message.includes("access denied")) {
       return c.json({ error: { code: "BAD_REQUEST", message } }, BAD_REQUEST);
     }
     return c.json(

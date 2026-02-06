@@ -1,5 +1,5 @@
 import { createRoute, z } from "@hono/zod-openapi";
-import { CREATED, BAD_REQUEST, INTERNAL_SERVER_ERROR } from "stoker/http-status-codes";
+import { CREATED, BAD_REQUEST, UNAUTHORIZED, INTERNAL_SERVER_ERROR } from "stoker/http-status-codes";
 import { jsonContent } from "stoker/openapi/helpers";
 
 import type { AppRouteHandler } from "@capital/server/types";
@@ -67,6 +67,7 @@ export const route = createRoute({
   responses: {
     [CREATED]: jsonContent(RecurringTransferSchema, "Recurring transfer created"),
     [BAD_REQUEST]: jsonContent(ErrorResponseSchema, "Invalid request data"),
+    [UNAUTHORIZED]: jsonContent(ErrorResponseSchema, "Unauthorized"),
     [INTERNAL_SERVER_ERROR]: jsonContent(
       ErrorResponseSchema,
       "Internal server error"
@@ -76,8 +77,17 @@ export const route = createRoute({
 
 export const handler: AppRouteHandler<typeof route> = async (c) => {
   try {
+    const userId = c.get("userId");
+    if (!userId) {
+      return c.json(
+        { error: { code: "UNAUTHORIZED", message: "User not authenticated" } },
+        UNAUTHORIZED
+      );
+    }
+
     const body = c.req.valid("json");
     const transfer = await createRecurringTransfer(
+      userId,
       {
         ...body,
         startDate: parseLocalDate(body.startDate),
@@ -113,7 +123,7 @@ export const handler: AppRouteHandler<typeof route> = async (c) => {
     );
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "Unknown error";
-    if (message.includes("required")) {
+    if (message.includes("required") || message.includes("not found") || message.includes("access denied")) {
       return c.json({ error: { code: "BAD_REQUEST", message } }, BAD_REQUEST);
     }
     return c.json(

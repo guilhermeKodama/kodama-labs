@@ -1,9 +1,10 @@
 import { createRoute, z } from "@hono/zod-openapi";
-import { OK, NOT_FOUND, INTERNAL_SERVER_ERROR } from "stoker/http-status-codes";
+import { OK, NOT_FOUND, UNAUTHORIZED, INTERNAL_SERVER_ERROR } from "stoker/http-status-codes";
 import { jsonContent } from "stoker/openapi/helpers";
 
 import type { AppRouteHandler } from "@capital/server/types";
 import { prisma } from "@capital/server/lib/prisma";
+import { requireUserId } from "@capital/server/lib/auth-middleware";
 import { updateBusinessService } from "../../services/update-business";
 import { routeConfig } from "../../constants";
 
@@ -39,7 +40,7 @@ export const route = createRoute({
   method: "put",
   tags: [...routeConfig.v1.defaultTags],
   summary: "Update business",
-  description: "Updates an existing business entity",
+  description: "Updates an existing business entity for the authenticated user",
   request: {
     params: z.object({
       id: z.string(),
@@ -49,6 +50,7 @@ export const route = createRoute({
   responses: {
     [OK]: jsonContent(BusinessSchema, "Business updated successfully"),
     [NOT_FOUND]: jsonContent(ErrorResponseSchema, "Business not found"),
+    [UNAUTHORIZED]: jsonContent(ErrorResponseSchema, "Not authenticated"),
     [INTERNAL_SERVER_ERROR]: jsonContent(
       ErrorResponseSchema,
       "Internal server error"
@@ -58,9 +60,10 @@ export const route = createRoute({
 
 export const handler: AppRouteHandler<typeof route> = async (c) => {
   try {
+    const userId = requireUserId(c);
     const { id } = c.req.valid("param");
     const body = c.req.valid("json");
-    const business = await updateBusinessService(id, body, prisma);
+    const business = await updateBusinessService(userId, id, body, prisma);
 
     return c.json(
       {

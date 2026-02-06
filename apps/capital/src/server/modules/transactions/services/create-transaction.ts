@@ -18,6 +18,7 @@ interface CreateTransactionInput {
 }
 
 export async function createTransaction(
+  userId: string,
   input: CreateTransactionInput,
   db: DbClient
 ) {
@@ -31,7 +32,9 @@ export async function createTransaction(
     );
   }
 
+  // Data layer will verify ownership
   return insertTransaction(
+    userId,
     {
       ...input,
       exchangeRate: input.exchangeRate ?? 1,

@@ -1,14 +1,14 @@
 import { createRoute, z } from "@hono/zod-openapi";
-import { CREATED, INTERNAL_SERVER_ERROR } from "stoker/http-status-codes";
+import { CREATED, UNAUTHORIZED, INTERNAL_SERVER_ERROR } from "stoker/http-status-codes";
 import { jsonContent } from "stoker/openapi/helpers";
 
 import type { AppRouteHandler } from "@capital/server/types";
 import { prisma } from "@capital/server/lib/prisma";
+import { requireUserId } from "@capital/server/lib/auth-middleware";
 import { createCategory } from "../../services/create-category";
 import { routeConfig } from "../../constants";
 
 const CreateCategorySchema = z.object({
-  userId: z.string(),
   name: z.string().min(1),
   type: z.enum(["income", "expense", "investment"]),
   color: z.string().optional(),
@@ -39,12 +39,13 @@ export const route = createRoute({
   method: "post",
   tags: [...routeConfig.v1.defaultTags],
   summary: "Create category",
-  description: "Creates a new category",
+  description: "Creates a new category for the authenticated user",
   request: {
     body: jsonContent(CreateCategorySchema, "Category creation data"),
   },
   responses: {
     [CREATED]: jsonContent(CategorySchema, "Category created"),
+    [UNAUTHORIZED]: jsonContent(ErrorResponseSchema, "Not authenticated"),
     [INTERNAL_SERVER_ERROR]: jsonContent(
       ErrorResponseSchema,
       "Internal server error"
@@ -54,8 +55,9 @@ export const route = createRoute({
 
 export const handler: AppRouteHandler<typeof route> = async (c) => {
   try {
+    const userId = requireUserId(c);
     const body = c.req.valid("json");
-    const category = await createCategory(body, prisma);
+    const category = await createCategory({ ...body, userId }, prisma);
 
     return c.json(
       {

@@ -1,9 +1,10 @@
 import { createRoute, z } from "@hono/zod-openapi";
-import { OK, INTERNAL_SERVER_ERROR } from "stoker/http-status-codes";
+import { OK, UNAUTHORIZED, INTERNAL_SERVER_ERROR } from "stoker/http-status-codes";
 import { jsonContent } from "stoker/openapi/helpers";
 
 import type { AppRouteHandler } from "@capital/server/types";
 import { prisma } from "@capital/server/lib/prisma";
+import { requireUserId } from "@capital/server/lib/auth-middleware";
 import { listBudgets } from "../../services/list-budgets";
 import { routeConfig } from "../../constants";
 
@@ -35,7 +36,7 @@ export const route = createRoute({
   method: "get",
   tags: [...routeConfig.v1.defaultTags],
   summary: "List budgets",
-  description: "Lists budgets with optional filters",
+  description: "Lists budgets for the authenticated user with optional filters",
   request: {
     query: z.object({
       businessId: z.string().optional(),
@@ -49,6 +50,7 @@ export const route = createRoute({
   },
   responses: {
     [OK]: jsonContent(z.array(BudgetSchema), "Budgets retrieved"),
+    [UNAUTHORIZED]: jsonContent(ErrorResponseSchema, "Not authenticated"),
     [INTERNAL_SERVER_ERROR]: jsonContent(
       ErrorResponseSchema,
       "Internal server error"
@@ -58,8 +60,9 @@ export const route = createRoute({
 
 export const handler: AppRouteHandler<typeof route> = async (c) => {
   try {
+    const userId = requireUserId(c);
     const query = c.req.valid("query");
-    const budgets = await listBudgets(query, prisma);
+    const budgets = await listBudgets(userId, query, prisma);
 
     return c.json(
       budgets.map((b) => ({

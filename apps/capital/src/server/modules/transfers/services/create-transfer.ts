@@ -17,7 +17,11 @@ interface CreateTransferInput {
   toPersonalAccountId?: string;
 }
 
-export async function createTransfer(input: CreateTransferInput, db: DbClient) {
+export async function createTransfer(
+  userId: string,
+  input: CreateTransferInput,
+  db: DbClient
+) {
   // Validate entity IDs match entity types
   if (input.fromEntityType === "business" && !input.fromBusinessId) {
     throw new Error("fromBusinessId is required for business entity type");
@@ -34,7 +38,9 @@ export async function createTransfer(input: CreateTransferInput, db: DbClient) {
     throw new Error("toPersonalAccountId is required for personal entity type");
   }
 
+  // Data layer will verify ownership
   return insertTransfer(
+    userId,
     {
       ...input,
       exchangeRate: input.exchangeRate ?? 1,

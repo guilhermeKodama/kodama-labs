@@ -1,7 +1,6 @@
 import type { DbClient } from "@capital/server/lib/prisma";
 import type { BudgetPeriod } from "@prisma/client";
 import { updateBudget as updateBudgetCmd } from "../data/commands/update-budget";
-import { fetchBudgetById } from "../data/queries/fetch-budgets";
 
 interface UpdateBudgetInput {
   category?: string;
@@ -14,14 +13,11 @@ interface UpdateBudgetInput {
 }
 
 export async function updateBudgetService(
+  userId: string,
   id: string,
   input: UpdateBudgetInput,
   db: DbClient
 ) {
-  const existing = await fetchBudgetById(id, db);
-  if (!existing) {
-    throw new Error("Budget not found");
-  }
-
-  return updateBudgetCmd(id, input, db);
+  // Data layer will verify ownership
+  return updateBudgetCmd(userId, id, input, db);
 }

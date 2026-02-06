@@ -13,8 +13,9 @@ interface ListTransactionsInput {
 }
 
 export async function listTransactions(
+  userId: string,
   filters: ListTransactionsInput,
   db: DbClient
 ) {
-  return fetchTransactions(filters, db);
+  return fetchTransactions(userId, filters, db);
 }

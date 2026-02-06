@@ -1,14 +1,14 @@
 import { createRoute, z } from "@hono/zod-openapi";
-import { CREATED, INTERNAL_SERVER_ERROR } from "stoker/http-status-codes";
+import { CREATED, UNAUTHORIZED, INTERNAL_SERVER_ERROR } from "stoker/http-status-codes";
 import { jsonContent } from "stoker/openapi/helpers";
 
 import type { AppRouteHandler } from "@capital/server/types";
 import { prisma } from "@capital/server/lib/prisma";
+import { requireUserId } from "@capital/server/lib/auth-middleware";
 import { createCurrency } from "../../services/create-currency";
 import { routeConfig } from "../../constants";
 
 const CreateCurrencySchema = z.object({
-  userId: z.string(),
   code: z.string().length(3).toUpperCase(),
   name: z.string().min(1),
   symbol: z.string().min(1),
@@ -38,12 +38,13 @@ export const route = createRoute({
   method: "post",
   tags: [...routeConfig.v1.defaultTags],
   summary: "Create or update currency",
-  description: "Creates a new currency or updates existing one",
+  description: "Creates a new currency or updates existing one for the authenticated user",
   request: {
     body: jsonContent(CreateCurrencySchema, "Currency data"),
   },
   responses: {
     [CREATED]: jsonContent(CurrencySchema, "Currency created/updated"),
+    [UNAUTHORIZED]: jsonContent(ErrorResponseSchema, "Not authenticated"),
     [INTERNAL_SERVER_ERROR]: jsonContent(
       ErrorResponseSchema,
       "Internal server error"
@@ -53,8 +54,9 @@ export const route = createRoute({
 
 export const handler: AppRouteHandler<typeof route> = async (c) => {
   try {
+    const userId = requireUserId(c);
     const body = c.req.valid("json");
-    const currency = await createCurrency(body, prisma);
+    const currency = await createCurrency({ ...body, userId }, prisma);
 
     return c.json(
       {

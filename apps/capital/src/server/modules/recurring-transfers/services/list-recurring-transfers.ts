@@ -13,8 +13,9 @@ interface ListRecurringTransfersFilters {
 }
 
 export async function listRecurringTransfers(
+  userId: string,
   filters: ListRecurringTransfersFilters,
   db: DbClient
 ) {
-  return fetchRecurringTransfers(filters, db);
+  return fetchRecurringTransfers(userId, filters, db);
 }

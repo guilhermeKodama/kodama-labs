@@ -1,9 +1,10 @@
 import { createRoute, z } from "@hono/zod-openapi";
-import { OK, INTERNAL_SERVER_ERROR } from "stoker/http-status-codes";
+import { OK, UNAUTHORIZED, INTERNAL_SERVER_ERROR } from "stoker/http-status-codes";
 import { jsonContent } from "stoker/openapi/helpers";
 
 import type { AppRouteHandler } from "@capital/server/types";
 import { prisma } from "@capital/server/lib/prisma";
+import { requireUserId } from "@capital/server/lib/auth-middleware";
 import { listRecurring } from "../../services/list-recurring";
 import { routeConfig } from "../../constants";
 
@@ -40,7 +41,7 @@ export const route = createRoute({
   method: "get",
   tags: [...routeConfig.v1.defaultTags],
   summary: "List recurring transactions",
-  description: "Lists recurring transactions with optional filters",
+  description: "Lists recurring transactions for the authenticated user",
   request: {
     query: z.object({
       businessId: z.string().optional(),
@@ -51,6 +52,7 @@ export const route = createRoute({
   },
   responses: {
     [OK]: jsonContent(z.array(RecurringSchema), "Recurring transactions"),
+    [UNAUTHORIZED]: jsonContent(ErrorResponseSchema, "Not authenticated"),
     [INTERNAL_SERVER_ERROR]: jsonContent(
       ErrorResponseSchema,
       "Internal server error"
@@ -60,8 +62,9 @@ export const route = createRoute({
 
 export const handler: AppRouteHandler<typeof route> = async (c) => {
   try {
+    const userId = requireUserId(c);
     const query = c.req.valid("query");
-    const recurring = await listRecurring(query, prisma);
+    const recurring = await listRecurring(userId, query, prisma);
 
     return c.json(
       recurring.map((r) => ({

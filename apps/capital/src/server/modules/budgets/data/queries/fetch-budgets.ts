@@ -11,9 +11,23 @@ interface FetchBudgetsFilters {
   isActive?: boolean;
 }
 
-export async function fetchBudgets(filters: FetchBudgetsFilters, db: DbClient) {
+/**
+ * Fetch budgets filtered by user ownership.
+ * @param userId - REQUIRED: The authenticated user's ID
+ * @param filters - Optional filters to narrow down results
+ */
+export async function fetchBudgets(
+  userId: string,
+  filters: FetchBudgetsFilters,
+  db: DbClient
+) {
   return db.budget.findMany({
     where: {
+      // MANDATORY: Always filter by user ownership through business or personalAccount
+      OR: [
+        { business: { userId } },
+        { personalAccount: { userId } },
+      ],
       ...(filters.businessId && { businessId: filters.businessId }),
       ...(filters.personalAccountId && {
         personalAccountId: filters.personalAccountId,
@@ -28,8 +42,21 @@ export async function fetchBudgets(filters: FetchBudgetsFilters, db: DbClient) {
   });
 }
 
-export async function fetchBudgetById(id: string, db: DbClient) {
-  return db.budget.findUnique({
-    where: { id },
+/**
+ * Fetch a single budget by ID, scoped to the authenticated user.
+ * @param userId - REQUIRED: The authenticated user's ID
+ * @param id - The budget ID
+ * @returns The budget if found and owned by user, null otherwise
+ */
+export async function fetchBudgetById(userId: string, id: string, db: DbClient) {
+  return db.budget.findFirst({
+    where: {
+      id,
+      // MANDATORY: Verify ownership through business or personalAccount
+      OR: [
+        { business: { userId } },
+        { personalAccount: { userId } },
+      ],
+    },
   });
 }

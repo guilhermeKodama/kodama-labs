@@ -1,5 +1,5 @@
 import { createRoute, z } from "@hono/zod-openapi";
-import { OK, NOT_FOUND, INTERNAL_SERVER_ERROR } from "stoker/http-status-codes";
+import { OK, NOT_FOUND, UNAUTHORIZED, INTERNAL_SERVER_ERROR } from "stoker/http-status-codes";
 import { jsonContent } from "stoker/openapi/helpers";
 
 import type { AppRouteHandler } from "@capital/server/types";
@@ -41,19 +41,17 @@ const ErrorResponseSchema = z.object({
 });
 
 export const route = createRoute({
-  path: "/v1/users/{userId}",
+  path: "/v1/users/me",
   method: "put",
   tags: [...routeConfig.v1.defaultTags],
-  summary: "Update user settings",
-  description: "Updates user profile and settings",
+  summary: "Update current user settings",
+  description: "Updates the current user's profile and settings",
   request: {
-    params: z.object({
-      userId: z.string(),
-    }),
     body: jsonContent(UpdateUserSchema, "User update data"),
   },
   responses: {
     [OK]: jsonContent(UserResponseSchema, "User updated successfully"),
+    [UNAUTHORIZED]: jsonContent(ErrorResponseSchema, "Unauthorized"),
     [NOT_FOUND]: jsonContent(ErrorResponseSchema, "User not found"),
     [INTERNAL_SERVER_ERROR]: jsonContent(
       ErrorResponseSchema,
@@ -64,7 +62,14 @@ export const route = createRoute({
 
 export const handler: AppRouteHandler<typeof route> = async (c) => {
   try {
-    const { userId } = c.req.valid("param");
+    const userId = c.get("userId");
+    if (!userId) {
+      return c.json(
+        { error: { code: "UNAUTHORIZED", message: "User not authenticated" } },
+        UNAUTHORIZED
+      );
+    }
+
     const body = c.req.valid("json");
     const user = await updateUserSettings(userId, body, prisma);
 

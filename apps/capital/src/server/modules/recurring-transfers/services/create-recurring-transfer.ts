@@ -24,6 +24,7 @@ interface CreateRecurringTransferInput {
 }
 
 export async function createRecurringTransfer(
+  userId: string,
   input: CreateRecurringTransferInput,
   db: DbClient
 ) {
@@ -47,7 +48,9 @@ export async function createRecurringTransfer(
     );
   }
 
+  // Data layer will verify ownership
   return insertRecurringTransfer(
+    userId,
     {
       ...input,
       exchangeRate: input.exchangeRate ?? 1,
