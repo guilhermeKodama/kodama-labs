@@ -16,15 +16,16 @@ const getBaseUrl = () => {
 
 /**
  * Type-safe Hono API client for the Capital backend.
+ * 
+ * Note: All API calls are authenticated via session cookies.
+ * The userId is automatically extracted from the session on the backend.
  *
  * Usage:
  * ```ts
  * import { client } from '@/lib/api-client';
  *
- * // Get businesses
- * const res = await client.v1.businesses.$get({
- *   query: { userId: 'user-123' }
- * });
+ * // Get businesses (for the authenticated user)
+ * const res = await client.v1.businesses.$get();
  * const businesses = await res.json();
  *
  * // Create transaction

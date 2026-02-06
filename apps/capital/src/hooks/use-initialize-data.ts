@@ -35,11 +35,13 @@ export function useInitializeData() {
     if (!userId) return;
 
     // Fetch settings first (includes currencies and categories)
-    await fetchUserData(userId);
+    // userId is now taken from session on the backend
+    await fetchUserData();
 
     // Then fetch all other data in parallel
+    // userId is now taken from session on the backend
     await Promise.all([
-      fetchBusinesses(userId),
+      fetchBusinesses(),
       fetchTransactions(),
       fetchTransfers(),
       fetchRecurringTransactions(),

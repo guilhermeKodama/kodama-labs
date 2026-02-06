@@ -1,9 +1,10 @@
 import { createRoute, z } from "@hono/zod-openapi";
-import { OK, NOT_FOUND, BAD_REQUEST, INTERNAL_SERVER_ERROR } from "stoker/http-status-codes";
+import { OK, NOT_FOUND, BAD_REQUEST, UNAUTHORIZED, INTERNAL_SERVER_ERROR } from "stoker/http-status-codes";
 import { jsonContent } from "stoker/openapi/helpers";
 
 import type { AppRouteHandler } from "@capital/server/types";
 import { prisma } from "@capital/server/lib/prisma";
+import { requireUserId } from "@capital/server/lib/auth-middleware";
 import { updateCategoryService } from "../../services/update-category";
 import { routeConfig } from "../../constants";
 
@@ -37,7 +38,7 @@ export const route = createRoute({
   method: "put",
   tags: [...routeConfig.v1.defaultTags],
   summary: "Update category",
-  description: "Updates an existing category",
+  description: "Updates an existing category for the authenticated user",
   request: {
     params: z.object({
       id: z.string(),
@@ -48,6 +49,7 @@ export const route = createRoute({
     [OK]: jsonContent(CategorySchema, "Category updated"),
     [NOT_FOUND]: jsonContent(ErrorResponseSchema, "Category not found"),
     [BAD_REQUEST]: jsonContent(ErrorResponseSchema, "Cannot modify default categories"),
+    [UNAUTHORIZED]: jsonContent(ErrorResponseSchema, "Not authenticated"),
     [INTERNAL_SERVER_ERROR]: jsonContent(
       ErrorResponseSchema,
       "Internal server error"
@@ -57,9 +59,10 @@ export const route = createRoute({
 
 export const handler: AppRouteHandler<typeof route> = async (c) => {
   try {
+    const userId = requireUserId(c);
     const { id } = c.req.valid("param");
     const body = c.req.valid("json");
-    const category = await updateCategoryService(id, body, prisma);
+    const category = await updateCategoryService(userId, id, body, prisma);
 
     return c.json(
       {

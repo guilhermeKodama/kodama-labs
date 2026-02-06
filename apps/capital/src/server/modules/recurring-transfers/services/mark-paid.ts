@@ -2,6 +2,7 @@ import { prisma } from "@capital/server/lib/prisma";
 import { addDays, addWeeks, addMonths, addYears } from "date-fns";
 import type { RecurrenceFrequency } from "@prisma/client";
 import { toNoonUTC } from "@capital/server/lib/date-utils";
+import { fetchRecurringTransferById } from "../data/queries/fetch-recurring-transfers";
 
 function getNextOccurrence(
   currentDate: Date,
@@ -22,21 +23,23 @@ function getNextOccurrence(
   }
 }
 
-export async function markRecurringTransferAsPaid(recurringTransferId: string) {
+export async function markRecurringTransferAsPaid(
+  userId: string,
+  recurringTransferId: string
+) {
+  // First verify ownership
+  const recurring = await fetchRecurringTransferById(userId, recurringTransferId, prisma);
+
+  if (!recurring) {
+    throw new Error("Recurring transfer not found");
+  }
+  if (!recurring.isActive) {
+    throw new Error("Cannot mark a paused recurring transfer as paid");
+  }
+
   // Use a transaction to ensure both operations succeed or fail together
   const [createdTransfer, updatedRecurring] = await prisma.$transaction(
     async (tx) => {
-      const recurring = await tx.recurringTransfer.findUnique({
-        where: { id: recurringTransferId },
-      });
-
-      if (!recurring) {
-        throw new Error("Recurring transfer not found");
-      }
-      if (!recurring.isActive) {
-        throw new Error("Cannot mark a paused recurring transfer as paid");
-      }
-
       // Normalize the date to noon UTC
       const transferDate = toNoonUTC(recurring.nextDueDate);
 

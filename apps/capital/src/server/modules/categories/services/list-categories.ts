@@ -4,8 +4,8 @@ import { fetchCategoriesByUserId } from "../data/queries/fetch-categories";
 
 export async function listCategories(
   userId: string,
-  type?: TransactionType,
-  db?: DbClient
+  type: TransactionType | undefined,
+  db: DbClient
 ) {
   return fetchCategoriesByUserId(userId, type, db);
 }

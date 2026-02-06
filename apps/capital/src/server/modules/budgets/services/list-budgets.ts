@@ -12,6 +12,10 @@ interface ListBudgetsInput {
   isActive?: boolean;
 }
 
-export async function listBudgets(filters: ListBudgetsInput, db: DbClient) {
-  return fetchBudgets(filters, db);
+export async function listBudgets(
+  userId: string,
+  filters: ListBudgetsInput,
+  db: DbClient
+) {
+  return fetchBudgets(userId, filters, db);
 }

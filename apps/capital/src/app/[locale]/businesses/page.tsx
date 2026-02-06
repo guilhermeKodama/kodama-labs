@@ -64,8 +64,8 @@ export default function BusinessesPage() {
   }, [businesses, transactions, transfers, settings.baseCurrency]);
 
   const handleCreate = async (data: CreateBusinessFormData) => {
-    if (!userId) return;
-    await addBusiness(userId, data);
+    // userId is now taken from session on the backend
+    await addBusiness(data);
     toast.success(t('businesses.toast.created'));
   };
 

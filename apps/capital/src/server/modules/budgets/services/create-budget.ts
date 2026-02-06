@@ -14,7 +14,11 @@ interface CreateBudgetInput {
   personalAccountId?: string;
 }
 
-export async function createBudget(input: CreateBudgetInput, db: DbClient) {
+export async function createBudget(
+  userId: string,
+  input: CreateBudgetInput,
+  db: DbClient
+) {
   // Validate entity matches type
   if (input.entityType === "business" && !input.businessId) {
     throw new Error("businessId is required for business entity type");
@@ -30,5 +34,6 @@ export async function createBudget(input: CreateBudgetInput, db: DbClient) {
     throw new Error("month is required for monthly budgets");
   }
 
-  return insertBudget(input, db);
+  // Data layer will verify ownership
+  return insertBudget(userId, input, db);
 }

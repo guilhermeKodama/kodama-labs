@@ -1,5 +1,5 @@
 import { createRoute, z } from "@hono/zod-openapi";
-import { OK, INTERNAL_SERVER_ERROR } from "stoker/http-status-codes";
+import { OK, UNAUTHORIZED, INTERNAL_SERVER_ERROR } from "stoker/http-status-codes";
 import { jsonContent } from "stoker/openapi/helpers";
 
 import type { AppRouteHandler } from "@capital/server/types";
@@ -56,6 +56,7 @@ export const route = createRoute({
   },
   responses: {
     [OK]: jsonContent(z.array(RecurringTransferSchema), "Recurring transfers"),
+    [UNAUTHORIZED]: jsonContent(ErrorResponseSchema, "Unauthorized"),
     [INTERNAL_SERVER_ERROR]: jsonContent(
       ErrorResponseSchema,
       "Internal server error"
@@ -65,8 +66,16 @@ export const route = createRoute({
 
 export const handler: AppRouteHandler<typeof route> = async (c) => {
   try {
+    const userId = c.get("userId");
+    if (!userId) {
+      return c.json(
+        { error: { code: "UNAUTHORIZED", message: "User not authenticated" } },
+        UNAUTHORIZED
+      );
+    }
+
     const query = c.req.valid("query");
-    const transfers = await listRecurringTransfers(query, prisma);
+    const transfers = await listRecurringTransfers(userId, query, prisma);
 
     return c.json(
       transfers.map((t) => ({

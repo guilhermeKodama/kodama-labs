@@ -9,11 +9,12 @@ interface UpdateCategoryInput {
 }
 
 export async function updateCategoryService(
+  userId: string,
   id: string,
   input: UpdateCategoryInput,
   db: DbClient
 ) {
-  const existing = await fetchCategoryById(id, db);
+  const existing = await fetchCategoryById(userId, id, db);
   if (!existing) {
     throw new Error("Category not found");
   }
@@ -22,5 +23,6 @@ export async function updateCategoryService(
     throw new Error("Cannot modify default categories");
   }
 
-  return updateCategoryCmd(id, input, db);
+  // Data layer will verify ownership
+  return updateCategoryCmd(userId, id, input, db);
 }

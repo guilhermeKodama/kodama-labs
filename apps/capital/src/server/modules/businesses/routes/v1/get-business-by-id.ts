@@ -1,9 +1,10 @@
 import { createRoute, z } from "@hono/zod-openapi";
-import { OK, NOT_FOUND, INTERNAL_SERVER_ERROR } from "stoker/http-status-codes";
+import { OK, NOT_FOUND, UNAUTHORIZED, INTERNAL_SERVER_ERROR } from "stoker/http-status-codes";
 import { jsonContent } from "stoker/openapi/helpers";
 
 import type { AppRouteHandler } from "@capital/server/types";
 import { prisma } from "@capital/server/lib/prisma";
+import { requireUserId } from "@capital/server/lib/auth-middleware";
 import { getBusinessById } from "../../services/get-business";
 import { routeConfig } from "../../constants";
 
@@ -31,7 +32,7 @@ export const route = createRoute({
   method: "get",
   tags: [...routeConfig.v1.defaultTags],
   summary: "Get business by ID",
-  description: "Retrieves a business by its ID",
+  description: "Retrieves a business by its ID for the authenticated user",
   request: {
     params: z.object({
       id: z.string(),
@@ -40,6 +41,7 @@ export const route = createRoute({
   responses: {
     [OK]: jsonContent(BusinessSchema, "Business retrieved successfully"),
     [NOT_FOUND]: jsonContent(ErrorResponseSchema, "Business not found"),
+    [UNAUTHORIZED]: jsonContent(ErrorResponseSchema, "Not authenticated"),
     [INTERNAL_SERVER_ERROR]: jsonContent(
       ErrorResponseSchema,
       "Internal server error"
@@ -49,8 +51,9 @@ export const route = createRoute({
 
 export const handler: AppRouteHandler<typeof route> = async (c) => {
   try {
+    const userId = requireUserId(c);
     const { id } = c.req.valid("param");
-    const business = await getBusinessById(id, prisma);
+    const business = await getBusinessById(userId, id, prisma);
 
     return c.json(
       {

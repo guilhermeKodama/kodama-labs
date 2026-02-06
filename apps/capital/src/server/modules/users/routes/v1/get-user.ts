@@ -1,5 +1,5 @@
 import { createRoute, z } from "@hono/zod-openapi";
-import { OK, NOT_FOUND, INTERNAL_SERVER_ERROR } from "stoker/http-status-codes";
+import { OK, NOT_FOUND, UNAUTHORIZED, FORBIDDEN, INTERNAL_SERVER_ERROR } from "stoker/http-status-codes";
 import { jsonContent } from "stoker/openapi/helpers";
 
 import type { AppRouteHandler } from "@capital/server/types";
@@ -33,18 +33,14 @@ const ErrorResponseSchema = z.object({
 });
 
 export const route = createRoute({
-  path: "/v1/users/{userId}",
+  path: "/v1/users/me",
   method: "get",
   tags: [...routeConfig.v1.defaultTags],
-  summary: "Get user by ID",
-  description: "Retrieves a user by their ID",
-  request: {
-    params: z.object({
-      userId: z.string(),
-    }),
-  },
+  summary: "Get current user",
+  description: "Retrieves the currently authenticated user",
   responses: {
     [OK]: jsonContent(UserResponseSchema, "User retrieved successfully"),
+    [UNAUTHORIZED]: jsonContent(ErrorResponseSchema, "Unauthorized"),
     [NOT_FOUND]: jsonContent(ErrorResponseSchema, "User not found"),
     [INTERNAL_SERVER_ERROR]: jsonContent(
       ErrorResponseSchema,
@@ -55,7 +51,14 @@ export const route = createRoute({
 
 export const handler: AppRouteHandler<typeof route> = async (c) => {
   try {
-    const { userId } = c.req.valid("param");
+    const userId = c.get("userId");
+    if (!userId) {
+      return c.json(
+        { error: { code: "UNAUTHORIZED", message: "User not authenticated" } },
+        UNAUTHORIZED
+      );
+    }
+
     const user = await getUserById(userId, prisma);
 
     return c.json(

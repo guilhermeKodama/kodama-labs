@@ -1,9 +1,11 @@
 import { createRoute, z } from "@hono/zod-openapi";
-import { OK, NOT_FOUND, INTERNAL_SERVER_ERROR } from "stoker/http-status-codes";
+import { OK, NOT_FOUND, UNAUTHORIZED, INTERNAL_SERVER_ERROR } from "stoker/http-status-codes";
 import { jsonContent } from "stoker/openapi/helpers";
 
 import type { AppRouteHandler } from "@capital/server/types";
 import { prisma } from "@capital/server/lib/prisma";
+import { requireUserId } from "@capital/server/lib/auth-middleware";
+import { updateBudgetService } from "../../services/update-budget";
 import { routeConfig } from "../../constants";
 
 const UpdateBudgetSchema = z.object({
@@ -44,7 +46,7 @@ export const route = createRoute({
   method: "put",
   tags: [...routeConfig.v1.defaultTags],
   summary: "Update budget",
-  description: "Updates an existing budget",
+  description: "Updates an existing budget for the authenticated user",
   request: {
     params: z.object({
       id: z.string(),
@@ -54,6 +56,7 @@ export const route = createRoute({
   responses: {
     [OK]: jsonContent(BudgetSchema, "Budget updated"),
     [NOT_FOUND]: jsonContent(ErrorResponseSchema, "Budget not found"),
+    [UNAUTHORIZED]: jsonContent(ErrorResponseSchema, "Not authenticated"),
     [INTERNAL_SERVER_ERROR]: jsonContent(
       ErrorResponseSchema,
       "Internal server error"
@@ -63,25 +66,10 @@ export const route = createRoute({
 
 export const handler: AppRouteHandler<typeof route> = async (c) => {
   try {
+    const userId = requireUserId(c);
     const { id } = c.req.valid("param");
     const body = c.req.valid("json");
-
-    // Check if exists
-    const existing = await prisma.budget.findUnique({
-      where: { id },
-    });
-
-    if (!existing) {
-      return c.json(
-        { error: { code: "NOT_FOUND", message: "Budget not found" } },
-        NOT_FOUND
-      );
-    }
-
-    const budget = await prisma.budget.update({
-      where: { id },
-      data: body,
-    });
+    const budget = await updateBudgetService(userId, id, body, prisma);
 
     return c.json(
       {
@@ -103,6 +91,9 @@ export const handler: AppRouteHandler<typeof route> = async (c) => {
     );
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "Unknown error";
+    if (message === "Budget not found") {
+      return c.json({ error: { code: "NOT_FOUND", message } }, NOT_FOUND);
+    }
     return c.json(
       { error: { code: "INTERNAL_ERROR", message } },
       INTERNAL_SERVER_ERROR

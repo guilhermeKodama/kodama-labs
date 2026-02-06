@@ -9,8 +9,8 @@ interface BusinessState {
 }
 
 interface BusinessActions {
-  fetchBusinesses: (userId: string) => Promise<void>;
-  addBusiness: (userId: string, input: CreateBusinessInput) => Promise<Business | null>;
+  fetchBusinesses: () => Promise<void>;
+  addBusiness: (input: CreateBusinessInput) => Promise<Business | null>;
   updateBusiness: (id: string, input: UpdateBusinessInput) => Promise<void>;
   deleteBusiness: (id: string) => Promise<void>;
   getBusiness: (id: string) => Business | undefined;
@@ -27,13 +27,11 @@ export const useBusinessStore = create<BusinessStore>()((set, get) => ({
   isLoading: false,
   error: null,
 
-  // Fetch businesses from API
-  fetchBusinesses: async (userId: string) => {
+  // Fetch businesses from API (userId is now taken from session on the backend)
+  fetchBusinesses: async () => {
     set({ isLoading: true, error: null });
     try {
-      const res = await client.v1.businesses.$get({
-        query: { userId },
-      });
+      const res = await client.v1.businesses.$get();
 
       if (!res.ok) {
         throw new Error('Failed to fetch businesses');
@@ -61,13 +59,12 @@ export const useBusinessStore = create<BusinessStore>()((set, get) => ({
     }
   },
 
-  // Create business via API
-  addBusiness: async (userId: string, input: CreateBusinessInput) => {
+  // Create business via API (userId is now taken from session on the backend)
+  addBusiness: async (input: CreateBusinessInput) => {
     set({ isLoading: true, error: null });
     try {
       const res = await client.v1.businesses.$post({
         json: {
-          userId,
           name: input.name,
           description: input.description,
           defaultCurrency: input.defaultCurrency,

@@ -1,7 +1,6 @@
 import type { DbClient } from "@capital/server/lib/prisma";
 import type { TransactionType } from "@prisma/client";
 import { updateTransaction as updateTransactionCmd } from "../data/commands/update-transaction";
-import { fetchTransactionById } from "../data/queries/fetch-transactions";
 
 interface UpdateTransactionInput {
   type?: TransactionType;
@@ -15,14 +14,11 @@ interface UpdateTransactionInput {
 }
 
 export async function updateTransactionService(
+  userId: string,
   id: string,
   input: UpdateTransactionInput,
   db: DbClient
 ) {
-  const existing = await fetchTransactionById(id, db);
-  if (!existing) {
-    throw new Error("Transaction not found");
-  }
-
-  return updateTransactionCmd(id, input, db);
+  // Data layer will verify ownership
+  return updateTransactionCmd(userId, id, input, db);
 }

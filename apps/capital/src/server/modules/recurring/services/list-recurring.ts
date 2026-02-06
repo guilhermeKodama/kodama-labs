@@ -9,6 +9,10 @@ interface ListRecurringInput {
   isActive?: boolean;
 }
 
-export async function listRecurring(filters: ListRecurringInput, db: DbClient) {
-  return fetchRecurringTransactions(filters, db);
+export async function listRecurring(
+  userId: string,
+  filters: ListRecurringInput,
+  db: DbClient
+) {
+  return fetchRecurringTransactions(userId, filters, db);
 }

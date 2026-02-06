@@ -1,5 +1,5 @@
 import { createRoute, z } from "@hono/zod-openapi";
-import { OK, INTERNAL_SERVER_ERROR } from "stoker/http-status-codes";
+import { OK, UNAUTHORIZED, INTERNAL_SERVER_ERROR } from "stoker/http-status-codes";
 import { jsonContent } from "stoker/openapi/helpers";
 
 import type { AppRouteHandler } from "@capital/server/types";
@@ -32,12 +32,12 @@ export const route = createRoute({
   description: "Gets tax calculations for all businesses for a given year",
   request: {
     query: z.object({
-      userId: z.string(),
       year: z.coerce.number().int().min(2000).max(2100),
     }),
   },
   responses: {
     [OK]: jsonContent(z.array(TaxSummarySchema), "Tax report"),
+    [UNAUTHORIZED]: jsonContent(ErrorResponseSchema, "Unauthorized"),
     [INTERNAL_SERVER_ERROR]: jsonContent(
       ErrorResponseSchema,
       "Internal server error"
@@ -47,7 +47,15 @@ export const route = createRoute({
 
 export const handler: AppRouteHandler<typeof route> = async (c) => {
   try {
-    const { userId, year } = c.req.valid("query");
+    const userId = c.get("userId");
+    if (!userId) {
+      return c.json(
+        { error: { code: "UNAUTHORIZED", message: "User not authenticated" } },
+        UNAUTHORIZED
+      );
+    }
+
+    const { year } = c.req.valid("query");
     const taxSummaries = await getTaxReport({ userId, year }, prisma);
 
     return c.json(taxSummaries, OK);

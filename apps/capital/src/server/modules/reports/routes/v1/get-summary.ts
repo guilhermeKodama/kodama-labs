@@ -1,5 +1,5 @@
 import { createRoute, z } from "@hono/zod-openapi";
-import { OK, INTERNAL_SERVER_ERROR } from "stoker/http-status-codes";
+import { OK, UNAUTHORIZED, INTERNAL_SERVER_ERROR } from "stoker/http-status-codes";
 import { jsonContent } from "stoker/openapi/helpers";
 
 import type { AppRouteHandler } from "@capital/server/types";
@@ -35,13 +35,13 @@ export const route = createRoute({
     "Gets a financial summary for all entities (businesses and personal)",
   request: {
     query: z.object({
-      userId: z.string(),
       dateFrom: z.string().optional(),
       dateTo: z.string().optional(),
     }),
   },
   responses: {
     [OK]: jsonContent(z.array(EntitySummarySchema), "Financial summary"),
+    [UNAUTHORIZED]: jsonContent(ErrorResponseSchema, "Unauthorized"),
     [INTERNAL_SERVER_ERROR]: jsonContent(
       ErrorResponseSchema,
       "Internal server error"
@@ -51,7 +51,15 @@ export const route = createRoute({
 
 export const handler: AppRouteHandler<typeof route> = async (c) => {
   try {
-    const { userId, dateFrom, dateTo } = c.req.valid("query");
+    const userId = c.get("userId");
+    if (!userId) {
+      return c.json(
+        { error: { code: "UNAUTHORIZED", message: "User not authenticated" } },
+        UNAUTHORIZED
+      );
+    }
+
+    const { dateFrom, dateTo } = c.req.valid("query");
     const summaries = await getSummary(
       {
         userId,

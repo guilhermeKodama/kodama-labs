@@ -1,6 +1,5 @@
 import type { DbClient } from "@capital/server/lib/prisma";
 import { updateBusiness as updateBusinessCmd } from "../data/commands/update-business";
-import { fetchBusinessById } from "../data/queries/fetch-businesses";
 
 interface UpdateBusinessInput {
   name?: string;
@@ -11,14 +10,11 @@ interface UpdateBusinessInput {
 }
 
 export async function updateBusinessService(
+  userId: string,
   id: string,
   input: UpdateBusinessInput,
   db: DbClient
 ) {
-  const existing = await fetchBusinessById(id, db);
-  if (!existing) {
-    throw new Error("Business not found");
-  }
-
-  return updateBusinessCmd(id, input, db);
+  // Data layer will verify ownership
+  return updateBusinessCmd(userId, id, input, db);
 }

@@ -1,10 +1,17 @@
 import { createRouter } from "@capital/server/lib/create-app";
+import { authMiddleware } from "@capital/server/lib/auth-middleware";
 
 import * as getTransfers from "./get-transfers";
 import * as postTransfer from "./post-transfer";
 import * as deleteTransfer from "./delete-transfer";
 
-const router = createRouter()
+const router = createRouter();
+
+// Apply auth middleware to all routes
+router.use("*", authMiddleware);
+
+// Register routes
+router
   .openapi(getTransfers.route, getTransfers.handler)
   .openapi(postTransfer.route, postTransfer.handler)
   .openapi(deleteTransfer.route, deleteTransfer.handler);

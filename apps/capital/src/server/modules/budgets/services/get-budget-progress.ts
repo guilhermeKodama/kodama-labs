@@ -12,10 +12,12 @@ export interface BudgetProgress {
 }
 
 export async function getBudgetProgress(
+  userId: string,
   budgetId: string,
   db: DbClient
 ): Promise<BudgetProgress> {
-  const budget = await fetchBudgetById(budgetId, db);
+  // Data layer will verify ownership
+  const budget = await fetchBudgetById(userId, budgetId, db);
   if (!budget) {
     throw new Error("Budget not found");
   }
@@ -28,6 +30,7 @@ export async function getBudgetProgress(
       : new Date(budget.year, 11, 31);
 
   // Get transactions for the budget period and category
+  // Note: This query is safe because we already verified budget ownership above
   const transactions = await db.transaction.findMany({
     where: {
       category: budget.category,
