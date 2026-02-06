@@ -6,3 +6,6 @@ export { ActivityTable } from './activity-table';
 export { RecurringTable } from './recurring-table';
 export { RecurringTransfersTable } from './recurring-transfers-table';
 export { BudgetsTable } from './budgets-table';
+export { BillsTable } from './bills-table';
+export { InstallmentsTable } from './installments-table';
+export { BillTransactionsTable } from './bill-transactions-table';

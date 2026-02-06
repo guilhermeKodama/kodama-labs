@@ -40,6 +40,24 @@ const DEFAULT_INVESTMENT_CATEGORIES = [
   "Other Investment",
 ];
 
+// System expense categories for credit cards - protected from deletion
+const SYSTEM_EXPENSE_CATEGORIES = [
+  "Credit Card",
+  "Subscriptions",
+  "Groceries",
+  "Restaurants & Dining",
+  "Transportation",
+  "Shopping",
+  "Entertainment",
+  "Health & Pharmacy",
+  "Travel",
+  "Education",
+  "Personal Care",
+  "Home",
+  "Fees & Charges",
+  "Other",
+];
+
 const DEFAULT_CURRENCIES = [
   { code: "USD", name: "US Dollar", symbol: "$", manualRate: 1 },
   { code: "EUR", name: "Euro", symbol: "€", manualRate: 0.92 },
@@ -55,18 +73,28 @@ async function seedDefaultCategoriesForUser(userId: string, prisma: PrismaClient
       name,
       type: "income" as const,
       isDefault: true,
+      isSystem: false,
     })),
     ...DEFAULT_EXPENSE_CATEGORIES.map((name) => ({
       userId,
       name,
       type: "expense" as const,
       isDefault: true,
+      isSystem: false,
     })),
     ...DEFAULT_INVESTMENT_CATEGORIES.map((name) => ({
       userId,
       name,
       type: "investment" as const,
       isDefault: true,
+      isSystem: false,
+    })),
+    ...SYSTEM_EXPENSE_CATEGORIES.map((name) => ({
+      userId,
+      name,
+      type: "expense" as const,
+      isDefault: true,
+      isSystem: true,
     })),
   ];
 

@@ -5,3 +5,5 @@ export { CategoryDialog } from './category-dialog';
 export { RecurringDialog } from './recurring-dialog';
 export { RecurringTransferDialog } from './recurring-transfer-dialog';
 export { BudgetDialog } from './budget-dialog';
+export { CreditCardDialog } from './credit-card-dialog';
+export { BillUploadDialog } from './bill-upload-dialog';

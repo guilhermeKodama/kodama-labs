@@ -14,6 +14,7 @@ import {
   Repeat,
   Target,
   Receipt,
+  CreditCard,
   LogOut,
 } from 'lucide-react';
 import { Link, usePathname } from '@/i18n/navigation';
@@ -40,6 +41,7 @@ const moreNavItems = [
   { href: '/budgets', icon: Target, labelKey: 'budgets' },
   { href: '/reports', icon: FileBarChart, labelKey: 'reports' },
   { href: '/tax', icon: Receipt, labelKey: 'tax' },
+  { href: '/credit-cards', icon: CreditCard, labelKey: 'creditCards' },
   { href: '/settings', icon: Settings, labelKey: 'settings' },
 ] as const;
 

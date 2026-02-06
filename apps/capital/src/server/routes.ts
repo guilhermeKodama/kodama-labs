@@ -12,6 +12,7 @@ import v1Budgets from "./modules/budgets/routes/v1";
 import v1Recurring from "./modules/recurring/routes/v1";
 import v1RecurringTransfers from "./modules/recurring-transfers/routes/v1";
 import v1Reports from "./modules/reports/routes/v1";
+import v1CreditCards from "./modules/credit-cards/routes/v1";
 
 export function registerRoutes<T extends AppOpenAPI>(app: T) {
   return app
@@ -26,5 +27,6 @@ export function registerRoutes<T extends AppOpenAPI>(app: T) {
     .route("/", v1Budgets)
     .route("/", v1Recurring)
     .route("/", v1RecurringTransfers)
-    .route("/", v1Reports);
+    .route("/", v1Reports)
+    .route("/", v1CreditCards);
 }

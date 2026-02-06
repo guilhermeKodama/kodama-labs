@@ -27,6 +27,7 @@
     "budgets": "Budgets",
     "reports": "Reports",
     "tax": "Tax",
+    "creditCards": "Credit Cards",
     "settings": "Settings",
     "baseCurrency": "Base Currency"
   },
@@ -774,6 +775,107 @@
     },
     "toast": {
       "exported": "Tax report exported!"
+    }
+  },
+  "creditCards": {
+    "title": "Credit Cards",
+    "subtitle": "Manage your credit cards and bills",
+    "addCard": "Add Card",
+    "uploadBill": "Upload Bill",
+    "noCards": "No credit cards yet. Add your first card to get started.",
+    "noBills": "No bills uploaded yet.",
+    "noInstallments": "No active installments.",
+    "tabs": {
+      "cards": "Cards",
+      "bills": "Bills",
+      "transactions": "Transactions",
+      "installments": "Installments",
+      "analytics": "Analytics"
+    },
+    "summary": {
+      "totalCredit": "Total Credit",
+      "currentBalance": "Current Balance",
+      "upcomingBills": "Upcoming Bills",
+      "activeInstallments": "Active Installments"
+    },
+    "card": {
+      "closes": "Closes",
+      "due": "Due",
+      "limit": "Limit",
+      "available": "Available",
+      "active": "Active",
+      "inactive": "Inactive",
+      "utilization": "Utilization"
+    },
+    "form": {
+      "bankName": "Bank Name",
+      "bankNamePlaceholder": "e.g. Nubank, Itaú, Bradesco",
+      "lastFour": "Last 4 Digits",
+      "lastFourPlaceholder": "1234",
+      "nickname": "Nickname (Optional)",
+      "nicknamePlaceholder": "e.g. My Nubank",
+      "creditLimit": "Credit Limit",
+      "closingDay": "Closing Day",
+      "dueDay": "Due Day",
+      "color": "Card Color",
+      "currency": "Currency",
+      "entityType": "Account Type",
+      "business": "Business",
+      "personal": "Personal",
+      "selectBusiness": "Select business"
+    },
+    "dialog": {
+      "createTitle": "Add Credit Card",
+      "createDescription": "Add a new credit card to track expenses.",
+      "editTitle": "Edit Credit Card",
+      "editDescription": "Update credit card details."
+    },
+    "bill": {
+      "closingDate": "Closing Date",
+      "dueDate": "Due Date",
+      "totalAmount": "Total Amount",
+      "status": "Status",
+      "transactions": "Transactions",
+      "pending": "Pending",
+      "paid": "Paid",
+      "overdue": "Overdue",
+      "linkExpense": "Link to Expense",
+      "createExpense": "Create Expense"
+    },
+    "upload": {
+      "title": "Upload Credit Card Bill",
+      "description": "Upload a CSV file from your credit card statement.",
+      "selectCard": "Select Credit Card",
+      "csvFile": "CSV File",
+      "csvFileDrag": "Drag & drop a CSV file or click to browse",
+      "closingDate": "Bill Closing Date",
+      "dueDate": "Bill Due Date",
+      "linkToExisting": "Link to existing expense transaction",
+      "createNewExpense": "Create a new expense transaction",
+      "noLink": "Don't link to any transaction",
+      "selectTransaction": "Select transaction",
+      "processing": "Processing bill with AI categorization...",
+      "success": "Bill uploaded and categorized successfully!",
+      "reviewCategories": "Review Categories"
+    },
+    "installment": {
+      "total": "Total",
+      "paid": "Paid",
+      "remaining": "Remaining",
+      "amount": "Per Installment",
+      "progress": "Progress",
+      "endsOn": "Ends on"
+    },
+    "delete": {
+      "title": "Delete Credit Card",
+      "description": "This will permanently delete this credit card and all associated bills and installments. This action cannot be undone."
+    },
+    "toast": {
+      "created": "Credit card added!",
+      "updated": "Credit card updated!",
+      "deleted": "Credit card deleted!",
+      "billUploaded": "Bill uploaded and categorized!",
+      "expenseCreated": "Expense created from bill!"
     }
   }
 }

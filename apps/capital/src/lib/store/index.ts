@@ -5,3 +5,4 @@ export { useSettingsStore } from './settings-store';
 export { useRecurringTransactionStore } from './recurring-store';
 export { useRecurringTransferStore } from './recurring-transfer-store';
 export { useBudgetStore } from './budget-store';
+export { useCreditCardStore } from "./credit-card-store";
