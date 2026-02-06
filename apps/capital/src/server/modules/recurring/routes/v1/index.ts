@@ -1,5 +1,4 @@
 import { createRouter } from "@capital/server/lib/create-app";
-import { authMiddleware } from "@capital/server/lib/auth-middleware";
 
 import * as getRecurring from "./get-recurring";
 import * as postRecurring from "./post-recurring";
@@ -8,13 +7,7 @@ import * as deleteRecurring from "./delete-recurring";
 import * as postToggle from "./post-toggle";
 import * as postMarkPaid from "./post-mark-paid";
 
-const router = createRouter();
-
-// Apply auth middleware to all routes
-router.use("*", authMiddleware);
-
-// Register routes
-router
+const router = createRouter()
   .openapi(getRecurring.route, getRecurring.handler)
   .openapi(postRecurring.route, postRecurring.handler)
   .openapi(putRecurring.route, putRecurring.handler)

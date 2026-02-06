@@ -399,7 +399,7 @@ export const useRecurringTransactionStore = create<RecurringTransactionStore>()(
   // Update the last generated date for a recurring transaction
   updateLastGeneratedDate: async (id: string, date: Date) => {
     try {
-      const res = await client.v1.recurring[':id'].$put({
+      await client.v1.recurring[':id'].$put({
         param: { id },
         json: {
           // The backend will update lastGeneratedDate automatically when we update

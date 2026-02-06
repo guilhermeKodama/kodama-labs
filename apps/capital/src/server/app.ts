@@ -1,7 +1,7 @@
 import { createApp } from "./lib/create-app";
 
-const { app, router } = createApp();
+const app = createApp();
 
-export type AppType = (typeof router)[number];
+export type AppType = typeof app;
 
 export default app;

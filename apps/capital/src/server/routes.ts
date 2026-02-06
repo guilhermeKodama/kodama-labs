@@ -13,25 +13,18 @@ import v1Recurring from "./modules/recurring/routes/v1";
 import v1RecurringTransfers from "./modules/recurring-transfers/routes/v1";
 import v1Reports from "./modules/reports/routes/v1";
 
-export function registerRoutes(app: AppOpenAPI) {
-  const routes = [
-    v1Health,
-    v1Auth,
-    v1Users,
-    v1Businesses,
-    v1Transactions,
-    v1Transfers,
-    v1Categories,
-    v1Currencies,
-    v1Budgets,
-    v1Recurring,
-    v1RecurringTransfers,
-    v1Reports,
-  ] as const;
-
-  routes.forEach((route) => {
-    app.route("/", route);
-  });
-
-  return routes;
+export function registerRoutes<T extends AppOpenAPI>(app: T) {
+  return app
+    .route("/", v1Health)
+    .route("/", v1Auth)
+    .route("/", v1Users)
+    .route("/", v1Businesses)
+    .route("/", v1Transactions)
+    .route("/", v1Transfers)
+    .route("/", v1Categories)
+    .route("/", v1Currencies)
+    .route("/", v1Budgets)
+    .route("/", v1Recurring)
+    .route("/", v1RecurringTransfers)
+    .route("/", v1Reports);
 }
