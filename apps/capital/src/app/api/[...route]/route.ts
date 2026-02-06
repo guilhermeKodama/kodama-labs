@@ -1,7 +1,5 @@
 import { handle } from "hono/vercel";
-import { createApp } from "@capital/server/lib/create-app";
-
-const { app } = createApp();
+import app from "@capital/server/app";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;

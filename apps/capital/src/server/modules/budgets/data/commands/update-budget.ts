@@ -7,7 +7,7 @@ interface UpdateBudgetData {
   currency?: string;
   period?: BudgetPeriod;
   year?: number;
-  month?: number;
+  month?: number | null;
   isActive?: boolean;
 }
 

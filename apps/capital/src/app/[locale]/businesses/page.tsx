@@ -31,7 +31,6 @@ import {
   useTransferStore,
   useSettingsStore,
 } from '@/lib/store';
-import { useUser } from '@/lib/user-context';
 import { calculateEntitySummary } from '@/lib/utils/calculations';
 import { toast } from 'sonner';
 import type { Business } from '@/types';
@@ -39,7 +38,6 @@ import type { CreateBusinessFormData } from '@/lib/validations';
 
 export default function BusinessesPage() {
   const t = useTranslations();
-  const { userId } = useUser();
   const { businesses, addBusiness, updateBusiness, deleteBusiness } =
     useBusinessStore();
   const { transactions, deleteTransactionsByEntity } = useTransactionStore();

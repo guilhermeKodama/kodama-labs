@@ -1,5 +1,5 @@
 import { createRoute, z } from "@hono/zod-openapi";
-import { OK, NOT_FOUND, UNAUTHORIZED, FORBIDDEN, INTERNAL_SERVER_ERROR } from "stoker/http-status-codes";
+import { OK, NOT_FOUND, UNAUTHORIZED, INTERNAL_SERVER_ERROR } from "stoker/http-status-codes";
 import { jsonContent } from "stoker/openapi/helpers";
 
 import type { AppRouteHandler } from "@capital/server/types";

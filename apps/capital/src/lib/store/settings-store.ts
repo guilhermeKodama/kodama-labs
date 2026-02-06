@@ -124,7 +124,7 @@ export const useSettingsStore = create<SettingsStore>()((set, get) => ({
   // Fetch categories from API (userId is now taken from session on the backend)
   fetchCategories: async () => {
     try {
-      const res = await client.v1.categories.$get();
+      const res = await client.v1.categories.$get({ query: {} });
 
       if (!res.ok) {
         throw new Error('Failed to fetch categories');

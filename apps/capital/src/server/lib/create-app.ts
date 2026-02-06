@@ -6,6 +6,7 @@ import { defaultHook } from "stoker/openapi";
 
 import { registerRoutes } from "../routes";
 import configureOpenAPI from "./configure-open-api";
+import { authMiddleware } from "./auth-middleware";
 
 import type { AppBindings, AppOpenAPI } from "../types";
 
@@ -24,6 +25,18 @@ export function createApp() {
   app.use("*", logger());
   app.use(serveEmojiFavicon("💰"));
 
+  // Auth middleware for all protected routes (exclude auth endpoints)
+  app.use("/v1/businesses/*", authMiddleware);
+  app.use("/v1/transactions/*", authMiddleware);
+  app.use("/v1/transfers/*", authMiddleware);
+  app.use("/v1/categories/*", authMiddleware);
+  app.use("/v1/currencies/*", authMiddleware);
+  app.use("/v1/budgets/*", authMiddleware);
+  app.use("/v1/recurring/*", authMiddleware);
+  app.use("/v1/recurring-transfers/*", authMiddleware);
+  app.use("/v1/reports/*", authMiddleware);
+  app.use("/v1/users/*", authMiddleware);
+
   // Error handling
   app.notFound(notFound);
   app.onError(onError);
@@ -31,12 +44,10 @@ export function createApp() {
   // OpenAPI documentation
   configureOpenAPI(app);
 
-  // Register all routes
-  const router = registerRoutes(app);
-
-  return { app, router };
+  // Register all routes and return the typed app
+  return registerRoutes(app);
 }
 
 export function createTestApp<R extends AppOpenAPI>(router: R) {
-  return createApp().app.route("/", router);
+  return createApp().route("/", router);
 }
