@@ -1,7 +1,7 @@
 'use client';
 
 import { format } from 'date-fns';
-import { Sparkles, ChevronDown } from 'lucide-react';
+import { Sparkles } from 'lucide-react';
 import { formatCurrency } from '@/lib/utils/format';
 import {
   Select,
