@@ -48,7 +48,7 @@ function LoginForm() {
         const data = await res.json();
         setError(data.error?.message ?? 'Login failed');
       }
-    } catch (err) {
+    } catch {
       setError('An unexpected error occurred');
     } finally {
       setIsLoading(false);

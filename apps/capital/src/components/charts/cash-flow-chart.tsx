@@ -11,12 +11,11 @@ import {
   Tooltip,
   ResponsiveContainer,
   ReferenceLine,
-  Legend,
 } from 'recharts';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { formatCurrency, formatCompactNumber } from '@/lib/utils/format';
-import { calculateCashFlow, type CashFlowDataPoint } from '@/lib/utils/calculations';
+import { calculateCashFlow } from '@/lib/utils/calculations';
 import type { Transaction, Transfer } from '@/types';
 
 type Period = 'weekly' | 'monthly';

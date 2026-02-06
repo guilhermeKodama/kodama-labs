@@ -18,7 +18,6 @@ import { formatCurrency, formatCompactNumber } from '@/lib/utils/format';
 import {
   calculateBalanceOverTime,
   getDateRangeForTimeRange,
-  type BalanceDataPoint,
 } from '@/lib/utils/calculations';
 import type { Transaction, Transfer, EntityType } from '@/types';
 

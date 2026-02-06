@@ -5,7 +5,6 @@ import { useTranslations } from 'next-intl';
 import {
   PiggyBank,
   Plus,
-  TrendingUp,
   Building2,
   User,
 } from 'lucide-react';
@@ -93,13 +92,6 @@ export default function InvestmentsPage() {
       .sort((a, b) => b.value - a.value);
   }, [investmentTransactions, totals.total]);
 
-  // Get entity name
-  const getEntityName = (entityId: string, entityType: 'business' | 'personal') => {
-    if (entityType === 'personal') return t('nav.personal');
-    const business = businesses.find((b) => b.id === entityId);
-    return business?.name || t('investments.unknownEntity');
-  };
-
   const handleCreateTransaction = async (data: CreateTransactionFormData) => {
     await addTransaction(data);
     toast.success(t('transactions.toast.created'));
@@ -119,11 +111,6 @@ export default function InvestmentsPage() {
       setDeletingTransaction(undefined);
       toast.success(t('transactions.toast.deleted'));
     }
-  };
-
-  const openCreateDialog = (entityId: string, entityType: 'business' | 'personal') => {
-    setSelectedEntityId(entityId);
-    setIsDialogOpen(true);
   };
 
   const closeDialog = () => {

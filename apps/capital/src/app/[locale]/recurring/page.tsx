@@ -216,7 +216,7 @@ export default function RecurringPage() {
       } else {
         toast.error(t('recurring.toast.markPaidError'));
       }
-    } catch (error) {
+    } catch {
       toast.error(t('recurring.toast.markPaidError'));
     } finally {
       setMarkingPaidId(null);

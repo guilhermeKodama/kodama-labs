@@ -49,7 +49,7 @@ export default function TaxPage() {
   const t = useTranslations();
   const { transactions } = useTransactionStore();
   const { businesses } = useBusinessStore();
-  const { settings, personalAccount, taxSettings, setEntityTaxRate, updateTaxSettings } = useSettingsStore();
+  const { settings, personalAccount, taxSettings, setEntityTaxRate } = useSettingsStore();
 
   const currentYear = new Date().getFullYear();
   const [selectedYear, setSelectedYear] = useState(taxSettings.taxYear || currentYear);
@@ -195,7 +195,7 @@ export default function TaxPage() {
       </div>
 
       {/* Tabs */}
-      <Tabs value={selectedTab} onValueChange={(v) => setSelectedTab(v as any)}>
+      <Tabs value={selectedTab} onValueChange={(v) => setSelectedTab(v as 'summary' | 'settings')}>
         <TabsList className="mb-6 border-slate-800 bg-slate-900/50">
           <TabsTrigger
             value="summary"

@@ -20,7 +20,6 @@ import { CategoryDialog } from '@/components/dialogs';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Badge } from '@/components/ui/badge';
 import {
   Card,
   CardContent,
@@ -165,17 +164,6 @@ export default function SettingsPage() {
     income: categories.filter((c) => c.type === 'income'),
     expense: categories.filter((c) => c.type === 'expense'),
     investment: categories.filter((c) => c.type === 'investment'),
-  };
-
-  const getCategoryBadgeStyle = (type: TransactionType) => {
-    switch (type) {
-      case 'income':
-        return 'border-emerald-500/50 bg-emerald-500/10 text-emerald-400';
-      case 'expense':
-        return 'border-red-500/50 bg-red-500/10 text-red-400';
-      case 'investment':
-        return 'border-blue-500/50 bg-blue-500/10 text-blue-400';
-    }
   };
 
   return (

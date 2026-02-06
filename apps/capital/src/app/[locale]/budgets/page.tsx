@@ -4,7 +4,6 @@ import { useState, useMemo } from 'react';
 import { useTranslations } from 'next-intl';
 import {
   Target,
-  Plus,
   TrendingDown,
   AlertTriangle,
   CheckCircle2,
@@ -208,7 +207,7 @@ export default function BudgetsPage() {
       )}
 
       {/* Budget Tabs */}
-      <Tabs value={selectedView} onValueChange={(v) => setSelectedView(v as any)}>
+      <Tabs value={selectedView} onValueChange={(v) => setSelectedView(v as 'current' | 'all')}>
         <TabsList className="mb-6 border-slate-800 bg-slate-900/50">
           <TabsTrigger
             value="current"

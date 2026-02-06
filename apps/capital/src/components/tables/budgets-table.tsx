@@ -29,7 +29,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { cn } from '@/lib/utils';
 import { formatCurrency } from '@/lib/utils/format';
-import { getBudgetStatusColor, getBudgetStatusBgColor } from '@/lib/utils/budget';
+import { getBudgetStatusColor } from '@/lib/utils/budget';
 import type { BudgetProgress } from '@/types';
 import { useSettingsStore, useBusinessStore } from '@/lib/store';
 
@@ -53,7 +53,7 @@ export function BudgetsTable({
 }: BudgetsTableProps) {
   const t = useTranslations('budgets');
   const tCommon = useTranslations('common');
-  const { settings, personalAccount } = useSettingsStore();
+  const { settings } = useSettingsStore();
   const { businesses } = useBusinessStore();
 
   const getEntityName = (entityId: string, entityType: string) => {
@@ -100,7 +100,6 @@ export function BudgetsTable({
           {budgetProgress.map((progress) => {
             const { budget, spent, percentUsed, isOverBudget } = progress;
             const statusColor = getBudgetStatusColor(percentUsed);
-            const progressColor = getBudgetStatusBgColor(percentUsed);
 
             return (
               <TableRow
