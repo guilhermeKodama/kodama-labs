@@ -14,15 +14,13 @@ import { Email as GmailEmail } from 'src/gmail/interfaces/gmail.interface';
 
 @Injectable()
 export class NERService {
-  private readonly CREDIT_CARD_KEY_TERMS = [
-    'fatura'
-  ];
+  private readonly CREDIT_CARD_KEY_TERMS = ['fatura'];
   private readonly CREDIT_CARD_BLACK_LIST = [
     'renegociação',
     'negativado',
-    'transferência realizada',  // More specific - only block completed transfers
-    'pagamento concluído',      // Block payment confirmations
-    'pagamento realizado'       // Block payment confirmations
+    'transferência realizada', // More specific - only block completed transfers
+    'pagamento concluído', // Block payment confirmations
+    'pagamento realizado', // Block payment confirmations
   ];
   private readonly logger = new Logger(NERService.name);
 
@@ -36,9 +34,10 @@ export class NERService {
   }
 
   filterCreditCardEmails(emails: GmailEmail[]): GmailEmail[] {
-    
-    this.logger.debug(`Filtering ${emails.length} emails for credit card bills`);
-    
+    this.logger.debug(
+      `Filtering ${emails.length} emails for credit card bills`,
+    );
+
     const bankEmails = emails.filter((email) => {
       this.logger.debug(`Processing email: ${email.id}`, {
         snippet: email.snippet?.substring(0, 100),
@@ -58,36 +57,48 @@ export class NERService {
       );
 
       if (!hasValidTerms) {
-        this.logger.debug(`Email ${email.id} failed first check - no valid terms`);
+        this.logger.debug(
+          `Email ${email.id} failed first check - no valid terms`,
+        );
         return false;
       }
 
       // Second check: must have actual PDF content to process
       // This prevents processing notification emails that just mention "fatura" but have no bill
       const hasPdfContent = email.hasPDF && (email.pdfText || email.pdfBuffer);
-      
+
       if (!hasPdfContent) {
-        this.logger.debug(`Email ${email.id} failed second check - no PDF content`);
+        this.logger.debug(
+          `Email ${email.id} failed second check - no PDF content`,
+        );
         return false;
       }
 
-      this.logger.debug(`Email ${email.id} passed second check - has PDF content`);
+      this.logger.debug(
+        `Email ${email.id} passed second check - has PDF content`,
+      );
 
       // Third check: must be an actual credit card bill, not just a notification
       // Look for indicators that this is a real bill (amount, due date, etc.)
       const hasBillIndicators = this.hasBillIndicators(email);
-      
+
       if (!hasBillIndicators) {
-        this.logger.debug(`Email ${email.id} failed third check - no bill indicators`);
+        this.logger.debug(
+          `Email ${email.id} failed third check - no bill indicators`,
+        );
         return false;
       }
 
-      this.logger.debug(`Email ${email.id} passed all checks - accepting email`);
+      this.logger.debug(
+        `Email ${email.id} passed all checks - accepting email`,
+      );
       return true;
     });
-  
-    this.logger.debug(`Filtered ${emails.length} emails down to ${bankEmails.length} credit card emails with PDF content`);
-    
+
+    this.logger.debug(
+      `Filtered ${emails.length} emails down to ${bankEmails.length} credit card emails with PDF content`,
+    );
+
     return bankEmails;
   }
 
@@ -108,7 +119,7 @@ export class NERService {
     // Check if the PDF text contains bill indicators
     if (email.pdfText) {
       const pdfText = email.pdfText.toLowerCase();
-      
+
       // Look for common bill indicators
       const billIndicators = [
         'valor de',
@@ -119,58 +130,58 @@ export class NERService {
         'reais',
         'valor da fatura',
         'total da fatura',
-        'fatura',           // Nubank: "Esta é a sua fatura de"
-        'vencimento',       // Nubank: "Data de vencimento"
-        'valor'             // Nubank: "no valor de"
+        'fatura', // Nubank: "Esta é a sua fatura de"
+        'vencimento', // Nubank: "Data de vencimento"
+        'valor', // Nubank: "no valor de"
       ];
-      
-      const foundIndicators = billIndicators.filter(indicator => 
-        pdfText.includes(indicator)
+
+      const foundIndicators = billIndicators.filter((indicator) =>
+        pdfText.includes(indicator),
       );
-      
+
       this.logger.debug('PDF text bill indicators check', {
         foundIndicators,
         pdfTextSample: pdfText.substring(0, 200),
       });
-      
+
       if (foundIndicators.length > 0) {
         this.logger.debug('PDF text has bill indicators, accepting email');
         return true;
       }
     }
-    
+
     // Check if the email body contains bill indicators
     if (email.body) {
       const bodyText = email.body.toLowerCase();
-      
+
       const bodyBillIndicators = [
         'valor de',
         'total',
         'r$',
         'reais',
         'fatura de',
-        'vencimento'
+        'vencimento',
       ];
-      
-      const foundBodyIndicators = bodyBillIndicators.filter(indicator => 
-        bodyText.includes(indicator)
+
+      const foundBodyIndicators = bodyBillIndicators.filter((indicator) =>
+        bodyText.includes(indicator),
       );
-      
+
       this.logger.debug('Email body bill indicators check', {
         foundBodyIndicators,
         bodyTextSample: bodyText.substring(0, 200),
       });
-      
+
       if (foundBodyIndicators.length > 0) {
         this.logger.debug('Email body has bill indicators, accepting email');
         return true;
       }
     }
-    
+
     // Check if the email snippet contains bill indicators (fallback for password-protected PDFs)
     if (email.snippet) {
       const snippetText = email.snippet.toLowerCase();
-      
+
       const snippetBillIndicators = [
         'fatura',
         'valor',
@@ -179,24 +190,24 @@ export class NERService {
         'total',
         'vencimento',
         'cartão',
-        'crédito'
+        'crédito',
       ];
-      
-      const foundSnippetIndicators = snippetBillIndicators.filter(indicator => 
-        snippetText.includes(indicator)
+
+      const foundSnippetIndicators = snippetBillIndicators.filter((indicator) =>
+        snippetText.includes(indicator),
       );
-      
+
       this.logger.debug('Email snippet bill indicators check', {
         foundSnippetIndicators,
         snippetTextSample: snippetText.substring(0, 200),
       });
-      
+
       if (foundSnippetIndicators.length > 0) {
         this.logger.debug('Email snippet has bill indicators, accepting email');
         return true;
       }
     }
-    
+
     this.logger.debug('No bill indicators found, rejecting email');
     return false;
   }
@@ -210,7 +221,7 @@ export class NERService {
     } else if (sender?.toLowerCase().includes('xp')) {
       return this.xpNerService.extractAllMonetaryValues(text);
     }
-    
+
     // Generic fallback for unknown senders
     const priceRegex = /(?:R\$\s*)?(\d{1,3}(?:\.\d{3})*(?:,\d{2}))/g;
     const values: number[] = [];
@@ -239,7 +250,7 @@ export class NERService {
     } else if (sender?.toLowerCase().includes('xp')) {
       return this.xpNerService.extractMainBillTotal(text);
     }
-    
+
     // Generic fallback for unknown senders
     const values = this.extractValues(text, sender);
     return values.length > 0 ? values[0] : null;
@@ -254,17 +265,38 @@ export class NERService {
     } else if (sender?.toLowerCase().includes('xp')) {
       return this.xpNerService.extractDates(text);
     }
-    
+
     // Generic fallback for unknown senders
-    const dateRegex = /(\d{1,2})\s*(?:de\s+)?([a-z]+)\s*(\d{4})?|(\d{1,2})\/(\d{1,2})/gi;
+    const dateRegex =
+      /(\d{1,2})\s*(?:de\s+)?([a-z]+)\s*(\d{4})?|(\d{1,2})\/(\d{1,2})/gi;
     const dates: Date[] = [];
     const months = {
-      janeiro: 0, jan: 0, fevereiro: 1, fev: 1, março: 2, mar: 2,
-      abril: 3, abr: 3, maio: 4, mai: 4, junho: 5, jun: 5,
-      julho: 6, jul: 6, agosto: 7, ago: 7, setembro: 8, set: 8,
-      outubro: 9, out: 9, novembro: 10, nov: 10, dezembro: 11, dez: 11,
+      janeiro: 0,
+      jan: 0,
+      fevereiro: 1,
+      fev: 1,
+      março: 2,
+      mar: 2,
+      abril: 3,
+      abr: 3,
+      maio: 4,
+      mai: 4,
+      junho: 5,
+      jun: 5,
+      julho: 6,
+      jul: 6,
+      agosto: 7,
+      ago: 7,
+      setembro: 8,
+      set: 8,
+      outubro: 9,
+      out: 9,
+      novembro: 10,
+      nov: 10,
+      dezembro: 11,
+      dez: 11,
     };
-    
+
     const matches = [...text.matchAll(dateRegex)];
     const currentYear = new Date().getFullYear();
 

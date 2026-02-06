@@ -125,14 +125,16 @@ export class GmailService {
                   }
                 }
               }
-              
+
               if (payload.parts && payload.parts.length) {
                 for (const part of payload.parts) {
                   // Check both filename and MIME type for PDF detection
-                  const isPDFByFilename = part.filename && part.filename.toLowerCase().endsWith('.pdf');
+                  const isPDFByFilename =
+                    part.filename &&
+                    part.filename.toLowerCase().endsWith('.pdf');
                   const isPDFByMimeType = part.mimeType === 'application/pdf';
                   const isPDF = isPDFByFilename || isPDFByMimeType;
-                  
+
                   if (isPDF) {
                     // Fetch attachment
                     pdfBuffer = await this.getAttachmentContent(
@@ -144,17 +146,19 @@ export class GmailService {
                     // Validate that the buffer actually contains PDF content
                     if (pdfBuffer && pdfBuffer.length > 0) {
                       // Check if the buffer starts with PDF magic number (%PDF)
-                      const isActualPDF = pdfBuffer.length >= 4 && 
+                      const isActualPDF =
+                        pdfBuffer.length >= 4 &&
                         pdfBuffer[0] === 0x25 && // %
                         pdfBuffer[1] === 0x50 && // P
                         pdfBuffer[2] === 0x44 && // D
-                        pdfBuffer[3] === 0x46;   // F
-                      
-                      
+                        pdfBuffer[3] === 0x46; // F
+
                       if (isActualPDF) {
                         hasPDF = true;
-                        pdfText = await this.pdfService.extractTextFromPdf(pdfBuffer);
-                        
+                        pdfText = await this.pdfService.extractTextFromPdf(
+                          pdfBuffer,
+                        );
+
                         // Additional validation: ensure we got meaningful text, not HTML
                         if (pdfText && pdfText.includes('<!doctype html>')) {
                           pdfText = ''; // Reset since it's not valid PDF text

@@ -13,43 +13,51 @@ export class NubankNERService {
 
   extractSubItemsFromCreditCardPDFText(text: string): SubItem[] {
     const transactions: SubItem[] = [];
-    
+
     // More specific regex to match only actual transaction lines
     // Looking for patterns like:
     // "15 JUL\n•••• 3308Localiza MeooR$ 181,18"
     // "24 JUL\n•••• 3308sem PararR$ 329,58"
     // Updated regex to capture: date, description, and amount
-    const transactionPattern = /(\d{2}\s+[A-Z]{3})\s*(?:\n|[\s]+)(.*?)\s*R\$\s*([\d.,]+)/g;
-    
+    const transactionPattern =
+      /(\d{2}\s+[A-Z]{3})\s*(?:\n|[\s]+)(.*?)\s*R\$\s*([\d.,]+)/g;
+
     let match;
     let matchCount = 0;
 
     this.logger.debug('Starting sub-items extraction from PDF text', {
       textLength: text.length,
-      textSample: text.substring(0, 500)
+      textSample: text.substring(0, 500),
     });
 
     // First, let's identify the main bill total to filter out values that are too large
     const mainBillTotal = this.extractMainBillTotal(text);
-    const maxReasonableTransaction = mainBillTotal ? mainBillTotal * 0.95 : 10000; // Max 95% of bill total (was 80%)
+    const maxReasonableTransaction = mainBillTotal
+      ? mainBillTotal * 0.95
+      : 10000; // Max 95% of bill total (was 80%)
 
     this.logger.debug('Main bill total and max reasonable transaction', {
       mainBillTotal,
-      maxReasonableTransaction
+      maxReasonableTransaction,
     });
 
     // Let's also log all monetary values found to understand what's in the PDF
     const allValues = this.extractAllMonetaryValues(text);
     this.logger.debug('All monetary values found in PDF', {
       allValues,
-      count: allValues.length
+      count: allValues.length,
     });
 
     while ((match = transactionPattern.exec(text)) !== null) {
       matchCount++;
       const [fullMatch, date, description, value] = match;
 
-      this.logger.debug(`Match ${matchCount}:`, { fullMatch, date, description, value });
+      this.logger.debug(`Match ${matchCount}:`, {
+        fullMatch,
+        date,
+        description,
+        value,
+      });
 
       // Convert BRL value format to a format that parseFloat can understand
       const numericValue = parseFloat(
@@ -61,10 +69,13 @@ export class NubankNERService {
 
       // Skip if the value is too large to be a reasonable transaction
       if (numericValue > maxReasonableTransaction) {
-        this.logger.debug(`Skipping value ${numericValue} - too large for a transaction`, {
-          maxReasonableTransaction,
-          mainBillTotal
-        });
+        this.logger.debug(
+          `Skipping value ${numericValue} - too large for a transaction`,
+          {
+            maxReasonableTransaction,
+            mainBillTotal,
+          },
+        );
         continue;
       }
 
@@ -78,8 +89,8 @@ export class NubankNERService {
 
       // Clean up the description: remove card info (•••• 3308) and clean up whitespace
       let cleanDescription = description
-        .replace(/[•\s]+/, ' ')  // Replace multiple dots and spaces with single space
-        .replace(/\d{4}/, '')    // Remove 4-digit card number
+        .replace(/[•\s]+/, ' ') // Replace multiple dots and spaces with single space
+        .replace(/\d{4}/, '') // Remove 4-digit card number
         .trim();
 
       // If no description found or too short, use a default
@@ -91,7 +102,7 @@ export class NubankNERService {
         date: dateObject,
         description: cleanDescription,
         value: numericValue,
-        originalLine: fullMatch
+        originalLine: fullMatch,
       });
 
       if (!isNaN(numericValue) && numericValue > 0) {
@@ -105,36 +116,36 @@ export class NubankNERService {
 
     // If no transactions were found with the current pattern, let's try a different approach
     if (transactions.length === 0) {
-      
       // Look for lines that contain dates and amounts but might not follow the exact pattern
-      const alternativePattern = /(\d{2}\s+[A-Z]{3})\s+(.*?)\s+R\$\s*([\d.,]+)/g;
+      const alternativePattern =
+        /(\d{2}\s+[A-Z]{3})\s+(.*?)\s+R\$\s*([\d.,]+)/g;
       let altMatch;
       let altMatchCount = 0;
-      
+
       // Get current year for date parsing
       const currentYear = new Date().getFullYear();
-      
+
       while ((altMatch = alternativePattern.exec(text)) !== null) {
         altMatchCount++;
         const [fullAltMatch, altDate, altDescription, altValue] = altMatch;
-        
-        
+
         const altNumericValue = parseFloat(
-          altValue
-            .replace(/\./g, '')
-            .replace(',', '.')
-            .trim()
+          altValue.replace(/\./g, '').replace(',', '.').trim(),
         );
-        
-        if (!isNaN(altNumericValue) && altNumericValue > 0 && altNumericValue <= maxReasonableTransaction) {
+
+        if (
+          !isNaN(altNumericValue) &&
+          altNumericValue > 0 &&
+          altNumericValue <= maxReasonableTransaction
+        ) {
           const [altDay, altMonthStr] = altDate.trim().split(/\s+/);
           const altMonth = this.convertMonthStringToNumber(altMonthStr);
           const altDateObject = new Date(
             Date.UTC(currentYear, altMonth, parseInt(altDay, 10), 12, 0, 0),
           );
-          
+
           const cleanDescription = altDescription.trim();
-          
+
           transactions.push({
             description: cleanDescription || `Transaction ${altMatchCount}`,
             date: altDateObject,
@@ -146,10 +157,13 @@ export class NubankNERService {
 
     // If still no transactions found, this might be a summary bill without detailed transactions
     if (transactions.length === 0) {
-      this.logger.log('No individual transactions found in PDF - this appears to be a summary bill', {
-        mainBillTotal,
-        pdfTextLength: text.length
-      });
+      this.logger.log(
+        'No individual transactions found in PDF - this appears to be a summary bill',
+        {
+          mainBillTotal,
+          pdfTextLength: text.length,
+        },
+      );
     }
 
     return transactions;
@@ -162,7 +176,7 @@ export class NubankNERService {
   extractMainBillTotal(text: string): number | null {
     // First, extract all monetary values from the text
     const values = this.extractAllMonetaryValues(text);
-    
+
     if (values.length === 0) {
       return null;
     }
@@ -173,50 +187,58 @@ export class NubankNERService {
 
     // Look for the main bill total by checking the text for specific patterns
     let mainTotal = null;
-    
+
     // Pattern 1: "no valor de R$ X.XXX,XX" (main bill amount) - HIGHEST PRIORITY
     const valorPattern = /no valor de\s*r\$\s*([\d.,]+)/i;
     const valorMatch = text.match(valorPattern);
     if (valorMatch) {
-      const valorAmount = parseFloat(valorMatch[1].replace(/\./g, '').replace(',', '.'));
+      const valorAmount = parseFloat(
+        valorMatch[1].replace(/\./g, '').replace(',', '.'),
+      );
       if (!isNaN(valorAmount) && values.includes(valorAmount)) {
         mainTotal = valorAmount;
         return mainTotal; // Return immediately for highest priority pattern
       }
     }
-    
+
     // Pattern 2: "fatura no valor de R$ X.XXX,XX" (main bill amount)
     if (!mainTotal) {
       const faturaPattern = /fatura no valor de\s*r\$\s*([\d.,]+)/i;
       const faturaMatch = text.match(faturaPattern);
       if (faturaMatch) {
-        const faturaAmount = parseFloat(faturaMatch[1].replace(/\./g, '').replace(',', '.'));
+        const faturaAmount = parseFloat(
+          faturaMatch[1].replace(/\./g, '').replace(',', '.'),
+        );
         if (!isNaN(faturaAmount) && values.includes(faturaAmount)) {
           mainTotal = faturaAmount;
         }
       }
     }
-    
+
     // Pattern 3: "Total a pagar R$ X.XXX,XX" (main bill amount)
     if (!mainTotal) {
       const totalPattern = /total a pagar\s*r\$\s*([\d.,]+)/i;
       const totalMatch = text.match(totalPattern);
       if (totalMatch) {
-        const totalAmount = parseFloat(totalMatch[1].replace(/\./g, '').replace(',', '.'));
+        const totalAmount = parseFloat(
+          totalMatch[1].replace(/\./g, '').replace(',', '.'),
+        );
         if (!isNaN(totalAmount) && values.includes(totalAmount)) {
           mainTotal = totalAmount;
         }
       }
     }
-    
+
     if (mainTotal) {
       // Use the pattern-matched total
       return mainTotal;
     } else {
       // Fallback: Look for values that might be the main total
       // Credit card bills typically have totals in the range of 100-50,000
-      const likelyTotals = values.filter(value => value >= 100 && value <= 50000);
-      
+      const likelyTotals = values.filter(
+        (value) => value >= 100 && value <= 50000,
+      );
+
       if (likelyTotals.length > 0) {
         // If we have likely totals, use the largest one as it's usually the main bill
         const fallbackTotal = Math.max(...likelyTotals);
@@ -263,23 +285,36 @@ export class NubankNERService {
    */
   extractDates(text: string): Date[] {
     // First, look specifically for due dates with a more targeted regex
-    const dueDateRegex = /data de vencimento:\s*(\d{1,2})\s+([a-z]+)\s*(\d{4})?/gi;
+    const dueDateRegex =
+      /data de vencimento:\s*(\d{1,2})\s+([a-z]+)\s*(\d{4})?/gi;
     const dueDates: Date[] = [];
-    
+
     // Mapping of month names in Portuguese to their respective month numbers
     const months = {
-      janeiro: 0, jan: 0,
-      fevereiro: 1, fev: 1,
-      março: 2, mar: 2,
-      abril: 3, abr: 3,
-      maio: 4, mai: 4,
-      junho: 5, jun: 5,
-      julho: 6, jul: 6,
-      agosto: 7, ago: 7,
-      setembro: 8, set: 8,
-      outubro: 9, out: 9,
-      novembro: 10, nov: 10,
-      dezembro: 11, dez: 11,
+      janeiro: 0,
+      jan: 0,
+      fevereiro: 1,
+      fev: 1,
+      março: 2,
+      mar: 2,
+      abril: 3,
+      abr: 3,
+      maio: 4,
+      mai: 4,
+      junho: 5,
+      jun: 5,
+      julho: 6,
+      jul: 6,
+      agosto: 7,
+      ago: 7,
+      setembro: 8,
+      set: 8,
+      outubro: 9,
+      out: 9,
+      novembro: 10,
+      nov: 10,
+      dezembro: 11,
+      dez: 11,
     };
 
     // Current year as fallback if the year is not mentioned in the text
@@ -296,32 +331,35 @@ export class NubankNERService {
       if (!isNaN(day) && !isNaN(month) && month >= 0 && month <= 11) {
         const date = new Date(Date.UTC(year, month, day));
         dueDates.push(date);
-        this.logger.debug('Found due date using specific pattern', { 
-          date: date.toISOString(), 
+        this.logger.debug('Found due date using specific pattern', {
+          date: date.toISOString(),
           match: match[0],
-          day, month, year 
+          day,
+          month,
+          year,
         });
       }
     }
 
     // If we found due dates, return them immediately
     if (dueDates.length > 0) {
-      this.logger.debug('Due dates found, returning them', { 
-        dueDates: dueDates.map(d => d.toISOString())
+      this.logger.debug('Due dates found, returning them', {
+        dueDates: dueDates.map((d) => d.toISOString()),
       });
       return dueDates;
     }
 
     // Fallback: extract all other dates if no due dates found
     const dates: Date[] = [];
-    
+
     // Regular expression to match dates in various formats found in Nubank credit card PDFs
     // Format 1: "11 AGO 2025" (DD MMM YYYY)
     // Format 2: "15 JUL" (DD MMM)
     // Format 3: "DD/MM" (DD/MM)
     // Format 4: "DD de MMMM" (DD de Month)
-    const dateRegex = /(\d{1,2})\s*(?:de\s+)?([a-z]+)\s*(\d{4})?|(\d{1,2})\/(\d{1,2})/gi;
-    
+    const dateRegex =
+      /(\d{1,2})\s*(?:de\s+)?([a-z]+)\s*(\d{4})?|(\d{1,2})\/(\d{1,2})/gi;
+
     // Execute the regex on the text
     const matches = [...text.matchAll(dateRegex)];
 
@@ -363,14 +401,14 @@ export class NubankNERService {
     if (email.pdfText) {
       // Look for patterns that indicate the bill description
       const pdfText = email.pdfText;
-      
+
       // Pattern 1: Look for "FATURA" followed by date
       const faturaPattern = /FATURA\s+(\d{1,2}\s+[A-Z]{3}\s+\d{4})/i;
       const faturaMatch = pdfText.match(faturaPattern);
       if (faturaMatch) {
         return `Fatura Nubank ${faturaMatch[1]}`;
       }
-      
+
       // Pattern 2: Look for "Esta é a sua fatura de [month]"
       const mesPattern = /Esta é a sua fatura de\s+([a-z]+)/i;
       const mesMatch = pdfText.match(mesPattern);
@@ -380,7 +418,7 @@ export class NubankNERService {
         const year = date.getFullYear();
         return `Fatura Nubank ${month} ${year}`;
       }
-      
+
       // Pattern 3: Look for "FATURA [date] EMISSÃO"
       const emissaoPattern = /FATURA\s+(\d{1,2}\s+[A-Z]{3}\s+\d{4})/i;
       const emissaoMatch = pdfText.match(emissaoPattern);
@@ -388,7 +426,7 @@ export class NubankNERService {
         return `Fatura Nubank ${emissaoMatch[1]}`;
       }
     }
-    
+
     // Fallback to the original logic if no meaningful description found
     const date = new Date(email.internalDate);
     const billAt = `${date.getMonth() + 1}/${date

@@ -21,7 +21,7 @@ export class XPNERService {
   extractMainBillTotal(text: string): number | null {
     // First, extract all monetary values from the text
     const values = this.extractAllMonetaryValues(text);
-    
+
     if (values.length === 0) {
       return null;
     }
@@ -31,20 +31,23 @@ export class XPNERService {
     }
 
     // If we have multiple values, try to find the most likely total
-    this.logger.debug('Multiple monetary values found, attempting to identify the main total', {
-      allValues: values,
-      valuesCount: values.length,
-    });
+    this.logger.debug(
+      'Multiple monetary values found, attempting to identify the main total',
+      {
+        allValues: values,
+        valuesCount: values.length,
+      },
+    );
 
     // For XP, we'll use the largest value as the main total since XP PDFs typically
     // have the total at the bottom and it's usually the largest amount
     const mainTotal = Math.max(...values);
-    
+
     this.logger.debug('Selected largest value as main total for XP PDF', {
       selectedTotal: mainTotal,
       allValues: values,
     });
-    
+
     return mainTotal;
   }
 
@@ -83,7 +86,7 @@ export class XPNERService {
   extractDates(text: string): Date[] {
     // XP PDFs use DD/MM/YY format
     const dateRegex = /(\d{2})\/(\d{2})\/(\d{2})/g;
-    
+
     const dates: Date[] = [];
 
     // Execute the regex on the text
@@ -104,14 +107,14 @@ export class XPNERService {
     }
 
     if (dates.length === 0) {
-      this.logger.warn('No dates found in XP PDF text', { 
+      this.logger.warn('No dates found in XP PDF text', {
         text: text.substring(0, 200),
-        textLength: text.length 
+        textLength: text.length,
       });
     } else {
-      this.logger.debug('Extracted dates from XP PDF text', { 
-        dates: dates.map(d => d.toISOString()),
-        count: dates.length 
+      this.logger.debug('Extracted dates from XP PDF text', {
+        dates: dates.map((d) => d.toISOString()),
+        count: dates.length,
       });
     }
 
@@ -126,14 +129,14 @@ export class XPNERService {
     if (email.pdfText) {
       // Look for patterns that indicate the bill description
       const pdfText = email.pdfText;
-      
+
       // Pattern 1: Look for "FATURA" followed by date
       const faturaPattern = /FATURA\s+(\d{2}\/\d{2}\/\d{4})/i;
       const faturaMatch = pdfText.match(faturaPattern);
       if (faturaMatch) {
         return `Fatura XP ${faturaMatch[1]}`;
       }
-      
+
       // Pattern 2: Look for "Resumo de Fatura" or similar
       const resumoPattern = /Resumo de Fatura\s+(\d{2}\/\d{2}\/\d{4})/i;
       const resumoMatch = pdfText.match(resumoPattern);
@@ -141,7 +144,7 @@ export class XPNERService {
         return `Fatura XP ${resumoMatch[1]}`;
       }
     }
-    
+
     // Fallback to the original logic if no meaningful description found
     const date = new Date(email.internalDate);
     const billAt = `${date.getMonth() + 1}/${date
