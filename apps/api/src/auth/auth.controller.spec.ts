@@ -146,7 +146,6 @@ describe('AuthController', () => {
       pdfText: extractedPdfText, // Use the actual extracted PDF text
     });
 
-
     // Mock the createTransaction method that's actually called by saveTransactionsFromEmail
     // We'll capture the actual calls to see what data is being passed
     const createTransactionSpy = jest
@@ -156,12 +155,12 @@ describe('AuthController', () => {
         console.log('=== DEBUG: createTransaction called with ===');
         console.log('Transaction data:', JSON.stringify(data, null, 2));
         console.log('=== END DEBUG ===');
-        
-        return { 
-          id: `transaction-${Date.now()}`, 
+
+        return {
+          id: `transaction-${Date.now()}`,
           ...data,
           createdAt: new Date(),
-          updatedAt: new Date()
+          updatedAt: new Date(),
         } as any;
       });
 
@@ -179,7 +178,7 @@ describe('AuthController', () => {
       mockUser.refreshToken,
       gmailService.BANKS_DOMAINS,
     );
-    
+
     expect(usersService.upsertEmail).toHaveBeenCalledWith({
       where: { messageId: 'emailId' },
       create: {
@@ -197,7 +196,7 @@ describe('AuthController', () => {
     });
     // Test that the parent transaction was created with correct data
     expect(createTransactionSpy).toHaveBeenCalledTimes(1);
-    
+
     const parentTransactionCall = createTransactionSpy.mock.calls[0][0];
     expect(parentTransactionCall).toMatchObject({
       status: 'PENDING',
@@ -208,29 +207,31 @@ describe('AuthController', () => {
 
     // Validate the amount - should be extracted from the PDF (R$ 5.633,55)
     expect(parentTransactionCall.amount).toBe(5633.55);
-    
+
     // Validate the due date - should be extracted from the PDF (11 AGO 2025)
     const dueAtDate = new Date(parentTransactionCall.dueAt);
-    
+
     // Fix timezone issue: compare date components in UTC
     expect(dueAtDate.getFullYear()).toBe(2025);
     expect(dueAtDate.getMonth()).toBe(7); // August is month 7 (0-indexed)
-    
+
     // Handle timezone differences by checking if the date is within the expected range
     // The extracted date should be August 11, but due to timezone conversion it might be August 10
     // We'll check both possibilities to handle timezone differences
     const day = dueAtDate.getDate();
     const isExpectedDay = day === 11 || day === 10; // Allow for timezone differences
     expect(isExpectedDay).toBe(true);
-    
+
     // Log the actual day for debugging
-    console.log(`Due date day: ${day} (expected: 11, but allowing 10 for timezone differences)`);
+    console.log(
+      `Due date day: ${day} (expected: 11, but allowing 10 for timezone differences)`,
+    );
 
     // Validate the description - should be extracted from the PDF
     expect(parentTransactionCall.description).toBeTruthy();
     expect(typeof parentTransactionCall.description).toBe('string');
     expect(parentTransactionCall.description.length).toBeGreaterThan(0);
-    
+
     // Validate the specific description format for this Nubank PDF
     // The PDF contains "FATURA 11 AGO 2025EMISSÃO E ENVIO 02 AGO 2025"
     // So the description should be "Fatura Nubank 11 AGO 2025"
@@ -239,11 +240,11 @@ describe('AuthController', () => {
     // Test that sub-transactions were created if the PDF contains them
     if (createTransactionsSpy.mock.calls.length > 0) {
       const subTransactionsCall = createTransactionsSpy.mock.calls[0][0];
-      
+
       // Validate that sub-transactions have the correct structure
       expect(Array.isArray(subTransactionsCall)).toBe(true);
       expect(subTransactionsCall.length).toBeGreaterThan(0);
-      
+
       // Validate each sub-transaction
       subTransactionsCall.forEach((subTransaction, index) => {
         expect(subTransaction).toMatchObject({
@@ -252,73 +253,86 @@ describe('AuthController', () => {
           userId: mockUser.id,
           emailId: 1,
         });
-        
+
         // Validate that amount is a positive number
         expect(subTransaction.amount).toBeGreaterThan(0);
         expect(typeof subTransaction.amount).toBe('number');
-        
+
         // Validate that description exists
         expect(subTransaction.description).toBeTruthy();
         expect(typeof subTransaction.description).toBe('string');
-        
+
         // Validate that date is a valid date
         expect(subTransaction.createdAt).toBeInstanceOf(Date);
-        
+
         console.log(`Sub-transaction ${index + 1}:`, {
           description: subTransaction.description,
           amount: subTransaction.amount,
           date: subTransaction.createdAt,
         });
       });
-      
+
       // Validate that the sum of sub-transactions matches the parent total
-      const subTransactionsTotal = subTransactionsCall.reduce((sum, sub) => sum + sub.amount, 0);
+      const subTransactionsTotal = subTransactionsCall.reduce(
+        (sum, sub) => sum + sub.amount,
+        0,
+      );
       expect(subTransactionsTotal).toBeCloseTo(parentTransactionCall.amount, 2);
     }
-    
+
     // 1. Validate the main bill total is exactly what we expect from the PDF
     expect(parentTransactionCall.amount).toBe(5633.55);
-    
+
     // 2. Validate the due date is correctly extracted (allowing for timezone differences)
     expect(isExpectedDay).toBe(true);
-    
+
     // 3. Validate the description format matches the PDF content
     expect(parentTransactionCall.description).toBe('Fatura Nubank 11 AGO 2025');
-    
+
     // 4. Validate that if sub-transactions exist, they have reasonable values
     if (createTransactionsSpy.mock.calls.length > 0) {
       const subTransactionsCall = createTransactionsSpy.mock.calls[0][0];
-      const subTransactionsTotal = subTransactionsCall.reduce((sum, sub) => sum + sub.amount, 0);
-      
+      const subTransactionsTotal = subTransactionsCall.reduce(
+        (sum, sub) => sum + sub.amount,
+        0,
+      );
+
       // Each sub-transaction should be a reasonable amount (not the main bill total)
       subTransactionsCall.forEach((subTransaction, index) => {
-        expect(subTransaction.amount).toBeLessThan(parentTransactionCall.amount);
+        expect(subTransaction.amount).toBeLessThan(
+          parentTransactionCall.amount,
+        );
         expect(subTransaction.amount).toBeGreaterThan(0);
       });
-      
+
       // The sub-transactions total should be close to the parent total
       expect(subTransactionsTotal).toBeCloseTo(parentTransactionCall.amount, 2);
     }
-    
-    
+
     // Test that the NER service can extract the main bill total from the PDF text
-    const extractedTotal = nerService.extractMainBillTotal(extractedPdfText, BankDomains.NUBANK);
+    const extractedTotal = nerService.extractMainBillTotal(
+      extractedPdfText,
+      BankDomains.NUBANK,
+    );
     expect(extractedTotal).toBe(5633.55);
-    
+
     // Test that the NER service can extract the due date from the PDF text
-    const extractedDates = nerService.extractDates(extractedPdfText, BankDomains.NUBANK);
+    const extractedDates = nerService.extractDates(
+      extractedPdfText,
+      BankDomains.NUBANK,
+    );
     expect(extractedDates.length).toBeGreaterThan(0);
-    
+
     // The first date should be the due date (11 AGO 2025)
     const firstExtractedDate = extractedDates[0];
     const extractedDay = firstExtractedDate.getDate();
     const extractedMonth = firstExtractedDate.getMonth();
     const extractedYear = firstExtractedDate.getFullYear();
-    
+
     expect(extractedYear).toBe(2025);
     expect(extractedMonth).toBe(7); // August
     expect(extractedDay === 11 || extractedDay === 10).toBe(true); // Allow timezone differences
-    
+
     // Test that the NER service can extract the description from the PDF text
     const mockEmailForDescription = {
       id: 1,
@@ -328,13 +342,17 @@ describe('AuthController', () => {
       body: mockEmails[0].body,
       pdfText: extractedPdfText,
     } as any;
-    
-    const extractedDescription = nerService.getDescriptionFromCreditCardBill(mockEmailForDescription);
+
+    const extractedDescription = nerService.getDescriptionFromCreditCardBill(
+      mockEmailForDescription,
+    );
     expect(extractedDescription).toBe('Fatura Nubank 11 AGO 2025');
-    
+
     // Test that the NER service can extract sub-items (if any)
-    const extractedSubItems = nerService.extractSubItems(mockEmailForDescription);
-    
+    const extractedSubItems = nerService.extractSubItems(
+      mockEmailForDescription,
+    );
+
     // If sub-items are found, validate their structure
     if (extractedSubItems.length > 0) {
       extractedSubItems.forEach((subItem, index) => {
@@ -343,31 +361,34 @@ describe('AuthController', () => {
         expect(subItem.description).toBeTruthy();
         expect(subItem.date).toBeInstanceOf(Date);
       });
-      
+
       // Validate that sub-items total is reasonable
-      const subItemsTotal = extractedSubItems.reduce((sum, item) => sum + item.value, 0);
-      
+      const subItemsTotal = extractedSubItems.reduce(
+        (sum, item) => sum + item.value,
+        0,
+      );
+
       // Log the extracted sub-items for debugging
       console.log('=== EXTRACTED SUB-ITEMS ===');
       extractedSubItems.forEach((item, index) => {
         console.log(`Sub-item ${index + 1}:`, {
           description: item.description,
           value: item.value,
-          date: item.date.toISOString()
+          date: item.date.toISOString(),
         });
       });
       console.log('Sub-items total:', subItemsTotal);
       console.log('Main bill total:', extractedTotal);
       console.log('=== END SUB-ITEMS ===');
-      
+
       // Validate that we have reasonable sub-items (not just the main total)
       expect(extractedSubItems.length).toBeGreaterThan(1); // Should have multiple transactions
-      
+
       // Each sub-item should be significantly smaller than the main total
       extractedSubItems.forEach((item, index) => {
         expect(item.value).toBeLessThan(extractedTotal * 0.95); // No single transaction > 95% of total (was 50%)
       });
-      
+
       // The sub-items total should be close to the main total (allowing for rounding)
       expect(subItemsTotal).toBeCloseTo(extractedTotal, 0); // Within R$ 1
     } else {
@@ -376,7 +397,7 @@ describe('AuthController', () => {
       console.log('PDF text sample:', extractedPdfText.substring(0, 500));
       console.log('=== END NO SUB-ITEMS ===');
     }
-    
+
     // Direct test of Nubank NER service sub-items extraction
     console.log('=== TESTING DIRECT NUBANK NER EXTRACTION ===');
     const nubankSubItems = nerService.extractSubItems(mockEmailForDescription);
@@ -386,14 +407,14 @@ describe('AuthController', () => {
         console.log(`Nubank sub-item ${index + 1}:`, {
           description: item.description,
           value: item.value,
-          date: item.date.toISOString()
+          date: item.date.toISOString(),
         });
       });
     } else {
       console.log('No sub-items extracted by Nubank NER service');
     }
     console.log('=== END DIRECT NUBANK NER TEST ===');
-    
+
     console.log('=== NER SERVICE EXTRACTION VALIDATION COMPLETE ===');
   });
   it('should process xp email and save transaction correctly', async () => {
@@ -448,16 +469,20 @@ describe('AuthController', () => {
     });
 
     // Mock the individual methods that get called inside saveTransactionsFromEmail
-    jest.spyOn(transactionsService, 'extractTotalFromEmail').mockReturnValue(20149.34);
-    jest.spyOn(transactionsService, 'extractDueAtFromEmail').mockReturnValue(
-      new Date(1726790400000 + 5 * 24 * 60 * 60 * 1000)
-    );
+    jest
+      .spyOn(transactionsService, 'extractTotalFromEmail')
+      .mockReturnValue(20149.34);
+    jest
+      .spyOn(transactionsService, 'extractDueAtFromEmail')
+      .mockReturnValue(new Date(1726790400000 + 5 * 24 * 60 * 60 * 1000));
 
     // Don't mock the NER service - let it use the real XP PDF extraction logic
     // This ensures we test that the actual extraction works correctly
 
     // Mock createTransactions method
-    jest.spyOn(transactionsService, 'createTransactions').mockResolvedValue({ count: 118 } as any);
+    jest
+      .spyOn(transactionsService, 'createTransactions')
+      .mockResolvedValue({ count: 118 } as any);
 
     // Override the Prisma mock for this test to return XP-specific amount
     jest.spyOn(prismaService.transaction, 'create').mockResolvedValue({
@@ -501,10 +526,10 @@ describe('AuthController', () => {
 
     // Verify that the individual methods were called correctly
     expect(transactionsService.extractTotalFromEmail).toHaveBeenCalledWith(
-      expect.objectContaining({ id: 1 })
+      expect.objectContaining({ id: 1 }),
     );
     expect(transactionsService.extractDueAtFromEmail).toHaveBeenCalledWith(
-      expect.objectContaining({ id: 1 })
+      expect.objectContaining({ id: 1 }),
     );
     expect(transactionsService.createTransactions).toHaveBeenCalledWith(
       expect.arrayContaining([
@@ -516,7 +541,7 @@ describe('AuthController', () => {
           description: 'RESERVA STONE - Parcela 9/10',
           amount: 319.2,
         }),
-      ])
+      ]),
     );
   });
 
@@ -575,20 +600,19 @@ describe('AuthController', () => {
     (gmailService.getEmails as jest.Mock).mockResolvedValue(mockEmails);
 
     // Mock UsersService.upsertEmail - only Email 2 should pass the filter
-    (usersService.upsertEmail as jest.Mock)
-      .mockResolvedValueOnce({
-        id: 2,
-        sender: 'todomundo@nubank.com.br',
-        internalDate: new Date(1627849200000),
-        snippet: mockEmails[1].snippet,
-        body: mockEmails[1].body,
-        pdfText: mockEmails[1].pdfText,
-      });
+    (usersService.upsertEmail as jest.Mock).mockResolvedValueOnce({
+      id: 2,
+      sender: 'todomundo@nubank.com.br',
+      internalDate: new Date(1627849200000),
+      snippet: mockEmails[1].snippet,
+      body: mockEmails[1].body,
+      pdfText: mockEmails[1].pdfText,
+    });
 
     // Mock TransactionsService methods - only Email 2 will be processed
     jest
       .spyOn(transactionsService, 'extractTotalFromEmail')
-      .mockReturnValueOnce(null);  // Email 2: no monetary value
+      .mockReturnValueOnce(null); // Email 2: no monetary value
 
     jest
       .spyOn(transactionsService, 'extractDueAtFromEmail')
@@ -610,13 +634,12 @@ describe('AuthController', () => {
       mockUser.refreshToken,
       gmailService.BANKS_DOMAINS,
     );
-    
+
     // Only Email 2 should pass the NERService filter (contains 'fatura' but no blacklisted terms)
     // Email 1: contains 'renegociação' (blacklisted)
     // Email 3: contains 'negativado' (blacklisted)
-    expect(usersService.upsertEmail).toHaveBeenCalledTimes(1)
-    ;
-    
+    expect(usersService.upsertEmail).toHaveBeenCalledTimes(1);
+
     // Verify Email 2 was processed correctly
     expect(usersService.upsertEmail).toHaveBeenCalledWith({
       where: { messageId: 'emailId2' },
@@ -635,7 +658,9 @@ describe('AuthController', () => {
     });
 
     // Email 2 has no monetary value, so saveTransactionsFromEmail should not be called
-    expect(transactionsService.saveTransactionsFromEmail).toHaveBeenCalledTimes(0);
+    expect(transactionsService.saveTransactionsFromEmail).toHaveBeenCalledTimes(
+      0,
+    );
     expect(transactionsService.createTransaction).toHaveBeenCalledTimes(0);
   });
 });

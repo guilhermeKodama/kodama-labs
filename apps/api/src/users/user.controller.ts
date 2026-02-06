@@ -172,16 +172,21 @@ export class UserController {
       throw new UnauthorizedException('User not found');
     }
 
-    this.logger.log(`Importing ${importCsvDto.transactions.length} transactions from CSV for user ${userId}`);
+    this.logger.log(
+      `Importing ${importCsvDto.transactions.length} transactions from CSV for user ${userId}`,
+    );
 
     try {
-      const createdTransactions = await this.transactionsService.createTransactionsFromCsv({
-        transactions: importCsvDto.transactions,
-        userId,
-        defaultStatus: importCsvDto.defaultStatus,
-      });
+      const createdTransactions =
+        await this.transactionsService.createTransactionsFromCsv({
+          transactions: importCsvDto.transactions,
+          userId,
+          defaultStatus: importCsvDto.defaultStatus,
+        });
 
-      this.logger.log(`Successfully imported ${createdTransactions.length} transactions from CSV`);
+      this.logger.log(
+        `Successfully imported ${createdTransactions.length} transactions from CSV`,
+      );
 
       return {
         success: true,
@@ -451,11 +456,14 @@ export class UserController {
         dueAt,
       );
     } else {
-      this.logger.log('Skipping email processing - no valid total amount found', {
-        emailId: emailRecord.id,
-        sender: emailRecord.sender,
-        subject: emailRecord.snippet?.substring(0, 100),
-      });
+      this.logger.log(
+        'Skipping email processing - no valid total amount found',
+        {
+          emailId: emailRecord.id,
+          sender: emailRecord.sender,
+          subject: emailRecord.snippet?.substring(0, 100),
+        },
+      );
     }
 
     this.storageService

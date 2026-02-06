@@ -15,10 +15,7 @@ import { ExpenseCategory } from '../types/transaction.enum';
 @Injectable()
 export class TransactionsService {
   private readonly logger = new Logger(TransactionsService.name);
-  constructor(
-    private prisma: PrismaService, 
-    private nerService: NERService
-  ) {}
+  constructor(private prisma: PrismaService, private nerService: NERService) {}
 
   /**
    * Database
@@ -85,11 +82,13 @@ export class TransactionsService {
   }): Promise<Transaction[]> {
     const { transactions, userId, defaultStatus } = params;
 
-    this.logger.log(`Creating ${transactions.length} transactions from CSV for user ${userId}`);
+    this.logger.log(
+      `Creating ${transactions.length} transactions from CSV for user ${userId}`,
+    );
 
     // Create transactions one by one to get the full objects back
     const createdTransactions: Transaction[] = [];
-    
+
     for (const tx of transactions) {
       const transaction = await this.prisma.transaction.create({
         data: {
@@ -108,8 +107,10 @@ export class TransactionsService {
       createdTransactions.push(transaction);
     }
 
-    this.logger.log(`Successfully created ${createdTransactions.length} transactions from CSV`);
-    
+    this.logger.log(
+      `Successfully created ${createdTransactions.length} transactions from CSV`,
+    );
+
     return createdTransactions;
   }
 
@@ -205,7 +206,10 @@ export class TransactionsService {
     const truncatedParentTotal = Math.floor(parentTotal);
 
     // If we have sub-items, validate the totals match
-    if (subItems.length > 0 && truncatedSubItemsTotal !== truncatedParentTotal) {
+    if (
+      subItems.length > 0 &&
+      truncatedSubItemsTotal !== truncatedParentTotal
+    ) {
       this.logger.error('Subitems total are diff from parent transaction', {
         subItemsTotal,
         parentTotal,
@@ -229,8 +233,10 @@ export class TransactionsService {
     } else {
       // Only create sub-items if we have them and they don't already exist
       if (subItemsRecord.length === 0 && subItems.length > 0) {
-        this.logger.debug(`Creating ${subItems.length} sub-items for transaction ${parentTransaction.id}`);
-        
+        this.logger.debug(
+          `Creating ${subItems.length} sub-items for transaction ${parentTransaction.id}`,
+        );
+
         const transactionsInput = subItems.map((subItem) => ({
           parentId: parentTransaction.id,
           status: TransactionStatus.PENDING,
@@ -245,11 +251,14 @@ export class TransactionsService {
 
         await this.createTransactions(transactionsInput);
       } else if (subItems.length === 0) {
-        this.logger.log('No sub-items extracted from PDF - transaction will be processed without detailed breakdown', {
-          emailId: email.id,
-          pdfTextLength: email.pdfText?.length || 0,
-          sender: email.sender,
-        });
+        this.logger.log(
+          'No sub-items extracted from PDF - transaction will be processed without detailed breakdown',
+          {
+            emailId: email.id,
+            pdfTextLength: email.pdfText?.length || 0,
+            sender: email.sender,
+          },
+        );
       }
 
       // Update the parent transaction with latest data
@@ -267,9 +276,9 @@ export class TransactionsService {
     // Use the NER service wrapper which delegates to the appropriate specialized service
     const total = this.nerService.extractMainBillTotal(
       `${email.snippet}  ${email.body} ${email.pdfText}`,
-      email.sender
+      email.sender,
     );
-    
+
     // Validate that we have a valid numeric amount
     if (total === undefined || total === null || isNaN(total) || total <= 0) {
       this.logger.warn('Could not extract valid amount from email', {
@@ -282,7 +291,7 @@ export class TransactionsService {
       });
       return null;
     }
-    
+
     return total;
   }
 

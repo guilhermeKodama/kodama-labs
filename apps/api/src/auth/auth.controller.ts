@@ -71,10 +71,10 @@ export class AuthController {
 
       const total = this.transactionsService.extractTotalFromEmail(emailRecord);
 
-      this.logger.debug({ 
-        email: emailRecord.sender, 
+      this.logger.debug({
+        email: emailRecord.sender,
         total,
-        emailSubject: emailRecord.snippet?.substring(0, 100)
+        emailSubject: emailRecord.snippet?.substring(0, 100),
       });
 
       /**
@@ -94,11 +94,14 @@ export class AuthController {
           dueAt,
         );
       } else {
-        this.logger.log('Skipping email processing - no valid total amount found', {
-          emailId: emailRecord.id,
-          sender: emailRecord.sender,
-          subject: emailRecord.snippet?.substring(0, 100),
-        });
+        this.logger.log(
+          'Skipping email processing - no valid total amount found',
+          {
+            emailId: emailRecord.id,
+            sender: emailRecord.sender,
+            subject: emailRecord.snippet?.substring(0, 100),
+          },
+        );
       }
     }
 
