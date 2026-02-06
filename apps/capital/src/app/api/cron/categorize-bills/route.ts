@@ -21,8 +21,11 @@ export async function GET(request: NextRequest) {
 
   try {
     // Find ONE bill with pending categorization (process one at a time to stay within limits)
+    // Find bills that need categorization: "pending" or stuck in "processing" (from a previous timeout)
     const pendingBill = await prisma.creditCardBill.findFirst({
-      where: { categorizationStatus: "pending" },
+      where: {
+        categorizationStatus: { in: ["pending", "processing"] },
+      },
       include: {
         creditCard: {
           select: {
