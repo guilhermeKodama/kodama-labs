@@ -1,5 +1,4 @@
 import type { DbClient } from "@capital/server/lib/prisma";
-import { categorizeBillTransactions } from "@capital/server/lib/claude";
 import { insertBill } from "../data/commands/insert-bill";
 import { insertBillTransactions } from "../data/commands/insert-bill-transactions";
 
@@ -19,7 +18,6 @@ interface ProcessBillCsvInput {
   csvContent: string;
   csvFileName: string;
   transactionId?: string; // Link to existing expense transaction
-  categories: string[];   // Available categories for AI categorization
 }
 
 /**
@@ -227,7 +225,8 @@ function parseInstallmentInfo(description: string): {
 }
 
 /**
- * Parse date string from various formats
+ * Parse date string from various formats.
+ * Uses noon UTC to prevent timezone shifts (e.g. midnight UTC = previous day in UTC-3).
  */
 function parseDate(dateStr: string): Date {
   const cleaned = dateStr.trim().replace(/"/g, "");
@@ -235,24 +234,30 @@ function parseDate(dateStr: string): Date {
   // Try YYYY-MM-DD (ISO format) — most common in Nubank CSVs
   const isoMatch = cleaned.match(/^(\d{4})-(\d{2})-(\d{2})$/);
   if (isoMatch) {
-    return new Date(
+    return new Date(Date.UTC(
       parseInt(isoMatch[1]),
       parseInt(isoMatch[2]) - 1,
-      parseInt(isoMatch[3])
-    );
+      parseInt(isoMatch[3]),
+      12, 0, 0 // Noon UTC — safe from any timezone shift
+    ));
   }
 
   // Try DD/MM/YYYY (Brazilian format)
   const brMatch = cleaned.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
   if (brMatch) {
-    return new Date(
+    return new Date(Date.UTC(
       parseInt(brMatch[3]),
       parseInt(brMatch[2]) - 1,
-      parseInt(brMatch[1])
-    );
+      parseInt(brMatch[1]),
+      12, 0, 0
+    ));
   }
 
-  // Fallback to Date constructor
+  // Fallback: append noon time if it looks like a date-only string
+  if (/^\d{4}-\d{2}-\d{2}$/.test(cleaned)) {
+    return new Date(cleaned + "T12:00:00Z");
+  }
+
   const date = new Date(cleaned);
   if (isNaN(date.getTime())) {
     throw new Error(`Invalid date format: ${dateStr}`);
@@ -261,7 +266,8 @@ function parseDate(dateStr: string): Date {
 }
 
 /**
- * Process a CSV credit card bill: parse, categorize with AI, and save to DB.
+ * Process a CSV credit card bill: parse CSV, save bill + transactions, create installments.
+ * AI categorization is handled asynchronously via cron job.
  */
 export async function processBillCsv(
   userId: string,
@@ -276,30 +282,10 @@ export async function processBillCsv(
   }
 
   // 2. Separate charges from payments
-  //    - Charges/refunds: everything except "Pagamento recebido"
-  //    - Bill total = sum of charges (with signs, so refunds reduce the total)
   const chargeTransactions = parsedTransactions.filter((t) => !t.isPayment);
   const totalAmount = chargeTransactions.reduce((sum, t) => sum + t.amount, 0);
 
-  // 3. Auto-categorize only charge transactions (not payments)
-  const categorizationInput = chargeTransactions.map((t, i) => ({
-    index: i,
-    description: t.description,
-    amount: t.amount,
-  }));
-
-  const categorizations = await categorizeBillTransactions(
-    categorizationInput,
-    input.categories
-  );
-
-  // 4. Create a map of index -> category
-  const categoryMap = new Map<number, string>();
-  for (const c of categorizations) {
-    categoryMap.set(c.index, c.category);
-  }
-
-  // 5. Create bill record
+  // 3. Create bill record (categorizationStatus defaults to "pending")
   const bill = await insertBill(
     userId,
     {
@@ -307,28 +293,27 @@ export async function processBillCsv(
       transactionId: input.transactionId,
       closingDate: input.closingDate,
       dueDate: input.dueDate,
-      totalAmount: Math.round(totalAmount * 100) / 100, // Round to 2 decimals
+      totalAmount: Math.round(totalAmount * 100) / 100,
       csvFileName: input.csvFileName,
     },
     db
   );
 
-  // 6. Create bill transactions (only charges, not payments)
-  const billTransactionData = chargeTransactions.map((t, i) => ({
+  // 4. Create bill transactions with "Uncategorized" — AI will categorize async
+  const billTransactionData = chargeTransactions.map((t) => ({
     billId: bill.id,
-    category: categoryMap.get(i) || "Other",
+    category: "Uncategorized",
     transactionDate: parseDate(t.date),
     description: t.description,
     amount: t.amount,
     installmentNumber: t.installmentNumber,
     totalInstallments: t.totalInstallments,
-    isAutoCategorized: true,
+    isAutoCategorized: false,
   }));
 
   await insertBillTransactions(billTransactionData, db);
 
-  // 7. Auto-create installment records for transactions with installment info
-  //    First, fetch the created bill transactions to get their IDs
+  // 5. Auto-create installment records for transactions with installment info
   const createdBillTransactions = await db.billTransaction.findMany({
     where: { billId: bill.id },
     select: {
@@ -363,21 +348,15 @@ export async function processBillCsv(
   if (installmentRecords.length > 0) {
     await db.installment.createMany({
       data: installmentRecords,
-      skipDuplicates: true, // Avoid errors if re-uploading
+      skipDuplicates: true,
     });
   }
 
-  // 8. Return the created bill with transactions
+  // 6. Return immediately — categorization will happen via cron
   return {
     bill,
     totalAmount: Math.round(totalAmount * 100) / 100,
     transactionCount: chargeTransactions.length,
     installmentCount: installmentRecords.length,
-    categorizations: categorizations.map((c) => ({
-      index: c.index,
-      description: chargeTransactions[c.index].description,
-      amount: chargeTransactions[c.index].amount,
-      category: c.category,
-    })),
   };
 }

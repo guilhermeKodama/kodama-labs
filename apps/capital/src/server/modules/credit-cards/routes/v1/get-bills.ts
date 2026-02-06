@@ -16,6 +16,7 @@ const BillSchema = z.object({
   dueDate: z.string(),
   totalAmount: z.number(),
   status: z.enum(["pending", "paid", "overdue"]),
+  categorizationStatus: z.string(),
   csvFileName: z.string().nullable(),
   creditCard: z.object({
     id: z.string(),
@@ -70,6 +71,7 @@ export const handler: AppRouteHandler<typeof route> = async (c) => {
         dueDate: bill.dueDate.toISOString(),
         totalAmount: bill.totalAmount,
         status: bill.status,
+        categorizationStatus: bill.categorizationStatus,
         csvFileName: bill.csvFileName,
         creditCard: {
           id: bill.creditCard.id,

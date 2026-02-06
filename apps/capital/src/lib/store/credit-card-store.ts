@@ -8,6 +8,7 @@ import type {
   Installment,
   BillUploadResult,
   BillStatus,
+  CategorizationStatus,
 } from '@/types';
 import { client } from '@/lib/api-client';
 
@@ -256,6 +257,7 @@ export const useCreditCardStore = create<CreditCardStore>()((set, get) => ({
           dueDate: new Date(bill.dueDate),
           totalAmount: bill.totalAmount,
           status: bill.status as BillStatus,
+          categorizationStatus: (bill as any).categorizationStatus ?? 'completed',
           csvFileName: bill.csvFileName ?? undefined,
           creditCard: bill.creditCard
             ? {
@@ -294,6 +296,7 @@ export const useCreditCardStore = create<CreditCardStore>()((set, get) => ({
 
       // Refresh bills after upload
       await get().fetchBills();
+      await get().fetchInstallments();
 
       set({ isLoading: false });
 
@@ -305,10 +308,10 @@ export const useCreditCardStore = create<CreditCardStore>()((set, get) => ({
           dueDate: new Date(result.bill.dueDate),
           totalAmount: result.bill.totalAmount,
           status: result.bill.status as BillStatus,
+          categorizationStatus: (result.bill as any).categorizationStatus ?? 'pending' as CategorizationStatus,
         },
         totalAmount: result.totalAmount,
         transactionCount: result.transactionCount,
-        categorizations: result.categorizations,
       };
     } catch (error) {
       set({

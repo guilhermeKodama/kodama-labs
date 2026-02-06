@@ -401,16 +401,17 @@ model CreditCard {
 // ============================================
 
 model CreditCardBill {
-  id              String     @id @default(uuid())
-  creditCardId    String
-  transactionId   String?    // Links to an expense Transaction (optional)
-  closingDate     DateTime
-  dueDate         DateTime
-  totalAmount     Float
-  status          BillStatus @default(pending)
-  csvFileName     String?
-  createdAt       DateTime   @default(now())
-  updatedAt       DateTime   @updatedAt
+  id                   String     @id @default(uuid())
+  creditCardId         String
+  transactionId        String?    // Links to an expense Transaction (optional)
+  closingDate          DateTime
+  dueDate              DateTime
+  totalAmount          Float
+  status               BillStatus @default(pending)
+  categorizationStatus String     @default("pending") // pending, processing, completed, failed
+  csvFileName          String?
+  createdAt            DateTime   @default(now())
+  updatedAt            DateTime   @updatedAt
 
   // Relations
   creditCard       CreditCard       @relation(fields: [creditCardId], references: [id], onDelete: Cascade)
@@ -421,6 +422,7 @@ model CreditCardBill {
   @@index([transactionId])
   @@index([status])
   @@index([dueDate])
+  @@index([categorizationStatus])
   @@map("credit_card_bills")
 }
 
