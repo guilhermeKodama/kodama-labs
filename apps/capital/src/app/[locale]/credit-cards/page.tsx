@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo, useEffect, useCallback } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useTranslations } from 'next-intl';
 import {
   CreditCard as CreditCardIcon,
@@ -42,7 +42,7 @@ import {
 } from '@/lib/store';
 import { formatCurrency } from '@/lib/utils/format';
 import { toast } from 'sonner';
-import type { CreditCard, CreditCardBill, BillTransaction, Installment } from '@/types';
+import type { CreditCard, CreditCardBill, Installment } from '@/types';
 
 export default function CreditCardsPage() {
   const t = useTranslations();
@@ -65,7 +65,7 @@ export default function CreditCardsPage() {
   } = useCreditCardStore();
   const { transactions } = useTransactionStore();
   const { businesses } = useBusinessStore();
-  const { settings, personalAccount, categories } = useSettingsStore();
+  const { settings, categories } = useSettingsStore();
 
   const [isCardDialogOpen, setIsCardDialogOpen] = useState(false);
   const [isUploadDialogOpen, setIsUploadDialogOpen] = useState(false);

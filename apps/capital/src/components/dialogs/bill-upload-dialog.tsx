@@ -101,8 +101,6 @@ export function BillUploadDialog({
     }
   };
 
-  const selectedCard = creditCards.find((c) => c.id === creditCardId);
-
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="border-slate-800 bg-slate-900 sm:max-w-[550px]">

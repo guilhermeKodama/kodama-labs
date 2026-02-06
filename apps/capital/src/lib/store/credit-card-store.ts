@@ -257,7 +257,7 @@ export const useCreditCardStore = create<CreditCardStore>()((set, get) => ({
           dueDate: new Date(bill.dueDate),
           totalAmount: bill.totalAmount,
           status: bill.status as BillStatus,
-          categorizationStatus: (bill as any).categorizationStatus ?? 'completed',
+          categorizationStatus: (bill.categorizationStatus as CategorizationStatus) ?? 'completed',
           csvFileName: bill.csvFileName ?? undefined,
           creditCard: bill.creditCard
             ? {
@@ -308,7 +308,7 @@ export const useCreditCardStore = create<CreditCardStore>()((set, get) => ({
           dueDate: new Date(result.bill.dueDate),
           totalAmount: result.bill.totalAmount,
           status: result.bill.status as BillStatus,
-          categorizationStatus: (result.bill as any).categorizationStatus ?? 'pending' as CategorizationStatus,
+          categorizationStatus: (result.bill.categorizationStatus as CategorizationStatus) ?? 'pending',
         },
         totalAmount: result.totalAmount,
         transactionCount: result.transactionCount,
