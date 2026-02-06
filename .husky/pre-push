@@ -1,0 +1,28 @@
+#!/bin/sh
+
+echo "🔍 Running lint and typecheck before push..."
+
+# Run lint
+echo "📝 Running lint..."
+pnpm lint
+LINT_EXIT_CODE=$?
+
+if [ $LINT_EXIT_CODE -ne 0 ]; then
+  echo "❌ Lint failed. Push aborted."
+  exit 1
+fi
+
+echo "✅ Lint passed!"
+
+# Run typecheck
+echo "🔎 Running typecheck..."
+pnpm typecheck
+TYPECHECK_EXIT_CODE=$?
+
+if [ $TYPECHECK_EXIT_CODE -ne 0 ]; then
+  echo "❌ Typecheck failed. Push aborted."
+  exit 1
+fi
+
+echo "✅ Typecheck passed!"
+echo "🚀 All checks passed. Pushing..."
