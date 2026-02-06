@@ -16,6 +16,10 @@ export async function deleteCategoryService(
     throw new Error("Cannot delete default categories");
   }
 
+  if (existing.isSystem) {
+    throw new Error("Cannot delete system categories");
+  }
+
   // Data layer will verify ownership
   return deleteCategoryCmd(userId, id, db);
 }

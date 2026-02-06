@@ -41,6 +41,12 @@ enum BudgetPeriod {
   yearly
 }
 
+enum BillStatus {
+  pending
+  paid
+  overdue
+}
+
 // ============================================
 // USER
 // ============================================
@@ -109,6 +115,7 @@ model Business {
   transfersTo           Transfer[]             @relation("TransferTo")
   recurringTransfersFrom RecurringTransfer[]   @relation("RecurringTransferFrom")
   recurringTransfersTo   RecurringTransfer[]   @relation("RecurringTransferTo")
+  creditCards           CreditCard[]
 
   @@index([userId])
   @@map("businesses")
@@ -135,6 +142,7 @@ model PersonalAccount {
   transfersTo           Transfer[]             @relation("PersonalTransferTo")
   recurringTransfersFrom RecurringTransfer[]   @relation("PersonalRecurringTransferFrom")
   recurringTransfersTo   RecurringTransfer[]   @relation("PersonalRecurringTransferTo")
+  creditCards           CreditCard[]
 
   @@map("personal_accounts")
 }
@@ -164,6 +172,7 @@ model Transaction {
   personalAccountId String?
   personalAccount   PersonalAccount?      @relation(fields: [personalAccountId], references: [id], onDelete: Cascade)
   recurringTransaction RecurringTransaction? @relation(fields: [recurringTransactionId], references: [id], onDelete: SetNull)
+  creditCardBills   CreditCardBill[]
 
   @@index([businessId])
   @@index([personalAccountId])
@@ -339,6 +348,7 @@ model Category {
   color     String?
   icon      String?
   isDefault Boolean         @default(false)
+  isSystem  Boolean         @default(false)
   createdAt DateTime        @default(now())
   updatedAt DateTime        @updatedAt
 
@@ -349,6 +359,124 @@ model Category {
   @@index([userId])
   @@index([type])
   @@map("categories")
+}
+
+// ============================================
+// CREDIT CARD
+// ============================================
+
+model CreditCard {
+  id                String     @id @default(uuid())
+  entityType        EntityType
+  bankName          String
+  lastFourDigits    String
+  nickname          String?
+  creditLimit       Float
+  closingDay        Int        // 1-31
+  dueDay            Int        // 1-31
+  color             String     @default("#3B82F6")
+  currency          String
+  isActive          Boolean    @default(true)
+  createdAt         DateTime   @default(now())
+  updatedAt         DateTime   @updatedAt
+
+  // Relations - polymorphic association
+  businessId        String?
+  business          Business?        @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  personalAccountId String?
+  personalAccount   PersonalAccount? @relation(fields: [personalAccountId], references: [id], onDelete: Cascade)
+
+  bills             CreditCardBill[]
+  installments      Installment[]
+
+  @@index([businessId])
+  @@index([personalAccountId])
+  @@index([entityType])
+  @@index([isActive])
+  @@map("credit_cards")
+}
+
+// ============================================
+// CREDIT CARD BILL
+// ============================================
+
+model CreditCardBill {
+  id              String     @id @default(uuid())
+  creditCardId    String
+  transactionId   String?    // Links to an expense Transaction (optional)
+  closingDate     DateTime
+  dueDate         DateTime
+  totalAmount     Float
+  status          BillStatus @default(pending)
+  csvFileName     String?
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+
+  // Relations
+  creditCard       CreditCard       @relation(fields: [creditCardId], references: [id], onDelete: Cascade)
+  transaction      Transaction?     @relation(fields: [transactionId], references: [id], onDelete: SetNull)
+  billTransactions BillTransaction[]
+
+  @@index([creditCardId])
+  @@index([transactionId])
+  @@index([status])
+  @@index([dueDate])
+  @@map("credit_card_bills")
+}
+
+// ============================================
+// BILL TRANSACTION (line items from CSV)
+// ============================================
+
+model BillTransaction {
+  id                  String   @id @default(uuid())
+  billId              String
+  category            String
+  transactionDate     DateTime
+  description         String
+  merchantName        String?
+  amount              Float
+  installmentNumber   Int?
+  totalInstallments   Int?
+  isAutoCategorized   Boolean  @default(false)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  // Relations
+  bill        CreditCardBill @relation(fields: [billId], references: [id], onDelete: Cascade)
+  installment Installment?
+
+  @@index([billId])
+  @@index([category])
+  @@index([transactionDate])
+  @@map("bill_transactions")
+}
+
+// ============================================
+// INSTALLMENT (parcela tracking)
+// ============================================
+
+model Installment {
+  id                  String   @id @default(uuid())
+  creditCardId        String
+  billTransactionId   String   @unique
+  description         String
+  totalAmount         Float
+  totalInstallments   Int
+  paidInstallments    Int      @default(0)
+  startDate           DateTime
+  installmentAmount   Float
+  isActive            Boolean  @default(true)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  // Relations
+  creditCard      CreditCard      @relation(fields: [creditCardId], references: [id], onDelete: Cascade)
+  billTransaction BillTransaction @relation(fields: [billTransactionId], references: [id], onDelete: Cascade)
+
+  @@index([creditCardId])
+  @@index([isActive])
+  @@map("installments")
 }
 
 // ============================================

@@ -360,6 +360,7 @@ export interface Category {
   type: TransactionType;
   color?: string;
   icon?: string;
+  isSystem?: boolean;
 }
 
 // Default categories
@@ -394,6 +395,151 @@ export const DEFAULT_INVESTMENT_CATEGORIES = [
   'Retirement',
   'Other Investment',
 ];
+
+// System expense categories for credit cards - cannot be deleted
+export const SYSTEM_EXPENSE_CATEGORIES = [
+  'Credit Card',
+  'Subscriptions',
+  'Groceries',
+  'Restaurants & Dining',
+  'Transportation',
+  'Shopping',
+  'Entertainment',
+  'Health & Pharmacy',
+  'Travel',
+  'Education',
+  'Personal Care',
+  'Home',
+  'Fees & Charges',
+  'Other',
+];
+
+// --------------------------------------------
+// Credit Card
+// --------------------------------------------
+
+export type BillStatus = 'pending' | 'paid' | 'overdue';
+
+export interface CreditCard {
+  id: string;
+  entityId: string;
+  entityType: EntityType;
+  bankName: string;
+  lastFourDigits: string;
+  nickname?: string;
+  creditLimit: number;
+  closingDay: number;
+  dueDay: number;
+  color: string;
+  currency: string;
+  isActive: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface CreateCreditCardInput {
+  entityType: EntityType;
+  bankName: string;
+  lastFourDigits: string;
+  nickname?: string;
+  creditLimit: number;
+  closingDay: number;
+  dueDay: number;
+  color?: string;
+  currency: string;
+  businessId?: string;
+  personalAccountId?: string;
+}
+
+export interface UpdateCreditCardInput {
+  bankName?: string;
+  lastFourDigits?: string;
+  nickname?: string;
+  creditLimit?: number;
+  closingDay?: number;
+  dueDay?: number;
+  color?: string;
+  currency?: string;
+  isActive?: boolean;
+}
+
+export interface CreditCardBill {
+  id: string;
+  creditCardId: string;
+  transactionId?: string;
+  closingDate: Date;
+  dueDate: Date;
+  totalAmount: number;
+  status: BillStatus;
+  csvFileName?: string;
+  creditCard?: {
+    id: string;
+    bankName: string;
+    lastFourDigits: string;
+    nickname?: string;
+    color: string;
+  };
+  transactionCount?: number;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface BillTransaction {
+  id: string;
+  billId: string;
+  category: string;
+  transactionDate: Date;
+  description: string;
+  merchantName?: string;
+  amount: number;
+  installmentNumber?: number;
+  totalInstallments?: number;
+  isAutoCategorized: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface Installment {
+  id: string;
+  creditCardId: string;
+  billTransactionId: string;
+  description: string;
+  totalAmount: number;
+  totalInstallments: number;
+  paidInstallments: number;
+  remainingInstallments: number;
+  startDate: Date;
+  installmentAmount: number;
+  isActive: boolean;
+  creditCard?: {
+    id: string;
+    bankName: string;
+    lastFourDigits: string;
+    nickname?: string;
+    color: string;
+  };
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface BillUploadResult {
+  bill: {
+    id: string;
+    creditCardId: string;
+    closingDate: Date;
+    dueDate: Date;
+    totalAmount: number;
+    status: BillStatus;
+  };
+  totalAmount: number;
+  transactionCount: number;
+  categorizations: Array<{
+    index: number;
+    description: string;
+    amount: number;
+    category: string;
+  }>;
+}
 
 // --------------------------------------------
 // Computed Types (for UI)

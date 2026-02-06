@@ -27,6 +27,7 @@
     "budgets": "Orçamentos",
     "reports": "Relatórios",
     "tax": "Impostos",
+    "creditCards": "Cartões de Crédito",
     "settings": "Configurações",
     "baseCurrency": "Moeda Base"
   },
@@ -774,6 +775,107 @@
     },
     "toast": {
       "exported": "Relatório fiscal exportado!"
+    }
+  },
+  "creditCards": {
+    "title": "Cartões de Crédito",
+    "subtitle": "Gerencie seus cartões de crédito e faturas",
+    "addCard": "Adicionar Cartão",
+    "uploadBill": "Enviar Fatura",
+    "noCards": "Nenhum cartão de crédito ainda. Adicione seu primeiro cartão para começar.",
+    "noBills": "Nenhuma fatura enviada ainda.",
+    "noInstallments": "Nenhuma parcela ativa.",
+    "tabs": {
+      "cards": "Cartões",
+      "bills": "Faturas",
+      "transactions": "Transações",
+      "installments": "Parcelas",
+      "analytics": "Análises"
+    },
+    "summary": {
+      "totalCredit": "Crédito Total",
+      "currentBalance": "Saldo Atual",
+      "upcomingBills": "Próximas Faturas",
+      "activeInstallments": "Parcelas Ativas"
+    },
+    "card": {
+      "closes": "Fecha",
+      "due": "Vence",
+      "limit": "Limite",
+      "available": "Disponível",
+      "active": "Ativo",
+      "inactive": "Inativo",
+      "utilization": "Utilização"
+    },
+    "form": {
+      "bankName": "Nome do Banco",
+      "bankNamePlaceholder": "ex: Nubank, Itaú, Bradesco",
+      "lastFour": "Últimos 4 Dígitos",
+      "lastFourPlaceholder": "1234",
+      "nickname": "Apelido (Opcional)",
+      "nicknamePlaceholder": "ex: Meu Nubank",
+      "creditLimit": "Limite de Crédito",
+      "closingDay": "Dia de Fechamento",
+      "dueDay": "Dia de Vencimento",
+      "color": "Cor do Cartão",
+      "currency": "Moeda",
+      "entityType": "Tipo de Conta",
+      "business": "Empresa",
+      "personal": "Pessoal",
+      "selectBusiness": "Selecionar empresa"
+    },
+    "dialog": {
+      "createTitle": "Adicionar Cartão de Crédito",
+      "createDescription": "Adicione um novo cartão de crédito para rastrear despesas.",
+      "editTitle": "Editar Cartão de Crédito",
+      "editDescription": "Atualize os detalhes do cartão de crédito."
+    },
+    "bill": {
+      "closingDate": "Data de Fechamento",
+      "dueDate": "Data de Vencimento",
+      "totalAmount": "Valor Total",
+      "status": "Status",
+      "transactions": "Transações",
+      "pending": "Pendente",
+      "paid": "Pago",
+      "overdue": "Atrasado",
+      "linkExpense": "Vincular a Despesa",
+      "createExpense": "Criar Despesa"
+    },
+    "upload": {
+      "title": "Enviar Fatura do Cartão",
+      "description": "Envie um arquivo CSV da fatura do seu cartão de crédito.",
+      "selectCard": "Selecionar Cartão de Crédito",
+      "csvFile": "Arquivo CSV",
+      "csvFileDrag": "Arraste e solte um arquivo CSV ou clique para procurar",
+      "closingDate": "Data de Fechamento da Fatura",
+      "dueDate": "Data de Vencimento da Fatura",
+      "linkToExisting": "Vincular a transação de despesa existente",
+      "createNewExpense": "Criar nova transação de despesa",
+      "noLink": "Não vincular a nenhuma transação",
+      "selectTransaction": "Selecionar transação",
+      "processing": "Processando fatura com categorização por IA...",
+      "success": "Fatura enviada e categorizada com sucesso!",
+      "reviewCategories": "Revisar Categorias"
+    },
+    "installment": {
+      "total": "Total",
+      "paid": "Pago",
+      "remaining": "Restante",
+      "amount": "Por Parcela",
+      "progress": "Progresso",
+      "endsOn": "Termina em"
+    },
+    "delete": {
+      "title": "Excluir Cartão de Crédito",
+      "description": "Isso excluirá permanentemente este cartão de crédito e todas as faturas e parcelas associadas. Esta ação não pode ser desfeita."
+    },
+    "toast": {
+      "created": "Cartão de crédito adicionado!",
+      "updated": "Cartão de crédito atualizado!",
+      "deleted": "Cartão de crédito excluído!",
+      "billUploaded": "Fatura enviada e categorizada!",
+      "expenseCreated": "Despesa criada a partir da fatura!"
     }
   }
 }
