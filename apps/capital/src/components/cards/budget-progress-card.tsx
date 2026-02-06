@@ -5,7 +5,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
 import { cn } from '@/lib/utils';
 import { formatCurrency } from '@/lib/utils/format';
-import { getBudgetStatusColor, getBudgetStatusBgColor } from '@/lib/utils/budget';
+import { getBudgetStatusColor } from '@/lib/utils/budget';
 import type { BudgetProgress } from '@/types';
 import { AlertTriangle, CheckCircle2, AlertCircle } from 'lucide-react';
 

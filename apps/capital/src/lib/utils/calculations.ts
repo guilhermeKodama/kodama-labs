@@ -269,11 +269,6 @@ export function calculateCashFlow(
     return date.getFullYear() === currentYear;
   });
 
-  const yearTransfers = transfers.filter(t => {
-    const date = new Date(t.date);
-    return date.getFullYear() === currentYear;
-  });
-
   const getPeriodKey = (date: Date): string => {
     switch (period) {
       case 'daily':
@@ -348,8 +343,7 @@ export function calculateCashFlow(
  * Calculate currency distribution across all transactions
  */
 export function calculateCurrencyDistribution(
-  transactions: Transaction[],
-  transfers: Transfer[]
+  transactions: Transaction[]
 ): CurrencyDistribution[] {
   const currencyTotals = new Map<string, number>();
 

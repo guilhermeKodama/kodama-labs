@@ -11,13 +11,32 @@ import {
   Legend,
 } from 'recharts';
 import { formatCurrency, formatPercent } from '@/lib/utils/format';
-import { calculateCurrencyDistribution, type CurrencyDistribution } from '@/lib/utils/calculations';
-import type { Transaction, Transfer } from '@/types';
+import { calculateCurrencyDistribution } from '@/lib/utils/calculations';
+import type { Transaction } from '@/types';
+
+interface TooltipPayloadItem {
+  payload: {
+    currency: string;
+    amount: number;
+    percentage: number;
+    color: string;
+  };
+}
+
+interface CustomTooltipProps {
+  active?: boolean;
+  payload?: TooltipPayloadItem[];
+}
+
+interface RenderLabelProps {
+  payload?: {
+    currency: string;
+  };
+  percent?: number;
+}
 
 interface CurrencyDistributionChartProps {
   transactions: Transaction[];
-  transfers: Transfer[];
-  baseCurrency: string;
   height?: number;
 }
 
@@ -45,21 +64,43 @@ const DEFAULT_COLORS = [
   '#6366f1',
 ];
 
+const CustomTooltip = ({ active, payload }: CustomTooltipProps) => {
+  if (active && payload && payload.length) {
+    const item = payload[0].payload;
+    return (
+      <div className="rounded-lg border border-slate-700 bg-slate-800/95 p-3 shadow-lg backdrop-blur-sm">
+        <p className="mb-1 font-medium text-white">{item.currency}</p>
+        <p className="text-sm text-slate-300">
+          {formatCurrency(item.amount, item.currency)}
+        </p>
+        <p className="text-xs text-slate-400">
+          {formatPercent(item.percentage)}
+        </p>
+      </div>
+    );
+  }
+  return null;
+};
+
+const renderLabel = (props: RenderLabelProps) => {
+  const { payload, percent } = props;
+  if (!payload || !percent || percent < 0.05) return null; // Don't show label for small slices (< 5%)
+  return `${payload.currency} (${(percent * 100).toFixed(0)}%)`;
+};
+
 export function CurrencyDistributionChart({
   transactions,
-  transfers,
-  baseCurrency,
   height = 300,
 }: CurrencyDistributionChartProps) {
   const t = useTranslations('charts');
 
   const data = useMemo(() => {
-    const distribution = calculateCurrencyDistribution(transactions, transfers);
+    const distribution = calculateCurrencyDistribution(transactions);
     return distribution.map((item, index) => ({
       ...item,
       color: CURRENCY_COLORS[item.currency] || DEFAULT_COLORS[index % DEFAULT_COLORS.length],
     }));
-  }, [transactions, transfers]);
+  }, [transactions]);
 
   if (data.length === 0) {
     return (
@@ -68,33 +109,6 @@ export function CurrencyDistributionChart({
       </div>
     );
   }
-
-  // Calculate total for display
-  const total = data.reduce((sum, item) => sum + item.amount, 0);
-
-  const CustomTooltip = ({ active, payload }: any) => {
-    if (active && payload && payload.length) {
-      const item = payload[0].payload;
-      return (
-        <div className="rounded-lg border border-slate-700 bg-slate-800/95 p-3 shadow-lg backdrop-blur-sm">
-          <p className="mb-1 font-medium text-white">{item.currency}</p>
-          <p className="text-sm text-slate-300">
-            {formatCurrency(item.amount, item.currency)}
-          </p>
-          <p className="text-xs text-slate-400">
-            {formatPercent(item.percentage)}
-          </p>
-        </div>
-      );
-    }
-    return null;
-  };
-
-  const renderLabel = (props: any) => {
-    const { payload, percent } = props;
-    if (!payload || percent < 0.05) return null; // Don't show label for small slices (< 5%)
-    return `${payload.currency} (${(percent * 100).toFixed(0)}%)`;
-  };
 
   return (
     <div className="space-y-4">

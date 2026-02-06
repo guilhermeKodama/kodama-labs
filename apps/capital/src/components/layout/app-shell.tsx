@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState, useSyncExternalStore, useCallback } from 'react';
 import { Sidebar } from './sidebar';
 import { BottomNav } from './bottom-nav';
 import { OnboardingDialog } from '@/components/onboarding/onboarding-dialog';
@@ -10,24 +10,26 @@ interface AppShellProps {
   children: React.ReactNode;
 }
 
+// Custom hook to track client-side mounting without setState in effect
+function useIsMounted() {
+  return useSyncExternalStore(
+    () => () => {},
+    () => true,
+    () => false
+  );
+}
+
 export function AppShell({ children }: AppShellProps) {
   const { isInitialized } = useSettingsStore();
-  const [showOnboarding, setShowOnboarding] = useState(false);
-  const [mounted, setMounted] = useState(false);
+  const mounted = useIsMounted();
+  const [onboardingDismissed, setOnboardingDismissed] = useState(false);
 
-  useEffect(() => {
-    setMounted(true);
+  // Derive showOnboarding from state instead of using useEffect
+  const showOnboarding = mounted && !isInitialized && !onboardingDismissed;
+
+  const handleOnboardingComplete = useCallback(() => {
+    setOnboardingDismissed(true);
   }, []);
-
-  useEffect(() => {
-    if (mounted && !isInitialized) {
-      setShowOnboarding(true);
-    }
-  }, [mounted, isInitialized]);
-
-  const handleOnboardingComplete = () => {
-    setShowOnboarding(false);
-  };
 
   if (!mounted) {
     return null;

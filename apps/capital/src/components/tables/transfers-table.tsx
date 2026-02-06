@@ -33,7 +33,7 @@ export function TransfersTable({ transfers, onDelete }: TransfersTableProps) {
   const t = useTranslations('transfers');
   const tCommon = useTranslations('common');
   const { businesses } = useBusinessStore();
-  const { personalAccount, settings } = useSettingsStore();
+  const { settings } = useSettingsStore();
 
   const getEntityName = (entityId: string, entityType: 'business' | 'personal') => {
     if (entityType === 'personal') {

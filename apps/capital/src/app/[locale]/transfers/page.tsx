@@ -47,7 +47,7 @@ export default function TransfersPage() {
   const t = useTranslations();
   const { transfers, addTransfer, deleteTransfer, fetchTransfers } = useTransferStore();
   const { businesses } = useBusinessStore();
-  const { settings, personalAccount } = useSettingsStore();
+  const { settings } = useSettingsStore();
   const {
     recurringTransfers,
     addRecurringTransfer,

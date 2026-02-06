@@ -309,7 +309,7 @@ export default function ReportsPage() {
       </div>
 
       {/* View Tabs */}
-      <Tabs value={selectedView} onValueChange={(v) => setSelectedView(v as any)}>
+      <Tabs value={selectedView} onValueChange={(v) => setSelectedView(v as 'monthly' | 'categories' | 'insights')}>
         <TabsList className="mb-6 border-slate-800 bg-slate-900/50">
           <TabsTrigger
             value="monthly"
@@ -407,7 +407,7 @@ export default function ReportsPage() {
               </CardTitle>
               <Tabs
                 value={selectedType}
-                onValueChange={(v) => setSelectedType(v as any)}
+                onValueChange={(v) => setSelectedType(v as TransactionType | 'all')}
               >
                 <TabsList className="border-slate-800 bg-slate-800/50">
                   <TabsTrigger
@@ -591,8 +591,6 @@ export default function ReportsPage() {
                 <CardContent>
                   <CurrencyDistributionChart
                     transactions={transactions}
-                    transfers={transfers}
-                    baseCurrency={settings.baseCurrency}
                     height={300}
                   />
                 </CardContent>

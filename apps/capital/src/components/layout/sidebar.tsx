@@ -20,7 +20,6 @@ import { Link, usePathname } from '@/i18n/navigation';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { LanguageSwitcher } from '@/components/language-switcher';
 import { cn } from '@/lib/utils';
-import { useSettingsStore } from '@/lib/store';
 import { useUser } from '@/lib/user-context';
 import { Button } from '@/components/ui/button';
 
@@ -42,7 +41,6 @@ export function Sidebar() {
   const tAuth = useTranslations('auth');
   const pathname = usePathname();
   const router = useRouter();
-  const { settings } = useSettingsStore();
   const { user, logout, isAuthenticated } = useUser();
 
   const handleLogout = async () => {

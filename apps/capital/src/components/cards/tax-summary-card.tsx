@@ -3,8 +3,7 @@
 import { useTranslations } from 'next-intl';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { cn } from '@/lib/utils';
-import { formatCurrency, formatPercent } from '@/lib/utils/format';
+import { formatCurrency } from '@/lib/utils/format';
 import type { TaxSummary } from '@/types';
 import { Building2, User, Receipt, Calculator, Percent } from 'lucide-react';
 

@@ -27,7 +27,7 @@ import {
 import { useSettingsStore, useBusinessStore, useTransactionStore, useTransferStore } from '@/lib/store';
 import { calculateEntitySummary } from '@/lib/utils/calculations';
 import { formatCurrency } from '@/lib/utils/format';
-import type { RecurringTransfer, TransferDirection, RecurrenceFrequency } from '@/types';
+import type { RecurringTransfer, TransferDirection } from '@/types';
 
 /**
  * Parse a date string from an input[type="date"] as noon UTC.

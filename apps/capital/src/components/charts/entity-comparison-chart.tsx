@@ -15,7 +15,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { formatCurrency, formatCompactNumber } from '@/lib/utils/format';
-import { calculateEntityComparison, type EntityComparisonData } from '@/lib/utils/calculations';
+import { calculateEntityComparison } from '@/lib/utils/calculations';
 import type { Transaction, Transfer, EntityType } from '@/types';
 
 type Metric = 'income' | 'expenses' | 'balance' | 'netWorth';
@@ -170,7 +170,7 @@ export function EntityComparisonChart({
 
       {/* Legend */}
       <div className="flex flex-wrap items-center justify-center gap-4 text-xs">
-        {sortedData.map((entity, index) => (
+        {sortedData.map((entity) => (
           <div key={entity.name} className="flex items-center gap-2">
             <div
               className="h-3 w-3 rounded-sm"

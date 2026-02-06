@@ -26,7 +26,7 @@ import {
   type CreateBudgetFormData,
 } from '@/lib/validations';
 import { useSettingsStore, useBusinessStore } from '@/lib/store';
-import type { Budget, EntityType, BudgetPeriod } from '@/types';
+import type { Budget, EntityType } from '@/types';
 import { DEFAULT_EXPENSE_CATEGORIES } from '@/types';
 
 interface BudgetFormProps {
