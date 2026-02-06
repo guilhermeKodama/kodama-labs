@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useCallback } from 'react';
 import { useTranslations } from 'next-intl';
 import {
   CreditCard as CreditCardIcon,
@@ -80,6 +80,20 @@ export default function CreditCardsPage() {
     fetchBills();
     fetchInstallments();
   }, [fetchCreditCards, fetchBills, fetchInstallments]);
+
+  // Auto-refresh when there are pending/processing categorizations
+  const hasPendingCategorization = useMemo(
+    () => bills.some((b: CreditCardBill) => b.categorizationStatus === 'pending' || b.categorizationStatus === 'processing'),
+    [bills]
+  );
+
+  useEffect(() => {
+    if (!hasPendingCategorization) return;
+    const interval = setInterval(() => {
+      fetchBills();
+    }, 10000); // Poll every 10 seconds
+    return () => clearInterval(interval);
+  }, [hasPendingCategorization, fetchBills]);
 
   // Calculate balances for each card (from pending bills)
   const cardBalances = useMemo(() => {

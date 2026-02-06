@@ -2,7 +2,7 @@
 
 import { useTranslations } from 'next-intl';
 import { format } from 'date-fns';
-import { FileText, ExternalLink, Trash2 } from 'lucide-react';
+import { FileText, ExternalLink, Trash2, Loader2, Sparkles, AlertCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { formatCurrency } from '@/lib/utils/format';
 import { Button } from '@/components/ui/button';
@@ -37,6 +37,41 @@ export function BillsTable({ bills, currency, onViewTransactions, onCreateExpens
     return styles[status as keyof typeof styles] || styles.pending;
   };
 
+  const getCategorizationBadge = (status: string) => {
+    switch (status) {
+      case 'pending':
+        return (
+          <span className="inline-flex items-center gap-1 rounded-full bg-blue-500/10 px-2 py-0.5 text-xs text-blue-400">
+            <Loader2 className="h-3 w-3 animate-spin" />
+            Categorizing...
+          </span>
+        );
+      case 'processing':
+        return (
+          <span className="inline-flex items-center gap-1 rounded-full bg-blue-500/10 px-2 py-0.5 text-xs text-blue-400">
+            <Loader2 className="h-3 w-3 animate-spin" />
+            Processing...
+          </span>
+        );
+      case 'completed':
+        return (
+          <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-0.5 text-xs text-emerald-400">
+            <Sparkles className="h-3 w-3" />
+            Categorized
+          </span>
+        );
+      case 'failed':
+        return (
+          <span className="inline-flex items-center gap-1 rounded-full bg-red-500/10 px-2 py-0.5 text-xs text-red-400">
+            <AlertCircle className="h-3 w-3" />
+            Failed
+          </span>
+        );
+      default:
+        return null;
+    }
+  };
+
   return (
     <div className="overflow-x-auto">
       <table className="w-full">
@@ -48,6 +83,7 @@ export function BillsTable({ bills, currency, onViewTransactions, onCreateExpens
             <th className="pb-3 text-right text-xs font-medium text-slate-400">{t('bill.totalAmount')}</th>
             <th className="pb-3 text-center text-xs font-medium text-slate-400">{t('bill.transactions')}</th>
             <th className="pb-3 text-center text-xs font-medium text-slate-400">{t('bill.status')}</th>
+            <th className="pb-3 text-center text-xs font-medium text-slate-400">AI</th>
             <th className="pb-3 text-right text-xs font-medium text-slate-400"></th>
           </tr>
         </thead>
@@ -83,6 +119,9 @@ export function BillsTable({ bills, currency, onViewTransactions, onCreateExpens
                 <span className={cn('rounded-full px-2 py-0.5 text-xs font-medium', getStatusBadge(bill.status))}>
                   {t(`bill.${bill.status}`)}
                 </span>
+              </td>
+              <td className="py-3 text-center">
+                {getCategorizationBadge(bill.categorizationStatus)}
               </td>
               <td className="py-3 text-right">
                 <div className="flex items-center justify-end gap-1">

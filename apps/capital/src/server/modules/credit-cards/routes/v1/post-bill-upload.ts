@@ -26,17 +26,10 @@ const BillUploadResultSchema = z.object({
     dueDate: z.string(),
     totalAmount: z.number(),
     status: z.enum(["pending", "paid", "overdue"]),
+    categorizationStatus: z.string(),
   }),
   totalAmount: z.number(),
   transactionCount: z.number(),
-  categorizations: z.array(
-    z.object({
-      index: z.number(),
-      description: z.string(),
-      amount: z.number(),
-      category: z.string(),
-    })
-  ),
 });
 
 const ErrorResponseSchema = z.object({
@@ -111,20 +104,15 @@ export const handler: AppRouteHandler<typeof route> = async (c) => {
     // Ensure system categories exist for this user (backfill for older accounts)
     await ensureSystemCategories(userId);
 
-    // Fetch user's expense categories for AI categorization
-    const categories = await fetchCategoriesByUserId(userId, "expense", prisma);
-    const categoryNames = [...new Set(categories.map((cat) => cat.name))];
-
     const result = await processBillCsv(
       userId,
       {
         creditCardId: body.creditCardId,
-        closingDate: new Date(body.closingDate),
-        dueDate: new Date(body.dueDate),
+        closingDate: new Date(body.closingDate + "T12:00:00Z"),
+        dueDate: new Date(body.dueDate + "T12:00:00Z"),
         csvContent: body.csvContent,
         csvFileName: body.csvFileName,
         transactionId: body.transactionId,
-        categories: categoryNames,
       },
       prisma
     );
@@ -138,10 +126,10 @@ export const handler: AppRouteHandler<typeof route> = async (c) => {
           dueDate: result.bill.dueDate.toISOString(),
           totalAmount: result.bill.totalAmount,
           status: result.bill.status,
+          categorizationStatus: result.bill.categorizationStatus,
         },
         totalAmount: result.totalAmount,
         transactionCount: result.transactionCount,
-        categorizations: result.categorizations,
       },
       CREATED
     );

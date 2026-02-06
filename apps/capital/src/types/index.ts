@@ -463,6 +463,8 @@ export interface UpdateCreditCardInput {
   isActive?: boolean;
 }
 
+export type CategorizationStatus = 'pending' | 'processing' | 'completed' | 'failed';
+
 export interface CreditCardBill {
   id: string;
   creditCardId: string;
@@ -471,6 +473,7 @@ export interface CreditCardBill {
   dueDate: Date;
   totalAmount: number;
   status: BillStatus;
+  categorizationStatus: CategorizationStatus;
   csvFileName?: string;
   creditCard?: {
     id: string;
@@ -530,15 +533,10 @@ export interface BillUploadResult {
     dueDate: Date;
     totalAmount: number;
     status: BillStatus;
+    categorizationStatus: CategorizationStatus;
   };
   totalAmount: number;
   transactionCount: number;
-  categorizations: Array<{
-    index: number;
-    description: string;
-    amount: number;
-    category: string;
-  }>;
 }
 
 // --------------------------------------------

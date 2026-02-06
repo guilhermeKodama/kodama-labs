@@ -69,7 +69,7 @@ export const handler: AppRouteHandler<typeof route> = async (c) => {
         personalAccountId: body.personalAccountId,
         currency: body.currency,
         exchangeRate: body.exchangeRate,
-        date: new Date(body.date),
+        date: new Date(body.date + "T12:00:00Z"),
       },
       prisma
     );
