@@ -56,6 +56,9 @@ interface CreditCardActions {
     date: string;
   }) => Promise<void>;
 
+  // Link bill to existing transaction
+  linkBillToTransaction: (billId: string, transactionId: string) => Promise<void>;
+
   // Delete bill
   deleteBill: (id: string) => Promise<void>;
 
@@ -319,6 +322,28 @@ export const useCreditCardStore = create<CreditCardStore>()((set, get) => ({
         isLoading: false,
       });
       return null;
+    }
+  },
+
+  // Link bill to existing transaction
+  linkBillToTransaction: async (billId, transactionId) => {
+    set({ isLoading: true, error: null });
+    try {
+      const res = await client.v1['credit-cards'].bills[':id'].link.$put({
+        param: { id: billId },
+        json: { transactionId },
+      });
+
+      if (!res.ok) throw new Error('Failed to link bill to transaction');
+
+      // Refresh bills to get updated status
+      await get().fetchBills();
+      set({ isLoading: false });
+    } catch (error) {
+      set({
+        error: error instanceof Error ? error.message : 'Unknown error',
+        isLoading: false,
+      });
     }
   },
 

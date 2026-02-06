@@ -286,6 +286,7 @@ export async function processBillCsv(
   const totalAmount = chargeTransactions.reduce((sum, t) => sum + t.amount, 0);
 
   // 3. Create bill record (categorizationStatus defaults to "pending")
+  //    If linked to an existing expense transaction, mark as paid
   const bill = await insertBill(
     userId,
     {
@@ -295,6 +296,7 @@ export async function processBillCsv(
       dueDate: input.dueDate,
       totalAmount: Math.round(totalAmount * 100) / 100,
       csvFileName: input.csvFileName,
+      status: input.transactionId ? "paid" : undefined,
     },
     db
   );

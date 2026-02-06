@@ -40,6 +40,10 @@ export async function createBillExpense(
     throw new Error("Bill not found or access denied");
   }
 
+  if (bill.transactionId) {
+    throw new Error("Bill is already linked to an expense transaction");
+  }
+
   // Create expense transaction
   const transaction = await db.transaction.create({
     data: {
@@ -57,10 +61,10 @@ export async function createBillExpense(
     },
   });
 
-  // Link bill to the transaction
+  // Link bill to the transaction and mark as paid
   await db.creditCardBill.update({
     where: { id: input.billId },
-    data: { transactionId: transaction.id },
+    data: { transactionId: transaction.id, status: "paid" },
   });
 
   return transaction;

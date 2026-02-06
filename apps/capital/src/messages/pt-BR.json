@@ -840,7 +840,10 @@
       "paid": "Pago",
       "overdue": "Atrasado",
       "linkExpense": "Vincular a Despesa",
-      "createExpense": "Criar Despesa"
+      "createExpense": "Criar Despesa",
+      "createNewExpense": "Criar nova transação de despesa",
+      "linkExisting": "Vincular a transação existente",
+      "noExpenseTransactions": "Nenhuma transação de despesa de Cartão de Crédito encontrada"
     },
     "upload": {
       "title": "Enviar Fatura do Cartão",
@@ -875,7 +878,8 @@
       "updated": "Cartão de crédito atualizado!",
       "deleted": "Cartão de crédito excluído!",
       "billUploaded": "Fatura enviada e categorizada!",
-      "expenseCreated": "Despesa criada a partir da fatura!"
+      "expenseCreated": "Despesa criada a partir da fatura!",
+      "billLinked": "Fatura vinculada à transação!"
     }
   }
 }
