@@ -11,6 +11,7 @@ import * as getInstallments from "./get-installments";
 import * as postBillExpense from "./post-bill-expense";
 import * as deleteBill from "./delete-bill";
 import * as putBillTransaction from "./put-bill-transaction";
+import * as putBillLink from "./put-bill-link";
 
 const router = createRouter()
   .openapi(getCreditCards.route, getCreditCards.handler)
@@ -23,6 +24,7 @@ const router = createRouter()
   .openapi(getInstallments.route, getInstallments.handler)
   .openapi(postBillExpense.route, postBillExpense.handler)
   .openapi(deleteBill.route, deleteBill.handler)
-  .openapi(putBillTransaction.route, putBillTransaction.handler);
+  .openapi(putBillTransaction.route, putBillTransaction.handler)
+  .openapi(putBillLink.route, putBillLink.handler);
 
 export default router;

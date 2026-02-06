@@ -61,9 +61,10 @@ export default function CreditCardsPage() {
     uploadBill,
     deleteBill,
     createBillExpense,
+    linkBillToTransaction,
     updateBillTransactionCategory,
   } = useCreditCardStore();
-  const { transactions } = useTransactionStore();
+  const { transactions, fetchTransactions } = useTransactionStore();
   const { businesses } = useBusinessStore();
   const { settings, categories } = useSettingsStore();
 
@@ -173,6 +174,29 @@ export default function CreditCardsPage() {
     toast.success('Bill deleted');
   };
 
+  const handleCreateExpenseFromBill = async (billId: string) => {
+    const bill = bills.find((b: CreditCardBill) => b.id === billId);
+    if (!bill) return;
+    const card = creditCards.find((c: CreditCard) => c.id === bill.creditCardId);
+    if (!card) return;
+    await createBillExpense({
+      billId,
+      entityType: card.entityType,
+      businessId: card.entityType === 'business' ? card.entityId : undefined,
+      personalAccountId: card.entityType === 'personal' ? card.entityId : undefined,
+      currency: card.currency,
+      date: new Date(bill.dueDate).toISOString().split('T')[0],
+    });
+    // Refresh transactions so other pages (personal/business) reflect the new expense
+    await fetchTransactions();
+    toast.success(t('creditCards.toast.expenseCreated'));
+  };
+
+  const handleLinkTransaction = async (billId: string, transactionId: string) => {
+    await linkBillToTransaction(billId, transactionId);
+    toast.success(t('creditCards.toast.billLinked'));
+  };
+
   const handleUploadBill = async (data: Parameters<typeof uploadBill>[0] & { createExpense: boolean }) => {
     const { createExpense: shouldCreateExpense, ...uploadData } = data;
     const result = await uploadBill(uploadData);
@@ -190,6 +214,7 @@ export default function CreditCardsPage() {
             currency: selectedCard.currency,
             date: data.dueDate,
           });
+          await fetchTransactions();
           toast.success(t('creditCards.toast.expenseCreated'));
         }
       }
@@ -352,7 +377,10 @@ export default function CreditCardsPage() {
               <BillsTable
                 bills={bills}
                 currency={settings.baseCurrency}
+                expenseTransactions={transactions.filter((tx) => tx.type === 'expense')}
                 onViewTransactions={handleViewBillTransactions}
+                onCreateExpense={handleCreateExpenseFromBill}
+                onLinkTransaction={handleLinkTransaction}
                 onDelete={handleDeleteBill}
               />
             </CardContent>

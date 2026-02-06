@@ -840,7 +840,10 @@
       "paid": "Paid",
       "overdue": "Overdue",
       "linkExpense": "Link to Expense",
-      "createExpense": "Create Expense"
+      "createExpense": "Create Expense",
+      "createNewExpense": "Create new expense transaction",
+      "linkExisting": "Link to existing transaction",
+      "noExpenseTransactions": "No Credit Card expense transactions found"
     },
     "upload": {
       "title": "Upload Credit Card Bill",
@@ -875,7 +878,8 @@
       "updated": "Credit card updated!",
       "deleted": "Credit card deleted!",
       "billUploaded": "Bill uploaded and categorized!",
-      "expenseCreated": "Expense created from bill!"
+      "expenseCreated": "Expense created from bill!",
+      "billLinked": "Bill linked to transaction!"
     }
   }
 }
