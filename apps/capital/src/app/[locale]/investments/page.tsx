@@ -53,13 +53,12 @@ import type {
 
 export default function InvestmentsPage() {
   const t = useTranslations();
-  const { settings, personalAccount } = useSettingsStore();
+  const { settings } = useSettingsStore();
   const { businesses } = useBusinessStore();
   const {
     accounts,
     holdings,
     transactions,
-    portfolioSummary,
     fetchAccounts,
     fetchHoldings,
     fetchTransactions,

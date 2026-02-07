@@ -1,5 +1,4 @@
 import type { DbClient } from "@capital/server/lib/prisma";
-import type { AssetClass } from "@prisma/client";
 
 export interface PortfolioSummaryResult {
   totalInvested: number;

@@ -26,7 +26,7 @@ import {
   type CreateInvestmentAccountFormData,
 } from '@/lib/validations';
 import { useSettingsStore, useBusinessStore } from '@/lib/store';
-import type { InvestmentAccount, EntityType } from '@/types';
+import type { InvestmentAccount } from '@/types';
 
 interface InvestmentAccountFormProps {
   account?: InvestmentAccount;
