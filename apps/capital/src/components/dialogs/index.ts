@@ -7,3 +7,6 @@ export { RecurringTransferDialog } from './recurring-transfer-dialog';
 export { BudgetDialog } from './budget-dialog';
 export { CreditCardDialog } from './credit-card-dialog';
 export { BillUploadDialog } from './bill-upload-dialog';
+export { InvestmentAccountDialog } from './investment-account-dialog';
+export { InvestmentHoldingDialog } from './investment-holding-dialog';
+export { InvestmentTransactionDialog } from './investment-transaction-dialog';

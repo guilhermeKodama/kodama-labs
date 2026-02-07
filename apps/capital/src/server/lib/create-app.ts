@@ -36,6 +36,10 @@ export function createApp() {
   app.use("/v1/recurring-transfers/*", authMiddleware);
   app.use("/v1/reports/*", authMiddleware);
   app.use("/v1/credit-cards/*", authMiddleware);
+  app.use("/v1/investment-accounts/*", authMiddleware);
+  app.use("/v1/investment-holdings/*", authMiddleware);
+  app.use("/v1/investment-transactions/*", authMiddleware);
+  app.use("/v1/investment-portfolio/*", authMiddleware);
   app.use("/v1/users/*", authMiddleware);
 
   // Error handling

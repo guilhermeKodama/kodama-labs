@@ -1,8 +1,9 @@
-export { useBusinessStore } from './business-store';
-export { useTransactionStore } from './transaction-store';
-export { useTransferStore } from './transfer-store';
-export { useSettingsStore } from './settings-store';
-export { useRecurringTransactionStore } from './recurring-store';
-export { useRecurringTransferStore } from './recurring-transfer-store';
-export { useBudgetStore } from './budget-store';
+export { useBusinessStore } from "./business-store";
+export { useTransactionStore } from "./transaction-store";
+export { useTransferStore } from "./transfer-store";
+export { useSettingsStore } from "./settings-store";
+export { useRecurringTransactionStore } from "./recurring-store";
+export { useRecurringTransferStore } from "./recurring-transfer-store";
+export { useBudgetStore } from "./budget-store";
 export { useCreditCardStore } from "./credit-card-store";
+export { useInvestmentStore } from "./investment-store";

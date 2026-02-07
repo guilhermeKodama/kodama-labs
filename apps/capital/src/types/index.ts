@@ -388,11 +388,14 @@ export const DEFAULT_EXPENSE_CATEGORIES = [
 
 export const DEFAULT_INVESTMENT_CATEGORIES = [
   'Stocks',
-  'Bonds',
+  'FII',
+  'ETF',
+  'BDR',
+  'Fixed Income',
   'Crypto',
-  'Real Estate',
+  'International Stocks',
+  'International ETF',
   'Savings',
-  'Retirement',
   'Other Investment',
 ];
 
@@ -537,6 +540,204 @@ export interface BillUploadResult {
   };
   totalAmount: number;
   transactionCount: number;
+}
+
+// --------------------------------------------
+// Investment Portfolio
+// --------------------------------------------
+
+export type AssetClass =
+  | 'stocks'
+  | 'fii'
+  | 'etf'
+  | 'bdr'
+  | 'fixed_income'
+  | 'crypto'
+  | 'savings'
+  | 'international_stocks'
+  | 'international_etf';
+
+export type FixedIncomeSubType =
+  | 'cdb'
+  | 'rdb'
+  | 'lci'
+  | 'lca'
+  | 'cdi'
+  | 'tesouro_selic'
+  | 'tesouro_ipca'
+  | 'tesouro_prefixado'
+  | 'debenture';
+
+export type InvestmentTransactionType =
+  | 'buy'
+  | 'sell'
+  | 'dividend'
+  | 'yield_payment'
+  | 'split'
+  | 'deposit'
+  | 'withdrawal';
+
+export const ASSET_CLASS_LABELS: Record<AssetClass, string> = {
+  stocks: 'Stocks',
+  fii: 'FII',
+  etf: 'ETF',
+  bdr: 'BDR',
+  fixed_income: 'Fixed Income',
+  crypto: 'Crypto',
+  savings: 'Savings',
+  international_stocks: 'International Stocks',
+  international_etf: 'International ETF',
+};
+
+export const FIXED_INCOME_SUBTYPE_LABELS: Record<FixedIncomeSubType, string> = {
+  cdb: 'CDB',
+  rdb: 'RDB',
+  lci: 'LCI',
+  lca: 'LCA',
+  cdi: 'CDI',
+  tesouro_selic: 'Tesouro Selic',
+  tesouro_ipca: 'Tesouro IPCA+',
+  tesouro_prefixado: 'Tesouro Prefixado',
+  debenture: 'Debênture',
+};
+
+export const INVESTMENT_TRANSACTION_TYPE_LABELS: Record<InvestmentTransactionType, string> = {
+  buy: 'Buy',
+  sell: 'Sell',
+  dividend: 'Dividend',
+  yield_payment: 'Yield',
+  split: 'Split',
+  deposit: 'Deposit',
+  withdrawal: 'Withdrawal',
+};
+
+// Asset classes that require a ticker symbol
+export const TICKER_ASSET_CLASSES: AssetClass[] = [
+  'stocks',
+  'fii',
+  'etf',
+  'bdr',
+  'crypto',
+  'international_stocks',
+  'international_etf',
+];
+
+// Asset classes that require price per unit
+export const PRICE_PER_UNIT_ASSET_CLASSES: AssetClass[] = [
+  'stocks',
+  'fii',
+  'etf',
+  'bdr',
+  'crypto',
+  'international_stocks',
+  'international_etf',
+];
+
+export interface InvestmentAccount {
+  id: string;
+  userId: string;
+  name: string;
+  broker?: string;
+  entityId: string; // businessId or personalAccountId
+  entityType: EntityType;
+  currency: string;
+  isActive: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface CreateInvestmentAccountInput {
+  name: string;
+  broker?: string;
+  entityType: EntityType;
+  currency: string;
+  businessId?: string;
+  personalAccountId?: string;
+}
+
+export interface UpdateInvestmentAccountInput {
+  name?: string;
+  broker?: string;
+  currency?: string;
+  isActive?: boolean;
+}
+
+export interface InvestmentHolding {
+  id: string;
+  accountId: string;
+  assetClass: AssetClass;
+  subType?: FixedIncomeSubType;
+  ticker?: string;
+  name: string;
+  currency: string;
+  currentQuantity: number;
+  averageCost: number;
+  totalInvested: number;
+  isActive: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+  // Enriched from joins
+  account?: Pick<InvestmentAccount, 'id' | 'name' | 'broker' | 'entityType'>;
+}
+
+export interface CreateInvestmentHoldingInput {
+  accountId: string;
+  assetClass: AssetClass;
+  subType?: FixedIncomeSubType;
+  ticker?: string;
+  name: string;
+  currency: string;
+}
+
+export interface UpdateInvestmentHoldingInput {
+  name?: string;
+  ticker?: string;
+  subType?: FixedIncomeSubType;
+  isActive?: boolean;
+}
+
+export interface InvestmentTransaction {
+  id: string;
+  holdingId: string;
+  type: InvestmentTransactionType;
+  quantity?: number;
+  pricePerUnit?: number;
+  totalAmount: number;
+  fees: number;
+  date: Date;
+  notes?: string;
+  createdAt: Date;
+  updatedAt: Date;
+  // Enriched from joins
+  holding?: Pick<InvestmentHolding, 'id' | 'name' | 'ticker' | 'assetClass'>;
+}
+
+export interface CreateInvestmentTransactionInput {
+  holdingId: string;
+  type: InvestmentTransactionType;
+  quantity?: number;
+  pricePerUnit?: number;
+  totalAmount: number;
+  fees?: number;
+  date: Date;
+  notes?: string;
+}
+
+export interface UpdateInvestmentTransactionInput {
+  type?: InvestmentTransactionType;
+  quantity?: number;
+  pricePerUnit?: number;
+  totalAmount?: number;
+  fees?: number;
+  date?: Date;
+  notes?: string;
+}
+
+export interface PortfolioSummary {
+  totalInvested: number;
+  totalByAssetClass: Record<AssetClass, number>;
+  holdingsCount: number;
+  accountsCount: number;
 }
 
 // --------------------------------------------

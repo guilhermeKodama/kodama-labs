@@ -380,6 +380,7 @@
     "title": "Investments",
     "subtitle": "Track your investment portfolio",
     "addInvestment": "Add Investment",
+    "totalInvested": "Total Invested",
     "totalInvestments": "Total Investments",
     "businessInvestments": "Business Investments",
     "personalInvestments": "Personal Investments",
@@ -388,8 +389,160 @@
     "empty": "No investments recorded yet",
     "addFirst": "Add Your First Investment",
     "unknownEntity": "Unknown Entity",
+    "holdingsCount": "{count} holdings",
+    "accountsCount": "{count} accounts",
     "filters": {
       "all": "All"
+    },
+    "tabs": {
+      "portfolio": "Portfolio",
+      "accounts": "Accounts",
+      "transactions": "Transactions"
+    },
+    "accounts": {
+      "title": "Broker Accounts",
+      "addAccount": "Add Account",
+      "empty": "No broker accounts yet",
+      "addFirst": "Add Your First Account",
+      "form": {
+        "name": "Account Name",
+        "namePlaceholder": "e.g., Interactive Brokers, NuInvest",
+        "broker": "Broker",
+        "brokerPlaceholder": "e.g., IBKR, XP, NuBank",
+        "entityType": "Account Type",
+        "currency": "Default Currency",
+        "create": "Create Account",
+        "update": "Update Account",
+        "cancel": "Cancel"
+      },
+      "dialog": {
+        "createTitle": "Add Broker Account",
+        "createDescription": "Add a new brokerage or platform account.",
+        "editTitle": "Edit Account",
+        "editDescription": "Update the account details."
+      },
+      "toast": {
+        "created": "Account created successfully!",
+        "updated": "Account updated successfully!",
+        "deleted": "Account deleted successfully!"
+      }
+    },
+    "holdings": {
+      "title": "Holdings",
+      "addHolding": "Add Holding",
+      "empty": "No holdings yet",
+      "addFirst": "Add Your First Holding",
+      "quantity": "Qty",
+      "avgCost": "Avg Cost",
+      "totalInvested": "Invested",
+      "form": {
+        "account": "Account",
+        "accountPlaceholder": "Select a broker account",
+        "assetClass": "Asset Class",
+        "assetClassPlaceholder": "Select asset class",
+        "subType": "Sub Type",
+        "subTypePlaceholder": "Select sub type",
+        "ticker": "Ticker / Symbol",
+        "tickerPlaceholder": "e.g., PETR4, BTC, AAPL",
+        "name": "Name / Description",
+        "namePlaceholder": "e.g., Petrobras PN, Bitcoin",
+        "currency": "Currency",
+        "initialPosition": "Initial Position",
+        "initialPositionHint": "Optional: set your current position in this asset",
+        "initialAmount": "Amount Invested",
+        "initialAmountPlaceholder": "Total amount",
+        "initialQuantity": "Quantity Held",
+        "initialQuantityPlaceholder": "Number of units",
+        "initialPricePerUnit": "Average Purchase Price",
+        "initialPricePerUnitPlaceholder": "Price per unit",
+        "initialDate": "Investment Date",
+        "create": "Create Holding",
+        "update": "Update Holding",
+        "cancel": "Cancel"
+      },
+      "dialog": {
+        "createTitle": "Add Investment Holding",
+        "createDescription": "Add a new position to your portfolio.",
+        "editTitle": "Edit Holding",
+        "editDescription": "Update the holding details."
+      },
+      "toast": {
+        "created": "Holding created successfully!",
+        "updated": "Holding updated successfully!",
+        "deleted": "Holding deleted successfully!"
+      }
+    },
+    "transactions": {
+      "title": "Transactions",
+      "addTransaction": "Add Transaction",
+      "empty": "No investment transactions yet",
+      "addFirst": "Record Your First Transaction",
+      "form": {
+        "holding": "Holding",
+        "holdingPlaceholder": "Select a holding",
+        "type": "Transaction Type",
+        "typePlaceholder": "Select type",
+        "quantity": "Quantity",
+        "quantityPlaceholder": "Number of units",
+        "pricePerUnit": "Price per Unit",
+        "pricePerUnitPlaceholder": "Price paid per unit",
+        "totalAmount": "Total Amount",
+        "totalAmountPlaceholder": "Total transaction value",
+        "fees": "Fees",
+        "feesPlaceholder": "Brokerage fees, taxes",
+        "date": "Date",
+        "notes": "Notes",
+        "notesPlaceholder": "Optional notes",
+        "create": "Record Transaction",
+        "update": "Update Transaction",
+        "cancel": "Cancel"
+      },
+      "dialog": {
+        "createTitle": "Record Investment Transaction",
+        "createDescription": "Record a buy, sell, dividend, or yield event.",
+        "editTitle": "Edit Transaction",
+        "editDescription": "Update the transaction details."
+      },
+      "toast": {
+        "created": "Transaction recorded successfully!",
+        "updated": "Transaction updated successfully!",
+        "deleted": "Transaction deleted successfully!"
+      }
+    },
+    "assetClasses": {
+      "stocks": "Stocks",
+      "fii": "FII",
+      "etf": "ETF",
+      "bdr": "BDR",
+      "fixed_income": "Fixed Income",
+      "crypto": "Crypto",
+      "savings": "Savings",
+      "international_stocks": "Int'l Stocks",
+      "international_etf": "Int'l ETF"
+    },
+    "fixedIncomeSubTypes": {
+      "cdb": "CDB",
+      "rdb": "RDB",
+      "lci": "LCI",
+      "lca": "LCA",
+      "cdi": "CDI",
+      "tesouro_selic": "Tesouro Selic",
+      "tesouro_ipca": "Tesouro IPCA+",
+      "tesouro_prefixado": "Tesouro Prefixado",
+      "debenture": "Debenture"
+    },
+    "transactionTypes": {
+      "buy": "Buy",
+      "sell": "Sell",
+      "dividend": "Dividend",
+      "yield_payment": "Yield",
+      "split": "Split",
+      "deposit": "Deposit",
+      "withdrawal": "Withdrawal"
+    },
+    "delete": {
+      "title": "Delete?",
+      "description": "This action cannot be undone."
     }
   },
   "reports": {

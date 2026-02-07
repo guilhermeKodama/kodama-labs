@@ -47,6 +47,40 @@ enum BillStatus {
   overdue
 }
 
+enum AssetClass {
+  stocks
+  fii
+  etf
+  bdr
+  fixed_income
+  crypto
+  savings
+  international_stocks
+  international_etf
+}
+
+enum FixedIncomeSubType {
+  cdb
+  rdb
+  lci
+  lca
+  cdi
+  tesouro_selic
+  tesouro_ipca
+  tesouro_prefixado
+  debenture
+}
+
+enum InvestmentTransactionType {
+  buy
+  sell
+  dividend
+  yield_payment
+  split
+  deposit
+  withdrawal
+}
+
 // ============================================
 // USER
 // ============================================
@@ -64,11 +98,12 @@ model User {
   updatedAt    DateTime @updatedAt
 
   // Relations
-  businesses       Business[]
-  personalAccount  PersonalAccount?
-  categories       Category[]
-  currencies       Currency[]
-  sessions         Session[]
+  businesses          Business[]
+  personalAccount     PersonalAccount?
+  categories          Category[]
+  currencies          Currency[]
+  sessions            Session[]
+  investmentAccounts  InvestmentAccount[]
 
   @@map("users")
 }
@@ -116,6 +151,7 @@ model Business {
   recurringTransfersFrom RecurringTransfer[]   @relation("RecurringTransferFrom")
   recurringTransfersTo   RecurringTransfer[]   @relation("RecurringTransferTo")
   creditCards           CreditCard[]
+  investmentAccounts   InvestmentAccount[]
 
   @@index([userId])
   @@map("businesses")
@@ -143,6 +179,7 @@ model PersonalAccount {
   recurringTransfersFrom RecurringTransfer[]   @relation("PersonalRecurringTransferFrom")
   recurringTransfersTo   RecurringTransfer[]   @relation("PersonalRecurringTransferTo")
   creditCards           CreditCard[]
+  investmentAccounts   InvestmentAccount[]
 
   @@map("personal_accounts")
 }
@@ -479,6 +516,92 @@ model Installment {
   @@index([creditCardId])
   @@index([isActive])
   @@map("installments")
+}
+
+// ============================================
+// INVESTMENT ACCOUNT (broker/platform)
+// ============================================
+
+model InvestmentAccount {
+  id              String     @id @default(uuid())
+  userId          String
+  name            String     // e.g., "Interactive Brokers", "NuInvest", "Tesouro Direto"
+  broker          String?    // Broker identifier
+  entityType      EntityType
+  currency        String     @default("BRL")
+  isActive        Boolean    @default(true)
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+
+  // Relations - polymorphic association
+  user              User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  businessId        String?
+  business          Business?           @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  personalAccountId String?
+  personalAccount   PersonalAccount?    @relation(fields: [personalAccountId], references: [id], onDelete: Cascade)
+  holdings          InvestmentHolding[]
+
+  @@index([userId])
+  @@index([entityType])
+  @@index([businessId])
+  @@index([personalAccountId])
+  @@map("investment_accounts")
+}
+
+// ============================================
+// INVESTMENT HOLDING (position/asset)
+// ============================================
+
+model InvestmentHolding {
+  id              String              @id @default(uuid())
+  accountId       String
+  assetClass      AssetClass
+  subType         FixedIncomeSubType? // Only for fixed_income assets
+  ticker          String?             // For stocks, FIIs, crypto, ETFs (e.g., PETR4, HGLG11, BTC)
+  name            String              // Descriptive name (e.g., "CDB Nubank 120% CDI")
+  currency        String              @default("BRL")
+  currentQuantity Float               @default(0)
+  averageCost     Float               @default(0)
+  totalInvested   Float               @default(0)
+  isActive        Boolean             @default(true)
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+
+  // Relations
+  account      InvestmentAccount       @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  transactions InvestmentTransaction[]
+
+  @@index([accountId])
+  @@index([assetClass])
+  @@index([ticker])
+  @@index([isActive])
+  @@map("investment_holdings")
+}
+
+// ============================================
+// INVESTMENT TRANSACTION (buy/sell/dividend/yield)
+// ============================================
+
+model InvestmentTransaction {
+  id           String                    @id @default(uuid())
+  holdingId    String
+  type         InvestmentTransactionType
+  quantity     Float?                    // Number of units (for stocks, crypto, FIIs)
+  pricePerUnit Float?                    // Price paid per unit (for stocks, crypto, FIIs)
+  totalAmount  Float                     // Total cash value of the transaction
+  fees         Float                     @default(0) // Brokerage fees, taxes
+  date         DateTime
+  notes        String?
+  createdAt    DateTime                  @default(now())
+  updatedAt    DateTime                  @updatedAt
+
+  // Relations
+  holding InvestmentHolding @relation(fields: [holdingId], references: [id], onDelete: Cascade)
+
+  @@index([holdingId])
+  @@index([type])
+  @@index([date])
+  @@map("investment_transactions")
 }
 
 // ============================================
