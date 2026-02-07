@@ -380,6 +380,7 @@
     "title": "Investimentos",
     "subtitle": "Acompanhe sua carteira de investimentos",
     "addInvestment": "Adicionar Investimento",
+    "totalInvested": "Total Investido",
     "totalInvestments": "Total em Investimentos",
     "businessInvestments": "Investimentos Empresariais",
     "personalInvestments": "Investimentos Pessoais",
@@ -388,8 +389,160 @@
     "empty": "Nenhum investimento registrado ainda",
     "addFirst": "Adicione Seu Primeiro Investimento",
     "unknownEntity": "Entidade Desconhecida",
+    "holdingsCount": "{count} posições",
+    "accountsCount": "{count} contas",
     "filters": {
       "all": "Todos"
+    },
+    "tabs": {
+      "portfolio": "Carteira",
+      "accounts": "Contas",
+      "transactions": "Transações"
+    },
+    "accounts": {
+      "title": "Contas de Corretora",
+      "addAccount": "Adicionar Conta",
+      "empty": "Nenhuma conta de corretora ainda",
+      "addFirst": "Adicione Sua Primeira Conta",
+      "form": {
+        "name": "Nome da Conta",
+        "namePlaceholder": "ex: Interactive Brokers, NuInvest",
+        "broker": "Corretora",
+        "brokerPlaceholder": "ex: IBKR, XP, NuBank",
+        "entityType": "Tipo da Conta",
+        "currency": "Moeda Padrão",
+        "create": "Criar Conta",
+        "update": "Atualizar Conta",
+        "cancel": "Cancelar"
+      },
+      "dialog": {
+        "createTitle": "Adicionar Conta de Corretora",
+        "createDescription": "Adicione uma nova conta de corretora ou plataforma.",
+        "editTitle": "Editar Conta",
+        "editDescription": "Atualize os detalhes da conta."
+      },
+      "toast": {
+        "created": "Conta criada com sucesso!",
+        "updated": "Conta atualizada com sucesso!",
+        "deleted": "Conta excluída com sucesso!"
+      }
+    },
+    "holdings": {
+      "title": "Posições",
+      "addHolding": "Adicionar Posição",
+      "empty": "Nenhuma posição ainda",
+      "addFirst": "Adicione Sua Primeira Posição",
+      "quantity": "Qtd",
+      "avgCost": "Preço Médio",
+      "totalInvested": "Investido",
+      "form": {
+        "account": "Conta",
+        "accountPlaceholder": "Selecione uma conta",
+        "assetClass": "Classe de Ativo",
+        "assetClassPlaceholder": "Selecione a classe",
+        "subType": "Subtipo",
+        "subTypePlaceholder": "Selecione o subtipo",
+        "ticker": "Ticker / Símbolo",
+        "tickerPlaceholder": "ex: PETR4, BTC, AAPL",
+        "name": "Nome / Descrição",
+        "namePlaceholder": "ex: Petrobras PN, Bitcoin",
+        "currency": "Moeda",
+        "initialPosition": "Posição Atual",
+        "initialPositionHint": "Opcional: informe sua posição atual neste ativo",
+        "initialAmount": "Valor Investido",
+        "initialAmountPlaceholder": "Valor total",
+        "initialQuantity": "Quantidade",
+        "initialQuantityPlaceholder": "Número de unidades",
+        "initialPricePerUnit": "Preço Médio de Compra",
+        "initialPricePerUnitPlaceholder": "Preço por unidade",
+        "initialDate": "Data do Investimento",
+        "create": "Criar Posição",
+        "update": "Atualizar Posição",
+        "cancel": "Cancelar"
+      },
+      "dialog": {
+        "createTitle": "Adicionar Posição de Investimento",
+        "createDescription": "Adicione uma nova posição à sua carteira.",
+        "editTitle": "Editar Posição",
+        "editDescription": "Atualize os detalhes da posição."
+      },
+      "toast": {
+        "created": "Posição criada com sucesso!",
+        "updated": "Posição atualizada com sucesso!",
+        "deleted": "Posição excluída com sucesso!"
+      }
+    },
+    "transactions": {
+      "title": "Transações",
+      "addTransaction": "Adicionar Transação",
+      "empty": "Nenhuma transação de investimento ainda",
+      "addFirst": "Registre Sua Primeira Transação",
+      "form": {
+        "holding": "Posição",
+        "holdingPlaceholder": "Selecione uma posição",
+        "type": "Tipo de Transação",
+        "typePlaceholder": "Selecione o tipo",
+        "quantity": "Quantidade",
+        "quantityPlaceholder": "Número de unidades",
+        "pricePerUnit": "Preço por Unidade",
+        "pricePerUnitPlaceholder": "Preço pago por unidade",
+        "totalAmount": "Valor Total",
+        "totalAmountPlaceholder": "Valor total da transação",
+        "fees": "Taxas",
+        "feesPlaceholder": "Corretagem, impostos",
+        "date": "Data",
+        "notes": "Notas",
+        "notesPlaceholder": "Notas opcionais",
+        "create": "Registrar Transação",
+        "update": "Atualizar Transação",
+        "cancel": "Cancelar"
+      },
+      "dialog": {
+        "createTitle": "Registrar Transação de Investimento",
+        "createDescription": "Registre uma compra, venda, dividendo ou rendimento.",
+        "editTitle": "Editar Transação",
+        "editDescription": "Atualize os detalhes da transação."
+      },
+      "toast": {
+        "created": "Transação registrada com sucesso!",
+        "updated": "Transação atualizada com sucesso!",
+        "deleted": "Transação excluída com sucesso!"
+      }
+    },
+    "assetClasses": {
+      "stocks": "Ações",
+      "fii": "FII",
+      "etf": "ETF",
+      "bdr": "BDR",
+      "fixed_income": "Renda Fixa",
+      "crypto": "Cripto",
+      "savings": "Poupança",
+      "international_stocks": "Ações Int'l",
+      "international_etf": "ETF Int'l"
+    },
+    "fixedIncomeSubTypes": {
+      "cdb": "CDB",
+      "rdb": "RDB",
+      "lci": "LCI",
+      "lca": "LCA",
+      "cdi": "CDI",
+      "tesouro_selic": "Tesouro Selic",
+      "tesouro_ipca": "Tesouro IPCA+",
+      "tesouro_prefixado": "Tesouro Prefixado",
+      "debenture": "Debênture"
+    },
+    "transactionTypes": {
+      "buy": "Compra",
+      "sell": "Venda",
+      "dividend": "Dividendo",
+      "yield_payment": "Rendimento",
+      "split": "Desdobramento",
+      "deposit": "Depósito",
+      "withdrawal": "Resgate"
+    },
+    "delete": {
+      "title": "Excluir?",
+      "description": "Esta ação não pode ser desfeita."
     }
   },
   "reports": {

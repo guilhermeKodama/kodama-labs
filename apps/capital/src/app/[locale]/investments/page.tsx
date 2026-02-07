@@ -1,21 +1,27 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useTranslations } from 'next-intl';
 import {
   PiggyBank,
   Plus,
-  Building2,
-  User,
+  Pencil,
+  Landmark,
+  Briefcase,
+  Trash2,
 } from 'lucide-react';
 import { AppShell } from '@/components/layout';
 import { Header } from '@/components/layout/header';
-import { SummaryCard, InvestmentCard } from '@/components/cards';
-import { TransactionsTable } from '@/components/tables';
-import { TransactionDialog } from '@/components/dialogs';
+import { SummaryCard } from '@/components/cards';
+import { HoldingsTable } from '@/components/tables/holdings-table';
+import { InvestmentTransactionsTable } from '@/components/tables/investment-transactions-table';
+import { InvestmentAccountDialog } from '@/components/dialogs/investment-account-dialog';
+import { InvestmentHoldingDialog } from '@/components/dialogs/investment-holding-dialog';
+import { InvestmentTransactionDialog } from '@/components/dialogs/investment-transaction-dialog';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Badge } from '@/components/ui/badge';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -27,233 +33,519 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import {
-  useTransactionStore,
-  useBusinessStore,
+  useInvestmentStore,
   useSettingsStore,
+  useBusinessStore,
 } from '@/lib/store';
-import { calculateCategoryBreakdown } from '@/lib/utils/calculations';
+import { formatCurrency } from '@/lib/utils/format';
 import { toast } from 'sonner';
-import type { Transaction } from '@/types';
-import type { CreateTransactionFormData } from '@/lib/validations';
+import type {
+  InvestmentAccount,
+  InvestmentHolding,
+  InvestmentTransaction,
+  AssetClass,
+} from '@/types';
+import type {
+  CreateInvestmentAccountFormData,
+  CreateInvestmentHoldingFormData,
+  CreateInvestmentTransactionFormData,
+} from '@/lib/validations';
 
 export default function InvestmentsPage() {
   const t = useTranslations();
-  const { transactions, addTransaction, updateTransaction, deleteTransaction } =
-    useTransactionStore();
-  const { businesses } = useBusinessStore();
   const { settings, personalAccount } = useSettingsStore();
+  const { businesses } = useBusinessStore();
+  const {
+    accounts,
+    holdings,
+    transactions,
+    portfolioSummary,
+    fetchAccounts,
+    fetchHoldings,
+    fetchTransactions,
+    fetchPortfolioSummary,
+    addAccount,
+    updateAccount,
+    deleteAccount,
+    addHolding,
+    updateHolding,
+    deleteHolding,
+    addTransaction,
+    deleteTransaction,
+  } = useInvestmentStore();
 
-  const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [selectedEntityId, setSelectedEntityId] = useState<string>('all');
-  const [editingTransaction, setEditingTransaction] = useState<Transaction | undefined>();
-  const [deletingTransaction, setDeletingTransaction] = useState<Transaction | undefined>();
+  // Dialog states
+  const [isAccountDialogOpen, setIsAccountDialogOpen] = useState(false);
+  const [isHoldingDialogOpen, setIsHoldingDialogOpen] = useState(false);
+  const [isTransactionDialogOpen, setIsTransactionDialogOpen] = useState(false);
+  const [editingAccount, setEditingAccount] = useState<InvestmentAccount | undefined>();
+  const [editingHolding, setEditingHolding] = useState<InvestmentHolding | undefined>();
+  const [editingTransaction, setEditingTransaction] = useState<InvestmentTransaction | undefined>();
+  const [deletingItem, setDeletingItem] = useState<{ type: 'account' | 'holding' | 'transaction'; id: string } | null>(null);
 
-  // Filter investment transactions
-  const investmentTransactions = useMemo(() => {
-    let filtered = transactions.filter((t) => t.type === 'investment');
-    
-    if (selectedEntityId !== 'all') {
-      filtered = filtered.filter((t) => t.entityId === selectedEntityId);
-    }
-    
-    return filtered;
-  }, [transactions, selectedEntityId]);
+  // Active tab
+  const [activeTab, setActiveTab] = useState('portfolio');
+
+  // Fetch data on mount
+  useEffect(() => {
+    fetchAccounts();
+    fetchHoldings();
+    fetchTransactions();
+    fetchPortfolioSummary();
+  }, [fetchAccounts, fetchHoldings, fetchTransactions, fetchPortfolioSummary]);
 
   // Calculate totals
   const totals = useMemo(() => {
-    const total = investmentTransactions.reduce(
-      (sum, t) => sum + t.amount * t.exchangeRate,
-      0
-    );
-    
-    const businessTotal = investmentTransactions
-      .filter((t) => t.entityType === 'business')
-      .reduce((sum, t) => sum + t.amount * t.exchangeRate, 0);
-    
-    const personalTotal = investmentTransactions
-      .filter((t) => t.entityType === 'personal')
-      .reduce((sum, t) => sum + t.amount * t.exchangeRate, 0);
+    const total = holdings.reduce((sum: number, h: InvestmentHolding) => sum + h.totalInvested, 0);
+    return { total };
+  }, [holdings]);
 
-    return { total, businessTotal, personalTotal };
-  }, [investmentTransactions]);
+  // Group holdings by asset class
+  const holdingsByAssetClass = useMemo(() => {
+    const groups: Record<string, { holdings: InvestmentHolding[]; total: number }> = {};
+    for (const h of holdings.filter((h: InvestmentHolding) => h.isActive)) {
+      if (!groups[h.assetClass]) {
+        groups[h.assetClass] = { holdings: [], total: 0 };
+      }
+      groups[h.assetClass].holdings.push(h);
+      groups[h.assetClass].total += h.totalInvested;
+    }
+    return groups;
+  }, [holdings]);
 
-  // Category breakdown
-  const categoryBreakdown = useMemo(() => {
-    const breakdown = calculateCategoryBreakdown(investmentTransactions);
-    const total = totals.total || 1;
-    
-    return Object.entries(breakdown)
-      .map(([category, value]) => ({
-        category,
-        value,
-        percentage: (value / total) * 100,
-        count: investmentTransactions.filter((t) => t.category === category).length,
+  // Asset class breakdown for summary cards
+  const assetClassBreakdown = useMemo(() => {
+    return Object.entries(holdingsByAssetClass)
+      .map(([assetClass, data]) => ({
+        assetClass: assetClass as AssetClass,
+        total: data.total,
+        count: data.holdings.length,
+        percentage: totals.total > 0 ? (data.total / totals.total) * 100 : 0,
       }))
-      .sort((a, b) => b.value - a.value);
-  }, [investmentTransactions, totals.total]);
+      .sort((a, b) => b.total - a.total);
+  }, [holdingsByAssetClass, totals.total]);
 
-  const handleCreateTransaction = async (data: CreateTransactionFormData) => {
-    await addTransaction(data);
-    toast.success(t('transactions.toast.created'));
-  };
+  // ---- Handlers ----
 
-  const handleUpdateTransaction = async (data: CreateTransactionFormData) => {
-    if (editingTransaction) {
-      await updateTransaction(editingTransaction.id, data);
-      setEditingTransaction(undefined);
-      toast.success(t('transactions.toast.updated'));
+  const handleCreateAccount = async (data: CreateInvestmentAccountFormData) => {
+    const result = await addAccount({
+      name: data.name,
+      broker: data.broker || undefined,
+      entityType: data.entityType,
+      currency: data.currency,
+      businessId: data.entityType === 'business' ? data.entityId : undefined,
+      personalAccountId: data.entityType === 'personal' ? data.entityId : undefined,
+    });
+    if (result) {
+      toast.success(t('investments.accounts.toast.created'));
+    } else {
+      toast.error('Failed to create account');
     }
   };
 
-  const handleDeleteTransaction = async () => {
-    if (deletingTransaction) {
-      await deleteTransaction(deletingTransaction.id);
-      setDeletingTransaction(undefined);
-      toast.success(t('transactions.toast.deleted'));
+  const handleUpdateAccount = async (data: CreateInvestmentAccountFormData) => {
+    if (editingAccount) {
+      await updateAccount(editingAccount.id, {
+        name: data.name,
+        broker: data.broker || undefined,
+        currency: data.currency,
+      });
+      setEditingAccount(undefined);
+      toast.success(t('investments.accounts.toast.updated'));
     }
   };
 
-  const closeDialog = () => {
-    setIsDialogOpen(false);
-    setEditingTransaction(undefined);
-  };
+  const handleCreateHolding = async (data: CreateInvestmentHoldingFormData) => {
+    const result = await addHolding(data);
+    if (!result) {
+      toast.error('Failed to create holding');
+      return;
+    }
 
-  // Determine which entity to use for new transactions
-  const getDefaultEntity = () => {
-    if (selectedEntityId !== 'all') {
-      const business = businesses.find((b) => b.id === selectedEntityId);
-      if (business) {
-        return { id: business.id, type: 'business' as const };
+    // If initial position fields are filled, create an initial transaction
+    if (data.initialAmount && data.initialAmount > 0) {
+      const isTickerAsset = ['stocks', 'fii', 'etf', 'bdr', 'crypto', 'international_stocks', 'international_etf'].includes(data.assetClass);
+      const txResult = await addTransaction({
+        holdingId: result.id,
+        type: isTickerAsset ? 'buy' : 'deposit',
+        quantity: data.initialQuantity,
+        pricePerUnit: data.initialPricePerUnit,
+        totalAmount: data.initialAmount,
+        fees: 0,
+        date: data.initialDate || new Date(),
+      });
+      if (!txResult) {
+        toast.error('Holding created but failed to set initial position');
+        return;
       }
-      if (selectedEntityId === personalAccount?.id) {
-        return { id: personalAccount.id, type: 'personal' as const };
-      }
+      fetchPortfolioSummary();
     }
-    // Default to personal account
-    return personalAccount
-      ? { id: personalAccount.id, type: 'personal' as const }
-      : { id: businesses[0]?.id || '', type: 'business' as const };
+
+    toast.success(t('investments.holdings.toast.created'));
   };
 
-  const defaultEntity = getDefaultEntity();
+  const handleUpdateHolding = async (data: CreateInvestmentHoldingFormData) => {
+    if (editingHolding) {
+      await updateHolding(editingHolding.id, {
+        name: data.name,
+        ticker: data.ticker,
+        subType: data.subType,
+      });
+      setEditingHolding(undefined);
+      toast.success(t('investments.holdings.toast.updated'));
+    }
+  };
+
+  const handleCreateTransaction = async (data: CreateInvestmentTransactionFormData) => {
+    const result = await addTransaction(data);
+    if (result) {
+      toast.success(t('investments.transactions.toast.created'));
+      fetchPortfolioSummary();
+    } else {
+      toast.error('Failed to create transaction');
+    }
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!deletingItem) return;
+
+    switch (deletingItem.type) {
+      case 'account':
+        await deleteAccount(deletingItem.id);
+        toast.success(t('investments.accounts.toast.deleted'));
+        break;
+      case 'holding':
+        await deleteHolding(deletingItem.id);
+        toast.success(t('investments.holdings.toast.deleted'));
+        break;
+      case 'transaction':
+        await deleteTransaction(deletingItem.id);
+        toast.success(t('investments.transactions.toast.deleted'));
+        break;
+    }
+    setDeletingItem(null);
+    fetchPortfolioSummary();
+  };
+
+  // ---- Action buttons for header ----
+  const getHeaderAction = () => {
+    switch (activeTab) {
+      case 'portfolio':
+        return {
+          label: t('investments.holdings.addHolding'),
+          onClick: () => setIsHoldingDialogOpen(true),
+        };
+      case 'accounts':
+        return {
+          label: t('investments.accounts.addAccount'),
+          onClick: () => setIsAccountDialogOpen(true),
+        };
+      case 'transactions':
+        return {
+          label: t('investments.transactions.addTransaction'),
+          onClick: () => setIsTransactionDialogOpen(true),
+        };
+      default:
+        return {
+          label: t('investments.addInvestment'),
+          onClick: () => setIsTransactionDialogOpen(true),
+        };
+    }
+  };
 
   return (
     <AppShell>
       <Header
         title={t('investments.title')}
         description={t('investments.subtitle')}
-        action={{
-          label: t('investments.addInvestment'),
-          onClick: () => setIsDialogOpen(true),
-        }}
+        action={getHeaderAction()}
       />
 
       {/* Summary Cards */}
-      <div className="mb-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      <div className="mb-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <SummaryCard
-          title={t('investments.totalInvestments')}
+          title={t('investments.totalInvested')}
           value={totals.total}
           currency={settings.baseCurrency}
           icon={PiggyBank}
           variant="investment"
         />
         <SummaryCard
-          title={t('investments.businessInvestments')}
-          value={totals.businessTotal}
-          currency={settings.baseCurrency}
-          icon={Building2}
+          title={t('investments.holdingsCount', { count: holdings.filter((h: InvestmentHolding) => h.isActive).length })}
+          value={holdings.filter((h) => h.isActive).length}
+          icon={Briefcase}
           variant="default"
+          isCount
         />
         <SummaryCard
-          title={t('investments.personalInvestments')}
-          value={totals.personalTotal}
-          currency={settings.baseCurrency}
-          icon={User}
+          title={t('investments.accountsCount', { count: accounts.filter((a) => a.isActive).length })}
+          value={accounts.filter((a) => a.isActive).length}
+          icon={Landmark}
           variant="default"
+          isCount
+        />
+        <SummaryCard
+          title={t('investments.transactionHistory')}
+          value={transactions.length}
+          icon={Landmark}
+          variant="default"
+          isCount
         />
       </div>
 
-      {/* Portfolio Breakdown */}
-      {categoryBreakdown.length > 0 && (
+      {/* Asset Class Breakdown */}
+      {assetClassBreakdown.length > 0 && (
         <div className="mb-8">
           <h2 className="mb-4 text-lg font-semibold text-white">
             {t('investments.portfolioBreakdown')}
           </h2>
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {categoryBreakdown.map((item) => (
-              <InvestmentCard
-                key={item.category}
-                category={item.category}
-                totalValue={item.value}
-                currency={settings.baseCurrency}
-                transactionCount={item.count}
-                percentageOfTotal={item.percentage}
-              />
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+            {assetClassBreakdown.map((item) => (
+              <Card
+                key={item.assetClass}
+                className="border-slate-800 bg-slate-900/50 backdrop-blur-sm transition-all hover:border-slate-700"
+              >
+                <CardContent className="p-4">
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <p className="text-sm font-medium text-slate-400">
+                        {t(`investments.assetClasses.${item.assetClass}`)}
+                      </p>
+                      <p className="mt-1 text-xl font-bold text-white">
+                        {formatCurrency(item.total, settings.baseCurrency)}
+                      </p>
+                      <p className="text-xs text-slate-500">
+                        {item.count} {item.count === 1 ? 'holding' : 'holdings'}
+                      </p>
+                    </div>
+                    <Badge
+                      variant="outline"
+                      className="border-blue-500/50 bg-blue-500/10 text-blue-400"
+                    >
+                      {item.percentage.toFixed(1)}%
+                    </Badge>
+                  </div>
+                </CardContent>
+              </Card>
             ))}
           </div>
         </div>
       )}
 
-      {/* Tabs for filtering */}
-      <Tabs
-        value={selectedEntityId}
-        onValueChange={setSelectedEntityId}
-        className="space-y-4"
-      >
+      {/* Main Content Tabs */}
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
         <TabsList className="border-slate-800 bg-slate-900/50">
           <TabsTrigger
-            value="all"
+            value="portfolio"
             className="data-[state=active]:bg-slate-800 data-[state=active]:text-white"
           >
-            {t('investments.filters.all')}
+            {t('investments.tabs.portfolio')}
           </TabsTrigger>
-          {personalAccount && (
-            <TabsTrigger
-              value={personalAccount.id}
-              className="data-[state=active]:bg-slate-800 data-[state=active]:text-white"
-            >
-              {t('nav.personal')}
-            </TabsTrigger>
-          )}
-          {businesses.map((business) => (
-            <TabsTrigger
-              key={business.id}
-              value={business.id}
-              className="data-[state=active]:bg-slate-800 data-[state=active]:text-white"
-            >
-              {business.name}
-            </TabsTrigger>
-          ))}
+          <TabsTrigger
+            value="accounts"
+            className="data-[state=active]:bg-slate-800 data-[state=active]:text-white"
+          >
+            {t('investments.tabs.accounts')}
+          </TabsTrigger>
+          <TabsTrigger
+            value="transactions"
+            className="data-[state=active]:bg-slate-800 data-[state=active]:text-white"
+          >
+            {t('investments.tabs.transactions')}
+          </TabsTrigger>
         </TabsList>
 
-        <TabsContent value={selectedEntityId}>
+        {/* Portfolio Tab - Holdings */}
+        <TabsContent value="portfolio">
           <Card className="border-slate-800 bg-slate-900/50 backdrop-blur-sm">
-            <CardHeader>
+            <CardHeader className="flex flex-row items-center justify-between">
               <CardTitle className="text-lg text-white">
-                {t('investments.transactionHistory')}
+                {t('investments.holdings.title')}
               </CardTitle>
+              <Button
+                onClick={() => setIsHoldingDialogOpen(true)}
+                size="sm"
+                className="bg-gradient-to-r from-blue-500 to-indigo-500 text-white hover:from-blue-600 hover:to-indigo-600"
+              >
+                <Plus className="mr-2 h-4 w-4" />
+                {t('investments.holdings.addHolding')}
+              </Button>
             </CardHeader>
             <CardContent>
-              {investmentTransactions.length === 0 ? (
+              {holdings.filter((h) => h.isActive).length === 0 ? (
                 <div className="py-8 text-center">
                   <PiggyBank className="mx-auto mb-4 h-12 w-12 text-slate-600" />
-                  <p className="text-slate-400">{t('investments.empty')}</p>
+                  <p className="text-slate-400">{t('investments.holdings.empty')}</p>
                   <Button
-                    onClick={() => setIsDialogOpen(true)}
+                    onClick={() => setIsHoldingDialogOpen(true)}
                     className="mt-4 bg-gradient-to-r from-blue-500 to-indigo-500 text-white hover:from-blue-600 hover:to-indigo-600"
                   >
                     <Plus className="mr-2 h-4 w-4" />
-                    {t('investments.addFirst')}
+                    {t('investments.holdings.addFirst')}
                   </Button>
                 </div>
               ) : (
-                <TransactionsTable
-                  transactions={investmentTransactions}
-                  onEdit={(t) => {
-                    setEditingTransaction(t);
-                    setIsDialogOpen(true);
+                <HoldingsTable
+                  holdings={holdings.filter((h) => h.isActive)}
+                  onEdit={(h) => {
+                    setEditingHolding(h);
+                    setIsHoldingDialogOpen(true);
                   }}
-                  onDelete={setDeletingTransaction}
+                  onDelete={(h) => setDeletingItem({ type: 'holding', id: h.id })}
+                />
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Accounts Tab */}
+        <TabsContent value="accounts">
+          <Card className="border-slate-800 bg-slate-900/50 backdrop-blur-sm">
+            <CardHeader className="flex flex-row items-center justify-between">
+              <CardTitle className="text-lg text-white">
+                {t('investments.accounts.title')}
+              </CardTitle>
+              <Button
+                onClick={() => setIsAccountDialogOpen(true)}
+                size="sm"
+                className="bg-gradient-to-r from-blue-500 to-indigo-500 text-white hover:from-blue-600 hover:to-indigo-600"
+              >
+                <Plus className="mr-2 h-4 w-4" />
+                {t('investments.accounts.addAccount')}
+              </Button>
+            </CardHeader>
+            <CardContent>
+              {accounts.length === 0 ? (
+                <div className="py-8 text-center">
+                  <Landmark className="mx-auto mb-4 h-12 w-12 text-slate-600" />
+                  <p className="text-slate-400">{t('investments.accounts.empty')}</p>
+                  <Button
+                    onClick={() => setIsAccountDialogOpen(true)}
+                    className="mt-4 bg-gradient-to-r from-blue-500 to-indigo-500 text-white hover:from-blue-600 hover:to-indigo-600"
+                  >
+                    <Plus className="mr-2 h-4 w-4" />
+                    {t('investments.accounts.addFirst')}
+                  </Button>
+                </div>
+              ) : (
+                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                  {accounts.map((account) => {
+                    const accountHoldings = holdings.filter(
+                      (h) => h.accountId === account.id && h.isActive
+                    );
+                    const accountTotal = accountHoldings.reduce(
+                      (sum, h) => sum + h.totalInvested,
+                      0
+                    );
+
+                    return (
+                      <Card
+                        key={account.id}
+                        className="border-slate-800 bg-slate-800/50 transition-all hover:border-slate-700"
+                      >
+                        <CardContent className="p-5">
+                          <div className="flex items-start justify-between">
+                            <div>
+                              <h3 className="font-semibold text-white">{account.name}</h3>
+                              {account.broker && (
+                                <p className="text-xs text-slate-500">{account.broker}</p>
+                              )}
+                            </div>
+                            <div className="flex gap-1">
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8 text-slate-400 hover:text-white"
+                                onClick={() => {
+                                  setEditingAccount(account);
+                                  setIsAccountDialogOpen(true);
+                                }}
+                              >
+                                <Pencil className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8 text-slate-400 hover:text-red-400"
+                                onClick={() =>
+                                  setDeletingItem({ type: 'account', id: account.id })
+                                }
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          </div>
+                          <div className="mt-3">
+                            <p className="text-2xl font-bold text-white">
+                              {formatCurrency(accountTotal, account.currency)}
+                            </p>
+                            <p className="text-xs text-slate-500">
+                              {accountHoldings.length} holdings
+                            </p>
+                          </div>
+                          <div className="mt-2">
+                            <Badge
+                              variant="outline"
+                              className={
+                                account.entityType === 'personal'
+                                  ? 'border-emerald-500/50 bg-emerald-500/10 text-emerald-400'
+                                  : 'border-blue-500/50 bg-blue-500/10 text-blue-400'
+                              }
+                            >
+                              {account.entityType === 'personal'
+                                ? t('nav.personal')
+                                : businesses.find((b) => b.id === account.entityId)?.name || 'Business'}
+                            </Badge>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    );
+                  })}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Transactions Tab */}
+        <TabsContent value="transactions">
+          <Card className="border-slate-800 bg-slate-900/50 backdrop-blur-sm">
+            <CardHeader className="flex flex-row items-center justify-between">
+              <CardTitle className="text-lg text-white">
+                {t('investments.transactions.title')}
+              </CardTitle>
+              <Button
+                onClick={() => setIsTransactionDialogOpen(true)}
+                size="sm"
+                className="bg-gradient-to-r from-blue-500 to-indigo-500 text-white hover:from-blue-600 hover:to-indigo-600"
+              >
+                <Plus className="mr-2 h-4 w-4" />
+                {t('investments.transactions.addTransaction')}
+              </Button>
+            </CardHeader>
+            <CardContent>
+              {transactions.length === 0 ? (
+                <div className="py-8 text-center">
+                  <PiggyBank className="mx-auto mb-4 h-12 w-12 text-slate-600" />
+                  <p className="text-slate-400">{t('investments.transactions.empty')}</p>
+                  <Button
+                    onClick={() => setIsTransactionDialogOpen(true)}
+                    className="mt-4 bg-gradient-to-r from-blue-500 to-indigo-500 text-white hover:from-blue-600 hover:to-indigo-600"
+                  >
+                    <Plus className="mr-2 h-4 w-4" />
+                    {t('investments.transactions.addFirst')}
+                  </Button>
+                </div>
+              ) : (
+                <InvestmentTransactionsTable
+                  transactions={transactions}
+                  onEdit={(tx) => {
+                    setEditingTransaction(tx);
+                    setIsTransactionDialogOpen(true);
+                  }}
+                  onDelete={(tx) =>
+                    setDeletingItem({ type: 'transaction', id: tx.id })
+                  }
                 />
               )}
             </CardContent>
@@ -261,29 +553,49 @@ export default function InvestmentsPage() {
         </TabsContent>
       </Tabs>
 
-      {/* Transaction Dialog */}
-      <TransactionDialog
-        open={isDialogOpen}
-        onOpenChange={closeDialog}
-        entityId={editingTransaction?.entityId || defaultEntity.id}
-        entityType={editingTransaction?.entityType || defaultEntity.type}
+      {/* Dialogs */}
+      <InvestmentAccountDialog
+        open={isAccountDialogOpen}
+        onOpenChange={(open) => {
+          setIsAccountDialogOpen(open);
+          if (!open) setEditingAccount(undefined);
+        }}
+        account={editingAccount}
+        onSubmit={editingAccount ? handleUpdateAccount : handleCreateAccount}
+      />
+
+      <InvestmentHoldingDialog
+        open={isHoldingDialogOpen}
+        onOpenChange={(open) => {
+          setIsHoldingDialogOpen(open);
+          if (!open) setEditingHolding(undefined);
+        }}
+        holding={editingHolding}
+        onSubmit={editingHolding ? handleUpdateHolding : handleCreateHolding}
+      />
+
+      <InvestmentTransactionDialog
+        open={isTransactionDialogOpen}
+        onOpenChange={(open) => {
+          setIsTransactionDialogOpen(open);
+          if (!open) setEditingTransaction(undefined);
+        }}
         transaction={editingTransaction}
-        defaultType="investment"
-        onSubmit={editingTransaction ? handleUpdateTransaction : handleCreateTransaction}
+        onSubmit={handleCreateTransaction}
       />
 
       {/* Delete Confirmation */}
       <AlertDialog
-        open={!!deletingTransaction}
-        onOpenChange={() => setDeletingTransaction(undefined)}
+        open={!!deletingItem}
+        onOpenChange={() => setDeletingItem(null)}
       >
         <AlertDialogContent className="border-slate-800 bg-slate-900">
           <AlertDialogHeader>
             <AlertDialogTitle className="text-white">
-              {t('transactions.delete.title')}
+              {t('investments.delete.title')}
             </AlertDialogTitle>
             <AlertDialogDescription className="text-slate-400">
-              {t('transactions.delete.description')}
+              {t('investments.delete.description')}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -291,7 +603,7 @@ export default function InvestmentsPage() {
               {t('common.cancel')}
             </AlertDialogCancel>
             <AlertDialogAction
-              onClick={handleDeleteTransaction}
+              onClick={handleDeleteConfirm}
               className="bg-red-500 text-white hover:bg-red-600"
             >
               {t('common.delete')}
