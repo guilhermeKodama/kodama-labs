@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useCallback } from 'react';
 import { useTranslations } from 'next-intl';
 import { format, startOfYear, endOfYear, eachMonthOfInterval } from 'date-fns';
 import {
@@ -52,6 +52,7 @@ import {
 } from '@/lib/utils/calculations';
 import { exportTransactionsToCSV } from '@/lib/utils/export';
 import { formatCurrency, formatPercent } from '@/lib/utils/format';
+import { convertToBaseCurrency } from '@/lib/utils/currency';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import type { TransactionType, InvestmentHolding, AssetClass } from '@/types';
@@ -213,66 +214,85 @@ export default function ReportsPage() {
     [holdings]
   );
 
+  // Helper: convert holding amount to base currency
+  const toBase = useCallback(
+    (amount: number, holdingCurrency: string) =>
+      convertToBaseCurrency(amount, holdingCurrency, currencies, settings.baseCurrency),
+    [currencies, settings.baseCurrency]
+  );
+
   const portfolioTotals = useMemo(() => {
-    const totalInvested = activeHoldings.reduce((sum: number, h: InvestmentHolding) => sum + h.totalInvested, 0);
-    const holdingsWithPrice = activeHoldings.filter((h: InvestmentHolding) => h.currentPrice && h.currentQuantity > 0);
+    const totalInvested = activeHoldings.reduce(
+      (sum: number, h: InvestmentHolding) => sum + toBase(h.totalInvested, h.currency), 0
+    );
+    const holdingsWithPrice = activeHoldings.filter(
+      (h: InvestmentHolding) => h.currentPrice && h.currentQuantity > 0
+    );
     const currentValue = holdingsWithPrice.reduce(
-      (sum: number, h: InvestmentHolding) => sum + h.currentQuantity * (h.currentPrice || 0),
+      (sum: number, h: InvestmentHolding) =>
+        sum + toBase(h.currentQuantity * (h.currentPrice || 0), h.currency),
       0
     );
     // For holdings without price, assume current = invested
-    const noPrice = activeHoldings.filter((h: InvestmentHolding) => !h.currentPrice || h.currentQuantity <= 0);
-    const noPriceTotal = noPrice.reduce((sum: number, h: InvestmentHolding) => sum + h.totalInvested, 0);
+    const noPrice = activeHoldings.filter(
+      (h: InvestmentHolding) => !h.currentPrice || h.currentQuantity <= 0
+    );
+    const noPriceTotal = noPrice.reduce(
+      (sum: number, h: InvestmentHolding) => sum + toBase(h.totalInvested, h.currency), 0
+    );
     const totalCurrentValue = currentValue + noPriceTotal;
     const totalPnL = totalCurrentValue - totalInvested;
     const totalPnLPercent = totalInvested > 0 ? (totalPnL / totalInvested) * 100 : 0;
     return { totalInvested, totalCurrentValue, totalPnL, totalPnLPercent, hasPriceData: holdingsWithPrice.length > 0 };
-  }, [activeHoldings]);
+  }, [activeHoldings, currencies, settings.baseCurrency]);
 
   const assetAllocationData = useMemo(() => {
     const groups: Record<string, number> = {};
     for (const h of activeHoldings) {
       const label = ASSET_CLASS_LABELS[h.assetClass as AssetClass] || h.assetClass;
-      groups[label] = (groups[label] || 0) + h.totalInvested;
+      groups[label] = (groups[label] || 0) + toBase(h.totalInvested, h.currency);
     }
     return Object.entries(groups)
       .map(([name, value]) => ({ name, value }))
       .sort((a, b) => b.value - a.value);
-  }, [activeHoldings]);
+  }, [activeHoldings, currencies, settings.baseCurrency]);
 
   const accountBreakdownData = useMemo(() => {
     const groups: Record<string, number> = {};
     for (const h of activeHoldings) {
       const accountName = h.account?.name || 'Unknown';
-      groups[accountName] = (groups[accountName] || 0) + h.totalInvested;
+      groups[accountName] = (groups[accountName] || 0) + toBase(h.totalInvested, h.currency);
     }
     return Object.entries(groups)
       .map(([name, value]) => ({ name, value }))
       .sort((a, b) => b.value - a.value);
-  }, [activeHoldings]);
+  }, [activeHoldings, currencies, settings.baseCurrency]);
 
   const currencyBreakdownData = useMemo(() => {
     const groups: Record<string, number> = {};
     for (const h of activeHoldings) {
       const currency = h.currency || 'Unknown';
-      groups[currency] = (groups[currency] || 0) + h.totalInvested;
+      // For currency exposure, convert to base so percentages are comparable
+      groups[currency] = (groups[currency] || 0) + toBase(h.totalInvested, h.currency);
     }
     return Object.entries(groups)
       .map(([name, value]) => ({ name, value }))
       .sort((a, b) => b.value - a.value);
-  }, [activeHoldings]);
+  }, [activeHoldings, currencies, settings.baseCurrency]);
 
   const holdingsPerformance = useMemo(() => {
     return activeHoldings
       .filter((h: InvestmentHolding) => h.currentPrice && h.currentQuantity > 0 && h.totalInvested > 0)
       .map((h: InvestmentHolding) => {
         const currentValue = h.currentQuantity * (h.currentPrice || 0);
-        const pnl = currentValue - h.totalInvested;
-        const pnlPercent = h.totalInvested > 0 ? (pnl / h.totalInvested) * 100 : 0;
-        return { ...h, currentValue, pnl, pnlPercent };
+        const investedInBase = toBase(h.totalInvested, h.currency);
+        const currentInBase = toBase(currentValue, h.currency);
+        const pnl = currentInBase - investedInBase;
+        const pnlPercent = investedInBase > 0 ? (pnl / investedInBase) * 100 : 0;
+        return { ...h, currentValue: currentInBase, investedInBase, pnl, pnlPercent };
       })
       .sort((a, b) => b.pnlPercent - a.pnlPercent);
-  }, [activeHoldings]);
+  }, [activeHoldings, currencies, settings.baseCurrency]);
 
   const handleExportCSV = () => {
     if (yearTransactions.length === 0) {
@@ -695,10 +715,10 @@ export default function ReportsPage() {
                                 </div>
                               </TableCell>
                               <TableCell className="text-right font-mono text-slate-300">
-                                {formatCurrency(h.totalInvested, h.currency)}
+                                {formatCurrency(h.investedInBase, settings.baseCurrency)}
                               </TableCell>
                               <TableCell className="text-right font-mono text-white">
-                                {formatCurrency(h.currentValue, h.currency)}
+                                {formatCurrency(h.currentValue, settings.baseCurrency)}
                               </TableCell>
                               <TableCell className="text-right">
                                 <div className="flex items-center justify-end gap-2">
@@ -706,7 +726,7 @@ export default function ReportsPage() {
                                     'font-mono text-sm',
                                     h.pnl >= 0 ? 'text-emerald-400' : 'text-red-400'
                                   )}>
-                                    {h.pnl >= 0 ? '+' : ''}{formatCurrency(h.pnl, h.currency)}
+                                    {h.pnl >= 0 ? '+' : ''}{formatCurrency(h.pnl, settings.baseCurrency)}
                                   </span>
                                   <Badge
                                     variant="outline"

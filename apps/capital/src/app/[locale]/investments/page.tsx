@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useCallback } from 'react';
 import { useTranslations } from 'next-intl';
 import {
   PiggyBank,
@@ -38,6 +38,7 @@ import {
   useBusinessStore,
 } from '@/lib/store';
 import { formatCurrency } from '@/lib/utils/format';
+import { convertToBaseCurrency } from '@/lib/utils/currency';
 import { toast } from 'sonner';
 import type {
   InvestmentAccount,
@@ -53,7 +54,7 @@ import type {
 
 export default function InvestmentsPage() {
   const t = useTranslations();
-  const { settings } = useSettingsStore();
+  const { settings, currencies } = useSettingsStore();
   const { businesses } = useBusinessStore();
   const {
     accounts,
@@ -93,11 +94,20 @@ export default function InvestmentsPage() {
     fetchPortfolioSummary();
   }, [fetchAccounts, fetchHoldings, fetchTransactions, fetchPortfolioSummary]);
 
+  // Helper: convert holding amount to base currency
+  const toBase = useCallback(
+    (amount: number, holdingCurrency: string) =>
+      convertToBaseCurrency(amount, holdingCurrency, currencies, settings.baseCurrency),
+    [currencies, settings.baseCurrency]
+  );
+
   // Calculate totals
   const totals = useMemo(() => {
-    const total = holdings.reduce((sum: number, h: InvestmentHolding) => sum + h.totalInvested, 0);
+    const total = holdings.reduce(
+      (sum: number, h: InvestmentHolding) => sum + toBase(h.totalInvested, h.currency), 0
+    );
     return { total };
-  }, [holdings]);
+  }, [holdings, currencies, settings.baseCurrency]);
 
   // Group holdings by asset class
   const holdingsByAssetClass = useMemo(() => {
@@ -107,10 +117,10 @@ export default function InvestmentsPage() {
         groups[h.assetClass] = { holdings: [], total: 0 };
       }
       groups[h.assetClass].holdings.push(h);
-      groups[h.assetClass].total += h.totalInvested;
+      groups[h.assetClass].total += toBase(h.totalInvested, h.currency);
     }
     return groups;
-  }, [holdings]);
+  }, [holdings, currencies, settings.baseCurrency]);
 
   // Asset class breakdown for summary cards
   const assetClassBreakdown = useMemo(() => {
