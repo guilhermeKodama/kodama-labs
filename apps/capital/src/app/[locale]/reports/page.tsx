@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useTranslations } from 'next-intl';
 import { format, startOfYear, endOfYear, eachMonthOfInterval } from 'date-fns';
 import {
@@ -12,6 +12,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Lightbulb,
+  Briefcase,
 } from 'lucide-react';
 import { AppShell } from '@/components/layout';
 import { Header } from '@/components/layout/header';
@@ -29,10 +30,20 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
+import { Badge } from '@/components/ui/badge';
+import {
   useTransactionStore,
   useTransferStore,
   useBusinessStore,
   useSettingsStore,
+  useInvestmentStore,
 } from '@/lib/store';
 import {
   calculateCategoryBreakdown,
@@ -43,7 +54,8 @@ import { exportTransactionsToCSV } from '@/lib/utils/export';
 import { formatCurrency, formatPercent } from '@/lib/utils/format';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
-import type { TransactionType } from '@/types';
+import type { TransactionType, InvestmentHolding, AssetClass } from '@/types';
+import { ASSET_CLASS_LABELS } from '@/types';
 
 export default function ReportsPage() {
   const t = useTranslations();
@@ -51,10 +63,21 @@ export default function ReportsPage() {
   const { transfers } = useTransferStore();
   const { businesses } = useBusinessStore();
   const { settings, personalAccount, currencies } = useSettingsStore();
+  const {
+    holdings,
+    fetchHoldings,
+    fetchAccounts,
+  } = useInvestmentStore();
 
   const currentYear = new Date().getFullYear();
   const [selectedYear, setSelectedYear] = useState(currentYear);
-  const [selectedView, setSelectedView] = useState<'monthly' | 'categories' | 'insights'>('monthly');
+  const [selectedView, setSelectedView] = useState<'monthly' | 'categories' | 'insights' | 'portfolio'>('monthly');
+
+  // Fetch investment data on mount
+  useEffect(() => {
+    fetchHoldings();
+    fetchAccounts();
+  }, [fetchHoldings, fetchAccounts]);
   const [selectedType, setSelectedType] = useState<TransactionType | 'all'>('all');
 
   // Filter transactions by year
@@ -184,6 +207,73 @@ export default function ReportsPage() {
     return entities;
   }, [businesses, personalAccount, t]);
 
+  // ---- Portfolio data ----
+  const activeHoldings = useMemo(
+    () => holdings.filter((h: InvestmentHolding) => h.isActive),
+    [holdings]
+  );
+
+  const portfolioTotals = useMemo(() => {
+    const totalInvested = activeHoldings.reduce((sum: number, h: InvestmentHolding) => sum + h.totalInvested, 0);
+    const holdingsWithPrice = activeHoldings.filter((h: InvestmentHolding) => h.currentPrice && h.currentQuantity > 0);
+    const currentValue = holdingsWithPrice.reduce(
+      (sum: number, h: InvestmentHolding) => sum + h.currentQuantity * (h.currentPrice || 0),
+      0
+    );
+    // For holdings without price, assume current = invested
+    const noPrice = activeHoldings.filter((h: InvestmentHolding) => !h.currentPrice || h.currentQuantity <= 0);
+    const noPriceTotal = noPrice.reduce((sum: number, h: InvestmentHolding) => sum + h.totalInvested, 0);
+    const totalCurrentValue = currentValue + noPriceTotal;
+    const totalPnL = totalCurrentValue - totalInvested;
+    const totalPnLPercent = totalInvested > 0 ? (totalPnL / totalInvested) * 100 : 0;
+    return { totalInvested, totalCurrentValue, totalPnL, totalPnLPercent, hasPriceData: holdingsWithPrice.length > 0 };
+  }, [activeHoldings]);
+
+  const assetAllocationData = useMemo(() => {
+    const groups: Record<string, number> = {};
+    for (const h of activeHoldings) {
+      const label = ASSET_CLASS_LABELS[h.assetClass as AssetClass] || h.assetClass;
+      groups[label] = (groups[label] || 0) + h.totalInvested;
+    }
+    return Object.entries(groups)
+      .map(([name, value]) => ({ name, value }))
+      .sort((a, b) => b.value - a.value);
+  }, [activeHoldings]);
+
+  const accountBreakdownData = useMemo(() => {
+    const groups: Record<string, number> = {};
+    for (const h of activeHoldings) {
+      const accountName = h.account?.name || 'Unknown';
+      groups[accountName] = (groups[accountName] || 0) + h.totalInvested;
+    }
+    return Object.entries(groups)
+      .map(([name, value]) => ({ name, value }))
+      .sort((a, b) => b.value - a.value);
+  }, [activeHoldings]);
+
+  const currencyBreakdownData = useMemo(() => {
+    const groups: Record<string, number> = {};
+    for (const h of activeHoldings) {
+      const currency = h.currency || 'Unknown';
+      groups[currency] = (groups[currency] || 0) + h.totalInvested;
+    }
+    return Object.entries(groups)
+      .map(([name, value]) => ({ name, value }))
+      .sort((a, b) => b.value - a.value);
+  }, [activeHoldings]);
+
+  const holdingsPerformance = useMemo(() => {
+    return activeHoldings
+      .filter((h: InvestmentHolding) => h.currentPrice && h.currentQuantity > 0 && h.totalInvested > 0)
+      .map((h: InvestmentHolding) => {
+        const currentValue = h.currentQuantity * (h.currentPrice || 0);
+        const pnl = currentValue - h.totalInvested;
+        const pnlPercent = h.totalInvested > 0 ? (pnl / h.totalInvested) * 100 : 0;
+        return { ...h, currentValue, pnl, pnlPercent };
+      })
+      .sort((a, b) => b.pnlPercent - a.pnlPercent);
+  }, [activeHoldings]);
+
   const handleExportCSV = () => {
     if (yearTransactions.length === 0) {
       toast.error(t('reports.export.noData'));
@@ -309,7 +399,7 @@ export default function ReportsPage() {
       </div>
 
       {/* View Tabs */}
-      <Tabs value={selectedView} onValueChange={(v) => setSelectedView(v as 'monthly' | 'categories' | 'insights')}>
+      <Tabs value={selectedView} onValueChange={(v) => setSelectedView(v as 'monthly' | 'categories' | 'insights' | 'portfolio')}>
         <TabsList className="mb-6 border-slate-800 bg-slate-900/50">
           <TabsTrigger
             value="monthly"
@@ -322,6 +412,13 @@ export default function ReportsPage() {
             className="data-[state=active]:bg-slate-800 data-[state=active]:text-white"
           >
             {t('reports.views.categories')}
+          </TabsTrigger>
+          <TabsTrigger
+            value="portfolio"
+            className="data-[state=active]:bg-slate-800 data-[state=active]:text-white"
+          >
+            <Briefcase className="mr-1.5 h-3.5 w-3.5" />
+            {t('reports.views.portfolio')}
           </TabsTrigger>
           <TabsTrigger
             value="insights"
@@ -444,6 +541,196 @@ export default function ReportsPage() {
               />
             </CardContent>
           </Card>
+        </TabsContent>
+
+        {/* Portfolio View */}
+        <TabsContent value="portfolio" className="space-y-6">
+          {activeHoldings.length === 0 ? (
+            <Card className="border-slate-800 bg-slate-900/50 backdrop-blur-sm">
+              <CardContent className="py-12 text-center">
+                <Briefcase className="mx-auto mb-4 h-12 w-12 text-slate-600" />
+                <p className="text-slate-400">{t('reports.portfolio.noData')}</p>
+              </CardContent>
+            </Card>
+          ) : (
+            <>
+              {/* Performance Summary Cards */}
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                <Card className="border-slate-800 bg-slate-900/50 backdrop-blur-sm">
+                  <CardContent className="pt-6">
+                    <p className="text-sm text-slate-400">{t('reports.portfolio.totalInvested')}</p>
+                    <p className="mt-1 text-2xl font-bold text-white">
+                      {formatCurrency(portfolioTotals.totalInvested, settings.baseCurrency)}
+                    </p>
+                  </CardContent>
+                </Card>
+                {portfolioTotals.hasPriceData && (
+                  <>
+                    <Card className="border-slate-800 bg-slate-900/50 backdrop-blur-sm">
+                      <CardContent className="pt-6">
+                        <p className="text-sm text-slate-400">{t('reports.portfolio.currentValue')}</p>
+                        <p className="mt-1 text-2xl font-bold text-white">
+                          {formatCurrency(portfolioTotals.totalCurrentValue, settings.baseCurrency)}
+                        </p>
+                      </CardContent>
+                    </Card>
+                    <Card className="border-slate-800 bg-slate-900/50 backdrop-blur-sm">
+                      <CardContent className="pt-6">
+                        <p className="text-sm text-slate-400">{t('reports.portfolio.totalPnL')}</p>
+                        <div className="mt-1 flex items-center gap-2">
+                          <p className={cn(
+                            'text-2xl font-bold',
+                            portfolioTotals.totalPnL >= 0 ? 'text-emerald-400' : 'text-red-400'
+                          )}>
+                            {portfolioTotals.totalPnL >= 0 ? '+' : ''}
+                            {formatCurrency(portfolioTotals.totalPnL, settings.baseCurrency)}
+                          </p>
+                          <Badge
+                            variant="outline"
+                            className={cn(
+                              portfolioTotals.totalPnL >= 0
+                                ? 'border-emerald-500/50 bg-emerald-500/10 text-emerald-400'
+                                : 'border-red-500/50 bg-red-500/10 text-red-400'
+                            )}
+                          >
+                            {portfolioTotals.totalPnL >= 0 ? '+' : ''}
+                            {portfolioTotals.totalPnLPercent.toFixed(1)}%
+                          </Badge>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </>
+                )}
+              </div>
+
+              {/* Asset Allocation + Account Breakdown */}
+              <div className="grid gap-6 lg:grid-cols-2">
+                <Card className="border-slate-800 bg-slate-900/50 backdrop-blur-sm">
+                  <CardHeader>
+                    <CardTitle className="text-lg text-white">
+                      {t('reports.portfolio.assetAllocation')}
+                    </CardTitle>
+                    <CardDescription className="text-slate-400">
+                      {t('reports.portfolio.assetAllocationDesc')}
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <CategoryPieChart
+                      data={assetAllocationData}
+                      currency={settings.baseCurrency}
+                    />
+                  </CardContent>
+                </Card>
+
+                <Card className="border-slate-800 bg-slate-900/50 backdrop-blur-sm">
+                  <CardHeader>
+                    <CardTitle className="text-lg text-white">
+                      {t('reports.portfolio.accountBreakdown')}
+                    </CardTitle>
+                    <CardDescription className="text-slate-400">
+                      {t('reports.portfolio.accountBreakdownDesc')}
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <CategoryPieChart
+                      data={accountBreakdownData}
+                      currency={settings.baseCurrency}
+                    />
+                  </CardContent>
+                </Card>
+              </div>
+
+              {/* Currency Breakdown */}
+              {currencyBreakdownData.length > 1 && (
+                <Card className="border-slate-800 bg-slate-900/50 backdrop-blur-sm">
+                  <CardHeader>
+                    <CardTitle className="text-lg text-white">
+                      {t('reports.portfolio.currencyBreakdown')}
+                    </CardTitle>
+                    <CardDescription className="text-slate-400">
+                      {t('reports.portfolio.currencyBreakdownDesc')}
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <CategoryPieChart
+                      data={currencyBreakdownData}
+                      currency={settings.baseCurrency}
+                    />
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* Holdings Performance Table */}
+              {holdingsPerformance.length > 0 && (
+                <Card className="border-slate-800 bg-slate-900/50 backdrop-blur-sm">
+                  <CardHeader>
+                    <CardTitle className="text-lg text-white">
+                      {t('reports.portfolio.performance')}
+                    </CardTitle>
+                    <CardDescription className="text-slate-400">
+                      {t('reports.portfolio.performanceDesc')}
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="overflow-x-auto">
+                      <Table>
+                        <TableHeader>
+                          <TableRow className="border-slate-800 hover:bg-transparent">
+                            <TableHead className="text-slate-400">{t('reports.portfolio.holding')}</TableHead>
+                            <TableHead className="text-right text-slate-400">{t('reports.portfolio.invested')}</TableHead>
+                            <TableHead className="text-right text-slate-400">{t('reports.portfolio.current')}</TableHead>
+                            <TableHead className="text-right text-slate-400">{t('reports.portfolio.pnl')}</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {holdingsPerformance.map((h) => (
+                            <TableRow key={h.id} className="border-slate-800 hover:bg-slate-800/50">
+                              <TableCell>
+                                <div>
+                                  <p className="font-medium text-white">
+                                    {h.ticker ? <span className="mr-2 font-mono text-sm">{h.ticker}</span> : null}
+                                    {h.name}
+                                  </p>
+                                  <p className="text-xs text-slate-500">{h.account?.name}</p>
+                                </div>
+                              </TableCell>
+                              <TableCell className="text-right font-mono text-slate-300">
+                                {formatCurrency(h.totalInvested, h.currency)}
+                              </TableCell>
+                              <TableCell className="text-right font-mono text-white">
+                                {formatCurrency(h.currentValue, h.currency)}
+                              </TableCell>
+                              <TableCell className="text-right">
+                                <div className="flex items-center justify-end gap-2">
+                                  <span className={cn(
+                                    'font-mono text-sm',
+                                    h.pnl >= 0 ? 'text-emerald-400' : 'text-red-400'
+                                  )}>
+                                    {h.pnl >= 0 ? '+' : ''}{formatCurrency(h.pnl, h.currency)}
+                                  </span>
+                                  <Badge
+                                    variant="outline"
+                                    className={cn(
+                                      'text-xs',
+                                      h.pnl >= 0
+                                        ? 'border-emerald-500/50 bg-emerald-500/10 text-emerald-400'
+                                        : 'border-red-500/50 bg-red-500/10 text-red-400'
+                                    )}
+                                  >
+                                    {h.pnlPercent >= 0 ? '+' : ''}{h.pnlPercent.toFixed(1)}%
+                                  </Badge>
+                                </div>
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+            </>
+          )}
         </TabsContent>
 
         {/* Insights View */}

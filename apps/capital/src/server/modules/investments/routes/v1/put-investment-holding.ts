@@ -11,10 +11,15 @@ import { routeConfig } from "../../constants";
 const UpdateSchema = z.object({
   name: z.string().min(1).optional(),
   ticker: z.string().optional(),
+  assetClass: z.enum([
+    "stocks", "fii", "etf", "bdr", "fixed_income", "crypto",
+    "savings", "international_stocks", "international_etf",
+  ]).optional(),
   subType: z.enum([
     "cdb", "rdb", "lci", "lca", "cdi", "tesouro_selic",
     "tesouro_ipca", "tesouro_prefixado", "debenture",
   ]).optional(),
+  currency: z.string().length(3).optional(),
   isActive: z.boolean().optional(),
 });
 

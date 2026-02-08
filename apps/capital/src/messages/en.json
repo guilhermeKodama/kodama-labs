@@ -561,7 +561,28 @@
     "views": {
       "monthly": "Monthly",
       "categories": "Categories",
-      "insights": "Insights"
+      "insights": "Insights",
+      "portfolio": "Portfolio"
+    },
+    "portfolio": {
+      "title": "Portfolio Reports",
+      "assetAllocation": "Asset Allocation",
+      "assetAllocationDesc": "Distribution of investments by asset class",
+      "performance": "Portfolio Performance",
+      "performanceDesc": "Overview of your portfolio value and returns",
+      "accountBreakdown": "Account Breakdown",
+      "accountBreakdownDesc": "How investments are distributed across broker accounts",
+      "totalInvested": "Total Invested",
+      "currentValue": "Current Value",
+      "totalPnL": "Total P&L",
+      "holding": "Holding",
+      "invested": "Invested",
+      "current": "Current",
+      "pnl": "P&L",
+      "currencyBreakdown": "Currency Exposure",
+      "currencyBreakdownDesc": "How your portfolio is distributed across currencies",
+      "noData": "Add investment holdings to see portfolio reports",
+      "noPriceData": "Run the price update to see current values"
     },
     "filters": {
       "all": "All"

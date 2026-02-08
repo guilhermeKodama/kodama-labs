@@ -561,7 +561,28 @@
     "views": {
       "monthly": "Mensal",
       "categories": "Categorias",
-      "insights": "Insights"
+      "insights": "Insights",
+      "portfolio": "Carteira"
+    },
+    "portfolio": {
+      "title": "Relatórios da Carteira",
+      "assetAllocation": "Alocação por Classe",
+      "assetAllocationDesc": "Distribuição dos investimentos por classe de ativo",
+      "performance": "Desempenho da Carteira",
+      "performanceDesc": "Visão geral do valor da carteira e retornos",
+      "accountBreakdown": "Distribuição por Conta",
+      "accountBreakdownDesc": "Como os investimentos estão distribuídos entre corretoras",
+      "totalInvested": "Total Investido",
+      "currentValue": "Valor Atual",
+      "totalPnL": "P&L Total",
+      "holding": "Posição",
+      "invested": "Investido",
+      "current": "Atual",
+      "pnl": "P&L",
+      "currencyBreakdown": "Exposição Cambial",
+      "currencyBreakdownDesc": "Como sua carteira está distribuída entre moedas",
+      "noData": "Adicione posições de investimento para ver relatórios da carteira",
+      "noPriceData": "Execute a atualização de preços para ver valores atuais"
     },
     "filters": {
       "all": "Todos"
