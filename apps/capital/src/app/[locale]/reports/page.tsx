@@ -221,6 +221,15 @@ export default function ReportsPage() {
     [currencies, settings.baseCurrency]
   );
 
+  // Helper: get the best available value for a holding (market value if available, cost basis otherwise)
+  const holdingValue = useCallback(
+    (h: InvestmentHolding) =>
+      h.currentPrice && h.currentQuantity > 0
+        ? h.currentQuantity * h.currentPrice
+        : h.totalInvested,
+    []
+  );
+
   const portfolioTotals = useMemo(() => {
     const totalInvested = activeHoldings.reduce(
       (sum: number, h: InvestmentHolding) => sum + toBase(h.totalInvested, h.currency), 0
@@ -250,35 +259,35 @@ export default function ReportsPage() {
     const groups: Record<string, number> = {};
     for (const h of activeHoldings) {
       const label = ASSET_CLASS_LABELS[h.assetClass as AssetClass] || h.assetClass;
-      groups[label] = (groups[label] || 0) + toBase(h.totalInvested, h.currency);
+      groups[label] = (groups[label] || 0) + toBase(holdingValue(h), h.currency);
     }
     return Object.entries(groups)
       .map(([name, value]) => ({ name, value }))
       .sort((a, b) => b.value - a.value);
-  }, [activeHoldings, toBase]);
+  }, [activeHoldings, toBase, holdingValue]);
 
   const accountBreakdownData = useMemo(() => {
     const groups: Record<string, number> = {};
     for (const h of activeHoldings) {
       const accountName = h.account?.name || 'Unknown';
-      groups[accountName] = (groups[accountName] || 0) + toBase(h.totalInvested, h.currency);
+      groups[accountName] = (groups[accountName] || 0) + toBase(holdingValue(h), h.currency);
     }
     return Object.entries(groups)
       .map(([name, value]) => ({ name, value }))
       .sort((a, b) => b.value - a.value);
-  }, [activeHoldings, toBase]);
+  }, [activeHoldings, toBase, holdingValue]);
 
   const currencyBreakdownData = useMemo(() => {
     const groups: Record<string, number> = {};
     for (const h of activeHoldings) {
       const currency = h.currency || 'Unknown';
       // For currency exposure, convert to base so percentages are comparable
-      groups[currency] = (groups[currency] || 0) + toBase(h.totalInvested, h.currency);
+      groups[currency] = (groups[currency] || 0) + toBase(holdingValue(h), h.currency);
     }
     return Object.entries(groups)
       .map(([name, value]) => ({ name, value }))
       .sort((a, b) => b.value - a.value);
-  }, [activeHoldings, toBase]);
+  }, [activeHoldings, toBase, holdingValue]);
 
   const holdingsPerformance = useMemo(() => {
     return activeHoldings

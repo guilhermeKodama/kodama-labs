@@ -101,15 +101,24 @@ export default function InvestmentsPage() {
     [currencies, settings.baseCurrency]
   );
 
-  // Calculate totals
+  // Helper: get the best available value for a holding (market value if available, cost basis otherwise)
+  const holdingValue = useCallback(
+    (h: InvestmentHolding) =>
+      h.currentPrice && h.currentQuantity > 0
+        ? h.currentQuantity * h.currentPrice
+        : h.totalInvested,
+    []
+  );
+
+  // Calculate totals (using current market value when available)
   const totals = useMemo(() => {
     const total = holdings.reduce(
-      (sum: number, h: InvestmentHolding) => sum + toBase(h.totalInvested, h.currency), 0
+      (sum: number, h: InvestmentHolding) => sum + toBase(holdingValue(h), h.currency), 0
     );
     return { total };
-  }, [holdings, toBase]);
+  }, [holdings, toBase, holdingValue]);
 
-  // Group holdings by asset class
+  // Group holdings by asset class (using current market value)
   const holdingsByAssetClass = useMemo(() => {
     const groups: Record<string, { holdings: InvestmentHolding[]; total: number }> = {};
     for (const h of holdings.filter((h: InvestmentHolding) => h.isActive)) {
@@ -117,10 +126,10 @@ export default function InvestmentsPage() {
         groups[h.assetClass] = { holdings: [], total: 0 };
       }
       groups[h.assetClass].holdings.push(h);
-      groups[h.assetClass].total += toBase(h.totalInvested, h.currency);
+      groups[h.assetClass].total += toBase(holdingValue(h), h.currency);
     }
     return groups;
-  }, [holdings, toBase]);
+  }, [holdings, toBase, holdingValue]);
 
   // Asset class breakdown for summary cards
   const assetClassBreakdown = useMemo(() => {
@@ -275,7 +284,7 @@ export default function InvestmentsPage() {
       {/* Summary Cards */}
       <div className="mb-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <SummaryCard
-          title={t('investments.totalInvested')}
+          title={t('investments.portfolioValue')}
           value={totals.total}
           currency={settings.baseCurrency}
           icon={PiggyBank}
