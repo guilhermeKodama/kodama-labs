@@ -5,6 +5,8 @@ import {
   MoreVertical,
   Pencil,
   Trash2,
+  TrendingUp,
+  TrendingDown,
 } from 'lucide-react';
 import {
   Table,
@@ -22,6 +24,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { cn } from '@/lib/utils';
 import { formatCurrency } from '@/lib/utils/format';
 import type { InvestmentHolding } from '@/types';
 
@@ -43,6 +46,21 @@ const assetClassColors: Record<string, string> = {
   international_etf: 'border-teal-500/50 bg-teal-500/10 text-teal-400',
 };
 
+function computeCurrentValue(holding: InvestmentHolding): number | null {
+  if (holding.currentPrice && holding.currentQuantity > 0) {
+    return holding.currentQuantity * holding.currentPrice;
+  }
+  return null;
+}
+
+function computePnL(holding: InvestmentHolding): { amount: number; percent: number } | null {
+  const currentValue = computeCurrentValue(holding);
+  if (currentValue === null || holding.totalInvested <= 0) return null;
+  const amount = currentValue - holding.totalInvested;
+  const percent = (amount / holding.totalInvested) * 100;
+  return { amount, percent };
+}
+
 export function HoldingsTable({
   holdings,
   onEdit,
@@ -50,6 +68,9 @@ export function HoldingsTable({
 }: HoldingsTableProps) {
   const t = useTranslations('investments');
   const tCommon = useTranslations('common');
+
+  // Check if any holding has price data
+  const hasPriceData = holdings.some((h) => h.currentPrice);
 
   return (
     <div className="overflow-x-auto">
@@ -62,85 +83,127 @@ export function HoldingsTable({
             <TableHead className="text-right text-slate-400">{t('holdings.quantity')}</TableHead>
             <TableHead className="text-right text-slate-400">{t('holdings.avgCost')}</TableHead>
             <TableHead className="text-right text-slate-400">{t('holdings.totalInvested')}</TableHead>
+            {hasPriceData && (
+              <>
+                <TableHead className="text-right text-slate-400">Valor Atual</TableHead>
+                <TableHead className="text-right text-slate-400">P&L</TableHead>
+              </>
+            )}
             {(onEdit || onDelete) && <TableHead className="w-10" />}
           </TableRow>
         </TableHeader>
         <TableBody>
-          {holdings.map((holding) => (
-            <TableRow
-              key={holding.id}
-              className="border-slate-800 hover:bg-slate-800/50"
-            >
-              <TableCell>
-                <div>
-                  <p className="font-medium text-white">
-                    {holding.ticker ? (
-                      <span className="mr-2 font-mono text-sm">{holding.ticker}</span>
-                    ) : null}
-                    {holding.name}
-                  </p>
-                  {holding.account && (
-                    <p className="text-xs text-slate-500">{holding.account.name}</p>
-                  )}
-                </div>
-              </TableCell>
-              <TableCell>
-                <Badge
-                  variant="outline"
-                  className={assetClassColors[holding.assetClass] || 'border-slate-500/50 bg-slate-500/10 text-slate-400'}
-                >
-                  {t(`assetClasses.${holding.assetClass}`)}
-                </Badge>
-              </TableCell>
-              <TableCell className="text-slate-300">
-                {holding.account?.name || '-'}
-              </TableCell>
-              <TableCell className="text-right font-mono text-slate-300">
-                {holding.currentQuantity > 0 ? holding.currentQuantity.toLocaleString(undefined, { maximumFractionDigits: 8 }) : '-'}
-              </TableCell>
-              <TableCell className="text-right font-mono text-slate-300">
-                {holding.averageCost > 0 ? formatCurrency(holding.averageCost, holding.currency) : '-'}
-              </TableCell>
-              <TableCell className="text-right font-mono font-semibold text-white">
-                {formatCurrency(holding.totalInvested, holding.currency)}
-              </TableCell>
-              {(onEdit || onDelete) && (
+          {holdings.map((holding) => {
+            const currentValue = computeCurrentValue(holding);
+            const pnl = computePnL(holding);
+
+            return (
+              <TableRow
+                key={holding.id}
+                className="border-slate-800 hover:bg-slate-800/50"
+              >
                 <TableCell>
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8 text-slate-400 hover:bg-slate-800 hover:text-white"
-                      >
-                        <MoreVertical className="h-4 w-4" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end" className="border-slate-700 bg-slate-900">
-                      {onEdit && (
-                        <DropdownMenuItem
-                          onClick={() => onEdit(holding)}
-                          className="text-slate-300 focus:bg-slate-800 focus:text-white"
-                        >
-                          <Pencil className="mr-2 h-4 w-4" />
-                          {tCommon('edit')}
-                        </DropdownMenuItem>
-                      )}
-                      {onDelete && (
-                        <DropdownMenuItem
-                          onClick={() => onDelete(holding)}
-                          className="text-red-400 focus:bg-red-500/10 focus:text-red-400"
-                        >
-                          <Trash2 className="mr-2 h-4 w-4" />
-                          {tCommon('delete')}
-                        </DropdownMenuItem>
-                      )}
-                    </DropdownMenuContent>
-                  </DropdownMenu>
+                  <div>
+                    <p className="font-medium text-white">
+                      {holding.ticker ? (
+                        <span className="mr-2 font-mono text-sm">{holding.ticker}</span>
+                      ) : null}
+                      {holding.name}
+                    </p>
+                    {holding.account && (
+                      <p className="text-xs text-slate-500">{holding.account.name}</p>
+                    )}
+                  </div>
                 </TableCell>
-              )}
-            </TableRow>
-          ))}
+                <TableCell>
+                  <Badge
+                    variant="outline"
+                    className={assetClassColors[holding.assetClass] || 'border-slate-500/50 bg-slate-500/10 text-slate-400'}
+                  >
+                    {t(`assetClasses.${holding.assetClass}`)}
+                  </Badge>
+                </TableCell>
+                <TableCell className="text-slate-300">
+                  {holding.account?.name || '-'}
+                </TableCell>
+                <TableCell className="text-right font-mono text-slate-300">
+                  {holding.currentQuantity > 0 ? holding.currentQuantity.toLocaleString(undefined, { maximumFractionDigits: 8 }) : '-'}
+                </TableCell>
+                <TableCell className="text-right font-mono text-slate-300">
+                  {holding.averageCost > 0 ? formatCurrency(holding.averageCost, holding.currency) : '-'}
+                </TableCell>
+                <TableCell className="text-right font-mono font-semibold text-white">
+                  {formatCurrency(holding.totalInvested, holding.currency)}
+                </TableCell>
+                {hasPriceData && (
+                  <>
+                    <TableCell className="text-right font-mono font-semibold text-white">
+                      {currentValue !== null
+                        ? formatCurrency(currentValue, holding.currency)
+                        : '-'}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {pnl ? (
+                        <div className="flex items-center justify-end gap-1">
+                          {pnl.amount >= 0 ? (
+                            <TrendingUp className="h-3 w-3 text-emerald-400" />
+                          ) : (
+                            <TrendingDown className="h-3 w-3 text-red-400" />
+                          )}
+                          <span
+                            className={cn(
+                              'font-mono text-sm font-medium',
+                              pnl.amount >= 0 ? 'text-emerald-400' : 'text-red-400'
+                            )}
+                          >
+                            {pnl.amount >= 0 ? '+' : ''}
+                            {pnl.percent.toFixed(1)}%
+                          </span>
+                        </div>
+                      ) : (
+                        <span className="text-slate-500">-</span>
+                      )}
+                    </TableCell>
+                  </>
+                )}
+                {(onEdit || onDelete) && (
+                  <TableCell>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 text-slate-400 hover:bg-slate-800 hover:text-white"
+                        >
+                          <MoreVertical className="h-4 w-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" className="border-slate-700 bg-slate-900">
+                        {onEdit && (
+                          <DropdownMenuItem
+                            onClick={() => onEdit(holding)}
+                            className="text-slate-300 focus:bg-slate-800 focus:text-white"
+                          >
+                            <Pencil className="mr-2 h-4 w-4" />
+                            {tCommon('edit')}
+                          </DropdownMenuItem>
+                        )}
+                        {onDelete && (
+                          <DropdownMenuItem
+                            onClick={() => onDelete(holding)}
+                            className="text-red-400 focus:bg-red-500/10 focus:text-red-400"
+                          >
+                            <Trash2 className="mr-2 h-4 w-4" />
+                            {tCommon('delete')}
+                          </DropdownMenuItem>
+                        )}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </TableCell>
+                )}
+              </TableRow>
+            );
+          })}
         </TableBody>
       </Table>
     </div>

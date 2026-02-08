@@ -1,10 +1,12 @@
 import type { DbClient } from "@capital/server/lib/prisma";
-import type { FixedIncomeSubType } from "@prisma/client";
+import type { AssetClass, FixedIncomeSubType } from "@prisma/client";
 
 interface UpdateInvestmentHoldingData {
   name?: string;
   ticker?: string;
+  assetClass?: AssetClass;
   subType?: FixedIncomeSubType;
+  currency?: string;
   isActive?: boolean;
   currentQuantity?: number;
   averageCost?: number;

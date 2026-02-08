@@ -673,6 +673,8 @@ export interface InvestmentHolding {
   currentQuantity: number;
   averageCost: number;
   totalInvested: number;
+  currentPrice?: number;
+  lastPriceUpdate?: Date;
   isActive: boolean;
   createdAt: Date;
   updatedAt: Date;
@@ -692,7 +694,9 @@ export interface CreateInvestmentHoldingInput {
 export interface UpdateInvestmentHoldingInput {
   name?: string;
   ticker?: string;
+  assetClass?: AssetClass;
   subType?: FixedIncomeSubType;
+  currency?: string;
   isActive?: boolean;
 }
 

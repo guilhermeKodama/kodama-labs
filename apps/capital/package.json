@@ -49,6 +49,7 @@
     "sonner": "^1.5.0",
     "stoker": "^1.0.0",
     "tailwind-merge": "^3.4.0",
+    "yahoo-finance2": "^3.13.0",
     "zod": "^3.23.8",
     "zustand": "^5.0.10"
   },

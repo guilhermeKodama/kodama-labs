@@ -563,6 +563,8 @@ model InvestmentHolding {
   currentQuantity Float               @default(0)
   averageCost     Float               @default(0)
   totalInvested   Float               @default(0)
+  currentPrice    Float?              // Latest market price per unit
+  lastPriceUpdate DateTime?           // When the price was last fetched
   isActive        Boolean             @default(true)
   createdAt       DateTime            @default(now())
   updatedAt       DateTime            @updatedAt

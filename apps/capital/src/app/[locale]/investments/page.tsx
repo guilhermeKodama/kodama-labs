@@ -188,7 +188,9 @@ export default function InvestmentsPage() {
       await updateHolding(editingHolding.id, {
         name: data.name,
         ticker: data.ticker,
+        assetClass: data.assetClass,
         subType: data.subType,
+        currency: data.currency,
       });
       setEditingHolding(undefined);
       toast.success(t('investments.holdings.toast.updated'));
