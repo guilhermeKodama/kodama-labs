@@ -244,7 +244,7 @@ export default function ReportsPage() {
     const totalPnL = totalCurrentValue - totalInvested;
     const totalPnLPercent = totalInvested > 0 ? (totalPnL / totalInvested) * 100 : 0;
     return { totalInvested, totalCurrentValue, totalPnL, totalPnLPercent, hasPriceData: holdingsWithPrice.length > 0 };
-  }, [activeHoldings, currencies, settings.baseCurrency]);
+  }, [activeHoldings, toBase]);
 
   const assetAllocationData = useMemo(() => {
     const groups: Record<string, number> = {};
@@ -255,7 +255,7 @@ export default function ReportsPage() {
     return Object.entries(groups)
       .map(([name, value]) => ({ name, value }))
       .sort((a, b) => b.value - a.value);
-  }, [activeHoldings, currencies, settings.baseCurrency]);
+  }, [activeHoldings, toBase]);
 
   const accountBreakdownData = useMemo(() => {
     const groups: Record<string, number> = {};
@@ -266,7 +266,7 @@ export default function ReportsPage() {
     return Object.entries(groups)
       .map(([name, value]) => ({ name, value }))
       .sort((a, b) => b.value - a.value);
-  }, [activeHoldings, currencies, settings.baseCurrency]);
+  }, [activeHoldings, toBase]);
 
   const currencyBreakdownData = useMemo(() => {
     const groups: Record<string, number> = {};
@@ -278,7 +278,7 @@ export default function ReportsPage() {
     return Object.entries(groups)
       .map(([name, value]) => ({ name, value }))
       .sort((a, b) => b.value - a.value);
-  }, [activeHoldings, currencies, settings.baseCurrency]);
+  }, [activeHoldings, toBase]);
 
   const holdingsPerformance = useMemo(() => {
     return activeHoldings
@@ -292,7 +292,7 @@ export default function ReportsPage() {
         return { ...h, currentValue: currentInBase, investedInBase, pnl, pnlPercent };
       })
       .sort((a, b) => b.pnlPercent - a.pnlPercent);
-  }, [activeHoldings, currencies, settings.baseCurrency]);
+  }, [activeHoldings, toBase]);
 
   const handleExportCSV = () => {
     if (yearTransactions.length === 0) {

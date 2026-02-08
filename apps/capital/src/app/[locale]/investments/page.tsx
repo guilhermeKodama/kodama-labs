@@ -107,7 +107,7 @@ export default function InvestmentsPage() {
       (sum: number, h: InvestmentHolding) => sum + toBase(h.totalInvested, h.currency), 0
     );
     return { total };
-  }, [holdings, currencies, settings.baseCurrency]);
+  }, [holdings, toBase]);
 
   // Group holdings by asset class
   const holdingsByAssetClass = useMemo(() => {
@@ -120,7 +120,7 @@ export default function InvestmentsPage() {
       groups[h.assetClass].total += toBase(h.totalInvested, h.currency);
     }
     return groups;
-  }, [holdings, currencies, settings.baseCurrency]);
+  }, [holdings, toBase]);
 
   // Asset class breakdown for summary cards
   const assetClassBreakdown = useMemo(() => {
