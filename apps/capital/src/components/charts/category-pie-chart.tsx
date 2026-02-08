@@ -76,7 +76,8 @@ export function CategoryPieChart({ data, currency }: CategoryPieChartProps) {
             borderRadius: '8px',
             color: '#f1f5f9',
           }}
-          labelStyle={{ color: '#94a3b8' }}
+          labelStyle={{ color: '#f1f5f9' }}
+          itemStyle={{ color: '#f1f5f9' }}
         />
         <Legend
           formatter={(value) => (

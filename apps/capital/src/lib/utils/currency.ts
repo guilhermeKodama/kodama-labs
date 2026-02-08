@@ -61,6 +61,28 @@ export function convertCurrency(
 }
 
 /**
+ * Convert an amount from a given currency to the user's base currency.
+ *
+ * manualRate means "1 base = X this currency", so:
+ *   amountInBase = amount / manualRate
+ *
+ * If the currency is already the base, or no rate is found, returns the amount as-is.
+ */
+export function convertToBaseCurrency(
+  amount: number,
+  holdingCurrency: string,
+  currencies: Currency[],
+  baseCurrency: string
+): number {
+  if (holdingCurrency === baseCurrency) return amount;
+
+  const curr = currencies.find((c) => c.code === holdingCurrency);
+  if (!curr || curr.manualRate <= 0) return amount; // fallback: no conversion
+
+  return amount / curr.manualRate;
+}
+
+/**
  * Format currency code for display
  */
 export function formatCurrencyCode(code: string): string {
