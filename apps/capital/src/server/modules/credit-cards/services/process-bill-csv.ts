@@ -381,7 +381,10 @@ export async function processBillCsv(
 
   await insertBillTransactions(billTransactionData, db);
 
-  // 7. Auto-create installment records for transactions with installment info
+  // 7. Create or update installment records for transactions with installment info.
+  //    When the same purchase appears across multiple bills (e.g., "STORE 3/10" in Jan,
+  //    "STORE 4/10" in Feb), we UPDATE the existing installment instead of creating a
+  //    duplicate. Matching key: creditCardId + description + installmentAmount + totalInstallments.
   const createdBillTransactions = await db.billTransaction.findMany({
     where: { billId: bill.id },
     select: {
@@ -394,30 +397,55 @@ export async function processBillCsv(
     },
   });
 
-  const installmentRecords = createdBillTransactions
-    .filter(
-      (bt) =>
-        bt.installmentNumber != null &&
-        bt.totalInstallments != null &&
-        bt.totalInstallments > 1
-    )
-    .map((bt) => ({
-      creditCardId: input.creditCardId,
-      billTransactionId: bt.id,
-      description: bt.description,
-      totalAmount: Math.round(bt.amount * bt.totalInstallments! * 100) / 100,
-      totalInstallments: bt.totalInstallments!,
-      paidInstallments: bt.installmentNumber!,
-      startDate: bt.transactionDate,
-      installmentAmount: bt.amount,
-      isActive: bt.installmentNumber! < bt.totalInstallments!,
-    }));
+  const installmentBillTxs = createdBillTransactions.filter(
+    (bt) =>
+      bt.installmentNumber != null &&
+      bt.totalInstallments != null &&
+      bt.totalInstallments > 1
+  );
 
-  if (installmentRecords.length > 0) {
-    await db.installment.createMany({
-      data: installmentRecords,
-      skipDuplicates: true,
+  let installmentCount = 0;
+
+  for (const bt of installmentBillTxs) {
+    // Look for an existing installment from a previous bill for the same purchase
+    const existingInstallment = await db.installment.findFirst({
+      where: {
+        creditCardId: input.creditCardId,
+        description: bt.description,
+        installmentAmount: bt.amount,
+        totalInstallments: bt.totalInstallments!,
+      },
+      select: { id: true },
     });
+
+    if (existingInstallment) {
+      // Update existing installment to point to the new bill's transaction
+      await db.installment.update({
+        where: { id: existingInstallment.id },
+        data: {
+          billTransactionId: bt.id,
+          paidInstallments: bt.installmentNumber!,
+          startDate: bt.transactionDate,
+          isActive: bt.installmentNumber! < bt.totalInstallments!,
+        },
+      });
+    } else {
+      // Create new installment
+      await db.installment.create({
+        data: {
+          creditCardId: input.creditCardId,
+          billTransactionId: bt.id,
+          description: bt.description,
+          totalAmount: Math.round(bt.amount * bt.totalInstallments! * 100) / 100,
+          totalInstallments: bt.totalInstallments!,
+          paidInstallments: bt.installmentNumber!,
+          startDate: bt.transactionDate,
+          installmentAmount: bt.amount,
+          isActive: bt.installmentNumber! < bt.totalInstallments!,
+        },
+      });
+    }
+    installmentCount++;
   }
 
   // 8. If replacing and there was a linked expense, update its amount
@@ -433,7 +461,7 @@ export async function processBillCsv(
     bill,
     totalAmount: Math.round(totalAmount * 100) / 100,
     transactionCount: chargeTransactions.length,
-    installmentCount: installmentRecords.length,
+    installmentCount,
     replaced,
   };
 }
