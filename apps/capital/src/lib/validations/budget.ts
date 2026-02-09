@@ -14,6 +14,7 @@ export const createBudgetSchema = z.object({
   period: budgetPeriodSchema,
   year: z.number().int().min(2000).max(2100),
   month: z.number().int().min(1).max(12).optional().nullable().transform((val) => val ?? undefined),
+  alertThreshold: z.number().int().min(1).max(100).optional().nullable().transform((val) => val ?? undefined),
 });
 
 export const updateBudgetSchema = createBudgetSchema.partial().omit({

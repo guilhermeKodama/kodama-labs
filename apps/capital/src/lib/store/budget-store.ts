@@ -71,6 +71,7 @@ export const useBudgetStore = create<BudgetStore>()((set, get) => ({
           period: b.period,
           year: b.year,
           month: b.month ?? undefined,
+          alertThreshold: (b as Record<string, unknown>).alertThreshold as number | undefined,
           isActive: b.isActive,
           createdAt: new Date(b.createdAt),
           updatedAt: new Date(b.updatedAt),

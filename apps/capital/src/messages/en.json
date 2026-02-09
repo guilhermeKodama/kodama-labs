@@ -827,6 +827,7 @@
     "title": "Budgets",
     "subtitle": "Set and track spending limits",
     "addBudget": "Add Budget",
+    "copyToNextMonth": "Copy to Next Month",
     "currentBudgets": "Current Month Budgets",
     "allBudgets": "All Budgets",
     "periods": {
@@ -849,7 +850,9 @@
       "currency": "Currency",
       "period": "Period",
       "year": "Year",
-      "month": "Month"
+      "month": "Month",
+      "alertThreshold": "Alert Threshold (%)",
+      "alertThresholdHint": "Get warned when spending reaches this percentage (default: 80%)"
     },
     "dialog": {
       "createTitle": "Create Budget",
@@ -864,7 +867,18 @@
       "progress": "Progress",
       "budget": "Budget",
       "spent": "Spent",
-      "status": "Status"
+      "remaining": "Remaining",
+      "pace": "Pace",
+      "status": "Status",
+      "sortBy": "Sort by"
+    },
+    "filter": {
+      "all": "All",
+      "onTrack": "On Track",
+      "nearLimit": "Near Limit",
+      "overBudget": "Over Budget",
+      "allEntities": "All Entities",
+      "statusFilter": "Status"
     },
     "status": {
       "onTrack": "On Track",
@@ -877,9 +891,67 @@
       "over": "Over by",
       "budget": "Budget"
     },
+    "pace": {
+      "onPace": "On pace",
+      "overPace": "Over pace",
+      "underPace": "Under pace",
+      "perDay": "/day",
+      "projected": "Projected",
+      "daysLeft": "days left"
+    },
+    "roomToSpend": {
+      "title": "Budget Overview",
+      "totalBudget": "Total Budget",
+      "totalSpent": "Total Spent",
+      "totalRoom": "Total Room",
+      "projected": "Projected",
+      "roomLeft": "room left",
+      "overBy": "over by",
+      "noRoom": "No room"
+    },
+    "insights": {
+      "title": "Budget Insights",
+      "holdSpending": "Hold Spending",
+      "roomAvailable": "Room Available",
+      "critical": "Critical",
+      "warning": "Warning",
+      "good": "Good"
+    },
+    "unbudgeted": {
+      "title": "Unbudgeted Spending",
+      "description": "These expense categories have recent spending but no budget set.",
+      "spent": "spent",
+      "transactions": "transactions",
+      "createBudget": "Create Budget",
+      "lastMonth": "last month",
+      "basedOnLastMonth": "Based on last month's spending"
+    },
+    "trend": {
+      "title": "Month-over-Month",
+      "vsLastMonth": "vs last month",
+      "noChange": "No change",
+      "increase": "increase",
+      "decrease": "decrease",
+      "new": "New",
+      "noPrevious": "No spending last month"
+    },
+    "overview": {
+      "title": "Overview",
+      "chartTitle": "Budget Distribution",
+      "trendTitle": "Spending Trends",
+      "today": "Today"
+    },
+    "drillDown": {
+      "title": "Transactions",
+      "noTransactions": "No transactions in this category for this period.",
+      "date": "Date",
+      "description": "Description",
+      "amount": "Amount"
+    },
     "views": {
       "current": "Current Month",
-      "all": "All Budgets"
+      "all": "All Budgets",
+      "overview": "Overview"
     },
     "alerts": {
       "title": "Budget Alerts"
@@ -898,10 +970,14 @@
     },
     "toast": {
       "created": "Budget created!",
+      "createError": "Failed to create budget. It may already exist for this period.",
       "updated": "Budget updated!",
       "deleted": "Budget deleted!",
       "paused": "Budget paused",
-      "resumed": "Budget resumed"
+      "resumed": "Budget resumed",
+      "copiedToNextMonth": "{count} budget(s) copied to next month",
+      "noBudgetsToCopy": "No current budgets to copy",
+      "allBudgetsExist": "All budgets already exist for next month"
     }
   },
   "tax": {
