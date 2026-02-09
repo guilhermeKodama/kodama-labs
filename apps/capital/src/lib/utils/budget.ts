@@ -561,6 +561,19 @@ export function convertInstallmentsToTransactions(
   bills: CreditCardBill[] = [],
   billTransactions: BillTransaction[] = []
 ): Transaction[] {
+  // Safety-net dedup: if the same purchase produced multiple installment records
+  // across different bills (e.g., "STORE 3/10" in Jan + "STORE 4/10" in Feb),
+  // keep only the one with the highest paidInstallments (most recent bill).
+  const dedupMap = new Map<string, Installment>();
+  for (const inst of installments) {
+    const key = `${inst.creditCardId}::${inst.description}::${inst.installmentAmount}::${inst.totalInstallments}`;
+    const existing = dedupMap.get(key);
+    if (!existing || inst.paidInstallments > existing.paidInstallments) {
+      dedupMap.set(key, inst);
+    }
+  }
+  const dedupedInstallments = Array.from(dedupMap.values());
+
   const cardMap = new Map(creditCards.map((c) => [c.id, c]));
   const billMap = new Map(bills.map((b) => [b.id, b]));
 
@@ -580,7 +593,7 @@ export function convertInstallmentsToTransactions(
 
   const result: Transaction[] = [];
 
-  for (const inst of installments) {
+  for (const inst of dedupedInstallments) {
     if (!inst.isActive) continue;
     const remaining = inst.totalInstallments - inst.paidInstallments;
     if (remaining <= 0) continue;
