@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { format } from 'date-fns';
-import { FileText, ExternalLink, Trash2, Loader2, Sparkles, AlertCircle, Link2, Plus } from 'lucide-react';
+import { FileText, Trash2, Loader2, Sparkles, AlertCircle, Link2, Plus } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { formatCurrency } from '@/lib/utils/format';
 import { Button } from '@/components/ui/button';
@@ -18,7 +18,6 @@ interface BillsTableProps {
   bills: CreditCardBill[];
   currency: string;
   expenseTransactions?: Transaction[];
-  onViewTransactions?: (billId: string) => void;
   onCreateExpense?: (billId: string) => void;
   onLinkTransaction?: (billId: string, transactionId: string) => void;
   onDelete?: (billId: string) => void;
@@ -28,7 +27,6 @@ export function BillsTable({
   bills,
   currency,
   expenseTransactions = [],
-  onViewTransactions,
   onCreateExpense,
   onLinkTransaction,
   onDelete,
@@ -106,7 +104,10 @@ export function BillsTable({
         </thead>
         <tbody>
           {bills.map((bill) => (
-            <tr key={bill.id} className="border-b border-slate-800/50 hover:bg-slate-800/30">
+            <tr
+              key={bill.id}
+              className="border-b border-slate-800/50 transition-colors hover:bg-slate-800/30"
+            >
               <td className="py-3">
                 {bill.creditCard && (
                   <div className="flex items-center gap-2">
@@ -141,18 +142,7 @@ export function BillsTable({
                 {getCategorizationBadge(bill.categorizationStatus)}
               </td>
               <td className="py-3 text-right">
-                <div className="flex items-center justify-end gap-1">
-                  {onViewTransactions && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => onViewTransactions(bill.id)}
-                      className="h-7 text-xs text-slate-400 hover:text-white"
-                    >
-                      <ExternalLink className="mr-1 h-3 w-3" />
-                      View
-                    </Button>
-                  )}
+                <div className="flex items-center justify-end gap-1" onClick={(e) => e.stopPropagation()}>
                   {!bill.transactionId && (
                     <Popover
                       open={linkingBillId === bill.id}

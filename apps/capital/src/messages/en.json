@@ -1043,6 +1043,13 @@
       "installments": "Installments",
       "analytics": "Analytics"
     },
+    "billContext": {
+      "viewing": "Viewing bill",
+      "closingDate": "Closing",
+      "selectBill": "Select a bill",
+      "selectBillPrompt": "No bills uploaded yet. Upload a bill to view transactions.",
+      "selectBillPromptAnalytics": "No bills uploaded yet. Upload a bill to view analytics."
+    },
     "summary": {
       "totalCredit": "Total Credit",
       "currentBalance": "Current Balance",

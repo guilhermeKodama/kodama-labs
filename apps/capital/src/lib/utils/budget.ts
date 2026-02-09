@@ -474,6 +474,16 @@ function formatAmount(amount: number): string {
  * so they can be included in budget calculations.
  *
  * Chain: BillTransaction → CreditCardBill → CreditCard → entity
+ *
+ * Uses the bill's closing date as the effective date for ALL transactions,
+ * not the individual purchase dates from the CSV. This ensures:
+ * - Jan bill transactions count in January's budget
+ * - Feb bill transactions count in February's budget
+ * - No cross-contamination (a late-Jan purchase in the Feb bill doesn't
+ *   inflate January's budget)
+ * - Installment charges are attributed to the correct billing cycle
+ *
+ * This matches the user's mental model: each bill maps to its own month.
  */
 export function convertBillTransactionsToTransactions(
   billTransactions: BillTransaction[],
@@ -491,6 +501,13 @@ export function convertBillTransactionsToTransactions(
     const card = cardMap.get(bill.creditCardId);
     if (!card) continue;
 
+    // Use the bill's closing date so each transaction is attributed to the
+    // correct billing cycle month. The CSV purchase date is preserved in the
+    // original BillTransaction record for display purposes.
+    const effectiveDate = bill.closingDate instanceof Date
+      ? bill.closingDate
+      : parseLocalDate(bill.closingDate);
+
     result.push({
       id: `cc-${bt.id}`,
       entityId: card.entityId,
@@ -501,7 +518,7 @@ export function convertBillTransactionsToTransactions(
       exchangeRate: 1,
       description: bt.description,
       category: bt.category,
-      date: bt.transactionDate,
+      date: effectiveDate,
       createdAt: bt.createdAt,
       updatedAt: bt.updatedAt,
     });

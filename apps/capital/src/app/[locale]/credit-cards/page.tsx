@@ -11,6 +11,7 @@ import {
   Repeat,
   BarChart3,
 } from 'lucide-react';
+import { format } from 'date-fns';
 import { AppShell } from '@/components/layout';
 import { Header } from '@/components/layout/header';
 import { SummaryCard } from '@/components/cards';
@@ -24,6 +25,13 @@ import { CategoryPieChart } from '@/components/charts';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -81,6 +89,17 @@ export default function CreditCardsPage() {
     fetchBills();
     fetchInstallments();
   }, [fetchCreditCards, fetchBills, fetchInstallments]);
+
+  // Auto-select the most recent bill so Transactions & Analytics tabs always have data
+  useEffect(() => {
+    if (bills.length > 0 && !selectedBillId) {
+      const mostRecent = [...bills].sort(
+        (a, b) => new Date(b.closingDate).getTime() - new Date(a.closingDate).getTime()
+      )[0];
+      setSelectedBillId(mostRecent.id);
+      fetchBillTransactions(mostRecent.id);
+    }
+  }, [bills, selectedBillId, fetchBillTransactions]);
 
   // Auto-refresh when there are pending/processing categorizations
   const hasPendingCategorization = useMemo(
@@ -227,10 +246,23 @@ export default function CreditCardsPage() {
     }
   };
 
-  const handleViewBillTransactions = (billId: string) => {
+  // The currently selected bill object (for context banners)
+  const selectedBill = useMemo(
+    () => bills.find((b: CreditCardBill) => b.id === selectedBillId),
+    [bills, selectedBillId]
+  );
+
+  // Bills sorted by closing date descending (latest first) for the dropdown
+  const sortedBills = useMemo(
+    () => [...bills].sort(
+      (a, b) => new Date(b.closingDate).getTime() - new Date(a.closingDate).getTime()
+    ),
+    [bills]
+  );
+
+  const handleSelectBill = (billId: string) => {
     setSelectedBillId(billId);
     fetchBillTransactions(billId);
-    setSelectedView('transactions');
   };
 
   const openEditDialog = (card: CreditCard) => {
@@ -381,7 +413,6 @@ export default function CreditCardsPage() {
                 bills={bills}
                 currency={settings.baseCurrency}
                 expenseTransactions={transactions.filter((tx) => tx.type === 'expense')}
-                onViewTransactions={handleViewBillTransactions}
                 onCreateExpense={handleCreateExpenseFromBill}
                 onLinkTransaction={handleLinkTransaction}
                 onDelete={handleDeleteBill}
@@ -394,15 +425,46 @@ export default function CreditCardsPage() {
         <TabsContent value="transactions">
           <Card className="border-slate-800 bg-slate-900/50 backdrop-blur-sm">
             <CardHeader>
-              <CardTitle className="text-lg text-white">
-                {t('creditCards.tabs.transactions')}
-                {selectedBillId && (
-                  <span className="ml-2 text-sm font-normal text-slate-400">
-                    (Bill: {bills.find((b: CreditCardBill) => b.id === selectedBillId)?.creditCard?.bankName} ****
-                    {bills.find((b: CreditCardBill) => b.id === selectedBillId)?.creditCard?.lastFourDigits})
-                  </span>
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-lg text-white">
+                  {t('creditCards.tabs.transactions')}
+                </CardTitle>
+                {sortedBills.length > 0 && (
+                  <Select
+                    value={selectedBillId ?? undefined}
+                    onValueChange={handleSelectBill}
+                  >
+                    <SelectTrigger className="h-9 w-auto min-w-[320px] gap-2 border-slate-700 bg-slate-800 text-sm text-white hover:bg-slate-700">
+                      <SelectValue placeholder={t('creditCards.billContext.selectBill')} />
+                    </SelectTrigger>
+                    <SelectContent className="border-slate-700 bg-slate-800">
+                      {sortedBills.map((bill) => (
+                        <SelectItem key={bill.id} value={bill.id} className="text-sm">
+                          <div className="flex items-center gap-2">
+                            {bill.creditCard && (
+                              <div
+                                className="h-2.5 w-2.5 shrink-0 rounded-full"
+                                style={{ backgroundColor: bill.creditCard.color }}
+                              />
+                            )}
+                            <span className="text-white">
+                              {bill.creditCard?.bankName} ****{bill.creditCard?.lastFourDigits}
+                            </span>
+                            <span className="text-slate-500">|</span>
+                            <span className="text-slate-400">
+                              {t('creditCards.billContext.closingDate')}: {format(new Date(bill.closingDate), 'MMM dd, yyyy')}
+                            </span>
+                            <span className="text-slate-500">|</span>
+                            <span className="font-medium text-white">
+                              {formatCurrency(bill.totalAmount, settings.baseCurrency)}
+                            </span>
+                          </div>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 )}
-              </CardTitle>
+              </div>
             </CardHeader>
             <CardContent>
               {selectedBillId ? (
@@ -416,7 +478,7 @@ export default function CreditCardsPage() {
                 />
               ) : (
                 <div className="py-8 text-center text-slate-400">
-                  Select a bill from the Bills tab to view its transactions.
+                  {t('creditCards.billContext.selectBillPrompt')}
                 </div>
               )}
             </CardContent>
@@ -444,9 +506,46 @@ export default function CreditCardsPage() {
         <TabsContent value="analytics" className="space-y-6">
           <Card className="border-slate-800 bg-slate-900/50 backdrop-blur-sm">
             <CardHeader>
-              <CardTitle className="text-lg text-white">
-                Spending by Category
-              </CardTitle>
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-lg text-white">
+                  Spending by Category
+                </CardTitle>
+                {sortedBills.length > 0 && (
+                  <Select
+                    value={selectedBillId ?? undefined}
+                    onValueChange={handleSelectBill}
+                  >
+                    <SelectTrigger className="h-9 w-auto min-w-[320px] gap-2 border-slate-700 bg-slate-800 text-sm text-white hover:bg-slate-700">
+                      <SelectValue placeholder={t('creditCards.billContext.selectBill')} />
+                    </SelectTrigger>
+                    <SelectContent className="border-slate-700 bg-slate-800">
+                      {sortedBills.map((bill) => (
+                        <SelectItem key={bill.id} value={bill.id} className="text-sm">
+                          <div className="flex items-center gap-2">
+                            {bill.creditCard && (
+                              <div
+                                className="h-2.5 w-2.5 shrink-0 rounded-full"
+                                style={{ backgroundColor: bill.creditCard.color }}
+                              />
+                            )}
+                            <span className="text-white">
+                              {bill.creditCard?.bankName} ****{bill.creditCard?.lastFourDigits}
+                            </span>
+                            <span className="text-slate-500">|</span>
+                            <span className="text-slate-400">
+                              {t('creditCards.billContext.closingDate')}: {format(new Date(bill.closingDate), 'MMM dd, yyyy')}
+                            </span>
+                            <span className="text-slate-500">|</span>
+                            <span className="font-medium text-white">
+                              {formatCurrency(bill.totalAmount, settings.baseCurrency)}
+                            </span>
+                          </div>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+              </div>
             </CardHeader>
             <CardContent>
               {categoryBreakdown.length > 0 ? (
@@ -456,7 +555,10 @@ export default function CreditCardsPage() {
                 />
               ) : (
                 <div className="py-8 text-center text-slate-400">
-                  Upload a bill to see category analytics.
+                  {selectedBillId
+                    ? 'No category data for this bill.'
+                    : t('creditCards.billContext.selectBillPromptAnalytics')
+                  }
                 </div>
               )}
             </CardContent>

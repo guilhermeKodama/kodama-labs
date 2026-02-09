@@ -1043,6 +1043,13 @@
       "installments": "Parcelas",
       "analytics": "Análises"
     },
+    "billContext": {
+      "viewing": "Visualizando fatura",
+      "closingDate": "Fechamento",
+      "selectBill": "Selecione uma fatura",
+      "selectBillPrompt": "Nenhuma fatura enviada ainda. Envie uma fatura para ver transações.",
+      "selectBillPromptAnalytics": "Nenhuma fatura enviada ainda. Envie uma fatura para ver análises."
+    },
     "summary": {
       "totalCredit": "Crédito Total",
       "currentBalance": "Saldo Atual",
