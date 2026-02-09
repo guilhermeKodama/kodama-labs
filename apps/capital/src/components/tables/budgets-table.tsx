@@ -176,7 +176,7 @@ export function BudgetsTable({
       }
     });
     return Array.from(entityMap.values());
-  }, [budgetProgress, businesses]);
+  }, [budgetProgress, businesses, getEntityName]);
 
   // Get transactions for drill-down
   const getDrillDownTransactions = (budget: BudgetProgress['budget']) => {
@@ -190,7 +190,7 @@ export function BudgetsTable({
     }).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
   };
 
-  const SortIcon = ({ field }: { field: SortField }) => {
+  const getSortIcon = (field: SortField) => {
     if (sortField !== field) return <ArrowUpDown className="ml-1 h-3 w-3 text-slate-600" />;
     return sortDirection === 'asc'
       ? <ArrowUp className="ml-1 h-3 w-3 text-cyan-400" />
@@ -252,7 +252,7 @@ export function BudgetsTable({
               >
                 <span className="flex items-center">
                   {t('table.category')}
-                  <SortIcon field="category" />
+                  {getSortIcon('category')}
                 </span>
               </TableHead>
               <TableHead className="text-slate-400">{t('table.entity')}</TableHead>
@@ -264,7 +264,7 @@ export function BudgetsTable({
               >
                 <span className="flex items-center justify-end">
                   {t('table.budget')}
-                  <SortIcon field="budget" />
+                  {getSortIcon('budget')}
                 </span>
               </TableHead>
               <TableHead
@@ -273,7 +273,7 @@ export function BudgetsTable({
               >
                 <span className="flex items-center justify-end">
                   {t('table.spent')}
-                  <SortIcon field="spent" />
+                  {getSortIcon('spent')}
                 </span>
               </TableHead>
               <TableHead
@@ -282,7 +282,7 @@ export function BudgetsTable({
               >
                 <span className="flex items-center justify-end">
                   {t('table.remaining')}
-                  <SortIcon field="remaining" />
+                  {getSortIcon('remaining')}
                 </span>
               </TableHead>
               <TableHead className="text-slate-400">{t('table.pace')}</TableHead>
