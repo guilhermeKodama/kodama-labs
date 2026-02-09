@@ -31,6 +31,7 @@ const BillUploadResultSchema = z.object({
   }),
   totalAmount: z.number(),
   transactionCount: z.number(),
+  replaced: z.boolean(),
 });
 
 const ErrorResponseSchema = z.object({
@@ -131,6 +132,7 @@ export const handler: AppRouteHandler<typeof route> = async (c) => {
         },
         totalAmount: result.totalAmount,
         transactionCount: result.transactionCount,
+        replaced: result.replaced,
       },
       CREATED
     );

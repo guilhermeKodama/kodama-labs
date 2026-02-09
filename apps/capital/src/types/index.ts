@@ -586,6 +586,7 @@ export interface BillUploadResult {
   };
   totalAmount: number;
   transactionCount: number;
+  replaced: boolean;
 }
 
 // --------------------------------------------

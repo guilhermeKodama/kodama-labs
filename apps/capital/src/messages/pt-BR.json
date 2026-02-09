@@ -1110,7 +1110,8 @@
       "selectTransaction": "Selecionar transação",
       "processing": "Processando fatura com categorização por IA...",
       "success": "Fatura enviada e categorizada com sucesso!",
-      "reviewCategories": "Revisar Categorias"
+      "reviewCategories": "Revisar Categorias",
+      "replaceWarning": "Já existe uma fatura para este cartão e data de fechamento. O envio substituirá a fatura existente, preservando suas categorizações manuais."
     },
     "installment": {
       "total": "Total",
@@ -1129,6 +1130,7 @@
       "updated": "Cartão de crédito atualizado!",
       "deleted": "Cartão de crédito excluído!",
       "billUploaded": "Fatura enviada e categorizada!",
+      "billReplaced": "Fatura substituída com sucesso!",
       "expenseCreated": "Despesa criada a partir da fatura!",
       "billLinked": "Fatura vinculada à transação!"
     }

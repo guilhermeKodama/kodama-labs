@@ -319,6 +319,7 @@ export const useCreditCardStore = create<CreditCardStore>()((set, get) => ({
         },
         totalAmount: result.totalAmount,
         transactionCount: result.transactionCount,
+        replaced: result.replaced,
       };
     } catch (error) {
       set({

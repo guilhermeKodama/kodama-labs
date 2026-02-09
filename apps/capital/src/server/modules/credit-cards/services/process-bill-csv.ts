@@ -268,6 +268,10 @@ function parseDate(dateStr: string): Date {
 /**
  * Process a CSV credit card bill: parse CSV, save bill + transactions, create installments.
  * AI categorization is handled asynchronously via cron job.
+ *
+ * If a bill already exists for the same creditCardId + closingDate, it is atomically
+ * replaced: old bill is deleted (cascading transactions + installments) and a new one
+ * is created, preserving manual categorizations and linked expense transactions.
  */
 export async function processBillCsv(
   userId: string,
@@ -285,37 +289,99 @@ export async function processBillCsv(
   const chargeTransactions = parsedTransactions.filter((t) => !t.isPayment);
   const totalAmount = chargeTransactions.reduce((sum, t) => sum + t.amount, 0);
 
-  // 3. Create bill record (categorizationStatus defaults to "pending")
-  //    If linked to an existing expense transaction, mark as paid
+  // 3. Check for existing bill with same card + closing date (replace semantics)
+  const existingBill = await db.creditCardBill.findFirst({
+    where: {
+      creditCardId: input.creditCardId,
+      closingDate: input.closingDate,
+      creditCard: {
+        OR: [
+          { business: { userId } },
+          { personalAccount: { userId } },
+        ],
+      },
+    },
+    include: {
+      billTransactions: {
+        select: {
+          description: true,
+          amount: true,
+          category: true,
+          isAutoCategorized: true,
+        },
+      },
+    },
+  });
+
+  let replaced = false;
+  let preservedTransactionId: string | undefined;
+  let preservedStatus: string | undefined;
+  const preservedCategories = new Map<string, string>();
+
+  if (existingBill) {
+    replaced = true;
+
+    // 3a. Preserve manual categorizations (user-set, not "Uncategorized")
+    for (const bt of existingBill.billTransactions) {
+      if (!bt.isAutoCategorized && bt.category !== "Uncategorized") {
+        const key = `${bt.description}::${bt.amount}`;
+        preservedCategories.set(key, bt.category);
+      }
+    }
+
+    // 3b. Preserve linked expense transaction and status
+    preservedTransactionId = existingBill.transactionId ?? undefined;
+    preservedStatus = existingBill.status;
+
+    // 3c. Delete the old bill (cascade removes transactions + installments)
+    await db.creditCardBill.delete({
+      where: { id: existingBill.id },
+    });
+  }
+
+  // 4. Determine transaction link and status
+  //    Priority: explicit input > preserved from old bill
+  const effectiveTransactionId = input.transactionId ?? preservedTransactionId;
+  const effectiveStatus = input.transactionId
+    ? "paid" as const
+    : preservedTransactionId
+      ? (preservedStatus as "pending" | "paid" | "overdue") ?? "pending" as const
+      : undefined;
+
+  // 5. Create bill record
   const bill = await insertBill(
     userId,
     {
       creditCardId: input.creditCardId,
-      transactionId: input.transactionId,
+      transactionId: effectiveTransactionId,
       closingDate: input.closingDate,
       dueDate: input.dueDate,
       totalAmount: Math.round(totalAmount * 100) / 100,
       csvFileName: input.csvFileName,
-      status: input.transactionId ? "paid" : undefined,
+      status: effectiveTransactionId ? effectiveStatus ?? "paid" : undefined,
     },
     db
   );
 
-  // 4. Create bill transactions with "Uncategorized" — AI will categorize async
-  const billTransactionData = chargeTransactions.map((t) => ({
-    billId: bill.id,
-    category: "Uncategorized",
-    transactionDate: parseDate(t.date),
-    description: t.description,
-    amount: t.amount,
-    installmentNumber: t.installmentNumber,
-    totalInstallments: t.totalInstallments,
-    isAutoCategorized: false,
-  }));
+  // 6. Create bill transactions, applying preserved manual categories where possible
+  const billTransactionData = chargeTransactions.map((t) => {
+    const key = `${t.description}::${t.amount}`;
+    const preservedCategory = preservedCategories.get(key);
+    return {
+      billId: bill.id,
+      category: preservedCategory ?? "Uncategorized",
+      transactionDate: parseDate(t.date),
+      description: t.description,
+      amount: t.amount,
+      installmentNumber: t.installmentNumber,
+      totalInstallments: t.totalInstallments,
+      isAutoCategorized: false,
+    };
+  });
 
   await insertBillTransactions(billTransactionData, db);
 
-  // 5. Auto-create installment records for transactions with installment info
+  // 7. Auto-create installment records for transactions with installment info
   const createdBillTransactions = await db.billTransaction.findMany({
     where: { billId: bill.id },
     select: {
@@ -354,11 +420,20 @@ export async function processBillCsv(
     });
   }
 
-  // 6. Return immediately — categorization will happen via cron
+  // 8. If replacing and there was a linked expense, update its amount
+  if (replaced && effectiveTransactionId) {
+    await db.transaction.update({
+      where: { id: effectiveTransactionId },
+      data: { amount: Math.round(totalAmount * 100) / 100 },
+    });
+  }
+
+  // 9. Return result — categorization will happen via cron
   return {
     bill,
     totalAmount: Math.round(totalAmount * 100) / 100,
     transactionCount: chargeTransactions.length,
     installmentCount: installmentRecords.length,
+    replaced,
   };
 }

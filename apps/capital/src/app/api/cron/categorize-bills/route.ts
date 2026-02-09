@@ -42,6 +42,8 @@ export async function GET(request: NextRequest) {
             description: true,
             merchantName: true,
             amount: true,
+            category: true,
+            isAutoCategorized: true,
           },
         },
       },
@@ -79,38 +81,46 @@ export async function GET(request: NextRequest) {
       });
       const categoryNames = [...new Set(categories.map((c) => c.name))];
 
-      // Prepare transactions for categorization
-      const txInput = pendingBill.billTransactions.map((t, i) => ({
-        index: i,
-        description: t.description,
-        merchantName: t.merchantName ?? undefined,
-        amount: t.amount,
-      }));
-
-      // Call Claude API
-      const categorizations = await categorizeBillTransactions(
-        txInput,
-        categoryNames
+      // Filter out transactions that already have manual categories
+      // (preserved from a previous bill upload or manually edited by the user)
+      const transactionsToCategorizе = pendingBill.billTransactions.filter(
+        (t) => t.category === "Uncategorized" || t.isAutoCategorized
       );
 
-      // Batch update all transactions using a single DB transaction
-      await prisma.$transaction(
-        categorizations
-          .filter((cat) => {
-            const tx = pendingBill.billTransactions[cat.index];
-            return tx !== undefined;
-          })
-          .map((cat) => {
-            const tx = pendingBill.billTransactions[cat.index];
-            return prisma.billTransaction.update({
-              where: { id: tx.id },
-              data: {
-                category: cat.category,
-                isAutoCategorized: true,
-              },
-            });
-          })
-      );
+      if (transactionsToCategorizе.length > 0) {
+        // Prepare transactions for categorization
+        const txInput = transactionsToCategorizе.map((t, i) => ({
+          index: i,
+          description: t.description,
+          merchantName: t.merchantName ?? undefined,
+          amount: t.amount,
+        }));
+
+        // Call Claude API
+        const categorizations = await categorizeBillTransactions(
+          txInput,
+          categoryNames
+        );
+
+        // Batch update only the transactions that need categorization
+        await prisma.$transaction(
+          categorizations
+            .filter((cat) => {
+              const tx = transactionsToCategorizе[cat.index];
+              return tx !== undefined;
+            })
+            .map((cat) => {
+              const tx = transactionsToCategorizе[cat.index];
+              return prisma.billTransaction.update({
+                where: { id: tx.id },
+                data: {
+                  category: cat.category,
+                  isAutoCategorized: true,
+                },
+              });
+            })
+        );
+      }
 
       // Mark as completed
       await prisma.creditCardBill.update({
