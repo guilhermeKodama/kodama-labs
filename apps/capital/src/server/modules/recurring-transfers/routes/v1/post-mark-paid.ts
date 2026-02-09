@@ -1,6 +1,7 @@
 import { createRoute, z } from "@hono/zod-openapi";
 import { OK, NOT_FOUND, UNAUTHORIZED, INTERNAL_SERVER_ERROR, BAD_REQUEST } from "stoker/http-status-codes";
 import { jsonContent } from "stoker/openapi/helpers";
+import { toDateString } from "@capital/server/lib/date-utils";
 
 import type { AppRouteHandler } from "@capital/server/types";
 import { markRecurringTransferAsPaid } from "../../services/mark-paid";
@@ -111,7 +112,7 @@ export const handler: AppRouteHandler<typeof route> = async (c) => {
           currency: result.createdTransfer.currency,
           exchangeRate: result.createdTransfer.exchangeRate,
           description: result.createdTransfer.description,
-          date: result.createdTransfer.date.toISOString(),
+          date: toDateString(result.createdTransfer.date),
           fromBusinessId: result.createdTransfer.fromBusinessId,
           fromPersonalAccountId: result.createdTransfer.fromPersonalAccountId,
           toBusinessId: result.createdTransfer.toBusinessId,
@@ -130,9 +131,9 @@ export const handler: AppRouteHandler<typeof route> = async (c) => {
           exchangeRate: result.updatedRecurring.exchangeRate,
           description: result.updatedRecurring.description,
           frequency: result.updatedRecurring.frequency,
-          startDate: result.updatedRecurring.startDate.toISOString(),
+          startDate: toDateString(result.updatedRecurring.startDate),
           endDate: result.updatedRecurring.endDate?.toISOString() ?? null,
-          nextDueDate: result.updatedRecurring.nextDueDate.toISOString(),
+          nextDueDate: toDateString(result.updatedRecurring.nextDueDate),
           lastGeneratedDate:
             result.updatedRecurring.lastGeneratedDate?.toISOString() ?? null,
           isActive: result.updatedRecurring.isActive,

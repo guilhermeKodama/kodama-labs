@@ -5,7 +5,7 @@ import { jsonContent } from "stoker/openapi/helpers";
 import type { AppRouteHandler } from "@capital/server/types";
 import { prisma } from "@capital/server/lib/prisma";
 import { requireUserId } from "@capital/server/lib/auth-middleware";
-import { parseLocalDate } from "@capital/server/lib/date-utils";
+import { parseLocalDate, toDateString } from "@capital/server/lib/date-utils";
 import { createInvestmentTransaction } from "../../services/create-investment-transaction";
 import { routeConfig } from "../../constants";
 
@@ -77,7 +77,7 @@ export const handler: AppRouteHandler<typeof route> = async (c) => {
         pricePerUnit: transaction.pricePerUnit,
         totalAmount: transaction.totalAmount,
         fees: transaction.fees,
-        date: transaction.date.toISOString(),
+        date: toDateString(transaction.date),
         notes: transaction.notes,
         createdAt: transaction.createdAt.toISOString(),
         updatedAt: transaction.updatedAt.toISOString(),

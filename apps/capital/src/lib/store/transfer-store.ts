@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { parseLocalDate } from '@/lib/utils/date';
 import type { Transfer, CreateTransferInput } from '@/types';
 import { client } from '@/lib/api-client';
 
@@ -57,7 +58,7 @@ export const useTransferStore = create<TransferStore>()((set, get) => ({
           currency: t.currency,
           exchangeRate: t.exchangeRate,
           description: t.description ?? undefined,
-          date: new Date(t.date),
+          date: parseLocalDate(t.date),
           createdAt: new Date(t.createdAt),
           updatedAt: new Date(t.updatedAt),
         })),
@@ -108,7 +109,7 @@ export const useTransferStore = create<TransferStore>()((set, get) => ({
         currency: data.currency,
         exchangeRate: data.exchangeRate,
         description: data.description ?? undefined,
-        date: new Date(data.date),
+        date: parseLocalDate(data.date),
         createdAt: new Date(data.createdAt),
         updatedAt: new Date(data.updatedAt),
       };

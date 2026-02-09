@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { parseLocalDate } from '@/lib/utils/date';
 import type {
   InvestmentAccount,
   InvestmentHolding,
@@ -387,7 +388,7 @@ export const useInvestmentStore = create<InvestmentStore>()((set, get) => ({
           pricePerUnit: t.pricePerUnit ?? undefined,
           totalAmount: t.totalAmount,
           fees: t.fees,
-          date: new Date(t.date),
+          date: parseLocalDate(t.date),
           notes: t.notes ?? undefined,
           createdAt: new Date(t.createdAt),
           updatedAt: new Date(t.updatedAt),
@@ -428,7 +429,7 @@ export const useInvestmentStore = create<InvestmentStore>()((set, get) => ({
         pricePerUnit: data.pricePerUnit ?? undefined,
         totalAmount: data.totalAmount,
         fees: data.fees,
-        date: new Date(data.date),
+        date: parseLocalDate(data.date),
         notes: data.notes ?? undefined,
         createdAt: new Date(data.createdAt),
         updatedAt: new Date(data.updatedAt),
@@ -473,7 +474,7 @@ export const useInvestmentStore = create<InvestmentStore>()((set, get) => ({
                 pricePerUnit: data.pricePerUnit ?? undefined,
                 totalAmount: data.totalAmount,
                 fees: data.fees,
-                date: new Date(data.date),
+                date: parseLocalDate(data.date),
                 notes: data.notes ?? undefined,
                 updatedAt: new Date(data.updatedAt),
               }

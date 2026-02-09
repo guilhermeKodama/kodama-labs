@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { addDays, addWeeks, addMonths, addYears } from 'date-fns';
+import { parseLocalDate } from '@/lib/utils/date';
 import type {
   RecurringTransfer,
   CreateRecurringTransferInput,
@@ -106,10 +107,10 @@ export const useRecurringTransferStore = create<RecurringTransferStore>()((set, 
           exchangeRate: r.exchangeRate,
           description: r.description ?? undefined,
           frequency: r.frequency,
-          startDate: new Date(r.startDate),
-          endDate: r.endDate ? new Date(r.endDate) : undefined,
-          nextDueDate: new Date(r.nextDueDate),
-          lastGeneratedDate: r.lastGeneratedDate ? new Date(r.lastGeneratedDate) : undefined,
+          startDate: parseLocalDate(r.startDate),
+          endDate: r.endDate ? parseLocalDate(r.endDate) : undefined,
+          nextDueDate: parseLocalDate(r.nextDueDate),
+          lastGeneratedDate: r.lastGeneratedDate ? parseLocalDate(r.lastGeneratedDate) : undefined,
           isActive: r.isActive,
           createdAt: new Date(r.createdAt),
           updatedAt: new Date(r.updatedAt),
@@ -128,7 +129,7 @@ export const useRecurringTransferStore = create<RecurringTransferStore>()((set, 
   addRecurringTransfer: async (input: CreateRecurringTransferInput) => {
     set({ isLoading: true, error: null });
     try {
-      const startDate = input.startDate instanceof Date ? input.startDate : new Date(input.startDate);
+      const startDate = input.startDate instanceof Date ? input.startDate : parseLocalDate(input.startDate);
       
       const res = await client.v1['recurring-transfers'].$post({
         json: {
@@ -168,10 +169,10 @@ export const useRecurringTransferStore = create<RecurringTransferStore>()((set, 
         exchangeRate: data.exchangeRate,
         description: data.description ?? undefined,
         frequency: data.frequency,
-        startDate: new Date(data.startDate),
-        endDate: data.endDate ? new Date(data.endDate) : undefined,
-        nextDueDate: new Date(data.nextDueDate),
-        lastGeneratedDate: data.lastGeneratedDate ? new Date(data.lastGeneratedDate) : undefined,
+        startDate: parseLocalDate(data.startDate),
+        endDate: data.endDate ? parseLocalDate(data.endDate) : undefined,
+        nextDueDate: parseLocalDate(data.nextDueDate),
+        lastGeneratedDate: data.lastGeneratedDate ? parseLocalDate(data.lastGeneratedDate) : undefined,
         isActive: data.isActive,
         createdAt: new Date(data.createdAt),
         updatedAt: new Date(data.updatedAt),
@@ -235,10 +236,10 @@ export const useRecurringTransferStore = create<RecurringTransferStore>()((set, 
                 exchangeRate: data.exchangeRate,
                 description: data.description ?? undefined,
                 frequency: data.frequency,
-                startDate: new Date(data.startDate),
-                endDate: data.endDate ? new Date(data.endDate) : undefined,
-                nextDueDate: new Date(data.nextDueDate),
-                lastGeneratedDate: data.lastGeneratedDate ? new Date(data.lastGeneratedDate) : undefined,
+                startDate: parseLocalDate(data.startDate),
+                endDate: data.endDate ? parseLocalDate(data.endDate) : undefined,
+                nextDueDate: parseLocalDate(data.nextDueDate),
+                lastGeneratedDate: data.lastGeneratedDate ? parseLocalDate(data.lastGeneratedDate) : undefined,
                 isActive: data.isActive,
                 createdAt: new Date(data.createdAt),
                 updatedAt: new Date(data.updatedAt),
@@ -332,9 +333,9 @@ export const useRecurringTransferStore = create<RecurringTransferStore>()((set, 
           rt.id === id
             ? {
                 ...rt,
-                nextDueDate: new Date(data.updatedRecurring.nextDueDate),
+                nextDueDate: parseLocalDate(data.updatedRecurring.nextDueDate),
                 lastGeneratedDate: data.updatedRecurring.lastGeneratedDate 
-                  ? new Date(data.updatedRecurring.lastGeneratedDate) 
+                  ? parseLocalDate(data.updatedRecurring.lastGeneratedDate) 
                   : undefined,
                 updatedAt: new Date(data.updatedRecurring.updatedAt),
               }
@@ -356,7 +357,7 @@ export const useRecurringTransferStore = create<RecurringTransferStore>()((set, 
           currency: data.createdTransfer.currency,
           exchangeRate: data.createdTransfer.exchangeRate,
           description: data.createdTransfer.description ?? undefined,
-          date: new Date(data.createdTransfer.date),
+          date: parseLocalDate(data.createdTransfer.date),
           createdAt: new Date(data.createdTransfer.createdAt),
           updatedAt: new Date(data.createdTransfer.updatedAt),
         } as Transfer,
@@ -372,11 +373,11 @@ export const useRecurringTransferStore = create<RecurringTransferStore>()((set, 
           exchangeRate: data.updatedRecurring.exchangeRate,
           description: data.updatedRecurring.description ?? undefined,
           frequency: data.updatedRecurring.frequency as RecurrenceFrequency,
-          startDate: new Date(data.updatedRecurring.startDate),
-          endDate: data.updatedRecurring.endDate ? new Date(data.updatedRecurring.endDate) : undefined,
-          nextDueDate: new Date(data.updatedRecurring.nextDueDate),
+          startDate: parseLocalDate(data.updatedRecurring.startDate),
+          endDate: data.updatedRecurring.endDate ? parseLocalDate(data.updatedRecurring.endDate) : undefined,
+          nextDueDate: parseLocalDate(data.updatedRecurring.nextDueDate),
           lastGeneratedDate: data.updatedRecurring.lastGeneratedDate 
-            ? new Date(data.updatedRecurring.lastGeneratedDate) 
+            ? parseLocalDate(data.updatedRecurring.lastGeneratedDate) 
             : undefined,
           isActive: data.updatedRecurring.isActive,
           createdAt: new Date(data.updatedRecurring.createdAt),

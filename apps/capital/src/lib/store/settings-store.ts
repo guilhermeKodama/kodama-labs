@@ -57,6 +57,7 @@ const defaultSettings: AppSettings = {
   theme: 'system',
   dateFormat: 'MMM d, yyyy',
   numberFormat: 'en-US',
+  timezone: 'America/Sao_Paulo',
 };
 
 const defaultTaxSettings: TaxSettings = {
@@ -94,6 +95,7 @@ export const useSettingsStore = create<SettingsStore>()((set, get) => ({
           theme: userData.theme as 'light' | 'dark' | 'system',
           dateFormat: userData.dateFormat,
           numberFormat: userData.numberFormat as 'en-US' | 'pt-BR' | 'de-DE',
+          timezone: (userData as Record<string, unknown>).timezone as string || 'America/Sao_Paulo',
         },
         personalAccount: userData.personalAccount
           ? {
@@ -180,6 +182,7 @@ export const useSettingsStore = create<SettingsStore>()((set, get) => ({
           theme: newSettings.theme,
           dateFormat: newSettings.dateFormat,
           numberFormat: newSettings.numberFormat,
+          timezone: newSettings.timezone,
         },
       });
 
@@ -195,6 +198,7 @@ export const useSettingsStore = create<SettingsStore>()((set, get) => ({
           theme: userData.theme as 'light' | 'dark' | 'system',
           dateFormat: userData.dateFormat,
           numberFormat: userData.numberFormat as 'en-US' | 'pt-BR' | 'de-DE',
+          timezone: (userData as Record<string, unknown>).timezone as string || state.settings.timezone,
         },
         isLoading: false,
       }));

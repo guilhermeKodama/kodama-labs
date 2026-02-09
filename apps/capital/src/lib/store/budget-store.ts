@@ -7,8 +7,74 @@ import type {
 } from '@/types';
 import { client } from '@/lib/api-client';
 
+// Dashboard data from server
+export interface BudgetDashboardData {
+  period: { year: number; month: number };
+  summary: {
+    totalBudget: number;
+    totalSpent: number;
+    totalRoom: number;
+    projectedTotal: number;
+  };
+  budgets: Array<{
+    id: string;
+    entityId: string;
+    entityType: string;
+    category: string;
+    amount: number;
+    currency: string;
+    period: string;
+    year: number;
+    month: number | null;
+    spent: number;
+    remaining: number;
+    percentUsed: number;
+    isOverBudget: boolean;
+    isActive: boolean;
+    pace: {
+      dailySpendRate: number;
+      allowedDailyRate: number;
+      projectedTotal: number;
+      isOverPace: boolean;
+      daysElapsed: number;
+      daysRemaining: number;
+      daysInPeriod: number;
+    };
+  }>;
+  insights: Array<{
+    budgetId: string;
+    category: string;
+    severity: 'critical' | 'warning' | 'good';
+    message: string;
+    recommendation: string;
+    percentUsed: number;
+    remaining: number;
+    daysRemaining: number;
+    dailySpendRate: number;
+    allowedDailyRate: number;
+  }>;
+  unbudgetedSpending: Array<{
+    category: string;
+    totalSpent: number;
+    transactionCount: number;
+    entityId: string;
+    entityType: string;
+    isFromPreviousMonth: boolean;
+  }>;
+  monthOverMonth: Array<{
+    category: string;
+    entityId: string;
+    currentSpent: number;
+    previousSpent: number;
+    changeAmount: number;
+    changePercent: number;
+  }>;
+}
+
 interface BudgetState {
   budgets: Budget[];
+  dashboard: BudgetDashboardData | null;
+  isDashboardLoading: boolean;
   isLoading: boolean;
   error: string | null;
 }
@@ -21,6 +87,7 @@ interface BudgetActions {
     year?: number;
     month?: number;
   }) => Promise<void>;
+  fetchDashboard: (year?: number, month?: number) => Promise<void>;
   addBudget: (input: CreateBudgetInput) => Promise<Budget | null>;
   updateBudget: (id: string, input: UpdateBudgetInput) => Promise<void>;
   deleteBudget: (id: string) => Promise<void>;
@@ -38,6 +105,8 @@ type BudgetStore = BudgetState & BudgetActions;
 export const useBudgetStore = create<BudgetStore>()((set, get) => ({
   // State
   budgets: [],
+  dashboard: null,
+  isDashboardLoading: false,
   isLoading: false,
   error: null,
 
@@ -82,6 +151,34 @@ export const useBudgetStore = create<BudgetStore>()((set, get) => ({
       set({
         error: error instanceof Error ? error.message : 'Unknown error',
         isLoading: false,
+      });
+    }
+  },
+
+  // Fetch dashboard data from server (all calculations done server-side)
+  fetchDashboard: async (year, month) => {
+    set({ isDashboardLoading: true, error: null });
+    try {
+      const res = await client.v1.budgets.dashboard.$get({
+        query: {
+          year,
+          month,
+        },
+      });
+
+      if (!res.ok) {
+        throw new Error('Failed to fetch budget dashboard');
+      }
+
+      const data = await res.json();
+      set({
+        dashboard: data as BudgetDashboardData,
+        isDashboardLoading: false,
+      });
+    } catch (error) {
+      set({
+        error: error instanceof Error ? error.message : 'Unknown error',
+        isDashboardLoading: false,
       });
     }
   },
@@ -287,6 +384,8 @@ export const useBudgetStore = create<BudgetStore>()((set, get) => ({
   reset: () => {
     set({
       budgets: [],
+      dashboard: null,
+      isDashboardLoading: false,
       isLoading: false,
       error: null,
     });
