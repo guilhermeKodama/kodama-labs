@@ -16,6 +16,7 @@ interface CreditCardState {
   creditCards: CreditCard[];
   bills: CreditCardBill[];
   billTransactions: BillTransaction[];
+  allBillTransactions: BillTransaction[];
   installments: Installment[];
   isLoading: boolean;
   error: string | null;
@@ -64,6 +65,7 @@ interface CreditCardActions {
 
   // Bill Transactions
   fetchBillTransactions: (billId: string) => Promise<void>;
+  fetchAllBillTransactions: () => Promise<void>;
   updateBillTransactionCategory: (id: string, category: string) => Promise<void>;
 
   // Installments
@@ -85,6 +87,7 @@ export const useCreditCardStore = create<CreditCardStore>()((set, get) => ({
   creditCards: [],
   bills: [],
   billTransactions: [],
+  allBillTransactions: [],
   installments: [],
   isLoading: false,
   error: null,
@@ -452,6 +455,45 @@ export const useCreditCardStore = create<CreditCardStore>()((set, get) => ({
     }
   },
 
+  // Fetch all bill transactions across all bills (for budget integration)
+  fetchAllBillTransactions: async () => {
+    const bills = get().bills;
+    if (bills.length === 0) {
+      set({ allBillTransactions: [] });
+      return;
+    }
+
+    try {
+      const allTxs: BillTransaction[] = [];
+      for (const bill of bills) {
+        const res = await client.v1['credit-cards'].bills[':billId'].transactions.$get({
+          param: { billId: bill.id },
+        });
+        if (!res.ok) continue;
+        const data = await res.json();
+        allTxs.push(
+          ...data.map((t) => ({
+            id: t.id,
+            billId: t.billId,
+            category: t.category,
+            transactionDate: new Date(t.transactionDate),
+            description: t.description,
+            merchantName: t.merchantName ?? undefined,
+            amount: t.amount,
+            installmentNumber: t.installmentNumber ?? undefined,
+            totalInstallments: t.totalInstallments ?? undefined,
+            isAutoCategorized: t.isAutoCategorized,
+            createdAt: new Date(t.createdAt),
+            updatedAt: new Date(t.updatedAt),
+          }))
+        );
+      }
+      set({ allBillTransactions: allTxs });
+    } catch (error) {
+      console.error('Failed to fetch all bill transactions:', error);
+    }
+  },
+
   // Fetch installments
   fetchInstallments: async (filters) => {
     set({ isLoading: true, error: null });
@@ -472,6 +514,7 @@ export const useCreditCardStore = create<CreditCardStore>()((set, get) => ({
           creditCardId: inst.creditCardId,
           billTransactionId: inst.billTransactionId,
           description: inst.description,
+          category: (inst as Record<string, unknown>).category as string | undefined,
           totalAmount: inst.totalAmount,
           totalInstallments: inst.totalInstallments,
           paidInstallments: inst.paidInstallments,
@@ -509,6 +552,7 @@ export const useCreditCardStore = create<CreditCardStore>()((set, get) => ({
       creditCards: [],
       bills: [],
       billTransactions: [],
+      allBillTransactions: [],
       installments: [],
       isLoading: false,
       error: null,

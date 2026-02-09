@@ -20,6 +20,7 @@ interface BudgetDialogProps {
   isLoading?: boolean;
   defaultEntityId?: string;
   defaultEntityType?: EntityType;
+  defaultCategory?: string;
 }
 
 export function BudgetDialog({
@@ -30,6 +31,7 @@ export function BudgetDialog({
   isLoading,
   defaultEntityId,
   defaultEntityType,
+  defaultCategory,
 }: BudgetDialogProps) {
   const t = useTranslations('budgets');
 
@@ -54,6 +56,7 @@ export function BudgetDialog({
           isLoading={isLoading}
           defaultEntityId={defaultEntityId}
           defaultEntityType={defaultEntityType}
+          defaultCategory={defaultCategory}
         />
       </DialogContent>
     </Dialog>

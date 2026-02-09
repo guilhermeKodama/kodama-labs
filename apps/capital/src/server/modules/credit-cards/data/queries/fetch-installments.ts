@@ -41,6 +41,7 @@ export async function fetchInstallments(
         select: {
           description: true,
           merchantName: true,
+          category: true,
         },
       },
     },

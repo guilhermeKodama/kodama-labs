@@ -827,6 +827,7 @@
     "title": "Orçamentos",
     "subtitle": "Defina e acompanhe limites de gastos",
     "addBudget": "Adicionar Orçamento",
+    "copyToNextMonth": "Copiar para Próximo Mês",
     "currentBudgets": "Orçamentos do Mês Atual",
     "allBudgets": "Todos os Orçamentos",
     "periods": {
@@ -849,7 +850,9 @@
       "currency": "Moeda",
       "period": "Período",
       "year": "Ano",
-      "month": "Mês"
+      "month": "Mês",
+      "alertThreshold": "Limite de Alerta (%)",
+      "alertThresholdHint": "Receba alerta quando o gasto atingir esta porcentagem (padrão: 80%)"
     },
     "dialog": {
       "createTitle": "Criar Orçamento",
@@ -864,7 +867,18 @@
       "progress": "Progresso",
       "budget": "Orçamento",
       "spent": "Gasto",
-      "status": "Status"
+      "remaining": "Restante",
+      "pace": "Ritmo",
+      "status": "Status",
+      "sortBy": "Ordenar por"
+    },
+    "filter": {
+      "all": "Todos",
+      "onTrack": "No Caminho",
+      "nearLimit": "Perto do Limite",
+      "overBudget": "Acima do Orçamento",
+      "allEntities": "Todas Entidades",
+      "statusFilter": "Status"
     },
     "status": {
       "onTrack": "No Caminho",
@@ -877,9 +891,67 @@
       "over": "Acima por",
       "budget": "Orçamento"
     },
+    "pace": {
+      "onPace": "No ritmo",
+      "overPace": "Acima do ritmo",
+      "underPace": "Abaixo do ritmo",
+      "perDay": "/dia",
+      "projected": "Projetado",
+      "daysLeft": "dias restantes"
+    },
+    "roomToSpend": {
+      "title": "Visão Geral do Orçamento",
+      "totalBudget": "Orçamento Total",
+      "totalSpent": "Total Gasto",
+      "totalRoom": "Espaço Total",
+      "projected": "Projetado",
+      "roomLeft": "disponível",
+      "overBy": "acima por",
+      "noRoom": "Sem espaço"
+    },
+    "insights": {
+      "title": "Insights do Orçamento",
+      "holdSpending": "Segurar Gastos",
+      "roomAvailable": "Espaço Disponível",
+      "critical": "Crítico",
+      "warning": "Atenção",
+      "good": "Bom"
+    },
+    "unbudgeted": {
+      "title": "Gastos Sem Orçamento",
+      "description": "Estas categorias têm gastos recentes mas nenhum orçamento definido.",
+      "spent": "gasto",
+      "transactions": "transações",
+      "createBudget": "Criar Orçamento",
+      "lastMonth": "mês passado",
+      "basedOnLastMonth": "Baseado nos gastos do mês anterior"
+    },
+    "trend": {
+      "title": "Mês a Mês",
+      "vsLastMonth": "vs mês anterior",
+      "noChange": "Sem alteração",
+      "increase": "aumento",
+      "decrease": "redução",
+      "new": "Novo",
+      "noPrevious": "Sem gastos no mês anterior"
+    },
+    "overview": {
+      "title": "Visão Geral",
+      "chartTitle": "Distribuição do Orçamento",
+      "trendTitle": "Tendências de Gastos",
+      "today": "Hoje"
+    },
+    "drillDown": {
+      "title": "Transações",
+      "noTransactions": "Nenhuma transação nesta categoria para este período.",
+      "date": "Data",
+      "description": "Descrição",
+      "amount": "Valor"
+    },
     "views": {
       "current": "Mês Atual",
-      "all": "Todos os Orçamentos"
+      "all": "Todos os Orçamentos",
+      "overview": "Visão Geral"
     },
     "alerts": {
       "title": "Alertas de Orçamento"
@@ -898,10 +970,14 @@
     },
     "toast": {
       "created": "Orçamento criado!",
+      "createError": "Falha ao criar orçamento. Ele pode já existir para este período.",
       "updated": "Orçamento atualizado!",
       "deleted": "Orçamento excluído!",
       "paused": "Orçamento pausado",
-      "resumed": "Orçamento retomado"
+      "resumed": "Orçamento retomado",
+      "copiedToNextMonth": "{count} orçamento(s) copiado(s) para o próximo mês",
+      "noBudgetsToCopy": "Nenhum orçamento atual para copiar",
+      "allBudgetsExist": "Todos os orçamentos já existem para o próximo mês"
     }
   },
   "tax": {

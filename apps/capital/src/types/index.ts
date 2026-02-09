@@ -278,6 +278,7 @@ export interface Budget {
   period: BudgetPeriod;
   year: number;
   month?: number; // 1-12 for monthly budgets
+  alertThreshold?: number; // Percentage (0-100) at which to warn, default 80
   isActive: boolean;
   createdAt: Date;
   updatedAt: Date;
@@ -292,6 +293,7 @@ export interface CreateBudgetInput {
   period: BudgetPeriod;
   year: number;
   month?: number;
+  alertThreshold?: number;
 }
 
 export interface UpdateBudgetInput {
@@ -310,6 +312,49 @@ export interface BudgetProgress {
   remaining: number;
   percentUsed: number;
   isOverBudget: boolean;
+}
+
+export interface BudgetPace {
+  dailySpendRate: number;
+  allowedDailyRate: number;
+  projectedTotal: number;
+  isOverPace: boolean;
+  daysElapsed: number;
+  daysRemaining: number;
+  daysInPeriod: number;
+}
+
+export interface UnbudgetedCategory {
+  category: string;
+  totalSpent: number;
+  transactionCount: number;
+  entityId: string;
+  entityType: EntityType;
+  isFromPreviousMonth?: boolean;
+}
+
+export interface MonthOverMonth {
+  category: string;
+  entityId: string;
+  currentSpent: number;
+  previousSpent: number;
+  changeAmount: number;
+  changePercent: number;
+}
+
+export type BudgetInsightSeverity = 'critical' | 'warning' | 'good';
+
+export interface BudgetInsight {
+  budgetId: string;
+  category: string;
+  severity: BudgetInsightSeverity;
+  message: string;
+  recommendation: string;
+  percentUsed: number;
+  remaining: number;
+  daysRemaining: number;
+  dailySpendRate: number;
+  allowedDailyRate: number;
 }
 
 // --------------------------------------------
@@ -510,6 +555,7 @@ export interface Installment {
   creditCardId: string;
   billTransactionId: string;
   description: string;
+  category?: string;
   totalAmount: number;
   totalInstallments: number;
   paidInstallments: number;

@@ -36,6 +36,7 @@ interface BudgetFormProps {
   isLoading?: boolean;
   defaultEntityId?: string;
   defaultEntityType?: EntityType;
+  defaultCategory?: string;
 }
 
 const MONTHS = [
@@ -60,6 +61,7 @@ export function BudgetForm({
   isLoading,
   defaultEntityId,
   defaultEntityType,
+  defaultCategory,
 }: BudgetFormProps) {
   const t = useTranslations('budgets');
   const tCommon = useTranslations('common');
@@ -74,12 +76,13 @@ export function BudgetForm({
     defaultValues: {
       entityId: budget?.entityId || defaultEntityId || personalAccount?.id || '',
       entityType: budget?.entityType || defaultEntityType || 'personal',
-      category: budget?.category || '',
+      category: budget?.category || defaultCategory || '',
       amount: budget?.amount || 0,
       currency: budget?.currency || settings.baseCurrency,
       period: budget?.period || 'monthly',
       year: budget?.year || currentYear,
       month: budget?.month || currentMonth,
+      alertThreshold: budget?.alertThreshold || 80,
     },
   });
 
@@ -357,6 +360,30 @@ export function BudgetForm({
             />
           )}
         </div>
+
+        {/* Alert Threshold */}
+        <FormField
+          control={form.control}
+          name="alertThreshold"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel className="text-slate-300">{t('form.alertThreshold')}</FormLabel>
+              <FormControl>
+                <Input
+                  {...field}
+                  type="number"
+                  min="1"
+                  max="100"
+                  value={field.value ?? 80}
+                  onChange={(e) => field.onChange(parseInt(e.target.value) || 80)}
+                  className="border-slate-700 bg-slate-800 text-white"
+                />
+              </FormControl>
+              <p className="text-xs text-slate-500">{t('form.alertThresholdHint')}</p>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
 
         {/* Actions */}
         <div className="flex justify-end gap-2 pt-4">

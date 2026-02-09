@@ -4,6 +4,7 @@ import { Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { LanguageSwitcher } from '@/components/language-switcher';
+import type { LucideIcon } from 'lucide-react';
 
 interface HeaderProps {
   title: string;
@@ -12,9 +13,14 @@ interface HeaderProps {
     label: string;
     onClick: () => void;
   };
+  secondaryAction?: {
+    label: string;
+    onClick: () => void;
+    icon?: LucideIcon;
+  };
 }
 
-export function Header({ title, description, action }: HeaderProps) {
+export function Header({ title, description, action, secondaryAction }: HeaderProps) {
   return (
     <header className="mb-8">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -31,6 +37,17 @@ export function Header({ title, description, action }: HeaderProps) {
             <LanguageSwitcher />
             <ThemeToggle />
           </div>
+
+          {secondaryAction && (
+            <Button
+              variant="outline"
+              onClick={secondaryAction.onClick}
+              className="border-slate-700 text-slate-300 hover:bg-slate-800 hover:text-white"
+            >
+              {secondaryAction.icon && <secondaryAction.icon className="mr-2 h-4 w-4" />}
+              {secondaryAction.label}
+            </Button>
+          )}
 
           {action && (
             <Button

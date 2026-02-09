@@ -3,3 +3,7 @@ export { BusinessCard } from './business-card';
 export { InvestmentCard } from './investment-card';
 export { BudgetProgressCard } from './budget-progress-card';
 export { TaxSummaryCard } from './tax-summary-card';
+export { RoomToSpendSummary } from './room-to-spend-summary';
+export { BudgetInsights } from './budget-insights';
+export { UnbudgetedSpendingCard } from './unbudgeted-spending-card';
+export { BudgetTrendCard } from './budget-trend-card';

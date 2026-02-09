@@ -89,8 +89,16 @@ export const handler: AppRouteHandler<typeof route> = async (c) => {
     );
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "Unknown error";
-    if (message.includes("required") || message.includes("access denied")) {
-      return c.json({ error: { code: "BAD_REQUEST", message } }, BAD_REQUEST);
+    if (
+      message.includes("required") ||
+      message.includes("access denied") ||
+      message.includes("already exists") ||
+      message.includes("Unique constraint")
+    ) {
+      const userMessage = message.includes("Unique constraint")
+        ? "A budget with this category already exists for this period."
+        : message;
+      return c.json({ error: { code: "BAD_REQUEST", message: userMessage } }, BAD_REQUEST);
     }
     return c.json(
       { error: { code: "INTERNAL_ERROR", message } },

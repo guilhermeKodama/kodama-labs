@@ -34,6 +34,28 @@ export async function createBudget(
     throw new Error("month is required for monthly budgets");
   }
 
+  // Check for existing budget with the same entity+category+period+year+month
+  const existing = await db.budget.findFirst({
+    where: {
+      OR: [
+        { business: { userId } },
+        { personalAccount: { userId } },
+      ],
+      ...(input.businessId && { businessId: input.businessId }),
+      ...(input.personalAccountId && { personalAccountId: input.personalAccountId }),
+      category: input.category,
+      period: input.period,
+      year: input.year,
+      ...(input.month !== undefined && { month: input.month }),
+    },
+  });
+
+  if (existing) {
+    throw new Error(
+      `A budget for "${input.category}" already exists for this period. Please edit the existing budget instead.`
+    );
+  }
+
   // Data layer will verify ownership
   return insertBudget(userId, input, db);
 }
