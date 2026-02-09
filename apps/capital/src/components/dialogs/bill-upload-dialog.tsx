@@ -1,8 +1,8 @@
 'use client';
 
-import { useState, useRef } from 'react';
+import { useState, useRef, useMemo } from 'react';
 import { useTranslations } from 'next-intl';
-import { Upload, FileText, Loader2 } from 'lucide-react';
+import { Upload, FileText, Loader2, AlertTriangle } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -21,12 +21,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import type { CreditCard, Transaction } from '@/types';
+import type { CreditCard, CreditCardBill, Transaction } from '@/types';
 
 interface BillUploadDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   creditCards: CreditCard[];
+  bills?: CreditCardBill[];
   expenseTransactions?: Transaction[];
   onSubmit: (data: {
     creditCardId: string;
@@ -43,6 +44,7 @@ export function BillUploadDialog({
   open,
   onOpenChange,
   creditCards,
+  bills = [],
   expenseTransactions = [],
   onSubmit,
 }: BillUploadDialogProps) {
@@ -58,6 +60,20 @@ export function BillUploadDialog({
   const [transactionId, setTransactionId] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Detect if uploading will replace an existing bill
+  const willReplace = useMemo(() => {
+    if (!creditCardId || !closingDate) return false;
+    // Match by card + closing date (same day = same billing cycle)
+    const inputClosing = closingDate; // "YYYY-MM-DD"
+    return bills.some((bill) => {
+      if (bill.creditCardId !== creditCardId) return false;
+      const billClosing = bill.closingDate instanceof Date
+        ? bill.closingDate.toISOString().slice(0, 10)
+        : String(bill.closingDate).slice(0, 10);
+      return billClosing === inputClosing;
+    });
+  }, [creditCardId, closingDate, bills]);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -186,6 +202,16 @@ export function BillUploadDialog({
               />
             </div>
           </div>
+
+          {/* Replace warning */}
+          {willReplace && (
+            <div className="flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3">
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-400" />
+              <p className="text-xs text-amber-300">
+                {t('upload.replaceWarning')}
+              </p>
+            </div>
+          )}
 
           {/* Link option */}
           <div className="space-y-3">

@@ -1110,7 +1110,8 @@
       "selectTransaction": "Select transaction",
       "processing": "Processing bill with AI categorization...",
       "success": "Bill uploaded and categorized successfully!",
-      "reviewCategories": "Review Categories"
+      "reviewCategories": "Review Categories",
+      "replaceWarning": "A bill already exists for this card and closing date. Uploading will replace it, preserving your manual categorizations."
     },
     "installment": {
       "total": "Total",
@@ -1129,6 +1130,7 @@
       "updated": "Credit card updated!",
       "deleted": "Credit card deleted!",
       "billUploaded": "Bill uploaded and categorized!",
+      "billReplaced": "Bill replaced successfully!",
       "expenseCreated": "Expense created from bill!",
       "billLinked": "Bill linked to transaction!"
     }

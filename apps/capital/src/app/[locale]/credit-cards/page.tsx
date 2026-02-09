@@ -201,8 +201,8 @@ export default function CreditCardsPage() {
     const { createExpense: shouldCreateExpense, ...uploadData } = data;
     const result = await uploadBill(uploadData);
     if (result) {
-      // Create expense transaction if user chose that option
-      if (shouldCreateExpense && result.bill) {
+      // Create expense transaction if user chose that option (only for new uploads, not replacements)
+      if (shouldCreateExpense && result.bill && !result.replaced) {
         const selectedCard = creditCards.find((c: CreditCard) => c.id === data.creditCardId);
         if (selectedCard) {
           await createBillExpense({
@@ -218,7 +218,10 @@ export default function CreditCardsPage() {
           toast.success(t('creditCards.toast.expenseCreated'));
         }
       }
-      toast.success(t('creditCards.toast.billUploaded'));
+      toast.success(result.replaced
+        ? t('creditCards.toast.billReplaced')
+        : t('creditCards.toast.billUploaded')
+      );
       // Refresh data to reflect new installments
       await fetchInstallments();
     }
@@ -522,6 +525,7 @@ export default function CreditCardsPage() {
         open={isUploadDialogOpen}
         onOpenChange={setIsUploadDialogOpen}
         creditCards={creditCards}
+        bills={bills}
         expenseTransactions={transactions.filter((t) => t.type === 'expense')}
         onSubmit={handleUploadBill}
       />
