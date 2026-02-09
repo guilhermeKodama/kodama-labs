@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState } from 'react';
 import { format } from 'date-fns';
 import { Sparkles, X } from 'lucide-react';
 import { formatCurrency } from '@/lib/utils/format';
