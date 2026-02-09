@@ -90,16 +90,26 @@ export default function CreditCardsPage() {
     fetchInstallments();
   }, [fetchCreditCards, fetchBills, fetchInstallments]);
 
-  // Auto-select the most recent bill so Transactions & Analytics tabs always have data
-  useEffect(() => {
-    if (bills.length > 0 && !selectedBillId) {
+  // Derive the effective bill id: use explicit selection, or fall back to the most recent bill
+  const effectiveBillId = useMemo(() => {
+    if (selectedBillId && bills.some((b: CreditCardBill) => b.id === selectedBillId)) {
+      return selectedBillId;
+    }
+    if (bills.length > 0) {
       const mostRecent = [...bills].sort(
         (a, b) => new Date(b.closingDate).getTime() - new Date(a.closingDate).getTime()
       )[0];
-      setSelectedBillId(mostRecent.id);
-      fetchBillTransactions(mostRecent.id);
+      return mostRecent.id;
     }
-  }, [bills, selectedBillId, fetchBillTransactions]);
+    return null;
+  }, [bills, selectedBillId]);
+
+  // Fetch bill transactions whenever the effective bill changes
+  useEffect(() => {
+    if (effectiveBillId) {
+      fetchBillTransactions(effectiveBillId);
+    }
+  }, [effectiveBillId, fetchBillTransactions]);
 
   // Auto-refresh when there are pending/processing categorizations
   const hasPendingCategorization = useMemo(
@@ -245,12 +255,6 @@ export default function CreditCardsPage() {
       await fetchInstallments();
     }
   };
-
-  // The currently selected bill object (for context banners)
-  const selectedBill = useMemo(
-    () => bills.find((b: CreditCardBill) => b.id === selectedBillId),
-    [bills, selectedBillId]
-  );
 
   // Bills sorted by closing date descending (latest first) for the dropdown
   const sortedBills = useMemo(
@@ -431,7 +435,7 @@ export default function CreditCardsPage() {
                 </CardTitle>
                 {sortedBills.length > 0 && (
                   <Select
-                    value={selectedBillId ?? undefined}
+                    value={effectiveBillId ?? undefined}
                     onValueChange={handleSelectBill}
                   >
                     <SelectTrigger className="h-9 w-auto min-w-[320px] gap-2 border-slate-700 bg-slate-800 text-sm text-white hover:bg-slate-700">
@@ -467,7 +471,7 @@ export default function CreditCardsPage() {
               </div>
             </CardHeader>
             <CardContent>
-              {selectedBillId ? (
+              {effectiveBillId ? (
                 <BillTransactionsTable
                   transactions={billTransactions}
                   currency={settings.baseCurrency}
@@ -512,7 +516,7 @@ export default function CreditCardsPage() {
                 </CardTitle>
                 {sortedBills.length > 0 && (
                   <Select
-                    value={selectedBillId ?? undefined}
+                    value={effectiveBillId ?? undefined}
                     onValueChange={handleSelectBill}
                   >
                     <SelectTrigger className="h-9 w-auto min-w-[320px] gap-2 border-slate-700 bg-slate-800 text-sm text-white hover:bg-slate-700">
@@ -555,7 +559,7 @@ export default function CreditCardsPage() {
                 />
               ) : (
                 <div className="py-8 text-center text-slate-400">
-                  {selectedBillId
+                  {effectiveBillId
                     ? 'No category data for this bill.'
                     : t('creditCards.billContext.selectBillPromptAnalytics')
                   }
