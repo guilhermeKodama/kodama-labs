@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { parseLocalDate } from '@/lib/utils/date';
 import type {
   CreditCard,
   CreateCreditCardInput,
@@ -259,8 +260,8 @@ export const useCreditCardStore = create<CreditCardStore>()((set, get) => ({
           id: bill.id,
           creditCardId: bill.creditCardId,
           transactionId: bill.transactionId ?? undefined,
-          closingDate: new Date(bill.closingDate),
-          dueDate: new Date(bill.dueDate),
+          closingDate: parseLocalDate(bill.closingDate),
+          dueDate: parseLocalDate(bill.dueDate),
           totalAmount: bill.totalAmount,
           status: bill.status as BillStatus,
           categorizationStatus: (bill.categorizationStatus as CategorizationStatus) ?? 'completed',
@@ -310,8 +311,8 @@ export const useCreditCardStore = create<CreditCardStore>()((set, get) => ({
         bill: {
           id: result.bill.id,
           creditCardId: result.bill.creditCardId,
-          closingDate: new Date(result.bill.closingDate),
-          dueDate: new Date(result.bill.dueDate),
+          closingDate: parseLocalDate(result.bill.closingDate),
+          dueDate: parseLocalDate(result.bill.dueDate),
           totalAmount: result.bill.totalAmount,
           status: result.bill.status as BillStatus,
           categorizationStatus: (result.bill.categorizationStatus as CategorizationStatus) ?? 'pending',
@@ -435,7 +436,7 @@ export const useCreditCardStore = create<CreditCardStore>()((set, get) => ({
           id: t.id,
           billId: t.billId,
           category: t.category,
-          transactionDate: new Date(t.transactionDate),
+          transactionDate: parseLocalDate(t.transactionDate),
           description: t.description,
           merchantName: t.merchantName ?? undefined,
           amount: t.amount,
@@ -476,7 +477,7 @@ export const useCreditCardStore = create<CreditCardStore>()((set, get) => ({
             id: t.id,
             billId: t.billId,
             category: t.category,
-            transactionDate: new Date(t.transactionDate),
+            transactionDate: parseLocalDate(t.transactionDate),
             description: t.description,
             merchantName: t.merchantName ?? undefined,
             amount: t.amount,
@@ -519,7 +520,7 @@ export const useCreditCardStore = create<CreditCardStore>()((set, get) => ({
           totalInstallments: inst.totalInstallments,
           paidInstallments: inst.paidInstallments,
           remainingInstallments: inst.remainingInstallments,
-          startDate: new Date(inst.startDate),
+          startDate: parseLocalDate(inst.startDate),
           installmentAmount: inst.installmentAmount,
           isActive: inst.isActive,
           creditCard: inst.creditCard

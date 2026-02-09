@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { parseLocalDate } from '@/lib/utils/date';
 import type {
   Transaction,
   CreateTransactionInput,
@@ -69,7 +70,7 @@ export const useTransactionStore = create<TransactionStore>()((set, get) => ({
           exchangeRate: t.exchangeRate,
           description: t.description,
           category: t.category,
-          date: new Date(t.date),
+          date: parseLocalDate(t.date),
           isTaxDeductible: t.isTaxDeductible,
           recurringTransactionId: t.recurringTransactionId ?? undefined,
           createdAt: new Date(t.createdAt),
@@ -121,7 +122,7 @@ export const useTransactionStore = create<TransactionStore>()((set, get) => ({
         exchangeRate: data.exchangeRate,
         description: data.description,
         category: data.category,
-        date: new Date(data.date),
+        date: parseLocalDate(data.date),
         isTaxDeductible: data.isTaxDeductible,
         recurringTransactionId: data.recurringTransactionId ?? undefined,
         createdAt: new Date(data.createdAt),
@@ -179,7 +180,7 @@ export const useTransactionStore = create<TransactionStore>()((set, get) => ({
                 exchangeRate: data.exchangeRate,
                 description: data.description,
                 category: data.category,
-                date: new Date(data.date),
+                date: parseLocalDate(data.date),
                 isTaxDeductible: data.isTaxDeductible,
                 recurringTransactionId: data.recurringTransactionId ?? undefined,
                 createdAt: new Date(data.createdAt),

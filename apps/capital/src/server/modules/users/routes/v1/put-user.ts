@@ -13,6 +13,7 @@ const UpdateUserSchema = z.object({
   theme: z.enum(["light", "dark", "system"]).optional(),
   dateFormat: z.string().optional(),
   numberFormat: z.enum(["en-US", "pt-BR", "de-DE"]).optional(),
+  timezone: z.string().optional(),
 });
 
 const UserResponseSchema = z.object({
@@ -23,6 +24,7 @@ const UserResponseSchema = z.object({
   theme: z.string(),
   dateFormat: z.string(),
   numberFormat: z.string(),
+  timezone: z.string(),
   createdAt: z.string(),
   updatedAt: z.string(),
   personalAccount: z
@@ -82,6 +84,7 @@ export const handler: AppRouteHandler<typeof route> = async (c) => {
         theme: user.theme,
         dateFormat: user.dateFormat,
         numberFormat: user.numberFormat,
+        timezone: user.timezone,
         createdAt: user.createdAt.toISOString(),
         updatedAt: user.updatedAt.toISOString(),
         personalAccount: user.personalAccount

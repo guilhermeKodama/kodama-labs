@@ -7,6 +7,7 @@ import {
   differenceInDays,
   addMonths,
 } from 'date-fns';
+import { parseLocalDate } from '@/lib/utils/date';
 import type {
   Budget,
   BudgetProgress,
@@ -59,7 +60,7 @@ export function calculateBudgetSpent(
       // Match type (budgets are for expenses)
       if (t.type !== 'expense') return false;
       // Match date range
-      const transactionDate = new Date(t.date);
+      const transactionDate = t.date instanceof Date ? t.date : parseLocalDate(t.date);
       return isWithinInterval(transactionDate, { start, end });
     })
     .reduce((sum, t) => sum + t.amount * t.exchangeRate, 0);
@@ -282,7 +283,7 @@ export function getUnbudgetedSpending(
   // Find expense transactions in current month OR previous month without a budget
   const expenseTransactions = transactions.filter((t) => {
     if (t.type !== 'expense') return false;
-    const txDate = new Date(t.date);
+    const txDate = t.date instanceof Date ? t.date : parseLocalDate(t.date);
     return (
       isWithinInterval(txDate, { start: currentStart, end: currentEnd }) ||
       isWithinInterval(txDate, { start: prevStart, end: prevEnd })
@@ -309,7 +310,7 @@ export function getUnbudgetedSpending(
         entityId: tx.entityId, entityType: tx.entityType,
       };
     }
-    const txDate = new Date(tx.date);
+    const txDate = tx.date instanceof Date ? tx.date : parseLocalDate(tx.date);
     const isCurrent = isWithinInterval(txDate, { start: currentStart, end: currentEnd });
     if (isCurrent) {
       grouped[key].currentTotal += tx.amount * tx.exchangeRate;
@@ -375,7 +376,7 @@ export function getMonthOverMonth(
     const currentSpent = transactions
       .filter((t) => {
         if (t.entityId !== entityId || t.category !== category || t.type !== 'expense') return false;
-        const d = new Date(t.date);
+        const d = t.date instanceof Date ? t.date : parseLocalDate(t.date);
         return isWithinInterval(d, { start: currentStart, end: currentEnd });
       })
       .reduce((sum, t) => sum + t.amount * t.exchangeRate, 0);
@@ -383,7 +384,7 @@ export function getMonthOverMonth(
     const previousSpent = transactions
       .filter((t) => {
         if (t.entityId !== entityId || t.category !== category || t.type !== 'expense') return false;
-        const d = new Date(t.date);
+        const d = t.date instanceof Date ? t.date : parseLocalDate(t.date);
         return isWithinInterval(d, { start: prevStart, end: prevEnd });
       })
       .reduce((sum, t) => sum + t.amount * t.exchangeRate, 0);
@@ -572,7 +573,7 @@ export function convertInstallmentsToTransactions(
   // Determine which year-months are already covered by uploaded bills
   const coveredMonths = new Set<string>();
   for (const bill of bills) {
-    const closing = new Date(bill.closingDate);
+    const closing = bill.closingDate instanceof Date ? bill.closingDate : parseLocalDate(bill.closingDate);
     const key = `${closing.getFullYear()}-${closing.getMonth() + 1}`;
     coveredMonths.add(key);
   }
@@ -596,7 +597,9 @@ export function convertInstallmentsToTransactions(
 
     // Anchor: the bill's closing date tells us when the last paid installment was charged
     // Each future installment is 1, 2, 3... months after that bill
-    const anchorDate = sourceBill ? new Date(sourceBill.closingDate) : new Date(inst.startDate);
+    const anchorDate = sourceBill
+      ? (sourceBill.closingDate instanceof Date ? sourceBill.closingDate : parseLocalDate(sourceBill.closingDate))
+      : (inst.startDate instanceof Date ? inst.startDate : parseLocalDate(inst.startDate));
     const usesBillAnchor = !!sourceBill;
 
     for (let i = 0; i < remaining; i++) {

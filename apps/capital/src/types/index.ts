@@ -825,6 +825,7 @@ export interface AppSettings {
   theme: 'light' | 'dark' | 'system';
   dateFormat: string;
   numberFormat: 'en-US' | 'pt-BR' | 'de-DE';
+  timezone: string;
 }
 
 // --------------------------------------------

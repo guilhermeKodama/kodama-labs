@@ -1,6 +1,7 @@
 import { createRoute, z } from "@hono/zod-openapi";
 import { OK, NOT_FOUND, BAD_REQUEST, UNAUTHORIZED, INTERNAL_SERVER_ERROR } from "stoker/http-status-codes";
 import { jsonContent } from "stoker/openapi/helpers";
+import { toDateString } from "@capital/server/lib/date-utils";
 
 import type { AppRouteHandler } from "@capital/server/types";
 import { prisma } from "@capital/server/lib/prisma";
@@ -106,7 +107,7 @@ export const handler: AppRouteHandler<typeof route> = async (c) => {
           exchangeRate: result.transaction.exchangeRate,
           description: result.transaction.description,
           category: result.transaction.category,
-          date: result.transaction.date.toISOString(),
+          date: toDateString(result.transaction.date),
           isTaxDeductible: result.transaction.isTaxDeductible,
           recurringTransactionId: result.transaction.recurringTransactionId,
           businessId: result.transaction.businessId,
@@ -124,9 +125,9 @@ export const handler: AppRouteHandler<typeof route> = async (c) => {
           description: result.recurring.description,
           category: result.recurring.category,
           frequency: result.recurring.frequency,
-          startDate: result.recurring.startDate.toISOString(),
+          startDate: toDateString(result.recurring.startDate),
           endDate: result.recurring.endDate?.toISOString() ?? null,
-          nextDueDate: result.recurring.nextDueDate.toISOString(),
+          nextDueDate: toDateString(result.recurring.nextDueDate),
           lastGeneratedDate:
             result.recurring.lastGeneratedDate?.toISOString() ?? null,
           isActive: result.recurring.isActive,

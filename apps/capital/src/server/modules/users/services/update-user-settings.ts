@@ -8,6 +8,7 @@ interface UpdateUserSettingsInput {
   theme?: string;
   dateFormat?: string;
   numberFormat?: string;
+  timezone?: string;
 }
 
 export async function updateUserSettings(

@@ -1,0 +1,33 @@
+/**
+ * Parse a date from an API response as a local calendar date, avoiding timezone shift.
+ *
+ * Problem: `new Date("2026-02-01T00:00:00.000Z")` in UTC-3 becomes Jan 31 at 21:00 local.
+ * Solution: Extract UTC year/month/day and create a local date at noon (safe from DST).
+ *
+ * Use this for all date-only fields from the API (date, closingDate, dueDate, startDate, etc.)
+ * Do NOT use this for timestamps (createdAt, updatedAt) where the exact moment matters.
+ */
+export function parseLocalDate(input: Date | string): Date {
+  if (typeof input === 'string') {
+    // If it's already a date-only string like "2026-02-01", parse directly as local
+    if (/^\d{4}-\d{2}-\d{2}$/.test(input)) {
+      const [y, m, d] = input.split('-').map(Number);
+      return new Date(y, m - 1, d, 12, 0, 0);
+    }
+    // Otherwise it's an ISO string with time — extract UTC components
+    const d = new Date(input);
+    return new Date(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), 12, 0, 0);
+  }
+  // Already a Date object — normalize to noon local using UTC components
+  return new Date(input.getUTCFullYear(), input.getUTCMonth(), input.getUTCDate(), 12, 0, 0);
+}
+
+/**
+ * Format a Date as "YYYY-MM-DD" string for API requests or display.
+ */
+export function toDateString(date: Date): string {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}

@@ -1,8 +1,10 @@
 'use client';
 
+import { useState, useMemo } from 'react';
 import { format } from 'date-fns';
-import { Sparkles } from 'lucide-react';
+import { Sparkles, X } from 'lucide-react';
 import { formatCurrency } from '@/lib/utils/format';
+import { Button } from '@/components/ui/button';
 import {
   Select,
   SelectContent,
@@ -10,6 +12,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { cn } from '@/lib/utils';
 import type { BillTransaction, Category } from '@/types';
 
 interface BillTransactionsTableProps {
@@ -25,6 +28,8 @@ export function BillTransactionsTable({
   categories = [],
   onUpdateCategory,
 }: BillTransactionsTableProps) {
+  const [selectedCategories, setSelectedCategories] = useState<Set<string>>(new Set());
+
   if (transactions.length === 0) {
     return (
       <div className="py-8 text-center text-slate-400">
@@ -34,36 +39,96 @@ export function BillTransactionsTable({
   }
 
   // Group by category for summary
-  const categoryTotals = transactions.reduce<Record<string, number>>((acc, t) => {
-    acc[t.category] = (acc[t.category] || 0) + t.amount;
+  const categoryTotals = transactions.reduce<Record<string, { total: number; count: number }>>((acc, t) => {
+    if (!acc[t.category]) acc[t.category] = { total: 0, count: 0 };
+    acc[t.category].total += t.amount;
+    acc[t.category].count += 1;
     return acc;
   }, {});
 
-  const sortedCategories = Object.entries(categoryTotals).sort((a, b) => b[1] - a[1]);
+  const sortedCategories = Object.entries(categoryTotals).sort((a, b) => b[1].total - a[1].total);
 
   // Get unique expense category names for the dropdown
   const expenseCategories = categories
     .filter((c) => c.type === 'expense')
     .map((c) => c.name);
-  // Deduplicate
   const uniqueCategories = [...new Set(expenseCategories)].sort();
+
+  // Filter transactions by selected categories
+  const filteredTransactions = selectedCategories.size > 0
+    ? transactions.filter((t) => selectedCategories.has(t.category))
+    : transactions;
+
+  // Filtered total
+  const filteredTotal = filteredTransactions.reduce((sum, t) => sum + t.amount, 0);
+
+  const toggleCategory = (category: string) => {
+    setSelectedCategories((prev) => {
+      const next = new Set(prev);
+      if (next.has(category)) {
+        next.delete(category);
+      } else {
+        next.add(category);
+      }
+      return next;
+    });
+  };
+
+  const clearFilters = () => {
+    setSelectedCategories(new Set());
+  };
 
   return (
     <div className="space-y-6">
-      {/* Category summary */}
-      <div className="flex flex-wrap gap-2">
-        {sortedCategories.map(([category, total]) => (
-          <span
-            key={category}
-            className="inline-flex items-center rounded-full bg-slate-800 px-3 py-1 text-xs"
+      {/* Category summary — clickable filters */}
+      <div className="flex flex-wrap items-center gap-2">
+        {sortedCategories.map(([category, { total }]) => {
+          const isSelected = selectedCategories.has(category);
+          const isFiltering = selectedCategories.size > 0;
+          return (
+            <button
+              key={category}
+              onClick={() => toggleCategory(category)}
+              className={cn(
+                'inline-flex items-center rounded-full px-3 py-1 text-xs transition-all cursor-pointer',
+                isSelected
+                  ? 'bg-cyan-500/20 ring-1 ring-cyan-500/50'
+                  : isFiltering
+                  ? 'bg-slate-800/50 opacity-50 hover:opacity-80'
+                  : 'bg-slate-800 hover:bg-slate-700'
+              )}
+            >
+              <span className={cn('text-slate-300', isSelected && 'text-cyan-300')}>
+                {category}
+              </span>
+              <span className={cn('ml-2 font-medium', isSelected ? 'text-cyan-400' : 'text-white')}>
+                {formatCurrency(total, currency)}
+              </span>
+            </button>
+          );
+        })}
+
+        {/* Reset button */}
+        {selectedCategories.size > 0 && (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={clearFilters}
+            className="h-6 gap-1 rounded-full px-2 text-xs text-slate-400 hover:bg-slate-700 hover:text-white"
           >
-            <span className="text-slate-300">{category}</span>
-            <span className="ml-2 font-medium text-white">
-              {formatCurrency(total, currency)}
-            </span>
-          </span>
-        ))}
+            <X className="h-3 w-3" />
+            Clear
+          </Button>
+        )}
       </div>
+
+      {/* Filter summary */}
+      {selectedCategories.size > 0 && (
+        <div className="text-xs text-slate-500">
+          Showing {filteredTransactions.length} of {transactions.length} transactions
+          &middot; {formatCurrency(filteredTotal, currency)}
+        </div>
+      )}
 
       {/* Transaction list */}
       <div className="overflow-x-auto">
@@ -78,7 +143,7 @@ export function BillTransactionsTable({
             </tr>
           </thead>
           <tbody>
-            {transactions.map((tx) => (
+            {filteredTransactions.map((tx) => (
               <tr key={tx.id} className="border-b border-slate-800/50 hover:bg-slate-800/30">
                 <td className="py-2.5 text-sm text-slate-300">
                   {format(new Date(tx.transactionDate), 'MMM dd')}

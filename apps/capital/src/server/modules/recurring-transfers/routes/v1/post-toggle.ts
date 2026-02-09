@@ -1,6 +1,7 @@
 import { createRoute, z } from "@hono/zod-openapi";
 import { OK, NOT_FOUND, UNAUTHORIZED, INTERNAL_SERVER_ERROR } from "stoker/http-status-codes";
 import { jsonContent } from "stoker/openapi/helpers";
+import { toDateString } from "@capital/server/lib/date-utils";
 
 import type { AppRouteHandler } from "@capital/server/types";
 import { prisma } from "@capital/server/lib/prisma";
@@ -83,9 +84,9 @@ export const handler: AppRouteHandler<typeof route> = async (c) => {
         exchangeRate: transfer.exchangeRate,
         description: transfer.description,
         frequency: transfer.frequency,
-        startDate: transfer.startDate.toISOString(),
+        startDate: toDateString(transfer.startDate),
         endDate: transfer.endDate?.toISOString() ?? null,
-        nextDueDate: transfer.nextDueDate.toISOString(),
+        nextDueDate: toDateString(transfer.nextDueDate),
         lastGeneratedDate: transfer.lastGeneratedDate?.toISOString() ?? null,
         isActive: transfer.isActive,
         fromBusinessId: transfer.fromBusinessId,

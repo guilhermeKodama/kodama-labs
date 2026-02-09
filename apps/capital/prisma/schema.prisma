@@ -94,6 +94,7 @@ model User {
   theme        String   @default("system") // light, dark, system
   dateFormat   String   @default("yyyy-MM-dd")
   numberFormat String   @default("en-US") // en-US, pt-BR, de-DE
+  timezone     String   @default("America/Sao_Paulo")
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 

@@ -5,7 +5,7 @@ import { jsonContent } from "stoker/openapi/helpers";
 import type { AppRouteHandler } from "@capital/server/types";
 import { prisma } from "@capital/server/lib/prisma";
 import { requireUserId } from "@capital/server/lib/auth-middleware";
-import { parseLocalDate } from "@capital/server/lib/date-utils";
+import { parseLocalDate, toDateString } from "@capital/server/lib/date-utils";
 import { updateRecurring } from "../../data/commands/update-recurring";
 import { fetchRecurringById } from "../../data/queries/fetch-recurring";
 import { routeConfig } from "../../constants";
@@ -115,9 +115,9 @@ export const handler: AppRouteHandler<typeof route> = async (c) => {
         description: recurring.description,
         category: recurring.category,
         frequency: recurring.frequency,
-        startDate: recurring.startDate.toISOString(),
+        startDate: toDateString(recurring.startDate),
         endDate: recurring.endDate?.toISOString() ?? null,
-        nextDueDate: recurring.nextDueDate.toISOString(),
+        nextDueDate: toDateString(recurring.nextDueDate),
         lastGeneratedDate: recurring.lastGeneratedDate?.toISOString() ?? null,
         isActive: recurring.isActive,
         businessId: recurring.businessId,

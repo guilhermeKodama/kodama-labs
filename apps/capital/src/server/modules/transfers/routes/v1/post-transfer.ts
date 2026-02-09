@@ -5,7 +5,7 @@ import { jsonContent } from "stoker/openapi/helpers";
 import type { AppRouteHandler } from "@capital/server/types";
 import { prisma } from "@capital/server/lib/prisma";
 import { requireUserId } from "@capital/server/lib/auth-middleware";
-import { parseLocalDate } from "@capital/server/lib/date-utils";
+import { parseLocalDate, toDateString } from "@capital/server/lib/date-utils";
 import { createTransfer } from "../../services/create-transfer";
 import { routeConfig } from "../../constants";
 
@@ -92,7 +92,7 @@ export const handler: AppRouteHandler<typeof route> = async (c) => {
         currency: transfer.currency,
         exchangeRate: transfer.exchangeRate,
         description: transfer.description,
-        date: transfer.date.toISOString(),
+        date: toDateString(transfer.date),
         fromBusinessId: transfer.fromBusinessId,
         fromPersonalAccountId: transfer.fromPersonalAccountId,
         toBusinessId: transfer.toBusinessId,
