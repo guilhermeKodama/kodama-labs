@@ -18,8 +18,10 @@ import { YearlyBudgetSummary } from '@/components/cards';
 import { BudgetsTable } from '@/components/tables';
 import { BudgetDialog } from '@/components/dialogs';
 import { YearlyBudgetChart } from '@/components/charts';
+import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { cn } from '@/lib/utils';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -116,6 +118,8 @@ export default function BudgetsPage() {
   const [prefillCategory, setPrefillCategory] = useState<string | undefined>();
   const [prefillEntityId, setPrefillEntityId] = useState<string | undefined>();
   const [prefillEntityType, setPrefillEntityType] = useState<EntityType | undefined>();
+  // Yearly tab: category filter (empty set = all categories shown)
+  const [selectedYearlyCategories, setSelectedYearlyCategories] = useState<Set<string>>(new Set());
 
   const now = new Date();
   const currentYear = now.getFullYear();
@@ -199,6 +203,52 @@ export default function BudgetsPage() {
   const yearlySummaryStats = useMemo(() => {
     return getYearlySummaryStats(budgets, mergedTransactions, currentYear);
   }, [budgets, mergedTransactions, currentYear]);
+
+  // Available categories for the yearly filter
+  const yearlyCategories = useMemo(() => {
+    return yearlyProgress.map((yp) => yp.budget.category).sort();
+  }, [yearlyProgress]);
+
+  // Whether all categories are selected (empty set = all)
+  const isAllYearlyCategoriesSelected = selectedYearlyCategories.size === 0;
+
+  // Filtered yearly data based on selected categories
+  const filteredYearlyProgress = useMemo(() => {
+    if (isAllYearlyCategoriesSelected) return yearlyProgress;
+    return yearlyProgress.filter((yp) => selectedYearlyCategories.has(yp.budget.category));
+  }, [yearlyProgress, selectedYearlyCategories, isAllYearlyCategoriesSelected]);
+
+  const filteredYearlySummaryStats = useMemo(() => {
+    if (isAllYearlyCategoriesSelected) return yearlySummaryStats;
+    // Recompute stats for filtered budgets only
+    const filteredBudgets = budgets.filter(
+      (b) => b.isActive && b.period === 'yearly' && b.year === currentYear && selectedYearlyCategories.has(b.category)
+    );
+    return getYearlySummaryStats(
+      // Pass only filtered budgets (the function filters by yearly+active+year internally,
+      // so we wrap them to match)
+      filteredBudgets,
+      mergedTransactions,
+      currentYear
+    );
+  }, [yearlySummaryStats, isAllYearlyCategoriesSelected, budgets, mergedTransactions, currentYear, selectedYearlyCategories]);
+
+  // Toggle a category in the yearly filter
+  const toggleYearlyCategory = (category: string) => {
+    setSelectedYearlyCategories((prev) => {
+      const next = new Set(prev);
+      if (next.has(category)) {
+        next.delete(category);
+      } else {
+        next.add(category);
+      }
+      return next;
+    });
+  };
+
+  const selectAllYearlyCategories = () => {
+    setSelectedYearlyCategories(new Set());
+  };
 
   // ============================================
   // Manage Tab Data
@@ -433,9 +483,45 @@ export default function BudgetsPage() {
             </Card>
           ) : (
             <>
+              {/* Category Filter Pills */}
+              <div className="flex flex-wrap items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={selectAllYearlyCategories}
+                  className={cn(
+                    'rounded-full border text-xs transition-colors',
+                    isAllYearlyCategoriesSelected
+                      ? 'border-cyan-500/50 bg-cyan-500/10 text-cyan-400 hover:bg-cyan-500/20 hover:text-cyan-300'
+                      : 'border-slate-700 text-slate-400 hover:bg-slate-800 hover:text-white'
+                  )}
+                >
+                  {t('budgets.yearly.allCategories')}
+                </Button>
+                {yearlyCategories.map((category) => {
+                  const isSelected = selectedYearlyCategories.has(category);
+                  return (
+                    <Button
+                      key={category}
+                      variant="outline"
+                      size="sm"
+                      onClick={() => toggleYearlyCategory(category)}
+                      className={cn(
+                        'rounded-full border text-xs transition-colors',
+                        isSelected
+                          ? 'border-cyan-500/50 bg-cyan-500/10 text-cyan-400 hover:bg-cyan-500/20 hover:text-cyan-300'
+                          : 'border-slate-700 text-slate-400 hover:bg-slate-800 hover:text-white'
+                      )}
+                    >
+                      {category}
+                    </Button>
+                  );
+                })}
+              </div>
+
               {/* Yearly Summary Cards */}
               <YearlyBudgetSummary
-                stats={yearlySummaryStats}
+                stats={filteredYearlySummaryStats}
                 currency={settings.baseCurrency}
                 year={currentYear}
               />
@@ -449,7 +535,7 @@ export default function BudgetsPage() {
                 </CardHeader>
                 <CardContent>
                   <YearlyBudgetChart
-                    yearlyProgress={yearlyProgress}
+                    yearlyProgress={filteredYearlyProgress}
                     currency={settings.baseCurrency}
                   />
                 </CardContent>
@@ -464,7 +550,7 @@ export default function BudgetsPage() {
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-4">
-                    {yearlyProgress.map((yp) => {
+                    {filteredYearlyProgress.map((yp) => {
                       const percentUsed = yp.budget.amount > 0
                         ? (yp.ytdSpent / yp.budget.amount) * 100
                         : 0;
@@ -536,8 +622,8 @@ export default function BudgetsPage() {
                               {t('budgets.yearly.monthlyAvg')}:{' '}
                               <span className="text-slate-300">
                                 {formatCurrency(
-                                  yearlySummaryStats.monthsElapsed > 0
-                                    ? yp.ytdSpent / yearlySummaryStats.monthsElapsed
+                                  filteredYearlySummaryStats.monthsElapsed > 0
+                                    ? yp.ytdSpent / filteredYearlySummaryStats.monthsElapsed
                                     : 0,
                                   settings.baseCurrency
                                 )}

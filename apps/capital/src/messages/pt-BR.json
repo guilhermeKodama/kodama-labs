@@ -962,7 +962,9 @@
       "monthlyAvg": "Média Mensal",
       "categoryBreakdown": "Detalhamento por Categoria",
       "noYearlyBudgets": "Nenhum orçamento anual definido para este ano.",
-      "noYearlyBudgetsDescription": "Crie orçamentos anuais para acompanhar gastos no ano. Metas mensais são calculadas automaticamente."
+      "noYearlyBudgetsDescription": "Crie orçamentos anuais para acompanhar gastos no ano. Metas mensais são calculadas automaticamente.",
+      "allCategories": "Todas Categorias",
+      "filterCategories": "Filtrar categorias"
     },
     "drillDown": {
       "title": "Transações",

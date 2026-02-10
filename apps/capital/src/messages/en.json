@@ -962,7 +962,9 @@
       "monthlyAvg": "Monthly Avg",
       "categoryBreakdown": "Category Breakdown",
       "noYearlyBudgets": "No yearly budgets set for this year.",
-      "noYearlyBudgetsDescription": "Create yearly budgets to track annual spending. Monthly targets are automatically calculated."
+      "noYearlyBudgetsDescription": "Create yearly budgets to track annual spending. Monthly targets are automatically calculated.",
+      "allCategories": "All Categories",
+      "filterCategories": "Filter categories"
     },
     "drillDown": {
       "title": "Transactions",
