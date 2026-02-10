@@ -827,6 +827,7 @@
     "title": "Orçamentos",
     "subtitle": "Defina e acompanhe limites de gastos",
     "addBudget": "Adicionar Orçamento",
+    "copyToNextYear": "Copiar para Próximo Ano",
     "copyToNextMonth": "Copiar para Próximo Mês",
     "currentBudgets": "Orçamentos do Mês Atual",
     "allBudgets": "Todos os Orçamentos",
@@ -907,7 +908,9 @@
       "projected": "Projetado",
       "roomLeft": "disponível",
       "overBy": "acima por",
-      "noRoom": "Sem espaço"
+      "noRoom": "Sem espaço",
+      "monthlyTarget": "Meta Mensal",
+      "ofAnnual": "de {amount} anual"
     },
     "insights": {
       "title": "Insights do Orçamento",
@@ -941,6 +944,26 @@
       "trendTitle": "Tendências de Gastos",
       "today": "Hoje"
     },
+    "yearly": {
+      "title": "Visão Anual",
+      "annualBudget": "Orçamento Anual",
+      "ytdSpent": "Gasto no Ano",
+      "annualRoom": "Espaço Anual",
+      "projectedAnnual": "Projeção Anual",
+      "monthlyTarget": "Meta Mensal",
+      "onTrackForYear": "No ritmo para o ano",
+      "overPaceForYear": "Acima do ritmo para o ano",
+      "ytdProgress": "Progresso no Ano",
+      "monthlyBreakdown": "Detalhamento Mensal",
+      "budgetVsActual": "Orçamento vs Real",
+      "cumulativeProgress": "Progresso Acumulado",
+      "budget": "Orçamento",
+      "actual": "Real",
+      "monthlyAvg": "Média Mensal",
+      "categoryBreakdown": "Detalhamento por Categoria",
+      "noYearlyBudgets": "Nenhum orçamento anual definido para este ano.",
+      "noYearlyBudgetsDescription": "Crie orçamentos anuais para acompanhar gastos no ano. Metas mensais são calculadas automaticamente."
+    },
     "drillDown": {
       "title": "Transações",
       "noTransactions": "Nenhuma transação nesta categoria para este período.",
@@ -951,7 +974,10 @@
     "views": {
       "current": "Mês Atual",
       "all": "Todos os Orçamentos",
-      "overview": "Visão Geral"
+      "overview": "Visão Geral",
+      "monthly": "Mensal",
+      "yearly": "Anual",
+      "manage": "Gerenciar"
     },
     "alerts": {
       "title": "Alertas de Orçamento"
@@ -976,8 +1002,10 @@
       "paused": "Orçamento pausado",
       "resumed": "Orçamento retomado",
       "copiedToNextMonth": "{count} orçamento(s) copiado(s) para o próximo mês",
+      "copiedToNextYear": "{count} orçamento(s) copiado(s) para o próximo ano",
       "noBudgetsToCopy": "Nenhum orçamento atual para copiar",
-      "allBudgetsExist": "Todos os orçamentos já existem para o próximo mês"
+      "allBudgetsExist": "Todos os orçamentos já existem para o próximo mês",
+      "allYearlyBudgetsExist": "Todos os orçamentos anuais já existem para o próximo ano"
     }
   },
   "tax": {

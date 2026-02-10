@@ -15,6 +15,9 @@ import type {
   UnbudgetedCategory,
   MonthOverMonth,
   BudgetInsight,
+  YearlyMonthBreakdown,
+  YearlyBudgetProgress,
+  YearlySummaryStats,
   Transaction,
   BudgetPeriod,
   BillTransaction,
@@ -412,14 +415,30 @@ export function getMonthOverMonth(
  */
 export function generateBudgetInsights(
   budgetProgressList: BudgetProgress[],
-  transactions: Transaction[]
+  transactions: Transaction[],
+  yearlyBudgets?: Budget[]
 ): BudgetInsight[] {
+  // Build a lookup of yearly budget amounts by entityId+category for context
+  const yearlyAmountMap = new Map<string, number>();
+  if (yearlyBudgets) {
+    for (const yb of yearlyBudgets) {
+      yearlyAmountMap.set(`${yb.entityId}::${yb.category}`, yb.amount);
+    }
+  }
+
   return budgetProgressList
     .filter((p) => p.budget.isActive)
     .map((progress) => {
       const pace = calculateBudgetPace(progress.budget, transactions);
       const { percentUsed, remaining, budget } = progress;
       const { dailySpendRate, allowedDailyRate, daysRemaining } = pace;
+
+      // Check if this budget is a yearly-derived monthly view
+      const isYearlyDerived = budget.period === 'yearly';
+      const annualAmount = yearlyAmountMap.get(`${budget.entityId}::${budget.category}`);
+      const yearlyContext = isYearlyDerived && annualAmount
+        ? ` (monthly target from ${formatAmount(annualAmount)}/year)`
+        : '';
 
       let severity: BudgetInsight['severity'];
       let message: string;
@@ -428,10 +447,12 @@ export function generateBudgetInsights(
       if (progress.isOverBudget) {
         severity = 'critical';
         message = `${budget.category}: Over budget by ${formatAmount(Math.abs(remaining))}`;
-        recommendation = 'Stop non-essential spending in this category immediately.';
+        recommendation = isYearlyDerived
+          ? 'Over this month\'s target. Keep an eye on the yearly total to stay on track.'
+          : 'Stop non-essential spending in this category immediately.';
       } else if (percentUsed >= 80) {
         severity = 'warning';
-        message = `${budget.category}: ${percentUsed.toFixed(0)}% used with ${daysRemaining} days remaining`;
+        message = `${budget.category}: ${percentUsed.toFixed(0)}% used with ${daysRemaining} days remaining${yearlyContext}`;
         recommendation = dailySpendRate > allowedDailyRate
           ? `Spending ${formatAmount(dailySpendRate)}/day vs ${formatAmount(allowedDailyRate)}/day budget pace. Consider reducing spend.`
           : `On pace but close to limit. ${formatAmount(remaining)} remaining.`;
@@ -463,6 +484,232 @@ export function generateBudgetInsights(
 /** Simple helper to format amounts for insight messages */
 function formatAmount(amount: number): string {
   return amount.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+}
+
+// ============================================
+// Yearly Budget Breakdown
+// ============================================
+
+const MONTH_LABELS_SHORT = [
+  'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+  'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+];
+
+/**
+ * Break a yearly budget into 12 monthly segments with budget target
+ * (amount/12) vs actual spending per month.
+ */
+export function getYearlyBreakdown(
+  budget: Budget,
+  transactions: Transaction[]
+): YearlyMonthBreakdown[] {
+  const monthlyTarget = budget.amount / 12;
+
+  return Array.from({ length: 12 }, (_, i) => {
+    const month = i + 1;
+    const monthStart = startOfMonth(new Date(budget.year, i, 1));
+    const monthEnd = endOfMonth(new Date(budget.year, i, 1));
+
+    const actual = transactions
+      .filter((t) => {
+        if (t.entityId !== budget.entityId) return false;
+        if (t.category !== budget.category) return false;
+        if (t.type !== 'expense') return false;
+        const txDate = t.date instanceof Date ? t.date : parseLocalDate(t.date);
+        return isWithinInterval(txDate, { start: monthStart, end: monthEnd });
+      })
+      .reduce((sum, t) => sum + t.amount * t.exchangeRate, 0);
+
+    const cumulativeBudget = monthlyTarget * month;
+    const cumulativeActual = Array.from({ length: month }, (_, j) => {
+      const mStart = startOfMonth(new Date(budget.year, j, 1));
+      const mEnd = endOfMonth(new Date(budget.year, j, 1));
+      return transactions
+        .filter((t) => {
+          if (t.entityId !== budget.entityId) return false;
+          if (t.category !== budget.category) return false;
+          if (t.type !== 'expense') return false;
+          const txDate = t.date instanceof Date ? t.date : parseLocalDate(t.date);
+          return isWithinInterval(txDate, { start: mStart, end: mEnd });
+        })
+        .reduce((sum, t) => sum + t.amount * t.exchangeRate, 0);
+    }).reduce((sum, v) => sum + v, 0);
+
+    return {
+      month,
+      monthLabel: MONTH_LABELS_SHORT[i],
+      budgetTarget: monthlyTarget,
+      actual,
+      cumulativeBudget,
+      cumulativeActual,
+      isOver: actual > monthlyTarget,
+    };
+  });
+}
+
+/**
+ * Calculate yearly progress for a single yearly budget.
+ * Derives monthly target (amount/12), YTD spent, and projected annual.
+ */
+export function calculateYearlyBudgetProgress(
+  budget: Budget,
+  transactions: Transaction[]
+): YearlyBudgetProgress {
+  const now = new Date();
+  const currentMonth = budget.year === now.getFullYear()
+    ? now.getMonth() + 1
+    : (budget.year < now.getFullYear() ? 12 : 0);
+
+  const monthlyTarget = budget.amount / 12;
+  const months = getYearlyBreakdown(budget, transactions);
+
+  // YTD = sum of months up to current month
+  const ytdMonths = months.filter((m) => m.month <= currentMonth);
+  const ytdSpent = ytdMonths.reduce((sum, m) => sum + m.actual, 0);
+  const ytdBudget = monthlyTarget * currentMonth;
+  const ytdRemaining = ytdBudget - ytdSpent;
+  const ytdPercentUsed = ytdBudget > 0 ? (ytdSpent / ytdBudget) * 100 : 0;
+
+  // Project annual: if we've spent X in N months, project X * (12/N)
+  const projectedAnnual = currentMonth > 0
+    ? (ytdSpent / currentMonth) * 12
+    : 0;
+
+  return {
+    budget,
+    monthlyTarget,
+    ytdBudget,
+    ytdSpent,
+    ytdRemaining,
+    ytdPercentUsed,
+    isYtdOver: ytdSpent > ytdBudget,
+    projectedAnnual,
+    months,
+  };
+}
+
+/**
+ * Calculate yearly progress for all yearly budgets in a given year.
+ */
+export function calculateAllYearlyProgress(
+  budgets: Budget[],
+  transactions: Transaction[],
+  year: number
+): YearlyBudgetProgress[] {
+  return budgets
+    .filter((b) => b.isActive && b.period === 'yearly' && b.year === year)
+    .map((b) => calculateYearlyBudgetProgress(b, transactions));
+}
+
+/**
+ * Get aggregated yearly summary stats across all yearly budgets for a year.
+ */
+export function getYearlySummaryStats(
+  budgets: Budget[],
+  transactions: Transaction[],
+  year: number
+): YearlySummaryStats {
+  const yearlyBudgets = budgets.filter(
+    (b) => b.isActive && b.period === 'yearly' && b.year === year
+  );
+
+  const now = new Date();
+  const monthsElapsed = year === now.getFullYear()
+    ? now.getMonth() + 1
+    : (year < now.getFullYear() ? 12 : 0);
+
+  const totalAnnualBudget = yearlyBudgets.reduce((sum, b) => sum + b.amount, 0);
+
+  // Total YTD spent across all yearly budgets
+  let totalYtdSpent = 0;
+  for (const budget of yearlyBudgets) {
+    for (let m = 0; m < monthsElapsed; m++) {
+      const mStart = startOfMonth(new Date(year, m, 1));
+      const mEnd = endOfMonth(new Date(year, m, 1));
+      totalYtdSpent += transactions
+        .filter((t) => {
+          if (t.entityId !== budget.entityId) return false;
+          if (t.category !== budget.category) return false;
+          if (t.type !== 'expense') return false;
+          const txDate = t.date instanceof Date ? t.date : parseLocalDate(t.date);
+          return isWithinInterval(txDate, { start: mStart, end: mEnd });
+        })
+        .reduce((sum, t) => sum + t.amount * t.exchangeRate, 0);
+    }
+  }
+
+  const totalAnnualRoom = totalAnnualBudget - totalYtdSpent;
+  const projectedAnnualTotal = monthsElapsed > 0
+    ? (totalYtdSpent / monthsElapsed) * 12
+    : 0;
+  const isOnTrack = projectedAnnualTotal <= totalAnnualBudget;
+
+  return {
+    totalAnnualBudget,
+    totalYtdSpent,
+    totalAnnualRoom,
+    projectedAnnualTotal,
+    monthsElapsed,
+    isOnTrack,
+  };
+}
+
+/**
+ * Get yearly budgets for the current year.
+ */
+export function getCurrentYearBudgets(budgets: Budget[]): Budget[] {
+  const currentYear = new Date().getFullYear();
+  return budgets.filter(
+    (b) => b.isActive && b.period === 'yearly' && b.year === currentYear
+  );
+}
+
+/**
+ * For the Monthly tab, derive monthly-equivalent budget progress from yearly budgets.
+ * Each yearly budget appears as a virtual monthly budget with amount/12 for the given month.
+ */
+export function getMonthlyFromYearlyBudgets(
+  budgets: Budget[],
+  transactions: Transaction[],
+  year: number,
+  month: number
+): BudgetProgress[] {
+  const yearlyBudgets = budgets.filter(
+    (b) => b.isActive && b.period === 'yearly' && b.year === year
+  );
+
+  const monthStart = startOfMonth(new Date(year, month - 1, 1));
+  const monthEnd = endOfMonth(new Date(year, month - 1, 1));
+
+  return yearlyBudgets.map((budget) => {
+    const monthlyTarget = budget.amount / 12;
+    const spent = transactions
+      .filter((t) => {
+        if (t.entityId !== budget.entityId) return false;
+        if (t.category !== budget.category) return false;
+        if (t.type !== 'expense') return false;
+        const txDate = t.date instanceof Date ? t.date : parseLocalDate(t.date);
+        return isWithinInterval(txDate, { start: monthStart, end: monthEnd });
+      })
+      .reduce((sum, t) => sum + t.amount * t.exchangeRate, 0);
+
+    const remaining = monthlyTarget - spent;
+    const percentUsed = monthlyTarget > 0 ? (spent / monthlyTarget) * 100 : 0;
+
+    // Create a virtual budget with monthly amount for display
+    const virtualBudget: Budget = {
+      ...budget,
+      amount: monthlyTarget,
+    };
+
+    return {
+      budget: virtualBudget,
+      spent,
+      remaining,
+      percentUsed,
+      isOverBudget: spent > monthlyTarget,
+    };
+  });
 }
 
 // ============================================

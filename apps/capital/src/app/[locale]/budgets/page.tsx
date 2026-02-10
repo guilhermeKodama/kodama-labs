@@ -6,19 +6,18 @@ import {
   Copy,
   Calendar,
   BarChart3,
-  ChevronLeft,
-  ChevronRight,
+  Settings2,
 } from 'lucide-react';
 import { AppShell } from '@/components/layout';
 import { Header } from '@/components/layout/header';
-import { Button } from '@/components/ui/button';
 import { RoomToSpendSummary } from '@/components/cards';
 import { BudgetInsights } from '@/components/cards';
 import { UnbudgetedSpendingCard } from '@/components/cards';
 import { BudgetTrendCard } from '@/components/cards';
+import { YearlyBudgetSummary } from '@/components/cards';
 import { BudgetsTable } from '@/components/tables';
 import { BudgetDialog } from '@/components/dialogs';
-import { BudgetOverviewChart } from '@/components/charts';
+import { YearlyBudgetChart } from '@/components/charts';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
@@ -39,14 +38,17 @@ import {
 } from '@/lib/store';
 import {
   calculateAllBudgetProgress,
-  getCurrentMonthBudgets,
-  getBudgetAlerts,
   getUnbudgetedSpending,
   getMonthOverMonth,
   generateBudgetInsights,
   mergeTransactionsWithCreditCard,
   convertInstallmentsToTransactions,
+  getMonthlyFromYearlyBudgets,
+  calculateAllYearlyProgress,
+  getYearlySummaryStats,
+  getCurrentYearBudgets,
 } from '@/lib/utils/budget';
+import { formatCurrency } from '@/lib/utils/format';
 import { toast } from 'sonner';
 import type { Budget, EntityType } from '@/types';
 import type { CreateBudgetFormData } from '@/lib/validations';
@@ -97,7 +99,6 @@ export default function BudgetsPage() {
     );
 
     // Add installment future projections as virtual transactions
-    // Uses bill closing dates as anchor for accurate month alignment
     const installmentTransactions = convertInstallmentsToTransactions(
       installments,
       creditCards,
@@ -111,7 +112,7 @@ export default function BudgetsPage() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingBudget, setEditingBudget] = useState<Budget | undefined>();
   const [deletingBudget, setDeletingBudget] = useState<Budget | undefined>();
-  const [selectedView, setSelectedView] = useState<'current' | 'all' | 'overview'>('current');
+  const [selectedView, setSelectedView] = useState<'monthly' | 'yearly' | 'manage'>('monthly');
   const [prefillCategory, setPrefillCategory] = useState<string | undefined>();
   const [prefillEntityId, setPrefillEntityId] = useState<string | undefined>();
   const [prefillEntityType, setPrefillEntityType] = useState<EntityType | undefined>();
@@ -120,85 +121,97 @@ export default function BudgetsPage() {
   const currentYear = now.getFullYear();
   const currentMonth = now.getMonth() + 1;
 
-  // Overview period selector state
-  const [overviewYear, setOverviewYear] = useState(currentYear);
-  const [overviewMonth, setOverviewMonth] = useState(currentMonth);
+  // ============================================
+  // Monthly Tab Data
+  // ============================================
 
-  // Calculate budget progress (using merged transactions that include CC spending)
+  // Get yearly budgets for current year to derive monthly targets
+  const currentYearBudgets = useMemo(() => {
+    return getCurrentYearBudgets(budgets);
+  }, [budgets]);
+
+  // Derive monthly budget progress from yearly budgets (amount/12 per category)
+  const monthlyFromYearly = useMemo(() => {
+    return getMonthlyFromYearlyBudgets(
+      budgets,
+      mergedTransactions,
+      currentYear,
+      currentMonth
+    );
+  }, [budgets, mergedTransactions, currentYear, currentMonth]);
+
+  // Also get any explicit monthly budgets for current month
+  const explicitMonthlyProgress = useMemo(() => {
+    const monthlyBudgets = budgets.filter(
+      (b) => b.isActive && b.period === 'monthly' && b.year === currentYear && b.month === currentMonth
+    );
+    return calculateAllBudgetProgress(monthlyBudgets, mergedTransactions);
+  }, [budgets, mergedTransactions, currentYear, currentMonth]);
+
+  // Combine monthly view: explicit monthly + derived from yearly
+  const currentMonthProgress = useMemo(() => {
+    // Avoid duplicates: if a category has an explicit monthly budget, skip the yearly-derived one
+    const explicitKeys = new Set(
+      explicitMonthlyProgress.map((p) => `${p.budget.entityId}::${p.budget.category}`)
+    );
+    const filtered = monthlyFromYearly.filter(
+      (p) => !explicitKeys.has(`${p.budget.entityId}::${p.budget.category}`)
+    );
+    return [...explicitMonthlyProgress, ...filtered];
+  }, [explicitMonthlyProgress, monthlyFromYearly]);
+
+  // Generate monthly insights
+  const insights = useMemo(() => {
+    return generateBudgetInsights(
+      currentMonthProgress,
+      mergedTransactions,
+      currentYearBudgets
+    );
+  }, [currentMonthProgress, mergedTransactions, currentYearBudgets]);
+
+  // Unbudgeted spending (includes credit card categories)
+  const allCurrentBudgets = useMemo(() => {
+    return budgets.filter((b) => {
+      if (!b.isActive) return false;
+      if (b.year !== currentYear) return false;
+      if (b.period === 'monthly') return b.month === currentMonth;
+      return true; // yearly
+    });
+  }, [budgets, currentYear, currentMonth]);
+
+  const unbudgetedCategories = useMemo(() => {
+    return getUnbudgetedSpending(allCurrentBudgets, mergedTransactions, currentYear, currentMonth);
+  }, [allCurrentBudgets, mergedTransactions, currentYear, currentMonth]);
+
+  // Month-over-month trends
+  const trends = useMemo(() => {
+    return getMonthOverMonth(allCurrentBudgets, mergedTransactions, currentYear, currentMonth);
+  }, [allCurrentBudgets, mergedTransactions, currentYear, currentMonth]);
+
+  // ============================================
+  // Yearly Tab Data
+  // ============================================
+
+  const yearlyProgress = useMemo(() => {
+    return calculateAllYearlyProgress(budgets, mergedTransactions, currentYear);
+  }, [budgets, mergedTransactions, currentYear]);
+
+  const yearlySummaryStats = useMemo(() => {
+    return getYearlySummaryStats(budgets, mergedTransactions, currentYear);
+  }, [budgets, mergedTransactions, currentYear]);
+
+  // ============================================
+  // Manage Tab Data
+  // ============================================
+
   const allBudgetProgress = useMemo(() => {
     return calculateAllBudgetProgress(budgets, mergedTransactions);
   }, [budgets, mergedTransactions]);
 
-  // Get current month budgets
-  const currentBudgets = useMemo(() => {
-    return getCurrentMonthBudgets(budgets);
-  }, [budgets]);
-
-  const currentBudgetProgress = useMemo(() => {
-    return calculateAllBudgetProgress(currentBudgets, mergedTransactions);
-  }, [currentBudgets, mergedTransactions]);
-
-  // Generate insights
-  const insights = useMemo(() => {
-    return generateBudgetInsights(currentBudgetProgress, mergedTransactions);
-  }, [currentBudgetProgress, mergedTransactions]);
-
-  // Unbudgeted spending (includes credit card categories)
-  const unbudgetedCategories = useMemo(() => {
-    return getUnbudgetedSpending(currentBudgets, mergedTransactions, currentYear, currentMonth);
-  }, [currentBudgets, mergedTransactions, currentYear, currentMonth]);
-
-  // Month-over-month trends
-  const trends = useMemo(() => {
-    return getMonthOverMonth(currentBudgets, mergedTransactions, currentYear, currentMonth);
-  }, [currentBudgets, mergedTransactions, currentYear, currentMonth]);
-
-  // Overview tab: budgets and progress for the selected period
-  const overviewBudgets = useMemo(() => {
-    return budgets.filter((b) => {
-      if (!b.isActive) return false;
-      if (b.year !== overviewYear) return false;
-      if (b.period === 'monthly') {
-        return b.month === overviewMonth;
-      }
-      return true; // Yearly budgets
-    });
-  }, [budgets, overviewYear, overviewMonth]);
-
-  const overviewBudgetProgress = useMemo(() => {
-    return calculateAllBudgetProgress(overviewBudgets, mergedTransactions);
-  }, [overviewBudgets, mergedTransactions]);
-
-  const overviewTrends = useMemo(() => {
-    return getMonthOverMonth(overviewBudgets, mergedTransactions, overviewYear, overviewMonth);
-  }, [overviewBudgets, mergedTransactions, overviewYear, overviewMonth]);
-
-  const MONTH_LABELS = [
-    'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
-  ];
-
-  const navigateOverviewPeriod = (direction: 'prev' | 'next') => {
-    if (direction === 'prev') {
-      if (overviewMonth === 1) {
-        setOverviewMonth(12);
-        setOverviewYear(overviewYear - 1);
-      } else {
-        setOverviewMonth(overviewMonth - 1);
-      }
-    } else {
-      if (overviewMonth === 12) {
-        setOverviewMonth(1);
-        setOverviewYear(overviewYear + 1);
-      } else {
-        setOverviewMonth(overviewMonth + 1);
-      }
-    }
-  };
-
-  const isCurrentPeriod = overviewYear === currentYear && overviewMonth === currentMonth;
-
+  // ============================================
   // Handlers
+  // ============================================
+
   const handleCreate = async (data: CreateBudgetFormData) => {
     const result = await addBudget(data);
     setPrefillCategory(undefined);
@@ -252,32 +265,34 @@ export default function BudgetsPage() {
     setPrefillEntityType(undefined);
   };
 
-  // Copy to next month handler
-  const handleCopyToNextMonth = async () => {
-    if (currentBudgets.length === 0) {
+  // Copy yearly budgets to next year
+  const handleCopyToNextYear = async () => {
+    const yearlyBudgets = budgets.filter(
+      (b) => b.isActive && b.period === 'yearly' && b.year === currentYear
+    );
+
+    if (yearlyBudgets.length === 0) {
       toast.info(t('budgets.toast.noBudgetsToCopy'));
       return;
     }
 
-    const nextMonth = currentMonth === 12 ? 1 : currentMonth + 1;
-    const nextYear = currentMonth === 12 ? currentYear + 1 : currentYear;
+    const nextYear = currentYear + 1;
 
-    // Check which budgets already exist for next month
-    const existingNextMonth = budgets.filter(
-      (b) => b.year === nextYear && b.month === nextMonth && b.period === 'monthly'
+    // Check which budgets already exist for next year
+    const existingNextYear = budgets.filter(
+      (b) => b.year === nextYear && b.period === 'yearly'
     );
     const existingKeys = new Set(
-      existingNextMonth.map((b) => `${b.entityId}::${b.category}`)
+      existingNextYear.map((b) => `${b.entityId}::${b.category}`)
     );
 
-    const budgetsToCopy = currentBudgets.filter((b) => {
-      if (b.period !== 'monthly') return false;
+    const budgetsToCopy = yearlyBudgets.filter((b) => {
       const key = `${b.entityId}::${b.category}`;
       return !existingKeys.has(key);
     });
 
     if (budgetsToCopy.length === 0) {
-      toast.info(t('budgets.toast.allBudgetsExist'));
+      toast.info(t('budgets.toast.allYearlyBudgetsExist'));
       return;
     }
 
@@ -289,16 +304,15 @@ export default function BudgetsPage() {
         category: budget.category,
         amount: budget.amount,
         currency: budget.currency,
-        period: 'monthly',
+        period: 'yearly',
         year: nextYear,
-        month: nextMonth,
         alertThreshold: budget.alertThreshold,
       });
       if (result) copied++;
     }
 
     if (copied > 0) {
-      toast.success(t('budgets.toast.copiedToNextMonth', { count: copied }));
+      toast.success(t('budgets.toast.copiedToNextYear', { count: copied }));
     }
   };
 
@@ -321,55 +335,55 @@ export default function BudgetsPage() {
           onClick: () => setIsDialogOpen(true),
         }}
         secondaryAction={{
-          label: t('budgets.copyToNextMonth'),
-          onClick: handleCopyToNextMonth,
+          label: t('budgets.copyToNextYear'),
+          onClick: handleCopyToNextYear,
           icon: Copy,
         }}
       />
 
-      {/* Room to Spend Summary (replaces old 4 summary cards) */}
-      <RoomToSpendSummary
-        budgetProgress={currentBudgetProgress}
-        transactions={mergedTransactions}
-        currency={settings.baseCurrency}
-      />
+      {/* Main Tabs */}
+      <Tabs value={selectedView} onValueChange={(v) => setSelectedView(v as 'monthly' | 'yearly' | 'manage')}>
+        <div className="mb-6 flex items-center justify-between">
+          <TabsList className="border-slate-800 bg-slate-900/50">
+            <TabsTrigger
+              value="monthly"
+              className="data-[state=active]:bg-slate-800 data-[state=active]:text-white"
+            >
+              <Calendar className="mr-1.5 h-3.5 w-3.5" />
+              {t('budgets.views.monthly')}
+            </TabsTrigger>
+            <TabsTrigger
+              value="yearly"
+              className="data-[state=active]:bg-slate-800 data-[state=active]:text-white"
+            >
+              <BarChart3 className="mr-1.5 h-3.5 w-3.5" />
+              {t('budgets.views.yearly')}
+            </TabsTrigger>
+            <TabsTrigger
+              value="manage"
+              className="data-[state=active]:bg-slate-800 data-[state=active]:text-white"
+            >
+              <Settings2 className="mr-1.5 h-3.5 w-3.5" />
+              {t('budgets.views.manage')}
+            </TabsTrigger>
+          </TabsList>
+        </div>
 
-      {/* Actionable Insights (replaces old alerts) */}
-      <BudgetInsights insights={insights} />
+        {/* ============================================ */}
+        {/* Monthly Tab */}
+        {/* ============================================ */}
+        <TabsContent value="monthly" className="space-y-6">
+          {/* Summary Cards */}
+          <RoomToSpendSummary
+            budgetProgress={currentMonthProgress}
+            transactions={mergedTransactions}
+            currency={settings.baseCurrency}
+          />
 
-      {/* Unbudgeted Spending Detection */}
-      <UnbudgetedSpendingCard
-        unbudgetedCategories={unbudgetedCategories}
-        currency={settings.baseCurrency}
-        onCreateBudget={handleCreateFromUnbudgeted}
-      />
+          {/* Insights */}
+          <BudgetInsights insights={insights} />
 
-      {/* Budget Tabs */}
-      <Tabs value={selectedView} onValueChange={(v) => setSelectedView(v as 'current' | 'all' | 'overview')}>
-        <TabsList className="mb-6 border-slate-800 bg-slate-900/50">
-          <TabsTrigger
-            value="current"
-            className="data-[state=active]:bg-slate-800 data-[state=active]:text-white"
-          >
-            <Calendar className="mr-2 h-4 w-4" />
-            {t('budgets.views.current')}
-          </TabsTrigger>
-          <TabsTrigger
-            value="all"
-            className="data-[state=active]:bg-slate-800 data-[state=active]:text-white"
-          >
-            {t('budgets.views.all')}
-          </TabsTrigger>
-          <TabsTrigger
-            value="overview"
-            className="data-[state=active]:bg-slate-800 data-[state=active]:text-white"
-          >
-            <BarChart3 className="mr-2 h-4 w-4" />
-            {t('budgets.views.overview')}
-          </TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="current">
+          {/* Current Month Budget Table */}
           <Card className="border-slate-800 bg-slate-900/50 backdrop-blur-sm">
             <CardHeader>
               <CardTitle className="text-lg text-white">
@@ -378,7 +392,7 @@ export default function BudgetsPage() {
             </CardHeader>
             <CardContent>
               <BudgetsTable
-                budgetProgress={currentBudgetProgress}
+                budgetProgress={currentMonthProgress}
                 transactions={mergedTransactions}
                 onEdit={openEditDialog}
                 onDelete={setDeletingBudget}
@@ -386,9 +400,164 @@ export default function BudgetsPage() {
               />
             </CardContent>
           </Card>
+
+          {/* Unbudgeted Spending */}
+          <UnbudgetedSpendingCard
+            unbudgetedCategories={unbudgetedCategories}
+            currency={settings.baseCurrency}
+            onCreateBudget={handleCreateFromUnbudgeted}
+          />
+
+          {/* Month-over-Month Trends */}
+          <BudgetTrendCard
+            trends={trends}
+            currency={settings.baseCurrency}
+          />
         </TabsContent>
 
-        <TabsContent value="all">
+        {/* ============================================ */}
+        {/* Yearly Tab */}
+        {/* ============================================ */}
+        <TabsContent value="yearly" className="space-y-6">
+          {yearlyProgress.length === 0 ? (
+            <Card className="border-slate-800 bg-slate-900/50 backdrop-blur-sm">
+              <CardContent className="flex flex-col items-center justify-center py-16">
+                <BarChart3 className="mb-4 h-12 w-12 text-slate-600" />
+                <h3 className="mb-2 text-lg font-medium text-white">
+                  {t('budgets.yearly.noYearlyBudgets')}
+                </h3>
+                <p className="max-w-md text-center text-sm text-slate-400">
+                  {t('budgets.yearly.noYearlyBudgetsDescription')}
+                </p>
+              </CardContent>
+            </Card>
+          ) : (
+            <>
+              {/* Yearly Summary Cards */}
+              <YearlyBudgetSummary
+                stats={yearlySummaryStats}
+                currency={settings.baseCurrency}
+                year={currentYear}
+              />
+
+              {/* 12-Month Budget vs Actual Chart */}
+              <Card className="border-slate-800 bg-slate-900/50 backdrop-blur-sm">
+                <CardHeader>
+                  <CardTitle className="text-lg text-white">
+                    {t('budgets.yearly.monthlyBreakdown')} — {currentYear}
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <YearlyBudgetChart
+                    yearlyProgress={yearlyProgress}
+                    currency={settings.baseCurrency}
+                  />
+                </CardContent>
+              </Card>
+
+              {/* Category YTD Breakdown */}
+              <Card className="border-slate-800 bg-slate-900/50 backdrop-blur-sm">
+                <CardHeader>
+                  <CardTitle className="text-lg text-white">
+                    {t('budgets.yearly.categoryBreakdown')}
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-4">
+                    {yearlyProgress.map((yp) => {
+                      const percentUsed = yp.budget.amount > 0
+                        ? (yp.ytdSpent / yp.budget.amount) * 100
+                        : 0;
+                      const isOver = yp.ytdSpent > yp.ytdBudget;
+                      const projectedOver = yp.projectedAnnual > yp.budget.amount;
+
+                      return (
+                        <div
+                          key={yp.budget.id}
+                          className="rounded-lg border border-slate-700/50 bg-slate-800/30 p-4"
+                        >
+                          <div className="mb-3 flex items-center justify-between">
+                            <div>
+                              <h4 className="font-medium text-white">
+                                {yp.budget.category}
+                              </h4>
+                              <p className="text-xs text-slate-400">
+                                {t('budgets.yearly.annualBudget')}: {formatCurrency(yp.budget.amount, settings.baseCurrency)}
+                                {' · '}
+                                {t('budgets.yearly.monthlyTarget')}: {formatCurrency(yp.monthlyTarget, settings.baseCurrency)}
+                              </p>
+                            </div>
+                            <div className="text-right">
+                              <p className={`text-lg font-bold ${isOver ? 'text-red-400' : 'text-white'}`}>
+                                {formatCurrency(yp.ytdSpent, settings.baseCurrency)}
+                              </p>
+                              <p className="text-xs text-slate-400">
+                                {t('budgets.yearly.ytdSpent')} ({yp.ytdPercentUsed.toFixed(0)}%)
+                              </p>
+                            </div>
+                          </div>
+
+                          {/* Progress bar */}
+                          <div className="mb-2">
+                            <div className="flex justify-between text-xs text-slate-500">
+                              <span>0%</span>
+                              <span>{percentUsed.toFixed(0)}% of annual</span>
+                              <span>100%</span>
+                            </div>
+                            <div className="mt-1 h-2 w-full overflow-hidden rounded-full bg-slate-700">
+                              <div
+                                className={`h-full rounded-full transition-all ${
+                                  percentUsed >= 100
+                                    ? 'bg-red-500'
+                                    : percentUsed >= 80
+                                      ? 'bg-amber-500'
+                                      : 'bg-emerald-500'
+                                }`}
+                                style={{ width: `${Math.min(percentUsed, 100)}%` }}
+                              />
+                            </div>
+                          </div>
+
+                          {/* Stats row */}
+                          <div className="flex items-center gap-4 text-xs">
+                            <span className="text-slate-400">
+                              {t('budgets.yearly.annualRoom')}:{' '}
+                              <span className={isOver ? 'text-red-400' : 'text-emerald-400'}>
+                                {formatCurrency(yp.budget.amount - yp.ytdSpent, settings.baseCurrency)}
+                              </span>
+                            </span>
+                            <span className="text-slate-400">
+                              {t('budgets.yearly.projectedAnnual')}:{' '}
+                              <span className={projectedOver ? 'text-amber-400' : 'text-slate-300'}>
+                                {formatCurrency(yp.projectedAnnual, settings.baseCurrency)}
+                              </span>
+                            </span>
+                            <span className="text-slate-400">
+                              {t('budgets.yearly.monthlyAvg')}:{' '}
+                              <span className="text-slate-300">
+                                {formatCurrency(
+                                  yearlySummaryStats.monthsElapsed > 0
+                                    ? yp.ytdSpent / yearlySummaryStats.monthsElapsed
+                                    : 0,
+                                  settings.baseCurrency
+                                )}
+                              </span>
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </CardContent>
+              </Card>
+            </>
+          )}
+        </TabsContent>
+
+        {/* ============================================ */}
+        {/* Manage Tab */}
+        {/* ============================================ */}
+        <TabsContent value="manage">
           <Card className="border-slate-800 bg-slate-900/50 backdrop-blur-sm">
             <CardHeader>
               <CardTitle className="text-lg text-white">
@@ -405,74 +574,6 @@ export default function BudgetsPage() {
               />
             </CardContent>
           </Card>
-        </TabsContent>
-
-        <TabsContent value="overview">
-          <div className="space-y-6">
-            {/* Period Navigator */}
-            <div className="flex items-center justify-center gap-4">
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-8 w-8 text-slate-400 hover:bg-slate-800 hover:text-white"
-                onClick={() => navigateOverviewPeriod('prev')}
-              >
-                <ChevronLeft className="h-5 w-5" />
-              </Button>
-              <div className="flex items-center gap-2">
-                <span className="text-lg font-semibold text-white">
-                  {MONTH_LABELS[overviewMonth - 1]} {overviewYear}
-                </span>
-                {isCurrentPeriod && (
-                  <span className="rounded-full bg-cyan-500/20 px-2 py-0.5 text-xs font-medium text-cyan-400">
-                    {t('budgets.views.current')}
-                  </span>
-                )}
-              </div>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-8 w-8 text-slate-400 hover:bg-slate-800 hover:text-white"
-                onClick={() => navigateOverviewPeriod('next')}
-              >
-                <ChevronRight className="h-5 w-5" />
-              </Button>
-              {!isCurrentPeriod && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="ml-2 border-slate-700 text-xs text-slate-400 hover:bg-slate-800 hover:text-white"
-                  onClick={() => {
-                    setOverviewMonth(currentMonth);
-                    setOverviewYear(currentYear);
-                  }}
-                >
-                  {t('budgets.overview.today')}
-                </Button>
-              )}
-            </div>
-
-            {/* Budget Distribution Chart */}
-            <Card className="border-slate-800 bg-slate-900/50 backdrop-blur-sm">
-              <CardHeader>
-                <CardTitle className="text-lg text-white">
-                  {t('budgets.overview.chartTitle')}
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <BudgetOverviewChart
-                  budgetProgress={overviewBudgetProgress}
-                  currency={settings.baseCurrency}
-                />
-              </CardContent>
-            </Card>
-
-            {/* Month-over-Month Trends */}
-            <BudgetTrendCard
-              trends={overviewTrends}
-              currency={settings.baseCurrency}
-            />
-          </div>
         </TabsContent>
       </Tabs>
 

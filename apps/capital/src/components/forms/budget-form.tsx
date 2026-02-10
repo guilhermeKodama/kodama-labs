@@ -79,9 +79,9 @@ export function BudgetForm({
       category: budget?.category || defaultCategory || '',
       amount: budget?.amount || 0,
       currency: budget?.currency || settings.baseCurrency,
-      period: budget?.period || 'monthly',
+      period: budget?.period || 'yearly',
       year: budget?.year || currentYear,
-      month: budget?.month || currentMonth,
+      month: budget?.month || (budget?.period === 'monthly' ? currentMonth : undefined),
       alertThreshold: budget?.alertThreshold || 80,
     },
   });
