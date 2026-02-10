@@ -199,6 +199,11 @@ export function RoomToSpendSummary({
                       <div className="flex items-center gap-3 text-xs">
                         <span className="text-slate-400">
                           {formatCurrency(spent, currency)} / {formatCurrency(budget.amount, currency)}
+                          {budget.period === 'yearly' && (
+                            <span className="ml-1 text-slate-500">
+                              ({t('roomToSpend.ofAnnual', { amount: formatCurrency(budget.amount * 12, currency) })})
+                            </span>
+                          )}
                         </span>
                         <span className={cn(
                           'font-medium',

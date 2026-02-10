@@ -5,3 +5,4 @@ export { CashFlowChart } from './cash-flow-chart';
 export { EntityComparisonChart } from './entity-comparison-chart';
 export { CurrencyDistributionChart } from './currency-distribution-chart';
 export { BudgetOverviewChart } from './budget-overview-chart';
+export { YearlyBudgetChart } from './yearly-budget-chart';

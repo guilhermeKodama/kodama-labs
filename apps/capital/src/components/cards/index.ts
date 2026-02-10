@@ -7,3 +7,4 @@ export { RoomToSpendSummary } from './room-to-spend-summary';
 export { BudgetInsights } from './budget-insights';
 export { UnbudgetedSpendingCard } from './unbudgeted-spending-card';
 export { BudgetTrendCard } from './budget-trend-card';
+export { YearlyBudgetSummary } from './yearly-budget-summary';

@@ -827,6 +827,7 @@
     "title": "Budgets",
     "subtitle": "Set and track spending limits",
     "addBudget": "Add Budget",
+    "copyToNextYear": "Copy to Next Year",
     "copyToNextMonth": "Copy to Next Month",
     "currentBudgets": "Current Month Budgets",
     "allBudgets": "All Budgets",
@@ -907,7 +908,9 @@
       "projected": "Projected",
       "roomLeft": "room left",
       "overBy": "over by",
-      "noRoom": "No room"
+      "noRoom": "No room",
+      "monthlyTarget": "Monthly Target",
+      "ofAnnual": "of {amount} annual"
     },
     "insights": {
       "title": "Budget Insights",
@@ -941,6 +944,26 @@
       "trendTitle": "Spending Trends",
       "today": "Today"
     },
+    "yearly": {
+      "title": "Yearly Overview",
+      "annualBudget": "Annual Budget",
+      "ytdSpent": "YTD Spent",
+      "annualRoom": "Annual Room",
+      "projectedAnnual": "Projected Annual",
+      "monthlyTarget": "Monthly Target",
+      "onTrackForYear": "On track for the year",
+      "overPaceForYear": "Over pace for the year",
+      "ytdProgress": "YTD Progress",
+      "monthlyBreakdown": "Monthly Breakdown",
+      "budgetVsActual": "Budget vs Actual",
+      "cumulativeProgress": "Cumulative Progress",
+      "budget": "Budget",
+      "actual": "Actual",
+      "monthlyAvg": "Monthly Avg",
+      "categoryBreakdown": "Category Breakdown",
+      "noYearlyBudgets": "No yearly budgets set for this year.",
+      "noYearlyBudgetsDescription": "Create yearly budgets to track annual spending. Monthly targets are automatically calculated."
+    },
     "drillDown": {
       "title": "Transactions",
       "noTransactions": "No transactions in this category for this period.",
@@ -951,7 +974,10 @@
     "views": {
       "current": "Current Month",
       "all": "All Budgets",
-      "overview": "Overview"
+      "overview": "Overview",
+      "monthly": "Monthly",
+      "yearly": "Yearly",
+      "manage": "Manage"
     },
     "alerts": {
       "title": "Budget Alerts"
@@ -976,8 +1002,10 @@
       "paused": "Budget paused",
       "resumed": "Budget resumed",
       "copiedToNextMonth": "{count} budget(s) copied to next month",
+      "copiedToNextYear": "{count} budget(s) copied to next year",
       "noBudgetsToCopy": "No current budgets to copy",
-      "allBudgetsExist": "All budgets already exist for next month"
+      "allBudgetsExist": "All budgets already exist for next month",
+      "allYearlyBudgetsExist": "All yearly budgets already exist for next year"
     }
   },
   "tax": {

@@ -342,6 +342,37 @@ export interface MonthOverMonth {
   changePercent: number;
 }
 
+export interface YearlyMonthBreakdown {
+  month: number; // 1-12
+  monthLabel: string;
+  budgetTarget: number; // yearly amount / 12
+  actual: number;
+  cumulativeBudget: number;
+  cumulativeActual: number;
+  isOver: boolean;
+}
+
+export interface YearlyBudgetProgress {
+  budget: Budget;
+  monthlyTarget: number; // amount / 12
+  ytdBudget: number;
+  ytdSpent: number;
+  ytdRemaining: number;
+  ytdPercentUsed: number;
+  isYtdOver: boolean;
+  projectedAnnual: number;
+  months: YearlyMonthBreakdown[];
+}
+
+export interface YearlySummaryStats {
+  totalAnnualBudget: number;
+  totalYtdSpent: number;
+  totalAnnualRoom: number;
+  projectedAnnualTotal: number;
+  monthsElapsed: number;
+  isOnTrack: boolean;
+}
+
 export type BudgetInsightSeverity = 'critical' | 'warning' | 'good';
 
 export interface BudgetInsight {
