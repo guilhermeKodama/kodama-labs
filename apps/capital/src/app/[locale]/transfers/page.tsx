@@ -53,6 +53,7 @@ import {
   useBusinessStore,
   useSettingsStore,
   useRecurringTransferStore,
+  useInvestmentStore,
 } from '@/lib/store';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
@@ -164,9 +165,19 @@ export default function TransfersPage() {
     };
   }, [recurringTransfers]);
 
+  const { fetchAccounts: fetchInvestmentAccounts } = useInvestmentStore();
+
   const handleCreateTransfer = async (data: CreateTransferFormData) => {
-    await addTransfer(data);
-    toast.success(t('transfers.toast.created'));
+    const result = await addTransfer(data);
+    if (result) {
+      toast.success(t('transfers.toast.created'));
+      // Refresh investment accounts if this was an investment transfer
+      if (data.direction === 'investment_deposit' || data.direction === 'investment_withdrawal') {
+        fetchInvestmentAccounts();
+      }
+    } else {
+      toast.error(t('transfers.toast.error'));
+    }
   };
 
   const handleDeleteTransfer = async () => {

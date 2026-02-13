@@ -55,7 +55,7 @@ const recurringTransferSchema = z.object({
   fromEntityType: z.enum(['business', 'personal']),
   toEntityId: z.string().min(1, 'Required'),
   toEntityType: z.enum(['business', 'personal']),
-  direction: z.enum(['profit_distribution', 'capital_injection', 'reimbursement']),
+  direction: z.enum(['profit_distribution', 'capital_injection', 'reimbursement', 'investment_deposit', 'investment_withdrawal']),
   amount: z.number().positive('Amount must be positive'),
   currency: z.string().length(3, 'Currency is required'),
   exchangeRate: z.number().positive().optional(),

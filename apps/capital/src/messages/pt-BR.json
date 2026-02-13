@@ -166,6 +166,7 @@
     "title": "Conta Pessoal",
     "subtitle": "Acompanhe suas finanças pessoais",
     "netWorth": "Patrimônio Líquido",
+    "balance": "Saldo",
     "setup": {
       "title": "Conta Pessoal Não Configurada",
       "description": "Complete o onboarding para configurar sua conta pessoal."
@@ -235,7 +236,9 @@
     "directions": {
       "profitDistribution": "Distribuição de Lucro",
       "capitalInjection": "Aporte de Capital",
-      "reimbursement": "Reembolso"
+      "reimbursement": "Reembolso",
+      "investmentDeposit": "Aporte em Investimento",
+      "investmentWithdrawal": "Resgate de Investimento"
     },
     "summary": {
       "totalTransfers": "Total de Transferências",
@@ -247,6 +250,8 @@
       "from": "De",
       "to": "Para",
       "selectBusiness": "Selecione a empresa",
+      "selectAccount": "Selecione a conta",
+      "selectInvestmentAccount": "Selecione a conta de investimento",
       "personalAccount": "Conta Pessoal",
       "availableBalance": "Saldo disponível",
       "amount": "Valor",
@@ -279,7 +284,8 @@
     },
     "toast": {
       "created": "Transferência criada com sucesso!",
-      "deleted": "Transferência excluída com sucesso!"
+      "deleted": "Transferência excluída com sucesso!",
+      "error": "Falha ao criar transferência"
     },
     "noBusinesses": {
       "title": "Nenhuma Empresa Encontrada",
@@ -415,6 +421,7 @@
       "addAccount": "Adicionar Conta",
       "empty": "Nenhuma conta de corretora ainda",
       "addFirst": "Adicione Sua Primeira Conta",
+      "cashBalance": "Saldo Disponível",
       "form": {
         "name": "Nome da Conta",
         "namePlaceholder": "ex: Interactive Brokers, NuInvest",
@@ -550,6 +557,38 @@
       "split": "Desdobramento",
       "deposit": "Depósito",
       "withdrawal": "Resgate"
+    },
+    "fund": {
+      "button": "Aportar",
+      "title": "Aportar na Conta",
+      "description": "Transferir dinheiro da sua conta corrente para esta conta de investimento.",
+      "from": "De",
+      "to": "Para",
+      "checkingAccount": "Conta Corrente",
+      "amount": "Valor",
+      "currency": "Moeda",
+      "exchangeRate": "Taxa de Câmbio",
+      "descriptionLabel": "Descrição",
+      "descriptionPlaceholder": "Descrição opcional",
+      "date": "Data",
+      "submit": "Aportar",
+      "toast": {
+        "success": "Aporte realizado com sucesso!",
+        "error": "Falha ao realizar aporte"
+      }
+    },
+    "withdraw": {
+      "button": "Resgatar",
+      "title": "Resgatar da Conta",
+      "description": "Transferir dinheiro desta conta de investimento de volta para sua conta corrente.",
+      "from": "De",
+      "to": "Para",
+      "checkingAccount": "Conta Corrente",
+      "submit": "Resgatar",
+      "toast": {
+        "success": "Resgate realizado com sucesso!",
+        "error": "Falha ao realizar resgate"
+      }
     },
     "delete": {
       "title": "Excluir?",

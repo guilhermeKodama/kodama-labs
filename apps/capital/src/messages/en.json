@@ -166,6 +166,7 @@
     "title": "Personal Account",
     "subtitle": "Track your personal finances",
     "netWorth": "Net Worth",
+    "balance": "Balance",
     "setup": {
       "title": "Personal Account Not Set Up",
       "description": "Complete the onboarding to set up your personal account."
@@ -235,7 +236,9 @@
     "directions": {
       "profitDistribution": "Profit Distribution",
       "capitalInjection": "Capital Injection",
-      "reimbursement": "Reimbursement"
+      "reimbursement": "Reimbursement",
+      "investmentDeposit": "Investment Deposit",
+      "investmentWithdrawal": "Investment Withdrawal"
     },
     "summary": {
       "totalTransfers": "Total Transfers",
@@ -247,6 +250,8 @@
       "from": "From",
       "to": "To",
       "selectBusiness": "Select business",
+      "selectAccount": "Select account",
+      "selectInvestmentAccount": "Select investment account",
       "personalAccount": "Personal Account",
       "availableBalance": "Available balance",
       "amount": "Amount",
@@ -279,7 +284,8 @@
     },
     "toast": {
       "created": "Transfer created successfully!",
-      "deleted": "Transfer deleted successfully!"
+      "deleted": "Transfer deleted successfully!",
+      "error": "Failed to create transfer"
     },
     "noBusinesses": {
       "title": "No Businesses Found",
@@ -415,6 +421,7 @@
       "addAccount": "Add Account",
       "empty": "No broker accounts yet",
       "addFirst": "Add Your First Account",
+      "cashBalance": "Cash Balance",
       "form": {
         "name": "Account Name",
         "namePlaceholder": "e.g., Interactive Brokers, NuInvest",
@@ -550,6 +557,38 @@
       "split": "Split",
       "deposit": "Deposit",
       "withdrawal": "Withdrawal"
+    },
+    "fund": {
+      "button": "Fund",
+      "title": "Fund Account",
+      "description": "Transfer money from your checking account to this investment account.",
+      "from": "From",
+      "to": "To",
+      "checkingAccount": "Checking Account",
+      "amount": "Amount",
+      "currency": "Currency",
+      "exchangeRate": "Exchange Rate",
+      "descriptionLabel": "Description",
+      "descriptionPlaceholder": "Optional description",
+      "date": "Date",
+      "submit": "Fund Account",
+      "toast": {
+        "success": "Account funded successfully!",
+        "error": "Failed to fund account"
+      }
+    },
+    "withdraw": {
+      "button": "Withdraw",
+      "title": "Withdraw from Account",
+      "description": "Transfer money from this investment account back to your checking account.",
+      "from": "From",
+      "to": "To",
+      "checkingAccount": "Checking Account",
+      "submit": "Withdraw",
+      "toast": {
+        "success": "Withdrawal completed successfully!",
+        "error": "Failed to withdraw from account"
+      }
     },
     "delete": {
       "title": "Delete?",

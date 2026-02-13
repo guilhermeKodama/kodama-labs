@@ -10,6 +10,7 @@ import { useRecurringTransactionStore } from "@/lib/store/recurring-store";
 import { useRecurringTransferStore } from "@/lib/store/recurring-transfer-store";
 import { useBudgetStore } from "@/lib/store/budget-store";
 import { useCreditCardStore } from "@/lib/store/credit-card-store";
+import { useInvestmentStore } from "@/lib/store/investment-store";
 
 export function useInitializeData() {
   const { userId, isLoading: isUserLoading } = useUser();
@@ -24,6 +25,9 @@ export function useInitializeData() {
   const fetchCreditCards = useCreditCardStore((s) => s.fetchCreditCards);
   const fetchBills = useCreditCardStore((s) => s.fetchBills);
   const fetchInstallments = useCreditCardStore((s) => s.fetchInstallments);
+  const fetchInvestmentAccounts = useInvestmentStore((s) => s.fetchAccounts);
+  const fetchInvestmentHoldings = useInvestmentStore((s) => s.fetchHoldings);
+  const fetchInvestmentTransactions = useInvestmentStore((s) => s.fetchTransactions);
   
   const settingsLoading = useSettingsStore((s) => s.isLoading);
   const businessLoading = useBusinessStore((s) => s.isLoading);
@@ -54,6 +58,9 @@ export function useInitializeData() {
       fetchCreditCards(),
       fetchBills(),
       fetchInstallments(),
+      fetchInvestmentAccounts(),
+      fetchInvestmentHoldings(),
+      fetchInvestmentTransactions(),
     ]);
   }, [
     userId,
@@ -67,6 +74,9 @@ export function useInitializeData() {
     fetchCreditCards,
     fetchBills,
     fetchInstallments,
+    fetchInvestmentAccounts,
+    fetchInvestmentHoldings,
+    fetchInvestmentTransactions,
   ]);
 
   useEffect(() => {

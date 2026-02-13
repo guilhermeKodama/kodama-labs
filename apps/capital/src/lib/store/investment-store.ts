@@ -58,6 +58,10 @@ interface InvestmentActions {
   updateTransaction: (id: string, input: UpdateInvestmentTransactionInput) => Promise<void>;
   deleteTransaction: (id: string) => Promise<void>;
 
+  // Fund / Withdraw
+  fundAccount: (accountId: string, input: { amount: number; currency: string; exchangeRate?: number; description?: string; date: Date }) => Promise<boolean>;
+  withdrawAccount: (accountId: string, input: { amount: number; currency: string; exchangeRate?: number; description?: string; date: Date }) => Promise<boolean>;
+
   // Portfolio
   fetchPortfolioSummary: () => Promise<void>;
 
@@ -109,6 +113,7 @@ export const useInvestmentStore = create<InvestmentStore>()((set, get) => ({
           entityId: a.businessId ?? a.personalAccountId ?? '',
           entityType: a.entityType as EntityType,
           currency: a.currency,
+          cashBalance: Number((a as Record<string, unknown>).cashBalance) || 0,
           isActive: a.isActive,
           createdAt: new Date(a.createdAt),
           updatedAt: new Date(a.updatedAt),
@@ -152,6 +157,7 @@ export const useInvestmentStore = create<InvestmentStore>()((set, get) => ({
         entityId: data.businessId ?? data.personalAccountId ?? '',
         entityType: data.entityType as EntityType,
         currency: data.currency,
+        cashBalance: 0,
         isActive: data.isActive,
         createdAt: new Date(data.createdAt),
         updatedAt: new Date(data.updatedAt),
@@ -440,8 +446,9 @@ export const useInvestmentStore = create<InvestmentStore>()((set, get) => ({
         isLoading: false,
       }));
 
-      // Refresh holdings to get updated averageCost/currentQuantity
+      // Refresh holdings and accounts to get updated values
       get().fetchHoldings();
+      get().fetchAccounts();
 
       return newTx;
     } catch (error) {
@@ -483,8 +490,9 @@ export const useInvestmentStore = create<InvestmentStore>()((set, get) => ({
         isLoading: false,
       }));
 
-      // Refresh holdings to get updated values
+      // Refresh holdings and accounts to get updated values
       get().fetchHoldings();
+      get().fetchAccounts();
     } catch (error) {
       set({ error: error instanceof Error ? error.message : 'Unknown error', isLoading: false });
     }
@@ -504,10 +512,92 @@ export const useInvestmentStore = create<InvestmentStore>()((set, get) => ({
         isLoading: false,
       }));
 
-      // Refresh holdings to get updated values
+      // Refresh holdings and accounts to get updated values
       get().fetchHoldings();
+      get().fetchAccounts();
     } catch (error) {
       set({ error: error instanceof Error ? error.message : 'Unknown error', isLoading: false });
+    }
+  },
+
+  // ----------------------------------------
+  // Fund / Withdraw
+  // ----------------------------------------
+  fundAccount: async (accountId, input) => {
+    set({ isLoading: true, error: null });
+    try {
+      const res = await client.v1['investment-accounts'][':id'].fund.$post({
+        param: { id: accountId },
+        json: {
+          amount: input.amount,
+          currency: input.currency,
+          exchangeRate: input.exchangeRate,
+          description: input.description,
+          date: input.date instanceof Date ? input.date.toISOString() : input.date as string,
+        },
+      });
+
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => null);
+        throw new Error(
+          (errorData as { error?: { message?: string } })?.error?.message
+            || 'Failed to fund account'
+        );
+      }
+
+      const data = await res.json();
+
+      // Update local account cash balance
+      set((state) => ({
+        accounts: state.accounts.map((a) =>
+          a.id === accountId ? { ...a, cashBalance: data.cashBalance } : a
+        ),
+        isLoading: false,
+      }));
+
+      return true;
+    } catch (error) {
+      set({ error: error instanceof Error ? error.message : 'Unknown error', isLoading: false });
+      return false;
+    }
+  },
+
+  withdrawAccount: async (accountId, input) => {
+    set({ isLoading: true, error: null });
+    try {
+      const res = await client.v1['investment-accounts'][':id'].withdraw.$post({
+        param: { id: accountId },
+        json: {
+          amount: input.amount,
+          currency: input.currency,
+          exchangeRate: input.exchangeRate,
+          description: input.description,
+          date: input.date instanceof Date ? input.date.toISOString() : input.date as string,
+        },
+      });
+
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => null);
+        throw new Error(
+          (errorData as { error?: { message?: string } })?.error?.message
+            || 'Failed to withdraw from account'
+        );
+      }
+
+      const data = await res.json();
+
+      // Update local account cash balance
+      set((state) => ({
+        accounts: state.accounts.map((a) =>
+          a.id === accountId ? { ...a, cashBalance: data.cashBalance } : a
+        ),
+        isLoading: false,
+      }));
+
+      return true;
+    } catch (error) {
+      set({ error: error instanceof Error ? error.message : 'Unknown error', isLoading: false });
+      return false;
     }
   },
 

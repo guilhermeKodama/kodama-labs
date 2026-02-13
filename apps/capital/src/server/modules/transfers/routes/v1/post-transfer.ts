@@ -12,7 +12,7 @@ import { routeConfig } from "../../constants";
 const CreateTransferSchema = z.object({
   fromEntityType: z.enum(["business", "personal"]),
   toEntityType: z.enum(["business", "personal"]),
-  direction: z.enum(["profit_distribution", "capital_injection", "reimbursement"]),
+  direction: z.enum(["profit_distribution", "capital_injection", "reimbursement", "investment_deposit", "investment_withdrawal"]),
   amount: z.number().positive(),
   currency: z.string().length(3),
   exchangeRate: z.number().positive().optional(),
@@ -22,13 +22,15 @@ const CreateTransferSchema = z.object({
   fromPersonalAccountId: z.string().optional(),
   toBusinessId: z.string().optional(),
   toPersonalAccountId: z.string().optional(),
+  toInvestmentAccountId: z.string().optional(),
+  fromInvestmentAccountId: z.string().optional(),
 });
 
 const TransferSchema = z.object({
   id: z.string(),
   fromEntityType: z.enum(["business", "personal"]),
   toEntityType: z.enum(["business", "personal"]),
-  direction: z.enum(["profit_distribution", "capital_injection", "reimbursement"]),
+  direction: z.enum(["profit_distribution", "capital_injection", "reimbursement", "investment_deposit", "investment_withdrawal"]),
   amount: z.number(),
   currency: z.string(),
   exchangeRate: z.number(),
@@ -38,6 +40,8 @@ const TransferSchema = z.object({
   fromPersonalAccountId: z.string().nullable(),
   toBusinessId: z.string().nullable(),
   toPersonalAccountId: z.string().nullable(),
+  toInvestmentAccountId: z.string().nullable(),
+  fromInvestmentAccountId: z.string().nullable(),
   createdAt: z.string(),
   updatedAt: z.string(),
 });
@@ -97,6 +101,8 @@ export const handler: AppRouteHandler<typeof route> = async (c) => {
         fromPersonalAccountId: transfer.fromPersonalAccountId,
         toBusinessId: transfer.toBusinessId,
         toPersonalAccountId: transfer.toPersonalAccountId,
+        toInvestmentAccountId: transfer.toInvestmentAccountId,
+        fromInvestmentAccountId: transfer.fromInvestmentAccountId,
         createdAt: transfer.createdAt.toISOString(),
         updatedAt: transfer.updatedAt.toISOString(),
       },

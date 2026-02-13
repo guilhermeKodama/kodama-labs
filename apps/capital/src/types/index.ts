@@ -10,7 +10,7 @@ export type EntityType = 'business' | 'personal';
 
 export type TransactionType = 'income' | 'expense' | 'investment';
 
-export type TransferDirection = 'profit_distribution' | 'capital_injection' | 'reimbursement';
+export type TransferDirection = 'profit_distribution' | 'capital_injection' | 'reimbursement' | 'investment_deposit' | 'investment_withdrawal';
 
 export type RecurrenceFrequency = 'daily' | 'weekly' | 'monthly' | 'yearly';
 
@@ -26,6 +26,8 @@ export const TRANSFER_DIRECTION_LABELS: Record<TransferDirection, string> = {
   profit_distribution: 'Profit Distribution',
   capital_injection: 'Capital Injection',
   reimbursement: 'Reimbursement',
+  investment_deposit: 'Investment Deposit',
+  investment_withdrawal: 'Investment Withdrawal',
 };
 
 // --------------------------------------------
@@ -159,6 +161,8 @@ export interface CreateTransferInput {
   exchangeRate?: number;
   description?: string;
   date: Date;
+  toInvestmentAccountId?: string;
+  fromInvestmentAccountId?: string;
 }
 
 // --------------------------------------------
@@ -719,6 +723,7 @@ export interface InvestmentAccount {
   entityId: string; // businessId or personalAccountId
   entityType: EntityType;
   currency: string;
+  cashBalance: number;
   isActive: boolean;
   createdAt: Date;
   updatedAt: Date;

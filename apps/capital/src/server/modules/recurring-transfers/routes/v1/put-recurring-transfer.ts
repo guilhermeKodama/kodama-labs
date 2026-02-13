@@ -9,7 +9,7 @@ import { updateRecurringTransfer } from "../../data/commands/update-recurring-tr
 import { routeConfig } from "../../constants";
 
 const UpdateRecurringTransferSchema = z.object({
-  direction: z.enum(["profit_distribution", "capital_injection", "reimbursement"]).optional(),
+  direction: z.enum(["profit_distribution", "capital_injection", "reimbursement", "investment_deposit", "investment_withdrawal"]).optional(),
   amount: z.number().positive().optional(),
   currency: z.string().length(3).optional(),
   exchangeRate: z.number().positive().optional(),
@@ -24,7 +24,7 @@ const RecurringTransferSchema = z.object({
   id: z.string(),
   fromEntityType: z.enum(["business", "personal"]),
   toEntityType: z.enum(["business", "personal"]),
-  direction: z.enum(["profit_distribution", "capital_injection", "reimbursement"]),
+  direction: z.enum(["profit_distribution", "capital_injection", "reimbursement", "investment_deposit", "investment_withdrawal"]),
   amount: z.number(),
   currency: z.string(),
   exchangeRate: z.number(),

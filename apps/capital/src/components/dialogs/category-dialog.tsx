@@ -91,12 +91,6 @@ export function CategoryDialog({
                 >
                   {tTx('types.expense')}
                 </SelectItem>
-                <SelectItem
-                  value="investment"
-                  className="text-blue-400 focus:bg-slate-800 focus:text-blue-400"
-                >
-                  {tTx('types.investment')}
-                </SelectItem>
               </SelectContent>
             </Select>
           </div>

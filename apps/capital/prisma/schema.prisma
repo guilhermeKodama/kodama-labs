@@ -27,6 +27,8 @@ enum TransferDirection {
   profit_distribution
   capital_injection
   reimbursement
+  investment_deposit
+  investment_withdrawal
 }
 
 enum RecurrenceFrequency {
@@ -211,6 +213,7 @@ model Transaction {
   personalAccount   PersonalAccount?      @relation(fields: [personalAccountId], references: [id], onDelete: Cascade)
   recurringTransaction RecurringTransaction? @relation(fields: [recurringTransactionId], references: [id], onDelete: SetNull)
   creditCardBills   CreditCardBill[]
+  linkedInvestmentTransaction InvestmentTransaction?
 
   @@index([businessId])
   @@index([personalAccountId])
@@ -250,10 +253,18 @@ model Transfer {
   toPersonalAccount     PersonalAccount? @relation("PersonalTransferTo", fields: [toPersonalAccountId], references: [id], onDelete: Cascade)
   recurringTransfer     RecurringTransfer? @relation("GeneratedFromRecurring", fields: [recurringTransferId], references: [id], onDelete: SetNull)
 
+  // Investment account references (for investment_deposit / investment_withdrawal)
+  toInvestmentAccountId   String?
+  toInvestmentAccount     InvestmentAccount? @relation("TransferToInvestment", fields: [toInvestmentAccountId], references: [id], onDelete: Cascade)
+  fromInvestmentAccountId String?
+  fromInvestmentAccount   InvestmentAccount? @relation("TransferFromInvestment", fields: [fromInvestmentAccountId], references: [id], onDelete: Cascade)
+
   @@index([fromBusinessId])
   @@index([fromPersonalAccountId])
   @@index([toBusinessId])
   @@index([toPersonalAccountId])
+  @@index([toInvestmentAccountId])
+  @@index([fromInvestmentAccountId])
   @@index([date])
   @@index([recurringTransferId])
   @@map("transfers")
@@ -530,6 +541,7 @@ model InvestmentAccount {
   broker          String?    // Broker identifier
   entityType      EntityType
   currency        String     @default("BRL")
+  cashBalance     Float      @default(0) // Available cash in the account (not invested)
   isActive        Boolean    @default(true)
   createdAt       DateTime   @default(now())
   updatedAt       DateTime   @updatedAt
@@ -541,6 +553,8 @@ model InvestmentAccount {
   personalAccountId String?
   personalAccount   PersonalAccount?    @relation(fields: [personalAccountId], references: [id], onDelete: Cascade)
   holdings          InvestmentHolding[]
+  transfersTo       Transfer[]          @relation("TransferToInvestment")
+  transfersFrom     Transfer[]          @relation("TransferFromInvestment")
 
   @@index([userId])
   @@index([entityType])
@@ -600,6 +614,8 @@ model InvestmentTransaction {
 
   // Relations
   holding InvestmentHolding @relation(fields: [holdingId], references: [id], onDelete: Cascade)
+  linkedTransactionId String?   @unique
+  linkedTransaction   Transaction? @relation(fields: [linkedTransactionId], references: [id], onDelete: SetNull)
 
   @@index([holdingId])
   @@index([type])

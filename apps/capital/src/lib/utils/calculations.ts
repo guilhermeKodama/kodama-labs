@@ -46,8 +46,9 @@ export function calculateEntitySummary(
     .filter((t) => t.fromEntityId === entityId)
     .reduce((sum, t) => sum + t.amount * t.exchangeRate, 0);
 
-  const balance = totalIncome - totalExpenses + incomingTransfers - outgoingTransfers;
-  const netWorth = balance + totalInvestments;
+  // Investment-type transactions represent cash leaving the checking account,
+  // so they reduce the balance (same as expenses).
+  const balance = totalIncome - totalExpenses - totalInvestments + incomingTransfers - outgoingTransfers;
 
   return {
     entityId,
@@ -57,7 +58,7 @@ export function calculateEntitySummary(
     totalExpenses,
     totalInvestments,
     balance,
-    netWorth,
+    netWorth: balance,
     currency: baseCurrency,
   };
 }
@@ -200,10 +201,10 @@ export function calculateBalanceOverTime(
 
     if (t.type === 'income') {
       existing.income += amount;
-    } else if (t.type === 'expense') {
+    } else if (t.type === 'expense' || t.type === 'investment') {
+      // Investment-type transactions are cash outflows (same as expenses)
       existing.expense += amount;
     }
-    // Investments don't affect liquid balance directly
 
     dailyChanges.set(dateKey, existing);
   });
