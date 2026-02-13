@@ -117,7 +117,7 @@ export function FundWithdrawDialog({
     } else {
       const currency = currencies.find((c) => c.code === selectedCurrency);
       if (currency && currency.manualRate > 0) {
-        form.setValue('exchangeRate', 1 / currency.manualRate);
+        form.setValue('exchangeRate', Math.round((1 / currency.manualRate) * 1000000) / 1000000);
       }
     }
   }, [selectedCurrency, currencies, settings.baseCurrency, form]);

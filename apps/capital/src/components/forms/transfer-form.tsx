@@ -226,7 +226,7 @@ export function TransferForm({
     form.setValue('currency', currencyCode);
     const currency = currencies.find((c) => c.code === currencyCode);
     if (currency && currency.manualRate > 0) {
-      form.setValue('exchangeRate', 1 / currency.manualRate);
+      form.setValue('exchangeRate', Math.round((1 / currency.manualRate) * 1000000) / 1000000);
     }
   };
 

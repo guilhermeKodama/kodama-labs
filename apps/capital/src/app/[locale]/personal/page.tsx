@@ -49,6 +49,7 @@ import {
   useTransferStore,
   useSettingsStore,
   useBusinessStore,
+  useInvestmentStore,
 } from '@/lib/store';
 import { calculateEntitySummary } from '@/lib/utils/calculations';
 import { cn } from '@/lib/utils';
@@ -137,6 +138,8 @@ export default function PersonalPage() {
   };
 
   // Build entity names map for display
+  const { accounts: investmentAccounts } = useInvestmentStore();
+
   const entityNames = useMemo(() => {
     const names: Record<string, string> = {};
     businesses.forEach((b) => {
@@ -145,8 +148,11 @@ export default function PersonalPage() {
     if (personalAccount) {
       names[personalAccount.id] = t('nav.personal');
     }
+    investmentAccounts.forEach((a) => {
+      names[a.id] = a.name;
+    });
     return names;
-  }, [businesses, personalAccount, t]);
+  }, [businesses, personalAccount, investmentAccounts, t]);
 
   const summary = useMemo(() => {
     if (!personalAccount) return null;

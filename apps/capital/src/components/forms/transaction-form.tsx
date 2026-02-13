@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useTranslations, useLocale } from 'next-intl';
@@ -87,10 +87,13 @@ export function TransactionForm({
   const selectedType = form.watch('type');
   const selectedCurrency = form.watch('currency');
 
+  // Track whether the currency was changed by the user (vs initial load)
+  const initialCurrencyRef = useRef(transaction?.currency || settings.baseCurrency);
+  const hasUserChangedCurrency = useRef(false);
+
   // Set default currency when currencies are loaded
   useEffect(() => {
     if (currencies.length > 0 && !selectedCurrency) {
-      // Try to use base currency, or fall back to first available
       const defaultCurrency = currencies.find(c => c.code === settings.baseCurrency) 
         || currencies[0];
       if (defaultCurrency) {
@@ -100,15 +103,20 @@ export function TransactionForm({
   }, [currencies, selectedCurrency, settings.baseCurrency, form]);
 
   // Auto-update exchange rate when currency changes
-  // manualRate = "1 baseCurrency = X foreignCurrency"
-  // exchangeRate = "1 foreignCurrency = X baseCurrency" (inverse, used as amount * exchangeRate)
+  // Only auto-fill when the user actively changes the currency, not on initial load when editing
   useEffect(() => {
+    // Skip auto-update on initial render if editing (keep the saved exchange rate)
+    if (!hasUserChangedCurrency.current && selectedCurrency === initialCurrencyRef.current) {
+      return;
+    }
+    hasUserChangedCurrency.current = true;
+
     if (selectedCurrency === settings.baseCurrency) {
       form.setValue('exchangeRate', 1);
     } else {
       const currency = currencies.find((c) => c.code === selectedCurrency);
       if (currency && currency.manualRate > 0) {
-        form.setValue('exchangeRate', 1 / currency.manualRate);
+        form.setValue('exchangeRate', Math.round((1 / currency.manualRate) * 1000000) / 1000000);
       }
     }
   }, [selectedCurrency, currencies, settings.baseCurrency, form]);
