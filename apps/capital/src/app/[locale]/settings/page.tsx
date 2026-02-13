@@ -302,7 +302,7 @@ export default function SettingsPage() {
                             </Label>
                             <Input
                               type="number"
-                              step="0.0001"
+                              step="0.000001"
                               value={currency.manualRate}
                               onChange={(e) =>
                                 updateCurrencyRate(
@@ -539,7 +539,7 @@ export default function SettingsPage() {
               </Label>
               <Input
                 type="number"
-                step="0.0001"
+                step="0.000001"
                 value={newCurrencyRate}
                 onChange={(e) => setNewCurrencyRate(e.target.value)}
                 className="border-slate-700 bg-slate-800 text-white"
