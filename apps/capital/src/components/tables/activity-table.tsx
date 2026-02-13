@@ -70,6 +70,7 @@ interface ActivityTableProps {
   entityNames?: Record<string, string>; // Map of entity IDs to names
   onEditTransaction?: (transaction: Transaction) => void;
   onDeleteTransaction?: (transaction: Transaction) => void;
+  onEditTransfer?: (transfer: Transfer) => void;
   onDeleteTransfer?: (transfer: Transfer) => void;
 }
 
@@ -106,6 +107,7 @@ export function ActivityTable({
   entityNames = {},
   onEditTransaction,
   onDeleteTransaction,
+  onEditTransfer,
   onDeleteTransfer,
 }: ActivityTableProps) {
   // _entityType reserved for potential future filtering by entity type
@@ -418,10 +420,10 @@ export function ActivityTable({
                       </div>
                     )}
                   </TableCell>
-                  {(onEditTransaction || onDeleteTransaction || onDeleteTransfer) && (
+                  {(onEditTransaction || onDeleteTransaction || onEditTransfer || onDeleteTransfer) && (
                     <TableCell>
                       {(isTransaction && (onEditTransaction || onDeleteTransaction)) ||
-                       (isTransfer && onDeleteTransfer) ? (
+                       (isTransfer && (onEditTransfer || onDeleteTransfer)) ? (
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
                             <Button
@@ -452,6 +454,15 @@ export function ActivityTable({
                               >
                                 <Trash2 className="mr-2 h-4 w-4" />
                                 {t('common.delete')}
+                              </DropdownMenuItem>
+                            )}
+                            {isTransfer && onEditTransfer && item.originalTransfer && (
+                              <DropdownMenuItem
+                                onClick={() => onEditTransfer(item.originalTransfer!)}
+                                className="text-slate-300 focus:bg-slate-800 focus:text-white"
+                              >
+                                <Pencil className="mr-2 h-4 w-4" />
+                                {t('common.edit')}
                               </DropdownMenuItem>
                             )}
                             {isTransfer && onDeleteTransfer && item.originalTransfer && (
