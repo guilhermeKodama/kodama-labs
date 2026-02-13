@@ -3,6 +3,17 @@
 import { useState, useMemo, useCallback } from 'react';
 import { useQueryState, parseAsStringLiteral } from 'nuqs';
 import { useTranslations } from 'next-intl';
+import { useLocale } from 'next-intl';
+import {
+  format,
+  startOfMonth,
+  endOfMonth,
+  subMonths,
+  isWithinInterval,
+  startOfDay,
+  endOfDay,
+} from 'date-fns';
+import { ptBR, enUS } from 'date-fns/locale';
 import {
   ArrowLeftRight,
   Plus,
@@ -10,6 +21,8 @@ import {
   TrendingDown,
   Building2,
   Repeat,
+  CalendarIcon,
+  X,
 } from 'lucide-react';
 import { AppShell } from '@/components/layout';
 import { Header } from '@/components/layout/header';
@@ -17,6 +30,12 @@ import { SummaryCard } from '@/components/cards';
 import { TransfersTable, RecurringTransfersTable } from '@/components/tables';
 import { TransferDialog, RecurringTransferDialog } from '@/components/dialogs';
 import { Button } from '@/components/ui/button';
+import { Calendar } from '@/components/ui/calendar';
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
@@ -35,16 +54,20 @@ import {
   useSettingsStore,
   useRecurringTransferStore,
 } from '@/lib/store';
+import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import type { Transfer, RecurringTransfer, CreateRecurringTransferInput } from '@/types';
 import type { CreateTransferFormData } from '@/lib/validations';
 import type { RecurringTransferFormData } from '@/components/forms/recurring-transfer-form';
+import type { DateRange } from 'react-day-picker';
 import { Link } from '@/i18n/navigation';
 
 const tabOptions = ['history', 'recurring'] as const;
 
 export default function TransfersPage() {
   const t = useTranslations();
+  const locale = useLocale();
+  const dateLocale = locale === 'pt-BR' ? ptBR : enUS;
   const { transfers, addTransfer, deleteTransfer, fetchTransfers } = useTransferStore();
   const { businesses } = useBusinessStore();
   const { settings } = useSettingsStore();
@@ -69,6 +92,41 @@ export default function TransfersPage() {
   const [editingRecurring, setEditingRecurring] = useState<RecurringTransfer | undefined>();
   const [deletingRecurring, setDeletingRecurring] = useState<RecurringTransfer | undefined>();
   const [markingPaidId, setMarkingPaidId] = useState<string | null>(null);
+  const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined);
+
+  // Filter transfers by date range
+  const filteredTransfers = useMemo(() => {
+    if (!dateRange?.from) return transfers;
+    
+    const start = startOfDay(dateRange.from);
+    const end = dateRange.to ? endOfDay(dateRange.to) : endOfDay(dateRange.from);
+    
+    return transfers.filter((t) => {
+      const date = new Date(t.date);
+      return isWithinInterval(date, { start, end });
+    });
+  }, [transfers, dateRange]);
+
+  // Quick filter presets
+  const setThisMonth = () => {
+    const now = new Date();
+    setDateRange({
+      from: startOfMonth(now),
+      to: endOfMonth(now),
+    });
+  };
+
+  const setLastMonth = () => {
+    const lastMonth = subMonths(new Date(), 1);
+    setDateRange({
+      from: startOfMonth(lastMonth),
+      to: endOfMonth(lastMonth),
+    });
+  };
+
+  const clearFilter = () => {
+    setDateRange(undefined);
+  };
 
   // Calculate transfer summaries
   const summaries = useMemo(() => {
@@ -305,13 +363,99 @@ export default function TransfersPage() {
         <TabsContent value="history">
           <Card className="border-slate-800 bg-slate-900/50 backdrop-blur-sm">
             <CardHeader>
-              <CardTitle className="text-lg text-white">
-                {t('transfers.history')}
-              </CardTitle>
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                <CardTitle className="text-lg text-white">
+                  {t('transfers.history')}
+                </CardTitle>
+                
+                {/* Date Filters */}
+                <div className="flex flex-wrap items-center gap-2">
+                  {/* Quick Presets */}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={setThisMonth}
+                    className={cn(
+                      'border-slate-700 text-slate-300 hover:bg-slate-800 hover:text-white',
+                      dateRange?.from &&
+                        format(dateRange.from, 'yyyy-MM') === format(new Date(), 'yyyy-MM') &&
+                        'bg-slate-800 text-white'
+                    )}
+                  >
+                    {t('transfers.filter.thisMonth')}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={setLastMonth}
+                    className={cn(
+                      'border-slate-700 text-slate-300 hover:bg-slate-800 hover:text-white',
+                      dateRange?.from &&
+                        format(dateRange.from, 'yyyy-MM') === format(subMonths(new Date(), 1), 'yyyy-MM') &&
+                        'bg-slate-800 text-white'
+                    )}
+                  >
+                    {t('transfers.filter.lastMonth')}
+                  </Button>
+
+                  {/* Custom Date Range Picker */}
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className={cn(
+                          'border-slate-700 text-slate-300 hover:bg-slate-800 hover:text-white min-w-[200px] justify-start text-left font-normal',
+                          dateRange?.from && 'bg-slate-800 text-white'
+                        )}
+                      >
+                        <CalendarIcon className="mr-2 h-4 w-4" />
+                        {dateRange?.from ? (
+                          dateRange.to ? (
+                            <>
+                              {format(dateRange.from, 'dd MMM', { locale: dateLocale })} -{' '}
+                              {format(dateRange.to, 'dd MMM yyyy', { locale: dateLocale })}
+                            </>
+                          ) : (
+                            format(dateRange.from, 'dd MMM yyyy', { locale: dateLocale })
+                          )
+                        ) : (
+                          t('transfers.filter.selectDates')
+                        )}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent
+                      className="w-auto p-0 border-slate-700 bg-slate-900"
+                      align="end"
+                    >
+                      <Calendar
+                        mode="range"
+                        selected={dateRange}
+                        onSelect={setDateRange}
+                        numberOfMonths={2}
+                        locale={dateLocale}
+                        className="bg-slate-900 text-white"
+                      />
+                    </PopoverContent>
+                  </Popover>
+
+                  {/* Clear Filter */}
+                  {dateRange?.from && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={clearFilter}
+                      className="text-slate-400 hover:text-white hover:bg-slate-800"
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                  )}
+                </div>
+              </div>
             </CardHeader>
             <CardContent>
               <TransfersTable
-                transfers={transfers}
+                transfers={filteredTransfers}
                 onDelete={setDeletingTransfer}
               />
             </CardContent>
