@@ -78,6 +78,21 @@ export function formatCompactNumber(
 }
 
 /**
+ * Format an exchange rate with up to 6 decimal places (financial industry standard).
+ * Trailing zeros are trimmed for cleaner display (e.g., 1.25 instead of 1.250000).
+ */
+export function formatRate(
+  rate: number,
+  locale: string = 'en-US',
+  maxDecimals: number = 6
+): string {
+  return new Intl.NumberFormat(locale, {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: maxDecimals,
+  }).format(rate);
+}
+
+/**
  * Get currency symbol
  */
 export function getCurrencySymbol(currency: string, locale: string = 'en-US'): string {

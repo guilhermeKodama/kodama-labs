@@ -376,7 +376,7 @@ export function TransferForm({
                   <Input
                     {...field}
                     type="number"
-                    step="0.0001"
+                    step="0.000001"
                     min="0"
                     onChange={(e) => field.onChange(parseFloat(e.target.value) || 1)}
                     className="border-slate-700 bg-slate-800 text-white"
