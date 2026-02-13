@@ -26,7 +26,7 @@ import {
 import { AppShell } from '@/components/layout';
 import { SummaryCard } from '@/components/cards';
 import { ActivityTable } from '@/components/tables';
-import { TransactionDialog } from '@/components/dialogs';
+import { TransactionDialog, TransferDialog } from '@/components/dialogs';
 import { Button } from '@/components/ui/button';
 import { Calendar } from '@/components/ui/calendar';
 import {
@@ -70,7 +70,7 @@ export default function BusinessDetailPage() {
   const { businesses, getBusiness } = useBusinessStore();
   const { transactions, addTransaction, updateTransaction, deleteTransaction } =
     useTransactionStore();
-  const { transfers, deleteTransfer } = useTransferStore();
+  const { transfers, addTransfer, deleteTransfer } = useTransferStore();
   const { settings, personalAccount } = useSettingsStore();
 
   const business = getBusiness(businessId);
@@ -78,6 +78,8 @@ export default function BusinessDetailPage() {
   const [editingTransaction, setEditingTransaction] = useState<Transaction | undefined>();
   const [deletingTransaction, setDeletingTransaction] = useState<Transaction | undefined>();
   const [deletingTransfer, setDeletingTransfer] = useState<Transfer | undefined>();
+  const [editingTransfer, setEditingTransfer] = useState<Transfer | undefined>();
+  const [isTransferDialogOpen, setIsTransferDialogOpen] = useState(false);
   const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined);
 
   // Get transactions for this business
@@ -220,14 +222,35 @@ export default function BusinessDetailPage() {
     }
   };
 
+  const handleEditTransfer = async (data: import('@/lib/validations').CreateTransferFormData) => {
+    if (editingTransfer) {
+      // Delete old transfer and create new one
+      await deleteTransfer(editingTransfer.id);
+      await addTransfer(data);
+      setEditingTransfer(undefined);
+      setIsTransferDialogOpen(false);
+      toast.success(t('transfers.toast.created'));
+    }
+  };
+
   const openEditDialog = (transaction: Transaction) => {
     setEditingTransaction(transaction);
     setIsDialogOpen(true);
   };
 
+  const openEditTransferDialog = (transfer: Transfer) => {
+    setEditingTransfer(transfer);
+    setIsTransferDialogOpen(true);
+  };
+
   const closeDialog = () => {
     setIsDialogOpen(false);
     setEditingTransaction(undefined);
+  };
+
+  const closeTransferDialog = () => {
+    setIsTransferDialogOpen(false);
+    setEditingTransfer(undefined);
   };
 
   return (
@@ -408,6 +431,7 @@ export default function BusinessDetailPage() {
             entityNames={entityNames}
             onEditTransaction={openEditDialog}
             onDeleteTransaction={setDeletingTransaction}
+            onEditTransfer={openEditTransferDialog}
             onDeleteTransfer={setDeletingTransfer}
           />
         </CardContent>
@@ -421,6 +445,14 @@ export default function BusinessDetailPage() {
         entityType="business"
         transaction={editingTransaction}
         onSubmit={editingTransaction ? handleUpdateTransaction : handleCreateTransaction}
+      />
+
+      {/* Transfer Edit Dialog */}
+      <TransferDialog
+        open={isTransferDialogOpen}
+        onOpenChange={closeTransferDialog}
+        transfer={editingTransfer}
+        onSubmit={handleEditTransfer}
       />
 
       {/* Delete Transaction Confirmation */}
