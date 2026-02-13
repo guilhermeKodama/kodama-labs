@@ -76,50 +76,56 @@ export const useTransferStore = create<TransferStore>()((set, get) => ({
   addTransfer: async (input: CreateTransferInput) => {
     set({ isLoading: true, error: null });
     try {
-      const res = await client.v1.transfers.$post({
-        json: {
-          fromEntityType: input.fromEntityType,
-          toEntityType: input.toEntityType,
-          direction: input.direction,
-          amount: input.amount,
-          currency: input.currency,
-          exchangeRate: input.exchangeRate,
-          description: input.description,
-          date: input.date instanceof Date ? input.date.toISOString() : input.date,
-          fromBusinessId: input.fromEntityType === 'business' ? input.fromEntityId : undefined,
-          fromPersonalAccountId: input.fromEntityType === 'personal' ? input.fromEntityId : undefined,
-          toBusinessId: input.toEntityType === 'business' ? input.toEntityId : undefined,
-          toPersonalAccountId: input.toEntityType === 'personal' ? input.toEntityId : undefined,
-        },
+      const isInvestmentDeposit = input.direction === 'investment_deposit';
+      const isInvestmentWithdrawal = input.direction === 'investment_withdrawal';
+
+      const body: Record<string, unknown> = {
+        fromEntityType: input.fromEntityType,
+        toEntityType: input.toEntityType,
+        direction: input.direction,
+        amount: input.amount,
+        currency: input.currency,
+        exchangeRate: input.exchangeRate,
+        description: input.description,
+        date: input.date instanceof Date ? input.date.toISOString() : input.date,
+      };
+
+      // Set entity IDs (skip when the side is an investment account)
+      if (!isInvestmentWithdrawal && input.fromEntityId) {
+        if (input.fromEntityType === 'business') body.fromBusinessId = input.fromEntityId;
+        if (input.fromEntityType === 'personal') body.fromPersonalAccountId = input.fromEntityId;
+      }
+      if (!isInvestmentDeposit && input.toEntityId) {
+        if (input.toEntityType === 'business') body.toBusinessId = input.toEntityId;
+        if (input.toEntityType === 'personal') body.toPersonalAccountId = input.toEntityId;
+      }
+
+      // Set investment account IDs
+      if (input.toInvestmentAccountId) body.toInvestmentAccountId = input.toInvestmentAccountId;
+      if (input.fromInvestmentAccountId) body.fromInvestmentAccountId = input.fromInvestmentAccountId;
+
+      // Use raw fetch to ensure all fields are sent (Hono typed client may strip new fields)
+      const baseUrl = typeof window !== 'undefined' ? window.location.origin : '';
+      const res = await fetch(`${baseUrl}/api/v1/transfers`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify(body),
       });
 
       if (!res.ok) {
-        throw new Error('Failed to create transfer');
+        const errorData = await res.json().catch(() => null);
+        throw new Error(
+          (errorData as { error?: { message?: string } })?.error?.message
+            || 'Failed to create transfer'
+        );
       }
 
-      const data = await res.json();
-      const newTransfer: Transfer = {
-        id: data.id,
-        fromEntityId: data.fromBusinessId ?? data.fromPersonalAccountId ?? '',
-        fromEntityType: data.fromEntityType,
-        toEntityId: data.toBusinessId ?? data.toPersonalAccountId ?? '',
-        toEntityType: data.toEntityType,
-        direction: data.direction,
-        amount: data.amount,
-        currency: data.currency,
-        exchangeRate: data.exchangeRate,
-        description: data.description ?? undefined,
-        date: parseLocalDate(data.date),
-        createdAt: new Date(data.createdAt),
-        updatedAt: new Date(data.updatedAt),
-      };
+      // Refresh all transfers from the server to stay in sync
+      await get().fetchTransfers();
 
-      set((state) => ({
-        transfers: [...state.transfers, newTransfer],
-        isLoading: false,
-      }));
-
-      return newTransfer;
+      const transfers = get().transfers;
+      return transfers[transfers.length - 1] || null;
     } catch (error) {
       set({
         error: error instanceof Error ? error.message : 'Unknown error',

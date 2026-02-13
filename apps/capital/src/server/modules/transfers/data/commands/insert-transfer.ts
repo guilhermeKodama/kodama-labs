@@ -14,6 +14,8 @@ interface CreateTransferData {
   fromPersonalAccountId?: string;
   toBusinessId?: string;
   toPersonalAccountId?: string;
+  toInvestmentAccountId?: string;
+  fromInvestmentAccountId?: string;
   recurringTransferId?: string;
 }
 
@@ -67,6 +69,27 @@ export async function insertTransfer(
     });
     if (!personalAccount) {
       throw new Error("Target personal account not found or access denied");
+    }
+  }
+
+  // Verify user owns the investment accounts if specified
+  if (data.toInvestmentAccountId) {
+    const account = await db.investmentAccount.findFirst({
+      where: { id: data.toInvestmentAccountId, userId },
+      select: { id: true },
+    });
+    if (!account) {
+      throw new Error("Target investment account not found or access denied");
+    }
+  }
+
+  if (data.fromInvestmentAccountId) {
+    const account = await db.investmentAccount.findFirst({
+      where: { id: data.fromInvestmentAccountId, userId },
+      select: { id: true },
+    });
+    if (!account) {
+      throw new Error("Source investment account not found or access denied");
     }
   }
 

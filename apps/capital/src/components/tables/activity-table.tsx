@@ -54,7 +54,7 @@ interface ActivityItem {
   category?: string;
   // For transfers
   transferDirection?: 'incoming' | 'outgoing';
-  transferType?: 'profit_distribution' | 'capital_injection' | 'reimbursement';
+  transferType?: 'profit_distribution' | 'capital_injection' | 'reimbursement' | 'investment_deposit' | 'investment_withdrawal';
   counterpartyName?: string;
   // Original data for actions
   originalTransaction?: Transaction;

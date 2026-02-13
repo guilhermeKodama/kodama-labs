@@ -5,7 +5,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useTranslations, useLocale } from 'next-intl';
 import { format } from 'date-fns';
-import { ArrowRight, Wallet } from 'lucide-react';
+import { Wallet } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
 /**
@@ -40,7 +40,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { createTransferSchema, type CreateTransferFormData } from '@/lib/validations';
-import { useSettingsStore, useBusinessStore, useTransactionStore, useTransferStore } from '@/lib/store';
+import { useSettingsStore, useBusinessStore, useTransactionStore, useTransferStore, useInvestmentStore } from '@/lib/store';
 import { calculateEntitySummary } from '@/lib/utils/calculations';
 import { formatCurrency } from '@/lib/utils/format';
 import type { Transfer, TransferDirection } from '@/types';
@@ -65,6 +65,7 @@ export function TransferForm({
   const { businesses } = useBusinessStore();
   const { transactions } = useTransactionStore();
   const { transfers } = useTransferStore();
+  const { accounts: investmentAccounts } = useInvestmentStore();
 
   const form = useForm<CreateTransferFormData>({
     resolver: zodResolver(createTransferSchema),
@@ -86,28 +87,70 @@ export function TransferForm({
   const selectedCurrency = form.watch('currency');
   const selectedFromEntityId = form.watch('fromEntityId');
 
+  const selectedToInvestmentAccountId = form.watch('toInvestmentAccountId');
+  const selectedFromInvestmentAccountId = form.watch('fromInvestmentAccountId');
+
+  // For deposits, filter investment accounts by the source entity.
+  // For withdrawals, show all accounts (user picks account first).
+  const filteredInvestmentAccounts = useMemo(() => {
+    const active = investmentAccounts.filter((a) => a.isActive);
+    if (selectedDirection === 'investment_deposit' && selectedFromEntityId) {
+      const matched = active.filter((a) => a.entityId === selectedFromEntityId);
+      // If entity has its own accounts, show only those; otherwise show all
+      return matched.length > 0 ? matched : active;
+    }
+    return active;
+  }, [investmentAccounts, selectedDirection, selectedFromEntityId]);
+
   // Calculate the balance of the source entity
   const sourceEntityBalance = useMemo(() => {
-    if (selectedDirection === 'reimbursement' || selectedDirection === 'profit_distribution') {
-      // Source is a business
-      const business = businesses.find((b) => b.id === selectedFromEntityId);
-      if (!business) return null;
-      
-      const summary = calculateEntitySummary(
-        business.id,
-        'business',
-        business.name,
-        transactions,
-        transfers,
-        settings.baseCurrency
-      );
+    if (selectedDirection === 'investment_withdrawal') {
+      // Source is an investment account
+      const account = investmentAccounts.find((a) => a.id === selectedFromInvestmentAccountId);
+      if (!account) return null;
       return {
-        name: business.name,
-        balance: summary.balance,
-        currency: settings.baseCurrency,
+        name: account.name,
+        balance: account.cashBalance,
+        currency: account.currency,
       };
+    }
+    if (selectedDirection === 'investment_deposit' || selectedDirection === 'reimbursement' || selectedDirection === 'profit_distribution') {
+      // Source is a business (or personal for investment_deposit)
+      const business = businesses.find((b) => b.id === selectedFromEntityId);
+      if (business) {
+        const summary = calculateEntitySummary(
+          business.id,
+          'business',
+          business.name,
+          transactions,
+          transfers,
+          settings.baseCurrency
+        );
+        return {
+          name: business.name,
+          balance: summary.balance,
+          currency: settings.baseCurrency,
+        };
+      }
+      // Check if source is personal
+      if (personalAccount && selectedFromEntityId === personalAccount.id) {
+        const summary = calculateEntitySummary(
+          personalAccount.id,
+          'personal',
+          t('form.personalAccount'),
+          transactions,
+          transfers,
+          settings.baseCurrency
+        );
+        return {
+          name: t('form.personalAccount'),
+          balance: summary.balance,
+          currency: settings.baseCurrency,
+        };
+      }
+      return null;
     } else {
-      // Source is personal account
+      // Capital injection: source is personal account
       if (!personalAccount) return null;
       
       const summary = calculateEntitySummary(
@@ -124,32 +167,66 @@ export function TransferForm({
         currency: settings.baseCurrency,
       };
     }
-  }, [selectedDirection, selectedFromEntityId, businesses, personalAccount, transactions, transfers, settings.baseCurrency, t]);
+  }, [selectedDirection, selectedFromEntityId, selectedFromInvestmentAccountId, businesses, personalAccount, investmentAccounts, transactions, transfers, settings.baseCurrency, t]);
 
   // Update from/to entities when direction changes
   const handleDirectionChange = (direction: TransferDirection) => {
     form.setValue('direction', direction);
+    form.setValue('toInvestmentAccountId', undefined);
+    form.setValue('fromInvestmentAccountId', undefined);
+
     if (direction === 'profit_distribution' || direction === 'reimbursement') {
       // Profit distribution & reimbursement: business → personal
       form.setValue('fromEntityType', 'business');
       form.setValue('toEntityType', 'personal');
       form.setValue('toEntityId', personalAccount?.id || '');
       form.setValue('fromEntityId', businesses[0]?.id || '');
-    } else {
+    } else if (direction === 'capital_injection') {
       // Capital injection: personal → business
       form.setValue('fromEntityType', 'personal');
       form.setValue('toEntityType', 'business');
       form.setValue('fromEntityId', personalAccount?.id || '');
       form.setValue('toEntityId', businesses[0]?.id || '');
+    } else if (direction === 'investment_deposit') {
+      // Investment deposit: entity → investment account
+      const activeAccounts = investmentAccounts.filter((a) => a.isActive);
+      form.setValue('fromEntityType', businesses[0] ? 'business' : 'personal');
+      form.setValue('toEntityType', 'business');
+      form.setValue('fromEntityId', businesses[0]?.id || personalAccount?.id || '');
+      form.setValue('toEntityId', '');
+      form.setValue('toInvestmentAccountId', activeAccounts[0]?.id || '');
+    } else if (direction === 'investment_withdrawal') {
+      // Investment withdrawal: investment account → entity
+      const activeAccounts = investmentAccounts.filter((a) => a.isActive);
+      form.setValue('fromEntityType', 'business');
+      form.setValue('toEntityType', businesses[0] ? 'business' : 'personal');
+      form.setValue('fromEntityId', '');
+      form.setValue('toEntityId', businesses[0]?.id || personalAccount?.id || '');
+      form.setValue('fromInvestmentAccountId', activeAccounts[0]?.id || '');
     }
   };
 
+  // Auto-select first matching investment account when source entity changes
+  useEffect(() => {
+    if (selectedDirection === 'investment_deposit' && selectedFromEntityId) {
+      const active = investmentAccounts.filter((a) => a.isActive);
+      const matched = active.filter((a) => a.entityId === selectedFromEntityId);
+      const list = matched.length > 0 ? matched : active;
+      const current = form.getValues('toInvestmentAccountId');
+      if (!current || !list.find((a) => a.id === current)) {
+        form.setValue('toInvestmentAccountId', list[0]?.id || '');
+      }
+    }
+  }, [selectedFromEntityId, selectedDirection, investmentAccounts, form]);
+
   // Get exchange rate from currencies when currency changes
+  // manualRate = "1 baseCurrency = X foreignCurrency"
+  // exchangeRate = "1 foreignCurrency = X baseCurrency" (inverse)
   const handleCurrencyChange = (currencyCode: string) => {
     form.setValue('currency', currencyCode);
     const currency = currencies.find((c) => c.code === currencyCode);
-    if (currency) {
-      form.setValue('exchangeRate', currency.manualRate);
+    if (currency && currency.manualRate > 0) {
+      form.setValue('exchangeRate', 1 / currency.manualRate);
     }
   };
 
@@ -204,6 +281,22 @@ export function TransferForm({
                   >
                     {t('directions.reimbursement')}
                   </SelectItem>
+                  {investmentAccounts.length > 0 && (
+                    <>
+                      <SelectItem
+                        value="investment_deposit"
+                        className="text-cyan-400 focus:bg-slate-800 focus:text-cyan-400"
+                      >
+                        {t('directions.investmentDeposit')}
+                      </SelectItem>
+                      <SelectItem
+                        value="investment_withdrawal"
+                        className="text-amber-400 focus:bg-slate-800 focus:text-amber-400"
+                      >
+                        {t('directions.investmentWithdrawal')}
+                      </SelectItem>
+                    </>
+                  )}
                 </SelectContent>
               </Select>
               <FormMessage />
@@ -211,102 +304,196 @@ export function TransferForm({
           )}
         />
 
-        {/* From/To visualization */}
-        <div className="rounded-lg border border-slate-700 bg-slate-800/50 p-4">
-          <div className="flex items-center justify-between gap-4">
-            {/* From Entity */}
-            <div className="flex-1">
-              <p className="mb-2 text-xs text-slate-400">{t('form.from')}</p>
-              {selectedDirection === 'profit_distribution' || selectedDirection === 'reimbursement' ? (
-                <FormField
-                  control={form.control}
-                  name="fromEntityId"
-                  render={({ field }) => (
-                    <FormItem>
-                      <Select onValueChange={field.onChange} value={field.value}>
-                        <FormControl>
-                          <SelectTrigger className="border-slate-700 bg-slate-800 text-white">
-                            <SelectValue placeholder={t('form.selectBusiness')} />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent className="border-slate-700 bg-slate-900">
-                          {businesses.map((business) => (
-                            <SelectItem
-                              key={business.id}
-                              value={business.id}
-                              className="text-slate-300 focus:bg-slate-800 focus:text-white"
-                            >
-                              {business.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              ) : (
-                <div className="rounded-md border border-slate-600 bg-slate-700/50 px-3 py-2 text-white">
-                  {t('form.personalAccount')}
-                </div>
-              )}
+        {/* From */}
+        {selectedDirection === 'investment_withdrawal' ? (
+          <FormField
+            control={form.control}
+            name="fromInvestmentAccountId"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel className="text-slate-300">{t('form.from')}</FormLabel>
+                <Select onValueChange={field.onChange} value={field.value || ''}>
+                  <FormControl>
+                    <SelectTrigger className="border-slate-700 bg-slate-800 text-white">
+                      <SelectValue placeholder={t('form.selectInvestmentAccount')} />
+                    </SelectTrigger>
+                  </FormControl>
+                  <SelectContent className="border-slate-700 bg-slate-900">
+                    {investmentAccounts.filter((a) => a.isActive).map((account) => (
+                      <SelectItem
+                        key={account.id}
+                        value={account.id}
+                        className="text-slate-300 focus:bg-slate-800 focus:text-white"
+                      >
+                        {account.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+        ) : selectedDirection === 'profit_distribution' || selectedDirection === 'reimbursement' || selectedDirection === 'investment_deposit' ? (
+          <FormField
+            control={form.control}
+            name="fromEntityId"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel className="text-slate-300">{t('form.from')}</FormLabel>
+                <Select
+                  onValueChange={(val) => {
+                    field.onChange(val);
+                    if (personalAccount && val === personalAccount.id) {
+                      form.setValue('fromEntityType', 'personal');
+                    } else {
+                      form.setValue('fromEntityType', 'business');
+                    }
+                  }}
+                  value={field.value}
+                >
+                  <FormControl>
+                    <SelectTrigger className="border-slate-700 bg-slate-800 text-white">
+                      <SelectValue placeholder={t('form.selectAccount')} />
+                    </SelectTrigger>
+                  </FormControl>
+                  <SelectContent className="border-slate-700 bg-slate-900">
+                    {businesses.map((business) => (
+                      <SelectItem
+                        key={business.id}
+                        value={business.id}
+                        className="text-slate-300 focus:bg-slate-800 focus:text-white"
+                      >
+                        {business.name}
+                      </SelectItem>
+                    ))}
+                    {personalAccount && selectedDirection === 'investment_deposit' && (
+                      <SelectItem
+                        value={personalAccount.id}
+                        className="text-slate-300 focus:bg-slate-800 focus:text-white"
+                      >
+                        {t('form.personalAccount')}
+                      </SelectItem>
+                    )}
+                  </SelectContent>
+                </Select>
+                <FormMessage />
+                {/* Available Balance */}
+                {sourceEntityBalance && (
+                  <div className="mt-1.5 flex items-center gap-2 text-xs">
+                    <Wallet className="h-3.5 w-3.5 text-slate-400" />
+                    <span className="text-slate-400">{t('form.availableBalance')}:</span>
+                    <span className={sourceEntityBalance.balance >= 0 ? 'font-semibold text-emerald-400' : 'font-semibold text-red-400'}>
+                      {formatCurrency(sourceEntityBalance.balance, sourceEntityBalance.currency)}
+                    </span>
+                  </div>
+                )}
+              </FormItem>
+            )}
+          />
+        ) : (
+          <div>
+            <p className="mb-2 text-sm font-medium text-slate-300">{t('form.from')}</p>
+            <div className="rounded-md border border-slate-600 bg-slate-700/50 px-3 py-2 text-white">
+              {t('form.personalAccount')}
             </div>
+            {sourceEntityBalance && (
+              <div className="mt-1.5 flex items-center gap-2 text-xs">
+                <Wallet className="h-3.5 w-3.5 text-slate-400" />
+                <span className="text-slate-400">{t('form.availableBalance')}:</span>
+                <span className={sourceEntityBalance.balance >= 0 ? 'font-semibold text-emerald-400' : 'font-semibold text-red-400'}>
+                  {formatCurrency(sourceEntityBalance.balance, sourceEntityBalance.currency)}
+                </span>
+              </div>
+            )}
+          </div>
+        )}
 
-            {/* Arrow */}
-            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-slate-700">
-              <ArrowRight className="h-5 w-5 text-slate-400" />
-            </div>
-
-            {/* To Entity */}
-            <div className="flex-1">
-              <p className="mb-2 text-xs text-slate-400">{t('form.to')}</p>
-              {selectedDirection === 'capital_injection' ? (
-                <FormField
-                  control={form.control}
-                  name="toEntityId"
-                  render={({ field }) => (
-                    <FormItem>
-                      <Select onValueChange={field.onChange} value={field.value}>
-                        <FormControl>
-                          <SelectTrigger className="border-slate-700 bg-slate-800 text-white">
-                            <SelectValue placeholder={t('form.selectBusiness')} />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent className="border-slate-700 bg-slate-900">
-                          {businesses.map((business) => (
-                            <SelectItem
-                              key={business.id}
-                              value={business.id}
-                              className="text-slate-300 focus:bg-slate-800 focus:text-white"
-                            >
-                              {business.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              ) : (
-                <div className="rounded-md border border-slate-600 bg-slate-700/50 px-3 py-2 text-white">
-                  {t('form.personalAccount')}
-                </div>
-              )}
+        {/* To */}
+        {selectedDirection === 'investment_deposit' ? (
+          <FormField
+            control={form.control}
+            name="toInvestmentAccountId"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel className="text-slate-300">{t('form.to')}</FormLabel>
+                <Select onValueChange={field.onChange} value={field.value || ''}>
+                  <FormControl>
+                    <SelectTrigger className="border-slate-700 bg-slate-800 text-white">
+                      <SelectValue placeholder={t('form.selectInvestmentAccount')} />
+                    </SelectTrigger>
+                  </FormControl>
+                  <SelectContent className="border-slate-700 bg-slate-900">
+                    {filteredInvestmentAccounts.map((account) => (
+                      <SelectItem
+                        key={account.id}
+                        value={account.id}
+                        className="text-slate-300 focus:bg-slate-800 focus:text-white"
+                      >
+                        {account.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+        ) : selectedDirection === 'capital_injection' || selectedDirection === 'investment_withdrawal' ? (
+          <FormField
+            control={form.control}
+            name="toEntityId"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel className="text-slate-300">{t('form.to')}</FormLabel>
+                <Select
+                  onValueChange={(val) => {
+                    field.onChange(val);
+                    if (personalAccount && val === personalAccount.id) {
+                      form.setValue('toEntityType', 'personal');
+                    } else {
+                      form.setValue('toEntityType', 'business');
+                    }
+                  }}
+                  value={field.value}
+                >
+                  <FormControl>
+                    <SelectTrigger className="border-slate-700 bg-slate-800 text-white">
+                      <SelectValue placeholder={t('form.selectAccount')} />
+                    </SelectTrigger>
+                  </FormControl>
+                  <SelectContent className="border-slate-700 bg-slate-900">
+                    {businesses.map((business) => (
+                      <SelectItem
+                        key={business.id}
+                        value={business.id}
+                        className="text-slate-300 focus:bg-slate-800 focus:text-white"
+                      >
+                        {business.name}
+                      </SelectItem>
+                    ))}
+                    {personalAccount && (
+                      <SelectItem
+                        value={personalAccount.id}
+                        className="text-slate-300 focus:bg-slate-800 focus:text-white"
+                      >
+                        {t('form.personalAccount')}
+                      </SelectItem>
+                    )}
+                  </SelectContent>
+                </Select>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+        ) : (
+          <div>
+            <p className="mb-2 text-sm font-medium text-slate-300">{t('form.to')}</p>
+            <div className="rounded-md border border-slate-600 bg-slate-700/50 px-3 py-2 text-white">
+              {t('form.personalAccount')}
             </div>
           </div>
-
-          {/* Available Balance */}
-          {sourceEntityBalance && (
-            <div className="mt-4 flex items-center gap-2 rounded-md border border-slate-600 bg-slate-700/30 px-3 py-2">
-              <Wallet className="h-4 w-4 text-slate-400" />
-              <span className="text-sm text-slate-400">{t('form.availableBalance')}:</span>
-              <span className={`text-sm font-semibold ${sourceEntityBalance.balance >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                {formatCurrency(sourceEntityBalance.balance, sourceEntityBalance.currency)}
-              </span>
-            </div>
-          )}
-        </div>
+        )}
 
         {/* Amount and Currency */}
         <div className="grid grid-cols-2 gap-4">
@@ -370,7 +557,7 @@ export function TransferForm({
             render={({ field }) => (
               <FormItem>
                 <FormLabel className="text-slate-300">
-                  {t('form.exchangeRate')} (1 {settings.baseCurrency} = ? {selectedCurrency})
+                  {t('form.exchangeRate')} (1 {selectedCurrency} = ? {settings.baseCurrency})
                 </FormLabel>
                 <FormControl>
                   <Input

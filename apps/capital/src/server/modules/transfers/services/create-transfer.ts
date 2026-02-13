@@ -15,6 +15,8 @@ interface CreateTransferInput {
   fromPersonalAccountId?: string;
   toBusinessId?: string;
   toPersonalAccountId?: string;
+  toInvestmentAccountId?: string;
+  fromInvestmentAccountId?: string;
 }
 
 export async function createTransfer(
@@ -22,24 +24,51 @@ export async function createTransfer(
   input: CreateTransferInput,
   db: DbClient
 ) {
-  // Validate entity IDs match entity types
-  if (input.fromEntityType === "business" && !input.fromBusinessId) {
-    throw new Error("fromBusinessId is required for business entity type");
-  }
-  if (input.fromEntityType === "personal" && !input.fromPersonalAccountId) {
-    throw new Error(
-      "fromPersonalAccountId is required for personal entity type"
-    );
-  }
-  if (input.toEntityType === "business" && !input.toBusinessId) {
-    throw new Error("toBusinessId is required for business entity type");
-  }
-  if (input.toEntityType === "personal" && !input.toPersonalAccountId) {
-    throw new Error("toPersonalAccountId is required for personal entity type");
+  // Validate entity IDs match entity types (for non-investment directions)
+  if (input.direction !== "investment_deposit" && input.direction !== "investment_withdrawal") {
+    if (input.fromEntityType === "business" && !input.fromBusinessId) {
+      throw new Error("fromBusinessId is required for business entity type");
+    }
+    if (input.fromEntityType === "personal" && !input.fromPersonalAccountId) {
+      throw new Error("fromPersonalAccountId is required for personal entity type");
+    }
+    if (input.toEntityType === "business" && !input.toBusinessId) {
+      throw new Error("toBusinessId is required for business entity type");
+    }
+    if (input.toEntityType === "personal" && !input.toPersonalAccountId) {
+      throw new Error("toPersonalAccountId is required for personal entity type");
+    }
   }
 
-  // Data layer will verify ownership
-  return insertTransfer(
+  // Validate investment transfer requirements
+  if (input.direction === "investment_deposit") {
+    if (!input.toInvestmentAccountId) {
+      throw new Error("toInvestmentAccountId is required for investment_deposit");
+    }
+    // Source must be a business or personal account
+    if (input.fromEntityType === "business" && !input.fromBusinessId) {
+      throw new Error("fromBusinessId is required for business entity type");
+    }
+    if (input.fromEntityType === "personal" && !input.fromPersonalAccountId) {
+      throw new Error("fromPersonalAccountId is required for personal entity type");
+    }
+  }
+
+  if (input.direction === "investment_withdrawal") {
+    if (!input.fromInvestmentAccountId) {
+      throw new Error("fromInvestmentAccountId is required for investment_withdrawal");
+    }
+    // Target must be a business or personal account
+    if (input.toEntityType === "business" && !input.toBusinessId) {
+      throw new Error("toBusinessId is required for business entity type");
+    }
+    if (input.toEntityType === "personal" && !input.toPersonalAccountId) {
+      throw new Error("toPersonalAccountId is required for personal entity type");
+    }
+  }
+
+  // Create the transfer
+  const transfer = await insertTransfer(
     userId,
     {
       ...input,
@@ -47,4 +76,21 @@ export async function createTransfer(
     },
     db
   );
+
+  // Update investment account cash balance if applicable
+  if (input.direction === "investment_deposit" && input.toInvestmentAccountId) {
+    await db.investmentAccount.update({
+      where: { id: input.toInvestmentAccountId },
+      data: { cashBalance: { increment: input.amount } },
+    });
+  }
+
+  if (input.direction === "investment_withdrawal" && input.fromInvestmentAccountId) {
+    await db.investmentAccount.update({
+      where: { id: input.fromInvestmentAccountId },
+      data: { cashBalance: { decrement: input.amount } },
+    });
+  }
+
+  return transfer;
 }

@@ -44,7 +44,6 @@ import type { Transaction, TransactionType, EntityType } from '@/types';
 import {
   DEFAULT_INCOME_CATEGORIES,
   DEFAULT_EXPENSE_CATEGORIES,
-  DEFAULT_INVESTMENT_CATEGORIES,
 } from '@/types';
 
 interface TransactionFormProps {
@@ -101,13 +100,15 @@ export function TransactionForm({
   }, [currencies, selectedCurrency, settings.baseCurrency, form]);
 
   // Auto-update exchange rate when currency changes
+  // manualRate = "1 baseCurrency = X foreignCurrency"
+  // exchangeRate = "1 foreignCurrency = X baseCurrency" (inverse, used as amount * exchangeRate)
   useEffect(() => {
     if (selectedCurrency === settings.baseCurrency) {
       form.setValue('exchangeRate', 1);
     } else {
       const currency = currencies.find((c) => c.code === selectedCurrency);
-      if (currency) {
-        form.setValue('exchangeRate', currency.manualRate);
+      if (currency && currency.manualRate > 0) {
+        form.setValue('exchangeRate', 1 / currency.manualRate);
       }
     }
   }, [selectedCurrency, currencies, settings.baseCurrency, form]);
@@ -127,9 +128,8 @@ export function TransactionForm({
       case 'income':
         return DEFAULT_INCOME_CATEGORIES;
       case 'expense':
+      default:
         return DEFAULT_EXPENSE_CATEGORIES;
-      case 'investment':
-        return DEFAULT_INVESTMENT_CATEGORIES;
     }
   };
 
@@ -169,12 +169,6 @@ export function TransactionForm({
                     className="text-red-400 focus:bg-slate-800 focus:text-red-400"
                   >
                     {t('types.expense')}
-                  </SelectItem>
-                  <SelectItem
-                    value="investment"
-                    className="text-blue-400 focus:bg-slate-800 focus:text-blue-400"
-                  >
-                    {t('types.investment')}
                   </SelectItem>
                 </SelectContent>
               </Select>
@@ -271,7 +265,7 @@ export function TransactionForm({
             render={({ field }) => (
               <FormItem>
                 <FormLabel className="text-slate-300">
-                  {t('form.exchangeRate')} (1 {settings.baseCurrency} = ? {selectedCurrency})
+                  {t('form.exchangeRate')} (1 {selectedCurrency} = ? {settings.baseCurrency})
                 </FormLabel>
                 <FormControl>
                   <Input

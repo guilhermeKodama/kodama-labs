@@ -4,12 +4,14 @@ export const transferDirectionSchema = z.enum([
   'profit_distribution',
   'capital_injection',
   'reimbursement',
+  'investment_deposit',
+  'investment_withdrawal',
 ]);
 
 export const createTransferSchema = z.object({
-  fromEntityId: z.string().min(1, 'Source entity is required'),
+  fromEntityId: z.string().optional().default(''),
   fromEntityType: z.enum(['business', 'personal']),
-  toEntityId: z.string().min(1, 'Destination entity is required'),
+  toEntityId: z.string().optional().default(''),
   toEntityType: z.enum(['business', 'personal']),
   direction: transferDirectionSchema,
   amount: z
@@ -23,6 +25,8 @@ export const createTransferSchema = z.object({
     .max(500, 'Description must be less than 500 characters')
     .optional(),
   date: z.coerce.date(),
+  toInvestmentAccountId: z.string().optional(),
+  fromInvestmentAccountId: z.string().optional(),
 });
 
 export type CreateTransferFormData = z.infer<typeof createTransferSchema>;

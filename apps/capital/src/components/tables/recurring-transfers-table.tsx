@@ -59,6 +59,14 @@ const directionConfig: Record<
     label: 'reimbursement',
     className: 'bg-purple-500/10 text-purple-400 border-purple-700',
   },
+  investment_deposit: {
+    label: 'investmentDeposit',
+    className: 'bg-cyan-500/10 text-cyan-400 border-cyan-700',
+  },
+  investment_withdrawal: {
+    label: 'investmentWithdrawal',
+    className: 'bg-amber-500/10 text-amber-400 border-amber-700',
+  },
 };
 
 const frequencyLabels: Record<RecurrenceFrequency, string> = {

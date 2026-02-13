@@ -22,6 +22,8 @@ import {
   Trash2,
   CalendarIcon,
   X,
+  ArrowDownToLine,
+  ArrowUpFromLine,
 } from 'lucide-react';
 import { AppShell } from '@/components/layout';
 import { Header } from '@/components/layout/header';
@@ -31,6 +33,7 @@ import { InvestmentTransactionsTable } from '@/components/tables/investment-tran
 import { InvestmentAccountDialog } from '@/components/dialogs/investment-account-dialog';
 import { InvestmentHoldingDialog } from '@/components/dialogs/investment-holding-dialog';
 import { InvestmentTransactionDialog } from '@/components/dialogs/investment-transaction-dialog';
+import { FundWithdrawDialog } from '@/components/dialogs/fund-withdraw-dialog';
 import { Button } from '@/components/ui/button';
 import { Calendar } from '@/components/ui/calendar';
 import {
@@ -55,6 +58,7 @@ import {
   useInvestmentStore,
   useSettingsStore,
   useBusinessStore,
+  useTransferStore,
 } from '@/lib/store';
 import { formatCurrency } from '@/lib/utils/format';
 import { convertToBaseCurrency } from '@/lib/utils/currency';
@@ -96,6 +100,7 @@ export default function InvestmentsPage() {
     addTransaction,
     deleteTransaction,
   } = useInvestmentStore();
+  const { addTransfer } = useTransferStore();
 
   // Dialog states
   const [isAccountDialogOpen, setIsAccountDialogOpen] = useState(false);
@@ -105,6 +110,8 @@ export default function InvestmentsPage() {
   const [editingHolding, setEditingHolding] = useState<InvestmentHolding | undefined>();
   const [editingTransaction, setEditingTransaction] = useState<InvestmentTransaction | undefined>();
   const [deletingItem, setDeletingItem] = useState<{ type: 'account' | 'holding' | 'transaction'; id: string } | null>(null);
+  const [fundWithdrawAccount, setFundWithdrawAccount] = useState<InvestmentAccount | null>(null);
+  const [fundWithdrawMode, setFundWithdrawMode] = useState<'fund' | 'withdraw'>('fund');
 
   // Active tab
   const [activeTab, setActiveTab] = useState('portfolio');
@@ -303,6 +310,50 @@ export default function InvestmentsPage() {
     }
     setDeletingItem(null);
     fetchPortfolioSummary();
+  };
+
+  const handleFundWithdraw = async (
+    accountId: string,
+    data: { amount: number; currency: string; exchangeRate?: number; description?: string; date: Date }
+  ) => {
+    const account = accounts.find((a) => a.id === accountId);
+    if (!account) return false;
+
+    const isFund = fundWithdrawMode === 'fund';
+
+    const result = await addTransfer({
+      direction: isFund ? 'investment_deposit' : 'investment_withdrawal',
+      amount: data.amount,
+      currency: data.currency,
+      exchangeRate: data.exchangeRate,
+      description: data.description,
+      date: data.date,
+      // Entity side
+      fromEntityId: isFund ? account.entityId : '',
+      fromEntityType: isFund ? account.entityType : account.entityType,
+      toEntityId: isFund ? '' : account.entityId,
+      toEntityType: isFund ? account.entityType : account.entityType,
+      // Investment account side
+      toInvestmentAccountId: isFund ? accountId : undefined,
+      fromInvestmentAccountId: isFund ? undefined : accountId,
+    });
+
+    if (result) {
+      toast.success(
+        isFund
+          ? t('investments.fund.toast.success')
+          : t('investments.withdraw.toast.success')
+      );
+      fetchAccounts();
+      fetchPortfolioSummary();
+    } else {
+      toast.error(
+        isFund
+          ? t('investments.fund.toast.error')
+          : t('investments.withdraw.toast.error')
+      );
+    }
+    return !!result;
   };
 
   // ---- Action buttons for header ----
@@ -561,6 +612,40 @@ export default function InvestmentsPage() {
                               {accountHoldings.length} holdings
                             </p>
                           </div>
+                          {/* Cash Balance */}
+                          <div className="mt-2 flex items-center gap-1.5 rounded-md border border-slate-700 bg-slate-700/30 px-2.5 py-1.5">
+                            <span className="text-xs text-slate-400">{t('investments.accounts.cashBalance')}:</span>
+                            <span className="text-xs font-semibold text-emerald-400">
+                              {formatCurrency(account.cashBalance, account.currency)}
+                            </span>
+                          </div>
+                          {/* Fund / Withdraw buttons */}
+                          <div className="mt-3 flex gap-2">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="flex-1 border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/10 hover:text-emerald-300"
+                              onClick={() => {
+                                setFundWithdrawAccount(account);
+                                setFundWithdrawMode('fund');
+                              }}
+                            >
+                              <ArrowDownToLine className="mr-1.5 h-3.5 w-3.5" />
+                              {t('investments.fund.button')}
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="flex-1 border-amber-500/30 text-amber-400 hover:bg-amber-500/10 hover:text-amber-300"
+                              onClick={() => {
+                                setFundWithdrawAccount(account);
+                                setFundWithdrawMode('withdraw');
+                              }}
+                            >
+                              <ArrowUpFromLine className="mr-1.5 h-3.5 w-3.5" />
+                              {t('investments.withdraw.button')}
+                            </Button>
+                          </div>
                           <div className="mt-2">
                             <Badge
                               variant="outline"
@@ -746,6 +831,16 @@ export default function InvestmentsPage() {
         }}
         transaction={editingTransaction}
         onSubmit={handleCreateTransaction}
+      />
+
+      <FundWithdrawDialog
+        open={!!fundWithdrawAccount}
+        onOpenChange={(open) => {
+          if (!open) setFundWithdrawAccount(null);
+        }}
+        account={fundWithdrawAccount}
+        mode={fundWithdrawMode}
+        onSubmit={handleFundWithdraw}
       />
 
       {/* Delete Confirmation */}

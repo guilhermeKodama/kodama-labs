@@ -20,7 +20,6 @@ import {
   Building2,
   TrendingUp,
   TrendingDown,
-  PiggyBank,
   CalendarIcon,
   X,
 } from 'lucide-react';
@@ -276,7 +275,7 @@ export default function BusinessDetailPage() {
 
       {/* Summary Cards */}
       {summary && (
-        <div className="mb-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="mb-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           <SummaryCard
             title={t('transactions.summary.balance')}
             value={summary.balance}
@@ -297,13 +296,6 @@ export default function BusinessDetailPage() {
             currency={settings.baseCurrency}
             icon={TrendingDown}
             variant="expense"
-          />
-          <SummaryCard
-            title={t('transactions.summary.investments')}
-            value={summary.totalInvestments}
-            currency={settings.baseCurrency}
-            icon={PiggyBank}
-            variant="investment"
           />
         </div>
       )}
