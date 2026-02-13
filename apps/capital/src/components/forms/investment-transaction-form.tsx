@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useMemo } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useTranslations, useLocale } from 'next-intl';
@@ -43,8 +43,19 @@ function formatDateForInput(date: Date): string {
   return format(date, 'yyyy-MM-dd');
 }
 
-const TRANSACTION_TYPES: InvestmentTransactionType[] = [
-  'buy', 'sell', 'dividend', 'yield_payment', 'split', 'deposit', 'withdrawal',
+// Transaction types for ticker-based assets (stocks, ETF, BDR, FII, crypto)
+const TICKER_TRANSACTION_TYPES: InvestmentTransactionType[] = [
+  'buy', 'sell', 'dividend', 'split',
+];
+
+// Transaction types for deposit-based assets (fixed income, savings)
+const DEPOSIT_TRANSACTION_TYPES: InvestmentTransactionType[] = [
+  'deposit', 'withdrawal', 'yield_payment',
+];
+
+// All types combined (when no holding is selected yet)
+const ALL_TRANSACTION_TYPES: InvestmentTransactionType[] = [
+  ...TICKER_TRANSACTION_TYPES, ...DEPOSIT_TRANSACTION_TYPES,
 ];
 
 interface InvestmentTransactionFormProps {
@@ -85,25 +96,44 @@ export function InvestmentTransactionForm({
   const quantity = form.watch('quantity');
   const pricePerUnit = form.watch('pricePerUnit');
 
-  // Determine if the selected holding requires price per unit
+  // Look up the selected holding
   const selectedHolding = holdings.find((h) => h.id === selectedHoldingId);
-  const showPriceFields = selectedHolding
-    ? PRICE_PER_UNIT_ASSET_CLASSES.includes(selectedHolding.assetClass)
-    : false;
 
-  // Show quantity field for buy/sell/split types
-  const showQuantity = ['buy', 'sell', 'split', 'deposit', 'withdrawal'].includes(selectedType);
+  // Is this a ticker-based asset? (stocks, etf, crypto, etc.)
+  const isTickerAsset = selectedHolding
+    ? PRICE_PER_UNIT_ASSET_CLASSES.includes(selectedHolding.assetClass)
+    : true; // default to ticker when no holding selected
+
+  // Available transaction types based on asset class
+  const availableTransactionTypes = useMemo(() => {
+    if (!selectedHolding) return ALL_TRANSACTION_TYPES;
+    return isTickerAsset ? TICKER_TRANSACTION_TYPES : DEPOSIT_TRANSACTION_TYPES;
+  }, [selectedHolding, isTickerAsset]);
+
+  // Auto-switch transaction type when holding changes to a different asset class
+  useEffect(() => {
+    if (selectedHolding) {
+      const currentType = form.getValues('type');
+      if (!availableTransactionTypes.includes(currentType)) {
+        form.setValue('type', availableTransactionTypes[0]);
+      }
+    }
+  }, [selectedHoldingId, selectedHolding, availableTransactionTypes, form]);
+
+  // For ticker assets: show quantity + price per unit fields
+  const showQuantityAndPrice = isTickerAsset && ['buy', 'sell', 'split'].includes(selectedType);
 
   // Auto-calculate totalAmount from quantity * pricePerUnit
   useEffect(() => {
-    if (showPriceFields && quantity && pricePerUnit && quantity > 0 && pricePerUnit > 0) {
+    if (showQuantityAndPrice && quantity && pricePerUnit && quantity > 0 && pricePerUnit > 0) {
       form.setValue('totalAmount', quantity * pricePerUnit);
     }
-  }, [quantity, pricePerUnit, showPriceFields, form]);
+  }, [quantity, pricePerUnit, showQuantityAndPrice, form]);
 
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+        {/* Holding selector */}
         <FormField
           control={form.control}
           name="holdingId"
@@ -133,20 +163,24 @@ export function InvestmentTransactionForm({
           )}
         />
 
+        {/* Transaction type — filtered by asset class */}
         <FormField
           control={form.control}
           name="type"
           render={({ field }) => (
             <FormItem>
               <FormLabel className="text-slate-300">{t('transactions.form.type')}</FormLabel>
-              <Select onValueChange={field.onChange} defaultValue={field.value}>
+              <Select
+                onValueChange={field.onChange}
+                value={availableTransactionTypes.includes(field.value) ? field.value : availableTransactionTypes[0]}
+              >
                 <FormControl>
                   <SelectTrigger className="border-slate-700 bg-slate-800 text-white">
                     <SelectValue placeholder={t('transactions.form.typePlaceholder')} />
                   </SelectTrigger>
                 </FormControl>
                 <SelectContent className="border-slate-700 bg-slate-900">
-                  {TRANSACTION_TYPES.map((type) => (
+                  {availableTransactionTypes.map((type) => (
                     <SelectItem
                       key={type}
                       value={type}
@@ -162,8 +196,9 @@ export function InvestmentTransactionForm({
           )}
         />
 
-        {showQuantity && (
-          <div className={showPriceFields ? 'grid grid-cols-2 gap-4' : ''}>
+        {/* Quantity + Price per Unit — only for ticker-based buy/sell/split */}
+        {showQuantityAndPrice && (
+          <div className="grid grid-cols-2 gap-4">
             <FormField
               control={form.control}
               name="quantity"
@@ -186,29 +221,28 @@ export function InvestmentTransactionForm({
               )}
             />
 
-            {showPriceFields && (
-              <FormField
-                control={form.control}
-                name="pricePerUnit"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel className="text-slate-300">{t('transactions.form.pricePerUnit')}</FormLabel>
-                    <FormControl>
-                      <CurrencyInput
-                        value={field.value ?? 0}
-                        onChange={field.onChange}
-                        locale={locale}
-                        className="border-slate-700 bg-slate-800 text-white"
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            )}
+            <FormField
+              control={form.control}
+              name="pricePerUnit"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel className="text-slate-300">{t('transactions.form.pricePerUnit')}</FormLabel>
+                  <FormControl>
+                    <CurrencyInput
+                      value={field.value ?? 0}
+                      onChange={field.onChange}
+                      locale={locale}
+                      className="border-slate-700 bg-slate-800 text-white"
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
           </div>
         )}
 
+        {/* Total Amount + Fees — always shown */}
         <div className="grid grid-cols-2 gap-4">
           <FormField
             control={form.control}
@@ -249,6 +283,7 @@ export function InvestmentTransactionForm({
           />
         </div>
 
+        {/* Date */}
         <FormField
           control={form.control}
           name="date"
@@ -268,6 +303,7 @@ export function InvestmentTransactionForm({
           )}
         />
 
+        {/* Notes */}
         <FormField
           control={form.control}
           name="notes"
