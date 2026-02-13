@@ -59,6 +59,8 @@ export const useTransferStore = create<TransferStore>()((set, get) => ({
           exchangeRate: t.exchangeRate,
           description: t.description ?? undefined,
           date: parseLocalDate(t.date),
+          toInvestmentAccountId: (t as Record<string, unknown>).toInvestmentAccountId as string | undefined,
+          fromInvestmentAccountId: (t as Record<string, unknown>).fromInvestmentAccountId as string | undefined,
           createdAt: new Date(t.createdAt),
           updatedAt: new Date(t.updatedAt),
         })),

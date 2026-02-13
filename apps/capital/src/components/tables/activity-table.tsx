@@ -38,6 +38,7 @@ import {
 } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
 import { formatCurrency, formatDate } from '@/lib/utils/format';
+import { useSettingsStore } from '@/lib/store';
 import type { Transaction, TransactionType, Transfer, EntityType } from '@/types';
 
 // Unified activity item type
@@ -110,6 +111,7 @@ export function ActivityTable({
   // _entityType reserved for potential future filtering by entity type
   void _entityType;
   const t = useTranslations();
+  const { settings } = useSettingsStore();
   const [sortField, setSortField] = useState<SortField>('date');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
   const [filterType, setFilterType] = useState<FilterType>('all');
@@ -141,9 +143,17 @@ export function ActivityTable({
       
       if (!isIncoming && !isOutgoing) return;
 
-      const counterpartyId = isIncoming ? tr.fromEntityId : tr.toEntityId;
-      const counterpartyName = entityNames[counterpartyId] || 
-        (isIncoming ? t('transfers.form.from') : t('transfers.form.to'));
+      // For investment transfers, resolve the counterparty from the investment account
+      let counterpartyName: string;
+      if (tr.direction === 'investment_deposit' && tr.toInvestmentAccountId) {
+        counterpartyName = entityNames[tr.toInvestmentAccountId] || tr.description || '';
+      } else if (tr.direction === 'investment_withdrawal' && tr.fromInvestmentAccountId) {
+        counterpartyName = entityNames[tr.fromInvestmentAccountId] || tr.description || '';
+      } else {
+        const counterpartyId = isIncoming ? tr.fromEntityId : tr.toEntityId;
+        counterpartyName = entityNames[counterpartyId] || 
+          (isIncoming ? t('transfers.form.from') : t('transfers.form.to'));
+      }
 
       items.push({
         id: `tr-${tr.id}`,
@@ -376,22 +386,37 @@ export function ActivityTable({
                             ? 'border-emerald-700/50 text-emerald-400/70'
                             : item.transferType === 'reimbursement'
                               ? 'border-purple-700/50 text-purple-400/70'
-                              : 'border-blue-700/50 text-blue-400/70'
+                              : item.transferType === 'investment_deposit'
+                                ? 'border-cyan-700/50 text-cyan-400/70'
+                                : item.transferType === 'investment_withdrawal'
+                                  ? 'border-amber-700/50 text-amber-400/70'
+                                  : 'border-blue-700/50 text-blue-400/70'
                         }
                       >
                         {item.transferType === 'profit_distribution'
                           ? t('transfers.directions.profitDistribution')
                           : item.transferType === 'reimbursement'
                             ? t('transfers.directions.reimbursement')
-                            : t('transfers.directions.capitalInjection')}
+                            : item.transferType === 'investment_deposit'
+                              ? t('transfers.directions.investmentDeposit')
+                              : item.transferType === 'investment_withdrawal'
+                                ? t('transfers.directions.investmentWithdrawal')
+                                : t('transfers.directions.capitalInjection')}
                       </Badge>
                     ) : (
                       <span className="text-slate-500">-</span>
                     )}
                   </TableCell>
-                  <TableCell className={cn('text-right font-medium', amountColor)}>
-                    {amountPrefix}
-                    {formatCurrency(item.amount, item.currency)}
+                  <TableCell className={cn('text-right', amountColor)}>
+                    <span className="font-medium">
+                      {amountPrefix}
+                      {formatCurrency(item.amount, item.currency)}
+                    </span>
+                    {item.currency !== settings.baseCurrency && item.exchangeRate !== 1 && (
+                      <div className="text-xs text-slate-500">
+                        ≈ {formatCurrency(item.amount * item.exchangeRate, settings.baseCurrency)}
+                      </div>
+                    )}
                   </TableCell>
                   {(onEditTransaction || onDeleteTransaction || onDeleteTransfer) && (
                     <TableCell>

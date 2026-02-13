@@ -20,7 +20,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { useBusinessStore, useSettingsStore } from '@/lib/store';
+import { useBusinessStore, useSettingsStore, useInvestmentStore } from '@/lib/store';
 import { formatCurrency } from '@/lib/utils/format';
 import type { Transfer } from '@/types';
 
@@ -34,13 +34,21 @@ export function TransfersTable({ transfers, onDelete }: TransfersTableProps) {
   const tCommon = useTranslations('common');
   const { businesses } = useBusinessStore();
   const { settings } = useSettingsStore();
+  const { accounts: investmentAccounts } = useInvestmentStore();
 
   const getEntityName = (entityId: string, entityType: 'business' | 'personal') => {
+    if (!entityId) return t('table.unknownEntity');
     if (entityType === 'personal') {
       return t('form.personalAccount');
     }
     const business = businesses.find((b) => b.id === entityId);
     return business?.name || t('table.unknownEntity');
+  };
+
+  const getInvestmentAccountName = (accountId?: string) => {
+    if (!accountId) return null;
+    const account = investmentAccounts.find((a) => a.id === accountId);
+    return account?.name || null;
   };
 
   const sortedTransfers = useMemo(() => {
@@ -110,11 +118,15 @@ export function TransfersTable({ transfers, onDelete }: TransfersTableProps) {
               <TableCell>
                 <div className="flex items-center gap-2 text-sm">
                   <span className="text-slate-300">
-                    {getEntityName(transfer.fromEntityId, transfer.fromEntityType)}
+                    {transfer.direction === 'investment_withdrawal'
+                      ? getInvestmentAccountName(transfer.fromInvestmentAccountId) || t('table.unknownEntity')
+                      : getEntityName(transfer.fromEntityId, transfer.fromEntityType)}
                   </span>
-                  <ArrowRight className="h-3 w-3 text-slate-500" />
+                  <ArrowRight className="h-3 w-3 flex-shrink-0 text-slate-500" />
                   <span className="text-slate-300">
-                    {getEntityName(transfer.toEntityId, transfer.toEntityType)}
+                    {transfer.direction === 'investment_deposit'
+                      ? getInvestmentAccountName(transfer.toInvestmentAccountId) || t('table.unknownEntity')
+                      : getEntityName(transfer.toEntityId, transfer.toEntityType)}
                   </span>
                 </div>
               </TableCell>

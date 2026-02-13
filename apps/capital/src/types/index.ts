@@ -146,6 +146,8 @@ export interface Transfer {
   exchangeRate: number;
   description?: string;
   date: Date;
+  toInvestmentAccountId?: string;
+  fromInvestmentAccountId?: string;
   createdAt: Date;
   updatedAt: Date;
 }
