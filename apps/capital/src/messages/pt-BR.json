@@ -286,6 +286,11 @@
       "description": "Você precisa criar uma empresa antes de fazer transferências.",
       "createBusiness": "Criar Empresa"
     },
+    "filter": {
+      "thisMonth": "Este Mês",
+      "lastMonth": "Mês Passado",
+      "selectDates": "Selecionar datas"
+    },
     "features": {
       "profitDistribution": "Distribuição de lucro (Empresa → Pessoal)",
       "capitalInjection": "Aporte de capital (Pessoal → Empresa)",
@@ -394,6 +399,11 @@
     "accountsCount": "{count} contas",
     "filters": {
       "all": "Todos"
+    },
+    "filter": {
+      "thisMonth": "Este Mês",
+      "lastMonth": "Mês Passado",
+      "selectDates": "Selecionar datas"
     },
     "tabs": {
       "portfolio": "Carteira",

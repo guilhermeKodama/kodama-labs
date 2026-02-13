@@ -2,6 +2,17 @@
 
 import { useState, useMemo, useEffect, useCallback } from 'react';
 import { useTranslations } from 'next-intl';
+import { useLocale } from 'next-intl';
+import {
+  format,
+  startOfMonth,
+  endOfMonth,
+  subMonths,
+  isWithinInterval,
+  startOfDay,
+  endOfDay,
+} from 'date-fns';
+import { ptBR, enUS } from 'date-fns/locale';
 import {
   PiggyBank,
   Plus,
@@ -9,6 +20,8 @@ import {
   Landmark,
   Briefcase,
   Trash2,
+  CalendarIcon,
+  X,
 } from 'lucide-react';
 import { AppShell } from '@/components/layout';
 import { Header } from '@/components/layout/header';
@@ -19,6 +32,12 @@ import { InvestmentAccountDialog } from '@/components/dialogs/investment-account
 import { InvestmentHoldingDialog } from '@/components/dialogs/investment-holding-dialog';
 import { InvestmentTransactionDialog } from '@/components/dialogs/investment-transaction-dialog';
 import { Button } from '@/components/ui/button';
+import { Calendar } from '@/components/ui/calendar';
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
@@ -39,6 +58,7 @@ import {
 } from '@/lib/store';
 import { formatCurrency } from '@/lib/utils/format';
 import { convertToBaseCurrency } from '@/lib/utils/currency';
+import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import type {
   InvestmentAccount,
@@ -51,9 +71,12 @@ import type {
   CreateInvestmentHoldingFormData,
   CreateInvestmentTransactionFormData,
 } from '@/lib/validations';
+import type { DateRange } from 'react-day-picker';
 
 export default function InvestmentsPage() {
   const t = useTranslations();
+  const locale = useLocale();
+  const dateLocale = locale === 'pt-BR' ? ptBR : enUS;
   const { settings, currencies } = useSettingsStore();
   const { businesses } = useBusinessStore();
   const {
@@ -85,6 +108,41 @@ export default function InvestmentsPage() {
 
   // Active tab
   const [activeTab, setActiveTab] = useState('portfolio');
+  const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined);
+
+  // Filter investment transactions by date range
+  const filteredTransactions = useMemo(() => {
+    if (!dateRange?.from) return transactions;
+    
+    const start = startOfDay(dateRange.from);
+    const end = dateRange.to ? endOfDay(dateRange.to) : endOfDay(dateRange.from);
+    
+    return transactions.filter((t) => {
+      const date = new Date(t.date);
+      return isWithinInterval(date, { start, end });
+    });
+  }, [transactions, dateRange]);
+
+  // Quick filter presets
+  const setThisMonth = () => {
+    const now = new Date();
+    setDateRange({
+      from: startOfMonth(now),
+      to: endOfMonth(now),
+    });
+  };
+
+  const setLastMonth = () => {
+    const lastMonth = subMonths(new Date(), 1);
+    setDateRange({
+      from: startOfMonth(lastMonth),
+      to: endOfMonth(lastMonth),
+    });
+  };
+
+  const clearFilter = () => {
+    setDateRange(undefined);
+  };
 
   // Fetch data on mount
   useEffect(() => {
@@ -530,18 +588,104 @@ export default function InvestmentsPage() {
         {/* Transactions Tab */}
         <TabsContent value="transactions">
           <Card className="border-slate-800 bg-slate-900/50 backdrop-blur-sm">
-            <CardHeader className="flex flex-row items-center justify-between">
-              <CardTitle className="text-lg text-white">
-                {t('investments.transactions.title')}
-              </CardTitle>
-              <Button
-                onClick={() => setIsTransactionDialogOpen(true)}
-                size="sm"
-                className="bg-gradient-to-r from-blue-500 to-indigo-500 text-white hover:from-blue-600 hover:to-indigo-600"
-              >
-                <Plus className="mr-2 h-4 w-4" />
-                {t('investments.transactions.addTransaction')}
-              </Button>
+            <CardHeader>
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                <CardTitle className="text-lg text-white">
+                  {t('investments.transactions.title')}
+                </CardTitle>
+                <Button
+                  onClick={() => setIsTransactionDialogOpen(true)}
+                  size="sm"
+                  className="bg-gradient-to-r from-blue-500 to-indigo-500 text-white hover:from-blue-600 hover:to-indigo-600"
+                >
+                  <Plus className="mr-2 h-4 w-4" />
+                  {t('investments.transactions.addTransaction')}
+                </Button>
+              </div>
+
+              {/* Date Filters */}
+              <div className="flex flex-wrap items-center gap-2 pt-2">
+                {/* Quick Presets */}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={setThisMonth}
+                  className={cn(
+                    'border-slate-700 text-slate-300 hover:bg-slate-800 hover:text-white',
+                    dateRange?.from &&
+                      format(dateRange.from, 'yyyy-MM') === format(new Date(), 'yyyy-MM') &&
+                      'bg-slate-800 text-white'
+                  )}
+                >
+                  {t('investments.filter.thisMonth')}
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={setLastMonth}
+                  className={cn(
+                    'border-slate-700 text-slate-300 hover:bg-slate-800 hover:text-white',
+                    dateRange?.from &&
+                      format(dateRange.from, 'yyyy-MM') === format(subMonths(new Date(), 1), 'yyyy-MM') &&
+                      'bg-slate-800 text-white'
+                  )}
+                >
+                  {t('investments.filter.lastMonth')}
+                </Button>
+
+                {/* Custom Date Range Picker */}
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className={cn(
+                        'border-slate-700 text-slate-300 hover:bg-slate-800 hover:text-white min-w-[200px] justify-start text-left font-normal',
+                        dateRange?.from && 'bg-slate-800 text-white'
+                      )}
+                    >
+                      <CalendarIcon className="mr-2 h-4 w-4" />
+                      {dateRange?.from ? (
+                        dateRange.to ? (
+                          <>
+                            {format(dateRange.from, 'dd MMM', { locale: dateLocale })} -{' '}
+                            {format(dateRange.to, 'dd MMM yyyy', { locale: dateLocale })}
+                          </>
+                        ) : (
+                          format(dateRange.from, 'dd MMM yyyy', { locale: dateLocale })
+                        )
+                      ) : (
+                        t('investments.filter.selectDates')
+                      )}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent
+                    className="w-auto p-0 border-slate-700 bg-slate-900"
+                    align="end"
+                  >
+                    <Calendar
+                      mode="range"
+                      selected={dateRange}
+                      onSelect={setDateRange}
+                      numberOfMonths={2}
+                      locale={dateLocale}
+                      className="bg-slate-900 text-white"
+                    />
+                  </PopoverContent>
+                </Popover>
+
+                {/* Clear Filter */}
+                {dateRange?.from && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={clearFilter}
+                    className="text-slate-400 hover:text-white hover:bg-slate-800"
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
+                )}
+              </div>
             </CardHeader>
             <CardContent>
               {transactions.length === 0 ? (
@@ -558,7 +702,7 @@ export default function InvestmentsPage() {
                 </div>
               ) : (
                 <InvestmentTransactionsTable
-                  transactions={transactions}
+                  transactions={filteredTransactions}
                   onEdit={(tx) => {
                     setEditingTransaction(tx);
                     setIsTransactionDialogOpen(true);

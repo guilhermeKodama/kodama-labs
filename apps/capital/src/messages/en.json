@@ -286,6 +286,11 @@
       "description": "You need to create a business before making transfers.",
       "createBusiness": "Create Business"
     },
+    "filter": {
+      "thisMonth": "This Month",
+      "lastMonth": "Last Month",
+      "selectDates": "Select dates"
+    },
     "features": {
       "profitDistribution": "Profit distribution (Business → Personal)",
       "capitalInjection": "Capital injection (Personal → Business)",
@@ -394,6 +399,11 @@
     "accountsCount": "{count} accounts",
     "filters": {
       "all": "All"
+    },
+    "filter": {
+      "thisMonth": "This Month",
+      "lastMonth": "Last Month",
+      "selectDates": "Select dates"
     },
     "tabs": {
       "portfolio": "Portfolio",
