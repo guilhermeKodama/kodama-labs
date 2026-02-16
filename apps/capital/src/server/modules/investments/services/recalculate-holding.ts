@@ -42,12 +42,21 @@ export async function recalculateHolding(
       }
       case "sell":
       case "withdrawal": {
-        currentQuantity -= qty;
-        // Reduce total cost proportionally
-        if (currentQuantity > 0 && (currentQuantity + qty) > 0) {
-          totalCost = totalCost * (currentQuantity / (currentQuantity + qty));
+        if (qty > 0) {
+          // Quantity-based asset (stocks, BDRs, ETFs)
+          const prevQuantity = currentQuantity;
+          currentQuantity -= qty;
+          if (currentQuantity > 0 && prevQuantity > 0) {
+            totalCost = totalCost * (currentQuantity / prevQuantity);
+          } else {
+            totalCost = 0;
+          }
         } else {
-          totalCost = 0;
+          // Amount-based asset (fixed income / renda fixa): no quantity,
+          // the position IS the monetary amount. Reduce both totalInvested
+          // and totalCost by the withdrawal amount.
+          totalInvested -= amount;
+          totalCost = Math.max(0, totalCost - amount);
         }
         break;
       }
