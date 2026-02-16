@@ -441,12 +441,11 @@ export const useInvestmentStore = create<InvestmentStore>()((set, get) => ({
         updatedAt: new Date(data.updatedAt),
       };
 
-      set((state) => ({
-        transactions: [...state.transactions, newTx],
-        isLoading: false,
-      }));
+      set({ isLoading: false });
 
-      // Refresh holdings and accounts to get updated values
+      // Refresh all related data to get updated values (holdings, accounts,
+      // and transactions with full holding info for display)
+      get().fetchTransactions();
       get().fetchHoldings();
       get().fetchAccounts();
 
@@ -470,27 +469,11 @@ export const useInvestmentStore = create<InvestmentStore>()((set, get) => ({
 
       if (!res.ok) throw new Error('Failed to update investment transaction');
 
-      const data = await res.json();
-      set((state) => ({
-        transactions: state.transactions.map((t) =>
-          t.id === id
-            ? {
-                ...t,
-                type: data.type as InvestmentTransactionType,
-                quantity: data.quantity ?? undefined,
-                pricePerUnit: data.pricePerUnit ?? undefined,
-                totalAmount: data.totalAmount,
-                fees: data.fees,
-                date: parseLocalDate(data.date),
-                notes: data.notes ?? undefined,
-                updatedAt: new Date(data.updatedAt),
-              }
-            : t
-        ),
-        isLoading: false,
-      }));
+      await res.json();
+      set({ isLoading: false });
 
-      // Refresh holdings and accounts to get updated values
+      // Refresh all related data to get updated values
+      get().fetchTransactions();
       get().fetchHoldings();
       get().fetchAccounts();
     } catch (error) {
@@ -507,12 +490,10 @@ export const useInvestmentStore = create<InvestmentStore>()((set, get) => ({
 
       if (!res.ok) throw new Error('Failed to delete investment transaction');
 
-      set((state) => ({
-        transactions: state.transactions.filter((t) => t.id !== id),
-        isLoading: false,
-      }));
+      set({ isLoading: false });
 
-      // Refresh holdings and accounts to get updated values
+      // Refresh all related data to get updated values
+      get().fetchTransactions();
       get().fetchHoldings();
       get().fetchAccounts();
     } catch (error) {
