@@ -2,7 +2,7 @@ import type { DbClient } from "@capital/server/lib/prisma";
 import { insertBill } from "../data/commands/insert-bill";
 import { insertBillTransactions } from "../data/commands/insert-bill-transactions";
 
-interface ParsedTransaction {
+export interface ParsedTransaction {
   date: string;
   description: string;
   amount: number;
@@ -225,6 +225,31 @@ function parseInstallmentInfo(description: string): {
 }
 
 /**
+ * Compute the start of the current billing cycle (day after previous month's closing).
+ * Credits/refunds dated before this are adjustments to a previous bill and should not
+ * be counted in the current bill's total.
+ */
+function computeCycleStart(closingDate: Date): Date {
+  const closingDay = closingDate.getUTCDate();
+  const closingMonth = closingDate.getUTCMonth();
+  const closingYear = closingDate.getUTCFullYear();
+
+  let prevMonth = closingMonth - 1;
+  let prevYear = closingYear;
+  if (prevMonth < 0) {
+    prevMonth = 11;
+    prevYear--;
+  }
+
+  // Handle months with fewer days (e.g. closing day 31 but Feb only has 28)
+  const lastDayOfPrevMonth = new Date(Date.UTC(prevYear, prevMonth + 1, 0)).getUTCDate();
+  const prevClosingDay = Math.min(closingDay, lastDayOfPrevMonth);
+
+  // Cycle starts the day after the previous closing
+  return new Date(Date.UTC(prevYear, prevMonth, prevClosingDay + 1, 12, 0, 0));
+}
+
+/**
  * Parse date string from various formats.
  * Uses noon UTC to prevent timezone shifts (e.g. midnight UTC = previous day in UTC-3).
  */
@@ -266,6 +291,52 @@ function parseDate(dateStr: string): Date {
 }
 
 /**
+ * Calculate the bill total from parsed transactions and the bill's closing date.
+ *
+ * Positive amounts (charges) are always included. Negative amounts (credits/refunds)
+ * are only included if they fall within the current billing cycle. Previous-cycle
+ * credits (e.g., estornos of charges billed in the prior month) reduce the overall
+ * balance but are NOT part of the current bill's "total da fatura".
+ *
+ * The cycle boundary is determined by the "Pagamento recebido" date when available
+ * (the payment closes out the previous bill), falling back to an estimate based on
+ * the closing date.
+ */
+export function calculateBillTotal(
+  parsedTransactions: ParsedTransaction[],
+  closingDate: Date
+): number {
+  const chargeTransactions = parsedTransactions.filter((t) => !t.isPayment);
+  const paymentTransactions = parsedTransactions.filter((t) => t.isPayment);
+
+  let creditCutoff: Date;
+  if (paymentTransactions.length > 0) {
+    try {
+      const paymentDates = paymentTransactions.map((t) => parseDate(t.date));
+      creditCutoff = new Date(Math.max(...paymentDates.map((d) => d.getTime())));
+    } catch {
+      creditCutoff = computeCycleStart(closingDate);
+    }
+  } else {
+    creditCutoff = computeCycleStart(closingDate);
+  }
+
+  return chargeTransactions.reduce((sum, t) => {
+    // Always include charges (positive amounts)
+    if (t.amount >= 0) return sum + t.amount;
+
+    // For credits/refunds (negative), only include if on or after the credit cutoff
+    try {
+      const txDate = parseDate(t.date);
+      return txDate >= creditCutoff ? sum + t.amount : sum;
+    } catch {
+      // If date can't be parsed, include the amount to be safe
+      return sum + t.amount;
+    }
+  }, 0);
+}
+
+/**
  * Process a CSV credit card bill: parse CSV, save bill + transactions, create installments.
  * AI categorization is handled asynchronously via cron job.
  *
@@ -285,9 +356,9 @@ export async function processBillCsv(
     throw new Error("No valid transactions found in CSV");
   }
 
-  // 2. Separate charges from payments
+  // 2. Calculate bill total and filter charge transactions
   const chargeTransactions = parsedTransactions.filter((t) => !t.isPayment);
-  const totalAmount = chargeTransactions.reduce((sum, t) => sum + t.amount, 0);
+  const totalAmount = calculateBillTotal(parsedTransactions, input.closingDate);
 
   // 3. Check for existing bill with same card + closing date (replace semantics)
   const existingBill = await db.creditCardBill.findFirst({
