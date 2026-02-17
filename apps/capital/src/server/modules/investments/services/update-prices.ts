@@ -1,5 +1,6 @@
 import type { DbClient } from "@capital/server/lib/prisma";
 import type { AssetClass } from "@prisma/client";
+import { env } from "@/env";
 
 // ============================================
 // CoinGecko - Crypto prices
@@ -78,13 +79,16 @@ async function fetchCryptoPrices(
 const BRAPI_API = "https://brapi.dev/api/quote";
 
 async function fetchBrazilianPrices(
-  tickers: string[]
+  tickers: string[],
+  token?: string
 ): Promise<Record<string, number>> {
   if (tickers.length === 0) return {};
 
   // brapi.dev supports comma-separated tickers
   const tickerList = tickers.join(",");
-  const url = `${BRAPI_API}/${tickerList}`;
+  const url = token
+    ? `${BRAPI_API}/${tickerList}?token=${token}`
+    : `${BRAPI_API}/${tickerList}`;
 
   try {
     const res = await fetch(url);
@@ -263,19 +267,44 @@ export async function updateAllPrices(
       // Use the currency of the first crypto holding (usually USD)
       holdings.find((h) => h.assetClass === "crypto")?.currency || "usd"
     ),
-    fetchBrazilianPrices(brazilianTickers),
+    fetchBrazilianPrices(brazilianTickers, env.BRAPI_TOKEN),
     fetchYahooPrices(yahooTickers),
   ]);
 
-  // 4. Merge all prices
+  // 3b. Fallback: For any Brazilian tickers that brapi.dev didn't return prices for,
+  // try Yahoo Finance with .SA suffix (works for B3 stocks, BDRs, FIIs, ETFs)
+  const missingBrazilianTickers = brazilianTickers.filter(
+    (t) => !(t in brazilianPrices)
+  );
+
+  let yahooFallbackPrices: Record<string, number> = {};
+  if (missingBrazilianTickers.length > 0) {
+    console.log(
+      `[PriceUpdate] brapi.dev missed ${missingBrazilianTickers.length} tickers, trying Yahoo Finance fallback: ${missingBrazilianTickers.join(", ")}`
+    );
+    // Yahoo Finance uses .SA suffix for B3 tickers (e.g., AMZO34.SA, PETR4.SA)
+    const yahooSuffixedTickers = missingBrazilianTickers.map((t) => `${t}.SA`);
+    const fallbackRaw = await fetchYahooPrices(yahooSuffixedTickers);
+
+    // Map back from "AMZO34.SA" → "AMZO34"
+    for (const [yahooTicker, price] of Object.entries(fallbackRaw)) {
+      const originalTicker = yahooTicker.replace(/\.SA$/i, "");
+      yahooFallbackPrices[originalTicker] = price;
+    }
+  }
+
+  // 4. Merge all prices (Yahoo fallback fills gaps from brapi.dev)
   const allPrices: Record<string, number> = {
     ...cryptoPrices,
     ...brazilianPrices,
+    ...yahooFallbackPrices,
     ...yahooPrices,
   };
 
   result.bySource.coingecko = Object.keys(cryptoPrices).length;
-  result.bySource.brapi = Object.keys(brazilianPrices).length;
+  result.bySource.brapi =
+    Object.keys(brazilianPrices).length +
+    Object.keys(yahooFallbackPrices).length;
   result.bySource.yahoo = Object.keys(yahooPrices).length;
 
   // 5. Batch update holdings

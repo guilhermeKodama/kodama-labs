@@ -13,6 +13,7 @@ export const env = createEnv({
       .default("development"),
     CRON_SECRET: z.string().optional(),
     ANTHROPIC_API_KEY: z.string().optional(),
+    BRAPI_TOKEN: z.string().optional(),
   },
   client: {
     NEXT_PUBLIC_APP_URL: z.string().url().optional(),
@@ -24,6 +25,7 @@ export const env = createEnv({
     NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL,
     CRON_SECRET: process.env.CRON_SECRET,
     ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY,
+    BRAPI_TOKEN: process.env.BRAPI_TOKEN,
   },
   skipValidation: !!process.env.SKIP_ENV_VALIDATION,
 });
