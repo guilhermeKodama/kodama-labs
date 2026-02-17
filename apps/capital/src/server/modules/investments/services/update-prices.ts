@@ -277,7 +277,7 @@ export async function updateAllPrices(
     (t) => !(t in brazilianPrices)
   );
 
-  let yahooFallbackPrices: Record<string, number> = {};
+  const yahooFallbackPrices: Record<string, number> = {};
   if (missingBrazilianTickers.length > 0) {
     console.log(
       `[PriceUpdate] brapi.dev missed ${missingBrazilianTickers.length} tickers, trying Yahoo Finance fallback: ${missingBrazilianTickers.join(", ")}`
