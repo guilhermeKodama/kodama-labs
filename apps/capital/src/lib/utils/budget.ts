@@ -652,7 +652,7 @@ export function getYearlySummaryStats(
   const projectedAnnualTotal = monthsElapsed > 0
     ? (totalYtdSpent / monthsElapsed) * 12
     : 0;
-  const isOnTrack = totalAnnualSpent <= totalAnnualBudget;
+  const isOnTrack = totalAnnualSpent <= totalAnnualBudget && projectedAnnualTotal <= totalAnnualBudget;
 
   return {
     totalAnnualBudget,
