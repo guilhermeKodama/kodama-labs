@@ -570,6 +570,9 @@ export function calculateYearlyBudgetProgress(
   const ytdRemaining = ytdBudget - ytdSpent;
   const ytdPercentUsed = ytdBudget > 0 ? (ytdSpent / ytdBudget) * 100 : 0;
 
+  // Total annual spent: sum ALL 12 months including known future installments
+  const totalAnnualSpent = months.reduce((sum, m) => sum + m.actual, 0);
+
   // Project annual: if we've spent X in N months, project X * (12/N)
   const projectedAnnual = currentMonth > 0
     ? (ytdSpent / currentMonth) * 12
@@ -584,6 +587,7 @@ export function calculateYearlyBudgetProgress(
     ytdPercentUsed,
     isYtdOver: ytdSpent > ytdBudget,
     projectedAnnual,
+    totalAnnualSpent,
     months,
   };
 }
@@ -620,13 +624,15 @@ export function getYearlySummaryStats(
 
   const totalAnnualBudget = yearlyBudgets.reduce((sum, b) => sum + b.amount, 0);
 
-  // Total YTD spent across all yearly budgets
+  // Total YTD spent across all yearly budgets (only elapsed months)
   let totalYtdSpent = 0;
+  // Total annual spent across all 12 months (including known future installments)
+  let totalAnnualSpent = 0;
   for (const budget of yearlyBudgets) {
-    for (let m = 0; m < monthsElapsed; m++) {
+    for (let m = 0; m < 12; m++) {
       const mStart = startOfMonth(new Date(year, m, 1));
       const mEnd = endOfMonth(new Date(year, m, 1));
-      totalYtdSpent += transactions
+      const monthSpent = transactions
         .filter((t) => {
           if (t.entityId !== budget.entityId) return false;
           if (t.category !== budget.category) return false;
@@ -635,18 +641,23 @@ export function getYearlySummaryStats(
           return isWithinInterval(txDate, { start: mStart, end: mEnd });
         })
         .reduce((sum, t) => sum + t.amount * t.exchangeRate, 0);
+      totalAnnualSpent += monthSpent;
+      if (m < monthsElapsed) {
+        totalYtdSpent += monthSpent;
+      }
     }
   }
 
-  const totalAnnualRoom = totalAnnualBudget - totalYtdSpent;
+  const totalAnnualRoom = totalAnnualBudget - totalAnnualSpent;
   const projectedAnnualTotal = monthsElapsed > 0
     ? (totalYtdSpent / monthsElapsed) * 12
     : 0;
-  const isOnTrack = projectedAnnualTotal <= totalAnnualBudget;
+  const isOnTrack = totalAnnualSpent <= totalAnnualBudget;
 
   return {
     totalAnnualBudget,
     totalYtdSpent,
+    totalAnnualSpent,
     totalAnnualRoom,
     projectedAnnualTotal,
     monthsElapsed,

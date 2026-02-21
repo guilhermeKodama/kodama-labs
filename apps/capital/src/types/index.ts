@@ -367,12 +367,14 @@ export interface YearlyBudgetProgress {
   ytdPercentUsed: number;
   isYtdOver: boolean;
   projectedAnnual: number;
+  totalAnnualSpent: number; // all 12 months including known future installments
   months: YearlyMonthBreakdown[];
 }
 
 export interface YearlySummaryStats {
   totalAnnualBudget: number;
   totalYtdSpent: number;
+  totalAnnualSpent: number; // all 12 months including known future installments
   totalAnnualRoom: number;
   projectedAnnualTotal: number;
   monthsElapsed: number;

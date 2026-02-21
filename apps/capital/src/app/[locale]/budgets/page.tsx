@@ -552,9 +552,9 @@ export default function BudgetsPage() {
                   <div className="space-y-4">
                     {filteredYearlyProgress.map((yp) => {
                       const percentUsed = yp.budget.amount > 0
-                        ? (yp.ytdSpent / yp.budget.amount) * 100
+                        ? (yp.totalAnnualSpent / yp.budget.amount) * 100
                         : 0;
-                      const isOver = yp.ytdSpent > yp.ytdBudget;
+                      const isOver = yp.totalAnnualSpent > yp.budget.amount;
                       const projectedOver = yp.projectedAnnual > yp.budget.amount;
 
                       return (
@@ -575,10 +575,10 @@ export default function BudgetsPage() {
                             </div>
                             <div className="text-right">
                               <p className={`text-lg font-bold ${isOver ? 'text-red-400' : 'text-white'}`}>
-                                {formatCurrency(yp.ytdSpent, settings.baseCurrency)}
+                                {formatCurrency(yp.totalAnnualSpent, settings.baseCurrency)}
                               </p>
                               <p className="text-xs text-slate-400">
-                                {t('budgets.yearly.ytdSpent')} ({yp.ytdPercentUsed.toFixed(0)}%)
+                                {t('budgets.yearly.ytdSpent')} ({percentUsed.toFixed(0)}%)
                               </p>
                             </div>
                           </div>
@@ -609,7 +609,7 @@ export default function BudgetsPage() {
                             <span className="text-slate-400">
                               {t('budgets.yearly.annualRoom')}:{' '}
                               <span className={isOver ? 'text-red-400' : 'text-emerald-400'}>
-                                {formatCurrency(yp.budget.amount - yp.ytdSpent, settings.baseCurrency)}
+                                {formatCurrency(yp.budget.amount - yp.totalAnnualSpent, settings.baseCurrency)}
                               </span>
                             </span>
                             <span className="text-slate-400">
@@ -623,7 +623,7 @@ export default function BudgetsPage() {
                               <span className="text-slate-300">
                                 {formatCurrency(
                                   filteredYearlySummaryStats.monthsElapsed > 0
-                                    ? yp.ytdSpent / filteredYearlySummaryStats.monthsElapsed
+                                    ? yp.totalAnnualSpent / filteredYearlySummaryStats.monthsElapsed
                                     : 0,
                                   settings.baseCurrency
                                 )}
