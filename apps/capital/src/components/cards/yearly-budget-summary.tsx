@@ -52,7 +52,7 @@ export function YearlyBudgetSummary({
         </CardContent>
       </Card>
 
-      {/* YTD Spent */}
+      {/* Annual Spent (includes known future installments) */}
       <Card className="border-slate-800 bg-slate-900/50 backdrop-blur-sm">
         <CardContent className="p-6">
           <div className="flex items-start justify-between">
@@ -61,7 +61,7 @@ export function YearlyBudgetSummary({
                 {t('ytdSpent')}
               </p>
               <p className="text-2xl font-bold text-white">
-                {formatCurrency(stats.totalYtdSpent, currency)}
+                {formatCurrency(stats.totalAnnualSpent, currency)}
               </p>
               <p className="text-xs text-slate-500">
                 {stats.monthsElapsed} / 12 months
