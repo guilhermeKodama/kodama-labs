@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@capital/server/lib/prisma";
 import { env } from "@/env";
 import { categorizeBillTransactions } from "@capital/server/lib/claude";
+import { normalizeDescription } from "@capital/server/modules/credit-cards/services/process-bill-csv";
 
 // Allow up to 60 seconds for this function (Pro plan supports up to 300s)
 export const maxDuration = 60;
@@ -103,23 +104,55 @@ export async function GET(request: NextRequest) {
         );
 
         // Batch update only the transactions that need categorization
+        const validCategorizations = categorizations.filter((cat) => {
+          const tx = transactionsToCategorizе[cat.index];
+          return tx !== undefined;
+        });
+
         await prisma.$transaction(
-          categorizations
-            .filter((cat) => {
-              const tx = transactionsToCategorizе[cat.index];
-              return tx !== undefined;
-            })
-            .map((cat) => {
-              const tx = transactionsToCategorizе[cat.index];
-              return prisma.billTransaction.update({
-                where: { id: tx.id },
-                data: {
-                  category: cat.category,
-                  isAutoCategorized: true,
-                },
-              });
-            })
+          validCategorizations.map((cat) => {
+            const tx = transactionsToCategorizе[cat.index];
+            return prisma.billTransaction.update({
+              where: { id: tx.id },
+              data: {
+                category: cat.category,
+                isAutoCategorized: true,
+              },
+            });
+          })
         );
+
+        // Save learned mappings (AI won't overwrite manual ones)
+        for (const cat of validCategorizations) {
+          const tx = transactionsToCategorizе[cat.index];
+          if (cat.category === "Other") continue;
+          const normalized = normalizeDescription(tx.description);
+          const existing = await prisma.merchantCategoryMapping.findUnique({
+            where: {
+              userId_normalizedDescription: {
+                userId,
+                normalizedDescription: normalized,
+              },
+            },
+            select: { source: true },
+          });
+          if (existing?.source === "manual") continue;
+          await prisma.merchantCategoryMapping.upsert({
+            where: {
+              userId_normalizedDescription: {
+                userId,
+                normalizedDescription: normalized,
+              },
+            },
+            update: { category: cat.category },
+            create: {
+              userId,
+              normalizedDescription: normalized,
+              category: cat.category,
+              source: "ai",
+            },
+          });
+        }
       }
 
       // Mark as completed
