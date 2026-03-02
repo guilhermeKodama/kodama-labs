@@ -1,5 +1,5 @@
 import type { DbClient } from "@capital/server/lib/prisma";
-import { normalizeDescription } from "../../services/process-bill-csv";
+import { normalizeDescription } from "../../utils";
 
 /**
  * Update a bill transaction's category, scoped to the authenticated user.

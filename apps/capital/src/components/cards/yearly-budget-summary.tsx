@@ -18,11 +18,8 @@ interface YearlyBudgetSummaryProps {
   year: number;
 }
 
-export function YearlyBudgetSummary({
-  stats,
-  currency,
-  year,
-}: YearlyBudgetSummaryProps) {
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+export function YearlyBudgetSummary({ stats, currency, year }: YearlyBudgetSummaryProps) {
   const t = useTranslations('budgets.yearly');
 
   const isOver = stats.totalAnnualRoom < 0;

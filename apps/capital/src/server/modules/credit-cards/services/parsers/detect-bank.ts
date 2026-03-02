@@ -27,6 +27,7 @@ export function detectBankParser(headers: string[]): BankParserConfig | undefine
  * Build a generic fallback parser config from headers.
  * Uses broad header-name matching (same logic as the original parseCsvContent).
  */
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 export function buildFallbackParser(headers: string[]): BankParserConfig {
   return {
     name: "Generic",

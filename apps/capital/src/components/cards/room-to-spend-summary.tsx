@@ -17,8 +17,6 @@ import { cn } from '@/lib/utils';
 import { formatCurrency } from '@/lib/utils/format';
 import {
   calculateBudgetPace,
-  getBudgetStatusColor,
-  getBudgetStatusBgColor,
 } from '@/lib/utils/budget';
 import type { BudgetProgress, Transaction } from '@/types';
 
@@ -178,7 +176,6 @@ export function RoomToSpendSummary({
               {rankedCategories.map((item) => {
                 const { budget, spent, remaining, percentUsed } = item;
                 const { isOverPace } = item.pace;
-                const statusColor = getBudgetStatusColor(percentUsed);
                 const isOver = remaining < 0;
 
                 return (

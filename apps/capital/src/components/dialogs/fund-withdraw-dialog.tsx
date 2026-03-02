@@ -139,9 +139,6 @@ export function FundWithdrawDialog({
   if (!account) return null;
 
   const isFund = mode === 'fund';
-  const entityLabel = account.entityType === 'personal'
-    ? tCommon('personal')
-    : account.entityId;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>

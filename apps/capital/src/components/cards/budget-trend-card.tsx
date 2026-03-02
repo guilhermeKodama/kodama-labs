@@ -3,7 +3,6 @@
 import { useTranslations } from 'next-intl';
 import { TrendingUp, TrendingDown, Minus } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { cn } from '@/lib/utils';
 import { formatCurrency } from '@/lib/utils/format';
 import type { MonthOverMonth } from '@/types';
 
