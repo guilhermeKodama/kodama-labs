@@ -8,6 +8,10 @@ import type { ParsedTransaction } from "./parsers";
 export { parseCsvContent } from "./parsers";
 export type { ParsedTransaction } from "./parsers";
 
+export function normalizeDescription(description: string): string {
+  return description.toLowerCase().trim();
+}
+
 interface ProcessBillCsvInput {
   creditCardId: string;
   closingDate: Date;
@@ -161,13 +165,23 @@ export async function processBillCsv(
     db
   );
 
-  // 6. Create bill transactions, applying preserved manual categories where possible
+  // 6. Load learned merchant-to-category mappings for this user
+  const merchantMappings = await db.merchantCategoryMapping.findMany({
+    where: { userId },
+    select: { normalizedDescription: true, category: true },
+  });
+  const mappingLookup = new Map(
+    merchantMappings.map((m) => [m.normalizedDescription, m.category])
+  );
+
+  // 7. Create bill transactions, applying: preserved manual > learned mapping > Uncategorized
   const billTransactionData = chargeTransactions.map((t) => {
     const key = `${t.description}::${t.amount}`;
     const preservedCategory = preservedCategories.get(key);
+    const mappedCategory = mappingLookup.get(normalizeDescription(t.description));
     return {
       billId: bill.id,
-      category: preservedCategory ?? "Uncategorized",
+      category: preservedCategory ?? mappedCategory ?? "Uncategorized",
       transactionDate: parseDate(t.date),
       description: t.description,
       amount: t.amount,
@@ -179,7 +193,18 @@ export async function processBillCsv(
 
   await insertBillTransactions(billTransactionData, db);
 
-  // 7. Create or update installment records for transactions with installment info.
+  // 7a. If every transaction got a category, skip the AI cron entirely
+  const allPreCategorized = billTransactionData.every(
+    (t) => t.category !== "Uncategorized"
+  );
+  if (allPreCategorized) {
+    await db.creditCardBill.update({
+      where: { id: bill.id },
+      data: { categorizationStatus: "completed" },
+    });
+  }
+
+  // 8. Create or update installment records for transactions with installment info.
   //    When the same purchase appears across multiple bills (e.g., "STORE 3/10" in Jan,
   //    "STORE 4/10" in Feb), we UPDATE the existing installment instead of creating a
   //    duplicate. Matching key: creditCardId + description + installmentAmount + totalInstallments.
@@ -246,7 +271,7 @@ export async function processBillCsv(
     installmentCount++;
   }
 
-  // 8. If replacing and there was a linked expense, update its amount
+  // 9. If replacing and there was a linked expense, update its amount
   if (replaced && effectiveTransactionId) {
     await db.transaction.update({
       where: { id: effectiveTransactionId },
@@ -254,7 +279,7 @@ export async function processBillCsv(
     });
   }
 
-  // 9. Return result — categorization will happen via cron
+  // 10. Return result — categorization will happen via cron for remaining Uncategorized
   return {
     bill,
     totalAmount: Math.round(totalAmount * 100) / 100,

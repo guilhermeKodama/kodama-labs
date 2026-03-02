@@ -1,7 +1,9 @@
 import type { DbClient } from "@capital/server/lib/prisma";
+import { normalizeDescription } from "../../services/process-bill-csv";
 
 /**
  * Update a bill transaction's category, scoped to the authenticated user.
+ * Also upserts a MerchantCategoryMapping so future bills learn the choice.
  */
 export async function updateBillTransaction(
   userId: string,
@@ -9,7 +11,6 @@ export async function updateBillTransaction(
   data: { category: string },
   db: DbClient
 ) {
-  // MANDATORY: Verify ownership through bill -> creditCard -> business/personalAccount
   const billTx = await db.billTransaction.findFirst({
     where: {
       id,
@@ -22,18 +23,38 @@ export async function updateBillTransaction(
         },
       },
     },
-    select: { id: true },
+    select: { id: true, description: true },
   });
 
   if (!billTx) {
     throw new Error("Bill transaction not found");
   }
 
-  return db.billTransaction.update({
+  const updated = await db.billTransaction.update({
     where: { id },
     data: {
       category: data.category,
-      isAutoCategorized: false, // Mark as manually categorized
+      isAutoCategorized: false,
     },
   });
+
+  // Persist the manual mapping so future bills use this category automatically
+  const normalized = normalizeDescription(billTx.description);
+  await db.merchantCategoryMapping.upsert({
+    where: {
+      userId_normalizedDescription: {
+        userId,
+        normalizedDescription: normalized,
+      },
+    },
+    update: { category: data.category, source: "manual" },
+    create: {
+      userId,
+      normalizedDescription: normalized,
+      category: data.category,
+      source: "manual",
+    },
+  });
+
+  return updated;
 }
