@@ -8,9 +8,7 @@ import type { ParsedTransaction } from "./parsers";
 export { parseCsvContent } from "./parsers";
 export type { ParsedTransaction } from "./parsers";
 
-export function normalizeDescription(description: string): string {
-  return description.toLowerCase().trim();
-}
+import { normalizeDescription } from "../utils";
 
 interface ProcessBillCsvInput {
   creditCardId: string;

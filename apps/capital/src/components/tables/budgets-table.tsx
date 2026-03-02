@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo, Fragment } from 'react';
+import { useState, useMemo, useCallback, Fragment } from 'react';
 import { useTranslations } from 'next-intl';
 import {
   MoreVertical,
@@ -87,13 +87,13 @@ export function BudgetsTable({
   const [entityFilter, setEntityFilter] = useState<string>('all');
   const [expandedBudgetId, setExpandedBudgetId] = useState<string | null>(null);
 
-  const getEntityName = (entityId: string, entityType: string) => {
+  const getEntityName = useCallback((entityId: string, entityType: string) => {
     if (entityType === 'personal') {
       return tCommon('personal');
     }
     const business = businesses.find((b) => b.id === entityId);
     return business?.name || 'Unknown';
-  };
+  }, [businesses, tCommon]);
 
   const getPeriodLabel = (budget: BudgetProgress['budget']) => {
     if (budget.period === 'yearly') {
@@ -176,7 +176,7 @@ export function BudgetsTable({
       }
     });
     return Array.from(entityMap.values());
-  }, [budgetProgress, businesses, getEntityName]);
+  }, [budgetProgress, getEntityName]);
 
   // Get transactions for drill-down
   const getDrillDownTransactions = (budget: BudgetProgress['budget']) => {

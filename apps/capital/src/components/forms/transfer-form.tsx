@@ -87,7 +87,6 @@ export function TransferForm({
   const selectedCurrency = form.watch('currency');
   const selectedFromEntityId = form.watch('fromEntityId');
 
-  const selectedToInvestmentAccountId = form.watch('toInvestmentAccountId');
   const selectedFromInvestmentAccountId = form.watch('fromInvestmentAccountId');
 
   // For deposits, filter investment accounts by the source entity.

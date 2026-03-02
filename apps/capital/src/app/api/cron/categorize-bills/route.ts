@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@capital/server/lib/prisma";
 import { env } from "@/env";
 import { categorizeBillTransactions } from "@capital/server/lib/claude";
-import { normalizeDescription } from "@capital/server/modules/credit-cards/services/process-bill-csv";
+import { normalizeDescription } from "@capital/server/modules/credit-cards/utils";
 
 // Allow up to 60 seconds for this function (Pro plan supports up to 300s)
 export const maxDuration = 60;
