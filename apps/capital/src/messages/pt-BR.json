@@ -15,7 +15,9 @@
     "create": "Criar",
     "loading": "Carregando...",
     "personal": "Pessoal",
-    "business": "Empresa"
+    "business": "Empresa",
+    "done": "Concluir",
+    "next": "Próximo"
   },
   "nav": {
     "dashboard": "Painel",
@@ -1219,6 +1221,62 @@
       "billReplaced": "Fatura substituída com sucesso!",
       "expenseCreated": "Despesa criada a partir da fatura!",
       "billLinked": "Fatura vinculada à transação!"
+    }
+  },
+  "bankStatements": {
+    "title": "Upload de Extrato Bancário",
+    "step": "Passo",
+    "of": "de",
+    "uploadStatement": "Enviar Extrato",
+    "upload": {
+      "dropzone": "Clique para selecionar arquivos OFX ou arraste aqui",
+      "formats": "Formatos suportados: .ofx, .qfx",
+      "parsing": "Processando...",
+      "continue": "Continuar"
+    },
+    "entity": {
+      "detected": "Conta bancária detectada",
+      "account": "Conta",
+      "selectEntity": "Importar transações para",
+      "personal": "Conta Pessoal",
+      "business": "Empresa",
+      "selectBusiness": "Selecione uma empresa"
+    },
+    "creditCards": {
+      "detected": "Pagamentos de fatura detectados",
+      "detectedDescription": "Encontramos {count} pagamento(s) de fatura de cartão. Deseja criar um cartão de crédito?",
+      "createNew": "Criar Cartão de Crédito",
+      "bankName": "Banco",
+      "lastFour": "Últimos 4 Dígitos",
+      "closingDay": "Dia de Fechamento",
+      "dueDay": "Dia de Vencimento",
+      "skip": "Pular esta etapa"
+    },
+    "preview": {
+      "new": "Novas",
+      "duplicates": "Duplicadas",
+      "income": "Receitas",
+      "expenses": "Despesas",
+      "transactions": "Transações",
+      "toggleAll": "Selecionar todas",
+      "duplicate": "Já importada",
+      "importing": "Importando...",
+      "import": "Importar {count} transações"
+    },
+    "success": {
+      "title": "Importação Concluída",
+      "description": "Suas transações foram importadas com sucesso.",
+      "imported": "{count} transações importadas",
+      "creditCardsCreated": "{count} cartão(ões) de crédito criado(s)",
+      "categorizing": "IA está categorizando suas transações..."
+    },
+    "status": {
+      "categorizing": "IA está categorizando suas transações importadas...",
+      "completed": "Categorização concluída"
+    },
+    "toast": {
+      "imported": "Extrato bancário importado!",
+      "error": "Falha ao importar extrato"
     }
   }
 }

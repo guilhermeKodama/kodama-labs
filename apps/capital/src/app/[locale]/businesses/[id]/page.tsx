@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect, useCallback } from 'react';
 import { useParams } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { useLocale } from 'next-intl';
@@ -22,11 +22,14 @@ import {
   TrendingDown,
   CalendarIcon,
   X,
+  Upload,
+  Loader2,
 } from 'lucide-react';
 import { AppShell } from '@/components/layout';
 import { SummaryCard } from '@/components/cards';
 import { ActivityTable } from '@/components/tables';
 import { TransactionDialog, TransferDialog } from '@/components/dialogs';
+import { StatementUploadDialog } from '@/components/dialogs/statement-upload-dialog';
 import { Button } from '@/components/ui/button';
 import { Calendar } from '@/components/ui/calendar';
 import {
@@ -52,10 +55,12 @@ import {
   useTransferStore,
   useSettingsStore,
   useInvestmentStore,
+  useCreditCardStore,
 } from '@/lib/store';
 import { calculateEntitySummary } from '@/lib/utils/calculations';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
+import { client } from '@/lib/api-client';
 import type { Transaction, Transfer } from '@/types';
 import type { CreateTransactionFormData } from '@/lib/validations';
 import type { DateRange } from 'react-day-picker';
@@ -68,13 +73,16 @@ export default function BusinessDetailPage() {
   const businessId = params.id as string;
 
   const { businesses, getBusiness } = useBusinessStore();
-  const { transactions, addTransaction, updateTransaction, deleteTransaction } =
+  const { transactions, addTransaction, updateTransaction, deleteTransaction, fetchTransactions } =
     useTransactionStore();
   const { transfers, addTransfer, deleteTransfer } = useTransferStore();
   const { settings, personalAccount } = useSettingsStore();
+  const { creditCards } = useCreditCardStore();
 
   const business = getBusiness(businessId);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [isStatementDialogOpen, setIsStatementDialogOpen] = useState(false);
+  const [pendingCategorization, setPendingCategorization] = useState(false);
   const [editingTransaction, setEditingTransaction] = useState<Transaction | undefined>();
   const [deletingTransaction, setDeletingTransaction] = useState<Transaction | undefined>();
   const [deletingTransfer, setDeletingTransfer] = useState<Transfer | undefined>();
@@ -253,6 +261,34 @@ export default function BusinessDetailPage() {
     setEditingTransfer(undefined);
   };
 
+  const handleImportComplete = useCallback(() => {
+    fetchTransactions();
+    setPendingCategorization(true);
+    toast.success(t('bankStatements.toast.imported'));
+  }, [fetchTransactions, t]);
+
+  useEffect(() => {
+    if (!pendingCategorization) return;
+    const interval = setInterval(async () => {
+      try {
+        const res = await client.v1['bank-statements'].imports.$get();
+        if (res.ok) {
+          const imports = await res.json() as Array<{ categorizationStatus: string }>;
+          const hasPending = imports.some(
+            (i) => i.categorizationStatus === 'pending' || i.categorizationStatus === 'processing'
+          );
+          if (!hasPending) {
+            setPendingCategorization(false);
+            fetchTransactions();
+          }
+        }
+      } catch {
+        // Silently ignore polling errors
+      }
+    }, 10000);
+    return () => clearInterval(interval);
+  }, [pendingCategorization, fetchTransactions]);
+
   return (
     <AppShell>
       {/* Header */}
@@ -292,13 +328,23 @@ export default function BusinessDetailPage() {
             </div>
           </div>
 
-          <Button
-            onClick={() => setIsDialogOpen(true)}
-            className="bg-gradient-to-r from-emerald-500 to-cyan-500 text-white hover:from-emerald-600 hover:to-cyan-600"
-          >
-            <Plus className="mr-2 h-4 w-4" />
-            {t('transactions.addTransaction')}
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              onClick={() => setIsStatementDialogOpen(true)}
+              className="border-slate-700 text-slate-300 hover:bg-slate-800 hover:text-white"
+            >
+              <Upload className="mr-2 h-4 w-4" />
+              {t('bankStatements.uploadStatement')}
+            </Button>
+            <Button
+              onClick={() => setIsDialogOpen(true)}
+              className="bg-gradient-to-r from-emerald-500 to-cyan-500 text-white hover:from-emerald-600 hover:to-cyan-600"
+            >
+              <Plus className="mr-2 h-4 w-4" />
+              {t('transactions.addTransaction')}
+            </Button>
+          </div>
         </div>
       </div>
 
@@ -326,6 +372,13 @@ export default function BusinessDetailPage() {
             icon={TrendingDown}
             variant="expense"
           />
+        </div>
+      )}
+
+      {pendingCategorization && (
+        <div className="mb-4 flex items-center gap-2 rounded-lg border border-blue-500/30 bg-blue-500/10 px-4 py-3">
+          <Loader2 className="h-4 w-4 animate-spin text-blue-400" />
+          <span className="text-sm text-blue-300">{t('bankStatements.status.categorizing')}</span>
         </div>
       )}
 
@@ -436,6 +489,18 @@ export default function BusinessDetailPage() {
           />
         </CardContent>
       </Card>
+
+      {/* Statement Upload Dialog */}
+      <StatementUploadDialog
+        open={isStatementDialogOpen}
+        onOpenChange={setIsStatementDialogOpen}
+        businesses={businesses}
+        personalAccountId={personalAccount?.id ?? null}
+        existingCreditCards={creditCards}
+        defaultEntityType="business"
+        defaultEntityId={businessId}
+        onImportComplete={handleImportComplete}
+      />
 
       {/* Transaction Dialog */}
       <TransactionDialog

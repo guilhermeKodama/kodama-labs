@@ -9,6 +9,10 @@
       "schedule": "*/2 * * * *"
     },
     {
+      "path": "/api/cron/categorize-statements",
+      "schedule": "*/2 * * * *"
+    },
+    {
       "path": "/api/cron/update-prices",
       "schedule": "0 * * * *"
     },

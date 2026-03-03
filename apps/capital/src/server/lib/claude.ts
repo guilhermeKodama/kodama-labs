@@ -59,6 +59,98 @@ export async function categorizeBillTransactions(
   return results;
 }
 
+/**
+ * Use Claude to auto-categorize bank statement transactions.
+ * Adapted prompt for bank statement descriptions (Pix, boleto, debit card, etc.)
+ */
+export async function categorizeStatementTransactions(
+  transactions: BillTransactionInput[],
+  availableCategories: string[],
+  transactionType: "expense" | "income"
+): Promise<CategorizationResult[]> {
+  const client = getClient();
+
+  if (!client) {
+    const fallback = transactionType === "income" ? "Other Income" : "Other";
+    return transactions.map((t) => ({ index: t.index, category: fallback }));
+  }
+
+  const BATCH_SIZE = 50;
+  const results: CategorizationResult[] = [];
+
+  for (let i = 0; i < transactions.length; i += BATCH_SIZE) {
+    const batch = transactions.slice(i, i + BATCH_SIZE);
+    const batchResults = await categorizeStatementBatch(client, batch, availableCategories, transactionType);
+    results.push(...batchResults);
+  }
+
+  return results;
+}
+
+async function categorizeStatementBatch(
+  client: Anthropic,
+  transactions: BillTransactionInput[],
+  availableCategories: string[],
+  transactionType: "expense" | "income"
+): Promise<CategorizationResult[]> {
+  const transactionList = transactions
+    .map((t) => `${t.index}. "${t.description}" - Amount: ${t.amount}`)
+    .join("\n");
+
+  const typeLabel = transactionType === "income" ? "income/credit" : "expense/debit";
+
+  const prompt = `You are a financial categorization assistant for Brazilian bank statement transactions (${typeLabel}). Categorize each transaction into one of the available categories.
+
+Available categories:
+${availableCategories.map((c) => `- ${c}`).join("\n")}
+
+Transactions to categorize:
+${transactionList}
+
+Rules:
+- Assign exactly one category per transaction from the available list.
+- These are bank statement descriptions, not credit card merchants. Common patterns:
+  - "Transferência enviada/recebida pelo Pix - RECIPIENT - CNPJ/CPF - BANK" — Pix transfer
+  - "Pagamento de boleto efetuado - ENTITY" — bill/boleto payment
+  - "Compra no débito - STORE" — debit card purchase
+  - "Aplicação RDB" / "Resgate RDB" — investment (RDB application/redemption)
+  - "Pagamento de fatura" — credit card bill payment
+- For Pix transfers, categorize based on the RECIPIENT name and context.
+- "Pagamento de fatura" should be "Credit Card" (expense) or skipped (income).
+- "Aplicação/Resgate RDB" is investment-related.
+- Use "Other" only if absolutely no other category fits.
+
+Respond ONLY with a valid JSON array, no other text:
+[{"index": 0, "category": "Transportation"}, {"index": 1, "category": "Other"}, ...]`;
+
+  try {
+    const response = await client.messages.create({
+      model: "claude-sonnet-4-20250514",
+      max_tokens: 4096,
+      messages: [{ role: "user", content: prompt }],
+    });
+
+    const content = response.content[0];
+    if (content.type !== "text") throw new Error("Unexpected response type");
+
+    let jsonStr = content.text.trim();
+    if (jsonStr.startsWith("```")) {
+      jsonStr = jsonStr.replace(/^```(?:json)?\n?/, "").replace(/\n?```$/, "");
+    }
+
+    const parsed = JSON.parse(jsonStr) as CategorizationResult[];
+    return parsed.map((r) => ({
+      index: r.index,
+      category: availableCategories.includes(r.category) ? r.category : "Other",
+      suggestedCategory: r.suggestedCategory || undefined,
+    }));
+  } catch (error) {
+    console.error("Claude statement categorization failed:", error);
+    const fallback = transactionType === "income" ? "Other Income" : "Other";
+    return transactions.map((t) => ({ index: t.index, category: fallback }));
+  }
+}
+
 async function categorizeBatch(
   client: Anthropic,
   transactions: BillTransactionInput[],

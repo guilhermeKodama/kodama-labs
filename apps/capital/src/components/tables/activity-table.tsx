@@ -280,11 +280,11 @@ export function ActivityTable({
       </div>
 
       {/* Table */}
-      <div className="rounded-lg border border-slate-800 bg-slate-900/50">
-        <Table>
+      <div className="rounded-lg border border-slate-800 bg-slate-900/50 overflow-hidden">
+        <Table className="table-fixed">
           <TableHeader>
             <TableRow className="border-slate-800 hover:bg-transparent">
-              <TableHead className="text-slate-400">
+              <TableHead className="w-[120px] text-slate-400">
                 <Button
                   variant="ghost"
                   size="sm"
@@ -296,9 +296,9 @@ export function ActivityTable({
                 </Button>
               </TableHead>
               <TableHead className="text-slate-400">{t('activity.table.description')}</TableHead>
-              <TableHead className="text-slate-400">{t('activity.table.type')}</TableHead>
-              <TableHead className="text-slate-400">{t('activity.table.category')}</TableHead>
-              <TableHead className="text-right text-slate-400">
+              <TableHead className="w-[110px] text-slate-400">{t('activity.table.type')}</TableHead>
+              <TableHead className="w-[140px] text-slate-400">{t('activity.table.category')}</TableHead>
+              <TableHead className="w-[130px] text-right text-slate-400">
                 <Button
                   variant="ghost"
                   size="sm"
@@ -356,12 +356,14 @@ export function ActivityTable({
                     {formatDate(item.date)}
                   </TableCell>
                   <TableCell className="font-medium text-white">
-                    {item.description}
-                    {isTransfer && item.counterpartyName && (
-                      <span className="ml-2 text-xs text-slate-500">
-                        ({isIncoming ? t('activity.from') : t('activity.to')} {item.counterpartyName})
-                      </span>
-                    )}
+                    <div className="truncate" title={item.description}>
+                      {item.description}
+                      {isTransfer && item.counterpartyName && (
+                        <span className="ml-2 text-xs text-slate-500">
+                          ({isIncoming ? t('activity.from') : t('activity.to')} {item.counterpartyName})
+                        </span>
+                      )}
+                    </div>
                   </TableCell>
                   <TableCell>
                     <Badge
