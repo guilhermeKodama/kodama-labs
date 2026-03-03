@@ -179,6 +179,34 @@ export default function BusinessDetailPage() {
     );
   }, [business, transactions, transfers, settings.baseCurrency]);
 
+  const handleImportComplete = useCallback(() => {
+    fetchTransactions();
+    setPendingCategorization(true);
+    toast.success(t('bankStatements.toast.imported'));
+  }, [fetchTransactions, t]);
+
+  useEffect(() => {
+    if (!pendingCategorization) return;
+    const interval = setInterval(async () => {
+      try {
+        const res = await client.v1['bank-statements'].imports.$get();
+        if (res.ok) {
+          const imports = await res.json() as Array<{ categorizationStatus: string }>;
+          const hasPending = imports.some(
+            (i) => i.categorizationStatus === 'pending' || i.categorizationStatus === 'processing'
+          );
+          if (!hasPending) {
+            setPendingCategorization(false);
+            fetchTransactions();
+          }
+        }
+      } catch {
+        // Silently ignore polling errors
+      }
+    }, 10000);
+    return () => clearInterval(interval);
+  }, [pendingCategorization, fetchTransactions]);
+
   if (!business) {
     return (
       <AppShell>
@@ -260,34 +288,6 @@ export default function BusinessDetailPage() {
     setIsTransferDialogOpen(false);
     setEditingTransfer(undefined);
   };
-
-  const handleImportComplete = useCallback(() => {
-    fetchTransactions();
-    setPendingCategorization(true);
-    toast.success(t('bankStatements.toast.imported'));
-  }, [fetchTransactions, t]);
-
-  useEffect(() => {
-    if (!pendingCategorization) return;
-    const interval = setInterval(async () => {
-      try {
-        const res = await client.v1['bank-statements'].imports.$get();
-        if (res.ok) {
-          const imports = await res.json() as Array<{ categorizationStatus: string }>;
-          const hasPending = imports.some(
-            (i) => i.categorizationStatus === 'pending' || i.categorizationStatus === 'processing'
-          );
-          if (!hasPending) {
-            setPendingCategorization(false);
-            fetchTransactions();
-          }
-        }
-      } catch {
-        // Silently ignore polling errors
-      }
-    }, 10000);
-    return () => clearInterval(interval);
-  }, [pendingCategorization, fetchTransactions]);
 
   return (
     <AppShell>

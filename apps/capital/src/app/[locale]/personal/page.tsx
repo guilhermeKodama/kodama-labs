@@ -22,7 +22,6 @@ import {
   X,
   Upload,
   Loader2,
-  Sparkles,
 } from 'lucide-react';
 import { AppShell } from '@/components/layout';
 import { Header } from '@/components/layout/header';
@@ -188,6 +187,69 @@ export default function PersonalPage() {
     );
   }, [personalAccount, transactions, transfers, settings.baseCurrency, t]);
 
+  const updateLedgerBalance = useCallback((imports: StatementImportStatus[]) => {
+    if (!personalAccount) return;
+    const relevant = imports
+      .filter((i) => i.personalAccountId === personalAccount.id && i.ledgerBalance != null)
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    if (relevant.length > 0) {
+      setLedgerBalance(relevant[0].ledgerBalance);
+    }
+  }, [personalAccount]);
+
+  useEffect(() => {
+    if (!personalAccount) return;
+    (async () => {
+      try {
+        const res = await client.v1['bank-statements'].imports.$get();
+        if (res.ok) {
+          const imports = await res.json() as StatementImportStatus[];
+          updateLedgerBalance(imports);
+        }
+      } catch {
+        // ignore
+      }
+    })();
+  }, [personalAccount, updateLedgerBalance]);
+
+  useEffect(() => {
+    if (!pendingCategorization) return;
+    const interval = setInterval(async () => {
+      try {
+        const res = await client.v1['bank-statements'].imports.$get();
+        if (res.ok) {
+          const imports = await res.json() as StatementImportStatus[];
+          updateLedgerBalance(imports);
+          const hasPending = imports.some(
+            (i) => i.categorizationStatus === 'pending' || i.categorizationStatus === 'processing'
+          );
+          if (!hasPending) {
+            setPendingCategorization(false);
+            fetchTransactions();
+          }
+        }
+      } catch {
+        // Silently ignore polling errors
+      }
+    }, 10000);
+    return () => clearInterval(interval);
+  }, [pendingCategorization, fetchTransactions, updateLedgerBalance]);
+
+  const handleImportComplete = useCallback(async () => {
+    fetchTransactions();
+    setPendingCategorization(true);
+    toast.success(t('bankStatements.toast.imported'));
+    try {
+      const res = await client.v1['bank-statements'].imports.$get();
+      if (res.ok) {
+        const imports = await res.json() as StatementImportStatus[];
+        updateLedgerBalance(imports);
+      }
+    } catch {
+      // ignore
+    }
+  }, [fetchTransactions, t, updateLedgerBalance]);
+
   if (!personalAccount) {
     return (
       <AppShell>
@@ -260,71 +322,6 @@ export default function PersonalPage() {
     setIsTransferDialogOpen(false);
     setEditingTransfer(undefined);
   };
-
-  const updateLedgerBalance = useCallback((imports: StatementImportStatus[]) => {
-    if (!personalAccount) return;
-    const relevant = imports
-      .filter((i) => i.personalAccountId === personalAccount.id && i.ledgerBalance != null)
-      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-    if (relevant.length > 0) {
-      setLedgerBalance(relevant[0].ledgerBalance);
-    }
-  }, [personalAccount]);
-
-  // Fetch ledger balance on mount
-  useEffect(() => {
-    if (!personalAccount) return;
-    (async () => {
-      try {
-        const res = await client.v1['bank-statements'].imports.$get();
-        if (res.ok) {
-          const imports = await res.json() as StatementImportStatus[];
-          updateLedgerBalance(imports);
-        }
-      } catch {
-        // ignore
-      }
-    })();
-  }, [personalAccount, updateLedgerBalance]);
-
-  // Poll for categorization status
-  useEffect(() => {
-    if (!pendingCategorization) return;
-    const interval = setInterval(async () => {
-      try {
-        const res = await client.v1['bank-statements'].imports.$get();
-        if (res.ok) {
-          const imports = await res.json() as StatementImportStatus[];
-          updateLedgerBalance(imports);
-          const hasPending = imports.some(
-            (i) => i.categorizationStatus === 'pending' || i.categorizationStatus === 'processing'
-          );
-          if (!hasPending) {
-            setPendingCategorization(false);
-            fetchTransactions();
-          }
-        }
-      } catch {
-        // Silently ignore polling errors
-      }
-    }, 10000);
-    return () => clearInterval(interval);
-  }, [pendingCategorization, fetchTransactions, updateLedgerBalance]);
-
-  const handleImportComplete = useCallback(async () => {
-    fetchTransactions();
-    setPendingCategorization(true);
-    toast.success(t('bankStatements.toast.imported'));
-    try {
-      const res = await client.v1['bank-statements'].imports.$get();
-      if (res.ok) {
-        const imports = await res.json() as StatementImportStatus[];
-        updateLedgerBalance(imports);
-      }
-    } catch {
-      // ignore
-    }
-  }, [fetchTransactions, t, updateLedgerBalance]);
 
   return (
     <AppShell>
