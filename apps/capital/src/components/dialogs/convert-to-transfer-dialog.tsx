@@ -74,7 +74,7 @@ export function ConvertToTransferDialog({
 
   const [step, setStep] = useState<Step>('select-entity');
   const [selectedEntityId, setSelectedEntityId] = useState<string | null>(null);
-  const [selectedEntityType, setSelectedEntityType] = useState<EntityType>('business');
+  const [, setSelectedEntityType] = useState<EntityType>('business');
   const [direction, setDirection] = useState<TransferDirection>('capital_injection');
   const [description, setDescription] = useState('');
   const [isConverting, setIsConverting] = useState(false);
