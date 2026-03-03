@@ -29,6 +29,7 @@ import { SummaryCard } from '@/components/cards';
 import { ActivityTable } from '@/components/tables';
 import { TransactionDialog, TransferDialog } from '@/components/dialogs';
 import { StatementUploadDialog } from '@/components/dialogs/statement-upload-dialog';
+import { ConvertToTransferDialog } from '@/components/dialogs/convert-to-transfer-dialog';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Calendar } from '@/components/ui/calendar';
@@ -80,7 +81,7 @@ export default function PersonalPage() {
   
   const { transactions, addTransaction, updateTransaction, deleteTransaction, fetchTransactions } =
     useTransactionStore();
-  const { transfers, addTransfer, deleteTransfer } = useTransferStore();
+  const { transfers, addTransfer, deleteTransfer, fetchTransfers } = useTransferStore();
   const { settings, personalAccount } = useSettingsStore();
   const { businesses } = useBusinessStore();
   const { creditCards } = useCreditCardStore();
@@ -91,6 +92,7 @@ export default function PersonalPage() {
   const [ledgerBalance, setLedgerBalance] = useState<number | null>(null);
   const [editingTransaction, setEditingTransaction] = useState<Transaction | undefined>();
   const [deletingTransaction, setDeletingTransaction] = useState<Transaction | undefined>();
+  const [convertingTransaction, setConvertingTransaction] = useState<Transaction | null>(null);
   const [deletingTransfer, setDeletingTransfer] = useState<Transfer | undefined>();
   const [editingTransfer, setEditingTransfer] = useState<Transfer | undefined>();
   const [isTransferDialogOpen, setIsTransferDialogOpen] = useState(false);
@@ -476,6 +478,7 @@ export default function PersonalPage() {
             entityNames={entityNames}
             onEditTransaction={openEditDialog}
             onDeleteTransaction={setDeletingTransaction}
+            onConvertToTransfer={setConvertingTransaction}
             onEditTransfer={openEditTransferDialog}
             onDeleteTransfer={setDeletingTransfer}
           />
@@ -510,6 +513,23 @@ export default function PersonalPage() {
         onOpenChange={closeTransferDialog}
         transfer={editingTransfer}
         onSubmit={handleEditTransfer}
+      />
+
+      {/* Convert Transaction to Transfer Dialog */}
+      <ConvertToTransferDialog
+        open={!!convertingTransaction}
+        onOpenChange={(open) => { if (!open) setConvertingTransaction(null); }}
+        transaction={convertingTransaction}
+        sourceEntityId={personalAccount.id}
+        sourceEntityType="personal"
+        businesses={businesses}
+        personalAccountId={personalAccount.id}
+        onComplete={() => {
+          setConvertingTransaction(null);
+          fetchTransactions();
+          fetchTransfers();
+          toast.success(t('convertTransfer.success'));
+        }}
       />
 
       {/* Delete Transaction Confirmation */}

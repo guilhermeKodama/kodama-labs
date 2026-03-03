@@ -38,6 +38,23 @@ const DetectedCreditCardPaymentSchema = z.object({
   closingDay: z.number(),
 });
 
+const DetectedTransferSchema = z.object({
+  fitId: z.string(),
+  amount: z.number(),
+  date: z.string(),
+  description: z.string(),
+  fullDescription: z.string(),
+  type: z.enum(["income", "expense"]),
+  suggestedEntityId: z.string(),
+  suggestedEntityName: z.string(),
+  suggestedEntityType: z.enum(["business", "personal"]),
+  suggestedDirection: z.enum([
+    "profit_distribution",
+    "capital_injection",
+    "reimbursement",
+  ]),
+});
+
 const ParseResponseSchema = z.object({
   bankName: z.string(),
   accountId: z.string(),
@@ -45,6 +62,7 @@ const ParseResponseSchema = z.object({
   ledgerBalance: z.number(),
   transactions: z.array(ParsedTransactionSchema),
   detectedCreditCardPayments: z.array(DetectedCreditCardPaymentSchema),
+  detectedTransfers: z.array(DetectedTransferSchema),
   summary: z.object({
     totalIncome: z.number(),
     totalExpenses: z.number(),
@@ -164,6 +182,87 @@ export const handler: AppRouteHandler<typeof route> = async (c) => {
         };
       });
 
+    // Detect transfers to/from registered entities
+    const userBusinesses = await prisma.business.findMany({
+      where: { userId },
+      select: { id: true, name: true },
+    });
+
+    const normalizeForMatch = (s: string) =>
+      s.toLowerCase().replace(/[^a-záàâãéêíóôõúüç0-9\s]/gi, "").replace(/\s+/g, " ").trim();
+
+    const entityCandidates = userBusinesses.map((b) => ({
+      id: b.id,
+      name: b.name,
+      normalized: normalizeForMatch(b.name),
+      entityType: "business" as const,
+    }));
+
+    // Extract counterparty name from OFX memo for matching
+    function extractCounterparty(memo: string): string | null {
+      const pixSent = memo.match(/^Transferência enviada pelo Pix(?:\s+via\s+Open\s+Banking)?\s*-\s*([^-]+)/i);
+      if (pixSent) return pixSent[1].trim();
+      const pixReceived = memo.match(/^Transferência recebida pelo Pix\s*-\s*([^-]+)/i);
+      if (pixReceived) return pixReceived[1].trim();
+      const boleto = memo.match(/^Pagamento de boleto efetuado\s*-\s*([^-]+)/i);
+      if (boleto) return boleto[1].trim();
+      const ted = memo.match(/^TED\s+(?:enviada|recebida)\s*-\s*([^-]+)/i);
+      if (ted) return ted[1].trim();
+      return null;
+    }
+
+    const detectedTransferFitIds = new Set<string>();
+    const detectedTransfers: Array<{
+      fitId: string;
+      amount: number;
+      date: string;
+      description: string;
+      fullDescription: string;
+      type: "income" | "expense";
+      suggestedEntityId: string;
+      suggestedEntityName: string;
+      suggestedEntityType: "business" | "personal";
+      suggestedDirection: "profit_distribution" | "capital_injection" | "reimbursement";
+    }> = [];
+
+    for (const tx of allTransactions) {
+      if (existingFitIds.has(tx.fitId)) continue;
+      const counterparty = extractCounterparty(tx.fullDescription);
+      if (!counterparty) continue;
+      const normalizedCounterparty = normalizeForMatch(counterparty);
+
+      for (const entity of entityCandidates) {
+        // Match if the counterparty name starts with the entity name or vice versa
+        // (OFX often truncates names)
+        const matches =
+          normalizedCounterparty.startsWith(entity.normalized) ||
+          entity.normalized.startsWith(normalizedCounterparty) ||
+          normalizedCounterparty.includes(entity.normalized) ||
+          entity.normalized.includes(normalizedCounterparty);
+
+        if (matches && entity.normalized.length >= 3) {
+          // expense from personal = money going to business (capital_injection)
+          // income to personal = money coming from business (profit_distribution)
+          const direction = tx.type === "expense" ? "capital_injection" : "profit_distribution";
+
+          detectedTransfers.push({
+            fitId: tx.fitId,
+            amount: tx.amount,
+            date: toDateString(tx.date),
+            description: tx.description,
+            fullDescription: tx.fullDescription,
+            type: tx.type,
+            suggestedEntityId: entity.id,
+            suggestedEntityName: entity.name,
+            suggestedEntityType: entity.entityType,
+            suggestedDirection: direction,
+          });
+          detectedTransferFitIds.add(tx.fitId);
+          break;
+        }
+      }
+    }
+
     // Build response
     const transactions = allTransactions.map((t) => ({
       fitId: t.fitId,
@@ -198,6 +297,7 @@ export const handler: AppRouteHandler<typeof route> = async (c) => {
         ledgerBalance: Math.round(ledgerBalance * 100) / 100,
         transactions,
         detectedCreditCardPayments,
+        detectedTransfers,
         summary: {
           totalIncome: Math.round(totalIncome * 100) / 100,
           totalExpenses: Math.round(totalExpenses * 100) / 100,

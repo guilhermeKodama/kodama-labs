@@ -13,6 +13,7 @@ import {
   X,
   Sparkles,
   AlertTriangle,
+  ArrowLeftRight,
 } from 'lucide-react';
 import {
   Dialog,
@@ -57,6 +58,30 @@ interface DetectedCreditCardPayment {
   closingDay: number;
 }
 
+interface DetectedTransfer {
+  fitId: string;
+  amount: number;
+  date: string;
+  description: string;
+  fullDescription: string;
+  type: 'income' | 'expense';
+  suggestedEntityId: string;
+  suggestedEntityName: string;
+  suggestedEntityType: 'business' | 'personal';
+  suggestedDirection: 'profit_distribution' | 'capital_injection' | 'reimbursement';
+}
+
+interface ConfirmedTransfer {
+  fitId: string;
+  amount: number;
+  date: string;
+  description: string;
+  direction: 'profit_distribution' | 'capital_injection' | 'reimbursement';
+  counterpartyEntityType: 'business' | 'personal';
+  counterpartyEntityId: string;
+  counterpartyEntityName: string;
+}
+
 interface CreditCardToCreate {
   bankName: string;
   lastFourDigits: string;
@@ -72,6 +97,7 @@ interface ParseResult {
   ledgerBalance: number;
   transactions: ParsedTransaction[];
   detectedCreditCardPayments: DetectedCreditCardPayment[];
+  detectedTransfers: DetectedTransfer[];
   summary: {
     totalIncome: number;
     totalExpenses: number;
@@ -138,9 +164,16 @@ export function StatementUploadDialog({
   const [creditCardsToCreate, setCreditCardsToCreate] = useState<CreditCardToCreate[]>([]);
   const [skipCreditCards, setSkipCreditCards] = useState(false);
 
+  // Transfer state
+  const [confirmedTransfers, setConfirmedTransfers] = useState<ConfirmedTransfer[]>([]);
+
   // Import state
   const [isImporting, setIsImporting] = useState(false);
-  const [importResult, setImportResult] = useState<{ imported: number; creditCardsCreated: number } | null>(null);
+  const [importResult, setImportResult] = useState<{
+    imported: number;
+    transfersCreated: number;
+    creditCardsCreated: number;
+  } | null>(null);
 
   const reset = useCallback(() => {
     setCurrentStep('upload');
@@ -152,6 +185,7 @@ export function StatementUploadDialog({
     setEntityId(defaultEntityId ?? personalAccountId ?? '');
     setCreditCardsToCreate([]);
     setSkipCreditCards(false);
+    setConfirmedTransfers([]);
     setIsImporting(false);
     setImportResult(null);
   }, [defaultEntityType, defaultEntityId, personalAccountId]);
@@ -216,7 +250,6 @@ export function StatementUploadDialog({
           (cc) => cc.bankName.toUpperCase().includes(data.bankName.toUpperCase().split(' ')[0] ?? '')
         );
         if (!hasExisting) {
-          // Use the inferred days from the first detected payment
           const firstPayment = data.detectedCreditCardPayments[0];
           setCreditCardsToCreate([
             {
@@ -230,6 +263,22 @@ export function StatementUploadDialog({
         }
       }
 
+      // Auto-confirm detected transfers with their suggested values
+      if (data.detectedTransfers && data.detectedTransfers.length > 0) {
+        setConfirmedTransfers(
+          data.detectedTransfers.map((dt: DetectedTransfer) => ({
+            fitId: dt.fitId,
+            amount: dt.amount,
+            date: dt.date,
+            description: dt.description,
+            direction: dt.suggestedDirection,
+            counterpartyEntityType: dt.suggestedEntityType,
+            counterpartyEntityId: dt.suggestedEntityId,
+            counterpartyEntityName: dt.suggestedEntityName,
+          }))
+        );
+      }
+
       setCurrentStep('entity');
     } catch (error) {
       setParseError(error instanceof Error ? error.message : 'Failed to parse files');
@@ -241,7 +290,6 @@ export function StatementUploadDialog({
   // --- Navigation ---
 
   const goToStep = (step: Step) => {
-    // Skip credit cards step if no payments detected
     if (step === 'credit-cards' && (!parseResult?.detectedCreditCardPayments.length || skipCreditCards)) {
       setCurrentStep('preview');
       return;
@@ -268,12 +316,58 @@ export function StatementUploadDialog({
     }
   };
 
+  // --- Transfer management ---
+
+  const confirmedTransferFitIds = new Set(confirmedTransfers.map((ct) => ct.fitId));
+
+  const dismissTransfer = (fitId: string) => {
+    setConfirmedTransfers((prev) => prev.filter((ct) => ct.fitId !== fitId));
+  };
+
+  const confirmTransfer = (dt: DetectedTransfer) => {
+    if (confirmedTransferFitIds.has(dt.fitId)) return;
+    setConfirmedTransfers((prev) => [
+      ...prev,
+      {
+        fitId: dt.fitId,
+        amount: dt.amount,
+        date: dt.date,
+        description: dt.description,
+        direction: dt.suggestedDirection,
+        counterpartyEntityType: dt.suggestedEntityType,
+        counterpartyEntityId: dt.suggestedEntityId,
+        counterpartyEntityName: dt.suggestedEntityName,
+      },
+    ]);
+  };
+
+  const updateTransferDirection = (fitId: string, direction: ConfirmedTransfer['direction']) => {
+    setConfirmedTransfers((prev) =>
+      prev.map((ct) => (ct.fitId === fitId ? { ...ct, direction } : ct))
+    );
+  };
+
+  const updateTransferEntity = (fitId: string, entityIdVal: string) => {
+    const biz = businesses.find((b) => b.id === entityIdVal);
+    if (!biz) return;
+    setConfirmedTransfers((prev) =>
+      prev.map((ct) =>
+        ct.fitId === fitId
+          ? { ...ct, counterpartyEntityId: entityIdVal, counterpartyEntityName: biz.name, counterpartyEntityType: 'business' }
+          : ct
+      )
+    );
+  };
+
   // --- Import ---
 
-  const selectedTransactions = parseResult?.transactions.filter((t) => t.selected) ?? [];
+  // Transactions that are selected but NOT confirmed as transfers
+  const selectedTransactions = (parseResult?.transactions ?? []).filter(
+    (t) => t.selected && !confirmedTransferFitIds.has(t.fitId)
+  );
 
   const handleImport = async () => {
-    if (!parseResult || selectedTransactions.length === 0) return;
+    if (!parseResult || (selectedTransactions.length === 0 && confirmedTransfers.length === 0)) return;
     setIsImporting(true);
 
     try {
@@ -285,13 +379,24 @@ export function StatementUploadDialog({
           bankName: parseResult.bankName,
           fileName: files.map((f) => f.name).join(', '),
           ledgerBalance: parseResult.ledgerBalance,
-          transactions: selectedTransactions.map((t) => ({
-            externalId: t.fitId,
-            date: t.date,
-            description: t.description,
-            amount: t.amount,
-            type: t.type,
+          transactions: selectedTransactions.map((txn) => ({
+            externalId: txn.fitId,
+            date: txn.date,
+            description: txn.description,
+            amount: txn.amount,
+            type: txn.type,
           })),
+          transfers: confirmedTransfers.length > 0
+            ? confirmedTransfers.map((ct) => ({
+                externalId: ct.fitId,
+                date: ct.date,
+                amount: ct.amount,
+                description: ct.description,
+                direction: ct.direction,
+                counterpartyEntityType: ct.counterpartyEntityType,
+                counterpartyEntityId: ct.counterpartyEntityId,
+              }))
+            : undefined,
           creditCards: creditCardsToCreate.length > 0 && !skipCreditCards
             ? creditCardsToCreate.filter((cc) => cc.lastFourDigits.length === 4)
             : undefined,
@@ -346,6 +451,11 @@ export function StatementUploadDialog({
 
   const stepNumber = STEPS.indexOf(currentStep) + 1;
   const totalSteps = parseResult?.detectedCreditCardPayments.length ? 5 : 4;
+
+  // Build a lookup of detected transfers by fitId for quick access
+  const detectedTransferMap = new Map(
+    (parseResult?.detectedTransfers ?? []).map((dt) => [dt.fitId, dt])
+  );
 
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o) handleClose(); }}>
@@ -589,7 +699,7 @@ export function StatementUploadDialog({
                   <p className="text-xs text-slate-400">{t('preview.income')}</p>
                   <p className="text-lg font-bold text-emerald-400">
                     {formatCurrency(
-                      selectedTransactions.filter((t) => t.type === 'income').reduce((s, t) => s + t.amount, 0),
+                      selectedTransactions.filter((st) => st.type === 'income').reduce((s, st) => s + st.amount, 0),
                       parseResult.currency
                     )}
                   </p>
@@ -598,12 +708,25 @@ export function StatementUploadDialog({
                   <p className="text-xs text-slate-400">{t('preview.expenses')}</p>
                   <p className="text-lg font-bold text-red-400">
                     {formatCurrency(
-                      selectedTransactions.filter((t) => t.type === 'expense').reduce((s, t) => s + t.amount, 0),
+                      selectedTransactions.filter((st) => st.type === 'expense').reduce((s, st) => s + st.amount, 0),
                       parseResult.currency
                     )}
                   </p>
                 </div>
               </div>
+
+              {/* Detected transfers banner */}
+              {confirmedTransfers.length > 0 && (
+                <div className="flex items-start gap-2 rounded-lg border border-purple-500/30 bg-purple-500/10 p-3">
+                  <ArrowLeftRight className="mt-0.5 h-4 w-4 shrink-0 text-purple-400" />
+                  <div>
+                    <p className="text-sm font-medium text-purple-300">{t('transfers.detected')}</p>
+                    <p className="mt-0.5 text-xs text-purple-400">
+                      {t('transfers.confirmedCount', { count: confirmedTransfers.length })}
+                    </p>
+                  </div>
+                </div>
+              )}
 
               {/* Select all toggle */}
               <div className="flex items-center justify-between">
@@ -618,57 +741,136 @@ export function StatementUploadDialog({
 
               {/* Transaction list */}
               <div className="max-h-[300px] overflow-y-auto space-y-1 rounded-lg border border-slate-700">
-                {parseResult.transactions.map((tx) => (
-                  <div
-                    key={tx.fitId}
-                    onClick={() => !tx.isDuplicate && toggleTransaction(tx.fitId)}
-                    className={`flex items-center gap-3 px-3 py-2 text-sm transition-colors ${
-                      tx.isDuplicate
-                        ? 'bg-slate-800/30 opacity-50'
-                        : tx.selected
-                          ? 'bg-slate-800/50 cursor-pointer hover:bg-slate-800/70'
-                          : 'bg-slate-800/20 cursor-pointer hover:bg-slate-800/40'
-                    }`}
-                  >
-                    {/* Checkbox */}
-                    <div
-                      className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border ${
-                        tx.isDuplicate
-                          ? 'border-slate-600 bg-slate-700'
-                          : tx.selected
-                            ? 'border-emerald-500 bg-emerald-500'
-                            : 'border-slate-600'
-                      }`}
-                    >
-                      {(tx.selected || tx.isDuplicate) && <Check className="h-3 w-3 text-white" />}
-                    </div>
+                {parseResult.transactions.map((tx) => {
+                  const isConfirmedTransfer = confirmedTransferFitIds.has(tx.fitId);
+                  const detectedTransfer = detectedTransferMap.get(tx.fitId);
+                  const confirmedTr = confirmedTransfers.find((ct) => ct.fitId === tx.fitId);
 
-                    {/* Date */}
-                    <span className="w-20 shrink-0 text-slate-400">{tx.date}</span>
-
-                    {/* Description */}
-                    <span className="min-w-0 flex-1 truncate text-slate-300" title={tx.fullDescription}>
-                      {tx.description}
-                    </span>
-
-                    {/* Amount + badges */}
-                    <div className="flex shrink-0 items-center gap-2">
-                      {tx.isDuplicate && (
-                        <span className="rounded-full bg-slate-700 px-2 py-0.5 text-[10px] text-slate-400">
-                          {t('preview.duplicate')}
-                        </span>
-                      )}
-                      <span
-                        className={`font-medium ${
-                          tx.type === 'income' ? 'text-emerald-400' : 'text-red-400'
+                  return (
+                    <div key={tx.fitId}>
+                      {/* Main transaction row */}
+                      <div
+                        onClick={() => !tx.isDuplicate && !isConfirmedTransfer && toggleTransaction(tx.fitId)}
+                        className={`flex items-center gap-3 px-3 py-2 text-sm transition-colors ${
+                          tx.isDuplicate
+                            ? 'bg-slate-800/30 opacity-50'
+                            : isConfirmedTransfer
+                              ? 'bg-purple-900/20 border-l-2 border-l-purple-500'
+                              : tx.selected
+                                ? 'bg-slate-800/50 cursor-pointer hover:bg-slate-800/70'
+                                : 'bg-slate-800/20 cursor-pointer hover:bg-slate-800/40'
                         }`}
                       >
-                        {tx.type === 'income' ? '+' : '-'}
-                        {formatCurrency(tx.amount, parseResult.currency)}
-                      </span>
+                        {/* Checkbox / Transfer icon */}
+                        {isConfirmedTransfer ? (
+                          <ArrowLeftRight className="h-4 w-4 shrink-0 text-purple-400" />
+                        ) : (
+                          <div
+                            className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border ${
+                              tx.isDuplicate
+                                ? 'border-slate-600 bg-slate-700'
+                                : tx.selected
+                                  ? 'border-emerald-500 bg-emerald-500'
+                                  : 'border-slate-600'
+                            }`}
+                          >
+                            {(tx.selected || tx.isDuplicate) && <Check className="h-3 w-3 text-white" />}
+                          </div>
+                        )}
+
+                        {/* Date */}
+                        <span className="w-20 shrink-0 text-slate-400">{tx.date}</span>
+
+                        {/* Description */}
+                        <span className="min-w-0 flex-1 truncate text-slate-300" title={tx.fullDescription}>
+                          {tx.description}
+                        </span>
+
+                        {/* Amount + badges */}
+                        <div className="flex shrink-0 items-center gap-2">
+                          {tx.isDuplicate && (
+                            <span className="rounded-full bg-slate-700 px-2 py-0.5 text-[10px] text-slate-400">
+                              {t('preview.duplicate')}
+                            </span>
+                          )}
+                          {isConfirmedTransfer && confirmedTr && (
+                            <span className="rounded-full bg-purple-500/20 px-2 py-0.5 text-[10px] text-purple-300">
+                              {t('transfers.directionOptions.' + confirmedTr.direction)}
+                            </span>
+                          )}
+                          <span
+                            className={`font-medium ${
+                              tx.type === 'income' ? 'text-emerald-400' : 'text-red-400'
+                            }`}
+                          >
+                            {tx.type === 'income' ? '+' : '-'}
+                            {formatCurrency(tx.amount, parseResult.currency)}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Transfer action row: show for detected transfers (confirmed or not) */}
+                      {detectedTransfer && !tx.isDuplicate && (
+                        <div className="flex items-center gap-2 bg-purple-950/20 px-3 py-1.5 text-xs border-b border-slate-700/50">
+                          {isConfirmedTransfer && confirmedTr ? (
+                            <>
+                              <span className="text-purple-300">
+                                ↔ {confirmedTr.counterpartyEntityName}
+                              </span>
+                              <Select
+                                value={confirmedTr.direction}
+                                onValueChange={(v) => updateTransferDirection(tx.fitId, v as ConfirmedTransfer['direction'])}
+                              >
+                                <SelectTrigger className="h-6 w-auto min-w-[130px] border-purple-500/30 bg-purple-900/30 text-purple-300 text-xs px-2">
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent className="border-slate-700 bg-slate-900">
+                                  <SelectItem value="capital_injection">{t('transfers.directionOptions.capital_injection')}</SelectItem>
+                                  <SelectItem value="profit_distribution">{t('transfers.directionOptions.profit_distribution')}</SelectItem>
+                                  <SelectItem value="reimbursement">{t('transfers.directionOptions.reimbursement')}</SelectItem>
+                                </SelectContent>
+                              </Select>
+                              {businesses.length > 1 && (
+                                <Select
+                                  value={confirmedTr.counterpartyEntityId}
+                                  onValueChange={(v) => updateTransferEntity(tx.fitId, v)}
+                                >
+                                  <SelectTrigger className="h-6 w-auto min-w-[120px] border-purple-500/30 bg-purple-900/30 text-purple-300 text-xs px-2">
+                                    <SelectValue />
+                                  </SelectTrigger>
+                                  <SelectContent className="border-slate-700 bg-slate-900">
+                                    {businesses.map((biz) => (
+                                      <SelectItem key={biz.id} value={biz.id}>{biz.name}</SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                              )}
+                              <button
+                                onClick={() => dismissTransfer(tx.fitId)}
+                                className="ml-auto text-slate-400 hover:text-slate-200"
+                              >
+                                {t('transfers.dismiss')}
+                              </button>
+                            </>
+                          ) : (
+                            <>
+                              <ArrowLeftRight className="h-3 w-3 text-purple-400" />
+                              <span className="text-purple-300">
+                                {detectedTransfer.suggestedEntityName}
+                              </span>
+                              <button
+                                onClick={() => confirmTransfer(detectedTransfer)}
+                                className="ml-auto rounded bg-purple-600/50 px-2 py-0.5 text-purple-200 hover:bg-purple-600/70"
+                              >
+                                {t('transfers.confirm')}
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      )}
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           )}
@@ -683,15 +885,22 @@ export function StatementUploadDialog({
                 <p className="text-lg font-medium text-white">
                   {t('success.imported', { count: importResult.imported })}
                 </p>
+                {importResult.transfersCreated > 0 && (
+                  <p className="mt-1 text-sm text-purple-300">
+                    {t('success.transfersCreated', { count: importResult.transfersCreated })}
+                  </p>
+                )}
                 {importResult.creditCardsCreated > 0 && (
                   <p className="mt-1 text-sm text-slate-400">
                     {t('success.creditCardsCreated', { count: importResult.creditCardsCreated })}
                   </p>
                 )}
-                <p className="mt-3 text-sm text-slate-400">
-                  <Loader2 className="mr-1 inline h-3 w-3 animate-spin" />
-                  {t('success.categorizing')}
-                </p>
+                {importResult.imported > 0 && (
+                  <p className="mt-3 text-sm text-slate-400">
+                    <Loader2 className="mr-1 inline h-3 w-3 animate-spin" />
+                    {t('success.categorizing')}
+                  </p>
+                )}
               </div>
             </div>
           )}
@@ -775,13 +984,21 @@ export function StatementUploadDialog({
                 {currentStep === 'preview' && (
                   <Button
                     onClick={handleImport}
-                    disabled={selectedTransactions.length === 0 || isImporting}
+                    disabled={(selectedTransactions.length === 0 && confirmedTransfers.length === 0) || isImporting}
                     className="bg-emerald-600 text-white hover:bg-emerald-700"
                   >
                     {isImporting ? (
                       <span className="flex items-center gap-2">
                         <Loader2 className="h-4 w-4 animate-spin" />
                         {t('preview.importing')}
+                      </span>
+                    ) : confirmedTransfers.length > 0 ? (
+                      <span className="flex items-center gap-2">
+                        <Upload className="h-4 w-4" />
+                        {t('preview.importWithTransfers', {
+                          txCount: selectedTransactions.length,
+                          trCount: confirmedTransfers.length,
+                        })}
                       </span>
                     ) : (
                       <span className="flex items-center gap-2">

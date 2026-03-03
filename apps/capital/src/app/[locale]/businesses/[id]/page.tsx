@@ -30,6 +30,7 @@ import { SummaryCard } from '@/components/cards';
 import { ActivityTable } from '@/components/tables';
 import { TransactionDialog, TransferDialog } from '@/components/dialogs';
 import { StatementUploadDialog } from '@/components/dialogs/statement-upload-dialog';
+import { ConvertToTransferDialog } from '@/components/dialogs/convert-to-transfer-dialog';
 import { Button } from '@/components/ui/button';
 import { Calendar } from '@/components/ui/calendar';
 import {
@@ -75,7 +76,7 @@ export default function BusinessDetailPage() {
   const { businesses, getBusiness } = useBusinessStore();
   const { transactions, addTransaction, updateTransaction, deleteTransaction, fetchTransactions } =
     useTransactionStore();
-  const { transfers, addTransfer, deleteTransfer } = useTransferStore();
+  const { transfers, addTransfer, deleteTransfer, fetchTransfers } = useTransferStore();
   const { settings, personalAccount } = useSettingsStore();
   const { creditCards } = useCreditCardStore();
 
@@ -85,6 +86,7 @@ export default function BusinessDetailPage() {
   const [pendingCategorization, setPendingCategorization] = useState(false);
   const [editingTransaction, setEditingTransaction] = useState<Transaction | undefined>();
   const [deletingTransaction, setDeletingTransaction] = useState<Transaction | undefined>();
+  const [convertingTransaction, setConvertingTransaction] = useState<Transaction | null>(null);
   const [deletingTransfer, setDeletingTransfer] = useState<Transfer | undefined>();
   const [editingTransfer, setEditingTransfer] = useState<Transfer | undefined>();
   const [isTransferDialogOpen, setIsTransferDialogOpen] = useState(false);
@@ -484,6 +486,7 @@ export default function BusinessDetailPage() {
             entityNames={entityNames}
             onEditTransaction={openEditDialog}
             onDeleteTransaction={setDeletingTransaction}
+            onConvertToTransfer={setConvertingTransaction}
             onEditTransfer={openEditTransferDialog}
             onDeleteTransfer={setDeletingTransfer}
           />
@@ -518,6 +521,23 @@ export default function BusinessDetailPage() {
         onOpenChange={closeTransferDialog}
         transfer={editingTransfer}
         onSubmit={handleEditTransfer}
+      />
+
+      {/* Convert Transaction to Transfer Dialog */}
+      <ConvertToTransferDialog
+        open={!!convertingTransaction}
+        onOpenChange={(open) => { if (!open) setConvertingTransaction(null); }}
+        transaction={convertingTransaction}
+        sourceEntityId={businessId}
+        sourceEntityType="business"
+        businesses={businesses}
+        personalAccountId={personalAccount?.id ?? null}
+        onComplete={() => {
+          setConvertingTransaction(null);
+          fetchTransactions();
+          fetchTransfers();
+          toast.success(t('convertTransfer.success'));
+        }}
       />
 
       {/* Delete Transaction Confirmation */}

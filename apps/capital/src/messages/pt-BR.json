@@ -767,7 +767,32 @@
       "thisMonth": "Este Mês",
       "lastMonth": "Mês Passado",
       "selectDates": "Selecionar datas"
-    }
+    },
+    "convertToTransfer": "Converter em Transferência"
+  },
+  "convertTransfer": {
+    "title": "Converter em Transferência",
+    "step": "Passo",
+    "of": "de",
+    "selectEntity": "Selecione ou crie uma empresa",
+    "createBusiness": "Criar Nova Empresa",
+    "businessName": "Nome da Empresa",
+    "currency": "Moeda",
+    "creating": "Criando...",
+    "configure": "Configurar Transferência",
+    "direction": "Direção da Transferência",
+    "description": "Descrição",
+    "transactionSummary": "Transação Original",
+    "confirm": "Confirmar Conversão",
+    "confirmDescription": "Isso excluirá a transação original e criará uma transferência em seu lugar.",
+    "summary": "Converter {amount} {type} em uma transferência de {direction} {preposition} {entity}",
+    "converting": "Convertendo...",
+    "success": "Transação convertida em transferência",
+    "income": "receita",
+    "expense": "despesa",
+    "to": "para",
+    "from": "de",
+    "noBusiness": "Nenhuma empresa encontrada. Crie uma para continuar."
   },
   "language": {
     "title": "Idioma",
@@ -1252,6 +1277,22 @@
       "dueDay": "Dia de Vencimento",
       "skip": "Pular esta etapa"
     },
+    "transfers": {
+      "detected": "Transferências detectadas",
+      "detectedDescription": "Identificamos {count} transação(ões) que parecem ser transferências entre suas contas.",
+      "transferTo": "Transferência para {name}",
+      "transferFrom": "Transferência de {name}",
+      "confirm": "Confirmar como transferência",
+      "dismiss": "Manter como transação",
+      "changeEntity": "Alterar entidade",
+      "direction": "Direção",
+      "directionOptions": {
+        "capital_injection": "Injeção de Capital",
+        "profit_distribution": "Distribuição de Lucros",
+        "reimbursement": "Reembolso"
+      },
+      "confirmedCount": "{count} transferência(s)"
+    },
     "preview": {
       "new": "Novas",
       "duplicates": "Duplicadas",
@@ -1261,12 +1302,14 @@
       "toggleAll": "Selecionar todas",
       "duplicate": "Já importada",
       "importing": "Importando...",
-      "import": "Importar {count} transações"
+      "import": "Importar {count} transações",
+      "importWithTransfers": "Importar {txCount} transações + {trCount} transferências"
     },
     "success": {
       "title": "Importação Concluída",
       "description": "Suas transações foram importadas com sucesso.",
       "imported": "{count} transações importadas",
+      "transfersCreated": "{count} transferência(s) criada(s)",
       "creditCardsCreated": "{count} cartão(ões) de crédito criado(s)",
       "categorizing": "IA está categorizando suas transações..."
     },

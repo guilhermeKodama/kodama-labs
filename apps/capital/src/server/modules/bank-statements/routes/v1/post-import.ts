@@ -25,6 +25,20 @@ const CreditCardInputSchema = z.object({
   currency: z.string().length(3),
 });
 
+const TransferInputSchema = z.object({
+  externalId: z.string().min(1),
+  date: z.string().min(1),
+  amount: z.number().positive(),
+  description: z.string().optional(),
+  direction: z.enum([
+    "profit_distribution",
+    "capital_injection",
+    "reimbursement",
+  ]),
+  counterpartyEntityType: z.enum(["business", "personal"]),
+  counterpartyEntityId: z.string().min(1),
+});
+
 const ImportRequestSchema = z.object({
   entityType: z.enum(["personal", "business"]),
   entityId: z.string().min(1),
@@ -32,12 +46,14 @@ const ImportRequestSchema = z.object({
   bankName: z.string().optional(),
   fileName: z.string().optional(),
   ledgerBalance: z.number().optional(),
-  transactions: z.array(TransactionInputSchema).min(1),
+  transactions: z.array(TransactionInputSchema),
+  transfers: z.array(TransferInputSchema).optional(),
   creditCards: z.array(CreditCardInputSchema).optional(),
 });
 
 const ImportResponseSchema = z.object({
   imported: z.number(),
+  transfersCreated: z.number(),
   creditCardsCreated: z.number(),
   statementImportId: z.string(),
 });
@@ -192,30 +208,74 @@ export const handler: AppRouteHandler<typeof route> = async (c) => {
       }
     }
 
+    // Create transfers if provided
+    let transfersCreated = 0;
+    if (body.transfers && body.transfers.length > 0) {
+      for (const tr of body.transfers) {
+        // Determine from/to based on direction:
+        // capital_injection: source entity -> counterparty (money leaving source)
+        // profit_distribution: counterparty -> source entity (money entering source)
+        // reimbursement: counterparty -> source entity (money entering source)
+        const isOutgoing = tr.direction === "capital_injection";
+
+        const fromEntityType = isOutgoing ? body.entityType : tr.counterpartyEntityType;
+        const fromEntityId = isOutgoing ? body.entityId : tr.counterpartyEntityId;
+        const toEntityType = isOutgoing ? tr.counterpartyEntityType : body.entityType;
+        const toEntityId = isOutgoing ? tr.counterpartyEntityId : body.entityId;
+
+        await prisma.transfer.create({
+          data: {
+            fromEntityType,
+            toEntityType,
+            direction: tr.direction,
+            amount: tr.amount,
+            currency: body.currency,
+            exchangeRate: 1,
+            description: tr.description,
+            date: parseLocalDate(tr.date),
+            fromBusinessId: fromEntityType === "business" ? fromEntityId : undefined,
+            fromPersonalAccountId: fromEntityType === "personal" ? fromEntityId : undefined,
+            toBusinessId: toEntityType === "business" ? toEntityId : undefined,
+            toPersonalAccountId: toEntityType === "personal" ? toEntityId : undefined,
+          },
+        });
+        transfersCreated++;
+      }
+    }
+
     // Build transaction data with category mapping
-    const txData = body.transactions.map((t) => {
-      const mapped = mappingLookup.get(normalizeDescription(t.description));
-      return {
-        entityType: body.entityType as "personal" | "business",
-        type: t.type as "income" | "expense",
-        amount: t.amount,
-        currency: body.currency,
-        description: t.description,
-        category: mapped ?? "Uncategorized",
-        date: parseLocalDate(t.date),
-        externalId: t.externalId,
-        statementImportId: statementImport.id,
-        businessId: body.entityType === "business" ? body.entityId : undefined,
-        personalAccountId: body.entityType === "personal" ? body.entityId : undefined,
-      };
-    });
+    let importedCount = 0;
+    if (body.transactions.length > 0) {
+      const txData = body.transactions.map((t) => {
+        const mapped = mappingLookup.get(normalizeDescription(t.description));
+        return {
+          entityType: body.entityType as "personal" | "business",
+          type: t.type as "income" | "expense",
+          amount: t.amount,
+          currency: body.currency,
+          description: t.description,
+          category: mapped ?? "Uncategorized",
+          date: parseLocalDate(t.date),
+          externalId: t.externalId,
+          statementImportId: statementImport.id,
+          businessId: body.entityType === "business" ? body.entityId : undefined,
+          personalAccountId: body.entityType === "personal" ? body.entityId : undefined,
+        };
+      });
 
-    // Bulk insert
-    const result = await prisma.transaction.createMany({ data: txData });
+      const result = await prisma.transaction.createMany({ data: txData });
+      importedCount = result.count;
 
-    // If all transactions got a category, mark as completed immediately
-    const allCategorized = txData.every((t) => t.category !== "Uncategorized");
-    if (allCategorized) {
+      // If all transactions got a category, mark as completed immediately
+      const allCategorized = txData.every((t) => t.category !== "Uncategorized");
+      if (allCategorized) {
+        await prisma.statementImport.update({
+          where: { id: statementImport.id },
+          data: { categorizationStatus: "completed" },
+        });
+      }
+    } else {
+      // No transactions to categorize
       await prisma.statementImport.update({
         where: { id: statementImport.id },
         data: { categorizationStatus: "completed" },
@@ -224,7 +284,8 @@ export const handler: AppRouteHandler<typeof route> = async (c) => {
 
     return c.json(
       {
-        imported: result.count,
+        imported: importedCount,
+        transfersCreated,
         creditCardsCreated,
         statementImportId: statementImport.id,
       },

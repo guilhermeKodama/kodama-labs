@@ -767,7 +767,32 @@
       "thisMonth": "This Month",
       "lastMonth": "Last Month",
       "selectDates": "Select dates"
-    }
+    },
+    "convertToTransfer": "Convert to Transfer"
+  },
+  "convertTransfer": {
+    "title": "Convert to Transfer",
+    "step": "Step",
+    "of": "of",
+    "selectEntity": "Select or create a business",
+    "createBusiness": "Create New Business",
+    "businessName": "Business Name",
+    "currency": "Currency",
+    "creating": "Creating...",
+    "configure": "Configure Transfer",
+    "direction": "Transfer Direction",
+    "description": "Description",
+    "transactionSummary": "Original Transaction",
+    "confirm": "Confirm Conversion",
+    "confirmDescription": "This will delete the original transaction and create a transfer in its place.",
+    "summary": "Convert {amount} {type} into a {direction} transfer {preposition} {entity}",
+    "converting": "Converting...",
+    "success": "Transaction converted to transfer",
+    "income": "income",
+    "expense": "expense",
+    "to": "to",
+    "from": "from",
+    "noBusiness": "No businesses found. Create one to continue."
   },
   "language": {
     "title": "Language",
@@ -1252,6 +1277,22 @@
       "dueDay": "Due Day",
       "skip": "Skip this step"
     },
+    "transfers": {
+      "detected": "Transfers detected",
+      "detectedDescription": "We identified {count} transaction(s) that look like transfers between your accounts.",
+      "transferTo": "Transfer to {name}",
+      "transferFrom": "Transfer from {name}",
+      "confirm": "Confirm as transfer",
+      "dismiss": "Keep as transaction",
+      "changeEntity": "Change entity",
+      "direction": "Direction",
+      "directionOptions": {
+        "capital_injection": "Capital Injection",
+        "profit_distribution": "Profit Distribution",
+        "reimbursement": "Reimbursement"
+      },
+      "confirmedCount": "{count} transfer(s)"
+    },
     "preview": {
       "new": "New",
       "duplicates": "Duplicates",
@@ -1261,12 +1302,14 @@
       "toggleAll": "Toggle all",
       "duplicate": "Already imported",
       "importing": "Importing...",
-      "import": "Import {count} transactions"
+      "import": "Import {count} transactions",
+      "importWithTransfers": "Import {txCount} transactions + {trCount} transfers"
     },
     "success": {
       "title": "Import Complete",
       "description": "Your transactions have been imported successfully.",
       "imported": "{count} transactions imported",
+      "transfersCreated": "{count} transfer(s) created",
       "creditCardsCreated": "{count} credit card(s) created",
       "categorizing": "AI is categorizing your transactions..."
     },
