@@ -70,6 +70,7 @@ interface ActivityTableProps {
   entityNames?: Record<string, string>; // Map of entity IDs to names
   onEditTransaction?: (transaction: Transaction) => void;
   onDeleteTransaction?: (transaction: Transaction) => void;
+  onConvertToTransfer?: (transaction: Transaction) => void;
   onEditTransfer?: (transfer: Transfer) => void;
   onDeleteTransfer?: (transfer: Transfer) => void;
 }
@@ -107,6 +108,7 @@ export function ActivityTable({
   entityNames = {},
   onEditTransaction,
   onDeleteTransaction,
+  onConvertToTransfer,
   onEditTransfer,
   onDeleteTransfer,
 }: ActivityTableProps) {
@@ -309,7 +311,7 @@ export function ActivityTable({
                   <ArrowUpDown className="ml-2 h-3 w-3" />
                 </Button>
               </TableHead>
-              {(onEditTransaction || onDeleteTransaction || onDeleteTransfer) && (
+              {(onEditTransaction || onDeleteTransaction || onConvertToTransfer || onDeleteTransfer) && (
                 <TableHead className="w-[50px]"></TableHead>
               )}
             </TableRow>
@@ -422,9 +424,9 @@ export function ActivityTable({
                       </div>
                     )}
                   </TableCell>
-                  {(onEditTransaction || onDeleteTransaction || onEditTransfer || onDeleteTransfer) && (
+                  {(onEditTransaction || onDeleteTransaction || onConvertToTransfer || onEditTransfer || onDeleteTransfer) && (
                     <TableCell>
-                      {(isTransaction && (onEditTransaction || onDeleteTransaction)) ||
+                      {(isTransaction && (onEditTransaction || onDeleteTransaction || onConvertToTransfer)) ||
                        (isTransfer && (onEditTransfer || onDeleteTransfer)) ? (
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
@@ -447,6 +449,15 @@ export function ActivityTable({
                               >
                                 <Pencil className="mr-2 h-4 w-4" />
                                 {t('common.edit')}
+                              </DropdownMenuItem>
+                            )}
+                            {isTransaction && onConvertToTransfer && item.originalTransaction && (
+                              <DropdownMenuItem
+                                onClick={() => onConvertToTransfer(item.originalTransaction!)}
+                                className="text-purple-400 focus:bg-purple-500/10 focus:text-purple-400"
+                              >
+                                <ArrowLeftRight className="mr-2 h-4 w-4" />
+                                {t('activity.convertToTransfer')}
                               </DropdownMenuItem>
                             )}
                             {isTransaction && onDeleteTransaction && item.originalTransaction && (
