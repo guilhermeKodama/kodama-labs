@@ -15,7 +15,9 @@
     "create": "Create",
     "loading": "Loading...",
     "personal": "Personal",
-    "business": "Business"
+    "business": "Business",
+    "done": "Done",
+    "next": "Next"
   },
   "nav": {
     "dashboard": "Dashboard",
@@ -1219,6 +1221,62 @@
       "billReplaced": "Bill replaced successfully!",
       "expenseCreated": "Expense created from bill!",
       "billLinked": "Bill linked to transaction!"
+    }
+  },
+  "bankStatements": {
+    "title": "Upload Bank Statement",
+    "step": "Step",
+    "of": "of",
+    "uploadStatement": "Upload Statement",
+    "upload": {
+      "dropzone": "Click to select OFX files or drag them here",
+      "formats": "Supported: .ofx, .qfx",
+      "parsing": "Parsing...",
+      "continue": "Continue"
+    },
+    "entity": {
+      "detected": "Detected bank account",
+      "account": "Account",
+      "selectEntity": "Import transactions to",
+      "personal": "Personal Account",
+      "business": "Business",
+      "selectBusiness": "Select a business"
+    },
+    "creditCards": {
+      "detected": "Credit card payments detected",
+      "detectedDescription": "We found {count} credit card bill payment(s). Would you like to create a credit card?",
+      "createNew": "Create Credit Card",
+      "bankName": "Bank Name",
+      "lastFour": "Last 4 Digits",
+      "closingDay": "Closing Day",
+      "dueDay": "Due Day",
+      "skip": "Skip this step"
+    },
+    "preview": {
+      "new": "New",
+      "duplicates": "Duplicates",
+      "income": "Income",
+      "expenses": "Expenses",
+      "transactions": "Transactions",
+      "toggleAll": "Toggle all",
+      "duplicate": "Already imported",
+      "importing": "Importing...",
+      "import": "Import {count} transactions"
+    },
+    "success": {
+      "title": "Import Complete",
+      "description": "Your transactions have been imported successfully.",
+      "imported": "{count} transactions imported",
+      "creditCardsCreated": "{count} credit card(s) created",
+      "categorizing": "AI is categorizing your transactions..."
+    },
+    "status": {
+      "categorizing": "AI is categorizing your imported transactions...",
+      "completed": "Categorization complete"
+    },
+    "toast": {
+      "imported": "Bank statement imported!",
+      "error": "Failed to import statement"
     }
   }
 }

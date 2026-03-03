@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect, useCallback } from 'react';
 import { useTranslations } from 'next-intl';
 import {
   format,
@@ -20,12 +20,16 @@ import {
   Wallet,
   CalendarIcon,
   X,
+  Upload,
+  Loader2,
+  Sparkles,
 } from 'lucide-react';
 import { AppShell } from '@/components/layout';
 import { Header } from '@/components/layout/header';
 import { SummaryCard } from '@/components/cards';
 import { ActivityTable } from '@/components/tables';
 import { TransactionDialog, TransferDialog } from '@/components/dialogs';
+import { StatementUploadDialog } from '@/components/dialogs/statement-upload-dialog';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Calendar } from '@/components/ui/calendar';
@@ -50,26 +54,42 @@ import {
   useSettingsStore,
   useBusinessStore,
   useInvestmentStore,
+  useCreditCardStore,
 } from '@/lib/store';
 import { calculateEntitySummary } from '@/lib/utils/calculations';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
+import { client } from '@/lib/api-client';
 import type { Transaction, Transfer } from '@/types';
 import type { CreateTransactionFormData } from '@/lib/validations';
 import type { DateRange } from 'react-day-picker';
+
+interface StatementImportStatus {
+  id: string;
+  categorizationStatus: string;
+  ledgerBalance: number | null;
+  ledgerCurrency: string | null;
+  personalAccountId: string | null;
+  businessId: string | null;
+  createdAt: string;
+}
 
 export default function PersonalPage() {
   const t = useTranslations();
   const locale = useLocale();
   const dateLocale = locale === 'pt-BR' ? ptBR : enUS;
   
-  const { transactions, addTransaction, updateTransaction, deleteTransaction } =
+  const { transactions, addTransaction, updateTransaction, deleteTransaction, fetchTransactions } =
     useTransactionStore();
   const { transfers, addTransfer, deleteTransfer } = useTransferStore();
   const { settings, personalAccount } = useSettingsStore();
   const { businesses } = useBusinessStore();
+  const { creditCards } = useCreditCardStore();
 
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [isStatementDialogOpen, setIsStatementDialogOpen] = useState(false);
+  const [pendingCategorization, setPendingCategorization] = useState(false);
+  const [ledgerBalance, setLedgerBalance] = useState<number | null>(null);
   const [editingTransaction, setEditingTransaction] = useState<Transaction | undefined>();
   const [deletingTransaction, setDeletingTransaction] = useState<Transaction | undefined>();
   const [deletingTransfer, setDeletingTransfer] = useState<Transfer | undefined>();
@@ -241,11 +261,81 @@ export default function PersonalPage() {
     setEditingTransfer(undefined);
   };
 
+  const updateLedgerBalance = useCallback((imports: StatementImportStatus[]) => {
+    if (!personalAccount) return;
+    const relevant = imports
+      .filter((i) => i.personalAccountId === personalAccount.id && i.ledgerBalance != null)
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    if (relevant.length > 0) {
+      setLedgerBalance(relevant[0].ledgerBalance);
+    }
+  }, [personalAccount]);
+
+  // Fetch ledger balance on mount
+  useEffect(() => {
+    if (!personalAccount) return;
+    (async () => {
+      try {
+        const res = await client.v1['bank-statements'].imports.$get();
+        if (res.ok) {
+          const imports = await res.json() as StatementImportStatus[];
+          updateLedgerBalance(imports);
+        }
+      } catch {
+        // ignore
+      }
+    })();
+  }, [personalAccount, updateLedgerBalance]);
+
+  // Poll for categorization status
+  useEffect(() => {
+    if (!pendingCategorization) return;
+    const interval = setInterval(async () => {
+      try {
+        const res = await client.v1['bank-statements'].imports.$get();
+        if (res.ok) {
+          const imports = await res.json() as StatementImportStatus[];
+          updateLedgerBalance(imports);
+          const hasPending = imports.some(
+            (i) => i.categorizationStatus === 'pending' || i.categorizationStatus === 'processing'
+          );
+          if (!hasPending) {
+            setPendingCategorization(false);
+            fetchTransactions();
+          }
+        }
+      } catch {
+        // Silently ignore polling errors
+      }
+    }, 10000);
+    return () => clearInterval(interval);
+  }, [pendingCategorization, fetchTransactions, updateLedgerBalance]);
+
+  const handleImportComplete = useCallback(async () => {
+    fetchTransactions();
+    setPendingCategorization(true);
+    toast.success(t('bankStatements.toast.imported'));
+    try {
+      const res = await client.v1['bank-statements'].imports.$get();
+      if (res.ok) {
+        const imports = await res.json() as StatementImportStatus[];
+        updateLedgerBalance(imports);
+      }
+    } catch {
+      // ignore
+    }
+  }, [fetchTransactions, t, updateLedgerBalance]);
+
   return (
     <AppShell>
       <Header
         title={t('personal.title')}
         description={t('personal.subtitle')}
+        secondaryAction={{
+          label: t('bankStatements.uploadStatement'),
+          onClick: () => setIsStatementDialogOpen(true),
+          icon: Upload,
+        }}
         action={{
           label: t('transactions.addTransaction'),
           onClick: () => setIsDialogOpen(true),
@@ -257,10 +347,10 @@ export default function PersonalPage() {
         <div className="mb-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           <SummaryCard
             title={t('personal.balance')}
-            value={summary.balance}
+            value={ledgerBalance ?? summary.balance}
             currency={settings.baseCurrency}
             icon={Wallet}
-            variant={summary.balance >= 0 ? 'income' : 'expense'}
+            variant={(ledgerBalance ?? summary.balance) >= 0 ? 'income' : 'expense'}
           />
           <SummaryCard
             title={t('transactions.summary.income')}
@@ -276,6 +366,14 @@ export default function PersonalPage() {
             icon={TrendingDown}
             variant="expense"
           />
+        </div>
+      )}
+
+      {/* Categorization Status Banner */}
+      {pendingCategorization && (
+        <div className="mb-4 flex items-center gap-2 rounded-lg border border-blue-500/30 bg-blue-500/10 px-4 py-3">
+          <Loader2 className="h-4 w-4 animate-spin text-blue-400" />
+          <span className="text-sm text-blue-300">{t('bankStatements.status.categorizing')}</span>
         </div>
       )}
 
@@ -386,6 +484,18 @@ export default function PersonalPage() {
           />
         </CardContent>
       </Card>
+
+      {/* Statement Upload Dialog */}
+      <StatementUploadDialog
+        open={isStatementDialogOpen}
+        onOpenChange={setIsStatementDialogOpen}
+        businesses={businesses}
+        personalAccountId={personalAccount.id}
+        existingCreditCards={creditCards}
+        defaultEntityType="personal"
+        defaultEntityId={personalAccount.id}
+        onImportComplete={handleImportComplete}
+      />
 
       {/* Transaction Dialog */}
       <TransactionDialog
