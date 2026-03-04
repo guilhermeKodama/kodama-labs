@@ -9,6 +9,7 @@ import {
   Legend,
   Tooltip,
 } from 'recharts';
+import { useTranslations } from 'next-intl';
 import { formatCurrency } from '@/lib/utils/format';
 
 interface CategoryPieChartProps {
@@ -33,6 +34,8 @@ const COLORS = [
 ];
 
 export function CategoryPieChart({ data, currency }: CategoryPieChartProps) {
+  const t = useTranslations('charts');
+
   const chartData = useMemo(() => {
     return data.map((item, index) => ({
       ...item,
@@ -43,7 +46,7 @@ export function CategoryPieChart({ data, currency }: CategoryPieChartProps) {
   if (data.length === 0) {
     return (
       <div className="flex h-[300px] items-center justify-center text-slate-500">
-        No data available
+        {t('noData')}
       </div>
     );
   }
