@@ -106,20 +106,44 @@ export async function getSummary(
 
   // Calculate summary for personal account
   if (personalAccount) {
-    const transactions = await db.transaction.findMany({
-      where: {
-        personalAccountId: personalAccount.id,
-        ...dateFilter,
-      },
-    });
+    const [transactions, reimbursementTransfers] = await Promise.all([
+      db.transaction.findMany({
+        where: {
+          personalAccountId: personalAccount.id,
+          ...dateFilter,
+        },
+      }),
+      db.transfer.findMany({
+        where: {
+          toPersonalAccountId: personalAccount.id,
+          direction: "reimbursement",
+          ...(dateFrom || dateTo
+            ? {
+                date: {
+                  ...(dateFrom && { gte: dateFrom }),
+                  ...(dateTo && { lte: dateTo }),
+                },
+              }
+            : {}),
+        },
+      }),
+    ]);
 
     const totalIncome = transactions
       .filter((t) => t.type === "income")
       .reduce((sum, t) => sum + t.amount, 0);
 
-    const totalExpenses = transactions
-      .filter((t) => t.type === "expense")
-      .reduce((sum, t) => sum + t.amount, 0);
+    const reimbursementCredits = reimbursementTransfers.reduce(
+      (sum, t) => sum + t.amount,
+      0
+    );
+
+    const totalExpenses = Math.max(
+      0,
+      transactions
+        .filter((t) => t.type === "expense")
+        .reduce((sum, t) => sum + t.amount, 0) - reimbursementCredits
+    );
 
     const totalInvestments = transactions
       .filter((t) => t.type === "investment")

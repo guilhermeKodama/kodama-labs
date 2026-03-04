@@ -32,6 +32,19 @@ export function sumReimbursementExpenses(
 }
 
 /**
+ * Sum reimbursement transfer amounts that should be subtracted from the
+ * receiving (personal) entity's expenses to avoid double-counting.
+ */
+export function sumReimbursementCredits(
+  transfers: Transfer[],
+  entityId?: string
+): number {
+  return transfers
+    .filter(t => t.direction === 'reimbursement' && (entityId ? t.toEntityId === entityId : true))
+    .reduce((sum, t) => sum + t.amount * t.exchangeRate, 0);
+}
+
+/**
  * Calculate entity summary (income, expenses, investments, balance)
  *
  * Reimbursement transfers are reclassified as expenses on the business (from)
@@ -58,7 +71,12 @@ export function calculateEntitySummary(
     .filter((t) => t.direction === 'reimbursement' && t.fromEntityId === entityId)
     .reduce((sum, t) => sum + t.amount * t.exchangeRate, 0);
 
-  const totalExpenses = sumTransactionsByType(entityTransactions, 'expense') + reimbursementExpenses;
+  // Reimbursement inflows reduce expenses for the receiving (personal) entity
+  const reimbursementCredits = transfers
+    .filter((t) => t.direction === 'reimbursement' && t.toEntityId === entityId)
+    .reduce((sum, t) => sum + t.amount * t.exchangeRate, 0);
+
+  const totalExpenses = Math.max(0, sumTransactionsByType(entityTransactions, 'expense') + reimbursementExpenses - reimbursementCredits);
 
   const incomingTransfers = transfers
     .filter((t) => t.toEntityId === entityId)
