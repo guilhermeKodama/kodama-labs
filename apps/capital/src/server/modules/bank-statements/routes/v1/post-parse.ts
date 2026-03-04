@@ -55,6 +55,14 @@ const DetectedTransferSchema = z.object({
   ]),
 });
 
+const DetectedInvestmentTransferSchema = z.object({
+  fitId: z.string(),
+  amount: z.number(),
+  date: z.string(),
+  description: z.string(),
+  direction: z.enum(["investment_deposit", "investment_withdrawal"]),
+});
+
 const ParseResponseSchema = z.object({
   bankName: z.string(),
   accountId: z.string(),
@@ -63,6 +71,7 @@ const ParseResponseSchema = z.object({
   transactions: z.array(ParsedTransactionSchema),
   detectedCreditCardPayments: z.array(DetectedCreditCardPaymentSchema),
   detectedTransfers: z.array(DetectedTransferSchema),
+  detectedInvestmentTransfers: z.array(DetectedInvestmentTransferSchema),
   summary: z.object({
     totalIncome: z.number(),
     totalExpenses: z.number(),
@@ -97,6 +106,14 @@ export const route = createRoute({
 
 const CREDIT_CARD_PAYMENT_PATTERNS = [
   "pagamento de fatura",
+];
+
+const INVESTMENT_TRANSFER_PATTERNS: Array<{
+  pattern: string;
+  direction: "investment_deposit" | "investment_withdrawal";
+}> = [
+  { pattern: "aplicação rdb", direction: "investment_deposit" },
+  { pattern: "resgate rdb", direction: "investment_withdrawal" },
 ];
 
 export const handler: AppRouteHandler<typeof route> = async (c) => {
@@ -263,6 +280,35 @@ export const handler: AppRouteHandler<typeof route> = async (c) => {
       }
     }
 
+    // Detect investment account transfers (e.g. "Aplicação RDB", "Resgate RDB")
+    const detectedInvestmentTransfers: Array<{
+      fitId: string;
+      amount: number;
+      date: string;
+      description: string;
+      direction: "investment_deposit" | "investment_withdrawal";
+    }> = [];
+    const investmentTransferFitIds = new Set<string>();
+
+    for (const tx of allTransactions) {
+      if (existingFitIds.has(tx.fitId)) continue;
+      if (detectedTransferFitIds.has(tx.fitId)) continue;
+      const lower = tx.description.toLowerCase();
+      for (const { pattern, direction } of INVESTMENT_TRANSFER_PATTERNS) {
+        if (lower.includes(pattern)) {
+          detectedInvestmentTransfers.push({
+            fitId: tx.fitId,
+            amount: tx.amount,
+            date: toDateString(tx.date),
+            description: tx.description,
+            direction,
+          });
+          investmentTransferFitIds.add(tx.fitId);
+          break;
+        }
+      }
+    }
+
     // Build response
     const transactions = allTransactions.map((t) => ({
       fitId: t.fitId,
@@ -298,6 +344,7 @@ export const handler: AppRouteHandler<typeof route> = async (c) => {
         transactions,
         detectedCreditCardPayments,
         detectedTransfers,
+        detectedInvestmentTransfers,
         summary: {
           totalIncome: Math.round(totalIncome * 100) / 100,
           totalExpenses: Math.round(totalExpenses * 100) / 100,

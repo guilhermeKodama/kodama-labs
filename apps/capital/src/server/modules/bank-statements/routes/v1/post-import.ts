@@ -6,6 +6,7 @@ import type { AppRouteHandler } from "@capital/server/types";
 import { prisma } from "@capital/server/lib/prisma";
 import { requireUserId } from "@capital/server/lib/auth-middleware";
 import { parseLocalDate } from "@capital/server/lib/date-utils";
+import { createTransfer } from "@capital/server/modules/transfers/services/create-transfer";
 import { normalizeDescription } from "../../utils";
 import { routeConfig } from "../../constants";
 
@@ -39,6 +40,15 @@ const TransferInputSchema = z.object({
   counterpartyEntityId: z.string().min(1),
 });
 
+const InvestmentTransferInputSchema = z.object({
+  externalId: z.string().min(1),
+  date: z.string().min(1),
+  amount: z.number().positive(),
+  description: z.string().optional(),
+  direction: z.enum(["investment_deposit", "investment_withdrawal"]),
+  investmentAccountId: z.string().min(1),
+});
+
 const ImportRequestSchema = z.object({
   entityType: z.enum(["personal", "business"]),
   entityId: z.string().min(1),
@@ -49,12 +59,14 @@ const ImportRequestSchema = z.object({
   transactions: z.array(TransactionInputSchema),
   transfers: z.array(TransferInputSchema).optional(),
   creditCards: z.array(CreditCardInputSchema).optional(),
+  investmentTransfers: z.array(InvestmentTransferInputSchema).optional(),
 });
 
 const ImportResponseSchema = z.object({
   imported: z.number(),
   transfersCreated: z.number(),
   creditCardsCreated: z.number(),
+  investmentTransfersCreated: z.number(),
   statementImportId: z.string(),
 });
 
@@ -243,6 +255,43 @@ export const handler: AppRouteHandler<typeof route> = async (c) => {
       }
     }
 
+    // Create investment transfers if provided
+    let investmentTransfersCreated = 0;
+    if (body.investmentTransfers && body.investmentTransfers.length > 0) {
+      for (const it of body.investmentTransfers) {
+        if (it.direction === "investment_deposit") {
+          await createTransfer(userId, {
+            fromEntityType: body.entityType as "personal" | "business",
+            toEntityType: body.entityType as "personal" | "business",
+            direction: "investment_deposit",
+            amount: it.amount,
+            currency: body.currency,
+            exchangeRate: 1,
+            description: it.description,
+            date: parseLocalDate(it.date),
+            fromBusinessId: body.entityType === "business" ? body.entityId : undefined,
+            fromPersonalAccountId: body.entityType === "personal" ? body.entityId : undefined,
+            toInvestmentAccountId: it.investmentAccountId,
+          }, prisma);
+        } else {
+          await createTransfer(userId, {
+            fromEntityType: body.entityType as "personal" | "business",
+            toEntityType: body.entityType as "personal" | "business",
+            direction: "investment_withdrawal",
+            amount: it.amount,
+            currency: body.currency,
+            exchangeRate: 1,
+            description: it.description,
+            date: parseLocalDate(it.date),
+            toBusinessId: body.entityType === "business" ? body.entityId : undefined,
+            toPersonalAccountId: body.entityType === "personal" ? body.entityId : undefined,
+            fromInvestmentAccountId: it.investmentAccountId,
+          }, prisma);
+        }
+        investmentTransfersCreated++;
+      }
+    }
+
     // Build transaction data with category mapping
     let importedCount = 0;
     if (body.transactions.length > 0) {
@@ -287,6 +336,7 @@ export const handler: AppRouteHandler<typeof route> = async (c) => {
         imported: importedCount,
         transfersCreated,
         creditCardsCreated,
+        investmentTransfersCreated,
         statementImportId: statementImport.id,
       },
       CREATED

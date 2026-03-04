@@ -14,6 +14,8 @@ import {
   Sparkles,
   AlertTriangle,
   ArrowLeftRight,
+  Wallet,
+  Plus,
 } from 'lucide-react';
 import {
   Dialog,
@@ -33,8 +35,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import type { Business, EntityType, CreditCard as CreditCardType } from '@/types';
+import type { Business, EntityType, CreditCard as CreditCardType, InvestmentAccount } from '@/types';
 import { client } from '@/lib/api-client';
+import { useInvestmentStore } from '@/lib/store';
 
 // --- Types for parsed data ---
 
@@ -90,6 +93,14 @@ interface CreditCardToCreate {
   currency: string;
 }
 
+interface DetectedInvestmentTransfer {
+  fitId: string;
+  amount: number;
+  date: string;
+  description: string;
+  direction: 'investment_deposit' | 'investment_withdrawal';
+}
+
 interface ParseResult {
   bankName: string;
   accountId: string;
@@ -98,6 +109,7 @@ interface ParseResult {
   transactions: ParsedTransaction[];
   detectedCreditCardPayments: DetectedCreditCardPayment[];
   detectedTransfers: DetectedTransfer[];
+  detectedInvestmentTransfers: DetectedInvestmentTransfer[];
   summary: {
     totalIncome: number;
     totalExpenses: number;
@@ -114,14 +126,15 @@ interface StatementUploadDialogProps {
   businesses: Business[];
   personalAccountId: string | null;
   existingCreditCards: CreditCardType[];
+  investmentAccounts: InvestmentAccount[];
   defaultEntityType?: EntityType;
   defaultEntityId?: string;
   onImportComplete: () => void;
 }
 
-type Step = 'upload' | 'entity' | 'credit-cards' | 'preview' | 'confirm';
+type Step = 'upload' | 'entity' | 'credit-cards' | 'investment-accounts' | 'preview' | 'confirm';
 
-const STEPS: Step[] = ['upload', 'entity', 'credit-cards', 'preview', 'confirm'];
+const STEPS: Step[] = ['upload', 'entity', 'credit-cards', 'investment-accounts', 'preview', 'confirm'];
 
 function formatCurrency(amount: number, currency: string): string {
   try {
@@ -137,12 +150,14 @@ export function StatementUploadDialog({
   businesses,
   personalAccountId,
   existingCreditCards,
+  investmentAccounts,
   defaultEntityType,
   defaultEntityId,
   onImportComplete,
 }: StatementUploadDialogProps) {
   const t = useTranslations('bankStatements');
   const tCommon = useTranslations('common');
+  const { addAccount: addInvestmentAccount } = useInvestmentStore();
 
   // Step state
   const [currentStep, setCurrentStep] = useState<Step>('upload');
@@ -167,12 +182,21 @@ export function StatementUploadDialog({
   // Transfer state
   const [confirmedTransfers, setConfirmedTransfers] = useState<ConfirmedTransfer[]>([]);
 
+  // Investment transfer state
+  const [selectedInvestmentAccountId, setSelectedInvestmentAccountId] = useState<string>('');
+  const [skipInvestmentTransfers, setSkipInvestmentTransfers] = useState(false);
+  const [showCreateInvestmentAccount, setShowCreateInvestmentAccount] = useState(false);
+  const [newInvestmentAccountName, setNewInvestmentAccountName] = useState('');
+  const [newInvestmentAccountBroker, setNewInvestmentAccountBroker] = useState('');
+  const [isCreatingInvestmentAccount, setIsCreatingInvestmentAccount] = useState(false);
+
   // Import state
   const [isImporting, setIsImporting] = useState(false);
   const [importResult, setImportResult] = useState<{
     imported: number;
     transfersCreated: number;
     creditCardsCreated: number;
+    investmentTransfersCreated: number;
   } | null>(null);
 
   const reset = useCallback(() => {
@@ -186,6 +210,12 @@ export function StatementUploadDialog({
     setCreditCardsToCreate([]);
     setSkipCreditCards(false);
     setConfirmedTransfers([]);
+    setSelectedInvestmentAccountId('');
+    setSkipInvestmentTransfers(false);
+    setShowCreateInvestmentAccount(false);
+    setNewInvestmentAccountName('');
+    setNewInvestmentAccountBroker('');
+    setIsCreatingInvestmentAccount(false);
     setIsImporting(false);
     setImportResult(null);
   }, [defaultEntityType, defaultEntityId, personalAccountId]);
@@ -289,10 +319,22 @@ export function StatementUploadDialog({
 
   // --- Navigation ---
 
+  const shouldSkipStep = (step: Step): boolean => {
+    if (step === 'credit-cards' && (!parseResult?.detectedCreditCardPayments.length || skipCreditCards)) return true;
+    if (step === 'investment-accounts' && (!parseResult?.detectedInvestmentTransfers?.length || skipInvestmentTransfers)) return true;
+    return false;
+  };
+
   const goToStep = (step: Step) => {
-    if (step === 'credit-cards' && (!parseResult?.detectedCreditCardPayments.length || skipCreditCards)) {
-      setCurrentStep('preview');
-      return;
+    if (shouldSkipStep(step)) {
+      const idx = STEPS.indexOf(step);
+      // Skip forward
+      for (let i = idx + 1; i < STEPS.length; i++) {
+        if (!shouldSkipStep(STEPS[i])) {
+          setCurrentStep(STEPS[i]);
+          return;
+        }
+      }
     }
     setCurrentStep(step);
   };
@@ -306,13 +348,11 @@ export function StatementUploadDialog({
 
   const goPrev = () => {
     const idx = STEPS.indexOf(currentStep);
-    if (idx > 0) {
-      const prevStep = STEPS[idx - 1];
-      if (prevStep === 'credit-cards' && (!parseResult?.detectedCreditCardPayments.length || skipCreditCards)) {
-        setCurrentStep('entity');
+    for (let i = idx - 1; i >= 0; i--) {
+      if (!shouldSkipStep(STEPS[i])) {
+        setCurrentStep(STEPS[i]);
         return;
       }
-      setCurrentStep(prevStep);
     }
   };
 
@@ -359,15 +399,52 @@ export function StatementUploadDialog({
     );
   };
 
+  // --- Investment account creation ---
+
+  const handleCreateInvestmentAccount = async () => {
+    if (!newInvestmentAccountName.trim()) return;
+    setIsCreatingInvestmentAccount(true);
+    try {
+      const created = await addInvestmentAccount({
+        name: newInvestmentAccountName.trim(),
+        broker: newInvestmentAccountBroker.trim() || undefined,
+        entityType,
+        currency: parseResult?.currency ?? 'BRL',
+        businessId: entityType === 'business' ? entityId : undefined,
+        personalAccountId: entityType === 'personal' ? entityId : undefined,
+      });
+      if (created) {
+        setSelectedInvestmentAccountId(created.id);
+        setShowCreateInvestmentAccount(false);
+        setNewInvestmentAccountName('');
+        setNewInvestmentAccountBroker('');
+      }
+    } finally {
+      setIsCreatingInvestmentAccount(false);
+    }
+  };
+
   // --- Import ---
 
-  // Transactions that are selected but NOT confirmed as transfers
-  const selectedTransactions = (parseResult?.transactions ?? []).filter(
-    (t) => t.selected && !confirmedTransferFitIds.has(t.fitId)
+  // Investment transfer fitIds for exclusion from regular transactions
+  const investmentTransferFitIds = new Set(
+    !skipInvestmentTransfers && selectedInvestmentAccountId
+      ? (parseResult?.detectedInvestmentTransfers ?? []).map((it) => it.fitId)
+      : []
   );
 
+  // Transactions that are selected but NOT confirmed as transfers or investment transfers
+  const selectedTransactions = (parseResult?.transactions ?? []).filter(
+    (t) => t.selected && !confirmedTransferFitIds.has(t.fitId) && !investmentTransferFitIds.has(t.fitId)
+  );
+
+  // Investment transfers to import
+  const confirmedInvestmentTransfers = !skipInvestmentTransfers && selectedInvestmentAccountId
+    ? (parseResult?.detectedInvestmentTransfers ?? [])
+    : [];
+
   const handleImport = async () => {
-    if (!parseResult || (selectedTransactions.length === 0 && confirmedTransfers.length === 0)) return;
+    if (!parseResult || (selectedTransactions.length === 0 && confirmedTransfers.length === 0 && confirmedInvestmentTransfers.length === 0)) return;
     setIsImporting(true);
 
     try {
@@ -399,6 +476,16 @@ export function StatementUploadDialog({
             : undefined,
           creditCards: creditCardsToCreate.length > 0 && !skipCreditCards
             ? creditCardsToCreate.filter((cc) => cc.lastFourDigits.length === 4)
+            : undefined,
+          investmentTransfers: confirmedInvestmentTransfers.length > 0
+            ? confirmedInvestmentTransfers.map((it) => ({
+                externalId: it.fitId,
+                date: it.date,
+                amount: it.amount,
+                description: it.description,
+                direction: it.direction,
+                investmentAccountId: selectedInvestmentAccountId,
+              }))
             : undefined,
         },
       });
@@ -449,8 +536,9 @@ export function StatementUploadDialog({
 
   // --- Step indicators ---
 
-  const stepNumber = STEPS.indexOf(currentStep) + 1;
-  const totalSteps = parseResult?.detectedCreditCardPayments.length ? 5 : 4;
+  const visibleSteps = STEPS.filter((s) => !shouldSkipStep(s));
+  const stepNumber = visibleSteps.indexOf(currentStep) + 1;
+  const totalSteps = visibleSteps.length;
 
   // Build a lookup of detected transfers by fitId for quick access
   const detectedTransferMap = new Map(
@@ -678,6 +766,136 @@ export function StatementUploadDialog({
             </div>
           )}
 
+          {/* STEP: Investment account setup */}
+          {currentStep === 'investment-accounts' && parseResult && (
+            <div className="space-y-4">
+              <div className="flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3">
+                <Wallet className="mt-0.5 h-4 w-4 shrink-0 text-amber-400" />
+                <div>
+                  <p className="text-sm font-medium text-amber-300">{t('investmentTransfers.detected')}</p>
+                  <p className="mt-1 text-xs text-amber-400">
+                    {t('investmentTransfers.detectedDescription', { count: parseResult.detectedInvestmentTransfers.length })}
+                  </p>
+                </div>
+              </div>
+
+              {parseResult.detectedInvestmentTransfers.map((it) => (
+                <div
+                  key={it.fitId}
+                  className="rounded-lg border border-slate-700 bg-slate-800/50 p-3"
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm text-slate-300">{it.date}</span>
+                      <span className={`rounded-full px-2 py-0.5 text-[10px] ${
+                        it.direction === 'investment_deposit'
+                          ? 'bg-amber-500/20 text-amber-300'
+                          : 'bg-emerald-500/20 text-emerald-300'
+                      }`}>
+                        {it.direction === 'investment_deposit' ? t('investmentTransfers.deposit') : t('investmentTransfers.withdrawal')}
+                      </span>
+                    </div>
+                    <span className={`text-sm font-medium ${
+                      it.direction === 'investment_deposit' ? 'text-red-400' : 'text-emerald-400'
+                    }`}>
+                      {it.direction === 'investment_deposit' ? '-' : '+'}
+                      {formatCurrency(it.amount, parseResult.currency)}
+                    </span>
+                  </div>
+                  <p className="mt-1 text-xs text-slate-400">{it.description}</p>
+                </div>
+              ))}
+
+              <div className="space-y-3">
+                <Label className="text-slate-300">{t('investmentTransfers.selectAccount')}</Label>
+                {investmentAccounts.length > 0 && (
+                  <Select value={selectedInvestmentAccountId} onValueChange={setSelectedInvestmentAccountId}>
+                    <SelectTrigger className="border-slate-700 bg-slate-800 text-white">
+                      <SelectValue placeholder={t('investmentTransfers.selectAccountPlaceholder')} />
+                    </SelectTrigger>
+                    <SelectContent className="border-slate-700 bg-slate-800">
+                      {investmentAccounts.map((acc) => (
+                        <SelectItem key={acc.id} value={acc.id}>
+                          {acc.name}{acc.broker ? ` (${acc.broker})` : ''}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+
+                {!showCreateInvestmentAccount && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setShowCreateInvestmentAccount(true)}
+                    className="w-full border-dashed border-slate-700 text-slate-400 hover:border-slate-500 hover:text-white"
+                  >
+                    <Plus className="mr-2 h-4 w-4" />
+                    {t('investmentTransfers.createNew')}
+                  </Button>
+                )}
+
+                {showCreateInvestmentAccount && (
+                  <div className="space-y-3 rounded-lg border border-slate-700 bg-slate-800/30 p-4">
+                    <p className="text-sm font-medium text-white">{t('investmentTransfers.createNew')}</p>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-1">
+                        <Label className="text-xs text-slate-400">{t('investmentTransfers.accountName')}</Label>
+                        <Input
+                          value={newInvestmentAccountName}
+                          onChange={(e) => setNewInvestmentAccountName(e.target.value)}
+                          className="border-slate-700 bg-slate-800 text-white h-9 text-sm"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs text-slate-400">{t('investmentTransfers.broker')}</Label>
+                        <Input
+                          value={newInvestmentAccountBroker}
+                          onChange={(e) => setNewInvestmentAccountBroker(e.target.value)}
+                          className="border-slate-700 bg-slate-800 text-white h-9 text-sm"
+                        />
+                      </div>
+                    </div>
+                    <div className="flex justify-end gap-2">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setShowCreateInvestmentAccount(false)}
+                        className="text-slate-400 hover:text-white"
+                      >
+                        {tCommon('cancel')}
+                      </Button>
+                      <Button
+                        size="sm"
+                        disabled={!newInvestmentAccountName.trim() || isCreatingInvestmentAccount}
+                        onClick={handleCreateInvestmentAccount}
+                        className="bg-amber-600 text-white hover:bg-amber-700"
+                      >
+                        {isCreatingInvestmentAccount ? (
+                          <span className="flex items-center gap-2">
+                            <Loader2 className="h-3 w-3 animate-spin" />
+                            {tCommon('loading')}
+                          </span>
+                        ) : (
+                          t('investmentTransfers.createNew')
+                        )}
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setSkipInvestmentTransfers(true)}
+                className="text-slate-400 hover:text-slate-300"
+              >
+                {t('investmentTransfers.skip')}
+              </Button>
+            </div>
+          )}
+
           {/* STEP: Preview */}
           {currentStep === 'preview' && parseResult && (
             <div className="space-y-4">
@@ -728,6 +946,19 @@ export function StatementUploadDialog({
                 </div>
               )}
 
+              {/* Investment transfers banner */}
+              {confirmedInvestmentTransfers.length > 0 && (
+                <div className="flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3">
+                  <Wallet className="mt-0.5 h-4 w-4 shrink-0 text-amber-400" />
+                  <div>
+                    <p className="text-sm font-medium text-amber-300">{t('investmentTransfers.detected')}</p>
+                    <p className="mt-0.5 text-xs text-amber-400">
+                      {t('investmentTransfers.confirmedCount', { count: confirmedInvestmentTransfers.length })}
+                    </p>
+                  </div>
+                </div>
+              )}
+
               {/* Select all toggle */}
               <div className="flex items-center justify-between">
                 <span className="text-xs text-slate-400">{t('preview.transactions')}</span>
@@ -743,26 +974,32 @@ export function StatementUploadDialog({
               <div className="max-h-[300px] overflow-y-auto space-y-1 rounded-lg border border-slate-700">
                 {parseResult.transactions.map((tx) => {
                   const isConfirmedTransfer = confirmedTransferFitIds.has(tx.fitId);
+                  const isInvestmentTransfer = investmentTransferFitIds.has(tx.fitId);
                   const detectedTransfer = detectedTransferMap.get(tx.fitId);
                   const confirmedTr = confirmedTransfers.find((ct) => ct.fitId === tx.fitId);
+                  const isExcluded = isConfirmedTransfer || isInvestmentTransfer;
 
                   return (
                     <div key={tx.fitId}>
                       {/* Main transaction row */}
                       <div
-                        onClick={() => !tx.isDuplicate && !isConfirmedTransfer && toggleTransaction(tx.fitId)}
+                        onClick={() => !tx.isDuplicate && !isExcluded && toggleTransaction(tx.fitId)}
                         className={`flex items-center gap-3 px-3 py-2 text-sm transition-colors ${
                           tx.isDuplicate
                             ? 'bg-slate-800/30 opacity-50'
                             : isConfirmedTransfer
                               ? 'bg-purple-900/20 border-l-2 border-l-purple-500'
-                              : tx.selected
-                                ? 'bg-slate-800/50 cursor-pointer hover:bg-slate-800/70'
-                                : 'bg-slate-800/20 cursor-pointer hover:bg-slate-800/40'
+                              : isInvestmentTransfer
+                                ? 'bg-amber-900/20 border-l-2 border-l-amber-500'
+                                : tx.selected
+                                  ? 'bg-slate-800/50 cursor-pointer hover:bg-slate-800/70'
+                                  : 'bg-slate-800/20 cursor-pointer hover:bg-slate-800/40'
                         }`}
                       >
-                        {/* Checkbox / Transfer icon */}
-                        {isConfirmedTransfer ? (
+                        {/* Checkbox / Transfer icon / Investment icon */}
+                        {isInvestmentTransfer ? (
+                          <Wallet className="h-4 w-4 shrink-0 text-amber-400" />
+                        ) : isConfirmedTransfer ? (
                           <ArrowLeftRight className="h-4 w-4 shrink-0 text-purple-400" />
                         ) : (
                           <div
@@ -796,6 +1033,13 @@ export function StatementUploadDialog({
                           {isConfirmedTransfer && confirmedTr && (
                             <span className="rounded-full bg-purple-500/20 px-2 py-0.5 text-[10px] text-purple-300">
                               {t('transfers.directionOptions.' + confirmedTr.direction)}
+                            </span>
+                          )}
+                          {isInvestmentTransfer && (
+                            <span className="rounded-full bg-amber-500/20 px-2 py-0.5 text-[10px] text-amber-300">
+                              {parseResult.detectedInvestmentTransfers.find((it) => it.fitId === tx.fitId)?.direction === 'investment_deposit'
+                                ? t('investmentTransfers.deposit')
+                                : t('investmentTransfers.withdrawal')}
                             </span>
                           )}
                           <span
@@ -895,6 +1139,11 @@ export function StatementUploadDialog({
                     {t('success.creditCardsCreated', { count: importResult.creditCardsCreated })}
                   </p>
                 )}
+                {importResult.investmentTransfersCreated > 0 && (
+                  <p className="mt-1 text-sm text-amber-300">
+                    {t('success.investmentTransfersCreated', { count: importResult.investmentTransfersCreated })}
+                  </p>
+                )}
                 {importResult.imported > 0 && (
                   <p className="mt-3 text-sm text-slate-400">
                     <Loader2 className="mr-1 inline h-3 w-3 animate-spin" />
@@ -981,10 +1230,21 @@ export function StatementUploadDialog({
                   </Button>
                 )}
 
+                {currentStep === 'investment-accounts' && (
+                  <Button
+                    onClick={goNext}
+                    disabled={!selectedInvestmentAccountId}
+                    className="bg-emerald-600 text-white hover:bg-emerald-700"
+                  >
+                    <ArrowRight className="mr-1 h-4 w-4" />
+                    {tCommon('next')}
+                  </Button>
+                )}
+
                 {currentStep === 'preview' && (
                   <Button
                     onClick={handleImport}
-                    disabled={(selectedTransactions.length === 0 && confirmedTransfers.length === 0) || isImporting}
+                    disabled={(selectedTransactions.length === 0 && confirmedTransfers.length === 0 && confirmedInvestmentTransfers.length === 0) || isImporting}
                     className="bg-emerald-600 text-white hover:bg-emerald-700"
                   >
                     {isImporting ? (
@@ -992,12 +1252,12 @@ export function StatementUploadDialog({
                         <Loader2 className="h-4 w-4 animate-spin" />
                         {t('preview.importing')}
                       </span>
-                    ) : confirmedTransfers.length > 0 ? (
+                    ) : (confirmedTransfers.length > 0 || confirmedInvestmentTransfers.length > 0) ? (
                       <span className="flex items-center gap-2">
                         <Upload className="h-4 w-4" />
                         {t('preview.importWithTransfers', {
                           txCount: selectedTransactions.length,
-                          trCount: confirmedTransfers.length,
+                          trCount: confirmedTransfers.length + confirmedInvestmentTransfers.length,
                         })}
                       </span>
                     ) : (

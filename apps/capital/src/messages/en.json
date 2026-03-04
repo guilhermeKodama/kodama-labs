@@ -19,6 +19,10 @@
     "done": "Done",
     "next": "Next"
   },
+  "filters": {
+    "allEntities": "All Entities",
+    "showingCount": "{count} of {total} entities"
+  },
   "nav": {
     "dashboard": "Dashboard",
     "businesses": "Businesses",
@@ -774,9 +778,12 @@
     "title": "Convert to Transfer",
     "step": "Step",
     "of": "of",
-    "selectEntity": "Select or create a business",
+    "selectEntity": "Select a counterparty",
     "createBusiness": "Create New Business",
+    "createInvestmentAccount": "Create New Investment Account",
     "businessName": "Business Name",
+    "accountName": "Account Name",
+    "broker": "Broker",
     "currency": "Currency",
     "creating": "Creating...",
     "configure": "Configure Transfer",
@@ -792,7 +799,11 @@
     "expense": "expense",
     "to": "to",
     "from": "from",
-    "noBusiness": "No businesses found. Create one to continue."
+    "noBusiness": "No businesses found. Create one to continue.",
+    "investmentAccount": "Investment Account",
+    "businessOrInvestment": "Business or Investment Account",
+    "sectionBusinesses": "Businesses",
+    "sectionInvestments": "Investment Accounts"
   },
   "language": {
     "title": "Language",
@@ -1293,6 +1304,19 @@
       },
       "confirmedCount": "{count} transfer(s)"
     },
+    "investmentTransfers": {
+      "detected": "Investment transfers detected",
+      "detectedDescription": "We found {count} transaction(s) that look like transfers to/from an investment account.",
+      "selectAccount": "Select Investment Account",
+      "selectAccountPlaceholder": "Choose an account",
+      "createNew": "Create New Account",
+      "accountName": "Account Name",
+      "broker": "Broker",
+      "skip": "Skip - import as regular transactions",
+      "deposit": "Deposit",
+      "withdrawal": "Withdrawal",
+      "confirmedCount": "{count} investment transfer(s)"
+    },
     "preview": {
       "new": "New",
       "duplicates": "Duplicates",
@@ -1311,6 +1335,7 @@
       "imported": "{count} transactions imported",
       "transfersCreated": "{count} transfer(s) created",
       "creditCardsCreated": "{count} credit card(s) created",
+      "investmentTransfersCreated": "{count} investment transfer(s) created",
       "categorizing": "AI is categorizing your transactions..."
     },
     "status": {

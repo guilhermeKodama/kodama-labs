@@ -84,7 +84,6 @@ export function BudgetsTable({
   const [sortField, setSortField] = useState<SortField>('percentUsed');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
-  const [entityFilter, setEntityFilter] = useState<string>('all');
   const [expandedBudgetId, setExpandedBudgetId] = useState<string | null>(null);
 
   const getEntityName = useCallback((entityId: string, entityType: string) => {
@@ -124,11 +123,6 @@ export function BudgetsTable({
       });
     }
 
-    // Entity filter
-    if (entityFilter !== 'all') {
-      result = result.filter((p) => p.budget.entityId === entityFilter);
-    }
-
     // Sort
     result.sort((a, b) => {
       let comparison = 0;
@@ -153,7 +147,7 @@ export function BudgetsTable({
     });
 
     return result;
-  }, [progressWithPace, sortField, sortDirection, statusFilter, entityFilter]);
+  }, [progressWithPace, sortField, sortDirection, statusFilter]);
 
   const toggleSort = (field: SortField) => {
     if (sortField === field) {
@@ -164,19 +158,6 @@ export function BudgetsTable({
     }
   };
 
-  // Get unique entities for filter
-  const entities = useMemo(() => {
-    const entityMap = new Map<string, { id: string; name: string }>();
-    budgetProgress.forEach((p) => {
-      if (!entityMap.has(p.budget.entityId)) {
-        entityMap.set(p.budget.entityId, {
-          id: p.budget.entityId,
-          name: getEntityName(p.budget.entityId, p.budget.entityType),
-        });
-      }
-    });
-    return Array.from(entityMap.values());
-  }, [budgetProgress, getEntityName]);
 
   // Get transactions for drill-down
   const getDrillDownTransactions = (budget: BudgetProgress['budget']) => {
@@ -223,21 +204,6 @@ export function BudgetsTable({
           </SelectContent>
         </Select>
 
-        {entities.length > 1 && (
-          <Select value={entityFilter} onValueChange={setEntityFilter}>
-            <SelectTrigger className="w-[160px] border-slate-700 bg-slate-800 text-slate-300">
-              <SelectValue placeholder={t('filter.allEntities')} />
-            </SelectTrigger>
-            <SelectContent className="border-slate-700 bg-slate-900">
-              <SelectItem value="all" className="text-slate-300 focus:bg-slate-800 focus:text-white">{t('filter.allEntities')}</SelectItem>
-              {entities.map((e) => (
-                <SelectItem key={e.id} value={e.id} className="text-slate-300 focus:bg-slate-800 focus:text-white">
-                  {e.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        )}
       </div>
 
       {/* Table */}
