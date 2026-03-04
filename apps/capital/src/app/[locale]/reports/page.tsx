@@ -321,17 +321,28 @@ export default function ReportsPage() {
     return { totalInvested, totalCurrentValue, totalPnL, totalPnLPercent, hasPriceData: holdingsWithPrice.length > 0 };
   }, [activeHoldings, toBase]);
 
+  const assetClassLabels: Record<AssetClass, string> = useMemo(() => ({
+    stocks: t('investments.assetClasses.stocks'),
+    fii: t('investments.assetClasses.fii'),
+    etf: t('investments.assetClasses.etf'),
+    bdr: t('investments.assetClasses.bdr'),
+    fixed_income: t('investments.assetClasses.fixed_income'),
+    crypto: t('investments.assetClasses.crypto'),
+    savings: t('investments.assetClasses.savings'),
+    international_stocks: t('investments.assetClasses.international_stocks'),
+    international_etf: t('investments.assetClasses.international_etf'),
+  }), [t]);
+
   const assetAllocationData = useMemo(() => {
     const groups: Record<string, number> = {};
     for (const h of activeHoldings) {
-      const assetKey = h.assetClass as AssetClass;
-      const label = t(`investments.assetClasses.${assetKey}` as any) || h.assetClass;
+      const label = assetClassLabels[h.assetClass as AssetClass] || h.assetClass;
       groups[label] = (groups[label] || 0) + toBase(holdingValue(h), h.currency);
     }
     return Object.entries(groups)
       .map(([name, value]) => ({ name, value }))
       .sort((a, b) => b.value - a.value);
-  }, [activeHoldings, toBase, holdingValue, t]);
+  }, [activeHoldings, toBase, holdingValue, assetClassLabels]);
 
   const accountBreakdownData = useMemo(() => {
     const groups: Record<string, number> = {};
