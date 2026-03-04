@@ -10,6 +10,7 @@ import {
   Legend,
   ResponsiveContainer,
 } from 'recharts';
+import { useTranslations } from 'next-intl';
 import { formatCurrency, formatCompactNumber } from '@/lib/utils/format';
 
 interface MonthlyData {
@@ -25,13 +26,19 @@ interface IncomeExpenseChartProps {
 }
 
 export function IncomeExpenseChart({ data, currency }: IncomeExpenseChartProps) {
+  const t = useTranslations();
+
   if (data.length === 0) {
     return (
       <div className="flex h-[300px] items-center justify-center text-slate-500">
-        No data available
+        {t('charts.noData')}
       </div>
     );
   }
+
+  const incomeLabel = t('transactions.types.income');
+  const expenseLabel = t('transactions.types.expense');
+  const investmentLabel = t('transactions.types.investment');
 
   return (
     <ResponsiveContainer width="100%" height={300}>
@@ -50,7 +57,7 @@ export function IncomeExpenseChart({ data, currency }: IncomeExpenseChartProps) 
         <Tooltip
           formatter={(value, name) => [
             formatCurrency(Number(value) || 0, currency),
-            String(name).charAt(0).toUpperCase() + String(name).slice(1),
+            String(name),
           ]}
           contentStyle={{
             backgroundColor: '#1e293b',
@@ -63,7 +70,7 @@ export function IncomeExpenseChart({ data, currency }: IncomeExpenseChartProps) 
         <Legend
           formatter={(value) => (
             <span style={{ color: '#94a3b8' }}>
-              {String(value).charAt(0).toUpperCase() + String(value).slice(1)}
+              {String(value)}
             </span>
           )}
         />
@@ -71,19 +78,19 @@ export function IncomeExpenseChart({ data, currency }: IncomeExpenseChartProps) 
           dataKey="income"
           fill="#10b981"
           radius={[4, 4, 0, 0]}
-          name="Income"
+          name={incomeLabel}
         />
         <Bar
           dataKey="expense"
           fill="#ef4444"
           radius={[4, 4, 0, 0]}
-          name="Expenses"
+          name={expenseLabel}
         />
         <Bar
           dataKey="investment"
           fill="#3b82f6"
           radius={[4, 4, 0, 0]}
-          name="Investments"
+          name={investmentLabel}
         />
       </BarChart>
     </ResponsiveContainer>

@@ -1,8 +1,9 @@
 'use client';
 
 import { useState, useMemo, useEffect, useCallback } from 'react';
-import { useTranslations } from 'next-intl';
+import { useTranslations, useLocale } from 'next-intl';
 import { format, startOfYear, endOfYear, eachMonthOfInterval } from 'date-fns';
+import { ptBR, enUS } from 'date-fns/locale';
 import {
   TrendingUp,
   TrendingDown,
@@ -49,6 +50,7 @@ import {
 import {
   calculateCategoryBreakdown,
   sumTransactionsByType,
+  sumReimbursementExpenses,
   calculateGrowthRate,
 } from '@/lib/utils/calculations';
 import { exportTransactionsToCSV } from '@/lib/utils/export';
@@ -57,10 +59,11 @@ import { convertToBaseCurrency } from '@/lib/utils/currency';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import type { TransactionType, InvestmentHolding, AssetClass } from '@/types';
-import { ASSET_CLASS_LABELS } from '@/types';
 
 export default function ReportsPage() {
   const t = useTranslations();
+  const locale = useLocale();
+  const dateLocale = locale === 'pt-BR' ? ptBR : enUS;
   const { transactions } = useTransactionStore();
   const { transfers } = useTransferStore();
   const { businesses } = useBusinessStore();
@@ -146,10 +149,30 @@ export default function ReportsPage() {
     );
   }, [transfers, isEntityFiltered, matchesEntityFilter]);
 
-  // Calculate yearly totals
+  // Reimbursement transfers filtered by year and entity (treated as business expenses)
+  const yearReimbursements = useMemo(() => {
+    return transfers.filter((t) => {
+      if (t.direction !== 'reimbursement') return false;
+      const date = new Date(t.date);
+      if (date.getFullYear() !== selectedYear) return false;
+      return !isEntityFiltered || selectedEntityIds.has(t.fromEntityId);
+    });
+  }, [transfers, selectedYear, isEntityFiltered, selectedEntityIds]);
+
+  const prevYearReimbursements = useMemo(() => {
+    return transfers.filter((t) => {
+      if (t.direction !== 'reimbursement') return false;
+      const date = new Date(t.date);
+      if (date.getFullYear() !== selectedYear - 1) return false;
+      return !isEntityFiltered || selectedEntityIds.has(t.fromEntityId);
+    });
+  }, [transfers, selectedYear, isEntityFiltered, selectedEntityIds]);
+
+  // Calculate yearly totals (including reimbursement expenses)
   const yearlyTotals = useMemo(() => {
     const income = sumTransactionsByType(yearTransactions, 'income');
-    const expense = sumTransactionsByType(yearTransactions, 'expense');
+    const reimbursementExp = sumReimbursementExpenses(yearReimbursements);
+    const expense = sumTransactionsByType(yearTransactions, 'expense') + reimbursementExp;
     const investment = sumTransactionsByType(yearTransactions, 'investment');
     return {
       income,
@@ -157,14 +180,14 @@ export default function ReportsPage() {
       investment,
       balance: income - expense,
     };
-  }, [yearTransactions]);
+  }, [yearTransactions, yearReimbursements]);
 
   // Calculate previous year totals for growth comparison
   const prevYearTotals = useMemo(() => {
     const income = sumTransactionsByType(prevYearTransactions, 'income');
-    const expense = sumTransactionsByType(prevYearTransactions, 'expense');
+    const expense = sumTransactionsByType(prevYearTransactions, 'expense') + sumReimbursementExpenses(prevYearReimbursements);
     return { income, expense };
-  }, [prevYearTransactions]);
+  }, [prevYearTransactions, prevYearReimbursements]);
 
   // Calculate growth rates
   const growthRates = useMemo(() => ({
@@ -172,7 +195,7 @@ export default function ReportsPage() {
     expense: calculateGrowthRate(yearlyTotals.expense, prevYearTotals.expense),
   }), [yearlyTotals, prevYearTotals]);
 
-  // Calculate monthly data
+  // Calculate monthly data (including reimbursement expenses)
   const monthlyData = useMemo(() => {
     const months = eachMonthOfInterval({
       start: startOfYear(new Date(selectedYear, 0, 1)),
@@ -185,21 +208,27 @@ export default function ReportsPage() {
         return date.getMonth() === month.getMonth();
       });
 
+      const monthReimbursements = yearReimbursements.filter((t) => {
+        const date = new Date(t.date);
+        return date.getMonth() === month.getMonth();
+      });
+
       const income = sumTransactionsByType(monthTransactions, 'income');
-      const expense = sumTransactionsByType(monthTransactions, 'expense');
+      const reimbursementExp = sumReimbursementExpenses(monthReimbursements);
+      const expense = sumTransactionsByType(monthTransactions, 'expense') + reimbursementExp;
       const investment = sumTransactionsByType(monthTransactions, 'investment');
 
       return {
-        month: format(month, 'MMM'),
+        month: format(month, 'MMM', { locale: dateLocale }),
         income,
         expense,
         investment,
         balance: income - expense,
       };
     });
-  }, [yearTransactions, selectedYear]);
+  }, [yearTransactions, yearReimbursements, selectedYear, dateLocale]);
 
-  // Calculate category breakdown
+  // Calculate category breakdown (reimbursements appear under expenses)
   const categoryBreakdown = useMemo(() => {
     const filtered =
       selectedType === 'all'
@@ -208,10 +237,18 @@ export default function ReportsPage() {
 
     const breakdown = calculateCategoryBreakdown(filtered);
 
+    if (selectedType === 'all' || selectedType === 'expense') {
+      const reimbursementTotal = sumReimbursementExpenses(yearReimbursements);
+      if (reimbursementTotal > 0) {
+        const label = t('transfers.directions.reimbursement');
+        breakdown[label] = (breakdown[label] || 0) + reimbursementTotal;
+      }
+    }
+
     return Object.entries(breakdown)
       .map(([name, value]) => ({ name, value }))
       .sort((a, b) => b.value - a.value);
-  }, [yearTransactions, selectedType]);
+  }, [yearTransactions, yearReimbursements, selectedType, t]);
 
   // Income vs Expense breakdown
   const incomeBreakdown = useMemo(() => {
@@ -227,10 +264,15 @@ export default function ReportsPage() {
     const breakdown = calculateCategoryBreakdown(
       yearTransactions.filter((t) => t.type === 'expense')
     );
+    const reimbursementTotal = sumReimbursementExpenses(yearReimbursements);
+    if (reimbursementTotal > 0) {
+      const label = t('transfers.directions.reimbursement');
+      breakdown[label] = (breakdown[label] || 0) + reimbursementTotal;
+    }
     return Object.entries(breakdown)
       .map(([name, value]) => ({ name, value }))
       .sort((a, b) => b.value - a.value);
-  }, [yearTransactions]);
+  }, [yearTransactions, yearReimbursements, t]);
 
   // ---- Portfolio data ----
   const activeHoldings = useMemo(
@@ -282,36 +324,37 @@ export default function ReportsPage() {
   const assetAllocationData = useMemo(() => {
     const groups: Record<string, number> = {};
     for (const h of activeHoldings) {
-      const label = ASSET_CLASS_LABELS[h.assetClass as AssetClass] || h.assetClass;
+      const assetKey = h.assetClass as AssetClass;
+      const label = t(`investments.assetClasses.${assetKey}` as any) || h.assetClass;
       groups[label] = (groups[label] || 0) + toBase(holdingValue(h), h.currency);
     }
     return Object.entries(groups)
       .map(([name, value]) => ({ name, value }))
       .sort((a, b) => b.value - a.value);
-  }, [activeHoldings, toBase, holdingValue]);
+  }, [activeHoldings, toBase, holdingValue, t]);
 
   const accountBreakdownData = useMemo(() => {
     const groups: Record<string, number> = {};
     for (const h of activeHoldings) {
-      const accountName = h.account?.name || 'Unknown';
+      const accountName = h.account?.name || t('transfers.table.unknownEntity');
       groups[accountName] = (groups[accountName] || 0) + toBase(holdingValue(h), h.currency);
     }
     return Object.entries(groups)
       .map(([name, value]) => ({ name, value }))
       .sort((a, b) => b.value - a.value);
-  }, [activeHoldings, toBase, holdingValue]);
+  }, [activeHoldings, toBase, holdingValue, t]);
 
   const currencyBreakdownData = useMemo(() => {
     const groups: Record<string, number> = {};
     for (const h of activeHoldings) {
-      const currency = h.currency || 'Unknown';
+      const currency = h.currency || t('transfers.table.unknownEntity');
       // For currency exposure, convert to base so percentages are comparable
       groups[currency] = (groups[currency] || 0) + toBase(holdingValue(h), h.currency);
     }
     return Object.entries(groups)
       .map(([name, value]) => ({ name, value }))
       .sort((a, b) => b.value - a.value);
-  }, [activeHoldings, toBase, holdingValue]);
+  }, [activeHoldings, toBase, holdingValue, t]);
 
   const holdingsPerformance = useMemo(() => {
     return activeHoldings
