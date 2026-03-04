@@ -19,7 +19,24 @@ export function sumTransactionsByType(
 }
 
 /**
+ * Sum reimbursement transfer amounts that should be treated as expenses.
+ * When entityId is provided, only counts reimbursements originating from that entity.
+ */
+export function sumReimbursementExpenses(
+  transfers: Transfer[],
+  entityId?: string
+): number {
+  return transfers
+    .filter(t => t.direction === 'reimbursement' && (entityId ? t.fromEntityId === entityId : true))
+    .reduce((sum, t) => sum + t.amount * t.exchangeRate, 0);
+}
+
+/**
  * Calculate entity summary (income, expenses, investments, balance)
+ *
+ * Reimbursement transfers are reclassified as expenses on the business (from)
+ * side so that cashflow reports accurately reflect the business's outgoing costs.
+ * On the personal (to) side they remain as incoming transfers.
  */
 export function calculateEntitySummary(
   entityId: string,
@@ -34,20 +51,24 @@ export function calculateEntitySummary(
   );
 
   const totalIncome = sumTransactionsByType(entityTransactions, 'income');
-  const totalExpenses = sumTransactionsByType(entityTransactions, 'expense');
   const totalInvestments = sumTransactionsByType(entityTransactions, 'investment');
 
-  // Calculate transfers impact
+  // Reimbursement outflows count as expenses for the originating (business) entity
+  const reimbursementExpenses = transfers
+    .filter((t) => t.direction === 'reimbursement' && t.fromEntityId === entityId)
+    .reduce((sum, t) => sum + t.amount * t.exchangeRate, 0);
+
+  const totalExpenses = sumTransactionsByType(entityTransactions, 'expense') + reimbursementExpenses;
+
   const incomingTransfers = transfers
     .filter((t) => t.toEntityId === entityId)
     .reduce((sum, t) => sum + t.amount * t.exchangeRate, 0);
 
+  // Exclude reimbursements from outgoing transfers since they are already in expenses
   const outgoingTransfers = transfers
-    .filter((t) => t.fromEntityId === entityId)
+    .filter((t) => t.fromEntityId === entityId && t.direction !== 'reimbursement')
     .reduce((sum, t) => sum + t.amount * t.exchangeRate, 0);
 
-  // Investment-type transactions represent cash leaving the checking account,
-  // so they reduce the balance (same as expenses).
   const balance = totalIncome - totalExpenses - totalInvestments + incomingTransfers - outgoingTransfers;
 
   return {
@@ -301,6 +322,19 @@ export function calculateCashFlow(
 
     periodData.set(periodKey, existing);
   });
+
+  // Reimbursement transfers count as outflow (business expenses)
+  transfers
+    .filter(t => {
+      const date = new Date(t.date);
+      return date.getFullYear() === currentYear && t.direction === 'reimbursement';
+    })
+    .forEach(t => {
+      const periodKey = getPeriodKey(new Date(t.date));
+      const existing = periodData.get(periodKey) || { inflow: 0, outflow: 0 };
+      existing.outflow += t.amount * t.exchangeRate;
+      periodData.set(periodKey, existing);
+    });
 
   // For monthly period, ensure all months are present
   if (period === 'monthly') {

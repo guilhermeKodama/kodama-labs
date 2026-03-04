@@ -50,20 +50,42 @@ export async function getSummary(
 
   // Calculate summary for each business
   for (const business of businesses) {
-    const transactions = await db.transaction.findMany({
-      where: {
-        businessId: business.id,
-        ...dateFilter,
-      },
-    });
+    const [transactions, reimbursementTransfers] = await Promise.all([
+      db.transaction.findMany({
+        where: {
+          businessId: business.id,
+          ...dateFilter,
+        },
+      }),
+      db.transfer.findMany({
+        where: {
+          fromBusinessId: business.id,
+          direction: "reimbursement",
+          ...(dateFrom || dateTo
+            ? {
+                date: {
+                  ...(dateFrom && { gte: dateFrom }),
+                  ...(dateTo && { lte: dateTo }),
+                },
+              }
+            : {}),
+        },
+      }),
+    ]);
 
     const totalIncome = transactions
       .filter((t) => t.type === "income")
       .reduce((sum, t) => sum + t.amount, 0);
 
-    const totalExpenses = transactions
-      .filter((t) => t.type === "expense")
-      .reduce((sum, t) => sum + t.amount, 0);
+    const reimbursementExpenses = reimbursementTransfers.reduce(
+      (sum, t) => sum + t.amount,
+      0
+    );
+
+    const totalExpenses =
+      transactions
+        .filter((t) => t.type === "expense")
+        .reduce((sum, t) => sum + t.amount, 0) + reimbursementExpenses;
 
     const totalInvestments = transactions
       .filter((t) => t.type === "investment")
