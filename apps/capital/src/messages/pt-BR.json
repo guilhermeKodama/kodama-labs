@@ -19,6 +19,10 @@
     "done": "Concluir",
     "next": "Próximo"
   },
+  "filters": {
+    "allEntities": "Todas as Entidades",
+    "showingCount": "{count} de {total} entidades"
+  },
   "nav": {
     "dashboard": "Painel",
     "businesses": "Empresas",
@@ -774,9 +778,12 @@
     "title": "Converter em Transferência",
     "step": "Passo",
     "of": "de",
-    "selectEntity": "Selecione ou crie uma empresa",
+    "selectEntity": "Selecione uma contraparte",
     "createBusiness": "Criar Nova Empresa",
+    "createInvestmentAccount": "Criar Nova Conta de Investimento",
     "businessName": "Nome da Empresa",
+    "accountName": "Nome da Conta",
+    "broker": "Corretora",
     "currency": "Moeda",
     "creating": "Criando...",
     "configure": "Configurar Transferência",
@@ -792,7 +799,11 @@
     "expense": "despesa",
     "to": "para",
     "from": "de",
-    "noBusiness": "Nenhuma empresa encontrada. Crie uma para continuar."
+    "noBusiness": "Nenhuma empresa encontrada. Crie uma para continuar.",
+    "investmentAccount": "Conta de Investimento",
+    "businessOrInvestment": "Empresa ou Conta de Investimento",
+    "sectionBusinesses": "Empresas",
+    "sectionInvestments": "Contas de Investimento"
   },
   "language": {
     "title": "Idioma",
@@ -1293,6 +1304,19 @@
       },
       "confirmedCount": "{count} transferência(s)"
     },
+    "investmentTransfers": {
+      "detected": "Transferências de investimento detectadas",
+      "detectedDescription": "Encontramos {count} transação(ões) que parecem ser transferências para/de uma conta de investimento.",
+      "selectAccount": "Selecionar Conta de Investimento",
+      "selectAccountPlaceholder": "Escolha uma conta",
+      "createNew": "Criar Nova Conta",
+      "accountName": "Nome da Conta",
+      "broker": "Corretora",
+      "skip": "Pular - importar como transações normais",
+      "deposit": "Aplicação",
+      "withdrawal": "Resgate",
+      "confirmedCount": "{count} transferência(s) de investimento"
+    },
     "preview": {
       "new": "Novas",
       "duplicates": "Duplicadas",
@@ -1311,6 +1335,7 @@
       "imported": "{count} transações importadas",
       "transfersCreated": "{count} transferência(s) criada(s)",
       "creditCardsCreated": "{count} cartão(ões) de crédito criado(s)",
+      "investmentTransfersCreated": "{count} transferência(s) de investimento criada(s)",
       "categorizing": "IA está categorizando suas transações..."
     },
     "status": {

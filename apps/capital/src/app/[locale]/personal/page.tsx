@@ -161,7 +161,7 @@ export default function PersonalPage() {
   };
 
   // Build entity names map for display
-  const { accounts: investmentAccounts } = useInvestmentStore();
+  const { accounts: investmentAccounts, fetchAccounts: fetchInvestmentAccounts } = useInvestmentStore();
 
   const entityNames = useMemo(() => {
     const names: Record<string, string> = {};
@@ -239,6 +239,7 @@ export default function PersonalPage() {
 
   const handleImportComplete = useCallback(async () => {
     fetchTransactions();
+    fetchInvestmentAccounts();
     setPendingCategorization(true);
     toast.success(t('bankStatements.toast.imported'));
     try {
@@ -250,7 +251,7 @@ export default function PersonalPage() {
     } catch {
       // ignore
     }
-  }, [fetchTransactions, t, updateLedgerBalance]);
+  }, [fetchTransactions, fetchInvestmentAccounts, t, updateLedgerBalance]);
 
   if (!personalAccount) {
     return (
@@ -492,6 +493,7 @@ export default function PersonalPage() {
         businesses={businesses}
         personalAccountId={personalAccount.id}
         existingCreditCards={creditCards}
+        investmentAccounts={investmentAccounts}
         defaultEntityType="personal"
         defaultEntityId={personalAccount.id}
         onImportComplete={handleImportComplete}
@@ -524,6 +526,7 @@ export default function PersonalPage() {
         sourceEntityType="personal"
         businesses={businesses}
         personalAccountId={personalAccount.id}
+        investmentAccounts={investmentAccounts}
         onComplete={() => {
           setConvertingTransaction(null);
           fetchTransactions();

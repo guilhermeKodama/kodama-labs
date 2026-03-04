@@ -10,6 +10,8 @@ import {
   ChevronRight,
   Plus,
   Loader2,
+  Wallet,
+  User,
 } from 'lucide-react';
 import {
   Dialog,
@@ -31,8 +33,10 @@ import {
 import { cn } from '@/lib/utils';
 import { formatCurrency, formatDate } from '@/lib/utils/format';
 import { COMMON_CURRENCIES } from '@/lib/utils/currency';
-import { useBusinessStore, useSettingsStore } from '@/lib/store';
-import type { Transaction, Business, EntityType, TransferDirection } from '@/types';
+import { useBusinessStore, useSettingsStore, useInvestmentStore } from '@/lib/store';
+import type { Transaction, Business, EntityType, TransferDirection, InvestmentAccount } from '@/types';
+
+type CounterpartyKind = 'business' | 'personal' | 'investment';
 
 interface ConvertToTransferDialogProps {
   open: boolean;
@@ -42,6 +46,7 @@ interface ConvertToTransferDialogProps {
   sourceEntityType: EntityType;
   businesses: Business[];
   personalAccountId: string | null;
+  investmentAccounts: InvestmentAccount[];
   onComplete: () => void;
 }
 
@@ -50,8 +55,12 @@ const STEPS: Step[] = ['select-entity', 'configure', 'confirm'];
 
 function inferDirection(
   sourceEntityType: EntityType,
-  transactionType: string
+  transactionType: string,
+  counterpartyKind: CounterpartyKind,
 ): TransferDirection {
+  if (counterpartyKind === 'investment') {
+    return transactionType === 'expense' ? 'investment_deposit' : 'investment_withdrawal';
+  }
   if (sourceEntityType === 'personal') {
     return transactionType === 'expense' ? 'capital_injection' : 'profit_distribution';
   }
@@ -66,37 +75,46 @@ export function ConvertToTransferDialog({
   sourceEntityType,
   businesses,
   personalAccountId,
+  investmentAccounts,
   onComplete,
 }: ConvertToTransferDialogProps) {
   const t = useTranslations();
   const { settings } = useSettingsStore();
   const { addBusiness } = useBusinessStore();
+  const { addAccount: addInvestmentAccount } = useInvestmentStore();
 
   const [step, setStep] = useState<Step>('select-entity');
   const [selectedEntityId, setSelectedEntityId] = useState<string | null>(null);
-  const [, setSelectedEntityType] = useState<EntityType>('business');
+  const [selectedCounterpartyKind, setSelectedCounterpartyKind] = useState<CounterpartyKind>('business');
   const [direction, setDirection] = useState<TransferDirection>('capital_injection');
   const [description, setDescription] = useState('');
   const [isConverting, setIsConverting] = useState(false);
 
-  const [showCreateForm, setShowCreateForm] = useState(false);
+  const [showCreateForm, setShowCreateForm] = useState<'business' | 'investment' | null>(null);
   const [newBusinessName, setNewBusinessName] = useState('');
   const [newBusinessCurrency, setNewBusinessCurrency] = useState(settings.baseCurrency);
   const [isCreatingBusiness, setIsCreatingBusiness] = useState(false);
+  const [newInvestmentName, setNewInvestmentName] = useState('');
+  const [newInvestmentBroker, setNewInvestmentBroker] = useState('');
+  const [isCreatingInvestment, setIsCreatingInvestment] = useState(false);
 
   const stepIndex = STEPS.indexOf(step);
+  const isInvestmentTransfer = selectedCounterpartyKind === 'investment';
 
   const reset = () => {
     setStep('select-entity');
     setSelectedEntityId(null);
-    setSelectedEntityType('business');
+    setSelectedCounterpartyKind('business');
     setDirection('capital_injection');
     setDescription('');
     setIsConverting(false);
-    setShowCreateForm(false);
+    setShowCreateForm(null);
     setNewBusinessName('');
     setNewBusinessCurrency(settings.baseCurrency);
     setIsCreatingBusiness(false);
+    setNewInvestmentName('');
+    setNewInvestmentBroker('');
+    setIsCreatingInvestment(false);
   };
 
   const handleOpenChange = (open: boolean) => {
@@ -104,16 +122,21 @@ export function ConvertToTransferDialog({
     onOpenChange(open);
   };
 
-  const handleSelectEntity = (entityId: string, entityType: EntityType) => {
+  const handleSelectEntity = (entityId: string, kind: CounterpartyKind) => {
     setSelectedEntityId(entityId);
-    setSelectedEntityType(entityType);
+    setSelectedCounterpartyKind(kind);
   };
 
   const handleNext = () => {
     if (step === 'select-entity' && selectedEntityId && transaction) {
-      setDirection(inferDirection(sourceEntityType, transaction.type));
+      setDirection(inferDirection(sourceEntityType, transaction.type, selectedCounterpartyKind));
       setDescription(transaction.description);
-      setStep('configure');
+      if (isInvestmentTransfer) {
+        // Skip configure step for investment transfers (direction is auto-determined)
+        setStep('confirm');
+      } else {
+        setStep('configure');
+      }
     } else if (step === 'configure') {
       setStep('confirm');
     }
@@ -121,7 +144,13 @@ export function ConvertToTransferDialog({
 
   const handleBack = () => {
     if (step === 'configure') setStep('select-entity');
-    else if (step === 'confirm') setStep('configure');
+    else if (step === 'confirm') {
+      if (isInvestmentTransfer) {
+        setStep('select-entity');
+      } else {
+        setStep('configure');
+      }
+    }
   };
 
   const handleCreateBusiness = async () => {
@@ -134,8 +163,8 @@ export function ConvertToTransferDialog({
       });
       if (created) {
         setSelectedEntityId(created.id);
-        setSelectedEntityType('business');
-        setShowCreateForm(false);
+        setSelectedCounterpartyKind('business');
+        setShowCreateForm(null);
         setNewBusinessName('');
       }
     } finally {
@@ -143,52 +172,107 @@ export function ConvertToTransferDialog({
     }
   };
 
+  const handleCreateInvestmentAccount = async () => {
+    if (!newInvestmentName.trim()) return;
+    setIsCreatingInvestment(true);
+    try {
+      const created = await addInvestmentAccount({
+        name: newInvestmentName.trim(),
+        broker: newInvestmentBroker.trim() || undefined,
+        entityType: sourceEntityType,
+        currency: transaction?.currency ?? settings.baseCurrency,
+        businessId: sourceEntityType === 'business' ? sourceEntityId : undefined,
+        personalAccountId: sourceEntityType === 'personal' ? sourceEntityId : undefined,
+      });
+      if (created) {
+        setSelectedEntityId(created.id);
+        setSelectedCounterpartyKind('investment');
+        setShowCreateForm(null);
+        setNewInvestmentName('');
+        setNewInvestmentBroker('');
+      }
+    } finally {
+      setIsCreatingInvestment(false);
+    }
+  };
+
   const handleConfirm = async () => {
     if (!transaction || !selectedEntityId) return;
     setIsConverting(true);
     try {
-      // Determine personal and business sides from the two entities involved
-      const personalId = sourceEntityType === 'personal' ? sourceEntityId : selectedEntityId;
-      const businessId = sourceEntityType === 'business' ? sourceEntityId : selectedEntityId;
+      const baseUrl = typeof window !== 'undefined' ? window.location.origin : '';
+      let body: Record<string, unknown>;
 
-      let fromEntityId: string;
-      let fromEntityType: EntityType;
-      let toEntityId: string;
-      let toEntityType: EntityType;
+      if (isInvestmentTransfer) {
+        const isDeposit = direction === 'investment_deposit';
+        body = {
+          fromEntityType: sourceEntityType,
+          toEntityType: sourceEntityType,
+          direction,
+          amount: transaction.amount,
+          currency: transaction.currency,
+          exchangeRate: transaction.exchangeRate,
+          description: description || transaction.description,
+          date: transaction.date instanceof Date ? transaction.date.toISOString() : transaction.date,
+        };
 
-      if (direction === 'capital_injection') {
-        // capital_injection: personal → business (matches transfer-form)
-        fromEntityId = personalId;
-        fromEntityType = 'personal';
-        toEntityId = businessId;
-        toEntityType = 'business';
+        if (sourceEntityType === 'business') {
+          if (isDeposit) {
+            body.fromBusinessId = sourceEntityId;
+          } else {
+            body.toBusinessId = sourceEntityId;
+          }
+        } else {
+          if (isDeposit) {
+            body.fromPersonalAccountId = sourceEntityId;
+          } else {
+            body.toPersonalAccountId = sourceEntityId;
+          }
+        }
+
+        if (isDeposit) {
+          body.toInvestmentAccountId = selectedEntityId;
+        } else {
+          body.fromInvestmentAccountId = selectedEntityId;
+        }
       } else {
-        // profit_distribution & reimbursement: business → personal (matches transfer-form)
-        fromEntityId = businessId;
-        fromEntityType = 'business';
-        toEntityId = personalId;
-        toEntityType = 'personal';
+        const personalId = sourceEntityType === 'personal' ? sourceEntityId : selectedEntityId;
+        const businessId = sourceEntityType === 'business' ? sourceEntityId : selectedEntityId;
+
+        let fromEntityId: string;
+        let fromEntityType: EntityType;
+        let toEntityId: string;
+        let toEntityType: EntityType;
+
+        if (direction === 'capital_injection') {
+          fromEntityId = personalId;
+          fromEntityType = 'personal';
+          toEntityId = businessId;
+          toEntityType = 'business';
+        } else {
+          fromEntityId = businessId;
+          fromEntityType = 'business';
+          toEntityId = personalId;
+          toEntityType = 'personal';
+        }
+
+        body = {
+          fromEntityType,
+          toEntityType,
+          direction,
+          amount: transaction.amount,
+          currency: transaction.currency,
+          exchangeRate: transaction.exchangeRate,
+          description: description || transaction.description,
+          date: transaction.date instanceof Date ? transaction.date.toISOString() : transaction.date,
+        };
+
+        if (fromEntityType === 'business') body.fromBusinessId = fromEntityId;
+        if (fromEntityType === 'personal') body.fromPersonalAccountId = fromEntityId;
+        if (toEntityType === 'business') body.toBusinessId = toEntityId;
+        if (toEntityType === 'personal') body.toPersonalAccountId = toEntityId;
       }
 
-      const body: Record<string, unknown> = {
-        fromEntityType,
-        toEntityType,
-        direction,
-        amount: transaction.amount,
-        currency: transaction.currency,
-        exchangeRate: transaction.exchangeRate,
-        description: description || transaction.description,
-        date: transaction.date instanceof Date ? transaction.date.toISOString() : transaction.date,
-      };
-
-      if (fromEntityType === 'business') body.fromBusinessId = fromEntityId;
-      if (fromEntityType === 'personal') body.fromPersonalAccountId = fromEntityId;
-      if (toEntityType === 'business') body.toBusinessId = toEntityId;
-      if (toEntityType === 'personal') body.toPersonalAccountId = toEntityId;
-
-      const baseUrl = typeof window !== 'undefined' ? window.location.origin : '';
-
-      // Create transfer
       const createRes = await fetch(`${baseUrl}/api/v1/transfers`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -200,7 +284,6 @@ export function ConvertToTransferDialog({
         throw new Error('Failed to create transfer');
       }
 
-      // Delete original transaction
       const deleteRes = await fetch(`${baseUrl}/api/v1/transactions/${transaction.id}`, {
         method: 'DELETE',
         credentials: 'include',
@@ -219,36 +302,43 @@ export function ConvertToTransferDialog({
     }
   };
 
-  const selectedEntity = selectedEntityId
-    ? businesses.find((b) => b.id === selectedEntityId)
-    : null;
+  const selectedEntityName = (() => {
+    if (isInvestmentTransfer) {
+      const acc = investmentAccounts.find((a) => a.id === selectedEntityId);
+      return acc?.name ?? '';
+    }
+    const biz = businesses.find((b) => b.id === selectedEntityId);
+    if (biz) return biz.name;
+    if (selectedEntityId === personalAccountId) return t('nav.personal');
+    return '';
+  })();
 
-  const selectedEntityName = selectedEntity?.name ?? t('nav.personal');
-
-  const counterpartyOptions: { id: string; name: string; type: EntityType; color?: string }[] = [];
+  // Build counterparty options grouped by type
+  const businessOptions: { id: string; name: string; kind: CounterpartyKind; color?: string }[] = [];
+  const investmentOptions: { id: string; name: string; kind: CounterpartyKind; broker?: string }[] = [];
 
   if (sourceEntityType === 'personal') {
     businesses.forEach((b) => {
-      counterpartyOptions.push({ id: b.id, name: b.name, type: 'business', color: b.color });
+      businessOptions.push({ id: b.id, name: b.name, kind: 'business', color: b.color });
     });
   } else {
     if (personalAccountId) {
-      counterpartyOptions.push({
-        id: personalAccountId,
-        name: t('nav.personal'),
-        type: 'personal',
-      });
+      businessOptions.push({ id: personalAccountId, name: t('nav.personal'), kind: 'personal' });
     }
-    businesses
-      .filter((b) => b.id !== sourceEntityId)
-      .forEach((b) => {
-        counterpartyOptions.push({ id: b.id, name: b.name, type: 'business', color: b.color });
-      });
+    businesses.filter((b) => b.id !== sourceEntityId).forEach((b) => {
+      businessOptions.push({ id: b.id, name: b.name, kind: 'business', color: b.color });
+    });
   }
+
+  investmentAccounts.forEach((a) => {
+    investmentOptions.push({ id: a.id, name: a.name, kind: 'investment', broker: a.broker });
+  });
 
   const directionLabel = (d: TransferDirection) => {
     if (d === 'capital_injection') return t('transfers.directions.capitalInjection');
     if (d === 'profit_distribution') return t('transfers.directions.profitDistribution');
+    if (d === 'investment_deposit') return t('transfers.directions.investmentDeposit');
+    if (d === 'investment_withdrawal') return t('transfers.directions.investmentWithdrawal');
     return t('transfers.directions.reimbursement');
   };
 
@@ -270,60 +360,115 @@ export function ConvertToTransferDialog({
           <div className="space-y-4">
             <p className="text-sm text-slate-400">{t('convertTransfer.selectEntity')}</p>
 
-            {counterpartyOptions.length === 0 && !showCreateForm && (
+            {businessOptions.length === 0 && investmentOptions.length === 0 && !showCreateForm && (
               <p className="text-sm text-slate-500">{t('convertTransfer.noBusiness')}</p>
             )}
 
+            {/* Business / Personal options */}
+            {businessOptions.length > 0 && (
+              <div className="space-y-2">
+                <p className="text-xs font-medium uppercase tracking-wider text-slate-500">
+                  {t('convertTransfer.sectionBusinesses')}
+                </p>
+                {businessOptions.map((opt) => (
+                  <button
+                    key={opt.id}
+                    type="button"
+                    onClick={() => handleSelectEntity(opt.id, opt.kind)}
+                    className={cn(
+                      'flex w-full items-center gap-3 rounded-lg border p-3 text-left transition-colors',
+                      selectedEntityId === opt.id && selectedCounterpartyKind === opt.kind
+                        ? 'border-purple-500 bg-purple-500/10'
+                        : 'border-slate-700 bg-slate-800/50 hover:border-slate-600'
+                    )}
+                  >
+                    <div
+                      className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg"
+                      style={{
+                        backgroundColor: opt.color ? `${opt.color}20` : 'rgb(51 65 85 / 0.5)',
+                      }}
+                    >
+                      {opt.kind === 'personal' ? (
+                        <User className="h-4 w-4" style={{ color: '#94a3b8' }} />
+                      ) : (
+                        <Building2 className="h-4 w-4" style={{ color: opt.color || '#94a3b8' }} />
+                      )}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate font-medium text-white">{opt.name}</p>
+                      <p className="text-xs text-slate-500">
+                        {opt.kind === 'business' ? t('common.business') : t('nav.personal')}
+                      </p>
+                    </div>
+                    {selectedEntityId === opt.id && selectedCounterpartyKind === opt.kind && (
+                      <Check className="h-4 w-4 shrink-0 text-purple-400" />
+                    )}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {/* Investment account options */}
             <div className="space-y-2">
-              {counterpartyOptions.map((opt) => (
+              <p className="text-xs font-medium uppercase tracking-wider text-slate-500">
+                {t('convertTransfer.sectionInvestments')}
+              </p>
+              {investmentOptions.map((opt) => (
                 <button
                   key={opt.id}
                   type="button"
-                  onClick={() => handleSelectEntity(opt.id, opt.type)}
+                  onClick={() => handleSelectEntity(opt.id, 'investment')}
                   className={cn(
                     'flex w-full items-center gap-3 rounded-lg border p-3 text-left transition-colors',
-                    selectedEntityId === opt.id
-                      ? 'border-purple-500 bg-purple-500/10'
+                    selectedEntityId === opt.id && selectedCounterpartyKind === 'investment'
+                      ? 'border-amber-500 bg-amber-500/10'
                       : 'border-slate-700 bg-slate-800/50 hover:border-slate-600'
                   )}
                 >
-                  <div
-                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg"
-                    style={{
-                      backgroundColor: opt.color ? `${opt.color}20` : 'rgb(51 65 85 / 0.5)',
-                    }}
-                  >
-                    <Building2
-                      className="h-4 w-4"
-                      style={{ color: opt.color || '#94a3b8' }}
-                    />
+                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-amber-500/10">
+                    <Wallet className="h-4 w-4 text-amber-400" />
                   </div>
                   <div className="min-w-0 flex-1">
                     <p className="truncate font-medium text-white">{opt.name}</p>
                     <p className="text-xs text-slate-500">
-                      {opt.type === 'business' ? t('common.business') : t('nav.personal')}
+                      {opt.broker ? opt.broker : t('convertTransfer.investmentAccount')}
                     </p>
                   </div>
-                  {selectedEntityId === opt.id && (
-                    <Check className="h-4 w-4 shrink-0 text-purple-400" />
+                  {selectedEntityId === opt.id && selectedCounterpartyKind === 'investment' && (
+                    <Check className="h-4 w-4 shrink-0 text-amber-400" />
                   )}
                 </button>
               ))}
             </div>
 
-            {/* Create new business inline */}
-            {sourceEntityType === 'personal' && !showCreateForm && (
-              <Button
-                variant="outline"
-                onClick={() => setShowCreateForm(true)}
-                className="w-full border-dashed border-slate-700 text-slate-400 hover:border-slate-500 hover:text-white"
-              >
-                <Plus className="mr-2 h-4 w-4" />
-                {t('convertTransfer.createBusiness')}
-              </Button>
+            {/* Create new entity buttons */}
+            {!showCreateForm && (
+              <div className="space-y-2">
+                {sourceEntityType === 'personal' && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setShowCreateForm('business')}
+                    className="w-full border-dashed border-slate-700 text-slate-400 hover:border-slate-500 hover:text-white"
+                  >
+                    <Plus className="mr-1 h-3 w-3" />
+                    {t('convertTransfer.createBusiness')}
+                  </Button>
+                )}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowCreateForm('investment')}
+                  className="w-full border-dashed border-slate-700 text-slate-400 hover:border-slate-500 hover:text-white"
+                >
+                  <Plus className="mr-1 h-3 w-3" />
+                  {t('convertTransfer.createInvestmentAccount')}
+                </Button>
+              </div>
             )}
 
-            {showCreateForm && (
+            {/* Create business form */}
+            {showCreateForm === 'business' && (
               <div className="space-y-3 rounded-lg border border-slate-700 bg-slate-800/50 p-4">
                 <div>
                   <Label className="text-sm text-slate-300">
@@ -364,7 +509,7 @@ export function ConvertToTransferDialog({
                   <Button
                     variant="ghost"
                     size="sm"
-                    onClick={() => setShowCreateForm(false)}
+                    onClick={() => setShowCreateForm(null)}
                     className="text-slate-400 hover:text-white"
                   >
                     {t('common.cancel')}
@@ -388,6 +533,59 @@ export function ConvertToTransferDialog({
               </div>
             )}
 
+            {/* Create investment account form */}
+            {showCreateForm === 'investment' && (
+              <div className="space-y-3 rounded-lg border border-slate-700 bg-slate-800/50 p-4">
+                <div>
+                  <Label className="text-sm text-slate-300">
+                    {t('convertTransfer.accountName')}
+                  </Label>
+                  <Input
+                    value={newInvestmentName}
+                    onChange={(e) => setNewInvestmentName(e.target.value)}
+                    placeholder={t('convertTransfer.accountName')}
+                    className="mt-1 border-slate-700 bg-slate-800 text-white placeholder:text-slate-500"
+                  />
+                </div>
+                <div>
+                  <Label className="text-sm text-slate-300">
+                    {t('convertTransfer.broker')}
+                  </Label>
+                  <Input
+                    value={newInvestmentBroker}
+                    onChange={(e) => setNewInvestmentBroker(e.target.value)}
+                    placeholder={t('convertTransfer.broker')}
+                    className="mt-1 border-slate-700 bg-slate-800 text-white placeholder:text-slate-500"
+                  />
+                </div>
+                <div className="flex justify-end gap-2">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setShowCreateForm(null)}
+                    className="text-slate-400 hover:text-white"
+                  >
+                    {t('common.cancel')}
+                  </Button>
+                  <Button
+                    size="sm"
+                    disabled={!newInvestmentName.trim() || isCreatingInvestment}
+                    onClick={handleCreateInvestmentAccount}
+                    className="bg-gradient-to-r from-amber-500 to-orange-500 text-white hover:from-amber-600 hover:to-orange-600"
+                  >
+                    {isCreatingInvestment ? (
+                      <>
+                        <Loader2 className="mr-2 h-3 w-3 animate-spin" />
+                        {t('convertTransfer.creating')}
+                      </>
+                    ) : (
+                      t('convertTransfer.createInvestmentAccount')
+                    )}
+                  </Button>
+                </div>
+              </div>
+            )}
+
             <div className="flex justify-end pt-2">
               <Button
                 onClick={handleNext}
@@ -401,10 +599,9 @@ export function ConvertToTransferDialog({
           </div>
         )}
 
-        {/* Step 2: Configure Transfer */}
+        {/* Step 2: Configure Transfer (skipped for investment transfers) */}
         {step === 'configure' && transaction && (
           <div className="space-y-4">
-            {/* Original transaction summary */}
             <div className="rounded-lg border border-slate-700 bg-slate-800/50 p-4">
               <p className="mb-2 text-xs font-medium uppercase tracking-wider text-slate-500">
                 {t('convertTransfer.transactionSummary')}
@@ -428,7 +625,6 @@ export function ConvertToTransferDialog({
               </div>
             </div>
 
-            {/* Direction */}
             <div>
               <Label className="text-sm text-slate-300">
                 {t('convertTransfer.direction')}
@@ -463,7 +659,6 @@ export function ConvertToTransferDialog({
               </Select>
             </div>
 
-            {/* Description override */}
             <div>
               <Label className="text-sm text-slate-300">
                 {t('convertTransfer.description')}
@@ -498,8 +693,16 @@ export function ConvertToTransferDialog({
         {/* Step 3: Confirm */}
         {step === 'confirm' && transaction && (
           <div className="space-y-4">
-            <div className="rounded-lg border border-purple-500/30 bg-purple-500/10 p-4">
-              <p className="text-sm text-purple-200">
+            <div className={cn(
+              'rounded-lg border p-4',
+              isInvestmentTransfer
+                ? 'border-amber-500/30 bg-amber-500/10'
+                : 'border-purple-500/30 bg-purple-500/10'
+            )}>
+              <p className={cn(
+                'text-sm',
+                isInvestmentTransfer ? 'text-amber-200' : 'text-purple-200'
+              )}>
                 {t('convertTransfer.summary', {
                   amount: formatCurrency(transaction.amount, transaction.currency),
                   type: transaction.type === 'expense'
@@ -507,11 +710,9 @@ export function ConvertToTransferDialog({
                     : t('convertTransfer.income'),
                   direction: directionLabel(direction).toLowerCase(),
                   preposition:
-                    direction === 'profit_distribution'
+                    direction === 'investment_deposit' || direction === 'capital_injection'
                       ? t('convertTransfer.to')
-                      : direction === 'capital_injection'
-                        ? t('convertTransfer.to')
-                        : t('convertTransfer.from'),
+                      : t('convertTransfer.from'),
                   entity: selectedEntityName,
                 })}
               </p>
@@ -533,7 +734,12 @@ export function ConvertToTransferDialog({
               <Button
                 onClick={handleConfirm}
                 disabled={isConverting}
-                className="bg-gradient-to-r from-purple-500 to-pink-500 text-white hover:from-purple-600 hover:to-pink-600"
+                className={cn(
+                  'text-white',
+                  isInvestmentTransfer
+                    ? 'bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600'
+                    : 'bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600'
+                )}
               >
                 {isConverting ? (
                   <>

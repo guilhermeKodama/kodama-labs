@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useCallback } from 'react';
 import { useTranslations } from 'next-intl';
 import {
   Copy,
@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import { AppShell } from '@/components/layout';
 import { Header } from '@/components/layout/header';
+import { EntityFilterBar } from '@/components/filters/entity-filter-bar';
 import { RoomToSpendSummary } from '@/components/cards';
 import { BudgetInsights } from '@/components/cards';
 import { UnbudgetedSpendingCard } from '@/components/cards';
@@ -37,6 +38,7 @@ import {
   useTransactionStore,
   useSettingsStore,
   useCreditCardStore,
+  useBusinessStore,
 } from '@/lib/store';
 import {
   calculateAllBudgetProgress,
@@ -65,7 +67,8 @@ export default function BudgetsPage() {
     toggleBudget,
   } = useBudgetStore();
   const { transactions } = useTransactionStore();
-  const { settings } = useSettingsStore();
+  const { settings, personalAccount } = useSettingsStore();
+  const { businesses } = useBusinessStore();
   const {
     creditCards,
     bills,
@@ -91,6 +94,27 @@ export default function BudgetsPage() {
     }
   }, [bills, fetchAllBillTransactions]);
 
+  // Entity filter state
+  const [selectedEntityIds, setSelectedEntityIds] = useState<Set<string>>(new Set());
+
+  const allEntities = useMemo(() => {
+    const entities: Array<{ id: string; name: string; type: 'business' | 'personal'; color?: string }> = [];
+    businesses.forEach((b) => {
+      entities.push({ id: b.id, name: b.name, type: 'business', color: b.color });
+    });
+    if (personalAccount) {
+      entities.push({ id: personalAccount.id, name: t('nav.personal'), type: 'personal', color: '#8b5cf6' });
+    }
+    return entities;
+  }, [businesses, personalAccount, t]);
+
+  const isEntityFiltered = selectedEntityIds.size > 0;
+
+  const matchesEntityFilter = useCallback(
+    (entityId: string) => !isEntityFiltered || selectedEntityIds.has(entityId),
+    [isEntityFiltered, selectedEntityIds]
+  );
+
   // Merge regular transactions + credit card bill transactions + installment projections
   const mergedTransactions = useMemo(() => {
     const ccMerged = mergeTransactionsWithCreditCard(
@@ -110,6 +134,17 @@ export default function BudgetsPage() {
 
     return [...ccMerged, ...installmentTransactions];
   }, [transactions, allBillTransactions, bills, creditCards, installments]);
+
+  // Entity-filtered budgets and transactions
+  const filteredBudgets = useMemo(() => {
+    if (!isEntityFiltered) return budgets;
+    return budgets.filter((b) => matchesEntityFilter(b.entityId));
+  }, [budgets, isEntityFiltered, matchesEntityFilter]);
+
+  const filteredMergedTransactions = useMemo(() => {
+    if (!isEntityFiltered) return mergedTransactions;
+    return mergedTransactions.filter((t) => matchesEntityFilter(t.entityId));
+  }, [mergedTransactions, isEntityFiltered, matchesEntityFilter]);
 
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingBudget, setEditingBudget] = useState<Budget | undefined>();
@@ -131,26 +166,26 @@ export default function BudgetsPage() {
 
   // Get yearly budgets for current year to derive monthly targets
   const currentYearBudgets = useMemo(() => {
-    return getCurrentYearBudgets(budgets);
-  }, [budgets]);
+    return getCurrentYearBudgets(filteredBudgets);
+  }, [filteredBudgets]);
 
   // Derive monthly budget progress from yearly budgets (amount/12 per category)
   const monthlyFromYearly = useMemo(() => {
     return getMonthlyFromYearlyBudgets(
-      budgets,
-      mergedTransactions,
+      filteredBudgets,
+      filteredMergedTransactions,
       currentYear,
       currentMonth
     );
-  }, [budgets, mergedTransactions, currentYear, currentMonth]);
+  }, [filteredBudgets, filteredMergedTransactions, currentYear, currentMonth]);
 
   // Also get any explicit monthly budgets for current month
   const explicitMonthlyProgress = useMemo(() => {
-    const monthlyBudgets = budgets.filter(
+    const monthlyBudgets = filteredBudgets.filter(
       (b) => b.isActive && b.period === 'monthly' && b.year === currentYear && b.month === currentMonth
     );
-    return calculateAllBudgetProgress(monthlyBudgets, mergedTransactions);
-  }, [budgets, mergedTransactions, currentYear, currentMonth]);
+    return calculateAllBudgetProgress(monthlyBudgets, filteredMergedTransactions);
+  }, [filteredBudgets, filteredMergedTransactions, currentYear, currentMonth]);
 
   // Combine monthly view: explicit monthly + derived from yearly
   const currentMonthProgress = useMemo(() => {
@@ -168,41 +203,41 @@ export default function BudgetsPage() {
   const insights = useMemo(() => {
     return generateBudgetInsights(
       currentMonthProgress,
-      mergedTransactions,
+      filteredMergedTransactions,
       currentYearBudgets
     );
-  }, [currentMonthProgress, mergedTransactions, currentYearBudgets]);
+  }, [currentMonthProgress, filteredMergedTransactions, currentYearBudgets]);
 
   // Unbudgeted spending (includes credit card categories)
   const allCurrentBudgets = useMemo(() => {
-    return budgets.filter((b) => {
+    return filteredBudgets.filter((b) => {
       if (!b.isActive) return false;
       if (b.year !== currentYear) return false;
       if (b.period === 'monthly') return b.month === currentMonth;
       return true; // yearly
     });
-  }, [budgets, currentYear, currentMonth]);
+  }, [filteredBudgets, currentYear, currentMonth]);
 
   const unbudgetedCategories = useMemo(() => {
-    return getUnbudgetedSpending(allCurrentBudgets, mergedTransactions, currentYear, currentMonth);
-  }, [allCurrentBudgets, mergedTransactions, currentYear, currentMonth]);
+    return getUnbudgetedSpending(allCurrentBudgets, filteredMergedTransactions, currentYear, currentMonth);
+  }, [allCurrentBudgets, filteredMergedTransactions, currentYear, currentMonth]);
 
   // Month-over-month trends
   const trends = useMemo(() => {
-    return getMonthOverMonth(allCurrentBudgets, mergedTransactions, currentYear, currentMonth);
-  }, [allCurrentBudgets, mergedTransactions, currentYear, currentMonth]);
+    return getMonthOverMonth(allCurrentBudgets, filteredMergedTransactions, currentYear, currentMonth);
+  }, [allCurrentBudgets, filteredMergedTransactions, currentYear, currentMonth]);
 
   // ============================================
   // Yearly Tab Data
   // ============================================
 
   const yearlyProgress = useMemo(() => {
-    return calculateAllYearlyProgress(budgets, mergedTransactions, currentYear);
-  }, [budgets, mergedTransactions, currentYear]);
+    return calculateAllYearlyProgress(filteredBudgets, filteredMergedTransactions, currentYear);
+  }, [filteredBudgets, filteredMergedTransactions, currentYear]);
 
   const yearlySummaryStats = useMemo(() => {
-    return getYearlySummaryStats(budgets, mergedTransactions, currentYear);
-  }, [budgets, mergedTransactions, currentYear]);
+    return getYearlySummaryStats(filteredBudgets, filteredMergedTransactions, currentYear);
+  }, [filteredBudgets, filteredMergedTransactions, currentYear]);
 
   // Available categories for the yearly filter
   const yearlyCategories = useMemo(() => {
@@ -221,17 +256,15 @@ export default function BudgetsPage() {
   const filteredYearlySummaryStats = useMemo(() => {
     if (isAllYearlyCategoriesSelected) return yearlySummaryStats;
     // Recompute stats for filtered budgets only
-    const filteredBudgets = budgets.filter(
+    const categoryFilteredBudgets = filteredBudgets.filter(
       (b) => b.isActive && b.period === 'yearly' && b.year === currentYear && selectedYearlyCategories.has(b.category)
     );
     return getYearlySummaryStats(
-      // Pass only filtered budgets (the function filters by yearly+active+year internally,
-      // so we wrap them to match)
-      filteredBudgets,
-      mergedTransactions,
+      categoryFilteredBudgets,
+      filteredMergedTransactions,
       currentYear
     );
-  }, [yearlySummaryStats, isAllYearlyCategoriesSelected, budgets, mergedTransactions, currentYear, selectedYearlyCategories]);
+  }, [yearlySummaryStats, isAllYearlyCategoriesSelected, filteredBudgets, filteredMergedTransactions, currentYear, selectedYearlyCategories]);
 
   // Toggle a category in the yearly filter
   const toggleYearlyCategory = (category: string) => {
@@ -255,8 +288,8 @@ export default function BudgetsPage() {
   // ============================================
 
   const allBudgetProgress = useMemo(() => {
-    return calculateAllBudgetProgress(budgets, mergedTransactions);
-  }, [budgets, mergedTransactions]);
+    return calculateAllBudgetProgress(filteredBudgets, filteredMergedTransactions);
+  }, [filteredBudgets, filteredMergedTransactions]);
 
   // ============================================
   // Handlers
@@ -419,6 +452,17 @@ export default function BudgetsPage() {
           </TabsList>
         </div>
 
+        {/* Entity Filter */}
+        {allEntities.length > 1 && (
+          <div className="mb-6">
+            <EntityFilterBar
+              entities={allEntities}
+              selectedEntityIds={selectedEntityIds}
+              onSelectionChange={setSelectedEntityIds}
+            />
+          </div>
+        )}
+
         {/* ============================================ */}
         {/* Monthly Tab */}
         {/* ============================================ */}
@@ -426,7 +470,7 @@ export default function BudgetsPage() {
           {/* Summary Cards */}
           <RoomToSpendSummary
             budgetProgress={currentMonthProgress}
-            transactions={mergedTransactions}
+            transactions={filteredMergedTransactions}
             currency={settings.baseCurrency}
           />
 
@@ -443,7 +487,7 @@ export default function BudgetsPage() {
             <CardContent>
               <BudgetsTable
                 budgetProgress={currentMonthProgress}
-                transactions={mergedTransactions}
+                transactions={filteredMergedTransactions}
                 onEdit={openEditDialog}
                 onDelete={setDeletingBudget}
                 onToggle={handleToggle}
@@ -653,7 +697,7 @@ export default function BudgetsPage() {
             <CardContent>
               <BudgetsTable
                 budgetProgress={allBudgetProgress}
-                transactions={mergedTransactions}
+                transactions={filteredMergedTransactions}
                 onEdit={openEditDialog}
                 onDelete={setDeletingBudget}
                 onToggle={handleToggle}

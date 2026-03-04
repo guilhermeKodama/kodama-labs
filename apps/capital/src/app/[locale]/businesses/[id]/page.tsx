@@ -152,7 +152,7 @@ export default function BusinessDetailPage() {
     setDateRange(undefined);
   };
 
-  const { accounts: investmentAccounts } = useInvestmentStore();
+  const { accounts: investmentAccounts, fetchAccounts: fetchInvestmentAccounts } = useInvestmentStore();
 
   // Build entity names map for display (includes investment accounts)
   const entityNames = useMemo(() => {
@@ -183,9 +183,10 @@ export default function BusinessDetailPage() {
 
   const handleImportComplete = useCallback(() => {
     fetchTransactions();
+    fetchInvestmentAccounts();
     setPendingCategorization(true);
     toast.success(t('bankStatements.toast.imported'));
-  }, [fetchTransactions, t]);
+  }, [fetchTransactions, fetchInvestmentAccounts, t]);
 
   useEffect(() => {
     if (!pendingCategorization) return;
@@ -500,6 +501,7 @@ export default function BusinessDetailPage() {
         businesses={businesses}
         personalAccountId={personalAccount?.id ?? null}
         existingCreditCards={creditCards}
+        investmentAccounts={investmentAccounts}
         defaultEntityType="business"
         defaultEntityId={businessId}
         onImportComplete={handleImportComplete}
@@ -532,6 +534,7 @@ export default function BusinessDetailPage() {
         sourceEntityType="business"
         businesses={businesses}
         personalAccountId={personalAccount?.id ?? null}
+        investmentAccounts={investmentAccounts}
         onComplete={() => {
           setConvertingTransaction(null);
           fetchTransactions();

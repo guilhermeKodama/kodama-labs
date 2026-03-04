@@ -18,6 +18,7 @@ import { AppShell } from '@/components/layout';
 import { Header } from '@/components/layout/header';
 import { SummaryCard } from '@/components/cards';
 import { MonthlyReportTable } from '@/components/tables';
+import { EntityFilterBar } from '@/components/filters/entity-filter-bar';
 import {
   CategoryPieChart,
   IncomeExpenseChart,
@@ -73,6 +74,7 @@ export default function ReportsPage() {
   const currentYear = new Date().getFullYear();
   const [selectedYear, setSelectedYear] = useState(currentYear);
   const [selectedView, setSelectedView] = useState<'monthly' | 'categories' | 'insights' | 'portfolio'>('monthly');
+  const [selectedEntityIds, setSelectedEntityIds] = useState<Set<string>>(new Set());
 
   // Fetch investment data on mount
   useEffect(() => {
@@ -81,21 +83,68 @@ export default function ReportsPage() {
   }, [fetchHoldings, fetchAccounts]);
   const [selectedType, setSelectedType] = useState<TransactionType | 'all'>('all');
 
-  // Filter transactions by year
+  // Prepare entities list (needed for filter bar and comparison chart)
+  const allEntities = useMemo(() => {
+    const entities: Array<{ id: string; name: string; type: 'business' | 'personal'; color?: string }> = [];
+    
+    businesses.forEach((b) => {
+      entities.push({
+        id: b.id,
+        name: b.name,
+        type: 'business',
+        color: b.color,
+      });
+    });
+
+    if (personalAccount) {
+      entities.push({
+        id: personalAccount.id,
+        name: t('nav.personal'),
+        type: 'personal',
+        color: '#8b5cf6',
+      });
+    }
+
+    return entities;
+  }, [businesses, personalAccount, t]);
+
+  const isEntityFiltered = selectedEntityIds.size > 0;
+
+  // Helper to check if a transaction passes the entity filter
+  const matchesEntityFilter = useCallback(
+    (entityId: string) => !isEntityFiltered || selectedEntityIds.has(entityId),
+    [isEntityFiltered, selectedEntityIds]
+  );
+
+  // Filter transactions by year and entity
   const yearTransactions = useMemo(() => {
     return transactions.filter((t) => {
       const date = new Date(t.date);
-      return date.getFullYear() === selectedYear;
+      return date.getFullYear() === selectedYear && matchesEntityFilter(t.entityId);
     });
-  }, [transactions, selectedYear]);
+  }, [transactions, selectedYear, matchesEntityFilter]);
 
-  // Previous year transactions for comparison
+  // Previous year transactions for comparison (also entity-filtered)
   const prevYearTransactions = useMemo(() => {
     return transactions.filter((t) => {
       const date = new Date(t.date);
-      return date.getFullYear() === selectedYear - 1;
+      return date.getFullYear() === selectedYear - 1 && matchesEntityFilter(t.entityId);
     });
-  }, [transactions, selectedYear]);
+  }, [transactions, selectedYear, matchesEntityFilter]);
+
+  // Entity-filtered transactions for Insights charts (all years)
+  const filteredTransactions = useMemo(() => {
+    if (!isEntityFiltered) return transactions;
+    return transactions.filter((t) => matchesEntityFilter(t.entityId));
+  }, [transactions, isEntityFiltered, matchesEntityFilter]);
+
+  // Entity-filtered transfers for Insights charts
+  const filteredTransfers = useMemo(() => {
+    if (!isEntityFiltered) return transfers;
+    return transfers.filter((t) =>
+      matchesEntityFilter(t.fromEntityId) || matchesEntityFilter(t.toEntityId)
+    );
+  }, [transfers, isEntityFiltered, matchesEntityFilter]);
 
   // Calculate yearly totals
   const yearlyTotals = useMemo(() => {
@@ -182,31 +231,6 @@ export default function ReportsPage() {
       .map(([name, value]) => ({ name, value }))
       .sort((a, b) => b.value - a.value);
   }, [yearTransactions]);
-
-  // Prepare entities for comparison chart
-  const allEntities = useMemo(() => {
-    const entities: Array<{ id: string; name: string; type: 'business' | 'personal'; color?: string }> = [];
-    
-    businesses.forEach((b) => {
-      entities.push({
-        id: b.id,
-        name: b.name,
-        type: 'business',
-        color: b.color,
-      });
-    });
-
-    if (personalAccount) {
-      entities.push({
-        id: personalAccount.id,
-        name: t('nav.personal'),
-        type: 'personal',
-        color: '#8b5cf6',
-      });
-    }
-
-    return entities;
-  }, [businesses, personalAccount, t]);
 
   // ---- Portfolio data ----
   const activeHoldings = useMemo(
@@ -310,12 +334,9 @@ export default function ReportsPage() {
     }
 
     const entityNames: Record<string, string> = {};
-    businesses.forEach((b) => {
-      entityNames[b.id] = b.name;
+    allEntities.forEach((e) => {
+      entityNames[e.id] = e.name;
     });
-    if (personalAccount) {
-      entityNames[personalAccount.id] = t('nav.personal');
-    }
 
     exportTransactionsToCSV(
       yearTransactions,
@@ -336,7 +357,7 @@ export default function ReportsPage() {
     return Array.from(years).sort((a, b) => b - a);
   }, [transactions, currentYear]);
 
-  const hasData = transactions.length > 0;
+  const hasData = yearTransactions.length > 0;
   const hasMultipleEntities = allEntities.length > 1;
   const hasMultipleCurrencies = currencies.length > 1;
 
@@ -386,6 +407,17 @@ export default function ReportsPage() {
           {t('reports.export.button')}
         </Button>
       </div>
+
+      {/* Entity Filter */}
+      {allEntities.length > 1 && (
+        <div className="mb-6">
+          <EntityFilterBar
+            entities={allEntities}
+            selectedEntityIds={selectedEntityIds}
+            onSelectionChange={setSelectedEntityIds}
+          />
+        </div>
+      )}
 
       {/* Summary Cards */}
       <div className="mb-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -840,8 +872,8 @@ export default function ReportsPage() {
             </CardHeader>
             <CardContent>
               <BalanceLineChart
-                transactions={transactions}
-                transfers={transfers}
+                transactions={filteredTransactions}
+                transfers={filteredTransfers}
                 currency={settings.baseCurrency}
                 height={300}
               />
@@ -860,8 +892,8 @@ export default function ReportsPage() {
             </CardHeader>
             <CardContent>
               <CashFlowChart
-                transactions={transactions}
-                transfers={transfers}
+                transactions={filteredTransactions}
+                transfers={filteredTransfers}
                 currency={settings.baseCurrency}
                 year={selectedYear}
                 height={300}
@@ -906,7 +938,7 @@ export default function ReportsPage() {
                 </CardHeader>
                 <CardContent>
                   <CurrencyDistributionChart
-                    transactions={transactions}
+                    transactions={filteredTransactions}
                     height={300}
                   />
                 </CardContent>
