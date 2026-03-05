@@ -279,12 +279,46 @@ export default function ReportsPage() {
       const withdrawals = sumInvestmentWithdrawals(monthInvestmentTransfers);
       const investment = Math.max(0, investmentTxs + investmentCatExp + deposits - withdrawals);
 
+      // Build detail items for expandable rows
+      type DetailItem = { id: string; date: Date; description: string; amount: number; source: string };
+
+      const incomeItems: DetailItem[] = monthTransactions
+        .filter((t) => t.type === 'income')
+        .map((t) => ({ id: t.id, date: new Date(t.date), description: t.description, amount: t.amount * t.exchangeRate, source: 'transaction' }));
+
+      const expenseItems: DetailItem[] = [
+        ...monthTransactions
+          .filter((t) => t.type === 'expense' && t.category !== 'Investment')
+          .map((t) => ({ id: t.id, date: new Date(t.date), description: t.description, amount: t.amount * t.exchangeRate, source: 'transaction' })),
+        ...monthReimbursements.map((t) => ({ id: t.id, date: new Date(t.date), description: t.description || 'Reimbursement', amount: t.amount * t.exchangeRate, source: 'reimbursement' })),
+        ...monthReimbursementCreds.map((t) => ({ id: `credit-${t.id}`, date: new Date(t.date), description: t.description || 'Reimbursement credit', amount: -(t.amount * t.exchangeRate), source: 'reimbursement_credit' })),
+      ];
+
+      const investmentItems: DetailItem[] = [
+        ...monthTransactions
+          .filter((t) => t.type === 'investment')
+          .map((t) => ({ id: t.id, date: new Date(t.date), description: t.description, amount: t.amount * t.exchangeRate, source: 'transaction' })),
+        ...monthTransactions
+          .filter((t) => t.type === 'expense' && t.category === 'Investment')
+          .map((t) => ({ id: t.id, date: new Date(t.date), description: t.description, amount: t.amount * t.exchangeRate, source: 'fund_account' })),
+        ...monthInvestmentTransfers.map((t) => ({
+          id: t.id,
+          date: new Date(t.date),
+          description: t.description || (t.direction === 'investment_deposit' ? 'Investment deposit' : 'Investment withdrawal'),
+          amount: t.direction === 'investment_deposit' ? t.amount * t.exchangeRate : -(t.amount * t.exchangeRate),
+          source: t.direction === 'investment_deposit' ? 'deposit' : 'withdrawal',
+        })),
+      ];
+
       return {
         month: format(month, 'MMM', { locale: dateLocale }),
         income,
         expense,
         investment,
         balance: income - expense,
+        incomeItems: incomeItems.sort((a, b) => a.date.getTime() - b.date.getTime()),
+        expenseItems: expenseItems.sort((a, b) => a.date.getTime() - b.date.getTime()),
+        investmentItems: investmentItems.sort((a, b) => a.date.getTime() - b.date.getTime()),
       };
     });
   }, [yearTransactions, yearReimbursements, yearReimbursementCredits, yearInvestmentTransfers, selectedYear, dateLocale]);

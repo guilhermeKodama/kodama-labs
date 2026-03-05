@@ -649,7 +649,8 @@
       "expenses": "Despesas",
       "investments": "Investimentos",
       "balance": "Saldo",
-      "total": "Total"
+      "total": "Total",
+      "noItems": "Nenhum item neste mês"
     },
     "export": {
       "button": "Exportar CSV",
