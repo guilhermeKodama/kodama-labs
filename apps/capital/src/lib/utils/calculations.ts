@@ -71,6 +71,20 @@ export function sumInvestmentWithdrawals(
 }
 
 /**
+ * Sum profit_distribution transfer amounts.
+ * For business view these are outgoing expenses; for personal view these are incoming income.
+ */
+export function sumProfitDistributions(
+  transfers: Transfer[],
+  side: 'from' | 'to',
+  entityId?: string
+): number {
+  return transfers
+    .filter(t => t.direction === 'profit_distribution' && (entityId ? (side === 'from' ? t.fromEntityId : t.toEntityId) === entityId : true))
+    .reduce((sum, t) => sum + t.amount * t.exchangeRate, 0);
+}
+
+/**
  * Sum expense transactions with category "Investment" (aportes via fund-account).
  * These are recorded as expenses but are actually investment contributions.
  */

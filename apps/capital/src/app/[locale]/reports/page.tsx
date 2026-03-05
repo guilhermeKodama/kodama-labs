@@ -52,6 +52,7 @@ import {
   sumTransactionsByType,
   sumReimbursementExpenses,
   sumReimbursementCredits,
+  sumProfitDistributions,
   sumInvestmentDeposits,
   sumInvestmentWithdrawals,
   sumInvestmentCategoryExpenses,
@@ -116,6 +117,17 @@ export default function ReportsPage() {
   }, [businesses, personalAccount, t]);
 
   const isEntityFiltered = selectedEntityIds.size > 0;
+
+  const viewMode = useMemo(() => {
+    const selected = isEntityFiltered
+      ? allEntities.filter(e => selectedEntityIds.has(e.id))
+      : allEntities;
+    const hasBusiness = selected.some(e => e.type === 'business');
+    const hasPersonal = selected.some(e => e.type === 'personal');
+    if (hasBusiness && hasPersonal) return 'combined';
+    if (hasBusiness) return 'business';
+    return 'personal';
+  }, [allEntities, selectedEntityIds, isEntityFiltered]);
 
   // Helper to check if a transaction passes the entity filter
   const matchesEntityFilter = useCallback(
@@ -202,17 +214,43 @@ export default function ReportsPage() {
     });
   }, [transfers, selectedYear, isEntityFiltered, selectedEntityIds]);
 
-  // Calculate yearly totals (including reimbursement expenses, credits, and investment aportes)
+  // Profit distribution transfers filtered by year and entity
+  const yearProfitDistributions = useMemo(() => {
+    return transfers.filter((t) => {
+      if (t.direction !== 'profit_distribution') return false;
+      const date = new Date(t.date);
+      if (date.getFullYear() !== selectedYear) return false;
+      if (!isEntityFiltered) return true;
+      return selectedEntityIds.has(t.fromEntityId) || selectedEntityIds.has(t.toEntityId);
+    });
+  }, [transfers, selectedYear, isEntityFiltered, selectedEntityIds]);
+
+  // Calculate yearly totals with view-mode-dependent transfer handling
   const yearlyTotals = useMemo(() => {
-    const income = sumTransactionsByType(yearTransactions, 'income');
+    const rawIncome = sumTransactionsByType(yearTransactions, 'income');
+    const rawExpenses = sumTransactionsByType(yearTransactions, 'expense');
+    const investmentCatExp = sumInvestmentCategoryExpenses(yearTransactions);
+
     const reimbursementExp = sumReimbursementExpenses(yearReimbursements);
     const reimbursementCred = sumReimbursementCredits(yearReimbursementCredits);
+    const profitDistExp = sumProfitDistributions(yearProfitDistributions, 'from');
+    const profitDistIncome = sumProfitDistributions(yearProfitDistributions, 'to');
 
-    // "Investment"-category expenses are fund-account aportes; reclassify them
-    const investmentCatExp = sumInvestmentCategoryExpenses(yearTransactions);
-    const expense = Math.max(0, sumTransactionsByType(yearTransactions, 'expense') - investmentCatExp + reimbursementExp - reimbursementCred);
+    let income: number;
+    let expense: number;
 
-    // Net investment = explicit txs + fund-account aportes + transfer deposits - transfer withdrawals
+    if (viewMode === 'combined') {
+      income = rawIncome;
+      expense = Math.max(0, rawExpenses - investmentCatExp);
+    } else if (viewMode === 'business') {
+      income = rawIncome;
+      expense = Math.max(0, rawExpenses - investmentCatExp + reimbursementExp + profitDistExp);
+    } else {
+      // personal
+      income = rawIncome + reimbursementCred + profitDistIncome;
+      expense = Math.max(0, rawExpenses - investmentCatExp);
+    }
+
     const investmentTxs = sumTransactionsByType(yearTransactions, 'investment');
     const deposits = sumInvestmentDeposits(yearInvestmentTransfers);
     const withdrawals = sumInvestmentWithdrawals(yearInvestmentTransfers);
@@ -224,7 +262,7 @@ export default function ReportsPage() {
       investment,
       balance: income - expense,
     };
-  }, [yearTransactions, yearReimbursements, yearReimbursementCredits, yearInvestmentTransfers]);
+  }, [yearTransactions, yearReimbursements, yearReimbursementCredits, yearInvestmentTransfers, yearProfitDistributions, viewMode]);
 
   // Calculate previous year totals for growth comparison
   const prevYearTotals = useMemo(() => {
@@ -239,7 +277,7 @@ export default function ReportsPage() {
     expense: calculateGrowthRate(yearlyTotals.expense, prevYearTotals.expense),
   }), [yearlyTotals, prevYearTotals]);
 
-  // Calculate monthly data (including reimbursement expenses and investment aportes)
+  // Calculate monthly data with view-mode-dependent transfer handling
   const monthlyData = useMemo(() => {
     const months = eachMonthOfInterval({
       start: startOfYear(new Date(selectedYear, 0, 1)),
@@ -267,32 +305,69 @@ export default function ReportsPage() {
         return date.getMonth() === month.getMonth();
       });
 
-      const income = sumTransactionsByType(monthTransactions, 'income');
+      const monthProfitDist = yearProfitDistributions.filter((t) => {
+        const date = new Date(t.date);
+        return date.getMonth() === month.getMonth();
+      });
+
+      const rawIncome = sumTransactionsByType(monthTransactions, 'income');
+      const rawExpenses = sumTransactionsByType(monthTransactions, 'expense');
+      const investmentCatExp = sumInvestmentCategoryExpenses(monthTransactions);
       const reimbursementExp = sumReimbursementExpenses(monthReimbursements);
       const reimbursementCred = sumReimbursementCredits(monthReimbursementCreds);
+      const profitDistExp = sumProfitDistributions(monthProfitDist, 'from');
+      const profitDistIncome = sumProfitDistributions(monthProfitDist, 'to');
 
-      const investmentCatExp = sumInvestmentCategoryExpenses(monthTransactions);
-      const expense = Math.max(0, sumTransactionsByType(monthTransactions, 'expense') - investmentCatExp + reimbursementExp - reimbursementCred);
+      let income: number;
+      let expense: number;
+
+      if (viewMode === 'combined') {
+        income = rawIncome;
+        expense = Math.max(0, rawExpenses - investmentCatExp);
+      } else if (viewMode === 'business') {
+        income = rawIncome;
+        expense = Math.max(0, rawExpenses - investmentCatExp + reimbursementExp + profitDistExp);
+      } else {
+        income = rawIncome + reimbursementCred + profitDistIncome;
+        expense = Math.max(0, rawExpenses - investmentCatExp);
+      }
 
       const investmentTxs = sumTransactionsByType(monthTransactions, 'investment');
       const deposits = sumInvestmentDeposits(monthInvestmentTransfers);
       const withdrawals = sumInvestmentWithdrawals(monthInvestmentTransfers);
       const investment = Math.max(0, investmentTxs + investmentCatExp + deposits - withdrawals);
 
-      // Build detail items for expandable rows
       type DetailItem = { id: string; date: Date; description: string; amount: number; source: string };
 
       const incomeItems: DetailItem[] = monthTransactions
         .filter((t) => t.type === 'income')
         .map((t) => ({ id: t.id, date: new Date(t.date), description: t.description, amount: t.amount * t.exchangeRate, source: 'transaction' }));
 
+      // In personal mode, reimbursements and profit distributions are income
+      if (viewMode === 'personal') {
+        monthReimbursementCreds.forEach((t) => {
+          incomeItems.push({ id: `credit-${t.id}`, date: new Date(t.date), description: t.description || 'Reimbursement', amount: t.amount * t.exchangeRate, source: 'reimbursement_credit' });
+        });
+        monthProfitDist.forEach((t) => {
+          incomeItems.push({ id: `pd-${t.id}`, date: new Date(t.date), description: t.description || 'Profit distribution', amount: t.amount * t.exchangeRate, source: 'profit_distribution' });
+        });
+      }
+
       const expenseItems: DetailItem[] = [
         ...monthTransactions
           .filter((t) => t.type === 'expense' && t.category !== 'Investment')
           .map((t) => ({ id: t.id, date: new Date(t.date), description: t.description, amount: t.amount * t.exchangeRate, source: 'transaction' })),
-        ...monthReimbursements.map((t) => ({ id: t.id, date: new Date(t.date), description: t.description || 'Reimbursement', amount: t.amount * t.exchangeRate, source: 'reimbursement' })),
-        ...monthReimbursementCreds.map((t) => ({ id: `credit-${t.id}`, date: new Date(t.date), description: t.description || 'Reimbursement credit', amount: -(t.amount * t.exchangeRate), source: 'reimbursement_credit' })),
       ];
+
+      // In business mode, reimbursements and profit distributions are expenses
+      if (viewMode === 'business') {
+        monthReimbursements.forEach((t) => {
+          expenseItems.push({ id: t.id, date: new Date(t.date), description: t.description || 'Reimbursement', amount: t.amount * t.exchangeRate, source: 'reimbursement' });
+        });
+        monthProfitDist.forEach((t) => {
+          expenseItems.push({ id: `pd-${t.id}`, date: new Date(t.date), description: t.description || 'Profit distribution', amount: t.amount * t.exchangeRate, source: 'profit_distribution' });
+        });
+      }
 
       const investmentItems: DetailItem[] = [
         ...monthTransactions
@@ -321,27 +396,44 @@ export default function ReportsPage() {
         investmentItems: investmentItems.sort((a, b) => a.date.getTime() - b.date.getTime()),
       };
     });
-  }, [yearTransactions, yearReimbursements, yearReimbursementCredits, yearInvestmentTransfers, selectedYear, dateLocale]);
+  }, [yearTransactions, yearReimbursements, yearReimbursementCredits, yearInvestmentTransfers, yearProfitDistributions, selectedYear, dateLocale, viewMode]);
 
-  // Calculate category breakdown (reimbursements appear under expenses, Investment-category excluded from expenses)
+  // Calculate category breakdown with view-mode-dependent transfer handling
   const categoryBreakdown = useMemo(() => {
     let filtered =
       selectedType === 'all'
         ? yearTransactions
         : yearTransactions.filter((t) => t.type === selectedType);
 
-    // Exclude "Investment"-category expenses since they are investment aportes
     if (selectedType === 'all' || selectedType === 'expense') {
       filtered = filtered.filter((t) => !(t.type === 'expense' && t.category === 'Investment'));
     }
 
     const breakdown = calculateCategoryBreakdown(filtered);
 
-    if (selectedType === 'all' || selectedType === 'expense') {
-      const reimbursementNet = sumReimbursementExpenses(yearReimbursements) - sumReimbursementCredits(yearReimbursementCredits);
-      if (reimbursementNet !== 0) {
+    if ((selectedType === 'all' || selectedType === 'expense') && viewMode === 'business') {
+      const reimbursementTotal = sumReimbursementExpenses(yearReimbursements);
+      const profitDistTotal = sumProfitDistributions(yearProfitDistributions, 'from');
+      if (reimbursementTotal > 0) {
         const label = t('transfers.directions.reimbursement');
-        breakdown[label] = (breakdown[label] || 0) + reimbursementNet;
+        breakdown[label] = (breakdown[label] || 0) + reimbursementTotal;
+      }
+      if (profitDistTotal > 0) {
+        const label = t('transfers.directions.profit_distribution');
+        breakdown[label] = (breakdown[label] || 0) + profitDistTotal;
+      }
+    }
+
+    if ((selectedType === 'all' || selectedType === 'income') && viewMode === 'personal') {
+      const reimbursementCred = sumReimbursementCredits(yearReimbursementCredits);
+      const profitDistIncome = sumProfitDistributions(yearProfitDistributions, 'to');
+      if (reimbursementCred > 0) {
+        const label = t('transfers.directions.reimbursement');
+        breakdown[label] = (breakdown[label] || 0) + reimbursementCred;
+      }
+      if (profitDistIncome > 0) {
+        const label = t('transfers.directions.profit_distribution');
+        breakdown[label] = (breakdown[label] || 0) + profitDistIncome;
       }
     }
 
@@ -349,32 +441,53 @@ export default function ReportsPage() {
       .map(([name, value]) => ({ name, value }))
       .filter(({ value }) => value > 0)
       .sort((a, b) => b.value - a.value);
-  }, [yearTransactions, yearReimbursements, yearReimbursementCredits, selectedType, t]);
+  }, [yearTransactions, yearReimbursements, yearReimbursementCredits, yearProfitDistributions, selectedType, viewMode, t]);
 
-  // Income vs Expense breakdown
+  // Income breakdown with view-mode-dependent transfer handling
   const incomeBreakdown = useMemo(() => {
     const breakdown = calculateCategoryBreakdown(
       yearTransactions.filter((t) => t.type === 'income')
     );
-    return Object.entries(breakdown)
-      .map(([name, value]) => ({ name, value }))
-      .sort((a, b) => b.value - a.value);
-  }, [yearTransactions]);
-
-  const expenseBreakdown = useMemo(() => {
-    const breakdown = calculateCategoryBreakdown(
-      yearTransactions.filter((t) => t.type === 'expense' && t.category !== 'Investment')
-    );
-    const reimbursementNet = sumReimbursementExpenses(yearReimbursements) - sumReimbursementCredits(yearReimbursementCredits);
-    if (reimbursementNet !== 0) {
-      const label = t('transfers.directions.reimbursement');
-      breakdown[label] = (breakdown[label] || 0) + reimbursementNet;
+    if (viewMode === 'personal') {
+      const reimbursementCred = sumReimbursementCredits(yearReimbursementCredits);
+      const profitDistIncome = sumProfitDistributions(yearProfitDistributions, 'to');
+      if (reimbursementCred > 0) {
+        const label = t('transfers.directions.reimbursement');
+        breakdown[label] = (breakdown[label] || 0) + reimbursementCred;
+      }
+      if (profitDistIncome > 0) {
+        const label = t('transfers.directions.profit_distribution');
+        breakdown[label] = (breakdown[label] || 0) + profitDistIncome;
+      }
     }
     return Object.entries(breakdown)
       .map(([name, value]) => ({ name, value }))
       .filter(({ value }) => value > 0)
       .sort((a, b) => b.value - a.value);
-  }, [yearTransactions, yearReimbursements, yearReimbursementCredits, t]);
+  }, [yearTransactions, yearReimbursementCredits, yearProfitDistributions, viewMode, t]);
+
+  // Expense breakdown with view-mode-dependent transfer handling
+  const expenseBreakdown = useMemo(() => {
+    const breakdown = calculateCategoryBreakdown(
+      yearTransactions.filter((t) => t.type === 'expense' && t.category !== 'Investment')
+    );
+    if (viewMode === 'business') {
+      const reimbursementTotal = sumReimbursementExpenses(yearReimbursements);
+      const profitDistTotal = sumProfitDistributions(yearProfitDistributions, 'from');
+      if (reimbursementTotal > 0) {
+        const label = t('transfers.directions.reimbursement');
+        breakdown[label] = (breakdown[label] || 0) + reimbursementTotal;
+      }
+      if (profitDistTotal > 0) {
+        const label = t('transfers.directions.profit_distribution');
+        breakdown[label] = (breakdown[label] || 0) + profitDistTotal;
+      }
+    }
+    return Object.entries(breakdown)
+      .map(([name, value]) => ({ name, value }))
+      .filter(({ value }) => value > 0)
+      .sort((a, b) => b.value - a.value);
+  }, [yearTransactions, yearReimbursements, yearProfitDistributions, viewMode, t]);
 
   // ---- Portfolio data ----
   const activeHoldings = useMemo(
