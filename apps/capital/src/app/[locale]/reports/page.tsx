@@ -52,6 +52,9 @@ import {
   sumTransactionsByType,
   sumReimbursementExpenses,
   sumReimbursementCredits,
+  sumInvestmentDeposits,
+  sumInvestmentWithdrawals,
+  sumInvestmentCategoryExpenses,
   calculateGrowthRate,
 } from '@/lib/utils/calculations';
 import { exportTransactionsToCSV } from '@/lib/utils/export';
@@ -188,20 +191,40 @@ export default function ReportsPage() {
     });
   }, [transfers, selectedYear, isEntityFiltered, selectedEntityIds]);
 
-  // Calculate yearly totals (including reimbursement expenses and credits)
+  // Investment transfers for the selected year (deposits = aportes, withdrawals = resgates)
+  const yearInvestmentTransfers = useMemo(() => {
+    return transfers.filter((t) => {
+      if (t.direction !== 'investment_deposit' && t.direction !== 'investment_withdrawal') return false;
+      const date = new Date(t.date);
+      if (date.getFullYear() !== selectedYear) return false;
+      const entityId = t.direction === 'investment_deposit' ? t.fromEntityId : t.toEntityId;
+      return !isEntityFiltered || selectedEntityIds.has(entityId);
+    });
+  }, [transfers, selectedYear, isEntityFiltered, selectedEntityIds]);
+
+  // Calculate yearly totals (including reimbursement expenses, credits, and investment aportes)
   const yearlyTotals = useMemo(() => {
     const income = sumTransactionsByType(yearTransactions, 'income');
     const reimbursementExp = sumReimbursementExpenses(yearReimbursements);
     const reimbursementCred = sumReimbursementCredits(yearReimbursementCredits);
-    const expense = Math.max(0, sumTransactionsByType(yearTransactions, 'expense') + reimbursementExp - reimbursementCred);
-    const investment = sumTransactionsByType(yearTransactions, 'investment');
+
+    // "Investment"-category expenses are fund-account aportes; reclassify them
+    const investmentCatExp = sumInvestmentCategoryExpenses(yearTransactions);
+    const expense = Math.max(0, sumTransactionsByType(yearTransactions, 'expense') - investmentCatExp + reimbursementExp - reimbursementCred);
+
+    // Net investment = explicit txs + fund-account aportes + transfer deposits - transfer withdrawals
+    const investmentTxs = sumTransactionsByType(yearTransactions, 'investment');
+    const deposits = sumInvestmentDeposits(yearInvestmentTransfers);
+    const withdrawals = sumInvestmentWithdrawals(yearInvestmentTransfers);
+    const investment = Math.max(0, investmentTxs + investmentCatExp + deposits - withdrawals);
+
     return {
       income,
       expense,
       investment,
       balance: income - expense,
     };
-  }, [yearTransactions, yearReimbursements, yearReimbursementCredits]);
+  }, [yearTransactions, yearReimbursements, yearReimbursementCredits, yearInvestmentTransfers]);
 
   // Calculate previous year totals for growth comparison
   const prevYearTotals = useMemo(() => {
@@ -216,7 +239,7 @@ export default function ReportsPage() {
     expense: calculateGrowthRate(yearlyTotals.expense, prevYearTotals.expense),
   }), [yearlyTotals, prevYearTotals]);
 
-  // Calculate monthly data (including reimbursement expenses)
+  // Calculate monthly data (including reimbursement expenses and investment aportes)
   const monthlyData = useMemo(() => {
     const months = eachMonthOfInterval({
       start: startOfYear(new Date(selectedYear, 0, 1)),
@@ -239,11 +262,22 @@ export default function ReportsPage() {
         return date.getMonth() === month.getMonth();
       });
 
+      const monthInvestmentTransfers = yearInvestmentTransfers.filter((t) => {
+        const date = new Date(t.date);
+        return date.getMonth() === month.getMonth();
+      });
+
       const income = sumTransactionsByType(monthTransactions, 'income');
       const reimbursementExp = sumReimbursementExpenses(monthReimbursements);
       const reimbursementCred = sumReimbursementCredits(monthReimbursementCreds);
-      const expense = Math.max(0, sumTransactionsByType(monthTransactions, 'expense') + reimbursementExp - reimbursementCred);
-      const investment = sumTransactionsByType(monthTransactions, 'investment');
+
+      const investmentCatExp = sumInvestmentCategoryExpenses(monthTransactions);
+      const expense = Math.max(0, sumTransactionsByType(monthTransactions, 'expense') - investmentCatExp + reimbursementExp - reimbursementCred);
+
+      const investmentTxs = sumTransactionsByType(monthTransactions, 'investment');
+      const deposits = sumInvestmentDeposits(monthInvestmentTransfers);
+      const withdrawals = sumInvestmentWithdrawals(monthInvestmentTransfers);
+      const investment = Math.max(0, investmentTxs + investmentCatExp + deposits - withdrawals);
 
       return {
         month: format(month, 'MMM', { locale: dateLocale }),
@@ -253,23 +287,25 @@ export default function ReportsPage() {
         balance: income - expense,
       };
     });
-  }, [yearTransactions, yearReimbursements, yearReimbursementCredits, selectedYear, dateLocale]);
+  }, [yearTransactions, yearReimbursements, yearReimbursementCredits, yearInvestmentTransfers, selectedYear, dateLocale]);
 
-  // Calculate category breakdown (reimbursements appear under expenses)
+  // Calculate category breakdown (reimbursements appear under expenses, Investment-category excluded from expenses)
   const categoryBreakdown = useMemo(() => {
-    const filtered =
+    let filtered =
       selectedType === 'all'
         ? yearTransactions
         : yearTransactions.filter((t) => t.type === selectedType);
+
+    // Exclude "Investment"-category expenses since they are investment aportes
+    if (selectedType === 'all' || selectedType === 'expense') {
+      filtered = filtered.filter((t) => !(t.type === 'expense' && t.category === 'Investment'));
+    }
 
     const breakdown = calculateCategoryBreakdown(filtered);
 
     if (selectedType === 'all' || selectedType === 'expense') {
       const reimbursementNet = sumReimbursementExpenses(yearReimbursements) - sumReimbursementCredits(yearReimbursementCredits);
-      if (reimbursementNet > 0) {
-        const label = t('transfers.directions.reimbursement');
-        breakdown[label] = (breakdown[label] || 0) + reimbursementNet;
-      } else if (reimbursementNet < 0) {
+      if (reimbursementNet !== 0) {
         const label = t('transfers.directions.reimbursement');
         breakdown[label] = (breakdown[label] || 0) + reimbursementNet;
       }
@@ -293,7 +329,7 @@ export default function ReportsPage() {
 
   const expenseBreakdown = useMemo(() => {
     const breakdown = calculateCategoryBreakdown(
-      yearTransactions.filter((t) => t.type === 'expense')
+      yearTransactions.filter((t) => t.type === 'expense' && t.category !== 'Investment')
     );
     const reimbursementNet = sumReimbursementExpenses(yearReimbursements) - sumReimbursementCredits(yearReimbursementCredits);
     if (reimbursementNet !== 0) {

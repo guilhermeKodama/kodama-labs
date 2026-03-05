@@ -45,6 +45,44 @@ export function sumReimbursementCredits(
 }
 
 /**
+ * Sum investment_deposit transfer amounts (aportes via transfer).
+ * These represent money moved from an entity into an investment account.
+ */
+export function sumInvestmentDeposits(
+  transfers: Transfer[],
+  entityId?: string
+): number {
+  return transfers
+    .filter(t => t.direction === 'investment_deposit' && (entityId ? t.fromEntityId === entityId : true))
+    .reduce((sum, t) => sum + t.amount * t.exchangeRate, 0);
+}
+
+/**
+ * Sum investment_withdrawal transfer amounts (resgates via transfer).
+ * These represent money moved from an investment account back to an entity.
+ */
+export function sumInvestmentWithdrawals(
+  transfers: Transfer[],
+  entityId?: string
+): number {
+  return transfers
+    .filter(t => t.direction === 'investment_withdrawal' && (entityId ? t.toEntityId === entityId : true))
+    .reduce((sum, t) => sum + t.amount * t.exchangeRate, 0);
+}
+
+/**
+ * Sum expense transactions with category "Investment" (aportes via fund-account).
+ * These are recorded as expenses but are actually investment contributions.
+ */
+export function sumInvestmentCategoryExpenses(
+  transactions: Transaction[]
+): number {
+  return transactions
+    .filter(t => t.type === 'expense' && t.category === 'Investment')
+    .reduce((sum, t) => sum + t.amount * t.exchangeRate, 0);
+}
+
+/**
  * Calculate entity summary (income, expenses, investments, balance)
  *
  * Reimbursement transfers are reclassified as expenses on the business (from)
