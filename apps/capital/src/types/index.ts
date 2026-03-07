@@ -303,6 +303,8 @@ export interface CreateBudgetInput {
 }
 
 export interface UpdateBudgetInput {
+  entityId?: string;
+  entityType?: EntityType;
   category?: string;
   amount?: number;
   currency?: string;

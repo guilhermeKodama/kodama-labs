@@ -1,7 +1,9 @@
 import type { DbClient } from "@capital/server/lib/prisma";
-import type { BudgetPeriod } from "@prisma/client";
+import type { EntityType, BudgetPeriod } from "@prisma/client";
 
 interface UpdateBudgetData {
+  entityType?: EntityType;
+  entityId?: string;
   category?: string;
   amount?: number;
   currency?: string;
@@ -40,8 +42,49 @@ export async function updateBudget(
     throw new Error("Budget not found");
   }
 
+  const { entityType, entityId, ...rest } = data;
+
+  // If entity is being changed, verify ownership of the new entity and build association update
+  if (entityType && entityId) {
+    if (entityType === "business") {
+      const business = await db.business.findFirst({
+        where: { id: entityId, userId },
+        select: { id: true },
+      });
+      if (!business) {
+        throw new Error("Business not found or access denied");
+      }
+      return db.budget.update({
+        where: { id },
+        data: {
+          ...rest,
+          entityType,
+          businessId: entityId,
+          personalAccountId: null,
+        },
+      });
+    } else {
+      const personalAccount = await db.personalAccount.findFirst({
+        where: { id: entityId, userId },
+        select: { id: true },
+      });
+      if (!personalAccount) {
+        throw new Error("Personal account not found or access denied");
+      }
+      return db.budget.update({
+        where: { id },
+        data: {
+          ...rest,
+          entityType,
+          personalAccountId: entityId,
+          businessId: null,
+        },
+      });
+    }
+  }
+
   return db.budget.update({
     where: { id },
-    data,
+    data: rest,
   });
 }

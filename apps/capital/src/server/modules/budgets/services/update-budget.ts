@@ -1,8 +1,10 @@
 import type { DbClient } from "@capital/server/lib/prisma";
-import type { BudgetPeriod } from "@prisma/client";
+import type { EntityType, BudgetPeriod } from "@prisma/client";
 import { updateBudget as updateBudgetCmd } from "../data/commands/update-budget";
 
 interface UpdateBudgetInput {
+  entityType?: EntityType;
+  entityId?: string;
   category?: string;
   amount?: number;
   currency?: string;
@@ -18,6 +20,5 @@ export async function updateBudgetService(
   input: UpdateBudgetInput,
   db: DbClient
 ) {
-  // Data layer will verify ownership
   return updateBudgetCmd(userId, id, input, db);
 }

@@ -17,10 +17,7 @@ export const createBudgetSchema = z.object({
   alertThreshold: z.number().int().min(1).max(100).optional().nullable().transform((val) => val ?? undefined),
 });
 
-export const updateBudgetSchema = createBudgetSchema.partial().omit({
-  entityId: true,
-  entityType: true,
-});
+export const updateBudgetSchema = createBudgetSchema.partial();
 
 export type CreateBudgetFormData = z.infer<typeof createBudgetSchema>;
 export type UpdateBudgetFormData = z.infer<typeof updateBudgetSchema>;

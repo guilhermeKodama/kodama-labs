@@ -243,6 +243,8 @@ export const useBudgetStore = create<BudgetStore>()((set, get) => ({
       const res = await client.v1.budgets[':id'].$put({
         param: { id },
         json: {
+          entityType: input.entityType,
+          entityId: input.entityId,
           category: input.category,
           amount: input.amount,
           currency: input.currency,
