@@ -203,11 +203,11 @@ describe('getSummary - date filtering', () => {
 
     await getSummary({ userId: 'user-1', dateFrom, dateTo }, db);
 
-    const txCalls = db.transaction.findMany.mock.calls;
-    expect(txCalls[0][0].where.date).toEqual({ gte: dateFrom, lte: dateTo });
+    const txCalls = vi.mocked(db.transaction.findMany).mock.calls;
+    expect(txCalls[0][0]!.where!.date).toEqual({ gte: dateFrom, lte: dateTo });
 
-    const trCalls = db.transfer.findMany.mock.calls;
-    expect(trCalls[0][0].where.date).toEqual({ gte: dateFrom, lte: dateTo });
+    const trCalls = vi.mocked(db.transfer.findMany).mock.calls;
+    expect(trCalls[0][0]!.where!.date).toEqual({ gte: dateFrom, lte: dateTo });
   });
 });
 
