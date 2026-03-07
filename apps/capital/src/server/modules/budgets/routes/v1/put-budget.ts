@@ -9,6 +9,8 @@ import { updateBudgetService } from "../../services/update-budget";
 import { routeConfig } from "../../constants";
 
 const UpdateBudgetSchema = z.object({
+  entityType: z.enum(["business", "personal"]).optional(),
+  entityId: z.string().optional(),
   category: z.string().min(1).optional(),
   amount: z.number().positive().optional(),
   currency: z.string().length(3).optional(),
@@ -91,7 +93,7 @@ export const handler: AppRouteHandler<typeof route> = async (c) => {
     );
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "Unknown error";
-    if (message === "Budget not found") {
+    if (message === "Budget not found" || message.includes("not found or access denied")) {
       return c.json({ error: { code: "NOT_FOUND", message } }, NOT_FOUND);
     }
     return c.json(
