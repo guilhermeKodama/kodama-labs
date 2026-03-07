@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { getSummary } from '../get-summary';
+import type { DbClient } from '@capital/server/lib/prisma';
 
 // ============================================================
 // Mock DB helpers
@@ -12,7 +13,7 @@ function mockDb(overrides: {
   transfers?: Array<{ amount: number }>;
   personalTransactions?: Array<{ type: string; amount: number }>;
   personalTransfers?: Array<{ amount: number }>;
-}) {
+}): DbClient {
   const businesses = overrides.businesses ?? [];
   const personalAccount = overrides.personalAccount ?? null;
 
@@ -44,7 +45,7 @@ function mockDb(overrides: {
         return Promise.resolve(overrides.personalTransfers ?? overrides.transfers ?? []);
       }),
     },
-  } as any;
+  } as unknown as DbClient;
 }
 
 // ============================================================
