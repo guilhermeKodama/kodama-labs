@@ -57,6 +57,7 @@ import {
   sumInvestmentWithdrawals,
   sumInvestmentCategoryExpenses,
   calculateGrowthRate,
+  calculateYearlyTotals,
 } from '@/lib/utils/calculations';
 import { exportTransactionsToCSV } from '@/lib/utils/export';
 import { formatCurrency, formatPercent } from '@/lib/utils/format';
@@ -225,43 +226,15 @@ export default function ReportsPage() {
     });
   }, [transfers, selectedYear, isEntityFiltered, selectedEntityIds]);
 
-  // Calculate yearly totals with view-mode-dependent transfer handling
   const yearlyTotals = useMemo(() => {
-    const rawIncome = sumTransactionsByType(yearTransactions, 'income');
-    const rawExpenses = sumTransactionsByType(yearTransactions, 'expense');
-    const investmentCatExp = sumInvestmentCategoryExpenses(yearTransactions);
-
-    const reimbursementExp = sumReimbursementExpenses(yearReimbursements);
-    const reimbursementCred = sumReimbursementCredits(yearReimbursementCredits);
-    const profitDistExp = sumProfitDistributions(yearProfitDistributions, 'from');
-    const profitDistIncome = sumProfitDistributions(yearProfitDistributions, 'to');
-
-    let income: number;
-    let expense: number;
-
-    if (viewMode === 'combined') {
-      income = rawIncome;
-      expense = Math.max(0, rawExpenses - investmentCatExp);
-    } else if (viewMode === 'business') {
-      income = rawIncome;
-      expense = Math.max(0, rawExpenses - investmentCatExp + reimbursementExp + profitDistExp);
-    } else {
-      // personal
-      income = rawIncome + reimbursementCred + profitDistIncome;
-      expense = Math.max(0, rawExpenses - investmentCatExp);
-    }
-
-    const investmentTxs = sumTransactionsByType(yearTransactions, 'investment');
-    const deposits = sumInvestmentDeposits(yearInvestmentTransfers);
-    const withdrawals = sumInvestmentWithdrawals(yearInvestmentTransfers);
-    const investment = Math.max(0, investmentTxs + investmentCatExp + deposits - withdrawals);
-
-    return {
-      income,
-      expense,
-      investment,
-      balance: income - expense,
-    };
+    return calculateYearlyTotals(
+      yearTransactions,
+      yearReimbursements,
+      yearReimbursementCredits,
+      yearInvestmentTransfers,
+      yearProfitDistributions,
+      viewMode
+    );
   }, [yearTransactions, yearReimbursements, yearReimbursementCredits, yearInvestmentTransfers, yearProfitDistributions, viewMode]);
 
   // Calculate previous year totals for growth comparison
