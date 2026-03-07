@@ -4,28 +4,8 @@ import { useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useTranslations, useLocale } from 'next-intl';
-
-/**
- * Parse a date string from an input[type="date"] as noon UTC.
- * "2026-02-06" should be Feb 6 regardless of user timezone.
- * Using noon UTC provides a 12-hour buffer in both directions.
- */
-function parseLocalDate(dateString: string): Date {
-  const [year, month, day] = dateString.split('-').map(Number);
-  return new Date(Date.UTC(year, month - 1, day, 12, 0, 0));
-}
-
-/**
- * Format a Date to YYYY-MM-DD for input[type="date"] using UTC date parts.
- * This ensures the displayed date matches the stored UTC date.
- */
-function formatDateForInput(date: Date): string {
-  const year = date.getUTCFullYear();
-  const month = String(date.getUTCMonth() + 1).padStart(2, '0');
-  const day = String(date.getUTCDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
-}
 import { Button } from '@/components/ui/button';
+import { parseInputDateUTC, formatInputDateUTC } from '@/lib/utils/date';
 import {
   Form,
   FormControl,
@@ -438,12 +418,11 @@ export function RecurringForm({
               <FormControl>
                 <Input
                   type="date"
-                  value={
-                    field.value instanceof Date
-                      ? formatDateForInput(field.value)
-                      : ''
-                  }
-                  onChange={(e) => field.onChange(parseLocalDate(e.target.value))}
+                  value={formatInputDateUTC(field.value instanceof Date ? field.value : null)}
+                  onChange={(e) => {
+                    const parsed = parseInputDateUTC(e.target.value);
+                    if (parsed) field.onChange(parsed);
+                  }}
                   className="border-slate-700 bg-slate-800 text-white"
                 />
               </FormControl>
@@ -475,11 +454,12 @@ export function RecurringForm({
                     <Input
                       type="date"
                       value={
-                        field.value instanceof Date
-                          ? formatDateForInput(field.value)
-                          : ''
+                        formatInputDateUTC(field.value instanceof Date ? field.value : null)
                       }
-                      onChange={(e) => field.onChange(parseLocalDate(e.target.value))}
+                      onChange={(e) => {
+                        const parsed = parseInputDateUTC(e.target.value);
+                        if (parsed) field.onChange(parsed);
+                      }}
                       className="border-slate-700 bg-slate-800 text-white"
                     />
                   </FormControl>

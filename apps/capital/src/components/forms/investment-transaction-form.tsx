@@ -4,7 +4,6 @@ import { useEffect, useMemo } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useTranslations, useLocale } from 'next-intl';
-import { format } from 'date-fns';
 import { Button } from '@/components/ui/button';
 import {
   Form,
@@ -28,20 +27,12 @@ import {
   type CreateInvestmentTransactionFormData,
 } from '@/lib/validations';
 import { useInvestmentStore } from '@/lib/store';
+import { parseInputDate, formatInputDate } from '@/lib/utils/date';
 import type {
   InvestmentTransaction,
   InvestmentTransactionType,
 } from '@/types';
 import { PRICE_PER_UNIT_ASSET_CLASSES } from '@/types';
-
-function parseLocalDate(dateString: string): Date {
-  const [year, month, day] = dateString.split('-').map(Number);
-  return new Date(year, month - 1, day, 12, 0, 0);
-}
-
-function formatDateForInput(date: Date): string {
-  return format(date, 'yyyy-MM-dd');
-}
 
 // Transaction types for ticker-based assets (stocks, ETF, BDR, FII, crypto)
 const TICKER_TRANSACTION_TYPES: InvestmentTransactionType[] = [
@@ -293,8 +284,11 @@ export function InvestmentTransactionForm({
               <FormControl>
                 <Input
                   type="date"
-                  value={field.value instanceof Date ? formatDateForInput(field.value) : ''}
-                  onChange={(e) => field.onChange(parseLocalDate(e.target.value))}
+                  value={formatInputDate(field.value instanceof Date ? field.value : null)}
+                  onChange={(e) => {
+                    const parsed = parseInputDate(e.target.value);
+                    if (parsed) field.onChange(parsed);
+                  }}
                   className="border-slate-700 bg-slate-800 text-white"
                 />
               </FormControl>

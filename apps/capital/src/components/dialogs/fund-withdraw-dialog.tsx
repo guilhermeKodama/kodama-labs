@@ -4,7 +4,6 @@ import { useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useTranslations, useLocale } from 'next-intl';
-import { format } from 'date-fns';
 import { ArrowRight, Wallet, Building2, User } from 'lucide-react';
 import { z } from 'zod';
 import {
@@ -34,16 +33,8 @@ import {
 } from '@/components/ui/select';
 import { useSettingsStore } from '@/lib/store';
 import { formatCurrency } from '@/lib/utils/format';
+import { parseInputDate, formatInputDate } from '@/lib/utils/date';
 import type { InvestmentAccount } from '@/types';
-
-function parseLocalDate(dateString: string): Date {
-  const [year, month, day] = dateString.split('-').map(Number);
-  return new Date(year, month - 1, day, 12, 0, 0);
-}
-
-function formatDateForInput(date: Date): string {
-  return format(date, 'yyyy-MM-dd');
-}
 
 const fundWithdrawSchema = z.object({
   amount: z.number().positive('Amount must be greater than 0'),
@@ -298,12 +289,11 @@ export function FundWithdrawDialog({
                   <FormControl>
                     <Input
                       type="date"
-                      value={
-                        field.value instanceof Date
-                          ? formatDateForInput(field.value)
-                          : ''
-                      }
-                      onChange={(e) => field.onChange(parseLocalDate(e.target.value))}
+                      value={formatInputDate(field.value instanceof Date ? field.value : null)}
+                      onChange={(e) => {
+                        const parsed = parseInputDate(e.target.value);
+                        if (parsed) field.onChange(parsed);
+                      }}
                       className="border-slate-700 bg-slate-800 text-white"
                     />
                   </FormControl>
