@@ -130,8 +130,9 @@ export function calculateEntitySummary(
 
   const totalExpenses = Math.max(0, sumTransactionsByType(entityTransactions, 'expense') + reimbursementExpenses - reimbursementCredits);
 
+  // Exclude reimbursements from incoming transfers since they are already accounted for via expense reduction
   const incomingTransfers = transfers
-    .filter((t) => t.toEntityId === entityId)
+    .filter((t) => t.toEntityId === entityId && t.direction !== 'reimbursement')
     .reduce((sum, t) => sum + t.amount * t.exchangeRate, 0);
 
   // Exclude reimbursements from outgoing transfers since they are already in expenses
@@ -222,6 +223,63 @@ export function calculateGrowthRate(
 ): number {
   if (previousValue === 0) return currentValue > 0 ? 100 : 0;
   return ((currentValue - previousValue) / Math.abs(previousValue)) * 100;
+}
+
+export type ReportsViewMode = 'combined' | 'business' | 'personal';
+
+export interface YearlyTotals {
+  income: number;
+  expense: number;
+  investment: number;
+  balance: number;
+}
+
+/**
+ * Calculate yearly totals with view-mode-dependent transfer handling.
+ * Extracted from the reports page for testability.
+ */
+export function calculateYearlyTotals(
+  yearTransactions: Transaction[],
+  yearReimbursements: Transfer[],
+  yearReimbursementCredits: Transfer[],
+  yearInvestmentTransfers: Transfer[],
+  yearProfitDistributions: Transfer[],
+  viewMode: ReportsViewMode
+): YearlyTotals {
+  const rawIncome = sumTransactionsByType(yearTransactions, 'income');
+  const rawExpenses = sumTransactionsByType(yearTransactions, 'expense');
+  const investmentCatExp = sumInvestmentCategoryExpenses(yearTransactions);
+
+  const reimbursementExp = sumReimbursementExpenses(yearReimbursements);
+  const reimbursementCred = sumReimbursementCredits(yearReimbursementCredits);
+  const profitDistExp = sumProfitDistributions(yearProfitDistributions, 'from');
+  const profitDistIncome = sumProfitDistributions(yearProfitDistributions, 'to');
+
+  let income: number;
+  let expense: number;
+
+  if (viewMode === 'combined') {
+    income = rawIncome;
+    expense = Math.max(0, rawExpenses - investmentCatExp);
+  } else if (viewMode === 'business') {
+    income = rawIncome;
+    expense = Math.max(0, rawExpenses - investmentCatExp + reimbursementExp + profitDistExp);
+  } else {
+    income = rawIncome + reimbursementCred + profitDistIncome;
+    expense = Math.max(0, rawExpenses - investmentCatExp);
+  }
+
+  const investmentTxs = sumTransactionsByType(yearTransactions, 'investment');
+  const deposits = sumInvestmentDeposits(yearInvestmentTransfers);
+  const withdrawals = sumInvestmentWithdrawals(yearInvestmentTransfers);
+  const investment = Math.max(0, investmentTxs + investmentCatExp + deposits - withdrawals);
+
+  return {
+    income,
+    expense,
+    investment,
+    balance: income - expense,
+  };
 }
 
 // ============================================

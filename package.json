@@ -8,7 +8,8 @@
     "typecheck": "turbo typecheck",
     "format": "prettier --write \"**/*.{ts,tsx,md}\"",
     "prepare": "husky",
-    "db:reset": "turbo db:reset"
+    "db:reset": "turbo db:reset",
+    "test": "turbo test --filter=@wallex/capital"
   },
   "devDependencies": {
     "husky": "^9.1.7",

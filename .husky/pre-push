@@ -25,4 +25,16 @@ if [ $TYPECHECK_EXIT_CODE -ne 0 ]; then
 fi
 
 echo "✅ Typecheck passed!"
+
+# Run tests
+echo "🧪 Running tests..."
+pnpm test
+TEST_EXIT_CODE=$?
+
+if [ $TEST_EXIT_CODE -ne 0 ]; then
+  echo "❌ Tests failed. Push aborted."
+  exit 1
+fi
+
+echo "✅ Tests passed!"
 echo "🚀 All checks passed. Pushing..."
