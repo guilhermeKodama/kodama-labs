@@ -1,0 +1,386 @@
+---
+title: "Capital — Market Research"
+description: "Target audience, market opportunity, competitive landscape, distribution strategy, differentiation, and product gap analysis for Capital"
+---
+
+> **Last updated:** March 2026
+> **Status:** Living document — refine as we validate assumptions
+
+## 1. Executive Summary
+
+Capital is a financial management platform purpose-built for international freelancers and contractors — with a sharp focus on Brazilian tech professionals earning in foreign currencies (USD, EUR, GBP). It is the only product that unifies business finance, personal finance, investment portfolio tracking, multi-currency management, and Brazilian tax/bank integration in a single application. The global freelance economy generates $1.3 trillion in annual revenue across 1.57 billion independent workers, and Brazil has emerged as a primary tech talent hub with global developer demand growing 20%+ annually. Today, these professionals are forced to stitch together 5–10 fragmented tools (Organizze for budgets, Gorila for investments, Colinear for taxes, spreadsheets for multi-currency tracking). Capital eliminates that fragmentation and becomes the single source of truth for their entire financial life.
+
+## 2. Target Audience
+
+### 2.1 Primary: Brazilian Tech Professionals Working Internationally
+
+| Attribute | Detail |
+|---|---|
+| **Who** | Software developers, designers, product managers, and other tech contractors based in Brazil working remotely for US/EU companies |
+| **Legal structure** | PJ (Pessoa Jurídica) via Simples Nacional or Lucro Presumido; some Autônomos |
+| **Income range** | $30,000–$80,000 USD/year ($5,000–$6,700/month) |
+| **Currencies dealt with** | BRL (daily life), USD (primary income), EUR/GBP (secondary income) |
+| **Age range** | 25–40 years old |
+| **Tech savviness** | High — comfortable with web apps, APIs, and spreadsheets |
+| **Financial sophistication** | Moderate to high — they invest in B3 stocks, FIIs, Tesouro Direto, CDBs, and sometimes international assets |
+
+**Core pain points:**
+
+- Separating business (PJ) and personal (PF) finances while seeing the full picture
+- Tracking profit distributions from PJ to personal accounts
+- Managing exchange rate conversions and their tax implications
+- Understanding true net income after taxes, fees, and currency conversion
+- Tracking investments across multiple brokerages (XP, Nubank, Inter, international)
+- Preparing for annual Imposto de Renda (IR) declarations with clean, organized records
+- Monthly Carnê-Leão or PJ tax obligations with proper documentation
+
+**Behavioral patterns:**
+
+- Already use Nubank, XP, or Inter as primary banks/brokerages
+- Active in communities like r/brdev, r/investimentos, Twitter tech circles, and Discord servers
+- Many use spreadsheets (Google Sheets) as their "financial OS" because no single tool fits
+- Value privacy and data ownership — skeptical of giving bank credentials to third parties
+
+### 2.2 Secondary: International Freelancers Globally
+
+| Attribute | Detail |
+|---|---|
+| **Who** | Freelancers and contractors in LATAM, Eastern Europe, Southeast Asia earning in currencies different from their local one |
+| **Income range** | $20,000–$100,000 USD/year |
+| **Key need** | Multi-currency tracking, business/personal separation, investment tracking |
+
+This segment is addressable with the English localization already built into Capital, but requires removing Brazil-specific assumptions from the core flow.
+
+## 3. Market Size and Opportunity
+
+### 3.1 Global Freelance Economy
+
+| Metric | Value | Source |
+|---|---|---|
+| Total freelance revenue (global) | $1.3 trillion/year | BusinessDojo, Oct 2025 |
+| Independent professionals worldwide | 1.57 billion (46.7% of global workforce) | BusinessDojo, Oct 2025 |
+| Freelance platforms market size (2026) | $8.9 billion | GlobeNewsWire, Feb 2026 |
+| Projected platforms market (2031) | $21.97 billion (16.32% CAGR) | GlobeNewsWire, Feb 2026 |
+| Freelance workforce growth (2020–2024) | +90% | BusinessDojo |
+
+### 3.2 Brazil as a Tech Talent Hub
+
+| Metric | Value |
+|---|---|
+| Global developer demand growth | 20%+ annually |
+| Brazilian remote dev average salary (international contracts) | $5,800–$6,000/month (~$70k/year) |
+| Cost efficiency vs. US hiring | >50% savings for companies |
+| Key growth drivers | Time-zone alignment with US, improving English proficiency, strong CS education pipeline |
+
+### 3.3 Serviceable Market Estimate
+
+Conservative estimate for the primary audience:
+
+- **Brazil has ~500,000+ software developers** (and growing), with an increasing share working internationally
+- Even capturing just **10,000 paying users** at **$10–15/month** = **$1.2M–$1.8M ARR**
+- At **50,000 users** = **$6M–$9M ARR**
+- The broader LATAM + global freelancer market expands this by 10x+
+
+The opportunity is not just the direct revenue — it's becoming the trusted financial infrastructure layer for this underserved audience, with expansion paths into payments, lending, and tax filing.
+
+## 4. Core Problem Statement
+
+### The Fragmentation Problem
+
+An international Brazilian freelancer today needs to juggle multiple disconnected tools:
+
+| Need | Current Tool | Limitation |
+|---|---|---|
+| Personal budgeting | Organizze, Mobills | No multi-currency, no business separation, no investments |
+| Investment tracking | Gorila, Kinvo | No expense tracking, no business finance, no budgets |
+| Tax compliance | Colinear, Adaflow | Accounting-only, no personal finance or investment views |
+| Multi-currency income | Spreadsheets, Wise dashboard | Manual, error-prone, no integration with other financial data |
+| Business accounting | QuickBooks, FreshBooks | No Brazilian tax rules, no BRL, no investment tracking; QB Self-Employed lacks multi-currency entirely |
+| Credit card management | Bank apps, spreadsheets | Siloed per bank, no cross-card analytics |
+| Recurring income/expenses | Calendar reminders, spreadsheets | No financial context, easy to miss |
+
+**Result:** The freelancer maintains 5–10 separate tools plus spreadsheets, with no unified view of their financial health. They can't answer basic questions like:
+
+- "What's my true net worth across all entities and currencies?"
+- "How much did my PJ actually earn this quarter after taxes and expenses?"
+- "Am I on track with my budgets if I include credit card installments?"
+- "What's my effective tax rate across all income sources?"
+
+### What Capital Solves
+
+Capital is the **single pane of glass** for the international freelancer's entire financial life:
+
+```
+┌─────────────────────────────────────────────────┐
+│                   CAPITAL                        │
+│                                                  │
+│  ┌──────────┐  ┌──────────┐  ┌──────────────┐  │
+│  │ Business │  │ Personal │  │ Investments  │  │
+│  │ Finance  │  │ Finance  │  │ Portfolio    │  │
+│  └────┬─────┘  └────┬─────┘  └──────┬───────┘  │
+│       │              │               │           │
+│  ┌────▼──────────────▼───────────────▼───────┐  │
+│  │         Multi-Currency Engine              │  │
+│  │    (BRL, USD, EUR, GBP + auto rates)       │  │
+│  └────────────────────┬──────────────────────┘  │
+│                       │                          │
+│  ┌────────────────────▼──────────────────────┐  │
+│  │  Budgets │ Tax │ Reports │ Credit Cards   │  │
+│  │  Recurring │ Bank Import │ AI Categorize  │  │
+│  └───────────────────────────────────────────┘  │
+└─────────────────────────────────────────────────┘
+```
+
+## 5. Competitive Landscape
+
+### 5.1 Competitor Categories
+
+#### A. Brazilian Personal Finance Apps
+
+| App | Strengths | Weaknesses vs. Capital |
+|---|---|---|
+| **Organizze** | 10+ bank connections via Open Finance, PF+PJ in one interface, alerts, categories | No investment tracking, no multi-currency, no profit distribution concept, no tax helpers |
+| **Mobills** | 10M+ downloads, polished mobile UX, credit card management, budget tracking | No business/personal separation, no multi-currency, no investments, no tax features |
+
+**Takeaway:** Strong on personal budgeting UX and mobile experience, but completely miss the international freelancer use case.
+
+#### B. Brazilian Investment Trackers
+
+| App | Strengths | Weaknesses vs. Capital |
+|---|---|---|
+| **Gorila** | 40+ asset types, B3 integration, automatic portfolio updates, performance analytics | No expense tracking, no business finance, no budgets, no credit cards, no tax deduction tracking |
+| **Kinvo** | Popular with retail investors, clean UI, consolidates multiple brokerages | Same gaps as Gorila — investment-only, no financial management |
+
+**Takeaway:** Excellent investment tracking but operate in a silo. A freelancer using Gorila still needs Organizze + Colinear + spreadsheets.
+
+#### C. Brazilian Accounting Platforms for Devs
+
+| App | Strengths | Weaknesses vs. Capital |
+|---|---|---|
+| **Colinear** | PJ opening in 48h, AI invoice issuance, specialized for tech, international account help | Tax/accounting-only — no personal finance, no investments, no budgets, no expense tracking |
+| **Adaflow** | Fast CNPJ opening, tax recovery (R$200k+ recovered), transparent pricing | Same as Colinear — compliance tool only, not a financial management platform |
+
+**Takeaway:** These are complementary, not competitive. Capital could integrate with them rather than replace them.
+
+#### D. International Freelancer Finance Tools
+
+| App | Strengths | Weaknesses vs. Capital |
+|---|---|---|
+| **Pallo** | All-in-one (budgets + invoicing + time tracking + tax), 12,000+ bank connections via Plaid, multi-business | US-centric, no Brazilian bank/tax integration, no investment tracking, no multi-currency depth |
+| **Harpoon** | Revenue forecasting, project budgeting, time tracking | No personal finance, no investments, no multi-currency, no Brazilian market support |
+| **FreshBooks** | Strong invoicing, time tracking, $21–65/month | No personal finance, no investments, no Brazilian tax rules, limited multi-currency |
+| **Wave** | Free core accounting, payroll add-ons | No Brazilian support, no investments, no multi-currency, limited for international freelancers |
+| **Lucra** | Built for freelancers, expense tracking, invoicing | Early stage, no investment tracking, no Brazilian integration |
+| **FinFlow OS** | Cash flow focus, runway visibility, launching Q1 2026 | Very early, no Brazilian support, unclear feature depth |
+
+**Takeaway:** The closest competitor globally is Pallo, but it's entirely US-focused with no path to Brazilian tax/bank integration. None offer investment portfolio tracking.
+
+#### E. Multi-Currency Payment Platforms
+
+| Platform | Strengths | Weaknesses vs. Capital |
+|---|---|---|
+| **Wise** | Real exchange rates, multi-currency accounts, widely trusted | Payment infrastructure only — no budgets, no investments, no business tracking, no tax |
+| **OFX** | 30+ currencies, AI expense categorization, corporate cards | Enterprise-focused, not a personal financial management tool |
+| **Remoly** | EU IBAN, low FX fees, invoicing | Payment/payroll platform, not financial management |
+
+**Takeaway:** These solve the money movement problem, not the money management problem. Capital is complementary.
+
+### 5.2 Competitive Feature Matrix
+
+| Feature | Capital | Organizze | Mobills | Gorila | Pallo | FreshBooks | Colinear |
+|---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
+| Business finance tracking | **Yes** | Partial | No | No | Yes | Yes | Yes |
+| Personal finance tracking | **Yes** | Yes | Yes | No | Yes | No | No |
+| Business + personal unified | **Yes** | Partial | No | No | Yes | No | No |
+| Multi-currency | **Yes** | No | No | No | Limited | Limited | No |
+| Investment portfolio | **Yes** | No | No | Yes | No | No | No |
+| Budget management | **Yes** | Yes | Yes | No | Yes | No | No |
+| Credit card management | **Yes** | Yes | Yes | No | Yes | No | No |
+| Bank statement import (BR) | **Yes** | Yes | No | No | No | No | No |
+| AI categorization | **Yes** | No | No | No | No | No | No |
+| Tax helpers (BR) | **Yes** | No | No | No | No | No | Yes |
+| Profit distribution tracking | **Yes** | No | No | No | No | No | No |
+| Recurring transactions | **Yes** | Yes | Yes | No | Partial | Yes | No |
+| Reports & insights | **Yes** | Yes | Yes | Yes | Yes | Yes | Yes |
+| Brazilian bank integration | **Yes** | Yes | No | Yes | No | No | No |
+| Invoicing | No | No | No | No | Yes | Yes | Yes |
+| Mobile app | No | Yes | Yes | Yes | Yes | Yes | No |
+| Open Finance connection | No | Yes | No | Yes | No | No | No |
+
+**Capital's unique position:** No other product covers all of the top 13 rows. The closest combination would require using Organizze + Gorila + Colinear + spreadsheets — four separate tools with no data sharing.
+
+## 6. Distribution and Marketing Strategy
+
+### 6.1 Phase 1: Community-Led Growth (Months 1–3)
+
+**Target communities where our audience already gathers:**
+
+| Channel | Community | Approach |
+|---|---|---|
+| Reddit | r/brdev, r/investimentos, r/freelance, r/ExpatFinance | Share genuine value posts about freelancer financial management, not product pitches. Answer questions about PJ finances, multi-currency tracking. Soft-launch with "I built this" posts. |
+| Twitter/X | Brazilian tech Twitter, #remotework, indie hacker circles | Build in public — share development updates, financial tips, and user stories. Engage with influencers in the BR tech/finance space. |
+| LinkedIn | Brazilian professionals working internationally | Long-form posts about the financial challenges of international freelancing. Target hiring managers and contractors. |
+| Discord | Dev communities, finance communities | Participate and share when relevant. |
+
+**Goal:** 500 beta users, 50 active weekly users.
+
+### 6.2 Phase 2: Content & SEO (Months 2–6)
+
+**Create high-intent content targeting searches our audience makes:**
+
+- "como gerenciar finanças trabalhando para o exterior"
+- "controle financeiro PJ freelancer"
+- "como declarar renda do exterior no IR"
+- "organizar investimentos e renda PJ"
+- "distribuição de lucros PJ para pessoa física"
+- "multi-currency income tracking for freelancers"
+
+**Content formats:**
+
+- Blog posts / guides on the Capital website
+- YouTube tutorials (screen recordings showing real workflows)
+- Comparison posts ("Capital vs. Organizze + Gorila + planilhas")
+- Tax season guides (annual, high-intent traffic spike around Feb–Apr)
+
+**Goal:** 5,000 organic monthly visitors, 200 signups/month.
+
+### 6.3 Phase 3: Launch & Partnerships (Months 3–6)
+
+| Channel | Action |
+|---|---|
+| **Product Hunt** | Full launch with demo video, screenshots, and founder story. Target "Product of the Day". |
+| **Hacker News** | "Show HN" post with authentic story about building for the underserved Brazilian freelancer market. |
+| **Partnerships** | Approach Colinear and Adaflow for co-marketing — Capital handles financial management, they handle tax compliance. Mutual referrals. |
+| **Influencers** | Partner with Brazilian tech/finance YouTubers and Twitter accounts (Filipe Deschamps, Código Fonte TV, Me Poupe!, Primo Rico — or micro-influencers in the dev+finance niche). |
+
+**Goal:** 2,000 signups from launch week, partnership pipeline with 2–3 accounting firms.
+
+### 6.4 Phase 4: Referral & Paid Growth (Months 6–12)
+
+- **Referral program:** Give users 1 free month for each successful referral. Freelancers talk to other freelancers.
+- **Paid ads:** Targeted Google Ads on high-intent Portuguese keywords. Instagram/Facebook ads targeting Brazilian tech professionals.
+- **Sponsorships:** Sponsor Brazilian dev podcasts and newsletters (e.g., Filipe Deschamps newsletter, BrazilJS).
+
+**Goal:** 5,000 active users, path to $50k MRR.
+
+## 7. Differentiation Strategy
+
+### 7.1 Core Value Proposition
+
+> **Capital is the only financial platform that unifies business income, personal finances, investments, and multi-currency management — built specifically for international freelancers and contractors.**
+
+### 7.2 Key Differentiators by Competitor Category
+
+| Against | Capital's Edge |
+|---|---|
+| **Organizze / Mobills** | Multi-currency engine, investment tracking, business/personal entity separation with profit distributions, AI categorization, tax helpers |
+| **Gorila / Kinvo** | Full financial management beyond investments — expenses, budgets, credit cards, business tracking, recurring transactions |
+| **Colinear / Adaflow** | Not just tax compliance — full financial visibility. Capital shows the complete picture; they file the taxes. Complementary positioning. |
+| **Pallo / FreshBooks** | Brazilian bank integration (Nubank, XP CSV import), Brazilian tax rules, B3 investment tracking, Portuguese localization, understanding of PJ/PF dynamics |
+| **Wise / OFX** | Financial management on top of money movement. Capital tracks what happens to the money after it arrives. |
+
+### 7.3 Positioning Statement
+
+**For** Brazilian tech professionals working internationally,
+**who** struggle to manage their PJ business, personal finances, and investments across multiple currencies and tools,
+**Capital** is a financial management platform
+**that** provides a single, unified view of their entire financial life — business income, personal expenses, investments, budgets, taxes, and credit cards — all with native multi-currency support.
+**Unlike** Organizze, Gorila, or QuickBooks, which each solve only one piece of the puzzle,
+**Capital** is the only platform purpose-built for the unique financial reality of international freelancers.
+
+## 8. Gaps to Address / Product Improvements
+
+### 8.1 High Priority (Must-Have for Competitive Parity)
+
+| Gap | Why It Matters | Competitors That Have It |
+|---|---|---|
+| **Mobile app (or PWA)** | Organizze, Mobills, and Gorila are mobile-first. Brazilian users expect to manage finances on their phone. Without mobile, Capital loses daily engagement and quick transaction entry. | Organizze, Mobills, Gorila, Pallo |
+| **Open Finance / bank connection** | Manual transaction entry is the #1 friction point. Organizze connects to 10+ banks automatically. This is table stakes for retention. | Organizze, Gorila |
+| **Invoicing** | International freelancers need to send invoices (Nota Fiscal for PJ, or international invoices for direct clients). Lacking this forces users to keep a separate invoicing tool. | Pallo, FreshBooks, Colinear, Wave |
+
+### 8.2 Medium Priority (Strong Differentiators)
+
+| Gap | Why It Matters | Competitors That Have It |
+|---|---|---|
+| **Cash flow forecasting** | Freelancers have irregular income. Showing projected cash flow based on recurring items, pending invoices, and historical patterns would be a killer feature. | Harpoon, FinFlow OS |
+| **Client/project profitability** | Freelancers with multiple clients need to know which ones are actually profitable after accounting for time spent and expenses. | Harpoon, Pallo |
+| **Receipt/expense OCR** | Snap a photo of a receipt and auto-create an expense. Reduces friction for business expense tracking. | Fisca, BillKit, Pallo |
+| **Onboarding wizard for Brazilian PJ setup** | Guide new users through PJ vs. MEI vs. Autônomo decision, tax regime selection, and initial category/currency setup. First-run experience matters. | Colinear (consultation), Adaflow |
+| **Nota Fiscal integration** | Auto-generate Notas Fiscais for PJ services rendered. Major time saver for PJ freelancers who issue monthly. | Colinear, Adaflow |
+
+### 8.3 Lower Priority (Future Moat)
+
+| Gap | Why It Matters |
+|---|---|
+| **Integration with Colinear/Adaflow** | Export tax-ready reports or sync data with accounting platforms. Makes Capital the financial layer while they handle compliance. |
+| **Wise/Husky/Payoneer integration** | Auto-import international transfers and conversions. Eliminate manual multi-currency entry. |
+| **Financial independence calculator** | "At your current savings rate and investment returns, you can retire in X years." Powerful engagement and retention tool. |
+| **Collaborative access (accountant view)** | Let the user's accountant view reports and transactions without full access. Bridges the gap between Capital and tax compliance. |
+| **API / export for IR declaration** | Generate the specific data needed for annual IR filing in the format accountants expect. Annual retention hook. |
+
+## 9. Risks and Challenges
+
+### 9.1 Product Risks
+
+| Risk | Severity | Mitigation |
+|---|---|---|
+| **No mobile app** | High | Prioritize a PWA or React Native app. Without mobile, daily engagement will lag behind Organizze/Mobills. |
+| **Manual data entry friction** | High | Open Finance integration is expensive and complex but critical. In the short term, improve CSV/OFX import coverage for more banks. |
+| **Scope creep** | Medium | Capital already has a wide feature set. Adding invoicing, OCR, and Open Finance risks diluting quality. Prioritize ruthlessly. |
+| **Data trust** | Medium | Users are trusting Capital with their complete financial picture. Invest in security, transparency about data handling, and optional self-hosting. |
+
+### 9.2 Market Risks
+
+| Risk | Severity | Mitigation |
+|---|---|---|
+| **Organizze adds investment tracking** | Medium | Move fast on the unified experience. Organizze's DNA is personal budgeting — adding investments would be a pivot for them. |
+| **Gorila adds expense tracking** | Medium | Same logic — investment-first apps rarely succeed at daily finance management. |
+| **Pallo enters Brazil** | Low-Medium | Pallo would need Brazilian bank integration, tax rules, and Portuguese localization. Significant effort. Capital's head start is real. |
+| **Regulatory changes** | Low | Brazil's Open Finance regulations are evolving. Stay informed and adapt. Capital's modular architecture allows flexibility. |
+| **Currency/economic volatility** | Low | Actually a tailwind — volatility makes multi-currency management more important, not less. |
+
+### 9.3 Execution Risks
+
+| Risk | Severity | Mitigation |
+|---|---|---|
+| **Solo/small team** | High | Focus on the primary audience (Brazilian tech PJ) before expanding. Resist the urge to go global too early. |
+| **Pricing sensitivity** | Medium | Freelancers are cost-conscious. Consider a generous free tier with premium features (investment tracking, AI categorization, advanced reports) as paid. |
+| **User acquisition cost** | Medium | Community-led and content-driven growth is slower but cheaper. Avoid paid acquisition until product-market fit is proven. |
+
+## 10. Recommended Next Steps
+
+### Immediate (Next 30 Days)
+
+1. **Validate with real users** — Find 10–20 Brazilian tech freelancers (r/brdev, Twitter, personal network) and do 30-minute interviews. Confirm pain points, willingness to pay, and feature priorities.
+2. **Set up a landing page** — Create a waitlist/early access page to start collecting emails and measuring interest before a full launch.
+3. **Define pricing tiers** — Draft a freemium model (free: basic tracking + 1 business; premium: unlimited businesses + investments + AI categorization + advanced reports).
+
+### Short-Term (Months 1–3)
+
+4. **Build a PWA or responsive mobile experience** — This is the single biggest gap vs. competitors. Even a basic PWA for quick transaction entry and dashboard viewing would help.
+5. **Expand bank import coverage** — Add more Brazilian bank CSV/OFX formats beyond Nubank and XP (Inter, Itaú, Bradesco, C6, BTG).
+6. **Launch on Product Hunt + Hacker News** — Prepare assets, demo video, and community posts.
+7. **Start content marketing** — Publish 2–4 SEO-optimized articles per month targeting Portuguese keywords.
+
+### Medium-Term (Months 3–6)
+
+8. **Add basic invoicing** — Even simple invoice generation (not full billing) would close a major gap.
+9. **Explore Open Finance APIs** — Research providers (Belvo, Pluggy) and costs for automatic bank connection.
+10. **Build partnership pipeline** — Reach out to Colinear, Adaflow, and Brazilian tech communities for co-marketing.
+11. **Implement referral program** — Leverage the tight-knit Brazilian dev community for word-of-mouth growth.
+
+### Long-Term (Months 6–12)
+
+12. **Open Finance integration** — Automatic bank/brokerage connection for hands-free transaction import.
+13. **Nota Fiscal integration** — Auto-generate invoices for PJ service exports.
+14. **Accountant collaboration features** — Read-only access and tax-ready export for accountants.
+15. **Expand to broader LATAM** — Adapt for Colombian, Argentine, and Mexican freelancers with similar pain points.
+
+## Appendix: Key Resources and References
+
+- [Freelance Platforms Market Analysis Report 2026](https://www.globenewswire.com/news-release/2026/02/09/3234629/28124/en/Freelance-Platforms-Market-Analysis-Report-2026.html) — Market size and growth projections
+- [Freelance Economy Statistics 2026 — BusinessDojo](https://dojobusiness.com/blogs/news/freelance-economy-statistics) — Global freelance workforce data
+- [Contabilidade para Devs — Nomad Global](https://www.nomadglobal.com/conteudos/contabilidade-para-devs) — Brazilian dev tax landscape
+- [How to manage freelance income and taxes in Brazil — Transfi](https://www.transfi.com/blog/how-to-manage-freelance-income-and-taxes-in-brazil) — PJ/MEI/Autônomo comparison
+- [Remote Developer Salaries in Brazil 2026](https://www.remotelytalents.com/blog/remote-developer-salaries-brazil-2026) — Salary benchmarks
+- [QuickBooks Multicurrency Limitations](https://www.webgility.com/blog/quickbooks-multicurrency) — Competitor limitations
