@@ -19,6 +19,7 @@ import {
   TrendingDown,
   Wallet,
   CalendarIcon,
+  CalendarClock,
   X,
   Upload,
   Loader2,
@@ -56,7 +57,9 @@ import {
   useInvestmentStore,
   useCreditCardStore,
 } from '@/lib/store';
-import { calculateEntitySummary } from '@/lib/utils/calculations';
+import { calculateEntitySummary, calculateUpcomingExpenses } from '@/lib/utils/calculations';
+import { useRecurringTransactionStore } from '@/lib/store/recurring-store';
+import { useRecurringTransferStore } from '@/lib/store/recurring-transfer-store';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { client } from '@/lib/api-client';
@@ -85,6 +88,8 @@ export default function PersonalPage() {
   const { settings, personalAccount } = useSettingsStore();
   const { businesses } = useBusinessStore();
   const { creditCards } = useCreditCardStore();
+  const { recurringTransactions } = useRecurringTransactionStore();
+  const { recurringTransfers } = useRecurringTransferStore();
 
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isStatementDialogOpen, setIsStatementDialogOpen] = useState(false);
@@ -188,6 +193,16 @@ export default function PersonalPage() {
       settings.baseCurrency
     );
   }, [personalAccount, transactions, transfers, settings.baseCurrency, t]);
+
+  const upcomingExpenses = useMemo(() => {
+    if (!personalAccount) return 0;
+    return calculateUpcomingExpenses(
+      personalAccount.id,
+      'personal',
+      recurringTransactions,
+      recurringTransfers,
+    );
+  }, [personalAccount, recurringTransactions, recurringTransfers]);
 
   const updateLedgerBalance = useCallback((imports: StatementImportStatus[]) => {
     if (!personalAccount) return;
@@ -344,7 +359,7 @@ export default function PersonalPage() {
 
       {/* Summary Cards */}
       {summary && (
-        <div className="mb-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="mb-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <SummaryCard
             title={t('personal.balance')}
             value={ledgerBalance ?? summary.balance}
@@ -364,6 +379,13 @@ export default function PersonalPage() {
             value={summary.totalExpenses}
             currency={settings.baseCurrency}
             icon={TrendingDown}
+            variant="expense"
+          />
+          <SummaryCard
+            title={t('transactions.summary.upcomingExpenses')}
+            value={upcomingExpenses}
+            currency={settings.baseCurrency}
+            icon={CalendarClock}
             variant="expense"
           />
         </div>

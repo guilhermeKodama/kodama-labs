@@ -1,9 +1,12 @@
+import { startOfMonth, endOfMonth, isWithinInterval, startOfDay } from 'date-fns';
 import type {
   Transaction,
   Transfer,
   EntityType,
   EntitySummary,
   TransactionType,
+  RecurringTransaction,
+  RecurringTransfer,
 } from '@/types';
 
 /**
@@ -280,6 +283,48 @@ export function calculateYearlyTotals(
     investment,
     balance: income - expense,
   };
+}
+
+/**
+ * Calculate the total upcoming (unpaid) expenses for the current month for a given entity.
+ * Sums active recurring expense transactions and outgoing recurring transfers
+ * whose nextDueDate falls within the current month.
+ */
+export function calculateUpcomingExpenses(
+  entityId: string,
+  entityType: EntityType,
+  recurringTransactions: RecurringTransaction[],
+  recurringTransfers: RecurringTransfer[],
+): number {
+  const now = new Date();
+  const monthStart = startOfMonth(now);
+  const monthEnd = endOfMonth(now);
+  const interval = { start: monthStart, end: monthEnd };
+
+  const expenseTransactions = recurringTransactions
+    .filter((rt) => {
+      if (!rt.isActive) return false;
+      if (rt.entityId !== entityId || rt.entityType !== entityType) return false;
+      if (rt.type !== 'expense') return false;
+      const dueDate = startOfDay(new Date(rt.nextDueDate));
+      if (!isWithinInterval(dueDate, interval)) return false;
+      if (rt.endDate && new Date(rt.endDate) < dueDate) return false;
+      return true;
+    })
+    .reduce((sum, rt) => sum + rt.amount * rt.exchangeRate, 0);
+
+  const outgoingTransfers = recurringTransfers
+    .filter((rt) => {
+      if (!rt.isActive) return false;
+      if (rt.fromEntityId !== entityId) return false;
+      const dueDate = startOfDay(new Date(rt.nextDueDate));
+      if (!isWithinInterval(dueDate, interval)) return false;
+      if (rt.endDate && new Date(rt.endDate) < dueDate) return false;
+      return true;
+    })
+    .reduce((sum, rt) => sum + rt.amount * rt.exchangeRate, 0);
+
+  return expenseTransactions + outgoingTransfers;
 }
 
 // ============================================

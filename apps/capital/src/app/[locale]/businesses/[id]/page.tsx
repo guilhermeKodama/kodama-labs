@@ -21,6 +21,7 @@ import {
   TrendingUp,
   TrendingDown,
   CalendarIcon,
+  CalendarClock,
   X,
   Upload,
   Loader2,
@@ -58,7 +59,9 @@ import {
   useInvestmentStore,
   useCreditCardStore,
 } from '@/lib/store';
-import { calculateEntitySummary } from '@/lib/utils/calculations';
+import { calculateEntitySummary, calculateUpcomingExpenses } from '@/lib/utils/calculations';
+import { useRecurringTransactionStore } from '@/lib/store/recurring-store';
+import { useRecurringTransferStore } from '@/lib/store/recurring-transfer-store';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { client } from '@/lib/api-client';
@@ -79,6 +82,8 @@ export default function BusinessDetailPage() {
   const { transfers, addTransfer, deleteTransfer, fetchTransfers } = useTransferStore();
   const { settings, personalAccount } = useSettingsStore();
   const { creditCards } = useCreditCardStore();
+  const { recurringTransactions } = useRecurringTransactionStore();
+  const { recurringTransfers } = useRecurringTransferStore();
 
   const business = getBusiness(businessId);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -180,6 +185,16 @@ export default function BusinessDetailPage() {
       settings.baseCurrency
     );
   }, [business, transactions, transfers, settings.baseCurrency]);
+
+  const upcomingExpenses = useMemo(() => {
+    if (!business) return 0;
+    return calculateUpcomingExpenses(
+      business.id,
+      'business',
+      recurringTransactions,
+      recurringTransfers,
+    );
+  }, [business, recurringTransactions, recurringTransfers]);
 
   const handleImportComplete = useCallback(() => {
     fetchTransactions();
@@ -353,7 +368,7 @@ export default function BusinessDetailPage() {
 
       {/* Summary Cards */}
       {summary && (
-        <div className="mb-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="mb-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <SummaryCard
             title={t('transactions.summary.balance')}
             value={summary.balance}
@@ -373,6 +388,13 @@ export default function BusinessDetailPage() {
             value={summary.totalExpenses}
             currency={settings.baseCurrency}
             icon={TrendingDown}
+            variant="expense"
+          />
+          <SummaryCard
+            title={t('transactions.summary.upcomingExpenses')}
+            value={upcomingExpenses}
+            currency={settings.baseCurrency}
+            icon={CalendarClock}
             variant="expense"
           />
         </div>

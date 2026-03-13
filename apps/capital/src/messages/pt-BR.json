@@ -190,7 +190,8 @@
       "balance": "Saldo",
       "income": "Receita",
       "expenses": "Despesas",
-      "investments": "Investimentos"
+      "investments": "Investimentos",
+      "upcomingExpenses": "Despesas Previstas"
     },
     "form": {
       "type": "Tipo",

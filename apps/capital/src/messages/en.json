@@ -190,7 +190,8 @@
       "balance": "Balance",
       "income": "Income",
       "expenses": "Expenses",
-      "investments": "Investments"
+      "investments": "Investments",
+      "upcomingExpenses": "Upcoming Expenses"
     },
     "form": {
       "type": "Type",
