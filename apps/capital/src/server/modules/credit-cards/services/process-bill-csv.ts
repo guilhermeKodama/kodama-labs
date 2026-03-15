@@ -20,12 +20,22 @@ interface ProcessBillCsvInput {
 }
 
 /**
+ * IOF-related adjustments ("Ajuste a crédito", "IOF de volta") are always part of
+ * the current billing cycle because they pair with IOF charges in the same bill.
+ * They bypass the date-based credit cutoff that filters previous-cycle estornos.
+ */
+function isIofAdjustment(description: string): boolean {
+  const lower = description.toLowerCase();
+  return lower.includes("ajuste a crédito") || lower.includes("iof de volta");
+}
+
+/**
  * Calculate the bill total from parsed transactions and the bill's closing date.
  *
  * Positive amounts (charges) are always included. Negative amounts (credits/refunds)
- * are only included if they fall within the current billing cycle. Previous-cycle
- * credits (e.g., estornos of charges billed in the prior month) reduce the overall
- * balance but are NOT part of the current bill's "total da fatura".
+ * are only included if they fall within the current billing cycle OR are IOF-related
+ * adjustments (which always belong to the current cycle). Previous-cycle estornos
+ * (refunds of charges billed in a prior month) are excluded.
  *
  * The cycle boundary is determined by the "Pagamento recebido" date when available
  * (the payment closes out the previous bill), falling back to an estimate based on
@@ -51,15 +61,14 @@ export function calculateBillTotal(
   }
 
   return chargeTransactions.reduce((sum, t) => {
-    // Always include charges (positive amounts)
     if (t.amount >= 0) return sum + t.amount;
 
-    // For credits/refunds (negative), only include if on or after the credit cutoff
+    if (isIofAdjustment(t.description)) return sum + t.amount;
+
     try {
       const txDate = parseDate(t.date);
       return txDate >= creditCutoff ? sum + t.amount : sum;
     } catch {
-      // If date can't be parsed, include the amount to be safe
       return sum + t.amount;
     }
   }, 0);

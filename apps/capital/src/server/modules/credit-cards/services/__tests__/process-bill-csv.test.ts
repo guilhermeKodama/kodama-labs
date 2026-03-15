@@ -420,4 +420,24 @@ describe("calculateBillTotal", () => {
     const charges = transactions.filter((t) => !t.isPayment);
     expect(charges).toHaveLength(198);
   });
+
+  it("should include IOF adjustments even when dated before the payment cutoff", () => {
+    const csv = `date,title,amount
+2026-02-14,"IOF de ""Cursor Usage Mid Jan""",15.20
+2026-02-14,"IOF de ""Cursor Usage Mid Jan""",11.37
+2026-02-14,Ajuste a crédito,-15.20
+2026-02-14,Ajuste a crédito,-11.37
+2026-02-16,Pagamento recebido,-51274.23
+2026-02-16,Cursor Usage Mid Jan,542.32
+2026-03-07,IOF de volta de Vercel Inc.,-3.83
+2026-03-07,Vercel Inc.,109.46`;
+    const transactions = parseCsvContent(csv);
+    const total = calculateBillTotal(
+      transactions,
+      new Date("2026-03-14T12:00:00Z")
+    );
+    // Ajuste a crédito (-15.20, -11.37) and IOF de volta (-3.83) must be included
+    // even though the first two are before the payment date (Feb 16)
+    expect(Math.round(total * 100) / 100).toBe(647.95);
+  });
 });
