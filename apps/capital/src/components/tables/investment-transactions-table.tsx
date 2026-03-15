@@ -39,6 +39,7 @@ const typeColors: Record<InvestmentTransactionType, string> = {
   split: 'border-purple-500/50 bg-purple-500/10 text-purple-400',
   deposit: 'border-cyan-500/50 bg-cyan-500/10 text-cyan-400',
   withdrawal: 'border-orange-500/50 bg-orange-500/10 text-orange-400',
+  adjustment: 'border-amber-500/50 bg-amber-500/10 text-amber-400',
 };
 
 export function InvestmentTransactionsTable({

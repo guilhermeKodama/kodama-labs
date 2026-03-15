@@ -491,10 +491,24 @@
         "editTitle": "Editar Posição",
         "editDescription": "Atualize os detalhes da posição."
       },
+      "rebalance": "Rebalancear",
       "toast": {
         "created": "Posição criada com sucesso!",
         "updated": "Posição atualizada com sucesso!",
         "deleted": "Posição excluída com sucesso!"
+      }
+    },
+    "rebalance": {
+      "title": "Rebalancear Posição",
+      "description": "Atualize o valor para corresponder ao saldo atual real.",
+      "currentValue": "Valor registrado atual",
+      "actualValue": "Valor atual real",
+      "adjustment": "Ajuste",
+      "submit": "Rebalancear",
+      "transactionNote": "Ajuste de rebalanceamento de valor",
+      "toast": {
+        "success": "Valor da posição rebalanceado com sucesso!",
+        "error": "Falha ao rebalancear o valor da posição"
       }
     },
     "transactions": {
@@ -563,7 +577,8 @@
       "yield_payment": "Rendimento",
       "split": "Desdobramento",
       "deposit": "Depósito",
-      "withdrawal": "Resgate"
+      "withdrawal": "Resgate",
+      "adjustment": "Ajuste"
     },
     "fund": {
       "button": "Aportar",

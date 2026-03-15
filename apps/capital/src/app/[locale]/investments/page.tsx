@@ -34,6 +34,7 @@ import { InvestmentAccountDialog } from '@/components/dialogs/investment-account
 import { InvestmentHoldingDialog } from '@/components/dialogs/investment-holding-dialog';
 import { InvestmentTransactionDialog } from '@/components/dialogs/investment-transaction-dialog';
 import { FundWithdrawDialog } from '@/components/dialogs/fund-withdraw-dialog';
+import { RebalanceDialog } from '@/components/dialogs/rebalance-dialog';
 import { Button } from '@/components/ui/button';
 import { Calendar } from '@/components/ui/calendar';
 import {
@@ -112,6 +113,7 @@ export default function InvestmentsPage() {
   const [deletingItem, setDeletingItem] = useState<{ type: 'account' | 'holding' | 'transaction'; id: string } | null>(null);
   const [fundWithdrawAccount, setFundWithdrawAccount] = useState<InvestmentAccount | null>(null);
   const [fundWithdrawMode, setFundWithdrawMode] = useState<'fund' | 'withdraw'>('fund');
+  const [rebalancingHolding, setRebalancingHolding] = useState<InvestmentHolding | null>(null);
 
   // Active tab
   const [activeTab, setActiveTab] = useState('portfolio');
@@ -356,6 +358,24 @@ export default function InvestmentsPage() {
     return !!result;
   };
 
+  const handleRebalance = async (holdingId: string, adjustmentAmount: number) => {
+    const result = await addTransaction({
+      holdingId,
+      type: 'adjustment',
+      totalAmount: adjustmentAmount,
+      fees: 0,
+      date: new Date(),
+      notes: t('investments.rebalance.transactionNote'),
+    });
+    if (result) {
+      toast.success(t('investments.rebalance.toast.success'));
+      fetchPortfolioSummary();
+      return true;
+    }
+    toast.error(t('investments.rebalance.toast.error'));
+    return false;
+  };
+
   // ---- Action buttons for header ----
   const getHeaderAction = () => {
     switch (activeTab) {
@@ -521,6 +541,7 @@ export default function InvestmentsPage() {
                     setIsHoldingDialogOpen(true);
                   }}
                   onDelete={(h) => setDeletingItem({ type: 'holding', id: h.id })}
+                  onRebalance={(h) => setRebalancingHolding(h)}
                 />
               )}
             </CardContent>
@@ -841,6 +862,15 @@ export default function InvestmentsPage() {
         account={fundWithdrawAccount}
         mode={fundWithdrawMode}
         onSubmit={handleFundWithdraw}
+      />
+
+      <RebalanceDialog
+        open={!!rebalancingHolding}
+        onOpenChange={(open) => {
+          if (!open) setRebalancingHolding(null);
+        }}
+        holding={rebalancingHolding}
+        onSubmit={handleRebalance}
       />
 
       {/* Delete Confirmation */}

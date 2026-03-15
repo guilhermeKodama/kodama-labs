@@ -10,7 +10,7 @@ import { listInvestmentTransactions } from "../../services/list-investment-trans
 import { routeConfig } from "../../constants";
 
 const InvestmentTransactionTypeValues = z.enum([
-  "buy", "sell", "dividend", "yield_payment", "split", "deposit", "withdrawal",
+  "buy", "sell", "dividend", "yield_payment", "split", "deposit", "withdrawal", "adjustment",
 ]);
 
 const TransactionSchema = z.object({

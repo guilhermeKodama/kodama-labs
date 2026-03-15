@@ -12,15 +12,18 @@ import { routeConfig } from "../../constants";
 const CreateSchema = z.object({
   holdingId: z.string().min(1),
   type: z.enum([
-    "buy", "sell", "dividend", "yield_payment", "split", "deposit", "withdrawal",
+    "buy", "sell", "dividend", "yield_payment", "split", "deposit", "withdrawal", "adjustment",
   ]),
   quantity: z.number().optional(),
   pricePerUnit: z.number().optional(),
-  totalAmount: z.number().positive(),
+  totalAmount: z.number(),
   fees: z.number().min(0).optional(),
   date: z.string(),
   notes: z.string().optional(),
-});
+}).refine(
+  (data) => data.type === "adjustment" || data.totalAmount > 0,
+  { message: "Amount must be greater than 0", path: ["totalAmount"] }
+);
 
 const ResponseSchema = z.object({
   id: z.string(),

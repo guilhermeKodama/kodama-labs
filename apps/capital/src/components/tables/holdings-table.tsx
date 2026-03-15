@@ -7,6 +7,7 @@ import {
   Trash2,
   TrendingUp,
   TrendingDown,
+  RefreshCw,
 } from 'lucide-react';
 import {
   Table,
@@ -27,11 +28,13 @@ import {
 import { cn } from '@/lib/utils';
 import { formatCurrency } from '@/lib/utils/format';
 import type { InvestmentHolding } from '@/types';
+import { TICKER_ASSET_CLASSES } from '@/types';
 
 interface HoldingsTableProps {
   holdings: InvestmentHolding[];
   onEdit?: (holding: InvestmentHolding) => void;
   onDelete?: (holding: InvestmentHolding) => void;
+  onRebalance?: (holding: InvestmentHolding) => void;
 }
 
 const assetClassColors: Record<string, string> = {
@@ -65,6 +68,7 @@ export function HoldingsTable({
   holdings,
   onEdit,
   onDelete,
+  onRebalance,
 }: HoldingsTableProps) {
   const t = useTranslations('investments');
   const tCommon = useTranslations('common');
@@ -89,7 +93,7 @@ export function HoldingsTable({
                 <TableHead className="text-right text-slate-400">P&L</TableHead>
               </>
             )}
-            {(onEdit || onDelete) && <TableHead className="w-10" />}
+            {(onEdit || onDelete || onRebalance) && <TableHead className="w-10" />}
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -166,7 +170,7 @@ export function HoldingsTable({
                     </TableCell>
                   </>
                 )}
-                {(onEdit || onDelete) && (
+                {(onEdit || onDelete || onRebalance) && (
                   <TableCell>
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
@@ -179,6 +183,15 @@ export function HoldingsTable({
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end" className="border-slate-700 bg-slate-900">
+                        {onRebalance && !TICKER_ASSET_CLASSES.includes(holding.assetClass) && (
+                          <DropdownMenuItem
+                            onClick={() => onRebalance(holding)}
+                            className="text-slate-300 focus:bg-slate-800 focus:text-white"
+                          >
+                            <RefreshCw className="mr-2 h-4 w-4" />
+                            {t('holdings.rebalance')}
+                          </DropdownMenuItem>
+                        )}
                         {onEdit && (
                           <DropdownMenuItem
                             onClick={() => onEdit(holding)}

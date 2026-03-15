@@ -491,10 +491,24 @@
         "editTitle": "Edit Holding",
         "editDescription": "Update the holding details."
       },
+      "rebalance": "Rebalance",
       "toast": {
         "created": "Holding created successfully!",
         "updated": "Holding updated successfully!",
         "deleted": "Holding deleted successfully!"
+      }
+    },
+    "rebalance": {
+      "title": "Rebalance Holding",
+      "description": "Update the value to match the actual current balance.",
+      "currentValue": "Current tracked value",
+      "actualValue": "Actual current value",
+      "adjustment": "Adjustment",
+      "submit": "Rebalance",
+      "transactionNote": "Value rebalance adjustment",
+      "toast": {
+        "success": "Holding value rebalanced successfully!",
+        "error": "Failed to rebalance holding value"
       }
     },
     "transactions": {
@@ -563,7 +577,8 @@
       "yield_payment": "Yield",
       "split": "Split",
       "deposit": "Deposit",
-      "withdrawal": "Withdrawal"
+      "withdrawal": "Withdrawal",
+      "adjustment": "Adjustment"
     },
     "fund": {
       "button": "Fund",

@@ -70,6 +70,11 @@ export async function recalculateHolding(
         // These are income events - don't affect position
         break;
       }
+      case "adjustment": {
+        totalInvested += amount;
+        totalCost = Math.max(0, totalCost + amount);
+        break;
+      }
     }
   }
 

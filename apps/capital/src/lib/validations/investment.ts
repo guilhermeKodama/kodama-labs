@@ -49,7 +49,7 @@ export type CreateInvestmentHoldingFormData = z.infer<typeof createInvestmentHol
 // ============================================
 
 export const investmentTransactionTypeSchema = z.enum([
-  'buy', 'sell', 'dividend', 'yield_payment', 'split', 'deposit', 'withdrawal',
+  'buy', 'sell', 'dividend', 'yield_payment', 'split', 'deposit', 'withdrawal', 'adjustment',
 ]);
 
 export const createInvestmentTransactionSchema = z.object({
@@ -57,10 +57,13 @@ export const createInvestmentTransactionSchema = z.object({
   type: investmentTransactionTypeSchema,
   quantity: z.number().positive().optional(),
   pricePerUnit: z.number().positive().optional(),
-  totalAmount: z.number().positive('Amount must be greater than 0'),
+  totalAmount: z.number(),
   fees: z.number().min(0).optional().default(0),
   date: z.coerce.date(),
   notes: z.string().max(500).optional(),
-});
+}).refine(
+  (data) => data.type === 'adjustment' || data.totalAmount > 0,
+  { message: 'Amount must be greater than 0', path: ['totalAmount'] }
+);
 
 export type CreateInvestmentTransactionFormData = z.infer<typeof createInvestmentTransactionSchema>;
