@@ -10,3 +10,4 @@ export { BillUploadDialog } from './bill-upload-dialog';
 export { InvestmentAccountDialog } from './investment-account-dialog';
 export { InvestmentHoldingDialog } from './investment-holding-dialog';
 export { InvestmentTransactionDialog } from './investment-transaction-dialog';
+export { RebalanceDialog } from './rebalance-dialog';

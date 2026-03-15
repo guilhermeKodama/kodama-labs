@@ -663,7 +663,8 @@ export type InvestmentTransactionType =
   | 'yield_payment'
   | 'split'
   | 'deposit'
-  | 'withdrawal';
+  | 'withdrawal'
+  | 'adjustment';
 
 export const ASSET_CLASS_LABELS: Record<AssetClass, string> = {
   stocks: 'Stocks',
@@ -697,6 +698,7 @@ export const INVESTMENT_TRANSACTION_TYPE_LABELS: Record<InvestmentTransactionTyp
   split: 'Split',
   deposit: 'Deposit',
   withdrawal: 'Withdrawal',
+  adjustment: 'Adjustment',
 };
 
 // Asset classes that require a ticker symbol

@@ -11,7 +11,7 @@ import { routeConfig } from "../../constants";
 
 const UpdateSchema = z.object({
   type: z.enum([
-    "buy", "sell", "dividend", "yield_payment", "split", "deposit", "withdrawal",
+    "buy", "sell", "dividend", "yield_payment", "split", "deposit", "withdrawal", "adjustment",
   ]).optional(),
   quantity: z.number().optional(),
   pricePerUnit: z.number().optional(),

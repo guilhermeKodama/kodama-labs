@@ -41,6 +41,7 @@ function getCashBalanceImpact(
     case "yield_payment":
       return totalAmount;
     case "split":
+    case "adjustment":
       return 0;
     default:
       return 0;
