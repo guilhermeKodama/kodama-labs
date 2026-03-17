@@ -7,8 +7,18 @@ import { prisma } from "@capital/server/lib/prisma";
 import { requireUserId } from "@capital/server/lib/auth-middleware";
 import { parseOfxContent } from "../../services/parsers";
 import { toDateString } from "@capital/server/lib/date-utils";
-import { extractShortTitle } from "../../utils";
+import {
+  normalizeTransactions,
+  classifyTransactions,
+  detectReconciliation,
+  type EntityInfo,
+  type InvestmentAccountInfo,
+} from "../../services/reconciliation";
 import { routeConfig } from "../../constants";
+
+// ---------------------------------------------------------------------------
+// Request / Response schemas
+// ---------------------------------------------------------------------------
 
 const FileSchema = z.object({
   content: z.string().min(1),
@@ -19,6 +29,47 @@ const ParseRequestSchema = z.object({
   files: z.array(FileSchema).min(1),
 });
 
+const ClassificationCandidateSchema = z.object({
+  type: z.enum([
+    "regular_transaction",
+    "entity_transfer",
+    "investment_transfer",
+    "credit_card_payment",
+  ]),
+  confidence: z.enum(["high", "medium", "low"]),
+  transferDetails: z
+    .object({
+      suggestedEntityId: z.string(),
+      suggestedEntityName: z.string(),
+      suggestedEntityType: z.enum(["business", "personal"]),
+      suggestedDirection: z.enum([
+        "profit_distribution",
+        "capital_injection",
+        "reimbursement",
+      ]),
+    })
+    .optional(),
+  investmentDetails: z
+    .object({
+      direction: z.enum(["investment_deposit", "investment_withdrawal"]),
+      suggestedAccountId: z.string().optional(),
+    })
+    .optional(),
+  creditCardDetails: z
+    .object({
+      suggestedBankName: z.string(),
+      dueDay: z.number(),
+      closingDay: z.number(),
+    })
+    .optional(),
+});
+
+const FieldDiffSchema = z.object({
+  field: z.enum(["amount", "date", "description"]),
+  existingValue: z.string(),
+  ofxValue: z.string(),
+});
+
 const ParsedTransactionSchema = z.object({
   fitId: z.string(),
   date: z.string(),
@@ -26,41 +77,23 @@ const ParsedTransactionSchema = z.object({
   fullDescription: z.string(),
   amount: z.number(),
   type: z.enum(["income", "expense"]),
+  // Reconciliation
+  reconciliationStatus: z.enum(["new", "duplicate", "changed"]),
+  existingTransactionId: z.string().optional(),
+  diffs: z.array(FieldDiffSchema).optional(),
+  // Classification
+  candidates: z.array(ClassificationCandidateSchema),
+  resolvedClassification: z
+    .enum([
+      "regular_transaction",
+      "entity_transfer",
+      "investment_transfer",
+      "credit_card_payment",
+    ])
+    .optional(),
+  needsResolution: z.boolean(),
+  // Legacy compat
   isDuplicate: z.boolean(),
-});
-
-const DetectedCreditCardPaymentSchema = z.object({
-  fitId: z.string(),
-  amount: z.number(),
-  date: z.string(),
-  suggestedBankName: z.string(),
-  dueDay: z.number(),
-  closingDay: z.number(),
-});
-
-const DetectedTransferSchema = z.object({
-  fitId: z.string(),
-  amount: z.number(),
-  date: z.string(),
-  description: z.string(),
-  fullDescription: z.string(),
-  type: z.enum(["income", "expense"]),
-  suggestedEntityId: z.string(),
-  suggestedEntityName: z.string(),
-  suggestedEntityType: z.enum(["business", "personal"]),
-  suggestedDirection: z.enum([
-    "profit_distribution",
-    "capital_injection",
-    "reimbursement",
-  ]),
-});
-
-const DetectedInvestmentTransferSchema = z.object({
-  fitId: z.string(),
-  amount: z.number(),
-  date: z.string(),
-  description: z.string(),
-  direction: z.enum(["investment_deposit", "investment_withdrawal"]),
 });
 
 const ParseResponseSchema = z.object({
@@ -69,14 +102,13 @@ const ParseResponseSchema = z.object({
   currency: z.string(),
   ledgerBalance: z.number(),
   transactions: z.array(ParsedTransactionSchema),
-  detectedCreditCardPayments: z.array(DetectedCreditCardPaymentSchema),
-  detectedTransfers: z.array(DetectedTransferSchema),
-  detectedInvestmentTransfers: z.array(DetectedInvestmentTransferSchema),
   summary: z.object({
     totalIncome: z.number(),
     totalExpenses: z.number(),
     newCount: z.number(),
     duplicateCount: z.number(),
+    changedCount: z.number(),
+    needsResolutionCount: z.number(),
   }),
 });
 
@@ -92,7 +124,8 @@ export const route = createRoute({
   method: "post",
   tags: [...routeConfig.v1.defaultTags],
   summary: "Parse OFX bank statement files",
-  description: "Parses OFX files and returns a preview of transactions for import",
+  description:
+    "Parses OFX files and returns a preview of transactions with reconciliation status and classification candidates",
   request: {
     body: jsonContent(ParseRequestSchema, "OFX files to parse"),
   },
@@ -100,36 +133,23 @@ export const route = createRoute({
     [OK]: jsonContent(ParseResponseSchema, "Parsed statement data"),
     [BAD_REQUEST]: jsonContent(ErrorResponseSchema, "Invalid file data"),
     [UNAUTHORIZED]: jsonContent(ErrorResponseSchema, "Not authenticated"),
-    [INTERNAL_SERVER_ERROR]: jsonContent(ErrorResponseSchema, "Internal server error"),
+    [INTERNAL_SERVER_ERROR]: jsonContent(
+      ErrorResponseSchema,
+      "Internal server error"
+    ),
   },
 });
 
-const CREDIT_CARD_PAYMENT_PATTERNS = [
-  "pagamento de fatura",
-];
-
-const INVESTMENT_TRANSFER_PATTERNS: Array<{
-  pattern: string;
-  direction: "investment_deposit" | "investment_withdrawal";
-}> = [
-  { pattern: "aplicação rdb", direction: "investment_deposit" },
-  { pattern: "resgate rdb", direction: "investment_withdrawal" },
-];
+// ---------------------------------------------------------------------------
+// Handler
+// ---------------------------------------------------------------------------
 
 export const handler: AppRouteHandler<typeof route> = async (c) => {
   try {
     const userId = requireUserId(c);
     const body = c.req.valid("json");
 
-    // Parse all OFX files and merge transactions
-    const allTransactions: Array<{
-      fitId: string;
-      date: Date;
-      description: string;
-      fullDescription: string;
-      amount: number;
-      type: "income" | "expense";
-    }> = [];
+    // Parse all OFX files and merge transactions (dedup within batch by FITID)
     let bankName = "";
     let accountId = "";
     let currency = "BRL";
@@ -137,6 +157,13 @@ export const handler: AppRouteHandler<typeof route> = async (c) => {
     let ledgerBalance = 0;
 
     const seenFitIds = new Set<string>();
+    const allRawTransactions: Array<{
+      fitId: string;
+      date: Date;
+      amount: number;
+      memo: string;
+      trnType: string;
+    }> = [];
 
     for (const file of body.files) {
       const parsed = parseOfxContent(file.content);
@@ -144,7 +171,6 @@ export const handler: AppRouteHandler<typeof route> = async (c) => {
       if (!accountId) accountId = parsed.account.accountId;
       if (parsed.currency) currency = parsed.currency;
 
-      // Track the most recent ledger balance across all files
       if (parsed.balanceDate > latestBalanceDate) {
         latestBalanceDate = parsed.balanceDate;
         ledgerBalance = parsed.ledgerBalance;
@@ -153,20 +179,14 @@ export const handler: AppRouteHandler<typeof route> = async (c) => {
       for (const tx of parsed.transactions) {
         if (seenFitIds.has(tx.fitId)) continue;
         seenFitIds.add(tx.fitId);
-
-        allTransactions.push({
-          fitId: tx.fitId,
-          date: tx.date,
-          description: extractShortTitle(tx.memo),
-          fullDescription: tx.memo,
-          amount: Math.abs(tx.amount),
-          type: tx.amount >= 0 ? "income" : "expense",
-        });
+        allRawTransactions.push(tx);
       }
     }
 
-    // Check for existing transactions by externalId
-    const fitIds = allTransactions.map((t) => t.fitId);
+    const normalized = normalizeTransactions(allRawTransactions);
+
+    // Fetch existing transactions with full data for reconciliation
+    const fitIds = normalized.map((t) => t.fitId);
     const existingTransactions = await prisma.transaction.findMany({
       where: {
         externalId: { in: fitIds },
@@ -175,164 +195,109 @@ export const handler: AppRouteHandler<typeof route> = async (c) => {
           { personalAccount: { userId } },
         ],
       },
-      select: { externalId: true },
+      select: {
+        id: true,
+        externalId: true,
+        amount: true,
+        date: true,
+        description: true,
+        type: true,
+      },
     });
-    const existingFitIds = new Set(existingTransactions.map((t) => t.externalId));
 
-    // Detect credit card payments and infer due/closing days from payment dates
-    const detectedCreditCardPayments = allTransactions
-      .filter((t) => {
-        const lower = t.description.toLowerCase();
-        return CREDIT_CARD_PAYMENT_PATTERNS.some((p) => lower.includes(p));
-      })
-      .map((t) => {
-        const dueDay = t.date.getUTCDate();
-        // Closing day is typically ~10 days before due day in Brazil
-        const closingDay = dueDay <= 10 ? dueDay + 20 : dueDay - 10;
-        return {
-          fitId: t.fitId,
-          amount: t.amount,
-          date: toDateString(t.date),
-          suggestedBankName: bankName,
-          dueDay,
-          closingDay,
-        };
-      });
+    const existingData = existingTransactions.map((t) => ({
+      id: t.id,
+      externalId: t.externalId!,
+      amount: t.amount,
+      date: t.date,
+      description: t.description,
+      type: t.type as "income" | "expense",
+    }));
 
-    // Detect transfers to/from registered entities
+    // Reconciliation: detect new / duplicate / changed
+    const reconciled = detectReconciliation(normalized, existingData);
+
+    // Fetch user entities for classification
     const userBusinesses = await prisma.business.findMany({
       where: { userId },
       select: { id: true, name: true },
     });
 
-    const normalizeForMatch = (s: string) =>
-      s.toLowerCase().replace(/[^a-záàâãéêíóôõúüç0-9\s]/gi, "").replace(/\s+/g, " ").trim();
+    const userPersonalAccounts = await prisma.personalAccount.findMany({
+      where: { userId },
+      select: { id: true },
+    });
 
-    const entityCandidates = userBusinesses.map((b) => ({
+    const entities: EntityInfo[] = userBusinesses.map((b) => ({
       id: b.id,
       name: b.name,
-      normalized: normalizeForMatch(b.name),
       entityType: "business" as const,
     }));
 
-    // Extract counterparty name from OFX memo for matching
-    function extractCounterparty(memo: string): string | null {
-      const pixSent = memo.match(/^Transferência enviada pelo Pix(?:\s+via\s+Open\s+Banking)?\s*-\s*([^-]+)/i);
-      if (pixSent) return pixSent[1].trim();
-      const pixReceived = memo.match(/^Transferência recebida pelo Pix\s*-\s*([^-]+)/i);
-      if (pixReceived) return pixReceived[1].trim();
-      const boleto = memo.match(/^Pagamento de boleto efetuado\s*-\s*([^-]+)/i);
-      if (boleto) return boleto[1].trim();
-      const ted = memo.match(/^TED\s+(?:enviada|recebida)\s*-\s*([^-]+)/i);
-      if (ted) return ted[1].trim();
-      return null;
-    }
+    const investmentAccounts: InvestmentAccountInfo[] = await prisma.investmentAccount
+      .findMany({
+        where: {
+          OR: [
+            { business: { userId } },
+            { personalAccount: { userId } },
+          ],
+        },
+        select: { id: true, name: true },
+      });
 
-    const detectedTransferFitIds = new Set<string>();
-    const detectedTransfers: Array<{
-      fitId: string;
-      amount: number;
-      date: string;
-      description: string;
-      fullDescription: string;
-      type: "income" | "expense";
-      suggestedEntityId: string;
-      suggestedEntityName: string;
-      suggestedEntityType: "business" | "personal";
-      suggestedDirection: "profit_distribution" | "capital_injection" | "reimbursement";
-    }> = [];
+    // Classification: only classify non-duplicate transactions
+    const newTransactions = reconciled.filter((t) => t.status === "new");
+    const changedTransactions = reconciled.filter((t) => t.status === "changed");
+    const transactionsToClassify = [...newTransactions, ...changedTransactions];
 
-    for (const tx of allTransactions) {
-      if (existingFitIds.has(tx.fitId)) continue;
-      const counterparty = extractCounterparty(tx.fullDescription);
-      if (!counterparty) continue;
-      const normalizedCounterparty = normalizeForMatch(counterparty);
-
-      for (const entity of entityCandidates) {
-        // Match if the counterparty name starts with the entity name or vice versa
-        // (OFX often truncates names)
-        const matches =
-          normalizedCounterparty.startsWith(entity.normalized) ||
-          entity.normalized.startsWith(normalizedCounterparty) ||
-          normalizedCounterparty.includes(entity.normalized) ||
-          entity.normalized.includes(normalizedCounterparty);
-
-        if (matches && entity.normalized.length >= 3) {
-          // expense from personal = money going to business (capital_injection)
-          // income to personal = money coming from business (profit_distribution)
-          const direction = tx.type === "expense" ? "capital_injection" : "profit_distribution";
-
-          detectedTransfers.push({
-            fitId: tx.fitId,
-            amount: tx.amount,
-            date: toDateString(tx.date),
-            description: tx.description,
-            fullDescription: tx.fullDescription,
-            type: tx.type,
-            suggestedEntityId: entity.id,
-            suggestedEntityName: entity.name,
-            suggestedEntityType: entity.entityType,
-            suggestedDirection: direction,
-          });
-          detectedTransferFitIds.add(tx.fitId);
-          break;
-        }
-      }
-    }
-
-    // Detect investment account transfers (e.g. "Aplicação RDB", "Resgate RDB")
-    const detectedInvestmentTransfers: Array<{
-      fitId: string;
-      amount: number;
-      date: string;
-      description: string;
-      direction: "investment_deposit" | "investment_withdrawal";
-    }> = [];
-    const investmentTransferFitIds = new Set<string>();
-
-    for (const tx of allTransactions) {
-      if (existingFitIds.has(tx.fitId)) continue;
-      if (detectedTransferFitIds.has(tx.fitId)) continue;
-      const lower = tx.description.toLowerCase();
-      for (const { pattern, direction } of INVESTMENT_TRANSFER_PATTERNS) {
-        if (lower.includes(pattern)) {
-          detectedInvestmentTransfers.push({
-            fitId: tx.fitId,
-            amount: tx.amount,
-            date: toDateString(tx.date),
-            description: tx.description,
-            direction,
-          });
-          investmentTransferFitIds.add(tx.fitId);
-          break;
-        }
-      }
-    }
+    const classified = classifyTransactions(
+      transactionsToClassify,
+      entities,
+      investmentAccounts,
+      bankName
+    );
+    const classificationMap = new Map(classified.map((c) => [c.fitId, c]));
 
     // Build response
-    const transactions = allTransactions.map((t) => ({
-      fitId: t.fitId,
-      date: toDateString(t.date),
-      description: t.description,
-      fullDescription: t.fullDescription,
-      amount: t.amount,
-      type: t.type,
-      isDuplicate: existingFitIds.has(t.fitId),
-    }));
+    const transactions = reconciled.map((tx) => {
+      const classification = classificationMap.get(tx.fitId);
+      return {
+        fitId: tx.fitId,
+        date: toDateString(tx.date),
+        description: tx.description,
+        fullDescription: tx.fullDescription,
+        amount: tx.amount,
+        type: tx.type,
+        reconciliationStatus: tx.status,
+        existingTransactionId: tx.existingTransactionId,
+        diffs: tx.diffs,
+        candidates: classification?.candidates ?? [
+          { type: "regular_transaction" as const, confidence: "high" as const },
+        ],
+        resolvedClassification: classification?.resolvedClassification,
+        needsResolution: classification?.needsResolution ?? false,
+        isDuplicate: tx.status === "duplicate",
+      };
+    });
 
     let totalIncome = 0;
     let totalExpenses = 0;
     let newCount = 0;
     let duplicateCount = 0;
+    let changedCount = 0;
+    let needsResolutionCount = 0;
 
     for (const t of transactions) {
-      if (t.isDuplicate) {
+      if (t.reconciliationStatus === "duplicate") {
         duplicateCount++;
+      } else if (t.reconciliationStatus === "changed") {
+        changedCount++;
       } else {
         newCount++;
         if (t.type === "income") totalIncome += t.amount;
         else totalExpenses += t.amount;
       }
+      if (t.needsResolution) needsResolutionCount++;
     }
 
     return c.json(
@@ -342,14 +307,13 @@ export const handler: AppRouteHandler<typeof route> = async (c) => {
         currency,
         ledgerBalance: Math.round(ledgerBalance * 100) / 100,
         transactions,
-        detectedCreditCardPayments,
-        detectedTransfers,
-        detectedInvestmentTransfers,
         summary: {
           totalIncome: Math.round(totalIncome * 100) / 100,
           totalExpenses: Math.round(totalExpenses * 100) / 100,
           newCount,
           duplicateCount,
+          changedCount,
+          needsResolutionCount,
         },
       },
       OK

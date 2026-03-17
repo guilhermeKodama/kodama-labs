@@ -222,6 +222,8 @@ model Transaction {
   creditCardBills   CreditCardBill[]
   linkedInvestmentTransaction InvestmentTransaction?
 
+  @@unique([externalId, businessId])
+  @@unique([externalId, personalAccountId])
   @@index([businessId])
   @@index([personalAccountId])
   @@index([entityType])
