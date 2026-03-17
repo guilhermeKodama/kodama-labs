@@ -223,11 +223,6 @@ export const handler: AppRouteHandler<typeof route> = async (c) => {
       select: { id: true, name: true },
     });
 
-    const userPersonalAccounts = await prisma.personalAccount.findMany({
-      where: { userId },
-      select: { id: true },
-    });
-
     const entities: EntityInfo[] = userBusinesses.map((b) => ({
       id: b.id,
       name: b.name,
