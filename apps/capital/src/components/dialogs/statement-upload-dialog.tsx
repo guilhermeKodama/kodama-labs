@@ -16,6 +16,8 @@ import {
   ArrowLeftRight,
   Wallet,
   Plus,
+  RefreshCw,
+  HelpCircle,
 } from 'lucide-react';
 import {
   Dialog,
@@ -39,7 +41,35 @@ import type { Business, EntityType, CreditCard as CreditCardType, InvestmentAcco
 import { client } from '@/lib/api-client';
 import { useInvestmentStore } from '@/lib/store';
 
-// --- Types for parsed data ---
+// ---------------------------------------------------------------------------
+// Types for the enriched parse response
+// ---------------------------------------------------------------------------
+
+interface ClassificationCandidate {
+  type: 'regular_transaction' | 'entity_transfer' | 'investment_transfer' | 'credit_card_payment';
+  confidence: 'high' | 'medium' | 'low';
+  transferDetails?: {
+    suggestedEntityId: string;
+    suggestedEntityName: string;
+    suggestedEntityType: 'business' | 'personal';
+    suggestedDirection: 'profit_distribution' | 'capital_injection' | 'reimbursement';
+  };
+  investmentDetails?: {
+    direction: 'investment_deposit' | 'investment_withdrawal';
+    suggestedAccountId?: string;
+  };
+  creditCardDetails?: {
+    suggestedBankName: string;
+    dueDay: number;
+    closingDay: number;
+  };
+}
+
+interface FieldDiff {
+  field: 'amount' | 'date' | 'description';
+  existingValue: string;
+  ofxValue: string;
+}
 
 interface ParsedTransaction {
   fitId: string;
@@ -48,57 +78,15 @@ interface ParsedTransaction {
   fullDescription: string;
   amount: number;
   type: 'income' | 'expense';
+  reconciliationStatus: 'new' | 'duplicate' | 'changed';
+  existingTransactionId?: string;
+  diffs?: FieldDiff[];
+  candidates: ClassificationCandidate[];
+  resolvedClassification?: string;
+  needsResolution: boolean;
   isDuplicate: boolean;
+  // Client-side state
   selected: boolean;
-}
-
-interface DetectedCreditCardPayment {
-  fitId: string;
-  amount: number;
-  date: string;
-  suggestedBankName: string;
-  dueDay: number;
-  closingDay: number;
-}
-
-interface DetectedTransfer {
-  fitId: string;
-  amount: number;
-  date: string;
-  description: string;
-  fullDescription: string;
-  type: 'income' | 'expense';
-  suggestedEntityId: string;
-  suggestedEntityName: string;
-  suggestedEntityType: 'business' | 'personal';
-  suggestedDirection: 'profit_distribution' | 'capital_injection' | 'reimbursement';
-}
-
-interface ConfirmedTransfer {
-  fitId: string;
-  amount: number;
-  date: string;
-  description: string;
-  direction: 'profit_distribution' | 'capital_injection' | 'reimbursement';
-  counterpartyEntityType: 'business' | 'personal';
-  counterpartyEntityId: string;
-  counterpartyEntityName: string;
-}
-
-interface CreditCardToCreate {
-  bankName: string;
-  lastFourDigits: string;
-  closingDay: number;
-  dueDay: number;
-  currency: string;
-}
-
-interface DetectedInvestmentTransfer {
-  fitId: string;
-  amount: number;
-  date: string;
-  description: string;
-  direction: 'investment_deposit' | 'investment_withdrawal';
 }
 
 interface ParseResult {
@@ -107,18 +95,52 @@ interface ParseResult {
   currency: string;
   ledgerBalance: number;
   transactions: ParsedTransaction[];
-  detectedCreditCardPayments: DetectedCreditCardPayment[];
-  detectedTransfers: DetectedTransfer[];
-  detectedInvestmentTransfers: DetectedInvestmentTransfer[];
   summary: {
     totalIncome: number;
     totalExpenses: number;
     newCount: number;
     duplicateCount: number;
+    changedCount: number;
+    needsResolutionCount: number;
   };
 }
 
-// --- Props ---
+// Client-side resolution state for each transaction
+interface Resolution {
+  classification: ClassificationCandidate['type'];
+  // For entity_transfer
+  entityId?: string;
+  entityName?: string;
+  entityType?: 'business' | 'personal';
+  direction?: 'profit_distribution' | 'capital_injection' | 'reimbursement';
+  // For investment_transfer
+  investmentAccountId?: string;
+  investmentDirection?: 'investment_deposit' | 'investment_withdrawal';
+  // For credit_card_payment
+  creditCard?: {
+    bankName: string;
+    lastFourDigits: string;
+    closingDay: number;
+    dueDay: number;
+    currency: string;
+  };
+}
+
+// Reconciliation: which changed transactions to update
+interface ReconciliationChoice {
+  existingTransactionId: string;
+  externalId: string;
+  action: 'update' | 'keep';
+  updates: {
+    amount?: number;
+    date?: string;
+    description?: string;
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Props
+// ---------------------------------------------------------------------------
 
 interface StatementUploadDialogProps {
   open: boolean;
@@ -132,9 +154,9 @@ interface StatementUploadDialogProps {
   onImportComplete: () => void;
 }
 
-type Step = 'upload' | 'entity' | 'credit-cards' | 'investment-accounts' | 'preview' | 'confirm';
+type Step = 'upload' | 'entity' | 'resolve' | 'preview' | 'confirm';
 
-const STEPS: Step[] = ['upload', 'entity', 'credit-cards', 'investment-accounts', 'preview', 'confirm'];
+const STEPS: Step[] = ['upload', 'entity', 'resolve', 'preview', 'confirm'];
 
 function formatCurrency(amount: number, currency: string): string {
   try {
@@ -150,7 +172,7 @@ export function StatementUploadDialog({
   businesses,
   personalAccountId,
   existingCreditCards,
-  investmentAccounts,
+  investmentAccounts: initialInvestmentAccounts,
   defaultEntityType,
   defaultEntityId,
   onImportComplete,
@@ -175,25 +197,35 @@ export function StatementUploadDialog({
   const [entityType, setEntityType] = useState<EntityType>(defaultEntityType ?? 'personal');
   const [entityId, setEntityId] = useState<string>(defaultEntityId ?? personalAccountId ?? '');
 
-  // Credit card creation state
-  const [creditCardsToCreate, setCreditCardsToCreate] = useState<CreditCardToCreate[]>([]);
-  const [skipCreditCards, setSkipCreditCards] = useState(false);
+  // Resolution state: map fitId -> user's classification choice
+  const [resolutions, setResolutions] = useState<Map<string, Resolution>>(new Map());
 
-  // Transfer state
-  const [confirmedTransfers, setConfirmedTransfers] = useState<ConfirmedTransfer[]>([]);
+  // Reconciliation choices: map fitId -> update/keep choice
+  const [reconciliationChoices, setReconciliationChoices] = useState<Map<string, ReconciliationChoice>>(new Map());
 
-  // Investment transfer state
-  const [selectedInvestmentAccountId, setSelectedInvestmentAccountId] = useState<string>('');
-  const [skipInvestmentTransfers, setSkipInvestmentTransfers] = useState(false);
-  const [showCreateInvestmentAccount, setShowCreateInvestmentAccount] = useState(false);
+  // Inline entity creation state
+  const [creatingEntityForFitId, setCreatingEntityForFitId] = useState<string | null>(null);
+  const [newBusinessName, setNewBusinessName] = useState('');
+  const [isCreatingBusiness, setIsCreatingBusiness] = useState(false);
   const [newInvestmentAccountName, setNewInvestmentAccountName] = useState('');
   const [newInvestmentAccountBroker, setNewInvestmentAccountBroker] = useState('');
   const [isCreatingInvestmentAccount, setIsCreatingInvestmentAccount] = useState(false);
+  const [creatingInvAccountForFitId, setCreatingInvAccountForFitId] = useState<string | null>(null);
+
+  // Track locally created investment accounts
+  const [localInvestmentAccounts, setLocalInvestmentAccounts] = useState<InvestmentAccount[]>([]);
+  const allInvestmentAccounts = [...initialInvestmentAccounts, ...localInvestmentAccounts];
+
+  // Track locally created businesses
+  const [localBusinesses, setLocalBusinesses] = useState<Business[]>([]);
+  const allBusinesses = [...businesses, ...localBusinesses];
 
   // Import state
   const [isImporting, setIsImporting] = useState(false);
   const [importResult, setImportResult] = useState<{
     imported: number;
+    duplicatesSkipped: number;
+    reconciled: number;
     transfersCreated: number;
     creditCardsCreated: number;
     investmentTransfersCreated: number;
@@ -207,15 +239,17 @@ export function StatementUploadDialog({
     setParseResult(null);
     setEntityType(defaultEntityType ?? 'personal');
     setEntityId(defaultEntityId ?? personalAccountId ?? '');
-    setCreditCardsToCreate([]);
-    setSkipCreditCards(false);
-    setConfirmedTransfers([]);
-    setSelectedInvestmentAccountId('');
-    setSkipInvestmentTransfers(false);
-    setShowCreateInvestmentAccount(false);
+    setResolutions(new Map());
+    setReconciliationChoices(new Map());
+    setCreatingEntityForFitId(null);
+    setNewBusinessName('');
+    setIsCreatingBusiness(false);
     setNewInvestmentAccountName('');
     setNewInvestmentAccountBroker('');
     setIsCreatingInvestmentAccount(false);
+    setCreatingInvAccountForFitId(null);
+    setLocalInvestmentAccounts([]);
+    setLocalBusinesses([]);
     setIsImporting(false);
     setImportResult(null);
   }, [defaultEntityType, defaultEntityId, personalAccountId]);
@@ -225,12 +259,13 @@ export function StatementUploadDialog({
     setTimeout(reset, 300);
   }, [onOpenChange, reset]);
 
-  // --- File upload ---
+  // ---------------------------------------------------------------------------
+  // File upload
+  // ---------------------------------------------------------------------------
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFiles = e.target.files;
     if (!selectedFiles || selectedFiles.length === 0) return;
-
     const newFiles: Array<{ name: string; content: string }> = [];
     for (let i = 0; i < selectedFiles.length; i++) {
       const file = selectedFiles[i];
@@ -253,61 +288,75 @@ export function StatementUploadDialog({
 
     try {
       const res = await client.v1['bank-statements'].parse.$post({
-        json: {
-          files: files.map((f) => ({ content: f.content, fileName: f.name })),
-        },
+        json: { files: files.map((f) => ({ content: f.content, fileName: f.name })) },
       });
-
       if (!res.ok) {
         const err = (await res.json()) as { error?: { message?: string } };
         throw new Error(err.error?.message ?? 'Failed to parse files');
       }
-
       const data = await res.json();
       const transactions: ParsedTransaction[] = data.transactions.map((tx) => ({
         ...tx,
-        selected: !tx.isDuplicate,
+        selected: tx.reconciliationStatus !== 'duplicate',
       }));
+      setParseResult({ ...data, transactions });
 
-      setParseResult({
-        ...data,
-        transactions,
-      });
-
-      // Pre-fill credit cards to create if payments detected
-      if (data.detectedCreditCardPayments.length > 0) {
-        const hasExisting = existingCreditCards.some(
-          (cc) => cc.bankName.toUpperCase().includes(data.bankName.toUpperCase().split(' ')[0] ?? '')
-        );
-        if (!hasExisting) {
-          const firstPayment = data.detectedCreditCardPayments[0];
-          setCreditCardsToCreate([
-            {
-              bankName: data.bankName.split('.')[0]?.replace('S/A', '').replace('S.A', '').trim() ?? data.bankName,
-              lastFourDigits: '',
-              closingDay: firstPayment.closingDay,
-              dueDay: firstPayment.dueDay,
-              currency: data.currency,
-            },
-          ]);
+      // Auto-populate resolutions from server-resolved classifications
+      const autoResolutions = new Map<string, Resolution>();
+      for (const tx of data.transactions) {
+        if (tx.resolvedClassification && !tx.needsResolution) {
+          const candidate = tx.candidates.find((c) => c.type === tx.resolvedClassification);
+          if (candidate) {
+            const resolution: Resolution = { classification: candidate.type };
+            if (candidate.type === 'entity_transfer' && candidate.transferDetails) {
+              resolution.entityId = candidate.transferDetails.suggestedEntityId;
+              resolution.entityName = candidate.transferDetails.suggestedEntityName;
+              resolution.entityType = candidate.transferDetails.suggestedEntityType;
+              resolution.direction = candidate.transferDetails.suggestedDirection;
+            }
+            if (candidate.type === 'investment_transfer' && candidate.investmentDetails) {
+              resolution.investmentDirection = candidate.investmentDetails.direction;
+              resolution.investmentAccountId = candidate.investmentDetails.suggestedAccountId;
+            }
+            if (candidate.type === 'credit_card_payment' && candidate.creditCardDetails) {
+              const hasExisting = existingCreditCards.some(
+                (cc) => cc.bankName.toUpperCase().includes((candidate.creditCardDetails?.suggestedBankName ?? '').toUpperCase().split(' ')[0] ?? '')
+              );
+              if (!hasExisting) {
+                resolution.creditCard = {
+                  bankName: candidate.creditCardDetails.suggestedBankName,
+                  lastFourDigits: '',
+                  closingDay: candidate.creditCardDetails.closingDay,
+                  dueDay: candidate.creditCardDetails.dueDay,
+                  currency: data.currency,
+                };
+              }
+            }
+            autoResolutions.set(tx.fitId, resolution);
+          }
         }
       }
+      setResolutions(autoResolutions);
 
-      // Auto-confirm detected transfers with their suggested values
-      if (data.detectedTransfers && data.detectedTransfers.length > 0) {
-        setConfirmedTransfers(
-          data.detectedTransfers.map((dt: DetectedTransfer) => ({
-            fitId: dt.fitId,
-            amount: dt.amount,
-            date: dt.date,
-            description: dt.description,
-            direction: dt.suggestedDirection,
-            counterpartyEntityType: dt.suggestedEntityType,
-            counterpartyEntityId: dt.suggestedEntityId,
-            counterpartyEntityName: dt.suggestedEntityName,
-          }))
-        );
+      // Auto-populate reconciliation choices: default to "update" for changed txs
+      const autoReconciliations = new Map<string, ReconciliationChoice>();
+      for (const tx of data.transactions) {
+        if (tx.reconciliationStatus === 'changed' && tx.existingTransactionId && tx.diffs) {
+          const updates: ReconciliationChoice['updates'] = {};
+          for (const diff of tx.diffs) {
+            if (diff.field === 'amount') updates.amount = tx.amount;
+            if (diff.field === 'date') updates.date = tx.date;
+            if (diff.field === 'description') updates.description = tx.description;
+          }
+          autoReconciliations.set(tx.fitId, {
+            existingTransactionId: tx.existingTransactionId,
+            externalId: tx.fitId,
+            action: 'update',
+            updates,
+          });
+        }
       }
+      setReconciliationChoices(autoReconciliations);
 
       setCurrentStep('entity');
     } catch (error) {
@@ -317,18 +366,22 @@ export function StatementUploadDialog({
     }
   };
 
-  // --- Navigation ---
+  // ---------------------------------------------------------------------------
+  // Navigation
+  // ---------------------------------------------------------------------------
+
+  const needsResolveStep = parseResult
+    ? parseResult.transactions.some((t) => t.needsResolution)
+    : false;
 
   const shouldSkipStep = (step: Step): boolean => {
-    if (step === 'credit-cards' && (!parseResult?.detectedCreditCardPayments.length || skipCreditCards)) return true;
-    if (step === 'investment-accounts' && (!parseResult?.detectedInvestmentTransfers?.length || skipInvestmentTransfers)) return true;
+    if (step === 'resolve' && !needsResolveStep) return true;
     return false;
   };
 
   const goToStep = (step: Step) => {
     if (shouldSkipStep(step)) {
       const idx = STEPS.indexOf(step);
-      // Skip forward
       for (let i = idx + 1; i < STEPS.length; i++) {
         if (!shouldSkipStep(STEPS[i])) {
           setCurrentStep(STEPS[i]);
@@ -341,9 +394,7 @@ export function StatementUploadDialog({
 
   const goNext = () => {
     const idx = STEPS.indexOf(currentStep);
-    if (idx < STEPS.length - 1) {
-      goToStep(STEPS[idx + 1]);
-    }
+    if (idx < STEPS.length - 1) goToStep(STEPS[idx + 1]);
   };
 
   const goPrev = () => {
@@ -356,52 +407,49 @@ export function StatementUploadDialog({
     }
   };
 
-  // --- Transfer management ---
+  // ---------------------------------------------------------------------------
+  // Resolution management
+  // ---------------------------------------------------------------------------
 
-  const confirmedTransferFitIds = new Set(confirmedTransfers.map((ct) => ct.fitId));
-
-  const dismissTransfer = (fitId: string) => {
-    setConfirmedTransfers((prev) => prev.filter((ct) => ct.fitId !== fitId));
+  const setResolution = (fitId: string, resolution: Resolution) => {
+    setResolutions((prev) => {
+      const next = new Map(prev);
+      next.set(fitId, resolution);
+      return next;
+    });
   };
 
-  const confirmTransfer = (dt: DetectedTransfer) => {
-    if (confirmedTransferFitIds.has(dt.fitId)) return;
-    setConfirmedTransfers((prev) => [
-      ...prev,
-      {
-        fitId: dt.fitId,
-        amount: dt.amount,
-        date: dt.date,
-        description: dt.description,
-        direction: dt.suggestedDirection,
-        counterpartyEntityType: dt.suggestedEntityType,
-        counterpartyEntityId: dt.suggestedEntityId,
-        counterpartyEntityName: dt.suggestedEntityName,
-      },
-    ]);
+  const getResolution = (fitId: string): Resolution | undefined => resolutions.get(fitId);
+
+  // ---------------------------------------------------------------------------
+  // Inline entity creation
+  // ---------------------------------------------------------------------------
+
+  const handleCreateBusiness = async (fitId: string) => {
+    if (!newBusinessName.trim()) return;
+    setIsCreatingBusiness(true);
+    try {
+      const res = await client.v1.businesses.$post({
+        json: { name: newBusinessName.trim(), defaultCurrency: parseResult?.currency ?? 'BRL' },
+      });
+      if (res.ok) {
+        const created = await res.json();
+        setLocalBusinesses((prev) => [...prev, created as unknown as Business]);
+        setResolution(fitId, {
+          ...getResolution(fitId)!,
+          entityId: (created as unknown as { id: string }).id,
+          entityName: newBusinessName.trim(),
+          entityType: 'business',
+        });
+        setCreatingEntityForFitId(null);
+        setNewBusinessName('');
+      }
+    } finally {
+      setIsCreatingBusiness(false);
+    }
   };
 
-  const updateTransferDirection = (fitId: string, direction: ConfirmedTransfer['direction']) => {
-    setConfirmedTransfers((prev) =>
-      prev.map((ct) => (ct.fitId === fitId ? { ...ct, direction } : ct))
-    );
-  };
-
-  const updateTransferEntity = (fitId: string, entityIdVal: string) => {
-    const biz = businesses.find((b) => b.id === entityIdVal);
-    if (!biz) return;
-    setConfirmedTransfers((prev) =>
-      prev.map((ct) =>
-        ct.fitId === fitId
-          ? { ...ct, counterpartyEntityId: entityIdVal, counterpartyEntityName: biz.name, counterpartyEntityType: 'business' }
-          : ct
-      )
-    );
-  };
-
-  // --- Investment account creation ---
-
-  const handleCreateInvestmentAccount = async () => {
+  const handleCreateInvestmentAccount = async (fitId: string) => {
     if (!newInvestmentAccountName.trim()) return;
     setIsCreatingInvestmentAccount(true);
     try {
@@ -414,8 +462,12 @@ export function StatementUploadDialog({
         personalAccountId: entityType === 'personal' ? entityId : undefined,
       });
       if (created) {
-        setSelectedInvestmentAccountId(created.id);
-        setShowCreateInvestmentAccount(false);
+        setLocalInvestmentAccounts((prev) => [...prev, created]);
+        setResolution(fitId, {
+          ...getResolution(fitId)!,
+          investmentAccountId: created.id,
+        });
+        setCreatingInvAccountForFitId(null);
         setNewInvestmentAccountName('');
         setNewInvestmentAccountBroker('');
       }
@@ -424,29 +476,108 @@ export function StatementUploadDialog({
     }
   };
 
-  // --- Import ---
+  // ---------------------------------------------------------------------------
+  // Reconciliation management
+  // ---------------------------------------------------------------------------
 
-  // Investment transfer fitIds for exclusion from regular transactions
-  const investmentTransferFitIds = new Set(
-    !skipInvestmentTransfers && selectedInvestmentAccountId
-      ? (parseResult?.detectedInvestmentTransfers ?? []).map((it) => it.fitId)
-      : []
-  );
+  const toggleReconciliation = (fitId: string) => {
+    setReconciliationChoices((prev) => {
+      const next = new Map(prev);
+      const current = next.get(fitId);
+      if (current) {
+        next.set(fitId, { ...current, action: current.action === 'update' ? 'keep' : 'update' });
+      }
+      return next;
+    });
+  };
 
-  // Transactions that are selected but NOT confirmed as transfers or investment transfers
+  // ---------------------------------------------------------------------------
+  // Computed: build import payload
+  // ---------------------------------------------------------------------------
+
+  const resolvedTransfers: Array<{
+    externalId: string;
+    date: string;
+    amount: number;
+    description: string;
+    direction: 'profit_distribution' | 'capital_injection' | 'reimbursement';
+    counterpartyEntityType: 'business' | 'personal';
+    counterpartyEntityId: string;
+  }> = [];
+
+  const resolvedInvestmentTransfers: Array<{
+    externalId: string;
+    date: string;
+    amount: number;
+    description: string;
+    direction: 'investment_deposit' | 'investment_withdrawal';
+    investmentAccountId: string;
+  }> = [];
+
+  const resolvedCreditCards: Array<{
+    bankName: string;
+    lastFourDigits: string;
+    closingDay: number;
+    dueDay: number;
+    currency: string;
+  }> = [];
+
+  const resolvedFitIds = new Set<string>();
+  const creditCardBanksSeen = new Set<string>();
+
+  if (parseResult) {
+    for (const tx of parseResult.transactions) {
+      if (tx.reconciliationStatus === 'duplicate') continue;
+      const res = getResolution(tx.fitId);
+      if (!res) continue;
+
+      if (res.classification === 'entity_transfer' && res.entityId && res.direction && res.entityType) {
+        resolvedTransfers.push({
+          externalId: tx.fitId,
+          date: tx.date,
+          amount: tx.amount,
+          description: tx.description,
+          direction: res.direction,
+          counterpartyEntityType: res.entityType,
+          counterpartyEntityId: res.entityId,
+        });
+        resolvedFitIds.add(tx.fitId);
+      } else if (res.classification === 'investment_transfer' && res.investmentAccountId && res.investmentDirection) {
+        resolvedInvestmentTransfers.push({
+          externalId: tx.fitId,
+          date: tx.date,
+          amount: tx.amount,
+          description: tx.description,
+          direction: res.investmentDirection,
+          investmentAccountId: res.investmentAccountId,
+        });
+        resolvedFitIds.add(tx.fitId);
+      } else if (res.classification === 'credit_card_payment' && res.creditCard && res.creditCard.lastFourDigits.length === 4) {
+        const key = res.creditCard.bankName;
+        if (!creditCardBanksSeen.has(key)) {
+          creditCardBanksSeen.add(key);
+          resolvedCreditCards.push(res.creditCard);
+        }
+        resolvedFitIds.add(tx.fitId);
+      }
+    }
+  }
+
   const selectedTransactions = (parseResult?.transactions ?? []).filter(
-    (t) => t.selected && !confirmedTransferFitIds.has(t.fitId) && !investmentTransferFitIds.has(t.fitId)
+    (t) => t.selected && !resolvedFitIds.has(t.fitId) && t.reconciliationStatus === 'new'
   );
 
-  // Investment transfers to import
-  const confirmedInvestmentTransfers = !skipInvestmentTransfers && selectedInvestmentAccountId
-    ? (parseResult?.detectedInvestmentTransfers ?? [])
-    : [];
+  const reconciliationsToApply = Array.from(reconciliationChoices.values()).filter(
+    (r) => r.action === 'update'
+  );
+
+  // ---------------------------------------------------------------------------
+  // Import
+  // ---------------------------------------------------------------------------
 
   const handleImport = async () => {
-    if (!parseResult || (selectedTransactions.length === 0 && confirmedTransfers.length === 0 && confirmedInvestmentTransfers.length === 0)) return;
+    if (!parseResult) return;
     setIsImporting(true);
-
     try {
       const res = await client.v1['bank-statements'].import.$post({
         json: {
@@ -463,38 +594,24 @@ export function StatementUploadDialog({
             amount: txn.amount,
             type: txn.type,
           })),
-          transfers: confirmedTransfers.length > 0
-            ? confirmedTransfers.map((ct) => ({
-                externalId: ct.fitId,
-                date: ct.date,
-                amount: ct.amount,
-                description: ct.description,
-                direction: ct.direction,
-                counterpartyEntityType: ct.counterpartyEntityType,
-                counterpartyEntityId: ct.counterpartyEntityId,
-              }))
+          transfers: resolvedTransfers.length > 0 ? resolvedTransfers : undefined,
+          creditCards: resolvedCreditCards.length > 0 ? resolvedCreditCards : undefined,
+          investmentTransfers: resolvedInvestmentTransfers.length > 0
+            ? resolvedInvestmentTransfers
             : undefined,
-          creditCards: creditCardsToCreate.length > 0 && !skipCreditCards
-            ? creditCardsToCreate.filter((cc) => cc.lastFourDigits.length === 4)
-            : undefined,
-          investmentTransfers: confirmedInvestmentTransfers.length > 0
-            ? confirmedInvestmentTransfers.map((it) => ({
-                externalId: it.fitId,
-                date: it.date,
-                amount: it.amount,
-                description: it.description,
-                direction: it.direction,
-                investmentAccountId: selectedInvestmentAccountId,
+          reconciliations: reconciliationsToApply.length > 0
+            ? reconciliationsToApply.map((r) => ({
+                existingTransactionId: r.existingTransactionId,
+                externalId: r.externalId,
+                updates: r.updates,
               }))
             : undefined,
         },
       });
-
       if (!res.ok) {
         const err = (await res.json()) as { error?: { message?: string } };
         throw new Error(err.error?.message ?? 'Import failed');
       }
-
       const data = await res.json();
       setImportResult(data);
       setCurrentStep('confirm');
@@ -510,7 +627,9 @@ export function StatementUploadDialog({
     handleClose();
   };
 
-  // --- Toggle transaction selection ---
+  // ---------------------------------------------------------------------------
+  // Toggle transaction selection
+  // ---------------------------------------------------------------------------
 
   const toggleTransaction = (fitId: string) => {
     if (!parseResult) return;
@@ -524,26 +643,31 @@ export function StatementUploadDialog({
 
   const toggleAllNew = () => {
     if (!parseResult) return;
-    const newTxs = parseResult.transactions.filter((t) => !t.isDuplicate);
+    const newTxs = parseResult.transactions.filter(
+      (t) => t.reconciliationStatus === 'new' && !resolvedFitIds.has(t.fitId)
+    );
     const allSelected = newTxs.every((t) => t.selected);
     setParseResult({
       ...parseResult,
       transactions: parseResult.transactions.map((t) =>
-        t.isDuplicate ? t : { ...t, selected: !allSelected }
+        t.reconciliationStatus === 'new' && !resolvedFitIds.has(t.fitId)
+          ? { ...t, selected: !allSelected }
+          : t
       ),
     });
   };
 
-  // --- Step indicators ---
+  // ---------------------------------------------------------------------------
+  // Step indicators
+  // ---------------------------------------------------------------------------
 
   const visibleSteps = STEPS.filter((s) => !shouldSkipStep(s));
   const stepNumber = visibleSteps.indexOf(currentStep) + 1;
   const totalSteps = visibleSteps.length;
 
-  // Build a lookup of detected transfers by fitId for quick access
-  const detectedTransferMap = new Map(
-    (parseResult?.detectedTransfers ?? []).map((dt) => [dt.fitId, dt])
-  );
+  // ---------------------------------------------------------------------------
+  // Render
+  // ---------------------------------------------------------------------------
 
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o) handleClose(); }}>
@@ -560,7 +684,9 @@ export function StatementUploadDialog({
         </DialogHeader>
 
         <div className="flex-1 overflow-y-auto py-2">
-          {/* STEP: Upload */}
+          {/* ============================================================ */}
+          {/* STEP: Upload                                                 */}
+          {/* ============================================================ */}
           {currentStep === 'upload' && (
             <div className="space-y-4">
               <div
@@ -579,29 +705,21 @@ export function StatementUploadDialog({
                 className="hidden"
                 onChange={handleFileChange}
               />
-
               {files.length > 0 && (
                 <div className="space-y-2">
                   {files.map((file, idx) => (
-                    <div
-                      key={idx}
-                      className="flex items-center justify-between rounded-lg border border-slate-700 bg-slate-800/50 px-3 py-2"
-                    >
+                    <div key={idx} className="flex items-center justify-between rounded-lg border border-slate-700 bg-slate-800/50 px-3 py-2">
                       <div className="flex items-center gap-2 text-emerald-400">
                         <FileText className="h-4 w-4" />
                         <span className="text-sm">{file.name}</span>
                       </div>
-                      <button
-                        onClick={() => removeFile(idx)}
-                        className="text-slate-500 hover:text-slate-300"
-                      >
+                      <button onClick={() => removeFile(idx)} className="text-slate-500 hover:text-slate-300">
                         <X className="h-4 w-4" />
                       </button>
                     </div>
                   ))}
                 </div>
               )}
-
               {parseError && (
                 <div className="flex items-start gap-2 rounded-lg border border-red-500/30 bg-red-500/10 p-3">
                   <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-red-400" />
@@ -611,7 +729,9 @@ export function StatementUploadDialog({
             </div>
           )}
 
-          {/* STEP: Entity selection */}
+          {/* ============================================================ */}
+          {/* STEP: Entity selection                                       */}
+          {/* ============================================================ */}
           {currentStep === 'entity' && parseResult && (
             <div className="space-y-4">
               <div className="rounded-lg border border-slate-700 bg-slate-800/50 p-4">
@@ -621,30 +741,21 @@ export function StatementUploadDialog({
                   {t('entity.account')}: {parseResult.accountId} · {parseResult.currency}
                 </p>
               </div>
-
               <div className="space-y-3">
                 <Label className="text-slate-300">{t('entity.selectEntity')}</Label>
                 <Select value={entityType} onValueChange={(v) => {
                   setEntityType(v as EntityType);
-                  if (v === 'personal' && personalAccountId) {
-                    setEntityId(personalAccountId);
-                  } else {
-                    setEntityId('');
-                  }
+                  if (v === 'personal' && personalAccountId) setEntityId(personalAccountId);
+                  else setEntityId('');
                 }}>
                   <SelectTrigger className="border-slate-700 bg-slate-800 text-white">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent className="border-slate-700 bg-slate-800">
-                    {personalAccountId && (
-                      <SelectItem value="personal">{t('entity.personal')}</SelectItem>
-                    )}
-                    {businesses.length > 0 && (
-                      <SelectItem value="business">{t('entity.business')}</SelectItem>
-                    )}
+                    {personalAccountId && <SelectItem value="personal">{t('entity.personal')}</SelectItem>}
+                    {businesses.length > 0 && <SelectItem value="business">{t('entity.business')}</SelectItem>}
                   </SelectContent>
                 </Select>
-
                 {entityType === 'business' && (
                   <Select value={entityId} onValueChange={setEntityId}>
                     <SelectTrigger className="border-slate-700 bg-slate-800 text-white">
@@ -652,9 +763,7 @@ export function StatementUploadDialog({
                     </SelectTrigger>
                     <SelectContent className="border-slate-700 bg-slate-800">
                       {businesses.map((biz) => (
-                        <SelectItem key={biz.id} value={biz.id}>
-                          {biz.name}
-                        </SelectItem>
+                        <SelectItem key={biz.id} value={biz.id}>{biz.name}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
@@ -663,256 +772,263 @@ export function StatementUploadDialog({
             </div>
           )}
 
-          {/* STEP: Credit card setup */}
-          {currentStep === 'credit-cards' && parseResult && (
-            <div className="space-y-4">
-              <div className="flex items-start gap-2 rounded-lg border border-blue-500/30 bg-blue-500/10 p-3">
-                <CreditCard className="mt-0.5 h-4 w-4 shrink-0 text-blue-400" />
-                <div>
-                  <p className="text-sm font-medium text-blue-300">{t('creditCards.detected')}</p>
-                  <p className="mt-1 text-xs text-blue-400">
-                    {t('creditCards.detectedDescription', { count: parseResult.detectedCreditCardPayments.length })}
-                  </p>
-                </div>
-              </div>
-
-              {parseResult.detectedCreditCardPayments.map((payment) => (
-                <div
-                  key={payment.fitId}
-                  className="rounded-lg border border-slate-700 bg-slate-800/50 p-3"
-                >
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm text-slate-300">{payment.date}</span>
-                    <span className="text-sm font-medium text-red-400">
-                      {formatCurrency(payment.amount, parseResult.currency)}
-                    </span>
-                  </div>
-                </div>
-              ))}
-
-              {creditCardsToCreate.map((card, idx) => (
-                <div key={idx} className="space-y-3 rounded-lg border border-slate-700 bg-slate-800/30 p-4">
-                  <p className="text-sm font-medium text-white">{t('creditCards.createNew')}</p>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="space-y-1">
-                      <Label className="text-xs text-slate-400">{t('creditCards.bankName')}</Label>
-                      <Input
-                        value={card.bankName}
-                        onChange={(e) => {
-                          const updated = [...creditCardsToCreate];
-                          updated[idx] = { ...card, bankName: e.target.value };
-                          setCreditCardsToCreate(updated);
-                        }}
-                        className="border-slate-700 bg-slate-800 text-white h-9 text-sm"
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <Label className="text-xs text-slate-400">{t('creditCards.lastFour')}</Label>
-                      <Input
-                        value={card.lastFourDigits}
-                        onChange={(e) => {
-                          const val = e.target.value.replace(/\D/g, '').slice(0, 4);
-                          const updated = [...creditCardsToCreate];
-                          updated[idx] = { ...card, lastFourDigits: val };
-                          setCreditCardsToCreate(updated);
-                        }}
-                        placeholder="1234"
-                        maxLength={4}
-                        className="border-slate-700 bg-slate-800 text-white h-9 text-sm"
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <Label className="text-xs text-slate-400">{t('creditCards.closingDay')}</Label>
-                      <Input
-                        type="number"
-                        min={1}
-                        max={31}
-                        value={card.closingDay}
-                        onChange={(e) => {
-                          const updated = [...creditCardsToCreate];
-                          updated[idx] = { ...card, closingDay: parseInt(e.target.value) || 1 };
-                          setCreditCardsToCreate(updated);
-                        }}
-                        className="border-slate-700 bg-slate-800 text-white h-9 text-sm"
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <Label className="text-xs text-slate-400">{t('creditCards.dueDay')}</Label>
-                      <Input
-                        type="number"
-                        min={1}
-                        max={31}
-                        value={card.dueDay}
-                        onChange={(e) => {
-                          const updated = [...creditCardsToCreate];
-                          updated[idx] = { ...card, dueDay: parseInt(e.target.value) || 10 };
-                          setCreditCardsToCreate(updated);
-                        }}
-                        className="border-slate-700 bg-slate-800 text-white h-9 text-sm"
-                      />
-                    </div>
-                  </div>
-                </div>
-              ))}
-
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setSkipCreditCards(true)}
-                className="text-slate-400 hover:text-slate-300"
-              >
-                {t('creditCards.skip')}
-              </Button>
-            </div>
-          )}
-
-          {/* STEP: Investment account setup */}
-          {currentStep === 'investment-accounts' && parseResult && (
+          {/* ============================================================ */}
+          {/* STEP: Resolve ambiguous transactions                         */}
+          {/* ============================================================ */}
+          {currentStep === 'resolve' && parseResult && (
             <div className="space-y-4">
               <div className="flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3">
-                <Wallet className="mt-0.5 h-4 w-4 shrink-0 text-amber-400" />
+                <HelpCircle className="mt-0.5 h-4 w-4 shrink-0 text-amber-400" />
                 <div>
-                  <p className="text-sm font-medium text-amber-300">{t('investmentTransfers.detected')}</p>
+                  <p className="text-sm font-medium text-amber-300">{t('resolve.title')}</p>
                   <p className="mt-1 text-xs text-amber-400">
-                    {t('investmentTransfers.detectedDescription', { count: parseResult.detectedInvestmentTransfers.length })}
+                    {t('resolve.needsResolution', { count: parseResult.summary.needsResolutionCount })}
                   </p>
                 </div>
               </div>
 
-              {parseResult.detectedInvestmentTransfers.map((it) => (
-                <div
-                  key={it.fitId}
-                  className="rounded-lg border border-slate-700 bg-slate-800/50 p-3"
-                >
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm text-slate-300">{it.date}</span>
-                      <span className={`rounded-full px-2 py-0.5 text-[10px] ${
-                        it.direction === 'investment_deposit'
-                          ? 'bg-amber-500/20 text-amber-300'
-                          : 'bg-emerald-500/20 text-emerald-300'
-                      }`}>
-                        {it.direction === 'investment_deposit' ? t('investmentTransfers.deposit') : t('investmentTransfers.withdrawal')}
-                      </span>
-                    </div>
-                    <span className={`text-sm font-medium ${
-                      it.direction === 'investment_deposit' ? 'text-red-400' : 'text-emerald-400'
-                    }`}>
-                      {it.direction === 'investment_deposit' ? '-' : '+'}
-                      {formatCurrency(it.amount, parseResult.currency)}
-                    </span>
-                  </div>
-                  <p className="mt-1 text-xs text-slate-400">{it.description}</p>
-                </div>
-              ))}
-
               <div className="space-y-3">
-                <Label className="text-slate-300">{t('investmentTransfers.selectAccount')}</Label>
-                {investmentAccounts.length > 0 && (
-                  <Select value={selectedInvestmentAccountId} onValueChange={setSelectedInvestmentAccountId}>
-                    <SelectTrigger className="border-slate-700 bg-slate-800 text-white">
-                      <SelectValue placeholder={t('investmentTransfers.selectAccountPlaceholder')} />
-                    </SelectTrigger>
-                    <SelectContent className="border-slate-700 bg-slate-800">
-                      {investmentAccounts.map((acc) => (
-                        <SelectItem key={acc.id} value={acc.id}>
-                          {acc.name}{acc.broker ? ` (${acc.broker})` : ''}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                )}
-
-                {!showCreateInvestmentAccount && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setShowCreateInvestmentAccount(true)}
-                    className="w-full border-dashed border-slate-700 text-slate-400 hover:border-slate-500 hover:text-white"
-                  >
-                    <Plus className="mr-2 h-4 w-4" />
-                    {t('investmentTransfers.createNew')}
-                  </Button>
-                )}
-
-                {showCreateInvestmentAccount && (
-                  <div className="space-y-3 rounded-lg border border-slate-700 bg-slate-800/30 p-4">
-                    <p className="text-sm font-medium text-white">{t('investmentTransfers.createNew')}</p>
-                    <div className="grid grid-cols-2 gap-3">
-                      <div className="space-y-1">
-                        <Label className="text-xs text-slate-400">{t('investmentTransfers.accountName')}</Label>
-                        <Input
-                          value={newInvestmentAccountName}
-                          onChange={(e) => setNewInvestmentAccountName(e.target.value)}
-                          className="border-slate-700 bg-slate-800 text-white h-9 text-sm"
-                        />
-                      </div>
-                      <div className="space-y-1">
-                        <Label className="text-xs text-slate-400">{t('investmentTransfers.broker')}</Label>
-                        <Input
-                          value={newInvestmentAccountBroker}
-                          onChange={(e) => setNewInvestmentAccountBroker(e.target.value)}
-                          className="border-slate-700 bg-slate-800 text-white h-9 text-sm"
-                        />
-                      </div>
-                    </div>
-                    <div className="flex justify-end gap-2">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => setShowCreateInvestmentAccount(false)}
-                        className="text-slate-400 hover:text-white"
-                      >
-                        {tCommon('cancel')}
-                      </Button>
-                      <Button
-                        size="sm"
-                        disabled={!newInvestmentAccountName.trim() || isCreatingInvestmentAccount}
-                        onClick={handleCreateInvestmentAccount}
-                        className="bg-amber-600 text-white hover:bg-amber-700"
-                      >
-                        {isCreatingInvestmentAccount ? (
-                          <span className="flex items-center gap-2">
-                            <Loader2 className="h-3 w-3 animate-spin" />
-                            {tCommon('loading')}
+                {parseResult.transactions
+                  .filter((tx) => tx.needsResolution && tx.reconciliationStatus !== 'duplicate')
+                  .map((tx) => {
+                    const resolution = getResolution(tx.fitId);
+                    return (
+                      <div key={tx.fitId} className="rounded-lg border border-slate-700 bg-slate-800/30 p-4 space-y-3">
+                        {/* Transaction header */}
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <span className="text-xs text-slate-400">{tx.date}</span>
+                            <p className="text-sm font-medium text-white">{tx.description}</p>
+                            <p className="text-xs text-slate-500 truncate max-w-md" title={tx.fullDescription}>
+                              {tx.fullDescription}
+                            </p>
+                          </div>
+                          <span className={`text-sm font-medium ${tx.type === 'income' ? 'text-emerald-400' : 'text-red-400'}`}>
+                            {tx.type === 'income' ? '+' : '-'}
+                            {formatCurrency(tx.amount, parseResult.currency)}
                           </span>
-                        ) : (
-                          t('investmentTransfers.createNew')
-                        )}
-                      </Button>
-                    </div>
-                  </div>
-                )}
-              </div>
+                        </div>
 
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setSkipInvestmentTransfers(true)}
-                className="text-slate-400 hover:text-slate-300"
-              >
-                {t('investmentTransfers.skip')}
-              </Button>
+                        {/* Classification options */}
+                        <div className="space-y-2">
+                          <p className="text-xs font-medium text-slate-400">{t('resolve.classifyAs')}</p>
+                          {tx.candidates.map((candidate, ci) => {
+                            const isSelected = resolution?.classification === candidate.type;
+                            return (
+                              <div key={ci}>
+                                <label
+                                  className={`flex items-start gap-2 rounded-md border px-3 py-2 cursor-pointer transition-colors ${
+                                    isSelected
+                                      ? 'border-emerald-500/50 bg-emerald-500/10'
+                                      : 'border-slate-700 bg-slate-800/50 hover:border-slate-600'
+                                  }`}
+                                  onClick={() => {
+                                    const newRes: Resolution = { classification: candidate.type };
+                                    if (candidate.type === 'entity_transfer' && candidate.transferDetails) {
+                                      newRes.entityId = candidate.transferDetails.suggestedEntityId;
+                                      newRes.entityName = candidate.transferDetails.suggestedEntityName;
+                                      newRes.entityType = candidate.transferDetails.suggestedEntityType;
+                                      newRes.direction = candidate.transferDetails.suggestedDirection;
+                                    }
+                                    if (candidate.type === 'investment_transfer' && candidate.investmentDetails) {
+                                      newRes.investmentDirection = candidate.investmentDetails.direction;
+                                      newRes.investmentAccountId = candidate.investmentDetails.suggestedAccountId;
+                                    }
+                                    setResolution(tx.fitId, newRes);
+                                  }}
+                                >
+                                  <div className={`mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full border ${
+                                    isSelected ? 'border-emerald-500 bg-emerald-500' : 'border-slate-500'
+                                  }`}>
+                                    {isSelected && <Check className="h-3 w-3 text-white" />}
+                                  </div>
+                                  <div className="flex-1 min-w-0">
+                                    <span className="text-sm text-slate-200">
+                                      {candidate.type === 'regular_transaction' && t('resolve.regularTransaction')}
+                                      {candidate.type === 'entity_transfer' && (
+                                        <>
+                                          {t('resolve.entityTransfer')}
+                                          {candidate.transferDetails && (
+                                            <span className="text-slate-400"> — {candidate.transferDetails.suggestedEntityName}</span>
+                                          )}
+                                        </>
+                                      )}
+                                      {candidate.type === 'investment_transfer' && (
+                                        <>
+                                          {t('resolve.investmentTransfer')}
+                                          {candidate.investmentDetails && (
+                                            <span className="text-slate-400">
+                                              {' '}— {candidate.investmentDetails.direction === 'investment_deposit'
+                                                ? t('investmentTransfers.deposit')
+                                                : t('investmentTransfers.withdrawal')}
+                                            </span>
+                                          )}
+                                        </>
+                                      )}
+                                      {candidate.type === 'credit_card_payment' && t('resolve.creditCardPayment')}
+                                    </span>
+                                  </div>
+                                </label>
+
+                                {/* Sub-options when this candidate is selected */}
+                                {isSelected && candidate.type === 'entity_transfer' && (
+                                  <div className="ml-6 mt-2 space-y-2">
+                                    <Select
+                                      value={resolution?.entityId ?? ''}
+                                      onValueChange={(v) => {
+                                        const biz = allBusinesses.find((b) => b.id === v);
+                                        if (biz) {
+                                          setResolution(tx.fitId, {
+                                            ...resolution!,
+                                            entityId: v,
+                                            entityName: biz.name,
+                                            entityType: 'business',
+                                          });
+                                        }
+                                      }}
+                                    >
+                                      <SelectTrigger className="h-8 border-slate-700 bg-slate-800 text-white text-xs">
+                                        <SelectValue placeholder={t('resolve.selectEntity')} />
+                                      </SelectTrigger>
+                                      <SelectContent className="border-slate-700 bg-slate-900">
+                                        {allBusinesses.map((biz) => (
+                                          <SelectItem key={biz.id} value={biz.id}>{biz.name}</SelectItem>
+                                        ))}
+                                      </SelectContent>
+                                    </Select>
+                                    <Select
+                                      value={resolution?.direction ?? ''}
+                                      onValueChange={(v) =>
+                                        setResolution(tx.fitId, {
+                                          ...resolution!,
+                                          direction: v as Resolution['direction'],
+                                        })
+                                      }
+                                    >
+                                      <SelectTrigger className="h-8 border-slate-700 bg-slate-800 text-white text-xs">
+                                        <SelectValue placeholder={t('resolve.direction')} />
+                                      </SelectTrigger>
+                                      <SelectContent className="border-slate-700 bg-slate-900">
+                                        <SelectItem value="capital_injection">{t('transfers.directionOptions.capital_injection')}</SelectItem>
+                                        <SelectItem value="profit_distribution">{t('transfers.directionOptions.profit_distribution')}</SelectItem>
+                                        <SelectItem value="reimbursement">{t('transfers.directionOptions.reimbursement')}</SelectItem>
+                                      </SelectContent>
+                                    </Select>
+
+                                    {creatingEntityForFitId === tx.fitId ? (
+                                      <div className="space-y-2 rounded-md border border-slate-700 bg-slate-800/50 p-2">
+                                        <Input
+                                          value={newBusinessName}
+                                          onChange={(e) => setNewBusinessName(e.target.value)}
+                                          placeholder={t('resolve.businessName')}
+                                          className="h-8 border-slate-700 bg-slate-800 text-white text-xs"
+                                        />
+                                        <div className="flex gap-2">
+                                          <Button size="sm" variant="ghost" className="h-7 text-xs text-slate-400" onClick={() => setCreatingEntityForFitId(null)}>
+                                            {tCommon('cancel')}
+                                          </Button>
+                                          <Button size="sm" className="h-7 text-xs bg-emerald-600 text-white hover:bg-emerald-700"
+                                            disabled={!newBusinessName.trim() || isCreatingBusiness}
+                                            onClick={() => handleCreateBusiness(tx.fitId)}>
+                                            {isCreatingBusiness ? <Loader2 className="h-3 w-3 animate-spin" /> : t('resolve.createBusiness')}
+                                          </Button>
+                                        </div>
+                                      </div>
+                                    ) : (
+                                      <Button size="sm" variant="outline" className="h-7 text-xs w-full border-dashed border-slate-700 text-slate-400"
+                                        onClick={() => setCreatingEntityForFitId(tx.fitId)}>
+                                        <Plus className="mr-1 h-3 w-3" /> {t('resolve.createBusiness')}
+                                      </Button>
+                                    )}
+                                  </div>
+                                )}
+
+                                {isSelected && candidate.type === 'investment_transfer' && (
+                                  <div className="ml-6 mt-2 space-y-2">
+                                    {allInvestmentAccounts.length > 0 && (
+                                      <Select
+                                        value={resolution?.investmentAccountId ?? ''}
+                                        onValueChange={(v) =>
+                                          setResolution(tx.fitId, { ...resolution!, investmentAccountId: v })
+                                        }
+                                      >
+                                        <SelectTrigger className="h-8 border-slate-700 bg-slate-800 text-white text-xs">
+                                          <SelectValue placeholder={t('resolve.selectAccount')} />
+                                        </SelectTrigger>
+                                        <SelectContent className="border-slate-700 bg-slate-900">
+                                          {allInvestmentAccounts.map((acc) => (
+                                            <SelectItem key={acc.id} value={acc.id}>
+                                              {acc.name}{acc.broker ? ` (${acc.broker})` : ''}
+                                            </SelectItem>
+                                          ))}
+                                        </SelectContent>
+                                      </Select>
+                                    )}
+                                    {creatingInvAccountForFitId === tx.fitId ? (
+                                      <div className="space-y-2 rounded-md border border-slate-700 bg-slate-800/50 p-2">
+                                        <Input
+                                          value={newInvestmentAccountName}
+                                          onChange={(e) => setNewInvestmentAccountName(e.target.value)}
+                                          placeholder={t('investmentTransfers.accountName')}
+                                          className="h-8 border-slate-700 bg-slate-800 text-white text-xs"
+                                        />
+                                        <Input
+                                          value={newInvestmentAccountBroker}
+                                          onChange={(e) => setNewInvestmentAccountBroker(e.target.value)}
+                                          placeholder={t('investmentTransfers.broker')}
+                                          className="h-8 border-slate-700 bg-slate-800 text-white text-xs"
+                                        />
+                                        <div className="flex gap-2">
+                                          <Button size="sm" variant="ghost" className="h-7 text-xs text-slate-400" onClick={() => setCreatingInvAccountForFitId(null)}>
+                                            {tCommon('cancel')}
+                                          </Button>
+                                          <Button size="sm" className="h-7 text-xs bg-amber-600 text-white hover:bg-amber-700"
+                                            disabled={!newInvestmentAccountName.trim() || isCreatingInvestmentAccount}
+                                            onClick={() => handleCreateInvestmentAccount(tx.fitId)}>
+                                            {isCreatingInvestmentAccount ? <Loader2 className="h-3 w-3 animate-spin" /> : t('resolve.createInvestmentAccount')}
+                                          </Button>
+                                        </div>
+                                      </div>
+                                    ) : (
+                                      <Button size="sm" variant="outline" className="h-7 text-xs w-full border-dashed border-slate-700 text-slate-400"
+                                        onClick={() => setCreatingInvAccountForFitId(tx.fitId)}>
+                                        <Plus className="mr-1 h-3 w-3" /> {t('resolve.createInvestmentAccount')}
+                                      </Button>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  })}
+              </div>
             </div>
           )}
 
-          {/* STEP: Preview */}
+          {/* ============================================================ */}
+          {/* STEP: Preview                                                */}
+          {/* ============================================================ */}
           {currentStep === 'preview' && parseResult && (
             <div className="space-y-4">
               {/* Summary bar */}
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
                 <div className="rounded-lg border border-slate-700 bg-slate-800/50 p-3 text-center">
                   <p className="text-xs text-slate-400">{t('preview.new')}</p>
-                  <p className="text-lg font-bold text-emerald-400">
-                    {selectedTransactions.length}
-                  </p>
+                  <p className="text-lg font-bold text-emerald-400">{selectedTransactions.length}</p>
                 </div>
                 <div className="rounded-lg border border-slate-700 bg-slate-800/50 p-3 text-center">
                   <p className="text-xs text-slate-400">{t('preview.duplicates')}</p>
-                  <p className="text-lg font-bold text-slate-500">
-                    {parseResult.summary.duplicateCount}
-                  </p>
+                  <p className="text-lg font-bold text-slate-500">{parseResult.summary.duplicateCount}</p>
                 </div>
+                {parseResult.summary.changedCount > 0 && (
+                  <div className="rounded-lg border border-slate-700 bg-slate-800/50 p-3 text-center">
+                    <p className="text-xs text-slate-400">{t('preview.changed')}</p>
+                    <p className="text-lg font-bold text-amber-400">{parseResult.summary.changedCount}</p>
+                  </div>
+                )}
                 <div className="rounded-lg border border-slate-700 bg-slate-800/50 p-3 text-center">
                   <p className="text-xs text-slate-400">{t('preview.income')}</p>
                   <p className="text-lg font-bold text-emerald-400">
@@ -933,39 +1049,88 @@ export function StatementUploadDialog({
                 </div>
               </div>
 
-              {/* Detected transfers banner */}
-              {confirmedTransfers.length > 0 && (
+              {/* Transfers / Investment transfers banners */}
+              {resolvedTransfers.length > 0 && (
                 <div className="flex items-start gap-2 rounded-lg border border-purple-500/30 bg-purple-500/10 p-3">
                   <ArrowLeftRight className="mt-0.5 h-4 w-4 shrink-0 text-purple-400" />
                   <div>
                     <p className="text-sm font-medium text-purple-300">{t('transfers.detected')}</p>
-                    <p className="mt-0.5 text-xs text-purple-400">
-                      {t('transfers.confirmedCount', { count: confirmedTransfers.length })}
-                    </p>
+                    <p className="mt-0.5 text-xs text-purple-400">{t('transfers.confirmedCount', { count: resolvedTransfers.length })}</p>
                   </div>
                 </div>
               )}
-
-              {/* Investment transfers banner */}
-              {confirmedInvestmentTransfers.length > 0 && (
+              {resolvedInvestmentTransfers.length > 0 && (
                 <div className="flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3">
                   <Wallet className="mt-0.5 h-4 w-4 shrink-0 text-amber-400" />
                   <div>
                     <p className="text-sm font-medium text-amber-300">{t('investmentTransfers.detected')}</p>
-                    <p className="mt-0.5 text-xs text-amber-400">
-                      {t('investmentTransfers.confirmedCount', { count: confirmedInvestmentTransfers.length })}
-                    </p>
+                    <p className="mt-0.5 text-xs text-amber-400">{t('investmentTransfers.confirmedCount', { count: resolvedInvestmentTransfers.length })}</p>
                   </div>
+                </div>
+              )}
+
+              {/* Changed transactions (reconciliation) */}
+              {parseResult.summary.changedCount > 0 && (
+                <div className="space-y-2">
+                  <div className="flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3">
+                    <RefreshCw className="mt-0.5 h-4 w-4 shrink-0 text-amber-400" />
+                    <div>
+                      <p className="text-sm font-medium text-amber-300">{t('reconciliation.changedCount', { count: parseResult.summary.changedCount })}</p>
+                    </div>
+                  </div>
+                  {parseResult.transactions
+                    .filter((tx) => tx.reconciliationStatus === 'changed')
+                    .map((tx) => {
+                      const choice = reconciliationChoices.get(tx.fitId);
+                      return (
+                        <div key={tx.fitId} className="rounded-lg border border-amber-500/20 bg-slate-800/50 p-3 space-y-2">
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <span className="text-xs text-slate-400">{tx.date}</span>
+                              <p className="text-sm text-white">{tx.description}</p>
+                            </div>
+                            <span className={`text-sm font-medium ${tx.type === 'income' ? 'text-emerald-400' : 'text-red-400'}`}>
+                              {tx.type === 'income' ? '+' : '-'}{formatCurrency(tx.amount, parseResult.currency)}
+                            </span>
+                          </div>
+                          {tx.diffs && tx.diffs.map((diff, di) => (
+                            <div key={di} className="flex items-center gap-2 text-xs">
+                              <span className="rounded bg-amber-500/20 px-1.5 py-0.5 text-amber-300 font-medium">
+                                {t(`reconciliation.field${diff.field.charAt(0).toUpperCase() + diff.field.slice(1)}` as Parameters<typeof t>[0])}
+                              </span>
+                              <span className="text-slate-400 line-through">{diff.existingValue}</span>
+                              <ArrowRight className="h-3 w-3 text-slate-500" />
+                              <span className="text-white">{diff.ofxValue}</span>
+                            </div>
+                          ))}
+                          <div className="flex gap-2">
+                            <Button
+                              size="sm"
+                              variant={choice?.action === 'update' ? 'default' : 'outline'}
+                              className={`h-7 text-xs ${choice?.action === 'update' ? 'bg-amber-600 text-white hover:bg-amber-700' : 'border-slate-700 text-slate-400'}`}
+                              onClick={() => choice?.action !== 'update' && toggleReconciliation(tx.fitId)}
+                            >
+                              {t('reconciliation.updateToMatch')}
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant={choice?.action === 'keep' ? 'default' : 'outline'}
+                              className={`h-7 text-xs ${choice?.action === 'keep' ? 'bg-slate-600 text-white hover:bg-slate-700' : 'border-slate-700 text-slate-400'}`}
+                              onClick={() => choice?.action !== 'keep' && toggleReconciliation(tx.fitId)}
+                            >
+                              {t('reconciliation.keepCurrent')}
+                            </Button>
+                          </div>
+                        </div>
+                      );
+                    })}
                 </div>
               )}
 
               {/* Select all toggle */}
               <div className="flex items-center justify-between">
                 <span className="text-xs text-slate-400">{t('preview.transactions')}</span>
-                <button
-                  onClick={toggleAllNew}
-                  className="text-xs text-emerald-400 hover:text-emerald-300"
-                >
+                <button onClick={toggleAllNew} className="text-xs text-emerald-400 hover:text-emerald-300">
                   {t('preview.toggleAll')}
                 </button>
               </div>
@@ -973,145 +1138,89 @@ export function StatementUploadDialog({
               {/* Transaction list */}
               <div className="max-h-[300px] overflow-y-auto space-y-1 rounded-lg border border-slate-700">
                 {parseResult.transactions.map((tx) => {
-                  const isConfirmedTransfer = confirmedTransferFitIds.has(tx.fitId);
-                  const isInvestmentTransfer = investmentTransferFitIds.has(tx.fitId);
-                  const detectedTransfer = detectedTransferMap.get(tx.fitId);
-                  const confirmedTr = confirmedTransfers.find((ct) => ct.fitId === tx.fitId);
-                  const isExcluded = isConfirmedTransfer || isInvestmentTransfer;
+                  const isResolvedSpecial = resolvedFitIds.has(tx.fitId);
+                  const resolution = getResolution(tx.fitId);
+                  const isTransfer = isResolvedSpecial && resolution?.classification === 'entity_transfer';
+                  const isInvestment = isResolvedSpecial && resolution?.classification === 'investment_transfer';
+                  const isCCPayment = isResolvedSpecial && resolution?.classification === 'credit_card_payment';
+                  const isExcluded = isResolvedSpecial;
 
                   return (
-                    <div key={tx.fitId}>
-                      {/* Main transaction row */}
-                      <div
-                        onClick={() => !tx.isDuplicate && !isExcluded && toggleTransaction(tx.fitId)}
-                        className={`flex items-center gap-3 px-3 py-2 text-sm transition-colors ${
-                          tx.isDuplicate
-                            ? 'bg-slate-800/30 opacity-50'
-                            : isConfirmedTransfer
+                    <div
+                      key={tx.fitId}
+                      onClick={() => !tx.isDuplicate && !isExcluded && tx.reconciliationStatus !== 'changed' && toggleTransaction(tx.fitId)}
+                      className={`flex items-center gap-3 px-3 py-2 text-sm transition-colors ${
+                        tx.reconciliationStatus === 'duplicate'
+                          ? 'bg-slate-800/30 opacity-50'
+                          : tx.reconciliationStatus === 'changed'
+                            ? 'bg-amber-900/10 border-l-2 border-l-amber-500'
+                            : isTransfer
                               ? 'bg-purple-900/20 border-l-2 border-l-purple-500'
-                              : isInvestmentTransfer
+                              : isInvestment
                                 ? 'bg-amber-900/20 border-l-2 border-l-amber-500'
-                                : tx.selected
-                                  ? 'bg-slate-800/50 cursor-pointer hover:bg-slate-800/70'
-                                  : 'bg-slate-800/20 cursor-pointer hover:bg-slate-800/40'
-                        }`}
-                      >
-                        {/* Checkbox / Transfer icon / Investment icon */}
-                        {isInvestmentTransfer ? (
-                          <Wallet className="h-4 w-4 shrink-0 text-amber-400" />
-                        ) : isConfirmedTransfer ? (
-                          <ArrowLeftRight className="h-4 w-4 shrink-0 text-purple-400" />
-                        ) : (
-                          <div
-                            className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border ${
-                              tx.isDuplicate
-                                ? 'border-slate-600 bg-slate-700'
-                                : tx.selected
-                                  ? 'border-emerald-500 bg-emerald-500'
-                                  : 'border-slate-600'
-                            }`}
-                          >
-                            {(tx.selected || tx.isDuplicate) && <Check className="h-3 w-3 text-white" />}
-                          </div>
-                        )}
-
-                        {/* Date */}
-                        <span className="w-20 shrink-0 text-slate-400">{tx.date}</span>
-
-                        {/* Description */}
-                        <span className="min-w-0 flex-1 truncate text-slate-300" title={tx.fullDescription}>
-                          {tx.description}
-                        </span>
-
-                        {/* Amount + badges */}
-                        <div className="flex shrink-0 items-center gap-2">
-                          {tx.isDuplicate && (
-                            <span className="rounded-full bg-slate-700 px-2 py-0.5 text-[10px] text-slate-400">
-                              {t('preview.duplicate')}
-                            </span>
-                          )}
-                          {isConfirmedTransfer && confirmedTr && (
-                            <span className="rounded-full bg-purple-500/20 px-2 py-0.5 text-[10px] text-purple-300">
-                              {t('transfers.directionOptions.' + confirmedTr.direction)}
-                            </span>
-                          )}
-                          {isInvestmentTransfer && (
-                            <span className="rounded-full bg-amber-500/20 px-2 py-0.5 text-[10px] text-amber-300">
-                              {parseResult.detectedInvestmentTransfers.find((it) => it.fitId === tx.fitId)?.direction === 'investment_deposit'
-                                ? t('investmentTransfers.deposit')
-                                : t('investmentTransfers.withdrawal')}
-                            </span>
-                          )}
-                          <span
-                            className={`font-medium ${
-                              tx.type === 'income' ? 'text-emerald-400' : 'text-red-400'
-                            }`}
-                          >
-                            {tx.type === 'income' ? '+' : '-'}
-                            {formatCurrency(tx.amount, parseResult.currency)}
-                          </span>
-                        </div>
-                      </div>
-
-                      {/* Transfer action row: show for detected transfers (confirmed or not) */}
-                      {detectedTransfer && !tx.isDuplicate && (
-                        <div className="flex items-center gap-2 bg-purple-950/20 px-3 py-1.5 text-xs border-b border-slate-700/50">
-                          {isConfirmedTransfer && confirmedTr ? (
-                            <>
-                              <span className="text-purple-300">
-                                ↔ {confirmedTr.counterpartyEntityName}
-                              </span>
-                              <Select
-                                value={confirmedTr.direction}
-                                onValueChange={(v) => updateTransferDirection(tx.fitId, v as ConfirmedTransfer['direction'])}
-                              >
-                                <SelectTrigger className="h-6 w-auto min-w-[130px] border-purple-500/30 bg-purple-900/30 text-purple-300 text-xs px-2">
-                                  <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent className="border-slate-700 bg-slate-900">
-                                  <SelectItem value="capital_injection">{t('transfers.directionOptions.capital_injection')}</SelectItem>
-                                  <SelectItem value="profit_distribution">{t('transfers.directionOptions.profit_distribution')}</SelectItem>
-                                  <SelectItem value="reimbursement">{t('transfers.directionOptions.reimbursement')}</SelectItem>
-                                </SelectContent>
-                              </Select>
-                              {businesses.length > 1 && (
-                                <Select
-                                  value={confirmedTr.counterpartyEntityId}
-                                  onValueChange={(v) => updateTransferEntity(tx.fitId, v)}
-                                >
-                                  <SelectTrigger className="h-6 w-auto min-w-[120px] border-purple-500/30 bg-purple-900/30 text-purple-300 text-xs px-2">
-                                    <SelectValue />
-                                  </SelectTrigger>
-                                  <SelectContent className="border-slate-700 bg-slate-900">
-                                    {businesses.map((biz) => (
-                                      <SelectItem key={biz.id} value={biz.id}>{biz.name}</SelectItem>
-                                    ))}
-                                  </SelectContent>
-                                </Select>
-                              )}
-                              <button
-                                onClick={() => dismissTransfer(tx.fitId)}
-                                className="ml-auto text-slate-400 hover:text-slate-200"
-                              >
-                                {t('transfers.dismiss')}
-                              </button>
-                            </>
-                          ) : (
-                            <>
-                              <ArrowLeftRight className="h-3 w-3 text-purple-400" />
-                              <span className="text-purple-300">
-                                {detectedTransfer.suggestedEntityName}
-                              </span>
-                              <button
-                                onClick={() => confirmTransfer(detectedTransfer)}
-                                className="ml-auto rounded bg-purple-600/50 px-2 py-0.5 text-purple-200 hover:bg-purple-600/70"
-                              >
-                                {t('transfers.confirm')}
-                              </button>
-                            </>
-                          )}
+                                : isCCPayment
+                                  ? 'bg-blue-900/20 border-l-2 border-l-blue-500'
+                                  : tx.selected
+                                    ? 'bg-slate-800/50 cursor-pointer hover:bg-slate-800/70'
+                                    : 'bg-slate-800/20 cursor-pointer hover:bg-slate-800/40'
+                      }`}
+                    >
+                      {/* Icon / checkbox */}
+                      {tx.reconciliationStatus === 'changed' ? (
+                        <RefreshCw className="h-4 w-4 shrink-0 text-amber-400" />
+                      ) : isInvestment ? (
+                        <Wallet className="h-4 w-4 shrink-0 text-amber-400" />
+                      ) : isTransfer ? (
+                        <ArrowLeftRight className="h-4 w-4 shrink-0 text-purple-400" />
+                      ) : isCCPayment ? (
+                        <CreditCard className="h-4 w-4 shrink-0 text-blue-400" />
+                      ) : (
+                        <div className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border ${
+                          tx.isDuplicate ? 'border-slate-600 bg-slate-700'
+                            : tx.selected ? 'border-emerald-500 bg-emerald-500'
+                            : 'border-slate-600'
+                        }`}>
+                          {(tx.selected || tx.isDuplicate) && <Check className="h-3 w-3 text-white" />}
                         </div>
                       )}
+
+                      <span className="w-20 shrink-0 text-slate-400">{tx.date}</span>
+                      <span className="min-w-0 flex-1 truncate text-slate-300" title={tx.fullDescription}>
+                        {tx.description}
+                      </span>
+
+                      <div className="flex shrink-0 items-center gap-2">
+                        {tx.isDuplicate && (
+                          <span className="rounded-full bg-slate-700 px-2 py-0.5 text-[10px] text-slate-400">
+                            {t('preview.duplicate')}
+                          </span>
+                        )}
+                        {tx.reconciliationStatus === 'changed' && (
+                          <span className="rounded-full bg-amber-500/20 px-2 py-0.5 text-[10px] text-amber-300">
+                            {t('reconciliation.changed')}
+                          </span>
+                        )}
+                        {isTransfer && resolution && (
+                          <span className="rounded-full bg-purple-500/20 px-2 py-0.5 text-[10px] text-purple-300">
+                            {t(`transfers.directionOptions.${resolution.direction}` as Parameters<typeof t>[0])}
+                          </span>
+                        )}
+                        {isInvestment && (
+                          <span className="rounded-full bg-amber-500/20 px-2 py-0.5 text-[10px] text-amber-300">
+                            {resolution?.investmentDirection === 'investment_deposit'
+                              ? t('investmentTransfers.deposit')
+                              : t('investmentTransfers.withdrawal')}
+                          </span>
+                        )}
+                        {isCCPayment && (
+                          <span className="rounded-full bg-blue-500/20 px-2 py-0.5 text-[10px] text-blue-300">
+                            {t('resolve.creditCardPayment')}
+                          </span>
+                        )}
+                        <span className={`font-medium ${tx.type === 'income' ? 'text-emerald-400' : 'text-red-400'}`}>
+                          {tx.type === 'income' ? '+' : '-'}{formatCurrency(tx.amount, parseResult.currency)}
+                        </span>
+                      </div>
                     </div>
                   );
                 })}
@@ -1119,7 +1228,9 @@ export function StatementUploadDialog({
             </div>
           )}
 
-          {/* STEP: Confirm (result) */}
+          {/* ============================================================ */}
+          {/* STEP: Confirm (result)                                       */}
+          {/* ============================================================ */}
           {currentStep === 'confirm' && importResult && (
             <div className="flex flex-col items-center justify-center space-y-4 py-8">
               <div className="flex h-16 w-16 items-center justify-center rounded-full bg-emerald-500/10">
@@ -1129,6 +1240,16 @@ export function StatementUploadDialog({
                 <p className="text-lg font-medium text-white">
                   {t('success.imported', { count: importResult.imported })}
                 </p>
+                {importResult.reconciled > 0 && (
+                  <p className="mt-1 text-sm text-amber-300">
+                    {t('success.reconciled', { count: importResult.reconciled })}
+                  </p>
+                )}
+                {importResult.duplicatesSkipped > 0 && (
+                  <p className="mt-1 text-sm text-slate-400">
+                    {t('success.duplicatesSkipped', { count: importResult.duplicatesSkipped })}
+                  </p>
+                )}
                 {importResult.transfersCreated > 0 && (
                   <p className="mt-1 text-sm text-purple-300">
                     {t('success.transfersCreated', { count: importResult.transfersCreated })}
@@ -1155,14 +1276,13 @@ export function StatementUploadDialog({
           )}
         </div>
 
-        {/* Footer with navigation */}
+        {/* ============================================================ */}
+        {/* Footer with navigation                                       */}
+        {/* ============================================================ */}
         <DialogFooter className="flex-row justify-between sm:justify-between gap-2">
           {currentStep === 'confirm' && importResult ? (
             <div className="flex w-full justify-end">
-              <Button
-                onClick={handleDone}
-                className="bg-emerald-600 text-white hover:bg-emerald-700"
-              >
+              <Button onClick={handleDone} className="bg-emerald-600 text-white hover:bg-emerald-700">
                 {tCommon('done')}
               </Button>
             </div>
@@ -1170,94 +1290,65 @@ export function StatementUploadDialog({
             <>
               <div>
                 {currentStep !== 'upload' && (
-                  <Button
-                    variant="outline"
-                    onClick={goPrev}
-                    className="border-slate-700 text-slate-300 hover:bg-slate-800"
-                  >
+                  <Button variant="outline" onClick={goPrev} className="border-slate-700 text-slate-300 hover:bg-slate-800">
                     <ArrowLeft className="mr-1 h-4 w-4" />
                     {tCommon('back')}
                   </Button>
                 )}
               </div>
               <div className="flex gap-2">
-                <Button
-                  variant="outline"
-                  onClick={handleClose}
-                  className="border-slate-700 text-slate-300 hover:bg-slate-800"
-                >
+                <Button variant="outline" onClick={handleClose} className="border-slate-700 text-slate-300 hover:bg-slate-800">
                   {tCommon('cancel')}
                 </Button>
 
                 {currentStep === 'upload' && (
-                  <Button
-                    onClick={handleParse}
-                    disabled={files.length === 0 || isParsing}
-                    className="bg-emerald-600 text-white hover:bg-emerald-700"
-                  >
+                  <Button onClick={handleParse} disabled={files.length === 0 || isParsing} className="bg-emerald-600 text-white hover:bg-emerald-700">
                     {isParsing ? (
                       <span className="flex items-center gap-2">
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                        {t('upload.parsing')}
+                        <Loader2 className="h-4 w-4 animate-spin" /> {t('upload.parsing')}
                       </span>
                     ) : (
                       <span className="flex items-center gap-2">
-                        <ArrowRight className="h-4 w-4" />
-                        {t('upload.continue')}
+                        <ArrowRight className="h-4 w-4" /> {t('upload.continue')}
                       </span>
                     )}
                   </Button>
                 )}
 
                 {currentStep === 'entity' && (
-                  <Button
-                    onClick={goNext}
-                    disabled={!entityId}
-                    className="bg-emerald-600 text-white hover:bg-emerald-700"
-                  >
-                    <ArrowRight className="mr-1 h-4 w-4" />
-                    {tCommon('next')}
+                  <Button onClick={goNext} disabled={!entityId} className="bg-emerald-600 text-white hover:bg-emerald-700">
+                    <ArrowRight className="mr-1 h-4 w-4" /> {tCommon('next')}
                   </Button>
                 )}
 
-                {currentStep === 'credit-cards' && (
-                  <Button
-                    onClick={goNext}
-                    className="bg-emerald-600 text-white hover:bg-emerald-700"
-                  >
-                    <ArrowRight className="mr-1 h-4 w-4" />
-                    {tCommon('next')}
-                  </Button>
-                )}
-
-                {currentStep === 'investment-accounts' && (
-                  <Button
-                    onClick={goNext}
-                    disabled={!selectedInvestmentAccountId}
-                    className="bg-emerald-600 text-white hover:bg-emerald-700"
-                  >
-                    <ArrowRight className="mr-1 h-4 w-4" />
-                    {tCommon('next')}
+                {currentStep === 'resolve' && (
+                  <Button onClick={goNext} className="bg-emerald-600 text-white hover:bg-emerald-700">
+                    <ArrowRight className="mr-1 h-4 w-4" /> {tCommon('next')}
                   </Button>
                 )}
 
                 {currentStep === 'preview' && (
                   <Button
                     onClick={handleImport}
-                    disabled={(selectedTransactions.length === 0 && confirmedTransfers.length === 0 && confirmedInvestmentTransfers.length === 0) || isImporting}
+                    disabled={
+                      (selectedTransactions.length === 0 &&
+                        resolvedTransfers.length === 0 &&
+                        resolvedInvestmentTransfers.length === 0 &&
+                        reconciliationsToApply.length === 0) ||
+                      isImporting
+                    }
                     className="bg-emerald-600 text-white hover:bg-emerald-700"
                   >
                     {isImporting ? (
                       <span className="flex items-center gap-2">
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                        {t('preview.importing')}
+                        <Loader2 className="h-4 w-4 animate-spin" /> {t('preview.importing')}
                       </span>
-                    ) : (confirmedTransfers.length > 0 || confirmedInvestmentTransfers.length > 0) ? (
+                    ) : (resolvedTransfers.length > 0 || resolvedInvestmentTransfers.length > 0) ? (
                       <span className="flex items-center gap-2">
                         <Upload className="h-4 w-4" />
                         {t('preview.importWithTransfers', {
                           txCount: selectedTransactions.length,
-                          trCount: confirmedTransfers.length + confirmedInvestmentTransfers.length,
+                          trCount: resolvedTransfers.length + resolvedInvestmentTransfers.length,
                         })}
                       </span>
                     ) : (

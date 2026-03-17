@@ -10,6 +10,10 @@ import { createTransfer } from "@capital/server/modules/transfers/services/creat
 import { normalizeDescription } from "../../utils";
 import { routeConfig } from "../../constants";
 
+// ---------------------------------------------------------------------------
+// Schemas
+// ---------------------------------------------------------------------------
+
 const TransactionInputSchema = z.object({
   externalId: z.string().min(1),
   date: z.string().min(1),
@@ -49,6 +53,16 @@ const InvestmentTransferInputSchema = z.object({
   investmentAccountId: z.string().min(1),
 });
 
+const ReconciliationUpdateSchema = z.object({
+  existingTransactionId: z.string().min(1),
+  externalId: z.string().min(1),
+  updates: z.object({
+    amount: z.number().positive().optional(),
+    date: z.string().min(1).optional(),
+    description: z.string().min(1).optional(),
+  }),
+});
+
 const ImportRequestSchema = z.object({
   entityType: z.enum(["personal", "business"]),
   entityId: z.string().min(1),
@@ -60,10 +74,13 @@ const ImportRequestSchema = z.object({
   transfers: z.array(TransferInputSchema).optional(),
   creditCards: z.array(CreditCardInputSchema).optional(),
   investmentTransfers: z.array(InvestmentTransferInputSchema).optional(),
+  reconciliations: z.array(ReconciliationUpdateSchema).optional(),
 });
 
 const ImportResponseSchema = z.object({
   imported: z.number(),
+  duplicatesSkipped: z.number(),
+  reconciled: z.number(),
   transfersCreated: z.number(),
   creditCardsCreated: z.number(),
   investmentTransfersCreated: z.number(),
@@ -82,7 +99,8 @@ export const route = createRoute({
   method: "post",
   tags: [...routeConfig.v1.defaultTags],
   summary: "Import bank statement transactions",
-  description: "Bulk-creates transactions from parsed bank statement data",
+  description:
+    "Bulk-creates transactions from parsed bank statement data with server-side deduplication and reconciliation",
   request: {
     body: jsonContent(ImportRequestSchema, "Transactions to import"),
   },
@@ -90,9 +108,16 @@ export const route = createRoute({
     [CREATED]: jsonContent(ImportResponseSchema, "Import result"),
     [BAD_REQUEST]: jsonContent(ErrorResponseSchema, "Invalid request data"),
     [UNAUTHORIZED]: jsonContent(ErrorResponseSchema, "Not authenticated"),
-    [INTERNAL_SERVER_ERROR]: jsonContent(ErrorResponseSchema, "Internal server error"),
+    [INTERNAL_SERVER_ERROR]: jsonContent(
+      ErrorResponseSchema,
+      "Internal server error"
+    ),
   },
 });
+
+// ---------------------------------------------------------------------------
+// System categories
+// ---------------------------------------------------------------------------
 
 const SYSTEM_EXPENSE_CATEGORIES = [
   "Credit Card",
@@ -126,16 +151,34 @@ async function ensureSystemCategories(userId: string) {
   });
   const existingKeys = new Set(existing.map((c) => `${c.type}:${c.name}`));
 
-  const toCreate: Array<{ userId: string; name: string; type: "expense" | "income"; isDefault: boolean; isSystem: boolean }> = [];
+  const toCreate: Array<{
+    userId: string;
+    name: string;
+    type: "expense" | "income";
+    isDefault: boolean;
+    isSystem: boolean;
+  }> = [];
 
   for (const name of SYSTEM_EXPENSE_CATEGORIES) {
     if (!existingKeys.has(`expense:${name}`)) {
-      toCreate.push({ userId, name, type: "expense", isDefault: true, isSystem: true });
+      toCreate.push({
+        userId,
+        name,
+        type: "expense",
+        isDefault: true,
+        isSystem: true,
+      });
     }
   }
   for (const name of SYSTEM_INCOME_CATEGORIES) {
     if (!existingKeys.has(`income:${name}`)) {
-      toCreate.push({ userId, name, type: "income", isDefault: true, isSystem: true });
+      toCreate.push({
+        userId,
+        name,
+        type: "income",
+        isDefault: true,
+        isSystem: true,
+      });
     }
   }
 
@@ -143,6 +186,10 @@ async function ensureSystemCategories(userId: string) {
     await prisma.category.createMany({ data: toCreate, skipDuplicates: true });
   }
 }
+
+// ---------------------------------------------------------------------------
+// Handler
+// ---------------------------------------------------------------------------
 
 export const handler: AppRouteHandler<typeof route> = async (c) => {
   try {
@@ -157,7 +204,12 @@ export const handler: AppRouteHandler<typeof route> = async (c) => {
       });
       if (!pa) {
         return c.json(
-          { error: { code: "BAD_REQUEST", message: "Personal account not found or access denied" } },
+          {
+            error: {
+              code: "BAD_REQUEST",
+              message: "Personal account not found or access denied",
+            },
+          },
           BAD_REQUEST
         );
       }
@@ -168,7 +220,12 @@ export const handler: AppRouteHandler<typeof route> = async (c) => {
       });
       if (!biz) {
         return c.json(
-          { error: { code: "BAD_REQUEST", message: "Business not found or access denied" } },
+          {
+            error: {
+              code: "BAD_REQUEST",
+              message: "Business not found or access denied",
+            },
+          },
           BAD_REQUEST
         );
       }
@@ -176,12 +233,37 @@ export const handler: AppRouteHandler<typeof route> = async (c) => {
 
     await ensureSystemCategories(userId);
 
-    // Load merchant category mappings for quick lookup
+    // Load merchant category mappings
     const mappings = await prisma.merchantCategoryMapping.findMany({
       where: { userId },
       select: { normalizedDescription: true, category: true },
     });
-    const mappingLookup = new Map(mappings.map((m) => [m.normalizedDescription, m.category]));
+    const mappingLookup = new Map(
+      mappings.map((m) => [m.normalizedDescription, m.category])
+    );
+
+    // --- Server-side deduplication ---
+    // Query existing externalIds to prevent double-inserts
+    const incomingExternalIds = body.transactions.map((t) => t.externalId);
+    const existingTxs = await prisma.transaction.findMany({
+      where: {
+        externalId: { in: incomingExternalIds },
+        OR: [
+          { business: { userId } },
+          { personalAccount: { userId } },
+        ],
+      },
+      select: { externalId: true },
+    });
+    const existingExternalIds = new Set(
+      existingTxs.map((t) => t.externalId)
+    );
+
+    const newTransactions = body.transactions.filter(
+      (t) => !existingExternalIds.has(t.externalId)
+    );
+    const duplicatesSkipped =
+      body.transactions.length - newTransactions.length;
 
     // Create StatementImport record
     const statementImport = await prisma.statementImport.create({
@@ -190,12 +272,14 @@ export const handler: AppRouteHandler<typeof route> = async (c) => {
         entityType: body.entityType,
         bankName: body.bankName,
         fileName: body.fileName,
-        transactionCount: body.transactions.length,
+        transactionCount: newTransactions.length,
         ledgerBalance: body.ledgerBalance,
         ledgerCurrency: body.currency,
         categorizationStatus: "pending",
-        businessId: body.entityType === "business" ? body.entityId : undefined,
-        personalAccountId: body.entityType === "personal" ? body.entityId : undefined,
+        businessId:
+          body.entityType === "business" ? body.entityId : undefined,
+        personalAccountId:
+          body.entityType === "personal" ? body.entityId : undefined,
       },
     });
 
@@ -212,8 +296,10 @@ export const handler: AppRouteHandler<typeof route> = async (c) => {
             closingDay: card.closingDay,
             dueDay: card.dueDay,
             currency: card.currency,
-            businessId: body.entityType === "business" ? body.entityId : undefined,
-            personalAccountId: body.entityType === "personal" ? body.entityId : undefined,
+            businessId:
+              body.entityType === "business" ? body.entityId : undefined,
+            personalAccountId:
+              body.entityType === "personal" ? body.entityId : undefined,
           },
         });
         creditCardsCreated++;
@@ -224,16 +310,19 @@ export const handler: AppRouteHandler<typeof route> = async (c) => {
     let transfersCreated = 0;
     if (body.transfers && body.transfers.length > 0) {
       for (const tr of body.transfers) {
-        // Determine from/to based on direction:
-        // capital_injection: source entity -> counterparty (money leaving source)
-        // profit_distribution: counterparty -> source entity (money entering source)
-        // reimbursement: counterparty -> source entity (money entering source)
         const isOutgoing = tr.direction === "capital_injection";
-
-        const fromEntityType = isOutgoing ? body.entityType : tr.counterpartyEntityType;
-        const fromEntityId = isOutgoing ? body.entityId : tr.counterpartyEntityId;
-        const toEntityType = isOutgoing ? tr.counterpartyEntityType : body.entityType;
-        const toEntityId = isOutgoing ? tr.counterpartyEntityId : body.entityId;
+        const fromEntityType = isOutgoing
+          ? body.entityType
+          : tr.counterpartyEntityType;
+        const fromEntityId = isOutgoing
+          ? body.entityId
+          : tr.counterpartyEntityId;
+        const toEntityType = isOutgoing
+          ? tr.counterpartyEntityType
+          : body.entityType;
+        const toEntityId = isOutgoing
+          ? tr.counterpartyEntityId
+          : body.entityId;
 
         await prisma.transfer.create({
           data: {
@@ -245,10 +334,14 @@ export const handler: AppRouteHandler<typeof route> = async (c) => {
             exchangeRate: 1,
             description: tr.description,
             date: parseLocalDate(tr.date),
-            fromBusinessId: fromEntityType === "business" ? fromEntityId : undefined,
-            fromPersonalAccountId: fromEntityType === "personal" ? fromEntityId : undefined,
-            toBusinessId: toEntityType === "business" ? toEntityId : undefined,
-            toPersonalAccountId: toEntityType === "personal" ? toEntityId : undefined,
+            fromBusinessId:
+              fromEntityType === "business" ? fromEntityId : undefined,
+            fromPersonalAccountId:
+              fromEntityType === "personal" ? fromEntityId : undefined,
+            toBusinessId:
+              toEntityType === "business" ? toEntityId : undefined,
+            toPersonalAccountId:
+              toEntityType === "personal" ? toEntityId : undefined,
           },
         });
         transfersCreated++;
@@ -260,42 +353,79 @@ export const handler: AppRouteHandler<typeof route> = async (c) => {
     if (body.investmentTransfers && body.investmentTransfers.length > 0) {
       for (const it of body.investmentTransfers) {
         if (it.direction === "investment_deposit") {
-          await createTransfer(userId, {
-            fromEntityType: body.entityType as "personal" | "business",
-            toEntityType: body.entityType as "personal" | "business",
-            direction: "investment_deposit",
-            amount: it.amount,
-            currency: body.currency,
-            exchangeRate: 1,
-            description: it.description,
-            date: parseLocalDate(it.date),
-            fromBusinessId: body.entityType === "business" ? body.entityId : undefined,
-            fromPersonalAccountId: body.entityType === "personal" ? body.entityId : undefined,
-            toInvestmentAccountId: it.investmentAccountId,
-          }, prisma);
+          await createTransfer(
+            userId,
+            {
+              fromEntityType: body.entityType as "personal" | "business",
+              toEntityType: body.entityType as "personal" | "business",
+              direction: "investment_deposit",
+              amount: it.amount,
+              currency: body.currency,
+              exchangeRate: 1,
+              description: it.description,
+              date: parseLocalDate(it.date),
+              fromBusinessId:
+                body.entityType === "business" ? body.entityId : undefined,
+              fromPersonalAccountId:
+                body.entityType === "personal" ? body.entityId : undefined,
+              toInvestmentAccountId: it.investmentAccountId,
+            },
+            prisma
+          );
         } else {
-          await createTransfer(userId, {
-            fromEntityType: body.entityType as "personal" | "business",
-            toEntityType: body.entityType as "personal" | "business",
-            direction: "investment_withdrawal",
-            amount: it.amount,
-            currency: body.currency,
-            exchangeRate: 1,
-            description: it.description,
-            date: parseLocalDate(it.date),
-            toBusinessId: body.entityType === "business" ? body.entityId : undefined,
-            toPersonalAccountId: body.entityType === "personal" ? body.entityId : undefined,
-            fromInvestmentAccountId: it.investmentAccountId,
-          }, prisma);
+          await createTransfer(
+            userId,
+            {
+              fromEntityType: body.entityType as "personal" | "business",
+              toEntityType: body.entityType as "personal" | "business",
+              direction: "investment_withdrawal",
+              amount: it.amount,
+              currency: body.currency,
+              exchangeRate: 1,
+              description: it.description,
+              date: parseLocalDate(it.date),
+              toBusinessId:
+                body.entityType === "business" ? body.entityId : undefined,
+              toPersonalAccountId:
+                body.entityType === "personal" ? body.entityId : undefined,
+              fromInvestmentAccountId: it.investmentAccountId,
+            },
+            prisma
+          );
         }
         investmentTransfersCreated++;
       }
     }
 
-    // Build transaction data with category mapping
+    // --- Reconciliation: update changed transactions ---
+    let reconciledCount = 0;
+    if (body.reconciliations && body.reconciliations.length > 0) {
+      for (const rec of body.reconciliations) {
+        const updateData: Record<string, unknown> = {};
+        if (rec.updates.amount !== undefined) {
+          updateData.amount = rec.updates.amount;
+        }
+        if (rec.updates.date !== undefined) {
+          updateData.date = parseLocalDate(rec.updates.date);
+        }
+        if (rec.updates.description !== undefined) {
+          updateData.description = rec.updates.description;
+        }
+
+        if (Object.keys(updateData).length > 0) {
+          await prisma.transaction.update({
+            where: { id: rec.existingTransactionId },
+            data: updateData,
+          });
+          reconciledCount++;
+        }
+      }
+    }
+
+    // Build transaction data with category mapping, using skipDuplicates as safety net
     let importedCount = 0;
-    if (body.transactions.length > 0) {
-      const txData = body.transactions.map((t) => {
+    if (newTransactions.length > 0) {
+      const txData = newTransactions.map((t) => {
         const mapped = mappingLookup.get(normalizeDescription(t.description));
         return {
           entityType: body.entityType as "personal" | "business",
@@ -307,16 +437,22 @@ export const handler: AppRouteHandler<typeof route> = async (c) => {
           date: parseLocalDate(t.date),
           externalId: t.externalId,
           statementImportId: statementImport.id,
-          businessId: body.entityType === "business" ? body.entityId : undefined,
-          personalAccountId: body.entityType === "personal" ? body.entityId : undefined,
+          businessId:
+            body.entityType === "business" ? body.entityId : undefined,
+          personalAccountId:
+            body.entityType === "personal" ? body.entityId : undefined,
         };
       });
 
-      const result = await prisma.transaction.createMany({ data: txData });
+      const result = await prisma.transaction.createMany({
+        data: txData,
+        skipDuplicates: true,
+      });
       importedCount = result.count;
 
-      // If all transactions got a category, mark as completed immediately
-      const allCategorized = txData.every((t) => t.category !== "Uncategorized");
+      const allCategorized = txData.every(
+        (t) => t.category !== "Uncategorized"
+      );
       if (allCategorized) {
         await prisma.statementImport.update({
           where: { id: statementImport.id },
@@ -324,7 +460,6 @@ export const handler: AppRouteHandler<typeof route> = async (c) => {
         });
       }
     } else {
-      // No transactions to categorize
       await prisma.statementImport.update({
         where: { id: statementImport.id },
         data: { categorizationStatus: "completed" },
@@ -334,6 +469,8 @@ export const handler: AppRouteHandler<typeof route> = async (c) => {
     return c.json(
       {
         imported: importedCount,
+        duplicatesSkipped,
+        reconciled: reconciledCount,
         transfersCreated,
         creditCardsCreated,
         investmentTransfersCreated,
