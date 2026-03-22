@@ -1,5 +1,5 @@
 import type { DbClient } from "@capital/server/lib/prisma";
-import type { EntityType, TransactionType } from "@prisma/client";
+import type { EntityType, TransactionType } from "@/generated/prisma";
 
 interface FetchTransactionsFilters {
   businessId?: string;

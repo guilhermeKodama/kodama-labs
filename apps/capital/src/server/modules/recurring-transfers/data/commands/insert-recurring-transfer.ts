@@ -3,7 +3,7 @@ import type {
   EntityType,
   TransferDirection,
   RecurrenceFrequency,
-} from "@prisma/client";
+} from "@/generated/prisma";
 
 interface InsertRecurringTransferInput {
   fromEntityType: EntityType;

@@ -10,6 +10,9 @@
     "format": "prettier --write \"**/*.{ts,tsx,md}\"",
     "prepare": "husky",
     "db:reset": "turbo db:reset",
+    "db:dump": "bash infrastructure/postgres/db-backup.sh dump",
+    "db:restore": "bash infrastructure/postgres/db-backup.sh restore",
+    "db:backups": "bash infrastructure/postgres/db-backup.sh list",
     "test": "turbo test --filter=@wallex/capital"
   },
   "devDependencies": {

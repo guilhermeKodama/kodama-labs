@@ -1,5 +1,5 @@
 import type { DbClient } from "@capital/server/lib/prisma";
-import type { InvestmentTransactionType } from "@prisma/client";
+import type { InvestmentTransactionType } from "@/generated/prisma";
 
 interface CreateInvestmentTransactionData {
   holdingId: string;

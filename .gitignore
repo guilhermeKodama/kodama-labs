@@ -46,6 +46,12 @@ Thumbs.db
 *.launch
 .settings
 
+# Prisma generated clients
+**/src/generated/prisma
+
+# Database backups
+infrastructure/postgres/backups/
+
 # Misc
 .vercel
 .netlify
