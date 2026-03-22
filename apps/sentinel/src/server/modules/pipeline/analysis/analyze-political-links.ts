@@ -404,8 +404,6 @@ async function detectDonorGotContract(): Promise<number> {
     const supplierCnpjs = [...new Set(contracts.map((c) => c.supplierCnpj))];
 
     for (const cnpj of supplierCnpjs) {
-      const key = `${politicianId}-${cnpj}-DONOR_GOT_CONTRACT`;
-
       const existingLink = await prisma.politicalLink.findFirst({
         where: {
           politicianId,

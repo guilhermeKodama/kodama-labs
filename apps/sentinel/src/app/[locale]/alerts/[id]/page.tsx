@@ -58,7 +58,6 @@ export default async function AlertDetailPage({
 
   const alertData = alert.data as Record<string, unknown> | null;
   const politicianName = alertData?.politicianName as string | undefined;
-  const politicianCpf = alertData?.politicianCpf as string | undefined;
   const party = alertData?.party as string | undefined;
   const linkType = alertData?.linkType as string | undefined;
 
