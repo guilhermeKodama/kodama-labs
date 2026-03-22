@@ -1,5 +1,5 @@
 import type { DbClient } from "@capital/server/lib/prisma";
-import type { EntityType } from "@prisma/client";
+import type { EntityType } from "@/generated/prisma";
 import { fetchRecurringTransfers } from "../data/queries/fetch-recurring-transfers";
 
 interface ListRecurringTransfersFilters {

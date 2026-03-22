@@ -1,5 +1,5 @@
 import type { DbClient } from "@capital/server/lib/prisma";
-import type { EntityType, BudgetPeriod } from "@prisma/client";
+import type { EntityType, BudgetPeriod } from "@/generated/prisma";
 
 interface FetchBudgetsFilters {
   businessId?: string;

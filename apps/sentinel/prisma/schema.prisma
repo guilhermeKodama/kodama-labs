@@ -1,0 +1,582 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// ============================================
+// ENUMS
+// ============================================
+
+enum DataSource {
+  PNCP
+  TRANSPARENCIA
+  COMPRAS_GOV
+  CEIS
+  CNEP
+  TCU
+  CNPJ
+  MARKET_PRICE
+  TSE
+  CAMARA
+}
+
+enum JobStatus {
+  IDLE
+  RUNNING
+  COMPLETED
+  FAILED
+}
+
+enum AlertType {
+  OVERPRICING
+  SHELL_COMPANY
+  SANCTIONED_ENTITY
+  SUSPICIOUS_NETWORK
+  AI_FLAG
+  POLITICAL_LINK
+}
+
+enum Severity {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum SanctionSource {
+  CEIS
+  CNEP
+  TCU
+}
+
+// ============================================
+// LAYER 1: RAW INGESTION
+// ============================================
+
+model IngestionCursor {
+  id            String     @id @default(cuid())
+  source        DataSource
+  endpoint      String
+  lastFetchedAt DateTime
+  cursorValue   String?
+  totalFetched  Int        @default(0)
+  status        JobStatus  @default(IDLE)
+  lastError     String?
+  updatedAt     DateTime   @updatedAt
+
+  @@unique([source, endpoint])
+  @@map("ingestion_cursors")
+}
+
+model RawRecord {
+  id              String     @id @default(cuid())
+  source          DataSource
+  recordType      String
+  externalId      String
+  data            Json
+  fetchedAt       DateTime   @default(now())
+  processedAt     DateTime?
+  processingError String?
+
+  @@unique([source, recordType, externalId])
+  @@index([source, recordType, processedAt])
+  @@map("raw_records")
+}
+
+// ============================================
+// LAYER 2: PROCESSED DATA
+// ============================================
+
+model Procurement {
+  id          String     @id @default(cuid())
+  externalId  String     @unique
+  source      DataSource
+  orgCnpj     String
+  orgName     String
+  orgPower    String?
+  orgSphere   String?
+  unitName    String?
+  unitCode    String?
+  ibgeCode    String?
+  year        Int
+  number      String
+  sequencial  Int?
+  modality    String
+  modalityId  Int?
+  description String
+  publishedAt DateTime
+  status      String
+  statusId    Int?
+
+  estimatedValue Decimal?
+  approvedValue  Decimal?
+  totalValue     Decimal?
+
+  processo                 String?
+  legalBasis               String?
+  legalBasisDescription    String?
+  disputeMode              String?
+  disputeModeId            Int?
+  isSrp                    Boolean?
+  instrumentType           String?
+  instrumentTypeId         Int?
+  proposalOpenDate         DateTime?
+  proposalCloseDate        DateTime?
+  confidentialBudget       Boolean  @default(false)
+  linkOrigem               String?
+  linkProcesso             String?
+  budgetSources            Json?
+
+  itemsEnrichedAt DateTime?
+
+  state       String?
+  city        String?
+  riskScore   Float?
+  processedAt DateTime   @default(now())
+  rawRecordId String?
+
+  items      ProcurementItem[]
+  contracts  Contract[]
+  alerts     Alert[]
+  analyses   AiAnalysis[]
+
+  @@index([orgCnpj])
+  @@index([state, city])
+  @@index([publishedAt])
+  @@index([riskScore])
+  @@index([itemsEnrichedAt])
+  @@map("procurements")
+}
+
+model ProcurementItem {
+  id            String  @id @default(cuid())
+  externalId    String  @unique
+  procurementId String
+  itemNumber    Int
+  description   String
+  quantity      Decimal
+  unitPrice     Decimal
+  totalPrice    Decimal
+  unit          String
+  catmatCode    String?
+  ncmCode       String?
+  catalogCode   String?
+
+  materialOrService     String?
+  materialOrServiceName String?
+  situationId           Int?
+  situationName         String?
+  judgmentCriteria       String?
+  judgmentCriteriaId    Int?
+  benefitType           String?
+  hasResult             Boolean @default(false)
+
+  procurement     Procurement      @relation(fields: [procurementId], references: [id], onDelete: Cascade)
+  bidResults      BidResult[]
+  priceReferences PriceReference[]
+  priceAnalyses   PriceAnalysis[]
+
+  @@index([catmatCode])
+  @@index([ncmCode])
+  @@index([procurementId])
+  @@map("procurement_items")
+}
+
+model BidResult {
+  id            String  @id @default(cuid())
+  itemId        String
+  sequencial    Int
+  supplierCnpj  String
+  supplierName  String
+  supplierSize  String?
+  supplierType  String?
+  countryCode   String?
+
+  unitPrice     Decimal
+  totalPrice    Decimal
+  quantity      Decimal?
+  discount      Float?
+  ranking       Int?
+
+  isSubcontracted    Boolean @default(false)
+  resultDate         DateTime?
+  situationId        Int?
+  situationName      String?
+
+  item ProcurementItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+
+  @@unique([itemId, sequencial])
+  @@index([supplierCnpj])
+  @@index([itemId])
+  @@map("bid_results")
+}
+
+model Contract {
+  id            String    @id @default(cuid())
+  externalId    String    @unique
+  procurementId String?
+  procurementExternalId String?
+
+  orgCnpj       String?
+  orgName       String?
+  unitName      String?
+  unitState     String?
+  unitCity      String?
+
+  supplierCnpj  String
+  supplierName  String
+  supplierType  String?
+  supplierCountry String?
+
+  objectDescription String?
+  categoryName      String?
+  categoryId        Int?
+  contractType      String?
+  contractTypeId    Int?
+  processo          String?
+  contractNumber    String?
+
+  value             Decimal
+  initialValue      Decimal?
+  globalValue       Decimal?
+  installmentValue  Decimal?
+  installmentCount  Int?
+  accumulatedValue  Decimal?
+
+  signatureDate     DateTime?
+  startDate         DateTime
+  endDate           DateTime?
+  publishedAt       DateTime?
+
+  amendmentCount    Int       @default(0)
+  isRevenue         Boolean   @default(false)
+
+  subcontractorCnpj String?
+  subcontractorName String?
+
+  description   String
+  rawRecordId   String?
+
+  entity      Entity       @relation(fields: [supplierCnpj], references: [cnpj])
+  procurement Procurement? @relation(fields: [procurementId], references: [id])
+  alerts      Alert[]
+
+  @@index([supplierCnpj])
+  @@index([orgCnpj])
+  @@index([procurementId])
+  @@index([startDate])
+  @@index([publishedAt])
+  @@map("contracts")
+}
+
+model Entity {
+  id            String    @id @default(cuid())
+  cnpj          String    @unique
+  name          String
+  tradeName     String?
+  legalNature   String?
+  openDate      DateTime?
+  capital       Decimal?
+  activityCode  String?
+  activityDesc  String?
+  address       String?
+  state         String?
+  city          String?
+  employeeCount Int?
+  riskScore     Float?
+  isShellCompany Boolean  @default(false)
+  enrichedAt    DateTime?
+  rawRecordId   String?
+
+  shareholders   Shareholder[]
+  contracts      Contract[]
+  sanctions      Sanction[]
+  alerts         Alert[]
+  politicalLinks PoliticalLink[]
+
+  @@index([state, city])
+  @@index([riskScore])
+  @@index([isShellCompany])
+  @@map("entities")
+}
+
+model Shareholder {
+  id       String  @id @default(cuid())
+  entityId String
+  name     String
+  cpfCnpj  String?
+  role     String
+
+  entity Entity @relation(fields: [entityId], references: [id], onDelete: Cascade)
+
+  @@index([cpfCnpj])
+  @@index([entityId])
+  @@map("shareholders")
+}
+
+model Sanction {
+  id          String         @id @default(cuid())
+  externalId  String?        @unique
+  entityId    String?
+  cnpjCpf     String
+  personName  String?
+  personType  String?
+  source      SanctionSource
+  type        String
+  reason      String
+  startDate   DateTime
+  endDate     DateTime?
+
+  sanctionType           String?
+  legalBasis             String?
+  sanctioningOrg         String?
+  sanctioningOrgState    String?
+  sanctioningOrgPower    String?
+  sanctioningOrgSphere   String?
+  processNumber          String?
+  publicationDate        DateTime?
+  transitDate            DateTime?
+  originDate             DateTime?
+
+  rawRecordId String?
+
+  entity Entity? @relation(fields: [entityId], references: [id])
+
+  @@index([cnpjCpf])
+  @@index([entityId])
+  @@index([source])
+  @@index([endDate])
+  @@map("sanctions")
+}
+
+model PriceReference {
+  id        String   @id @default(cuid())
+  itemId    String
+  source    String
+  price     Decimal
+  fetchedAt DateTime
+  url       String?
+
+  item ProcurementItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+
+  @@index([itemId])
+  @@map("price_references")
+}
+
+// ============================================
+// LAYER 3: ANALYSIS
+// ============================================
+
+model PriceAnalysis {
+  id             String   @id @default(cuid())
+  itemId         String
+  medianGovPrice Decimal?
+  avgMarketPrice Decimal?
+  deviation      Float
+  method         String
+  isOverpriced   Boolean
+  details        Json
+  analyzedAt     DateTime @default(now())
+
+  item ProcurementItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+
+  @@index([itemId])
+  @@index([isOverpriced])
+  @@map("price_analyses")
+}
+
+model Alert {
+  id            String    @id @default(cuid())
+  type          AlertType
+  severity      Severity
+  title         String
+  description   String
+  procurementId String?
+  contractId    String?
+  entityId      String?
+  data          Json
+  createdAt     DateTime  @default(now())
+  resolvedAt    DateTime?
+
+  procurement Procurement? @relation(fields: [procurementId], references: [id])
+  contract    Contract?    @relation(fields: [contractId], references: [id])
+  entity      Entity?      @relation(fields: [entityId], references: [id])
+
+  @@index([type])
+  @@index([severity])
+  @@index([createdAt])
+  @@index([procurementId])
+  @@index([contractId])
+  @@index([entityId])
+  @@map("alerts")
+}
+
+model AiAnalysis {
+  id            String   @id @default(cuid())
+  targetType    String
+  targetId      String
+  analysisType  String
+  prompt        String
+  response      String
+  riskScore     Float
+  findings      Json
+  model         String
+  tokens        Int?
+  createdAt     DateTime @default(now())
+  procurementId String?
+
+  procurement Procurement? @relation(fields: [procurementId], references: [id])
+
+  @@index([targetType, targetId])
+  @@index([analysisType])
+  @@index([createdAt])
+  @@map("ai_analyses")
+}
+
+// ============================================
+// LAYER 2b: POLITICAL DATA
+// ============================================
+
+model Politician {
+  id            String    @id @default(cuid())
+  cpf           String    @unique
+  name          String
+  ballotName    String?
+  party         String?
+  position      String
+  state         String?
+  city          String?
+  electionYear  Int?
+  elected       Boolean   @default(false)
+  active        Boolean   @default(false)
+  photoUrl      String?
+  externalId    String?
+  rawRecordId   String?
+  birthDate     DateTime?
+  birthState    String?
+  birthCity     String?
+  gender        String?
+  education     String?
+  maritalStatus String?
+  occupation    String?
+  email         String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  donations CampaignDonation[]
+  links     PoliticalLink[]
+  assets    CandidateAsset[]
+  servants  PublicServant[]
+
+  @@index([cpf])
+  @@index([party])
+  @@index([state])
+  @@index([position])
+  @@map("politicians")
+}
+
+model CampaignDonation {
+  id           String   @id @default(cuid())
+  politicianId String
+  donorName    String
+  donorCpfCnpj String
+  donorType    String?
+  amount       Decimal
+  electionYear Int
+  description  String?
+  rawRecordId  String?
+  createdAt    DateTime @default(now())
+
+  politician Politician @relation(fields: [politicianId], references: [id], onDelete: Cascade)
+
+  @@index([donorCpfCnpj])
+  @@index([politicianId])
+  @@map("campaign_donations")
+}
+
+model PoliticalLink {
+  id            String   @id @default(cuid())
+  politicianId  String
+  entityId      String?
+  shareholderId String?
+  contractId    String?
+  linkType      String
+  description   String
+  strength      Float    @default(0.5)
+  data          Json
+  createdAt     DateTime @default(now())
+
+  politician Politician @relation(fields: [politicianId], references: [id], onDelete: Cascade)
+  entity     Entity?    @relation(fields: [entityId], references: [id])
+
+  @@index([politicianId])
+  @@index([entityId])
+  @@index([linkType])
+  @@map("political_links")
+}
+
+model CandidateAsset {
+  id           String   @id @default(cuid())
+  politicianId String
+  assetType    String
+  description  String
+  value        Decimal
+  electionYear Int
+  rawRecordId  String?
+  createdAt    DateTime @default(now())
+
+  politician Politician @relation(fields: [politicianId], references: [id], onDelete: Cascade)
+
+  @@index([politicianId])
+  @@index([electionYear])
+  @@map("candidate_assets")
+}
+
+model PublicServant {
+  id           String    @id @default(cuid())
+  politicianId String
+  cpf          String
+  cargo        String?
+  funcao       String?
+  orgao        String?
+  orgaoCode    String?
+  situacao     String?
+  remuneracao  Decimal?
+  dataAdmissao DateTime?
+  rawRecordId  String?
+  createdAt    DateTime  @default(now())
+
+  politician Politician @relation(fields: [politicianId], references: [id], onDelete: Cascade)
+
+  @@index([politicianId])
+  @@index([cpf])
+  @@map("public_servants")
+}
+
+// ============================================
+// JOBS
+// ============================================
+
+model JobRun {
+  id          String    @id @default(cuid())
+  jobName     String
+  layer       String
+  status      JobStatus
+  startedAt   DateTime  @default(now())
+  completedAt DateTime?
+  recordsIn   Int?
+  recordsOut  Int?
+  error       String?
+  metadata    Json?
+
+  @@index([jobName])
+  @@index([layer])
+  @@index([startedAt])
+  @@map("job_runs")
+}

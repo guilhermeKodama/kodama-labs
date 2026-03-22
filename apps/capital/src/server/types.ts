@@ -1,5 +1,5 @@
 import type { OpenAPIHono, RouteConfig, RouteHandler } from "@hono/zod-openapi";
-import type { PrismaClient } from "@prisma/client";
+import type { PrismaClient } from "@/generated/prisma";
 
 // App bindings for Hono context
 export interface AppBindings {
