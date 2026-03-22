@@ -32,8 +32,6 @@ export async function analyzeNetwork() {
     for (const [shareholderCpf, entities] of shareholderToEntities) {
       if (entities.length < 2) continue;
 
-      const entityIds = entities.map((e) => e.entityId);
-
       const procurements = await prisma.procurement.findMany({
         where: {
           contracts: {

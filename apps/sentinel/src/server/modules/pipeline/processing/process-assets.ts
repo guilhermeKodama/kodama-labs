@@ -26,8 +26,6 @@ export async function processAssets() {
       orderBy: { fetchedAt: "asc" },
     });
 
-    const seqs = [...new Set(rawRecords.map((r) => findCol(r.data as unknown as RawRow, /SQ_CANDIDATO/i)))].filter(Boolean);
-
     const candidateRaws = await prisma.rawRecord.findMany({
       where: {
         source: "TSE",
