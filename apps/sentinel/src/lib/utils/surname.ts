@@ -2,13 +2,40 @@ const PREPOSITIONS = new Set([
   "DE", "DA", "DO", "DOS", "DAS", "E", "DI", "DEL", "DELLA",
 ]);
 
+// Common Brazilian first names that frequently appear as middle names.
+// These must be excluded from surname extraction to avoid false matches.
+const COMMON_FIRST_NAMES = new Set([
+  "LUIZ", "LUIS", "MARIA", "JOSE", "JOAO", "PEDRO", "PAULO", "FRANCISCO",
+  "ANTONIO", "CARLOS", "ANA", "MARCOS", "LUCAS", "ANDRE", "JORGE",
+  "EDUARDO", "FERNANDO", "ROBERTO", "RICARDO", "RAFAEL", "MARCELO",
+  "SERGIO", "CLAUDIO", "CLAUDIA", "MARIO", "SANDRA", "PATRICIA",
+  "ADRIANA", "ADRIANO", "CRISTINA", "CRISTIANO", "FLAVIO", "FLAVIA",
+  "GILBERTO", "HELENA", "ISABELA", "ISABEL", "JULIO", "JULIANA",
+  "LEANDRO", "LEONARDO", "LETICIA", "LUCIANA", "LUCIANO", "MANOEL",
+  "MANUEL", "MARCIO", "MARCIA", "MARGARETE", "MIGUEL", "NELSON",
+  "RENATO", "RENATA", "ROSA", "SIMONE", "TIAGO", "THIAGO", "VALERIA",
+  "VINICIUS", "WAGNER", "WELLINGTON", "ANDERSON", "ALEX", "ALEXANDRE",
+  "ALINE", "AMANDA", "APARECIDA", "BEATRIZ", "BRUNO", "CAMILA",
+  "CAROLINA", "CECILIA", "CESAR", "DANIEL", "DANIELA", "DAVID",
+  "DEBORA", "DENIS", "DIEGO", "DOUGLAS", "EDSON", "ELIANE", "ERICA",
+  "FABIANA", "FABIANO", "FABIO", "FELIPE", "GABRIEL", "GIOVANA",
+  "GUSTAVO", "IGOR", "ITALO", "JEAN", "JEFFERSON", "JESSICA", "JONAS",
+  "JOSEFA", "JOYCE", "KARINA", "LARISSA", "LUANA", "LUCIA", "LUCIO",
+  "LUIZA", "MARIANA", "MATEUS", "MATHEUS", "MAURICIO", "MAURO",
+  "NATALIA", "NATHALIA", "NICOLAS", "PATRICIA", "PRISCILA", "RAQUEL",
+  "REGINALDO", "REGINA", "RODRIGO", "ROGERIO", "ROSANA", "ROSANGELA",
+  "SEBASTIAO", "SILVANA", "SONIA", "SUELI", "SUZANA", "TATIANA",
+  "TEREZA", "TERESA", "VANESSA", "VERA", "VICTOR", "VITOR", "VIVIANE",
+  "WASHINGTON", "WILLIAM", "WILSON",
+]);
+
 // IBGE census-based surname frequency tiers.
 // Rarity: 0 = extremely common (everyone has it), 1 = very rare.
 const TIER_1_RARITY = 0.05; // top 10
 const TIER_2_RARITY = 0.15; // top 30
 const TIER_3_RARITY = 0.30; // top 80
 const TIER_4_RARITY = 0.50; // top 200
-const UNKNOWN_RARITY = 0.85;
+const UNKNOWN_RARITY = 0.50;
 
 const SURNAME_TIERS: [number, string[]][] = [
   [TIER_1_RARITY, [
@@ -116,7 +143,9 @@ export function extractSurnames(fullName: string): string[] {
   const tokens = normalizeName(fullName).split(/\s+/);
   if (tokens.length < 2) return [];
 
-  return tokens.slice(1).filter((t) => !PREPOSITIONS.has(t) && t.length > 1);
+  return tokens.slice(1).filter(
+    (t) => !PREPOSITIONS.has(t) && !COMMON_FIRST_NAMES.has(t) && t.length > 1,
+  );
 }
 
 export function extractLastSurname(fullName: string): string | null {

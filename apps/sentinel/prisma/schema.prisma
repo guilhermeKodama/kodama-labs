@@ -464,15 +464,17 @@ model Politician {
   gender        String?
   education     String?
   maritalStatus String?
-  occupation    String?
-  email         String?
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  occupation      String?
+  email           String?
+  familyFetchedAt DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
   donations CampaignDonation[]
   links     PoliticalLink[]
   assets    CandidateAsset[]
   servants  PublicServant[]
+  relatives PoliticianRelative[]
 
   @@index([cpf])
   @@index([party])
@@ -557,6 +559,23 @@ model PublicServant {
   @@index([politicianId])
   @@index([cpf])
   @@map("public_servants")
+}
+
+model PoliticianRelative {
+  id           String   @id @default(cuid())
+  politicianId String
+  relativeCpf  String
+  relativeName String
+  relationship String
+  confidence   Float?
+  rawRecordId  String?
+  createdAt    DateTime @default(now())
+
+  politician Politician @relation(fields: [politicianId], references: [id], onDelete: Cascade)
+
+  @@unique([politicianId, relativeCpf])
+  @@index([relativeCpf])
+  @@map("politician_relatives")
 }
 
 // ============================================
