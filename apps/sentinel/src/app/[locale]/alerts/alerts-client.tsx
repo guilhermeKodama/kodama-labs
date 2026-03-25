@@ -43,6 +43,14 @@ const TYPE_LABELS: Record<string, string> = {
 };
 
 const SEVERITY_ORDER = ["CRITICAL", "HIGH", "MEDIUM", "LOW"] as const;
+const SEVERITY_RANK: Record<string, number> = { CRITICAL: 0, HIGH: 1, MEDIUM: 2, LOW: 3 };
+
+const SEVERITY_LABELS: Record<string, string> = {
+  CRITICAL: "Crítico",
+  HIGH: "Alto",
+  MEDIUM: "Médio",
+  LOW: "Baixo",
+};
 
 const SEVERITY_STYLES: Record<string, { dot: string; card: string; badge: string }> = {
   CRITICAL: {
@@ -115,6 +123,12 @@ export function AlertsClient({ data, locale, severityCounts }: Props) {
       });
     }
 
+    result.sort((a, b) => {
+      const sevDiff = (SEVERITY_RANK[a.severity] ?? 9) - (SEVERITY_RANK[b.severity] ?? 9);
+      if (sevDiff !== 0) return sevDiff;
+      return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+    });
+
     return result;
   }, [data, search, selectedSeverities, selectedTypes, selectedStates, selectedOrgs]);
 
@@ -184,6 +198,14 @@ export function AlertsClient({ data, locale, severityCounts }: Props) {
         </div>
 
         <FilterDropdown
+          label="Severidade"
+          options={SEVERITY_ORDER.map((s) => ({ value: s, label: SEVERITY_LABELS[s] ?? s }))}
+          selected={selectedSeverities}
+          onToggle={(v) => toggleSet(setSelectedSeverities, v)}
+          onClear={() => { setSelectedSeverities(new Set()); setPage(0); }}
+        />
+
+        <FilterDropdown
           label="Categoria"
           options={availableTypes.map((t) => ({ value: t, label: TYPE_LABELS[t] ?? t }))}
           selected={selectedTypes}
@@ -223,7 +245,7 @@ export function AlertsClient({ data, locale, severityCounts }: Props) {
           </span>
           {Array.from(selectedSeverities).map((s) => (
             <Badge key={`sev-${s}`} variant="secondary" className="gap-1 text-xs">
-              {s}
+              {SEVERITY_LABELS[s] ?? s}
               <button onClick={() => toggleSet(setSelectedSeverities, s)}><X className="h-3 w-3" /></button>
             </Badge>
           ))}

@@ -504,7 +504,11 @@ async function detectDonorGotContract(): Promise<number> {
 
 async function detectFamilyInSupplier(): Promise<number> {
   const politicians = await prisma.politician.findMany({
-    select: { id: true, cpf: true, name: true, party: true, position: true, state: true, city: true, birthState: true, birthCity: true },
+    select: {
+      id: true, cpf: true, name: true, party: true, position: true,
+      state: true, city: true, birthState: true, birthCity: true,
+      familyFetchedAt: true,
+    },
   });
 
   if (politicians.length === 0) return 0;
@@ -525,16 +529,104 @@ async function detectFamilyInSupplier(): Promise<number> {
     },
   });
 
+  // Build a lookup: relativeCpf → [{ politicianId, relationship }]
+  const allRelatives = await prisma.politicianRelative.findMany({
+    select: { politicianId: true, relativeCpf: true, relationship: true, relativeName: true },
+  });
+  const relativesByPolitician = new Map<string, Map<string, { relationship: string; relativeName: string }>>();
+  for (const rel of allRelatives) {
+    let cpfMap = relativesByPolitician.get(rel.politicianId);
+    if (!cpfMap) {
+      cpfMap = new Map();
+      relativesByPolitician.set(rel.politicianId, cpfMap);
+    }
+    cpfMap.set(rel.relativeCpf, { relationship: rel.relationship, relativeName: rel.relativeName });
+  }
+
   let linksCreated = 0;
 
   for (const sh of shareholders) {
     if (!sh.name || sh.entity.contracts.length === 0) continue;
+    if (!sh.cpfCnpj) continue;
+    const shCpf = sh.cpfCnpj.replace(/\D/g, "");
 
     for (const politician of politicians) {
-      if (sh.cpfCnpj === politician.cpf) continue;
+      if (shCpf === politician.cpf) continue;
 
+      const relativesMap = relativesByPolitician.get(politician.id);
+      const confirmedRelative = relativesMap?.get(shCpf);
+
+      // Tier 1: CPF confirmed via external data source
+      if (confirmedRelative) {
+        const existing = await prisma.politicalLink.findFirst({
+          where: {
+            politicianId: politician.id,
+            entityId: sh.entity.id,
+            shareholderId: sh.id,
+            linkType: "FAMILY_IN_SUPPLIER",
+          },
+        });
+        if (existing) continue;
+
+        const RELATIONSHIP_LABELS: Record<string, string> = {
+          mother: "mãe", father: "pai", brother: "irmão(ã)", spouse: "cônjuge",
+          son: "filho(a)", nephew: "sobrinho(a)", cousin: "primo(a)",
+          uncle: "tio(a)", grandparent: "avô/avó", grandson: "neto(a)",
+        };
+        const relLabel = RELATIONSHIP_LABELS[confirmedRelative.relationship] ?? confirmedRelative.relationship;
+        const strength = 0.85;
+        const severity: "HIGH" | "CRITICAL" = "HIGH";
+
+        await prisma.politicalLink.create({
+          data: {
+            politicianId: politician.id,
+            entityId: sh.entity.id,
+            shareholderId: sh.id,
+            linkType: "FAMILY_IN_SUPPLIER",
+            description: `Sócio "${sh.name}" da empresa ${sh.entity.name} (${sh.entity.cnpj}) é ${relLabel} do político ${politician.name} (${politician.party}/${politician.state}) — confirmado por CPF`,
+            strength,
+            data: {
+              politicianName: politician.name,
+              shareholderName: sh.name,
+              relationship: confirmedRelative.relationship,
+              relationshipLabel: relLabel,
+              confirmed: true,
+              entityCnpj: sh.entity.cnpj,
+              entityName: sh.entity.name,
+            } as unknown as Prisma.InputJsonValue,
+          },
+        });
+
+        await prisma.alert.create({
+          data: {
+            type: "POLITICAL_LINK",
+            severity,
+            title: `Familiar confirmado de político é sócio de fornecedor`,
+            description: `${sh.name} (${relLabel} de ${politician.name}, ${politician.party}/${politician.state}) é sócio de ${sh.entity.name} (${sh.entity.cnpj})`,
+            entityId: sh.entity.id,
+            data: {
+              linkType: "FAMILY_IN_SUPPLIER",
+              politicianCpf: politician.cpf,
+              politicianName: politician.name,
+              shareholderName: sh.name,
+              relationship: confirmedRelative.relationship,
+              confirmed: true,
+              entityCnpj: sh.entity.cnpj,
+            } as unknown as Prisma.InputJsonValue,
+          },
+        });
+
+        linksCreated++;
+        continue;
+      }
+
+      // Tier 2: Politician was queried but this CPF is not a known relative — skip
+      if (politician.familyFetchedAt) continue;
+
+      // Tier 3: Politician not yet queried — fall back to surname heuristics
       const match = computeSurnameMatchScore(politician.name, sh.name);
-      if (!match || match.score < 0.25) continue;
+      if (!match || match.score < 0.40) continue;
+      if (match.matchedSurnames.length < 2 && !match.isLastSurnameMatch) continue;
 
       const sameCity = politician.city && sh.entity.city &&
         normalizeName(politician.city) === normalizeName(sh.entity.city);
@@ -580,6 +672,7 @@ async function detectFamilyInSupplier(): Promise<number> {
             rarestSurname: match.rarestSurname,
             surnameScore: match.score,
             isLastSurnameMatch: match.isLastSurnameMatch,
+            confirmed: false,
             entityCnpj: sh.entity.cnpj,
             entityName: sh.entity.name,
             sameState: !!sameState,
@@ -604,6 +697,7 @@ async function detectFamilyInSupplier(): Promise<number> {
               sharedSurnames: match.matchedSurnames,
               rarestSurname: match.rarestSurname,
               surnameScore: match.score,
+              confirmed: false,
               entityCnpj: sh.entity.cnpj,
             } as unknown as Prisma.InputJsonValue,
           },
@@ -620,7 +714,7 @@ async function detectFamilyInSupplier(): Promise<number> {
 
 async function detectFamilyDonated(): Promise<number> {
   const politicians = await prisma.politician.findMany({
-    select: { id: true, cpf: true, name: true, party: true, position: true, state: true },
+    select: { id: true, cpf: true, name: true, party: true, position: true, state: true, familyFetchedAt: true },
   });
 
   if (politicians.length === 0) return 0;
@@ -644,16 +738,101 @@ async function detectFamilyDonated(): Promise<number> {
     donationsByPolitician.set(d.politicianId, list);
   }
 
+  // Build a lookup: politicianId → Map<relativeCpf, relationship>
+  const allRelatives = await prisma.politicianRelative.findMany({
+    select: { politicianId: true, relativeCpf: true, relationship: true, relativeName: true },
+  });
+  const relativesByPolitician = new Map<string, Map<string, { relationship: string; relativeName: string }>>();
+  for (const rel of allRelatives) {
+    let cpfMap = relativesByPolitician.get(rel.politicianId);
+    if (!cpfMap) {
+      cpfMap = new Map();
+      relativesByPolitician.set(rel.politicianId, cpfMap);
+    }
+    cpfMap.set(rel.relativeCpf, { relationship: rel.relationship, relativeName: rel.relativeName });
+  }
+
   let linksCreated = 0;
 
   for (const politician of politicians) {
     const donations = donationsByPolitician.get(politician.id) ?? [];
+    const relativesMap = relativesByPolitician.get(politician.id);
 
     for (const d of donations) {
       if (d.donorCpfCnpj === politician.cpf) continue;
 
+      const donorCpf = d.donorCpfCnpj.replace(/\D/g, "");
+      const confirmedRelative = relativesMap?.get(donorCpf);
+
+      // Tier 1: CPF confirmed via external data source
+      if (confirmedRelative) {
+        const existing = await prisma.politicalLink.findFirst({
+          where: {
+            politicianId: politician.id,
+            linkType: "FAMILY_DONATED",
+            data: { path: ["donorCpfCnpj"], equals: d.donorCpfCnpj },
+          },
+        });
+        if (existing) continue;
+
+        const amount = Number(d.amount);
+        const RELATIONSHIP_LABELS: Record<string, string> = {
+          mother: "mãe", father: "pai", brother: "irmão(ã)", spouse: "cônjuge",
+          son: "filho(a)", nephew: "sobrinho(a)", cousin: "primo(a)",
+          uncle: "tio(a)", grandparent: "avô/avó", grandson: "neto(a)",
+        };
+        const relLabel = RELATIONSHIP_LABELS[confirmedRelative.relationship] ?? confirmedRelative.relationship;
+        const strength = 0.85;
+
+        await prisma.politicalLink.create({
+          data: {
+            politicianId: politician.id,
+            linkType: "FAMILY_DONATED",
+            description: `Doador PF "${d.donorName}" é ${relLabel} de ${politician.name} (${politician.party}/${politician.state}) e doou R$ ${amount.toLocaleString("pt-BR")} — confirmado por CPF`,
+            strength,
+            data: {
+              politicianName: politician.name,
+              donorName: d.donorName,
+              donorCpfCnpj: d.donorCpfCnpj,
+              relationship: confirmedRelative.relationship,
+              relationshipLabel: relLabel,
+              confirmed: true,
+              amount,
+              electionYear: d.electionYear,
+            } as unknown as Prisma.InputJsonValue,
+          },
+        });
+
+        await prisma.alert.create({
+          data: {
+            type: "POLITICAL_LINK",
+            severity: "HIGH",
+            title: `Familiar confirmado doou para campanha`,
+            description: `${d.donorName} (${relLabel} de ${politician.name}, ${politician.party}/${politician.state}) doou R$ ${amount.toLocaleString("pt-BR")}`,
+            data: {
+              linkType: "FAMILY_DONATED",
+              politicianCpf: politician.cpf,
+              politicianName: politician.name,
+              donorName: d.donorName,
+              donorCpfCnpj: d.donorCpfCnpj,
+              relationship: confirmedRelative.relationship,
+              confirmed: true,
+              amount,
+            } as unknown as Prisma.InputJsonValue,
+          },
+        });
+
+        linksCreated++;
+        continue;
+      }
+
+      // Tier 2: Politician was queried but this CPF is not a known relative — skip
+      if (politician.familyFetchedAt) continue;
+
+      // Tier 3: Politician not yet queried — fall back to surname heuristics
       const match = computeSurnameMatchScore(politician.name, d.donorName);
-      if (!match || match.score < 0.25) continue;
+      if (!match || match.score < 0.40) continue;
+      if (match.matchedSurnames.length < 2 && !match.isLastSurnameMatch) continue;
 
       const existing = await prisma.politicalLink.findFirst({
         where: {
@@ -694,6 +873,7 @@ async function detectFamilyDonated(): Promise<number> {
             rarestSurname: match.rarestSurname,
             surnameScore: match.score,
             isLastSurnameMatch: match.isLastSurnameMatch,
+            confirmed: false,
             amount,
             electionYear: d.electionYear,
           } as unknown as Prisma.InputJsonValue,
@@ -716,6 +896,7 @@ async function detectFamilyDonated(): Promise<number> {
               sharedSurnames: match.matchedSurnames,
               rarestSurname: match.rarestSurname,
               surnameScore: match.score,
+              confirmed: false,
               amount,
             } as unknown as Prisma.InputJsonValue,
           },
