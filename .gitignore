@@ -46,6 +46,14 @@ Thumbs.db
 *.launch
 .settings
 
+# Generated Prisma clients
+**/src/generated/prisma/**
+!**/src/generated/prisma/.gitkeep
+
+# Database backups
+infrastructure/postgres/backups/**
+!infrastructure/postgres/backups/.gitkeep
+
 # Misc
 .vercel
 .netlify
