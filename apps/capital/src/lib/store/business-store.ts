@@ -46,6 +46,7 @@ export const useBusinessStore = create<BusinessStore>()((set, get) => ({
           description: b.description ?? undefined,
           defaultCurrency: b.defaultCurrency,
           color: b.color ?? undefined,
+          initialBalance: (b as Record<string, unknown>).initialBalance as number ?? 0,
           createdAt: new Date(b.createdAt),
           updatedAt: new Date(b.updatedAt),
         })),
@@ -84,6 +85,7 @@ export const useBusinessStore = create<BusinessStore>()((set, get) => ({
         description: data.description ?? undefined,
         defaultCurrency: data.defaultCurrency,
         color: data.color ?? undefined,
+        initialBalance: 0,
         createdAt: new Date(data.createdAt),
         updatedAt: new Date(data.updatedAt),
       };
@@ -127,6 +129,7 @@ export const useBusinessStore = create<BusinessStore>()((set, get) => ({
                 description: data.description ?? undefined,
                 defaultCurrency: data.defaultCurrency,
                 color: data.color ?? undefined,
+                initialBalance: (data as Record<string, unknown>).initialBalance as number ?? 0,
                 createdAt: new Date(data.createdAt),
                 updatedAt: new Date(data.updatedAt),
               }

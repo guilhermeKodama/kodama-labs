@@ -104,7 +104,8 @@ export function RecurringTransferForm({
         business.name,
         transactions,
         transfers,
-        settings.baseCurrency
+        settings.baseCurrency,
+        business.initialBalance
       );
       return {
         name: business.name,
@@ -121,7 +122,8 @@ export function RecurringTransferForm({
         tTransfers('form.personalAccount'),
         transactions,
         transfers,
-        settings.baseCurrency
+        settings.baseCurrency,
+        personalAccount.initialBalance
       );
       return {
         name: tTransfers('form.personalAccount'),

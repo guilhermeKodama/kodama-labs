@@ -56,7 +56,8 @@ export default function BusinessesPage() {
         business.name,
         transactions,
         transfers,
-        settings.baseCurrency
+        settings.baseCurrency,
+        business.initialBalance
       )
     );
   }, [businesses, transactions, transfers, settings.baseCurrency]);

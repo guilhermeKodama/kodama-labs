@@ -11,6 +11,7 @@ import {
   Download,
   Plus,
   Tag,
+  Wallet,
 } from 'lucide-react';
 import { AppShell } from '@/components/layout';
 import { Header } from '@/components/layout/header';
@@ -59,6 +60,7 @@ import {
 } from '@/lib/store';
 import { COMMON_CURRENCIES, getCurrencyByCode } from '@/lib/utils/currency';
 import { toast } from 'sonner';
+import { client } from '@/lib/api-client';
 import type { TransactionType, Category } from '@/types';
 
 export default function SettingsPage() {
@@ -67,6 +69,7 @@ export default function SettingsPage() {
     settings,
     currencies,
     categories,
+    personalAccount,
     updateSettings,
     addCurrency,
     updateCurrencyRate,
@@ -75,7 +78,7 @@ export default function SettingsPage() {
     removeCategory,
     resetApp,
   } = useSettingsStore();
-  const { businesses } = useBusinessStore();
+  const { businesses, updateBusiness } = useBusinessStore();
   const { transactions } = useTransactionStore();
   const { transfers } = useTransferStore();
 
@@ -85,6 +88,46 @@ export default function SettingsPage() {
   const [newCurrencyCode, setNewCurrencyCode] = useState('');
   const [newCurrencyRate, setNewCurrencyRate] = useState('1');
   const [deletingCategory, setDeletingCategory] = useState<Category | undefined>();
+
+  // Initial balance state
+  const [personalInitialBalance, setPersonalInitialBalance] = useState<string>(
+    personalAccount ? String(personalAccount.initialBalance) : '0'
+  );
+  const [businessInitialBalances, setBusinessInitialBalances] = useState<Record<string, string>>(
+    () => Object.fromEntries(businesses.map((b) => [b.id, String(b.initialBalance)]))
+  );
+  const [savingInitialBalance, setSavingInitialBalance] = useState<string | null>(null);
+
+  const handleSavePersonalInitialBalance = async () => {
+    if (!personalAccount) return;
+    setSavingInitialBalance('personal');
+    try {
+      const res = await client.v1.users.me['initial-balance'].$patch({
+        json: { initialBalance: parseFloat(personalInitialBalance) || 0 },
+      });
+      if (res.ok) {
+        toast.success(t('settings.initialBalance.saved'));
+      }
+    } catch {
+      toast.error('Failed to save initial balance');
+    } finally {
+      setSavingInitialBalance(null);
+    }
+  };
+
+  const handleSaveBusinessInitialBalance = async (businessId: string) => {
+    setSavingInitialBalance(businessId);
+    try {
+      await updateBusiness(businessId, {
+        initialBalance: parseFloat(businessInitialBalances[businessId] ?? '0') || 0,
+      });
+      toast.success(t('settings.initialBalance.saved'));
+    } catch {
+      toast.error('Failed to save initial balance');
+    } finally {
+      setSavingInitialBalance(null);
+    }
+  };
 
   const handleAddCurrency = () => {
     const currencyInfo = getCurrencyByCode(newCurrencyCode);
@@ -455,6 +498,84 @@ export default function SettingsPage() {
                 )}
               </div>
             )}
+          </CardContent>
+        </Card>
+
+        {/* Initial Balance */}
+        <Card className="border-slate-800 bg-slate-900/50 backdrop-blur-sm lg:col-span-2">
+          <CardHeader>
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-gradient-to-br from-emerald-500/20 to-teal-500/20">
+                <Wallet className="h-5 w-5 text-emerald-400" />
+              </div>
+              <div>
+                <CardTitle className="text-white">
+                  {t('settings.initialBalance.title')}
+                </CardTitle>
+                <CardDescription className="text-slate-400">
+                  {t('settings.initialBalance.description')}
+                </CardDescription>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {/* Personal Account */}
+            {personalAccount && (
+              <div className="flex items-center justify-between rounded-lg border border-slate-800 bg-slate-800/50 p-3">
+                <Label className="text-slate-300">
+                  {t('settings.initialBalance.personalAccount')}
+                </Label>
+                <div className="flex items-center gap-2">
+                  <Input
+                    type="number"
+                    step="0.01"
+                    value={personalInitialBalance}
+                    onChange={(e) => setPersonalInitialBalance(e.target.value)}
+                    placeholder={t('settings.initialBalance.placeholder')}
+                    className="w-36 border-slate-700 bg-slate-800 text-white text-right"
+                  />
+                  <Button
+                    size="sm"
+                    onClick={handleSavePersonalInitialBalance}
+                    disabled={savingInitialBalance === 'personal'}
+                    className="bg-emerald-600 text-white hover:bg-emerald-700"
+                  >
+                    {t('common.save')}
+                  </Button>
+                </div>
+              </div>
+            )}
+            {/* Business accounts */}
+            {businesses.map((biz) => (
+              <div key={biz.id} className="flex items-center justify-between rounded-lg border border-slate-800 bg-slate-800/50 p-3">
+                <Label className="text-slate-300">
+                  {t('settings.initialBalance.business', { name: biz.name })}
+                </Label>
+                <div className="flex items-center gap-2">
+                  <Input
+                    type="number"
+                    step="0.01"
+                    value={businessInitialBalances[biz.id] ?? '0'}
+                    onChange={(e) =>
+                      setBusinessInitialBalances((prev) => ({
+                        ...prev,
+                        [biz.id]: e.target.value,
+                      }))
+                    }
+                    placeholder={t('settings.initialBalance.placeholder')}
+                    className="w-36 border-slate-700 bg-slate-800 text-white text-right"
+                  />
+                  <Button
+                    size="sm"
+                    onClick={() => handleSaveBusinessInitialBalance(biz.id)}
+                    disabled={savingInitialBalance === biz.id}
+                    className="bg-emerald-600 text-white hover:bg-emerald-700"
+                  >
+                    {t('common.save')}
+                  </Button>
+                </div>
+              </div>
+            ))}
           </CardContent>
         </Card>
 

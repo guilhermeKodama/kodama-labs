@@ -63,7 +63,7 @@ export interface ClassifiedTransaction extends NormalizedTransaction {
   needsResolution: boolean;
 }
 
-export type ReconciliationStatus = "new" | "duplicate" | "changed";
+export type ReconciliationStatus = "new" | "duplicate" | "changed" | "fuzzy_match";
 
 export interface FieldDiff {
   field: "amount" | "date" | "description";
@@ -71,15 +71,24 @@ export interface FieldDiff {
   ofxValue: string;
 }
 
+export interface FuzzyMatchedTransaction {
+  id: string;
+  description: string;
+  amount: number;
+  date: string;
+  type: "income" | "expense";
+}
+
 export interface ReconciledTransaction extends NormalizedTransaction {
   status: ReconciliationStatus;
   existingTransactionId?: string;
   diffs?: FieldDiff[];
+  fuzzyMatchedTransaction?: FuzzyMatchedTransaction;
 }
 
 export interface ExistingTransactionData {
   id: string;
-  externalId: string;
+  externalId: string | null;
   amount: number;
   date: Date;
   description: string;
@@ -303,66 +312,104 @@ export function classifyTransactions(
 // detectReconciliation: compare parsed transactions against existing DB data
 // ---------------------------------------------------------------------------
 
+const FUZZY_DATE_TOLERANCE_MS = 3 * 24 * 60 * 60 * 1000; // 3 days
+
 export function detectReconciliation(
   transactions: NormalizedTransaction[],
-  existingTransactions: ExistingTransactionData[]
+  existingTransactions: ExistingTransactionData[],
+  knownTransferFitIds: Set<string> = new Set()
 ): ReconciledTransaction[] {
-  const existingMap = new Map<string, ExistingTransactionData>();
+  const existingByFitId = new Map<string, ExistingTransactionData>();
   for (const ex of existingTransactions) {
     if (ex.externalId) {
-      existingMap.set(ex.externalId, ex);
+      existingByFitId.set(ex.externalId, ex);
     }
   }
 
+  const usedFuzzyIds = new Set<string>();
+
   return transactions.map((tx) => {
-    const existing = existingMap.get(tx.fitId);
-
-    if (!existing) {
-      return { ...tx, status: "new" as const };
+    // --- Phase 0: FITID match against existing transfers ---
+    if (knownTransferFitIds.has(tx.fitId)) {
+      return { ...tx, status: "duplicate" as const };
     }
 
-    const diffs: FieldDiff[] = [];
+    // --- Phase 1: FITID exact match against existing transactions ---
+    const existing = existingByFitId.get(tx.fitId);
 
-    if (Math.abs(existing.amount - tx.amount) > 0.001) {
-      diffs.push({
-        field: "amount",
-        existingValue: existing.amount.toFixed(2),
-        ofxValue: tx.amount.toFixed(2),
-      });
-    }
+    if (existing) {
+      const diffs: FieldDiff[] = [];
 
-    const existingDateStr = existing.date.toISOString().split("T")[0];
-    const txDateStr = tx.date.toISOString().split("T")[0];
-    if (existingDateStr !== txDateStr) {
-      diffs.push({
-        field: "date",
-        existingValue: existingDateStr!,
-        ofxValue: txDateStr!,
-      });
-    }
+      if (Math.abs(existing.amount - tx.amount) > 0.001) {
+        diffs.push({
+          field: "amount",
+          existingValue: existing.amount.toFixed(2),
+          ofxValue: tx.amount.toFixed(2),
+        });
+      }
 
-    if (existing.description !== tx.description) {
-      diffs.push({
-        field: "description",
-        existingValue: existing.description,
-        ofxValue: tx.description,
-      });
-    }
+      const existingDateStr = existing.date.toISOString().split("T")[0];
+      const txDateStr = tx.date.toISOString().split("T")[0];
+      if (existingDateStr !== txDateStr) {
+        diffs.push({
+          field: "date",
+          existingValue: existingDateStr!,
+          ofxValue: txDateStr!,
+        });
+      }
 
-    if (diffs.length === 0) {
+      if (existing.description !== tx.description) {
+        diffs.push({
+          field: "description",
+          existingValue: existing.description,
+          ofxValue: tx.description,
+        });
+      }
+
+      if (diffs.length === 0) {
+        return {
+          ...tx,
+          status: "duplicate" as const,
+          existingTransactionId: existing.id,
+        };
+      }
+
       return {
         ...tx,
-        status: "duplicate" as const,
+        status: "changed" as const,
         existingTransactionId: existing.id,
+        diffs,
       };
     }
 
-    return {
-      ...tx,
-      status: "changed" as const,
-      existingTransactionId: existing.id,
-      diffs,
-    };
+    // --- Phase 2: Fuzzy match (amount + date within ±3 days) ---
+    const txTime = tx.date.getTime();
+    const fuzzyMatch = existingTransactions.find((ex) => {
+      if (usedFuzzyIds.has(ex.id)) return false;
+      if (ex.externalId) return false;
+      if (Math.abs(ex.amount - tx.amount) > 0.001) return false;
+      if (ex.type !== tx.type) return false;
+      const timeDiff = Math.abs(ex.date.getTime() - txTime);
+      return timeDiff <= FUZZY_DATE_TOLERANCE_MS;
+    });
+
+    if (fuzzyMatch) {
+      usedFuzzyIds.add(fuzzyMatch.id);
+      return {
+        ...tx,
+        status: "fuzzy_match" as const,
+        existingTransactionId: fuzzyMatch.id,
+        fuzzyMatchedTransaction: {
+          id: fuzzyMatch.id,
+          description: fuzzyMatch.description,
+          amount: fuzzyMatch.amount,
+          date: fuzzyMatch.date.toISOString().split("T")[0]!,
+          type: fuzzyMatch.type,
+        },
+      };
+    }
+
+    return { ...tx, status: "new" as const };
   });
 }
 

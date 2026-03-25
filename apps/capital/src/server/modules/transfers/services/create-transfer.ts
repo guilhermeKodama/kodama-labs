@@ -17,6 +17,7 @@ interface CreateTransferInput {
   toPersonalAccountId?: string;
   toInvestmentAccountId?: string;
   fromInvestmentAccountId?: string;
+  externalId?: string;
 }
 
 export async function createTransfer(
