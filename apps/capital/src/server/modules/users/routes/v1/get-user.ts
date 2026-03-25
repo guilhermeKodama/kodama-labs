@@ -22,6 +22,7 @@ const UserResponseSchema = z.object({
     .object({
       id: z.string(),
       defaultCurrency: z.string(),
+      initialBalance: z.number(),
     })
     .nullable(),
 });
@@ -78,6 +79,7 @@ export const handler: AppRouteHandler<typeof route> = async (c) => {
           ? {
               id: user.personalAccount.id,
               defaultCurrency: user.personalAccount.defaultCurrency,
+              initialBalance: user.personalAccount.initialBalance,
             }
           : null,
       },

@@ -17,6 +17,7 @@ interface CreateTransferData {
   toInvestmentAccountId?: string;
   fromInvestmentAccountId?: string;
   recurringTransferId?: string;
+  externalId?: string;
 }
 
 /**

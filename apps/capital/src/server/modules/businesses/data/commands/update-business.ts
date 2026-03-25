@@ -6,6 +6,7 @@ interface UpdateBusinessData {
   defaultCurrency?: string;
   color?: string;
   taxRate?: number;
+  initialBalance?: number;
 }
 
 /**

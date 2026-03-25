@@ -754,6 +754,14 @@
       "deleteTitle": "Excluir Categoria?",
       "deleteDescription": "Tem certeza que deseja excluir a categoria \"{name}\"? Isso não afetará transações existentes."
     },
+    "initialBalance": {
+      "title": "Saldo Inicial",
+      "description": "Saldo inicial das suas contas antes do rastreamento. Definido automaticamente na primeira importação de extrato.",
+      "personalAccount": "Conta Pessoal",
+      "business": "Empresa: {name}",
+      "placeholder": "0,00",
+      "saved": "Saldo inicial salvo!"
+    },
     "data": {
       "title": "Gerenciamento de Dados",
       "description": "Exporte ou redefina seus dados",
@@ -1295,6 +1303,14 @@
       "business": "Empresa",
       "selectBusiness": "Selecione uma empresa"
     },
+    "dedup": {
+      "title": "Possíveis Duplicatas Encontradas",
+      "description": "Encontramos {count} transação(ões) que podem já existir nos seus registros. Revise cada correspondência.",
+      "bankStatement": "Extrato Bancário",
+      "existingEntry": "Registro Existente",
+      "sameTransaction": "Mesma transação",
+      "differentTransaction": "Diferente — importar"
+    },
     "creditCards": {
       "detected": "Pagamentos de fatura detectados",
       "detectedDescription": "Encontramos {count} pagamento(s) de fatura de cartão. Deseja criar um cartão de crédito?",
@@ -1374,7 +1390,12 @@
       "duplicate": "Já importada",
       "importing": "Importando...",
       "import": "Importar {count} transações",
-      "importWithTransfers": "Importar {txCount} transações + {trCount} transferências"
+      "importWithTransfers": "Importar {txCount} transações + {trCount} transferências",
+      "currentBalance": "Saldo atual",
+      "projectedBalance": "Após importação",
+      "bankBalance": "Saldo do extrato",
+      "balanceMatch": "Confere",
+      "balanceDiff": "de diferença"
     },
     "success": {
       "title": "Importação Concluída",
@@ -1385,6 +1406,7 @@
       "transfersCreated": "{count} transferência(s) criada(s)",
       "creditCardsCreated": "{count} cartão(ões) de crédito criado(s)",
       "investmentTransfersCreated": "{count} transferência(s) de investimento criada(s)",
+      "fuzzyDuplicatesLinked": "{count} duplicata(s) vinculada(s) a registros existentes",
       "categorizing": "IA está categorizando suas transações..."
     },
     "status": {
