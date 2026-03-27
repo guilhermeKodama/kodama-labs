@@ -143,20 +143,19 @@ export default async function EntityDetailPage({
                   SHAREHOLDER_IS_POLITICIAN: "Sócio é Político",
                   SUPPLIER_DONATED: "Fornecedor Doou para Campanha",
                   DONOR_GOT_CONTRACT: "Doador Recebeu Contrato",
-                  FAMILY_IN_SUPPLIER: "Possível Familiar em Fornecedor",
-                  FAMILY_DONATED: "Possível Familiar Doou",
+                  FAMILY_IN_SUPPLIER: "Familiar Confirmado em Fornecedor",
+                  FAMILY_DONATED: "Familiar Confirmado Doou",
                   POLITICIAN_IS_SERVANT: "Político é Servidor",
                   WEALTH_ANOMALY: "Anomalia Patrimonial",
+                  DONOR_IS_SHAREHOLDER: "Doador é Sócio de Fornecedor",
+                  DONATION_TIMING: "Proximidade Temporal Doação-Contrato",
+                  DONOR_CONCENTRATION: "Concentração de Doações",
                 };
                 const strengthColor = link.strength >= 0.8
                   ? "bg-red-500/20 text-red-500"
                   : link.strength >= 0.5
                     ? "bg-orange-500/20 text-orange-500"
                     : "bg-yellow-500/20 text-yellow-500";
-
-                const data = link.data as Record<string, unknown> | null;
-                const surnameScore = data?.surnameScore as number | undefined;
-                const rarestSurname = data?.rarestSurname as string | undefined;
 
                 return (
                   <div key={link.id} className="p-4">
@@ -167,11 +166,6 @@ export default async function EntityDetailPage({
                       <span className={`text-[11px] px-1.5 py-0.5 rounded font-medium ${strengthColor}`}>
                         Força: {(link.strength * 100).toFixed(0)}%
                       </span>
-                      {surnameScore !== undefined && rarestSurname && (
-                        <span className="text-[11px] px-1.5 py-0.5 rounded bg-blue-500/15 text-blue-600 font-medium">
-                          Sobrenome: {rarestSurname} (raridade {(surnameScore * 100).toFixed(0)}%)
-                        </span>
-                      )}
                     </div>
                     <p className="text-sm mb-2">{link.description}</p>
                     <Link

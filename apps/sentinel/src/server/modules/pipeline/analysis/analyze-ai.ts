@@ -16,105 +16,119 @@ export async function analyzeAi() {
 
     const anthropic = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY });
 
-    const procurementsToAnalyze = await prisma.procurement.findMany({
-      where: {
-        analyses: { none: {} },
-        alerts: { some: {} },
-      },
-      include: {
-        items: {
-          include: {
-            priceAnalyses: true,
-            priceReferences: true,
-          },
+    let totalIn = 0;
+    let recordsOut = 0;
+
+    // eslint-disable-next-line no-constant-condition
+    while (true) {
+      const procurementsToAnalyze = await prisma.procurement.findMany({
+        where: {
+          analyses: { none: {} },
+          alerts: { some: {} },
         },
-        contracts: {
-          include: {
-            entity: {
-              include: {
-                shareholders: true,
-                sanctions: true,
-                politicalLinks: {
-                  include: {
-                    politician: {
-                      select: { name: true, party: true, position: true, state: true },
+        include: {
+          items: {
+            include: {
+              priceAnalyses: true,
+              priceReferences: true,
+            },
+          },
+          contracts: {
+            include: {
+              entity: {
+                include: {
+                  shareholders: true,
+                  sanctions: true,
+                  politicalLinks: {
+                    include: {
+                      politician: {
+                        select: { name: true, party: true, position: true, state: true },
+                      },
                     },
                   },
                 },
               },
             },
           },
+          alerts: true,
         },
-        alerts: true,
-      },
-      orderBy: { riskScore: { sort: "desc", nulls: "last" } },
-      take: BATCH_SIZE,
-    });
+        orderBy: { riskScore: { sort: "desc", nulls: "last" } },
+        take: BATCH_SIZE,
+      });
 
-    let recordsOut = 0;
+      if (procurementsToAnalyze.length === 0) break;
+      totalIn += procurementsToAnalyze.length;
 
-    for (const procurement of procurementsToAnalyze) {
-      try {
-        const context = buildAnalysisContext(procurement);
-        const prompt = buildPrompt(context);
+      for (const procurement of procurementsToAnalyze) {
+        try {
+          const context = buildAnalysisContext(procurement);
+          const prompt = buildPrompt(context);
 
-        const response = await anthropic.messages.create({
-          model: MODEL,
-          max_tokens: 2000,
-          messages: [{ role: "user", content: prompt }],
-        });
-
-        const responseText =
-          response.content[0]?.type === "text"
-            ? response.content[0].text
-            : "";
-
-        const riskScore = extractRiskScore(responseText);
-        const findings = extractFindings(responseText);
-
-        await prisma.aiAnalysis.create({
-          data: {
-            targetType: "procurement",
-            targetId: procurement.id,
-            analysisType: "risk_assessment",
-            prompt,
-            response: responseText,
-            riskScore,
-            findings: findings as unknown as Prisma.InputJsonValue,
+          const response = await anthropic.messages.create({
             model: MODEL,
-            tokens: response.usage.input_tokens + response.usage.output_tokens,
-            procurementId: procurement.id,
-          },
-        });
+            max_tokens: 2000,
+            messages: [{ role: "user", content: prompt }],
+          });
 
-        await prisma.procurement.update({
-          where: { id: procurement.id },
-          data: { riskScore },
-        });
+          const responseText =
+            response.content[0]?.type === "text"
+              ? response.content[0].text
+              : "";
 
-        if (riskScore >= 0.7) {
-          await prisma.alert.create({
+          const riskScore = extractRiskScore(responseText);
+          const findings = extractFindings(responseText);
+
+          await prisma.aiAnalysis.create({
             data: {
-              type: "AI_FLAG",
-              severity: riskScore >= 0.9 ? "CRITICAL" : "HIGH",
-              title: `IA identificou alto risco na licitação: ${procurement.orgName}`,
-              description: responseText.slice(0, 500),
+              targetType: "procurement",
+              targetId: procurement.id,
+              analysisType: "risk_assessment",
+              prompt,
+              response: responseText,
+              riskScore,
+              findings: findings as unknown as Prisma.InputJsonValue,
+              model: MODEL,
+              tokens: response.usage.input_tokens + response.usage.output_tokens,
               procurementId: procurement.id,
-              data: { riskScore, findings } as unknown as Prisma.InputJsonValue,
             },
           });
-        }
 
-        recordsOut++;
-      } catch (error) {
-        console.error(
-          `[analyze-ai] Error analyzing procurement ${procurement.id}:`,
-          error
-        );
+          await prisma.procurement.update({
+            where: { id: procurement.id },
+            data: { riskScore },
+          });
+
+          if (riskScore >= 0.7) {
+            const existingAiAlert = await prisma.alert.findFirst({
+              where: { type: "AI_FLAG", procurementId: procurement.id },
+            });
+            if (!existingAiAlert) {
+              await prisma.alert.create({
+                data: {
+                  type: "AI_FLAG",
+                  severity: riskScore >= 0.9 ? "CRITICAL" : "HIGH",
+                  title: `IA identificou alto risco na licitação: ${procurement.orgName}`,
+                  description: responseText.slice(0, 500),
+                  procurementId: procurement.id,
+                  data: { riskScore, findings } as unknown as Prisma.InputJsonValue,
+                },
+              });
+            }
+          }
+
+          recordsOut++;
+        } catch (error) {
+          console.error(
+            `[analyze-ai] Error analyzing procurement ${procurement.id}:`,
+            error
+          );
+        }
       }
+
+      if (procurementsToAnalyze.length < BATCH_SIZE) break;
     }
 
-    return { recordsIn: procurementsToAnalyze.length, recordsOut };
+    return { recordsIn: totalIn, recordsOut };
   });
 }
 

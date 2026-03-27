@@ -77,6 +77,39 @@ export async function fetchFornecedores(
   };
 }
 
+export interface ComprasGovIrpItem {
+  numero_irp: string;
+  numero_item_irp: number;
+  descricao_item: string;
+  codigo_item_material: number;
+  descricao_item_material: string;
+  quantidade_estimada: number;
+  valor_unitario_estimado: number;
+  valor_total_estimado: number;
+  unidade_fornecimento: string;
+  data_criacao: string;
+  codigo_uasg: string;
+}
+
+export async function fetchIrpByMaterial(
+  materialCode: number,
+  offset: number = 0,
+  limit: number = 100
+): Promise<{ data: ComprasGovIrpItem[]; count: number }> {
+  const result = await fetchComprasGov<ComprasGovIrpItem>(
+    "/licitacoes/v1/irps",
+    {
+      item_material: materialCode.toString(),
+      offset: offset.toString(),
+      limit: limit.toString(),
+    }
+  );
+  return {
+    data: result._embedded?.irps ?? [],
+    count: result.count,
+  };
+}
+
 export async function fetchMateriais(
   grupoId?: number,
   offset: number = 0,

@@ -23,8 +23,7 @@ export default async function PoliticianDetailPage({
     where: { id },
     include: {
       donations: {
-        orderBy: { amount: "desc" },
-        take: 50,
+        orderBy: [{ amount: "desc" }],
       },
       links: {
         orderBy: { strength: "desc" },
@@ -78,10 +77,13 @@ export default async function PoliticianDetailPage({
     SHAREHOLDER_IS_POLITICIAN: "Sócio é Político",
     SUPPLIER_DONATED: "Fornecedor Doou para Campanha",
     DONOR_GOT_CONTRACT: "Doador Recebeu Contrato",
-    FAMILY_IN_SUPPLIER: "Possível Familiar em Fornecedor",
-    FAMILY_DONATED: "Possível Familiar Doou",
+    FAMILY_IN_SUPPLIER: "Familiar Confirmado em Fornecedor",
+    FAMILY_DONATED: "Familiar Confirmado Doou",
     POLITICIAN_IS_SERVANT: "Político é Servidor Público",
     WEALTH_ANOMALY: "Crescimento Patrimonial Anômalo",
+    DONOR_IS_SHAREHOLDER: "Doador é Sócio de Fornecedor",
+    DONATION_TIMING: "Proximidade Temporal Doação-Contrato",
+    DONOR_CONCENTRATION: "Concentração de Doações",
   };
 
   const strengthColor = (s: number) =>
@@ -229,6 +231,83 @@ export default async function PoliticianDetailPage({
           )}
         </div>
 
+        {/* All Donations — detailed table */}
+        {politician.donations.length > 0 && (
+          <div className="rounded-lg border bg-card overflow-hidden mb-6">
+            <div className="p-4 border-b">
+              <h2 className="text-base font-semibold flex items-center gap-2">
+                <DollarSign className="h-4 w-4" />
+                Todas as Doações ({politician.donations.length})
+              </h2>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b bg-muted/50">
+                    <th className="text-left p-3 font-medium">Doador</th>
+                    <th className="text-left p-3 font-medium">CPF/CNPJ</th>
+                    <th className="text-center p-3 font-medium">Tipo</th>
+                    <th className="text-right p-3 font-medium">Valor</th>
+                    <th className="text-left p-3 font-medium">Origem</th>
+                    <th className="text-left p-3 font-medium">Espécie</th>
+                    <th className="text-left p-3 font-medium">Atividade (CNAE)</th>
+                    <th className="text-center p-3 font-medium">UF Doador</th>
+                    <th className="text-center p-3 font-medium">Data</th>
+                    <th className="text-center p-3 font-medium">Ano</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {politician.donations.map((d) => (
+                    <tr key={d.id} className="border-b hover:bg-muted/30 transition-colors">
+                      <td className="p-3 max-w-[200px]">
+                        <div className="font-medium truncate">{d.donorName}</div>
+                        {d.donorNameRfb && d.donorNameRfb !== d.donorName && (
+                          <div className="text-[10px] text-muted-foreground truncate">RFB: {d.donorNameRfb}</div>
+                        )}
+                      </td>
+                      <td className="p-3 text-muted-foreground text-xs font-mono">
+                        {d.donorCpfCnpj.length === 14
+                          ? formatCnpj(d.donorCpfCnpj)
+                          : d.donorCpfCnpj.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4")}
+                      </td>
+                      <td className="p-3 text-center">
+                        <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${
+                          d.donorType === "PJ"
+                            ? "bg-blue-500/20 text-blue-600"
+                            : d.donorType === "PF"
+                              ? "bg-green-500/20 text-green-600"
+                              : "bg-muted text-muted-foreground"
+                        }`}>
+                          {d.donorType ?? "-"}
+                        </span>
+                      </td>
+                      <td className="p-3 text-right font-medium tabular-nums">
+                        {formatCurrency(d.amount.toString())}
+                      </td>
+                      <td className="p-3 text-xs text-muted-foreground truncate max-w-[150px]">
+                        {d.originType ?? "-"}
+                      </td>
+                      <td className="p-3 text-xs text-muted-foreground truncate max-w-[100px]">
+                        {d.speciesType ?? "-"}
+                      </td>
+                      <td className="p-3 text-xs text-muted-foreground truncate max-w-[150px]">
+                        {d.donorCnae ?? "-"}
+                      </td>
+                      <td className="p-3 text-center text-xs text-muted-foreground">
+                        {d.donorState ?? d.state ?? "-"}
+                      </td>
+                      <td className="p-3 text-center text-xs text-muted-foreground">
+                        {d.donationDate?.toLocaleDateString("pt-BR") ?? "-"}
+                      </td>
+                      <td className="p-3 text-center text-xs">{d.electionYear}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
         {/* Asset Declaration History */}
         {politician.assets.length > 0 && (
           <div className="rounded-lg border bg-card overflow-hidden mb-6">
@@ -275,10 +354,6 @@ export default async function PoliticianDetailPage({
             </div>
             <div className="divide-y">
               {politician.links.map((link) => {
-                const data = link.data as Record<string, unknown> | null;
-                const surnameScore = data?.surnameScore as number | undefined;
-                const rarestSurname = data?.rarestSurname as string | undefined;
-
                 return (
                   <div key={link.id} className="p-4">
                     <div className="flex items-center gap-2 mb-2 flex-wrap">
@@ -290,11 +365,6 @@ export default async function PoliticianDetailPage({
                       >
                         Força: {(link.strength * 100).toFixed(0)}%
                       </span>
-                      {surnameScore !== undefined && rarestSurname && (
-                        <span className="text-[11px] px-1.5 py-0.5 rounded bg-blue-500/15 text-blue-600 font-medium">
-                          Sobrenome: {rarestSurname} (raridade {(surnameScore * 100).toFixed(0)}%)
-                        </span>
-                      )}
                     </div>
                     <p className="text-sm mb-2">{link.description}</p>
                     {link.entity && (
@@ -359,50 +429,6 @@ export default async function PoliticianDetailPage({
           </div>
         )}
 
-        {/* Campaign Donations from Companies */}
-        {pjDonations.length > 0 && (
-          <div className="rounded-lg border bg-card overflow-hidden mb-6">
-            <div className="p-4 border-b">
-              <h2 className="text-base font-semibold flex items-center gap-2">
-                <DollarSign className="h-4 w-4" />
-                Doações de Empresas ({pjDonations.length})
-              </h2>
-            </div>
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b bg-muted/50">
-                    <th className="text-left p-3 font-medium">Doador</th>
-                    <th className="text-left p-3 font-medium">CNPJ</th>
-                    <th className="text-right p-3 font-medium">Valor</th>
-                    <th className="text-center p-3 font-medium">Ano</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {pjDonations.map((d) => (
-                    <tr
-                      key={d.id}
-                      className="border-b hover:bg-muted/30 transition-colors"
-                    >
-                      <td className="p-3 font-medium truncate max-w-[200px]">
-                        {d.donorName}
-                      </td>
-                      <td className="p-3 text-muted-foreground text-xs">
-                        {formatCnpj(d.donorCpfCnpj)}
-                      </td>
-                      <td className="p-3 text-right font-medium tabular-nums">
-                        {formatCurrency(d.amount.toString())}
-                      </td>
-                      <td className="p-3 text-center text-xs">
-                        {d.electionYear}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
       </div>
     </PageLayout>
   );

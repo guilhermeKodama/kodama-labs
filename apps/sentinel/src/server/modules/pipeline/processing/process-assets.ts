@@ -1,9 +1,9 @@
 import { prisma } from "@sentinel/server/lib/prisma";
 import { Prisma } from "@/generated/prisma";
-import { runJob } from "@sentinel/server/lib/job-runner";
-import { cleanCpf } from "@/lib/gov-apis/tse";
+import { runJob, markProcessed, markErrors } from "@sentinel/server/lib/job-runner";
+import { getCpfToPoliticianId, getSeqToCpfMap } from "@sentinel/server/lib/politician-cache";
 
-const BATCH_SIZE = 500;
+const BATCH_SIZE = 2000;
 
 type RawRow = Record<string, string>;
 
@@ -21,96 +21,86 @@ export async function processAssets() {
         source: "TSE",
         recordType: "asset",
         processedAt: null,
+        processingError: null,
       },
-      take: BATCH_SIZE * 50,
+      select: { id: true, externalId: true, data: true },
+      take: BATCH_SIZE,
       orderBy: { fetchedAt: "asc" },
     });
 
-    const candidateRaws = await prisma.rawRecord.findMany({
-      where: {
-        source: "TSE",
-        recordType: "candidate",
-      },
-      select: { data: true },
-    });
+    if (rawRecords.length === 0) return { recordsIn: 0, recordsOut: 0 };
 
-    const seqToCpf = new Map<string, string>();
-    for (const r of candidateRaws) {
-      const d = r.data as unknown as RawRow;
-      const seq = findCol(d, /SQ_CANDIDATO/i);
-      const rawCpf = findCol(d, /NR_CPF_CANDIDATO/i);
-      if (seq && rawCpf) {
-        seqToCpf.set(seq, cleanCpf(rawCpf));
+    const seqToCpf = await getSeqToCpfMap();
+    const cpfToPoliticianId = await getCpfToPoliticianId();
+
+    const successIds: string[] = [];
+    const errs: { id: string; error: string }[] = [];
+    const toCreate: {
+      politicianId: string;
+      assetType: string;
+      description: string;
+      value: Prisma.Decimal;
+      electionYear: number;
+      rawRecordId: string;
+    }[] = [];
+
+    for (const raw of rawRecords) {
+      const data = raw.data as unknown as RawRow;
+      const seq = findCol(data, /SQ_CANDIDATO/i);
+      const cpf = seqToCpf.get(seq);
+      const politicianId = cpf ? cpfToPoliticianId.get(cpf) : undefined;
+
+      if (!politicianId) {
+        successIds.push(raw.id);
+        continue;
       }
+
+      const yearStr = data._year ?? findCol(data, /ANO_ELEICAO/i);
+      const electionYear = parseInt(yearStr) || 0;
+      if (electionYear === 0) {
+        errs.push({ id: raw.id, error: "Missing election year" });
+        continue;
+      }
+
+      const assetType = findCol(data, /DS_TIPO_BEM_CANDIDATO/i) || findCol(data, /CD_TIPO_BEM_CANDIDATO/i) || "DESCONHECIDO";
+      const description = findCol(data, /DS_BEM_CANDIDATO/i) || "";
+      const valueStr = findCol(data, /VR_BEM_CANDIDATO/i).replace(",", ".");
+      const value = parseFloat(valueStr) || 0;
+
+      toCreate.push({
+        politicianId,
+        assetType,
+        description,
+        value: new Prisma.Decimal(value),
+        electionYear,
+        rawRecordId: raw.id,
+      });
+      successIds.push(raw.id);
     }
 
-    const allPoliticians = await prisma.politician.findMany({
-      select: { id: true, cpf: true },
-    });
-    const cpfToPoliticianId = new Map(allPoliticians.map((p) => [p.cpf, p.id]));
-
-    let recordsOut = 0;
-
-    for (let i = 0; i < rawRecords.length; i += BATCH_SIZE) {
-      const batch = rawRecords.slice(i, i + BATCH_SIZE);
-
-      for (const raw of batch) {
+    if (toCreate.length > 0) {
+      const CHUNK = 1000;
+      for (let i = 0; i < toCreate.length; i += CHUNK) {
         try {
-          const data = raw.data as unknown as RawRow;
-          const seq = findCol(data, /SQ_CANDIDATO/i);
-          const cpf = seqToCpf.get(seq);
-          const politicianId = cpf ? cpfToPoliticianId.get(cpf) : undefined;
-
-          if (!politicianId) {
-            await prisma.rawRecord.update({
-              where: { id: raw.id },
-              data: { processingError: `No politician found for seq ${seq}` },
-            });
-            continue;
-          }
-
-          const assetType = findCol(data, /DS_TIPO_BEM_CANDIDATO/i) || findCol(data, /CD_TIPO_BEM_CANDIDATO/i) || "DESCONHECIDO";
-          const description = findCol(data, /DS_BEM_CANDIDATO/i) || "";
-          const valueStr = findCol(data, /VR_BEM_CANDIDATO/i).replace(",", ".");
-          const value = parseFloat(valueStr) || 0;
-          const yearStr = data._year ?? findCol(data, /ANO_ELEICAO/i);
-          const electionYear = parseInt(yearStr) || 0;
-
-          if (electionYear === 0) {
-            await prisma.rawRecord.update({
-              where: { id: raw.id },
-              data: { processingError: "Missing election year" },
-            });
-            continue;
-          }
-
-          await prisma.candidateAsset.create({
-            data: {
-              politicianId,
-              assetType,
-              description,
-              value: new Prisma.Decimal(value),
-              electionYear,
-              rawRecordId: raw.id,
-            },
+          await prisma.candidateAsset.createMany({
+            data: toCreate.slice(i, i + CHUNK),
           });
-
-          await prisma.rawRecord.update({
-            where: { id: raw.id },
-            data: { processedAt: new Date() },
-          });
-          recordsOut++;
         } catch (err) {
-          const msg = err instanceof Error ? err.message : "Unknown error";
-          console.error(`[process-assets] Error processing ${raw.id}:`, msg);
-          await prisma.rawRecord.update({
-            where: { id: raw.id },
-            data: { processingError: msg },
-          });
+          const msg = err instanceof Error ? err.message : "createMany error";
+          console.error("[process-assets] createMany failed:", msg);
+          const failedChunk = toCreate.slice(i, i + CHUNK);
+          for (const item of failedChunk) {
+            const idx = successIds.indexOf(item.rawRecordId);
+            if (idx !== -1) successIds.splice(idx, 1);
+            errs.push({ id: item.rawRecordId, error: msg });
+          }
         }
       }
     }
 
-    return { recordsIn: rawRecords.length, recordsOut };
+    await markProcessed(successIds);
+    await markErrors(errs);
+
+    return { recordsIn: rawRecords.length, recordsOut: successIds.length };
   });
 }
