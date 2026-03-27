@@ -10,13 +10,6 @@ function sleep(ms: number) {
   return new Promise((r) => setTimeout(r, ms));
 }
 
-function findCol(row: Record<string, string>, pattern: RegExp): string {
-  for (const key of Object.keys(row)) {
-    if (pattern.test(key)) return row[key] ?? "";
-  }
-  return "";
-}
-
 export async function ingestDonations() {
   return runJob("ingest-donations", "ingestion", async () => {
     let totalIn = 0;

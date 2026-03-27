@@ -19,7 +19,6 @@ export async function analyzeAi() {
     let totalIn = 0;
     let recordsOut = 0;
 
-    // eslint-disable-next-line no-constant-condition
     while (true) {
       const procurementsToAnalyze = await prisma.procurement.findMany({
         where: {

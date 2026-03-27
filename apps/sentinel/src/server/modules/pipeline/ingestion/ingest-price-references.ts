@@ -6,7 +6,7 @@ import {
   fetchItemResults,
   parseCompraControlNumber,
 } from "@/lib/gov-apis/pncp";
-import type { PncpItem, PncpBidResult } from "@/lib/gov-apis/pncp";
+import type { PncpItem } from "@/lib/gov-apis/pncp";
 import { Prisma } from "@/generated/prisma";
 
 const ATAS_PER_RUN = 15;
