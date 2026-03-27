@@ -37,6 +37,12 @@ const APPS: AppConfig[] = [
     vercelJsonPath: join(__dirname, "../../../apps/capital/vercel.json"),
     cronSecret: process.env.CRON_SECRET,
   },
+  {
+    name: "sentinel",
+    baseUrl: "http://localhost:3002",
+    vercelJsonPath: join(__dirname, "../../../apps/sentinel/vercel.json"),
+    cronSecret: process.env.CRON_SECRET,
+  },
 ];
 
 /**

@@ -1,4 +1,10 @@
 {
   "title": "Wallex",
-  "pages": ["---Business---", "...business"]
+  "pages": [
+    "---Apps---",
+    "...capital",
+    "...sentinel",
+    "---Research---",
+    "...business"
+  ]
 }

@@ -7,6 +7,6 @@ const create = browser<typeof Config, import("fumadocs-mdx/runtime/types").Inter
   }
 }>();
 const browserCollections = {
-  docs: create.doc("docs", {"index.mdx": () => import("../content/docs/index.mdx?collection=docs"), "business/index.mdx": () => import("../content/docs/business/index.mdx?collection=docs"), "business/market-research.mdx": () => import("../content/docs/business/market-research.mdx?collection=docs"), }),
+  docs: create.doc("docs", {"index.mdx": () => import("../content/docs/index.mdx?collection=docs"), "business/index.mdx": () => import("../content/docs/business/index.mdx?collection=docs"), "business/market-research.mdx": () => import("../content/docs/business/market-research.mdx?collection=docs"), "capital/index.mdx": () => import("../content/docs/capital/index.mdx?collection=docs"), "sentinel/analysis-engines.mdx": () => import("../content/docs/sentinel/analysis-engines.mdx?collection=docs"), "sentinel/architecture.mdx": () => import("../content/docs/sentinel/architecture.mdx?collection=docs"), "sentinel/data-model.mdx": () => import("../content/docs/sentinel/data-model.mdx?collection=docs"), "sentinel/data-sources.mdx": () => import("../content/docs/sentinel/data-sources.mdx?collection=docs"), "sentinel/etl-pipeline.mdx": () => import("../content/docs/sentinel/etl-pipeline.mdx?collection=docs"), "sentinel/index.mdx": () => import("../content/docs/sentinel/index.mdx?collection=docs"), }),
 };
 export default browserCollections;

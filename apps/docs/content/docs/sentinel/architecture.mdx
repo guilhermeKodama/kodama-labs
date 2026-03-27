@@ -1,0 +1,184 @@
+---
+title: System Architecture
+description: High-level system design, component interactions, and deployment topology for Sentinel
+---
+
+# System Architecture
+
+Sentinel is structured as a Next.js application with three distinct subsystems: a **data ingestion pipeline**, a **processing engine**, and an **analysis layer**. These run as background jobs orchestrated by cron schedules, while the frontend provides dashboards and detail views for investigation.
+
+## High-Level Architecture
+
+```mermaid
+flowchart TB
+    subgraph External["External Data Sources"]
+        PNCP["PNCP API\npncp.gov.br"]
+        TRANS["Portal da Transparência\napi.portaldatransparencia.gov.br"]
+        TCU["TCU Open Data\nsites.tcu.gov.br"]
+        BRASIL["BrasilAPI\nbrasilapi.com.br"]
+    end
+
+    subgraph Cron["Cron Scheduler"]
+        C1["/api/cron/ingest\nEvery 10 min"]
+        C2["/api/cron/process\nEvery 5 min"]
+        C3["/api/cron/analyze\nEvery 5 min"]
+    end
+
+    subgraph Sentinel["Sentinel Application"]
+        subgraph Ingestion["Ingestion Jobs"]
+            I1["ingest-pncp"]
+            I2["ingest-pncp-details"]
+            I3["ingest-sanctions"]
+            I4["ingest-cnpj"]
+        end
+
+        subgraph Processing["Processing Jobs"]
+            P1["process-procurements"]
+            P2["process-contracts"]
+            P3["process-items"]
+            P4["process-entities"]
+            P5["link-data"]
+        end
+
+        subgraph Analysis["Analysis Engines"]
+            A1["analyze-overpricing"]
+            A2["analyze-shell-companies"]
+            A3["analyze-sanctions"]
+            A4["analyze-network"]
+            A5["analyze-ai"]
+        end
+
+        subgraph Frontend["Frontend"]
+            D1["Dashboard"]
+            D2["Procurements"]
+            D3["Contracts"]
+            D4["Entities"]
+            D5["Pipeline Monitor"]
+        end
+    end
+
+    subgraph DB["PostgreSQL (sentinel)"]
+        RAW[(raw_records\ningestion_cursors)]
+        PROC[(procurements\ncontracts\nitems\nentities\nsanctions)]
+        ANAL[(alerts\nai_analyses\nprice_analyses)]
+        JOBS[(job_runs)]
+    end
+
+    External --> Ingestion
+    C1 --> Ingestion
+    C2 --> Processing
+    C3 --> Analysis
+
+    Ingestion --> RAW
+    RAW --> Processing
+    Processing --> PROC
+    PROC --> Analysis
+    Analysis --> ANAL
+
+    Ingestion --> JOBS
+    Processing --> JOBS
+    Analysis --> JOBS
+
+    PROC --> Frontend
+    ANAL --> Frontend
+    JOBS --> Frontend
+```
+
+## Component Interactions
+
+### Request Flow
+
+1. **Vercel Cron** (or local `infrastructure/cronjobs`) sends HTTP GET requests to the cron API routes on a fixed schedule
+2. Each cron route authenticates via `Authorization: Bearer $CRON_SECRET` and runs its jobs sequentially
+3. Jobs use the **job runner** (`job-runner.ts`) which creates a `JobRun` record, executes the logic, and updates the record with results (records in/out, status, duration)
+4. Jobs read from and write to the PostgreSQL `sentinel` database via Prisma
+
+### Database Isolation
+
+Sentinel uses a **completely separate database** from the Capital app:
+
+| App | Database | Connection |
+|---|---|---|
+| Capital | `capital` (port 5433) | `postgresql://root:root@localhost:5433/capital` |
+| Sentinel | `sentinel` (port 5433) | `postgresql://root:root@localhost:5433/sentinel` |
+
+Both databases run on the same PostgreSQL instance but are fully isolated — no cross-database queries or shared tables.
+
+### Job Runner
+
+Every pipeline job wraps its logic in `runJob(name, layer, fn)`:
+
+```mermaid
+sequenceDiagram
+    participant Cron as Cron Route
+    participant Runner as Job Runner
+    participant DB as Database
+    participant Job as Job Logic
+
+    Cron->>Runner: runJob("ingest-pncp", "ingestion", fn)
+    Runner->>DB: Create JobRun (RUNNING)
+    Runner->>Job: Execute fn()
+    Job->>DB: Read/Write data
+    Job-->>Runner: { recordsIn, recordsOut, metadata }
+    Runner->>DB: Update JobRun (COMPLETED)
+    Runner-->>Cron: { success: true, result }
+```
+
+If the job throws an error, the runner catches it and updates the `JobRun` status to `FAILED` with the error message, ensuring observability.
+
+## Cron Schedule
+
+| Route | Schedule | Jobs |
+|---|---|---|
+| `/api/cron/ingest` | Every 10 min | PNCP bulk, PNCP details, Sanctions (CEIS/CNEP/TCU), CNPJ enrichment |
+| `/api/cron/process` | Every 5 min | Procurements, Contracts, Items/Bids, Entities, Sanction linking |
+| `/api/cron/analyze` | Every 5 min | Overpricing, Shell companies, Sanctions cross-ref, Networks, AI analysis |
+
+Processing runs more frequently than ingestion because it needs to keep up with the larger volume of raw records that each ingestion run produces.
+
+## Environment Configuration
+
+| Variable | Purpose |
+|---|---|
+| `DATABASE_URL` | PostgreSQL connection string (sentinel database) |
+| `DIRECT_URL` | Direct DB connection for migrations |
+| `CRON_SECRET` | Bearer token for cron route authentication |
+| `ANTHROPIC_API_KEY` | Claude API key for AI analysis |
+| `TRANSPARENCIA_API_KEY` | Portal da Transparência API key (required for CEIS/CNEP) |
+
+## Directory Structure
+
+```
+apps/sentinel/
+├── prisma/
+│   └── schema.prisma              # Database schema (3 layers)
+├── src/
+│   ├── app/
+│   │   ├── [locale]/              # i18n routes
+│   │   │   ├── dashboard/         # Overview dashboard
+│   │   │   ├── procurements/      # Procurement list + detail
+│   │   │   ├── contracts/         # Contract list + detail
+│   │   │   ├── entities/          # Entity list + detail
+│   │   │   └── pipeline/          # Pipeline monitor
+│   │   └── api/cron/              # Cron trigger routes
+│   │       ├── ingest/
+│   │       ├── process/
+│   │       └── analyze/
+│   ├── lib/
+│   │   └── gov-apis/              # Government API clients
+│   │       ├── pncp.ts
+│   │       ├── transparencia.ts
+│   │       ├── tcu.ts
+│   │       ├── cnpj.ts
+│   │       └── compras-gov.ts
+│   └── server/
+│       ├── lib/
+│       │   ├── prisma.ts          # Prisma client singleton
+│       │   └── job-runner.ts      # Job execution framework
+│       └── modules/pipeline/
+│           ├── ingestion/         # Layer 1: Raw data extraction
+│           ├── processing/        # Layer 2: Data transformation
+│           └── analysis/          # Layer 3: Detection + AI
+├── vercel.json                    # Cron schedule definitions
+└── .env                           # Environment variables
+```

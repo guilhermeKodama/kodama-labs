@@ -1,4 +1,4 @@
-import type { PrismaClient } from "@prisma/client";
+import type { PrismaClient } from "@/generated/prisma";
 import { SESSION_EXPIRY_DAYS } from "../constants";
 
 export async function createSession(

@@ -3,7 +3,7 @@ import type {
   EntityType,
   TransactionType,
   RecurrenceFrequency,
-} from "@prisma/client";
+} from "@/generated/prisma";
 
 interface CreateRecurringData {
   entityType: EntityType;

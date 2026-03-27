@@ -1,5 +1,5 @@
 import type { DbClient } from "@capital/server/lib/prisma";
-import type { InvestmentTransactionType } from "@prisma/client";
+import type { InvestmentTransactionType } from "@/generated/prisma";
 import { updateInvestmentTransaction as updateCmd } from "../data/commands/update-investment-transaction";
 import { recalculateHolding } from "./recalculate-holding";
 

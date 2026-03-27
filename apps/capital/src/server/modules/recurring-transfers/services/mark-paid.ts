@@ -1,6 +1,6 @@
 import { prisma } from "@capital/server/lib/prisma";
 import { addDays, addWeeks, addMonths, addYears } from "date-fns";
-import type { RecurrenceFrequency } from "@prisma/client";
+import type { RecurrenceFrequency } from "@/generated/prisma";
 import { toNoonUTC } from "@capital/server/lib/date-utils";
 import { fetchRecurringTransferById } from "../data/queries/fetch-recurring-transfers";
 

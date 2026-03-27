@@ -1,5 +1,5 @@
 import type { DbClient } from "@capital/server/lib/prisma";
-import type { BillStatus } from "@prisma/client";
+import type { BillStatus } from "@/generated/prisma";
 
 interface FetchBillsFilters {
   creditCardId?: string;

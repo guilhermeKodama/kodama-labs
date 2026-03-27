@@ -2,7 +2,7 @@ import type { DbClient } from "@capital/server/lib/prisma";
 import type {
   TransferDirection,
   RecurrenceFrequency,
-} from "@prisma/client";
+} from "@/generated/prisma";
 
 interface UpdateRecurringTransferInput {
   direction?: TransferDirection;

@@ -9,7 +9,7 @@ import {
   endOfDay,
   isAfter,
 } from "date-fns";
-import type { RecurrenceFrequency } from "@prisma/client";
+import type { RecurrenceFrequency } from "@/generated/prisma";
 import { toNoonUTC } from "@capital/server/lib/date-utils";
 
 /**
