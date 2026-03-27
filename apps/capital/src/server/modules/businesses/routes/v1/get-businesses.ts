@@ -16,6 +16,7 @@ const BusinessSchema = z.object({
   defaultCurrency: z.string(),
   color: z.string().nullable(),
   taxRate: z.number(),
+  initialBalance: z.number(),
   createdAt: z.string(),
   updatedAt: z.string(),
 });
@@ -57,6 +58,7 @@ export const handler: AppRouteHandler<typeof route> = async (c) => {
         defaultCurrency: b.defaultCurrency,
         color: b.color,
         taxRate: b.taxRate,
+        initialBalance: b.initialBalance,
         createdAt: b.createdAt.toISOString(),
         updatedAt: b.updatedAt.toISOString(),
       })),

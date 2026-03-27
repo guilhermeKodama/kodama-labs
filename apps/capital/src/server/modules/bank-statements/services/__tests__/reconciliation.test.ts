@@ -561,6 +561,105 @@ describe("detectReconciliation", () => {
 });
 
 // ---------------------------------------------------------------------------
+// 5b. Transfer FITID Deduplication
+// ---------------------------------------------------------------------------
+
+describe("detectReconciliation with knownTransferFitIds", () => {
+  it("should mark transactions as duplicate when their FITID matches a known transfer", () => {
+    const transferFitIds = new Set([
+      FITIDS.RESGATE_RDB,
+      FITIDS.PIX_TO_LARISSA,
+    ]);
+
+    const result = detectReconciliation(normalized, [], transferFitIds);
+
+    const resgate = result.find((t) => t.fitId === FITIDS.RESGATE_RDB)!;
+    expect(resgate.status).toBe("duplicate");
+    expect(resgate.existingTransactionId).toBeUndefined();
+
+    const pix = result.find((t) => t.fitId === FITIDS.PIX_TO_LARISSA)!;
+    expect(pix.status).toBe("duplicate");
+
+    const others = result.filter(
+      (t) => t.fitId !== FITIDS.RESGATE_RDB && t.fitId !== FITIDS.PIX_TO_LARISSA
+    );
+    for (const tx of others) {
+      expect(tx.status).toBe("new");
+    }
+  });
+
+  it("should prioritize transfer FITID match over transaction FITID match", () => {
+    const existingData: ExistingTransactionData[] = [
+      {
+        id: "existing-resgate",
+        externalId: FITIDS.RESGATE_RDB,
+        amount: txByFitId(FITIDS.RESGATE_RDB).amount,
+        date: txByFitId(FITIDS.RESGATE_RDB).date,
+        description: txByFitId(FITIDS.RESGATE_RDB).description,
+        type: "income",
+      },
+    ];
+
+    const transferFitIds = new Set([FITIDS.RESGATE_RDB]);
+    const result = detectReconciliation(normalized, existingData, transferFitIds);
+
+    const resgate = result.find((t) => t.fitId === FITIDS.RESGATE_RDB)!;
+    expect(resgate.status).toBe("duplicate");
+    expect(resgate.existingTransactionId).toBeUndefined();
+  });
+
+  it("should still detect transaction FITID matches for non-transfer FITIDs", () => {
+    const existingData: ExistingTransactionData[] = [
+      {
+        id: "existing-drogasil",
+        externalId: FITIDS.DEBIT_DROGASIL,
+        amount: txByFitId(FITIDS.DEBIT_DROGASIL).amount,
+        date: txByFitId(FITIDS.DEBIT_DROGASIL).date,
+        description: txByFitId(FITIDS.DEBIT_DROGASIL).description,
+        type: "expense",
+      },
+    ];
+
+    const transferFitIds = new Set([FITIDS.RESGATE_RDB]);
+    const result = detectReconciliation(normalized, existingData, transferFitIds);
+
+    const resgate = result.find((t) => t.fitId === FITIDS.RESGATE_RDB)!;
+    expect(resgate.status).toBe("duplicate");
+
+    const drogasil = result.find((t) => t.fitId === FITIDS.DEBIT_DROGASIL)!;
+    expect(drogasil.status).toBe("duplicate");
+    expect(drogasil.existingTransactionId).toBe("existing-drogasil");
+  });
+
+  it("should still perform fuzzy matching for non-transfer, non-FITID transactions", () => {
+    const existingData: ExistingTransactionData[] = [
+      {
+        id: "manual-expense",
+        externalId: null,
+        amount: txByFitId(FITIDS.DEBIT_DROGASIL).amount,
+        date: txByFitId(FITIDS.DEBIT_DROGASIL).date,
+        description: "Farmacia",
+        type: "expense",
+      },
+    ];
+
+    const transferFitIds = new Set([FITIDS.RESGATE_RDB]);
+    const result = detectReconciliation(normalized, existingData, transferFitIds);
+
+    const drogasil = result.find((t) => t.fitId === FITIDS.DEBIT_DROGASIL)!;
+    expect(drogasil.status).toBe("fuzzy_match");
+    expect(drogasil.existingTransactionId).toBe("manual-expense");
+  });
+
+  it("should handle empty knownTransferFitIds the same as before", () => {
+    const result = detectReconciliation(normalized, [], new Set());
+    for (const tx of result) {
+      expect(tx.status).toBe("new");
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
 // 6. Balance Reconciliation
 // ---------------------------------------------------------------------------
 

@@ -54,6 +54,7 @@ export interface Business {
   description?: string;
   defaultCurrency: string;
   color?: string; // For UI differentiation
+  initialBalance: number;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -70,6 +71,7 @@ export interface UpdateBusinessInput {
   description?: string;
   defaultCurrency?: string;
   color?: string;
+  initialBalance?: number;
 }
 
 // --------------------------------------------
@@ -80,6 +82,7 @@ export interface PersonalAccount {
   id: string;
   userId: string;
   defaultCurrency: string;
+  initialBalance: number;
   createdAt: Date;
   updatedAt: Date;
 }
