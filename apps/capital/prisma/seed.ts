@@ -1,4 +1,4 @@
-import { PrismaClient, TransactionType } from "@prisma/client";
+import { PrismaClient, TransactionType } from "../src/generated/prisma";
 import bcrypt from "bcrypt";
 
 const prisma = new PrismaClient();

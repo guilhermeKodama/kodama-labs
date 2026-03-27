@@ -1,0 +1,16 @@
+{
+  "crons": [
+    {
+      "path": "/api/cron/ingest",
+      "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/cron/process",
+      "schedule": "*/1 * * * *"
+    },
+    {
+      "path": "/api/cron/analyze",
+      "schedule": "*/5 * * * *"
+    }
+  ]
+}

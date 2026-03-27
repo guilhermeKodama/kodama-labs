@@ -1,0 +1,59 @@
+{
+  "common": {
+    "appName": "Sentinel",
+    "loading": "Carregando...",
+    "error": "Ocorreu um erro",
+    "noData": "Nenhum dado disponível",
+    "search": "Buscar...",
+    "filter": "Filtrar",
+    "export": "Exportar",
+    "refresh": "Atualizar"
+  },
+  "nav": {
+    "dashboard": "Painel",
+    "procurements": "Licitações",
+    "contracts": "Contratos",
+    "entities": "Entidades",
+    "network": "Rede",
+    "alerts": "Alertas",
+    "analysis": "Análise IA",
+    "pipeline": "Pipeline"
+  },
+  "dashboard": {
+    "title": "Visão Geral",
+    "totalProcurements": "Total de Licitações",
+    "totalContracts": "Total de Contratos",
+    "totalEntities": "Total de Entidades",
+    "activeAlerts": "Alertas Ativos",
+    "criticalAlerts": "Alertas Críticos",
+    "riskDistribution": "Distribuição de Risco",
+    "recentAlerts": "Alertas Recentes",
+    "topRiskEntities": "Entidades de Maior Risco"
+  },
+  "alerts": {
+    "title": "Alertas",
+    "type": {
+      "OVERPRICING": "Sobrepreço",
+      "SHELL_COMPANY": "Empresa de Fachada",
+      "SANCTIONED_ENTITY": "Entidade Sancionada",
+      "SUSPICIOUS_NETWORK": "Rede Suspeita",
+      "AI_FLAG": "Alerta IA"
+    },
+    "severity": {
+      "LOW": "Baixo",
+      "MEDIUM": "Médio",
+      "HIGH": "Alto",
+      "CRITICAL": "Crítico"
+    }
+  },
+  "pipeline": {
+    "title": "Pipeline de Dados",
+    "ingestion": "Ingestão",
+    "processing": "Processamento",
+    "analysis": "Análise",
+    "lastRun": "Última Execução",
+    "status": "Status",
+    "recordsProcessed": "Registros Processados",
+    "dataFreshness": "Atualização dos Dados"
+  }
+}

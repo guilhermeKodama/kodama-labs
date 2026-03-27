@@ -10,6 +10,10 @@
     "format": "prettier --write \"**/*.{ts,tsx,md}\"",
     "prepare": "husky",
     "db:reset": "turbo db:reset",
+    "db:dump": "bash infrastructure/postgres/db-backup.sh dump",
+    "db:restore": "bash infrastructure/postgres/db-backup.sh restore",
+    "db:backups": "bash infrastructure/postgres/db-backup.sh list",
+    "db:generate": "pnpm --filter @wallex/capital exec prisma generate && pnpm --filter @wallex/sentinel exec prisma generate",
     "test": "turbo test --filter=@wallex/capital"
   },
   "devDependencies": {
@@ -26,7 +30,7 @@
     }
   },
   "engines": {
-    "node": "24"
+    "node": ">=24.0.0 <25"
   },
   "packageManager": "pnpm@9.15.4"
 }

@@ -1,5 +1,5 @@
 import type { DbClient } from "@capital/server/lib/prisma";
-import type { EntityType, TransferDirection } from "@prisma/client";
+import type { EntityType, TransferDirection } from "@/generated/prisma";
 
 interface CreateTransferData {
   fromEntityType: EntityType;

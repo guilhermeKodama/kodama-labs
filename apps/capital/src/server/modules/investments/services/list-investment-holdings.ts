@@ -1,5 +1,5 @@
 import type { DbClient } from "@capital/server/lib/prisma";
-import type { AssetClass } from "@prisma/client";
+import type { AssetClass } from "@/generated/prisma";
 import { fetchInvestmentHoldings } from "../data/queries/fetch-investment-holdings";
 
 interface ListInvestmentHoldingsInput {

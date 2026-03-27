@@ -1,0 +1,59 @@
+{
+  "common": {
+    "appName": "Sentinel",
+    "loading": "Loading...",
+    "error": "An error occurred",
+    "noData": "No data available",
+    "search": "Search...",
+    "filter": "Filter",
+    "export": "Export",
+    "refresh": "Refresh"
+  },
+  "nav": {
+    "dashboard": "Dashboard",
+    "procurements": "Procurements",
+    "contracts": "Contracts",
+    "entities": "Entities",
+    "network": "Network",
+    "alerts": "Alerts",
+    "analysis": "AI Analysis",
+    "pipeline": "Pipeline"
+  },
+  "dashboard": {
+    "title": "Overview",
+    "totalProcurements": "Total Procurements",
+    "totalContracts": "Total Contracts",
+    "totalEntities": "Total Entities",
+    "activeAlerts": "Active Alerts",
+    "criticalAlerts": "Critical Alerts",
+    "riskDistribution": "Risk Distribution",
+    "recentAlerts": "Recent Alerts",
+    "topRiskEntities": "Top Risk Entities"
+  },
+  "alerts": {
+    "title": "Alerts",
+    "type": {
+      "OVERPRICING": "Overpricing",
+      "SHELL_COMPANY": "Shell Company",
+      "SANCTIONED_ENTITY": "Sanctioned Entity",
+      "SUSPICIOUS_NETWORK": "Suspicious Network",
+      "AI_FLAG": "AI Flag"
+    },
+    "severity": {
+      "LOW": "Low",
+      "MEDIUM": "Medium",
+      "HIGH": "High",
+      "CRITICAL": "Critical"
+    }
+  },
+  "pipeline": {
+    "title": "Data Pipeline",
+    "ingestion": "Ingestion",
+    "processing": "Processing",
+    "analysis": "Analysis",
+    "lastRun": "Last Run",
+    "status": "Status",
+    "recordsProcessed": "Records Processed",
+    "dataFreshness": "Data Freshness"
+  }
+}
