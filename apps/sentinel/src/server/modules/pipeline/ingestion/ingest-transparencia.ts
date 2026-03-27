@@ -2,7 +2,7 @@ import { prisma } from "@sentinel/server/lib/prisma";
 import { Prisma } from "@/generated/prisma";
 import { runJob, getOrCreateCursor, updateCursor } from "@sentinel/server/lib/job-runner";
 import { fetchLicitacoes, fetchContratos } from "@/lib/gov-apis/transparencia";
-import { format, subDays, subMonths, addMonths, min } from "date-fns";
+import { format, subMonths, addMonths, min } from "date-fns";
 
 const POLITE_DELAY_MS = 2000;
 

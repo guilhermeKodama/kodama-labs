@@ -2,7 +2,6 @@
 
 import { DataTable, type ColumnDef } from "@/components/data-table";
 import Link from "next/link";
-import { useParams } from "next/navigation";
 
 interface PoliticianRow {
   id: string;

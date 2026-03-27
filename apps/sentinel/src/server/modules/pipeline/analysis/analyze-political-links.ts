@@ -14,8 +14,6 @@ interface StrategyConfig {
   enabled: boolean;
 }
 
-const GLOBAL_MIN_STRENGTH = 0.15;
-
 const strategies: StrategyConfig[] = [
   { name: "SHAREHOLDER_IS_POLITICIAN", fn: detectShareholderIsPolitician, maxLinks: 500,  minStrength: 0.5,  enabled: true },
   { name: "SUPPLIER_DONATED",         fn: detectSupplierDonatedToPolitician, maxLinks: 500, minStrength: 0.5, enabled: true },
