@@ -157,6 +157,32 @@ export interface PncpBidResult {
   numeroControlePNCPCompra: string;
 }
 
+export interface PncpAta {
+  numeroControlePNCPAta: string;
+  numeroAtaRegistroPreco: string;
+  anoAta: number;
+  numeroControlePNCPCompra: string;
+  cancelado: boolean;
+  dataCancelamento: string | null;
+  dataAssinatura: string;
+  vigenciaInicio: string;
+  vigenciaFim: string | null;
+  dataPublicacaoPncp: string;
+  dataInclusao: string;
+  dataAtualizacao: string;
+  dataAtualizacaoGlobal: string;
+  usuario: string;
+  objetoContratacao: string;
+  cnpjOrgao: string;
+  nomeOrgao: string;
+  cnpjOrgaoSubrogado: string | null;
+  nomeOrgaoSubrogado: string | null;
+  codigoUnidadeOrgao: string;
+  nomeUnidadeOrgao: string;
+  codigoUnidadeOrgaoSubrogado: string | null;
+  nomeUnidadeOrgaoSubrogado: string | null;
+}
+
 export interface PncpResponse<T> {
   data: T[];
   totalRegistros?: number;
@@ -232,21 +258,36 @@ export async function fetchProcurements(
   modalities: number[] = DEFAULT_MODALITIES
 ): Promise<PncpResponse<PncpProcurement>> {
   const allData: PncpProcurement[] = [];
+  const MAX_PAGES_PER_MODALITY = 200;
 
   for (const modality of modalities) {
+    let currentPage = page;
+    let totalPages = 1;
+
     try {
-      const response = await fetchPncp<PncpProcurement>(
-        "/v1/contratacoes/publicacao",
-        {
-          dataInicial: startDate,
-          dataFinal: endDate,
-          codigoModalidadeContratacao: modality.toString(),
-          pagina: page.toString(),
-          tamanhoPagina: Math.max(10, pageSize).toString(),
+      while (currentPage <= totalPages && currentPage <= MAX_PAGES_PER_MODALITY) {
+        const response = await fetchPncp<PncpProcurement>(
+          "/v1/contratacoes/publicacao",
+          {
+            dataInicial: startDate,
+            dataFinal: endDate,
+            codigoModalidadeContratacao: modality.toString(),
+            pagina: currentPage.toString(),
+            tamanhoPagina: Math.max(10, pageSize).toString(),
+          }
+        );
+
+        if (response.data?.length) {
+          allData.push(...response.data);
         }
-      );
-      if (response.data) {
-        allData.push(...response.data);
+
+        if (currentPage === page && response.totalPaginas) {
+          totalPages = response.totalPaginas;
+        }
+
+        if (!response.data?.length || response.data.length < pageSize) break;
+        currentPage++;
+        await sleep(POLITE_DELAY_MS);
       }
     } catch {
       // Some modalities may not have data or timeout
@@ -258,6 +299,42 @@ export async function fetchProcurements(
 }
 
 export async function fetchContracts(
+  startDate: string,
+  endDate: string,
+  page: number = 1,
+  pageSize: number = 50
+): Promise<PncpResponse<PncpContract>> {
+  const allData: PncpContract[] = [];
+  const MAX_PAGES = 200;
+  let currentPage = page;
+  let totalPages = 1;
+
+  while (currentPage <= totalPages && currentPage <= MAX_PAGES) {
+    const response = await fetchPncp<PncpContract>("/v1/contratos", {
+      dataInicial: startDate,
+      dataFinal: endDate,
+      pagina: currentPage.toString(),
+      tamanhoPagina: Math.max(10, pageSize).toString(),
+    });
+
+    if (response.data?.length) {
+      allData.push(...response.data);
+    }
+
+    if (currentPage === page && response.totalPaginas) {
+      totalPages = response.totalPaginas;
+    }
+
+    if (!response.data?.length || response.data.length < pageSize) break;
+    currentPage++;
+    await sleep(POLITE_DELAY_MS);
+  }
+
+  return { data: allData, totalPaginas: totalPages, paginaAtual: currentPage };
+}
+
+/** Fetch a single page of contracts (no internal pagination). */
+export async function fetchContractsPage(
   startDate: string,
   endDate: string,
   page: number = 1,
@@ -292,4 +369,36 @@ export async function fetchItemResults(
 ): Promise<PncpBidResult[]> {
   const url = `${API_URL}/v1/orgaos/${orgCnpj}/compras/${year}/${sequencial}/itens/${itemNumber}/resultados`;
   return fetchWithTimeout<PncpBidResult[]>(url, 15000);
+}
+
+// ============================================
+// Atas de Registro de Preços
+// ============================================
+
+export async function fetchAtas(
+  dataInicial: string,
+  dataFinal: string,
+  pagina: number = 1,
+): Promise<PncpResponse<PncpAta>> {
+  return fetchPncp<PncpAta>("/v1/atas", {
+    dataInicial,
+    dataFinal,
+    pagina: pagina.toString(),
+  });
+}
+
+/**
+ * Parse a PNCP compra control number into its components.
+ * Format: "01612781000138-1-000020/2022" -> { orgCnpj, year, sequencial }
+ */
+export function parseCompraControlNumber(
+  controlNumber: string,
+): { orgCnpj: string; year: number; sequencial: number } | null {
+  const match = controlNumber.match(/^(\d+)-\d+-(\d+)\/(\d{4})$/);
+  if (!match) return null;
+  return {
+    orgCnpj: match[1]!,
+    sequencial: parseInt(match[2]!, 10),
+    year: parseInt(match[3]!, 10),
+  };
 }

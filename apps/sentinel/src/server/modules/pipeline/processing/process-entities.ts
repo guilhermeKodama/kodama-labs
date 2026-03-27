@@ -1,6 +1,7 @@
 import { prisma } from "@sentinel/server/lib/prisma";
-import { runJob } from "@sentinel/server/lib/job-runner";
+import { runJob, markProcessed, markErrors } from "@sentinel/server/lib/job-runner";
 import type { CnpjData } from "@/lib/gov-apis/cnpj";
+import type { ComprasGovFornecedor } from "@/lib/gov-apis/compras-gov";
 
 const BATCH_SIZE = 50;
 
@@ -8,19 +9,28 @@ export async function processEntities() {
   return runJob("process-entities", "processing", async () => {
     const unprocessed = await prisma.rawRecord.findMany({
       where: {
-        source: "CNPJ",
-        recordType: "entity",
+        recordType: { in: ["entity", "fornecedor"] },
         processedAt: null,
         processingError: null,
       },
+      select: { id: true, externalId: true, recordType: true, data: true },
       take: BATCH_SIZE,
       orderBy: { fetchedAt: "asc" },
     });
 
-    let recordsOut = 0;
+    if (!unprocessed.length) return { recordsIn: 0, recordsOut: 0 };
+
+    const successIds: string[] = [];
+    const errors: { id: string; error: string }[] = [];
 
     for (const raw of unprocessed) {
       try {
+        if (raw.recordType === "fornecedor") {
+          await processFornecedor(raw as { id: string; externalId: string; data: unknown });
+          successIds.push(raw.id);
+          continue;
+        }
+
         const data = raw.data as unknown as CnpjData;
         const cnpj = data.cnpj.replace(/\D/g, "");
 
@@ -86,27 +96,36 @@ export async function processEntities() {
           }
         }
 
-        await prisma.rawRecord.update({
-          where: { id: raw.id },
-          data: { processedAt: new Date() },
-        });
-
-        recordsOut++;
+        successIds.push(raw.id);
       } catch (error) {
-        console.error(
-          `[process-entities] Error processing ${raw.externalId}:`,
-          error
-        );
-        await prisma.rawRecord.update({
-          where: { id: raw.id },
-          data: {
-            processingError:
-              error instanceof Error ? error.message : "Unknown error",
-          },
+        errors.push({
+          id: raw.id,
+          error: error instanceof Error ? error.message : "Unknown error",
         });
       }
     }
 
-    return { recordsIn: unprocessed.length, recordsOut };
+    await markProcessed(successIds);
+    await markErrors(errors);
+
+    return { recordsIn: unprocessed.length, recordsOut: successIds.length };
+  });
+}
+
+async function processFornecedor(raw: { id: string; externalId: string; data: unknown }) {
+  const data = raw.data as unknown as ComprasGovFornecedor;
+  const cnpj = (data.cnpj ?? "").replace(/\D/g, "");
+  if (!cnpj) return;
+
+  await prisma.entity.upsert({
+    where: { cnpj },
+    create: {
+      cnpj,
+      name: data.nome ?? "Desconhecido",
+      rawRecordId: raw.id,
+    },
+    update: {
+      name: data.nome || undefined,
+    },
   });
 }

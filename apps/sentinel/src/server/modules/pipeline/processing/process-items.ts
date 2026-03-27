@@ -1,8 +1,8 @@
 import { prisma } from "@sentinel/server/lib/prisma";
-import { runJob } from "@sentinel/server/lib/job-runner";
+import { runJob, markProcessed, markErrors } from "@sentinel/server/lib/job-runner";
 import type { PncpItem, PncpBidResult } from "@/lib/gov-apis/pncp";
 
-const BATCH_SIZE = 200;
+const BATCH_SIZE = 500;
 
 function extractCatmatFromDescription(desc: string): string | null {
   const match = desc.match(/CATMAT\s*(\d{4,8})/i);
@@ -36,22 +36,25 @@ interface RawBidResultData extends PncpBidResult {
 
 export async function processItems() {
   return runJob("process-items", "processing", async () => {
+    let recordsOut = 0;
+
     const unprocessedItems = await prisma.rawRecord.findMany({
       where: {
         recordType: "procurement_item",
         processedAt: null,
         processingError: null,
       },
+      select: { id: true, externalId: true, data: true },
       take: BATCH_SIZE,
       orderBy: { fetchedAt: "asc" },
     });
 
-    let recordsOut = 0;
+    const itemSuccess: string[] = [];
+    const itemErrors: { id: string; error: string }[] = [];
 
     for (const raw of unprocessedItems) {
       try {
         const data = raw.data as unknown as RawItemData;
-
         const catmat = data.catalogoCodigoItem ?? extractCatmatFromDescription(data.descricao ?? "");
         const descNorm = normalizeDescription(data.descricao ?? "");
 
@@ -92,21 +95,18 @@ export async function processItems() {
           },
         });
 
-        await prisma.rawRecord.update({
-          where: { id: raw.id },
-          data: { processedAt: new Date() },
-        });
+        itemSuccess.push(raw.id);
         recordsOut++;
       } catch (error) {
-        console.error(`[process-items] Error processing ${raw.externalId}:`, error);
-        await prisma.rawRecord.update({
-          where: { id: raw.id },
-          data: {
-            processingError: error instanceof Error ? error.message : "Unknown error",
-          },
+        itemErrors.push({
+          id: raw.id,
+          error: error instanceof Error ? error.message : "Unknown error",
         });
       }
     }
+
+    await markProcessed(itemSuccess);
+    await markErrors(itemErrors);
 
     const unprocessedResults = await prisma.rawRecord.findMany({
       where: {
@@ -114,54 +114,69 @@ export async function processItems() {
         processedAt: null,
         processingError: null,
       },
+      select: { id: true, externalId: true, data: true },
       take: BATCH_SIZE,
       orderBy: { fetchedAt: "asc" },
     });
 
+    const bidItemExtIds = unprocessedResults.map(
+      (r) => (r.data as unknown as RawBidResultData)._itemExternalId
+    ).filter(Boolean);
+
+    const itemMap = new Map<string, string>();
+    if (bidItemExtIds.length > 0) {
+      const CHUNK = 500;
+      for (let i = 0; i < bidItemExtIds.length; i += CHUNK) {
+        const items = await prisma.procurementItem.findMany({
+          where: { externalId: { in: bidItemExtIds.slice(i, i + CHUNK) } },
+          select: { id: true, externalId: true },
+        });
+        for (const it of items) itemMap.set(it.externalId, it.id);
+      }
+    }
+
+    const bidSuccess: string[] = [];
+    const bidErrors: { id: string; error: string }[] = [];
+    const entityCnpjs = new Set<string>();
+
     for (const raw of unprocessedResults) {
       try {
         const data = raw.data as unknown as RawBidResultData;
+        const itemId = itemMap.get(data._itemExternalId);
 
-        const item = await prisma.procurementItem.findUnique({
-          where: { externalId: data._itemExternalId },
-          select: { id: true },
-        });
-
-        if (!item) {
-          await prisma.rawRecord.update({
-            where: { id: raw.id },
-            data: { processedAt: new Date() },
-          });
+        if (!itemId) {
+          bidSuccess.push(raw.id);
           continue;
         }
 
         const supplierCnpj = (data.niFornecedor ?? "").replace(/\D/g, "");
         if (!supplierCnpj) {
-          await prisma.rawRecord.update({
-            where: { id: raw.id },
-            data: { processedAt: new Date() },
-          });
+          bidSuccess.push(raw.id);
           continue;
         }
 
-        await prisma.entity.upsert({
-          where: { cnpj: supplierCnpj },
-          create: {
-            cnpj: supplierCnpj,
-            name: data.nomeRazaoSocialFornecedor ?? "Desconhecido",
-          },
-          update: {},
-        });
+        if (!entityCnpjs.has(supplierCnpj)) {
+          entityCnpjs.add(supplierCnpj);
+          try {
+            await prisma.entity.upsert({
+              where: { cnpj: supplierCnpj },
+              create: { cnpj: supplierCnpj, name: data.nomeRazaoSocialFornecedor ?? "Desconhecido" },
+              update: {},
+            });
+          } catch {
+            // entity may already exist
+          }
+        }
 
         await prisma.bidResult.upsert({
           where: {
             itemId_sequencial: {
-              itemId: item.id,
+              itemId,
               sequencial: data.sequencialResultado,
             },
           },
           create: {
-            itemId: item.id,
+            itemId,
             sequencial: data.sequencialResultado,
             supplierCnpj,
             supplierName: data.nomeRazaoSocialFornecedor ?? "Desconhecido",
@@ -188,21 +203,18 @@ export async function processItems() {
           },
         });
 
-        await prisma.rawRecord.update({
-          where: { id: raw.id },
-          data: { processedAt: new Date() },
-        });
+        bidSuccess.push(raw.id);
         recordsOut++;
       } catch (error) {
-        console.error(`[process-items] Error processing bid result ${raw.externalId}:`, error);
-        await prisma.rawRecord.update({
-          where: { id: raw.id },
-          data: {
-            processingError: error instanceof Error ? error.message : "Unknown error",
-          },
+        bidErrors.push({
+          id: raw.id,
+          error: error instanceof Error ? error.message : "Unknown error",
         });
       }
     }
+
+    await markProcessed(bidSuccess);
+    await markErrors(bidErrors);
 
     return {
       recordsIn: unprocessedItems.length + unprocessedResults.length,

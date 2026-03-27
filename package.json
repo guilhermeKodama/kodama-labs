@@ -13,6 +13,7 @@
     "db:dump": "bash infrastructure/postgres/db-backup.sh dump",
     "db:restore": "bash infrastructure/postgres/db-backup.sh restore",
     "db:backups": "bash infrastructure/postgres/db-backup.sh list",
+    "db:generate": "pnpm --filter @wallex/capital exec prisma generate && pnpm --filter @wallex/sentinel exec prisma generate",
     "test": "turbo test --filter=@wallex/capital"
   },
   "devDependencies": {

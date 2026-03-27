@@ -1,23 +1,18 @@
 import { prisma } from "@sentinel/server/lib/prisma";
 import { Prisma } from "@/generated/prisma";
 import { runJob, getOrCreateCursor, updateCursor } from "@sentinel/server/lib/job-runner";
-import { fetchProcurements, fetchContracts } from "@/lib/gov-apis/pncp";
+import { fetchProcurements, fetchContractsPage } from "@/lib/gov-apis/pncp";
 import { format, subDays } from "date-fns";
 
 export async function ingestPncp() {
   return runJob("ingest-pncp", "ingestion", async () => {
-    let totalRecordsIn = 0;
-    let totalRecordsOut = 0;
+    return ingestPncpProcurements();
+  });
+}
 
-    const procResult = await ingestPncpProcurements();
-    totalRecordsIn += procResult.recordsIn;
-    totalRecordsOut += procResult.recordsOut;
-
-    const contractResult = await ingestPncpContracts();
-    totalRecordsIn += contractResult.recordsIn;
-    totalRecordsOut += contractResult.recordsOut;
-
-    return { recordsIn: totalRecordsIn, recordsOut: totalRecordsOut };
+export async function ingestPncpContratos() {
+  return runJob("ingest-pncp-contracts", "ingestion", async () => {
+    return ingestPncpContracts();
   });
 }
 
@@ -37,9 +32,11 @@ async function ingestPncpProcurements() {
   let totalOut = 0;
 
   try {
+    console.log(`[ingest-pncp] Fetching procurements from ${startDate} to ${endDate} (all pages)`);
     const response = await fetchProcurements(startDate, endDate, 1, 50);
     const records = response.data ?? [];
     totalIn = records.length;
+    console.log(`[ingest-pncp] Fetched ${totalIn} procurement records across all pages`);
 
     for (const record of records) {
       const externalId = record.numeroControlePNCP ?? 
@@ -95,47 +92,78 @@ async function ingestPncpContracts() {
 
   await updateCursor(cursor.id, { status: "RUNNING" });
 
-  const startDate = format(cursor.lastFetchedAt, "yyyyMMdd");
-  const endDate = format(new Date(), "yyyyMMdd");
+  const PAGE_SIZE = 50;
+  const startStr = format(cursor.lastFetchedAt, "yyyyMMdd");
+  const endStr = format(new Date(), "yyyyMMdd");
+
+  // Resume from last saved page (stored in cursorValue as "YYYYMMDD:page")
+  let currentPage = 1;
+  const cursorMeta = cursor.cursorValue ?? "";
+  if (cursorMeta.includes(":")) {
+    const [savedDate, savedPage] = cursorMeta.split(":");
+    if (savedDate === startStr) {
+      currentPage = parseInt(savedPage ?? "1") || 1;
+    }
+  }
 
   let totalIn = 0;
   let totalOut = 0;
 
   try {
-    const response = await fetchContracts(startDate, endDate, 1, 50);
-    const records = response.data ?? [];
-    totalIn = records.length;
+    console.log(`[ingest-pncp] Fetching contracts ${startStr}→${endStr} starting page ${currentPage}`);
 
-    for (const record of records) {
-      const externalId = record.numeroControlePNCP ??
-        `${record.orgaoEntidade.cnpj}-${record.anoContrato}-${record.sequencialContrato}`;
+    let hasMore = true;
+    while (hasMore) {
+      const response = await fetchContractsPage(startStr, endStr, currentPage, PAGE_SIZE);
+      const records = response.data ?? [];
+      totalIn += records.length;
 
-      await prisma.rawRecord.upsert({
-        where: {
-          source_recordType_externalId: {
+      if (records.length > 0) {
+        console.log(`[ingest-pncp] Contracts p${currentPage}: ${records.length} records (total pages: ${response.totalPaginas})`);
+      }
+
+      for (const record of records) {
+        const externalId =
+          record.numeroControlePNCP ??
+          `${record.orgaoEntidade.cnpj}-${record.anoContrato}-${record.sequencialContrato}`;
+
+        await prisma.rawRecord.upsert({
+          where: {
+            source_recordType_externalId: {
+              source: "PNCP",
+              recordType: "contract",
+              externalId,
+            },
+          },
+          create: {
             source: "PNCP",
             recordType: "contract",
             externalId,
+            data: record as unknown as Prisma.InputJsonValue,
           },
-        },
-        create: {
-          source: "PNCP",
-          recordType: "contract",
-          externalId,
-          data: record as unknown as Prisma.InputJsonValue,
-        },
-        update: {
-          data: record as unknown as Prisma.InputJsonValue,
-          fetchedAt: new Date(),
-          processedAt: null,
-        },
+          update: {
+            data: record as unknown as Prisma.InputJsonValue,
+            fetchedAt: new Date(),
+            processedAt: null,
+          },
+        });
+        totalOut++;
+      }
+
+      // Save progress after each page for crash recovery
+      await updateCursor(cursor.id, {
+        cursorValue: `${startStr}:${currentPage + 1}`,
+        totalFetched: cursor.totalFetched + totalOut,
       });
-      totalOut++;
+
+      hasMore = records.length >= PAGE_SIZE;
+      if (hasMore) currentPage++;
     }
 
+    // All pages done — advance the cursor forward
     await updateCursor(cursor.id, {
       lastFetchedAt: new Date(),
-      cursorValue: endDate,
+      cursorValue: endStr,
       totalFetched: cursor.totalFetched + totalOut,
       status: "IDLE",
       lastError: null,

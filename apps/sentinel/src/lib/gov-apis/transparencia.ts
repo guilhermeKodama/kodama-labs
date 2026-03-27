@@ -64,8 +64,15 @@ export interface TransparenciaLicitacao {
   objeto: string;
   situacaoCompra: { descricao: string };
   valorLicitacao: number;
-  uf: string;
-  municipio: string;
+  uf?: string;
+  municipio?: string | {
+    nomeIBGE?: string;
+    codigoIBGE?: string;
+    uf?: { nome?: string; sigla?: string };
+    pais?: string;
+    nomeRegiao?: string;
+    codigoRegiao?: string;
+  };
 }
 
 export interface TransparenciaContrato {
@@ -93,28 +100,34 @@ export async function fetchLicitacoes(
   startDate: string,
   endDate: string,
   page: number = 1,
-  pageSize: number = 100
+  pageSize: number = 100,
+  codigoOrgao?: string
 ): Promise<TransparenciaLicitacao[]> {
-  return fetchTransparencia<TransparenciaLicitacao>("/licitacoes", {
+  const params: Record<string, string> = {
     dataInicial: startDate,
     dataFinal: endDate,
     pagina: page.toString(),
     quantidade: pageSize.toString(),
-  });
+  };
+  if (codigoOrgao) params.codigoOrgao = codigoOrgao;
+  return fetchTransparencia<TransparenciaLicitacao>("/licitacoes", params);
 }
 
 export async function fetchContratos(
   startDate: string,
   endDate: string,
   page: number = 1,
-  pageSize: number = 100
+  pageSize: number = 100,
+  codigoOrgao?: string
 ): Promise<TransparenciaContrato[]> {
-  return fetchTransparencia<TransparenciaContrato>("/contratos", {
+  const params: Record<string, string> = {
     dataInicial: startDate,
     dataFinal: endDate,
     pagina: page.toString(),
     quantidade: pageSize.toString(),
-  });
+  };
+  if (codigoOrgao) params.codigoOrgao = codigoOrgao;
+  return fetchTransparencia<TransparenciaContrato>("/contratos", params);
 }
 
 export async function fetchCeis(

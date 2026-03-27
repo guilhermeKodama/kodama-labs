@@ -2,6 +2,7 @@
 
 import { DataTable, type ColumnDef } from "@/components/data-table";
 import Link from "next/link";
+import { useParams } from "next/navigation";
 
 interface PoliticianRow {
   id: string;
@@ -22,25 +23,32 @@ interface PoliticianRow {
 export function PoliticiansTable({
   data,
   locale,
+  totalCount,
+  nextCursor,
+  prevCursor,
+  filterOptions,
 }: {
   data: PoliticianRow[];
   locale: string;
+  totalCount: number;
+  nextCursor: string | null;
+  prevCursor: string | null;
+  filterOptions: {
+    party: { label: string; value: string }[];
+    position: { label: string; value: string }[];
+    state: { label: string; value: string }[];
+    year: { label: string; value: string }[];
+  };
 }) {
   const columns: ColumnDef<PoliticianRow>[] = [
     {
       id: "name",
       header: "Nome",
       width: "w-[25%]",
-      accessorFn: (row) =>
-        `${row.name} ${row.ballotName ?? ""} ${row.cpf}`,
+      accessorFn: (row) => `${row.name} ${row.ballotName ?? ""} ${row.cpf}`,
       cell: (row) => (
-        <Link
-          href={`/${locale}/politicians/${row.id}`}
-          className="hover:underline"
-        >
-          <div className="font-medium truncate">
-            {row.ballotName ?? row.name}
-          </div>
+        <Link href={`/${locale}/politicians/${row.id}`} className="hover:underline">
+          <div className="font-medium truncate">{row.ballotName ?? row.name}</div>
           <div className="text-[11px] text-muted-foreground truncate">
             {row.name !== row.ballotName ? row.name : ""}
           </div>
@@ -53,9 +61,9 @@ export function PoliticiansTable({
       width: "w-[8%]",
       accessorFn: (row) => row.party,
       filterable: true,
-      cell: (row) => (
-        <span className="text-xs font-medium">{row.party ?? "-"}</span>
-      ),
+      filterKey: "party",
+      filterOptions: filterOptions.party,
+      cell: (row) => <span className="text-xs font-medium">{row.party ?? "-"}</span>,
     },
     {
       id: "position",
@@ -63,10 +71,10 @@ export function PoliticiansTable({
       width: "w-[15%]",
       accessorFn: (row) => row.position,
       filterable: true,
+      filterKey: "position",
+      filterOptions: filterOptions.position,
       cell: (row) => (
-        <span className="text-xs text-muted-foreground truncate block">
-          {row.position}
-        </span>
+        <span className="text-xs text-muted-foreground truncate block">{row.position}</span>
       ),
     },
     {
@@ -75,11 +83,9 @@ export function PoliticiansTable({
       width: "w-[5%]",
       accessorFn: (row) => row.state,
       filterable: true,
-      cell: (row) => (
-        <span className="text-xs text-muted-foreground">
-          {row.state ?? "-"}
-        </span>
-      ),
+      filterKey: "state",
+      filterOptions: filterOptions.state,
+      cell: (row) => <span className="text-xs text-muted-foreground">{row.state ?? "-"}</span>,
     },
     {
       id: "city",
@@ -87,9 +93,7 @@ export function PoliticiansTable({
       width: "w-[12%]",
       accessorFn: (row) => row.city,
       cell: (row) => (
-        <span className="text-xs text-muted-foreground truncate block">
-          {row.city ?? "-"}
-        </span>
+        <span className="text-xs text-muted-foreground truncate block">{row.city ?? "-"}</span>
       ),
     },
     {
@@ -98,9 +102,9 @@ export function PoliticiansTable({
       width: "w-[7%]",
       accessorFn: (row) => row.electionYear,
       filterable: true,
-      cell: (row) => (
-        <span className="text-xs">{row.electionYear ?? "-"}</span>
-      ),
+      filterKey: "year",
+      filterOptions: filterOptions.year,
+      cell: (row) => <span className="text-xs">{row.electionYear ?? "-"}</span>,
     },
     {
       id: "status",
@@ -109,29 +113,18 @@ export function PoliticiansTable({
       accessorFn: (row) =>
         row.active ? "Ativo" : row.elected ? "Eleito" : "Candidato",
       filterable: true,
+      filterKey: "status",
       filterOptions: [
         { label: "Ativo", value: "Ativo" },
         { label: "Eleito", value: "Eleito" },
         { label: "Candidato", value: "Candidato" },
       ],
       cell: (row) => {
-        if (row.active) {
-          return (
-            <span className="px-1.5 py-0.5 rounded bg-green-500/20 text-green-600 text-[11px] font-medium">
-              Ativo
-            </span>
-          );
-        }
-        if (row.elected) {
-          return (
-            <span className="px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-600 text-[11px] font-medium">
-              Eleito
-            </span>
-          );
-        }
-        return (
-          <span className="text-[11px] text-muted-foreground">Candidato</span>
-        );
+        if (row.active)
+          return <span className="px-1.5 py-0.5 rounded bg-green-500/20 text-green-600 text-[11px] font-medium">Ativo</span>;
+        if (row.elected)
+          return <span className="px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-600 text-[11px] font-medium">Eleito</span>;
+        return <span className="text-[11px] text-muted-foreground">Candidato</span>;
       },
     },
     {
@@ -166,8 +159,12 @@ export function PoliticiansTable({
     <DataTable
       data={data}
       columns={columns}
-      searchPlaceholder="Pesquisar por nome, CPF, partido, cargo, UF..."
-      emptyMessage="Nenhum político encontrado. Execute o pipeline de ingestão de dados políticos."
+      searchPlaceholder="Pesquisar por nome, CPF..."
+      emptyMessage="Nenhum político encontrado."
+      totalCount={totalCount}
+      basePath={`/${locale}/politicians`}
+      nextCursor={nextCursor}
+      prevCursor={prevCursor}
     />
   );
 }

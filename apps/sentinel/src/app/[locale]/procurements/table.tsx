@@ -21,7 +21,25 @@ interface ProcurementRow {
   contractCount: number;
 }
 
-export function ProcurementsTable({ data, locale }: { data: ProcurementRow[]; locale: string }) {
+export function ProcurementsTable({
+  data,
+  locale,
+  totalCount,
+  nextCursor,
+  prevCursor,
+  filterOptions,
+}: {
+  data: ProcurementRow[];
+  locale: string;
+  totalCount: number;
+  nextCursor: string | null;
+  prevCursor: string | null;
+  filterOptions: {
+    modality: { label: string; value: string }[];
+    status: { label: string; value: string }[];
+    state: { label: string; value: string }[];
+  };
+}) {
   const columns: ColumnDef<ProcurementRow>[] = [
     {
       id: "orgName",
@@ -41,9 +59,9 @@ export function ProcurementsTable({ data, locale }: { data: ProcurementRow[]; lo
       width: "w-[10%]",
       accessorFn: (row) => row.modality,
       filterable: true,
-      cell: (row) => (
-        <span className="text-xs">{row.modality}</span>
-      ),
+      filterKey: "modality",
+      filterOptions: filterOptions.modality,
+      cell: (row) => <span className="text-xs">{row.modality}</span>,
     },
     {
       id: "description",
@@ -65,8 +83,6 @@ export function ProcurementsTable({ data, locale }: { data: ProcurementRow[]; lo
       width: "w-[10%]",
       accessorFn: (row) => row.estimatedValue,
       align: "right",
-      filterable: true,
-      filterType: "range",
       cell: (row) => (
         <span className="tabular-nums text-xs">{row.estimatedValue != null ? formatCurrency(row.estimatedValue) : "-"}</span>
       ),
@@ -77,8 +93,6 @@ export function ProcurementsTable({ data, locale }: { data: ProcurementRow[]; lo
       width: "w-[10%]",
       accessorFn: (row) => row.approvedValue,
       align: "right",
-      filterable: true,
-      filterType: "range",
       cell: (row) => (
         <span className="tabular-nums text-xs font-medium">{row.approvedValue != null ? formatCurrency(row.approvedValue) : "-"}</span>
       ),
@@ -97,6 +111,8 @@ export function ProcurementsTable({ data, locale }: { data: ProcurementRow[]; lo
       width: "w-[10%]",
       accessorFn: (row) => row.status,
       filterable: true,
+      filterKey: "status",
+      filterOptions: filterOptions.status,
       cell: (row) =>
         row.status ? (
           <span className="text-[11px] px-1.5 py-0.5 rounded bg-muted truncate block">{row.status}</span>
@@ -108,6 +124,8 @@ export function ProcurementsTable({ data, locale }: { data: ProcurementRow[]; lo
       width: "w-[5%]",
       accessorFn: (row) => row.state,
       filterable: true,
+      filterKey: "state",
+      filterOptions: filterOptions.state,
       cell: (row) => <span className="text-muted-foreground text-xs">{row.state ?? "-"}</span>,
     },
     {
@@ -127,8 +145,12 @@ export function ProcurementsTable({ data, locale }: { data: ProcurementRow[]; lo
     <DataTable
       data={data}
       columns={columns}
-      searchPlaceholder="Pesquisar órgão, CNPJ, objeto, modalidade..."
-      emptyMessage="Nenhuma licitação encontrada. Execute o pipeline de ingestão para começar."
+      searchPlaceholder="Pesquisar órgão, CNPJ, objeto..."
+      emptyMessage="Nenhuma licitação encontrada."
+      totalCount={totalCount}
+      basePath={`/${locale}/procurements`}
+      nextCursor={nextCursor}
+      prevCursor={prevCursor}
     />
   );
 }

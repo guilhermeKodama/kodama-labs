@@ -21,7 +21,24 @@ interface EntityRow {
   isShellCompany: boolean;
 }
 
-export function EntitiesTable({ data, locale }: { data: EntityRow[]; locale: string }) {
+export function EntitiesTable({
+  data,
+  locale,
+  totalCount,
+  nextCursor,
+  prevCursor,
+  filterOptions,
+}: {
+  data: EntityRow[];
+  locale: string;
+  totalCount: number;
+  nextCursor: string | null;
+  prevCursor: string | null;
+  filterOptions: {
+    legalNature: { label: string; value: string }[];
+    state: { label: string; value: string }[];
+  };
+}) {
   const columns: ColumnDef<EntityRow>[] = [
     {
       id: "name",
@@ -41,6 +58,8 @@ export function EntitiesTable({ data, locale }: { data: EntityRow[]; locale: str
       width: "w-[15%]",
       accessorFn: (row) => row.legalNature,
       filterable: true,
+      filterKey: "legalNature",
+      filterOptions: filterOptions.legalNature,
       cell: (row) =>
         row.legalNature ? (
           <span className="text-[11px] text-muted-foreground truncate block">{row.legalNature}</span>
@@ -54,6 +73,8 @@ export function EntitiesTable({ data, locale }: { data: EntityRow[]; locale: str
       width: "w-[5%]",
       accessorFn: (row) => row.state,
       filterable: true,
+      filterKey: "state",
+      filterOptions: filterOptions.state,
       cell: (row) => <span className="text-muted-foreground text-xs">{row.state ?? "-"}</span>,
     },
     {
@@ -62,8 +83,6 @@ export function EntitiesTable({ data, locale }: { data: EntityRow[]; locale: str
       width: "w-[12%]",
       accessorFn: (row) => row.capital,
       align: "right",
-      filterable: true,
-      filterType: "range",
       cell: (row) => (
         <span className="tabular-nums text-xs">{row.capital != null ? formatCurrency(row.capital) : "-"}</span>
       ),
@@ -126,9 +145,10 @@ export function EntitiesTable({ data, locale }: { data: EntityRow[]; locale: str
       accessorFn: (row) => row.isShellCompany ? "SIM" : "",
       align: "center",
       filterable: true,
+      filterKey: "shell",
       filterOptions: [
-        { label: "Sim — possível fachada", value: "SIM" },
-        { label: "Não", value: "" },
+        { label: "Sim — possível fachada", value: "true" },
+        { label: "Não", value: "false" },
       ],
       cell: (row) =>
         row.isShellCompany ? (
@@ -142,7 +162,11 @@ export function EntitiesTable({ data, locale }: { data: EntityRow[]; locale: str
       data={data}
       columns={columns}
       searchPlaceholder="Pesquisar empresa, CNPJ, atividade, UF..."
-      emptyMessage="Nenhuma entidade encontrada. Execute o pipeline para começar."
+      emptyMessage="Nenhuma entidade encontrada."
+      totalCount={totalCount}
+      basePath={`/${locale}/entities`}
+      nextCursor={nextCursor}
+      prevCursor={prevCursor}
     />
   );
 }

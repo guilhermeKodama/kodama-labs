@@ -54,8 +54,10 @@ async function ingestTseDonations(year: number) {
     recordsIn = rows.length;
 
     const validRows = rows.filter((row) => {
-      const cpfCnpj = findCol(row, /NR_CPF_CNPJ_DOADOR/i).replace(/\D/g, "");
-      const amountStr = findCol(row, /VR_RECEITA/i).replace(",", ".");
+      const cpfCnpj = (
+        row.NR_CPF_CNPJ_DOADOR ?? row.NR_CPF_CNPJ_DOADOR_ORIGINARIO ?? ""
+      ).replace(/\D/g, "");
+      const amountStr = (row.VR_RECEITA ?? "").replace(",", ".");
       const amount = parseFloat(amountStr);
       return cpfCnpj.length > 0 && !isNaN(amount) && amount > 0;
     });
@@ -63,9 +65,11 @@ async function ingestTseDonations(year: number) {
     console.log(`[ingest-donations] ${year}: ${rows.length} total rows, ${validRows.length} with valid donor + amount`);
 
     for (const row of validRows) {
-      const seq = findCol(row, /SQ_CANDIDATO/i);
-      const cpfCnpj = findCol(row, /NR_CPF_CNPJ_DOADOR/i).replace(/\D/g, "");
-      const amount = findCol(row, /VR_RECEITA/i).replace(",", ".");
+      const seq = row.SQ_CANDIDATO ?? row.SQ_PRESTADOR_CONTAS ?? "";
+      const cpfCnpj = (
+        row.NR_CPF_CNPJ_DOADOR ?? row.NR_CPF_CNPJ_DOADOR_ORIGINARIO ?? ""
+      ).replace(/\D/g, "");
+      const amount = (row.VR_RECEITA ?? "").replace(",", ".");
       const externalId = `${year}-${seq}-${cpfCnpj}-${amount}`;
 
       try {

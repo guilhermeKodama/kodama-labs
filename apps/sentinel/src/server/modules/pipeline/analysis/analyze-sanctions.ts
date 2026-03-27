@@ -25,9 +25,6 @@ export async function analyzeSanctions() {
     const contractsWithSanctioned = await prisma.contract.findMany({
       where: {
         supplierCnpj: { in: Array.from(sanctionMap.keys()) },
-        alerts: {
-          none: { type: "SANCTIONED_ENTITY" },
-        },
       },
       include: {
         entity: { select: { id: true, name: true } },
@@ -36,23 +33,38 @@ export async function analyzeSanctions() {
     });
 
     let recordsOut = 0;
+    const alertedCnpjs = new Set<string>();
 
     for (const contract of contractsWithSanctioned) {
       const sanctions = sanctionMap.get(contract.supplierCnpj);
       if (!sanctions) continue;
+      if (alertedCnpjs.has(contract.supplierCnpj)) continue;
+      alertedCnpjs.add(contract.supplierCnpj);
+
+      const existing = await prisma.alert.findFirst({
+        where: {
+          type: "SANCTIONED_ENTITY",
+          data: { path: ["supplierCnpj"], equals: contract.supplierCnpj },
+        },
+      });
+      if (existing) continue;
+
+      const contractCount = contractsWithSanctioned.filter(
+        (c) => c.supplierCnpj === contract.supplierCnpj,
+      ).length;
 
       await prisma.alert.create({
         data: {
           type: "SANCTIONED_ENTITY",
           severity: "CRITICAL",
           title: `Entidade sancionada com contrato ativo: ${contract.supplierName}`,
-          description: `A empresa ${contract.supplierName} (${contract.supplierCnpj}) possui sanção(ões) registrada(s) em ${sanctions.map((s) => s.source).join(", ")} e tem contrato com ${contract.procurement?.orgName ?? "órgão não identificado"}.`,
+          description: `A empresa ${contract.supplierName} (${contract.supplierCnpj}) possui sanção(ões) registrada(s) em ${sanctions.map((s) => s.source).join(", ")} e tem ${contractCount} contrato(s) governamental(is).`,
           contractId: contract.id,
           entityId: contract.entity?.id ?? null,
           procurementId: contract.procurementId,
           data: {
             supplierCnpj: contract.supplierCnpj,
-            contractValue: contract.value.toString(),
+            contractCount,
             sanctions,
           },
         },
