@@ -70,6 +70,14 @@ const FieldDiffSchema = z.object({
   ofxValue: z.string(),
 });
 
+const FuzzyMatchSchema = z.object({
+  id: z.string(),
+  description: z.string(),
+  amount: z.number(),
+  date: z.string(),
+  type: z.enum(["income", "expense"]),
+});
+
 const ParsedTransactionSchema = z.object({
   fitId: z.string(),
   date: z.string(),
@@ -77,11 +85,10 @@ const ParsedTransactionSchema = z.object({
   fullDescription: z.string(),
   amount: z.number(),
   type: z.enum(["income", "expense"]),
-  // Reconciliation
-  reconciliationStatus: z.enum(["new", "duplicate", "changed"]),
+  reconciliationStatus: z.enum(["new", "duplicate", "changed", "fuzzy_match"]),
   existingTransactionId: z.string().optional(),
   diffs: z.array(FieldDiffSchema).optional(),
-  // Classification
+  fuzzyMatchedTransaction: FuzzyMatchSchema.optional(),
   candidates: z.array(ClassificationCandidateSchema),
   resolvedClassification: z
     .enum([
@@ -92,7 +99,6 @@ const ParsedTransactionSchema = z.object({
     ])
     .optional(),
   needsResolution: z.boolean(),
-  // Legacy compat
   isDuplicate: z.boolean(),
 });
 
@@ -108,6 +114,7 @@ const ParseResponseSchema = z.object({
     newCount: z.number(),
     duplicateCount: z.number(),
     changedCount: z.number(),
+    fuzzyMatchCount: z.number(),
     needsResolutionCount: z.number(),
   }),
 });
@@ -185,11 +192,9 @@ export const handler: AppRouteHandler<typeof route> = async (c) => {
 
     const normalized = normalizeTransactions(allRawTransactions);
 
-    // Fetch existing transactions with full data for reconciliation
-    const fitIds = normalized.map((t) => t.fitId);
+    // Fetch ALL existing transactions for the user's entities for fuzzy matching
     const existingTransactions = await prisma.transaction.findMany({
       where: {
-        externalId: { in: fitIds },
         OR: [
           { business: { userId } },
           { personalAccount: { userId } },
@@ -207,15 +212,50 @@ export const handler: AppRouteHandler<typeof route> = async (c) => {
 
     const existingData = existingTransactions.map((t) => ({
       id: t.id,
-      externalId: t.externalId!,
+      externalId: t.externalId,
       amount: t.amount,
       date: t.date,
       description: t.description,
       type: t.type as "income" | "expense",
     }));
 
+    // Fetch existing transfer externalIds to prevent re-importing transfers
+    const [userPersonalAccounts, userBusinessesForTransfers] = await Promise.all([
+      prisma.personalAccount.findMany({ where: { userId }, select: { id: true } }),
+      prisma.business.findMany({ where: { userId }, select: { id: true } }),
+    ]);
+    const userBusinessIds = userBusinessesForTransfers.map((b) => b.id);
+    const userPersonalAccountIds = userPersonalAccounts.map((a) => a.id);
+
+    const existingTransfersWithFitId = await prisma.transfer.findMany({
+      where: {
+        externalId: { not: null },
+        OR: [
+          ...(userBusinessIds.length > 0
+            ? [
+                { fromBusinessId: { in: userBusinessIds } },
+                { toBusinessId: { in: userBusinessIds } },
+              ]
+            : []),
+          ...(userPersonalAccountIds.length > 0
+            ? [
+                { fromPersonalAccountId: { in: userPersonalAccountIds } },
+                { toPersonalAccountId: { in: userPersonalAccountIds } },
+              ]
+            : []),
+        ],
+      },
+      select: { externalId: true },
+    });
+
+    const knownTransferFitIds = new Set(
+      existingTransfersWithFitId
+        .map((t) => t.externalId)
+        .filter((id): id is string => id !== null)
+    );
+
     // Reconciliation: detect new / duplicate / changed
-    const reconciled = detectReconciliation(normalized, existingData);
+    const reconciled = detectReconciliation(normalized, existingData, knownTransferFitIds);
 
     // Fetch user entities for classification
     const userBusinesses = await prisma.business.findMany({
@@ -240,10 +280,10 @@ export const handler: AppRouteHandler<typeof route> = async (c) => {
         select: { id: true, name: true },
       });
 
-    // Classification: only classify non-duplicate transactions
-    const newTransactions = reconciled.filter((t) => t.status === "new");
-    const changedTransactions = reconciled.filter((t) => t.status === "changed");
-    const transactionsToClassify = [...newTransactions, ...changedTransactions];
+    // Classification: classify non-duplicate transactions (new, changed, fuzzy_match)
+    const transactionsToClassify = reconciled.filter(
+      (t) => t.status !== "duplicate"
+    );
 
     const classified = classifyTransactions(
       transactionsToClassify,
@@ -266,6 +306,7 @@ export const handler: AppRouteHandler<typeof route> = async (c) => {
         reconciliationStatus: tx.status,
         existingTransactionId: tx.existingTransactionId,
         diffs: tx.diffs,
+        fuzzyMatchedTransaction: tx.fuzzyMatchedTransaction,
         candidates: classification?.candidates ?? [
           { type: "regular_transaction" as const, confidence: "high" as const },
         ],
@@ -280,6 +321,7 @@ export const handler: AppRouteHandler<typeof route> = async (c) => {
     let newCount = 0;
     let duplicateCount = 0;
     let changedCount = 0;
+    let fuzzyMatchCount = 0;
     let needsResolutionCount = 0;
 
     for (const t of transactions) {
@@ -287,6 +329,8 @@ export const handler: AppRouteHandler<typeof route> = async (c) => {
         duplicateCount++;
       } else if (t.reconciliationStatus === "changed") {
         changedCount++;
+      } else if (t.reconciliationStatus === "fuzzy_match") {
+        fuzzyMatchCount++;
       } else {
         newCount++;
         if (t.type === "income") totalIncome += t.amount;
@@ -308,6 +352,7 @@ export const handler: AppRouteHandler<typeof route> = async (c) => {
           newCount,
           duplicateCount,
           changedCount,
+          fuzzyMatchCount,
           needsResolutionCount,
         },
       },

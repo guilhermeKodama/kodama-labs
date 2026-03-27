@@ -108,7 +108,8 @@ export function TransferForm({
           business.name,
           transactions,
           transfers,
-          settings.baseCurrency
+          settings.baseCurrency,
+          business.initialBalance
         );
         return {
           name: business.name,
@@ -124,7 +125,8 @@ export function TransferForm({
           t('form.personalAccount'),
           transactions,
           transfers,
-          settings.baseCurrency
+          settings.baseCurrency,
+          personalAccount.initialBalance
         );
         return {
           name: t('form.personalAccount'),
@@ -143,7 +145,8 @@ export function TransferForm({
         t('form.personalAccount'),
         transactions,
         transfers,
-        settings.baseCurrency
+        settings.baseCurrency,
+        personalAccount.initialBalance
       );
       return {
         name: t('form.personalAccount'),

@@ -71,6 +71,14 @@ interface FieldDiff {
   ofxValue: string;
 }
 
+interface FuzzyMatchedTransaction {
+  id: string;
+  description: string;
+  amount: number;
+  date: string;
+  type: 'income' | 'expense';
+}
+
 interface ParsedTransaction {
   fitId: string;
   date: string;
@@ -78,14 +86,14 @@ interface ParsedTransaction {
   fullDescription: string;
   amount: number;
   type: 'income' | 'expense';
-  reconciliationStatus: 'new' | 'duplicate' | 'changed';
+  reconciliationStatus: 'new' | 'duplicate' | 'changed' | 'fuzzy_match';
   existingTransactionId?: string;
   diffs?: FieldDiff[];
+  fuzzyMatchedTransaction?: FuzzyMatchedTransaction;
   candidates: ClassificationCandidate[];
   resolvedClassification?: string;
   needsResolution: boolean;
   isDuplicate: boolean;
-  // Client-side state
   selected: boolean;
 }
 
@@ -101,6 +109,7 @@ interface ParseResult {
     newCount: number;
     duplicateCount: number;
     changedCount: number;
+    fuzzyMatchCount: number;
     needsResolutionCount: number;
   };
 }
@@ -152,11 +161,12 @@ interface StatementUploadDialogProps {
   defaultEntityType?: EntityType;
   defaultEntityId?: string;
   onImportComplete: () => void;
+  currentBalance?: number;
 }
 
-type Step = 'upload' | 'entity' | 'resolve' | 'preview' | 'confirm';
+type Step = 'upload' | 'entity' | 'dedup' | 'resolve' | 'preview' | 'confirm';
 
-const STEPS: Step[] = ['upload', 'entity', 'resolve', 'preview', 'confirm'];
+const STEPS: Step[] = ['upload', 'entity', 'dedup', 'resolve', 'preview', 'confirm'];
 
 function formatCurrency(amount: number, currency: string): string {
   try {
@@ -176,6 +186,7 @@ export function StatementUploadDialog({
   defaultEntityType,
   defaultEntityId,
   onImportComplete,
+  currentBalance,
 }: StatementUploadDialogProps) {
   const t = useTranslations('bankStatements');
   const tCommon = useTranslations('common');
@@ -196,6 +207,9 @@ export function StatementUploadDialog({
   // Entity state
   const [entityType, setEntityType] = useState<EntityType>(defaultEntityType ?? 'personal');
   const [entityId, setEntityId] = useState<string>(defaultEntityId ?? personalAccountId ?? '');
+
+  // Fuzzy duplicate decisions: map fitId -> 'same' (skip import) | 'different' (import as new)
+  const [fuzzyDecisions, setFuzzyDecisions] = useState<Map<string, 'same' | 'different'>>(new Map());
 
   // Resolution state: map fitId -> user's classification choice
   const [resolutions, setResolutions] = useState<Map<string, Resolution>>(new Map());
@@ -229,6 +243,7 @@ export function StatementUploadDialog({
     transfersCreated: number;
     creditCardsCreated: number;
     investmentTransfersCreated: number;
+    fuzzyDuplicatesLinked: number;
   } | null>(null);
 
   const reset = useCallback(() => {
@@ -239,6 +254,7 @@ export function StatementUploadDialog({
     setParseResult(null);
     setEntityType(defaultEntityType ?? 'personal');
     setEntityId(defaultEntityId ?? personalAccountId ?? '');
+    setFuzzyDecisions(new Map());
     setResolutions(new Map());
     setReconciliationChoices(new Map());
     setCreatingEntityForFitId(null);
@@ -300,6 +316,15 @@ export function StatementUploadDialog({
         selected: tx.reconciliationStatus !== 'duplicate',
       }));
       setParseResult({ ...data, transactions });
+
+      // Auto-populate fuzzy decisions: default to 'same' (skip)
+      const autoFuzzy = new Map<string, 'same' | 'different'>();
+      for (const tx of data.transactions) {
+        if (tx.reconciliationStatus === 'fuzzy_match') {
+          autoFuzzy.set(tx.fitId, 'same');
+        }
+      }
+      setFuzzyDecisions(autoFuzzy);
 
       // Auto-populate resolutions from server-resolved classifications
       const autoResolutions = new Map<string, Resolution>();
@@ -370,11 +395,16 @@ export function StatementUploadDialog({
   // Navigation
   // ---------------------------------------------------------------------------
 
+  const needsDedupStep = parseResult
+    ? parseResult.summary.fuzzyMatchCount > 0
+    : false;
+
   const needsResolveStep = parseResult
     ? parseResult.transactions.some((t) => t.needsResolution)
     : false;
 
   const shouldSkipStep = (step: Step): boolean => {
+    if (step === 'dedup' && !needsDedupStep) return true;
     if (step === 'resolve' && !needsResolveStep) return true;
     return false;
   };
@@ -563,13 +593,69 @@ export function StatementUploadDialog({
     }
   }
 
+  // Fuzzy matches the user confirmed as "different" (import as new)
+  const fuzzyAsNew = new Set<string>();
+  // Fuzzy matches the user confirmed as "same" (link externalId, skip import)
+  const confirmedFuzzyDuplicates: Array<{ existingTransactionId: string; externalId: string }> = [];
+
+  if (parseResult) {
+    for (const tx of parseResult.transactions) {
+      if (tx.reconciliationStatus === 'fuzzy_match' && tx.existingTransactionId) {
+        const decision = fuzzyDecisions.get(tx.fitId) ?? 'same';
+        if (decision === 'different') {
+          fuzzyAsNew.add(tx.fitId);
+        } else {
+          confirmedFuzzyDuplicates.push({
+            existingTransactionId: tx.existingTransactionId,
+            externalId: tx.fitId,
+          });
+        }
+      }
+    }
+  }
+
   const selectedTransactions = (parseResult?.transactions ?? []).filter(
-    (t) => t.selected && !resolvedFitIds.has(t.fitId) && t.reconciliationStatus === 'new'
+    (t) =>
+      t.selected &&
+      !resolvedFitIds.has(t.fitId) &&
+      (t.reconciliationStatus === 'new' || fuzzyAsNew.has(t.fitId))
   );
 
   const reconciliationsToApply = Array.from(reconciliationChoices.values()).filter(
     (r) => r.action === 'update'
   );
+
+  // ---------------------------------------------------------------------------
+  // Projected balance after import
+  // ---------------------------------------------------------------------------
+
+  const projectedBalance = (() => {
+    if (currentBalance === undefined || !parseResult) return undefined;
+
+    let netImpact = 0;
+
+    for (const tx of selectedTransactions) {
+      netImpact += tx.type === 'income' ? tx.amount : -tx.amount;
+    }
+
+    for (const tr of resolvedTransfers) {
+      if (tr.direction === 'capital_injection') {
+        netImpact -= tr.amount;
+      } else {
+        netImpact += tr.amount;
+      }
+    }
+
+    for (const it of resolvedInvestmentTransfers) {
+      if (it.direction === 'investment_deposit') {
+        netImpact -= it.amount;
+      } else {
+        netImpact += it.amount;
+      }
+    }
+
+    return Math.round((currentBalance + netImpact) * 100) / 100;
+  })();
 
   // ---------------------------------------------------------------------------
   // Import
@@ -605,6 +691,9 @@ export function StatementUploadDialog({
                 externalId: r.externalId,
                 updates: r.updates,
               }))
+            : undefined,
+          fuzzyDuplicates: confirmedFuzzyDuplicates.length > 0
+            ? confirmedFuzzyDuplicates
             : undefined,
         },
       });
@@ -768,6 +857,75 @@ export function StatementUploadDialog({
                     </SelectContent>
                   </Select>
                 )}
+              </div>
+            </div>
+          )}
+
+          {/* ============================================================ */}
+          {/* STEP: Review fuzzy duplicates                                */}
+          {/* ============================================================ */}
+          {currentStep === 'dedup' && parseResult && (
+            <div className="space-y-4">
+              <div className="flex items-start gap-2 rounded-lg border border-orange-500/30 bg-orange-500/10 p-3">
+                <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-orange-400" />
+                <div>
+                  <p className="text-sm font-medium text-orange-300">{t('dedup.title')}</p>
+                  <p className="mt-1 text-xs text-orange-400">
+                    {t('dedup.description', { count: parseResult.summary.fuzzyMatchCount })}
+                  </p>
+                </div>
+              </div>
+
+              <div className="space-y-3 max-h-[400px] overflow-y-auto">
+                {parseResult.transactions
+                  .filter((tx) => tx.reconciliationStatus === 'fuzzy_match' && tx.fuzzyMatchedTransaction)
+                  .map((tx) => {
+                    const match = tx.fuzzyMatchedTransaction!;
+                    const decision = fuzzyDecisions.get(tx.fitId) ?? 'same';
+                    return (
+                      <div key={tx.fitId} className="rounded-lg border border-slate-700 bg-slate-800/30 p-4 space-y-3">
+                        <div className="grid grid-cols-2 gap-3">
+                          {/* OFX (imported) side */}
+                          <div className="rounded-md border border-blue-500/30 bg-blue-500/5 p-3 space-y-1">
+                            <p className="text-[10px] font-medium uppercase tracking-wider text-blue-400">{t('dedup.bankStatement')}</p>
+                            <p className="text-sm font-medium text-white truncate" title={tx.fullDescription}>{tx.description}</p>
+                            <p className="text-xs text-slate-400">{tx.date}</p>
+                            <p className={`text-sm font-medium ${tx.type === 'income' ? 'text-emerald-400' : 'text-red-400'}`}>
+                              {tx.type === 'income' ? '+' : '-'}{formatCurrency(tx.amount, parseResult.currency)}
+                            </p>
+                          </div>
+                          {/* Existing (manual) side */}
+                          <div className="rounded-md border border-purple-500/30 bg-purple-500/5 p-3 space-y-1">
+                            <p className="text-[10px] font-medium uppercase tracking-wider text-purple-400">{t('dedup.existingEntry')}</p>
+                            <p className="text-sm font-medium text-white truncate" title={match.description}>{match.description}</p>
+                            <p className="text-xs text-slate-400">{match.date}</p>
+                            <p className={`text-sm font-medium ${match.type === 'income' ? 'text-emerald-400' : 'text-red-400'}`}>
+                              {match.type === 'income' ? '+' : '-'}{formatCurrency(match.amount, parseResult.currency)}
+                            </p>
+                          </div>
+                        </div>
+                        {/* Decision buttons */}
+                        <div className="flex gap-2">
+                          <Button
+                            size="sm"
+                            variant={decision === 'same' ? 'default' : 'outline'}
+                            className={`h-7 text-xs flex-1 ${decision === 'same' ? 'bg-emerald-600 text-white hover:bg-emerald-700' : 'border-slate-700 text-slate-400'}`}
+                            onClick={() => setFuzzyDecisions((prev) => { const next = new Map(prev); next.set(tx.fitId, 'same'); return next; })}
+                          >
+                            <Check className="mr-1 h-3 w-3" /> {t('dedup.sameTransaction')}
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant={decision === 'different' ? 'default' : 'outline'}
+                            className={`h-7 text-xs flex-1 ${decision === 'different' ? 'bg-blue-600 text-white hover:bg-blue-700' : 'border-slate-700 text-slate-400'}`}
+                            onClick={() => setFuzzyDecisions((prev) => { const next = new Map(prev); next.set(tx.fitId, 'different'); return next; })}
+                          >
+                            <Plus className="mr-1 h-3 w-3" /> {t('dedup.differentTransaction')}
+                          </Button>
+                        </div>
+                      </div>
+                    );
+                  })}
               </div>
             </div>
           )}
@@ -1021,7 +1179,9 @@ export function StatementUploadDialog({
                 </div>
                 <div className="rounded-lg border border-slate-700 bg-slate-800/50 p-3 text-center">
                   <p className="text-xs text-slate-400">{t('preview.duplicates')}</p>
-                  <p className="text-lg font-bold text-slate-500">{parseResult.summary.duplicateCount}</p>
+                  <p className="text-lg font-bold text-slate-500">
+                    {parseResult.summary.duplicateCount + confirmedFuzzyDuplicates.length}
+                  </p>
                 </div>
                 {parseResult.summary.changedCount > 0 && (
                   <div className="rounded-lg border border-slate-700 bg-slate-800/50 p-3 text-center">
@@ -1048,6 +1208,47 @@ export function StatementUploadDialog({
                   </p>
                 </div>
               </div>
+
+              {/* Balance projection */}
+              {projectedBalance !== undefined && parseResult && (
+                <div className={`rounded-lg border p-3 ${
+                  Math.abs(projectedBalance - parseResult.ledgerBalance) < 0.01
+                    ? 'border-emerald-500/30 bg-emerald-500/10'
+                    : 'border-amber-500/30 bg-amber-500/10'
+                }`}>
+                  <div className="flex items-center justify-between gap-4">
+                    <div className="flex-1 space-y-1">
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="text-slate-400">{t('preview.currentBalance')}</span>
+                        <span className="font-medium text-slate-300">{formatCurrency(currentBalance!, parseResult.currency)}</span>
+                      </div>
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="text-slate-400">{t('preview.projectedBalance')}</span>
+                        <span className="font-bold text-white">{formatCurrency(projectedBalance, parseResult.currency)}</span>
+                      </div>
+                      <div className="border-t border-slate-700 pt-1 flex items-center justify-between text-xs">
+                        <span className="text-slate-400">{t('preview.bankBalance')}</span>
+                        <span className="font-medium text-slate-300">{formatCurrency(parseResult.ledgerBalance, parseResult.currency)}</span>
+                      </div>
+                    </div>
+                    <div className="shrink-0">
+                      {Math.abs(projectedBalance - parseResult.ledgerBalance) < 0.01 ? (
+                        <div className="flex items-center gap-1.5 rounded-full bg-emerald-500/20 px-2.5 py-1">
+                          <Check className="h-3.5 w-3.5 text-emerald-400" />
+                          <span className="text-xs font-medium text-emerald-400">{t('preview.balanceMatch')}</span>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-1.5 rounded-full bg-amber-500/20 px-2.5 py-1">
+                          <AlertTriangle className="h-3.5 w-3.5 text-amber-400" />
+                          <span className="text-xs font-medium text-amber-400">
+                            {formatCurrency(Math.abs(projectedBalance - parseResult.ledgerBalance), parseResult.currency)} {t('preview.balanceDiff')}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {/* Transfers / Investment transfers banners */}
               {resolvedTransfers.length > 0 && (
@@ -1265,6 +1466,11 @@ export function StatementUploadDialog({
                     {t('success.investmentTransfersCreated', { count: importResult.investmentTransfersCreated })}
                   </p>
                 )}
+                {importResult.fuzzyDuplicatesLinked > 0 && (
+                  <p className="mt-1 text-sm text-orange-300">
+                    {t('success.fuzzyDuplicatesLinked', { count: importResult.fuzzyDuplicatesLinked })}
+                  </p>
+                )}
                 {importResult.imported > 0 && (
                   <p className="mt-3 text-sm text-slate-400">
                     <Loader2 className="mr-1 inline h-3 w-3 animate-spin" />
@@ -1317,6 +1523,12 @@ export function StatementUploadDialog({
 
                 {currentStep === 'entity' && (
                   <Button onClick={goNext} disabled={!entityId} className="bg-emerald-600 text-white hover:bg-emerald-700">
+                    <ArrowRight className="mr-1 h-4 w-4" /> {tCommon('next')}
+                  </Button>
+                )}
+
+                {currentStep === 'dedup' && (
+                  <Button onClick={goNext} className="bg-emerald-600 text-white hover:bg-emerald-700">
                     <ArrowRight className="mr-1 h-4 w-4" /> {tCommon('next')}
                   </Button>
                 )}

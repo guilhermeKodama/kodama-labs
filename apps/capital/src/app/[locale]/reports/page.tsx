@@ -94,14 +94,15 @@ export default function ReportsPage() {
 
   // Prepare entities list (needed for filter bar and comparison chart)
   const allEntities = useMemo(() => {
-    const entities: Array<{ id: string; name: string; type: 'business' | 'personal'; color?: string }> = [];
-    
+    const entities: Array<{ id: string; name: string; type: 'business' | 'personal'; color?: string; initialBalance?: number }> = [];
+
     businesses.forEach((b) => {
       entities.push({
         id: b.id,
         name: b.name,
         type: 'business',
         color: b.color,
+        initialBalance: b.initialBalance,
       });
     });
 
@@ -111,6 +112,7 @@ export default function ReportsPage() {
         name: t('nav.personal'),
         type: 'personal',
         color: '#8b5cf6',
+        initialBalance: personalAccount.initialBalance,
       });
     }
 

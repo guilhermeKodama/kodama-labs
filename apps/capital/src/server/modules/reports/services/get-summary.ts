@@ -98,8 +98,8 @@ export async function getSummary(
       totalIncome,
       totalExpenses,
       totalInvestments,
-      balance: totalIncome - totalExpenses,
-      netWorth: totalIncome - totalExpenses + totalInvestments,
+      balance: business.initialBalance + totalIncome - totalExpenses,
+      netWorth: business.initialBalance + totalIncome - totalExpenses + totalInvestments,
       currency: business.defaultCurrency,
     });
   }
@@ -156,8 +156,8 @@ export async function getSummary(
       totalIncome,
       totalExpenses,
       totalInvestments,
-      balance: totalIncome - totalExpenses,
-      netWorth: totalIncome - totalExpenses + totalInvestments,
+      balance: personalAccount.initialBalance + totalIncome - totalExpenses,
+      netWorth: personalAccount.initialBalance + totalIncome - totalExpenses + totalInvestments,
       currency: personalAccount.defaultCurrency,
     });
   }

@@ -112,7 +112,8 @@ export function calculateEntitySummary(
   entityName: string,
   transactions: Transaction[],
   transfers: Transfer[],
-  baseCurrency: string
+  baseCurrency: string,
+  initialBalance: number = 0
 ): EntitySummary {
   const entityTransactions = transactions.filter(
     (t) => t.entityId === entityId && t.entityType === entityType
@@ -143,7 +144,7 @@ export function calculateEntitySummary(
     .filter((t) => t.fromEntityId === entityId && t.direction !== 'reimbursement')
     .reduce((sum, t) => sum + t.amount * t.exchangeRate, 0);
 
-  const balance = totalIncome - totalExpenses - totalInvestments + incomingTransfers - outgoingTransfers;
+  const balance = initialBalance + totalIncome - totalExpenses - totalInvestments + incomingTransfers - outgoingTransfers;
 
   return {
     entityId,
@@ -593,7 +594,7 @@ export function calculateCurrencyDistribution(
  * Calculate entity comparison data for all entities
  */
 export function calculateEntityComparison(
-  entities: Array<{ id: string; name: string; type: EntityType; color?: string }>,
+  entities: Array<{ id: string; name: string; type: EntityType; color?: string; initialBalance?: number }>,
   transactions: Transaction[],
   transfers: Transfer[],
   baseCurrency: string
@@ -605,7 +606,8 @@ export function calculateEntityComparison(
       entity.name,
       transactions,
       transfers,
-      baseCurrency
+      baseCurrency,
+      entity.initialBalance ?? 0
     );
 
     return {

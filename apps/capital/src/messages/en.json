@@ -754,6 +754,14 @@
       "deleteTitle": "Delete Category?",
       "deleteDescription": "Are you sure you want to delete the category \"{name}\"? This won't affect existing transactions."
     },
+    "initialBalance": {
+      "title": "Initial Balance",
+      "description": "Starting balance for your accounts before tracking. Auto-set from first bank statement import.",
+      "personalAccount": "Personal Account",
+      "business": "Business: {name}",
+      "placeholder": "0.00",
+      "saved": "Initial balance saved!"
+    },
     "data": {
       "title": "Data Management",
       "description": "Export or reset your data",
@@ -1295,6 +1303,14 @@
       "business": "Business",
       "selectBusiness": "Select a business"
     },
+    "dedup": {
+      "title": "Potential Duplicates Found",
+      "description": "We found {count} transaction(s) that may already exist in your records. Please review each match.",
+      "bankStatement": "Bank Statement",
+      "existingEntry": "Existing Entry",
+      "sameTransaction": "Same transaction",
+      "differentTransaction": "Different — import"
+    },
     "creditCards": {
       "detected": "Credit card payments detected",
       "detectedDescription": "We found {count} credit card bill payment(s). Would you like to create a credit card?",
@@ -1374,7 +1390,12 @@
       "duplicate": "Already imported",
       "importing": "Importing...",
       "import": "Import {count} transactions",
-      "importWithTransfers": "Import {txCount} transactions + {trCount} transfers"
+      "importWithTransfers": "Import {txCount} transactions + {trCount} transfers",
+      "currentBalance": "Current balance",
+      "projectedBalance": "After import",
+      "bankBalance": "Bank statement balance",
+      "balanceMatch": "Match",
+      "balanceDiff": "difference"
     },
     "success": {
       "title": "Import Complete",
@@ -1385,6 +1406,7 @@
       "transfersCreated": "{count} transfer(s) created",
       "creditCardsCreated": "{count} credit card(s) created",
       "investmentTransfersCreated": "{count} investment transfer(s) created",
+      "fuzzyDuplicatesLinked": "{count} duplicate(s) linked to existing entries",
       "categorizing": "AI is categorizing your transactions..."
     },
     "status": {
