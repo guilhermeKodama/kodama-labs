@@ -1,5 +1,5 @@
-import { describe, it, expect } from "vitest";
-import { readFileSync } from "fs";
+import { describe, it, expect, beforeAll } from "vitest";
+import { readFileSync, existsSync } from "fs";
 import { join } from "path";
 import { parseOfxContent, parseOfxDate } from "../parsers/ofx-parser";
 import { detectStatementBank } from "../parsers/detect-bank";
@@ -13,6 +13,9 @@ const OFX_DIR = join(process.env.HOME!, "Downloads");
 const JAN_FILE = join(OFX_DIR, "NU_43621320_01JAN2026_31JAN2026.ofx");
 const FEB_FILE = join(OFX_DIR, "NU_43621320_01FEV2026_28FEV2026.ofx");
 const MAR_FILE = join(OFX_DIR, "NU_43621320_01MAR2026_02MAR2026.ofx");
+
+const HAS_OFX_FILES =
+  existsSync(JAN_FILE) && existsSync(FEB_FILE) && existsSync(MAR_FILE);
 
 function readOFX(path: string): string {
   return readFileSync(path, "utf8");
@@ -65,8 +68,9 @@ describe("detectStatementBank", () => {
 // OFX Parsing - January
 // ---------------------------------------------------------------------------
 
-describe("parseOfxContent - January", () => {
-  const parsed = parseOfxContent(readOFX(JAN_FILE));
+describe.skipIf(!HAS_OFX_FILES)("parseOfxContent - January", () => {
+  let parsed: ReturnType<typeof parseOfxContent>;
+  beforeAll(() => { parsed = parseOfxContent(readOFX(JAN_FILE)); });
 
   it("should detect Nubank as bank", () => {
     expect(parsed.bankName).toBe("NU PAGAMENTOS S.A.");
@@ -139,8 +143,9 @@ describe("parseOfxContent - January", () => {
 // OFX Parsing - February
 // ---------------------------------------------------------------------------
 
-describe("parseOfxContent - February", () => {
-  const parsed = parseOfxContent(readOFX(FEB_FILE));
+describe.skipIf(!HAS_OFX_FILES)("parseOfxContent - February", () => {
+  let parsed: ReturnType<typeof parseOfxContent>;
+  beforeAll(() => { parsed = parseOfxContent(readOFX(FEB_FILE)); });
 
   it("should parse 36 transactions", () => {
     expect(parsed.transactions).toHaveLength(36);
@@ -175,8 +180,9 @@ describe("parseOfxContent - February", () => {
 // OFX Parsing - March
 // ---------------------------------------------------------------------------
 
-describe("parseOfxContent - March", () => {
-  const parsed = parseOfxContent(readOFX(MAR_FILE));
+describe.skipIf(!HAS_OFX_FILES)("parseOfxContent - March", () => {
+  let parsed: ReturnType<typeof parseOfxContent>;
+  beforeAll(() => { parsed = parseOfxContent(readOFX(MAR_FILE)); });
 
   it("should parse 1 transaction", () => {
     expect(parsed.transactions).toHaveLength(1);
@@ -202,23 +208,29 @@ describe("parseOfxContent - March", () => {
 // Multi-file balance calculation (simulates full import)
 // ---------------------------------------------------------------------------
 
-describe("Multi-file import balance", () => {
-  const janParsed = parseOfxContent(readOFX(JAN_FILE));
-  const febParsed = parseOfxContent(readOFX(FEB_FILE));
-  const marParsed = parseOfxContent(readOFX(MAR_FILE));
+describe.skipIf(!HAS_OFX_FILES)("Multi-file import balance", () => {
+  let janParsed: ReturnType<typeof parseOfxContent>;
+  let marParsed: ReturnType<typeof parseOfxContent>;
+  let uniqueTransactions: ReturnType<typeof parseOfxContent>["transactions"];
+  let seenFitIds: Set<string>;
 
-  const allTransactions = [
-    ...janParsed.transactions,
-    ...febParsed.transactions,
-    ...marParsed.transactions,
-  ];
+  beforeAll(() => {
+    janParsed = parseOfxContent(readOFX(JAN_FILE));
+    const febParsed = parseOfxContent(readOFX(FEB_FILE));
+    marParsed = parseOfxContent(readOFX(MAR_FILE));
 
-  // Deduplicate by FITID (same as import logic)
-  const seenFitIds = new Set<string>();
-  const uniqueTransactions = allTransactions.filter((t) => {
-    if (seenFitIds.has(t.fitId)) return false;
-    seenFitIds.add(t.fitId);
-    return true;
+    const allTransactions = [
+      ...janParsed.transactions,
+      ...febParsed.transactions,
+      ...marParsed.transactions,
+    ];
+
+    seenFitIds = new Set<string>();
+    uniqueTransactions = allTransactions.filter((t) => {
+      if (seenFitIds.has(t.fitId)) return false;
+      seenFitIds.add(t.fitId);
+      return true;
+    });
   });
 
   it("should have 72 unique transactions across 3 files", () => {
@@ -259,9 +271,6 @@ describe("Multi-file import balance", () => {
   });
 
   it("should match: the final OFX ledger balance is 4022.26", () => {
-    // The OFX ledger is the absolute account balance (not the sum of these transactions).
-    // It includes a starting balance before Jan 1.
-    // Starting balance = Jan ledger - Jan net = 797.28 - (-3584.49) = 4381.77
     expect(marParsed.ledgerBalance).toBe(4022.26);
   });
 
