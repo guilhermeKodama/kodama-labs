@@ -58,8 +58,13 @@ export default async function AlertDetailPage({
 
   const alertData = alert.data as Record<string, unknown> | null;
   const politicianName = alertData?.politicianName as string | undefined;
+  const politicianCpf = alertData?.politicianCpf as string | undefined;
   const party = alertData?.party as string | undefined;
   const linkType = alertData?.linkType as string | undefined;
+
+  const politician = politicianCpf
+    ? await prisma.politician.findFirst({ where: { cpf: politicianCpf }, select: { id: true } })
+    : null;
 
   return (
     <PageLayout>
@@ -127,7 +132,10 @@ export default async function AlertDetailPage({
             </Link>
           )}
           {alert.type === "POLITICAL_LINK" && politicianName && (
-            <div className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-purple-500/30 bg-purple-500/5">
+            <Link
+              href={politician ? `/${locale}/politicians/${politician.id}` : "#"}
+              className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-purple-500/30 bg-purple-500/5 hover:bg-purple-500/10 transition-colors"
+            >
               <Landmark className="h-4 w-4 text-purple-500" />
               <div>
                 <p className="text-sm font-medium">{politicianName}</p>
@@ -136,15 +144,18 @@ export default async function AlertDetailPage({
                     linkType === "SHAREHOLDER_IS_POLITICIAN" ? "Sócio é Político" :
                     linkType === "SUPPLIER_DONATED" ? "Fornecedor Doou" :
                     linkType === "DONOR_GOT_CONTRACT" ? "Doador Recebeu Contrato" :
-                    linkType === "FAMILY_IN_SUPPLIER" ? "Possível Familiar em Fornecedor" :
-                    linkType === "FAMILY_DONATED" ? "Possível Familiar Doou" :
+                    linkType === "FAMILY_IN_SUPPLIER" ? "Familiar Confirmado em Fornecedor" :
+                    linkType === "FAMILY_DONATED" ? "Familiar Confirmado Doou" :
                     linkType === "POLITICIAN_IS_SERVANT" ? "Servidor Público" :
                     linkType === "WEALTH_ANOMALY" ? "Crescimento Patrimonial" :
+                    linkType === "DONOR_IS_SHAREHOLDER" ? "Doador é Sócio de Fornecedor" :
+                    linkType === "DONATION_TIMING" ? "Proximidade Temporal Doação-Contrato" :
+                    linkType === "DONOR_CONCENTRATION" ? "Concentração de Doações" :
                     linkType ?? ""
                   }
                 </p>
               </div>
-            </div>
+            </Link>
           )}
         </div>
 

@@ -25,6 +25,7 @@ interface Entity {
   name: string;
   type: EntityType;
   color?: string;
+  initialBalance?: number;
 }
 
 interface EntityComparisonChartProps {

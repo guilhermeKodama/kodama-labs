@@ -125,9 +125,9 @@ export async function fetchTseCandidates(year: number): Promise<TseRawRow[]> {
     /consulta_cand.*\.csv$/i,
   );
 
-  const rows: TseRawRow[] = [];
+  let rows: TseRawRow[] = [];
   for (const csvText of csvTexts) {
-    rows.push(...csvToRecords(csvText));
+    rows = rows.concat(csvToRecords(csvText));
   }
 
   console.log(`[tse] Parsed ${rows.length} candidate rows for ${year}`);
@@ -141,9 +141,9 @@ export async function fetchTseDonations(year: number): Promise<TseRawRow[]> {
     /receitas_candidatos.*\.csv$/i,
   );
 
-  const rows: TseRawRow[] = [];
+  let rows: TseRawRow[] = [];
   for (const csvText of csvTexts) {
-    rows.push(...csvToRecords(csvText));
+    rows = rows.concat(csvToRecords(csvText));
   }
 
   console.log(`[tse] Parsed ${rows.length} donation rows for ${year}`);
@@ -157,9 +157,9 @@ export async function fetchTseAssets(year: number): Promise<TseRawRow[]> {
     /bem_candidato.*\.csv$/i,
   );
 
-  const rows: TseRawRow[] = [];
+  let rows: TseRawRow[] = [];
   for (const csvText of csvTexts) {
-    rows.push(...csvToRecords(csvText));
+    rows = rows.concat(csvToRecords(csvText));
   }
 
   console.log(`[tse] Parsed ${rows.length} asset rows for ${year}`);

@@ -7,6 +7,7 @@ interface UpdateBusinessInput {
   defaultCurrency?: string;
   color?: string;
   taxRate?: number;
+  initialBalance?: number;
 }
 
 export async function updateBusinessService(

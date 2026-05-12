@@ -182,7 +182,8 @@ export default function BusinessDetailPage() {
       business.name,
       transactions,
       transfers,
-      settings.baseCurrency
+      settings.baseCurrency,
+      business.initialBalance
     );
   }, [business, transactions, transfers, settings.baseCurrency]);
 
@@ -527,6 +528,7 @@ export default function BusinessDetailPage() {
         defaultEntityType="business"
         defaultEntityId={businessId}
         onImportComplete={handleImportComplete}
+        currentBalance={summary?.balance}
       />
 
       {/* Transaction Dialog */}

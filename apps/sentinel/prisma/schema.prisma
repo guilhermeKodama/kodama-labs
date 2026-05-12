@@ -24,6 +24,7 @@ enum DataSource {
   MARKET_PRICE
   TSE
   CAMARA
+  SENADO
 }
 
 enum JobStatus {
@@ -151,6 +152,7 @@ model Procurement {
   @@index([publishedAt])
   @@index([riskScore])
   @@index([itemsEnrichedAt])
+  @@index([publishedAt(sort: Desc), id])
   @@map("procurements")
 }
 
@@ -272,6 +274,7 @@ model Contract {
   @@index([procurementId])
   @@index([startDate])
   @@index([publishedAt])
+  @@index([startDate(sort: Desc), id])
   @@map("contracts")
 }
 
@@ -464,20 +467,23 @@ model Politician {
   gender        String?
   education     String?
   maritalStatus String?
-  occupation    String?
-  email         String?
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  occupation      String?
+  email           String?
+  familyFetchedAt DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
   donations CampaignDonation[]
   links     PoliticalLink[]
   assets    CandidateAsset[]
   servants  PublicServant[]
+  relatives PoliticianRelative[]
 
   @@index([cpf])
   @@index([party])
   @@index([state])
   @@index([position])
+  @@index([active, elected, name, id])
   @@map("politicians")
 }
 
@@ -493,10 +499,25 @@ model CampaignDonation {
   rawRecordId  String?
   createdAt    DateTime @default(now())
 
+  donorNameRfb  String?
+  donorCnae     String?
+  donorState    String?
+  donorCity     String?
+  donationDate  DateTime?
+  receiptNumber String?
+  originType    String?
+  sourceType    String?
+  speciesType   String?
+  candidateName String?
+  candidateParty String?
+  candidatePosition String?
+  state         String?
+
   politician Politician @relation(fields: [politicianId], references: [id], onDelete: Cascade)
 
   @@index([donorCpfCnpj])
   @@index([politicianId])
+  @@index([donorState])
   @@map("campaign_donations")
 }
 
@@ -557,6 +578,23 @@ model PublicServant {
   @@index([politicianId])
   @@index([cpf])
   @@map("public_servants")
+}
+
+model PoliticianRelative {
+  id           String   @id @default(cuid())
+  politicianId String
+  relativeCpf  String
+  relativeName String
+  relationship String
+  confidence   Float?
+  rawRecordId  String?
+  createdAt    DateTime @default(now())
+
+  politician Politician @relation(fields: [politicianId], references: [id], onDelete: Cascade)
+
+  @@unique([politicianId, relativeCpf])
+  @@index([relativeCpf])
+  @@map("politician_relatives")
 }
 
 // ============================================
