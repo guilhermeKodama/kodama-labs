@@ -63,6 +63,11 @@ const ReconciliationUpdateSchema = z.object({
   }),
 });
 
+const FuzzyDuplicateSchema = z.object({
+  existingTransactionId: z.string().min(1),
+  externalId: z.string().min(1),
+});
+
 const ImportRequestSchema = z.object({
   entityType: z.enum(["personal", "business"]),
   entityId: z.string().min(1),
@@ -75,6 +80,7 @@ const ImportRequestSchema = z.object({
   creditCards: z.array(CreditCardInputSchema).optional(),
   investmentTransfers: z.array(InvestmentTransferInputSchema).optional(),
   reconciliations: z.array(ReconciliationUpdateSchema).optional(),
+  fuzzyDuplicates: z.array(FuzzyDuplicateSchema).optional(),
 });
 
 const ImportResponseSchema = z.object({
@@ -84,6 +90,7 @@ const ImportResponseSchema = z.object({
   transfersCreated: z.number(),
   creditCardsCreated: z.number(),
   investmentTransfersCreated: z.number(),
+  fuzzyDuplicatesLinked: z.number(),
   statementImportId: z.string(),
 });
 
@@ -231,6 +238,28 @@ export const handler: AppRouteHandler<typeof route> = async (c) => {
       }
     }
 
+    // --- Auto-set initialBalance on first-ever import ---
+    if (body.ledgerBalance != null) {
+      const priorImports = await prisma.statementImport.count({
+        where: body.entityType === "personal"
+          ? { personalAccountId: body.entityId }
+          : { businessId: body.entityId },
+      });
+      if (priorImports === 0) {
+        if (body.entityType === "personal") {
+          await prisma.personalAccount.update({
+            where: { id: body.entityId },
+            data: { initialBalance: body.ledgerBalance },
+          });
+        } else {
+          await prisma.business.update({
+            where: { id: body.entityId },
+            data: { initialBalance: body.ledgerBalance },
+          });
+        }
+      }
+    }
+
     await ensureSystemCategories(userId);
 
     // Load merchant category mappings
@@ -259,11 +288,25 @@ export const handler: AppRouteHandler<typeof route> = async (c) => {
       existingTxs.map((t) => t.externalId)
     );
 
+    // --- Handle fuzzy duplicates: link externalId to existing transactions ---
+    let fuzzyDuplicatesLinked = 0;
+    const fuzzyLinkedExternalIds = new Set<string>();
+    if (body.fuzzyDuplicates && body.fuzzyDuplicates.length > 0) {
+      for (const fd of body.fuzzyDuplicates) {
+        await prisma.transaction.update({
+          where: { id: fd.existingTransactionId },
+          data: { externalId: fd.externalId },
+        });
+        fuzzyLinkedExternalIds.add(fd.externalId);
+        fuzzyDuplicatesLinked++;
+      }
+    }
+
     const newTransactions = body.transactions.filter(
-      (t) => !existingExternalIds.has(t.externalId)
+      (t) => !existingExternalIds.has(t.externalId) && !fuzzyLinkedExternalIds.has(t.externalId)
     );
     const duplicatesSkipped =
-      body.transactions.length - newTransactions.length;
+      body.transactions.length - newTransactions.length - fuzzyDuplicatesLinked;
 
     // Create StatementImport record
     const statementImport = await prisma.statementImport.create({
@@ -306,10 +349,28 @@ export const handler: AppRouteHandler<typeof route> = async (c) => {
       }
     }
 
+    // Collect externalIds from transfers/investment transfers to check for duplicates
+    const transferExternalIds = [
+      ...(body.transfers ?? []).map((t) => t.externalId),
+      ...(body.investmentTransfers ?? []).map((t) => t.externalId),
+    ].filter(Boolean);
+
+    const existingTransferFitIds = new Set<string>();
+    if (transferExternalIds.length > 0) {
+      const found = await prisma.transfer.findMany({
+        where: { externalId: { in: transferExternalIds } },
+        select: { externalId: true },
+      });
+      for (const f of found) {
+        if (f.externalId) existingTransferFitIds.add(f.externalId);
+      }
+    }
+
     // Create transfers if provided
     let transfersCreated = 0;
     if (body.transfers && body.transfers.length > 0) {
       for (const tr of body.transfers) {
+        if (existingTransferFitIds.has(tr.externalId)) continue;
         const isOutgoing = tr.direction === "capital_injection";
         const fromEntityType = isOutgoing
           ? body.entityType
@@ -334,6 +395,7 @@ export const handler: AppRouteHandler<typeof route> = async (c) => {
             exchangeRate: 1,
             description: tr.description,
             date: parseLocalDate(tr.date),
+            externalId: tr.externalId,
             fromBusinessId:
               fromEntityType === "business" ? fromEntityId : undefined,
             fromPersonalAccountId:
@@ -352,6 +414,7 @@ export const handler: AppRouteHandler<typeof route> = async (c) => {
     let investmentTransfersCreated = 0;
     if (body.investmentTransfers && body.investmentTransfers.length > 0) {
       for (const it of body.investmentTransfers) {
+        if (existingTransferFitIds.has(it.externalId)) continue;
         if (it.direction === "investment_deposit") {
           await createTransfer(
             userId,
@@ -369,6 +432,7 @@ export const handler: AppRouteHandler<typeof route> = async (c) => {
               fromPersonalAccountId:
                 body.entityType === "personal" ? body.entityId : undefined,
               toInvestmentAccountId: it.investmentAccountId,
+              externalId: it.externalId,
             },
             prisma
           );
@@ -389,6 +453,7 @@ export const handler: AppRouteHandler<typeof route> = async (c) => {
               toPersonalAccountId:
                 body.entityType === "personal" ? body.entityId : undefined,
               fromInvestmentAccountId: it.investmentAccountId,
+              externalId: it.externalId,
             },
             prisma
           );
@@ -474,6 +539,7 @@ export const handler: AppRouteHandler<typeof route> = async (c) => {
         transfersCreated,
         creditCardsCreated,
         investmentTransfersCreated,
+        fuzzyDuplicatesLinked,
         statementImportId: statementImport.id,
       },
       CREATED

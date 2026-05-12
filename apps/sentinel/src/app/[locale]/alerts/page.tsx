@@ -13,8 +13,7 @@ export default async function AlertsPage({
 
   const [alerts, countBySeverity] = await Promise.all([
     prisma.alert.findMany({
-      orderBy: { createdAt: "desc" },
-      take: 500,
+      orderBy: [{ createdAt: "desc" }],
       include: {
         entity: { select: { id: true, cnpj: true, name: true, state: true } },
         procurement: { select: { id: true, description: true, orgName: true, state: true, modality: true } },

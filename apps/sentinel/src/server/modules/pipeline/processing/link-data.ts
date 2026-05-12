@@ -1,5 +1,5 @@
 import { prisma } from "@sentinel/server/lib/prisma";
-import { runJob } from "@sentinel/server/lib/job-runner";
+import { runJob, markProcessed, markErrors } from "@sentinel/server/lib/job-runner";
 
 interface CeisCnepRaw {
   id: number;
@@ -46,65 +46,86 @@ function parseBrDate(dateStr: string | null | undefined): Date | null {
 
 export async function linkData() {
   return runJob("link-data", "processing", async () => {
-    let recordsOut = 0;
-
     const sanctionRaws = await prisma.rawRecord.findMany({
       where: {
         recordType: "sanction",
         processedAt: null,
         processingError: null,
       },
-      take: 200,
+      select: { id: true, externalId: true, source: true, data: true },
+      take: 1000,
     });
+
+    if (!sanctionRaws.length) return { recordsIn: 0, recordsOut: 0 };
+
+    const successIds: string[] = [];
+    const errors: { id: string; error: string }[] = [];
+
+    const allCnpjCpfs = new Set<string>();
+    for (const raw of sanctionRaws) {
+      if (raw.source === "CEIS" || raw.source === "CNEP") {
+        const data = raw.data as unknown as CeisCnepRaw;
+        const cnpjCpf = (data.sancionado?.codigoFormatado ?? "").replace(/\D/g, "");
+        if (cnpjCpf) allCnpjCpfs.add(cnpjCpf);
+      } else if (raw.source === "TCU") {
+        const data = raw.data as unknown as TcuRaw;
+        const cnpjCpf = (data.cpfCnpj ?? "").replace(/\D/g, "");
+        if (cnpjCpf) allCnpjCpfs.add(cnpjCpf);
+      }
+    }
+
+    const entityMap = new Map<string, string>();
+    if (allCnpjCpfs.size > 0) {
+      const cnpjArr = Array.from(allCnpjCpfs);
+      const CHUNK = 500;
+      for (let i = 0; i < cnpjArr.length; i += CHUNK) {
+        const entities = await prisma.entity.findMany({
+          where: { cnpj: { in: cnpjArr.slice(i, i + CHUNK) } },
+          select: { id: true, cnpj: true },
+        });
+        for (const e of entities) entityMap.set(e.cnpj, e.id);
+      }
+    }
 
     for (const raw of sanctionRaws) {
       try {
         if (raw.source === "CEIS" || raw.source === "CNEP") {
-          const ok = await processCeisCnep(raw);
-          if (ok) recordsOut++;
+          const ok = await processCeisCnep(raw, entityMap);
+          if (ok) successIds.push(raw.id);
+          else successIds.push(raw.id);
         } else if (raw.source === "TCU") {
-          const ok = await processTcu(raw);
-          if (ok) recordsOut++;
+          const ok = await processTcu(raw, entityMap);
+          if (ok) successIds.push(raw.id);
+          else successIds.push(raw.id);
+        } else {
+          successIds.push(raw.id);
         }
-
-        await prisma.rawRecord.update({
-          where: { id: raw.id },
-          data: { processedAt: new Date() },
-        });
       } catch (error) {
-        console.error(
-          `[link-data] Error processing sanction ${raw.externalId}:`,
-          error
-        );
-        await prisma.rawRecord.update({
-          where: { id: raw.id },
-          data: {
-            processingError:
-              error instanceof Error ? error.message : "Unknown error",
-          },
+        errors.push({
+          id: raw.id,
+          error: error instanceof Error ? error.message : "Unknown error",
         });
       }
     }
 
-    return { recordsIn: sanctionRaws.length, recordsOut };
+    await markProcessed(successIds);
+    await markErrors(errors);
+
+    return { recordsIn: sanctionRaws.length, recordsOut: successIds.length };
   });
 }
 
 async function processCeisCnep(
-  raw: { id: string; externalId: string; source: string; data: unknown }
+  raw: { id: string; externalId: string; source: string; data: unknown },
+  entityMap: Map<string, string>
 ): Promise<boolean> {
   const data = raw.data as CeisCnepRaw;
-
   const cnpjCpf = (data.sancionado?.codigoFormatado ?? "").replace(/\D/g, "");
   if (!cnpjCpf) return false;
 
   const personName = data.sancionado?.nome ?? data.pessoa?.nome ?? null;
   const personType = data.pessoa?.tipo ?? null;
-
-  const entity = await prisma.entity.findUnique({
-    where: { cnpj: cnpjCpf },
-    select: { id: true },
-  });
+  const entityId = entityMap.get(cnpjCpf) ?? null;
 
   const startDate = parseBrDate(data.dataInicioSancao);
   const endDate = parseBrDate(data.dataFimSancao);
@@ -123,7 +144,7 @@ async function processCeisCnep(
       cnpjCpf,
       personName,
       personType,
-      entityId: entity?.id ?? null,
+      entityId,
       source: raw.source as "CEIS" | "CNEP",
       type: sanctionType,
       reason: legalBasis.slice(0, 5000),
@@ -142,7 +163,7 @@ async function processCeisCnep(
       rawRecordId: raw.id,
     },
     update: {
-      entityId: entity?.id ?? null,
+      entityId,
       personName,
       type: sanctionType,
       reason: legalBasis.slice(0, 5000),
@@ -156,18 +177,14 @@ async function processCeisCnep(
 }
 
 async function processTcu(
-  raw: { id: string; externalId: string; data: unknown }
+  raw: { id: string; externalId: string; data: unknown },
+  entityMap: Map<string, string>
 ): Promise<boolean> {
   const data = raw.data as TcuRaw;
-
   const cnpjCpf = (data.cpfCnpj ?? "").replace(/\D/g, "");
   if (!cnpjCpf) return false;
 
-  const entity = await prisma.entity.findUnique({
-    where: { cnpj: cnpjCpf },
-    select: { id: true },
-  });
-
+  const entityId = entityMap.get(cnpjCpf) ?? null;
   const startDate = parseBrDate(data.dataTransitoJulgado);
   const endDate = parseBrDate(data.dataFinal);
 
@@ -177,7 +194,7 @@ async function processTcu(
       externalId: raw.externalId,
       cnpjCpf,
       personName: data.nome ?? null,
-      entityId: entity?.id ?? null,
+      entityId,
       source: "TCU",
       type: "licitante_inidoneo",
       reason: data.deliberacao ?? "",
@@ -194,7 +211,7 @@ async function processTcu(
       rawRecordId: raw.id,
     },
     update: {
-      entityId: entity?.id ?? null,
+      entityId,
       personName: data.nome ?? null,
       endDate,
     },

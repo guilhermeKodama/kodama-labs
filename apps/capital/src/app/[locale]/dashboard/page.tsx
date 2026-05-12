@@ -62,7 +62,8 @@ export default function DashboardPage() {
         business.name,
         transactions,
         transfers,
-        settings.baseCurrency
+        settings.baseCurrency,
+        business.initialBalance
       )
     );
   }, [businesses, transactions, transfers, settings.baseCurrency]);
@@ -75,7 +76,8 @@ export default function DashboardPage() {
       t('nav.personal'),
       transactions,
       transfers,
-      settings.baseCurrency
+      settings.baseCurrency,
+      personalAccount.initialBalance
     );
   }, [personalAccount, transactions, transfers, settings.baseCurrency, t]);
 
@@ -224,14 +226,15 @@ export default function DashboardPage() {
 
   // Prepare entities for comparison chart
   const allEntities = useMemo(() => {
-    const entities: Array<{ id: string; name: string; type: 'business' | 'personal'; color?: string }> = [];
-    
+    const entities: Array<{ id: string; name: string; type: 'business' | 'personal'; color?: string; initialBalance?: number }> = [];
+
     businesses.forEach((b) => {
       entities.push({
         id: b.id,
         name: b.name,
         type: 'business',
         color: b.color,
+        initialBalance: b.initialBalance,
       });
     });
 
@@ -241,6 +244,7 @@ export default function DashboardPage() {
         name: t('nav.personal'),
         type: 'personal',
         color: '#8b5cf6',
+        initialBalance: personalAccount.initialBalance,
       });
     }
 

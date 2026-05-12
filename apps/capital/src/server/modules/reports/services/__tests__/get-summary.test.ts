@@ -7,15 +7,20 @@ import type { DbClient } from '@capital/server/lib/prisma';
 // ============================================================
 
 function mockDb(overrides: {
-  businesses?: Array<{ id: string; name: string; defaultCurrency: string }>;
-  personalAccount?: { id: string; defaultCurrency: string } | null;
+  businesses?: Array<{ id: string; name: string; defaultCurrency: string; initialBalance?: number }>;
+  personalAccount?: { id: string; defaultCurrency: string; initialBalance?: number } | null;
   transactions?: Array<{ type: string; amount: number }>;
   transfers?: Array<{ amount: number }>;
   personalTransactions?: Array<{ type: string; amount: number }>;
   personalTransfers?: Array<{ amount: number }>;
 }): DbClient {
-  const businesses = overrides.businesses ?? [];
-  const personalAccount = overrides.personalAccount ?? null;
+  const businesses = (overrides.businesses ?? []).map((b) => ({
+    ...b,
+    initialBalance: b.initialBalance ?? 0,
+  }));
+  const personalAccount = overrides.personalAccount
+    ? { ...overrides.personalAccount, initialBalance: overrides.personalAccount.initialBalance ?? 0 }
+    : null;
 
   let txCallCount = 0;
   let trCallCount = 0;

@@ -86,10 +86,13 @@ export default async function NetworkPage({
     SHAREHOLDER_IS_POLITICIAN: "Sócio é Político",
     SUPPLIER_DONATED: "Fornecedor Doou para Campanha",
     DONOR_GOT_CONTRACT: "Doador Recebeu Contrato",
-    FAMILY_IN_SUPPLIER: "Possível Familiar em Fornecedor",
-    FAMILY_DONATED: "Possível Familiar Doou",
+    FAMILY_IN_SUPPLIER: "Familiar Confirmado em Fornecedor",
+    FAMILY_DONATED: "Familiar Confirmado Doou",
     POLITICIAN_IS_SERVANT: "Político é Servidor Público",
     WEALTH_ANOMALY: "Crescimento Patrimonial Anômalo",
+    DONOR_IS_SHAREHOLDER: "Doador é Sócio de Fornecedor",
+    DONATION_TIMING: "Proximidade Temporal Doação-Contrato",
+    DONOR_CONCENTRATION: "Concentração de Doações",
   };
 
   const linkTypeColors: Record<string, string> = {
@@ -100,6 +103,9 @@ export default async function NetworkPage({
     FAMILY_DONATED: "border-teal-500/30 bg-teal-500/5",
     POLITICIAN_IS_SERVANT: "border-indigo-500/30 bg-indigo-500/5",
     WEALTH_ANOMALY: "border-amber-500/30 bg-amber-500/5",
+    DONOR_IS_SHAREHOLDER: "border-pink-500/30 bg-pink-500/5",
+    DONATION_TIMING: "border-cyan-500/30 bg-cyan-500/5",
+    DONOR_CONCENTRATION: "border-emerald-500/30 bg-emerald-500/5",
   };
 
   const strengthColor = (s: number) =>

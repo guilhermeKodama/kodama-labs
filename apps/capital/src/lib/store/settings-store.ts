@@ -102,6 +102,7 @@ export const useSettingsStore = create<SettingsStore>()((set, get) => ({
               id: userData.personalAccount.id,
               userId: userData.id,
               defaultCurrency: userData.personalAccount.defaultCurrency,
+              initialBalance: (userData.personalAccount as Record<string, unknown>).initialBalance as number ?? 0,
               createdAt: new Date(userData.createdAt),
               updatedAt: new Date(userData.updatedAt),
             }

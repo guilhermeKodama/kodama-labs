@@ -2,9 +2,8 @@ import { prisma } from "@sentinel/server/lib/prisma";
 import { runJob } from "@sentinel/server/lib/job-runner";
 import { differenceInMonths } from "date-fns";
 
-const BATCH_SIZE = 100;
 const MIN_MONTHS_BEFORE_CONTRACT = 6;
-const CAPITAL_TO_CONTRACT_RATIO = 0.01; // Capital < 1% of contract value
+const CAPITAL_TO_CONTRACT_RATIO = 0.01;
 
 export async function analyzeShellCompanies() {
   return runJob("analyze-shell-companies", "analysis", async () => {
@@ -22,7 +21,6 @@ export async function analyzeShellCompanies() {
         shareholders: true,
         _count: { select: { contracts: true } },
       },
-      take: BATCH_SIZE,
     });
 
     let recordsOut = 0;
