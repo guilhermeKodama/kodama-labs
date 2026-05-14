@@ -2,9 +2,11 @@ import { prisma } from "@sentinel/server/lib/prisma";
 import { Prisma } from "@/generated/prisma";
 import { runJob, getOrCreateCursor, updateCursor } from "@sentinel/server/lib/job-runner";
 import { fetchSenadores, fetchSenadorDetail } from "@/lib/gov-apis/senado";
+import { BudgetTracker } from "@sentinel/server/lib/budget-tracker";
 
 const BATCH_SIZE = 5;
 const POLITE_DELAY_MS = 2000;
+const BUDGET_MS = 100_000;
 
 function sleep(ms: number) {
   return new Promise((r) => setTimeout(r, ms));
@@ -30,8 +32,13 @@ export async function ingestSenadores() {
     try {
       const senadores = await fetchSenadores();
       recordsIn = senadores.length;
+      const budget = new BudgetTracker(BUDGET_MS);
 
       for (let i = 0; i < senadores.length; i += BATCH_SIZE) {
+        if (budget.exceeded()) {
+          console.log(`[ingest-senadores] Budget exhausted at ${i}/${senadores.length}; yielding`);
+          break;
+        }
         const batch = senadores.slice(i, i + BATCH_SIZE);
 
         const details = await Promise.allSettled(

@@ -4,7 +4,7 @@ import { runJob, markProcessed, markErrors } from "@sentinel/server/lib/job-runn
 import { getCpfToPoliticianId } from "@sentinel/server/lib/politician-cache";
 import { cleanCpf } from "@/lib/gov-apis/tse";
 
-const BATCH_SIZE = 2000;
+const BATCH_SIZE = 500;
 
 type RawRow = Record<string, string>;
 
