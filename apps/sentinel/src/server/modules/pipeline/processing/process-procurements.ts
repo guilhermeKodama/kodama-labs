@@ -4,7 +4,7 @@ import type { PncpProcurement } from "@/lib/gov-apis/pncp";
 import type { TransparenciaLicitacao } from "@/lib/gov-apis/transparencia";
 import { randomUUID } from "crypto";
 
-const BATCH_SIZE = 2000;
+const BATCH_SIZE = 1000;
 
 export async function processProcurements() {
   return runJob("process-procurements", "processing", async () => {

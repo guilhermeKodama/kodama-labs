@@ -2,10 +2,12 @@ import { prisma } from "@sentinel/server/lib/prisma";
 import { Prisma } from "@/generated/prisma";
 import { runJob } from "@sentinel/server/lib/job-runner";
 import { fetchCnpjData } from "@/lib/gov-apis/cnpj";
+import { BudgetTracker } from "@sentinel/server/lib/budget-tracker";
 
 const BATCH_SIZE = 20;
 const DELAY_MS = 1000;
 const MAX_RETRIES = 3;
+const BUDGET_MS = 100_000;
 
 export async function ingestCnpj() {
   return runJob("ingest-cnpj", "ingestion", async () => {
@@ -20,8 +22,13 @@ export async function ingestCnpj() {
     }
 
     let totalOut = 0;
+    const budget = new BudgetTracker(BUDGET_MS);
 
     for (const entity of entitiesToEnrich) {
+      if (budget.exceeded()) {
+        console.log(`[ingest-cnpj] Budget exhausted; yielding`);
+        break;
+      }
       const cleanCnpj = entity.cnpj.replace(/\D/g, "");
 
       if (cleanCnpj.length !== 14) {

@@ -2,9 +2,11 @@ import { prisma } from "@sentinel/server/lib/prisma";
 import { Prisma } from "@/generated/prisma";
 import { runJob } from "@sentinel/server/lib/job-runner";
 import { fetchProcurementItems, fetchItemResults } from "@/lib/gov-apis/pncp";
+import { BudgetTracker } from "@sentinel/server/lib/budget-tracker";
 
 const BATCH_SIZE = 30;
 const DELAY_MS = 500;
+const BUDGET_MS = 100_000;
 
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -31,8 +33,13 @@ export async function ingestPncpDetails() {
 
     let totalIn = 0;
     let totalOut = 0;
+    const budget = new BudgetTracker(BUDGET_MS);
 
     for (const proc of procurements) {
+      if (budget.exceeded()) {
+        console.log(`[ingest-pncp-details] Budget exhausted; yielding, ${totalOut} records saved`);
+        break;
+      }
       if (!proc.sequencial || !proc.orgCnpj) continue;
 
       try {

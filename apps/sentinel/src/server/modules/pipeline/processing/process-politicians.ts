@@ -4,7 +4,7 @@ import { invalidatePoliticianCache } from "@sentinel/server/lib/politician-cache
 import { cleanCpf } from "@/lib/gov-apis/tse";
 import { randomUUID } from "crypto";
 
-const BATCH_SIZE = 5000;
+const BATCH_SIZE = 500;
 
 type RawRow = Record<string, string>;
 

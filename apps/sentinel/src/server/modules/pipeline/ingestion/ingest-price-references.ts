@@ -8,10 +8,12 @@ import {
 } from "@/lib/gov-apis/pncp";
 import type { PncpItem } from "@/lib/gov-apis/pncp";
 import { Prisma } from "@/generated/prisma";
+import { BudgetTracker } from "@sentinel/server/lib/budget-tracker";
 
 const ATAS_PER_RUN = 15;
 const DELAY_MS = 1000;
 const LOOKBACK_DAYS = 365;
+const BUDGET_MS = 120_000;
 
 function sleep(ms: number) {
   return new Promise((r) => setTimeout(r, ms));
@@ -54,6 +56,7 @@ export async function ingestPriceReferences() {
 
     await updateCursor(cursor.id, { status: "RUNNING" });
 
+    const budget = new BudgetTracker(BUDGET_MS);
     const startDate = cursor.lastFetchedAt;
     const endDate = new Date(
       Math.min(startDate.getTime() + 7 * 24 * 60 * 60 * 1000, Date.now()),
@@ -90,6 +93,16 @@ export async function ingestPriceReferences() {
       const toProcess = nonCancelled.slice(0, ATAS_PER_RUN);
 
       for (const ata of toProcess) {
+        if (budget.exceeded()) {
+          console.log(`[ingest-price-references] Budget exhausted; yielding before next ata`);
+          await updateCursor(cursor.id, {
+            status: "IDLE",
+            cursorValue: String(page),
+            totalFetched: (cursor.totalFetched ?? 0) + totalOut,
+            lastError: null,
+          });
+          return { recordsIn: totalIn, recordsOut: totalOut };
+        }
         const parsed = parseCompraControlNumber(ata.numeroControlePNCPCompra);
         if (!parsed) continue;
 

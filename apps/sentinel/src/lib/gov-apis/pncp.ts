@@ -348,6 +348,25 @@ export async function fetchContractsPage(
   });
 }
 
+/** Fetch a single page of procurements for a single modality (no internal pagination). */
+export async function fetchProcurementsPage(
+  startDate: string,
+  endDate: string,
+  modality: number,
+  page: number = 1,
+  pageSize: number = 50
+): Promise<PncpResponse<PncpProcurement>> {
+  return fetchPncp<PncpProcurement>("/v1/contratacoes/publicacao", {
+    dataInicial: startDate,
+    dataFinal: endDate,
+    codigoModalidadeContratacao: modality.toString(),
+    pagina: page.toString(),
+    tamanhoPagina: Math.max(10, pageSize).toString(),
+  });
+}
+
+export const PNCP_DEFAULT_MODALITIES = DEFAULT_MODALITIES;
+
 // ============================================
 // Detail endpoints (pncp-api)
 // ============================================

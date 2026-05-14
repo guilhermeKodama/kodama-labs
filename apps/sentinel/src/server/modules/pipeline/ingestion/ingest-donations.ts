@@ -1,10 +1,14 @@
 import { prisma } from "@sentinel/server/lib/prisma";
 import { Prisma } from "@/generated/prisma";
 import { runJob, getOrCreateCursor, updateCursor } from "@sentinel/server/lib/job-runner";
-import { fetchTseDonations } from "@/lib/gov-apis/tse";
+import { streamTseDonations, type TseRawRow } from "@/lib/gov-apis/tse";
+import { BudgetTracker, YieldSignal } from "@sentinel/server/lib/budget-tracker";
 
 const ELECTION_YEARS = [2020, 2022, 2024];
 const POLITE_DELAY_MS = 2000;
+const TOTAL_BUDGET_MS = 120_000;
+const CURSOR_SAVE_EVERY = 500;
+const RECENT_FETCH_INTERVAL_MS = 7 * 24 * 60 * 60 * 1000;
 
 function sleep(ms: number) {
   return new Promise((r) => setTimeout(r, ms));
@@ -12,13 +16,25 @@ function sleep(ms: number) {
 
 export async function ingestDonations() {
   return runJob("ingest-donations", "ingestion", async () => {
+    const budget = new BudgetTracker(TOTAL_BUDGET_MS);
     let totalIn = 0;
     let totalOut = 0;
 
     for (let i = 0; i < ELECTION_YEARS.length; i++) {
-      const result = await ingestTseDonations(ELECTION_YEARS[i]!);
-      totalIn += result.recordsIn;
-      totalOut += result.recordsOut;
+      if (budget.exceeded()) {
+        console.log(`[ingest-donations] Budget exhausted before year ${ELECTION_YEARS[i]}; deferring to next tick`);
+        break;
+      }
+      try {
+        const result = await ingestTseDonations(ELECTION_YEARS[i]!, budget);
+        totalIn += result.recordsIn;
+        totalOut += result.recordsOut;
+      } catch (e) {
+        console.warn(
+          `[ingest-donations] TSE ${ELECTION_YEARS[i]} failed:`,
+          e instanceof Error ? e.message : e,
+        );
+      }
       if (i < ELECTION_YEARS.length - 1) await sleep(POLITE_DELAY_MS);
     }
 
@@ -26,44 +42,39 @@ export async function ingestDonations() {
   });
 }
 
-async function ingestTseDonations(year: number) {
+async function ingestTseDonations(year: number, budget: BudgetTracker) {
   const endpoint = `prestacao_contas/${year}`;
   const cursor = await getOrCreateCursor("TSE", endpoint, new Date(0));
 
-  const daysSinceLastFetch =
-    (Date.now() - cursor.lastFetchedAt.getTime()) / (1000 * 60 * 60 * 24);
-  if (daysSinceLastFetch < 7) {
-    console.log(`[ingest-donations] TSE donations ${year} already fetched recently, skipping`);
+  const resumeOffset = Math.max(0, parseInt(cursor.cursorValue ?? "0", 10) || 0);
+  const sinceLast = Date.now() - cursor.lastFetchedAt.getTime();
+  if (sinceLast < RECENT_FETCH_INTERVAL_MS && resumeOffset === 0) {
+    console.log(`[ingest-donations] TSE ${year} fetched ${Math.round(sinceLast / 3600_000)}h ago; skipping`);
     return { recordsIn: 0, recordsOut: 0 };
   }
 
   await updateCursor(cursor.id, { status: "RUNNING" });
 
+  let rowIdx = 0;
   let recordsIn = 0;
   let recordsOut = 0;
 
   try {
-    const rows = await fetchTseDonations(year);
-    recordsIn = rows.length;
+    await streamTseDonations(year, async (row: TseRawRow) => {
+      const currentIdx = rowIdx++;
+      if (currentIdx < resumeOffset) return;
 
-    const validRows = rows.filter((row) => {
+      recordsIn++;
+
       const cpfCnpj = (
         row.NR_CPF_CNPJ_DOADOR ?? row.NR_CPF_CNPJ_DOADOR_ORIGINARIO ?? ""
       ).replace(/\D/g, "");
       const amountStr = (row.VR_RECEITA ?? "").replace(",", ".");
       const amount = parseFloat(amountStr);
-      return cpfCnpj.length > 0 && !isNaN(amount) && amount > 0;
-    });
+      if (!cpfCnpj || isNaN(amount) || amount <= 0) return;
 
-    console.log(`[ingest-donations] ${year}: ${rows.length} total rows, ${validRows.length} with valid donor + amount`);
-
-    for (const row of validRows) {
       const seq = row.SQ_CANDIDATO ?? row.SQ_PRESTADOR_CONTAS ?? "";
-      const cpfCnpj = (
-        row.NR_CPF_CNPJ_DOADOR ?? row.NR_CPF_CNPJ_DOADOR_ORIGINARIO ?? ""
-      ).replace(/\D/g, "");
-      const amount = (row.VR_RECEITA ?? "").replace(",", ".");
-      const externalId = `${year}-${seq}-${cpfCnpj}-${amount}`;
+      const externalId = `${year}-${seq}-${cpfCnpj}-${amountStr}`;
 
       try {
         await prisma.rawRecord.upsert({
@@ -90,15 +101,32 @@ async function ingestTseDonations(year: number) {
       } catch (err) {
         console.error(`[ingest-donations] Error saving donation:`, err);
       }
-    }
+
+      if (recordsOut > 0 && recordsOut % CURSOR_SAVE_EVERY === 0) {
+        await updateCursor(cursor.id, {
+          cursorValue: String(currentIdx + 1),
+          totalFetched: (cursor.totalFetched ?? 0) + recordsOut,
+        });
+        if (budget.exceeded()) {
+          console.log(`[ingest-donations] TSE ${year} budget exhausted at row ${currentIdx + 1}; yielding`);
+          throw new YieldSignal();
+        }
+      }
+    });
 
     await updateCursor(cursor.id, {
       status: "COMPLETED",
       lastFetchedAt: new Date(),
+      cursorValue: "0",
       totalFetched: (cursor.totalFetched ?? 0) + recordsOut,
       lastError: null,
     });
+    console.log(`[ingest-donations] TSE ${year} complete: ${recordsIn} fetched, ${recordsOut} saved`);
   } catch (err) {
+    if (err instanceof YieldSignal) {
+      await updateCursor(cursor.id, { status: "IDLE", lastError: null });
+      return { recordsIn, recordsOut };
+    }
     const msg = err instanceof Error ? err.message : "Unknown error";
     console.error(`[ingest-donations] TSE ${year} failed:`, msg);
     await updateCursor(cursor.id, { status: "FAILED", lastError: msg });

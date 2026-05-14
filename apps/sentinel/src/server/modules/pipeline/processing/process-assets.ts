@@ -3,7 +3,7 @@ import { Prisma } from "@/generated/prisma";
 import { runJob, markProcessed, markErrors } from "@sentinel/server/lib/job-runner";
 import { getCpfToPoliticianId, getSeqToCpfMap } from "@sentinel/server/lib/politician-cache";
 
-const BATCH_SIZE = 2000;
+const BATCH_SIZE = 500;
 
 type RawRow = Record<string, string>;
 
