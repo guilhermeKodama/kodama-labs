@@ -1,16 +1,18 @@
 {
   "crons": [
-    {
-      "path": "/api/cron/ingest",
-      "schedule": "*/5 * * * *"
-    },
-    {
-      "path": "/api/cron/process",
-      "schedule": "*/5 * * * *"
-    },
-    {
-      "path": "/api/cron/analyze",
-      "schedule": "*/5 * * * *"
-    }
+    { "path": "/api/cron/ingest/pncp", "schedule": "*/5 * * * *" },
+    { "path": "/api/cron/ingest/pncp-contracts", "schedule": "*/5 * * * *" },
+    { "path": "/api/cron/ingest/pncp-details", "schedule": "*/5 * * * *" },
+    { "path": "/api/cron/ingest/sanctions", "schedule": "*/5 * * * *" },
+    { "path": "/api/cron/ingest/transparencia", "schedule": "*/5 * * * *" },
+    { "path": "/api/cron/ingest/cnpj", "schedule": "*/5 * * * *" },
+    { "path": "/api/cron/ingest/politicians", "schedule": "*/5 * * * *" },
+    { "path": "/api/cron/ingest/senadores", "schedule": "*/5 * * * *" },
+    { "path": "/api/cron/ingest/donations", "schedule": "*/5 * * * *" },
+    { "path": "/api/cron/ingest/assets", "schedule": "*/5 * * * *" },
+    { "path": "/api/cron/ingest/servidores", "schedule": "*/5 * * * *" },
+    { "path": "/api/cron/ingest/price-references", "schedule": "*/5 * * * *" },
+    { "path": "/api/cron/process", "schedule": "*/5 * * * *" },
+    { "path": "/api/cron/analyze", "schedule": "*/5 * * * *" }
   ]
 }
