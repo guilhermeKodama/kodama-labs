@@ -1,0 +1,11 @@
+{
+  "title": "Sentinel",
+  "icon": "ShieldAlert",
+  "pages": [
+    "architecture",
+    "data-sources",
+    "etl-pipeline",
+    "analysis-engines",
+    "data-model"
+  ]
+}
