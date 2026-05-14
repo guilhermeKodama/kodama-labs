@@ -5,6 +5,7 @@ import { fetchLicitacoes, fetchContratos } from "@/lib/gov-apis/transparencia";
 import { format, subMonths, addMonths, min } from "date-fns";
 
 const POLITE_DELAY_MS = 2000;
+const PER_JOB_BUDGET_MS = 120_000;
 
 const FEDERAL_ORGANS = [
   "20000", // Presidência
@@ -31,6 +32,13 @@ const FEDERAL_ORGANS = [
 
 function sleep(ms: number) {
   return new Promise((r) => setTimeout(r, ms));
+}
+
+// cursorValue encodes the next org index to process within the current window.
+// "0" (or anything non-numeric, including legacy date strings) = start a fresh window.
+function parseResumeOrgIndex(cursorValue: string | null | undefined): number {
+  const n = parseInt(cursorValue ?? "0", 10);
+  return Number.isFinite(n) && n >= 0 && n < FEDERAL_ORGANS.length ? n : 0;
 }
 
 export async function ingestTransparencia() {
@@ -74,22 +82,28 @@ async function ingestLicitacoes() {
 
   await updateCursor(cursor.id, { status: "RUNNING" });
 
-  // Walk forward in 1-month windows from last fetched date
   let windowStart = cursor.lastFetchedAt < defaultStart ? defaultStart : cursor.lastFetchedAt;
+  let resumeOrgIndex = parseResumeOrgIndex(cursor.cursorValue);
   const today = new Date();
+  const jobStart = Date.now();
 
   let totalIn = 0;
   let totalOut = 0;
 
   try {
-    while (windowStart < today) {
+    windowLoop: while (windowStart < today) {
       const windowEnd = min([addMonths(windowStart, 1), today]);
       const startDate = format(windowStart, "dd/MM/yyyy");
       const endDate = format(windowEnd, "dd/MM/yyyy");
 
-      console.log(`[ingest-transparencia] Licitacoes window ${startDate} → ${endDate}`);
+      if (resumeOrgIndex > 0) {
+        console.log(`[ingest-transparencia] Licitacoes window ${startDate} → ${endDate} (resume at org ${resumeOrgIndex}/${FEDERAL_ORGANS.length})`);
+      } else {
+        console.log(`[ingest-transparencia] Licitacoes window ${startDate} → ${endDate}`);
+      }
 
-      for (const orgCode of FEDERAL_ORGANS) {
+      for (let orgIdx = resumeOrgIndex; orgIdx < FEDERAL_ORGANS.length; orgIdx++) {
+        const orgCode = FEDERAL_ORGANS[orgIdx];
         let page = 1;
         let hasMore = true;
 
@@ -134,21 +148,41 @@ async function ingestLicitacoes() {
           }
           if (hasMore) await sleep(POLITE_DELAY_MS);
         }
+
+        // Save progress after each org completes so the next tick resumes at the next org.
+        await updateCursor(cursor.id, {
+          cursorValue: String(orgIdx + 1),
+          totalFetched: cursor.totalFetched + totalOut,
+        });
+
+        if (Date.now() - jobStart > PER_JOB_BUDGET_MS) {
+          console.log(`[ingest-transparencia] Licitacoes budget exhausted after org ${orgIdx + 1}/${FEDERAL_ORGANS.length} in window ${startDate} → ${endDate}; yielding`);
+          await updateCursor(cursor.id, { status: "IDLE", lastError: null });
+          return { recordsIn: totalIn, recordsOut: totalOut };
+        }
+
         await sleep(POLITE_DELAY_MS);
       }
 
       console.log(`[ingest-transparencia] Licitacoes window done: ${totalIn} fetched so far`);
 
+      // All orgs in this window done — advance window and reset org index.
       await updateCursor(cursor.id, {
         lastFetchedAt: windowEnd,
-        cursorValue: format(windowEnd, "dd/MM/yyyy"),
+        cursorValue: "0",
         totalFetched: cursor.totalFetched + totalOut,
       });
 
       windowStart = windowEnd;
+      resumeOrgIndex = 0;
+
+      if (Date.now() - jobStart > PER_JOB_BUDGET_MS) {
+        console.log(`[ingest-transparencia] Licitacoes budget exhausted after window ${startDate} → ${endDate}; yielding`);
+        break windowLoop;
+      }
     }
 
-    console.log(`[ingest-transparencia] Licitacoes complete: ${totalIn} fetched, ${totalOut} saved`);
+    console.log(`[ingest-transparencia] Licitacoes tick complete: ${totalIn} fetched, ${totalOut} saved`);
     await updateCursor(cursor.id, { status: "IDLE", lastError: null });
   } catch (error) {
     await updateCursor(cursor.id, {
@@ -177,20 +211,27 @@ async function ingestContratos() {
   await updateCursor(cursor.id, { status: "RUNNING" });
 
   let windowStart = cursor.lastFetchedAt < defaultStart ? defaultStart : cursor.lastFetchedAt;
+  let resumeOrgIndex = parseResumeOrgIndex(cursor.cursorValue);
   const today = new Date();
+  const jobStart = Date.now();
 
   let totalIn = 0;
   let totalOut = 0;
 
   try {
-    while (windowStart < today) {
+    windowLoop: while (windowStart < today) {
       const windowEnd = min([addMonths(windowStart, 1), today]);
       const startDate = format(windowStart, "dd/MM/yyyy");
       const endDate = format(windowEnd, "dd/MM/yyyy");
 
-      console.log(`[ingest-transparencia] Contratos window ${startDate} → ${endDate}`);
+      if (resumeOrgIndex > 0) {
+        console.log(`[ingest-transparencia] Contratos window ${startDate} → ${endDate} (resume at org ${resumeOrgIndex}/${FEDERAL_ORGANS.length})`);
+      } else {
+        console.log(`[ingest-transparencia] Contratos window ${startDate} → ${endDate}`);
+      }
 
-      for (const orgCode of FEDERAL_ORGANS) {
+      for (let orgIdx = resumeOrgIndex; orgIdx < FEDERAL_ORGANS.length; orgIdx++) {
+        const orgCode = FEDERAL_ORGANS[orgIdx];
         let page = 1;
         let hasMore = true;
 
@@ -235,6 +276,18 @@ async function ingestContratos() {
           }
           if (hasMore) await sleep(POLITE_DELAY_MS);
         }
+
+        await updateCursor(cursor.id, {
+          cursorValue: String(orgIdx + 1),
+          totalFetched: cursor.totalFetched + totalOut,
+        });
+
+        if (Date.now() - jobStart > PER_JOB_BUDGET_MS) {
+          console.log(`[ingest-transparencia] Contratos budget exhausted after org ${orgIdx + 1}/${FEDERAL_ORGANS.length} in window ${startDate} → ${endDate}; yielding`);
+          await updateCursor(cursor.id, { status: "IDLE", lastError: null });
+          return { recordsIn: totalIn, recordsOut: totalOut };
+        }
+
         await sleep(POLITE_DELAY_MS);
       }
 
@@ -242,14 +295,20 @@ async function ingestContratos() {
 
       await updateCursor(cursor.id, {
         lastFetchedAt: windowEnd,
-        cursorValue: format(windowEnd, "dd/MM/yyyy"),
+        cursorValue: "0",
         totalFetched: cursor.totalFetched + totalOut,
       });
 
       windowStart = windowEnd;
+      resumeOrgIndex = 0;
+
+      if (Date.now() - jobStart > PER_JOB_BUDGET_MS) {
+        console.log(`[ingest-transparencia] Contratos budget exhausted after window ${startDate} → ${endDate}; yielding`);
+        break windowLoop;
+      }
     }
 
-    console.log(`[ingest-transparencia] Contratos complete: ${totalIn} fetched, ${totalOut} saved`);
+    console.log(`[ingest-transparencia] Contratos tick complete: ${totalIn} fetched, ${totalOut} saved`);
     await updateCursor(cursor.id, { status: "IDLE", lastError: null });
   } catch (error) {
     await updateCursor(cursor.id, {
