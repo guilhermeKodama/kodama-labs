@@ -46,6 +46,13 @@ Thumbs.db
 *.launch
 .settings
 
+# Claude Code local state (per-user settings, worktrees, scratch)
+.claude/
+
+# macOS Finder auto-duplicates (e.g. "foo 2.ts", "bar 3.tsx")
+* [0-9].*
+* [0-9]
+
 # Generated Prisma clients
 **/src/generated/prisma/**
 !**/src/generated/prisma/.gitkeep
