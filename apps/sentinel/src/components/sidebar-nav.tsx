@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -14,21 +15,25 @@ import {
   Landmark,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { LanguageSwitcher } from "./language-switcher";
 
 const navItems = [
-  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/procurements", label: "Licitações", icon: FileText },
-  { href: "/contracts", label: "Contratos", icon: ScrollText },
-  { href: "/entities", label: "Entidades", icon: Building2 },
-  { href: "/politicians", label: "Políticos", icon: Landmark },
-  { href: "/network", label: "Rede", icon: Network },
-  { href: "/alerts", label: "Alertas", icon: AlertTriangle },
-  { href: "/analysis", label: "Análise IA", icon: Brain },
-  { href: "/pipeline", label: "Pipeline", icon: Activity },
-];
+  { href: "/dashboard", labelKey: "dashboard", icon: LayoutDashboard },
+  { href: "/procurements", labelKey: "procurements", icon: FileText },
+  { href: "/contracts", labelKey: "contracts", icon: ScrollText },
+  { href: "/entities", labelKey: "entities", icon: Building2 },
+  { href: "/politicians", labelKey: "politicians", icon: Landmark },
+  { href: "/network", labelKey: "network", icon: Network },
+  { href: "/alerts", labelKey: "alerts", icon: AlertTriangle },
+  { href: "/analysis", labelKey: "analysis", icon: Brain },
+  { href: "/pipeline", labelKey: "pipeline", icon: Activity },
+] as const;
 
 export function SidebarNav() {
   const pathname = usePathname();
+  const tNav = useTranslations("nav");
+  const tApp = useTranslations("app");
+  const tCommon = useTranslations("common");
 
   const getLocale = () => {
     const match = pathname.match(/^\/(pt-BR|en)(\/|$)/);
@@ -39,9 +44,9 @@ export function SidebarNav() {
   return (
     <aside className="w-56 flex-shrink-0 border-r bg-card flex flex-col overflow-y-auto">
       <div className="p-4 pb-6">
-        <h1 className="text-lg font-bold tracking-tight">Sentinel</h1>
+        <h1 className="text-lg font-bold tracking-tight">{tApp("name")}</h1>
         <p className="text-[11px] text-muted-foreground leading-tight">
-          Government Corruption Tracker
+          {tApp("tagline")}
         </p>
       </div>
 
@@ -62,14 +67,15 @@ export function SidebarNav() {
               )}
             >
               <item.icon className="h-4 w-4 flex-shrink-0" />
-              {item.label}
+              {tNav(item.labelKey)}
             </Link>
           );
         })}
       </nav>
 
-      <div className="p-4 pt-3 border-t mt-auto">
-        <p className="text-[11px] text-muted-foreground">v0.1.0</p>
+      <div className="p-4 pt-3 border-t mt-auto flex items-center justify-between">
+        <p className="text-[11px] text-muted-foreground">{tCommon("version")}</p>
+        <LanguageSwitcher />
       </div>
     </aside>
   );

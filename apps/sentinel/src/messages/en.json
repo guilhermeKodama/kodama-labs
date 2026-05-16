@@ -1,4 +1,10 @@
 {
+  "app": {
+    "name": "Sentinel",
+    "tagline": "Public Procurement Transparency Monitor",
+    "metaTitle": "Sentinel — Public Procurement Transparency Monitor",
+    "metaDescription": "Public analysis of Brazilian government procurement data to surface possible inconsistencies and unusual patterns worth human review."
+  },
   "common": {
     "appName": "Sentinel",
     "loading": "Loading...",
@@ -7,53 +13,321 @@
     "search": "Search...",
     "filter": "Filter",
     "export": "Export",
-    "refresh": "Refresh"
+    "refresh": "Refresh",
+    "clear": "Clear",
+    "viewAll": "View all →",
+    "back": "Back",
+    "version": "v0.1.0",
+    "disclaimer": "Alerts flag possible inconsistencies for human review and do not constitute an allegation of wrongdoing.",
+    "languageSwitcher": {
+      "label": "Language",
+      "switchTo": "Change language",
+      "pt-BR": "Português",
+      "en": "English"
+    }
   },
   "nav": {
     "dashboard": "Dashboard",
     "procurements": "Procurements",
     "contracts": "Contracts",
     "entities": "Entities",
+    "politicians": "Politicians",
     "network": "Network",
     "alerts": "Alerts",
     "analysis": "AI Analysis",
     "pipeline": "Pipeline"
   },
-  "dashboard": {
-    "title": "Overview",
-    "totalProcurements": "Total Procurements",
-    "totalContracts": "Total Contracts",
-    "totalEntities": "Total Entities",
-    "activeAlerts": "Active Alerts",
-    "criticalAlerts": "Critical Alerts",
-    "riskDistribution": "Risk Distribution",
-    "recentAlerts": "Recent Alerts",
-    "topRiskEntities": "Top Risk Entities"
-  },
-  "alerts": {
-    "title": "Alerts",
-    "type": {
-      "OVERPRICING": "Overpricing",
-      "SHELL_COMPANY": "Shell Company",
-      "SANCTIONED_ENTITY": "Sanctioned Entity",
-      "SUSPICIOUS_NETWORK": "Suspicious Network",
-      "AI_FLAG": "AI Flag"
+  "codes": {
+    "alertType": {
+      "OVERPRICING": "Price to Review",
+      "SHELL_COMPANY": "Unusual Company Indicators",
+      "SANCTIONED_ENTITY": "Public Sanction on Record",
+      "SUSPICIOUS_NETWORK": "Ownership Link to Review",
+      "AI_FLAG": "AI Analysis Flag",
+      "POLITICAL_LINK": "Political Link to Review"
     },
     "severity": {
       "LOW": "Low",
       "MEDIUM": "Medium",
       "HIGH": "High",
       "CRITICAL": "Critical"
+    },
+    "shellCompanyFlag": {
+      "recently_created": "Opened shortly before first contract",
+      "low_capital": "Share capital low relative to contract value",
+      "single_shareholder": "Only one registered shareholder"
+    },
+    "priceAnalysisMethod": {
+      "market_price": "Compared to PNCP price records",
+      "catmat_iqr": "CATMAT (IQR)",
+      "description_iqr": "Similar description (IQR)",
+      "description_insufficient_data": "Insufficient sample for comparison",
+      "bid_spread": "Bid spread"
+    },
+    "priceConfidence": {
+      "high": "High",
+      "medium": "Medium",
+      "low": "Low"
+    },
+    "politicalLinkType": {
+      "SHAREHOLDER_IS_POLITICIAN": "Politician listed as shareholder",
+      "SUPPLIER_DONATED": "Supplier donated to campaign",
+      "DONOR_GOT_CONTRACT": "Donor received contract",
+      "FAMILY_IN_SUPPLIER": "Family member listed as supplier shareholder",
+      "FAMILY_DONATED": "Family member listed as donor",
+      "POLITICIAN_IS_SERVANT": "Politician with public-servant record",
+      "WEALTH_ANOMALY": "Unusual wealth variation",
+      "DONOR_IS_SHAREHOLDER": "Donor also listed as supplier shareholder",
+      "DONATION_TIMING": "Donation and contract timed closely",
+      "DONOR_CONCENTRATION": "Donations to multiple politicians with contracts"
+    },
+    "relationship": {
+      "mother": "mother",
+      "father": "father",
+      "brother": "sibling",
+      "spouse": "spouse",
+      "son": "child",
+      "nephew": "nephew/niece",
+      "cousin": "cousin",
+      "uncle": "uncle/aunt",
+      "grandparent": "grandparent",
+      "grandson": "grandchild"
+    },
+    "donorType": {
+      "PF": "Individual",
+      "PJ": "Company"
+    },
+    "aiAnalysisType": {
+      "risk_assessment": "Review-points assessment"
+    },
+    "aiTargetType": {
+      "procurement": "Procurement",
+      "contract": "Contract",
+      "entity": "Entity"
     }
   },
-  "pipeline": {
-    "title": "Data Pipeline",
-    "ingestion": "Ingestion",
-    "processing": "Processing",
-    "analysis": "Analysis",
-    "lastRun": "Last Run",
-    "status": "Status",
-    "recordsProcessed": "Records Processed",
-    "dataFreshness": "Data Freshness"
+  "alerts": {
+    "title": "Alerts",
+    "disclaimer": "Alerts flag possible inconsistencies for human review and do not constitute an allegation of wrongdoing.",
+    "empty": "No alerts found. Run the analysis pipeline to surface points worth reviewing.",
+    "emptyFiltered": "No alerts match the active filters.",
+    "search": "Search alert, entity, CNPJ, organization...",
+    "filters": {
+      "severity": "Severity",
+      "category": "Category",
+      "state": "State",
+      "organization": "Organization",
+      "stateLabel": "State: {state}",
+      "noOptions": "No options"
+    },
+    "pagination": {
+      "of": "{count} of {total} alerts",
+      "range": "{start}–{end} of {total}"
+    },
+    "templates": {
+      "shellCompany": {
+        "title": "Company with unusual indicators: {entityName}",
+        "description": "Entity {entityName} ({cnpj}) shows {flagCount} indicator(s) worth reviewing: {flags}."
+      },
+      "sanctionedEntity": {
+        "title": "Supplier with public sanction on record and active contract: {supplierName}",
+        "description": "Company {supplierName} ({cnpj}) has sanction(s) recorded in {sources} and {contractCount} active government contract(s)."
+      },
+      "suspiciousNetwork": {
+        "title": "Shared shareholder between suppliers in the same procurement",
+        "description": "Companies {entities} share the same shareholder (taxpayer ID: {shareholderCpf}) and took part in the same procurement \"{procurementDescription}\" of {orgName} — pattern worth reviewing."
+      },
+      "aiFlag": {
+        "title": "AI analysis surfaced points to review: {orgName}",
+        "description": "{summary}"
+      },
+      "overpricingMarket": {
+        "title": "Price above reference median: {deviationPct}% above",
+        "description": "Item \"{itemDescription}\"{contextLabel} priced at {unitPrice} is {deviationPct}% above the median {median} of PNCP price registries ({sampleSize} reference(s), confidence: {confidence})."
+      },
+      "overpricingIqr": {
+        "title": "Price above reference median: {deviationPct}% above",
+        "description": "Item \"{itemDescription}\"{contextLabel} priced at {unitPrice} is {deviationPct}% above the median {median} (sample: {sampleSize}, confidence: {confidence}, method: {method})."
+      },
+      "overpricingBidEstimate": {
+        "title": "Winning bid above estimated value",
+        "description": "Winning bid {winningBid} is {deviationPct}% above the estimated {estimatedPrice}. Item \"{itemDescription}\" in procurement of {orgName}. {bidCount} bid(s) recorded."
+      },
+      "overpricingBidSpread": {
+        "title": "Unusual spread between bids",
+        "description": "Maximum bid {bidSpreadRatio}x the minimum bid (outside expected range). Item \"{itemDescription}\" in procurement of {orgName}. {bidCount} bid(s) recorded."
+      },
+      "politicianShareholder": {
+        "title": "Politician listed as shareholder of a government supplier — link worth reviewing",
+        "description": "{politicianName} ({party}/{state} - {position}) is listed as a shareholder of {entityName} (CNPJ: {entityCnpj}), which holds {contractCount} government contract(s) totaling {totalContractValue}."
+      },
+      "supplierDonated": {
+        "title": "Supplier listed as campaign donor — link worth reviewing",
+        "description": "{entityName} ({entityCnpj}) is recorded as having donated {totalDonated} to {politicianName} ({party}) and holds {totalContractValue} in government contracts."
+      },
+      "donorGotContract": {
+        "title": "Campaign donor recorded with contracts in the same jurisdiction — link worth reviewing",
+        "description": "{donorName} is recorded as having donated {totalDonated} to {politicianName} ({party}/{state}) and received {totalContractValue} in government contracts in the same region."
+      },
+      "familyInSupplier": {
+        "title": "Person registered as politician's family member is listed as supplier shareholder — link worth reviewing",
+        "description": "{shareholderName} ({relationshipLabel} of {politicianName}, {party}/{state}) is listed as shareholder of {entityName} ({entityCnpj})."
+      },
+      "familyDonated": {
+        "title": "Person registered as politician's family member is listed as donor — link worth reviewing",
+        "description": "{donorName} ({relationshipLabel} of {politicianName}, {party}/{state}) is recorded as having donated {amount}."
+      },
+      "politicianServant": {
+        "title": "Politician on record as a federal public servant",
+        "description": "{politicianName} ({party}/{state} - {position}) has a public-servant record: {cargo} at {orgao}."
+      },
+      "wealthAnomaly": {
+        "title": "Unusual wealth variation between electoral declarations — verify",
+        "description": "{politicianName} ({party}/{state}) declared assets of {previousTotal} in {previousYear} and {currentTotal} in {currentYear} (variation of {growthPercentage}%)."
+      },
+      "donorIsShareholder": {
+        "title": "Campaign donor is also listed as a supplier shareholder — link worth reviewing",
+        "description": "{donorName} is recorded as having donated {totalDonated} to {politicianName} ({party}/{state}) and is listed as a shareholder of {entityName} ({entityCnpj}) with {totalContractValue} in contracts."
+      },
+      "donationTiming": {
+        "title": "Donation and contract timed closely — link worth reviewing",
+        "description": "{entityName} is recorded as having donated to {politicianName} and received a contract {gapMonths} months {direction} — {totalContractValue} in nearby contracts."
+      },
+      "donorConcentration": {
+        "title": "Company recorded with donations to {politicianCount} politicians and government contracts",
+        "description": "{entityName} ({entityCnpj}) is recorded as having donated {totalDonated} to: {politicianNames} — holds {contractCount} contract(s)."
+      }
+    }
+  },
+  "pages": {
+    "dashboard": {
+      "title": "Dashboard",
+      "stats": {
+        "procurements": "Procurements",
+        "items": "Procurement Items",
+        "itemsSubtitle": "{count} bid results",
+        "contracts": "Contracts",
+        "entities": "Entities",
+        "sanctions": "Sanctions",
+        "politicians": "Politicians",
+        "politicianLinksSubtitle": "{count} links",
+        "activeAlerts": "Active Alerts",
+        "criticalAlertsSubtitle": "{count} critical"
+      },
+      "recentAlerts": "Recent Alerts",
+      "recentAlertsEmpty": "No alerts yet. Run the pipeline to start the analysis.",
+      "pipelineStatusTitle": "Pipeline Status",
+      "pipelineStatusDescription": "Visit the <link>Pipeline</link> page to monitor ingestion and processing status."
+    },
+    "alertDetail": {
+      "backToAlerts": "Back to Alerts",
+      "descriptionHeading": "Description",
+      "entityHeading": "Entity: {name}",
+      "procurementHeading": "Procurement",
+      "alertDataHeading": "Alert Data",
+      "shareholders": "Shareholders",
+      "sanctions": "Sanctions",
+      "recentContracts": "Recent Contracts",
+      "linkedContracts": "Linked Contracts",
+      "items": "Items",
+      "dateTimeConnector": "at",
+      "fields": {
+        "cnpj": "CNPJ",
+        "legalNature": "Legal Nature",
+        "capital": "Share Capital",
+        "openDate": "Opening Date",
+        "activity": "Activity",
+        "location": "State / City",
+        "contracts": "Contracts",
+        "sanctions": "Sanctions",
+        "organization": "Organization",
+        "modality": "Modality",
+        "estimatedValue": "Estimated Value",
+        "itemsAndContracts": "Items / Contracts",
+        "itemsAndContractsValue": "{items} items · {contracts} contracts"
+      },
+      "itemsTable": {
+        "number": "#",
+        "description": "Description",
+        "quantity": "Qty",
+        "unitPrice": "Unit Price",
+        "total": "Total"
+      }
+    },
+    "analysis": {
+      "title": "AI Analysis",
+      "empty": "No AI analyses found. The system will run analyses automatically once processed data is available.",
+      "riskLabel": "Review points: {percent}%",
+      "viewProcurement": "View full procurement →"
+    },
+    "alerts": {
+      "title": "Alerts"
+    },
+    "procurements": {
+      "title": "Procurements"
+    },
+    "contracts": {
+      "title": "Contracts"
+    },
+    "entities": {
+      "title": "Entities"
+    },
+    "politicians": {
+      "title": "Politicians"
+    },
+    "network": {
+      "title": "Relationship Network",
+      "stats": {
+        "politicians": "Politicians",
+        "donations": "Donations",
+        "politicalLinks": "Political Links",
+        "sharedShareholders": "Shared Shareholders",
+        "politicalAlerts": "Link Alerts"
+      },
+      "empty": "No political links surfaced yet. Run the political-data pipeline to start the analysis.",
+      "sharedShareholdersTitle": "Shareholders in Multiple Companies",
+      "sharedShareholdersSubtitle": "People listed as shareholders in 2 or more companies supplying the government",
+      "sharedShareholdersTable": {
+        "name": "Name",
+        "cpfCnpj": "Taxpayer ID",
+        "entities": "Companies"
+      },
+      "recentAlerts": "Recent Political Links to Review",
+      "entityNotLinked": "Entity not linked",
+      "elected": "Elected",
+      "contractsLabel": "{count} contracts"
+    },
+    "pipeline": {
+      "title": "Data Pipeline",
+      "ingestion": "Ingestion",
+      "processing": "Processing",
+      "analysis": "Analysis",
+      "lastRun": "Last Run",
+      "status": "Status",
+      "recordsProcessed": "Records Processed",
+      "dataFreshness": "Data Freshness",
+      "stats": {
+        "rawRecords": "Raw Records",
+        "pending": "Pending",
+        "processed": "Processed",
+        "errors": "Errors"
+      },
+      "normalizedData": "Normalized Data",
+      "processingPipeline": "Processing Pipeline",
+      "table": {
+        "source": "Source",
+        "type": "Type",
+        "pending": "Pending",
+        "processed": "Processed",
+        "errors": "Errors",
+        "total": "Total",
+        "progress": "Progress"
+      },
+      "connection": {
+        "connected": "Live",
+        "connecting": "Reconnecting...",
+        "disconnected": "Disconnected"
+      }
+    }
   }
 }

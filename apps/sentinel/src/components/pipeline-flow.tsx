@@ -93,12 +93,12 @@ const NODE_INFO: Record<string, string> = {
   "proc-vinculacao": "Cruza dados entre entidades, políticos e servidores para identificar vínculos entre eles.",
 
   // Análise
-  "anal-sobrepreco": "Compara valores de itens licitados com preços de referência (atas) para detectar sobrepreço.",
-  "anal-shell": "Detecta indícios de empresas de fachada analisando capital social, idade, sócios e padrões de contratação.",
-  "anal-sancoes": "Verifica se empresas ou pessoas contratadas constam em listas de sanções (CEIS, CNEP, TCU).",
-  "anal-rede": "Mapeia conexões entre políticos, doadores e empresas contratadas para identificar conflitos de interesse.",
-  "anal-ai": "Análise por inteligência artificial que cruza múltiplos sinais para detectar padrões anômalos complexos.",
-  "anal-network": "Constrói grafo de relacionamentos entre entidades para visualização e detecção de redes suspeitas.",
+  "anal-sobrepreco": "Compara valores de itens licitados com preços de referência (atas) para sinalizar valores acima da faixa esperada.",
+  "anal-shell": "Sinaliza empresas com indicadores incomuns (capital social baixo, idade recente, sócio único) que recomendam revisão.",
+  "anal-sancoes": "Verifica se empresas ou pessoas contratadas constam em listas públicas de sanções (CEIS, CNEP, TCU).",
+  "anal-rede": "Mapeia conexões entre políticos, doadores e empresas contratadas para sinalizar potenciais conflitos de interesse a revisar.",
+  "anal-ai": "Análise por inteligência artificial que cruza múltiplos sinais para sinalizar padrões atípicos a revisar.",
+  "anal-network": "Constrói grafo de relacionamentos entre entidades para visualização e identificação de vínculos que merecem revisão.",
 
   // Dados normalizados
   "out-licitacoes": "Total de licitações normalizadas no banco de dados, prontas para análise e consulta.",
@@ -108,7 +108,7 @@ const NODE_INFO: Record<string, string> = {
   "out-doacoes": "Total de doações de campanha rastreadas com origem, destino e valor.",
   "out-sancoes": "Total de sanções ativas indexadas para cruzamento automático com contratados.",
   "out-vinculos": "Total de vínculos identificados entre políticos, empresas e servidores públicos.",
-  "out-alertas": "Total de alertas gerados pelas análises, cada um indicando uma anomalia para investigação.",
+  "out-alertas": "Total de alertas gerados pelas análises, cada um sinalizando um ponto a revisar.",
 };
 
 const COL_X = [100, 340, 570, 810];

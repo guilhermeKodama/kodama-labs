@@ -1,5 +1,6 @@
 import { prisma } from "@sentinel/server/lib/prisma";
 import { runJob } from "@sentinel/server/lib/job-runner";
+import { buildAlertI18n, renderPtBr } from "@sentinel/server/lib/alert-i18n";
 
 export async function analyzeNetwork() {
   return runJob("analyze-network", "analysis", async () => {
@@ -74,12 +75,25 @@ export async function analyzeNetwork() {
 
         if (existingAlert) continue;
 
+        const entitiesText = overlapping.map((e) => e.entityName).join(" e ");
+        const i18nParams = {
+          entities: entitiesText,
+          shareholderCpf,
+          procurementDescription: proc.description,
+          orgName: proc.orgName,
+        };
+        const i18n = buildAlertI18n(
+          "alerts.templates.suspiciousNetwork.title",
+          "alerts.templates.suspiciousNetwork.description",
+          i18nParams,
+        );
+
         await prisma.alert.create({
           data: {
             type: "SUSPICIOUS_NETWORK",
             severity: "HIGH",
-            title: `Sócio em comum entre fornecedores na mesma licitação`,
-            description: `As empresas ${overlapping.map((e) => e.entityName).join(" e ")} compartilham o mesmo sócio (CPF: ${shareholderCpf}) e participaram da mesma licitação "${proc.description}" do órgão ${proc.orgName}. Possível conluio.`,
+            title: renderPtBr("alerts.templates.suspiciousNetwork.title", i18nParams),
+            description: renderPtBr("alerts.templates.suspiciousNetwork.description", i18nParams),
             procurementId: proc.id,
             entityId: overlapping[0]?.entityId,
             data: {
@@ -89,6 +103,7 @@ export async function analyzeNetwork() {
                 name: e.entityName,
               })),
               procurementDescription: proc.description,
+              i18n,
             },
           },
         });

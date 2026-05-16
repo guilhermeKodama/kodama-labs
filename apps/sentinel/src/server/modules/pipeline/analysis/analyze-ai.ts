@@ -3,6 +3,7 @@ import { Prisma } from "@/generated/prisma";
 import { runJob } from "@sentinel/server/lib/job-runner";
 import { env } from "@/env";
 import Anthropic from "@anthropic-ai/sdk";
+import { buildAlertI18n, renderPtBr } from "@sentinel/server/lib/alert-i18n";
 
 const BATCH_SIZE = 10;
 const MODEL = "claude-sonnet-4-20250514";
@@ -102,14 +103,24 @@ export async function analyzeAi() {
               where: { type: "AI_FLAG", procurementId: procurement.id },
             });
             if (!existingAiAlert) {
+              const summary = (findings as { summary?: string }).summary ?? responseText.slice(0, 500);
+              const i18nParams = {
+                orgName: procurement.orgName,
+                summary: summary.slice(0, 500),
+              };
+              const i18n = buildAlertI18n(
+                "alerts.templates.aiFlag.title",
+                "alerts.templates.aiFlag.description",
+                i18nParams,
+              );
               await prisma.alert.create({
                 data: {
                   type: "AI_FLAG",
                   severity: riskScore >= 0.9 ? "CRITICAL" : "HIGH",
-                  title: `IA identificou alto risco na licitação: ${procurement.orgName}`,
-                  description: responseText.slice(0, 500),
+                  title: renderPtBr("alerts.templates.aiFlag.title", i18nParams),
+                  description: renderPtBr("alerts.templates.aiFlag.description", i18nParams),
                   procurementId: procurement.id,
-                  data: { riskScore, findings } as unknown as Prisma.InputJsonValue,
+                  data: { riskScore, findings, i18n } as unknown as Prisma.InputJsonValue,
                 },
               });
             }
@@ -207,35 +218,41 @@ function buildAnalysisContext(procurement: Record<string, unknown>) {
 }
 
 function buildPrompt(context: Record<string, unknown>): string {
-  return `Você é um auditor especializado em compras públicas brasileiras. Analise a seguinte licitação e seus dados associados para identificar sinais de corrupção, fraude ou irregularidade.
+  return `Você é um analista de dados públicos especializado em compras governamentais brasileiras. Sua tarefa é examinar os dados a seguir e **sinalizar possíveis inconsistências, padrões atípicos ou pontos que merecem revisão humana** — sem afirmar irregularidade, fraude, corrupção ou má-fé. Os dados são públicos; sua análise serve para orientar revisão posterior por auditores humanos.
+
+## Diretrizes obrigatórias de linguagem
+- NÃO use as palavras: "fraude", "corrupção", "criminal", "ilegal", "culpado", "suspeito", "conluio", "empresa de fachada".
+- USE: "possível inconsistência", "atípico", "incomum", "fora da faixa esperada", "padrão a revisar", "vínculo a verificar", "sinaliza", "indica possível".
+- Descreva fatos objetivos observados nos dados; não atribua intenção ou má-fé.
+- Quando mencionar vínculos políticos, deixe claro que são padrões para verificação, não acusações.
 
 ## Dados da Licitação
 ${JSON.stringify(context, null, 2)}
 
 ## Instruções
-1. Analise todos os dados fornecidos: descrição, valores, itens, fornecedores, sócios, sanções, conexões políticas e alertas existentes.
-2. Identifique padrões suspeitos como: sobrepreço, empresas de fachada, conluio entre fornecedores, conflitos de interesse, direcionamento de licitação.
-3. **CONEXÕES POLÍTICAS**: Preste atenção especial a fornecedores com conexões políticas (campo "politicalConnections"). Analise se:
-   - Sócios de empresas fornecedoras são ou foram políticos
-   - Empresas fornecedoras doaram para campanhas de políticos que atuam na mesma jurisdição
-   - Doadores de campanha receberam contratos na região de atuação do político
-   - Existe padrão de favorecimento baseado em conexões políticas
-4. Para cada problema identificado, explique a evidência e o nível de risco.
-5. Atribua um score de risco geral de 0.0 (sem risco) a 1.0 (alto risco). Conexões políticas fortes devem aumentar significativamente o score.
+1. Examine todos os dados fornecidos: descrição, valores, itens, fornecedores, sócios, sanções, vínculos políticos e alertas existentes.
+2. Sinalize padrões atípicos que mereçam revisão, como: preços fora da faixa esperada de referência, empresas com indicadores incomuns (capital baixo, recém-abertas, sócio único), participação simultânea de fornecedores com vínculos societários, possíveis conflitos de interesse com agentes públicos.
+3. **VÍNCULOS POLÍTICOS**: ao examinar o campo "politicalConnections", descreva objetivamente:
+   - Se há sócios de fornecedores que constam como políticos ativos ou ex-políticos.
+   - Se fornecedores constam como doadores de campanha de políticos com atuação na mesma jurisdição.
+   - Se doadores de campanha constam com contratos na região de atuação do político.
+   - Se há padrão recorrente de proximidade entre doações e contratos.
+4. Para cada ponto sinalizado, descreva a evidência observada e o nível de atenção sugerido (baixo, médio, alto).
+5. Atribua um score geral de 0.0 (nenhum ponto a revisar) a 1.0 (muitos pontos a revisar). Vínculos políticos consistentes elevam o score, mas não constituem afirmação de irregularidade.
 
 ## Formato de Resposta
 RISK_SCORE: [0.0-1.0]
 
-RESUMO: [resumo executivo em 2-3 frases]
+OBSERVAÇÕES: [resumo objetivo em 2-3 frases, sem juízo de valor]
 
-ACHADOS:
-- [achado 1 com evidência]
-- [achado 2 com evidência]
+PONTOS A REVISAR:
+- [ponto 1 com evidência observada nos dados]
+- [ponto 2 com evidência observada nos dados]
 
-CONEXÕES POLÍTICAS:
-- [conexão política encontrada com análise de risco]
+VÍNCULOS A VERIFICAR:
+- [vínculo identificado nos dados, com nível de atenção sugerido]
 
-RECOMENDAÇÕES:
+SUGESTÕES DE VERIFICAÇÃO:
 - [ação recomendada 1]
 - [ação recomendada 2]`;
 }
@@ -252,13 +269,16 @@ function extractRiskScore(response: string): number {
 function extractFindings(response: string): Record<string, unknown> {
   const sections: Record<string, string> = {};
 
-  const summaryMatch = response.match(/RESUMO:\s*([\s\S]*?)(?=ACHADOS:|$)/);
+  const summaryMatch = response.match(/OBSERVAÇÕES:\s*([\s\S]*?)(?=PONTOS A REVISAR:|$)/);
   if (summaryMatch) sections.summary = summaryMatch[1]!.trim();
 
-  const findingsMatch = response.match(/ACHADOS:\s*([\s\S]*?)(?=RECOMENDAÇÕES:|$)/);
+  const findingsMatch = response.match(/PONTOS A REVISAR:\s*([\s\S]*?)(?=VÍNCULOS A VERIFICAR:|SUGESTÕES DE VERIFICAÇÃO:|$)/);
   if (findingsMatch) sections.findings = findingsMatch[1]!.trim();
 
-  const recsMatch = response.match(/RECOMENDAÇÕES:\s*([\s\S]*?)$/);
+  const linksMatch = response.match(/VÍNCULOS A VERIFICAR:\s*([\s\S]*?)(?=SUGESTÕES DE VERIFICAÇÃO:|$)/);
+  if (linksMatch) sections.links = linksMatch[1]!.trim();
+
+  const recsMatch = response.match(/SUGESTÕES DE VERIFICAÇÃO:\s*([\s\S]*?)$/);
   if (recsMatch) sections.recommendations = recsMatch[1]!.trim();
 
   return sections;
