@@ -10,7 +10,7 @@ function localBase(): string {
 }
 
 function localUrlFor(pathname: string): string {
-  return `${localBase()}/api/_blob/${pathname}`;
+  return `${localBase()}/api/blob/${pathname}`;
 }
 
 function shouldUseLocalMode(): boolean {
@@ -122,7 +122,7 @@ export function buildDocumentStoragePath(
 }
 
 function isLocalUrl(url: string): boolean {
-  return url.includes("/api/_blob/");
+  return url.includes("/api/blob/");
 }
 
 function resolveLocalPath(pathname: string): string {
@@ -134,7 +134,7 @@ function resolveLocalPath(pathname: string): string {
 }
 
 function resolveLocalPathFromUrl(url: string): string | null {
-  const marker = "/api/_blob/";
+  const marker = "/api/blob/";
   const idx = url.indexOf(marker);
   if (idx === -1) return null;
   const pathname = url.slice(idx + marker.length).split("?")[0]!;
