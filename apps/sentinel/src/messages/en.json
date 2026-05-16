@@ -69,6 +69,11 @@
       "medium": "Medium",
       "low": "Low"
     },
+    "itemKind": {
+      "PRODUCT": "product",
+      "SERVICE": "service",
+      "GENERIC": "generic item"
+    },
     "politicalLinkType": {
       "SHAREHOLDER_IS_POLITICIAN": "Politician listed as shareholder",
       "SUPPLIER_DONATED": "Supplier donated to campaign",
@@ -156,6 +161,10 @@
       "overpricingBidSpread": {
         "title": "Unusual spread between bids",
         "description": "Maximum bid {bidSpreadRatio}x the minimum bid (outside expected range). Item \"{itemDescription}\" in procurement of {orgName}. {bidCount} bid(s) recorded."
+      },
+      "overpricingContextual": {
+        "title": "Price above the expected range for the scope: {deviationPct}% above",
+        "description": "Item \"{itemDescription}\" ({kind}) in procurement of {orgName} with total value {totalPrice} is {deviationPct}% above expected ({expectedPrice}). Estimated range: {minPrice} – {maxPrice}, based on the described scope and similar contracts."
       },
       "politicianShareholder": {
         "title": "Politician listed as shareholder of a government supplier — link worth reviewing",
@@ -295,7 +304,21 @@
       "recentAlerts": "Recent Political Links to Review",
       "entityNotLinked": "Entity not linked",
       "elected": "Elected",
-      "contractsLabel": "{count} contracts"
+      "contractsLabel": "{count} contracts",
+      "shareholderDetail": {
+        "title": "Companies of {name}",
+        "subtitle": "Companies where this person is listed as a shareholder",
+        "back": "Back to Network",
+        "alsoKnownAs": "Also spelled as: {names}",
+        "totalCompanies": "{count} companies",
+        "table": {
+          "entity": "Company",
+          "cnpj": "Taxpayer ID",
+          "role": "Role",
+          "contracts": "Contracts",
+          "totalValue": "Total Value"
+        }
+      }
     },
     "pipeline": {
       "title": "Data Pipeline",

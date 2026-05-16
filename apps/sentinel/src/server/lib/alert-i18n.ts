@@ -5,15 +5,26 @@ export type AlertI18nParam = string | number | null | undefined;
 export type AlertI18n = {
   titleKey: string;
   descriptionKey: string;
+  /** Default params used as pt-BR baseline and fallback for any locale. */
   params: Record<string, AlertI18nParam>;
+  /**
+   * Optional per-locale overrides. The frontend renderer merges
+   * `params` with `paramsByLocale[currentLocale]` so locale-specific
+   * free-text values (e.g. a translated `itemDescription`) can be injected
+   * without leaking the source language into other locales' templates.
+   */
+  paramsByLocale?: Record<string, Record<string, AlertI18nParam>>;
 };
 
 export function buildAlertI18n(
   titleKey: string,
   descriptionKey: string,
   params: Record<string, AlertI18nParam>,
+  paramsByLocale?: Record<string, Record<string, AlertI18nParam>>,
 ): AlertI18n {
-  return { titleKey, descriptionKey, params };
+  return paramsByLocale
+    ? { titleKey, descriptionKey, params, paramsByLocale }
+    : { titleKey, descriptionKey, params };
 }
 
 function getByPath(obj: unknown, path: string): string | undefined {
