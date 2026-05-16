@@ -4,9 +4,86 @@ import { runJob } from "@sentinel/server/lib/job-runner";
 import { env } from "@/env";
 import Anthropic from "@anthropic-ai/sdk";
 import { buildAlertI18n, renderPtBr } from "@sentinel/server/lib/alert-i18n";
+import { getObjectBuffer } from "@/lib/storage/s3";
 
 const BATCH_SIZE = 10;
 const MODEL = "claude-sonnet-4-20250514";
+
+const MAX_PDF_BUDGET_BYTES = 25 * 1024 * 1024;
+const MAX_PDFS_PER_PROCUREMENT = 5;
+
+const DOCUMENT_TYPE_PRIORITY: Record<string, number> = {
+  edital: 0,
+  "termo de referencia": 1,
+  "termo de referência": 1,
+  anexo: 2,
+};
+
+function documentRank(documentType: string): number {
+  const normalized = documentType
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/\p{Diacritic}/gu, "");
+  for (const [key, rank] of Object.entries(DOCUMENT_TYPE_PRIORITY)) {
+    if (normalized.includes(key)) return rank;
+  }
+  return 3;
+}
+
+interface AttachedDocument {
+  title: string;
+  documentType: string;
+  base64: string;
+  sizeBytes: number;
+}
+
+interface DocumentRecord {
+  title: string;
+  documentType: string;
+  mimeType: string;
+  storageKey: string | null;
+  sizeBytes: number;
+}
+
+async function loadAttachedDocuments(
+  documents: DocumentRecord[],
+): Promise<AttachedDocument[]> {
+  const ranked = [...documents]
+    .filter((d) => d.storageKey && d.mimeType === "application/pdf")
+    .sort((a, b) => documentRank(a.documentType) - documentRank(b.documentType));
+
+  const attached: AttachedDocument[] = [];
+  let totalBytes = 0;
+
+  for (const doc of ranked) {
+    if (attached.length >= MAX_PDFS_PER_PROCUREMENT) break;
+    if (!doc.storageKey) continue;
+    try {
+      const buffer = await getObjectBuffer(doc.storageKey);
+      if (!buffer) {
+        console.warn(
+          `[analyze-ai] Missing S3 object for document key=${doc.storageKey}`,
+        );
+        continue;
+      }
+      if (totalBytes + buffer.length > MAX_PDF_BUDGET_BYTES) continue;
+      attached.push({
+        title: doc.title,
+        documentType: doc.documentType,
+        base64: buffer.toString("base64"),
+        sizeBytes: buffer.length,
+      });
+      totalBytes += buffer.length;
+    } catch (err) {
+      console.warn(
+        `[analyze-ai] Failed to load document ${doc.storageKey}:`,
+        err instanceof Error ? err.message : err,
+      );
+    }
+  }
+
+  return attached;
+}
 
 export async function analyzeAi() {
   return runJob("analyze-ai", "analysis", async () => {
@@ -51,6 +128,12 @@ export async function analyzeAi() {
             },
           },
           alerts: true,
+          documents: {
+            where: {
+              storageKey: { not: null },
+              mimeType: "application/pdf",
+            },
+          },
         },
         orderBy: { riskScore: { sort: "desc", nulls: "last" } },
         take: BATCH_SIZE,
@@ -61,13 +144,30 @@ export async function analyzeAi() {
 
       for (const procurement of procurementsToAnalyze) {
         try {
+          const attachedDocs = await loadAttachedDocuments(procurement.documents);
           const context = buildAnalysisContext(procurement);
-          const prompt = buildPrompt(context);
+          const prompt = buildPrompt(context, attachedDocs);
+
+          const userContent: Anthropic.MessageParam["content"] = [
+            { type: "text", text: prompt },
+            ...attachedDocs.map(
+              (d): Anthropic.DocumentBlockParam => ({
+                type: "document",
+                source: {
+                  type: "base64",
+                  media_type: "application/pdf",
+                  data: d.base64,
+                },
+                title: d.title,
+                context: d.documentType,
+              }),
+            ),
+          ];
 
           const response = await anthropic.messages.create({
             model: MODEL,
             max_tokens: 2000,
-            messages: [{ role: "user", content: prompt }],
+            messages: [{ role: "user", content: userContent }],
           });
 
           const responseText =
@@ -76,7 +176,10 @@ export async function analyzeAi() {
               : "";
 
           const riskScore = extractRiskScore(responseText);
-          const findings = extractFindings(responseText);
+          const findings = {
+            ...extractFindings(responseText),
+            documentsAttached: attachedDocs.length,
+          };
 
           await prisma.aiAnalysis.create({
             data: {
@@ -217,7 +320,20 @@ function buildAnalysisContext(procurement: Record<string, unknown>) {
   };
 }
 
-function buildPrompt(context: Record<string, unknown>): string {
+function buildPrompt(
+  context: Record<string, unknown>,
+  attachedDocs: AttachedDocument[],
+): string {
+  const docsSection =
+    attachedDocs.length > 0
+      ? `## Documentos Anexados
+Os seguintes documentos PDF acompanham esta análise (anexados como blocos de documento):
+${attachedDocs.map((d, i) => `${i + 1}. ${d.title} (${d.documentType}, ${Math.round(d.sizeBytes / 1024)} KB)`).join("\n")}
+
+Considere o conteúdo dos documentos anexos ao examinar a licitação: escopo, especificações técnicas, exigências de habilitação, prazos, critérios de julgamento e cláusulas atípicas.
+`
+      : "";
+
   return `Você é um analista de dados públicos especializado em compras governamentais brasileiras. Sua tarefa é examinar os dados a seguir e **sinalizar possíveis inconsistências, padrões atípicos ou pontos que merecem revisão humana** — sem afirmar irregularidade, fraude, corrupção ou má-fé. Os dados são públicos; sua análise serve para orientar revisão posterior por auditores humanos.
 
 ## Diretrizes obrigatórias de linguagem
@@ -229,8 +345,8 @@ function buildPrompt(context: Record<string, unknown>): string {
 ## Dados da Licitação
 ${JSON.stringify(context, null, 2)}
 
-## Instruções
-1. Examine todos os dados fornecidos: descrição, valores, itens, fornecedores, sócios, sanções, vínculos políticos e alertas existentes.
+${docsSection}## Instruções
+1. Examine todos os dados fornecidos: descrição, valores, itens, fornecedores, sócios, sanções, vínculos políticos e alertas existentes${attachedDocs.length > 0 ? ", além do conteúdo dos documentos anexados (Edital, Termo de Referência, Anexos)" : ""}.
 2. Sinalize padrões atípicos que mereçam revisão, como: preços fora da faixa esperada de referência, empresas com indicadores incomuns (capital baixo, recém-abertas, sócio único), participação simultânea de fornecedores com vínculos societários, possíveis conflitos de interesse com agentes públicos.
 3. **VÍNCULOS POLÍTICOS**: ao examinar o campo "politicalConnections", descreva objetivamente:
    - Se há sócios de fornecedores que constam como políticos ativos ou ex-políticos.
