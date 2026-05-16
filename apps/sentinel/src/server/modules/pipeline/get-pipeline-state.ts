@@ -56,7 +56,23 @@ export interface PipelineState {
   };
 }
 
+const PIPELINE_STATE_CACHE_TTL_MS = 10_000;
+let pipelineStateCache: { at: number; value: Promise<PipelineState> } | null = null;
+
 export async function getPipelineState(): Promise<PipelineState> {
+  const now = Date.now();
+  if (pipelineStateCache && now - pipelineStateCache.at < PIPELINE_STATE_CACHE_TTL_MS) {
+    return pipelineStateCache.value;
+  }
+  const value = computePipelineState();
+  pipelineStateCache = { at: now, value };
+  value.catch(() => {
+    if (pipelineStateCache?.value === value) pipelineStateCache = null;
+  });
+  return value;
+}
+
+async function computePipelineState(): Promise<PipelineState> {
   const [recentJobs, rawRows, normalizedCounts] = await Promise.all([
     prisma.jobRun.findMany({
       orderBy: { startedAt: "desc" },

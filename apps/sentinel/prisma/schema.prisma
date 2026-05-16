@@ -87,6 +87,14 @@ model RawRecord {
 
   @@unique([source, recordType, externalId])
   @@index([source, recordType, processedAt])
+  // The two indexes below carry SQL clauses (INCLUDE / WHERE) that Prisma's
+  // schema syntax cannot express. They are created in
+  // migrations/20260516115212_add_raw_records_perf_indexes/migration.sql.
+  // `prisma migrate dev` will detect drift and try to drop the clauses —
+  // when that happens, delete the auto-generated migration and keep the
+  // hand-edited one. Don't remove these @@index lines.
+  @@index([source, recordType], map: "raw_records_breakdown_idx")
+  @@index([recordType, source, fetchedAt], map: "raw_records_pending_idx")
   @@map("raw_records")
 }
 
