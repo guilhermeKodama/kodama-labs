@@ -63,6 +63,7 @@ export default async function AlertDetailPage({
     "titleKey",
     (k, p) => tTemplates(k, p),
     (k) => tCodes(k),
+    locale,
   );
   const renderedDescription = renderAlertText(
     alert.description,
@@ -70,6 +71,7 @@ export default async function AlertDetailPage({
     "descriptionKey",
     (k, p) => tTemplates(k, p),
     (k) => tCodes(k),
+    locale,
   );
 
   const typeLabelKey = `alertType.${alert.type}`;

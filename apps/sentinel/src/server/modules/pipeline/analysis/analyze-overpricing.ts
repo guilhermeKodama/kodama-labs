@@ -5,15 +5,24 @@ import {
   buildAlertI18n,
   renderCodePtBr,
   renderPtBr,
+  type AlertI18nParam,
 } from "@sentinel/server/lib/alert-i18n";
+import { classifyItem, type ItemKind } from "./classify-item";
+import {
+  evaluateOverpricing,
+  type EvaluateInput,
+  type EvaluateVerdict,
+  type PriceAnalysisSummary,
+} from "./evaluate-overpricing";
 
 const BATCH_SIZE = 300;
+const EVAL_BATCH_SIZE = 100;
 const IQR_DEVIATION_THRESHOLD = 0.3;
 const BID_SPREAD_THRESHOLD = 2.0;
 const DESC_MIN_GROUP_SIZE = 5;
 
 // ---------------------------------------------------------------------------
-// Context extraction — prevents false positives by qualifying comparisons
+// Context extraction — used by statistical strategies to qualify comparisons
 // ---------------------------------------------------------------------------
 
 const VEHICLE_BRANDS: Record<string, string[]> = {
@@ -92,17 +101,17 @@ function getConfidence(sampleSize: number): Confidence {
   return "low";
 }
 
-// ---------------------------------------------------------------------------
-// Main entry
-// ---------------------------------------------------------------------------
+// ===========================================================================
+// Main entry — runs Pass 1 (statistics) then Pass 2 (agent-routed alerting)
+// ===========================================================================
 
 export async function analyzeOverpricing() {
   return runJob("analyze-overpricing", "analysis", async () => {
     let recordsOut = 0;
 
-    const strategies = [analyzeByMarketPrice, analyzeByCatmat, analyzeByDescription, analyzeBidSpread];
-
-    for (const strategy of strategies) {
+    // Pass 1: populate PriceAnalysis rows (statistical baselines). No alerts.
+    const stat1 = [analyzeByMarketPrice, analyzeByCatmat, analyzeByDescription, analyzeBidSpread];
+    for (const strategy of stat1) {
       let batchOut = 0;
       do {
         batchOut = await strategy();
@@ -110,13 +119,23 @@ export async function analyzeOverpricing() {
       } while (batchOut >= BATCH_SIZE);
     }
 
+    // Pass 2: route through the evaluator agent and create alerts only when
+    // it decides "create". This is the single place that creates OVERPRICING alerts.
+    let evalBatch = 0;
+    do {
+      evalBatch = await evaluateAndAlert();
+      recordsOut += evalBatch;
+    } while (evalBatch >= EVAL_BATCH_SIZE);
+
     return { recordsIn: 0, recordsOut };
   });
 }
 
-/**
- * Strategy 0: Market price comparison using PriceReference data from PNCP Atas
- */
+// ---------------------------------------------------------------------------
+// Pass 1: statistical strategies — populate PriceAnalysis rows only.
+// Alerts are NOT created here.
+// ---------------------------------------------------------------------------
+
 async function analyzeByMarketPrice(): Promise<number> {
   const items = await prisma.procurementItem.findMany({
     where: {
@@ -148,7 +167,6 @@ async function analyzeByMarketPrice(): Promise<number> {
     const confidence = getConfidence(refPrices.length);
 
     const isOverpriced = deviation > IQR_DEVIATION_THRESHOLD;
-
     const context = extractContextQualifiers(item.procurement?.description ?? "");
 
     await createPriceAnalysis(item.id, {
@@ -170,66 +188,12 @@ async function analyzeByMarketPrice(): Promise<number> {
       },
     });
 
-    if (isOverpriced && item.procurement && (confidence === "high" || confidence === "medium")) {
-      const severity = deviation > 1 ? "CRITICAL" : deviation > 0.5 ? "HIGH" : "MEDIUM";
-
-      const existing = await prisma.alert.findFirst({
-        where: {
-          type: "OVERPRICING",
-          data: { path: ["itemId"], equals: item.id },
-        },
-      });
-
-      if (!existing) {
-        const contextLabel = context ? ` (contexto: ${context})` : "";
-        const i18nParams = {
-          deviationPct: (deviation * 100).toFixed(0),
-          itemDescription: item.description.slice(0, 100),
-          contextLabel,
-          unitPrice: `R$${unitPrice.toFixed(2)}`,
-          median: `R$${median.toFixed(2)}`,
-          sampleSize: refPrices.length,
-          confidence: renderCodePtBr("priceConfidence", confidence),
-        };
-        const i18n = buildAlertI18n(
-          "alerts.templates.overpricingMarket.title",
-          "alerts.templates.overpricingMarket.description",
-          { ...i18nParams, confidence },
-        );
-
-        await prisma.alert.create({
-          data: {
-            type: "OVERPRICING",
-            severity: severity as "MEDIUM" | "HIGH" | "CRITICAL",
-            title: renderPtBr("alerts.templates.overpricingMarket.title", i18nParams),
-            description: renderPtBr("alerts.templates.overpricingMarket.description", i18nParams),
-            procurementId: item.procurement.id,
-            data: {
-              method: "market_price",
-              itemId: item.id,
-              unitPrice,
-              medianReference: median,
-              deviation: deviation * 100,
-              referenceCount: refPrices.length,
-              confidence,
-              context: context || null,
-              source: "PNCP_ATA",
-              i18n,
-            },
-          },
-        });
-      }
-    }
-
     out++;
   }
 
   return out;
 }
 
-/**
- * Strategy 1: CATMAT-based IQR analysis
- */
 async function analyzeByCatmat(): Promise<number> {
   const items = await prisma.procurementItem.findMany({
     where: {
@@ -271,12 +235,6 @@ async function analyzeByCatmat(): Promise<number> {
   return out;
 }
 
-/**
- * Strategy 2: Context-aware description-based similarity analysis.
- * Extracts qualifiers from the parent procurement description (vehicle model,
- * brand, equipment type) and uses them as part of the comparison grouping key
- * so items are only compared against truly equivalent items.
- */
 async function analyzeByDescription(): Promise<number> {
   const items = await prisma.procurementItem.findMany({
     where: {
@@ -399,9 +357,6 @@ async function analyzeByDescription(): Promise<number> {
   return out;
 }
 
-/**
- * Strategy 3: Bid spread analysis
- */
 async function analyzeBidSpread(): Promise<number> {
   const items = await prisma.procurementItem.findMany({
     where: {
@@ -439,10 +394,6 @@ async function analyzeBidSpread(): Promise<number> {
       estimateDeviation > IQR_DEVIATION_THRESHOLD ||
       bidSpreadRatio > BID_SPREAD_THRESHOLD;
 
-    const severity = estimateDeviation > 1
-      ? "CRITICAL" : estimateDeviation > 0.5
-      ? "HIGH" : "MEDIUM";
-
     await createPriceAnalysis(item.id, {
       method: "bid_spread",
       isOverpriced,
@@ -459,57 +410,6 @@ async function analyzeBidSpread(): Promise<number> {
       },
     });
 
-    if (isOverpriced && item.procurement) {
-      const useEstimate = estimateDeviation > IQR_DEVIATION_THRESHOLD;
-      const titleKey = useEstimate
-        ? "alerts.templates.overpricingBidEstimate.title"
-        : "alerts.templates.overpricingBidSpread.title";
-      const descriptionKey = useEstimate
-        ? "alerts.templates.overpricingBidEstimate.description"
-        : "alerts.templates.overpricingBidSpread.description";
-
-      const i18nParams: Record<string, string | number> = useEstimate
-        ? {
-            winningBid: `R$${winningBid.toFixed(2)}`,
-            estimatedPrice: `R$${estimatedPrice.toFixed(2)}`,
-            deviationPct: (estimateDeviation * 100).toFixed(0),
-            itemDescription: item.description.slice(0, 120),
-            orgName: item.procurement.orgName,
-            bidCount: bids.length,
-          }
-        : {
-            bidSpreadRatio: bidSpreadRatio.toFixed(1),
-            itemDescription: item.description.slice(0, 120),
-            orgName: item.procurement.orgName,
-            bidCount: bids.length,
-          };
-
-      const i18n = buildAlertI18n(titleKey, descriptionKey, i18nParams);
-
-      const existingBidAlert = await prisma.alert.findFirst({
-        where: { type: "OVERPRICING", data: { path: ["itemId"], equals: item.id } },
-      });
-
-      if (!existingBidAlert) await prisma.alert.create({
-        data: {
-          type: "OVERPRICING",
-          severity: severity as "MEDIUM" | "HIGH" | "CRITICAL",
-          title: renderPtBr(titleKey, i18nParams),
-          description: renderPtBr(descriptionKey, i18nParams),
-          procurementId: item.procurement.id,
-          data: {
-            method: "bid_spread",
-            itemId: item.id,
-            estimatedPrice,
-            winningBid,
-            bidSpreadRatio,
-            estimateDeviation: estimateDeviation * 100,
-            i18n,
-          },
-        },
-      });
-    }
-
     out++;
   }
 
@@ -517,7 +417,7 @@ async function analyzeBidSpread(): Promise<number> {
 }
 
 // ---------------------------------------------------------------------------
-// IQR analysis — shared by CATMAT and description strategies
+// IQR analysis — shared by CATMAT and description strategies (Pass 1)
 // ---------------------------------------------------------------------------
 
 async function runIqrAnalysis(
@@ -535,7 +435,7 @@ async function runIqrAnalysis(
   const iqr = q3 - q1;
   const upperBound = q3 + 1.5 * iqr;
 
-  const confidence = extraDetails.confidence as Confidence | undefined ?? getConfidence(prices.length);
+  const confidence = (extraDetails.confidence as Confidence | undefined) ?? getConfidence(prices.length);
 
   let out = 0;
 
@@ -543,8 +443,6 @@ async function runIqrAnalysis(
     const unitPrice = Number(item.unitPrice);
     const deviation = median > 0 ? (unitPrice - median) / median : 0;
     const isOverpriced = unitPrice > upperBound || deviation > IQR_DEVIATION_THRESHOLD;
-
-    const context = extraDetails.context as string | null | undefined ?? "";
 
     await createPriceAnalysis(item.id, {
       method,
@@ -559,55 +457,243 @@ async function runIqrAnalysis(
       },
     });
 
-    if (isOverpriced && item.procurement && (confidence === "high" || confidence === "medium")) {
-      const existingIqrAlert = await prisma.alert.findFirst({
-        where: { type: "OVERPRICING", data: { path: ["itemId"], equals: item.id } },
-      });
-      if (!existingIqrAlert) {
-        const contextLabel = context ? ` (contexto: ${context})` : "";
-        const fallbackParams = {
-          deviationPct: (deviation * 100).toFixed(0),
-          itemDescription: item.description.slice(0, 100),
-          contextLabel,
-          unitPrice: `R$${unitPrice.toFixed(2)}`,
-          median: `R$${median.toFixed(2)}`,
-          sampleSize: prices.length,
-          confidence: renderCodePtBr("priceConfidence", confidence),
-          method: renderCodePtBr("priceAnalysisMethod", method),
-        };
-        const i18n = buildAlertI18n(
-          "alerts.templates.overpricingIqr.title",
-          "alerts.templates.overpricingIqr.description",
-          { ...fallbackParams, confidence, method },
-        );
+    out++;
+  }
 
-        await prisma.alert.create({
-          data: {
-            type: "OVERPRICING",
-            severity: deviation > 1 ? "CRITICAL" : deviation > 0.5 ? "HIGH" : "MEDIUM",
-            title: renderPtBr("alerts.templates.overpricingIqr.title", fallbackParams),
-            description: renderPtBr("alerts.templates.overpricingIqr.description", fallbackParams),
-            procurementId: item.procurement.id,
-            data: {
-              method,
-              itemId: item.id,
-              unitPrice,
-              median,
-              deviation: deviation * 100,
-              sampleSize: prices.length,
-              confidence,
-              context: context || null,
-              i18n,
-            },
-          },
-        });
-      }
+  return out;
+}
+
+// ===========================================================================
+// Pass 2: routed evaluator — agent decides whether to create the alert.
+// ===========================================================================
+
+/**
+ * Selects items that (a) have at least one PriceAnalysis flagged as overpriced
+ * OR (b) are classified SERVICE/GENERIC and have not been evaluated yet.
+ * For each, invokes the Claude evaluator. Creates an Alert only if the
+ * verdict is "create".
+ */
+async function evaluateAndAlert(): Promise<number> {
+  // Fetch items that have at least one statistical analysis flagged as overpriced.
+  // We dedup by the existence of an `AiAnalysis` row (overpricing_evaluation) for
+  // the item — see the check below. So the same item is processed at most once
+  // even across multiple cron invocations.
+  const items = await prisma.procurementItem.findMany({
+    where: {
+      priceAnalyses: { some: { isOverpriced: true } },
+    },
+    include: {
+      priceAnalyses: true,
+      procurement: {
+        select: { id: true, orgName: true, description: true, state: true, city: true },
+      },
+    },
+    take: EVAL_BATCH_SIZE,
+  });
+
+  let out = 0;
+
+  for (const item of items) {
+    if (!item.procurement) continue;
+
+    // Skip if we already evaluated this item (avoid duplicate API calls)
+    const existing = await prisma.aiAnalysis.findFirst({
+      where: {
+        targetType: "procurement_item",
+        targetId: item.id,
+        analysisType: "overpricing_evaluation",
+      },
+      select: { id: true },
+    });
+    if (existing) continue;
+
+    const kind: ItemKind = classifyItem({
+      description: item.description,
+      materialOrService: item.materialOrService,
+      materialOrServiceName: item.materialOrServiceName,
+      unit: item.unit,
+      catmatCode: item.catmatCode,
+      catalogCode: item.catalogCode,
+    });
+
+    const bid = await prisma.bidResult.findFirst({
+      where: { itemId: item.id, unitPrice: { gt: 0 } },
+      orderBy: { unitPrice: "asc" },
+      select: { unitPrice: true },
+    });
+
+    const input: EvaluateInput = {
+      itemId: item.id,
+      itemDescription: item.description,
+      unit: item.unit,
+      quantity: Number(item.quantity),
+      unitPrice: Number(item.unitPrice),
+      totalPrice: Number(item.totalPrice),
+      winningBid: bid ? Number(bid.unitPrice) : null,
+      estimatedPrice: Number(item.unitPrice),
+      procurementId: item.procurement.id,
+      procurementDescription: item.procurement.description ?? "",
+      orgName: item.procurement.orgName,
+      state: item.procurement.state,
+      city: item.procurement.city,
+      kind,
+      priceAnalyses: item.priceAnalyses.map((pa): PriceAnalysisSummary => {
+        const details = (pa.details ?? {}) as Record<string, unknown>;
+        return {
+          method: pa.method,
+          isOverpriced: pa.isOverpriced,
+          deviation: Number(pa.deviation),
+          medianGovPrice: pa.medianGovPrice ? Number(pa.medianGovPrice) : null,
+          sampleSize: (details.sampleSize as number | undefined) ?? (details.referenceCount as number | undefined),
+          confidence: details.confidence as ("high" | "medium" | "low") | undefined,
+        };
+      }),
+    };
+
+    const verdict = await evaluateOverpricing(input);
+
+    await persistEvaluation(input, kind, verdict);
+
+    if (verdict.decision === "create" && verdict.severity) {
+      await createAlertFromVerdict(input, kind, verdict);
     }
 
     out++;
   }
 
   return out;
+}
+
+async function persistEvaluation(
+  input: EvaluateInput,
+  kind: ItemKind,
+  verdict: EvaluateVerdict,
+): Promise<void> {
+  try {
+    await prisma.aiAnalysis.create({
+      data: {
+        targetType: "procurement_item",
+        targetId: input.itemId,
+        analysisType: "overpricing_evaluation",
+        prompt: verdict.prompt,
+        response: verdict.response,
+        riskScore: verdict.riskScore,
+        findings: {
+          decision: verdict.decision,
+          severity: verdict.severity ?? null,
+          kind,
+          enrichedItemLabel: verdict.enrichedItemLabel ?? null,
+          derivedEstimate: verdict.derivedEstimate ?? null,
+          reasoning: verdict.reasoning,
+        } as unknown as Prisma.InputJsonValue,
+        model: "claude-sonnet-4-20250514",
+        tokens: verdict.modelTokens,
+        procurementId: input.procurementId,
+      },
+    });
+  } catch (err) {
+    console.error("[analyze-overpricing] failed to persist evaluation", err);
+  }
+}
+
+async function createAlertFromVerdict(
+  input: EvaluateInput,
+  kind: ItemKind,
+  verdict: EvaluateVerdict,
+): Promise<void> {
+  // Pick template: market when there's a statistical baseline, contextual when agent derived an estimate.
+  const hasDerivedEstimate = !!verdict.derivedEstimate;
+  const flaggedStatAnalysis = input.priceAnalyses.find((pa) => pa.isOverpriced);
+
+  const itemDescPtBr = verdict.enrichedItemLabel?.ptBr ?? input.itemDescription.slice(0, 100);
+  const itemDescEn = verdict.enrichedItemLabel?.en;
+
+  let titleKey: string;
+  let descriptionKey: string;
+  let params: Record<string, AlertI18nParam>;
+
+  if (hasDerivedEstimate && verdict.derivedEstimate) {
+    titleKey = "alerts.templates.overpricingContextual.title";
+    descriptionKey = "alerts.templates.overpricingContextual.description";
+    const total = input.totalPrice;
+    const expected = verdict.derivedEstimate.expectedPrice;
+    const deviation = expected > 0 ? ((total - expected) / expected) * 100 : 0;
+    params = {
+      itemDescription: itemDescPtBr,
+      orgName: input.orgName,
+      totalPrice: `R$${total.toFixed(2)}`,
+      expectedPrice: `R$${expected.toFixed(2)}`,
+      minPrice: `R$${verdict.derivedEstimate.minPrice.toFixed(2)}`,
+      maxPrice: `R$${verdict.derivedEstimate.maxPrice.toFixed(2)}`,
+      deviationPct: deviation.toFixed(0),
+      // Raw code — translated per locale on the frontend via CODE_PARAM_GROUPS.
+      kind,
+    };
+  } else if (flaggedStatAnalysis) {
+    titleKey = "alerts.templates.overpricingMarket.title";
+    descriptionKey = "alerts.templates.overpricingMarket.description";
+    const median = flaggedStatAnalysis.medianGovPrice ?? input.unitPrice;
+    params = {
+      deviationPct: flaggedStatAnalysis.deviation.toFixed(0),
+      itemDescription: itemDescPtBr,
+      contextLabel: "",
+      unitPrice: `R$${input.unitPrice.toFixed(2)}`,
+      median: `R$${median.toFixed(2)}`,
+      sampleSize: flaggedStatAnalysis.sampleSize ?? 0,
+      confidence: renderCodePtBr("priceConfidence", flaggedStatAnalysis.confidence ?? "low"),
+    };
+  } else {
+    // Agent created without statistical baseline or derived estimate — should be rare;
+    // fall back to a generic contextual template.
+    titleKey = "alerts.templates.overpricingContextual.title";
+    descriptionKey = "alerts.templates.overpricingContextual.description";
+    params = {
+      itemDescription: itemDescPtBr,
+      orgName: input.orgName,
+      totalPrice: `R$${input.totalPrice.toFixed(2)}`,
+      expectedPrice: "—",
+      minPrice: "—",
+      maxPrice: "—",
+      deviationPct: "0",
+      kind,
+    };
+  }
+
+  const paramsByLocale: Record<string, Record<string, AlertI18nParam>> | undefined = itemDescEn
+    ? { en: { itemDescription: itemDescEn } }
+    : undefined;
+
+  const i18n = buildAlertI18n(titleKey, descriptionKey, params, paramsByLocale);
+
+  // Snapshot renderers (server-side) need code params pre-translated since
+  // renderPtBr doesn't run through CODE_PARAM_GROUPS. Build a copy with codes
+  // resolved to their pt-BR labels for the snapshot only.
+  const snapshotParams: Record<string, AlertI18nParam> = {
+    ...params,
+    ...(typeof params.kind === "string"
+      ? { kind: renderCodePtBr("itemKind", params.kind) }
+      : {}),
+  };
+
+  await prisma.alert.create({
+    data: {
+      type: "OVERPRICING",
+      severity: verdict.severity as "LOW" | "MEDIUM" | "HIGH" | "CRITICAL",
+      title: renderPtBr(titleKey, snapshotParams),
+      description: renderPtBr(descriptionKey, snapshotParams),
+      procurementId: input.procurementId,
+      data: {
+        itemId: input.itemId,
+        kind,
+        unitPrice: input.unitPrice,
+        totalPrice: input.totalPrice,
+        derivedEstimate: verdict.derivedEstimate ?? null,
+        evaluatorReasoning: verdict.reasoning,
+        enrichedItemLabel: verdict.enrichedItemLabel ?? null,
+        i18n,
+      } as unknown as Prisma.InputJsonValue,
+    },
+  });
 }
 
 // ---------------------------------------------------------------------------

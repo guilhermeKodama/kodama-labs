@@ -80,12 +80,12 @@ export function AlertsClient({ data, locale, severityCounts }: Props) {
 
   const renderAlertTitle = (alert: AlertRow): string => {
     const i18n = extractAlertI18n(alert.data);
-    return renderAlertText(alert.title, i18n, "titleKey", tTemplates, tCodes);
+    return renderAlertText(alert.title, i18n, "titleKey", tTemplates, tCodes, locale);
   };
 
   const renderAlertDescription = (alert: AlertRow): string => {
     const i18n = extractAlertI18n(alert.data);
-    return renderAlertText(alert.description, i18n, "descriptionKey", tTemplates, tCodes);
+    return renderAlertText(alert.description, i18n, "descriptionKey", tTemplates, tCodes, locale);
   };
 
   const typeLabel = (type: string): string => {
