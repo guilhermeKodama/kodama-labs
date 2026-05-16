@@ -1,6 +1,6 @@
 import { prisma } from "@sentinel/server/lib/prisma";
 import { Prisma } from "@/generated/prisma";
-import { setRequestLocale } from "next-intl/server";
+import { getTranslations, setRequestLocale } from "next-intl/server";
 import { PageLayout } from "@/components/page-layout";
 import { ContractsTable } from "./table";
 
@@ -37,6 +37,7 @@ export default async function ContractsPage({
 }) {
   const { locale } = await params;
   setRequestLocale(locale);
+  const t = await getTranslations("pages.contracts");
 
   const sp = await searchParams;
   const cursorId = String(sp.cursor ?? "");
@@ -117,7 +118,7 @@ export default async function ContractsPage({
 
   return (
     <PageLayout>
-      <h1 className="text-2xl font-bold mb-5">Contratos</h1>
+      <h1 className="text-2xl font-bold mb-5">{t("title")}</h1>
       <ContractsTable
         data={serialized}
         locale={locale}

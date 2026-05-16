@@ -1,4 +1,10 @@
 {
+  "app": {
+    "name": "Sentinel",
+    "tagline": "Monitor de Transparência em Compras Públicas",
+    "metaTitle": "Sentinel — Monitor de Transparência em Compras Públicas",
+    "metaDescription": "Análise pública de dados de compras governamentais brasileiras para sinalizar inconsistências e padrões atípicos que merecem revisão humana."
+  },
   "common": {
     "appName": "Sentinel",
     "loading": "Carregando...",
@@ -7,53 +13,321 @@
     "search": "Buscar...",
     "filter": "Filtrar",
     "export": "Exportar",
-    "refresh": "Atualizar"
+    "refresh": "Atualizar",
+    "clear": "Limpar",
+    "viewAll": "Ver completo →",
+    "back": "Voltar",
+    "version": "v0.1.0",
+    "disclaimer": "Os alertas indicam possíveis inconsistências para revisão humana e não constituem afirmação de irregularidade.",
+    "languageSwitcher": {
+      "label": "Idioma",
+      "switchTo": "Alterar idioma",
+      "pt-BR": "Português",
+      "en": "English"
+    }
   },
   "nav": {
     "dashboard": "Painel",
     "procurements": "Licitações",
     "contracts": "Contratos",
     "entities": "Entidades",
+    "politicians": "Políticos",
     "network": "Rede",
     "alerts": "Alertas",
     "analysis": "Análise IA",
     "pipeline": "Pipeline"
   },
-  "dashboard": {
-    "title": "Visão Geral",
-    "totalProcurements": "Total de Licitações",
-    "totalContracts": "Total de Contratos",
-    "totalEntities": "Total de Entidades",
-    "activeAlerts": "Alertas Ativos",
-    "criticalAlerts": "Alertas Críticos",
-    "riskDistribution": "Distribuição de Risco",
-    "recentAlerts": "Alertas Recentes",
-    "topRiskEntities": "Entidades de Maior Risco"
-  },
-  "alerts": {
-    "title": "Alertas",
-    "type": {
-      "OVERPRICING": "Sobrepreço",
-      "SHELL_COMPANY": "Empresa de Fachada",
-      "SANCTIONED_ENTITY": "Entidade Sancionada",
-      "SUSPICIOUS_NETWORK": "Rede Suspeita",
-      "AI_FLAG": "Alerta IA"
+  "codes": {
+    "alertType": {
+      "OVERPRICING": "Preço a Revisar",
+      "SHELL_COMPANY": "Indicadores Empresariais Incomuns",
+      "SANCTIONED_ENTITY": "Sanção Pública Registrada",
+      "SUSPICIOUS_NETWORK": "Vínculo Societário a Revisar",
+      "AI_FLAG": "Sinalização da Análise IA",
+      "POLITICAL_LINK": "Vínculo Político a Revisar"
     },
     "severity": {
       "LOW": "Baixo",
       "MEDIUM": "Médio",
       "HIGH": "Alto",
       "CRITICAL": "Crítico"
+    },
+    "shellCompanyFlag": {
+      "recently_created": "Aberta pouco antes do primeiro contrato",
+      "low_capital": "Capital social baixo frente ao valor do contrato",
+      "single_shareholder": "Apenas um sócio cadastrado"
+    },
+    "priceAnalysisMethod": {
+      "market_price": "Comparação com Atas PNCP",
+      "catmat_iqr": "CATMAT (IQR)",
+      "description_iqr": "Descrição similar (IQR)",
+      "description_insufficient_data": "Amostra insuficiente para comparação",
+      "bid_spread": "Spread entre lances"
+    },
+    "priceConfidence": {
+      "high": "Alta",
+      "medium": "Média",
+      "low": "Baixa"
+    },
+    "politicalLinkType": {
+      "SHAREHOLDER_IS_POLITICIAN": "Político como sócio",
+      "SUPPLIER_DONATED": "Fornecedor doou para campanha",
+      "DONOR_GOT_CONTRACT": "Doador recebeu contrato",
+      "FAMILY_IN_SUPPLIER": "Familiar consta como sócio de fornecedor",
+      "FAMILY_DONATED": "Familiar consta como doador",
+      "POLITICIAN_IS_SERVANT": "Político com vínculo de servidor",
+      "WEALTH_ANOMALY": "Variação patrimonial atípica",
+      "DONOR_IS_SHAREHOLDER": "Doador também é sócio de fornecedor",
+      "DONATION_TIMING": "Proximidade temporal entre doação e contrato",
+      "DONOR_CONCENTRATION": "Doação para múltiplos políticos com contratos"
+    },
+    "relationship": {
+      "mother": "mãe",
+      "father": "pai",
+      "brother": "irmão(ã)",
+      "spouse": "cônjuge",
+      "son": "filho(a)",
+      "nephew": "sobrinho(a)",
+      "cousin": "primo(a)",
+      "uncle": "tio(a)",
+      "grandparent": "avô/avó",
+      "grandson": "neto(a)"
+    },
+    "donorType": {
+      "PF": "Pessoa Física",
+      "PJ": "Pessoa Jurídica"
+    },
+    "aiAnalysisType": {
+      "risk_assessment": "Avaliação de pontos a revisar"
+    },
+    "aiTargetType": {
+      "procurement": "Licitação",
+      "contract": "Contrato",
+      "entity": "Entidade"
     }
   },
-  "pipeline": {
-    "title": "Pipeline de Dados",
-    "ingestion": "Ingestão",
-    "processing": "Processamento",
-    "analysis": "Análise",
-    "lastRun": "Última Execução",
-    "status": "Status",
-    "recordsProcessed": "Registros Processados",
-    "dataFreshness": "Atualização dos Dados"
+  "alerts": {
+    "title": "Alertas",
+    "disclaimer": "Os alertas indicam possíveis inconsistências para revisão humana e não constituem afirmação de irregularidade.",
+    "empty": "Nenhum alerta encontrado. Execute o pipeline de análise para sinalizar pontos a revisar.",
+    "emptyFiltered": "Nenhum alerta corresponde aos filtros aplicados.",
+    "search": "Pesquisar alerta, entidade, CNPJ, órgão...",
+    "filters": {
+      "severity": "Severidade",
+      "category": "Categoria",
+      "state": "UF",
+      "organization": "Órgão",
+      "stateLabel": "UF: {state}",
+      "noOptions": "Nenhuma opção"
+    },
+    "pagination": {
+      "of": "{count} de {total} alertas",
+      "range": "{start}–{end} de {total}"
+    },
+    "templates": {
+      "shellCompany": {
+        "title": "Empresa com indicadores incomuns: {entityName}",
+        "description": "Entidade {entityName} ({cnpj}) apresenta {flagCount} indicador(es) que recomendam revisão: {flags}."
+      },
+      "sanctionedEntity": {
+        "title": "Fornecedor com sanção pública registrada e contrato ativo: {supplierName}",
+        "description": "A empresa {supplierName} ({cnpj}) possui sanção(ões) registrada(s) em {sources} e consta com {contractCount} contrato(s) governamental(is)."
+      },
+      "suspiciousNetwork": {
+        "title": "Sócio em comum entre fornecedores na mesma licitação",
+        "description": "As empresas {entities} compartilham o mesmo sócio (CPF: {shareholderCpf}) e participaram da mesma licitação \"{procurementDescription}\" do órgão {orgName} — padrão recomendado para verificação."
+      },
+      "aiFlag": {
+        "title": "Análise IA sinaliza pontos a revisar: {orgName}",
+        "description": "{summary}"
+      },
+      "overpricingMarket": {
+        "title": "Preço acima da mediana de referência: {deviationPct}% acima",
+        "description": "Item \"{itemDescription}\"{contextLabel} com preço {unitPrice} está {deviationPct}% acima da mediana {median} de Atas de Registro de Preço do PNCP ({sampleSize} referência(s), confiança: {confidence})."
+      },
+      "overpricingIqr": {
+        "title": "Preço acima da mediana de referência: {deviationPct}% acima",
+        "description": "Item \"{itemDescription}\"{contextLabel} com preço {unitPrice} está {deviationPct}% acima da mediana {median} (amostra: {sampleSize}, confiança: {confidence}, método: {method})."
+      },
+      "overpricingBidEstimate": {
+        "title": "Lance vencedor acima do valor estimado",
+        "description": "Preço vencedor {winningBid} é {deviationPct}% acima do estimado {estimatedPrice}. Item \"{itemDescription}\" na licitação de {orgName}. {bidCount} lance(s) registrado(s)."
+      },
+      "overpricingBidSpread": {
+        "title": "Spread atípico entre lances",
+        "description": "Lance máximo {bidSpreadRatio}x o lance mínimo (fora da faixa esperada). Item \"{itemDescription}\" na licitação de {orgName}. {bidCount} lance(s) registrado(s)."
+      },
+      "politicianShareholder": {
+        "title": "Político consta como sócio de fornecedor do governo — vínculo a revisar",
+        "description": "{politicianName} ({party}/{state} - {position}) consta como sócio da empresa {entityName} (CNPJ: {entityCnpj}), que possui {contractCount} contrato(s) governamental(is) totalizando {totalContractValue}."
+      },
+      "supplierDonated": {
+        "title": "Fornecedor consta como doador de campanha — vínculo a revisar",
+        "description": "{entityName} ({entityCnpj}) consta com doação de {totalDonated} para {politicianName} ({party}) e possui {totalContractValue} em contratos governamentais."
+      },
+      "donorGotContract": {
+        "title": "Doador de campanha consta com contratos na mesma jurisdição — vínculo a revisar",
+        "description": "{donorName} consta com doação de {totalDonated} para {politicianName} ({party}/{state}) e recebeu {totalContractValue} em contratos governamentais na mesma região."
+      },
+      "familyInSupplier": {
+        "title": "Pessoa cadastrada como familiar do político consta como sócio de fornecedor — vínculo a revisar",
+        "description": "{shareholderName} ({relationshipLabel} de {politicianName}, {party}/{state}) consta como sócio de {entityName} ({entityCnpj})."
+      },
+      "familyDonated": {
+        "title": "Pessoa cadastrada como familiar do político consta como doador de campanha — vínculo a revisar",
+        "description": "{donorName} ({relationshipLabel} de {politicianName}, {party}/{state}) consta com doação de {amount}."
+      },
+      "politicianServant": {
+        "title": "Político consta com vínculo de servidor público federal",
+        "description": "{politicianName} ({party}/{state} - {position}) possui vínculo como servidor: {cargo} no {orgao}."
+      },
+      "wealthAnomaly": {
+        "title": "Variação patrimonial atípica entre declarações eleitorais — verificar",
+        "description": "{politicianName} ({party}/{state}) declarou patrimônio de {previousTotal} em {previousYear} e {currentTotal} em {currentYear} (variação de {growthPercentage}%)."
+      },
+      "donorIsShareholder": {
+        "title": "Doador de campanha também consta como sócio de fornecedor — vínculo a revisar",
+        "description": "{donorName} consta com doação de {totalDonated} para {politicianName} ({party}/{state}) e é sócio de {entityName} ({entityCnpj}) com {totalContractValue} em contratos."
+      },
+      "donationTiming": {
+        "title": "Doação e contrato com proximidade temporal — vínculo a revisar",
+        "description": "{entityName} consta com doação para {politicianName} e recebeu contrato {gapMonths} meses {direction} — {totalContractValue} em contratos próximos."
+      },
+      "donorConcentration": {
+        "title": "Empresa consta com doação para {politicianCount} políticos e contratos governamentais",
+        "description": "{entityName} ({entityCnpj}) consta com doação de {totalDonated} para: {politicianNames} — possui {contractCount} contrato(s)."
+      }
+    }
+  },
+  "pages": {
+    "dashboard": {
+      "title": "Painel",
+      "stats": {
+        "procurements": "Licitações",
+        "items": "Itens de Licitação",
+        "itemsSubtitle": "{count} resultados de lances",
+        "contracts": "Contratos",
+        "entities": "Entidades",
+        "sanctions": "Sanções",
+        "politicians": "Políticos",
+        "politicianLinksSubtitle": "{count} vínculos",
+        "activeAlerts": "Alertas Ativos",
+        "criticalAlertsSubtitle": "{count} críticos"
+      },
+      "recentAlerts": "Alertas Recentes",
+      "recentAlertsEmpty": "Nenhum alerta ainda. Execute o pipeline para começar a análise.",
+      "pipelineStatusTitle": "Status do Pipeline",
+      "pipelineStatusDescription": "Acesse a página <link>Pipeline</link> para monitorar o status da ingestão e processamento de dados."
+    },
+    "alertDetail": {
+      "backToAlerts": "Voltar para Alertas",
+      "descriptionHeading": "Descrição",
+      "entityHeading": "Entidade: {name}",
+      "procurementHeading": "Licitação",
+      "alertDataHeading": "Dados do Alerta",
+      "shareholders": "Sócios",
+      "sanctions": "Sanções",
+      "recentContracts": "Contratos Recentes",
+      "linkedContracts": "Contratos Vinculados",
+      "items": "Itens",
+      "dateTimeConnector": "às",
+      "fields": {
+        "cnpj": "CNPJ",
+        "legalNature": "Natureza Jurídica",
+        "capital": "Capital Social",
+        "openDate": "Abertura",
+        "activity": "Atividade",
+        "location": "UF / Cidade",
+        "contracts": "Contratos",
+        "sanctions": "Sanções",
+        "organization": "Órgão",
+        "modality": "Modalidade",
+        "estimatedValue": "Valor Estimado",
+        "itemsAndContracts": "Itens / Contratos",
+        "itemsAndContractsValue": "{items} itens · {contracts} contratos"
+      },
+      "itemsTable": {
+        "number": "#",
+        "description": "Descrição",
+        "quantity": "Qtd",
+        "unitPrice": "Preço Unit.",
+        "total": "Total"
+      }
+    },
+    "analysis": {
+      "title": "Análise IA",
+      "empty": "Nenhuma análise de IA encontrada. O sistema executará análises automaticamente quando houver dados processados.",
+      "riskLabel": "Pontos a revisar: {percent}%",
+      "viewProcurement": "Ver licitação completa →"
+    },
+    "alerts": {
+      "title": "Alertas"
+    },
+    "procurements": {
+      "title": "Licitações"
+    },
+    "contracts": {
+      "title": "Contratos"
+    },
+    "entities": {
+      "title": "Entidades"
+    },
+    "politicians": {
+      "title": "Políticos"
+    },
+    "network": {
+      "title": "Rede de Relacionamentos",
+      "stats": {
+        "politicians": "Políticos",
+        "donations": "Doações",
+        "politicalLinks": "Vínculos Políticos",
+        "sharedShareholders": "Sócios Compartilhados",
+        "politicalAlerts": "Alertas de Vínculos"
+      },
+      "empty": "Nenhum vínculo político identificado ainda. Execute o pipeline de ingestão de dados políticos para iniciar a análise.",
+      "sharedShareholdersTitle": "Sócios em Múltiplas Empresas",
+      "sharedShareholdersSubtitle": "Pessoas que constam como sócias em 2 ou mais empresas fornecedoras do governo",
+      "sharedShareholdersTable": {
+        "name": "Nome",
+        "cpfCnpj": "CPF/CNPJ",
+        "entities": "Empresas"
+      },
+      "recentAlerts": "Vínculos Políticos Recentes a Revisar",
+      "entityNotLinked": "Entidade não vinculada",
+      "elected": "Eleito",
+      "contractsLabel": "{count} contratos"
+    },
+    "pipeline": {
+      "title": "Pipeline de Dados",
+      "ingestion": "Ingestão",
+      "processing": "Processamento",
+      "analysis": "Análise",
+      "lastRun": "Última Execução",
+      "status": "Status",
+      "recordsProcessed": "Registros Processados",
+      "dataFreshness": "Atualização dos Dados",
+      "stats": {
+        "rawRecords": "Registros Brutos",
+        "pending": "Pendentes",
+        "processed": "Processados",
+        "errors": "Erros"
+      },
+      "normalizedData": "Dados Normalizados",
+      "processingPipeline": "Pipeline de Processamento",
+      "table": {
+        "source": "Fonte",
+        "type": "Tipo",
+        "pending": "Pendentes",
+        "processed": "Processados",
+        "errors": "Erros",
+        "total": "Total",
+        "progress": "Progresso"
+      },
+      "connection": {
+        "connected": "Ao vivo",
+        "connecting": "Reconectando...",
+        "disconnected": "Desconectado"
+      }
+    }
   }
 }

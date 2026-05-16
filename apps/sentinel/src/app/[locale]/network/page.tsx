@@ -1,7 +1,8 @@
 import { prisma } from "@sentinel/server/lib/prisma";
-import { setRequestLocale } from "next-intl/server";
+import { getTranslations, setRequestLocale } from "next-intl/server";
 import { PageLayout } from "@/components/page-layout";
-import { formatCnpj } from "@/lib/utils";
+import { formatCnpj, formatDate, formatNumber, type AppLocale } from "@/lib/utils";
+import { extractAlertI18n, renderAlertText } from "@/lib/alert-render";
 import Link from "next/link";
 import {
   Users,
@@ -11,6 +12,19 @@ import {
   AlertTriangle,
 } from "lucide-react";
 
+const linkTypeColors: Record<string, string> = {
+  SHAREHOLDER_IS_POLITICIAN: "border-red-500/30 bg-red-500/5",
+  SUPPLIER_DONATED: "border-orange-500/30 bg-orange-500/5",
+  DONOR_GOT_CONTRACT: "border-purple-500/30 bg-purple-500/5",
+  FAMILY_IN_SUPPLIER: "border-blue-500/30 bg-blue-500/5",
+  FAMILY_DONATED: "border-teal-500/30 bg-teal-500/5",
+  POLITICIAN_IS_SERVANT: "border-indigo-500/30 bg-indigo-500/5",
+  WEALTH_ANOMALY: "border-amber-500/30 bg-amber-500/5",
+  DONOR_IS_SHAREHOLDER: "border-pink-500/30 bg-pink-500/5",
+  DONATION_TIMING: "border-cyan-500/30 bg-cyan-500/5",
+  DONOR_CONCENTRATION: "border-emerald-500/30 bg-emerald-500/5",
+};
+
 export default async function NetworkPage({
   params,
 }: {
@@ -18,6 +32,20 @@ export default async function NetworkPage({
 }) {
   const { locale } = await params;
   setRequestLocale(locale);
+
+  const appLocale = locale as AppLocale;
+  const t = await getTranslations("pages.network");
+  const tStats = await getTranslations("pages.network.stats");
+  const tTable = await getTranslations("pages.network.sharedShareholdersTable");
+  const tCommon = await getTranslations("common");
+  const tCodes = await getTranslations("codes");
+  const tTemplates = await getTranslations();
+
+  const renderCode = (group: string, code: string): string => {
+    const key = `${group}.${code}`;
+    const v = tCodes(key);
+    return v === key ? code : v;
+  };
 
   const politicalLinks = await prisma.politicalLink.findMany({
     orderBy: { strength: "desc" },
@@ -82,32 +110,6 @@ export default async function NetworkPage({
     linksByType.set(link.linkType, existing);
   }
 
-  const linkTypeLabels: Record<string, string> = {
-    SHAREHOLDER_IS_POLITICIAN: "Sócio é Político",
-    SUPPLIER_DONATED: "Fornecedor Doou para Campanha",
-    DONOR_GOT_CONTRACT: "Doador Recebeu Contrato",
-    FAMILY_IN_SUPPLIER: "Familiar Confirmado em Fornecedor",
-    FAMILY_DONATED: "Familiar Confirmado Doou",
-    POLITICIAN_IS_SERVANT: "Político é Servidor Público",
-    WEALTH_ANOMALY: "Crescimento Patrimonial Anômalo",
-    DONOR_IS_SHAREHOLDER: "Doador é Sócio de Fornecedor",
-    DONATION_TIMING: "Proximidade Temporal Doação-Contrato",
-    DONOR_CONCENTRATION: "Concentração de Doações",
-  };
-
-  const linkTypeColors: Record<string, string> = {
-    SHAREHOLDER_IS_POLITICIAN: "border-red-500/30 bg-red-500/5",
-    SUPPLIER_DONATED: "border-orange-500/30 bg-orange-500/5",
-    DONOR_GOT_CONTRACT: "border-purple-500/30 bg-purple-500/5",
-    FAMILY_IN_SUPPLIER: "border-blue-500/30 bg-blue-500/5",
-    FAMILY_DONATED: "border-teal-500/30 bg-teal-500/5",
-    POLITICIAN_IS_SERVANT: "border-indigo-500/30 bg-indigo-500/5",
-    WEALTH_ANOMALY: "border-amber-500/30 bg-amber-500/5",
-    DONOR_IS_SHAREHOLDER: "border-pink-500/30 bg-pink-500/5",
-    DONATION_TIMING: "border-cyan-500/30 bg-cyan-500/5",
-    DONOR_CONCENTRATION: "border-emerald-500/30 bg-emerald-500/5",
-  };
-
   const strengthColor = (s: number) =>
     s >= 0.8
       ? "bg-red-500/20 text-red-500"
@@ -117,39 +119,46 @@ export default async function NetworkPage({
 
   return (
     <PageLayout>
-      <h1 className="text-2xl font-bold mb-5">Rede de Relacionamentos</h1>
+      <h1 className="text-2xl font-bold mb-2">{t("title")}</h1>
+      <p className="text-xs text-muted-foreground mb-5 max-w-3xl">
+        {tCommon("disclaimer")}
+      </p>
 
       <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-6">
         <StatCard
           icon={<Landmark className="h-4 w-4" />}
-          label="Políticos"
+          label={tStats("politicians")}
           value={stats.politicians}
+          locale={appLocale}
         />
         <StatCard
           icon={<Building2 className="h-4 w-4" />}
-          label="Doações"
+          label={tStats("donations")}
           value={stats.donations}
+          locale={appLocale}
         />
         <StatCard
           icon={<Users className="h-4 w-4" />}
-          label="Vínculos Políticos"
+          label={tStats("politicalLinks")}
           value={stats.politicalLinks}
+          locale={appLocale}
           highlight
         />
         <StatCard
           icon={<Users className="h-4 w-4" />}
-          label="Sócios Compartilhados"
+          label={tStats("sharedShareholders")}
           value={stats.sharedShareholders}
+          locale={appLocale}
         />
         <StatCard
           icon={<AlertTriangle className="h-4 w-4" />}
-          label="Alertas Políticos"
+          label={tStats("politicalAlerts")}
           value={stats.politicalAlerts}
+          locale={appLocale}
           highlight
         />
       </div>
 
-      {/* Political Links by Type */}
       {Array.from(linksByType.entries()).map(([type, links]) => (
         <div
           key={type}
@@ -157,7 +166,7 @@ export default async function NetworkPage({
         >
           <div className="p-4 border-b">
             <h2 className="text-base font-semibold flex items-center gap-2">
-              {linkTypeLabels[type] ?? type}
+              {renderCode("politicalLinkType", type)}
               <span className="text-sm font-normal text-muted-foreground">
                 ({links.length})
               </span>
@@ -180,7 +189,7 @@ export default async function NetworkPage({
                     <p className="text-[11px] text-muted-foreground">
                       {link.politician.party}/{link.politician.state} —{" "}
                       {link.politician.position}
-                      {link.politician.elected && " (Eleito)"}
+                      {link.politician.elected && ` (${t("elected")})`}
                     </p>
                   </div>
                 </div>
@@ -208,12 +217,12 @@ export default async function NetworkPage({
                       </Link>
                       <p className="text-[11px] text-muted-foreground">
                         {formatCnpj(link.entity.cnpj)} — {link.entity.state ?? "?"} —{" "}
-                        {link.entity._count.contracts} contratos
+                        {t("contractsLabel", { count: link.entity._count.contracts })}
                       </p>
                     </div>
                   ) : (
                     <span className="text-sm text-muted-foreground">
-                      Entidade não vinculada
+                      {t("entityNotLinked")}
                     </span>
                   )}
                 </div>
@@ -226,32 +235,27 @@ export default async function NetworkPage({
       {politicalLinks.length === 0 && (
         <div className="rounded-lg border bg-card p-8 text-center mb-6">
           <Landmark className="h-8 w-8 mx-auto text-muted-foreground mb-2" />
-          <p className="text-muted-foreground">
-            Nenhum vínculo político detectado ainda. Execute o pipeline de
-            ingestão de dados políticos para começar a análise.
-          </p>
+          <p className="text-muted-foreground">{t("empty")}</p>
         </div>
       )}
 
-      {/* Shared Shareholders */}
       {sharedShareholders.length > 0 && (
         <div className="rounded-lg border bg-card overflow-hidden mb-6">
           <div className="p-4 border-b">
             <h2 className="text-base font-semibold">
-              Sócios em Múltiplas Empresas ({sharedShareholders.length})
+              {t("sharedShareholdersTitle")} ({sharedShareholders.length})
             </h2>
             <p className="text-xs text-muted-foreground mt-1">
-              Pessoas que são sócias em 2 ou mais empresas fornecedoras do
-              governo
+              {t("sharedShareholdersSubtitle")}
             </p>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b bg-muted/50">
-                  <th className="text-left p-3 font-medium">Nome</th>
-                  <th className="text-left p-3 font-medium">CPF/CNPJ</th>
-                  <th className="text-center p-3 font-medium">Empresas</th>
+                  <th className="text-left p-3 font-medium">{tTable("name")}</th>
+                  <th className="text-left p-3 font-medium">{tTable("cpfCnpj")}</th>
+                  <th className="text-center p-3 font-medium">{tTable("entities")}</th>
                 </tr>
               </thead>
               <tbody>
@@ -274,48 +278,64 @@ export default async function NetworkPage({
         </div>
       )}
 
-      {/* Recent Political Link Alerts */}
       {politicalLinkAlerts.length > 0 && (
         <div className="rounded-lg border border-orange-500/30 bg-card overflow-hidden">
           <div className="p-4 border-b border-orange-500/30 bg-orange-500/5">
             <h2 className="text-base font-semibold text-orange-600">
-              Alertas de Vínculos Políticos Recentes
+              {t("recentAlerts")}
             </h2>
           </div>
           <div className="p-4 space-y-2">
-            {politicalLinkAlerts.map((alert) => (
-              <Link
-                key={alert.id}
-                href={`/${locale}/alerts/${alert.id}`}
-                className="flex items-start gap-3 p-3 rounded-md bg-muted/50 hover:bg-muted transition-colors"
-              >
-                <div
-                  className={`w-2 h-2 rounded-full mt-1.5 flex-shrink-0 ${
-                    alert.severity === "CRITICAL"
-                      ? "bg-red-500"
-                      : alert.severity === "HIGH"
-                        ? "bg-orange-500"
-                        : alert.severity === "MEDIUM"
-                          ? "bg-yellow-500"
-                          : "bg-blue-500"
-                  }`}
-                />
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 mb-0.5">
-                    <span className="text-[11px] px-1.5 py-0.5 rounded bg-muted font-medium">
-                      {alert.severity}
-                    </span>
-                    <span className="text-[11px] text-muted-foreground">
-                      {alert.createdAt.toLocaleDateString("pt-BR")}
-                    </span>
+            {politicalLinkAlerts.map((alert) => {
+              const i18n = extractAlertI18n(alert.data);
+              const title = renderAlertText(
+                alert.title,
+                i18n,
+                "titleKey",
+                (k, p) => tTemplates(k, p),
+                (k) => tCodes(k),
+              );
+              const description = renderAlertText(
+                alert.description,
+                i18n,
+                "descriptionKey",
+                (k, p) => tTemplates(k, p),
+                (k) => tCodes(k),
+              );
+              return (
+                <Link
+                  key={alert.id}
+                  href={`/${locale}/alerts/${alert.id}`}
+                  className="flex items-start gap-3 p-3 rounded-md bg-muted/50 hover:bg-muted transition-colors"
+                >
+                  <div
+                    className={`w-2 h-2 rounded-full mt-1.5 flex-shrink-0 ${
+                      alert.severity === "CRITICAL"
+                        ? "bg-red-500"
+                        : alert.severity === "HIGH"
+                          ? "bg-orange-500"
+                          : alert.severity === "MEDIUM"
+                            ? "bg-yellow-500"
+                            : "bg-blue-500"
+                    }`}
+                  />
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-0.5">
+                      <span className="text-[11px] px-1.5 py-0.5 rounded bg-muted font-medium">
+                        {renderCode("severity", alert.severity)}
+                      </span>
+                      <span className="text-[11px] text-muted-foreground">
+                        {formatDate(alert.createdAt, appLocale)}
+                      </span>
+                    </div>
+                    <p className="text-sm font-medium">{title}</p>
+                    <p className="text-xs text-muted-foreground line-clamp-2">
+                      {description}
+                    </p>
                   </div>
-                  <p className="text-sm font-medium">{alert.title}</p>
-                  <p className="text-xs text-muted-foreground line-clamp-2">
-                    {alert.description}
-                  </p>
-                </div>
-              </Link>
-            ))}
+                </Link>
+              );
+            })}
           </div>
         </div>
       )}
@@ -328,11 +348,13 @@ function StatCard({
   label,
   value,
   highlight,
+  locale,
 }: {
   icon: React.ReactNode;
   label: string;
   value: number;
   highlight?: boolean;
+  locale: AppLocale;
 }) {
   return (
     <div
@@ -343,7 +365,7 @@ function StatCard({
         <p className="text-[11px] text-muted-foreground">{label}</p>
       </div>
       <p className={`text-lg font-bold ${highlight ? "text-orange-500" : ""}`}>
-        {value.toLocaleString("pt-BR")}
+        {formatNumber(value, locale)}
       </p>
     </div>
   );

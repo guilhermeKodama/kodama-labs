@@ -1,6 +1,7 @@
 import { prisma } from "@sentinel/server/lib/prisma";
 import { Prisma } from "@/generated/prisma";
 import { runJob } from "@sentinel/server/lib/job-runner";
+import { buildAlertI18n, renderCodePtBr, renderPtBr } from "@sentinel/server/lib/alert-i18n";
 
 // ---------------------------------------------------------------------------
 // Strategy registry — guardrails to prevent runaway link creation
@@ -174,16 +175,32 @@ async function detectShareholderIsPolitician(maxLinks: number): Promise<number> 
         where: { type: "POLITICAL_LINK", entityId: sh.entity.id, data: { path: ["politicianCpf"], equals: politician.cpf } },
       });
       if (!existingAlert) {
+        const i18nParams = {
+          politicianName: politician.name,
+          party: politician.party,
+          state: politician.state,
+          position: politician.position,
+          entityName: sh.entity.name,
+          entityCnpj: sh.entity.cnpj,
+          contractCount: sh.entity.contracts.length,
+          totalContractValue: `R$ ${totalContractValue.toLocaleString("pt-BR")}`,
+        };
+        const i18n = buildAlertI18n(
+          "alerts.templates.politicianShareholder.title",
+          "alerts.templates.politicianShareholder.description",
+          i18nParams,
+        );
         await prisma.alert.create({
           data: {
             type: "POLITICAL_LINK", severity,
-            title: `Político é sócio de fornecedor do governo`,
-            description: `${politician.name} (${politician.party}/${politician.state} - ${politician.position}) é sócio da empresa ${sh.entity.name} (CNPJ: ${sh.entity.cnpj}) que possui ${sh.entity.contracts.length} contratos governamentais totalizando R$ ${totalContractValue.toLocaleString("pt-BR")}`,
+            title: renderPtBr("alerts.templates.politicianShareholder.title", i18nParams),
+            description: renderPtBr("alerts.templates.politicianShareholder.description", i18nParams),
             entityId: sh.entity.id,
             data: {
               linkType: "SHAREHOLDER_IS_POLITICIAN", politicianCpf: politician.cpf, politicianName: politician.name,
               party: politician.party, position: politician.position, entityCnpj: sh.entity.cnpj,
               entityName: sh.entity.name, sameJurisdiction, contractCount: sh.entity.contracts.length, totalContractValue,
+              i18n,
             } as unknown as Prisma.InputJsonValue,
           },
         });
@@ -271,16 +288,30 @@ async function detectSupplierDonatedToPolitician(maxLinks: number): Promise<numb
       where: { type: "POLITICAL_LINK", entityId: entity.id, data: { path: ["linkType"], equals: "SUPPLIER_DONATED" } },
     });
     if (!existingAlert) {
+      const i18nParams = {
+        entityName: entity.name,
+        entityCnpj: entity.cnpj,
+        totalDonated: `R$ ${totalDonated.toLocaleString("pt-BR")}`,
+        politicianName: donation.politician.name,
+        party: donation.politician.party,
+        totalContractValue: `R$ ${totalContractValue.toLocaleString("pt-BR")}`,
+      };
+      const i18n = buildAlertI18n(
+        "alerts.templates.supplierDonated.title",
+        "alerts.templates.supplierDonated.description",
+        i18nParams,
+      );
       await prisma.alert.create({
         data: {
           type: "POLITICAL_LINK", severity,
-          title: `Fornecedor do governo doou para campanha política`,
-          description: `${entity.name} (${entity.cnpj}) doou R$ ${totalDonated.toLocaleString("pt-BR")} para ${donation.politician.name} (${donation.politician.party}) e tem R$ ${totalContractValue.toLocaleString("pt-BR")} em contratos governamentais`,
+          title: renderPtBr("alerts.templates.supplierDonated.title", i18nParams),
+          description: renderPtBr("alerts.templates.supplierDonated.description", i18nParams),
           entityId: entity.id, contractId: contracts[0]?.id, procurementId: contracts[0]?.procurementId,
           data: {
             linkType: "SUPPLIER_DONATED", politicianCpf: donation.politician.cpf, politicianName: donation.politician.name,
             party: donation.politician.party, entityCnpj: entity.cnpj, entityName: entity.name,
             totalDonated, totalContractValue, donationToContractRatio,
+            i18n,
           } as unknown as Prisma.InputJsonValue,
         },
       });
@@ -363,15 +394,29 @@ async function detectDonorGotContract(maxLinks: number): Promise<number> {
         where: { type: "POLITICAL_LINK", entityId: entity.id, data: { path: ["linkType"], equals: "DONOR_GOT_CONTRACT" } },
       });
       if (!existingAlert) {
+        const i18nParams = {
+          donorName: entity.name,
+          totalDonated: `R$ ${totalDonated.toLocaleString("pt-BR")}`,
+          politicianName: politician.name,
+          party: politician.party,
+          state: politician.state,
+          totalContractValue: `R$ ${totalContractValue.toLocaleString("pt-BR")}`,
+        };
+        const i18n = buildAlertI18n(
+          "alerts.templates.donorGotContract.title",
+          "alerts.templates.donorGotContract.description",
+          i18nParams,
+        );
         await prisma.alert.create({
           data: {
             type: "POLITICAL_LINK", severity,
-            title: `Doador de campanha recebeu contratos na jurisdição do político`,
-            description: `${entity.name} doou R$ ${totalDonated.toLocaleString("pt-BR")} para ${politician.name} (${politician.party}/${politician.state}) e recebeu R$ ${totalContractValue.toLocaleString("pt-BR")} em contratos governamentais na mesma região`,
+            title: renderPtBr("alerts.templates.donorGotContract.title", i18nParams),
+            description: renderPtBr("alerts.templates.donorGotContract.description", i18nParams),
             entityId: entity.id, contractId: relevantContracts[0]?.id, procurementId: relevantContracts[0]?.procurementId,
             data: {
               linkType: "DONOR_GOT_CONTRACT", politicianCpf: politician.cpf, politicianName: politician.name,
               party: politician.party, donorCnpj: cnpj, donorName: entity.name, totalDonated, totalContractValue,
+              i18n,
             } as unknown as Prisma.InputJsonValue,
           },
         });
@@ -436,36 +481,48 @@ async function detectFamilyInSupplier(maxLinks: number): Promise<number> {
       });
       if (existing) continue;
 
-      const RELATIONSHIP_LABELS: Record<string, string> = {
-        mother: "mãe", father: "pai", brother: "irmão(ã)", spouse: "cônjuge",
-        son: "filho(a)", nephew: "sobrinho(a)", cousin: "primo(a)",
-        uncle: "tio(a)", grandparent: "avô/avó", grandson: "neto(a)",
-      };
-      const relLabel = RELATIONSHIP_LABELS[confirmedRelative.relationship] ?? confirmedRelative.relationship;
+      const relLabel = renderCodePtBr("relationship", confirmedRelative.relationship);
 
       await prisma.politicalLink.create({
         data: {
           politicianId: politician.id, entityId: sh.entity.id, shareholderId: sh.id,
           linkType: "FAMILY_IN_SUPPLIER",
-          description: `Sócio "${sh.name}" da empresa ${sh.entity.name} (${sh.entity.cnpj}) é ${relLabel} do político ${politician.name} (${politician.party}/${politician.state}) — confirmado por CPF`,
+          description: `Sócio "${sh.name}" da empresa ${sh.entity.name} (${sh.entity.cnpj}) consta como ${relLabel} do político ${politician.name} (${politician.party}/${politician.state}) — vínculo confirmado por CPF, recomendado revisar`,
           strength: 0.85,
           data: {
             politicianName: politician.name, shareholderName: sh.name,
-            relationship: confirmedRelative.relationship, relationshipLabel: relLabel,
+            relationship: confirmedRelative.relationship,
             confirmed: true, entityCnpj: sh.entity.cnpj, entityName: sh.entity.name,
           } as unknown as Prisma.InputJsonValue,
         },
       });
 
+      const i18nParams = {
+        shareholderName: sh.name,
+        relationshipLabel: confirmedRelative.relationship,
+        politicianName: politician.name,
+        party: politician.party,
+        state: politician.state,
+        entityName: sh.entity.name,
+        entityCnpj: sh.entity.cnpj,
+      };
+      const fallbackParams = { ...i18nParams, relationshipLabel: relLabel };
+      const i18n = buildAlertI18n(
+        "alerts.templates.familyInSupplier.title",
+        "alerts.templates.familyInSupplier.description",
+        i18nParams,
+      );
+
       await prisma.alert.create({
         data: {
           type: "POLITICAL_LINK", severity: "HIGH",
-          title: `Familiar confirmado de político é sócio de fornecedor`,
-          description: `${sh.name} (${relLabel} de ${politician.name}, ${politician.party}/${politician.state}) é sócio de ${sh.entity.name} (${sh.entity.cnpj})`,
+          title: renderPtBr("alerts.templates.familyInSupplier.title", fallbackParams),
+          description: renderPtBr("alerts.templates.familyInSupplier.description", fallbackParams),
           entityId: sh.entity.id,
           data: {
             linkType: "FAMILY_IN_SUPPLIER", politicianCpf: politician.cpf, politicianName: politician.name,
             shareholderName: sh.name, relationship: confirmedRelative.relationship, confirmed: true, entityCnpj: sh.entity.cnpj,
+            i18n,
           } as unknown as Prisma.InputJsonValue,
         },
       });
@@ -529,35 +586,46 @@ async function detectFamilyDonated(maxLinks: number): Promise<number> {
       if (existing) continue;
 
       const amount = Number(d.amount);
-      const RELATIONSHIP_LABELS: Record<string, string> = {
-        mother: "mãe", father: "pai", brother: "irmão(ã)", spouse: "cônjuge",
-        son: "filho(a)", nephew: "sobrinho(a)", cousin: "primo(a)",
-        uncle: "tio(a)", grandparent: "avô/avó", grandson: "neto(a)",
-      };
-      const relLabel = RELATIONSHIP_LABELS[confirmedRelative.relationship] ?? confirmedRelative.relationship;
+      const relLabel = renderCodePtBr("relationship", confirmedRelative.relationship);
 
       await prisma.politicalLink.create({
         data: {
           politicianId: politician.id, linkType: "FAMILY_DONATED",
-          description: `Doador PF "${d.donorName}" é ${relLabel} de ${politician.name} (${politician.party}/${politician.state}) e doou R$ ${amount.toLocaleString("pt-BR")} — confirmado por CPF`,
+          description: `Doador PF "${d.donorName}" consta como ${relLabel} de ${politician.name} (${politician.party}/${politician.state}) e doou R$ ${amount.toLocaleString("pt-BR")} — vínculo confirmado por CPF, recomendado revisar`,
           strength: 0.85,
           data: {
             politicianName: politician.name, donorName: d.donorName, donorCpfCnpj: d.donorCpfCnpj,
-            relationship: confirmedRelative.relationship, relationshipLabel: relLabel,
+            relationship: confirmedRelative.relationship,
             confirmed: true, amount, electionYear: d.electionYear,
           } as unknown as Prisma.InputJsonValue,
         },
       });
 
+      const i18nParams = {
+        donorName: d.donorName,
+        relationshipLabel: confirmedRelative.relationship,
+        politicianName: politician.name,
+        party: politician.party,
+        state: politician.state,
+        amount: `R$ ${amount.toLocaleString("pt-BR")}`,
+      };
+      const fallbackParams = { ...i18nParams, relationshipLabel: relLabel };
+      const i18n = buildAlertI18n(
+        "alerts.templates.familyDonated.title",
+        "alerts.templates.familyDonated.description",
+        i18nParams,
+      );
+
       await prisma.alert.create({
         data: {
           type: "POLITICAL_LINK", severity: "HIGH",
-          title: `Familiar confirmado doou para campanha`,
-          description: `${d.donorName} (${relLabel} de ${politician.name}, ${politician.party}/${politician.state}) doou R$ ${amount.toLocaleString("pt-BR")}`,
+          title: renderPtBr("alerts.templates.familyDonated.title", fallbackParams),
+          description: renderPtBr("alerts.templates.familyDonated.description", fallbackParams),
           data: {
             linkType: "FAMILY_DONATED", politicianCpf: politician.cpf, politicianName: politician.name,
             donorName: d.donorName, donorCpfCnpj: d.donorCpfCnpj, relationship: confirmedRelative.relationship,
             confirmed: true, amount,
+            i18n,
           } as unknown as Prisma.InputJsonValue,
         },
       });
@@ -612,14 +680,28 @@ async function detectPoliticianIsServant(maxLinks: number): Promise<number> {
       },
     });
 
+    const i18nParams = {
+      politicianName: politician.name,
+      party: politician.party,
+      state: politician.state,
+      position: politician.position,
+      cargo: primary.cargo ?? "N/I",
+      orgao: primary.orgao ?? "N/I",
+    };
+    const i18n = buildAlertI18n(
+      "alerts.templates.politicianServant.title",
+      "alerts.templates.politicianServant.description",
+      i18nParams,
+    );
     await prisma.alert.create({
       data: {
         type: "POLITICAL_LINK", severity: "MEDIUM",
-        title: `Político é/foi servidor público federal`,
-        description: `${politician.name} (${politician.party}/${politician.state} - ${politician.position}) possui vínculo como servidor: ${primary.cargo ?? "N/I"} no ${primary.orgao ?? "N/I"}`,
+        title: renderPtBr("alerts.templates.politicianServant.title", i18nParams),
+        description: renderPtBr("alerts.templates.politicianServant.description", i18nParams),
         data: {
           linkType: "POLITICIAN_IS_SERVANT", politicianCpf: politician.cpf, politicianName: politician.name,
           cargo: primary.cargo, orgao: primary.orgao, situacao: primary.situacao,
+          i18n,
         } as unknown as Prisma.InputJsonValue,
       },
     });
@@ -681,14 +763,30 @@ async function detectWealthAnomaly(maxLinks: number): Promise<number> {
         where: { type: "POLITICAL_LINK", data: { path: ["linkType"], equals: "WEALTH_ANOMALY" }, AND: { data: { path: ["politicianCpf"], equals: politician.cpf } } },
       });
       if (!existingWealthAlert) {
+        const i18nParams = {
+          politicianName: politician.name,
+          party: politician.party,
+          state: politician.state,
+          previousTotal: `R$ ${prevTotal.toLocaleString("pt-BR")}`,
+          previousYear: prevYear,
+          currentTotal: `R$ ${currTotal.toLocaleString("pt-BR")}`,
+          currentYear: currYear,
+          growthPercentage: growthPct.toFixed(0),
+        };
+        const i18n = buildAlertI18n(
+          "alerts.templates.wealthAnomaly.title",
+          "alerts.templates.wealthAnomaly.description",
+          i18nParams,
+        );
         await prisma.alert.create({
           data: {
             type: "POLITICAL_LINK", severity,
-            title: `Crescimento patrimonial anômalo de político`,
-            description: `${politician.name} (${politician.party}/${politician.state}) declarou patrimônio de R$ ${prevTotal.toLocaleString("pt-BR")} em ${prevYear} e R$ ${currTotal.toLocaleString("pt-BR")} em ${currYear} (crescimento de ${growthPct.toFixed(0)}%)`,
+            title: renderPtBr("alerts.templates.wealthAnomaly.title", i18nParams),
+            description: renderPtBr("alerts.templates.wealthAnomaly.description", i18nParams),
             data: {
               linkType: "WEALTH_ANOMALY", politicianCpf: politician.cpf, politicianName: politician.name,
               previousYear: prevYear, currentYear: currYear, previousTotal: prevTotal, currentTotal: currTotal, growthPercentage: growthPct,
+              i18n,
             } as unknown as Prisma.InputJsonValue,
           },
         });
@@ -797,16 +895,32 @@ async function detectDonorIsShareholder(maxLinks: number): Promise<number> {
         },
       });
 
+      const i18nParams = {
+        donorName,
+        totalDonated: `R$ ${totalDonated.toLocaleString("pt-BR")}`,
+        politicianName: politician.name,
+        party: politician.party,
+        state: politician.state,
+        entityName: sh.entity.name,
+        entityCnpj: sh.entity.cnpj,
+        totalContractValue: `R$ ${totalContractValue.toLocaleString("pt-BR")}`,
+      };
+      const i18n = buildAlertI18n(
+        "alerts.templates.donorIsShareholder.title",
+        "alerts.templates.donorIsShareholder.description",
+        i18nParams,
+      );
       await prisma.alert.create({
         data: {
           type: "POLITICAL_LINK", severity,
-          title: `Doador de campanha é sócio de fornecedor do governo`,
-          description: `${donorName} doou R$ ${totalDonated.toLocaleString("pt-BR")} para ${politician.name} (${politician.party}/${politician.state}) e é sócio de ${sh.entity.name} (${sh.entity.cnpj}) com R$ ${totalContractValue.toLocaleString("pt-BR")} em contratos`,
+          title: renderPtBr("alerts.templates.donorIsShareholder.title", i18nParams),
+          description: renderPtBr("alerts.templates.donorIsShareholder.description", i18nParams),
           entityId: sh.entity.id,
           data: {
             linkType: "DONOR_IS_SHAREHOLDER", politicianCpf: politician.cpf, politicianName: politician.name,
             donorName, donorCpf, totalDonated, entityCnpj: sh.entity.cnpj, entityName: sh.entity.name,
             totalContractValue, sameState,
+            i18n,
           } as unknown as Prisma.InputJsonValue,
         },
       });
@@ -907,16 +1021,30 @@ async function detectDonationTiming(maxLinks: number): Promise<number> {
       },
     });
 
+    const direction = closest.contract.startDate > donDate ? "depois" : "antes";
+    const i18nParams = {
+      entityName: entity.name,
+      politicianName: politician.name,
+      gapMonths: gapMonths.toFixed(0),
+      direction,
+      totalContractValue: `R$ ${totalContractValue.toLocaleString("pt-BR")}`,
+    };
+    const i18n = buildAlertI18n(
+      "alerts.templates.donationTiming.title",
+      "alerts.templates.donationTiming.description",
+      i18nParams,
+    );
     await prisma.alert.create({
       data: {
         type: "POLITICAL_LINK", severity,
-        title: `Doação e contrato com proximidade temporal suspeita`,
-        description: `${entity.name} doou para ${politician.name} e recebeu contrato ${gapMonths.toFixed(0)} meses ${closest.contract.startDate > donDate ? "depois" : "antes"} — R$ ${totalContractValue.toLocaleString("pt-BR")} em contratos próximos`,
+        title: renderPtBr("alerts.templates.donationTiming.title", i18nParams),
+        description: renderPtBr("alerts.templates.donationTiming.description", i18nParams),
         entityId: entity.id, contractId: closest.contract.id, procurementId: closest.contract.procurementId,
         data: {
           linkType: "DONATION_TIMING", politicianCpf: politician.cpf, politicianName: politician.name,
           entityCnpj: entity.cnpj, entityName: entity.name, gapMonths: Math.round(gapMonths),
           donatedAmount, totalContractValue,
+          i18n,
         } as unknown as Prisma.InputJsonValue,
       },
     });
@@ -1028,15 +1156,30 @@ async function detectDonorConcentration(maxLinks: number): Promise<number> {
         .map((p) => `${p!.name} (${p!.party})`)
         .slice(0, 5);
 
+      const politicianNamesText = politicianNames.join(", ") + (politicianCount > 5 ? ` e mais ${politicianCount - 5}` : "");
+      const i18nParams = {
+        politicianCount,
+        entityName: entity.name,
+        entityCnpj: cnpj,
+        totalDonated: `R$ ${totalDonated.toLocaleString("pt-BR")}`,
+        politicianNames: politicianNamesText,
+        contractCount: entity._count.contracts,
+      };
+      const i18n = buildAlertI18n(
+        "alerts.templates.donorConcentration.title",
+        "alerts.templates.donorConcentration.description",
+        i18nParams,
+      );
       await prisma.alert.create({
         data: {
           type: "POLITICAL_LINK", severity,
-          title: `Empresa doou para ${politicianCount} políticos e tem contratos governamentais`,
-          description: `${entity.name} (${cnpj}) doou R$ ${totalDonated.toLocaleString("pt-BR")} para: ${politicianNames.join(", ")}${politicianCount > 5 ? ` e mais ${politicianCount - 5}` : ""} — possui ${entity._count.contracts} contratos`,
+          title: renderPtBr("alerts.templates.donorConcentration.title", i18nParams),
+          description: renderPtBr("alerts.templates.donorConcentration.description", i18nParams),
           entityId: entity.id,
           data: {
             linkType: "DONOR_CONCENTRATION", entityCnpj: cnpj, entityName: donorName,
             politicianCount, totalDonated, contractCount: entity._count.contracts,
+            i18n,
           } as unknown as Prisma.InputJsonValue,
         },
       });

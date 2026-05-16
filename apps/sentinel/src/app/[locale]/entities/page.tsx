@@ -1,6 +1,6 @@
 import { prisma } from "@sentinel/server/lib/prisma";
 import { Prisma } from "@/generated/prisma";
-import { setRequestLocale } from "next-intl/server";
+import { getTranslations, setRequestLocale } from "next-intl/server";
 import { PageLayout } from "@/components/page-layout";
 import { EntitiesTable } from "./table";
 
@@ -40,6 +40,7 @@ export default async function EntitiesPage({
 }) {
   const { locale } = await params;
   setRequestLocale(locale);
+  const t = await getTranslations("pages.entities");
 
   const sp = await searchParams;
   const cursorId = String(sp.cursor ?? "");
@@ -118,7 +119,7 @@ export default async function EntitiesPage({
 
   return (
     <PageLayout>
-      <h1 className="text-2xl font-bold mb-5">Entidades</h1>
+      <h1 className="text-2xl font-bold mb-5">{t("title")}</h1>
       <EntitiesTable
         data={serialized}
         locale={locale}

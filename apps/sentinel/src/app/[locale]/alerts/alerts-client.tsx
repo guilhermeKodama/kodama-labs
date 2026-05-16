@@ -1,12 +1,14 @@
 "use client";
 
 import { useState, useMemo } from "react";
+import { useTranslations } from "next-intl";
 import Link from "next/link";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Search, X, ExternalLink, ChevronLeft, ChevronRight } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { cn, formatDate, type AppLocale } from "@/lib/utils";
+import { extractAlertI18n, renderAlertText } from "@/lib/alert-render";
 
 interface AlertRow {
   id: string;
@@ -14,6 +16,7 @@ interface AlertRow {
   severity: string;
   title: string;
   description: string;
+  data: Record<string, unknown> | null;
   createdAt: string;
   resolved: boolean;
   entityId: string | null;
@@ -33,24 +36,8 @@ interface Props {
   severityCounts: Record<string, number>;
 }
 
-const TYPE_LABELS: Record<string, string> = {
-  OVERPRICING: "Sobrepreço",
-  SHELL_COMPANY: "Empresa de Fachada",
-  SANCTIONED_ENTITY: "Entidade Sancionada",
-  SUSPICIOUS_NETWORK: "Rede Suspeita",
-  AI_FLAG: "Sinalização IA",
-  POLITICAL_LINK: "Vínculo Político",
-};
-
 const SEVERITY_ORDER = ["CRITICAL", "HIGH", "MEDIUM", "LOW"] as const;
 const SEVERITY_RANK: Record<string, number> = { CRITICAL: 0, HIGH: 1, MEDIUM: 2, LOW: 3 };
-
-const SEVERITY_LABELS: Record<string, string> = {
-  CRITICAL: "Crítico",
-  HIGH: "Alto",
-  MEDIUM: "Médio",
-  LOW: "Baixo",
-};
 
 const SEVERITY_STYLES: Record<string, { dot: string; card: string; badge: string }> = {
   CRITICAL: {
@@ -76,6 +63,13 @@ const SEVERITY_STYLES: Record<string, { dot: string; card: string; badge: string
 };
 
 export function AlertsClient({ data, locale, severityCounts }: Props) {
+  const tAlerts = useTranslations("alerts");
+  const tFilters = useTranslations("alerts.filters");
+  const tPagination = useTranslations("alerts.pagination");
+  const tCodes = useTranslations("codes");
+  const tCommon = useTranslations("common");
+  const tTemplates = useTranslations();
+
   const [search, setSearch] = useState("");
   const [selectedSeverities, setSelectedSeverities] = useState<Set<string>>(new Set());
   const [selectedTypes, setSelectedTypes] = useState<Set<string>>(new Set());
@@ -83,6 +77,26 @@ export function AlertsClient({ data, locale, severityCounts }: Props) {
   const [selectedOrgs, setSelectedOrgs] = useState<Set<string>>(new Set());
   const [page, setPage] = useState(0);
   const pageSize = 25;
+
+  const renderAlertTitle = (alert: AlertRow): string => {
+    const i18n = extractAlertI18n(alert.data);
+    return renderAlertText(alert.title, i18n, "titleKey", tTemplates, tCodes);
+  };
+
+  const renderAlertDescription = (alert: AlertRow): string => {
+    const i18n = extractAlertI18n(alert.data);
+    return renderAlertText(alert.description, i18n, "descriptionKey", tTemplates, tCodes);
+  };
+
+  const typeLabel = (type: string): string => {
+    const translated = tCodes(`alertType.${type}`);
+    return translated === `alertType.${type}` ? type : translated;
+  };
+
+  const severityLabel = (sev: string): string => {
+    const translated = tCodes(`severity.${sev}`);
+    return translated === `severity.${sev}` ? sev : translated;
+  };
 
   const availableTypes = useMemo(() =>
     [...new Set(data.map((a) => a.type))].sort(),
@@ -158,7 +172,6 @@ export function AlertsClient({ data, locale, severityCounts }: Props) {
 
   return (
     <div className="space-y-4">
-      {/* Severity summary cards — also work as toggle filters */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         {SEVERITY_ORDER.map((sev) => {
           const isActive = selectedSeverities.has(sev);
@@ -173,21 +186,20 @@ export function AlertsClient({ data, locale, severityCounts }: Props) {
                 isActive && "ring-2 ring-offset-1 ring-current",
               )}
             >
-              <p className="text-xs uppercase tracking-wider">{sev}</p>
+              <p className="text-xs uppercase tracking-wider">{severityLabel(sev)}</p>
               <p className="text-xl font-bold">{severityCounts[sev] ?? 0}</p>
             </button>
           );
         })}
       </div>
 
-      {/* Search + filter bar */}
       <div className="flex flex-wrap items-center gap-2">
         <div className="relative flex-1 min-w-[280px]">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
             value={search}
             onChange={(e) => { setSearch(e.target.value); setPage(0); }}
-            placeholder="Pesquisar alerta, entidade, CNPJ, órgão..."
+            placeholder={tAlerts("search")}
             className="pl-9 h-9"
           />
           {search && (
@@ -198,23 +210,29 @@ export function AlertsClient({ data, locale, severityCounts }: Props) {
         </div>
 
         <FilterDropdown
-          label="Severidade"
-          options={SEVERITY_ORDER.map((s) => ({ value: s, label: SEVERITY_LABELS[s] ?? s }))}
+          label={tFilters("severity")}
+          noOptionsLabel={tFilters("noOptions")}
+          clearLabel={tCommon("clear")}
+          options={SEVERITY_ORDER.map((s) => ({ value: s, label: severityLabel(s) }))}
           selected={selectedSeverities}
           onToggle={(v) => toggleSet(setSelectedSeverities, v)}
           onClear={() => { setSelectedSeverities(new Set()); setPage(0); }}
         />
 
         <FilterDropdown
-          label="Categoria"
-          options={availableTypes.map((t) => ({ value: t, label: TYPE_LABELS[t] ?? t }))}
+          label={tFilters("category")}
+          noOptionsLabel={tFilters("noOptions")}
+          clearLabel={tCommon("clear")}
+          options={availableTypes.map((t) => ({ value: t, label: typeLabel(t) }))}
           selected={selectedTypes}
           onToggle={(v) => toggleSet(setSelectedTypes, v)}
           onClear={() => { setSelectedTypes(new Set()); setPage(0); }}
         />
 
         <FilterDropdown
-          label="UF"
+          label={tFilters("state")}
+          noOptionsLabel={tFilters("noOptions")}
+          clearLabel={tCommon("clear")}
           options={availableStates.map((s) => ({ value: s, label: s }))}
           selected={selectedStates}
           onToggle={(v) => toggleSet(setSelectedStates, v)}
@@ -222,7 +240,9 @@ export function AlertsClient({ data, locale, severityCounts }: Props) {
         />
 
         <FilterDropdown
-          label="Órgão"
+          label={tFilters("organization")}
+          noOptionsLabel={tFilters("noOptions")}
+          clearLabel={tCommon("clear")}
           options={availableOrgs.map((o) => ({ value: o, label: o }))}
           selected={selectedOrgs}
           onToggle={(v) => toggleSet(setSelectedOrgs, v)}
@@ -232,32 +252,31 @@ export function AlertsClient({ data, locale, severityCounts }: Props) {
         {hasFilters && (
           <Button variant="ghost" size="sm" onClick={clearAll} className="h-9 text-muted-foreground">
             <X className="h-3.5 w-3.5 mr-1" />
-            Limpar
+            {tCommon("clear")}
           </Button>
         )}
       </div>
 
-      {/* Active filter badges */}
       {hasFilters && (
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-xs text-muted-foreground">
-            {filtered.length} de {data.length} alertas
+            {tPagination("of", { count: filtered.length, total: data.length })}
           </span>
           {Array.from(selectedSeverities).map((s) => (
             <Badge key={`sev-${s}`} variant="secondary" className="gap-1 text-xs">
-              {SEVERITY_LABELS[s] ?? s}
+              {severityLabel(s)}
               <button onClick={() => toggleSet(setSelectedSeverities, s)}><X className="h-3 w-3" /></button>
             </Badge>
           ))}
           {Array.from(selectedTypes).map((t) => (
             <Badge key={`type-${t}`} variant="secondary" className="gap-1 text-xs">
-              {TYPE_LABELS[t] ?? t}
+              {typeLabel(t)}
               <button onClick={() => toggleSet(setSelectedTypes, t)}><X className="h-3 w-3" /></button>
             </Badge>
           ))}
           {Array.from(selectedStates).map((s) => (
             <Badge key={`state-${s}`} variant="secondary" className="gap-1 text-xs">
-              UF: {s}
+              {tFilters("stateLabel", { state: s })}
               <button onClick={() => toggleSet(setSelectedStates, s)}><X className="h-3 w-3" /></button>
             </Badge>
           ))}
@@ -270,13 +289,10 @@ export function AlertsClient({ data, locale, severityCounts }: Props) {
         </div>
       )}
 
-      {/* Alert list */}
       {paged.length === 0 ? (
         <div className="rounded-lg border bg-card p-12 text-center">
           <p className="text-muted-foreground">
-            {hasFilters
-              ? "Nenhum alerta corresponde aos filtros aplicados."
-              : "Nenhum alerta encontrado. Execute o pipeline de análise para detectar irregularidades."}
+            {hasFilters ? tAlerts("emptyFiltered") : tAlerts("empty")}
           </p>
         </div>
       ) : (
@@ -294,10 +310,10 @@ export function AlertsClient({ data, locale, severityCounts }: Props) {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-1 flex-wrap">
                       <span className={`text-[11px] px-2 py-0.5 rounded-full font-medium border ${style.badge}`}>
-                        {alert.severity}
+                        {severityLabel(alert.severity)}
                       </span>
                       <span className="text-[11px] px-2 py-0.5 rounded bg-muted font-medium">
-                        {TYPE_LABELS[alert.type] ?? alert.type}
+                        {typeLabel(alert.type)}
                       </span>
                       {alert.state && (
                         <span className="text-[11px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground">
@@ -305,12 +321,12 @@ export function AlertsClient({ data, locale, severityCounts }: Props) {
                         </span>
                       )}
                       <span className="text-[11px] text-muted-foreground">
-                        {new Date(alert.createdAt).toLocaleDateString("pt-BR")}
+                        {formatDate(alert.createdAt, locale as AppLocale)}
                       </span>
                     </div>
-                    <p className="font-medium text-sm">{alert.title}</p>
+                    <p className="font-medium text-sm">{renderAlertTitle(alert)}</p>
                     <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
-                      {alert.description}
+                      {renderAlertDescription(alert)}
                     </p>
                     <div className="flex flex-wrap gap-2 mt-2">
                       {alert.entityName && (
@@ -335,11 +351,14 @@ export function AlertsClient({ data, locale, severityCounts }: Props) {
         </div>
       )}
 
-      {/* Pagination */}
       {filtered.length > pageSize && (
         <div className="flex items-center justify-between">
           <span className="text-sm text-muted-foreground">
-            {page * pageSize + 1}–{Math.min((page + 1) * pageSize, filtered.length)} de {filtered.length}
+            {tPagination("range", {
+              start: page * pageSize + 1,
+              end: Math.min((page + 1) * pageSize, filtered.length),
+              total: filtered.length,
+            })}
           </span>
           <div className="flex items-center gap-1">
             <Button
@@ -387,12 +406,16 @@ export function AlertsClient({ data, locale, severityCounts }: Props) {
 
 function FilterDropdown({
   label,
+  noOptionsLabel,
+  clearLabel,
   options,
   selected,
   onToggle,
   onClear,
 }: {
   label: string;
+  noOptionsLabel: string;
+  clearLabel: string;
   options: { value: string; label: string }[];
   selected: Set<string>;
   onToggle: (value: string) => void;
@@ -420,7 +443,7 @@ function FilterDropdown({
           <div className="absolute top-full left-0 mt-1 z-50 w-64 rounded-lg border bg-popover shadow-lg overflow-hidden">
             <div className="max-h-60 overflow-y-auto p-1">
               {options.length === 0 ? (
-                <p className="text-xs text-muted-foreground p-3 text-center">Nenhuma opção</p>
+                <p className="text-xs text-muted-foreground p-3 text-center">{noOptionsLabel}</p>
               ) : (
                 options.map((opt) => (
                   <button
@@ -446,7 +469,7 @@ function FilterDropdown({
             {isActive && (
               <div className="border-t p-1.5">
                 <Button variant="ghost" size="sm" onClick={() => { onClear(); setOpen(false); }} className="w-full text-xs h-7">
-                  Limpar
+                  {clearLabel}
                 </Button>
               </div>
             )}
