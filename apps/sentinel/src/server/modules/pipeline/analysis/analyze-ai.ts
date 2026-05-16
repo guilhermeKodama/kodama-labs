@@ -4,7 +4,7 @@ import { runJob } from "@sentinel/server/lib/job-runner";
 import { env } from "@/env";
 import Anthropic from "@anthropic-ai/sdk";
 import { buildAlertI18n, renderPtBr } from "@sentinel/server/lib/alert-i18n";
-import { getObjectBuffer } from "@/lib/storage/s3";
+import { getObjectBuffer } from "@/lib/storage/blob";
 
 const BATCH_SIZE = 10;
 const MODEL = "claude-sonnet-4-20250514";
