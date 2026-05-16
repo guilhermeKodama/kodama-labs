@@ -391,6 +391,74 @@ export async function fetchItemResults(
 }
 
 // ============================================
+// Documents (arquivos)
+// ============================================
+
+export interface PncpDocument {
+  uri?: string;
+  url?: string;
+  sequencialDocumento: number;
+  dataPublicacaoPncp: string;
+  cnpj: string;
+  anoCompra: number;
+  sequencialCompra: number;
+  statusAtivo: boolean;
+  titulo: string;
+  tipoDocumentoId: number;
+  tipoDocumentoNome: string;
+  tipoDocumentoDescricao?: string;
+}
+
+export async function fetchProcurementDocuments(
+  orgCnpj: string,
+  year: number,
+  sequencial: number,
+): Promise<PncpDocument[]> {
+  const url = `${API_URL}/v1/orgaos/${orgCnpj}/compras/${year}/${sequencial}/arquivos`;
+  return fetchWithTimeout<PncpDocument[]>(url, 30000);
+}
+
+export interface PncpDownloadResult {
+  body: ReadableStream<Uint8Array>;
+  contentType: string;
+  contentLength: number | null;
+  contentDisposition: string | null;
+}
+
+export async function downloadProcurementDocument(
+  url: string,
+  timeoutMs: number = 60000,
+): Promise<PncpDownloadResult> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await fetch(url, {
+      headers: {
+        "User-Agent": "Sentinel/1.0 (gov-procurement-auditor)",
+        Accept: "*/*",
+      },
+      signal: controller.signal,
+      redirect: "follow",
+    });
+    if (!response.ok) {
+      throw new Error(`PNCP document download error: ${response.status} for ${url}`);
+    }
+    if (!response.body) {
+      throw new Error(`PNCP document download empty body for ${url}`);
+    }
+    const lenHeader = response.headers.get("content-length");
+    return {
+      body: response.body,
+      contentType: response.headers.get("content-type") ?? "application/octet-stream",
+      contentLength: lenHeader ? parseInt(lenHeader, 10) : null,
+      contentDisposition: response.headers.get("content-disposition"),
+    };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+// ============================================
 // Atas de Registro de Preços
 // ============================================
 

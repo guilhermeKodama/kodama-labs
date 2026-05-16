@@ -1,0 +1,348 @@
+import { createHash } from "node:crypto";
+import { prisma } from "@sentinel/server/lib/prisma";
+import { Prisma } from "@/generated/prisma";
+import { runJob } from "@sentinel/server/lib/job-runner";
+import { BudgetTracker } from "@sentinel/server/lib/budget-tracker";
+import {
+  fetchProcurementDocuments,
+  downloadProcurementDocument,
+  type PncpDocument,
+} from "@/lib/gov-apis/pncp";
+import {
+  getS3Client,
+  putObject,
+  headObject,
+  buildDocumentStorageKey,
+} from "@/lib/storage/s3";
+
+const BATCH_SIZE = 10;
+const DELAY_MS = 1000;
+const BUDGET_MS = 200_000;
+const MAX_FILE_SIZE_BYTES = 50 * 1024 * 1024;
+
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function pickExtension(mimeType: string, title: string): string {
+  if (mimeType.includes("pdf")) return "pdf";
+  if (mimeType.includes("zip")) return "zip";
+  if (mimeType.includes("wordprocessingml")) return "docx";
+  if (mimeType.includes("msword")) return "doc";
+  if (mimeType.includes("spreadsheetml")) return "xlsx";
+  if (mimeType.includes("excel")) return "xls";
+  const match = title.match(/\.([a-zA-Z0-9]{2,5})$/);
+  return match ? match[1]!.toLowerCase() : "bin";
+}
+
+function sniffMimeFromMagic(buf: Buffer, fallback: string): string {
+  if (buf.length >= 4) {
+    if (buf[0] === 0x25 && buf[1] === 0x50 && buf[2] === 0x44 && buf[3] === 0x46) {
+      return "application/pdf";
+    }
+    if (buf[0] === 0x50 && buf[1] === 0x4b) {
+      // ZIP magic — could be .zip, .docx, .xlsx
+      if (fallback.includes("wordprocessingml")) return fallback;
+      if (fallback.includes("spreadsheetml")) return fallback;
+      return fallback || "application/zip";
+    }
+  }
+  return fallback || "application/octet-stream";
+}
+
+async function streamToBuffer(
+  body: ReadableStream<Uint8Array>,
+  maxBytes: number,
+): Promise<{ buffer: Buffer; truncated: boolean }> {
+  const chunks: Buffer[] = [];
+  let total = 0;
+  const reader = body.getReader();
+  try {
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      if (!value) continue;
+      const chunk = Buffer.from(value);
+      total += chunk.length;
+      if (total > maxBytes) {
+        return { buffer: Buffer.concat(chunks), truncated: true };
+      }
+      chunks.push(chunk);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+  return { buffer: Buffer.concat(chunks), truncated: false };
+}
+
+export async function ingestPncpDocuments() {
+  return runJob("ingest-pncp-documents", "ingestion", async () => {
+    const s3 = getS3Client();
+    if (!s3) {
+      console.warn(
+        "[ingest-pncp-documents] S3 not configured (S3_BUCKET / S3_ACCESS_KEY_ID / S3_SECRET_ACCESS_KEY / S3_REGION); skipping",
+      );
+      return { recordsIn: 0, recordsOut: 0 };
+    }
+
+    const procurements = await prisma.procurement.findMany({
+      where: {
+        documentsEnrichedAt: null,
+        source: "PNCP",
+        sequencial: { not: null },
+      },
+      select: {
+        id: true,
+        externalId: true,
+        orgCnpj: true,
+        year: true,
+        sequencial: true,
+      },
+      take: BATCH_SIZE,
+      orderBy: { processedAt: "asc" },
+    });
+
+    let totalIn = 0;
+    let totalOut = 0;
+    const counters = {
+      listsFetched: 0,
+      docsDownloaded: 0,
+      docsSkippedDup: 0,
+      docsSkippedSize: 0,
+      docsSkippedExisting: 0,
+      bytesUploaded: 0,
+      errors: 0,
+    };
+
+    const budget = new BudgetTracker(BUDGET_MS);
+
+    for (const proc of procurements) {
+      if (budget.exceeded()) {
+        console.log(
+          `[ingest-pncp-documents] Budget exhausted; ${totalOut} records saved`,
+        );
+        break;
+      }
+      if (!proc.sequencial || !proc.orgCnpj) continue;
+
+      let documents: PncpDocument[] = [];
+      try {
+        documents = await fetchProcurementDocuments(
+          proc.orgCnpj,
+          proc.year,
+          proc.sequencial,
+        );
+        counters.listsFetched++;
+        totalIn += documents.length;
+      } catch (err) {
+        counters.errors++;
+        console.warn(
+          `[ingest-pncp-documents] Failed to list documents for ${proc.externalId}:`,
+          err instanceof Error ? err.message : err,
+        );
+        // Leave documentsEnrichedAt NULL so it retries later
+        await sleep(DELAY_MS);
+        continue;
+      }
+
+      for (const doc of documents) {
+        if (budget.exceeded()) break;
+        const downloadUrl = doc.url ?? doc.uri;
+        if (!downloadUrl) {
+          counters.errors++;
+          continue;
+        }
+
+        const externalId = `${proc.externalId}-doc-${doc.sequencialDocumento}`;
+
+        try {
+          const existing = await prisma.procurementDocument.findUnique({
+            where: { externalId },
+            select: { id: true, contentHash: true, storageKey: true },
+          });
+
+          const download = await downloadProcurementDocument(downloadUrl);
+
+          if (
+            download.contentLength &&
+            download.contentLength > MAX_FILE_SIZE_BYTES
+          ) {
+            counters.docsSkippedSize++;
+            // Cancel the body
+            await download.body.cancel().catch(() => {});
+            // Still record metadata so we know it exists
+            await prisma.procurementDocument.upsert({
+              where: { externalId },
+              create: {
+                externalId,
+                procurementId: proc.id,
+                source: "PNCP",
+                sequencial: doc.sequencialDocumento,
+                title: doc.titulo,
+                documentType: doc.tipoDocumentoNome,
+                mimeType: download.contentType,
+                sizeBytes: download.contentLength,
+                sourceUrl: downloadUrl,
+                statusAtivo: doc.statusAtivo,
+                publishedAt: doc.dataPublicacaoPncp
+                  ? new Date(doc.dataPublicacaoPncp)
+                  : null,
+              },
+              update: {
+                sizeBytes: download.contentLength,
+                mimeType: download.contentType,
+                title: doc.titulo,
+                documentType: doc.tipoDocumentoNome,
+                statusAtivo: doc.statusAtivo,
+              },
+            });
+            continue;
+          }
+
+          const { buffer, truncated } = await streamToBuffer(
+            download.body,
+            MAX_FILE_SIZE_BYTES,
+          );
+          if (truncated) {
+            counters.docsSkippedSize++;
+            continue;
+          }
+
+          const sha256 = createHash("sha256").update(buffer).digest("hex");
+
+          if (existing?.contentHash === sha256 && existing.storageKey) {
+            counters.docsSkippedDup++;
+            await prisma.procurementDocument.update({
+              where: { externalId },
+              data: {
+                title: doc.titulo,
+                documentType: doc.tipoDocumentoNome,
+                statusAtivo: doc.statusAtivo,
+                sourceUrl: downloadUrl,
+              },
+            });
+            continue;
+          }
+
+          const detectedMime = sniffMimeFromMagic(buffer, download.contentType);
+          const ext = pickExtension(detectedMime, doc.titulo);
+          const storageKey = buildDocumentStorageKey(
+            proc.id,
+            doc.sequencialDocumento,
+            doc.titulo,
+            ext,
+          );
+
+          const head = await headObject(storageKey);
+          if (!head || head.size !== buffer.length) {
+            await putObject(storageKey, buffer, detectedMime);
+            counters.bytesUploaded += buffer.length;
+          }
+          counters.docsDownloaded++;
+
+          await prisma.rawRecord.upsert({
+            where: {
+              source_recordType_externalId: {
+                source: "PNCP",
+                recordType: "procurement_document",
+                externalId,
+              },
+            },
+            create: {
+              source: "PNCP",
+              recordType: "procurement_document",
+              externalId,
+              data: {
+                ...doc,
+                _procurementId: proc.id,
+                _procurementExternalId: proc.externalId,
+                _storageKey: storageKey,
+                _contentHash: sha256,
+                _sizeBytes: buffer.length,
+                _mimeType: detectedMime,
+              } as unknown as Prisma.InputJsonValue,
+            },
+            update: {
+              data: {
+                ...doc,
+                _procurementId: proc.id,
+                _procurementExternalId: proc.externalId,
+                _storageKey: storageKey,
+                _contentHash: sha256,
+                _sizeBytes: buffer.length,
+                _mimeType: detectedMime,
+              } as unknown as Prisma.InputJsonValue,
+              fetchedAt: new Date(),
+              processedAt: null,
+            },
+          });
+
+          await prisma.procurementDocument.upsert({
+            where: { externalId },
+            create: {
+              externalId,
+              procurementId: proc.id,
+              source: "PNCP",
+              sequencial: doc.sequencialDocumento,
+              title: doc.titulo,
+              documentType: doc.tipoDocumentoNome,
+              mimeType: detectedMime,
+              sizeBytes: buffer.length,
+              contentHash: sha256,
+              sourceUrl: downloadUrl,
+              storageBucket: s3.bucket,
+              storageKey,
+              statusAtivo: doc.statusAtivo,
+              publishedAt: doc.dataPublicacaoPncp
+                ? new Date(doc.dataPublicacaoPncp)
+                : null,
+            },
+            update: {
+              title: doc.titulo,
+              documentType: doc.tipoDocumentoNome,
+              mimeType: detectedMime,
+              sizeBytes: buffer.length,
+              contentHash: sha256,
+              sourceUrl: downloadUrl,
+              storageBucket: s3.bucket,
+              storageKey,
+              statusAtivo: doc.statusAtivo,
+              publishedAt: doc.dataPublicacaoPncp
+                ? new Date(doc.dataPublicacaoPncp)
+                : null,
+              fetchedAt: new Date(),
+            },
+          });
+
+          totalOut++;
+        } catch (err) {
+          counters.errors++;
+          console.warn(
+            `[ingest-pncp-documents] Failed to download document ${externalId}:`,
+            err instanceof Error ? err.message : err,
+          );
+        }
+
+        await sleep(DELAY_MS);
+      }
+
+      await prisma.procurement.update({
+        where: { id: proc.id },
+        data: { documentsEnrichedAt: new Date() },
+      });
+
+      await sleep(DELAY_MS);
+    }
+
+    console.log(
+      `[ingest-pncp-documents] counters: ${JSON.stringify(counters)}`,
+    );
+
+    return {
+      recordsIn: totalIn,
+      recordsOut: totalOut,
+      metadata: counters,
+    };
+  });
+}
+
