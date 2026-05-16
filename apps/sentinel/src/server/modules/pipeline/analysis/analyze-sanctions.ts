@@ -1,5 +1,6 @@
 import { prisma } from "@sentinel/server/lib/prisma";
 import { runJob } from "@sentinel/server/lib/job-runner";
+import { buildAlertI18n, renderPtBr } from "@sentinel/server/lib/alert-i18n";
 
 export async function analyzeSanctions() {
   return runJob("analyze-sanctions", "analysis", async () => {
@@ -53,12 +54,24 @@ export async function analyzeSanctions() {
         (c) => c.supplierCnpj === contract.supplierCnpj,
       ).length;
 
+      const i18nParams = {
+        supplierName: contract.supplierName,
+        cnpj: contract.supplierCnpj,
+        sources: sanctions.map((s) => s.source).join(", "),
+        contractCount,
+      };
+      const i18n = buildAlertI18n(
+        "alerts.templates.sanctionedEntity.title",
+        "alerts.templates.sanctionedEntity.description",
+        i18nParams,
+      );
+
       await prisma.alert.create({
         data: {
           type: "SANCTIONED_ENTITY",
           severity: "CRITICAL",
-          title: `Entidade sancionada com contrato ativo: ${contract.supplierName}`,
-          description: `A empresa ${contract.supplierName} (${contract.supplierCnpj}) possui sanção(ões) registrada(s) em ${sanctions.map((s) => s.source).join(", ")} e tem ${contractCount} contrato(s) governamental(is).`,
+          title: renderPtBr("alerts.templates.sanctionedEntity.title", i18nParams),
+          description: renderPtBr("alerts.templates.sanctionedEntity.description", i18nParams),
           contractId: contract.id,
           entityId: contract.entity?.id ?? null,
           procurementId: contract.procurementId,
@@ -66,6 +79,7 @@ export async function analyzeSanctions() {
             supplierCnpj: contract.supplierCnpj,
             contractCount,
             sanctions,
+            i18n,
           },
         },
       });

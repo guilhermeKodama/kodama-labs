@@ -1,7 +1,7 @@
 import { prisma } from "@sentinel/server/lib/prisma";
-import { setRequestLocale } from "next-intl/server";
+import { getTranslations, setRequestLocale } from "next-intl/server";
 import { PageLayout } from "@/components/page-layout";
-import { stripHtml } from "@/lib/utils";
+import { stripHtml, formatDate, type AppLocale } from "@/lib/utils";
 import Link from "next/link";
 import { FileText } from "lucide-react";
 
@@ -13,21 +13,34 @@ export default async function AnalysisPage({
   const { locale } = await params;
   setRequestLocale(locale);
 
+  const t = await getTranslations("pages.analysis");
+  const tCommon = await getTranslations("common");
+  const tCodes = await getTranslations("codes");
+  const appLocale = locale as AppLocale;
+
   const analyses = await prisma.aiAnalysis.findMany({
     orderBy: { createdAt: "desc" },
     take: 20,
     include: { procurement: { select: { id: true, description: true, orgName: true } } },
   });
 
+  const renderCode = (group: string, code: string): string => {
+    const key = `${group}.${code}`;
+    const v = tCodes(key);
+    return v === key ? code : v;
+  };
+
   return (
     <PageLayout>
-      <h1 className="text-2xl font-bold mb-5">Análise IA</h1>
+      <h1 className="text-2xl font-bold mb-2">{t("title")}</h1>
+      <p className="text-xs text-muted-foreground mb-5 max-w-3xl">
+        {tCommon("disclaimer")}
+      </p>
 
       {analyses.length === 0 ? (
         <div className="rounded-lg border bg-card p-12 text-center">
           <p className="text-muted-foreground">
-            Nenhuma análise de IA encontrada. O sistema executará análises
-            automaticamente quando houver dados processados.
+            {t("empty")}
           </p>
         </div>
       ) : (
@@ -37,10 +50,10 @@ export default async function AnalysisPage({
               <div className="flex items-center justify-between mb-3">
                 <div className="flex items-center gap-2">
                   <span className="text-[11px] px-2 py-0.5 rounded bg-muted font-medium">
-                    {analysis.analysisType}
+                    {renderCode("aiAnalysisType", analysis.analysisType)}
                   </span>
                   <span className="text-[11px] px-2 py-0.5 rounded bg-muted font-medium">
-                    {analysis.targetType}
+                    {renderCode("aiTargetType", analysis.targetType)}
                   </span>
                   <span className={`text-[11px] px-2 py-0.5 rounded-full font-medium ${
                     analysis.riskScore >= 0.7
@@ -49,11 +62,11 @@ export default async function AnalysisPage({
                         ? "bg-yellow-500/20 text-yellow-500"
                         : "bg-green-500/20 text-green-500"
                   }`}>
-                    Risco: {(analysis.riskScore * 100).toFixed(0)}%
+                    {t("riskLabel", { percent: (analysis.riskScore * 100).toFixed(0) })}
                   </span>
                 </div>
                 <span className="text-[11px] text-muted-foreground">
-                  {analysis.createdAt.toLocaleDateString("pt-BR")}
+                  {formatDate(analysis.createdAt, appLocale)}
                 </span>
               </div>
 
@@ -81,7 +94,7 @@ export default async function AnalysisPage({
                     href={`/${locale}/procurements/${analysis.procurement.id}`}
                     className="text-xs text-primary hover:underline"
                   >
-                    Ver licitação completa →
+                    {t("viewProcurement")}
                   </Link>
                 </div>
               )}

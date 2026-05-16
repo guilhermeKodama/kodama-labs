@@ -13,9 +13,9 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Sentinel - Government Corruption Tracker",
+  title: "Sentinel — Monitor de Transparência em Compras Públicas",
   description:
-    "AI-powered analysis of Brazilian public procurement data to detect overpricing, shell companies, and suspicious patterns.",
+    "Análise pública de dados de compras governamentais brasileiras para sinalizar inconsistências e padrões atípicos que merecem revisão humana.",
 };
 
 export default function RootLayout({
