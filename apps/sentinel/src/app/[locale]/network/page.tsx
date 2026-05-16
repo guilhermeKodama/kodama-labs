@@ -10,6 +10,7 @@ import {
   Building2,
   ArrowRight,
   AlertTriangle,
+  ChevronRight,
 } from "lucide-react";
 
 const linkTypeColors: Record<string, string> = {
@@ -256,22 +257,46 @@ export default async function NetworkPage({
                   <th className="text-left p-3 font-medium">{tTable("name")}</th>
                   <th className="text-left p-3 font-medium">{tTable("cpfCnpj")}</th>
                   <th className="text-center p-3 font-medium">{tTable("entities")}</th>
+                  <th className="w-8 p-3" aria-hidden="true" />
                 </tr>
               </thead>
               <tbody>
-                {sharedShareholders.map((sh) => (
-                  <tr key={sh.cpf_cnpj} className="border-b hover:bg-muted/30">
-                    <td className="p-3 font-medium">{sh.name}</td>
-                    <td className="p-3 text-muted-foreground text-xs">
-                      {sh.cpf_cnpj}
-                    </td>
-                    <td className="p-3 text-center">
-                      <span className="px-1.5 py-0.5 rounded bg-orange-500/20 text-orange-500 text-[11px] font-medium">
-                        {sh.entity_count}
-                      </span>
-                    </td>
-                  </tr>
-                ))}
+                {sharedShareholders.map((sh) => {
+                  const href = `/${locale}/network/shareholders/${encodeURIComponent(sh.cpf_cnpj)}`;
+                  return (
+                    <tr
+                      key={sh.cpf_cnpj}
+                      className="border-b hover:bg-muted/30 cursor-pointer group"
+                    >
+                      <td className="p-0 font-medium">
+                        <Link href={href} className="block p-3">
+                          {sh.name}
+                        </Link>
+                      </td>
+                      <td className="p-0 text-muted-foreground text-xs">
+                        <Link href={href} className="block p-3">
+                          {sh.cpf_cnpj}
+                        </Link>
+                      </td>
+                      <td className="p-0 text-center">
+                        <Link href={href} className="block p-3">
+                          <span className="px-1.5 py-0.5 rounded bg-orange-500/20 text-orange-500 text-[11px] font-medium">
+                            {sh.entity_count}
+                          </span>
+                        </Link>
+                      </td>
+                      <td className="p-0 text-muted-foreground">
+                        <Link
+                          href={href}
+                          className="flex items-center justify-center p-3"
+                          aria-label={sh.name}
+                        >
+                          <ChevronRight className="h-4 w-4 opacity-50 group-hover:opacity-100 transition-opacity" />
+                        </Link>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -294,6 +319,7 @@ export default async function NetworkPage({
                 "titleKey",
                 (k, p) => tTemplates(k, p),
                 (k) => tCodes(k),
+                locale,
               );
               const description = renderAlertText(
                 alert.description,
@@ -301,6 +327,7 @@ export default async function NetworkPage({
                 "descriptionKey",
                 (k, p) => tTemplates(k, p),
                 (k) => tCodes(k),
+                locale,
               );
               return (
                 <Link
