@@ -69,6 +69,11 @@
       "medium": "Média",
       "low": "Baixa"
     },
+    "itemKind": {
+      "PRODUCT": "produto",
+      "SERVICE": "serviço",
+      "GENERIC": "item genérico"
+    },
     "politicalLinkType": {
       "SHAREHOLDER_IS_POLITICIAN": "Político como sócio",
       "SUPPLIER_DONATED": "Fornecedor doou para campanha",
@@ -156,6 +161,10 @@
       "overpricingBidSpread": {
         "title": "Spread atípico entre lances",
         "description": "Lance máximo {bidSpreadRatio}x o lance mínimo (fora da faixa esperada). Item \"{itemDescription}\" na licitação de {orgName}. {bidCount} lance(s) registrado(s)."
+      },
+      "overpricingContextual": {
+        "title": "Preço acima da faixa esperada para o escopo: {deviationPct}% acima",
+        "description": "Item \"{itemDescription}\" ({kind}) na licitação de {orgName} com valor total {totalPrice} está {deviationPct}% acima do esperado ({expectedPrice}). Faixa estimada: {minPrice} – {maxPrice}, com base no escopo descrito e em contratos similares."
       },
       "politicianShareholder": {
         "title": "Político consta como sócio de fornecedor do governo — vínculo a revisar",
@@ -295,7 +304,21 @@
       "recentAlerts": "Vínculos Políticos Recentes a Revisar",
       "entityNotLinked": "Entidade não vinculada",
       "elected": "Eleito",
-      "contractsLabel": "{count} contratos"
+      "contractsLabel": "{count} contratos",
+      "shareholderDetail": {
+        "title": "Empresas de {name}",
+        "subtitle": "Empresas em que esta pessoa consta como sócia",
+        "back": "Voltar para Rede",
+        "alsoKnownAs": "Também grafado como: {names}",
+        "totalCompanies": "{count} empresas",
+        "table": {
+          "entity": "Empresa",
+          "cnpj": "CNPJ",
+          "role": "Papel",
+          "contracts": "Contratos",
+          "totalValue": "Valor Total"
+        }
+      }
     },
     "pipeline": {
       "title": "Pipeline de Dados",

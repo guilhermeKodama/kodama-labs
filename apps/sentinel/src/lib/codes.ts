@@ -4,6 +4,7 @@ export type CodeGroup =
   | "shellCompanyFlag"
   | "priceAnalysisMethod"
   | "priceConfidence"
+  | "itemKind"
   | "politicalLinkType"
   | "relationship"
   | "donorType"
