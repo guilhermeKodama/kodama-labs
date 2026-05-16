@@ -9,11 +9,10 @@ import {
   type PncpDocument,
 } from "@/lib/gov-apis/pncp";
 import {
-  getS3Client,
+  isBlobConfigured,
   putObject,
-  headObject,
-  buildDocumentStorageKey,
-} from "@/lib/storage/s3";
+  buildDocumentStoragePath,
+} from "@/lib/storage/blob";
 
 const BATCH_SIZE = 10;
 const DELAY_MS = 1000;
@@ -77,10 +76,9 @@ async function streamToBuffer(
 
 export async function ingestPncpDocuments() {
   return runJob("ingest-pncp-documents", "ingestion", async () => {
-    const s3 = getS3Client();
-    if (!s3) {
+    if (!isBlobConfigured()) {
       console.warn(
-        "[ingest-pncp-documents] S3 not configured (S3_BUCKET / S3_ACCESS_KEY_ID / S3_SECRET_ACCESS_KEY / S3_REGION); skipping",
+        "[ingest-pncp-documents] Vercel Blob not configured (BLOB_READ_WRITE_TOKEN missing); skipping",
       );
       return { recordsIn: 0, recordsOut: 0 };
     }
@@ -226,18 +224,15 @@ export async function ingestPncpDocuments() {
 
           const detectedMime = sniffMimeFromMagic(buffer, download.contentType);
           const ext = pickExtension(detectedMime, doc.titulo);
-          const storageKey = buildDocumentStorageKey(
+          const pathname = buildDocumentStoragePath(
             proc.id,
             doc.sequencialDocumento,
             doc.titulo,
             ext,
           );
 
-          const head = await headObject(storageKey);
-          if (!head || head.size !== buffer.length) {
-            await putObject(storageKey, buffer, detectedMime);
-            counters.bytesUploaded += buffer.length;
-          }
+          const uploaded = await putObject(pathname, buffer, detectedMime);
+          counters.bytesUploaded += buffer.length;
           counters.docsDownloaded++;
 
           await prisma.rawRecord.upsert({
@@ -256,7 +251,8 @@ export async function ingestPncpDocuments() {
                 ...doc,
                 _procurementId: proc.id,
                 _procurementExternalId: proc.externalId,
-                _storageKey: storageKey,
+                _blobUrl: uploaded.url,
+                _blobPathname: uploaded.pathname,
                 _contentHash: sha256,
                 _sizeBytes: buffer.length,
                 _mimeType: detectedMime,
@@ -267,7 +263,8 @@ export async function ingestPncpDocuments() {
                 ...doc,
                 _procurementId: proc.id,
                 _procurementExternalId: proc.externalId,
-                _storageKey: storageKey,
+                _blobUrl: uploaded.url,
+                _blobPathname: uploaded.pathname,
                 _contentHash: sha256,
                 _sizeBytes: buffer.length,
                 _mimeType: detectedMime,
@@ -290,8 +287,7 @@ export async function ingestPncpDocuments() {
               sizeBytes: buffer.length,
               contentHash: sha256,
               sourceUrl: downloadUrl,
-              storageBucket: s3.bucket,
-              storageKey,
+              storageKey: uploaded.url,
               statusAtivo: doc.statusAtivo,
               publishedAt: doc.dataPublicacaoPncp
                 ? new Date(doc.dataPublicacaoPncp)
@@ -304,8 +300,7 @@ export async function ingestPncpDocuments() {
               sizeBytes: buffer.length,
               contentHash: sha256,
               sourceUrl: downloadUrl,
-              storageBucket: s3.bucket,
-              storageKey,
+              storageKey: uploaded.url,
               statusAtivo: doc.statusAtivo,
               publishedAt: doc.dataPublicacaoPncp
                 ? new Date(doc.dataPublicacaoPncp)
