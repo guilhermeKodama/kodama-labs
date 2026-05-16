@@ -1,6 +1,11 @@
 import { prisma } from "@sentinel/server/lib/prisma";
 import { runJob } from "@sentinel/server/lib/job-runner";
 import { differenceInMonths } from "date-fns";
+import {
+  buildAlertI18n,
+  renderCodeListPtBr,
+  renderPtBr,
+} from "@sentinel/server/lib/alert-i18n";
 
 const MIN_MONTHS_BEFORE_CONTRACT = 6;
 const CAPITAL_TO_CONTRACT_RATIO = 0.01;
@@ -66,14 +71,30 @@ export async function analyzeShellCompanies() {
           data: { isShellCompany: true },
         });
 
+        const i18nParams = {
+          entityName: entity.name,
+          cnpj: entity.cnpj,
+          flagCount: flags.length,
+          flags: flags.join(","),
+        };
+        const fallbackParams = {
+          ...i18nParams,
+          flags: renderCodeListPtBr("shellCompanyFlag", flags),
+        };
+        const i18n = buildAlertI18n(
+          "alerts.templates.shellCompany.title",
+          "alerts.templates.shellCompany.description",
+          i18nParams,
+        );
+
         await prisma.alert.create({
           data: {
             type: "SHELL_COMPANY",
             severity: flags.length >= 3 ? "HIGH" : "MEDIUM",
-            title: `Possível empresa de fachada: ${entity.name}`,
-            description: `Entidade ${entity.name} (${entity.cnpj}) apresenta ${flags.length} indicadores de empresa de fachada: ${flags.join(", ")}.`,
+            title: renderPtBr("alerts.templates.shellCompany.title", fallbackParams),
+            description: renderPtBr("alerts.templates.shellCompany.description", fallbackParams),
             entityId: entity.id,
-            data: { flags, ...details, entityCnpj: entity.cnpj },
+            data: { flags, ...details, entityCnpj: entity.cnpj, i18n },
           },
         });
 

@@ -1,6 +1,11 @@
 import { prisma } from "@sentinel/server/lib/prisma";
 import { runJob } from "@sentinel/server/lib/job-runner";
 import { Prisma } from "@/generated/prisma";
+import {
+  buildAlertI18n,
+  renderCodePtBr,
+  renderPtBr,
+} from "@sentinel/server/lib/alert-i18n";
 
 const BATCH_SIZE = 300;
 const IQR_DEVIATION_THRESHOLD = 0.3;
@@ -177,12 +182,27 @@ async function analyzeByMarketPrice(): Promise<number> {
 
       if (!existing) {
         const contextLabel = context ? ` (contexto: ${context})` : "";
+        const i18nParams = {
+          deviationPct: (deviation * 100).toFixed(0),
+          itemDescription: item.description.slice(0, 100),
+          contextLabel,
+          unitPrice: `R$${unitPrice.toFixed(2)}`,
+          median: `R$${median.toFixed(2)}`,
+          sampleSize: refPrices.length,
+          confidence: renderCodePtBr("priceConfidence", confidence),
+        };
+        const i18n = buildAlertI18n(
+          "alerts.templates.overpricingMarket.title",
+          "alerts.templates.overpricingMarket.description",
+          { ...i18nParams, confidence },
+        );
+
         await prisma.alert.create({
           data: {
             type: "OVERPRICING",
             severity: severity as "MEDIUM" | "HIGH" | "CRITICAL",
-            title: `Sobrepreço vs. Atas PNCP: ${(deviation * 100).toFixed(0)}% acima`,
-            description: `Item "${item.description.slice(0, 100)}"${contextLabel} com preço R$${unitPrice.toFixed(2)} está ${(deviation * 100).toFixed(0)}% acima da mediana R$${median.toFixed(2)} de Atas de Registro de Preço do PNCP (${refPrices.length} referência(s), confiança: ${confidence}).`,
+            title: renderPtBr("alerts.templates.overpricingMarket.title", i18nParams),
+            description: renderPtBr("alerts.templates.overpricingMarket.description", i18nParams),
             procurementId: item.procurement.id,
             data: {
               method: "market_price",
@@ -194,6 +214,7 @@ async function analyzeByMarketPrice(): Promise<number> {
               confidence,
               context: context || null,
               source: "PNCP_ATA",
+              i18n,
             },
           },
         });
@@ -439,9 +460,31 @@ async function analyzeBidSpread(): Promise<number> {
     });
 
     if (isOverpriced && item.procurement) {
-      const reason = estimateDeviation > IQR_DEVIATION_THRESHOLD
-        ? `Preço vencedor R$${winningBid.toFixed(2)} é ${(estimateDeviation * 100).toFixed(0)}% acima do estimado R$${estimatedPrice.toFixed(2)}`
-        : `Spread entre lances suspeito: lance máximo ${bidSpreadRatio.toFixed(1)}x o lance mínimo`;
+      const useEstimate = estimateDeviation > IQR_DEVIATION_THRESHOLD;
+      const titleKey = useEstimate
+        ? "alerts.templates.overpricingBidEstimate.title"
+        : "alerts.templates.overpricingBidSpread.title";
+      const descriptionKey = useEstimate
+        ? "alerts.templates.overpricingBidEstimate.description"
+        : "alerts.templates.overpricingBidSpread.description";
+
+      const i18nParams: Record<string, string | number> = useEstimate
+        ? {
+            winningBid: `R$${winningBid.toFixed(2)}`,
+            estimatedPrice: `R$${estimatedPrice.toFixed(2)}`,
+            deviationPct: (estimateDeviation * 100).toFixed(0),
+            itemDescription: item.description.slice(0, 120),
+            orgName: item.procurement.orgName,
+            bidCount: bids.length,
+          }
+        : {
+            bidSpreadRatio: bidSpreadRatio.toFixed(1),
+            itemDescription: item.description.slice(0, 120),
+            orgName: item.procurement.orgName,
+            bidCount: bids.length,
+          };
+
+      const i18n = buildAlertI18n(titleKey, descriptionKey, i18nParams);
 
       const existingBidAlert = await prisma.alert.findFirst({
         where: { type: "OVERPRICING", data: { path: ["itemId"], equals: item.id } },
@@ -451,8 +494,8 @@ async function analyzeBidSpread(): Promise<number> {
         data: {
           type: "OVERPRICING",
           severity: severity as "MEDIUM" | "HIGH" | "CRITICAL",
-          title: `Sobrepreço em lances: ${item.description.slice(0, 80)}`,
-          description: `${reason}. Item "${item.description.slice(0, 120)}" na licitação de ${item.procurement.orgName}. ${bids.length} lance(s) registrado(s).`,
+          title: renderPtBr(titleKey, i18nParams),
+          description: renderPtBr(descriptionKey, i18nParams),
           procurementId: item.procurement.id,
           data: {
             method: "bid_spread",
@@ -461,6 +504,7 @@ async function analyzeBidSpread(): Promise<number> {
             winningBid,
             bidSpreadRatio,
             estimateDeviation: estimateDeviation * 100,
+            i18n,
           },
         },
       });
@@ -521,12 +565,28 @@ async function runIqrAnalysis(
       });
       if (!existingIqrAlert) {
         const contextLabel = context ? ` (contexto: ${context})` : "";
+        const fallbackParams = {
+          deviationPct: (deviation * 100).toFixed(0),
+          itemDescription: item.description.slice(0, 100),
+          contextLabel,
+          unitPrice: `R$${unitPrice.toFixed(2)}`,
+          median: `R$${median.toFixed(2)}`,
+          sampleSize: prices.length,
+          confidence: renderCodePtBr("priceConfidence", confidence),
+          method: renderCodePtBr("priceAnalysisMethod", method),
+        };
+        const i18n = buildAlertI18n(
+          "alerts.templates.overpricingIqr.title",
+          "alerts.templates.overpricingIqr.description",
+          { ...fallbackParams, confidence, method },
+        );
+
         await prisma.alert.create({
           data: {
             type: "OVERPRICING",
             severity: deviation > 1 ? "CRITICAL" : deviation > 0.5 ? "HIGH" : "MEDIUM",
-            title: `Sobrepreço: ${(deviation * 100).toFixed(0)}% acima da mediana (${method})`,
-            description: `Item "${item.description.slice(0, 100)}"${contextLabel} com preço R$${unitPrice.toFixed(2)} está ${(deviation * 100).toFixed(0)}% acima da mediana R$${median.toFixed(2)} (amostra: ${prices.length}, confiança: ${confidence}).`,
+            title: renderPtBr("alerts.templates.overpricingIqr.title", fallbackParams),
+            description: renderPtBr("alerts.templates.overpricingIqr.description", fallbackParams),
             procurementId: item.procurement.id,
             data: {
               method,
@@ -537,6 +597,7 @@ async function runIqrAnalysis(
               sampleSize: prices.length,
               confidence,
               context: context || null,
+              i18n,
             },
           },
         });

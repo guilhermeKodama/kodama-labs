@@ -1,5 +1,5 @@
 import { prisma } from "@sentinel/server/lib/prisma";
-import { setRequestLocale } from "next-intl/server";
+import { getTranslations, setRequestLocale } from "next-intl/server";
 import { PageLayout } from "@/components/page-layout";
 import { AlertsClient } from "./alerts-client";
 
@@ -10,6 +10,9 @@ export default async function AlertsPage({
 }) {
   const { locale } = await params;
   setRequestLocale(locale);
+
+  const tPage = await getTranslations("pages.alerts");
+  const tCommon = await getTranslations("common");
 
   const [alerts, countBySeverity] = await Promise.all([
     prisma.alert.findMany({
@@ -32,6 +35,7 @@ export default async function AlertsPage({
     severity: a.severity,
     title: a.title,
     description: a.description,
+    data: a.data as Record<string, unknown> | null,
     createdAt: a.createdAt.toISOString(),
     resolved: !!a.resolvedAt,
     entityId: a.entity?.id ?? null,
@@ -54,7 +58,10 @@ export default async function AlertsPage({
 
   return (
     <PageLayout>
-      <h1 className="text-2xl font-bold mb-5">Alertas</h1>
+      <h1 className="text-2xl font-bold mb-2">{tPage("title")}</h1>
+      <p className="text-xs text-muted-foreground mb-5 max-w-3xl">
+        {tCommon("disclaimer")}
+      </p>
       <AlertsClient data={serialized} locale={locale} severityCounts={severityCounts} />
     </PageLayout>
   );

@@ -1,5 +1,5 @@
 import { prisma } from "@sentinel/server/lib/prisma";
-import { setRequestLocale } from "next-intl/server";
+import { getTranslations, setRequestLocale } from "next-intl/server";
 import { PageLayout } from "@/components/page-layout";
 import Link from "next/link";
 import {
@@ -12,6 +12,7 @@ import {
   Package,
   Landmark,
 } from "lucide-react";
+import { formatDate, formatNumber, type AppLocale } from "@/lib/utils";
 
 async function getDashboardStats() {
   const [
@@ -69,56 +70,66 @@ export default async function DashboardPage({
   const { locale } = await params;
   setRequestLocale(locale);
 
+  const t = await getTranslations("pages.dashboard");
+  const tStats = await getTranslations("pages.dashboard.stats");
   const stats = await getDashboardStats();
+  const appLocale = locale as AppLocale;
 
   return (
     <PageLayout>
-      <h1 className="text-2xl font-bold mb-6">Dashboard</h1>
+      <h1 className="text-2xl font-bold mb-6">{t("title")}</h1>
 
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 mb-6">
         <StatCard
-          title="Licitações"
+          title={tStats("procurements")}
           value={stats.procurementCount}
           icon={<FileText className="h-4 w-4 text-muted-foreground" />}
+          locale={appLocale}
         />
         <StatCard
-          title="Itens de Licitação"
+          title={tStats("items")}
           value={stats.itemCount}
           icon={<Package className="h-4 w-4 text-muted-foreground" />}
-          subtitle={`${stats.bidResultCount} resultados de lances`}
+          subtitle={tStats("itemsSubtitle", { count: stats.bidResultCount })}
+          locale={appLocale}
         />
         <StatCard
-          title="Contratos"
+          title={tStats("contracts")}
           value={stats.contractCount}
           icon={<ScrollText className="h-4 w-4 text-muted-foreground" />}
+          locale={appLocale}
         />
         <StatCard
-          title="Entidades"
+          title={tStats("entities")}
           value={stats.entityCount}
           icon={<Building2 className="h-4 w-4 text-muted-foreground" />}
+          locale={appLocale}
         />
         <StatCard
-          title="Sanções"
+          title={tStats("sanctions")}
           value={stats.sanctionCount}
           icon={<ShieldAlert className="h-4 w-4 text-orange-500" />}
           highlight={stats.sanctionCount > 0}
+          locale={appLocale}
         />
         <StatCard
-          title="Políticos"
+          title={tStats("politicians")}
           value={stats.politicianCount}
           icon={<Landmark className="h-4 w-4 text-purple-500" />}
-          subtitle={stats.politicalLinkCount > 0 ? `${stats.politicalLinkCount} vínculos` : undefined}
+          subtitle={stats.politicalLinkCount > 0 ? tStats("politicianLinksSubtitle", { count: stats.politicalLinkCount }) : undefined}
+          locale={appLocale}
         />
         <StatCard
-          title="Alertas Ativos"
+          title={tStats("activeAlerts")}
           value={stats.alertCount}
           icon={<AlertTriangle className="h-4 w-4 text-destructive" />}
           highlight={stats.criticalAlertCount > 0}
           subtitle={
             stats.criticalAlertCount > 0
-              ? `${stats.criticalAlertCount} críticos`
+              ? tStats("criticalAlertsSubtitle", { count: stats.criticalAlertCount })
               : undefined
           }
+          locale={appLocale}
         />
       </div>
 
@@ -126,11 +137,11 @@ export default async function DashboardPage({
         <div className="rounded-lg border bg-card p-5">
           <h2 className="text-base font-semibold mb-4 flex items-center gap-2">
             <Activity className="h-4 w-4" />
-            Alertas Recentes
+            {t("recentAlerts")}
           </h2>
           {stats.recentAlerts.length === 0 ? (
             <p className="text-muted-foreground text-sm">
-              Nenhum alerta ainda. Execute o pipeline para começar a análise.
+              {t("recentAlertsEmpty")}
             </p>
           ) : (
             <div className="space-y-2">
@@ -150,7 +161,7 @@ export default async function DashboardPage({
                     </p>
                   </div>
                   <span className="text-[11px] text-muted-foreground whitespace-nowrap">
-                    {alert.createdAt.toLocaleDateString("pt-BR")}
+                    {formatDate(alert.createdAt, appLocale)}
                   </span>
                 </Link>
               ))}
@@ -159,13 +170,15 @@ export default async function DashboardPage({
         </div>
 
         <div className="rounded-lg border bg-card p-5">
-          <h2 className="text-base font-semibold mb-4">Pipeline Status</h2>
+          <h2 className="text-base font-semibold mb-4">{t("pipelineStatusTitle")}</h2>
           <p className="text-muted-foreground text-sm">
-            Acesse a página{" "}
-            <a href={`/${locale}/pipeline`} className="text-primary underline">
-              Pipeline
-            </a>{" "}
-            para monitorar o status da ingestão e processamento de dados.
+            {t.rich("pipelineStatusDescription", {
+              link: (chunks) => (
+                <a href={`/${locale}/pipeline`} className="text-primary underline">
+                  {chunks}
+                </a>
+              ),
+            })}
           </p>
         </div>
       </div>
@@ -179,12 +192,14 @@ function StatCard({
   icon,
   highlight,
   subtitle,
+  locale,
 }: {
   title: string;
   value: number;
   icon: React.ReactNode;
   highlight?: boolean;
   subtitle?: string;
+  locale: AppLocale;
 }) {
   return (
     <div
@@ -194,7 +209,7 @@ function StatCard({
         <span className="text-xs text-muted-foreground">{title}</span>
         {icon}
       </div>
-      <p className="text-xl font-bold">{value.toLocaleString("pt-BR")}</p>
+      <p className="text-xl font-bold">{formatNumber(value, locale)}</p>
       {subtitle && (
         <p className="text-[11px] text-destructive mt-0.5">{subtitle}</p>
       )}

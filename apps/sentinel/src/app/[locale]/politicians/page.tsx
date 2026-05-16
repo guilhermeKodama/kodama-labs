@@ -1,6 +1,6 @@
 import { prisma } from "@sentinel/server/lib/prisma";
 import { Prisma } from "@/generated/prisma";
-import { setRequestLocale } from "next-intl/server";
+import { getTranslations, setRequestLocale } from "next-intl/server";
 import { PageLayout } from "@/components/page-layout";
 import { PoliticiansTable } from "./table";
 
@@ -47,6 +47,7 @@ export default async function PoliticiansPage({
 }) {
   const { locale } = await params;
   setRequestLocale(locale);
+  const t = await getTranslations("pages.politicians");
 
   const sp = await searchParams;
   const cursorId = String(sp.cursor ?? "");
@@ -128,7 +129,7 @@ export default async function PoliticiansPage({
 
   return (
     <PageLayout>
-      <h1 className="text-2xl font-bold mb-5">Políticos</h1>
+      <h1 className="text-2xl font-bold mb-5">{t("title")}</h1>
       <PoliticiansTable
         data={serialized}
         locale={locale}

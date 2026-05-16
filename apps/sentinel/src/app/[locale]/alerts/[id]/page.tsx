@@ -1,8 +1,9 @@
 import { prisma } from "@sentinel/server/lib/prisma";
-import { setRequestLocale } from "next-intl/server";
+import { getTranslations, setRequestLocale } from "next-intl/server";
 import { notFound } from "next/navigation";
 import { PageLayout } from "@/components/page-layout";
-import { formatCurrency, formatCnpj, stripHtml } from "@/lib/utils";
+import { formatCurrency, formatCnpj, stripHtml, formatDateTime, formatDate, formatNumber, type AppLocale } from "@/lib/utils";
+import { extractAlertI18n, renderAlertText } from "@/lib/alert-render";
 import Link from "next/link";
 import { ArrowLeft, Building2, FileText, ShieldAlert, Landmark } from "lucide-react";
 
@@ -13,6 +14,14 @@ export default async function AlertDetailPage({
 }) {
   const { locale, id } = await params;
   setRequestLocale(locale);
+
+  const appLocale = locale as AppLocale;
+  const t = await getTranslations("pages.alertDetail");
+  const tFields = await getTranslations("pages.alertDetail.fields");
+  const tTable = await getTranslations("pages.alertDetail.itemsTable");
+  const tCommon = await getTranslations("common");
+  const tCodes = await getTranslations("codes");
+  const tTemplates = await getTranslations();
 
   const alert = await prisma.alert.findUnique({
     where: { id },
@@ -47,20 +56,45 @@ export default async function AlertDetailPage({
     LOW: "bg-blue-500/20 text-blue-500 border-blue-500/30",
   };
 
-  const typeLabels: Record<string, string> = {
-    OVERPRICING: "Sobrepreço",
-    SHELL_COMPANY: "Empresa de Fachada",
-    SANCTIONED_ENTITY: "Entidade Sancionada",
-    SUSPICIOUS_NETWORK: "Rede Suspeita",
-    AI_FLAG: "Sinalização IA",
-    POLITICAL_LINK: "Vínculo Político",
-  };
+  const i18n = extractAlertI18n(alert.data);
+  const renderedTitle = renderAlertText(
+    alert.title,
+    i18n,
+    "titleKey",
+    (k, p) => tTemplates(k, p),
+    (k) => tCodes(k),
+  );
+  const renderedDescription = renderAlertText(
+    alert.description,
+    i18n,
+    "descriptionKey",
+    (k, p) => tTemplates(k, p),
+    (k) => tCodes(k),
+  );
+
+  const typeLabelKey = `alertType.${alert.type}`;
+  const typeLabel = (() => {
+    const v = tCodes(typeLabelKey);
+    return v === typeLabelKey ? alert.type : v;
+  })();
+  const severityLabelKey = `severity.${alert.severity}`;
+  const severityLabel = (() => {
+    const v = tCodes(severityLabelKey);
+    return v === severityLabelKey ? alert.severity : v;
+  })();
 
   const alertData = alert.data as Record<string, unknown> | null;
   const politicianName = alertData?.politicianName as string | undefined;
   const politicianCpf = alertData?.politicianCpf as string | undefined;
   const party = alertData?.party as string | undefined;
   const linkType = alertData?.linkType as string | undefined;
+  const linkTypeKey = linkType ? `politicalLinkType.${linkType}` : null;
+  const linkTypeLabel = linkType
+    ? (() => {
+        const v = tCodes(linkTypeKey!);
+        return v === linkTypeKey ? linkType : v;
+      })()
+    : null;
 
   const politician = politicianCpf
     ? await prisma.politician.findFirst({ where: { cpf: politicianCpf }, select: { id: true } })
@@ -74,8 +108,12 @@ export default async function AlertDetailPage({
           className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground mb-4"
         >
           <ArrowLeft className="h-4 w-4" />
-          Voltar para Alertas
+          {t("backToAlerts")}
         </Link>
+
+        <p className="text-xs text-muted-foreground mb-4 max-w-3xl">
+          {tCommon("disclaimer")}
+        </p>
 
         <div className="flex items-start gap-3 mb-5">
           <div className={`w-3 h-3 rounded-full mt-1.5 flex-shrink-0 ${
@@ -84,25 +122,25 @@ export default async function AlertDetailPage({
             alert.severity === "MEDIUM" ? "bg-yellow-500" : "bg-blue-500"
           }`} />
           <div className="flex-1 min-w-0">
-            <h1 className="text-xl font-bold">{alert.title}</h1>
+            <h1 className="text-xl font-bold">{renderedTitle}</h1>
             <div className="flex items-center gap-2 mt-2">
               <span className={`text-[11px] px-2 py-0.5 rounded-full font-medium border ${severityColors[alert.severity]}`}>
-                {alert.severity}
+                {severityLabel}
               </span>
               <span className="text-[11px] px-2 py-0.5 rounded-full bg-muted font-medium">
-                {typeLabels[alert.type] ?? alert.type}
+                {typeLabel}
               </span>
               <span className="text-xs text-muted-foreground">
-                {alert.createdAt.toLocaleDateString("pt-BR")} às {alert.createdAt.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
+                {formatDateTime(alert.createdAt, appLocale)}
               </span>
             </div>
           </div>
         </div>
 
-        {alert.description && (
+        {renderedDescription && (
           <div className="rounded-lg border bg-card p-5 mb-5">
-            <h2 className="text-xs font-semibold text-muted-foreground mb-2">Descrição</h2>
-            <p className="text-sm leading-relaxed">{alert.description}</p>
+            <h2 className="text-xs font-semibold text-muted-foreground mb-2">{t("descriptionHeading")}</h2>
+            <p className="text-sm leading-relaxed">{renderedDescription}</p>
           </div>
         )}
 
@@ -140,19 +178,7 @@ export default async function AlertDetailPage({
               <div>
                 <p className="text-sm font-medium">{politicianName}</p>
                 <p className="text-[11px] text-muted-foreground">
-                  {party ?? ""} — {
-                    linkType === "SHAREHOLDER_IS_POLITICIAN" ? "Sócio é Político" :
-                    linkType === "SUPPLIER_DONATED" ? "Fornecedor Doou" :
-                    linkType === "DONOR_GOT_CONTRACT" ? "Doador Recebeu Contrato" :
-                    linkType === "FAMILY_IN_SUPPLIER" ? "Familiar Confirmado em Fornecedor" :
-                    linkType === "FAMILY_DONATED" ? "Familiar Confirmado Doou" :
-                    linkType === "POLITICIAN_IS_SERVANT" ? "Servidor Público" :
-                    linkType === "WEALTH_ANOMALY" ? "Crescimento Patrimonial" :
-                    linkType === "DONOR_IS_SHAREHOLDER" ? "Doador é Sócio de Fornecedor" :
-                    linkType === "DONATION_TIMING" ? "Proximidade Temporal Doação-Contrato" :
-                    linkType === "DONOR_CONCENTRATION" ? "Concentração de Doações" :
-                    linkType ?? ""
-                  }
+                  {party ?? ""}{linkTypeLabel ? ` — ${linkTypeLabel}` : ""}
                 </p>
               </div>
             </Link>
@@ -164,49 +190,49 @@ export default async function AlertDetailPage({
             <div className="p-4 border-b flex items-center justify-between">
               <h2 className="text-base font-semibold flex items-center gap-2">
                 <Building2 className="h-4 w-4" />
-                Entidade: {alert.entity.name}
+                {t("entityHeading", { name: alert.entity.name })}
               </h2>
               <Link
                 href={`/${locale}/entities/${alert.entity.id}`}
                 className="text-xs text-primary hover:underline"
               >
-                Ver completo →
+                {tCommon("viewAll")}
               </Link>
             </div>
             <div className="p-4">
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
                 <div>
-                  <p className="text-[11px] text-muted-foreground">CNPJ</p>
+                  <p className="text-[11px] text-muted-foreground">{tFields("cnpj")}</p>
                   <p className="text-sm font-medium">{formatCnpj(alert.entity.cnpj)}</p>
                 </div>
                 <div>
-                  <p className="text-[11px] text-muted-foreground">Natureza Jurídica</p>
+                  <p className="text-[11px] text-muted-foreground">{tFields("legalNature")}</p>
                   <p className="text-sm font-medium">{alert.entity.legalNature ?? "-"}</p>
                 </div>
                 <div>
-                  <p className="text-[11px] text-muted-foreground">Capital Social</p>
-                  <p className="text-sm font-medium">{alert.entity.capital ? formatCurrency(alert.entity.capital.toString()) : "-"}</p>
+                  <p className="text-[11px] text-muted-foreground">{tFields("capital")}</p>
+                  <p className="text-sm font-medium">{alert.entity.capital ? formatCurrency(alert.entity.capital.toString(), appLocale) : "-"}</p>
                 </div>
                 <div>
-                  <p className="text-[11px] text-muted-foreground">Abertura</p>
-                  <p className="text-sm font-medium">{alert.entity.openDate?.toLocaleDateString("pt-BR") ?? "-"}</p>
+                  <p className="text-[11px] text-muted-foreground">{tFields("openDate")}</p>
+                  <p className="text-sm font-medium">{alert.entity.openDate ? formatDate(alert.entity.openDate, appLocale) : "-"}</p>
                 </div>
               </div>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
                 <div>
-                  <p className="text-[11px] text-muted-foreground">Atividade</p>
+                  <p className="text-[11px] text-muted-foreground">{tFields("activity")}</p>
                   <p className="text-sm font-medium">{alert.entity.activityDesc ?? "-"}</p>
                 </div>
                 <div>
-                  <p className="text-[11px] text-muted-foreground">UF / Cidade</p>
+                  <p className="text-[11px] text-muted-foreground">{tFields("location")}</p>
                   <p className="text-sm font-medium">{[alert.entity.state, alert.entity.city].filter(Boolean).join(" / ") || "-"}</p>
                 </div>
                 <div>
-                  <p className="text-[11px] text-muted-foreground">Contratos</p>
+                  <p className="text-[11px] text-muted-foreground">{tFields("contracts")}</p>
                   <p className="text-sm font-medium">{alert.entity._count.contracts}</p>
                 </div>
                 <div>
-                  <p className="text-[11px] text-muted-foreground">Sanções</p>
+                  <p className="text-[11px] text-muted-foreground">{tFields("sanctions")}</p>
                   <p className={`text-sm font-medium ${alert.entity._count.sanctions > 0 ? "text-red-500" : ""}`}>
                     {alert.entity._count.sanctions}
                   </p>
@@ -215,7 +241,7 @@ export default async function AlertDetailPage({
 
               {alert.entity.shareholders.length > 0 && (
                 <div className="mt-3 pt-3 border-t">
-                  <p className="text-[11px] font-semibold text-muted-foreground mb-2">Sócios ({alert.entity.shareholders.length})</p>
+                  <p className="text-[11px] font-semibold text-muted-foreground mb-2">{t("shareholders")} ({alert.entity.shareholders.length})</p>
                   <div className="space-y-1">
                     {alert.entity.shareholders.map((s) => (
                       <div key={s.id} className="flex items-center justify-between text-sm py-1">
@@ -231,7 +257,7 @@ export default async function AlertDetailPage({
                 <div className="mt-3 pt-3 border-t">
                   <p className="text-[11px] font-semibold text-red-500 mb-2 flex items-center gap-1">
                     <ShieldAlert className="h-3.5 w-3.5" />
-                    Sanções
+                    {t("sanctions")}
                   </p>
                   <div className="space-y-2">
                     {alert.entity.sanctions.map((s) => (
@@ -241,8 +267,8 @@ export default async function AlertDetailPage({
                           <span>{s.sanctionType ?? s.type}</span>
                         </div>
                         <p className="text-[11px] text-muted-foreground mt-1">
-                          {s.sanctioningOrg} · {s.startDate.toLocaleDateString("pt-BR")}
-                          {s.endDate && ` → ${s.endDate.toLocaleDateString("pt-BR")}`}
+                          {s.sanctioningOrg} · {formatDate(s.startDate, appLocale)}
+                          {s.endDate && ` → ${formatDate(s.endDate, appLocale)}`}
                         </p>
                       </div>
                     ))}
@@ -252,7 +278,7 @@ export default async function AlertDetailPage({
 
               {alert.entity.contracts.length > 0 && (
                 <div className="mt-3 pt-3 border-t">
-                  <p className="text-[11px] font-semibold text-muted-foreground mb-2">Contratos Recentes</p>
+                  <p className="text-[11px] font-semibold text-muted-foreground mb-2">{t("recentContracts")}</p>
                   <div className="space-y-1">
                     {alert.entity.contracts.slice(0, 5).map((c) => (
                       <Link
@@ -261,7 +287,7 @@ export default async function AlertDetailPage({
                         className="flex items-center justify-between text-sm py-1.5 hover:bg-muted/50 rounded px-2 -mx-2 transition-colors"
                       >
                         <span className="truncate max-w-[350px]">{stripHtml(c.objectDescription ?? c.description)}</span>
-                        <span className="text-xs font-medium tabular-nums ml-3">{formatCurrency(c.value.toString())}</span>
+                        <span className="text-xs font-medium tabular-nums ml-3">{formatCurrency(c.value.toString(), appLocale)}</span>
                       </Link>
                     ))}
                   </div>
@@ -276,48 +302,48 @@ export default async function AlertDetailPage({
             <div className="p-4 border-b flex items-center justify-between">
               <h2 className="text-base font-semibold flex items-center gap-2">
                 <FileText className="h-4 w-4" />
-                Licitação
+                {t("procurementHeading")}
               </h2>
               <Link
                 href={`/${locale}/procurements/${alert.procurement.id}`}
                 className="text-xs text-primary hover:underline"
               >
-                Ver completo →
+                {tCommon("viewAll")}
               </Link>
             </div>
             <div className="p-4">
               <p className="font-medium mb-2 text-sm">{stripHtml(alert.procurement.description)}</p>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
                 <div>
-                  <p className="text-[11px] text-muted-foreground">Órgão</p>
+                  <p className="text-[11px] text-muted-foreground">{tFields("organization")}</p>
                   <p className="text-sm font-medium">{alert.procurement.orgName}</p>
                 </div>
                 <div>
-                  <p className="text-[11px] text-muted-foreground">Modalidade</p>
+                  <p className="text-[11px] text-muted-foreground">{tFields("modality")}</p>
                   <p className="text-sm font-medium">{alert.procurement.modality}</p>
                 </div>
                 <div>
-                  <p className="text-[11px] text-muted-foreground">Valor Estimado</p>
-                  <p className="text-sm font-medium">{alert.procurement.estimatedValue ? formatCurrency(alert.procurement.estimatedValue.toString()) : "-"}</p>
+                  <p className="text-[11px] text-muted-foreground">{tFields("estimatedValue")}</p>
+                  <p className="text-sm font-medium">{alert.procurement.estimatedValue ? formatCurrency(alert.procurement.estimatedValue.toString(), appLocale) : "-"}</p>
                 </div>
                 <div>
-                  <p className="text-[11px] text-muted-foreground">Itens / Contratos</p>
-                  <p className="text-sm font-medium">{alert.procurement._count.items} itens · {alert.procurement._count.contracts} contratos</p>
+                  <p className="text-[11px] text-muted-foreground">{tFields("itemsAndContracts")}</p>
+                  <p className="text-sm font-medium">{tFields("itemsAndContractsValue", { items: alert.procurement._count.items, contracts: alert.procurement._count.contracts })}</p>
                 </div>
               </div>
 
               {alert.procurement.items.length > 0 && (
                 <div className="mt-3 pt-3 border-t">
-                  <p className="text-[11px] font-semibold text-muted-foreground mb-2">Itens ({alert.procurement._count.items})</p>
+                  <p className="text-[11px] font-semibold text-muted-foreground mb-2">{t("items")} ({alert.procurement._count.items})</p>
                   <div className="overflow-x-auto">
                     <table className="w-full text-sm">
                       <thead>
                         <tr className="text-[11px] text-muted-foreground border-b">
-                          <th className="text-left py-2 pr-3">#</th>
-                          <th className="text-left py-2 pr-3">Descrição</th>
-                          <th className="text-right py-2 pr-3">Qtd</th>
-                          <th className="text-right py-2 pr-3">Preço Unit.</th>
-                          <th className="text-right py-2">Total</th>
+                          <th className="text-left py-2 pr-3">{tTable("number")}</th>
+                          <th className="text-left py-2 pr-3">{tTable("description")}</th>
+                          <th className="text-right py-2 pr-3">{tTable("quantity")}</th>
+                          <th className="text-right py-2 pr-3">{tTable("unitPrice")}</th>
+                          <th className="text-right py-2">{tTable("total")}</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -325,9 +351,9 @@ export default async function AlertDetailPage({
                           <tr key={item.id} className="border-b last:border-0">
                             <td className="py-2 pr-3 text-muted-foreground">{item.itemNumber}</td>
                             <td className="py-2 pr-3 truncate max-w-[220px]">{stripHtml(item.description)}</td>
-                            <td className="py-2 pr-3 text-right tabular-nums">{Number(item.quantity).toLocaleString("pt-BR")}</td>
-                            <td className="py-2 pr-3 text-right tabular-nums">{formatCurrency(item.unitPrice.toString())}</td>
-                            <td className="py-2 text-right tabular-nums font-medium">{formatCurrency(item.totalPrice.toString())}</td>
+                            <td className="py-2 pr-3 text-right tabular-nums">{formatNumber(Number(item.quantity), appLocale)}</td>
+                            <td className="py-2 pr-3 text-right tabular-nums">{formatCurrency(item.unitPrice.toString(), appLocale)}</td>
+                            <td className="py-2 text-right tabular-nums font-medium">{formatCurrency(item.totalPrice.toString(), appLocale)}</td>
                           </tr>
                         ))}
                       </tbody>
@@ -338,7 +364,7 @@ export default async function AlertDetailPage({
 
               {alert.procurement.contracts.length > 0 && (
                 <div className="mt-3 pt-3 border-t">
-                  <p className="text-[11px] font-semibold text-muted-foreground mb-2">Contratos Vinculados ({alert.procurement._count.contracts})</p>
+                  <p className="text-[11px] font-semibold text-muted-foreground mb-2">{t("linkedContracts")} ({alert.procurement._count.contracts})</p>
                   <div className="space-y-1">
                     {alert.procurement.contracts.map((c) => (
                       <div key={c.id} className="flex items-center justify-between text-sm py-1.5">
@@ -355,7 +381,7 @@ export default async function AlertDetailPage({
                             </Link>
                           )}
                         </div>
-                        <span className="text-xs font-medium tabular-nums ml-3 flex-shrink-0">{formatCurrency(c.value.toString())}</span>
+                        <span className="text-xs font-medium tabular-nums ml-3 flex-shrink-0">{formatCurrency(c.value.toString(), appLocale)}</span>
                       </div>
                     ))}
                   </div>
@@ -365,10 +391,10 @@ export default async function AlertDetailPage({
           </div>
         )}
 
-        {alert.data && (
+        {alert.data ? (
           <div className="rounded-lg border bg-card overflow-hidden">
             <div className="p-4 border-b">
-              <h2 className="text-base font-semibold">Dados do Alerta</h2>
+              <h2 className="text-base font-semibold">{t("alertDataHeading")}</h2>
             </div>
             <div className="p-4">
               <pre className="text-xs bg-muted/50 p-4 rounded overflow-x-auto max-w-full">
@@ -376,7 +402,7 @@ export default async function AlertDetailPage({
               </pre>
             </div>
           </div>
-        )}
+        ) : null}
       </div>
     </PageLayout>
   );
