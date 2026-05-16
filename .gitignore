@@ -74,3 +74,6 @@ infrastructure/postgres/backups/**
 # Lock files (keep pnpm-lock.yaml, ignore others)
 package-lock.json
 yarn.lock
+
+# Local blob storage (dev fallback when BLOB_READ_WRITE_TOKEN is not set)
+.local-blob
