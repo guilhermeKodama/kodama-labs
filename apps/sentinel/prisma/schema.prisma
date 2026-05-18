@@ -142,7 +142,8 @@ model Procurement {
   linkProcesso             String?
   budgetSources            Json?
 
-  itemsEnrichedAt DateTime?
+  itemsEnrichedAt     DateTime?
+  documentsEnrichedAt DateTime?
 
   state       String?
   city        String?
@@ -154,14 +155,43 @@ model Procurement {
   contracts  Contract[]
   alerts     Alert[]
   analyses   AiAnalysis[]
+  documents  ProcurementDocument[]
 
   @@index([orgCnpj])
   @@index([state, city])
   @@index([publishedAt])
   @@index([riskScore])
   @@index([itemsEnrichedAt])
+  @@index([documentsEnrichedAt])
   @@index([publishedAt(sort: Desc), id])
   @@map("procurements")
+}
+
+model ProcurementDocument {
+  id             String     @id @default(cuid())
+  externalId     String     @unique
+  procurementId  String
+  source         DataSource
+  sequencial     Int
+  title          String
+  documentType   String
+  mimeType       String
+  sizeBytes      Int
+  contentHash    String?
+  sourceUrl      String?
+  storageBucket  String?
+  storageKey     String?
+  statusAtivo    Boolean    @default(true)
+  publishedAt    DateTime?
+  fetchedAt      DateTime   @default(now())
+  rawRecordId    String?
+
+  procurement Procurement @relation(fields: [procurementId], references: [id], onDelete: Cascade)
+
+  @@index([procurementId])
+  @@index([documentType])
+  @@index([fetchedAt])
+  @@map("procurement_documents")
 }
 
 model ProcurementItem {
