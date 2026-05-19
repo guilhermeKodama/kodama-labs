@@ -7,9 +7,14 @@ import { normalizeDescription } from "@capital/server/modules/credit-cards/utils
 // Allow up to 60 seconds for this function (Pro plan supports up to 300s)
 export const maxDuration = 60;
 
+// One chunk per invocation. Matches the Claude batch size in claude.ts so each
+// run makes a single Claude API call (~5-15s) and stays well under maxDuration.
+const CHUNK_SIZE = 50;
+
 /**
  * Cron endpoint that processes pending bill categorizations via Claude API.
- * Runs every 2 minutes on Vercel. Processes 1 bill per run to stay within limits.
+ * Runs every 2 minutes. Processes one chunk of transactions per run; the bill
+ * stays in "processing" until all its uncategorized transactions are done.
  */
 export async function GET(request: NextRequest) {
   // Verify the request is from Vercel Cron
@@ -21,8 +26,9 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    // Find ONE bill with pending categorization (process one at a time to stay within limits)
-    // Find bills that need categorization: "pending" or stuck in "processing" (from a previous timeout)
+    // Find the oldest bill that still has work to do. "processing" bills come
+    // first when they're older — that's the correct behavior since we want to
+    // finish in-progress bills before starting new ones.
     const pendingBill = await prisma.creditCardBill.findFirst({
       where: {
         categorizationStatus: { in: ["pending", "processing"] },
@@ -37,18 +43,8 @@ export async function GET(request: NextRequest) {
             business: { select: { userId: true } },
           },
         },
-        billTransactions: {
-          select: {
-            id: true,
-            description: true,
-            merchantName: true,
-            amount: true,
-            category: true,
-            isAutoCategorized: true,
-          },
-        },
       },
-      orderBy: { createdAt: "asc" }, // Process oldest first
+      orderBy: { createdAt: "asc" },
     });
 
     if (!pendingBill) {
@@ -59,20 +55,59 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    // Mark as processing
-    await prisma.creditCardBill.update({
-      where: { id: pendingBill.id },
-      data: { categorizationStatus: "processing" },
-    });
+    // Mark as processing (idempotent if already processing)
+    if (pendingBill.categorizationStatus !== "processing") {
+      await prisma.creditCardBill.update({
+        where: { id: pendingBill.id },
+        data: { categorizationStatus: "processing" },
+      });
+    }
 
     try {
-      // Get the user ID from the credit card's entity
       const userId =
         pendingBill.creditCard.personalAccount?.userId ??
         pendingBill.creditCard.business?.userId;
 
       if (!userId) {
         throw new Error("Could not determine user for bill");
+      }
+
+      // Pull the next chunk of uncategorized transactions for this bill.
+      // Progress marker is `category === "Uncategorized"`: once a transaction
+      // gets a real category (manual or AI), it falls out of this query, so
+      // subsequent cron runs naturally pick up the next chunk.
+      const chunk = await prisma.billTransaction.findMany({
+        where: {
+          billId: pendingBill.id,
+          category: "Uncategorized",
+        },
+        select: {
+          id: true,
+          description: true,
+          merchantName: true,
+          amount: true,
+        },
+        orderBy: { createdAt: "asc" },
+        take: CHUNK_SIZE,
+      });
+
+      if (chunk.length === 0) {
+        // Nothing left to categorize for this bill — mark completed.
+        await prisma.creditCardBill.update({
+          where: { id: pendingBill.id },
+          data: { categorizationStatus: "completed" },
+        });
+        return NextResponse.json({
+          success: true,
+          message: `Bill ${pendingBill.id} already fully categorized`,
+          processedAt: new Date().toISOString(),
+          result: {
+            billId: pendingBill.id,
+            processedInThisRun: 0,
+            remaining: 0,
+            status: "completed",
+          },
+        });
       }
 
       // Fetch user's expense categories
@@ -82,93 +117,95 @@ export async function GET(request: NextRequest) {
       });
       const categoryNames = [...new Set(categories.map((c) => c.name))];
 
-      // Filter out transactions that already have manual categories
-      // (preserved from a previous bill upload or manually edited by the user)
-      const transactionsToCategorizе = pendingBill.billTransactions.filter(
-        (t) => t.category === "Uncategorized" || t.isAutoCategorized
+      const txInput = chunk.map((t, i) => ({
+        index: i,
+        description: t.description,
+        merchantName: t.merchantName ?? undefined,
+        amount: t.amount,
+      }));
+
+      const categorizations = await categorizeBillTransactions(
+        txInput,
+        categoryNames
       );
 
-      if (transactionsToCategorizе.length > 0) {
-        // Prepare transactions for categorization
-        const txInput = transactionsToCategorizе.map((t, i) => ({
-          index: i,
-          description: t.description,
-          merchantName: t.merchantName ?? undefined,
-          amount: t.amount,
-        }));
+      const validCategorizations = categorizations.filter(
+        (cat) => chunk[cat.index] !== undefined
+      );
 
-        // Call Claude API
-        const categorizations = await categorizeBillTransactions(
-          txInput,
-          categoryNames
-        );
-
-        // Batch update only the transactions that need categorization
-        const validCategorizations = categorizations.filter((cat) => {
-          const tx = transactionsToCategorizе[cat.index];
-          return tx !== undefined;
-        });
-
-        await prisma.$transaction(
-          validCategorizations.map((cat) => {
-            const tx = transactionsToCategorizе[cat.index];
-            return prisma.billTransaction.update({
-              where: { id: tx.id },
-              data: {
-                category: cat.category,
-                isAutoCategorized: true,
-              },
-            });
-          })
-        );
-
-        // Save learned mappings (AI won't overwrite manual ones)
-        for (const cat of validCategorizations) {
-          const tx = transactionsToCategorizе[cat.index];
-          if (cat.category === "Other") continue;
-          const normalized = normalizeDescription(tx.description);
-          const existing = await prisma.merchantCategoryMapping.findUnique({
-            where: {
-              userId_normalizedDescription: {
-                userId,
-                normalizedDescription: normalized,
-              },
+      await prisma.$transaction(
+        validCategorizations.map((cat) => {
+          const tx = chunk[cat.index];
+          return prisma.billTransaction.update({
+            where: { id: tx.id },
+            data: {
+              category: cat.category,
+              isAutoCategorized: true,
             },
-            select: { source: true },
           });
-          if (existing?.source === "manual") continue;
-          await prisma.merchantCategoryMapping.upsert({
-            where: {
-              userId_normalizedDescription: {
-                userId,
-                normalizedDescription: normalized,
-              },
-            },
-            update: { category: cat.category },
-            create: {
+        })
+      );
+
+      // Save learned mappings (AI won't overwrite manual ones)
+      for (const cat of validCategorizations) {
+        const tx = chunk[cat.index];
+        if (cat.category === "Other") continue;
+        const normalized = normalizeDescription(tx.description);
+        const existing = await prisma.merchantCategoryMapping.findUnique({
+          where: {
+            userId_normalizedDescription: {
               userId,
               normalizedDescription: normalized,
-              category: cat.category,
-              source: "ai",
             },
-          });
-        }
+          },
+          select: { source: true },
+        });
+        if (existing?.source === "manual") continue;
+        await prisma.merchantCategoryMapping.upsert({
+          where: {
+            userId_normalizedDescription: {
+              userId,
+              normalizedDescription: normalized,
+            },
+          },
+          update: { category: cat.category },
+          create: {
+            userId,
+            normalizedDescription: normalized,
+            category: cat.category,
+            source: "ai",
+          },
+        });
       }
 
-      // Mark as completed
-      await prisma.creditCardBill.update({
-        where: { id: pendingBill.id },
-        data: { categorizationStatus: "completed" },
+      // Did we exhaust the bill? If yes, mark completed; otherwise leave it as
+      // "processing" so the next cron run picks up the next chunk.
+      const remaining = await prisma.billTransaction.count({
+        where: {
+          billId: pendingBill.id,
+          category: "Uncategorized",
+        },
       });
+
+      const isDone = remaining === 0;
+      if (isDone) {
+        await prisma.creditCardBill.update({
+          where: { id: pendingBill.id },
+          data: { categorizationStatus: "completed" },
+        });
+      }
 
       return NextResponse.json({
         success: true,
-        message: `Categorized bill ${pendingBill.id}`,
+        message: isDone
+          ? `Finished categorizing bill ${pendingBill.id}`
+          : `Categorized chunk of bill ${pendingBill.id}`,
         processedAt: new Date().toISOString(),
         result: {
           billId: pendingBill.id,
-          transactionCount: pendingBill.billTransactions.length,
-          status: "completed",
+          processedInThisRun: chunk.length,
+          remaining,
+          status: isDone ? "completed" : "processing",
         },
       });
     } catch (error) {
@@ -187,7 +224,6 @@ export async function GET(request: NextRequest) {
         error: error instanceof Error ? error.message : "Unknown error",
         result: {
           billId: pendingBill.id,
-          transactionCount: pendingBill.billTransactions.length,
           status: "failed",
         },
       });
