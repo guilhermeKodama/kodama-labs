@@ -596,6 +596,30 @@ async function persistEvaluation(
   }
 }
 
+/**
+ * Decides whether a contextual (LLM-derived) overpricing alert should fire,
+ * given the actual unit price and Claude's estimated range. Estimates from
+ * the evaluator are always in UNIT-price terms (see the prompt in
+ * evaluate-overpricing.ts), so the comparison must be unit-vs-unit. This
+ * function is exported so the decision logic is unit-testable on its own.
+ */
+export function evaluateContextualAlert(
+  unitPrice: number,
+  estimate: { minPrice: number; maxPrice: number; expectedPrice: number },
+): { skip: true; reason: string; deviation: number } | { skip: false; deviation: number } {
+  const expected = estimate.expectedPrice;
+  const maxExpected = estimate.maxPrice;
+  const deviation = expected > 0 ? ((unitPrice - expected) / expected) * 100 : 0;
+  // Skip if unit price is at or below the estimated max, or if the deviation
+  // above the expected midpoint isn't materially larger than the LOW/MEDIUM
+  // band (≤30%). Prevents the 85148%-style false positives that occur when
+  // the LLM accidentally returns a total-priced estimate.
+  if (unitPrice <= maxExpected || deviation <= 30) {
+    return { skip: true, reason: "unit_price_within_or_near_range", deviation };
+  }
+  return { skip: false, deviation };
+}
+
 async function createAlertFromVerdict(
   input: EvaluateInput,
   kind: ItemKind,
@@ -613,19 +637,32 @@ async function createAlertFromVerdict(
   let params: Record<string, AlertI18nParam>;
 
   if (hasDerivedEstimate && verdict.derivedEstimate) {
+    const decision = evaluateContextualAlert(input.unitPrice, verdict.derivedEstimate);
+    if (decision.skip) {
+      console.warn(
+        "[analyze-overpricing] skipping contextual alert — unit price within/near estimated range",
+        {
+          itemId: input.itemId,
+          unitPrice: input.unitPrice,
+          estimate: verdict.derivedEstimate,
+          deviation: decision.deviation,
+          reason: decision.reason,
+        },
+      );
+      return;
+    }
+
     titleKey = "alerts.templates.overpricingContextual.title";
     descriptionKey = "alerts.templates.overpricingContextual.description";
-    const total = input.totalPrice;
-    const expected = verdict.derivedEstimate.expectedPrice;
-    const deviation = expected > 0 ? ((total - expected) / expected) * 100 : 0;
     params = {
       itemDescription: itemDescPtBr,
       orgName: input.orgName,
-      totalPrice: `R$${total.toFixed(2)}`,
-      expectedPrice: `R$${expected.toFixed(2)}`,
+      unitPrice: `R$${input.unitPrice.toFixed(2)}`,
+      totalPrice: `R$${input.totalPrice.toFixed(2)}`,
+      expectedPrice: `R$${verdict.derivedEstimate.expectedPrice.toFixed(2)}`,
       minPrice: `R$${verdict.derivedEstimate.minPrice.toFixed(2)}`,
       maxPrice: `R$${verdict.derivedEstimate.maxPrice.toFixed(2)}`,
-      deviationPct: deviation.toFixed(0),
+      deviationPct: decision.deviation.toFixed(0),
       // Raw code — translated per locale on the frontend via CODE_PARAM_GROUPS.
       kind,
     };
@@ -650,6 +687,7 @@ async function createAlertFromVerdict(
     params = {
       itemDescription: itemDescPtBr,
       orgName: input.orgName,
+      unitPrice: `R$${input.unitPrice.toFixed(2)}`,
       totalPrice: `R$${input.totalPrice.toFixed(2)}`,
       expectedPrice: "—",
       minPrice: "—",

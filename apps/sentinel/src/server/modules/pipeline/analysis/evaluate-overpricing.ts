@@ -99,7 +99,7 @@ async function findSimilarContractsContext(
       id: true,
       orgName: true,
       items: {
-        where: { totalPrice: { gt: 0 } },
+        where: { unitPrice: { gt: 0 } },
         select: { description: true, unitPrice: true, totalPrice: true },
         take: 3,
       },
@@ -108,18 +108,21 @@ async function findSimilarContractsContext(
     orderBy: { publishedAt: "desc" },
   });
 
+  // Aggregate UNIT prices (not totals). Unit prices are directly comparable
+  // across procurements regardless of quantity, which is what the evaluator
+  // and downstream alert calc both reason in.
   const examples: { description: string; unitPrice: number; totalPrice: number; orgName: string }[] = [];
-  const totals: number[] = [];
+  const units: number[] = [];
   for (const p of procurements) {
     for (const it of p.items) {
-      const total = Number(it.totalPrice);
-      if (total > 0) {
-        totals.push(total);
+      const unit = Number(it.unitPrice);
+      if (unit > 0) {
+        units.push(unit);
         if (examples.length < 6) {
           examples.push({
             description: it.description,
-            unitPrice: Number(it.unitPrice),
-            totalPrice: total,
+            unitPrice: unit,
+            totalPrice: Number(it.totalPrice),
             orgName: p.orgName,
           });
         }
@@ -127,17 +130,17 @@ async function findSimilarContractsContext(
     }
   }
 
-  if (totals.length === 0) {
+  if (units.length === 0) {
     return { count: 0, median: null, min: null, max: null, examples };
   }
 
-  totals.sort((a, b) => a - b);
-  const median = totals[Math.floor(totals.length / 2)]!;
+  units.sort((a, b) => a - b);
+  const median = units[Math.floor(units.length / 2)]!;
   return {
-    count: totals.length,
+    count: units.length,
     median,
-    min: totals[0]!,
-    max: totals[totals.length - 1]!,
+    min: units[0]!,
+    max: units[units.length - 1]!,
     examples,
   };
 }
@@ -255,9 +258,9 @@ function buildPrompt(
     })),
     similarContracts: {
       count: similar.count,
-      medianTotal: similar.median !== null ? formatBRL(similar.median) : null,
-      minTotal: similar.min !== null ? formatBRL(similar.min) : null,
-      maxTotal: similar.max !== null ? formatBRL(similar.max) : null,
+      medianUnit: similar.median !== null ? formatBRL(similar.median) : null,
+      minUnit: similar.min !== null ? formatBRL(similar.min) : null,
+      maxUnit: similar.max !== null ? formatBRL(similar.max) : null,
       examples: similar.examples.map((e) => ({
         description: e.description.slice(0, 80),
         unitPrice: formatBRL(e.unitPrice),
@@ -287,15 +290,18 @@ ${JSON.stringify(ctx, null, 2)}
 ## Enriquecimento de descrição
 Se o item tem descrição genérica ("PRESTAÇÃO DE SERVIÇO", "MATERIAL DIVERSO", etc.) mas o contexto da licitação esclarece (equipamento, escopo), produza um ENRICHED_ITEM_PTBR e ENRICHED_ITEM_EN (até 100 chars cada) combinando ambos.
 
+## Unidade dos valores (CRÍTICO)
+Todos os valores ESTIMATE_MIN, ESTIMATE_MAX, ESTIMATE_EXPECTED devem ser em **preço unitário** (R$ por unidade), nunca o valor total do item. Os agregados em \`similarContracts\` (medianUnit/minUnit/maxUnit) também são preços unitários. Compare seu raciocínio contra \`item.unitPrice\` (= ${formatBRL(input.unitPrice)}), NÃO contra \`item.totalPrice\`. Se sua faixa estimada parecer próxima de \`item.totalPrice\` e muito acima de \`item.unitPrice\`, você está confundindo unidade — reavalie em termos por unidade.
+
 ## Severidade
-- CRITICAL: desvio > 100% acima da faixa esperada COM base sólida
-- HIGH: 50-100% acima
-- MEDIUM: 30-50% acima
+- CRITICAL: unitPrice > 100% acima da faixa esperada COM base sólida
+- HIGH: 50-100% acima do ESTIMATE_MAX
+- MEDIUM: 30-50% acima do ESTIMATE_MAX
 - LOW: dentro de 30% mas com sinais de irregularidade contextual
 Só atribua severidade quando decision=create.
 
 ## Faixa derivada
-Quando você for capaz de estimar uma faixa esperada (kind=SERVICE ou GENERIC), preencha ESTIMATE_MIN, ESTIMATE_MAX, ESTIMATE_EXPECTED em reais (apenas o número, sem R$) e ESTIMATE_SOURCES (lista de fontes do seu raciocínio, ex: LLM_KNOWLEDGE,PNCP_SIMILAR_CONTRACTS). Se não consegue estimar com confiança, deixe vazios e decida=suppress.
+Quando você for capaz de estimar uma faixa esperada (kind=SERVICE ou GENERIC), preencha ESTIMATE_MIN, ESTIMATE_MAX, ESTIMATE_EXPECTED **em preço unitário** (apenas o número em reais, sem R$, sem multiplicar pela quantidade) e ESTIMATE_SOURCES (lista de fontes do seu raciocínio, ex: LLM_KNOWLEDGE,PNCP_SIMILAR_CONTRACTS). Se não consegue estimar com confiança, deixe vazios e decida=suppress.
 
 ## Formato de resposta (obrigatório, exatamente assim)
 DECISION: create|suppress
@@ -321,13 +327,13 @@ Este item é um bem físico, possivelmente identificável. Use as análises esta
     return `## Diretriz para SERVIÇO
 Este item é um serviço. Não há catálogo público de preços para serviços, e estatísticas literais são ruim. Use:
 - O escopo descrito na licitação (equipamento, complexidade, quantidade, unidade)
-- Contratos PNCP similares (similarContracts) na mesma região
+- Contratos PNCP similares (similarContracts) na mesma região — agregados em preço unitário
 - Seu conhecimento de mercado para o tipo de serviço
 
-Derive uma faixa esperada (ESTIMATE_MIN..ESTIMATE_MAX). **CREATE** apenas se o totalPrice está acima do ESTIMATE_MAX por margem clara (>30%). **SUPPRESS** se não consegue derivar faixa com confiança razoável.`;
+Derive uma faixa esperada **em preço unitário** (ESTIMATE_MIN..ESTIMATE_MAX). **CREATE** apenas se o \`unitPrice\` está acima do ESTIMATE_MAX por margem clara (>30%). **SUPPRESS** se não consegue derivar faixa com confiança razoável.`;
   }
   return `## Diretriz para GENERIC
-A descrição do item é vaga ("PRESTAÇÃO DE SERVIÇO", "OUTROS", etc.). Só faz sentido analisar se a licitação dá contexto rico (equipamento, escopo). Mesmo com contexto, seja conservador. **SUPPRESS** é o default. **CREATE** apenas se você consegue derivar uma faixa confiável E o totalPrice está muito acima (>50% do ESTIMATE_MAX). Para genéricos, nunca atribua CRITICAL — máximo HIGH.`;
+A descrição do item é vaga ("PRESTAÇÃO DE SERVIÇO", "OUTROS", etc.). Só faz sentido analisar se a licitação dá contexto rico (equipamento, escopo). Mesmo com contexto, seja conservador. **SUPPRESS** é o default. **CREATE** apenas se você consegue derivar uma faixa confiável (em preço unitário) E o \`unitPrice\` está muito acima (>50% do ESTIMATE_MAX). Para genéricos, nunca atribua CRITICAL — máximo HIGH.`;
 }
 
 function parseResponse(text: string): {

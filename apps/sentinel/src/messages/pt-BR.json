@@ -164,7 +164,7 @@
       },
       "overpricingContextual": {
         "title": "Preço acima da faixa esperada para o escopo: {deviationPct}% acima",
-        "description": "Item \"{itemDescription}\" ({kind}) na licitação de {orgName} com valor total {totalPrice} está {deviationPct}% acima do esperado ({expectedPrice}). Faixa estimada: {minPrice} – {maxPrice}, com base no escopo descrito e em contratos similares."
+        "description": "Item \"{itemDescription}\" ({kind}) na licitação de {orgName} com preço unitário {unitPrice} está {deviationPct}% acima do esperado ({expectedPrice}). Faixa estimada: {minPrice} – {maxPrice} por unidade. Valor total do item: {totalPrice}. Baseado no escopo descrito e em contratos similares."
       },
       "politicianShareholder": {
         "title": "Político consta como sócio de fornecedor do governo — vínculo a revisar",
