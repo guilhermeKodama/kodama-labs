@@ -164,7 +164,7 @@
       },
       "overpricingContextual": {
         "title": "Price above the expected range for the scope: {deviationPct}% above",
-        "description": "Item \"{itemDescription}\" ({kind}) in procurement of {orgName} with total value {totalPrice} is {deviationPct}% above expected ({expectedPrice}). Estimated range: {minPrice} – {maxPrice}, based on the described scope and similar contracts."
+        "description": "Item \"{itemDescription}\" ({kind}) in procurement of {orgName} with unit price {unitPrice} is {deviationPct}% above expected ({expectedPrice}). Estimated range: {minPrice} – {maxPrice} per unit. Item total value: {totalPrice}. Based on the described scope and similar contracts."
       },
       "politicianShareholder": {
         "title": "Politician listed as shareholder of a government supplier — link worth reviewing",
