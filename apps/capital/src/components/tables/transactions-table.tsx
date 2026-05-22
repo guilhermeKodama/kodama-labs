@@ -39,6 +39,7 @@ import {
 import { cn } from '@/lib/utils';
 import { formatCurrency, formatDate } from '@/lib/utils/format';
 import type { Transaction, TransactionType } from '@/types';
+import { AttachmentBadge } from '@/components/attachments/attachment-badge';
 
 interface TransactionsTableProps {
   transactions: Transaction[];
@@ -230,7 +231,14 @@ export function TransactionsTable({
                     {formatDate(transaction.date)}
                   </TableCell>
                   <TableCell className="font-medium text-white">
-                    {transaction.description}
+                    <div className="flex items-center gap-2">
+                      <span>{transaction.description}</span>
+                      <AttachmentBadge
+                        ownerType="transaction"
+                        ownerId={transaction.id}
+                        onClick={onAttach ? () => onAttach(transaction) : undefined}
+                      />
+                    </div>
                   </TableCell>
                   <TableCell>
                     <Badge
