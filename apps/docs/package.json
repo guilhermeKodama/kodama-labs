@@ -7,7 +7,7 @@
     "dev": "next dev --port 3001",
     "start": "next start",
     "lint": "eslint --max-warnings 0",
-    "typecheck": "fumadocs-mdx && tsc --noEmit",
+    "typecheck": "fumadocs-mdx && next typegen && tsc --noEmit",
     "postinstall": "fumadocs-mdx"
   },
   "dependencies": {

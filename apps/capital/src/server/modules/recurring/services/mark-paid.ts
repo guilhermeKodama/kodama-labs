@@ -51,10 +51,10 @@ export async function markRecurringAsPaid(
   const transactionDate = toNoonUTC(recurring.nextDueDate);
   const nextDueDate = getNextOccurrence(transactionDate, recurring.frequency);
 
-  // Use a transaction to ensure both operations succeed or fail together
-  const [transaction, updatedRecurring] = await db.$transaction([
-    // Create the transaction
-    db.transaction.create({
+  // Use a transaction so the new Transaction + attachment carry-over + recurring
+  // advancement either all commit or none do.
+  const { transaction, updatedRecurring } = await db.$transaction(async (tx) => {
+    const created = await tx.transaction.create({
       data: {
         entityType: recurring.entityType,
         type: recurring.type,
@@ -68,16 +68,25 @@ export async function markRecurringAsPaid(
         businessId: recurring.businessId,
         personalAccountId: recurring.personalAccountId,
       },
-    }),
-    // Update the recurring transaction
-    db.recurringTransaction.update({
+    });
+
+    // Move any pending BILL attachments from the recurring template onto the
+    // freshly materialized transaction so the next iteration starts clean.
+    await tx.attachment.updateMany({
+      where: { recurringTransactionId: recurring.id, kind: "BILL" },
+      data: { recurringTransactionId: null, transactionId: created.id },
+    });
+
+    const updated = await tx.recurringTransaction.update({
       where: { id },
       data: {
         nextDueDate,
         lastGeneratedDate: now,
       },
-    }),
-  ]);
+    });
+
+    return { transaction: created, updatedRecurring: updated };
+  });
 
   return { transaction, recurring: updatedRecurring };
 }
