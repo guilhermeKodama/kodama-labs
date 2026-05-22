@@ -2,6 +2,7 @@
 
 import { DataTable, type ColumnDef } from "@/components/data-table";
 import { formatCurrency, formatCnpj, stripHtml } from "@/lib/utils";
+import { FileText } from "lucide-react";
 import Link from "next/link";
 
 interface ProcurementRow {
@@ -19,6 +20,7 @@ interface ProcurementRow {
   itemCount: number;
   alertCount: number;
   contractCount: number;
+  documentCount: number;
 }
 
 export function ProcurementsTable({
@@ -104,6 +106,22 @@ export function ProcurementsTable({
       accessorFn: (row) => row.itemCount,
       align: "center",
       cell: (row) => <span className="text-muted-foreground text-xs">{row.itemCount}</span>,
+    },
+    {
+      id: "documentCount",
+      header: "Docs",
+      width: "w-[5%]",
+      accessorFn: (row) => row.documentCount,
+      align: "center",
+      cell: (row) =>
+        row.documentCount > 0 ? (
+          <span className="inline-flex items-center gap-1 text-xs text-primary">
+            <FileText className="h-3 w-3" />
+            {row.documentCount}
+          </span>
+        ) : (
+          <span className="text-muted-foreground text-xs">-</span>
+        ),
     },
     {
       id: "status",

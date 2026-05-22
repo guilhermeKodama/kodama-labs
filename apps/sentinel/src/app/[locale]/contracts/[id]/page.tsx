@@ -4,7 +4,7 @@ import { notFound } from "next/navigation";
 import { PageLayout } from "@/components/page-layout";
 import { formatCurrency, formatCnpj, stripHtml } from "@/lib/utils";
 import Link from "next/link";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Download, FileText } from "lucide-react";
 
 export default async function ContractDetailPage({
   params,
@@ -26,6 +26,7 @@ export default async function ContractDetailPage({
       },
       procurement: { select: { id: true, description: true, orgName: true, modality: true } },
       alerts: true,
+      documents: { orderBy: [{ sequencial: "asc" }] },
     },
   });
 
@@ -136,6 +137,58 @@ export default async function ContractDetailPage({
             )}
           </div>
         </div>
+
+        {contract.documents.length > 0 && (
+          <div className="rounded-lg border bg-card mb-6 overflow-hidden">
+            <div className="p-4 border-b">
+              <h2 className="text-base font-semibold">
+                Documentos do Contrato ({contract.documents.length})
+              </h2>
+            </div>
+            <div className="divide-y">
+              {contract.documents.map((doc) => {
+                const sizeMb = doc.sizeBytes / (1024 * 1024);
+                const sizeLabel =
+                  sizeMb >= 1
+                    ? `${sizeMb.toFixed(1)} MB`
+                    : `${Math.max(1, Math.round(doc.sizeBytes / 1024))} KB`;
+                const downloadable = !!doc.storageKey || !!doc.sourceUrl;
+                return (
+                  <div
+                    key={doc.id}
+                    className="flex items-center gap-3 p-3 hover:bg-muted/30"
+                  >
+                    <FileText className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium truncate">{doc.title}</p>
+                      <p className="text-[11px] text-muted-foreground">
+                        {doc.documentType} &middot; {sizeLabel}
+                        {doc.mimeType && doc.mimeType !== "application/pdf"
+                          ? ` · ${doc.mimeType}`
+                          : ""}
+                      </p>
+                    </div>
+                    {downloadable ? (
+                      <a
+                        href={`/api/contracts/${contract.id}/documents/${doc.id}/download`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+                      >
+                        <Download className="h-3.5 w-3.5" />
+                        Baixar
+                      </a>
+                    ) : (
+                      <span className="text-xs text-muted-foreground">
+                        indisponível
+                      </span>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
         {contract.entity?.sanctions && contract.entity.sanctions.length > 0 && (
           <div className="rounded-lg border border-red-500/30 bg-card mb-6 overflow-hidden">
