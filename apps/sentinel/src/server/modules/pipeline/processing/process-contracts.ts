@@ -142,6 +142,8 @@ export async function processContracts() {
               ? data.niFornecedorSubContratado.replace(/\D/g, "")
               : null,
             subcontractorName: data.nomeFornecedorSubContratado ?? null,
+            year: data.anoContrato ?? null,
+            sequencial: data.sequencialContrato ?? null,
             description,
             rawRecordId: raw.id,
           },
@@ -156,6 +158,8 @@ export async function processContracts() {
             accumulatedValue: data.valorAcumulado ?? null,
             endDate: data.dataVigenciaFim ? new Date(data.dataVigenciaFim) : null,
             amendmentCount: data.numeroRetificacao ?? 0,
+            year: data.anoContrato ?? undefined,
+            sequencial: data.sequencialContrato ?? undefined,
             description,
           },
         });

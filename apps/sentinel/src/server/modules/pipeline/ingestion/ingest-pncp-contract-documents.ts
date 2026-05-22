@@ -4,14 +4,14 @@ import { Prisma } from "@/generated/prisma";
 import { runJob } from "@sentinel/server/lib/job-runner";
 import { BudgetTracker } from "@sentinel/server/lib/budget-tracker";
 import {
-  fetchProcurementDocuments,
+  fetchContractDocuments,
   downloadProcurementDocument,
   type PncpDocument,
 } from "@/lib/gov-apis/pncp";
 import {
   isBlobConfigured,
   putObject,
-  buildDocumentStoragePath,
+  buildContractDocumentStoragePath,
 } from "@/lib/storage/blob";
 
 const BATCH_SIZE = 30;
@@ -40,7 +40,6 @@ function sniffMimeFromMagic(buf: Buffer, fallback: string): string {
       return "application/pdf";
     }
     if (buf[0] === 0x50 && buf[1] === 0x4b) {
-      // ZIP magic — could be .zip, .docx, .xlsx
       if (fallback.includes("wordprocessingml")) return fallback;
       if (fallback.includes("spreadsheetml")) return fallback;
       return fallback || "application/zip";
@@ -74,20 +73,22 @@ async function streamToBuffer(
   return { buffer: Buffer.concat(chunks), truncated: false };
 }
 
-export async function ingestPncpDocuments() {
-  return runJob("ingest-pncp-documents", "ingestion", async () => {
+export async function ingestPncpContractDocuments() {
+  return runJob("ingest-pncp-contract-documents", "ingestion", async () => {
     if (!isBlobConfigured()) {
       console.warn(
-        "[ingest-pncp-documents] Vercel Blob not configured (BLOB_READ_WRITE_TOKEN missing); skipping",
+        "[ingest-pncp-contract-documents] Vercel Blob not configured (BLOB_READ_WRITE_TOKEN missing); skipping",
       );
       return { recordsIn: 0, recordsOut: 0 };
     }
 
-    const procurements = await prisma.procurement.findMany({
+    const contracts = await prisma.contract.findMany({
       where: {
         documentsEnrichedAt: null,
-        source: "PNCP",
+        year: { not: null },
         sequencial: { not: null },
+        orgCnpj: { not: null },
+        rawRecordId: { not: null },
       },
       select: {
         id: true,
@@ -97,7 +98,7 @@ export async function ingestPncpDocuments() {
         sequencial: true,
       },
       take: BATCH_SIZE,
-      orderBy: { processedAt: "asc" },
+      orderBy: { startDate: "desc" },
     });
 
     let totalIn = 0;
@@ -107,38 +108,38 @@ export async function ingestPncpDocuments() {
       docsDownloaded: 0,
       docsSkippedDup: 0,
       docsSkippedSize: 0,
-      docsSkippedExisting: 0,
       bytesUploaded: 0,
       errors: 0,
     };
 
     const budget = new BudgetTracker(BUDGET_MS);
 
-    for (const proc of procurements) {
+    for (const contract of contracts) {
       if (budget.exceeded()) {
         console.log(
-          `[ingest-pncp-documents] Budget exhausted; ${totalOut} records saved`,
+          `[ingest-pncp-contract-documents] Budget exhausted; ${totalOut} records saved`,
         );
         break;
       }
-      if (!proc.sequencial || !proc.orgCnpj) continue;
+      if (!contract.sequencial || !contract.year || !contract.orgCnpj) continue;
+
+      const orgCnpjDigits = contract.orgCnpj.replace(/\D/g, "");
 
       let documents: PncpDocument[] = [];
       try {
-        documents = await fetchProcurementDocuments(
-          proc.orgCnpj,
-          proc.year,
-          proc.sequencial,
+        documents = await fetchContractDocuments(
+          orgCnpjDigits,
+          contract.year,
+          contract.sequencial,
         );
         counters.listsFetched++;
         totalIn += documents.length;
       } catch (err) {
         counters.errors++;
         console.warn(
-          `[ingest-pncp-documents] Failed to list documents for ${proc.externalId}:`,
+          `[ingest-pncp-contract-documents] Failed to list documents for ${contract.externalId}:`,
           err instanceof Error ? err.message : err,
         );
-        // Leave documentsEnrichedAt NULL so it retries later
         await sleep(DELAY_MS);
         continue;
       }
@@ -151,10 +152,10 @@ export async function ingestPncpDocuments() {
           continue;
         }
 
-        const externalId = `${proc.externalId}-doc-${doc.sequencialDocumento}`;
+        const externalId = `${contract.externalId}-doc-${doc.sequencialDocumento}`;
 
         try {
-          const existing = await prisma.procurementDocument.findUnique({
+          const existing = await prisma.contractDocument.findUnique({
             where: { externalId },
             select: { id: true, contentHash: true, storageKey: true },
           });
@@ -166,14 +167,12 @@ export async function ingestPncpDocuments() {
             download.contentLength > MAX_FILE_SIZE_BYTES
           ) {
             counters.docsSkippedSize++;
-            // Cancel the body
             await download.body.cancel().catch(() => {});
-            // Still record metadata so we know it exists
-            await prisma.procurementDocument.upsert({
+            await prisma.contractDocument.upsert({
               where: { externalId },
               create: {
                 externalId,
-                procurementId: proc.id,
+                contractId: contract.id,
                 source: "PNCP",
                 sequencial: doc.sequencialDocumento,
                 title: doc.titulo,
@@ -210,7 +209,7 @@ export async function ingestPncpDocuments() {
 
           if (existing?.contentHash === sha256 && existing.storageKey) {
             counters.docsSkippedDup++;
-            await prisma.procurementDocument.update({
+            await prisma.contractDocument.update({
               where: { externalId },
               data: {
                 title: doc.titulo,
@@ -224,8 +223,8 @@ export async function ingestPncpDocuments() {
 
           const detectedMime = sniffMimeFromMagic(buffer, download.contentType);
           const ext = pickExtension(detectedMime, doc.titulo);
-          const pathname = buildDocumentStoragePath(
-            proc.id,
+          const pathname = buildContractDocumentStoragePath(
+            contract.id,
             doc.sequencialDocumento,
             doc.titulo,
             ext,
@@ -239,18 +238,18 @@ export async function ingestPncpDocuments() {
             where: {
               source_recordType_externalId: {
                 source: "PNCP",
-                recordType: "procurement_document",
+                recordType: "contract_document",
                 externalId,
               },
             },
             create: {
               source: "PNCP",
-              recordType: "procurement_document",
+              recordType: "contract_document",
               externalId,
               data: {
                 ...doc,
-                _procurementId: proc.id,
-                _procurementExternalId: proc.externalId,
+                _contractId: contract.id,
+                _contractExternalId: contract.externalId,
                 _blobUrl: uploaded.url,
                 _blobPathname: uploaded.pathname,
                 _contentHash: sha256,
@@ -261,8 +260,8 @@ export async function ingestPncpDocuments() {
             update: {
               data: {
                 ...doc,
-                _procurementId: proc.id,
-                _procurementExternalId: proc.externalId,
+                _contractId: contract.id,
+                _contractExternalId: contract.externalId,
                 _blobUrl: uploaded.url,
                 _blobPathname: uploaded.pathname,
                 _contentHash: sha256,
@@ -274,11 +273,11 @@ export async function ingestPncpDocuments() {
             },
           });
 
-          await prisma.procurementDocument.upsert({
+          await prisma.contractDocument.upsert({
             where: { externalId },
             create: {
               externalId,
-              procurementId: proc.id,
+              contractId: contract.id,
               source: "PNCP",
               sequencial: doc.sequencialDocumento,
               title: doc.titulo,
@@ -313,7 +312,7 @@ export async function ingestPncpDocuments() {
         } catch (err) {
           counters.errors++;
           console.warn(
-            `[ingest-pncp-documents] Failed to download document ${externalId}:`,
+            `[ingest-pncp-contract-documents] Failed to download document ${externalId}:`,
             err instanceof Error ? err.message : err,
           );
         }
@@ -321,8 +320,8 @@ export async function ingestPncpDocuments() {
         await sleep(DELAY_MS);
       }
 
-      await prisma.procurement.update({
-        where: { id: proc.id },
+      await prisma.contract.update({
+        where: { id: contract.id },
         data: { documentsEnrichedAt: new Date() },
       });
 
@@ -330,7 +329,7 @@ export async function ingestPncpDocuments() {
     }
 
     console.log(
-      `[ingest-pncp-documents] counters: ${JSON.stringify(counters)}`,
+      `[ingest-pncp-contract-documents] counters: ${JSON.stringify(counters)}`,
     );
 
     return {
@@ -340,4 +339,3 @@ export async function ingestPncpDocuments() {
     };
   });
 }
-
