@@ -38,6 +38,7 @@ import { cn } from '@/lib/utils';
 import { formatCurrency } from '@/lib/utils/format';
 import type { RecurringTransaction, TransactionType } from '@/types';
 import { useSettingsStore, useBusinessStore } from '@/lib/store';
+import { AttachmentBadge } from '@/components/attachments/attachment-badge';
 
 interface RecurringTableProps {
   recurringTransactions: RecurringTransaction[];
@@ -185,7 +186,14 @@ export function RecurringTable({
                       <AlertCircle className="h-4 w-4 text-red-400 flex-shrink-0" />
                     )}
                     <div>
-                      {recurring.description}
+                      <div className="flex items-center gap-2">
+                        <span>{recurring.description}</span>
+                        <AttachmentBadge
+                          ownerType="recurringTransaction"
+                          ownerId={recurring.id}
+                          onClick={onAttach ? () => onAttach(recurring) : undefined}
+                        />
+                      </div>
                       <div className="text-xs text-slate-500">{recurring.category}</div>
                     </div>
                   </div>

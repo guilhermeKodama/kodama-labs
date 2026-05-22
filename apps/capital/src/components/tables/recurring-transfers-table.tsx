@@ -34,6 +34,7 @@ import { useSettingsStore, useBusinessStore } from '@/lib/store';
 import { formatCurrency } from '@/lib/utils/format';
 import { cn } from '@/lib/utils';
 import type { RecurringTransfer, TransferDirection, RecurrenceFrequency } from '@/types';
+import { AttachmentBadge } from '@/components/attachments/attachment-badge';
 
 interface RecurringTransfersTableProps {
   recurringTransfers: RecurringTransfer[];
@@ -173,7 +174,14 @@ export function RecurringTransfersTable({
                 )}
               >
                 <TableCell className="font-medium text-white">
-                  {rt.description || '-'}
+                  <div className="flex items-center gap-2">
+                    <span>{rt.description || '-'}</span>
+                    <AttachmentBadge
+                      ownerType="recurringTransfer"
+                      ownerId={rt.id}
+                      onClick={onAttach ? () => onAttach(rt) : undefined}
+                    />
+                  </div>
                 </TableCell>
                 <TableCell>
                   <Badge variant="outline" className={config.className}>
