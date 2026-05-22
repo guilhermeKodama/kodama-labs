@@ -110,6 +110,25 @@ export function buildDocumentStoragePath(
   title: string,
   extension: string,
 ): string {
+  return buildStoragePath("procurements", procurementId, sequencial, title, extension);
+}
+
+export function buildContractDocumentStoragePath(
+  contractId: string,
+  sequencial: number,
+  title: string,
+  extension: string,
+): string {
+  return buildStoragePath("contracts", contractId, sequencial, title, extension);
+}
+
+function buildStoragePath(
+  prefix: string,
+  ownerId: string,
+  sequencial: number,
+  title: string,
+  extension: string,
+): string {
   const safeExt = extension.toLowerCase().replace(/[^a-z0-9]/g, "") || "bin";
   const slug = title
     .toLowerCase()
@@ -118,7 +137,7 @@ export function buildDocumentStoragePath(
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "")
     .slice(0, 60);
-  return `procurements/${procurementId}/${sequencial}-${slug || "doc"}.${safeExt}`;
+  return `${prefix}/${ownerId}/${sequencial}-${slug || "doc"}.${safeExt}`;
 }
 
 function isLocalUrl(url: string): boolean {
