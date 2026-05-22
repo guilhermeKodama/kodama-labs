@@ -300,12 +300,18 @@ model Contract {
   subcontractorCnpj String?
   subcontractorName String?
 
+  year       Int?
+  sequencial Int?
+
+  documentsEnrichedAt DateTime?
+
   description   String
   rawRecordId   String?
 
   entity      Entity       @relation(fields: [supplierCnpj], references: [cnpj])
   procurement Procurement? @relation(fields: [procurementId], references: [id])
   alerts      Alert[]
+  documents   ContractDocument[]
 
   @@index([supplierCnpj])
   @@index([orgCnpj])
@@ -313,7 +319,35 @@ model Contract {
   @@index([startDate])
   @@index([publishedAt])
   @@index([startDate(sort: Desc), id])
+  @@index([documentsEnrichedAt])
   @@map("contracts")
+}
+
+model ContractDocument {
+  id             String     @id @default(cuid())
+  externalId     String     @unique
+  contractId     String
+  source         DataSource
+  sequencial     Int
+  title          String
+  documentType   String
+  mimeType       String
+  sizeBytes      Int
+  contentHash    String?
+  sourceUrl      String?
+  storageBucket  String?
+  storageKey     String?
+  statusAtivo    Boolean    @default(true)
+  publishedAt    DateTime?
+  fetchedAt      DateTime   @default(now())
+  rawRecordId    String?
+
+  contract Contract @relation(fields: [contractId], references: [id], onDelete: Cascade)
+
+  @@index([contractId])
+  @@index([documentType])
+  @@index([fetchedAt])
+  @@map("contract_documents")
 }
 
 model Entity {

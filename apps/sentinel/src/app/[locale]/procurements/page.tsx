@@ -59,7 +59,7 @@ export default async function ProcurementsPage({
     cursor: cursorId ? { id: cursorId } : undefined,
     skip: cursorId ? 1 : 0,
     take,
-    include: { _count: { select: { items: true, alerts: true, contracts: true } } },
+    include: { _count: { select: { items: true, alerts: true, contracts: true, documents: true } } },
   });
 
   if (dir === "prev") rows.reverse();
@@ -102,6 +102,7 @@ export default async function ProcurementsPage({
     itemCount: p._count.items,
     alertCount: p._count.alerts,
     contractCount: p._count.contracts,
+    documentCount: p._count.documents,
   }));
 
   const [modalities, statuses, states] = await Promise.all([
