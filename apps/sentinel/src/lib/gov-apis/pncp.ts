@@ -425,6 +425,15 @@ export interface PncpDownloadResult {
   contentDisposition: string | null;
 }
 
+export async function fetchContractDocuments(
+  orgCnpj: string,
+  year: number,
+  sequencial: number,
+): Promise<PncpDocument[]> {
+  const url = `${API_URL}/v1/orgaos/${orgCnpj}/contratos/${year}/${sequencial}/arquivos`;
+  return fetchWithTimeout<PncpDocument[]>(url, 30000);
+}
+
 export async function downloadProcurementDocument(
   url: string,
   timeoutMs: number = 60000,
