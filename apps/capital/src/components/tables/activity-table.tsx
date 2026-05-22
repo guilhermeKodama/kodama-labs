@@ -39,6 +39,7 @@ import {
 } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
 import { formatCurrency, formatDate } from '@/lib/utils/format';
+import { AttachmentBadge } from '@/components/attachments/attachment-badge';
 import { useSettingsStore } from '@/lib/store';
 import type { Transaction, TransactionType, Transfer, EntityType } from '@/types';
 
@@ -363,12 +364,36 @@ export function ActivityTable({
                     {formatDate(item.date)}
                   </TableCell>
                   <TableCell className="font-medium text-white">
-                    <div className="truncate" title={item.description}>
-                      {item.description}
-                      {isTransfer && item.counterpartyName && (
-                        <span className="ml-2 text-xs text-slate-500">
-                          ({isIncoming ? t('activity.from') : t('activity.to')} {item.counterpartyName})
-                        </span>
+                    <div className="flex items-center gap-2" title={item.description}>
+                      <span className="truncate">
+                        {item.description}
+                        {isTransfer && item.counterpartyName && (
+                          <span className="ml-2 text-xs text-slate-500">
+                            ({isIncoming ? t('activity.from') : t('activity.to')} {item.counterpartyName})
+                          </span>
+                        )}
+                      </span>
+                      {isTransaction && item.originalTransaction && (
+                        <AttachmentBadge
+                          ownerType="transaction"
+                          ownerId={item.originalTransaction.id}
+                          onClick={
+                            onAttachTransaction
+                              ? () => onAttachTransaction(item.originalTransaction!)
+                              : undefined
+                          }
+                        />
+                      )}
+                      {isTransfer && item.originalTransfer && (
+                        <AttachmentBadge
+                          ownerType="transfer"
+                          ownerId={item.originalTransfer.id}
+                          onClick={
+                            onAttachTransfer
+                              ? () => onAttachTransfer(item.originalTransfer!)
+                              : undefined
+                          }
+                        />
                       )}
                     </div>
                   </TableCell>

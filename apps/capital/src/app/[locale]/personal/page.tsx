@@ -56,6 +56,7 @@ import {
   useBusinessStore,
   useInvestmentStore,
   useCreditCardStore,
+  useAttachmentStore,
 } from '@/lib/store';
 import { calculateEntitySummary, calculateUpcomingExpenses } from '@/lib/utils/calculations';
 import { useRecurringTransactionStore } from '@/lib/store/recurring-store';
@@ -82,6 +83,12 @@ export default function PersonalPage() {
   const { transactions, addTransaction, updateTransaction, deleteTransaction, fetchTransactions } =
     useTransactionStore();
   const { transfers, addTransfer, deleteTransfer, fetchTransfers } = useTransferStore();
+  const fetchAttachments = useAttachmentStore((s) => s.fetchByOwnerType);
+
+  useEffect(() => {
+    void fetchAttachments('transaction');
+    void fetchAttachments('transfer');
+  }, [fetchAttachments]);
   const { settings, personalAccount } = useSettingsStore();
   const { businesses } = useBusinessStore();
   const { creditCards } = useCreditCardStore();

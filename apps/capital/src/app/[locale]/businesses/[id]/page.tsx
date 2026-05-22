@@ -58,6 +58,7 @@ import {
   useSettingsStore,
   useInvestmentStore,
   useCreditCardStore,
+  useAttachmentStore,
 } from '@/lib/store';
 import { calculateEntitySummary, calculateUpcomingExpenses } from '@/lib/utils/calculations';
 import { useRecurringTransactionStore } from '@/lib/store/recurring-store';
@@ -84,6 +85,12 @@ export default function BusinessDetailPage() {
   const { creditCards } = useCreditCardStore();
   const { recurringTransactions } = useRecurringTransactionStore();
   const { recurringTransfers } = useRecurringTransferStore();
+  const fetchAttachments = useAttachmentStore((s) => s.fetchByOwnerType);
+
+  useEffect(() => {
+    void fetchAttachments('transaction');
+    void fetchAttachments('transfer');
+  }, [fetchAttachments]);
 
   const business = getBusiness(businessId);
   const [isDialogOpen, setIsDialogOpen] = useState(false);

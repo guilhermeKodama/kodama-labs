@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Download, FileText, Loader2, Trash2, Upload } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { useAttachmentStore } from '@/lib/store/attachment-store';
 
 export type AttachmentOwnerType =
   | 'transaction'
@@ -51,6 +52,7 @@ export function AttachmentUploader({
   const [isUploading, setIsUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const setForOwner = useAttachmentStore((s) => s.setForOwner);
 
   const refresh = useCallback(async () => {
     setIsLoading(true);
@@ -68,12 +70,13 @@ export function AttachmentUploader({
       }
       const data = (await res.json()) as Attachment[];
       setAttachments(data.filter((a) => a.kind === kind));
+      setForOwner(ownerType, ownerId, data);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load attachments');
     } finally {
       setIsLoading(false);
     }
-  }, [ownerType, ownerId, kind]);
+  }, [ownerType, ownerId, kind, setForOwner]);
 
   useEffect(() => {
     if (!ownerId) return;
@@ -131,7 +134,7 @@ export function AttachmentUploader({
           | null;
         throw new Error(body?.error?.message ?? `Delete failed (${res.status})`);
       }
-      setAttachments((prev) => prev.filter((a) => a.id !== id));
+      await refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Delete failed');
     }
