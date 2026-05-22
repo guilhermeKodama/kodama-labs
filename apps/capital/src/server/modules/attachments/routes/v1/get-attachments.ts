@@ -34,7 +34,7 @@ export const route = createRoute({
         "recurringTransaction",
         "recurringTransfer",
       ]),
-      ownerId: z.string(),
+      ownerId: z.string().optional(),
     }),
   },
   responses: {

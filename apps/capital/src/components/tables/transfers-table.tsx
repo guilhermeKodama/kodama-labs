@@ -23,6 +23,7 @@ import {
 import { useBusinessStore, useSettingsStore, useInvestmentStore } from '@/lib/store';
 import { formatCurrency } from '@/lib/utils/format';
 import type { Transfer } from '@/types';
+import { AttachmentBadge } from '@/components/attachments/attachment-badge';
 
 interface TransfersTableProps {
   transfers: Transfer[];
@@ -132,7 +133,14 @@ export function TransfersTable({ transfers, onDelete, onAttach }: TransfersTable
                 </div>
               </TableCell>
               <TableCell className="text-slate-400">
-                {transfer.description || '-'}
+                <div className="flex items-center gap-2">
+                  <span>{transfer.description || '-'}</span>
+                  <AttachmentBadge
+                    ownerType="transfer"
+                    ownerId={transfer.id}
+                    onClick={onAttach ? () => onAttach(transfer) : undefined}
+                  />
+                </div>
               </TableCell>
               <TableCell className="text-right">
                 <span className="font-medium text-white">

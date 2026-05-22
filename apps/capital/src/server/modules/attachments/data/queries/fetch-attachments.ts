@@ -17,6 +17,71 @@ export async function fetchAttachmentsByOwner(
 }
 
 /**
+ * Fetch every attachment of a given owner type belonging to the user, joined
+ * through the related entity so ownership is enforced at the query level.
+ */
+export async function fetchAttachmentsByOwnerType(
+  userId: string,
+  ownerType: AttachmentOwnerType,
+  db: DbClient,
+) {
+  switch (ownerType) {
+    case "transaction":
+      return db.attachment.findMany({
+        where: {
+          transaction: {
+            OR: [
+              { business: { userId } },
+              { personalAccount: { userId } },
+            ],
+          },
+        },
+        orderBy: { uploadedAt: "asc" },
+      });
+    case "transfer":
+      return db.attachment.findMany({
+        where: {
+          transfer: {
+            OR: [
+              { fromBusiness: { userId } },
+              { fromPersonalAccount: { userId } },
+              { toBusiness: { userId } },
+              { toPersonalAccount: { userId } },
+            ],
+          },
+        },
+        orderBy: { uploadedAt: "asc" },
+      });
+    case "recurringTransaction":
+      return db.attachment.findMany({
+        where: {
+          recurringTransaction: {
+            OR: [
+              { business: { userId } },
+              { personalAccount: { userId } },
+            ],
+          },
+        },
+        orderBy: { uploadedAt: "asc" },
+      });
+    case "recurringTransfer":
+      return db.attachment.findMany({
+        where: {
+          recurringTransfer: {
+            OR: [
+              { fromBusiness: { userId } },
+              { fromPersonalAccount: { userId } },
+              { toBusiness: { userId } },
+              { toPersonalAccount: { userId } },
+            ],
+          },
+        },
+        orderBy: { uploadedAt: "asc" },
+      });
+  }
+}
+
+/**
  * Fetch a single attachment by id, joined with its owner so the caller can
  * verify the authenticated user owns the parent entity.
  */
