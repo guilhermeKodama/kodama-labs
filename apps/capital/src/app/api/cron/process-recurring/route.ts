@@ -75,6 +75,7 @@ export async function GET(request: NextRequest) {
     for (const recurring of dueRecurring) {
       let currentDueDate = toNoonUTC(recurring.nextDueDate);
       let transactionsForThisRecurring = 0;
+      let pendingBillCarryover = true;
 
       // Generate transactions for all due dates up to today (inclusive)
       while (!isAfter(currentDueDate, todayEnd)) {
@@ -83,25 +84,39 @@ export async function GET(request: NextRequest) {
           break;
         }
 
-        // Create the transaction
-        await prisma.transaction.create({
-          data: {
-            entityType: recurring.entityType,
-            type: recurring.type,
-            amount: recurring.amount,
-            currency: recurring.currency,
-            exchangeRate: recurring.exchangeRate,
-            description: recurring.description,
-            category: recurring.category,
-            date: currentDueDate,
-            recurringTransactionId: recurring.id,
-            businessId: recurring.businessId,
-            personalAccountId: recurring.personalAccountId,
-          },
+        // Create the transaction + carry pending bill attachments atomically
+        const dueDate = currentDueDate;
+        const carry = pendingBillCarryover;
+        await prisma.$transaction(async (tx) => {
+          const created = await tx.transaction.create({
+            data: {
+              entityType: recurring.entityType,
+              type: recurring.type,
+              amount: recurring.amount,
+              currency: recurring.currency,
+              exchangeRate: recurring.exchangeRate,
+              description: recurring.description,
+              category: recurring.category,
+              date: dueDate,
+              recurringTransactionId: recurring.id,
+              businessId: recurring.businessId,
+              personalAccountId: recurring.personalAccountId,
+            },
+          });
+
+          // Bill files attached to the recurring template move to the first
+          // materialized transaction. Back-fills of missed periods stay clean.
+          if (carry) {
+            await tx.attachment.updateMany({
+              where: { recurringTransactionId: recurring.id, kind: "BILL" },
+              data: { recurringTransactionId: null, transactionId: created.id },
+            });
+          }
         });
 
         generatedCount++;
         transactionsForThisRecurring++;
+        pendingBillCarryover = false;
 
         // Move to next occurrence
         currentDueDate = getNextOccurrence(currentDueDate, recurring.frequency);
