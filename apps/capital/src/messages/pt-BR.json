@@ -222,6 +222,7 @@
       "amount": "Valor",
       "edit": "Editar",
       "delete": "Excluir",
+      "attach": "Anexar arquivos",
       "empty": "Nenhuma transação ainda",
       "filterAll": "Todos os Tipos"
     },
@@ -229,8 +230,21 @@
       "title": "Excluir Transação?",
       "description": "Esta ação não pode ser desfeita."
     },
+    "attachments": {
+      "title": "Anexos",
+      "description": "Anexe o boleto (antes do pagamento) e o recibo (comprovante de pagamento).",
+      "bill": {
+        "label": "Boletos",
+        "helper": "Boleto ou fatura recebida antes do pagamento."
+      },
+      "receipt": {
+        "label": "Recibos",
+        "helper": "Comprovante de que o pagamento foi realizado."
+      }
+    },
     "toast": {
       "created": "Transação adicionada com sucesso!",
+      "createError": "Falha ao criar transação",
       "updated": "Transação atualizada com sucesso!",
       "deleted": "Transação excluída com sucesso!"
     }
@@ -289,6 +303,17 @@
       "title": "Excluir Transferência?",
       "description": "Esta ação não pode ser desfeita."
     },
+    "actions": {
+      "attach": "Anexar comprovante"
+    },
+    "attachments": {
+      "title": "Anexos",
+      "description": "Anexe o comprovante da operação bancária desta transferência.",
+      "receipt": {
+        "label": "Comprovante de transferência",
+        "helper": "PDF, JPG, PNG ou WebP. Até 10 MB."
+      }
+    },
     "toast": {
       "created": "Transferência criada com sucesso!",
       "deleted": "Transferência excluída com sucesso!",
@@ -328,10 +353,20 @@
         "pause": "Pausar",
         "resume": "Retomar",
         "edit": "Editar",
-        "delete": "Excluir"
+        "delete": "Excluir",
+        "attach": "Anexar comprovante"
+      },
+      "attachments": {
+        "title": "Anexos",
+        "description": "Anexe o comprovante da próxima iteração. O arquivo é movido para a transferência gerada quando essa entrada é paga.",
+        "receipt": {
+          "label": "Comprovante da próxima iteração",
+          "helper": "PDF, JPG, PNG ou WebP. Até 10 MB."
+        }
       },
       "toast": {
         "created": "Transferência recorrente criada com sucesso!",
+        "createError": "Falha ao criar transferência recorrente",
         "updated": "Transferência recorrente atualizada com sucesso!",
         "deleted": "Transferência recorrente excluída com sucesso!",
         "paused": "Transferência recorrente pausada",
@@ -909,7 +944,8 @@
     "actions": {
       "pause": "Pausar",
       "resume": "Retomar",
-      "markPaid": "Marcar como Pago"
+      "markPaid": "Marcar como Pago",
+      "attach": "Anexar boleto"
     },
     "filter": {
       "thisMonth": "Este Mês",
@@ -925,8 +961,17 @@
       "title": "Excluir Transação Recorrente?",
       "description": "Isso impedirá que transações futuras sejam geradas. Transações existentes não serão afetadas."
     },
+    "attachments": {
+      "title": "Anexos",
+      "description": "Anexe o boleto da próxima iteração. O arquivo é movido para a transação gerada quando essa entrada é paga.",
+      "bill": {
+        "label": "Boleto da próxima iteração",
+        "helper": "PDF, JPG, PNG ou WebP. Até 10 MB."
+      }
+    },
     "toast": {
       "created": "Transação recorrente criada!",
+      "createError": "Falha ao criar transação recorrente",
       "updated": "Transação recorrente atualizada!",
       "deleted": "Transação recorrente excluída!",
       "paused": "Transação recorrente pausada",

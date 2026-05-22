@@ -29,7 +29,7 @@ import {
 import { AppShell } from '@/components/layout';
 import { SummaryCard } from '@/components/cards';
 import { ActivityTable } from '@/components/tables';
-import { TransactionDialog, TransferDialog } from '@/components/dialogs';
+import { TransactionDialog, TransferDialog, AttachmentsDialog } from '@/components/dialogs';
 import { StatementUploadDialog } from '@/components/dialogs/statement-upload-dialog';
 import { ConvertToTransferDialog } from '@/components/dialogs/convert-to-transfer-dialog';
 import { Button } from '@/components/ui/button';
@@ -96,6 +96,8 @@ export default function BusinessDetailPage() {
   const [editingTransfer, setEditingTransfer] = useState<Transfer | undefined>();
   const [isTransferDialogOpen, setIsTransferDialogOpen] = useState(false);
   const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined);
+  const [attachingTransaction, setAttachingTransaction] = useState<Transaction | undefined>();
+  const [attachingTransfer, setAttachingTransfer] = useState<Transfer | undefined>();
 
   // Get transactions for this business
   const businessTransactions = useMemo(() => {
@@ -249,13 +251,19 @@ export default function BusinessDetailPage() {
   }
 
   const handleCreateTransaction = async (data: CreateTransactionFormData) => {
-    await addTransaction(data);
-    toast.success(t('transactions.toast.created'));
+    const created = await addTransaction(data);
+    if (created) {
+      setEditingTransaction(created);
+      toast.success(t('transactions.toast.created'));
+    } else {
+      toast.error(t('transactions.toast.createError'));
+    }
   };
 
   const handleUpdateTransaction = async (data: CreateTransactionFormData) => {
     if (editingTransaction) {
       await updateTransaction(editingTransaction.id, data);
+      setIsDialogOpen(false);
       setEditingTransaction(undefined);
       toast.success(t('transactions.toast.updated'));
     }
@@ -510,9 +518,11 @@ export default function BusinessDetailPage() {
             entityNames={entityNames}
             onEditTransaction={openEditDialog}
             onDeleteTransaction={setDeletingTransaction}
+            onAttachTransaction={setAttachingTransaction}
             onConvertToTransfer={setConvertingTransaction}
             onEditTransfer={openEditTransferDialog}
             onDeleteTransfer={setDeletingTransfer}
+            onAttachTransfer={setAttachingTransfer}
           />
         </CardContent>
       </Card>
@@ -547,6 +557,45 @@ export default function BusinessDetailPage() {
         onOpenChange={closeTransferDialog}
         transfer={editingTransfer}
         onSubmit={handleEditTransfer}
+      />
+
+      {/* Attachments Dialog — Transaction */}
+      <AttachmentsDialog
+        open={!!attachingTransaction}
+        onOpenChange={(open) => { if (!open) setAttachingTransaction(undefined); }}
+        ownerType="transaction"
+        ownerId={attachingTransaction?.id ?? null}
+        title={attachingTransaction?.description ?? t('transactions.attachments.title')}
+        description={t('transactions.attachments.description')}
+        sections={[
+          {
+            kind: 'BILL',
+            label: t('transactions.attachments.bill.label'),
+            helperText: t('transactions.attachments.bill.helper'),
+          },
+          {
+            kind: 'RECEIPT',
+            label: t('transactions.attachments.receipt.label'),
+            helperText: t('transactions.attachments.receipt.helper'),
+          },
+        ]}
+      />
+
+      {/* Attachments Dialog — Transfer */}
+      <AttachmentsDialog
+        open={!!attachingTransfer}
+        onOpenChange={(open) => { if (!open) setAttachingTransfer(undefined); }}
+        ownerType="transfer"
+        ownerId={attachingTransfer?.id ?? null}
+        title={attachingTransfer?.description ?? t('transfers.attachments.title')}
+        description={t('transfers.attachments.description')}
+        sections={[
+          {
+            kind: 'TRANSFER_RECEIPT',
+            label: t('transfers.attachments.receipt.label'),
+            helperText: t('transfers.attachments.receipt.helper'),
+          },
+        ]}
       />
 
       {/* Convert Transaction to Transfer Dialog */}

@@ -25,7 +25,7 @@ import { AppShell } from '@/components/layout';
 import { Header } from '@/components/layout/header';
 import { SummaryCard } from '@/components/cards';
 import { RecurringTable } from '@/components/tables';
-import { RecurringDialog } from '@/components/dialogs';
+import { RecurringDialog, AttachmentsDialog } from '@/components/dialogs';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Calendar } from '@/components/ui/calendar';
@@ -84,6 +84,7 @@ export default function RecurringPage() {
   const [editingRecurring, setEditingRecurring] = useState<RecurringTransaction | undefined>();
   const [deletingRecurring, setDeletingRecurring] = useState<RecurringTransaction | undefined>();
   const [markingPaidId, setMarkingPaidId] = useState<string | null>(null);
+  const [attachingRecurring, setAttachingRecurring] = useState<RecurringTransaction | undefined>();
   const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined);
   const [selectedEntityId, setSelectedEntityId] = useState<string>('all');
 
@@ -176,13 +177,19 @@ export default function RecurringPage() {
   }
 
   const handleCreate = async (data: CreateRecurringTransactionFormData) => {
-    await addRecurringTransaction(data);
-    toast.success(t('recurring.toast.created'));
+    const created = await addRecurringTransaction(data);
+    if (created) {
+      setEditingRecurring(created);
+      toast.success(t('recurring.toast.created'));
+    } else {
+      toast.error(t('recurring.toast.createError'));
+    }
   };
 
   const handleUpdate = async (data: CreateRecurringTransactionFormData) => {
     if (editingRecurring) {
       await updateRecurringTransaction(editingRecurring.id, data);
+      setIsDialogOpen(false);
       setEditingRecurring(undefined);
       toast.success(t('recurring.toast.updated'));
     }
@@ -408,6 +415,7 @@ export default function RecurringPage() {
             onDelete={setDeletingRecurring}
             onToggle={handleToggle}
             onMarkPaid={handleMarkPaid}
+            onAttach={setAttachingRecurring}
             isMarkingPaid={markingPaidId}
           />
         </CardContent>
@@ -419,6 +427,23 @@ export default function RecurringPage() {
         onOpenChange={closeDialog}
         recurring={editingRecurring}
         onSubmit={editingRecurring ? handleUpdate : handleCreate}
+      />
+
+      {/* Attachments Dialog (from kebab "Anexar") */}
+      <AttachmentsDialog
+        open={!!attachingRecurring}
+        onOpenChange={(open) => { if (!open) setAttachingRecurring(undefined); }}
+        ownerType="recurringTransaction"
+        ownerId={attachingRecurring?.id ?? null}
+        title={attachingRecurring?.description ?? t('recurring.attachments.title')}
+        description={t('recurring.attachments.description')}
+        sections={[
+          {
+            kind: 'BILL',
+            label: t('recurring.attachments.bill.label'),
+            helperText: t('recurring.attachments.bill.helper'),
+          },
+        ]}
       />
 
       {/* Delete Confirmation */}

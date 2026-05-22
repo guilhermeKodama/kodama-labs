@@ -47,10 +47,7 @@ export function RecurringDialog({
         </DialogHeader>
         <RecurringForm
           recurring={recurring}
-          onSubmit={(data) => {
-            onSubmit(data);
-            onOpenChange(false);
-          }}
+          onSubmit={onSubmit}
           onCancel={() => onOpenChange(false)}
           isLoading={isLoading}
           defaultEntityId={defaultEntityId}

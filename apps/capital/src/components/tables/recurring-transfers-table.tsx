@@ -4,6 +4,7 @@ import { useTranslations } from 'next-intl';
 import {
   ArrowRight,
   MoreVertical,
+  Paperclip,
   Play,
   Pause,
   Pencil,
@@ -40,6 +41,7 @@ interface RecurringTransfersTableProps {
   onDelete?: (recurringTransfer: RecurringTransfer) => void;
   onToggle?: (recurringTransfer: RecurringTransfer) => void;
   onMarkPaid?: (recurringTransfer: RecurringTransfer) => void;
+  onAttach?: (recurringTransfer: RecurringTransfer) => void;
   isMarkingPaid?: string | null;
 }
 
@@ -113,6 +115,7 @@ export function RecurringTransfersTable({
   onDelete,
   onToggle,
   onMarkPaid,
+  onAttach,
   isMarkingPaid,
 }: RecurringTransfersTableProps) {
   const t = useTranslations('transfers.recurring');
@@ -276,6 +279,15 @@ export function RecurringTransfersTable({
                               {t('actions.resume')}
                             </>
                           )}
+                        </DropdownMenuItem>
+                      )}
+                      {onAttach && (
+                        <DropdownMenuItem
+                          onClick={() => onAttach(rt)}
+                          className="text-slate-300 focus:bg-slate-800 focus:text-white"
+                        >
+                          <Paperclip className="mr-2 h-4 w-4" />
+                          {t('actions.attach')}
                         </DropdownMenuItem>
                       )}
                       {onEdit && (
