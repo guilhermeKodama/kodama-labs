@@ -52,10 +52,7 @@ export function TransactionDialog({
           entityType={entityType}
           transaction={transaction}
           defaultType={defaultType}
-          onSubmit={(data) => {
-            onSubmit(data);
-            onOpenChange(false);
-          }}
+          onSubmit={onSubmit}
           onCancel={() => onOpenChange(false)}
           isLoading={isLoading}
         />

@@ -28,7 +28,7 @@ import { AppShell } from '@/components/layout';
 import { Header } from '@/components/layout/header';
 import { SummaryCard } from '@/components/cards';
 import { TransfersTable, RecurringTransfersTable } from '@/components/tables';
-import { TransferDialog, RecurringTransferDialog } from '@/components/dialogs';
+import { TransferDialog, RecurringTransferDialog, AttachmentsDialog } from '@/components/dialogs';
 import { Button } from '@/components/ui/button';
 import { Calendar } from '@/components/ui/calendar';
 import {
@@ -94,6 +94,8 @@ export default function TransfersPage() {
   const [deletingRecurring, setDeletingRecurring] = useState<RecurringTransfer | undefined>();
   const [markingPaidId, setMarkingPaidId] = useState<string | null>(null);
   const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined);
+  const [attachingTransfer, setAttachingTransfer] = useState<Transfer | undefined>();
+  const [attachingRecurringTransfer, setAttachingRecurringTransfer] = useState<RecurringTransfer | undefined>();
 
   // Filter transfers by date range
   const filteredTransfers = useMemo(() => {
@@ -170,6 +172,8 @@ export default function TransfersPage() {
   const handleCreateTransfer = async (data: CreateTransferFormData) => {
     const result = await addTransfer(data);
     if (result) {
+      setIsDialogOpen(false);
+      setAttachingTransfer(result);
       toast.success(t('transfers.toast.created'));
       // Refresh investment accounts if this was an investment transfer
       if (data.direction === 'investment_deposit' || data.direction === 'investment_withdrawal') {
@@ -203,8 +207,13 @@ export default function TransfersPage() {
       startDate: data.startDate,
       endDate: data.endDate ?? undefined,
     };
-    await addRecurringTransfer(input);
-    toast.success(t('transfers.recurring.toast.created'));
+    const created = await addRecurringTransfer(input);
+    if (created) {
+      setEditingRecurring(created);
+      toast.success(t('transfers.recurring.toast.created'));
+    } else {
+      toast.error(t('transfers.recurring.toast.createError'));
+    }
   };
 
   const handleUpdateRecurringTransfer = async (data: RecurringTransferFormData) => {
@@ -219,6 +228,7 @@ export default function TransfersPage() {
         startDate: data.startDate,
         endDate: data.endDate ?? undefined,
       });
+      setIsRecurringDialogOpen(false);
       setEditingRecurring(undefined);
       toast.success(t('transfers.recurring.toast.updated'));
     }
@@ -468,6 +478,7 @@ export default function TransfersPage() {
               <TransfersTable
                 transfers={filteredTransfers}
                 onDelete={setDeletingTransfer}
+                onAttach={setAttachingTransfer}
               />
             </CardContent>
           </Card>
@@ -487,6 +498,7 @@ export default function TransfersPage() {
                 onDelete={setDeletingRecurring}
                 onToggle={handleToggleRecurring}
                 onMarkPaid={handleMarkPaid}
+                onAttach={setAttachingRecurringTransfer}
                 isMarkingPaid={markingPaidId}
               />
             </CardContent>
@@ -507,6 +519,40 @@ export default function TransfersPage() {
         onOpenChange={closeRecurringDialog}
         recurringTransfer={editingRecurring}
         onSubmit={editingRecurring ? handleUpdateRecurringTransfer : handleCreateRecurringTransfer}
+      />
+
+      {/* Attachments Dialog — Transfer */}
+      <AttachmentsDialog
+        open={!!attachingTransfer}
+        onOpenChange={(open) => { if (!open) setAttachingTransfer(undefined); }}
+        ownerType="transfer"
+        ownerId={attachingTransfer?.id ?? null}
+        title={attachingTransfer?.description ?? t('transfers.attachments.title')}
+        description={t('transfers.attachments.description')}
+        sections={[
+          {
+            kind: 'TRANSFER_RECEIPT',
+            label: t('transfers.attachments.receipt.label'),
+            helperText: t('transfers.attachments.receipt.helper'),
+          },
+        ]}
+      />
+
+      {/* Attachments Dialog — Recurring Transfer */}
+      <AttachmentsDialog
+        open={!!attachingRecurringTransfer}
+        onOpenChange={(open) => { if (!open) setAttachingRecurringTransfer(undefined); }}
+        ownerType="recurringTransfer"
+        ownerId={attachingRecurringTransfer?.id ?? null}
+        title={attachingRecurringTransfer?.description ?? t('transfers.recurring.attachments.title')}
+        description={t('transfers.recurring.attachments.description')}
+        sections={[
+          {
+            kind: 'TRANSFER_RECEIPT',
+            label: t('transfers.recurring.attachments.receipt.label'),
+            helperText: t('transfers.recurring.attachments.receipt.helper'),
+          },
+        ]}
       />
 
       {/* Delete Transfer Confirmation */}

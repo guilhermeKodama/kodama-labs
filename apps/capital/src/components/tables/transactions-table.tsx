@@ -7,6 +7,7 @@ import {
   ArrowUpRight,
   TrendingUp,
   MoreVertical,
+  Paperclip,
   Pencil,
   Trash2,
   ArrowUpDown,
@@ -43,6 +44,7 @@ interface TransactionsTableProps {
   transactions: Transaction[];
   onEdit?: (transaction: Transaction) => void;
   onDelete?: (transaction: Transaction) => void;
+  onAttach?: (transaction: Transaction) => void;
 }
 
 const typeConfig: Record<
@@ -76,6 +78,7 @@ export function TransactionsTable({
   transactions,
   onEdit,
   onDelete,
+  onAttach,
 }: TransactionsTableProps) {
   const t = useTranslations('transactions');
   const [sortField, setSortField] = useState<SortField>('date');
@@ -208,7 +211,7 @@ export function TransactionsTable({
                   <ArrowUpDown className="ml-2 h-3 w-3" />
                 </Button>
               </TableHead>
-              {(onEdit || onDelete) && (
+              {(onEdit || onDelete || onAttach) && (
                 <TableHead className="w-[50px]"></TableHead>
               )}
             </TableRow>
@@ -255,7 +258,7 @@ export function TransactionsTable({
                     {transaction.type === 'expense' ? '-' : '+'}
                     {formatCurrency(transaction.amount, transaction.currency)}
                   </TableCell>
-                  {(onEdit || onDelete) && (
+                  {(onEdit || onDelete || onAttach) && (
                     <TableCell>
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
@@ -271,6 +274,15 @@ export function TransactionsTable({
                           align="end"
                           className="border-slate-700 bg-slate-900"
                         >
+                          {onAttach && (
+                            <DropdownMenuItem
+                              onClick={() => onAttach(transaction)}
+                              className="text-slate-300 focus:bg-slate-800 focus:text-white"
+                            >
+                              <Paperclip className="mr-2 h-4 w-4" />
+                              {t('table.attach')}
+                            </DropdownMenuItem>
+                          )}
                           {onEdit && (
                             <DropdownMenuItem
                               onClick={() => onEdit(transaction)}

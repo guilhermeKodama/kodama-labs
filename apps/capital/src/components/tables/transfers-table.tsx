@@ -3,7 +3,7 @@
 import { useMemo } from 'react';
 import { useTranslations } from 'next-intl';
 import { format } from 'date-fns';
-import { ArrowRight, MoreHorizontal, Trash2 } from 'lucide-react';
+import { ArrowRight, MoreHorizontal, Paperclip, Trash2 } from 'lucide-react';
 import {
   Table,
   TableBody,
@@ -27,9 +27,10 @@ import type { Transfer } from '@/types';
 interface TransfersTableProps {
   transfers: Transfer[];
   onDelete?: (transfer: Transfer) => void;
+  onAttach?: (transfer: Transfer) => void;
 }
 
-export function TransfersTable({ transfers, onDelete }: TransfersTableProps) {
+export function TransfersTable({ transfers, onDelete, onAttach }: TransfersTableProps) {
   const t = useTranslations('transfers');
   const tCommon = useTranslations('common');
   const { businesses } = useBusinessStore();
@@ -75,7 +76,7 @@ export function TransfersTable({ transfers, onDelete }: TransfersTableProps) {
             <TableHead className="text-right text-slate-400">
               {t('table.amount')}
             </TableHead>
-            {onDelete && (
+            {(onDelete || onAttach) && (
               <TableHead className="w-[50px] text-slate-400" />
             )}
           </TableRow>
@@ -146,7 +147,7 @@ export function TransfersTable({ transfers, onDelete }: TransfersTableProps) {
                   </div>
                 )}
               </TableCell>
-              {onDelete && (
+              {(onDelete || onAttach) && (
                 <TableCell>
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
@@ -162,13 +163,24 @@ export function TransfersTable({ transfers, onDelete }: TransfersTableProps) {
                       align="end"
                       className="border-slate-700 bg-slate-900"
                     >
-                      <DropdownMenuItem
-                        onClick={() => onDelete(transfer)}
-                        className="text-red-400 focus:bg-red-500/10 focus:text-red-400"
-                      >
-                        <Trash2 className="mr-2 h-4 w-4" />
-                        {tCommon('delete')}
-                      </DropdownMenuItem>
+                      {onAttach && (
+                        <DropdownMenuItem
+                          onClick={() => onAttach(transfer)}
+                          className="text-slate-300 focus:bg-slate-800 focus:text-white"
+                        >
+                          <Paperclip className="mr-2 h-4 w-4" />
+                          {t('actions.attach')}
+                        </DropdownMenuItem>
+                      )}
+                      {onDelete && (
+                        <DropdownMenuItem
+                          onClick={() => onDelete(transfer)}
+                          className="text-red-400 focus:bg-red-500/10 focus:text-red-400"
+                        >
+                          <Trash2 className="mr-2 h-4 w-4" />
+                          {tCommon('delete')}
+                        </DropdownMenuItem>
+                      )}
                     </DropdownMenuContent>
                   </DropdownMenu>
                 </TableCell>
