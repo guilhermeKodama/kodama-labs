@@ -1,6 +1,5 @@
 {
   "installCommand": "cd ../.. && pnpm install --frozen-lockfile",
-  "buildCommand": "cd ../.. && pnpm turbo run build --filter=@wallex/capital",
   "crons": [
     {
       "path": "/api/cron/process-recurring",
