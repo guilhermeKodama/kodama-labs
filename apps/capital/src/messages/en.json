@@ -222,6 +222,7 @@
       "amount": "Amount",
       "edit": "Edit",
       "delete": "Delete",
+      "attach": "Attach files",
       "empty": "No transactions yet",
       "filterAll": "All Types"
     },
@@ -229,8 +230,21 @@
       "title": "Delete Transaction?",
       "description": "This action cannot be undone."
     },
+    "attachments": {
+      "title": "Attachments",
+      "description": "Attach the bill (before payment) and the receipt (proof of payment).",
+      "bill": {
+        "label": "Bills",
+        "helper": "Invoice or bill received before payment."
+      },
+      "receipt": {
+        "label": "Receipts",
+        "helper": "Proof that the payment was made."
+      }
+    },
     "toast": {
       "created": "Transaction added successfully!",
+      "createError": "Failed to create transaction",
       "updated": "Transaction updated successfully!",
       "deleted": "Transaction deleted successfully!"
     }
@@ -289,6 +303,17 @@
       "title": "Delete Transfer?",
       "description": "This action cannot be undone."
     },
+    "actions": {
+      "attach": "Attach receipt"
+    },
+    "attachments": {
+      "title": "Attachments",
+      "description": "Attach the proof of bank operation for this transfer.",
+      "receipt": {
+        "label": "Transfer receipt",
+        "helper": "PDF, JPG, PNG, or WebP. Up to 10 MB."
+      }
+    },
     "toast": {
       "created": "Transfer created successfully!",
       "deleted": "Transfer deleted successfully!",
@@ -328,10 +353,20 @@
         "pause": "Pause",
         "resume": "Resume",
         "edit": "Edit",
-        "delete": "Delete"
+        "delete": "Delete",
+        "attach": "Attach receipt"
+      },
+      "attachments": {
+        "title": "Attachments",
+        "description": "Attach the receipt for the next iteration. The file is moved to the generated transfer when this entry is paid.",
+        "receipt": {
+          "label": "Receipt for next iteration",
+          "helper": "PDF, JPG, PNG, or WebP. Up to 10 MB."
+        }
       },
       "toast": {
         "created": "Recurring transfer created successfully!",
+        "createError": "Failed to create recurring transfer",
         "updated": "Recurring transfer updated successfully!",
         "deleted": "Recurring transfer deleted successfully!",
         "paused": "Recurring transfer paused",
@@ -909,7 +944,8 @@
     "actions": {
       "pause": "Pause",
       "resume": "Resume",
-      "markPaid": "Mark as Paid"
+      "markPaid": "Mark as Paid",
+      "attach": "Attach bill"
     },
     "filter": {
       "thisMonth": "This Month",
@@ -925,8 +961,17 @@
       "title": "Delete Recurring Transaction?",
       "description": "This will stop future transactions from being generated. Existing transactions will not be affected."
     },
+    "attachments": {
+      "title": "Attachments",
+      "description": "Attach the bill for the next iteration. The file is moved to the generated transaction when this entry is paid.",
+      "bill": {
+        "label": "Bill for next iteration",
+        "helper": "PDF, JPG, PNG, or WebP. Up to 10 MB."
+      }
+    },
     "toast": {
       "created": "Recurring transaction created!",
+      "createError": "Failed to create recurring transaction",
       "updated": "Recurring transaction updated!",
       "deleted": "Recurring transaction deleted!",
       "paused": "Recurring transaction paused",

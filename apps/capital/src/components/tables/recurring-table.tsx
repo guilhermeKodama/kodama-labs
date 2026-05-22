@@ -7,6 +7,7 @@ import {
   ArrowUpRight,
   TrendingUp,
   MoreVertical,
+  Paperclip,
   Pencil,
   Trash2,
   Pause,
@@ -44,6 +45,7 @@ interface RecurringTableProps {
   onDelete?: (recurring: RecurringTransaction) => void;
   onToggle?: (recurring: RecurringTransaction) => void;
   onMarkPaid?: (recurring: RecurringTransaction) => void;
+  onAttach?: (recurring: RecurringTransaction) => void;
   isMarkingPaid?: string | null; // ID of the recurring being marked as paid
 }
 
@@ -109,6 +111,7 @@ export function RecurringTable({
   onDelete,
   onToggle,
   onMarkPaid,
+  onAttach,
   isMarkingPaid,
 }: RecurringTableProps) {
   const t = useTranslations('recurring');
@@ -308,6 +311,15 @@ export function RecurringTable({
                                 {t('actions.resume')}
                               </>
                             )}
+                          </DropdownMenuItem>
+                        )}
+                        {onAttach && (
+                          <DropdownMenuItem
+                            onClick={() => onAttach(recurring)}
+                            className="text-slate-300 focus:bg-slate-800 focus:text-white"
+                          >
+                            <Paperclip className="mr-2 h-4 w-4" />
+                            {t('actions.attach')}
                           </DropdownMenuItem>
                         )}
                         {onEdit && (

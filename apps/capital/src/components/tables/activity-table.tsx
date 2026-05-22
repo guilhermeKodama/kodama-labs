@@ -7,6 +7,7 @@ import {
   ArrowUpRight,
   TrendingUp,
   MoreVertical,
+  Paperclip,
   Pencil,
   Trash2,
   ArrowUpDown,
@@ -70,9 +71,11 @@ interface ActivityTableProps {
   entityNames?: Record<string, string>; // Map of entity IDs to names
   onEditTransaction?: (transaction: Transaction) => void;
   onDeleteTransaction?: (transaction: Transaction) => void;
+  onAttachTransaction?: (transaction: Transaction) => void;
   onConvertToTransfer?: (transaction: Transaction) => void;
   onEditTransfer?: (transfer: Transfer) => void;
   onDeleteTransfer?: (transfer: Transfer) => void;
+  onAttachTransfer?: (transfer: Transfer) => void;
 }
 
 const transactionTypeConfig: Record<
@@ -108,9 +111,11 @@ export function ActivityTable({
   entityNames = {},
   onEditTransaction,
   onDeleteTransaction,
+  onAttachTransaction,
   onConvertToTransfer,
   onEditTransfer,
   onDeleteTransfer,
+  onAttachTransfer,
 }: ActivityTableProps) {
   // _entityType reserved for potential future filtering by entity type
   void _entityType;
@@ -424,10 +429,10 @@ export function ActivityTable({
                       </div>
                     )}
                   </TableCell>
-                  {(onEditTransaction || onDeleteTransaction || onConvertToTransfer || onEditTransfer || onDeleteTransfer) && (
+                  {(onEditTransaction || onDeleteTransaction || onAttachTransaction || onConvertToTransfer || onEditTransfer || onDeleteTransfer || onAttachTransfer) && (
                     <TableCell>
-                      {(isTransaction && (onEditTransaction || onDeleteTransaction || onConvertToTransfer)) ||
-                       (isTransfer && (onEditTransfer || onDeleteTransfer)) ? (
+                      {(isTransaction && (onEditTransaction || onDeleteTransaction || onAttachTransaction || onConvertToTransfer)) ||
+                       (isTransfer && (onEditTransfer || onDeleteTransfer || onAttachTransfer)) ? (
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
                             <Button
@@ -442,6 +447,15 @@ export function ActivityTable({
                             align="end"
                             className="border-slate-700 bg-slate-900"
                           >
+                            {isTransaction && onAttachTransaction && item.originalTransaction && (
+                              <DropdownMenuItem
+                                onClick={() => onAttachTransaction(item.originalTransaction!)}
+                                className="text-slate-300 focus:bg-slate-800 focus:text-white"
+                              >
+                                <Paperclip className="mr-2 h-4 w-4" />
+                                {t('transactions.table.attach')}
+                              </DropdownMenuItem>
+                            )}
                             {isTransaction && onEditTransaction && item.originalTransaction && (
                               <DropdownMenuItem
                                 onClick={() => onEditTransaction(item.originalTransaction!)}
@@ -467,6 +481,15 @@ export function ActivityTable({
                               >
                                 <Trash2 className="mr-2 h-4 w-4" />
                                 {t('common.delete')}
+                              </DropdownMenuItem>
+                            )}
+                            {isTransfer && onAttachTransfer && item.originalTransfer && (
+                              <DropdownMenuItem
+                                onClick={() => onAttachTransfer(item.originalTransfer!)}
+                                className="text-slate-300 focus:bg-slate-800 focus:text-white"
+                              >
+                                <Paperclip className="mr-2 h-4 w-4" />
+                                {t('transfers.actions.attach')}
                               </DropdownMenuItem>
                             )}
                             {isTransfer && onEditTransfer && item.originalTransfer && (
