@@ -59,9 +59,28 @@ export function buildDocumentStoragePath(
   title: string,
   extension: string,
 ): string {
+  return buildStoragePath("procurements", procurementId, sequencial, title, extension);
+}
+
+export function buildContractDocumentStoragePath(
+  contractId: string,
+  sequencial: number,
+  title: string,
+  extension: string,
+): string {
+  return buildStoragePath("contracts", contractId, sequencial, title, extension);
+}
+
+function buildStoragePath(
+  prefix: string,
+  ownerId: string,
+  sequencial: number,
+  title: string,
+  extension: string,
+): string {
   const slug = slugify(title).slice(0, 60) || "doc";
   const ext = sanitizeExtension(extension);
-  return joinPath("procurements", procurementId, `${sequencial}-${slug}.${ext}`);
+  return joinPath(prefix, ownerId, `${sequencial}-${slug}.${ext}`);
 }
 
 export type { PutBlobResult };
