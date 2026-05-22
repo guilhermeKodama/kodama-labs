@@ -42,6 +42,7 @@ export function createApp() {
   app.use("/v1/investment-portfolio/*", authMiddleware);
   app.use("/v1/users/*", authMiddleware);
   app.use("/v1/bank-statements/*", authMiddleware);
+  app.use("/v1/attachments/*", authMiddleware);
 
   // Error handling
   app.notFound(notFound);

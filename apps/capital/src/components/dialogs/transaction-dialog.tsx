@@ -9,6 +9,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { TransactionForm } from '@/components/forms/transaction-form';
+import { AttachmentUploader } from '@/components/attachments/attachment-uploader';
 import type { Transaction, TransactionType, EntityType } from '@/types';
 import type { CreateTransactionFormData } from '@/lib/validations';
 
@@ -37,7 +38,7 @@ export function TransactionDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="border-slate-800 bg-slate-900 sm:max-w-md">
+      <DialogContent className="max-h-[90vh] overflow-y-auto border-slate-800 bg-slate-900 sm:max-w-md">
         <DialogHeader>
           <DialogTitle className="text-white">
             {transaction ? t('dialog.editTitle') : t('dialog.createTitle')}
@@ -58,6 +59,24 @@ export function TransactionDialog({
           onCancel={() => onOpenChange(false)}
           isLoading={isLoading}
         />
+        {transaction ? (
+          <div className="space-y-4 border-t border-slate-800 pt-4">
+            <AttachmentUploader
+              ownerType="transaction"
+              ownerId={transaction.id}
+              kind="BILL"
+              label="Bills"
+              helperText="Invoice or bill received before payment."
+            />
+            <AttachmentUploader
+              ownerType="transaction"
+              ownerId={transaction.id}
+              kind="RECEIPT"
+              label="Receipts"
+              helperText="Proof that the payment was made."
+            />
+          </div>
+        ) : null}
       </DialogContent>
     </Dialog>
   );
