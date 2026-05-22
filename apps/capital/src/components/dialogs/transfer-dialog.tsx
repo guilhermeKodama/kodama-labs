@@ -9,6 +9,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { TransferForm } from '@/components/forms/transfer-form';
+import { AttachmentUploader } from '@/components/attachments/attachment-uploader';
 import type { Transfer } from '@/types';
 import type { CreateTransferFormData } from '@/lib/validations';
 
@@ -49,6 +50,17 @@ export function TransferDialog({
           onCancel={() => onOpenChange(false)}
           isLoading={isLoading}
         />
+        {transfer ? (
+          <div className="border-t border-slate-800 pt-4">
+            <AttachmentUploader
+              ownerType="transfer"
+              ownerId={transfer.id}
+              kind="TRANSFER_RECEIPT"
+              label="Transfer receipt"
+              helperText="Proof of the bank operation."
+            />
+          </div>
+        ) : null}
       </DialogContent>
     </Dialog>
   );

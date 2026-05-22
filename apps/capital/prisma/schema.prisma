@@ -85,6 +85,12 @@ enum InvestmentTransactionType {
   adjustment
 }
 
+enum AttachmentKind {
+  BILL
+  RECEIPT
+  TRANSFER_RECEIPT
+}
+
 // ============================================
 // USER
 // ============================================
@@ -103,13 +109,13 @@ model User {
   updatedAt    DateTime @updatedAt
 
   // Relations
-  businesses                Business[]
-  personalAccount           PersonalAccount?
-  categories                Category[]
-  currencies                Currency[]
-  sessions                  Session[]
-  investmentAccounts        InvestmentAccount[]
-  merchantCategoryMappings  MerchantCategoryMapping[]
+  businesses               Business[]
+  personalAccount          PersonalAccount?
+  categories               Category[]
+  currencies               Currency[]
+  sessions                 Session[]
+  investmentAccounts       InvestmentAccount[]
+  merchantCategoryMappings MerchantCategoryMapping[]
 
   @@map("users")
 }
@@ -149,17 +155,17 @@ model Business {
   updatedAt       DateTime @updatedAt
 
   // Relations
-  user                  User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
-  transactions          Transaction[]
-  budgets               Budget[]
-  recurringTransactions RecurringTransaction[]
-  transfersFrom         Transfer[]             @relation("TransferFrom")
-  transfersTo           Transfer[]             @relation("TransferTo")
-  recurringTransfersFrom RecurringTransfer[]   @relation("RecurringTransferFrom")
-  recurringTransfersTo   RecurringTransfer[]   @relation("RecurringTransferTo")
-  creditCards           CreditCard[]
-  investmentAccounts   InvestmentAccount[]
-  statementImports     StatementImport[]
+  user                   User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  transactions           Transaction[]
+  budgets                Budget[]
+  recurringTransactions  RecurringTransaction[]
+  transfersFrom          Transfer[]             @relation("TransferFrom")
+  transfersTo            Transfer[]             @relation("TransferTo")
+  recurringTransfersFrom RecurringTransfer[]    @relation("RecurringTransferFrom")
+  recurringTransfersTo   RecurringTransfer[]    @relation("RecurringTransferTo")
+  creditCards            CreditCard[]
+  investmentAccounts     InvestmentAccount[]
+  statementImports       StatementImport[]
 
   @@index([userId])
   @@map("businesses")
@@ -179,17 +185,17 @@ model PersonalAccount {
   updatedAt       DateTime @updatedAt
 
   // Relations
-  user                  User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
-  transactions          Transaction[]
-  budgets               Budget[]
-  recurringTransactions RecurringTransaction[]
-  transfersFrom         Transfer[]             @relation("PersonalTransferFrom")
-  transfersTo           Transfer[]             @relation("PersonalTransferTo")
-  recurringTransfersFrom RecurringTransfer[]   @relation("PersonalRecurringTransferFrom")
-  recurringTransfersTo   RecurringTransfer[]   @relation("PersonalRecurringTransferTo")
-  creditCards           CreditCard[]
-  investmentAccounts   InvestmentAccount[]
-  statementImports     StatementImport[]
+  user                   User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  transactions           Transaction[]
+  budgets                Budget[]
+  recurringTransactions  RecurringTransaction[]
+  transfersFrom          Transfer[]             @relation("PersonalTransferFrom")
+  transfersTo            Transfer[]             @relation("PersonalTransferTo")
+  recurringTransfersFrom RecurringTransfer[]    @relation("PersonalRecurringTransferFrom")
+  recurringTransfersTo   RecurringTransfer[]    @relation("PersonalRecurringTransferTo")
+  creditCards            CreditCard[]
+  investmentAccounts     InvestmentAccount[]
+  statementImports       StatementImport[]
 
   @@map("personal_accounts")
 }
@@ -216,14 +222,15 @@ model Transaction {
   updatedAt              DateTime        @updatedAt
 
   // Relations - polymorphic association
-  businessId        String?
-  business          Business?             @relation(fields: [businessId], references: [id], onDelete: Cascade)
-  personalAccountId String?
-  personalAccount   PersonalAccount?      @relation(fields: [personalAccountId], references: [id], onDelete: Cascade)
-  recurringTransaction RecurringTransaction? @relation(fields: [recurringTransactionId], references: [id], onDelete: SetNull)
-  statementImport   StatementImport?      @relation(fields: [statementImportId], references: [id], onDelete: SetNull)
-  creditCardBills   CreditCardBill[]
+  businessId                  String?
+  business                    Business?              @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  personalAccountId           String?
+  personalAccount             PersonalAccount?       @relation(fields: [personalAccountId], references: [id], onDelete: Cascade)
+  recurringTransaction        RecurringTransaction?  @relation(fields: [recurringTransactionId], references: [id], onDelete: SetNull)
+  statementImport             StatementImport?       @relation(fields: [statementImportId], references: [id], onDelete: SetNull)
+  creditCardBills             CreditCardBill[]
   linkedInvestmentTransaction InvestmentTransaction?
+  attachments                 Attachment[]
 
   @@unique([externalId, businessId])
   @@unique([externalId, personalAccountId])
@@ -242,29 +249,29 @@ model Transaction {
 // ============================================
 
 model Transfer {
-  id              String            @id @default(uuid())
-  fromEntityType  EntityType
-  toEntityType    EntityType
-  direction       TransferDirection
-  amount          Float
-  currency        String
-  exchangeRate    Float             @default(1)
-  description     String?
-  date            DateTime
-  externalId      String?
+  id                  String            @id @default(uuid())
+  fromEntityType      EntityType
+  toEntityType        EntityType
+  direction           TransferDirection
+  amount              Float
+  currency            String
+  exchangeRate        Float             @default(1)
+  description         String?
+  date                DateTime
+  externalId          String?
   recurringTransferId String?
-  createdAt       DateTime          @default(now())
-  updatedAt       DateTime          @updatedAt
+  createdAt           DateTime          @default(now())
+  updatedAt           DateTime          @updatedAt
 
   // Relations - polymorphic association for from/to entities
   fromBusinessId        String?
-  fromBusiness          Business?        @relation("TransferFrom", fields: [fromBusinessId], references: [id], onDelete: Cascade)
+  fromBusiness          Business?          @relation("TransferFrom", fields: [fromBusinessId], references: [id], onDelete: Cascade)
   fromPersonalAccountId String?
-  fromPersonalAccount   PersonalAccount? @relation("PersonalTransferFrom", fields: [fromPersonalAccountId], references: [id], onDelete: Cascade)
+  fromPersonalAccount   PersonalAccount?   @relation("PersonalTransferFrom", fields: [fromPersonalAccountId], references: [id], onDelete: Cascade)
   toBusinessId          String?
-  toBusiness            Business?        @relation("TransferTo", fields: [toBusinessId], references: [id], onDelete: Cascade)
+  toBusiness            Business?          @relation("TransferTo", fields: [toBusinessId], references: [id], onDelete: Cascade)
   toPersonalAccountId   String?
-  toPersonalAccount     PersonalAccount? @relation("PersonalTransferTo", fields: [toPersonalAccountId], references: [id], onDelete: Cascade)
+  toPersonalAccount     PersonalAccount?   @relation("PersonalTransferTo", fields: [toPersonalAccountId], references: [id], onDelete: Cascade)
   recurringTransfer     RecurringTransfer? @relation("GeneratedFromRecurring", fields: [recurringTransferId], references: [id], onDelete: SetNull)
 
   // Investment account references (for investment_deposit / investment_withdrawal)
@@ -272,6 +279,8 @@ model Transfer {
   toInvestmentAccount     InvestmentAccount? @relation("TransferToInvestment", fields: [toInvestmentAccountId], references: [id], onDelete: Cascade)
   fromInvestmentAccountId String?
   fromInvestmentAccount   InvestmentAccount? @relation("TransferFromInvestment", fields: [fromInvestmentAccountId], references: [id], onDelete: Cascade)
+
+  attachments Attachment[]
 
   @@index([fromBusinessId])
   @@index([fromPersonalAccountId])
@@ -320,6 +329,8 @@ model RecurringTransfer {
   // Generated transfers
   generatedTransfers Transfer[] @relation("GeneratedFromRecurring")
 
+  attachments Attachment[]
+
   @@index([fromBusinessId])
   @@index([fromPersonalAccountId])
   @@index([toBusinessId])
@@ -356,9 +367,11 @@ model RecurringTransaction {
   business          Business?        @relation(fields: [businessId], references: [id], onDelete: Cascade)
   personalAccountId String?
   personalAccount   PersonalAccount? @relation(fields: [personalAccountId], references: [id], onDelete: Cascade)
-  
+
   // Generated transactions
   generatedTransactions Transaction[]
+
+  attachments Attachment[]
 
   @@index([businessId])
   @@index([personalAccountId])
@@ -380,7 +393,7 @@ model Budget {
   currency   String
   period     BudgetPeriod
   year       Int
-  month      Int?         // 1-12 for monthly budgets
+  month      Int? // 1-12 for monthly budgets
   isActive   Boolean      @default(true)
   createdAt  DateTime     @default(now())
   updatedAt  DateTime     @updatedAt
@@ -430,19 +443,19 @@ model Category {
 // ============================================
 
 model CreditCard {
-  id                String     @id @default(uuid())
-  entityType        EntityType
-  bankName          String
-  lastFourDigits    String
-  nickname          String?
-  creditLimit       Float
-  closingDay        Int        // 1-31
-  dueDay            Int        // 1-31
-  color             String     @default("#3B82F6")
-  currency          String
-  isActive          Boolean    @default(true)
-  createdAt         DateTime   @default(now())
-  updatedAt         DateTime   @updatedAt
+  id             String     @id @default(uuid())
+  entityType     EntityType
+  bankName       String
+  lastFourDigits String
+  nickname       String?
+  creditLimit    Float
+  closingDay     Int // 1-31
+  dueDay         Int // 1-31
+  color          String     @default("#3B82F6")
+  currency       String
+  isActive       Boolean    @default(true)
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
 
   // Relations - polymorphic association
   businessId        String?
@@ -450,8 +463,8 @@ model CreditCard {
   personalAccountId String?
   personalAccount   PersonalAccount? @relation(fields: [personalAccountId], references: [id], onDelete: Cascade)
 
-  bills             CreditCardBill[]
-  installments      Installment[]
+  bills        CreditCardBill[]
+  installments Installment[]
 
   @@index([businessId])
   @@index([personalAccountId])
@@ -467,7 +480,7 @@ model CreditCard {
 model CreditCardBill {
   id                   String     @id @default(uuid())
   creditCardId         String
-  transactionId        String?    // Links to an expense Transaction (optional)
+  transactionId        String? // Links to an expense Transaction (optional)
   closingDate          DateTime
   dueDate              DateTime
   totalAmount          Float
@@ -478,8 +491,8 @@ model CreditCardBill {
   updatedAt            DateTime   @updatedAt
 
   // Relations
-  creditCard       CreditCard       @relation(fields: [creditCardId], references: [id], onDelete: Cascade)
-  transaction      Transaction?     @relation(fields: [transactionId], references: [id], onDelete: SetNull)
+  creditCard       CreditCard        @relation(fields: [creditCardId], references: [id], onDelete: Cascade)
+  transaction      Transaction?      @relation(fields: [transactionId], references: [id], onDelete: SetNull)
   billTransactions BillTransaction[]
 
   @@index([creditCardId])
@@ -495,18 +508,18 @@ model CreditCardBill {
 // ============================================
 
 model BillTransaction {
-  id                  String   @id @default(uuid())
-  billId              String
-  category            String
-  transactionDate     DateTime
-  description         String
-  merchantName        String?
-  amount              Float
-  installmentNumber   Int?
-  totalInstallments   Int?
-  isAutoCategorized   Boolean  @default(false)
-  createdAt           DateTime @default(now())
-  updatedAt           DateTime @updatedAt
+  id                String   @id @default(uuid())
+  billId            String
+  category          String
+  transactionDate   DateTime
+  description       String
+  merchantName      String?
+  amount            Float
+  installmentNumber Int?
+  totalInstallments Int?
+  isAutoCategorized Boolean  @default(false)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
 
   // Relations
   bill        CreditCardBill @relation(fields: [billId], references: [id], onDelete: Cascade)
@@ -523,18 +536,18 @@ model BillTransaction {
 // ============================================
 
 model Installment {
-  id                  String   @id @default(uuid())
-  creditCardId        String
-  billTransactionId   String   @unique
-  description         String
-  totalAmount         Float
-  totalInstallments   Int
-  paidInstallments    Int      @default(0)
-  startDate           DateTime
-  installmentAmount   Float
-  isActive            Boolean  @default(true)
-  createdAt           DateTime @default(now())
-  updatedAt           DateTime @updatedAt
+  id                String   @id @default(uuid())
+  creditCardId      String
+  billTransactionId String   @unique
+  description       String
+  totalAmount       Float
+  totalInstallments Int
+  paidInstallments  Int      @default(0)
+  startDate         DateTime
+  installmentAmount Float
+  isActive          Boolean  @default(true)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
 
   // Relations
   creditCard      CreditCard      @relation(fields: [creditCardId], references: [id], onDelete: Cascade)
@@ -550,16 +563,16 @@ model Installment {
 // ============================================
 
 model InvestmentAccount {
-  id              String     @id @default(uuid())
-  userId          String
-  name            String     // e.g., "Interactive Brokers", "NuInvest", "Tesouro Direto"
-  broker          String?    // Broker identifier
-  entityType      EntityType
-  currency        String     @default("BRL")
-  cashBalance     Float      @default(0) // Available cash in the account (not invested)
-  isActive        Boolean    @default(true)
-  createdAt       DateTime   @default(now())
-  updatedAt       DateTime   @updatedAt
+  id          String     @id @default(uuid())
+  userId      String
+  name        String // e.g., "Interactive Brokers", "NuInvest", "Tesouro Direto"
+  broker      String? // Broker identifier
+  entityType  EntityType
+  currency    String     @default("BRL")
+  cashBalance Float      @default(0) // Available cash in the account (not invested)
+  isActive    Boolean    @default(true)
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
 
   // Relations - polymorphic association
   user              User                @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -587,14 +600,14 @@ model InvestmentHolding {
   accountId       String
   assetClass      AssetClass
   subType         FixedIncomeSubType? // Only for fixed_income assets
-  ticker          String?             // For stocks, FIIs, crypto, ETFs (e.g., PETR4, HGLG11, BTC)
-  name            String              // Descriptive name (e.g., "CDB Nubank 120% CDI")
+  ticker          String? // For stocks, FIIs, crypto, ETFs (e.g., PETR4, HGLG11, BTC)
+  name            String // Descriptive name (e.g., "CDB Nubank 120% CDI")
   currency        String              @default("BRL")
   currentQuantity Float               @default(0)
   averageCost     Float               @default(0)
   totalInvested   Float               @default(0)
-  currentPrice    Float?              // Latest market price per unit
-  lastPriceUpdate DateTime?           // When the price was last fetched
+  currentPrice    Float? // Latest market price per unit
+  lastPriceUpdate DateTime? // When the price was last fetched
   isActive        Boolean             @default(true)
   createdAt       DateTime            @default(now())
   updatedAt       DateTime            @updatedAt
@@ -618,9 +631,9 @@ model InvestmentTransaction {
   id           String                    @id @default(uuid())
   holdingId    String
   type         InvestmentTransactionType
-  quantity     Float?                    // Number of units (for stocks, crypto, FIIs)
-  pricePerUnit Float?                    // Price paid per unit (for stocks, crypto, FIIs)
-  totalAmount  Float                     // Total cash value of the transaction
+  quantity     Float? // Number of units (for stocks, crypto, FIIs)
+  pricePerUnit Float? // Price paid per unit (for stocks, crypto, FIIs)
+  totalAmount  Float // Total cash value of the transaction
   fees         Float                     @default(0) // Brokerage fees, taxes
   date         DateTime
   notes        String?
@@ -628,9 +641,9 @@ model InvestmentTransaction {
   updatedAt    DateTime                  @updatedAt
 
   // Relations
-  holding InvestmentHolding @relation(fields: [holdingId], references: [id], onDelete: Cascade)
-  linkedTransactionId String?   @unique
-  linkedTransaction   Transaction? @relation(fields: [linkedTransactionId], references: [id], onDelete: SetNull)
+  holding             InvestmentHolding @relation(fields: [holdingId], references: [id], onDelete: Cascade)
+  linkedTransactionId String?           @unique
+  linkedTransaction   Transaction?      @relation(fields: [linkedTransactionId], references: [id], onDelete: SetNull)
 
   @@index([holdingId])
   @@index([type])
@@ -645,7 +658,7 @@ model InvestmentTransaction {
 model Currency {
   id         String   @id @default(uuid())
   userId     String
-  code       String   // ISO 4217 code (e.g., USD, EUR, BRL)
+  code       String // ISO 4217 code (e.g., USD, EUR, BRL)
   name       String
   symbol     String
   manualRate Float    @default(1) // Rate relative to user's base currency
@@ -710,4 +723,36 @@ model StatementImport {
   @@index([businessId])
   @@index([personalAccountId])
   @@map("statement_imports")
+}
+
+// ============================================
+// ATTACHMENT (bills, receipts, transfer proofs)
+// ============================================
+
+model Attachment {
+  id           String         @id @default(uuid())
+  kind         AttachmentKind
+  blobUrl      String
+  pathname     String
+  mimeType     String
+  sizeBytes    Int
+  originalName String
+  uploadedAt   DateTime       @default(now())
+
+  // Polymorphic owner - exactly ONE of the following must be non-null
+  transactionId          String?
+  transaction            Transaction?          @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+  transferId             String?
+  transfer               Transfer?             @relation(fields: [transferId], references: [id], onDelete: Cascade)
+  recurringTransactionId String?
+  recurringTransaction   RecurringTransaction? @relation(fields: [recurringTransactionId], references: [id], onDelete: Cascade)
+  recurringTransferId    String?
+  recurringTransfer      RecurringTransfer?    @relation(fields: [recurringTransferId], references: [id], onDelete: Cascade)
+
+  @@index([transactionId])
+  @@index([transferId])
+  @@index([recurringTransactionId])
+  @@index([recurringTransferId])
+  @@index([kind])
+  @@map("attachments")
 }

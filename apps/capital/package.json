@@ -19,6 +19,7 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.73.0",
     "@hono/zod-openapi": "^0.18.0",
+    "@repo/storage": "workspace:*",
     "@hookform/resolvers": "^3.9.1",
     "@prisma/client": "^6.0.0",
     "@radix-ui/react-alert-dialog": "^1.1.15",
