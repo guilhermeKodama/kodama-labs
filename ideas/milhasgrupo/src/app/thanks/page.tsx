@@ -9,8 +9,9 @@ export default function ThanksPage() {
         Viagem cadastrada.
       </h1>
       <p className="text-base text-muted-foreground">
-        Monitoramos sua viagem 24/7 e te avisamos no Telegram quando aparecerem
-        assentos suficientes.
+        Em breve te chamamos por e-mail ou WhatsApp para combinar os detalhes
+        (origem, programas onde você tem milhas). Depois disso, monitoramos sua
+        viagem 24/7.
       </p>
       <Link
         href="/"

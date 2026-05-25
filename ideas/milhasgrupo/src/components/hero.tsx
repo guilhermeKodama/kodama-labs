@@ -26,16 +26,29 @@ export function Hero() {
         Azul, LATAM ou Smiles.
       </p>
 
-      <div className="flex flex-wrap items-center gap-3">
-        <Button asChild size="lg">
-          <Link href="/start">
-            Cadastrar viagem grátis
-            <ArrowRight />
-          </Link>
-        </Button>
-        <Button asChild size="lg" variant="ghost">
-          <a href="#how">Como funciona</a>
-        </Button>
+      <div className="flex flex-col gap-3">
+        <div className="flex flex-wrap items-center gap-3">
+          <Button asChild size="lg">
+            <Link href="/start">
+              Cadastrar viagem grátis
+              <ArrowRight />
+            </Link>
+          </Button>
+          <Button asChild size="lg" variant="ghost">
+            <a href="#how">Como funciona</a>
+          </Button>
+        </div>
+        <p className="text-sm text-muted-foreground">
+          <span className="text-accent">●</span> 20 vagas no beta — cadastrados
+          recebem prioridade.
+        </p>
+        <p className="text-xs text-muted-foreground">
+          Sem custos
+          <span aria-hidden className="px-2 text-muted-foreground/40">·</span>
+          Não pedimos sua senha
+          <span aria-hidden className="px-2 text-muted-foreground/40">·</span>
+          Sem app pra instalar
+        </p>
       </div>
     </section>
   );

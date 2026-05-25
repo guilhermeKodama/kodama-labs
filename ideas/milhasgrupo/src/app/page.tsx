@@ -2,6 +2,7 @@ import { Hero } from "@/components/hero";
 import { Problem } from "@/components/problem";
 import { HowItWorks } from "@/components/how-it-works";
 import { Faq } from "@/components/faq";
+import { CtaRepeat } from "@/components/cta-repeat";
 import { Footer } from "@/components/footer";
 
 export default function Page() {
@@ -12,6 +13,7 @@ export default function Page() {
         <Problem />
         <HowItWorks />
         <Faq />
+        <CtaRepeat />
         <Footer />
       </div>
     </main>
