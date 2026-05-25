@@ -47,7 +47,7 @@ export function HowItWorks() {
               <div className="flex h-9 w-9 items-center justify-center rounded-md bg-secondary text-primary">
                 <Icon className="size-4" />
               </div>
-              <span className="text-xs font-medium text-muted-foreground">
+              <span className="text-xs font-medium text-accent">
                 {n}
               </span>
               <CardTitle className="text-base">{title}</CardTitle>

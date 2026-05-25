@@ -5,17 +5,20 @@
 
 :root {
   /* ============================================================
-   * WHITE-LABEL KNOBS — override these in your idea's globals.css
+   * MILHASGRUPO BRAND — editorial premium (navy + warm amber)
    * ============================================================ */
-  --color-primary: oklch(0.205 0 0);
+  --color-primary: oklch(0.22 0.07 260);
   --color-primary-foreground: oklch(0.985 0 0);
-  --radius: 0.625rem;
+  --accent: oklch(0.82 0.12 75);
+  --accent-foreground: oklch(0.21 0.05 70);
+  --radius: 0.5rem;
   --font-sans: var(--font-geist-sans);
+  --font-serif: var(--font-instrument-serif);
 
   /* ============================================================
-   * FOUNDATION — keep these stable across ideas
+   * FOUNDATION — neutrals, kept stable
    * ============================================================ */
-  --background: oklch(1 0 0);
+  --background: oklch(0.995 0.003 85);
   --foreground: oklch(0.145 0 0);
   --card: oklch(1 0 0);
   --card-foreground: oklch(0.145 0 0);
@@ -25,8 +28,6 @@
   --secondary-foreground: oklch(0.205 0 0);
   --muted: oklch(0.97 0 0);
   --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
   --destructive: oklch(0.577 0.245 27.325);
   --border: oklch(0.922 0 0);
   --input: oklch(0.922 0 0);
@@ -78,6 +79,7 @@
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
   --font-sans: var(--font-sans);
+  --font-serif: var(--font-serif);
 }
 
 body {
