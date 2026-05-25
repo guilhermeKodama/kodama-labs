@@ -1,28 +1,36 @@
 import Link from "next/link";
+import { ArrowRight } from "lucide-react";
+import { Button } from "@/components/ui/button";
 
 export function Hero() {
   return (
-    <section className="flex flex-col gap-6">
-      <p className="text-xs font-medium uppercase tracking-widest text-muted-foreground">
-        {/* TODO: niche / category */}
-        Validação em curso
-      </p>
-      <h1 className="text-balance text-4xl font-semibold leading-tight sm:text-5xl">
-        {/* TODO: headline — the promise in <12 words */}
-        {"{{IDEA_NAME}}"} — uma frase que resolve a dor em até 12 palavras.
+    <section className="flex flex-col items-start gap-8 py-24 sm:py-32">
+      <span className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
+        {/* TODO: niche · qualifier · qualifier (≤6 words, dot-separated) */}
+        Categoria · público · qualificador
+      </span>
+
+      <h1 className="text-balance text-5xl font-semibold tracking-tight sm:text-6xl lg:text-7xl">
+        {/* TODO: the promise — ≤8 words, active voice, concrete outcome */}
+        {"{{IDEA_NAME}}"} — a promessa em até 8 palavras.
       </h1>
-      <p className="max-w-prose text-balance text-base text-muted-foreground sm:text-lg">
-        {/* TODO: subheadline — restate the problem and hint at the solution */}
-        Para [persona] que vive [problema concreto]. Cadastre-se para o beta gratuito.
+
+      <p className="max-w-xl text-balance text-lg text-muted-foreground sm:text-xl">
+        {/* TODO: one sentence — who it's for + what we do. ≤18 words. */}
+        Para [persona] que [contexto]. Avisamos quando [resultado concreto].
       </p>
-      <div>
-        <Link
-          href="/start"
-          className="inline-flex items-center justify-center rounded-md bg-primary px-6 py-3 text-sm font-medium text-primary-foreground transition hover:opacity-90"
-        >
-          {/* TODO: CTA copy — verb + outcome */}
-          Quero participar
-        </Link>
+
+      <div className="flex flex-wrap items-center gap-3">
+        <Button asChild size="lg">
+          <Link href="/start">
+            {/* TODO: CTA verb matching user intent */}
+            Quero participar
+            <ArrowRight />
+          </Link>
+        </Button>
+        <Button asChild size="lg" variant="ghost">
+          <a href="#how">Como funciona</a>
+        </Button>
       </div>
     </section>
   );

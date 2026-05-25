@@ -1,39 +1,63 @@
+import { ClipboardList, Radar, Send } from "lucide-react";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+
 const steps = [
   {
-    n: 1,
-    title: "Você cadastra a viagem",
-    body: "Origem, janela de datas, tamanho do grupo e em quais programas você tem milhas. 1 minuto.",
+    n: "01",
+    icon: ClipboardList,
+    title: "Cadastre a viagem",
+    body: "Origem, datas, tamanho do grupo, programas onde você tem milhas. 1 minuto.",
   },
   {
-    n: 2,
-    title: "A gente monitora 24/7",
-    body: "Cruzamos disponibilidade em Azul Fidelidade, LATAM Pass e Smiles para o trecho exato da sua família.",
+    n: "02",
+    icon: Radar,
+    title: "Monitoramos 24/7",
+    body: "Cruzamos Azul Fidelidade, LATAM Pass e Smiles para o seu trecho exato.",
   },
   {
-    n: 3,
-    title: "Alerta no Telegram",
-    body: "Quando aparecem N assentos no mesmo voo, você recebe o link de emissão e um passo a passo. Você emite.",
+    n: "03",
+    icon: Send,
+    title: "Receba o alerta",
+    body: "Telegram ou WhatsApp com link de emissão e passo a passo. Você emite.",
   },
 ];
 
 export function HowItWorks() {
   return (
-    <section className="flex flex-col gap-4">
-      <h2 className="text-xl font-semibold">Como funciona</h2>
-      <ol className="grid gap-4 sm:grid-cols-3">
-        {steps.map((step) => (
-          <li
-            key={step.n}
-            className="flex flex-col gap-2 rounded-md border border-border p-4"
-          >
-            <span className="text-2xl font-semibold text-muted-foreground">
-              {step.n}
-            </span>
-            <h3 className="text-sm font-semibold">{step.title}</h3>
-            <p className="text-sm text-muted-foreground">{step.body}</p>
-          </li>
+    <section id="how" className="flex flex-col gap-10">
+      <header className="flex flex-col gap-3">
+        <h2 className="text-3xl font-semibold tracking-tight sm:text-4xl">
+          Como funciona
+        </h2>
+        <p className="max-w-xl text-base text-muted-foreground">
+          Três passos. Sem app pra instalar.
+        </p>
+      </header>
+
+      <div className="grid gap-4 sm:grid-cols-3">
+        {steps.map(({ n, icon: Icon, title, body }) => (
+          <Card key={n} className="gap-4 py-6">
+            <CardHeader className="gap-3">
+              <div className="flex h-9 w-9 items-center justify-center rounded-md bg-secondary text-primary">
+                <Icon className="size-4" />
+              </div>
+              <span className="text-xs font-medium text-muted-foreground">
+                {n}
+              </span>
+              <CardTitle className="text-base">{title}</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <CardDescription>{body}</CardDescription>
+            </CardContent>
+          </Card>
         ))}
-      </ol>
+      </div>
     </section>
   );
 }

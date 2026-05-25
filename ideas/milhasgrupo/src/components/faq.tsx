@@ -1,38 +1,45 @@
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
+
 const items = [
   {
     q: "Quanto custa?",
-    a: "Gratuito durante o beta. Cobramos só quando o produto provar valor (ainda estamos validando).",
+    a: "Gratuito durante o beta. Cobramos só depois que o produto provar valor.",
   },
   {
     q: "Para onde funciona?",
-    a: "Só Orlando (MCO) por enquanto, com partidas de GRU, CNF e VCP — voos diretos.",
+    a: "Apenas Orlando (MCO) por enquanto, saindo de GRU, CNF ou VCP — voos diretos.",
   },
   {
     q: "Quais programas vocês monitoram?",
-    a: "Azul Fidelidade, LATAM Pass e Smiles. Outros programas ficam para depois da validação.",
+    a: "Azul Fidelidade, LATAM Pass e Smiles. Outros vêm depois da validação.",
   },
   {
-    q: "Quantos alertas por dia eu recebo?",
-    a: "Bem poucos. A diferença para grupos genéricos é exatamente essa: você só é avisado quando há assentos no número da sua família, no seu trajeto, na sua janela.",
-  },
-  {
-    q: "Funciona para 1 ou 2 pessoas?",
-    a: "Não. Foco em famílias de 3 a 6 — o problema único que estamos resolvendo é o de grupos.",
+    q: "Por que só 3 a 6 passageiros?",
+    a: "É o problema específico que estamos resolvendo: companhias liberam poucos assentos por voo.",
   },
 ];
 
 export function Faq() {
   return (
-    <section className="flex flex-col gap-4">
-      <h2 className="text-xl font-semibold">Perguntas frequentes</h2>
-      <dl className="flex flex-col divide-y divide-border border-y border-border">
-        {items.map((item) => (
-          <div key={item.q} className="py-4">
-            <dt className="text-sm font-medium">{item.q}</dt>
-            <dd className="mt-1 text-sm text-muted-foreground">{item.a}</dd>
-          </div>
+    <section className="flex flex-col gap-8">
+      <h2 className="text-3xl font-semibold tracking-tight sm:text-4xl">
+        Perguntas frequentes
+      </h2>
+      <Accordion type="single" collapsible className="w-full">
+        {items.map((item, i) => (
+          <AccordionItem key={item.q} value={`item-${i}`}>
+            <AccordionTrigger className="text-base font-medium">
+              {item.q}
+            </AccordionTrigger>
+            <AccordionContent className="text-base">{item.a}</AccordionContent>
+          </AccordionItem>
         ))}
-      </dl>
+      </Accordion>
     </section>
   );
 }
