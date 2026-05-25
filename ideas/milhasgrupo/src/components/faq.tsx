@@ -7,6 +7,10 @@ import {
 
 const items = [
   {
+    q: "Vocês precisam da minha senha ou do meu login?",
+    a: "Não. Você só nos diz onde tem milhas. A consulta de disponibilidade é nossa — você emite no seu próprio programa, com seu próprio login.",
+  },
+  {
     q: "Quanto custa?",
     a: "Gratuito durante o beta. Cobramos só depois que o produto provar valor.",
   },

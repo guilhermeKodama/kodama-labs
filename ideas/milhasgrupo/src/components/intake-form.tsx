@@ -3,7 +3,6 @@
 import { useId, useState, FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
@@ -44,20 +43,6 @@ export function IntakeForm() {
   return (
     <form className="flex flex-col gap-8" onSubmit={onSubmit}>
       <FieldRadio
-        legend="De qual cidade você sai?"
-        helper="Apenas voos diretos para Orlando."
-        name="origin"
-        required
-        options={[
-          { value: "GRU", label: "São Paulo (GRU)" },
-          { value: "CNF", label: "Belo Horizonte (CNF)" },
-          { value: "VCP", label: "Campinas (VCP)" },
-        ]}
-      />
-
-      <Separator />
-
-      <FieldRadio
         legend="Quando você quer viajar?"
         name="travel_window"
         required
@@ -81,19 +66,6 @@ export function IntakeForm() {
           { value: "4", label: "4" },
           { value: "5", label: "5" },
           { value: "6+", label: "6 ou mais" },
-        ]}
-      />
-
-      <Separator />
-
-      <FieldCheckbox
-        legend="Em quais programas você tem milhas?"
-        helper="Marque todos onde tem saldo relevante."
-        name="programs"
-        options={[
-          { value: "azul", label: "Azul Fidelidade" },
-          { value: "latam", label: "LATAM Pass" },
-          { value: "smiles", label: "Smiles (Gol)" },
         ]}
       />
 
@@ -215,40 +187,3 @@ function FieldRadio({
   );
 }
 
-function FieldCheckbox({
-  legend,
-  helper,
-  name,
-  options,
-}: {
-  legend: string;
-  helper?: string;
-  name: string;
-  options: Array<{ value: string; label: string }>;
-}) {
-  return (
-    <div className="flex flex-col gap-4">
-      <div className="flex flex-col gap-1">
-        <h3 className="text-base font-semibold">{legend}</h3>
-        {helper ? (
-          <p className="text-sm text-muted-foreground">{helper}</p>
-        ) : null}
-      </div>
-      <div className="grid gap-2 sm:grid-cols-3">
-        {options.map((opt) => {
-          const id = `${name}-${opt.value}`;
-          return (
-            <Label
-              key={opt.value}
-              htmlFor={id}
-              className="flex cursor-pointer items-center gap-3 rounded-md border border-input bg-background px-4 py-3 text-sm font-normal transition has-[[data-state=checked]]:border-primary has-[[data-state=checked]]:bg-primary/5"
-            >
-              <Checkbox id={id} name={name} value={opt.value} />
-              <span>{opt.label}</span>
-            </Label>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
