@@ -1,7 +1,13 @@
 "use client";
 
-import { useState, FormEvent } from "react";
+import { useId, useState, FormEvent } from "react";
 import { useRouter } from "next/navigation";
+import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Separator } from "@/components/ui/separator";
 
 export function IntakeForm() {
   const router = useRouter();
@@ -37,8 +43,8 @@ export function IntakeForm() {
 
   return (
     <form className="flex flex-col gap-8" onSubmit={onSubmit}>
-      {/* Example: single-select radio group. Replace with your idea's field. */}
-      <RadioGroup
+      {/* Example: single-select. Replace with your idea's field. */}
+      <FieldRadio
         legend="Pergunta de exemplo (escolha uma)"
         name="example_single"
         required
@@ -49,8 +55,10 @@ export function IntakeForm() {
         ]}
       />
 
-      {/* Example: multi-select checkbox group. Replace with your idea's field. */}
-      <CheckboxGroup
+      <Separator />
+
+      {/* Example: multi-select. Replace with your idea's field. */}
+      <FieldCheckbox
         legend="Pergunta múltipla (escolha quantas quiser)"
         name="example_multi"
         options={[
@@ -60,117 +68,157 @@ export function IntakeForm() {
         ]}
       />
 
-      <fieldset className="flex flex-col gap-4 border-t border-border pt-6">
-        <legend className="text-sm font-semibold">Contato</legend>
-        <TextField label="E-mail" name="email" type="email" required />
-        <TextField
+      <Separator />
+
+      <div className="flex flex-col gap-6">
+        <div className="flex flex-col gap-1">
+          <h3 className="text-base font-semibold">Contato</h3>
+          <p className="text-sm text-muted-foreground">
+            Como podemos te avisar.
+          </p>
+        </div>
+        <FieldText
+          label="E-mail"
+          name="email"
+          type="email"
+          required
+          placeholder="voce@email.com"
+        />
+        <FieldText
           label="WhatsApp ou Telegram"
           name="contact"
           type="text"
           required
+          placeholder="@seu_usuario ou +55 11 9XXXX-XXXX"
         />
-      </fieldset>
+      </div>
 
-      <button
-        type="submit"
-        disabled={submitting}
-        className="inline-flex items-center justify-center rounded-md bg-primary px-4 py-3 text-sm font-medium text-primary-foreground transition hover:opacity-90 disabled:opacity-50"
-      >
+      <Button type="submit" size="lg" disabled={submitting} className="w-full">
         {submitting ? "Enviando…" : "Enviar"}
-      </button>
+      </Button>
 
-      {error ? <p className="text-sm text-red-600">{error}</p> : null}
+      {error ? (
+        <p className="text-sm text-destructive">{error}</p>
+      ) : (
+        <p className="text-xs text-muted-foreground">
+          Não compartilhamos seus dados. Você pode sair a qualquer momento.
+        </p>
+      )}
     </form>
   );
 }
 
-function TextField({
+function FieldText({
   label,
   name,
   type,
   required,
+  placeholder,
+  helper,
 }: {
   label: string;
   name: string;
   type: string;
   required?: boolean;
+  placeholder?: string;
+  helper?: string;
 }) {
+  const id = useId();
   return (
-    <label className="flex flex-col gap-1.5">
-      <span className="text-sm font-medium">{label}</span>
-      <input
+    <div className="flex flex-col gap-2">
+      <Label htmlFor={id}>{label}</Label>
+      <Input
+        id={id}
         name={name}
         type={type}
         required={required}
-        className="rounded-md border border-border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/20"
+        placeholder={placeholder}
       />
-    </label>
+      {helper ? (
+        <p className="text-xs text-muted-foreground">{helper}</p>
+      ) : null}
+    </div>
   );
 }
 
-function RadioGroup({
+function FieldRadio({
   legend,
+  helper,
   name,
   options,
   required,
 }: {
   legend: string;
+  helper?: string;
   name: string;
   options: Array<{ value: string; label: string }>;
   required?: boolean;
 }) {
   return (
-    <fieldset className="flex flex-col gap-3">
-      <legend className="text-sm font-semibold">{legend}</legend>
-      <div className="grid gap-2 sm:grid-cols-3">
-        {options.map((opt) => (
-          <label
-            key={opt.value}
-            className="flex cursor-pointer items-center gap-2 rounded-md border border-border bg-background px-3 py-2 text-sm has-[:checked]:border-primary has-[:checked]:bg-primary/5"
-          >
-            <input
-              type="radio"
-              name={name}
-              value={opt.value}
-              required={required}
-              className="accent-primary"
-            />
-            <span>{opt.label}</span>
-          </label>
-        ))}
+    <div className="flex flex-col gap-4">
+      <div className="flex flex-col gap-1">
+        <h3 className="text-base font-semibold">{legend}</h3>
+        {helper ? (
+          <p className="text-sm text-muted-foreground">{helper}</p>
+        ) : null}
       </div>
-    </fieldset>
+      <RadioGroup
+        name={name}
+        required={required}
+        className="grid gap-2 sm:grid-cols-3"
+      >
+        {options.map((opt) => {
+          const id = `${name}-${opt.value}`;
+          return (
+            <Label
+              key={opt.value}
+              htmlFor={id}
+              className="flex cursor-pointer items-center gap-3 rounded-md border border-input bg-background px-4 py-3 text-sm font-normal transition has-[[data-state=checked]]:border-primary has-[[data-state=checked]]:bg-primary/5"
+            >
+              <RadioGroupItem id={id} value={opt.value} />
+              <span>{opt.label}</span>
+            </Label>
+          );
+        })}
+      </RadioGroup>
+    </div>
   );
 }
 
-function CheckboxGroup({
+function FieldCheckbox({
   legend,
+  helper,
   name,
   options,
 }: {
   legend: string;
+  helper?: string;
   name: string;
   options: Array<{ value: string; label: string }>;
 }) {
   return (
-    <fieldset className="flex flex-col gap-3">
-      <legend className="text-sm font-semibold">{legend}</legend>
-      <div className="grid gap-2 sm:grid-cols-3">
-        {options.map((opt) => (
-          <label
-            key={opt.value}
-            className="flex cursor-pointer items-center gap-2 rounded-md border border-border bg-background px-3 py-2 text-sm has-[:checked]:border-primary has-[:checked]:bg-primary/5"
-          >
-            <input
-              type="checkbox"
-              name={name}
-              value={opt.value}
-              className="accent-primary"
-            />
-            <span>{opt.label}</span>
-          </label>
-        ))}
+    <div className="flex flex-col gap-4">
+      <div className="flex flex-col gap-1">
+        <h3 className="text-base font-semibold">{legend}</h3>
+        {helper ? (
+          <p className="text-sm text-muted-foreground">{helper}</p>
+        ) : null}
       </div>
-    </fieldset>
+      <div className="grid gap-2 sm:grid-cols-3">
+        {options.map((opt) => {
+          const id = `${name}-${opt.value}`;
+          return (
+            <Label
+              key={opt.value}
+              htmlFor={id}
+              className="flex cursor-pointer items-center gap-3 rounded-md border border-input bg-background px-4 py-3 text-sm font-normal transition has-[[data-state=checked]]:border-primary has-[[data-state=checked]]:bg-primary/5"
+            >
+              <Checkbox id={id} name={name} value={opt.value} />
+              <span>{opt.label}</span>
+            </Label>
+          );
+        })}
+      </div>
+    </div>
   );
 }

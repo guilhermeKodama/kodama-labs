@@ -1,30 +1,41 @@
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
+
 const items = [
   {
     q: "Quanto custa?",
-    a: "Durante o beta, gratuito. Cobramos só quando o produto provar valor.",
+    a: "Gratuito durante o beta. Cobramos só depois que o produto provar valor.",
   },
   {
     q: "Quando começa?",
     a: "Em poucas semanas. Cadastrados recebem prioridade.",
   },
   {
-    q: "Como funciona?",
-    a: "Substitua esta resposta pela mecânica do seu produto, em 2 frases.",
+    q: "Como funciona, na prática?",
+    a: "Substitua por uma resposta curta — até 30 palavras — sobre a mecânica do produto.",
   },
 ];
 
 export function Faq() {
   return (
-    <section className="flex flex-col gap-4">
-      <h2 className="text-xl font-semibold">Perguntas frequentes</h2>
-      <dl className="flex flex-col divide-y divide-border border-y border-border">
-        {items.map((item) => (
-          <div key={item.q} className="py-4">
-            <dt className="text-sm font-medium">{item.q}</dt>
-            <dd className="mt-1 text-sm text-muted-foreground">{item.a}</dd>
-          </div>
+    <section className="flex flex-col gap-8">
+      <h2 className="text-3xl font-semibold tracking-tight sm:text-4xl">
+        Perguntas frequentes
+      </h2>
+      <Accordion type="single" collapsible className="w-full">
+        {items.map((item, i) => (
+          <AccordionItem key={item.q} value={`item-${i}`}>
+            <AccordionTrigger className="text-base font-medium">
+              {item.q}
+            </AccordionTrigger>
+            <AccordionContent className="text-base">{item.a}</AccordionContent>
+          </AccordionItem>
         ))}
-      </dl>
+      </Accordion>
     </section>
   );
 }

@@ -1,7 +1,13 @@
 "use client";
 
-import { useState, FormEvent } from "react";
+import { useId, useState, FormEvent } from "react";
 import { useRouter } from "next/navigation";
+import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Separator } from "@/components/ui/separator";
 
 export function IntakeForm() {
   const router = useRouter();
@@ -37,9 +43,9 @@ export function IntakeForm() {
 
   return (
     <form className="flex flex-col gap-8" onSubmit={onSubmit}>
-      <RadioGroup
+      <FieldRadio
         legend="De qual cidade você sai?"
-        helper="Apenas voos diretos para Orlando — GRU, CNF e VCP."
+        helper="Apenas voos diretos para Orlando."
         name="origin"
         required
         options={[
@@ -49,7 +55,9 @@ export function IntakeForm() {
         ]}
       />
 
-      <RadioGroup
+      <Separator />
+
+      <FieldRadio
         legend="Quando você quer viajar?"
         name="travel_window"
         required
@@ -61,7 +69,9 @@ export function IntakeForm() {
         ]}
       />
 
-      <RadioGroup
+      <Separator />
+
+      <FieldRadio
         legend="Quantas pessoas na família?"
         helper="Foco em grupos de 3 a 6."
         name="group_size"
@@ -74,9 +84,11 @@ export function IntakeForm() {
         ]}
       />
 
-      <CheckboxGroup
-        legend="Em quais programas você tem milhas suficientes?"
-        helper="Marque todos onde tem saldo relevante. A gente cruza disponibilidade nos três."
+      <Separator />
+
+      <FieldCheckbox
+        legend="Em quais programas você tem milhas?"
+        helper="Marque todos onde tem saldo relevante."
         name="programs"
         options={[
           { value: "azul", label: "Azul Fidelidade" },
@@ -85,43 +97,48 @@ export function IntakeForm() {
         ]}
       />
 
-      <fieldset className="flex flex-col gap-4 border-t border-border pt-6">
-        <legend className="text-sm font-semibold">Como te avisamos?</legend>
-        <TextField
+      <Separator />
+
+      <div className="flex flex-col gap-6">
+        <div className="flex flex-col gap-1">
+          <h3 className="text-base font-semibold">Como te avisamos?</h3>
+          <p className="text-sm text-muted-foreground">
+            Os alertas chegam em segundos.
+          </p>
+        </div>
+        <FieldText
           label="E-mail"
           name="email"
           type="email"
           required
           placeholder="voce@email.com"
         />
-        <TextField
+        <FieldText
           label="Telegram ou WhatsApp"
           name="contact"
           type="text"
           required
           placeholder="@seu_usuario ou +55 11 9XXXX-XXXX"
-          helper="Os alertas chegam aqui em segundos — Telegram é mais rápido."
+          helper="Telegram é mais rápido."
         />
-      </fieldset>
+      </div>
 
-      <button
-        type="submit"
-        disabled={submitting}
-        className="inline-flex items-center justify-center rounded-md bg-primary px-4 py-3 text-sm font-medium text-primary-foreground transition hover:opacity-90 disabled:opacity-50"
-      >
+      <Button type="submit" size="lg" disabled={submitting} className="w-full">
         {submitting ? "Enviando…" : "Quero receber os alertas"}
-      </button>
+      </Button>
 
-      {error ? <p className="text-sm text-red-600">{error}</p> : null}
-
-      <p className="text-xs text-muted-foreground">
-        Não compartilhamos seus dados. Você pode sair a qualquer momento.
-      </p>
+      {error ? (
+        <p className="text-sm text-destructive">{error}</p>
+      ) : (
+        <p className="text-xs text-muted-foreground">
+          Não compartilhamos seus dados. Você pode sair a qualquer momento.
+        </p>
+      )}
     </form>
   );
 }
 
-function TextField({
+function FieldText({
   label,
   name,
   type,
@@ -136,24 +153,25 @@ function TextField({
   placeholder?: string;
   helper?: string;
 }) {
+  const id = useId();
   return (
-    <label className="flex flex-col gap-1.5">
-      <span className="text-sm font-medium">{label}</span>
-      <input
+    <div className="flex flex-col gap-2">
+      <Label htmlFor={id}>{label}</Label>
+      <Input
+        id={id}
         name={name}
         type={type}
         required={required}
         placeholder={placeholder}
-        className="rounded-md border border-border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/20"
       />
       {helper ? (
-        <span className="text-xs text-muted-foreground">{helper}</span>
+        <p className="text-xs text-muted-foreground">{helper}</p>
       ) : null}
-    </label>
+    </div>
   );
 }
 
-function RadioGroup({
+function FieldRadio({
   legend,
   helper,
   name,
@@ -167,33 +185,37 @@ function RadioGroup({
   required?: boolean;
 }) {
   return (
-    <fieldset className="flex flex-col gap-3">
-      <legend className="text-sm font-semibold">{legend}</legend>
-      {helper ? (
-        <p className="-mt-2 text-xs text-muted-foreground">{helper}</p>
-      ) : null}
-      <div className="grid gap-2 sm:grid-cols-3">
-        {options.map((opt) => (
-          <label
-            key={opt.value}
-            className="flex cursor-pointer items-center gap-2 rounded-md border border-border bg-background px-3 py-2 text-sm has-[:checked]:border-primary has-[:checked]:bg-primary/5"
-          >
-            <input
-              type="radio"
-              name={name}
-              value={opt.value}
-              required={required}
-              className="accent-primary"
-            />
-            <span>{opt.label}</span>
-          </label>
-        ))}
+    <div className="flex flex-col gap-4">
+      <div className="flex flex-col gap-1">
+        <h3 className="text-base font-semibold">{legend}</h3>
+        {helper ? (
+          <p className="text-sm text-muted-foreground">{helper}</p>
+        ) : null}
       </div>
-    </fieldset>
+      <RadioGroup
+        name={name}
+        required={required}
+        className="grid gap-2 sm:grid-cols-3"
+      >
+        {options.map((opt) => {
+          const id = `${name}-${opt.value}`;
+          return (
+            <Label
+              key={opt.value}
+              htmlFor={id}
+              className="flex cursor-pointer items-center gap-3 rounded-md border border-input bg-background px-4 py-3 text-sm font-normal transition has-[[data-state=checked]]:border-primary has-[[data-state=checked]]:bg-primary/5"
+            >
+              <RadioGroupItem id={id} value={opt.value} />
+              <span>{opt.label}</span>
+            </Label>
+          );
+        })}
+      </RadioGroup>
+    </div>
   );
 }
 
-function CheckboxGroup({
+function FieldCheckbox({
   legend,
   helper,
   name,
@@ -205,27 +227,28 @@ function CheckboxGroup({
   options: Array<{ value: string; label: string }>;
 }) {
   return (
-    <fieldset className="flex flex-col gap-3">
-      <legend className="text-sm font-semibold">{legend}</legend>
-      {helper ? (
-        <p className="-mt-2 text-xs text-muted-foreground">{helper}</p>
-      ) : null}
-      <div className="grid gap-2 sm:grid-cols-3">
-        {options.map((opt) => (
-          <label
-            key={opt.value}
-            className="flex cursor-pointer items-center gap-2 rounded-md border border-border bg-background px-3 py-2 text-sm has-[:checked]:border-primary has-[:checked]:bg-primary/5"
-          >
-            <input
-              type="checkbox"
-              name={name}
-              value={opt.value}
-              className="accent-primary"
-            />
-            <span>{opt.label}</span>
-          </label>
-        ))}
+    <div className="flex flex-col gap-4">
+      <div className="flex flex-col gap-1">
+        <h3 className="text-base font-semibold">{legend}</h3>
+        {helper ? (
+          <p className="text-sm text-muted-foreground">{helper}</p>
+        ) : null}
       </div>
-    </fieldset>
+      <div className="grid gap-2 sm:grid-cols-3">
+        {options.map((opt) => {
+          const id = `${name}-${opt.value}`;
+          return (
+            <Label
+              key={opt.value}
+              htmlFor={id}
+              className="flex cursor-pointer items-center gap-3 rounded-md border border-input bg-background px-4 py-3 text-sm font-normal transition has-[[data-state=checked]]:border-primary has-[[data-state=checked]]:bg-primary/5"
+            >
+              <Checkbox id={id} name={name} value={opt.value} />
+              <span>{opt.label}</span>
+            </Label>
+          );
+        })}
+      </div>
+    </div>
   );
 }
