@@ -30,7 +30,7 @@ export function Destinations() {
     <section className="flex flex-col gap-10">
       <header className="flex flex-col gap-3">
         <h2 className="text-3xl font-semibold tracking-tight sm:text-4xl">
-          A viagem inteira, do GRU à Flórida.
+          A viagem inteira, de SP, BH ou Campinas à Flórida.
         </h2>
         <p className="max-w-xl text-base text-muted-foreground">
           Três passos. Um único cadastro.
