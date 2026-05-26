@@ -9,21 +9,21 @@ export function Hero() {
       {/* Full-bleed background photo */}
       <Image
         src="/images/hero-family.webp"
-        alt="Família sorrindo numa praia tropical ao pôr do sol"
+        alt="Família brasileira de quatro caminhando juntos num parque ao pôr do sol"
         fill
         priority
         sizes="100vw"
         className="-z-20 object-cover"
       />
 
-      {/* Gradient scrim — darker on the left where the text lives, fades right */}
+      {/* Gradient scrim — bottom-up so the family stays fully lit and text reads over the path */}
       <div
         aria-hidden
-        className="absolute inset-0 -z-10 bg-gradient-to-r from-black/75 via-black/40 to-black/10"
+        className="absolute inset-0 -z-10 bg-gradient-to-t from-black/85 via-black/35 to-transparent"
       />
 
-      {/* Inner container with text overlay */}
-      <div className="relative mx-auto flex min-h-[640px] max-w-5xl flex-col items-start justify-center gap-7 px-6 py-24 text-background sm:min-h-[680px] sm:py-32 lg:min-h-[720px]">
+      {/* Inner container with text overlay — anchored to the bottom over the path */}
+      <div className="relative mx-auto flex min-h-[680px] max-w-5xl flex-col items-start justify-end gap-7 px-6 pb-16 pt-32 text-background sm:min-h-[720px] sm:pb-20 sm:pt-40 lg:min-h-[780px]">
         <span className="flex flex-wrap items-center gap-2 text-xs font-medium uppercase tracking-[0.18em] text-background/80">
           <span aria-hidden className="text-accent">●</span>
           Família
