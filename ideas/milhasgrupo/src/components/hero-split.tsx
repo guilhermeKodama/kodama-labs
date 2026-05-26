@@ -54,7 +54,7 @@ export function HeroSplit() {
       <div className="relative aspect-[4/5] w-full overflow-hidden rounded-2xl shadow-lg shadow-foreground/10 order-1 lg:order-2">
         <Image
           src="/images/hero-family.webp"
-          alt="Pai e filha observando aviões no aeroporto"
+          alt="Família feliz curtindo viagem em praia ensolarada"
           fill
           priority
           sizes="(min-width: 1024px) 480px, 100vw"

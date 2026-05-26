@@ -7,7 +7,7 @@ const stops = [
     title: "São Paulo, Belo Horizonte ou Campinas",
     body: "Voo direto, sem conexão.",
     src: "/images/dest-gru.webp",
-    alt: "Mãe e filha observando aviões no aeroporto ao amanhecer",
+    alt: "Vista aérea de São Paulo com avião ao pôr do sol",
   },
   {
     eyebrow: "02 · Voo direto",
