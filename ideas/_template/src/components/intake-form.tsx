@@ -8,23 +8,37 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Separator } from "@/components/ui/separator";
+import { trackCompleteRegistration, trackLead } from "@/lib/analytics";
+import { readUtmsFromUrl } from "@/lib/utm";
+
+type Step1Data = Record<string, string | string[]>;
 
 export function IntakeForm() {
   const router = useRouter();
+  const [step, setStep] = useState<1 | 2>(1);
+  const [step1Data, setStep1Data] = useState<Step1Data>({});
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  async function onSubmit(event: FormEvent<HTMLFormElement>) {
+  function onStep1Submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setError(null);
+    setStep1Data(serializeFormData(new FormData(event.currentTarget)));
+    trackLead();
+    setStep(2);
+  }
+
+  async function onStep2Submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError(null);
     setSubmitting(true);
 
-    const formData = new FormData(event.currentTarget);
-    const payload: Record<string, string | string[]> = {};
-    for (const key of new Set(formData.keys())) {
-      const values = formData.getAll(key).map(String);
-      payload[key] = values.length > 1 ? values : (values[0] ?? "");
-    }
+    const step2Data = serializeFormData(new FormData(event.currentTarget));
+    const payload: Record<string, string | string[]> = {
+      ...step1Data,
+      ...step2Data,
+      ...readUtmsFromUrl(),
+    };
 
     try {
       const res = await fetch("/api/lead", {
@@ -33,6 +47,7 @@ export function IntakeForm() {
         body: JSON.stringify(payload),
       });
       if (!res.ok) throw new Error(`status ${res.status}`);
+      trackCompleteRegistration();
       router.push("/thanks");
     } catch (err) {
       console.error(err);
@@ -41,42 +56,36 @@ export function IntakeForm() {
     }
   }
 
-  return (
-    <form className="flex flex-col gap-8" onSubmit={onSubmit}>
-      {/* Example: single-select. Replace with your idea's field. */}
-      <FieldRadio
-        legend="Pergunta de exemplo (escolha uma)"
-        name="example_single"
-        required
-        options={[
-          { value: "a", label: "Opção A" },
-          { value: "b", label: "Opção B" },
-          { value: "c", label: "Opção C" },
-        ]}
-      />
+  if (step === 1) {
+    return (
+      <form className="flex flex-col gap-8" onSubmit={onStep1Submit}>
+        {/* Example: single-select. Replace with your idea's field. */}
+        <FieldRadio
+          legend="Pergunta de exemplo (escolha uma)"
+          name="example_single"
+          required
+          options={[
+            { value: "a", label: "Opção A" },
+            { value: "b", label: "Opção B" },
+            { value: "c", label: "Opção C" },
+          ]}
+        />
 
-      <Separator />
+        <Separator />
 
-      {/* Example: multi-select. Replace with your idea's field. */}
-      <FieldCheckbox
-        legend="Pergunta múltipla (escolha quantas quiser)"
-        name="example_multi"
-        options={[
-          { value: "x", label: "Opção X" },
-          { value: "y", label: "Opção Y" },
-          { value: "z", label: "Opção Z" },
-        ]}
-      />
+        {/* Example: multi-select. Replace with your idea's field. */}
+        <FieldCheckbox
+          legend="Pergunta múltipla (escolha quantas quiser)"
+          name="example_multi"
+          options={[
+            { value: "x", label: "Opção X" },
+            { value: "y", label: "Opção Y" },
+            { value: "z", label: "Opção Z" },
+          ]}
+        />
 
-      <Separator />
+        <Separator />
 
-      <div className="flex flex-col gap-6">
-        <div className="flex flex-col gap-1">
-          <h3 className="text-base font-semibold">Contato</h3>
-          <p className="text-sm text-muted-foreground">
-            Como podemos te avisar.
-          </p>
-        </div>
         <FieldText
           label="E-mail"
           name="email"
@@ -84,6 +93,27 @@ export function IntakeForm() {
           required
           placeholder="voce@email.com"
         />
+
+        <Button type="submit" size="lg" className="w-full">
+          Continuar
+        </Button>
+
+        <p className="text-xs text-muted-foreground">
+          Etapa 1 de 2. Em seguida pedimos só o seu contato.
+        </p>
+      </form>
+    );
+  }
+
+  return (
+    <form className="flex flex-col gap-8" onSubmit={onStep2Submit}>
+      <div className="flex flex-col gap-6">
+        <div className="flex flex-col gap-1">
+          <h3 className="text-base font-semibold">Como te avisamos?</h3>
+          <p className="text-sm text-muted-foreground">
+            Última etapa. Menos de 10 segundos.
+          </p>
+        </div>
         <FieldText
           label="WhatsApp ou Telegram"
           name="contact"
@@ -106,6 +136,15 @@ export function IntakeForm() {
       )}
     </form>
   );
+}
+
+function serializeFormData(formData: FormData): Record<string, string | string[]> {
+  const payload: Record<string, string | string[]> = {};
+  for (const key of new Set(formData.keys())) {
+    const values = formData.getAll(key).map(String);
+    payload[key] = values.length > 1 ? values : (values[0] ?? "");
+  }
+  return payload;
 }
 
 function FieldText({
