@@ -1,10 +1,12 @@
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { IntakeForm } from "@/components/intake-form";
+import { TrackViewContent } from "@/components/track-view-content";
 
 export default function StartPage() {
   return (
     <main className="mx-auto flex min-h-screen max-w-xl flex-col gap-10 px-6 py-16">
+      <TrackViewContent name="start" />
       <header className="flex flex-col gap-3">
         <Link
           href="/"

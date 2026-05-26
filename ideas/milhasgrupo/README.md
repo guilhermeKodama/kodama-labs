@@ -106,14 +106,24 @@ The `/api/lead` route POSTs every submission as JSON to `LEADS_WEBHOOK_URL`. Poi
 5. In Vercel → Project → Settings → Environment Variables, set `LEADS_WEBHOOK_URL` to that URL. Redeploy.
 6. Smoke test: visit the production landing, submit the form, confirm a row lands in the Sheet.
 
-### 2. Analytics — Meta Pixel + Google Analytics
+### 2. Analytics — Meta Pixel + GA4 + Google Ads
 
-Both run via `src/lib/analytics.tsx` and stay silent if env vars are unset. To wire them up:
+All three load via `src/lib/analytics.tsx` and stay silent if the corresponding env vars are unset. To wire them up:
 
 - **Meta Pixel** — Meta Ads Manager → Events Manager → create Pixel → copy ID. Set `NEXT_PUBLIC_META_PIXEL_ID` in Vercel.
 - **GA4** — Google Analytics → Admin → Data Streams → new Web stream → copy *Measurement ID* (starts with `G-`). Set `NEXT_PUBLIC_GA_ID` in Vercel.
+- **Google Ads** — Google Ads → Tools → Conversions → new conversion (Website → Lead) → copy the `AW-XXXXXXX` ID and the conversion *label*. Set `NEXT_PUBLIC_GOOGLE_ADS_ID` and `NEXT_PUBLIC_GOOGLE_ADS_LEAD_LABEL` in Vercel.
 
-Redeploy. The Pixel auto-fires `PageView`; GA4 auto-tracks page views.
+Redeploy. The full funnel fires automatically:
+
+| Event | When | Meta Pixel | GA4 | Google Ads |
+| --- | --- | --- | --- | --- |
+| PageView | every page | `PageView` | auto | auto |
+| ViewContent | `/start` mounts | `ViewContent` | `view_content` | — |
+| Lead | step 1 submitted (travel + email) | `Lead` | `generate_lead` | `conversion` (uses `LEAD_LABEL`) |
+| CompleteRegistration | step 2 submitted (WhatsApp/Telegram) | `CompleteRegistration` | `sign_up` | — |
+
+UTMs (`utm_source`, `utm_medium`, `utm_campaign`, `utm_content`, `utm_term`) and `referrer` are captured from the URL on submit and forwarded to the lead webhook — confirm via Sheet rows.
 
 ### 3. Concierge runbook — manual alerts + issuance follow-up
 
