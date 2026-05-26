@@ -26,6 +26,23 @@ This Turborepo includes the following packages/apps:
 - `@repo/eslint-config`: `eslint` configurations (includes `eslint-config-next` and `eslint-config-prettier`)
 - `@repo/typescript-config`: `tsconfig.json`s used throughout the monorepo
 
+### Ideas (validation prototypes)
+
+`ideas/` is the validation product line — fast, structured idea testing. Each idea is its own Next.js prototype that ships independently to Vercel, paired with a one-pager (`validation.md`) following the Zero-to-Sold / Lean Startup framework. See [`ideas/README.md`](ideas/README.md) for the playbook. Spin up a new idea with `pnpm new:idea <slug>`.
+
+### Dev ports
+
+Every Next app is pinned to a fixed port so `pnpm dev` doesn't silently auto-bump and collide.
+
+| App | Port |
+|---|---|
+| `apps/capital` | 3000 |
+| `apps/docs` | 3001 |
+| `apps/sentinel` | 3002 |
+| `ideas/*` | 3100 |
+
+Ideas share port 3100 — run one prototype at a time, or pass `next dev --port 3101` to run a second in parallel.
+
 Each package/app is 100% [TypeScript](https://www.typescriptlang.org/).
 
 ### Utilities

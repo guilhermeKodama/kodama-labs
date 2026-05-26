@@ -2,3 +2,6 @@ packages:
   - 'apps/*'
   - 'infrastructure/*'
   - 'packages/*'
+  - 'ideas/*'
+  - '!ideas/_template'
+  - '!ideas/_rules'
