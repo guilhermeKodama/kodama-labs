@@ -25,6 +25,14 @@ export function IntakeForm() {
       payload[key] = values.length > 1 ? values : (values[0] ?? "");
     }
 
+    const params = new URLSearchParams(window.location.search);
+    payload.utm_source = params.get("utm_source") ?? "";
+    payload.utm_medium = params.get("utm_medium") ?? "";
+    payload.utm_campaign = params.get("utm_campaign") ?? "";
+    payload.utm_content = params.get("utm_content") ?? "";
+    payload.utm_term = params.get("utm_term") ?? "";
+    payload.referrer = document.referrer;
+
     try {
       const res = await fetch("/api/lead", {
         method: "POST",
