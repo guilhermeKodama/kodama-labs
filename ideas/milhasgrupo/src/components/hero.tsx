@@ -8,12 +8,12 @@ export function Hero() {
     <section className="relative isolate overflow-hidden">
       {/* Full-bleed background photo */}
       <Image
-        src="/images/hero-family.webp"
+        src="/images/hero-park-v2.webp"
         alt="Família brasileira de quatro caminhando juntos num parque ao pôr do sol"
         fill
         priority
         sizes="100vw"
-        className="-z-20 object-cover"
+        className="-z-20 object-cover object-[62%_center] sm:object-center"
       />
 
       {/* Gradient scrim — bottom-up so the family stays fully lit and text reads over the path */}
@@ -24,12 +24,12 @@ export function Hero() {
 
       {/* Inner container with text overlay — anchored to the bottom over the path */}
       <div className="relative mx-auto flex min-h-[680px] max-w-5xl flex-col items-start justify-end gap-7 px-6 pb-16 pt-32 text-background sm:min-h-[720px] sm:pb-20 sm:pt-40 lg:min-h-[780px]">
-        <span className="flex flex-wrap items-center gap-2 text-xs font-medium uppercase tracking-[0.18em] text-background/80">
-          <span aria-hidden className="text-accent">●</span>
+        <span className="flex flex-wrap items-center gap-2 text-xs font-semibold uppercase tracking-[0.18em] text-background drop-shadow-md">
+          <span aria-hidden className="text-accent drop-shadow">●</span>
           Família
-          <span aria-hidden className="text-background/40">·</span>
+          <span aria-hidden className="text-background/70">·</span>
           Orlando
-          <span aria-hidden className="text-background/40">·</span>
+          <span aria-hidden className="text-background/70">·</span>
           3 a 6 passageiros
         </span>
 
