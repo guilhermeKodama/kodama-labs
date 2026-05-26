@@ -7,31 +7,37 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Separator } from "@/components/ui/separator";
+import { trackCompleteRegistration, trackLead } from "@/lib/analytics";
+import { readUtmsFromUrl } from "@/lib/utm";
+
+type Step1Data = Record<string, string | string[]>;
 
 export function IntakeForm() {
   const router = useRouter();
+  const [step, setStep] = useState<1 | 2>(1);
+  const [step1Data, setStep1Data] = useState<Step1Data>({});
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  async function onSubmit(event: FormEvent<HTMLFormElement>) {
+  function onStep1Submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setError(null);
+    setStep1Data(serializeFormData(new FormData(event.currentTarget)));
+    trackLead();
+    setStep(2);
+  }
+
+  async function onStep2Submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError(null);
     setSubmitting(true);
 
-    const formData = new FormData(event.currentTarget);
-    const payload: Record<string, string | string[]> = {};
-    for (const key of new Set(formData.keys())) {
-      const values = formData.getAll(key).map(String);
-      payload[key] = values.length > 1 ? values : (values[0] ?? "");
-    }
-
-    const params = new URLSearchParams(window.location.search);
-    payload.utm_source = params.get("utm_source") ?? "";
-    payload.utm_medium = params.get("utm_medium") ?? "";
-    payload.utm_campaign = params.get("utm_campaign") ?? "";
-    payload.utm_content = params.get("utm_content") ?? "";
-    payload.utm_term = params.get("utm_term") ?? "";
-    payload.referrer = document.referrer;
+    const step2Data = serializeFormData(new FormData(event.currentTarget));
+    const payload: Record<string, string | string[]> = {
+      ...step1Data,
+      ...step2Data,
+      ...readUtmsFromUrl(),
+    };
 
     try {
       const res = await fetch("/api/lead", {
@@ -40,6 +46,7 @@ export function IntakeForm() {
         body: JSON.stringify(payload),
       });
       if (!res.ok) throw new Error(`status ${res.status}`);
+      trackCompleteRegistration();
       router.push("/thanks");
     } catch (err) {
       console.error(err);
@@ -48,44 +55,38 @@ export function IntakeForm() {
     }
   }
 
-  return (
-    <form className="flex flex-col gap-8" onSubmit={onSubmit}>
-      <FieldRadio
-        legend="Quando você quer viajar?"
-        name="travel_window"
-        required
-        options={[
-          { value: "0-6m", label: "Nos próximos 6 meses" },
-          { value: "6-12m", label: "Em 6 a 12 meses" },
-          { value: "12-18m", label: "Em 12 a 18 meses" },
-          { value: "researching", label: "Ainda pesquisando" },
-        ]}
-      />
+  if (step === 1) {
+    return (
+      <form className="flex flex-col gap-8" onSubmit={onStep1Submit}>
+        <FieldRadio
+          legend="Quando você quer viajar?"
+          name="travel_window"
+          required
+          options={[
+            { value: "0-6m", label: "Nos próximos 6 meses" },
+            { value: "6-12m", label: "Em 6 a 12 meses" },
+            { value: "12-18m", label: "Em 12 a 18 meses" },
+            { value: "researching", label: "Ainda pesquisando" },
+          ]}
+        />
 
-      <Separator />
+        <Separator />
 
-      <FieldRadio
-        legend="Quantas pessoas na família?"
-        helper="Foco em grupos de 3 a 6."
-        name="group_size"
-        required
-        options={[
-          { value: "3", label: "3" },
-          { value: "4", label: "4" },
-          { value: "5", label: "5" },
-          { value: "6+", label: "6 ou mais" },
-        ]}
-      />
+        <FieldRadio
+          legend="Quantas pessoas na família?"
+          helper="Foco em grupos de 3 a 6."
+          name="group_size"
+          required
+          options={[
+            { value: "3", label: "3" },
+            { value: "4", label: "4" },
+            { value: "5", label: "5" },
+            { value: "6+", label: "6 ou mais" },
+          ]}
+        />
 
-      <Separator />
+        <Separator />
 
-      <div className="flex flex-col gap-6">
-        <div className="flex flex-col gap-1">
-          <h3 className="text-base font-semibold">Como te avisamos?</h3>
-          <p className="text-sm text-muted-foreground">
-            Os alertas chegam em segundos.
-          </p>
-        </div>
         <FieldText
           label="E-mail"
           name="email"
@@ -93,13 +94,33 @@ export function IntakeForm() {
           required
           placeholder="voce@email.com"
         />
+
+        <Button type="submit" size="lg" className="w-full">
+          Continuar
+        </Button>
+
+        <p className="text-xs text-muted-foreground">
+          Etapa 1 de 2. Em seguida pedimos só o seu contato.
+        </p>
+      </form>
+    );
+  }
+
+  return (
+    <form className="flex flex-col gap-8" onSubmit={onStep2Submit}>
+      <div className="flex flex-col gap-6">
+        <div className="flex flex-col gap-1">
+          <h3 className="text-base font-semibold">Como te avisamos?</h3>
+          <p className="text-sm text-muted-foreground">
+            Os alertas chegam em segundos. Telegram é mais rápido.
+          </p>
+        </div>
         <FieldText
           label="Telegram ou WhatsApp"
           name="contact"
           type="text"
           required
           placeholder="@seu_usuario ou +55 11 9XXXX-XXXX"
-          helper="Telegram é mais rápido."
         />
       </div>
 
@@ -116,6 +137,15 @@ export function IntakeForm() {
       )}
     </form>
   );
+}
+
+function serializeFormData(formData: FormData): Record<string, string | string[]> {
+  const payload: Record<string, string | string[]> = {};
+  for (const key of new Set(formData.keys())) {
+    const values = formData.getAll(key).map(String);
+    payload[key] = values.length > 1 ? values : (values[0] ?? "");
+  }
+  return payload;
 }
 
 function FieldText({
@@ -194,4 +224,3 @@ function FieldRadio({
     </div>
   );
 }
-
