@@ -1,4 +1,4 @@
-import { HeroSplit } from "@/components/hero-split";
+import { Hero } from "@/components/hero";
 import { Stats } from "@/components/stats";
 import { Problem } from "@/components/problem";
 import { HowItWorks } from "@/components/how-it-works";
@@ -9,9 +9,9 @@ import { Footer } from "@/components/footer";
 
 export default function Page() {
   return (
-    <main className="mx-auto max-w-5xl px-6">
-      <HeroSplit />
-      <div className="mx-auto max-w-3xl space-y-24 pb-24 sm:space-y-32 sm:pb-32">
+    <>
+      <Hero />
+      <main className="mx-auto max-w-3xl space-y-24 px-6 pb-24 pt-24 sm:space-y-32 sm:pb-32 sm:pt-32">
         <Stats />
         <Problem />
         <HowItWorks />
@@ -19,7 +19,7 @@ export default function Page() {
         <Faq />
         <CtaRepeat />
         <Footer />
-      </div>
-    </main>
+      </main>
+    </>
   );
 }
