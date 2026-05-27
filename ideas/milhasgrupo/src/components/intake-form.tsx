@@ -82,12 +82,11 @@ export function IntakeForm() {
         placeholder="voce@email.com"
       />
 
-      <FieldText
+      <FieldContact
         label="Telegram ou WhatsApp"
         name="contact"
-        type="text"
         required
-        placeholder="@seu_usuario ou +55 11 9XXXX-XXXX"
+        placeholder="@seu_usuario ou (11) 99999-9999"
         helper="Os alertas chegam em segundos. Telegram é mais rápido."
       />
 
@@ -146,6 +145,59 @@ function FieldText({
       ) : null}
     </div>
   );
+}
+
+function FieldContact({
+  label,
+  name,
+  required,
+  placeholder,
+  helper,
+}: {
+  label: string;
+  name: string;
+  required?: boolean;
+  placeholder?: string;
+  helper?: string;
+}) {
+  const id = useId();
+  const [value, setValue] = useState("");
+
+  return (
+    <div className="flex flex-col gap-2">
+      <Label htmlFor={id}>{label}</Label>
+      <Input
+        id={id}
+        name={name}
+        type="text"
+        inputMode={isPhoneIntent(value) ? "tel" : "text"}
+        required={required}
+        placeholder={placeholder}
+        value={value}
+        onChange={(e) => setValue(formatContact(e.target.value))}
+      />
+      {helper ? (
+        <p className="text-xs text-muted-foreground">{helper}</p>
+      ) : null}
+    </div>
+  );
+}
+
+function isPhoneIntent(value: string): boolean {
+  const trimmed = value.trimStart();
+  if (trimmed.length === 0) return false;
+  return /^[\d(]/.test(trimmed);
+}
+
+function formatContact(value: string): string {
+  if (!isPhoneIntent(value)) return value;
+  const digits = value.replace(/\D/g, "").slice(0, 11);
+  if (digits.length === 0) return "";
+  if (digits.length <= 2) return `(${digits}`;
+  if (digits.length <= 6) return `(${digits.slice(0, 2)}) ${digits.slice(2)}`;
+  if (digits.length <= 10)
+    return `(${digits.slice(0, 2)}) ${digits.slice(2, 6)}-${digits.slice(6)}`;
+  return `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7)}`;
 }
 
 function FieldRadio({
