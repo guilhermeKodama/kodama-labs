@@ -669,7 +669,21 @@
       "monthly": "Mensal",
       "categories": "Categorias",
       "insights": "Insights",
-      "portfolio": "Carteira"
+      "portfolio": "Carteira",
+      "cashflow": "Fluxo"
+    },
+    "cashflow": {
+      "title": "Fluxo do Dinheiro",
+      "subtitle": "Veja para onde o dinheiro vai — das fontes de receita, passando pelas suas entidades, até onde ele realmente para.",
+      "legendIncome": "Receita",
+      "legendExpenses": "Despesas",
+      "legendInvestments": "Investimentos",
+      "legendSurplus": "Sobrou em Caixa",
+      "legendReserves": "Das Reservas",
+      "surplusHint": "\"Sobrou em Caixa\" é o que ficou na conta no período (receita que não foi gasta, transferida ou investida).",
+      "reservesHint": "\"Das Reservas\" aparece quando o gasto passou da receita do período — representa dinheiro vindo de saldos anteriores, poupança ou crédito.",
+      "expandOthers": "Clique em \"Outros\" para expandir as categorias pequenas.",
+      "empty": "Sem transações nesse período. Adicione algumas para ver o fluxo."
     },
     "portfolio": {
       "title": "Relatórios da Carteira",
@@ -730,7 +744,21 @@
     },
     "period": {
       "weekly": "Semanal",
-      "monthly": "Mensal"
+      "monthly": "Mensal",
+      "thisMonth": "Este Mês",
+      "last3M": "Últimos 3M",
+      "ytd": "Ano",
+      "1Y": "1A",
+      "all": "Tudo",
+      "custom": "Período"
+    },
+    "sankey": {
+      "personal": "Pessoal",
+      "others": "Outros",
+      "investments": "Investimentos",
+      "surplus": "Sobrou em Caixa",
+      "uncategorized": "Sem categoria",
+      "reserves": "Das Reservas"
     }
   },
   "insights": {
