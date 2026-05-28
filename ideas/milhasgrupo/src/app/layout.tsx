@@ -20,6 +20,11 @@ export const metadata: Metadata = {
   title: "MilhasGrupo — Disney em família com suas milhas",
   description:
     "Avisamos quando há 3 a 6 assentos no mesmo voo para Orlando em Azul Fidelidade, LATAM Pass ou Smiles.",
+  verification: {
+    other: {
+      "facebook-domain-verification": "p96qdqwfvkcd82shwdnax7rnxqhr8o",
+    },
+  },
 };
 
 export default function RootLayout({
