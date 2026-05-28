@@ -73,7 +73,6 @@ export function CashflowSankeyChart({
     title: string;
     detail: string;
   } | null>(null);
-  const [mountKey, setMountKey] = useState(0);
   const [expandedOthers, setExpandedOthers] = useState(false);
 
   // Observe container width for responsive sizing
@@ -88,12 +87,6 @@ export function CashflowSankeyChart({
     ro.observe(containerRef.current);
     return () => ro.disconnect();
   }, []);
-
-  // Trigger re-mount animation when underlying data changes
-  useEffect(() => {
-    setMountKey((k) => k + 1);
-    setExpandedOthers(false);
-  }, [nodes, links]);
 
   // Total flow into the system = sum of outflows from all source-layer nodes
   // (real income + virtual reserves). Used as denominator for tooltip %.
@@ -305,7 +298,6 @@ export function CashflowSankeyChart({
     >
       {graph ? (
         <svg
-          key={mountKey}
           width="100%"
           height={height}
           viewBox={`0 0 ${Math.max(360, width)} ${height}`}
@@ -355,7 +347,7 @@ export function CashflowSankeyChart({
               const delay = sourceColumn * ANIMATION_STAGGER_MS;
               return (
                 <path
-                  key={`link-${i}-${mountKey}`}
+                  key={`link-${i}`}
                   d={d}
                   stroke={`url(#cashflow-link-grad-${i})`}
                   strokeWidth={Math.max(1, link.width ?? 0)}
