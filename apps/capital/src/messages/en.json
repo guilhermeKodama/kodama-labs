@@ -669,7 +669,21 @@
       "monthly": "Monthly",
       "categories": "Categories",
       "insights": "Insights",
-      "portfolio": "Portfolio"
+      "portfolio": "Portfolio",
+      "cashflow": "Cash Flow"
+    },
+    "cashflow": {
+      "title": "Money Flow",
+      "subtitle": "Trace how money moves from income sources through your entities to where it actually lands.",
+      "legendIncome": "Income",
+      "legendExpenses": "Expenses",
+      "legendInvestments": "Investments",
+      "legendSurplus": "Cash Kept",
+      "legendReserves": "From Reserves",
+      "surplusHint": "\"Cash Kept\" is what stayed in each account this period (income that wasn't spent, transferred, or invested).",
+      "reservesHint": "\"From Reserves\" appears when spending exceeded income this period — it represents money pulled from previous balances, savings, or credit.",
+      "expandOthers": "Click \"Others\" to expand the small categories.",
+      "empty": "No transactions in this period. Add some to see the flow."
     },
     "portfolio": {
       "title": "Portfolio Reports",
@@ -730,7 +744,21 @@
     },
     "period": {
       "weekly": "Weekly",
-      "monthly": "Monthly"
+      "monthly": "Monthly",
+      "thisMonth": "This Month",
+      "last3M": "Last 3M",
+      "ytd": "YTD",
+      "1Y": "1Y",
+      "all": "All",
+      "custom": "Custom"
+    },
+    "sankey": {
+      "personal": "Personal",
+      "others": "Others",
+      "investments": "Investments",
+      "surplus": "Cash Kept",
+      "uncategorized": "Uncategorized",
+      "reserves": "From Reserves"
     }
   },
   "insights": {
