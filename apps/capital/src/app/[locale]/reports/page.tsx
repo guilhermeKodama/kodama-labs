@@ -14,6 +14,7 @@ import {
   ChevronRight,
   Lightbulb,
   Briefcase,
+  Waypoints,
 } from 'lucide-react';
 import { AppShell } from '@/components/layout';
 import { Header } from '@/components/layout/header';
@@ -21,13 +22,20 @@ import { SummaryCard } from '@/components/cards';
 import { MonthlyReportTable } from '@/components/tables';
 import { EntityFilterBar } from '@/components/filters/entity-filter-bar';
 import {
+  PeriodRangeSelector,
+  presetToRange,
+  type PeriodRange,
+} from '@/components/filters/period-range-selector';
+import {
   CategoryPieChart,
   IncomeExpenseChart,
   BalanceLineChart,
   CashFlowChart,
+  CashflowSankeyChart,
   EntityComparisonChart,
   CurrencyDistributionChart,
 } from '@/components/charts';
+import { buildCashflowSankey } from '@/lib/utils/cashflow-sankey';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -82,8 +90,12 @@ export default function ReportsPage() {
 
   const currentYear = new Date().getFullYear();
   const [selectedYear, setSelectedYear] = useState(currentYear);
-  const [selectedView, setSelectedView] = useState<'monthly' | 'categories' | 'insights' | 'portfolio'>('monthly');
+  const [selectedView, setSelectedView] = useState<'monthly' | 'categories' | 'insights' | 'portfolio' | 'cashflow'>('monthly');
   const [selectedEntityIds, setSelectedEntityIds] = useState<Set<string>>(new Set());
+  const [cashflowPeriod, setCashflowPeriod] = useState<PeriodRange>(() => {
+    const { from, to } = presetToRange('thisMonth');
+    return { preset: 'thisMonth', from, to };
+  });
 
   // Fetch investment data on mount
   useEffect(() => {
@@ -605,6 +617,30 @@ export default function ReportsPage() {
   const hasMultipleEntities = allEntities.length > 1;
   const hasMultipleCurrencies = currencies.length > 1;
 
+  // Cashflow Sankey data — independent from the year selector so the user can
+  // see any period (this month, last 3M, custom, etc.).
+  const cashflowSankeyData = useMemo(() => {
+    return buildCashflowSankey(
+      transactions,
+      transfers,
+      businesses,
+      personalAccount,
+      {
+        dateFrom: cashflowPeriod.from,
+        dateTo: cashflowPeriod.to,
+        filteredEntityIds: isEntityFiltered ? selectedEntityIds : undefined,
+        labels: {
+          personal: t('charts.sankey.personal'),
+          others: t('charts.sankey.others'),
+          investments: t('charts.sankey.investments'),
+          surplus: t('charts.sankey.surplus'),
+          uncategorized: t('charts.sankey.uncategorized'),
+          reserves: t('charts.sankey.reserves'),
+        },
+      }
+    );
+  }, [transactions, transfers, businesses, personalAccount, cashflowPeriod, isEntityFiltered, selectedEntityIds, t]);
+
   // Top expense category
   const topExpenseCategory = expenseBreakdown.length > 0 ? expenseBreakdown[0] : null;
   // Top income category
@@ -704,13 +740,20 @@ export default function ReportsPage() {
       </div>
 
       {/* View Tabs */}
-      <Tabs value={selectedView} onValueChange={(v) => setSelectedView(v as 'monthly' | 'categories' | 'insights' | 'portfolio')}>
+      <Tabs value={selectedView} onValueChange={(v) => setSelectedView(v as 'monthly' | 'categories' | 'insights' | 'portfolio' | 'cashflow')}>
         <TabsList className="mb-6 border-slate-800 bg-slate-900/50">
           <TabsTrigger
             value="monthly"
             className="data-[state=active]:bg-slate-800 data-[state=active]:text-white"
           >
             {t('reports.views.monthly')}
+          </TabsTrigger>
+          <TabsTrigger
+            value="cashflow"
+            className="data-[state=active]:bg-slate-800 data-[state=active]:text-white"
+          >
+            <Waypoints className="mr-1.5 h-3.5 w-3.5" />
+            {t('reports.views.cashflow')}
           </TabsTrigger>
           <TabsTrigger
             value="categories"
@@ -763,6 +806,88 @@ export default function ReportsPage() {
                 data={monthlyData}
                 currency={settings.baseCurrency}
               />
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Cash Flow Sankey View */}
+        <TabsContent value="cashflow" className="space-y-6">
+          <Card className="border-slate-800 bg-slate-900/50 backdrop-blur-sm">
+            <CardHeader className="space-y-4">
+              <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                <div>
+                  <CardTitle className="text-lg text-white">
+                    {t('reports.cashflow.title')}
+                  </CardTitle>
+                  <CardDescription className="text-slate-400">
+                    {t('reports.cashflow.subtitle')}
+                  </CardDescription>
+                </div>
+                <PeriodRangeSelector
+                  value={cashflowPeriod}
+                  onChange={setCashflowPeriod}
+                />
+              </div>
+
+              <div className="flex flex-wrap items-center gap-4 text-xs">
+                <div className="flex items-center gap-1.5">
+                  <span className="h-2 w-2 rounded-full bg-emerald-500" />
+                  <span className="text-slate-400">{t('reports.cashflow.legendIncome')}</span>
+                  <span className="font-mono text-emerald-400">
+                    {formatCurrency(cashflowSankeyData.totals.income, settings.baseCurrency)}
+                  </span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="h-2 w-2 rounded-full bg-red-500" />
+                  <span className="text-slate-400">{t('reports.cashflow.legendExpenses')}</span>
+                  <span className="font-mono text-red-400">
+                    {formatCurrency(cashflowSankeyData.totals.expenses, settings.baseCurrency)}
+                  </span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="h-2 w-2 rounded-full bg-purple-500" />
+                  <span className="text-slate-400">{t('reports.cashflow.legendInvestments')}</span>
+                  <span className="font-mono text-purple-400">
+                    {formatCurrency(cashflowSankeyData.totals.investments, settings.baseCurrency)}
+                  </span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="h-2 w-2 rounded-full bg-cyan-400" />
+                  <span className="text-slate-400">{t('reports.cashflow.legendSurplus')}</span>
+                  <span className="font-mono text-cyan-300">
+                    {formatCurrency(cashflowSankeyData.totals.surplus, settings.baseCurrency)}
+                  </span>
+                </div>
+                {cashflowSankeyData.totals.deficit > 0 && (
+                  <div className="flex items-center gap-1.5">
+                    <span className="h-2 w-2 rounded-full bg-amber-400" />
+                    <span className="text-slate-400">{t('reports.cashflow.legendReserves')}</span>
+                    <span className="font-mono text-amber-300">
+                      {formatCurrency(cashflowSankeyData.totals.deficit, settings.baseCurrency)}
+                    </span>
+                  </div>
+                )}
+              </div>
+            </CardHeader>
+            <CardContent>
+              <CashflowSankeyChart
+                nodes={cashflowSankeyData.nodes}
+                links={cashflowSankeyData.links}
+                currency={settings.baseCurrency}
+                height={720}
+                emptyMessage={t('reports.cashflow.empty')}
+              />
+              <div className="mt-3 space-y-1 text-center text-xs text-slate-500">
+                {cashflowSankeyData.totals.surplus > 0 && (
+                  <p>{t('reports.cashflow.surplusHint')}</p>
+                )}
+                {cashflowSankeyData.totals.deficit > 0 && (
+                  <p className="text-amber-500/80">{t('reports.cashflow.reservesHint')}</p>
+                )}
+                {cashflowSankeyData.nodes.some((n) => n.kind === 'others') && (
+                  <p>{t('reports.cashflow.expandOthers')}</p>
+                )}
+              </div>
             </CardContent>
           </Card>
         </TabsContent>

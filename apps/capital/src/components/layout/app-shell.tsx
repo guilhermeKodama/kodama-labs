@@ -4,7 +4,8 @@ import { useState, useSyncExternalStore, useCallback } from 'react';
 import { Sidebar } from './sidebar';
 import { BottomNav } from './bottom-nav';
 import { OnboardingDialog } from '@/components/onboarding/onboarding-dialog';
-import { useSettingsStore } from '@/lib/store';
+import { useSettingsStore, useUIStore } from '@/lib/store';
+import { cn } from '@/lib/utils';
 
 interface AppShellProps {
   children: React.ReactNode;
@@ -21,6 +22,7 @@ function useIsMounted() {
 
 export function AppShell({ children }: AppShellProps) {
   const { isInitialized } = useSettingsStore();
+  const { sidebarCollapsed } = useUIStore();
   const mounted = useIsMounted();
   const [onboardingDismissed, setOnboardingDismissed] = useState(false);
 
@@ -40,9 +42,19 @@ export function AppShell({ children }: AppShellProps) {
       <Sidebar />
       <BottomNav />
 
-      {/* Main content */}
-      <main className="pb-20 lg:ml-64 lg:pb-0">
-        <div className="mx-auto max-w-7xl p-4 sm:p-6 lg:p-8">
+      {/* Main content — margin tracks sidebar width on desktop. */}
+      <main
+        className={cn(
+          'pb-20 transition-[margin] duration-200 ease-out lg:pb-0',
+          sidebarCollapsed ? 'lg:ml-16' : 'lg:ml-64'
+        )}
+      >
+        <div
+          className={cn(
+            'mx-auto p-4 sm:p-6 lg:p-8',
+            sidebarCollapsed ? 'max-w-[1800px]' : 'max-w-7xl'
+          )}
+        >
           {children}
         </div>
       </main>
