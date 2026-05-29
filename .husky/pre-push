@@ -2,6 +2,16 @@
 
 echo "🔍 Running lint and typecheck before push..."
 
+# Regenerate Prisma clients (gitignored; required for typecheck)
+echo "🗄️  Generating Prisma clients..."
+pnpm db:generate
+GENERATE_EXIT_CODE=$?
+
+if [ $GENERATE_EXIT_CODE -ne 0 ]; then
+  echo "❌ Prisma generate failed. Push aborted."
+  exit 1
+fi
+
 # Run lint
 echo "📝 Running lint..."
 pnpm lint
