@@ -1,4 +1,5 @@
 {
   "title": "Capital",
-  "icon": "Wallet"
+  "icon": "Wallet",
+  "pages": ["index", "open-finance"]
 }
