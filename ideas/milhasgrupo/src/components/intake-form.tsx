@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Separator } from "@/components/ui/separator";
 import { trackCompleteRegistration, trackLead } from "@/lib/analytics";
-import { readUtmsFromUrl } from "@/lib/utm";
+import { readUtms } from "@/lib/utm";
 
 export function IntakeForm() {
   const router = useRouter();
@@ -23,7 +23,7 @@ export function IntakeForm() {
     const formData = serializeFormData(new FormData(event.currentTarget));
     const payload: Record<string, string | string[]> = {
       ...formData,
-      ...readUtmsFromUrl(),
+      ...readUtms(),
     };
 
     try {
