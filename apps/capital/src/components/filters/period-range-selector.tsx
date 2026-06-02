@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useTranslations, useLocale } from 'next-intl';
-import { format, startOfMonth, startOfYear, subMonths, subYears } from 'date-fns';
+import { format, startOfMonth, endOfMonth, startOfYear, subMonths, subYears } from 'date-fns';
 import { ptBR, enUS } from 'date-fns/locale';
 import { CalendarIcon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -30,9 +30,13 @@ export function presetToRange(
 ): { from?: Date; to?: Date } {
   switch (preset) {
     case 'thisMonth':
-      return { from: startOfMonth(now), to: now };
+      // Cover the entire current month, including scheduled/recurring entries
+      // that fall after `now` — the Activity tab and other pages already do
+      // this; the Sankey was the only place clipping at `now`, which silently
+      // dropped the rest-of-month transactions.
+      return { from: startOfMonth(now), to: endOfMonth(now) };
     case 'last3M':
-      return { from: startOfMonth(subMonths(now, 2)), to: now };
+      return { from: startOfMonth(subMonths(now, 2)), to: endOfMonth(now) };
     case 'ytd':
       return { from: startOfYear(now), to: now };
     case '1Y':

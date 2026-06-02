@@ -680,8 +680,10 @@
       "legendInvestments": "Investments",
       "legendSurplus": "Cash Kept",
       "legendReserves": "From Reserves",
+      "legendPriorBalance": "Prior Balance",
       "surplusHint": "\"Cash Kept\" is what stayed in each account this period (income that wasn't spent, transferred, or invested).",
-      "reservesHint": "\"From Reserves\" appears when spending exceeded income this period — it represents money pulled from previous balances, savings, or credit.",
+      "reservesHint": "\"From Reserves\" appears when you liquidated an investment (savings, CD, stocks, etc.) during the period.",
+      "priorBalanceHint": "\"Prior Balance\" appears when spending or distributions in the period exceeded the period's income — meaning the entity used cash already sitting in the account, not money pulled from a reserve.",
       "expandOthers": "Click \"Others\" to expand the small categories.",
       "empty": "No transactions in this period. Add some to see the flow."
     },
@@ -758,7 +760,9 @@
       "investments": "Investments",
       "surplus": "Cash Kept",
       "uncategorized": "Uncategorized",
-      "reserves": "From Reserves"
+      "reserves": "From Reserves",
+      "priorBalance": "Prior Balance",
+      "profitDistribution": "Profit Distribution"
     }
   },
   "insights": {
