@@ -15,7 +15,8 @@ export type SankeyNodeKind =
   | 'investment'
   | 'surplus'
   | 'others'
-  | 'reserves';
+  | 'reserves'
+  | 'prior_balance';
 
 export interface SankeyDataNode {
   id: string;
@@ -41,7 +42,13 @@ export interface CashflowSankeyResult {
     expenses: number;
     investments: number;
     surplus: number;
-    deficit: number;
+    /** Sum of real reserve withdrawals (investment_withdrawal transfers). */
+    reserves: number;
+    /**
+     * Cash drawn from prior-period balance to cover a deficit — not a real
+     * "reserve" withdrawal. Shown as a separate, neutral-colored node.
+     */
+    priorBalance: number;
   };
 }
 
@@ -60,6 +67,8 @@ export interface BuildCashflowSankeyOptions {
     surplus?: string;
     uncategorized?: string;
     reserves?: string;
+    priorBalance?: string;
+    profitDistribution?: string;
   };
 }
 
@@ -72,6 +81,7 @@ const COLORS = {
   surplus: '#22d3ee',
   others: '#94a3b8',
   reserves: '#fbbf24',
+  priorBalance: '#64748b',
 };
 
 const DEFAULT_LABELS = {
@@ -81,6 +91,8 @@ const DEFAULT_LABELS = {
   surplus: 'Surplus',
   uncategorized: 'Uncategorized',
   reserves: 'From Reserves',
+  priorBalance: 'Prior Balance',
+  profitDistribution: 'Profit Distribution',
 };
 
 export function buildCashflowSankey(
@@ -127,6 +139,10 @@ export function buildCashflowSankey(
   const investmentByEntity = new Map<string, number>();
   // `${fromId}::${toId}` → amount (business → personal profit distribution)
   const profitDistByPair = new Map<string, number>();
+  // entityId → amount (real reserve withdrawals: investment_withdrawal transfers).
+  // Surfaced as a "From Reserves" virtual source node — distinct from the
+  // virtual "Prior Balance" node which only covers period deficit.
+  const withdrawalByEntity = new Map<string, number>();
 
   const addToMapMap = (
     outer: Map<string, Map<string, number>>,
@@ -175,18 +191,37 @@ export function buildCashflowSankey(
   }
 
   // ---- ingest transfers ----
-  // v1 handles: profit_distribution (business → personal) and investment_deposit.
-  // Reimbursement, capital_injection, investment_withdrawal are intentionally
-  // skipped to keep the diagram readable; they are typically small relative to
-  // the main flow and can be added in a follow-up iteration.
+  // Handles: profit_distribution (business → personal), investment_deposit
+  // (outflow to the investments sink), and investment_withdrawal (inflow from
+  // a virtual "From Reserves" source — the only case where the term applies).
+  // Reimbursement and capital_injection are still skipped — they tend to be
+  // small relative to the main flow.
   for (const tr of transfers) {
     if (!inRange(tr.date)) continue;
     const amount = tr.amount * tr.exchangeRate;
     if (amount <= 0) continue;
 
     if (tr.direction === 'profit_distribution') {
-      if (!matchesEntity(tr.fromEntityId) && !matchesEntity(tr.toEntityId)) continue;
       if (!businessById.has(tr.fromEntityId) || !isPersonal(tr.toEntityId)) continue;
+      const fromMatched = matchesEntity(tr.fromEntityId);
+      const toMatched = matchesEntity(tr.toEntityId);
+      if (!fromMatched && !toMatched) continue;
+
+      // When the source business is filtered out but the destination is
+      // included, the cross-entity link can't be drawn without rendering the
+      // business as a ghost node (no inflow → would spuriously create a
+      // "Prior Balance" deficit for its outflow). Treat the received amount
+      // as direct external income to the destination entity instead.
+      if (entityFilterActive && !fromMatched && toMatched) {
+        addToMapMap(
+          incomeByEntityCategory,
+          tr.toEntityId,
+          labels.profitDistribution,
+          amount
+        );
+        continue;
+      }
+
       const key = `${tr.fromEntityId}::${tr.toEntityId}`;
       profitDistByPair.set(key, (profitDistByPair.get(key) ?? 0) + amount);
     } else if (tr.direction === 'investment_deposit') {
@@ -195,6 +230,13 @@ export function buildCashflowSankey(
       investmentByEntity.set(
         tr.fromEntityId,
         (investmentByEntity.get(tr.fromEntityId) ?? 0) + amount
+      );
+    } else if (tr.direction === 'investment_withdrawal') {
+      if (!matchesEntity(tr.toEntityId)) continue;
+      if (!isKnownEntity(tr.toEntityId)) continue;
+      withdrawalByEntity.set(
+        tr.toEntityId,
+        (withdrawalByEntity.get(tr.toEntityId) ?? 0) + amount
       );
     }
   }
@@ -334,15 +376,37 @@ export function buildCashflowSankey(
     }
   }
 
+  // Real reserve withdrawals (investment_withdrawal): "From Reserves" → entity.
+  // These are genuine inflows from liquidated investments — they reduce the
+  // residual deficit handled below, so create them BEFORE the balance pass.
+  let reservesTotal = 0;
+  let reservesIdx: number | null = null;
+  if (withdrawalByEntity.size > 0) {
+    reservesIdx = upsertNode({
+      id: 'income::__reserves__',
+      name: labels.reserves,
+      layer: 'income',
+      kind: 'reserves',
+      color: COLORS.reserves,
+    });
+    for (const [entityId, amount] of withdrawalByEntity.entries()) {
+      const entityIdx = entityNodeFor(entityId);
+      if (entityIdx === null) continue;
+      links.push({ source: reservesIdx, target: entityIdx, value: amount });
+      reservesTotal += amount;
+    }
+  }
+
   // Per-entity balance: inflow - outflow.
   //   balance > 0 → surplus: link entity → "{entity} Cash Kept" (sink)
-  //   balance < 0 → deficit: link "From Reserves" → entity (virtual source)
+  //   balance < 0 → residual deficit: link "Prior Balance" → entity (virtual)
   //
   // The deficit handling is critical for Sankey balance. Real data often has
   // entities (especially Personal) spending more than they earned in a given
-  // period (covered by previous savings, credit card debt, etc.). Without a
-  // virtual source, the diagram becomes mathematically unbalanced and
-  // d3-sankey distorts node heights / link widths, producing weird S-curves.
+  // period — but the gap is normally covered by cash that was already sitting
+  // in the account, NOT by liquidating an investment. We surface this as a
+  // distinct, neutral "Prior Balance" node to avoid implying a real reserve
+  // withdrawal happened (which is reserved for investment_withdrawal above).
   const inflow = new Map<number, number>();
   const outflow = new Map<number, number>();
   for (const link of links) {
@@ -351,8 +415,8 @@ export function buildCashflowSankey(
   }
 
   let surplusTotal = 0;
-  let deficitTotal = 0;
-  let reservesIdx: number | null = null;
+  let priorBalanceTotal = 0;
+  let priorBalanceIdx: number | null = null;
 
   for (let i = 0; i < nodes.length; i++) {
     const node = nodes[i];
@@ -370,22 +434,22 @@ export function buildCashflowSankey(
       links.push({ source: i, target: surplusIdx, value: balance });
       surplusTotal += balance;
     } else if (balance < -0.01) {
-      if (reservesIdx === null) {
-        reservesIdx = upsertNode({
-          id: 'income::__reserves__',
-          name: labels.reserves,
+      if (priorBalanceIdx === null) {
+        priorBalanceIdx = upsertNode({
+          id: 'income::__prior_balance__',
+          name: labels.priorBalance,
           layer: 'income',
-          kind: 'reserves',
-          color: COLORS.reserves,
+          kind: 'prior_balance',
+          color: COLORS.priorBalance,
         });
       }
-      links.push({ source: reservesIdx, target: i, value: -balance });
-      deficitTotal += -balance;
+      links.push({ source: priorBalanceIdx, target: i, value: -balance });
+      priorBalanceTotal += -balance;
     }
   }
 
   // Real-income total — sum outflows of real income category nodes
-  // (excluding the virtual "reserves" node which is also in the income layer).
+  // (excluding virtual "reserves" / "prior balance" nodes in the income layer).
   let incomeTotal = 0;
   const realIncomeIdxs = new Set<number>();
   for (let i = 0; i < nodes.length; i++) {
@@ -403,7 +467,8 @@ export function buildCashflowSankey(
       expenses: totalExpensesGlobal,
       investments: investmentsTotal,
       surplus: surplusTotal,
-      deficit: deficitTotal,
+      reserves: reservesTotal,
+      priorBalance: priorBalanceTotal,
     },
   };
 }
