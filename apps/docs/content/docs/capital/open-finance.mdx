@@ -1,0 +1,361 @@
+---
+title: "Open Finance Brasil — Panorama e Decisão"
+description: "Requisitos técnicos, regulatórios e econômicos para integrar o Capital ao Open Finance Brasil, com comparativo de caminhos (participante direto, agregador, manual) e justificativa da decisão atual."
+---
+
+> **Last updated:** Maio 2026
+> **Status:** Living document — atualizar quando preços de agregadores, regras do BCB ou escopo do Capital mudarem.
+
+## 1. TL;DR — Decisão atual
+
+**Não integramos o Capital ao Open Finance Brasil (OFD) por enquanto.** Os três caminhos viáveis são:
+
+| Caminho | Custo de entrada | Custo recorrente | Tempo até produção |
+|---|---|---|---|
+| Participante direto OFD | R$ 1M+ (capital social) + R$ 200k–500k (jurídico, dev, auditoria) | Auditoria anual + dev em conformidade | 6–18 meses |
+| Via agregador (Pluggy) | R$ 0 (trial 14d, 20 contas) | R$ 2.500/mês (Basic) ≈ R$ 30k/ano | Semanas |
+| Via agregador (Belvo) | Sob consulta comercial | Sob consulta comercial | Semanas |
+| Sem OFD (estado atual) | R$ 0 | R$ 0 | — (já existe) |
+
+O Capital é um projeto de uso pessoal hoje. **R$ 30k/ano para uma feature que beneficia um único usuário não se paga.** O caminho de participante direto é, na prática, inviável para o porte do projeto.
+
+**Estado atual do Capital** já cobre o caso de uso parcialmente: parser OFX, parser Nubank, import de CSV de fatura, categorização via Claude. Não é tempo real e exige ação do usuário, mas é gratuito e funciona.
+
+**Gatilho para reabrir esta discussão** está na [seção 11](#11-quando-reabrir-a-discussão).
+
+## 2. O que é Open Finance Brasil
+
+Open Finance Brasil é uma iniciativa do **Banco Central do Brasil (BCB)** que padroniza o compartilhamento de dados financeiros (e iniciação de pagamentos) entre instituições, mediante consentimento explícito do cliente. Foi lançado em 2021 e completou 5 anos em fevereiro de 2026, com **mais de 100 milhões de contas conectadas** e **154 milhões de consentimentos ativos**.
+
+### Fases regulatórias
+
+| Fase | Escopo | Status |
+|---|---|---|
+| Fase 1 | Dados públicos das instituições (produtos, canais, tarifas) | Ativa desde 2021 |
+| Fase 2 | Dados cadastrais e transacionais do cliente (contas, cartões, empréstimos) | Ativa desde 2021 |
+| Fase 3 | Iniciação de pagamentos (Pix via TPP, agendados, recorrentes) | Ativa, evoluindo (v4 com recorrência) |
+| Fase 4 | Investimentos, câmbio, seguros, previdência, capitalização | Em rollout contínuo |
+
+### Atores
+
+- **Holders / Detentor**: instituição que mantém a conta (Itaú, Nubank, XP). Expõe APIs.
+- **TPP / Receptor**: aplicação terceira que consome os dados (seria o papel do Capital).
+- **Iniciador de Pagamento**: subconjunto de TPP autorizado a movimentar dinheiro.
+- **PCM**: Plataforma Central de Marcação — coordena consentimentos.
+- **Diretório (Raidiam)**: registry oficial dos participantes; emite certificados.
+
+## 3. Os três caminhos de integração
+
+| Critério | Direto OFD | Agregador (Pluggy/Belvo) | Sem OFD (atual) |
+|---|---|---|---|
+| Cobertura | 100% das instituições reguladas | 90%+ via OFD + scraping | Manual, por banco |
+| Tempo real | Sim (webhook) | Sim (webhook do agregador) | Não |
+| Esforço técnico | Muito alto (FAPI, mTLS, DCR, certs) | Médio (SDK + webhooks) | Baixo (parsers + UI de upload) |
+| Esforço regulatório | Muito alto (BCB, jurídico, capital social) | Nenhum (o agregador é o regulado) | Nenhum |
+| Risco LGPD | Cliente direto, responsabilidade total | Compartilhada com agregador | Mínima (dados ficam offline até upload) |
+| Custo entrada | R$ 1M+ | R$ 0 (trial) | R$ 0 |
+| Custo recorrente | Compliance contínuo | R$ 30k+/ano | R$ 0 |
+| Lock-in | Baixo | Alto (modelo proprietário do agregador) | Nenhum |
+
+## 4. Caminho 1 — Participante direto OFD
+
+### 4.1. Modalidades regulatórias
+
+Para acessar dados via OFD como TPP/Receptor, é necessário ser uma **instituição financeira ou de pagamento autorizada pelo BCB**. As modalidades mais comuns para fintechs:
+
+| Modalidade | Atividade | Capital social mínimo |
+|---|---|---|
+| **SCD** — Sociedade de Crédito Direto | Conceder empréstimos com capital próprio | R$ 1 milhão |
+| **SEP** — Sociedade de Empréstimo entre Pessoas | Intermediar peer-to-peer | R$ 1 milhão |
+| **IP** — Instituição de Pagamento | Conta de pagamento, emissor de e-money, iniciador | Varia por modalidade (~R$ 2 milhões para IP credenciadora) |
+| **SCFI** — Sociedade de Crédito, Financiamento e Investimento | Financiamentos amplos | R$ 7 milhões |
+
+Existe também a figura de **"apenas Receptor de Dados"** no OFD — não requer ser instituição financeira regulada plena, mas ainda exige cadastro no Diretório, certificações técnicas e adesão ao convênio. Os custos técnicos são equivalentes aos de uma instituição regulada.
+
+### 4.2. Stack técnico obrigatório
+
+- **FAPI 1.0 Advanced** (Financial-grade API) — perfil de segurança OAuth 2.0 endurecido.
+- **mTLS** — TLS mútuo, certificados emitidos pelo Diretório.
+- **DCR** — Dynamic Client Registration via Diretório.
+- **OIDC** — OpenID Connect para autenticação.
+- **JWS / JWE** — assinatura e cifragem de payloads.
+- **PAR** — Pushed Authorization Requests.
+
+Não existe atalho. A pilha é mandatória e auditada.
+
+### 4.3. Processo de homologação
+
+1. Constituir a sociedade (S.A.) e integralizar capital social no BCB.
+2. Pedir autorização ao BCB (processo de meses; check de idoneidade, plano de negócios, governança).
+3. Aderir ao convênio Open Finance Brasil.
+4. Implementar a stack técnica.
+5. Passar pelos **testes de certificação** (FAPI-RP, DCR) — operados via Raidiam/Conformance Suite.
+6. Homologar no **sandbox do Diretório** (ambiente espelho do produtivo).
+7. Publicar em produção, cadastrando recursos (endpoints) no Diretório.
+8. Manter conformidade continuada (re-certificação periódica, atualização de certificados).
+
+### 4.4. Custos estimados (ordem de grandeza)
+
+| Item | Faixa |
+|---|---|
+| Capital social integralizado (SCD) | R$ 1.000.000 |
+| Assessoria jurídica para autorização | R$ 50.000–150.000 |
+| Engenharia (6–12 meses, time dedicado) | R$ 200.000–500.000 |
+| Auditoria de segurança / pentest | R$ 30.000–80.000 |
+| Certificados, sandbox, infraestrutura mTLS | R$ 20.000–50.000/ano |
+| Compliance continuado (DPO, auditoria anual) | R$ 100.000+/ano |
+
+**Total realista para chegar em produção: R$ 1,5–2 milhões + ~R$ 200k/ano de manutenção.**
+
+Inviável para projeto pessoal. Faz sentido apenas se o Capital virar produto comercial com tração e arrecadação compatível.
+
+## 5. Caminho 2 — Via agregador
+
+Agregadores são intermediários **já certificados pelo BCB** que oferecem uma API unificada. O Capital seria cliente do agregador, não do OFD diretamente. O agregador absorve toda a complexidade regulatória e técnica.
+
+### 5.1. Pluggy
+
+[pluggy.ai](https://www.pluggy.ai/)
+
+- **Modelo técnico**: Connect Widget (frontend, gera Connect Token) + API de backend (Items, Accounts, Transactions, Webhooks).
+- **Conectores**: regulados (via OFD oficial) **+** diretos (scraping/credenciais). Mesmo modelo de dados para os dois.
+- **SDK Node.js oficial** (`pluggy-sdk`), TypeScript nativo.
+- **Produtos**: contas, cartões de crédito, transações, identidade, empréstimos, investimentos, câmbio.
+- **Cobertura**: declara 90%+ das contas bancárias do Brasil.
+- **Webhooks**: notificação automática quando novos dados aparecem.
+- **Free trial**: 14 dias, até 20 contas conectadas, sem cartão de crédito.
+- **Plano Basic**: a partir de **R$ 2.500/mês** (~R$ 30.000/ano).
+- **Plano Custom**: sob demanda, acesso a produtos BETA, suporte técnico premium.
+
+Cliente ideal: fintech / startup brasileira que precisa de cobertura ampla rápido. Documentação em português.
+
+### 5.2. Belvo
+
+[belvo.com](https://belvo.com/)
+
+- **Modelo técnico**: Widget hospedado + conceito de "Link" (equivalente ao Item do Pluggy).
+- **Conectores**: **exclusivamente regulados** (rede OFD oficial — sem scraping).
+- **Produtos**: contas, saldos, transações (12 meses retroativos automáticos), faturas de cartão, investimentos, identidade.
+- **SDKs**: Node.js, Python, Ruby, Go.
+- **Cobertura geográfica**: Brasil + Colômbia + México (foco LATAM).
+- **Preço**: **sob consulta comercial** (sem tabela pública). Mercado posiciona na mesma faixa do Pluggy.
+- **Sandbox**: disponível mediante cadastro.
+
+Cliente ideal: empresa multinacional que precisa de cobertura LATAM ou que prioriza só rotas reguladas (não scraping).
+
+### 5.3. Klavi
+
+[klavi.ai](https://klavi.ai/)
+
+- Agregador brasileiro, foco em enriquecimento de dados e crédito.
+- Menos documentação pública sobre SDK e modelo de integração.
+- Preço sob consulta.
+- Posicionamento: complementar (insights e score) ao agregador puro.
+
+Não é primeira opção para um agregador financeiro pessoal — perfil de cliente é credit-tech.
+
+### 5.4. Outros agregadores no mercado
+
+- **Iniciador** ([iniciador.com.br](https://iniciador.com.br/)) — foco em iniciação de pagamento (Fase 3 OFD), não em agregação de dados.
+- **TecnoSpeed** — voltado a software houses, ERP e contabilidade.
+- **Quanto, Finansystech** — players menores, foco B2B.
+
+## 6. Caminho 3 — Sem OFD (estado atual do Capital)
+
+O Capital já implementa um agregador "manual" que cobre boa parte do caso de uso:
+
+| Capacidade | Implementação atual | Arquivo de referência |
+|---|---|---|
+| Import de extrato OFX | Parser genérico para Open Financial Exchange | [apps/capital/src/server/modules/bank-statements](apps/capital/src/server/modules/bank-statements) |
+| Parser Nubank | Específico para CSV do Nubank | mesma pasta, `parsers/nubank.ts` |
+| Import de fatura de cartão | CSV → BillTransaction com detecção de parcelas | [apps/capital/src/server/modules/credit-cards](apps/capital/src/server/modules/credit-cards) |
+| Categorização automática | Claude via `@anthropic-ai/sdk` em cron 2x/hora | [apps/capital/src/server/lib/claude.ts](apps/capital/src/server/lib/claude.ts) |
+| Cotações de ativos | brapi.dev + Yahoo + CoinGecko, cron horário | [apps/capital/src/server/modules/investments/services/update-prices.ts](apps/capital/src/server/modules/investments/services/update-prices.ts) |
+| Deduplicação de transações | `externalId` único por entidade + reconciliação fuzzy | [apps/capital/prisma/schema.prisma](apps/capital/prisma/schema.prisma) — migration `20260317120000_add_unique_external_id_per_entity` |
+
+### Limitações do modelo atual
+
+- Exige ação explícita do usuário (baixar OFX/CSV do banco e fazer upload).
+- Não cobre saldos em tempo real entre uploads.
+- Cada banco novo exige um parser dedicado (Nubank já existe; outros são OFX genérico).
+- Sem visibilidade unificada de investimentos por broker — depende de import manual.
+
+### O que mitiga essas limitações sem OFD
+
+- OFX é exportável por praticamente todo banco brasileiro grande (Itaú, Bradesco, Santander, Inter, BB).
+- A categorização Claude reduz drasticamente o esforço pós-upload.
+- Para uso pessoal, frequência mensal de upload é suficiente para fechamento contábil.
+
+## 7. APIs e escopo de dados do OFD
+
+O OFD expõe famílias de APIs versionadas (`/open-banking/<domínio>/v<n>/<recurso>`). Resumo dos domínios relevantes para um agregador financeiro:
+
+| Domínio | Conteúdo | Versão atual (referência) |
+|---|---|---|
+| `consents` | Criar, consultar, revogar consentimentos | v3 |
+| `accounts` | Contas correntes, poupança, saldos | v2 |
+| `credit-cards-accounts` | Contas de cartão, faturas, transações | v2 |
+| `loans` | Empréstimos e financiamentos | v2 |
+| `financings` | Financiamentos imobiliários, veículos | v2 |
+| `unarranged-accounts-overdraft` | Cheque especial | v2 |
+| `invoice-financings` | Adiantamento de recebíveis | v2 |
+| `bank-fixed-incomes` | Renda fixa bancária (CDB, RDB, LCI, LCA) | v1 |
+| `credit-fixed-incomes` | Renda fixa de crédito (debêntures) | v1 |
+| `variable-incomes` | Renda variável (ações, FIIs, ETFs, BDRs) | v1 |
+| `treasure` | Tesouro Direto | v1 |
+| `funds` | Fundos de investimento | v1 |
+| `exchanges` | Operações de câmbio | v1 |
+| `customers` | Identidade, qualificações, vínculos PF/PJ | v2 |
+| `resources` | Listagem de recursos consentidos | v3 |
+| `payments` | Iniciação de Pix (Fase 3) | v4 |
+| `automatic-payments` | Pagamentos recorrentes (Pix Automático) | v1 |
+
+### 7.1. Fluxo de consentimento
+
+1. TPP redireciona usuário ao banco com escopo desejado.
+2. Usuário autentica no banco e seleciona escopos.
+3. Banco devolve um `consentId` para o TPP.
+4. TPP usa o `consentId` (via token FAPI) para chamar as APIs de dados.
+5. Consentimento tem **validade máxima de 12 meses** — após esse prazo, exige re-consentimento explícito do usuário.
+6. Usuário pode revogar a qualquer momento via o app do banco ou via TPP.
+
+### 7.2. Versionamento
+
+- v1 → conteúdo inicial.
+- v2 → ajustes técnicos, novos campos.
+- v3 → códigos de erro padronizados, validações para evitar redirecionamentos desnecessários.
+- v4 (payments) → agendamento recorrente único, Pix automático.
+
+## 8. Mapeamento OFD → modelo Prisma atual do Capital
+
+A boa notícia: o schema do Capital já está estruturalmente pronto para receber dados externos. A maior parte do trabalho seria de fluxo e ETL, não de modelagem.
+
+| Entidade OFD | Modelo Capital correspondente | Já suporta? | Gap |
+|---|---|---|---|
+| Account (CC/poupança) | `Business` / `PersonalAccount` | Parcial | Falta um modelo `BankAccount` separado para refletir contas externas sem confundir com a entidade contábil "Business". |
+| Account → Transactions | `Transaction` (com `externalId`) | Sim | `externalId` único por entidade já garante deduplicação. Direto. |
+| Account → Balances | Calculado dinamicamente a partir de transações | Não | Não há campo de saldo "carimbado" pelo banco. Precisaria adicionar `lastReportedBalance` e `lastReportedBalanceAt`. |
+| Credit Card Account | `CreditCard` | Sim | Mapeamento direto. `lastFourDigits`, `creditLimit`, `closingDay`, `dueDay` já existem. |
+| Credit Card → Bills | `CreditCardBill` | Sim | Direto. |
+| Credit Card → Transactions | `BillTransaction` | Sim | Direto, com suporte a `installmentNumber` / `totalInstallments`. |
+| Variable income (ações, FII) | `InvestmentHolding` com `assetClass` apropriada | Sim | Reduz dependência de brapi/Yahoo para tickers que o banco já reporta. |
+| Bank fixed income (CDB, LCI) | `InvestmentHolding` com `FixedIncomeSubType` | Sim | Subtipos já modelados (`cdb`, `rdb`, `lci`, `lca`, `tesouro_*`, `debenture`). |
+| Investment Transactions | `InvestmentTransaction` | Sim | Tipos `buy`/`sell`/`dividend`/`yield_payment`/`deposit`/`withdrawal` já cobrem o vocabulário OFD. |
+| Loans / Financings | Nada equivalente | Não | Modelo novo (`Loan`) seria necessário se quisermos rastrear dívidas. Hoje só dá pra registrar como transação. |
+| Customer (identidade) | `User` | Parcial | `User` não armazena CPF/dados regulatórios — não precisa, esses dados ficam no banco. |
+| Consents | Nada equivalente | Não | Modelo novo `OpenFinanceConsent` (consentId, escopos, expiresAt, status) seria essencial. |
+
+### Estimativa de esforço (apenas para discussão futura)
+
+- **Modelagem** (novos modelos `BankAccount`, `OpenFinanceConsent`, eventualmente `Loan`): 1–2 dias.
+- **Módulo `open-finance/` no backend** (rotas para iniciar consentimento, callback, sync, revogação): 2–3 semanas.
+- **UI** (tela "Conectar banco", lista de instituições, gerenciar consentimentos, mostrar status): 1–2 semanas.
+- **Reconciliação** com dados manuais já importados via OFX/CSV (deduplicação por `externalId` + janela temporal): 3–5 dias.
+- **Cron de sync periódico** + tratamento de webhooks do agregador: 3–5 dias.
+
+Total realista: **5–8 semanas de uma engenheira dedicada**, assumindo caminho via agregador (Pluggy).
+
+## 9. Comparativo de custos (anual)
+
+| Caminho | Setup | Ano 1 | Anos subsequentes |
+|---|---|---|---|
+| Participante direto | R$ 1.000.000+ (capital social, retornável mas imobilizado) | R$ 300.000–700.000 | R$ 200.000+ |
+| Pluggy Basic | R$ 0 | R$ 30.000 | R$ 30.000 |
+| Pluggy Custom | Sob consulta | R$ 60.000+ (estimativa) | mesmo |
+| Belvo | Sob consulta | Faixa similar a Pluggy | mesmo |
+| Sem OFD (manual) | R$ 0 | R$ 0 | R$ 0 |
+
+Para um projeto sem receita, R$ 30k/ano é o piso real para entrar no mundo OFD.
+
+## 10. Riscos e considerações
+
+### 10.1. LGPD e responsabilidade
+
+Dados financeiros são **dados pessoais sensíveis** sob a LGPD. Mesmo via agregador, o Capital se torna **controlador** desses dados (o agregador atua como operador). Implicações:
+
+- Necessário registro/política de privacidade clara descrevendo escopos coletados.
+- Direito do titular de revogar consentimento a qualquer momento — exige fluxo de revogação no app.
+- Em caso de vazamento, responsabilidade civil pode ser pesada (multas LGPD vão até R$ 50M ou 2% do faturamento).
+- Designação de DPO recomendada se houver mais que punhado de usuários.
+
+### 10.2. Lock-in de agregador
+
+O modelo de dados do Pluggy (`Item`, `Account`, `Transaction`) **não é idêntico** ao do OFD bruto. Migrar de Pluggy → direto, ou Pluggy → Belvo, exige rewrite do ETL. Mitigação: manter uma camada de adaptação interna (`open-finance/adapters/<provedor>`) para isolar o vocabulário do agregador.
+
+### 10.3. Cobertura limitada
+
+Mesmo agregadores líderes não cobrem 100% das instituições. Bancos de nicho, fintechs novas, contas internacionais (Wise, Revolut) **não estão no OFD brasileiro**. O caminho manual continuaria necessário como fallback.
+
+### 10.4. Re-consentimento a cada 12 meses
+
+O OFD limita consentimentos a 12 meses. O usuário **precisa** reautorizar todo ano por banco — não é renovável automaticamente. UX para isso (notificação, fluxo de re-conexão) precisa ser desenhada e testada.
+
+### 10.5. Custos escondidos
+
+- Implementar logging detalhado (exigido por LGPD e auditoria).
+- Rate limits dos agregadores: planos básicos têm limites de requisições/mês.
+- Tratamento de erros e estados parciais (banco fora do ar, consentimento revogado, dados incompletos).
+
+## 11. Quando reabrir a discussão
+
+Reavaliar a integração com OFD quando **qualquer um** destes critérios for atendido:
+
+- [ ] Capital tem receita recorrente (qualquer que seja o modelo: SaaS, marketplace, etc.) suficiente para absorver R$ 30k+/ano sem inviabilizar o projeto.
+- [ ] Existem 3+ usuários ativos pagantes pedindo a feature explicitamente.
+- [ ] Algum agregador lançar plano free ou freemium com cobertura viável (ex.: até X contas grátis).
+- [ ] Custo de Pluggy Basic cair significativamente (ex.: abaixo de R$ 500/mês).
+- [ ] O Capital decidir buscar autorização BCB por outro motivo (ex.: virar IP para iniciar pagamentos próprios), tornando o caminho direto justificável.
+- [ ] Surgir biblioteca open-source madura que abstraia o caminho direto sem custo de certificação (não existe hoje; cenário improvável no curto prazo).
+
+Enquanto nenhum desses gatilhos ocorrer, **a estratégia é manter e melhorar o caminho manual**: mais parsers de banco (Itaú, Bradesco, Santander), melhor UX de upload, melhor categorização Claude.
+
+## 12. Glossário
+
+- **BCB** — Banco Central do Brasil. Regulador.
+- **OFD / OFB** — Open Finance Brasil. (Antes chamado "Open Banking Brasil".)
+- **TPP** — Third Party Provider. Quem consome dados/inicia pagamentos. O papel que o Capital teria.
+- **Holder / Detentor** — Instituição que detém a conta do cliente.
+- **PCM** — Plataforma Central de Marcação. Coordena consentimentos.
+- **Diretório** — Registry oficial dos participantes (operado pela Raidiam).
+- **FAPI** — Financial-grade API. Perfil de OAuth 2.0 endurecido para o setor financeiro.
+- **mTLS** — Mutual TLS. Autenticação bidirecional via certificado.
+- **DCR** — Dynamic Client Registration. Registro automático de clientes OAuth.
+- **OIDC** — OpenID Connect. Camada de autenticação sobre OAuth 2.0.
+- **PAR** — Pushed Authorization Requests. Envia parâmetros de autorização via backend antes do redirect.
+- **RP** — Relying Party. Equivalente ao TPP no vocabulário FAPI.
+- **OP** — OpenID Provider. Equivalente ao Holder.
+- **Consent ID** — Identificador do consentimento, base para todas as chamadas autorizadas.
+- **SCD / SEP / IP / SCFI** — Modalidades de instituição financeira reguladas pelo BCB.
+
+## 13. Fontes
+
+### Documentação oficial OFD
+
+- [Open Finance Brasil — site oficial](https://openfinancebrasil.org.br/)
+- [Onboarding — Open Finance Brasil](https://openfinancebrasil.org.br/onboarding/)
+- [Modelo de Participação](https://openfinancebrasil.org.br/modelo-de-participacao/)
+- [Manual de Integração — Área do Desenvolvedor](https://openfinancebrasil.atlassian.net/wiki/spaces/OF/pages/37945515)
+- [Guia de Certificação de Conformidade](https://openfinancebrasil.atlassian.net/wiki/spaces/OF/pages/155910145)
+- [FAPI 1.0 Security Profile (OFD)](https://openfinancebrasil.atlassian.net/wiki/spaces/OF/pages/245760001/EN+Open+Finance+Brasil+Financial-grade+API+Security+Profile+1.0+Implementers+Draft+3)
+- [Tabela de endpoints aceitos pela PCM](https://openfinancebrasil.atlassian.net/wiki/spaces/OF/pages/43089921/Tabela+de+endpoints+aceitos+pela+PCM)
+- [Dashboard do Cidadão — números OFD](https://dashboard.openfinancebrasil.org.br/)
+
+### Agregadores
+
+- [Pluggy — site](https://www.pluggy.ai/)
+- [Pluggy — Pricing](https://www.pluggy.ai/en/pricing)
+- [Pluggy — Open Finance regulado](https://www.pluggy.ai/en/open-finance)
+- [Pluggy — SDK Node (`pluggyai/pluggy-sdk-node`)](https://github.com/pluggyai/pluggy-sdk-node)
+- [Belvo — Banking Aggregation Brazil](https://developers.belvo.com/products/aggregation_brazil/aggregation-brazil-introduction)
+- [Belvo — site](https://belvo.com/)
+- [Iniciador](https://iniciador.com.br/)
+- [Klavi](https://klavi.ai/)
+
+### Análises e contexto regulatório
+
+- [Mattos Filho — Novas regras Open Finance](https://www.mattosfilho.com.br/unico/novas-regras-open-finance/)
+- [NDM Advogados — Autorização de fintechs no Bacen](https://ndmadvogados.com.br/artigo/guia-autorizacao-de-fintechs-no-bacen/)
+- [Chambarelli Advogados — Como abrir SCD/SEP](https://chambarelli.com.br/como-abrir-uma-sociedade-de-credito-direto-scd-ou-sociedade-de-emprestimo-entre-pessoas-sep/)
+- [Tecnospeed — Open Finance Brasil para Software Houses 2026](https://blog.tecnospeed.com.br/open-finance-brasil/)
+- [Raidiam — Deep dive nas APIs de pagamento](https://www.raidiam.com/thought-leadership/deep-dive-into-open-finance-brasil-payments-apis/)
+- [Dock Fluid — modelo do Brasil é um dos mais completos](https://dock.tech/fluid/blog/financeiro/open-finance/)
