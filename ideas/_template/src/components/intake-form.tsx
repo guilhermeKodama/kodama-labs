@@ -9,7 +9,7 @@ import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Separator } from "@/components/ui/separator";
 import { trackCompleteRegistration, trackLead } from "@/lib/analytics";
-import { readUtmsFromUrl } from "@/lib/utm";
+import { readUtms } from "@/lib/utm";
 
 type Step1Data = Record<string, string | string[]>;
 
@@ -37,7 +37,7 @@ export function IntakeForm() {
     const payload: Record<string, string | string[]> = {
       ...step1Data,
       ...step2Data,
-      ...readUtmsFromUrl(),
+      ...readUtms(),
     };
 
     try {
