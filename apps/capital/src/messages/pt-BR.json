@@ -680,8 +680,10 @@
       "legendInvestments": "Investimentos",
       "legendSurplus": "Sobrou em Caixa",
       "legendReserves": "Das Reservas",
+      "legendPriorBalance": "Saldo Anterior",
       "surplusHint": "\"Sobrou em Caixa\" é o que ficou na conta no período (receita que não foi gasta, transferida ou investida).",
-      "reservesHint": "\"Das Reservas\" aparece quando o gasto passou da receita do período — representa dinheiro vindo de saldos anteriores, poupança ou crédito.",
+      "reservesHint": "\"Das Reservas\" aparece quando você resgatou um investimento (poupança, CDB, ações, etc.) no período.",
+      "priorBalanceHint": "\"Saldo Anterior\" aparece quando o gasto/distribuição do período passou da receita do mesmo período — significa que a entidade usou caixa que já estava na conta, não que tirou de uma reserva.",
       "expandOthers": "Clique em \"Outros\" para expandir as categorias pequenas.",
       "empty": "Sem transações nesse período. Adicione algumas para ver o fluxo."
     },
@@ -758,7 +760,9 @@
       "investments": "Investimentos",
       "surplus": "Sobrou em Caixa",
       "uncategorized": "Sem categoria",
-      "reserves": "Das Reservas"
+      "reserves": "Das Reservas",
+      "priorBalance": "Saldo Anterior",
+      "profitDistribution": "Distribuição de Lucros"
     }
   },
   "insights": {

@@ -636,6 +636,8 @@ export default function ReportsPage() {
           surplus: t('charts.sankey.surplus'),
           uncategorized: t('charts.sankey.uncategorized'),
           reserves: t('charts.sankey.reserves'),
+          priorBalance: t('charts.sankey.priorBalance'),
+          profitDistribution: t('charts.sankey.profitDistribution'),
         },
       }
     );
@@ -858,12 +860,21 @@ export default function ReportsPage() {
                     {formatCurrency(cashflowSankeyData.totals.surplus, settings.baseCurrency)}
                   </span>
                 </div>
-                {cashflowSankeyData.totals.deficit > 0 && (
+                {cashflowSankeyData.totals.reserves > 0 && (
                   <div className="flex items-center gap-1.5">
                     <span className="h-2 w-2 rounded-full bg-amber-400" />
                     <span className="text-slate-400">{t('reports.cashflow.legendReserves')}</span>
                     <span className="font-mono text-amber-300">
-                      {formatCurrency(cashflowSankeyData.totals.deficit, settings.baseCurrency)}
+                      {formatCurrency(cashflowSankeyData.totals.reserves, settings.baseCurrency)}
+                    </span>
+                  </div>
+                )}
+                {cashflowSankeyData.totals.priorBalance > 0 && (
+                  <div className="flex items-center gap-1.5">
+                    <span className="h-2 w-2 rounded-full bg-slate-500" />
+                    <span className="text-slate-400">{t('reports.cashflow.legendPriorBalance')}</span>
+                    <span className="font-mono text-slate-300">
+                      {formatCurrency(cashflowSankeyData.totals.priorBalance, settings.baseCurrency)}
                     </span>
                   </div>
                 )}
@@ -881,8 +892,11 @@ export default function ReportsPage() {
                 {cashflowSankeyData.totals.surplus > 0 && (
                   <p>{t('reports.cashflow.surplusHint')}</p>
                 )}
-                {cashflowSankeyData.totals.deficit > 0 && (
+                {cashflowSankeyData.totals.reserves > 0 && (
                   <p className="text-amber-500/80">{t('reports.cashflow.reservesHint')}</p>
+                )}
+                {cashflowSankeyData.totals.priorBalance > 0 && (
+                  <p className="text-slate-400/90">{t('reports.cashflow.priorBalanceHint')}</p>
                 )}
                 {cashflowSankeyData.nodes.some((n) => n.kind === 'others') && (
                   <p>{t('reports.cashflow.expandOthers')}</p>

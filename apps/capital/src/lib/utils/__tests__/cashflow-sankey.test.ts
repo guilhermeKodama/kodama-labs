@@ -97,7 +97,7 @@ describe('buildCashflowSankey', () => {
       const r = buildCashflowSankey([], [], businesses, personalAccount);
       expect(r.nodes).toEqual([]);
       expect(r.links).toEqual([]);
-      expect(r.totals).toEqual({ income: 0, expenses: 0, investments: 0, surplus: 0, deficit: 0 });
+      expect(r.totals).toEqual({ income: 0, expenses: 0, investments: 0, surplus: 0, reserves: 0, priorBalance: 0 });
     });
   });
 
@@ -388,7 +388,7 @@ describe('buildCashflowSankey', () => {
   });
 
   describe('deficit (spending > income)', () => {
-    it('balances the diagram via a virtual "From Reserves" source node', () => {
+    it('balances the diagram via a virtual "Prior Balance" source node', () => {
       // Personal receives 1000 from Kodama but spends 1500 → 500 deficit
       const txs = [
         mkTx({
@@ -415,14 +415,19 @@ describe('buildCashflowSankey', () => {
       ];
       const r = buildCashflowSankey(txs, trs, businesses, personalAccount);
 
-      // Reserves node injects the missing 500
-      expect(linkValue(r, 'income::__reserves__', 'personal')).toBe(500);
-      expect(r.totals.deficit).toBe(500);
-      // Real income (excluding reserves) is still 1000
+      // Prior balance covers the missing 500 (NOT "From Reserves" — no
+      // investment was liquidated)
+      expect(linkValue(r, 'income::__prior_balance__', 'personal')).toBe(500);
+      expect(r.totals.priorBalance).toBe(500);
+      expect(r.totals.reserves).toBe(0);
+      expect(r.nodes.find((n) => n.id === 'income::__reserves__')).toBeUndefined();
+      // Real income (excluding the virtual node) is still 1000
       expect(r.totals.income).toBe(1000);
+      // The virtual node uses the prior_balance kind (neutral) not reserves (alert)
+      expect(r.nodes.find((n) => n.id === 'income::__prior_balance__')?.kind).toBe('prior_balance');
     });
 
-    it('does not create a reserves node when income covers spending', () => {
+    it('does not create a prior balance node when income covers spending', () => {
       const txs = [
         mkTx({
           entityId: PERSONAL_ID,
@@ -438,8 +443,139 @@ describe('buildCashflowSankey', () => {
         }),
       ];
       const r = buildCashflowSankey(txs, [], businesses, personalAccount);
+      expect(r.nodes.find((n) => n.id === 'income::__prior_balance__')).toBeUndefined();
       expect(r.nodes.find((n) => n.id === 'income::__reserves__')).toBeUndefined();
-      expect(r.totals.deficit).toBe(0);
+      expect(r.totals.priorBalance).toBe(0);
+      expect(r.totals.reserves).toBe(0);
+    });
+  });
+
+  describe('reserves (investment_withdrawal)', () => {
+    it('creates a "From Reserves" inflow when an investment is liquidated', () => {
+      // Personal pulls 2000 out of an investment account and spends 1800 of it
+      const txs = [
+        mkTx({
+          entityId: PERSONAL_ID,
+          type: 'expense',
+          category: 'Medical',
+          amount: 1800,
+        }),
+      ];
+      const trs = [
+        mkTransfer({
+          fromEntityId: 'some-investment-account',
+          fromEntityType: 'personal',
+          toEntityId: PERSONAL_ID,
+          toEntityType: 'personal',
+          direction: 'investment_withdrawal',
+          amount: 2000,
+        }),
+      ];
+      const r = buildCashflowSankey(txs, trs, businesses, personalAccount);
+
+      expect(linkValue(r, 'income::__reserves__', 'personal')).toBe(2000);
+      expect(r.totals.reserves).toBe(2000);
+      // Withdrawal exceeded spend by 200 → that 200 stays as surplus, no deficit
+      expect(linkValue(r, 'personal', 'output::surplus::personal')).toBe(200);
+      expect(r.totals.priorBalance).toBe(0);
+      expect(r.nodes.find((n) => n.id === 'income::__prior_balance__')).toBeUndefined();
+    });
+
+    it('shows both reserves and prior balance when withdrawal does not cover the gap', () => {
+      // Personal pulls 500 from investment, spends 1500 → 500 reserves + 1000 prior balance
+      const txs = [
+        mkTx({
+          entityId: PERSONAL_ID,
+          type: 'expense',
+          category: 'Rent',
+          amount: 1500,
+        }),
+      ];
+      const trs = [
+        mkTransfer({
+          fromEntityId: 'some-investment-account',
+          fromEntityType: 'personal',
+          toEntityId: PERSONAL_ID,
+          toEntityType: 'personal',
+          direction: 'investment_withdrawal',
+          amount: 500,
+        }),
+      ];
+      const r = buildCashflowSankey(txs, trs, businesses, personalAccount);
+
+      expect(linkValue(r, 'income::__reserves__', 'personal')).toBe(500);
+      expect(linkValue(r, 'income::__prior_balance__', 'personal')).toBe(1000);
+      expect(r.totals.reserves).toBe(500);
+      expect(r.totals.priorBalance).toBe(1000);
+    });
+  });
+
+  describe('profit_distribution with entity filter', () => {
+    it('treats incoming profit_distribution as external income when source is filtered out', () => {
+      // Kodama receives 10000, distributes 9000 to Personal. User filters to "Personal only".
+      // Bug before fix: Kodama becomes a ghost node with no inflow → 9000 deficit →
+      // bogus "Prior Balance" of 9000 from Personal's perspective.
+      // Expected after fix: the 9000 distribution shows up as a Profit Distribution
+      // income category for Personal; no Kodama node, no virtual deficit.
+      const txs = [
+        mkTx({
+          entityId: BUSINESS_A_ID,
+          entityType: 'business',
+          type: 'income',
+          category: 'Curebase',
+          amount: 10000,
+        }),
+      ];
+      const trs = [
+        mkTransfer({
+          fromEntityId: BUSINESS_A_ID,
+          toEntityId: PERSONAL_ID,
+          direction: 'profit_distribution',
+          amount: 9000,
+        }),
+      ];
+      const r = buildCashflowSankey(txs, trs, businesses, personalAccount, {
+        filteredEntityIds: new Set([PERSONAL_ID]),
+        labels: { profitDistribution: 'Profit Distribution' },
+      });
+
+      // Kodama node not rendered
+      expect(r.nodes.find((n) => n.id === `business::${BUSINESS_A_ID}`)).toBeUndefined();
+      // No virtual prior_balance / reserves needed
+      expect(r.nodes.find((n) => n.id === 'income::__prior_balance__')).toBeUndefined();
+      expect(r.nodes.find((n) => n.id === 'income::__reserves__')).toBeUndefined();
+      // Distribution flows in as an income category
+      expect(linkValue(r, 'income::Profit Distribution', 'personal')).toBe(9000);
+      // And remains as surplus (nothing spent)
+      expect(linkValue(r, 'personal', 'output::surplus::personal')).toBe(9000);
+      expect(r.totals.priorBalance).toBe(0);
+    });
+
+    it('still draws the cross-entity link when both source and destination match the filter', () => {
+      const txs = [
+        mkTx({
+          entityId: BUSINESS_A_ID,
+          entityType: 'business',
+          type: 'income',
+          category: 'Curebase',
+          amount: 10000,
+        }),
+      ];
+      const trs = [
+        mkTransfer({
+          fromEntityId: BUSINESS_A_ID,
+          toEntityId: PERSONAL_ID,
+          direction: 'profit_distribution',
+          amount: 6000,
+        }),
+      ];
+      const r = buildCashflowSankey(txs, trs, businesses, personalAccount, {
+        filteredEntityIds: new Set([BUSINESS_A_ID, PERSONAL_ID]),
+      });
+
+      // Both entities present, normal cross-entity link rendered
+      expect(linkValue(r, `business::${BUSINESS_A_ID}`, 'personal')).toBe(6000);
+      expect(r.nodes.find((n) => n.id === 'income::Profit Distribution')).toBeUndefined();
     });
   });
 
