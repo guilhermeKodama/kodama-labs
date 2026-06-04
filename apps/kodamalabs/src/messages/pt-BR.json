@@ -1,0 +1,144 @@
+{
+  "common": {
+    "status": {
+      "live": "No ar",
+      "validating": "Validando",
+      "shipped": "Lançado",
+      "archived": "Arquivado"
+    },
+    "labels": {
+      "technicalChallenges": "Desafios técnicos",
+      "impact": "Impacto",
+      "repository": "Repositório",
+      "liveSite": "Acessar projeto",
+      "scrollHint": "rolar"
+    }
+  },
+  "language": {
+    "title": "Idioma",
+    "en": "English",
+    "pt-BR": "Português (BR)"
+  },
+  "nav": {
+    "philosophy": "Filosofia",
+    "products": "Produtos",
+    "pipeline": "Pipeline",
+    "archive": "Arquivo",
+    "contact": "Contato"
+  },
+  "hero": {
+    "tag": "Kodama Labs",
+    "title": "Software com propósito.",
+    "subtitle": "Uma empresa guarda-chuva para produtos ambiciosos. Onde ideias viram software lançado — e software lançado vira impacto.",
+    "cta": "Veja o que estamos construindo",
+    "secondaryCta": "Leia a filosofia"
+  },
+  "philosophy": {
+    "eyebrow": "Filosofia",
+    "title": "Mover rápido. Validar com agressividade. Construir para impacto.",
+    "paragraphs": [
+      "Kodama Labs é um estúdio pessoal. Cada produto começa como um one-pager, ganha um protótipo em cinco dias e precisa provar que merece continuar vivo através de tráfego pago e usuários reais.",
+      "Não corremos atrás de tendências. Caçamos problemas chatos o suficiente para ninguém querer resolver, e importantes o suficiente para que quem tem o problema queira pagar atenção.",
+      "A régua é software honesto: ferramentas que fazem o que prometem, código que dá gosto manter, e um processo que trata tempo como o recurso mais escasso."
+    ],
+    "principles": [
+      { "title": "Lance primeiro", "body": "Um one-pager e um protótipo funcionando valem mais que um plano perfeito." },
+      { "title": "Valide pesado", "body": "Tráfego pago, usuários reais, decisão go/no-go na semana quatro. Sem métricas de vaidade." },
+      { "title": "Domine a stack", "body": "Um monorepo, um engenheiro, um conjunto de ferramentas — simplicidade radical." }
+    ]
+  },
+  "flagship": {
+    "eyebrow": "Destaques",
+    "title": "Produtos",
+    "subtitle": "Os que conquistaram o lugar."
+  },
+  "pipeline": {
+    "eyebrow": "Pipeline de ideias",
+    "title": "Hipótese → Validando → Validado → Lançado",
+    "subtitle": "Apostas em curso. Cada uma roda o mesmo playbook: um one-pager, um protótipo de 5 dias, investimento real em mídia e uma decisão honesta na semana quatro.",
+    "quote": "Se você não consegue articular a suposição mais arriscada em uma frase, a ideia não está pronta.",
+    "emptySlot": "Vaga aberta",
+    "emptySlotDescription": "Próxima aposta em definição. Fica de olho."
+  },
+  "archive": {
+    "eyebrow": "Trabalhos anteriores",
+    "title": "Arquivo",
+    "subtitle": "Uma seleção de projetos antigos. Alguns lançaram, outros pivotaram, todos ensinaram algo.",
+    "placeholder": "Em breve",
+    "placeholderDescription": "Os projetos do portfolio anterior estão sendo migrados para cá."
+  },
+  "contact": {
+    "eyebrow": "Fala comigo",
+    "title": "Vamos construir algo que valha a pena lançar.",
+    "subtitle": "Aberto a problemas interessantes, colaborações e conversas.",
+    "emailLabel": "Email",
+    "socialsLabel": "Me encontre em"
+  },
+  "footer": {
+    "tagline": "Uma empresa guarda-chuva para software ambicioso.",
+    "builtWith": "Feito com Next.js · Hospedado na Vercel"
+  },
+  "projects": {
+    "capital": {
+      "name": "Capital",
+      "tagline": "Gestão financeira para prestadores de serviço internacionais.",
+      "description": "Dashboard unificado para freelancers que faturam em múltiplas moedas. Acompanha fluxos entre PJ e pessoa física, categoriza extratos com Claude AI e visualiza o cashflow em diagramas Sankey do D3.",
+      "challenges": [
+        "Contabilidade multi-moeda entre entidades PJ e PF, com override manual de câmbio e períodos sensíveis a fuso horário.",
+        "Categorização de transações assistida por IA que aprende com correções sem precisar de um pipeline de ML completo.",
+        "Visualizações Sankey em tempo real que sobrevivem a recortes arbitrários de período sem distorcer a semântica de reservas."
+      ],
+      "impact": "Substitui cinco planilhas por uma fonte única de verdade para prestadores internacionais que cuidam de fluxos de empresa, pessoais e de investimento.",
+      "ctaLabel": "Saiba mais"
+    },
+    "sentinel": {
+      "name": "Sentinel",
+      "tagline": "Transparência com IA para compras públicas brasileiras.",
+      "description": "Ingere continuamente dados de compras federais, sinaliza padrões anômalos de preço e proximidade política, e produz relatórios em linguagem neutra para jornalistas e cidadãos. Disciplina: apontar o que vale revisar — nunca acusar.",
+      "challenges": [
+        "Escalar a análise com Claude sobre uma base contínua de dados governamentais sem estourar o orçamento de crons da Vercel.",
+        "Mapear relações políticas (família, doações, anomalias patrimoniais) sem cruzar a linha da difamação.",
+        "Pipeline de alertas multi-estágio com deduplicação determinística entre critérios sobrepostos."
+      ],
+      "impact": "Torna dados de compras públicas legíveis para quem não é especialista. Infraestrutura aberta para jornalismo de prestação de contas.",
+      "ctaLabel": "Saiba mais"
+    },
+    "milhasgrupo": {
+      "name": "MilhasGrupo",
+      "tagline": "Concierge de passagens com milhas para famílias brasileiras.",
+      "description": "Avisa famílias quando assentos resgatáveis abrem nas rotas e datas preferidas, em Azul, LATAM e Smiles. Em validação: tráfego pago rodando, concierge manual, gates de decisão na semana quatro.",
+      "challenges": [
+        "Instrumentação de funil: Meta Pixel + GA4 + Google Ads + Telegram, tudo amarrado por um template que preserva UTMs.",
+        "Concierge manual por design — nada de scraping ou automação até a unidade econômica justificar.",
+        "Lead scoring e follow-up trilhados em Google Sheets para manter o custo de build perto de zero durante a validação."
+      ],
+      "impact": "Economiza 30 a 80 horas de pesquisa por viagem e resgata milhas que iriam expirar.",
+      "ctaLabel": "Veja o protótipo"
+    },
+    "mee": {
+      "name": "Mee — Análise de Associação",
+      "tagline": "Retail tech: recomendações inteligentes de itens.",
+      "description": "Ajudou uma retail tech brasileira a aumentar o ticket médio e reduzir o tempo de atendimento treinando um modelo Apriori que expõe regras de associação aos atendentes em tempo real — usado tanto como sugestão quanto como cache inteligente para itens frequentemente comprados juntos."
+    },
+    "pandora": {
+      "name": "Pandora — Detecção de Arritmia",
+      "tagline": "Classificação de ECG em tempo real a partir de monitores.",
+      "description": "MVP de healthcare que processa sinais de ECG e classifica cinco categorias de arritmia em tempo real. Construiu feature engineering em série temporal de ECG, transformou o PhysioBank em um dataset rotulado e treinou um modelo com 85% de acurácia entre as classes."
+    },
+    "closetinn": {
+      "name": "Closetinn — Recomendações de Moda",
+      "tagline": "Recomendações semanais de roupas por email.",
+      "description": "Serviço de email que envia recomendações semanais de roupas de múltiplos e-commerces. Web scraping de catálogos de moda, filtragem colaborativa com usuários reais e modelo de churn para manter as recomendações relevantes ao longo do tempo."
+    },
+    "petfinder": {
+      "name": "PetFinder — Kaggle",
+      "tagline": "Previsão da velocidade de adoção em abrigos.",
+      "description": "Competição do Kaggle para prever quão rápido os pets são adotados, ajudando abrigos a melhorar perfis e reduzir eutanásia. Combinou features de imagem com CNN+PCA, TF-IDF + TruncatedSVD em texto não estruturado, e feature engineering em dados estruturados. Top 23% no leaderboard público."
+    },
+    "carrercon": {
+      "name": "CareerCon — Kaggle",
+      "tagline": "Reconhecimento de piso a partir de dados de IMU.",
+      "description": "Competição do Kaggle em que a tarefa era ajudar robôs a reconhecer o piso em que estavam usando dados de sensores IMU. Foco em feature engineering de séries temporais, tuning de parâmetros e avaliação de modelo. Top 100 no leaderboard público."
+    }
+  }
+}

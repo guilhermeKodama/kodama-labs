@@ -1,0 +1,144 @@
+{
+  "common": {
+    "status": {
+      "live": "Live",
+      "validating": "Validating",
+      "shipped": "Shipped",
+      "archived": "Archived"
+    },
+    "labels": {
+      "technicalChallenges": "Technical challenges",
+      "impact": "Impact",
+      "repository": "Repository",
+      "liveSite": "Live site",
+      "scrollHint": "scroll"
+    }
+  },
+  "language": {
+    "title": "Language",
+    "en": "English",
+    "pt-BR": "Português (BR)"
+  },
+  "nav": {
+    "philosophy": "Philosophy",
+    "products": "Products",
+    "pipeline": "Pipeline",
+    "archive": "Archive",
+    "contact": "Contact"
+  },
+  "hero": {
+    "tag": "Kodama Labs",
+    "title": "Software with intent.",
+    "subtitle": "An umbrella for ambitious products. Where ideas turn into shipped software — and shipped software turns into impact.",
+    "cta": "See what we're building",
+    "secondaryCta": "Read the philosophy"
+  },
+  "philosophy": {
+    "eyebrow": "Philosophy",
+    "title": "Move fast. Validate aggressively. Build for impact.",
+    "paragraphs": [
+      "Kodama Labs is a personal studio. Every product starts as a one-pager, gets a five-day prototype, and earns the right to keep living through paid traffic and real users.",
+      "We don't chase trends. We hunt for problems boring enough that nobody else wants to fix them, and important enough that the people who have them will pay attention.",
+      "The bar is honest software: tools that do what they claim, code that's a pleasure to maintain, and a process that treats time as the scarcest resource."
+    ],
+    "principles": [
+      { "title": "Ship first", "body": "A one-pager and a working prototype beat a perfect plan every time." },
+      { "title": "Validate hard", "body": "Paid traffic, real users, week-four go/no-go. No vanity metrics." },
+      { "title": "Own the stack", "body": "One monorepo, one engineer, one set of tools — radical simplicity." }
+    ]
+  },
+  "flagship": {
+    "eyebrow": "Flagship",
+    "title": "Products",
+    "subtitle": "The ones that earned their place."
+  },
+  "pipeline": {
+    "eyebrow": "Idea pipeline",
+    "title": "Hypothesis → Validating → Validated → Shipped",
+    "subtitle": "Bets in flight. Each one runs the same playbook: a one-pager, a 5-day prototype, real ad spend, and an honest decision on week four.",
+    "quote": "If you can't articulate the riskiest assumption in one sentence, the idea isn't ready.",
+    "emptySlot": "Slot open",
+    "emptySlotDescription": "Next bet in scoping. Watch this space."
+  },
+  "archive": {
+    "eyebrow": "Earlier work",
+    "title": "Archive",
+    "subtitle": "A selection of older projects. Some shipped, some pivoted, all taught something.",
+    "placeholder": "Coming soon",
+    "placeholderDescription": "Content from the previous portfolio is being migrated here."
+  },
+  "contact": {
+    "eyebrow": "Get in touch",
+    "title": "Let's build something worth shipping.",
+    "subtitle": "Open to interesting problems, collaborations, and conversations.",
+    "emailLabel": "Email",
+    "socialsLabel": "Find me on"
+  },
+  "footer": {
+    "tagline": "An umbrella for ambitious software.",
+    "builtWith": "Built with Next.js · Deployed on Vercel"
+  },
+  "projects": {
+    "capital": {
+      "name": "Capital",
+      "tagline": "Financial management for international service providers.",
+      "description": "Unified dashboard for freelancers earning in multiple currencies. Tracks flows between business entities and personal accounts, categorizes statements with Claude AI, and visualizes cashflow with D3 Sankey diagrams.",
+      "challenges": [
+        "Multi-currency accounting across business and personal entities, with manual rate overrides and timezone-aware periods.",
+        "AI-assisted transaction categorization that learns from corrections without requiring a full ML pipeline.",
+        "Real-time Sankey visualizations that survive arbitrary period clipping without distorting reserve semantics."
+      ],
+      "impact": "Replaces five spreadsheets with one source of truth for international contractors juggling business, personal, and investment flows.",
+      "ctaLabel": "Learn more"
+    },
+    "sentinel": {
+      "name": "Sentinel",
+      "tagline": "AI-powered transparency for Brazilian public procurement.",
+      "description": "Continuously ingests federal procurement data, flags unusual pricing patterns and political proximity, and produces neutral-language reports for journalists and citizens. Discipline: surface what's worth reviewing — never accuse.",
+      "challenges": [
+        "Scaling Claude analysis across a continuous government dataset while staying inside Vercel's cron budget.",
+        "Mapping political relationships (family, donations, wealth anomalies) without crossing into defamation territory.",
+        "Multi-stage alert pipeline with deterministic deduplication across overlapping criteria."
+      ],
+      "impact": "Makes public procurement data legible to non-experts. Open infrastructure for accountability journalism.",
+      "ctaLabel": "Learn more"
+    },
+    "milhasgrupo": {
+      "name": "MilhasGrupo",
+      "tagline": "Award flight concierge for Brazilian families.",
+      "description": "Notifies families when award seats open on their preferred routes and dates across Azul, LATAM, and Smiles. Currently in validation: paid traffic running, manual concierge model, week-four go/no-go gates.",
+      "challenges": [
+        "Funnel instrumentation: Meta Pixel + GA4 + Google Ads + Telegram, all wired through a single UTM-preserving template.",
+        "Manual concierge by design — no scraping or automation until the unit economics earn it.",
+        "Lead scoring and follow-up tracked on Google Sheets to keep the build cost near zero during validation."
+      ],
+      "impact": "Saves families 30–80 hours of research per trip and rescues miles that would otherwise expire.",
+      "ctaLabel": "See the prototype"
+    },
+    "mee": {
+      "name": "Mee — Association Analysis",
+      "tagline": "Retail tech: smart item recommendations.",
+      "description": "Helped a Brazilian retail tech raise average ticket and cut attendance time by training an Apriori model that surfaces association rules to attendants in real time — used both as suggestions and as a smart cache for commonly bought-together items."
+    },
+    "pandora": {
+      "name": "Pandora — Arrhythmia Detection",
+      "tagline": "Realtime ECG classification from health monitors.",
+      "description": "Healthcare MVP that processes ECG signals and classifies five arrhythmia categories in realtime. Built feature engineering on time-series ECG, wrangled PhysioBank into a labeled dataset, and trained a model that hit 85% accuracy across classes."
+    },
+    "closetinn": {
+      "name": "Closetinn — Fashion Recommendations",
+      "tagline": "Weekly clothing recommendations by email.",
+      "description": "Email service that sends weekly clothing recommendations from multiple e-commerce sources. Web-scraped fashion catalogs, ran collaborative filtering on real users, and trained a churn model to keep the recommendations relevant over time."
+    },
+    "petfinder": {
+      "name": "PetFinder — Kaggle",
+      "tagline": "Predicting pet adoption speed at shelters.",
+      "description": "Kaggle competition to predict how quickly pets get adopted, helping shelters improve profile appeal and reduce euthanization. Combined CNN+PCA image features, TF-IDF + TruncatedSVD on unstructured text, and structured-data feature engineering. Top 23% on public leaderboard."
+    },
+    "carrercon": {
+      "name": "CareerCon — Kaggle",
+      "tagline": "Floor-surface recognition from IMU data.",
+      "description": "Kaggle competition where the task was to help robots recognize the floor surface they're standing on using IMU sensor data. Heavy on time-series feature engineering, parameter tuning, and model evaluation. Top 100 on public leaderboard."
+    }
+  }
+}
