@@ -3,7 +3,8 @@
   "private": true,
   "scripts": {
     "build": "turbo build",
-    "dev": "turbo dev",
+    "dev": "turbo dev --filter=!@infrastructure/postgres",
+    "dev:db": "turbo dev --filter=@infrastructure/postgres",
     "dev:docs": "turbo dev --filter=@wallex/docs",
     "lint": "turbo lint",
     "typecheck": "turbo typecheck",
