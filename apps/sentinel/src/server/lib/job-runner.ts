@@ -7,8 +7,34 @@ export interface JobResult {
   metadata?: Record<string, unknown>;
 }
 
-const STALE_JOB_THRESHOLD_MS = 30 * 60 * 1000; // 30 minutes
+const STALE_JOB_THRESHOLD_MS = 10 * 60 * 1000; // 10 minutes
 const STALE_CURSOR_THRESHOLD_MS = 30 * 60 * 1000;
+
+async function updateJobRunWithRetry(
+  jobName: string,
+  args: Parameters<typeof prisma.jobRun.update>[0],
+) {
+  const delaysMs = [200, 600, 1800];
+  let lastErr: unknown;
+  for (let attempt = 0; attempt <= delaysMs.length; attempt++) {
+    try {
+      return await prisma.jobRun.update(args);
+    } catch (err) {
+      lastErr = err;
+      if (attempt === delaysMs.length) break;
+      const backoff = delaysMs[attempt]!;
+      console.warn(
+        `[${jobName}] jobRun.update failed (attempt ${attempt + 1}/${delaysMs.length + 1}), retrying in ${backoff}ms`,
+        err instanceof Error ? err.message : err,
+      );
+      await new Promise((r) => setTimeout(r, backoff));
+    }
+  }
+  console.error(
+    `[${jobName}] jobRun.update exhausted retries; row may remain in RUNNING state`,
+  );
+  throw lastErr;
+}
 
 export async function runJob(
   jobName: string,
@@ -43,7 +69,7 @@ export async function runJob(
   try {
     const result = await fn();
 
-    await prisma.jobRun.update({
+    await updateJobRunWithRetry(jobName, {
       where: { id: jobRun.id },
       data: {
         status: "COMPLETED" as JobStatus,
@@ -59,7 +85,7 @@ export async function runJob(
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : "Unknown error";
 
-    await prisma.jobRun.update({
+    await updateJobRunWithRetry(jobName, {
       where: { id: jobRun.id },
       data: { status: "FAILED" as JobStatus, completedAt: new Date(), error: errorMessage },
     });

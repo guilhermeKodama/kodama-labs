@@ -2,8 +2,10 @@ import { getPipelineState } from "@sentinel/server/modules/pipeline/get-pipeline
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
+export const maxDuration = 60;
 
 const INTERVAL_MS = 5_000;
+const MAX_STREAM_DURATION_MS = 50_000;
 
 export async function GET(request: Request) {
   const { signal } = request;
@@ -11,13 +13,17 @@ export async function GET(request: Request) {
   const stream = new ReadableStream({
     async start(controller) {
       const encoder = new TextEncoder();
+      const startedAt = Date.now();
 
       const send = (data: string) => {
         controller.enqueue(encoder.encode(`data: ${data}\n\n`));
       };
 
       try {
-        while (!signal.aborted) {
+        while (
+          !signal.aborted &&
+          Date.now() - startedAt < MAX_STREAM_DURATION_MS
+        ) {
           const state = await getPipelineState();
           send(JSON.stringify(state));
           await new Promise<void>((resolve, reject) => {
