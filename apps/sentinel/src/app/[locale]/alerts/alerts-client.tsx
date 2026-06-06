@@ -194,7 +194,7 @@ export function AlertsClient({ data, locale, severityCounts }: Props) {
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
-        <div className="relative flex-1 min-w-[280px]">
+        <div className="relative flex-1 w-full sm:min-w-[280px]">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
             value={search}
@@ -352,15 +352,40 @@ export function AlertsClient({ data, locale, severityCounts }: Props) {
       )}
 
       {filtered.length > pageSize && (
-        <div className="flex items-center justify-between">
-          <span className="text-sm text-muted-foreground">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <span className="text-xs sm:text-sm text-muted-foreground">
             {tPagination("range", {
               start: page * pageSize + 1,
               end: Math.min((page + 1) * pageSize, filtered.length),
               total: filtered.length,
             })}
           </span>
-          <div className="flex items-center gap-1">
+          <div className="md:hidden flex items-center justify-between gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setPage((p) => Math.max(0, p - 1))}
+              disabled={page === 0}
+              className="h-8 gap-1 flex-1"
+            >
+              <ChevronLeft className="h-4 w-4" />
+              Anterior
+            </Button>
+            <span className="text-xs text-muted-foreground whitespace-nowrap px-2">
+              {page + 1} / {Math.max(totalPages, 1)}
+            </span>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
+              disabled={page >= totalPages - 1}
+              className="h-8 gap-1 flex-1"
+            >
+              Próximo
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+          </div>
+          <div className="hidden md:flex items-center gap-1">
             <Button
               variant="outline"
               size="sm"

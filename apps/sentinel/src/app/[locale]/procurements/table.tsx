@@ -159,6 +159,41 @@ export function ProcurementsTable({
     },
   ];
 
+  const renderMobileRow = (row: ProcurementRow) => (
+    <Link
+      href={`/${locale}/procurements/${row.id}`}
+      className="flex items-start justify-between gap-3 p-3 hover:bg-muted/30 transition-colors"
+    >
+      <div className="flex-1 min-w-0">
+        <div className="font-medium text-sm truncate">{stripHtml(row.description)}</div>
+        <div className="text-xs text-muted-foreground truncate">{row.orgName}</div>
+        <div className="text-[11px] text-muted-foreground mt-0.5 flex items-center gap-1.5 flex-wrap">
+          <span>{row.modality}</span>
+          <span>·</span>
+          <span>{new Date(row.publishedAt).toLocaleDateString("pt-BR")}</span>
+          {row.state && (
+            <>
+              <span>·</span>
+              <span>{row.state}</span>
+            </>
+          )}
+        </div>
+      </div>
+      <div className="flex-shrink-0 text-right">
+        <div className="text-sm font-medium tabular-nums">
+          {row.approvedValue != null
+            ? formatCurrency(row.approvedValue)
+            : row.estimatedValue != null
+              ? formatCurrency(row.estimatedValue)
+              : "-"}
+        </div>
+        {row.itemCount > 0 && (
+          <div className="text-[11px] text-muted-foreground">{row.itemCount} itens</div>
+        )}
+      </div>
+    </Link>
+  );
+
   return (
     <DataTable
       data={data}
@@ -169,6 +204,7 @@ export function ProcurementsTable({
       basePath={`/${locale}/procurements`}
       nextCursor={nextCursor}
       prevCursor={prevCursor}
+      renderMobileRow={renderMobileRow}
     />
   );
 }

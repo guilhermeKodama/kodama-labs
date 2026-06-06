@@ -109,7 +109,34 @@ export default async function ShareholderDetailPage({
         </div>
 
         <div className="rounded-lg border bg-card overflow-hidden mt-5">
-          <div className="overflow-x-auto">
+          <div className="md:hidden divide-y">
+            {companies.map((c) => (
+              <Link
+                key={c.entityId}
+                href={`/${locale}/entities/${c.entityId}`}
+                className="flex items-start justify-between gap-3 p-3 hover:bg-muted/30 transition-colors"
+              >
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 font-medium text-sm min-w-0">
+                    <Building2 className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
+                    <span className="truncate">{c.entityName}</span>
+                  </div>
+                  <div className="text-[11px] text-muted-foreground mt-0.5 truncate">
+                    {formatCnpj(c.entityCnpj)}
+                  </div>
+                  <div className="text-[11px] text-muted-foreground mt-0.5 flex items-center gap-1.5">
+                    <span>{c.role}</span>
+                    <span>·</span>
+                    <span>{formatNumber(c.contractCount, appLocale)} contr.</span>
+                  </div>
+                </div>
+                <div className="flex-shrink-0 text-right text-sm font-medium tabular-nums">
+                  {formatCurrency(c.totalContractValue, appLocale)}
+                </div>
+              </Link>
+            ))}
+          </div>
+          <div className="hidden md:block overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b bg-muted/50">

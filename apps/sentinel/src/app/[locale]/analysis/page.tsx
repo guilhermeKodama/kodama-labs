@@ -32,7 +32,7 @@ export default async function AnalysisPage({
 
   return (
     <PageLayout>
-      <h1 className="text-2xl font-bold mb-2">{t("title")}</h1>
+      <h1 className="text-xl md:text-2xl font-bold mb-2">{t("title")}</h1>
       <p className="text-xs text-muted-foreground mb-5 max-w-3xl">
         {tCommon("disclaimer")}
       </p>
@@ -46,16 +46,16 @@ export default async function AnalysisPage({
       ) : (
         <div className="space-y-3">
           {analyses.map((analysis) => (
-            <div key={analysis.id} className="rounded-lg border bg-card p-5">
-              <div className="flex items-center justify-between mb-3">
-                <div className="flex items-center gap-2">
-                  <span className="text-[11px] px-2 py-0.5 rounded bg-muted font-medium">
+            <div key={analysis.id} className="rounded-lg border bg-card p-4 md:p-5 min-w-0">
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-2 mb-3">
+                <div className="flex flex-wrap items-center gap-2 min-w-0">
+                  <span className="text-[11px] px-2 py-0.5 rounded bg-muted font-medium truncate max-w-full">
                     {renderCode("aiAnalysisType", analysis.analysisType)}
                   </span>
-                  <span className="text-[11px] px-2 py-0.5 rounded bg-muted font-medium">
+                  <span className="text-[11px] px-2 py-0.5 rounded bg-muted font-medium truncate max-w-full">
                     {renderCode("aiTargetType", analysis.targetType)}
                   </span>
-                  <span className={`text-[11px] px-2 py-0.5 rounded-full font-medium ${
+                  <span className={`text-[11px] px-2 py-0.5 rounded-full font-medium whitespace-nowrap ${
                     analysis.riskScore >= 0.7
                       ? "bg-red-500/20 text-red-500"
                       : analysis.riskScore >= 0.4
@@ -65,7 +65,7 @@ export default async function AnalysisPage({
                     {t("riskLabel", { percent: (analysis.riskScore * 100).toFixed(0) })}
                   </span>
                 </div>
-                <span className="text-[11px] text-muted-foreground">
+                <span className="text-[11px] text-muted-foreground ml-auto whitespace-nowrap">
                   {formatDate(analysis.createdAt, appLocale)}
                 </span>
               </div>
