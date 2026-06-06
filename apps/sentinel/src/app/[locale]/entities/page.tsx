@@ -1,4 +1,5 @@
 import { prisma } from "@sentinel/server/lib/prisma";
+import { cachedFilterOptions, smartCount } from "@sentinel/server/lib/list-helpers";
 import { Prisma } from "@/generated/prisma";
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import { PageLayout } from "@/components/page-layout";
@@ -31,6 +32,18 @@ function buildWhere(sp: Record<string, string | string[] | undefined>) {
   return where;
 }
 
+const loadFilterOptions = () =>
+  cachedFilterOptions("entities", async () => {
+    const [legalNatures, states] = await Promise.all([
+      prisma.entity.groupBy({ by: ["legalNature"], where: { legalNature: { not: null } }, _count: true, orderBy: { _count: { legalNature: "desc" } }, take: 30 }),
+      prisma.entity.groupBy({ by: ["state"], where: { state: { not: null } }, _count: true, orderBy: { state: "asc" } }),
+    ]);
+    return {
+      legalNature: legalNatures.filter((n) => n.legalNature).map((n) => ({ label: `${n.legalNature} (${n._count})`, value: n.legalNature! })),
+      state: states.filter((s) => s.state).map((s) => ({ label: s.state!, value: s.state! })),
+    };
+  });
+
 export default async function EntitiesPage({
   params,
   searchParams,
@@ -54,18 +67,23 @@ export default async function EntitiesPage({
 
   const take = dir === "prev" ? -(PAGE_SIZE + 1) : PAGE_SIZE + 1;
 
-  const rows = await prisma.entity.findMany({
-    where,
-    orderBy,
-    cursor: cursorId ? { id: cursorId } : undefined,
-    skip: cursorId ? 1 : 0,
-    take,
-    include: {
-      _count: { select: { contracts: true, shareholders: true, sanctions: true, alerts: true } },
-    },
-  });
+  const [rowsRaw, totalCount, filterOptions] = await Promise.all([
+    prisma.entity.findMany({
+      where,
+      orderBy,
+      cursor: cursorId ? { id: cursorId } : undefined,
+      skip: cursorId ? 1 : 0,
+      take,
+    }),
+    smartCount({
+      tableName: "entities",
+      where: where as Record<string, unknown>,
+      exactCount: () => prisma.entity.count({ where }),
+    }),
+    loadFilterOptions(),
+  ]);
 
-  if (dir === "prev") rows.reverse();
+  const rows = dir === "prev" ? [...rowsRaw].reverse() : rowsRaw;
 
   const hasExtra = rows.length > PAGE_SIZE;
   const pageRows = hasExtra
@@ -88,7 +106,22 @@ export default async function EntitiesPage({
     }
   }
 
-  const totalCount = await prisma.entity.count({ where });
+  const pageIds = pageRows.map((e) => e.id);
+  const pageCnpjs = pageRows.map((e) => e.cnpj);
+
+  const empty = new Map<string, number>();
+  const [contractCountMap, shareholderCountMap, sanctionCountMap, alertCountMap] = pageIds.length === 0
+    ? [empty, empty, empty, empty]
+    : await Promise.all([
+        prisma.contract.groupBy({ by: ["supplierCnpj"], where: { supplierCnpj: { in: pageCnpjs } }, _count: true })
+          .then((rows) => new Map(rows.map((r) => [r.supplierCnpj, r._count]))),
+        prisma.shareholder.groupBy({ by: ["entityId"], where: { entityId: { in: pageIds } }, _count: true })
+          .then((rows) => new Map(rows.map((r) => [r.entityId, r._count]))),
+        prisma.sanction.groupBy({ by: ["entityId"], where: { entityId: { in: pageIds } }, _count: true })
+          .then((rows) => new Map(rows.filter((r): r is typeof r & { entityId: string } => r.entityId !== null).map((r) => [r.entityId, r._count]))),
+        prisma.alert.groupBy({ by: ["entityId"], where: { entityId: { in: pageIds } }, _count: true })
+          .then((rows) => new Map(rows.filter((r): r is typeof r & { entityId: string } => r.entityId !== null).map((r) => [r.entityId, r._count]))),
+      ]);
 
   const serialized = pageRows.map((e) => ({
     id: e.id,
@@ -99,23 +132,13 @@ export default async function EntitiesPage({
     city: e.city,
     capital: e.capital ? Number(e.capital) : null,
     activityDesc: e.activityDesc,
-    contractCount: e._count.contracts,
-    shareholderCount: e._count.shareholders,
-    sanctionCount: e._count.sanctions,
-    alertCount: e._count.alerts,
+    contractCount: contractCountMap.get(e.cnpj) ?? 0,
+    shareholderCount: shareholderCountMap.get(e.id) ?? 0,
+    sanctionCount: sanctionCountMap.get(e.id) ?? 0,
+    alertCount: alertCountMap.get(e.id) ?? 0,
     riskScore: e.riskScore,
     isShellCompany: e.isShellCompany,
   }));
-
-  const [legalNatures, states] = await Promise.all([
-    prisma.entity.groupBy({ by: ["legalNature"], where: { legalNature: { not: null } }, _count: true, orderBy: { _count: { legalNature: "desc" } }, take: 30 }),
-    prisma.entity.groupBy({ by: ["state"], where: { state: { not: null } }, _count: true, orderBy: { state: "asc" } }),
-  ]);
-
-  const filterOptions = {
-    legalNature: legalNatures.filter((n) => n.legalNature).map((n) => ({ label: `${n.legalNature} (${n._count})`, value: n.legalNature! })),
-    state: states.filter((s) => s.state).map((s) => ({ label: s.state!, value: s.state! })),
-  };
 
   return (
     <PageLayout>
