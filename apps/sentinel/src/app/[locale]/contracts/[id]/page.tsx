@@ -21,7 +21,6 @@ export default async function ContractDetailPage({
         include: {
           sanctions: true,
           shareholders: true,
-          _count: { select: { contracts: true } },
         },
       },
       procurement: { select: { id: true, description: true, orgName: true, modality: true } },
@@ -31,6 +30,10 @@ export default async function ContractDetailPage({
   });
 
   if (!contract) return notFound();
+
+  const supplierContractCount = contract.entity
+    ? await prisma.contract.count({ where: { supplierCnpj: contract.supplierCnpj } })
+    : 0;
 
   return (
     <PageLayout>
@@ -121,7 +124,7 @@ export default async function ContractDetailPage({
               {contract.entity && (
                 <>
                   <Field label="Capital Social" value={contract.entity.capital ? formatCurrency(contract.entity.capital.toString()) : null} />
-                  <Field label="Total Contratos" value={contract.entity._count.contracts.toString()} />
+                  <Field label="Total Contratos" value={supplierContractCount.toString()} />
                 </>
               )}
             </div>
