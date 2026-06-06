@@ -24,7 +24,7 @@ export function PipelineLive({
   return (
     <>
       <div className="flex items-center justify-between mb-5">
-        <h1 className="text-2xl font-bold">{t("title")}</h1>
+        <h1 className="text-xl md:text-2xl font-bold">{t("title")}</h1>
         <StatusIndicator status={status} />
       </div>
 

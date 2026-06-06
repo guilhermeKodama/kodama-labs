@@ -58,7 +58,7 @@ export default async function AlertsPage({
 
   return (
     <PageLayout>
-      <h1 className="text-2xl font-bold mb-2">{tPage("title")}</h1>
+      <h1 className="text-xl md:text-2xl font-bold mb-2">{tPage("title")}</h1>
       <p className="text-xs text-muted-foreground mb-5 max-w-3xl">
         {tCommon("disclaimer")}
       </p>

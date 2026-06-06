@@ -35,7 +35,9 @@
     "network": "Rede",
     "alerts": "Alertas",
     "analysis": "Análise IA",
-    "pipeline": "Pipeline"
+    "pipeline": "Pipeline",
+    "openMenu": "Abrir menu",
+    "closeMenu": "Fechar menu"
   },
   "codes": {
     "alertType": {
@@ -103,12 +105,14 @@
       "PJ": "Pessoa Jurídica"
     },
     "aiAnalysisType": {
-      "risk_assessment": "Avaliação de pontos a revisar"
+      "risk_assessment": "Avaliação de pontos a revisar",
+      "overpricing_evaluation": "Análise de preço"
     },
     "aiTargetType": {
       "procurement": "Licitação",
       "contract": "Contrato",
-      "entity": "Entidade"
+      "entity": "Entidade",
+      "procurement_item": "Item de licitação"
     }
   },
   "alerts": {

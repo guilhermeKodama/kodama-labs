@@ -240,7 +240,44 @@ export default async function PoliticianDetailPage({
                 Todas as Doações ({politician.donations.length})
               </h2>
             </div>
-            <div className="overflow-x-auto">
+            <div className="md:hidden divide-y">
+              {politician.donations.map((d) => (
+                <div key={d.id} className="flex items-start justify-between gap-3 p-3">
+                  <div className="flex-1 min-w-0">
+                    <div className="font-medium text-sm truncate">{d.donorName}</div>
+                    <div className="text-[11px] text-muted-foreground font-mono truncate">
+                      {d.donorCpfCnpj.length === 14
+                        ? formatCnpj(d.donorCpfCnpj)
+                        : d.donorCpfCnpj.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4")}
+                    </div>
+                    <div className="text-[11px] text-muted-foreground mt-0.5 flex items-center gap-1.5 flex-wrap">
+                      <span>{d.electionYear}</span>
+                      {(d.donorState || d.state) && (
+                        <>
+                          <span>·</span>
+                          <span>{d.donorState ?? d.state}</span>
+                        </>
+                      )}
+                      {d.donorType && (
+                        <span
+                          className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${
+                            d.donorType === "PJ"
+                              ? "bg-blue-500/20 text-blue-600"
+                              : "bg-green-500/20 text-green-600"
+                          }`}
+                        >
+                          {d.donorType}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex-shrink-0 text-right text-sm font-medium tabular-nums">
+                    {formatCurrency(d.amount.toString())}
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="hidden md:block overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b bg-muted/50">
@@ -317,7 +354,24 @@ export default async function PoliticianDetailPage({
                 Declaração de Bens ({politician.assets.length} itens)
               </h2>
             </div>
-            <div className="overflow-x-auto">
+            <div className="md:hidden divide-y">
+              {politician.assets.map((a) => (
+                <div key={a.id} className="flex items-start justify-between gap-3 p-3">
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm">{a.description}</div>
+                    <div className="text-[11px] text-muted-foreground mt-0.5 flex items-center gap-1.5">
+                      <span>{a.assetType}</span>
+                      <span>·</span>
+                      <span>{a.electionYear}</span>
+                    </div>
+                  </div>
+                  <div className="flex-shrink-0 text-right text-sm font-medium tabular-nums">
+                    {formatCurrency(a.value.toString())}
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="hidden md:block overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b bg-muted/50">

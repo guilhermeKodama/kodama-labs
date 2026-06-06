@@ -129,7 +129,7 @@ export default async function PoliticiansPage({
 
   return (
     <PageLayout>
-      <h1 className="text-2xl font-bold mb-5">{t("title")}</h1>
+      <h1 className="text-xl md:text-2xl font-bold mb-5">{t("title")}</h1>
       <PoliticiansTable
         data={serialized}
         locale={locale}

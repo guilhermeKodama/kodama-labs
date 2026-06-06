@@ -119,7 +119,7 @@ export default async function EntitiesPage({
 
   return (
     <PageLayout>
-      <h1 className="text-2xl font-bold mb-5">{t("title")}</h1>
+      <h1 className="text-xl md:text-2xl font-bold mb-5">{t("title")}</h1>
       <EntitiesTable
         data={serialized}
         locale={locale}

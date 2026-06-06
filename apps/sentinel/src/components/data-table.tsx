@@ -59,6 +59,7 @@ interface DataTableProps<T> {
   basePath?: string;
   nextCursor?: string | null;
   prevCursor?: string | null;
+  renderMobileRow?: (row: T) => React.ReactNode;
 }
 
 export function DataTable<T extends { id: string }>({
@@ -71,6 +72,7 @@ export function DataTable<T extends { id: string }>({
   basePath,
   nextCursor,
   prevCursor,
+  renderMobileRow,
 }: DataTableProps<T>) {
   const isServer = basePath != null && totalCount != null;
   const router = useRouter();
@@ -298,7 +300,7 @@ export function DataTable<T extends { id: string }>({
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-3">
-        <div className="relative flex-1 min-w-[300px]">
+        <div className="relative flex-1 w-full sm:min-w-[300px]">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
             value={isServer ? searchDraft : localSearch}
@@ -380,7 +382,28 @@ export function DataTable<T extends { id: string }>({
         </div>
       )}
 
-      <div className="rounded-lg border bg-card overflow-hidden">
+      {renderMobileRow && (
+        <div className="md:hidden rounded-lg border bg-card divide-y">
+          {pagedData.length === 0 ? (
+            <div className="p-8 text-center text-sm text-muted-foreground">
+              {hasActiveFilters
+                ? "Nenhum registro corresponde aos filtros aplicados."
+                : emptyMessage}
+            </div>
+          ) : (
+            pagedData.map((row) => (
+              <div key={row.id}>{renderMobileRow(row)}</div>
+            ))
+          )}
+        </div>
+      )}
+
+      <div
+        className={cn(
+          "rounded-lg border bg-card overflow-hidden",
+          renderMobileRow && "hidden md:block",
+        )}
+      >
         <div className="overflow-x-auto">
           <table className="w-full text-sm table-fixed">
             <thead>
@@ -441,8 +464,8 @@ export function DataTable<T extends { id: string }>({
       </div>
 
       {effectiveTotal > 0 && (
-        <div className="flex items-center justify-between">
-          <span className="text-sm text-muted-foreground">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <span className="text-xs sm:text-sm text-muted-foreground">
             {data.length > 0
               ? `Mostrando ${data.length} de ${effectiveTotal.toLocaleString("pt-BR")} registros`
               : `${effectiveTotal.toLocaleString("pt-BR")} registros`}
@@ -455,7 +478,7 @@ export function DataTable<T extends { id: string }>({
                 size="sm"
                 disabled={!prevCursor}
                 onClick={() => router.push(buildServerUrl({ cursor: prevCursor!, dir: "prev" }))}
-                className="h-8 gap-1"
+                className="h-8 gap-1 flex-1 sm:flex-initial"
               >
                 <ChevronLeft className="h-4 w-4" />
                 Anterior
@@ -465,51 +488,78 @@ export function DataTable<T extends { id: string }>({
                 size="sm"
                 disabled={!nextCursor}
                 onClick={() => router.push(buildServerUrl({ cursor: nextCursor!, dir: "next" }))}
-                className="h-8 gap-1"
+                className="h-8 gap-1 flex-1 sm:flex-initial"
               >
                 Próximo
                 <ChevronRight className="h-4 w-4" />
               </Button>
             </div>
           ) : (
-            <div className="flex items-center gap-1">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setPage((p) => Math.max(0, p - 1))}
-                disabled={page === 0}
-                className="h-8 w-8 p-0"
-              >
-                <ChevronLeft className="h-4 w-4" />
-              </Button>
-              {Array.from({ length: Math.min(totalPages, 7) }, (_, i) => {
-                let pageNum: number;
-                if (totalPages <= 7) pageNum = i;
-                else if (page < 3) pageNum = i;
-                else if (page > totalPages - 4) pageNum = totalPages - 7 + i;
-                else pageNum = page - 3 + i;
-                return (
-                  <Button
-                    key={pageNum}
-                    variant={page === pageNum ? "default" : "outline"}
-                    size="sm"
-                    onClick={() => setPage(pageNum)}
-                    className="h-8 w-8 p-0 text-xs"
-                  >
-                    {pageNum + 1}
-                  </Button>
-                );
-              })}
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
-                disabled={page >= totalPages - 1}
-                className="h-8 w-8 p-0"
-              >
-                <ChevronRight className="h-4 w-4" />
-              </Button>
-            </div>
+            <>
+              <div className="md:hidden flex items-center justify-between gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setPage((p) => Math.max(0, p - 1))}
+                  disabled={page === 0}
+                  className="h-8 gap-1 flex-1"
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                  Anterior
+                </Button>
+                <span className="text-xs text-muted-foreground whitespace-nowrap px-2">
+                  {page + 1} / {Math.max(totalPages, 1)}
+                </span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
+                  disabled={page >= totalPages - 1}
+                  className="h-8 gap-1 flex-1"
+                >
+                  Próximo
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+              </div>
+              <div className="hidden md:flex items-center gap-1">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setPage((p) => Math.max(0, p - 1))}
+                  disabled={page === 0}
+                  className="h-8 w-8 p-0"
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                </Button>
+                {Array.from({ length: Math.min(totalPages, 7) }, (_, i) => {
+                  let pageNum: number;
+                  if (totalPages <= 7) pageNum = i;
+                  else if (page < 3) pageNum = i;
+                  else if (page > totalPages - 4) pageNum = totalPages - 7 + i;
+                  else pageNum = page - 3 + i;
+                  return (
+                    <Button
+                      key={pageNum}
+                      variant={page === pageNum ? "default" : "outline"}
+                      size="sm"
+                      onClick={() => setPage(pageNum)}
+                      className="h-8 w-8 p-0 text-xs"
+                    >
+                      {pageNum + 1}
+                    </Button>
+                  );
+                })}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
+                  disabled={page >= totalPages - 1}
+                  className="h-8 w-8 p-0"
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+              </div>
+            </>
           )}
         </div>
       )}
