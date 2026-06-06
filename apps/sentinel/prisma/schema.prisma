@@ -127,20 +127,20 @@ model Procurement {
   approvedValue  Decimal?
   totalValue     Decimal?
 
-  processo                 String?
-  legalBasis               String?
-  legalBasisDescription    String?
-  disputeMode              String?
-  disputeModeId            Int?
-  isSrp                    Boolean?
-  instrumentType           String?
-  instrumentTypeId         Int?
-  proposalOpenDate         DateTime?
-  proposalCloseDate        DateTime?
-  confidentialBudget       Boolean  @default(false)
-  linkOrigem               String?
-  linkProcesso             String?
-  budgetSources            Json?
+  processo              String?
+  legalBasis            String?
+  legalBasisDescription String?
+  disputeMode           String?
+  disputeModeId         Int?
+  isSrp                 Boolean?
+  instrumentType        String?
+  instrumentTypeId      Int?
+  proposalOpenDate      DateTime?
+  proposalCloseDate     DateTime?
+  confidentialBudget    Boolean   @default(false)
+  linkOrigem            String?
+  linkProcesso          String?
+  budgetSources         Json?
 
   itemsEnrichedAt     DateTime?
   documentsEnrichedAt DateTime?
@@ -148,14 +148,14 @@ model Procurement {
   state       String?
   city        String?
   riskScore   Float?
-  processedAt DateTime   @default(now())
+  processedAt DateTime @default(now())
   rawRecordId String?
 
-  items      ProcurementItem[]
-  contracts  Contract[]
-  alerts     Alert[]
-  analyses   AiAnalysis[]
-  documents  ProcurementDocument[]
+  items     ProcurementItem[]
+  contracts Contract[]
+  alerts    Alert[]
+  analyses  AiAnalysis[]
+  documents ProcurementDocument[]
 
   @@index([orgCnpj])
   @@index([state, city])
@@ -168,23 +168,23 @@ model Procurement {
 }
 
 model ProcurementDocument {
-  id             String     @id @default(cuid())
-  externalId     String     @unique
-  procurementId  String
-  source         DataSource
-  sequencial     Int
-  title          String
-  documentType   String
-  mimeType       String
-  sizeBytes      Int
-  contentHash    String?
-  sourceUrl      String?
-  storageBucket  String?
-  storageKey     String?
-  statusAtivo    Boolean    @default(true)
-  publishedAt    DateTime?
-  fetchedAt      DateTime   @default(now())
-  rawRecordId    String?
+  id            String     @id @default(cuid())
+  externalId    String     @unique
+  procurementId String
+  source        DataSource
+  sequencial    Int
+  title         String
+  documentType  String
+  mimeType      String
+  sizeBytes     Int
+  contentHash   String?
+  sourceUrl     String?
+  storageBucket String?
+  storageKey    String?
+  statusAtivo   Boolean    @default(true)
+  publishedAt   DateTime?
+  fetchedAt     DateTime   @default(now())
+  rawRecordId   String?
 
   procurement Procurement @relation(fields: [procurementId], references: [id], onDelete: Cascade)
 
@@ -212,7 +212,7 @@ model ProcurementItem {
   materialOrServiceName String?
   situationId           Int?
   situationName         String?
-  judgmentCriteria       String?
+  judgmentCriteria      String?
   judgmentCriteriaId    Int?
   benefitType           String?
   hasResult             Boolean @default(false)
@@ -229,25 +229,25 @@ model ProcurementItem {
 }
 
 model BidResult {
-  id            String  @id @default(cuid())
-  itemId        String
-  sequencial    Int
-  supplierCnpj  String
-  supplierName  String
-  supplierSize  String?
-  supplierType  String?
-  countryCode   String?
+  id           String  @id @default(cuid())
+  itemId       String
+  sequencial   Int
+  supplierCnpj String
+  supplierName String
+  supplierSize String?
+  supplierType String?
+  countryCode  String?
 
-  unitPrice     Decimal
-  totalPrice    Decimal
-  quantity      Decimal?
-  discount      Float?
-  ranking       Int?
+  unitPrice  Decimal
+  totalPrice Decimal
+  quantity   Decimal?
+  discount   Float?
+  ranking    Int?
 
-  isSubcontracted    Boolean @default(false)
-  resultDate         DateTime?
-  situationId        Int?
-  situationName      String?
+  isSubcontracted Boolean   @default(false)
+  resultDate      DateTime?
+  situationId     Int?
+  situationName   String?
 
   item ProcurementItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
 
@@ -258,20 +258,20 @@ model BidResult {
 }
 
 model Contract {
-  id            String    @id @default(cuid())
-  externalId    String    @unique
-  procurementId String?
+  id                    String  @id @default(cuid())
+  externalId            String  @unique
+  procurementId         String?
   procurementExternalId String?
 
-  orgCnpj       String?
-  orgName       String?
-  unitName      String?
-  unitState     String?
-  unitCity      String?
+  orgCnpj   String?
+  orgName   String?
+  unitName  String?
+  unitState String?
+  unitCity  String?
 
-  supplierCnpj  String
-  supplierName  String
-  supplierType  String?
+  supplierCnpj    String
+  supplierName    String
+  supplierType    String?
   supplierCountry String?
 
   objectDescription String?
@@ -282,20 +282,20 @@ model Contract {
   processo          String?
   contractNumber    String?
 
-  value             Decimal
-  initialValue      Decimal?
-  globalValue       Decimal?
-  installmentValue  Decimal?
-  installmentCount  Int?
-  accumulatedValue  Decimal?
+  value            Decimal
+  initialValue     Decimal?
+  globalValue      Decimal?
+  installmentValue Decimal?
+  installmentCount Int?
+  accumulatedValue Decimal?
 
-  signatureDate     DateTime?
-  startDate         DateTime
-  endDate           DateTime?
-  publishedAt       DateTime?
+  signatureDate DateTime?
+  startDate     DateTime
+  endDate       DateTime?
+  publishedAt   DateTime?
 
-  amendmentCount    Int       @default(0)
-  isRevenue         Boolean   @default(false)
+  amendmentCount Int     @default(0)
+  isRevenue      Boolean @default(false)
 
   subcontractorCnpj String?
   subcontractorName String?
@@ -305,11 +305,11 @@ model Contract {
 
   documentsEnrichedAt DateTime?
 
-  description   String
-  rawRecordId   String?
+  description String
+  rawRecordId String?
 
-  entity      Entity       @relation(fields: [supplierCnpj], references: [cnpj])
-  procurement Procurement? @relation(fields: [procurementId], references: [id])
+  entity      Entity             @relation(fields: [supplierCnpj], references: [cnpj])
+  procurement Procurement?       @relation(fields: [procurementId], references: [id])
   alerts      Alert[]
   documents   ContractDocument[]
 
@@ -324,23 +324,23 @@ model Contract {
 }
 
 model ContractDocument {
-  id             String     @id @default(cuid())
-  externalId     String     @unique
-  contractId     String
-  source         DataSource
-  sequencial     Int
-  title          String
-  documentType   String
-  mimeType       String
-  sizeBytes      Int
-  contentHash    String?
-  sourceUrl      String?
-  storageBucket  String?
-  storageKey     String?
-  statusAtivo    Boolean    @default(true)
-  publishedAt    DateTime?
-  fetchedAt      DateTime   @default(now())
-  rawRecordId    String?
+  id            String     @id @default(cuid())
+  externalId    String     @unique
+  contractId    String
+  source        DataSource
+  sequencial    Int
+  title         String
+  documentType  String
+  mimeType      String
+  sizeBytes     Int
+  contentHash   String?
+  sourceUrl     String?
+  storageBucket String?
+  storageKey    String?
+  statusAtivo   Boolean    @default(true)
+  publishedAt   DateTime?
+  fetchedAt     DateTime   @default(now())
+  rawRecordId   String?
 
   contract Contract @relation(fields: [contractId], references: [id], onDelete: Cascade)
 
@@ -351,23 +351,23 @@ model ContractDocument {
 }
 
 model Entity {
-  id            String    @id @default(cuid())
-  cnpj          String    @unique
-  name          String
-  tradeName     String?
-  legalNature   String?
-  openDate      DateTime?
-  capital       Decimal?
-  activityCode  String?
-  activityDesc  String?
-  address       String?
-  state         String?
-  city          String?
-  employeeCount Int?
-  riskScore     Float?
-  isShellCompany Boolean  @default(false)
-  enrichedAt    DateTime?
-  rawRecordId   String?
+  id             String    @id @default(cuid())
+  cnpj           String    @unique
+  name           String
+  tradeName      String?
+  legalNature    String?
+  openDate       DateTime?
+  capital        Decimal?
+  activityCode   String?
+  activityDesc   String?
+  address        String?
+  state          String?
+  city           String?
+  employeeCount  Int?
+  riskScore      Float?
+  isShellCompany Boolean   @default(false)
+  enrichedAt     DateTime?
+  rawRecordId    String?
 
   shareholders   Shareholder[]
   contracts      Contract[]
@@ -378,6 +378,14 @@ model Entity {
   @@index([state, city])
   @@index([riskScore])
   @@index([isShellCompany])
+  // Matches the entities listing orderBy: (riskScore DESC NULLS LAST, id ASC).
+  // The NULLS LAST modifier cannot be expressed in Prisma's @@index syntax, so
+  // the index is created via hand-edited SQL in
+  // migrations/20260606000000_add_listing_perf_indexes/migration.sql.
+  // `prisma migrate dev` will detect drift and try to drop NULLS LAST — when
+  // that happens, delete the auto-generated migration and keep the hand-edited
+  // one. Don't remove this @@index line.
+  @@index([riskScore(sort: Desc), id], map: "entities_riskScore_id_listing_idx")
   @@map("entities")
 }
 
@@ -396,28 +404,28 @@ model Shareholder {
 }
 
 model Sanction {
-  id          String         @id @default(cuid())
-  externalId  String?        @unique
-  entityId    String?
-  cnpjCpf     String
-  personName  String?
-  personType  String?
-  source      SanctionSource
-  type        String
-  reason      String
-  startDate   DateTime
-  endDate     DateTime?
+  id         String         @id @default(cuid())
+  externalId String?        @unique
+  entityId   String?
+  cnpjCpf    String
+  personName String?
+  personType String?
+  source     SanctionSource
+  type       String
+  reason     String
+  startDate  DateTime
+  endDate    DateTime?
 
-  sanctionType           String?
-  legalBasis             String?
-  sanctioningOrg         String?
-  sanctioningOrgState    String?
-  sanctioningOrgPower    String?
-  sanctioningOrgSphere   String?
-  processNumber          String?
-  publicationDate        DateTime?
-  transitDate            DateTime?
-  originDate             DateTime?
+  sanctionType         String?
+  legalBasis           String?
+  sanctioningOrg       String?
+  sanctioningOrgState  String?
+  sanctioningOrgPower  String?
+  sanctioningOrgSphere String?
+  processNumber        String?
+  publicationDate      DateTime?
+  transitDate          DateTime?
+  originDate           DateTime?
 
   rawRecordId String?
 
@@ -519,26 +527,26 @@ model AiAnalysis {
 // ============================================
 
 model Politician {
-  id            String    @id @default(cuid())
-  cpf           String    @unique
-  name          String
-  ballotName    String?
-  party         String?
-  position      String
-  state         String?
-  city          String?
-  electionYear  Int?
-  elected       Boolean   @default(false)
-  active        Boolean   @default(false)
-  photoUrl      String?
-  externalId    String?
-  rawRecordId   String?
-  birthDate     DateTime?
-  birthState    String?
-  birthCity     String?
-  gender        String?
-  education     String?
-  maritalStatus String?
+  id              String    @id @default(cuid())
+  cpf             String    @unique
+  name            String
+  ballotName      String?
+  party           String?
+  position        String
+  state           String?
+  city            String?
+  electionYear    Int?
+  elected         Boolean   @default(false)
+  active          Boolean   @default(false)
+  photoUrl        String?
+  externalId      String?
+  rawRecordId     String?
+  birthDate       DateTime?
+  birthState      String?
+  birthCity       String?
+  gender          String?
+  education       String?
+  maritalStatus   String?
   occupation      String?
   email           String?
   familyFetchedAt DateTime?
@@ -556,6 +564,11 @@ model Politician {
   @@index([state])
   @@index([position])
   @@index([active, elected, name, id])
+  // Matches the politicians listing orderBy:
+  // (active DESC, elected DESC, name ASC, id ASC). The existing
+  // [active, elected, name, id] index is all-ASC and cannot serve this scan
+  // forward or backward, forcing a sort over the whole result set.
+  @@index([active(sort: Desc), elected(sort: Desc), name, id], map: "politicians_listing_idx")
   @@map("politicians")
 }
 
@@ -571,19 +584,19 @@ model CampaignDonation {
   rawRecordId  String?
   createdAt    DateTime @default(now())
 
-  donorNameRfb  String?
-  donorCnae     String?
-  donorState    String?
-  donorCity     String?
-  donationDate  DateTime?
-  receiptNumber String?
-  originType    String?
-  sourceType    String?
-  speciesType   String?
-  candidateName String?
-  candidateParty String?
+  donorNameRfb      String?
+  donorCnae         String?
+  donorState        String?
+  donorCity         String?
+  donationDate      DateTime?
+  receiptNumber     String?
+  originType        String?
+  sourceType        String?
+  speciesType       String?
+  candidateName     String?
+  candidateParty    String?
   candidatePosition String?
-  state         String?
+  state             String?
 
   politician Politician @relation(fields: [politicianId], references: [id], onDelete: Cascade)
 

@@ -1,4 +1,5 @@
 import { prisma } from "@sentinel/server/lib/prisma";
+import { cachedFilterOptions, smartCount } from "@sentinel/server/lib/list-helpers";
 import { Prisma } from "@/generated/prisma";
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import { PageLayout } from "@/components/page-layout";
@@ -38,6 +39,22 @@ function buildWhere(sp: Record<string, string | string[] | undefined>) {
   return where;
 }
 
+const loadFilterOptions = () =>
+  cachedFilterOptions("politicians", async () => {
+    const [parties, positions, states, years] = await Promise.all([
+      prisma.politician.groupBy({ by: ["party"], where: { party: { not: null } }, _count: true, orderBy: { _count: { party: "desc" } }, take: 50 }),
+      prisma.politician.groupBy({ by: ["position"], _count: true, orderBy: { _count: { position: "desc" } }, take: 30 }),
+      prisma.politician.groupBy({ by: ["state"], where: { state: { not: null } }, _count: true, orderBy: { state: "asc" } }),
+      prisma.politician.groupBy({ by: ["electionYear"], where: { electionYear: { not: null } }, _count: true, orderBy: { electionYear: "desc" } }),
+    ]);
+    return {
+      party: parties.filter((p) => p.party).map((p) => ({ label: `${p.party} (${p._count})`, value: p.party! })),
+      position: positions.map((p) => ({ label: `${p.position} (${p._count})`, value: p.position })),
+      state: states.filter((s) => s.state).map((s) => ({ label: s.state!, value: s.state! })),
+      year: years.filter((y) => y.electionYear).map((y) => ({ label: String(y.electionYear!), value: String(y.electionYear!) })),
+    };
+  });
+
 export default async function PoliticiansPage({
   params,
   searchParams,
@@ -63,16 +80,36 @@ export default async function PoliticiansPage({
 
   const take = dir === "prev" ? -(PAGE_SIZE + 1) : PAGE_SIZE + 1;
 
-  const rows = await prisma.politician.findMany({
-    where,
-    orderBy,
-    cursor: cursorId ? { id: cursorId } : undefined,
-    skip: cursorId ? 1 : 0,
-    take,
-    include: { _count: { select: { donations: true, links: true } } },
-  });
+  const [rowsRaw, totalCount, filterOptions] = await Promise.all([
+    prisma.politician.findMany({
+      where,
+      orderBy,
+      cursor: cursorId ? { id: cursorId } : undefined,
+      skip: cursorId ? 1 : 0,
+      take,
+      select: {
+        id: true,
+        name: true,
+        ballotName: true,
+        cpf: true,
+        party: true,
+        position: true,
+        state: true,
+        city: true,
+        electionYear: true,
+        elected: true,
+        active: true,
+      },
+    }),
+    smartCount({
+      tableName: "politicians",
+      where: where as Record<string, unknown>,
+      exactCount: () => prisma.politician.count({ where }),
+    }),
+    loadFilterOptions(),
+  ]);
 
-  if (dir === "prev") rows.reverse();
+  const rows = dir === "prev" ? [...rowsRaw].reverse() : rowsRaw;
 
   const hasExtra = rows.length > PAGE_SIZE;
   const pageRows = hasExtra
@@ -95,7 +132,16 @@ export default async function PoliticiansPage({
     }
   }
 
-  const totalCount = await prisma.politician.count({ where });
+  const pageIds = pageRows.map((p) => p.id);
+  const empty = new Map<string, number>();
+  const [donationCountMap, linkCountMap] = pageIds.length === 0
+    ? [empty, empty]
+    : await Promise.all([
+        prisma.campaignDonation.groupBy({ by: ["politicianId"], where: { politicianId: { in: pageIds } }, _count: true })
+          .then((rows) => new Map(rows.map((r) => [r.politicianId, r._count]))),
+        prisma.politicalLink.groupBy({ by: ["politicianId"], where: { politicianId: { in: pageIds } }, _count: true })
+          .then((rows) => new Map(rows.map((r) => [r.politicianId, r._count]))),
+      ]);
 
   const serialized = pageRows.map((p) => ({
     id: p.id,
@@ -109,23 +155,9 @@ export default async function PoliticiansPage({
     electionYear: p.electionYear,
     elected: p.elected,
     active: p.active,
-    donationCount: p._count.donations,
-    linkCount: p._count.links,
+    donationCount: donationCountMap.get(p.id) ?? 0,
+    linkCount: linkCountMap.get(p.id) ?? 0,
   }));
-
-  const [parties, positions, states, years] = await Promise.all([
-    prisma.politician.groupBy({ by: ["party"], where: { party: { not: null } }, _count: true, orderBy: { _count: { party: "desc" } }, take: 50 }),
-    prisma.politician.groupBy({ by: ["position"], _count: true, orderBy: { _count: { position: "desc" } }, take: 30 }),
-    prisma.politician.groupBy({ by: ["state"], where: { state: { not: null } }, _count: true, orderBy: { state: "asc" } }),
-    prisma.politician.groupBy({ by: ["electionYear"], where: { electionYear: { not: null } }, _count: true, orderBy: { electionYear: "desc" } }),
-  ]);
-
-  const filterOptions = {
-    party: parties.filter((p) => p.party).map((p) => ({ label: `${p.party} (${p._count})`, value: p.party! })),
-    position: positions.map((p) => ({ label: `${p.position} (${p._count})`, value: p.position })),
-    state: states.filter((s) => s.state).map((s) => ({ label: s.state!, value: s.state! })),
-    year: years.filter((y) => y.electionYear).map((y) => ({ label: String(y.electionYear!), value: String(y.electionYear!) })),
-  };
 
   return (
     <PageLayout>

@@ -1,4 +1,5 @@
 import { prisma } from "@sentinel/server/lib/prisma";
+import { cachedFilterOptions, smartCount } from "@sentinel/server/lib/list-helpers";
 import { Prisma } from "@/generated/prisma";
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import { PageLayout } from "@/components/page-layout";
@@ -28,6 +29,18 @@ function buildWhere(sp: Record<string, string | string[] | undefined>) {
   return where;
 }
 
+const loadFilterOptions = () =>
+  cachedFilterOptions("contracts", async () => {
+    const [contractTypes, states] = await Promise.all([
+      prisma.contract.groupBy({ by: ["contractType"], where: { contractType: { not: null } }, _count: true, orderBy: { _count: { contractType: "desc" } }, take: 20 }),
+      prisma.contract.groupBy({ by: ["unitState"], where: { unitState: { not: null } }, _count: true, orderBy: { unitState: "asc" } }),
+    ]);
+    return {
+      contractType: contractTypes.filter((t) => t.contractType).map((t) => ({ label: `${t.contractType} (${t._count})`, value: t.contractType! })),
+      state: states.filter((s) => s.unitState).map((s) => ({ label: s.unitState!, value: s.unitState! })),
+    };
+  });
+
 export default async function ContractsPage({
   params,
   searchParams,
@@ -51,19 +64,39 @@ export default async function ContractsPage({
 
   const take = dir === "prev" ? -(PAGE_SIZE + 1) : PAGE_SIZE + 1;
 
-  const rows = await prisma.contract.findMany({
-    where,
-    orderBy,
-    cursor: cursorId ? { id: cursorId } : undefined,
-    skip: cursorId ? 1 : 0,
-    take,
-    include: {
-      entity: { select: { id: true, _count: { select: { sanctions: true } } } },
-      _count: { select: { alerts: true } },
-    },
-  });
+  const [rowsRaw, totalCount, filterOptions] = await Promise.all([
+    prisma.contract.findMany({
+      where,
+      orderBy,
+      cursor: cursorId ? { id: cursorId } : undefined,
+      skip: cursorId ? 1 : 0,
+      take,
+      select: {
+        id: true,
+        supplierName: true,
+        supplierCnpj: true,
+        supplierType: true,
+        orgName: true,
+        unitState: true,
+        objectDescription: true,
+        description: true,
+        contractType: true,
+        value: true,
+        amendmentCount: true,
+        startDate: true,
+        endDate: true,
+        entity: { select: { id: true } },
+      },
+    }),
+    smartCount({
+      tableName: "contracts",
+      where: where as Record<string, unknown>,
+      exactCount: () => prisma.contract.count({ where }),
+    }),
+    loadFilterOptions(),
+  ]);
 
-  if (dir === "prev") rows.reverse();
+  const rows = dir === "prev" ? [...rowsRaw].reverse() : rowsRaw;
 
   const hasExtra = rows.length > PAGE_SIZE;
   const pageRows = hasExtra
@@ -86,7 +119,20 @@ export default async function ContractsPage({
     }
   }
 
-  const totalCount = await prisma.contract.count({ where });
+  const pageIds = pageRows.map((c) => c.id);
+  const supplierCnpjs = Array.from(new Set(pageRows.map((c) => c.supplierCnpj).filter(Boolean)));
+
+  const empty = new Map<string, number>();
+  const [alertCountMap, sanctionCountMap] = pageIds.length === 0
+    ? [empty, empty]
+    : await Promise.all([
+        prisma.alert.groupBy({ by: ["contractId"], where: { contractId: { in: pageIds } }, _count: true })
+          .then((rows) => new Map(rows.filter((r): r is typeof r & { contractId: string } => r.contractId !== null).map((r) => [r.contractId, r._count]))),
+        supplierCnpjs.length === 0
+          ? Promise.resolve(empty)
+          : prisma.sanction.groupBy({ by: ["cnpjCpf"], where: { cnpjCpf: { in: supplierCnpjs } }, _count: true })
+              .then((rows) => new Map(rows.map((r) => [r.cnpjCpf, r._count]))),
+      ]);
 
   const serialized = pageRows.map((c) => ({
     id: c.id,
@@ -99,22 +145,12 @@ export default async function ContractsPage({
     contractType: c.contractType,
     value: Number(c.value),
     amendmentCount: c.amendmentCount,
-    sanctionCount: c.entity?._count.sanctions ?? 0,
-    alertCount: c._count.alerts,
+    sanctionCount: sanctionCountMap.get(c.supplierCnpj) ?? 0,
+    alertCount: alertCountMap.get(c.id) ?? 0,
     startDate: c.startDate.toISOString(),
     endDate: c.endDate?.toISOString() ?? null,
     entityId: c.entity?.id ?? null,
   }));
-
-  const [contractTypes, states] = await Promise.all([
-    prisma.contract.groupBy({ by: ["contractType"], where: { contractType: { not: null } }, _count: true, orderBy: { _count: { contractType: "desc" } }, take: 20 }),
-    prisma.contract.groupBy({ by: ["unitState"], where: { unitState: { not: null } }, _count: true, orderBy: { unitState: "asc" } }),
-  ]);
-
-  const filterOptions = {
-    contractType: contractTypes.filter((t) => t.contractType).map((t) => ({ label: `${t.contractType} (${t._count})`, value: t.contractType! })),
-    state: states.filter((s) => s.unitState).map((s) => ({ label: s.unitState!, value: s.unitState! })),
-  };
 
   return (
     <PageLayout>
