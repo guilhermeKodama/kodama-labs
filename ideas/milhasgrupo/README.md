@@ -62,7 +62,7 @@ The `/api/lead` route POSTs every submission as JSON to `LEADS_WEBHOOK_URL`. Poi
    ```
    received_at | email | contact | group_size | travel_window | utm_source | utm_medium | utm_campaign | referrer | status | alerts_sent | issuances | notes
    ```
-   The last four (`status`, `alerts_sent`, `issuances`, `notes`) are filled **manually** as you work each lead.
+   The last four (`status`, `alerts_sent`, `issuances`, `notes`) are filled **manually** as you work each lead. Allowed `status` values and transitions: [lead-playbook.md](lead-playbook.md) — Status dos leads.
 3. **Extensions → Apps Script**. Replace the default code with:
 
    ```js
@@ -127,11 +127,15 @@ UTMs (`utm_source`, `utm_medium`, `utm_campaign`, `utm_content`, `utm_term`) and
 
 ### 3. Concierge runbook — manual alerts + issuance follow-up
 
+**Lead onboarding:** [lead-playbook.md](lead-playbook.md) — Mensagem 0 padrão (WhatsApp/Telegram) + checklist. Enviar antes de buscar voos.
+
 **Daily routine (15-30 min):**
 
-1. Open the Sheet. Filter `status = Lead`.
-2. For each row, scout availability in **Azul Fidelidade**, **LATAM Pass**, **Smiles** for the user's `travel_window` × `group_size` going GRU/CNF/VCP → MCO.
-3. When you find N seats on the same flight, send the alert template via Telegram (preferred) or WhatsApp.
+1. Open the Sheet. Filter `status` in `(vazio)`, `Lead`, `Onboarding`, `Qualified` as needed.
+2. `(vazio)` / `Lead`: send **Mensagem 0** from [lead-playbook.md](lead-playbook.md) (≤24h) → set `Onboarding`.
+3. `Onboarding`: when they answer the 3 questions → `Qualified` + `notes`.
+4. `Qualified`: scout **Azul Fidelidade**, **LATAM Pass**, **Smiles** (`travel_window` × `group_size` → GRU/CNF/VCP → MCO).
+5. When you find N seats on the same flight, send the alert template via Telegram (preferred) or WhatsApp → `Active`.
 
 **Alert template (paste-ready):**
 
@@ -157,9 +161,10 @@ Oi {{NOME}}, deu pra emitir? Quantos lugares?
 
 **Log the reply:**
 - `issuances` → number of seats they actually booked (0 if not)
+- `status` → `Issued` if `issuances` ≥ 1 (otherwise keep `Active`)
 - `notes` → append the user's reply verbatim — the *texture* of why they did/didn't book is the real validation signal (Mom Test #3)
 
-**Weekly check-in on cold Leads** (`status = Lead` for >7 days):
+**Weekly check-in** (`Onboarding` for >7 days, then `Cold` or `Lost` if no reply):
 
 ```
 Oi {{NOME}}, ainda planejando a viagem? Posso te avisar de combinações específicas se precisar.
