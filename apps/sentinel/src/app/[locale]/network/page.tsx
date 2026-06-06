@@ -1,4 +1,5 @@
 import { prisma } from "@sentinel/server/lib/prisma";
+import { cachedAggregation, smartCount } from "@sentinel/server/lib/list-helpers";
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import { PageLayout } from "@/components/page-layout";
 import { formatCnpj, formatDate, formatNumber, type AppLocale } from "@/lib/utils";
@@ -48,60 +49,87 @@ export default async function NetworkPage({
     return v === key ? code : v;
   };
 
-  const politicalLinks = await prisma.politicalLink.findMany({
-    orderBy: { strength: "desc" },
-    take: 100,
-    include: {
-      politician: {
-        select: {
-          id: true,
-          name: true,
-          ballotName: true,
-          party: true,
-          position: true,
-          state: true,
-          elected: true,
+  const [politicalLinks, sharedShareholders, politicalLinkAlerts, politiciansTotal, donationsTotal] = await Promise.all([
+    prisma.politicalLink.findMany({
+      orderBy: { strength: "desc" },
+      take: 100,
+      include: {
+        politician: {
+          select: {
+            id: true,
+            name: true,
+            ballotName: true,
+            party: true,
+            position: true,
+            state: true,
+            elected: true,
+          },
+        },
+        entity: {
+          select: {
+            id: true,
+            name: true,
+            cnpj: true,
+            state: true,
+          },
         },
       },
-      entity: {
-        select: {
-          id: true,
-          name: true,
-          cnpj: true,
-          state: true,
-          _count: { select: { contracts: true } },
-        },
+    }),
+    cachedAggregation("network-shared-shareholders", () =>
+      prisma.$queryRaw<{ cpf_cnpj: string; name: string; entity_count: number }[]>`
+        SELECT s."cpfCnpj" as cpf_cnpj, s."name", COUNT(DISTINCT s."entityId")::int as entity_count
+        FROM shareholders s
+        WHERE s."cpfCnpj" IS NOT NULL
+        GROUP BY s."cpfCnpj", s."name"
+        HAVING COUNT(DISTINCT s."entityId") >= 2
+        ORDER BY entity_count DESC
+        LIMIT 50
+      `,
+    ),
+    prisma.alert.findMany({
+      where: { type: "POLITICAL_LINK" },
+      orderBy: { createdAt: "desc" },
+      take: 20,
+      include: {
+        entity: { select: { id: true, name: true, cnpj: true } },
       },
-    },
-  });
+    }),
+    smartCount({
+      tableName: "politicians",
+      where: {},
+      exactCount: () => prisma.politician.count(),
+    }),
+    smartCount({
+      tableName: "campaign_donations",
+      where: {},
+      exactCount: () => prisma.campaignDonation.count(),
+    }),
+  ]);
 
-  const sharedShareholders = await prisma.$queryRaw<
-    { cpf_cnpj: string; name: string; entity_count: number }[]
-  >`
-    SELECT s."cpfCnpj" as cpf_cnpj, s."name", COUNT(DISTINCT s."entityId")::int as entity_count
-    FROM shareholders s
-    WHERE s."cpfCnpj" IS NOT NULL
-    GROUP BY s."cpfCnpj", s."name"
-    HAVING COUNT(DISTINCT s."entityId") >= 2
-    ORDER BY entity_count DESC
-    LIMIT 50
-  `;
-
-  const politicalLinkAlerts = await prisma.alert.findMany({
-    where: { type: "POLITICAL_LINK" },
-    orderBy: { createdAt: "desc" },
-    take: 20,
-    include: {
-      entity: { select: { id: true, name: true, cnpj: true } },
-    },
-  });
+  const linkedEntityCnpjs = Array.from(
+    new Set(
+      politicalLinks
+        .map((l) => l.entity?.cnpj)
+        .filter((c): c is string => Boolean(c)),
+    ),
+  );
+  const contractCountByCnpj =
+    linkedEntityCnpjs.length === 0
+      ? new Map<string, number>()
+      : await prisma.contract
+          .groupBy({
+            by: ["supplierCnpj"],
+            where: { supplierCnpj: { in: linkedEntityCnpjs } },
+            _count: true,
+          })
+          .then((rows) => new Map(rows.map((r) => [r.supplierCnpj, r._count])));
 
   const stats = {
     politicalLinks: politicalLinks.length,
     sharedShareholders: sharedShareholders.length,
     politicalAlerts: politicalLinkAlerts.length,
-    politicians: await prisma.politician.count(),
-    donations: await prisma.campaignDonation.count(),
+    politicians: politiciansTotal,
+    donations: donationsTotal,
   };
 
   const linksByType = new Map<string, typeof politicalLinks>();
@@ -218,7 +246,7 @@ export default async function NetworkPage({
                       </Link>
                       <p className="text-[11px] text-muted-foreground">
                         {formatCnpj(link.entity.cnpj)} — {link.entity.state ?? "?"} —{" "}
-                        {t("contractsLabel", { count: link.entity._count.contracts })}
+                        {t("contractsLabel", { count: contractCountByCnpj.get(link.entity.cnpj) ?? 0 })}
                       </p>
                     </div>
                   ) : (
