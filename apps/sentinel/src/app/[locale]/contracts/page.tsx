@@ -1,3 +1,4 @@
+import { unstable_cache } from "next/cache";
 import { prisma } from "@sentinel/server/lib/prisma";
 import { cachedFilterOptions, smartCount } from "@sentinel/server/lib/list-helpers";
 import { Prisma } from "@/generated/prisma";
@@ -6,6 +7,32 @@ import { PageLayout } from "@/components/page-layout";
 import { ContractsTable } from "./table";
 
 const PAGE_SIZE = 25;
+const DEFAULT_LISTING_REVALIDATE_SECONDS = 60;
+
+interface SerializedContract {
+  id: string;
+  supplierName: string;
+  supplierCnpj: string;
+  supplierType: string | null;
+  orgName: string | null;
+  unitState: string | null;
+  objectDescription: string;
+  contractType: string | null;
+  value: number;
+  amendmentCount: number;
+  sanctionCount: number;
+  alertCount: number;
+  startDate: string;
+  endDate: string | null;
+  entityId: string | null;
+}
+
+interface ListingResult {
+  rows: SerializedContract[];
+  totalCount: number;
+  nextCursor: string | null;
+  prevCursor: string | null;
+}
 
 function buildWhere(sp: Record<string, string | string[] | undefined>) {
   const where: Prisma.ContractWhereInput = {};
@@ -41,30 +68,22 @@ const loadFilterOptions = () =>
     };
   });
 
-export default async function ContractsPage({
-  params,
-  searchParams,
+async function fetchListing({
+  where,
+  cursorId,
+  dir,
 }: {
-  params: Promise<{ locale: string }>;
-  searchParams: Promise<Record<string, string | string[] | undefined>>;
-}) {
-  const { locale } = await params;
-  setRequestLocale(locale);
-  const t = await getTranslations("pages.contracts");
-
-  const sp = await searchParams;
-  const cursorId = String(sp.cursor ?? "");
-  const dir = String(sp.dir ?? "next");
-  const where = buildWhere(sp);
-
+  where: Prisma.ContractWhereInput;
+  cursorId: string;
+  dir: "next" | "prev";
+}): Promise<ListingResult> {
   const orderBy: Prisma.ContractOrderByWithRelationInput[] = [
     { startDate: "desc" },
     { id: "asc" },
   ];
-
   const take = dir === "prev" ? -(PAGE_SIZE + 1) : PAGE_SIZE + 1;
 
-  const [rowsRaw, totalCount, filterOptions] = await Promise.all([
+  const [rowsRaw, totalCount] = await Promise.all([
     prisma.contract.findMany({
       where,
       orderBy,
@@ -93,11 +112,9 @@ export default async function ContractsPage({
       where: where as Record<string, unknown>,
       exactCount: () => prisma.contract.count({ where }),
     }),
-    loadFilterOptions(),
   ]);
 
   const rows = dir === "prev" ? [...rowsRaw].reverse() : rowsRaw;
-
   const hasExtra = rows.length > PAGE_SIZE;
   const pageRows = hasExtra
     ? dir === "prev" ? rows.slice(1) : rows.slice(0, PAGE_SIZE)
@@ -134,7 +151,7 @@ export default async function ContractsPage({
               .then((rows) => new Map(rows.map((r) => [r.cnpjCpf, r._count]))),
       ]);
 
-  const serialized = pageRows.map((c) => ({
+  const serialized: SerializedContract[] = pageRows.map((c) => ({
     id: c.id,
     supplierName: c.supplierName,
     supplierCnpj: c.supplierCnpj,
@@ -152,15 +169,49 @@ export default async function ContractsPage({
     entityId: c.entity?.id ?? null,
   }));
 
+  return { rows: serialized, totalCount, nextCursor, prevCursor };
+}
+
+const fetchDefaultListing = unstable_cache(
+  () => fetchListing({ where: {}, cursorId: "", dir: "next" }),
+  ["contracts-default-listing-v1"],
+  { revalidate: DEFAULT_LISTING_REVALIDATE_SECONDS },
+);
+
+function isDefaultState(sp: Record<string, string | string[] | undefined>): boolean {
+  return !sp.search && !sp.contractType && !sp.state && !sp.cursor && !sp.dir;
+}
+
+export default async function ContractsPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ locale: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  const { locale } = await params;
+  setRequestLocale(locale);
+  const t = await getTranslations("pages.contracts");
+
+  const sp = await searchParams;
+  const cursorId = String(sp.cursor ?? "");
+  const dir: "next" | "prev" = String(sp.dir ?? "next") === "prev" ? "prev" : "next";
+  const where = buildWhere(sp);
+
+  const [listing, filterOptions] = await Promise.all([
+    isDefaultState(sp) ? fetchDefaultListing() : fetchListing({ where, cursorId, dir }),
+    loadFilterOptions(),
+  ]);
+
   return (
     <PageLayout>
       <h1 className="text-xl md:text-2xl font-bold mb-5">{t("title")}</h1>
       <ContractsTable
-        data={serialized}
+        data={listing.rows}
         locale={locale}
-        totalCount={totalCount}
-        nextCursor={nextCursor}
-        prevCursor={prevCursor}
+        totalCount={listing.totalCount}
+        nextCursor={listing.nextCursor}
+        prevCursor={listing.prevCursor}
         filterOptions={filterOptions}
       />
     </PageLayout>
