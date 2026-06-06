@@ -34,7 +34,6 @@ export default async function PoliticianDetailPage({
               name: true,
               cnpj: true,
               state: true,
-              _count: { select: { contracts: true } },
             },
           },
         },
@@ -50,6 +49,37 @@ export default async function PoliticianDetailPage({
 
   if (!politician) return notFound();
 
+  const linkedEntityCnpjs = Array.from(
+    new Set(
+      politician.links
+        .map((l) => l.entity?.cnpj)
+        .filter((c): c is string => Boolean(c)),
+    ),
+  );
+
+  const [relatedAlerts, contractCountByCnpj] = await Promise.all([
+    prisma.alert.findMany({
+      where: {
+        type: "POLITICAL_LINK",
+        data: {
+          path: ["politicianCpf"],
+          equals: politician.cpf,
+        },
+      },
+      orderBy: { createdAt: "desc" },
+      take: 20,
+    }),
+    linkedEntityCnpjs.length === 0
+      ? Promise.resolve(new Map<string, number>())
+      : prisma.contract
+          .groupBy({
+            by: ["supplierCnpj"],
+            where: { supplierCnpj: { in: linkedEntityCnpjs } },
+            _count: true,
+          })
+          .then((rows) => new Map(rows.map((r) => [r.supplierCnpj, r._count]))),
+  ]);
+
   const totalDonations = politician.donations.reduce(
     (sum, d) => sum + Number(d.amount),
     0,
@@ -60,18 +90,6 @@ export default async function PoliticianDetailPage({
     (sum, d) => sum + Number(d.amount),
     0,
   );
-
-  const relatedAlerts = await prisma.alert.findMany({
-    where: {
-      type: "POLITICAL_LINK",
-      data: {
-        path: ["politicianCpf"],
-        equals: politician.cpf,
-      },
-    },
-    orderBy: { createdAt: "desc" },
-    take: 20,
-  });
 
   const linkTypeLabels: Record<string, string> = {
     SHAREHOLDER_IS_POLITICIAN: "Sócio é Político",
@@ -428,7 +446,7 @@ export default async function PoliticianDetailPage({
                       >
                         <Building2 className="h-3.5 w-3.5" />
                         {link.entity.name} ({formatCnpj(link.entity.cnpj)}) —{" "}
-                        {link.entity._count.contracts} contratos
+                        {contractCountByCnpj.get(link.entity.cnpj) ?? 0} contratos
                       </Link>
                     )}
                   </div>
