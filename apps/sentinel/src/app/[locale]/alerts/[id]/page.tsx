@@ -337,7 +337,25 @@ export default async function AlertDetailPage({
               {alert.procurement.items.length > 0 && (
                 <div className="mt-3 pt-3 border-t">
                   <p className="text-[11px] font-semibold text-muted-foreground mb-2">{t("items")} ({alert.procurement._count.items})</p>
-                  <div className="overflow-x-auto">
+                  <div className="md:hidden divide-y">
+                    {alert.procurement.items.map((item) => (
+                      <div key={item.id} className="flex items-start justify-between gap-3 py-2">
+                        <div className="flex-1 min-w-0">
+                          <div className="text-sm">
+                            <span className="text-muted-foreground mr-1.5">#{item.itemNumber}</span>
+                            {stripHtml(item.description)}
+                          </div>
+                          <div className="text-[11px] text-muted-foreground mt-0.5 tabular-nums">
+                            {formatNumber(Number(item.quantity), appLocale)} × {formatCurrency(item.unitPrice.toString(), appLocale)}
+                          </div>
+                        </div>
+                        <div className="flex-shrink-0 text-right text-sm font-medium tabular-nums">
+                          {formatCurrency(item.totalPrice.toString(), appLocale)}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="hidden md:block overflow-x-auto">
                     <table className="w-full text-sm">
                       <thead>
                         <tr className="text-[11px] text-muted-foreground border-b">

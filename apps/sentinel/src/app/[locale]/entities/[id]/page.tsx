@@ -189,7 +189,28 @@ export default async function EntityDetailPage({
                 Sanções ({entity.sanctions.length})
               </h2>
             </div>
-            <div className="overflow-x-auto">
+            <div className="md:hidden divide-y">
+              {entity.sanctions.map((s) => (
+                <div key={s.id} className="p-3 space-y-1">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm font-medium">{s.sanctionType ?? s.type}</div>
+                      {s.sanctioningOrg && (
+                        <div className="text-xs text-muted-foreground truncate">{s.sanctioningOrg}</div>
+                      )}
+                      <div className="text-[11px] text-muted-foreground mt-0.5">
+                        {s.startDate.toLocaleDateString("pt-BR")}
+                        {s.endDate && ` → ${s.endDate.toLocaleDateString("pt-BR")}`}
+                      </div>
+                    </div>
+                    <span className="flex-shrink-0 text-[11px] px-2 py-0.5 rounded bg-red-500/20 text-red-600 font-medium">
+                      {s.source}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="hidden md:block overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b bg-muted/50">
@@ -261,7 +282,32 @@ export default async function EntityDetailPage({
             <div className="p-4 border-b">
               <h2 className="text-base font-semibold">Contratos ({entity.contracts.length})</h2>
             </div>
-            <div className="overflow-x-auto">
+            <div className="md:hidden divide-y">
+              {entity.contracts.map((c) => (
+                <Link
+                  key={c.id}
+                  href={`/${locale}/contracts/${c.id}`}
+                  className="flex items-start justify-between gap-3 p-3 hover:bg-muted/30 transition-colors"
+                >
+                  <div className="flex-1 min-w-0">
+                    <div className="font-medium text-sm truncate">
+                      {stripHtml(c.objectDescription ?? c.description)}
+                    </div>
+                    {c.orgName && (
+                      <div className="text-xs text-muted-foreground truncate">{c.orgName}</div>
+                    )}
+                    <div className="text-[11px] text-muted-foreground mt-0.5">
+                      {c.startDate.toLocaleDateString("pt-BR")}
+                      {c.endDate && ` – ${c.endDate.toLocaleDateString("pt-BR")}`}
+                    </div>
+                  </div>
+                  <div className="flex-shrink-0 text-right text-sm font-medium tabular-nums">
+                    {formatCurrency(c.value.toString())}
+                  </div>
+                </Link>
+              ))}
+            </div>
+            <div className="hidden md:block overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b bg-muted/50">
