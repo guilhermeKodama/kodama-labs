@@ -154,6 +154,49 @@ export function PoliticiansTable({
     },
   ];
 
+  const renderMobileRow = (row: PoliticianRow) => (
+    <Link
+      href={`/${locale}/politicians/${row.id}`}
+      className="flex items-start justify-between gap-3 p-3 hover:bg-muted/30 transition-colors"
+    >
+      <div className="flex-1 min-w-0">
+        <div className="font-medium text-sm truncate">{row.ballotName ?? row.name}</div>
+        <div className="text-xs text-muted-foreground truncate">{row.position}</div>
+        <div className="text-[11px] text-muted-foreground mt-0.5 flex items-center gap-1.5 flex-wrap">
+          {row.party && <span className="font-medium">{row.party}</span>}
+          {row.state && (
+            <>
+              {row.party && <span>·</span>}
+              <span>{row.state}</span>
+            </>
+          )}
+          {row.electionYear && (
+            <>
+              <span>·</span>
+              <span>{row.electionYear}</span>
+            </>
+          )}
+        </div>
+      </div>
+      <div className="flex-shrink-0 text-right flex flex-col items-end gap-1">
+        {row.active ? (
+          <span className="px-1.5 py-0.5 rounded bg-green-500/20 text-green-600 text-[11px] font-medium">
+            Ativo
+          </span>
+        ) : row.elected ? (
+          <span className="px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-600 text-[11px] font-medium">
+            Eleito
+          </span>
+        ) : null}
+        {row.linkCount > 0 && (
+          <span className="text-[11px] px-1.5 py-0.5 rounded bg-orange-500/20 text-orange-500 font-medium">
+            {row.linkCount} vínc.
+          </span>
+        )}
+      </div>
+    </Link>
+  );
+
   return (
     <DataTable
       data={data}
@@ -164,6 +207,7 @@ export function PoliticiansTable({
       basePath={`/${locale}/politicians`}
       nextCursor={nextCursor}
       prevCursor={prevCursor}
+      renderMobileRow={renderMobileRow}
     />
   );
 }

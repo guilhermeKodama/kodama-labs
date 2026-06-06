@@ -151,7 +151,67 @@ export default async function ProcurementDetailPage({
             <div className="p-4 border-b">
               <h2 className="text-base font-semibold">Itens ({procurement.items.length})</h2>
             </div>
-            <div className="overflow-x-auto">
+            <div className="md:hidden divide-y">
+              {procurement.items.map((item) => (
+                <div key={item.id} className="p-3 space-y-2">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm font-medium">
+                        <span className="text-muted-foreground mr-1.5">#{item.itemNumber}</span>
+                        {stripHtml(item.description)}
+                      </div>
+                      <div className="text-[11px] text-muted-foreground mt-0.5 flex items-center gap-1.5 flex-wrap">
+                        <span>{Number(item.quantity).toLocaleString("pt-BR")} {item.unit}</span>
+                        {item.materialOrServiceName && (
+                          <>
+                            <span>·</span>
+                            <span>{item.materialOrServiceName}</span>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex-shrink-0 text-right">
+                      <div className="text-sm font-medium tabular-nums">
+                        {formatCurrency(item.totalPrice.toString())}
+                      </div>
+                      <div className="text-[11px] text-muted-foreground tabular-nums">
+                        {formatCurrency(item.unitPrice.toString())}/un
+                      </div>
+                      {item.situationName && (
+                        <span
+                          className={`inline-block mt-1 text-[10px] px-1.5 py-0.5 rounded ${
+                            item.situationName === "Homologado"
+                              ? "bg-green-500/20 text-green-600"
+                              : "bg-muted text-muted-foreground"
+                          }`}
+                        >
+                          {item.situationName}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  {item.bidResults.length > 0 && (
+                    <div className="rounded bg-muted/30 p-2 space-y-1">
+                      <div className="text-[11px] font-medium text-muted-foreground">
+                        Resultados ({item.bidResults.length})
+                      </div>
+                      {item.bidResults.map((bid) => (
+                        <div key={bid.id} className="flex items-center gap-2 text-[11px]">
+                          <span className="w-5 text-center text-muted-foreground font-mono flex-shrink-0">
+                            {bid.ranking ?? "-"}º
+                          </span>
+                          <span className="flex-1 truncate min-w-0">{bid.supplierName}</span>
+                          <span className="font-medium tabular-nums flex-shrink-0">
+                            {formatCurrency(bid.totalPrice.toString())}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+            <div className="hidden md:block overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b bg-muted/50">
@@ -231,7 +291,31 @@ export default async function ProcurementDetailPage({
             <div className="p-4 border-b">
               <h2 className="text-base font-semibold">Contratos Vinculados ({procurement.contracts.length})</h2>
             </div>
-            <div className="overflow-x-auto">
+            <div className="md:hidden divide-y">
+              {procurement.contracts.map((c) => (
+                <Link
+                  key={c.id}
+                  href={`/${locale}/contracts/${c.id}`}
+                  className="flex items-start justify-between gap-3 p-3 hover:bg-muted/30 transition-colors"
+                >
+                  <div className="flex-1 min-w-0">
+                    <div className="font-medium text-sm truncate">{c.supplierName}</div>
+                    <div className="text-[11px] text-muted-foreground truncate">{formatCnpj(c.supplierCnpj)}</div>
+                    <div className="text-xs text-muted-foreground truncate mt-0.5">
+                      {stripHtml(c.objectDescription ?? c.description ?? "")}
+                    </div>
+                    <div className="text-[11px] text-muted-foreground mt-0.5">
+                      {c.startDate.toLocaleDateString("pt-BR")}
+                      {c.endDate && ` – ${c.endDate.toLocaleDateString("pt-BR")}`}
+                    </div>
+                  </div>
+                  <div className="flex-shrink-0 text-right text-sm font-medium tabular-nums">
+                    {formatCurrency(c.value.toString())}
+                  </div>
+                </Link>
+              ))}
+            </div>
+            <div className="hidden md:block overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b bg-muted/50">

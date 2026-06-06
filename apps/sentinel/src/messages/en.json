@@ -35,7 +35,9 @@
     "network": "Network",
     "alerts": "Alerts",
     "analysis": "AI Analysis",
-    "pipeline": "Pipeline"
+    "pipeline": "Pipeline",
+    "openMenu": "Open menu",
+    "closeMenu": "Close menu"
   },
   "codes": {
     "alertType": {
@@ -103,12 +105,14 @@
       "PJ": "Company"
     },
     "aiAnalysisType": {
-      "risk_assessment": "Review-points assessment"
+      "risk_assessment": "Review-points assessment",
+      "overpricing_evaluation": "Pricing review"
     },
     "aiTargetType": {
       "procurement": "Procurement",
       "contract": "Contract",
-      "entity": "Entity"
+      "entity": "Entity",
+      "procurement_item": "Procurement item"
     }
   },
   "alerts": {

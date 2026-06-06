@@ -160,6 +160,50 @@ export function ContractsTable({
     },
   ];
 
+  const renderMobileRow = (row: ContractRow) => (
+    <Link
+      href={`/${locale}/contracts/${row.id}`}
+      className="flex items-start justify-between gap-3 p-3 hover:bg-muted/30 transition-colors"
+    >
+      <div className="flex-1 min-w-0">
+        <div className="font-medium text-sm truncate">{row.supplierName}</div>
+        <div className="text-xs text-muted-foreground truncate">{stripHtml(row.objectDescription)}</div>
+        <div className="text-[11px] text-muted-foreground mt-0.5 flex items-center gap-1.5 flex-wrap">
+          <span>{new Date(row.startDate).toLocaleDateString("pt-BR")}</span>
+          {row.unitState && (
+            <>
+              <span>·</span>
+              <span>{row.unitState}</span>
+            </>
+          )}
+          {row.contractType && (
+            <>
+              <span>·</span>
+              <span className="truncate">{row.contractType}</span>
+            </>
+          )}
+        </div>
+      </div>
+      <div className="flex-shrink-0 text-right">
+        <div className="text-sm font-medium tabular-nums">{formatCurrency(row.value)}</div>
+        {(row.alertCount > 0 || row.sanctionCount > 0) && (
+          <div className="text-[11px] mt-0.5 flex items-center justify-end gap-1">
+            {row.sanctionCount > 0 && (
+              <span className="px-1.5 py-0.5 rounded bg-red-500/20 text-red-600 font-medium">
+                {row.sanctionCount} sanç.
+              </span>
+            )}
+            {row.alertCount > 0 && (
+              <span className="px-1.5 py-0.5 rounded bg-red-500/20 text-red-500 font-medium">
+                {row.alertCount} alert.
+              </span>
+            )}
+          </div>
+        )}
+      </div>
+    </Link>
+  );
+
   return (
     <DataTable
       data={data}
@@ -170,6 +214,7 @@ export function ContractsTable({
       basePath={`/${locale}/contracts`}
       nextCursor={nextCursor}
       prevCursor={prevCursor}
+      renderMobileRow={renderMobileRow}
     />
   );
 }
