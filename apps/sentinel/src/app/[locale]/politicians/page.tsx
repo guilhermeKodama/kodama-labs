@@ -1,3 +1,4 @@
+import { unstable_cache } from "next/cache";
 import { prisma } from "@sentinel/server/lib/prisma";
 import { cachedFilterOptions, smartCount } from "@sentinel/server/lib/list-helpers";
 import { Prisma } from "@/generated/prisma";
@@ -6,6 +7,30 @@ import { PageLayout } from "@/components/page-layout";
 import { PoliticiansTable } from "./table";
 
 const PAGE_SIZE = 25;
+const DEFAULT_LISTING_REVALIDATE_SECONDS = 60;
+
+interface SerializedPolitician {
+  id: string;
+  name: string;
+  ballotName: string | null;
+  cpf: string;
+  party: string | null;
+  position: string;
+  state: string | null;
+  city: string | null;
+  electionYear: number | null;
+  elected: boolean;
+  active: boolean;
+  donationCount: number;
+  linkCount: number;
+}
+
+interface ListingResult {
+  rows: SerializedPolitician[];
+  totalCount: number;
+  nextCursor: string | null;
+  prevCursor: string | null;
+}
 
 function buildWhere(sp: Record<string, string | string[] | undefined>) {
   const where: Prisma.PoliticianWhereInput = {};
@@ -55,32 +80,24 @@ const loadFilterOptions = () =>
     };
   });
 
-export default async function PoliticiansPage({
-  params,
-  searchParams,
+async function fetchListing({
+  where,
+  cursorId,
+  dir,
 }: {
-  params: Promise<{ locale: string }>;
-  searchParams: Promise<Record<string, string | string[] | undefined>>;
-}) {
-  const { locale } = await params;
-  setRequestLocale(locale);
-  const t = await getTranslations("pages.politicians");
-
-  const sp = await searchParams;
-  const cursorId = String(sp.cursor ?? "");
-  const dir = String(sp.dir ?? "next");
-  const where = buildWhere(sp);
-
+  where: Prisma.PoliticianWhereInput;
+  cursorId: string;
+  dir: "next" | "prev";
+}): Promise<ListingResult> {
   const orderBy: Prisma.PoliticianOrderByWithRelationInput[] = [
     { active: "desc" },
     { elected: "desc" },
     { name: "asc" },
     { id: "asc" },
   ];
-
   const take = dir === "prev" ? -(PAGE_SIZE + 1) : PAGE_SIZE + 1;
 
-  const [rowsRaw, totalCount, filterOptions] = await Promise.all([
+  const [rowsRaw, totalCount] = await Promise.all([
     prisma.politician.findMany({
       where,
       orderBy,
@@ -106,11 +123,9 @@ export default async function PoliticiansPage({
       where: where as Record<string, unknown>,
       exactCount: () => prisma.politician.count({ where }),
     }),
-    loadFilterOptions(),
   ]);
 
   const rows = dir === "prev" ? [...rowsRaw].reverse() : rowsRaw;
-
   const hasExtra = rows.length > PAGE_SIZE;
   const pageRows = hasExtra
     ? dir === "prev" ? rows.slice(1) : rows.slice(0, PAGE_SIZE)
@@ -143,7 +158,7 @@ export default async function PoliticiansPage({
           .then((rows) => new Map(rows.map((r) => [r.politicianId, r._count]))),
       ]);
 
-  const serialized = pageRows.map((p) => ({
+  const serialized: SerializedPolitician[] = pageRows.map((p) => ({
     id: p.id,
     name: p.name,
     ballotName: p.ballotName,
@@ -159,15 +174,58 @@ export default async function PoliticiansPage({
     linkCount: linkCountMap.get(p.id) ?? 0,
   }));
 
+  return { rows: serialized, totalCount, nextCursor, prevCursor };
+}
+
+const fetchDefaultListing = unstable_cache(
+  () => fetchListing({ where: {}, cursorId: "", dir: "next" }),
+  ["politicians-default-listing-v1"],
+  { revalidate: DEFAULT_LISTING_REVALIDATE_SECONDS },
+);
+
+function isDefaultState(sp: Record<string, string | string[] | undefined>): boolean {
+  return (
+    !sp.search &&
+    !sp.status &&
+    !sp.party &&
+    !sp.position &&
+    !sp.state &&
+    !sp.year &&
+    !sp.cursor &&
+    !sp.dir
+  );
+}
+
+export default async function PoliticiansPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ locale: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  const { locale } = await params;
+  setRequestLocale(locale);
+  const t = await getTranslations("pages.politicians");
+
+  const sp = await searchParams;
+  const cursorId = String(sp.cursor ?? "");
+  const dir: "next" | "prev" = String(sp.dir ?? "next") === "prev" ? "prev" : "next";
+  const where = buildWhere(sp);
+
+  const [listing, filterOptions] = await Promise.all([
+    isDefaultState(sp) ? fetchDefaultListing() : fetchListing({ where, cursorId, dir }),
+    loadFilterOptions(),
+  ]);
+
   return (
     <PageLayout>
       <h1 className="text-xl md:text-2xl font-bold mb-5">{t("title")}</h1>
       <PoliticiansTable
-        data={serialized}
+        data={listing.rows}
         locale={locale}
-        totalCount={totalCount}
-        nextCursor={nextCursor}
-        prevCursor={prevCursor}
+        totalCount={listing.totalCount}
+        nextCursor={listing.nextCursor}
+        prevCursor={listing.prevCursor}
         filterOptions={filterOptions}
       />
     </PageLayout>
