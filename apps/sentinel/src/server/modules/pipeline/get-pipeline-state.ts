@@ -1,4 +1,6 @@
+import { unstable_cache } from "next/cache";
 import { prisma } from "@sentinel/server/lib/prisma";
+import { smartCount } from "@sentinel/server/lib/list-helpers";
 
 interface RawBreakdownRow {
   source: string;
@@ -56,20 +58,23 @@ export interface PipelineState {
   };
 }
 
-const PIPELINE_STATE_CACHE_TTL_MS = 10_000;
-let pipelineStateCache: { at: number; value: Promise<PipelineState> } | null = null;
+const PIPELINE_STATE_REVALIDATE_SECONDS = 60;
 
-export async function getPipelineState(): Promise<PipelineState> {
-  const now = Date.now();
-  if (pipelineStateCache && now - pipelineStateCache.at < PIPELINE_STATE_CACHE_TTL_MS) {
-    return pipelineStateCache.value;
-  }
-  const value = computePipelineState();
-  pipelineStateCache = { at: now, value };
-  value.catch(() => {
-    if (pipelineStateCache?.value === value) pipelineStateCache = null;
-  });
-  return value;
+/**
+ * Cross-Lambda cache. Previously this was an in-memory cache (10s TTL,
+ * per-Lambda-instance) which cold-started repeatedly under Vercel scale-out
+ * and was the source of the high-traffic raw_records GROUP BY hits in the
+ * Neon query log. unstable_cache stores in Next.js' shared cache so a single
+ * compute window covers every Lambda hitting it.
+ */
+const cachedComputePipelineState = unstable_cache(
+  () => computePipelineState(),
+  ["pipeline-state-v1"],
+  { revalidate: PIPELINE_STATE_REVALIDATE_SECONDS },
+);
+
+export function getPipelineState(): Promise<PipelineState> {
+  return cachedComputePipelineState();
 }
 
 async function computePipelineState(): Promise<PipelineState> {
@@ -90,16 +95,16 @@ async function computePipelineState(): Promise<PipelineState> {
       ORDER BY pending DESC, processed DESC
     `),
     Promise.all([
-      prisma.politician.count(),
-      prisma.procurement.count(),
-      prisma.contract.count(),
-      prisma.entity.count(),
-      prisma.candidateAsset.count(),
-      prisma.campaignDonation.count(),
-      prisma.sanction.count(),
-      prisma.publicServant.count(),
-      prisma.politicalLink.count(),
-      prisma.alert.count(),
+      smartCount({ tableName: "politicians", where: {}, exactCount: () => prisma.politician.count() }),
+      smartCount({ tableName: "procurements", where: {}, exactCount: () => prisma.procurement.count() }),
+      smartCount({ tableName: "contracts", where: {}, exactCount: () => prisma.contract.count() }),
+      smartCount({ tableName: "entities", where: {}, exactCount: () => prisma.entity.count() }),
+      smartCount({ tableName: "candidate_assets", where: {}, exactCount: () => prisma.candidateAsset.count() }),
+      smartCount({ tableName: "campaign_donations", where: {}, exactCount: () => prisma.campaignDonation.count() }),
+      smartCount({ tableName: "sanctions", where: {}, exactCount: () => prisma.sanction.count() }),
+      smartCount({ tableName: "public_servants", where: {}, exactCount: () => prisma.publicServant.count() }),
+      smartCount({ tableName: "political_links", where: {}, exactCount: () => prisma.politicalLink.count() }),
+      smartCount({ tableName: "alerts", where: {}, exactCount: () => prisma.alert.count() }),
     ]),
   ]);
 
