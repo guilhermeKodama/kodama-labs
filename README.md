@@ -64,6 +64,31 @@ pnpm build
 
 ### Develop
 
+Local development needs PostgreSQL plus env files for the Prisma apps.
+
+```sh
+# 1. Install dependencies (also runs prisma generate via postinstall)
+pnpm install
+
+# 2. Copy env templates for apps that use the database
+cp apps/capital/.env.example apps/capital/.env
+cp apps/sentinel/.env.example apps/sentinel/.env
+
+# 3. Start Postgres and apply migrations
+pnpm setup:local
+
+# 4. Run all apps
+pnpm dev
+```
+
+Postgres runs in Docker on port `5433` (`infrastructure/postgres`). To manage it separately:
+
+```sh
+pnpm db:up      # start postgres in the background
+pnpm db:migrate # apply capital + sentinel migrations
+pnpm dev:db     # foreground postgres logs (optional)
+```
+
 To develop all apps and packages, run the following command:
 
 ```

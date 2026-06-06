@@ -3,8 +3,12 @@
   "private": true,
   "scripts": {
     "build": "turbo build",
+    "postinstall": "pnpm db:generate",
     "dev": "turbo dev --filter=!@infrastructure/postgres",
     "dev:db": "turbo dev --filter=@infrastructure/postgres",
+    "db:up": "pnpm --filter @infrastructure/postgres start",
+    "db:migrate": "pnpm --filter @wallex/capital exec prisma migrate deploy && pnpm --filter @wallex/sentinel exec prisma migrate deploy",
+    "setup:local": "pnpm db:up && pnpm db:migrate",
     "dev:docs": "turbo dev --filter=@wallex/docs",
     "lint": "turbo lint",
     "typecheck": "turbo typecheck",

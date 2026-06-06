@@ -364,6 +364,10 @@ apps/capital/
 # From the monorepo root
 pnpm install
 
+# Copy env template and start local Postgres
+cp apps/capital/.env.example apps/capital/.env
+pnpm setup:local
+
 # Run the capital app
 pnpm --filter @wallex/capital dev
 ```
