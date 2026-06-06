@@ -56,3 +56,10 @@ export const cachedFilterOptions = <T>(
   const cached = unstable_cache(loader, [`filter-options-${key}-v1`], { revalidate });
   return cached();
 };
+
+/**
+ * Alias of {@link cachedFilterOptions} for non-filter aggregations (e.g. the
+ * network page's full-table shareholder GROUP BY). Same impl, friendlier
+ * call-site reading.
+ */
+export const cachedAggregation = cachedFilterOptions;
