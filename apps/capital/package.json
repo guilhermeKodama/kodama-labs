@@ -4,7 +4,7 @@
   "description": "Financial management for international service providers",
   "private": true,
   "scripts": {
-    "dev": "next dev --port 3000",
+    "dev": "prisma generate && next dev --port 3000",
     "build": "prisma generate && prisma migrate deploy && next build",
     "start": "next start --port 3000",
     "lint": "eslint --max-warnings 0",
