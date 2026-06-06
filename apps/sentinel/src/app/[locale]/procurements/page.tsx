@@ -1,4 +1,5 @@
 import { prisma } from "@sentinel/server/lib/prisma";
+import { cachedFilterOptions, smartCount } from "@sentinel/server/lib/list-helpers";
 import { Prisma } from "@/generated/prisma";
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import { PageLayout } from "@/components/page-layout";
@@ -30,6 +31,20 @@ function buildWhere(sp: Record<string, string | string[] | undefined>) {
   return where;
 }
 
+const loadFilterOptions = () =>
+  cachedFilterOptions("procurements", async () => {
+    const [modalities, statuses, states] = await Promise.all([
+      prisma.procurement.groupBy({ by: ["modality"], _count: true, orderBy: { _count: { modality: "desc" } }, take: 30 }),
+      prisma.procurement.groupBy({ by: ["status"], where: { status: { not: "" } }, _count: true, orderBy: { _count: { status: "desc" } }, take: 20 }),
+      prisma.procurement.groupBy({ by: ["state"], where: { state: { not: null } }, _count: true, orderBy: { state: "asc" } }),
+    ]);
+    return {
+      modality: modalities.map((m) => ({ label: `${m.modality} (${m._count})`, value: m.modality })),
+      status: statuses.filter((s) => s.status).map((s) => ({ label: s.status!, value: s.status! })),
+      state: states.filter((s) => s.state).map((s) => ({ label: s.state!, value: s.state! })),
+    };
+  });
+
 export default async function ProcurementsPage({
   params,
   searchParams,
@@ -53,16 +68,23 @@ export default async function ProcurementsPage({
 
   const take = dir === "prev" ? -(PAGE_SIZE + 1) : PAGE_SIZE + 1;
 
-  const rows = await prisma.procurement.findMany({
-    where,
-    orderBy,
-    cursor: cursorId ? { id: cursorId } : undefined,
-    skip: cursorId ? 1 : 0,
-    take,
-    include: { _count: { select: { items: true, alerts: true, contracts: true, documents: true } } },
-  });
+  const [rowsRaw, totalCount, filterOptions] = await Promise.all([
+    prisma.procurement.findMany({
+      where,
+      orderBy,
+      cursor: cursorId ? { id: cursorId } : undefined,
+      skip: cursorId ? 1 : 0,
+      take,
+    }),
+    smartCount({
+      tableName: "procurements",
+      where: where as Record<string, unknown>,
+      exactCount: () => prisma.procurement.count({ where }),
+    }),
+    loadFilterOptions(),
+  ]);
 
-  if (dir === "prev") rows.reverse();
+  const rows = dir === "prev" ? [...rowsRaw].reverse() : rowsRaw;
 
   const hasExtra = rows.length > PAGE_SIZE;
   const pageRows = hasExtra
@@ -85,7 +107,20 @@ export default async function ProcurementsPage({
     }
   }
 
-  const totalCount = await prisma.procurement.count({ where });
+  const pageIds = pageRows.map((p) => p.id);
+  const emptyCounts = new Map<string, number>();
+  const [itemCountMap, alertCountMap, contractCountMap, docCountMap] = pageIds.length === 0
+    ? [emptyCounts, emptyCounts, emptyCounts, emptyCounts]
+    : await Promise.all([
+        prisma.procurementItem.groupBy({ by: ["procurementId"], where: { procurementId: { in: pageIds } }, _count: true })
+          .then((rows) => new Map(rows.map((r) => [r.procurementId, r._count]))),
+        prisma.alert.groupBy({ by: ["procurementId"], where: { procurementId: { in: pageIds } }, _count: true })
+          .then((rows) => new Map(rows.filter((r): r is typeof r & { procurementId: string } => r.procurementId !== null).map((r) => [r.procurementId, r._count]))),
+        prisma.contract.groupBy({ by: ["procurementId"], where: { procurementId: { in: pageIds } }, _count: true })
+          .then((rows) => new Map(rows.filter((r): r is typeof r & { procurementId: string } => r.procurementId !== null).map((r) => [r.procurementId, r._count]))),
+        prisma.procurementDocument.groupBy({ by: ["procurementId"], where: { procurementId: { in: pageIds } }, _count: true })
+          .then((rows) => new Map(rows.map((r) => [r.procurementId, r._count]))),
+      ]);
 
   const serialized = pageRows.map((p) => ({
     id: p.id,
@@ -99,23 +134,11 @@ export default async function ProcurementsPage({
     status: p.status,
     state: p.state,
     publishedAt: p.publishedAt.toISOString(),
-    itemCount: p._count.items,
-    alertCount: p._count.alerts,
-    contractCount: p._count.contracts,
-    documentCount: p._count.documents,
+    itemCount: itemCountMap.get(p.id) ?? 0,
+    alertCount: alertCountMap.get(p.id) ?? 0,
+    contractCount: contractCountMap.get(p.id) ?? 0,
+    documentCount: docCountMap.get(p.id) ?? 0,
   }));
-
-  const [modalities, statuses, states] = await Promise.all([
-    prisma.procurement.groupBy({ by: ["modality"], _count: true, orderBy: { _count: { modality: "desc" } }, take: 30 }),
-    prisma.procurement.groupBy({ by: ["status"], where: { status: { not: "" } }, _count: true, orderBy: { _count: { status: "desc" } }, take: 20 }),
-    prisma.procurement.groupBy({ by: ["state"], where: { state: { not: null } }, _count: true, orderBy: { state: "asc" } }),
-  ]);
-
-  const filterOptions = {
-    modality: modalities.map((m) => ({ label: `${m.modality} (${m._count})`, value: m.modality })),
-    status: statuses.filter((s) => s.status).map((s) => ({ label: s.status!, value: s.status! })),
-    state: states.filter((s) => s.state).map((s) => ({ label: s.state!, value: s.state! })),
-  };
 
   return (
     <PageLayout>
