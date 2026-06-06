@@ -1,3 +1,4 @@
+import { unstable_cache } from "next/cache";
 import { prisma } from "@sentinel/server/lib/prisma";
 import { cachedFilterOptions, smartCount } from "@sentinel/server/lib/list-helpers";
 import { Prisma } from "@/generated/prisma";
@@ -6,6 +7,31 @@ import { PageLayout } from "@/components/page-layout";
 import { EntitiesTable } from "./table";
 
 const PAGE_SIZE = 25;
+const DEFAULT_LISTING_REVALIDATE_SECONDS = 60;
+
+interface SerializedEntity {
+  id: string;
+  name: string;
+  cnpj: string;
+  legalNature: string | null;
+  state: string | null;
+  city: string | null;
+  capital: number | null;
+  activityDesc: string | null;
+  contractCount: number;
+  shareholderCount: number;
+  sanctionCount: number;
+  alertCount: number;
+  riskScore: number | null;
+  isShellCompany: boolean;
+}
+
+interface ListingResult {
+  rows: SerializedEntity[];
+  totalCount: number;
+  nextCursor: string | null;
+  prevCursor: string | null;
+}
 
 function buildWhere(sp: Record<string, string | string[] | undefined>) {
   const where: Prisma.EntityWhereInput = {};
@@ -44,30 +70,22 @@ const loadFilterOptions = () =>
     };
   });
 
-export default async function EntitiesPage({
-  params,
-  searchParams,
+async function fetchListing({
+  where,
+  cursorId,
+  dir,
 }: {
-  params: Promise<{ locale: string }>;
-  searchParams: Promise<Record<string, string | string[] | undefined>>;
-}) {
-  const { locale } = await params;
-  setRequestLocale(locale);
-  const t = await getTranslations("pages.entities");
-
-  const sp = await searchParams;
-  const cursorId = String(sp.cursor ?? "");
-  const dir = String(sp.dir ?? "next");
-  const where = buildWhere(sp);
-
+  where: Prisma.EntityWhereInput;
+  cursorId: string;
+  dir: "next" | "prev";
+}): Promise<ListingResult> {
   const orderBy: Prisma.EntityOrderByWithRelationInput[] = [
     { riskScore: { sort: "desc", nulls: "last" } },
     { id: "asc" },
   ];
-
   const take = dir === "prev" ? -(PAGE_SIZE + 1) : PAGE_SIZE + 1;
 
-  const [rowsRaw, totalCount, filterOptions] = await Promise.all([
+  const [rowsRaw, totalCount] = await Promise.all([
     prisma.entity.findMany({
       where,
       orderBy,
@@ -80,11 +98,9 @@ export default async function EntitiesPage({
       where: where as Record<string, unknown>,
       exactCount: () => prisma.entity.count({ where }),
     }),
-    loadFilterOptions(),
   ]);
 
   const rows = dir === "prev" ? [...rowsRaw].reverse() : rowsRaw;
-
   const hasExtra = rows.length > PAGE_SIZE;
   const pageRows = hasExtra
     ? dir === "prev" ? rows.slice(1) : rows.slice(0, PAGE_SIZE)
@@ -123,7 +139,7 @@ export default async function EntitiesPage({
           .then((rows) => new Map(rows.filter((r): r is typeof r & { entityId: string } => r.entityId !== null).map((r) => [r.entityId, r._count]))),
       ]);
 
-  const serialized = pageRows.map((e) => ({
+  const serialized: SerializedEntity[] = pageRows.map((e) => ({
     id: e.id,
     name: e.name,
     cnpj: e.cnpj,
@@ -140,15 +156,49 @@ export default async function EntitiesPage({
     isShellCompany: e.isShellCompany,
   }));
 
+  return { rows: serialized, totalCount, nextCursor, prevCursor };
+}
+
+const fetchDefaultListing = unstable_cache(
+  () => fetchListing({ where: {}, cursorId: "", dir: "next" }),
+  ["entities-default-listing-v1"],
+  { revalidate: DEFAULT_LISTING_REVALIDATE_SECONDS },
+);
+
+function isDefaultState(sp: Record<string, string | string[] | undefined>): boolean {
+  return !sp.search && !sp.legalNature && !sp.state && !sp.shell && !sp.cursor && !sp.dir;
+}
+
+export default async function EntitiesPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ locale: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  const { locale } = await params;
+  setRequestLocale(locale);
+  const t = await getTranslations("pages.entities");
+
+  const sp = await searchParams;
+  const cursorId = String(sp.cursor ?? "");
+  const dir: "next" | "prev" = String(sp.dir ?? "next") === "prev" ? "prev" : "next";
+  const where = buildWhere(sp);
+
+  const [listing, filterOptions] = await Promise.all([
+    isDefaultState(sp) ? fetchDefaultListing() : fetchListing({ where, cursorId, dir }),
+    loadFilterOptions(),
+  ]);
+
   return (
     <PageLayout>
       <h1 className="text-xl md:text-2xl font-bold mb-5">{t("title")}</h1>
       <EntitiesTable
-        data={serialized}
+        data={listing.rows}
         locale={locale}
-        totalCount={totalCount}
-        nextCursor={nextCursor}
-        prevCursor={prevCursor}
+        totalCount={listing.totalCount}
+        nextCursor={listing.nextCursor}
+        prevCursor={listing.prevCursor}
         filterOptions={filterOptions}
       />
     </PageLayout>
