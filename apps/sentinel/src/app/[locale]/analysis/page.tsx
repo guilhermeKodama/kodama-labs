@@ -1,6 +1,5 @@
 import { prisma } from "@sentinel/server/lib/prisma";
 import { getTranslations, setRequestLocale } from "next-intl/server";
-import { PageLayout } from "@/components/page-layout";
 import { stripHtml, formatDate, type AppLocale } from "@/lib/utils";
 import Link from "next/link";
 import { FileText } from "lucide-react";
@@ -31,7 +30,7 @@ export default async function AnalysisPage({
   };
 
   return (
-    <PageLayout>
+    <>
       <h1 className="text-xl md:text-2xl font-bold mb-2">{t("title")}</h1>
       <p className="text-xs text-muted-foreground mb-5 max-w-3xl">
         {tCommon("disclaimer")}
@@ -102,6 +101,6 @@ export default async function AnalysisPage({
           ))}
         </div>
       )}
-    </PageLayout>
+    </>
   );
 }
