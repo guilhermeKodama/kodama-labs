@@ -3,6 +3,7 @@ import { getMessages, getTranslations, setRequestLocale } from "next-intl/server
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { Toaster } from "sonner";
+import { PageLayout } from "@/components/page-layout";
 import { routing } from "@/i18n/routing";
 
 export function generateStaticParams() {
@@ -44,7 +45,7 @@ export default async function LocaleLayout({
 
   return (
     <NextIntlClientProvider messages={messages}>
-      {children}
+      <PageLayout>{children}</PageLayout>
       <Toaster />
     </NextIntlClientProvider>
   );

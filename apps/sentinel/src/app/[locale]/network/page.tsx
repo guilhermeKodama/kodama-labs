@@ -1,7 +1,6 @@
 import { prisma } from "@sentinel/server/lib/prisma";
 import { cachedAggregation, smartCount } from "@sentinel/server/lib/list-helpers";
 import { getTranslations, setRequestLocale } from "next-intl/server";
-import { PageLayout } from "@/components/page-layout";
 import { formatCnpj, formatDate, formatNumber, type AppLocale } from "@/lib/utils";
 import { extractAlertI18n, renderAlertText } from "@/lib/alert-render";
 import Link from "next/link";
@@ -147,7 +146,7 @@ export default async function NetworkPage({
         : "bg-yellow-500/20 text-yellow-500";
 
   return (
-    <PageLayout>
+    <>
       <h1 className="text-xl md:text-2xl font-bold mb-2">{t("title")}</h1>
       <p className="text-xs text-muted-foreground mb-5 max-w-3xl">
         {tCommon("disclaimer")}
@@ -394,7 +393,7 @@ export default async function NetworkPage({
           </div>
         </div>
       )}
-    </PageLayout>
+    </>
   );
 }
 

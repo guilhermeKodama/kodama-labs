@@ -1,7 +1,6 @@
 import { prisma } from "@sentinel/server/lib/prisma";
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import { notFound } from "next/navigation";
-import { PageLayout } from "@/components/page-layout";
 import { formatCnpj, formatCurrency, formatNumber, type AppLocale } from "@/lib/utils";
 import Link from "next/link";
 import { ArrowLeft, Building2, Users } from "lucide-react";
@@ -77,107 +76,105 @@ export default async function ShareholderDetailPage({
   const alternateNames = allNames.filter((n) => n !== canonicalName);
 
   return (
-    <PageLayout>
-      <div className="max-w-5xl">
-        <Link
-          href={`/${locale}/network`}
-          className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground mb-4"
-        >
-          <ArrowLeft className="h-4 w-4" />
-          {t("back")}
-        </Link>
+    <div className="max-w-5xl">
+      <Link
+        href={`/${locale}/network`}
+        className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground mb-4"
+      >
+        <ArrowLeft className="h-4 w-4" />
+        {t("back")}
+      </Link>
 
-        <div className="flex items-start justify-between gap-3 mb-1">
-          <div className="min-w-0">
-            <h1 className="text-xl font-bold">
-              {t("title", { name: canonicalName })}
-            </h1>
-            <p className="text-sm text-muted-foreground">{decodedCpfCnpj}</p>
-            <p className="text-xs text-muted-foreground mt-1">{t("subtitle")}</p>
-            {alternateNames.length > 0 && (
-              <p className="text-[11px] text-muted-foreground mt-1 italic">
-                {t("alsoKnownAs", { names: alternateNames.join(", ") })}
-              </p>
-            )}
-          </div>
-          <div className="flex-shrink-0">
-            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-orange-500/20 text-orange-500 text-xs font-medium">
-              <Users className="h-3.5 w-3.5" />
-              {t("totalCompanies", { count: companies.length })}
-            </span>
-          </div>
+      <div className="flex items-start justify-between gap-3 mb-1">
+        <div className="min-w-0">
+          <h1 className="text-xl font-bold">
+            {t("title", { name: canonicalName })}
+          </h1>
+          <p className="text-sm text-muted-foreground">{decodedCpfCnpj}</p>
+          <p className="text-xs text-muted-foreground mt-1">{t("subtitle")}</p>
+          {alternateNames.length > 0 && (
+            <p className="text-[11px] text-muted-foreground mt-1 italic">
+              {t("alsoKnownAs", { names: alternateNames.join(", ") })}
+            </p>
+          )}
         </div>
-
-        <div className="rounded-lg border bg-card overflow-hidden mt-5">
-          <div className="md:hidden divide-y">
-            {companies.map((c) => (
-              <Link
-                key={c.entityId}
-                href={`/${locale}/entities/${c.entityId}`}
-                className="flex items-start justify-between gap-3 p-3 hover:bg-muted/30 transition-colors"
-              >
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 font-medium text-sm min-w-0">
-                    <Building2 className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
-                    <span className="truncate">{c.entityName}</span>
-                  </div>
-                  <div className="text-[11px] text-muted-foreground mt-0.5 truncate">
-                    {formatCnpj(c.entityCnpj)}
-                  </div>
-                  <div className="text-[11px] text-muted-foreground mt-0.5 flex items-center gap-1.5">
-                    <span>{c.role}</span>
-                    <span>·</span>
-                    <span>{formatNumber(c.contractCount, appLocale)} contr.</span>
-                  </div>
-                </div>
-                <div className="flex-shrink-0 text-right text-sm font-medium tabular-nums">
-                  {formatCurrency(c.totalContractValue, appLocale)}
-                </div>
-              </Link>
-            ))}
-          </div>
-          <div className="hidden md:block overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b bg-muted/50">
-                  <th className="text-left p-3 font-medium">{tTable("entity")}</th>
-                  <th className="text-left p-3 font-medium">{tTable("cnpj")}</th>
-                  <th className="text-left p-3 font-medium">{tTable("role")}</th>
-                  <th className="text-right p-3 font-medium">{tTable("contracts")}</th>
-                  <th className="text-right p-3 font-medium">{tTable("totalValue")}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {companies.map((c) => (
-                  <tr key={c.entityId} className="border-b hover:bg-muted/30">
-                    <td className="p-3">
-                      <Link
-                        href={`/${locale}/entities/${c.entityId}`}
-                        className="inline-flex items-center gap-2 font-medium hover:underline"
-                      >
-                        <Building2 className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
-                        <span className="min-w-0 truncate">{c.entityName}</span>
-                      </Link>
-                    </td>
-                    <td className="p-3 text-muted-foreground text-xs">
-                      {formatCnpj(c.entityCnpj)}
-                    </td>
-                    <td className="p-3 text-muted-foreground text-xs">
-                      {c.role}
-                    </td>
-                    <td className="p-3 text-right">
-                      {formatNumber(c.contractCount, appLocale)}
-                    </td>
-                    <td className="p-3 text-right tabular-nums">
-                      {formatCurrency(c.totalContractValue, appLocale)}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+        <div className="flex-shrink-0">
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-orange-500/20 text-orange-500 text-xs font-medium">
+            <Users className="h-3.5 w-3.5" />
+            {t("totalCompanies", { count: companies.length })}
+          </span>
         </div>
       </div>
-    </PageLayout>
+
+      <div className="rounded-lg border bg-card overflow-hidden mt-5">
+        <div className="md:hidden divide-y">
+          {companies.map((c) => (
+            <Link
+              key={c.entityId}
+              href={`/${locale}/entities/${c.entityId}`}
+              className="flex items-start justify-between gap-3 p-3 hover:bg-muted/30 transition-colors"
+            >
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 font-medium text-sm min-w-0">
+                  <Building2 className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
+                  <span className="truncate">{c.entityName}</span>
+                </div>
+                <div className="text-[11px] text-muted-foreground mt-0.5 truncate">
+                  {formatCnpj(c.entityCnpj)}
+                </div>
+                <div className="text-[11px] text-muted-foreground mt-0.5 flex items-center gap-1.5">
+                  <span>{c.role}</span>
+                  <span>·</span>
+                  <span>{formatNumber(c.contractCount, appLocale)} contr.</span>
+                </div>
+              </div>
+              <div className="flex-shrink-0 text-right text-sm font-medium tabular-nums">
+                {formatCurrency(c.totalContractValue, appLocale)}
+              </div>
+            </Link>
+          ))}
+        </div>
+        <div className="hidden md:block overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b bg-muted/50">
+                <th className="text-left p-3 font-medium">{tTable("entity")}</th>
+                <th className="text-left p-3 font-medium">{tTable("cnpj")}</th>
+                <th className="text-left p-3 font-medium">{tTable("role")}</th>
+                <th className="text-right p-3 font-medium">{tTable("contracts")}</th>
+                <th className="text-right p-3 font-medium">{tTable("totalValue")}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {companies.map((c) => (
+                <tr key={c.entityId} className="border-b hover:bg-muted/30">
+                  <td className="p-3">
+                    <Link
+                      href={`/${locale}/entities/${c.entityId}`}
+                      className="inline-flex items-center gap-2 font-medium hover:underline"
+                    >
+                      <Building2 className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
+                      <span className="min-w-0 truncate">{c.entityName}</span>
+                    </Link>
+                  </td>
+                  <td className="p-3 text-muted-foreground text-xs">
+                    {formatCnpj(c.entityCnpj)}
+                  </td>
+                  <td className="p-3 text-muted-foreground text-xs">
+                    {c.role}
+                  </td>
+                  <td className="p-3 text-right">
+                    {formatNumber(c.contractCount, appLocale)}
+                  </td>
+                  <td className="p-3 text-right tabular-nums">
+                    {formatCurrency(c.totalContractValue, appLocale)}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
   );
 }
