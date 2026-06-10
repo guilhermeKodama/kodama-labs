@@ -3,7 +3,6 @@ import { prisma } from "@sentinel/server/lib/prisma";
 import { cachedFilterOptions, smartCount } from "@sentinel/server/lib/list-helpers";
 import { Prisma } from "@/generated/prisma";
 import { getTranslations, setRequestLocale } from "next-intl/server";
-import { PageLayout } from "@/components/page-layout";
 import { EntitiesTable } from "./table";
 
 const PAGE_SIZE = 25;
@@ -191,7 +190,7 @@ export default async function EntitiesPage({
   ]);
 
   return (
-    <PageLayout>
+    <>
       <h1 className="text-xl md:text-2xl font-bold mb-5">{t("title")}</h1>
       <EntitiesTable
         data={listing.rows}
@@ -201,6 +200,6 @@ export default async function EntitiesPage({
         prevCursor={listing.prevCursor}
         filterOptions={filterOptions}
       />
-    </PageLayout>
+    </>
   );
 }
