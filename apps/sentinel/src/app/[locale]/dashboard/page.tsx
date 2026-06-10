@@ -1,6 +1,5 @@
 import { prisma } from "@sentinel/server/lib/prisma";
 import { getTranslations, setRequestLocale } from "next-intl/server";
-import { PageLayout } from "@/components/page-layout";
 import Link from "next/link";
 import {
   AlertTriangle,
@@ -76,7 +75,7 @@ export default async function DashboardPage({
   const appLocale = locale as AppLocale;
 
   return (
-    <PageLayout>
+    <>
       <h1 className="text-xl md:text-2xl font-bold mb-6">{t("title")}</h1>
 
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 mb-6">
@@ -182,7 +181,7 @@ export default async function DashboardPage({
           </p>
         </div>
       </div>
-    </PageLayout>
+    </>
   );
 }
 

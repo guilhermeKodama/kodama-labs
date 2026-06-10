@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useCallback, useEffect, useRef } from "react";
+import { useState, useMemo, useCallback, useEffect, useRef, useTransition } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -28,6 +28,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Check,
+  Loader2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -77,6 +78,7 @@ export function DataTable<T extends { id: string }>({
   const isServer = basePath != null && totalCount != null;
   const router = useRouter();
   const searchParams = useSearchParams();
+  const [isPending, startTransition] = useTransition();
 
   const serverSearch = isServer ? (searchParams.get("search") ?? "") : "";
   const serverFilters = useMemo(() => {
@@ -141,7 +143,9 @@ export function DataTable<T extends { id: string }>({
         setSearchDraft(value);
         if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
         searchTimerRef.current = setTimeout(() => {
-          router.push(buildServerUrl({ search: value || null, cursor: null, dir: null }));
+          startTransition(() => {
+            router.push(buildServerUrl({ search: value || null, cursor: null, dir: null }));
+          });
         }, 400);
       } else {
         setLocalSearch(value);
@@ -157,7 +161,9 @@ export function DataTable<T extends { id: string }>({
         const key = columns.find((c) => c.id === colId)?.filterKey ?? colId;
         const current = searchParams.get(key);
         const next = current === value ? null : value;
-        router.push(buildServerUrl({ [key]: next, cursor: null, dir: null }));
+        startTransition(() => {
+          router.push(buildServerUrl({ [key]: next, cursor: null, dir: null }));
+        });
       } else {
         setLocalFilters((prev) => {
           const existing = new Set(prev[colId] ?? []);
@@ -178,7 +184,9 @@ export function DataTable<T extends { id: string }>({
     (colId: string) => {
       if (isServer) {
         const key = columns.find((c) => c.id === colId)?.filterKey ?? colId;
-        router.push(buildServerUrl({ [key]: null, cursor: null, dir: null }));
+        startTransition(() => {
+          router.push(buildServerUrl({ [key]: null, cursor: null, dir: null }));
+        });
       } else {
         setLocalFilters((prev) => { const n = { ...prev }; delete n[colId]; return n; });
         setRangeFilters((prev) => { const n = { ...prev }; delete n[colId]; return n; });
@@ -190,7 +198,9 @@ export function DataTable<T extends { id: string }>({
 
   const handleClearAll = useCallback(() => {
     if (isServer) {
-      router.push(basePath!);
+      startTransition(() => {
+        router.push(basePath!);
+      });
     } else {
       setLocalFilters({});
       setRangeFilters({});
@@ -301,7 +311,11 @@ export function DataTable<T extends { id: string }>({
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-3">
         <div className="relative flex-1 w-full sm:min-w-[300px]">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          {isPending ? (
+            <Loader2 className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground animate-spin" />
+          ) : (
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          )}
           <Input
             value={isServer ? searchDraft : localSearch}
             onChange={(e) => handleSearchChange(e.target.value)}
@@ -383,7 +397,13 @@ export function DataTable<T extends { id: string }>({
       )}
 
       {renderMobileRow && (
-        <div className="md:hidden rounded-lg border bg-card divide-y">
+        <div
+          className={cn(
+            "md:hidden rounded-lg border bg-card divide-y",
+            isPending && "opacity-60 pointer-events-none transition-opacity",
+          )}
+          aria-busy={isPending}
+        >
           {pagedData.length === 0 ? (
             <div className="p-8 text-center text-sm text-muted-foreground">
               {hasActiveFilters
@@ -402,7 +422,9 @@ export function DataTable<T extends { id: string }>({
         className={cn(
           "rounded-lg border bg-card overflow-hidden",
           renderMobileRow && "hidden md:block",
+          isPending && "opacity-60 pointer-events-none transition-opacity",
         )}
+        aria-busy={isPending}
       >
         <div className="overflow-x-auto">
           <table className="w-full text-sm table-fixed">
@@ -476,8 +498,8 @@ export function DataTable<T extends { id: string }>({
               <Button
                 variant="outline"
                 size="sm"
-                disabled={!prevCursor}
-                onClick={() => router.push(buildServerUrl({ cursor: prevCursor!, dir: "prev" }))}
+                disabled={!prevCursor || isPending}
+                onClick={() => startTransition(() => router.push(buildServerUrl({ cursor: prevCursor!, dir: "prev" })))}
                 className="h-8 gap-1 flex-1 sm:flex-initial"
               >
                 <ChevronLeft className="h-4 w-4" />
@@ -486,8 +508,8 @@ export function DataTable<T extends { id: string }>({
               <Button
                 variant="outline"
                 size="sm"
-                disabled={!nextCursor}
-                onClick={() => router.push(buildServerUrl({ cursor: nextCursor!, dir: "next" }))}
+                disabled={!nextCursor || isPending}
+                onClick={() => startTransition(() => router.push(buildServerUrl({ cursor: nextCursor!, dir: "next" })))}
                 className="h-8 gap-1 flex-1 sm:flex-initial"
               >
                 Próximo
