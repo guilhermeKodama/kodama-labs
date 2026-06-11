@@ -1,6 +1,5 @@
 import { prisma } from "@sentinel/server/lib/prisma";
 import { getTranslations, setRequestLocale } from "next-intl/server";
-import { PageLayout } from "@/components/page-layout";
 import { AlertsClient } from "./alerts-client";
 
 export default async function AlertsPage({
@@ -57,12 +56,12 @@ export default async function AlertsPage({
   };
 
   return (
-    <PageLayout>
+    <>
       <h1 className="text-xl md:text-2xl font-bold mb-2">{tPage("title")}</h1>
       <p className="text-xs text-muted-foreground mb-5 max-w-3xl">
         {tCommon("disclaimer")}
       </p>
       <AlertsClient data={serialized} locale={locale} severityCounts={severityCounts} />
-    </PageLayout>
+    </>
   );
 }
