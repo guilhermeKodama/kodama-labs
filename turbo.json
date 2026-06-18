@@ -14,7 +14,18 @@
         "TRANSPARENCIA_API_KEY",
         "BRAPI_TOKEN",
         "NEXT_PUBLIC_APP_URL",
-        "BLOB_READ_WRITE_TOKEN"
+        "BLOB_READ_WRITE_TOKEN",
+        "SYNC_SECRET",
+        "WEBHOOK_HMAC_SECRET",
+        "DASHBOARD_USER",
+        "DASHBOARD_PASSWORD",
+        "META_SYSTEM_USER_TOKEN",
+        "GOOGLE_ADS_DEVELOPER_TOKEN",
+        "GOOGLE_ADS_CLIENT_ID",
+        "GOOGLE_ADS_CLIENT_SECRET",
+        "GOOGLE_ADS_REFRESH_TOKEN",
+        "GOOGLE_ADS_LOGIN_CUSTOMER_ID",
+        "GA4_SA_KEY_BASE64"
       ]
     },
     "lint": {

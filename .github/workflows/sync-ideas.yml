@@ -1,0 +1,34 @@
+name: Sync ideas to pipeline
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "ideas/**/idea.yaml"
+      - "scripts/sync-ideas.mjs"
+      - ".github/workflows/sync-ideas.yml"
+  workflow_dispatch: {}
+
+concurrency:
+  group: sync-ideas
+  cancel-in-progress: true
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile --ignore-scripts --filter wallex
+      - name: Sync ideas
+        run: node scripts/sync-ideas.mjs
+        env:
+          PIPELINE_URL: ${{ vars.PIPELINE_URL }}
+          SYNC_SECRET: ${{ secrets.PIPELINE_SYNC_SECRET }}
+          GITHUB_SHA: ${{ github.sha }}
+          GITHUB_REF: ${{ github.ref }}

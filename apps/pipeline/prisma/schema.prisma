@@ -1,0 +1,315 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// ============================================
+// ENUMS
+// ============================================
+
+enum IdeaStatus {
+  HYPOTHESIS
+  VALIDATING
+  VALIDATED
+  KILLED
+  PAUSED
+  ARCHIVED
+}
+
+// Attribution / reporting channel. META + GOOGLE are paid (fed by ads APIs);
+// ORGANIC/DIRECT/OTHER exist so GA4 sessions and leads without paid UTMs have
+// a home and never pollute paid CAC.
+enum Channel {
+  META
+  GOOGLE
+  ORGANIC
+  DIRECT
+  OTHER
+}
+
+// Threshold scope. ALL is a sentinel instead of NULL because Postgres treats
+// NULLs as distinct in unique constraints.
+enum ThresholdChannel {
+  ALL
+  META
+  GOOGLE
+}
+
+enum LeadStatus {
+  NEW
+  ONBOARDING
+  QUALIFIED
+  ACTIVE
+  CUSTOMER
+  COLD
+  LOST
+}
+
+enum MetricKey {
+  CPM
+  CPC
+  CTR
+  BOUNCE_RATE
+  SESSION_TO_LEAD
+  CPL
+  AR
+  PCR
+  CAC
+}
+
+enum ThresholdSource {
+  CONFIG // synced from idea.yaml — sync job may overwrite
+  MANUAL // edited in the dashboard UI — sync job must NOT overwrite
+  DEFAULT // seeded from code defaults when idea.yaml omits the metric
+}
+
+enum SpendSource {
+  API
+  MANUAL
+}
+
+enum JobStatus {
+  IDLE
+  RUNNING
+  COMPLETED
+  FAILED
+}
+
+// ============================================
+// IDEAS (synced from ideas/<slug>/idea.yaml)
+// ============================================
+
+model Idea {
+  id         String     @id @default(cuid())
+  slug       String     @unique // = ideas/<slug> dir name
+  name       String
+  status     IdeaStatus @default(HYPOTHESIS)
+  isLive     Boolean    @default(false) // status == VALIDATING; gates ads/GA4 polling
+  landingUrl String?
+  timezone   String     @default("America/Sao_Paulo") // ads accounts + GA4 property must match
+
+  // --- economics (BRL cents) ---
+  priceMonthlyCents   Int?
+  projectedLtvCents   Int?
+  maxCacCents         Int? // null → derived as projectedLtv/4
+  cacCeilingLeadCents Int? // validation CAC ceiling per qualified lead (CPL kill line)
+  channelKillCacCents Int? // kill a single channel above this
+
+  // --- go/kill config (small ordered lists, replaced atomically by sync) ---
+  cacBands Json? // [{cacMaxCents, arMin, decision}]; null → derived from LTV/4 rule
+  gates    Json? // {go: [...], pivot: [...], kill: [...]} — computable + manual checklist items
+
+  // --- channel config (Google account is shared; name prefix does the mapping) ---
+  metaAdAccountId      String? // "act_..."
+  googleCustomerId     String? // digits only
+  googleCampaignPrefix String? // defaults to slug at sync time
+  ga4PropertyId        String? // numeric Data API property id
+
+  // --- validation lifecycle ---
+  adsLaunchedAt    DateTime? // starts the 72h learning clock + day-28 countdown
+  goNoGoAt         DateTime?
+  budgetTotalCents Int?
+  budgetWeeks      Int?
+
+  // --- sync bookkeeping ---
+  configHash     String? // sha256 of canonical idea.yaml JSON → idempotent sync
+  rawConfig      Json? // last synced payload, for drift audit
+  syncedAt       DateTime?
+  lastSyncCommit String? // archive-on-absence only applies for newer CI commits
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  thresholds MetricThreshold[]
+  leads      Lead[]
+  adSpend    AdSpendDaily[]
+  sessions   Ga4SessionsDaily[]
+
+  @@map("ideas")
+}
+
+model MetricThreshold {
+  id      String           @id @default(cuid())
+  ideaId  String
+  metric  MetricKey
+  channel ThresholdChannel @default(ALL)
+
+  // Ratios stored as fractions (0.015 = 1.5%); money metrics in BRL cents.
+  healthyValue Decimal @db.Decimal(14, 6)
+  deathValue   Decimal @db.Decimal(14, 6)
+
+  source    ThresholdSource @default(CONFIG)
+  updatedAt DateTime        @updatedAt
+
+  idea Idea @relation(fields: [ideaId], references: [id], onDelete: Cascade)
+
+  @@unique([ideaId, metric, channel])
+  @@map("metric_thresholds")
+}
+
+// ============================================
+// LEADS (dashboard is the source of truth)
+// ============================================
+
+model Lead {
+  id     String @id @default(cuid())
+  ideaId String
+
+  email   String
+  contact String?
+  name    String?
+
+  // idea-specific form fields (group_size, travel_window, ...)
+  formData Json @default("{}")
+
+  // first-touch attribution, as the LP webhook forwards it
+  utmSource   String @default("")
+  utmMedium   String @default("")
+  utmCampaign String @default("")
+  utmContent  String @default("")
+  utmTerm     String @default("")
+  referrer    String @default("")
+  gclid       String @default("")
+
+  channel Channel
+  status  LeadStatus @default(NEW)
+
+  // "ever reached" timestamps — set ONCE on first entry into each status,
+  // never cleared. AR/PCR derive from these (a lead that went ACTIVE→COLD
+  // still activated once).
+  onboardingAt DateTime?
+  qualifiedAt  DateTime?
+  activatedAt  DateTime?
+  convertedAt  DateTime?
+  coldAt       DateTime?
+  lostAt       DateTime?
+
+  notes              String?
+  attributes         Json    @default("{}") // operational counters: alerts_sent, issuances...
+  customerValueCents Int?
+  resubmitCount      Int     @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  idea   Idea              @relation(fields: [ideaId], references: [id], onDelete: Cascade)
+  events LeadStatusEvent[]
+
+  @@unique([ideaId, email])
+  @@index([ideaId, status])
+  @@index([ideaId, channel, createdAt])
+  @@index([ideaId, createdAt])
+  @@index([ideaId, activatedAt])
+  @@index([ideaId, convertedAt])
+  @@map("leads")
+}
+
+model LeadStatusEvent {
+  id         String      @id @default(cuid())
+  leadId     String
+  fromStatus LeadStatus?
+  toStatus   LeadStatus
+  occurredAt DateTime    @default(now())
+  note       String?
+  actor      String? // "ui" | "webhook" | "import:sheets"
+  forced     Boolean     @default(false)
+
+  lead Lead @relation(fields: [leadId], references: [id], onDelete: Cascade)
+
+  @@index([leadId, occurredAt])
+  @@map("lead_status_events")
+}
+
+// The webhook NEVER rejects: the raw payload lands here BEFORE any validation,
+// so a misconfigured LP or schema drift can't burn a paid lead.
+model LeadInbox {
+  id             String    @id @default(cuid())
+  slug           String
+  body           Json
+  signatureValid Boolean   @default(false)
+  receivedAt     DateTime  @default(now())
+  processedAt    DateTime?
+  leadId         String?
+  error          String?
+
+  @@index([slug, receivedAt])
+  @@index([processedAt])
+  @@map("lead_inbox")
+}
+
+// ============================================
+// DAILY RAW COUNTS (derived metrics are NEVER stored)
+// ============================================
+
+model AdSpendDaily {
+  id     String  @id @default(cuid())
+  ideaId String? // null = unmapped spend (still ingested, surfaced in the UI)
+
+  channel      Channel
+  date         DateTime @db.Date // calendar day in the AD ACCOUNT's timezone
+  accountId    String // act_X (Meta) / customer id digits (Google) / "manual:{ideaId}"
+  campaignId   String // platform campaign id; "manual" for hand-entered rows
+  campaignName String
+
+  spendCents  Int // Google: round(cost_micros / 10_000)
+  impressions Int
+  clicks      Int
+  currency    String @default("BRL")
+
+  source   SpendSource @default(API)
+  pulledAt DateTime    @updatedAt
+
+  idea Idea? @relation(fields: [ideaId], references: [id])
+
+  @@unique([channel, accountId, campaignId, date])
+  @@index([ideaId, date])
+  @@index([channel, date])
+  @@map("ad_spend_daily")
+}
+
+model Ga4SessionsDaily {
+  id      String   @id @default(cuid())
+  ideaId  String
+  channel Channel
+  date    DateTime @db.Date // day in GA4 property timezone
+
+  sessions        Int
+  engagedSessions Int // bounce = 1 - engaged/sessions, computed at read time
+  totalUsers      Int // thresholding fingerprint: 0 users with sessions > 0 is suspicious
+
+  ga4SyncedAt DateTime @updatedAt
+
+  idea Idea @relation(fields: [ideaId], references: [id], onDelete: Cascade)
+
+  @@unique([ideaId, channel, date])
+  @@index([ideaId, date])
+  @@map("ga4_sessions_daily")
+}
+
+// ============================================
+// JOBS — same shape as sentinel; job-runner.ts ported as-is
+// ============================================
+
+model JobRun {
+  id          String    @id @default(cuid())
+  jobName     String
+  layer       String
+  status      JobStatus
+  startedAt   DateTime  @default(now())
+  completedAt DateTime?
+  recordsIn   Int?
+  recordsOut  Int?
+  error       String?
+  metadata    Json?
+
+  @@index([jobName])
+  @@index([layer])
+  @@index([startedAt])
+  @@map("job_runs")
+}

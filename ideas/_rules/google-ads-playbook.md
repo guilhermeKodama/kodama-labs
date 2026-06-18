@@ -81,22 +81,39 @@ Ex.: Google a R$30/dia, teste de 30 dias → ~R$900 + margem ≈ **limite R$1.20
 
 ## 🔁 FLUXO PARA CADA NOVA IDEIA
 
-1. Criar **sub-conta** dentro da MCC (`Accounts → + → Create new account`).
+> **Topologia (decisão do pipeline dashboard):** usamos **UMA conta de anúncios
+> compartilhada** sob a MCC para todas as ideias — não uma sub-conta por ideia.
+> O que separa as ideias é o **prefixo do nome da campanha**: toda campanha da
+> ideia começa com o slug (`{slug}_…`, ex.: `milhasgrupo_Search_Lead_v1`).
+> É assim que o dashboard atribui o spend; campanha sem prefixo vira "spend não
+> atribuído" no portfólio. A conta compartilhada é criada UMA vez com **fuso
+> America/Sao_Paulo + moeda BRL** (permanentes; o job de ingestão verifica e
+> falha alto em mismatch) e o customer id (10 dígitos) vai no `idea.yaml`
+> (`ads.google_customer_id`) de cada ideia.
+
+1. Confirmar a conta compartilhada na MCC (criar só na primeira ideia — ver topologia acima).
 2. Emitir os **2 cartões virtuais** (`{APP}-META`, `{APP}-GOOGLE`) e definir limites.
 3. Instalar a **Google tag** na landing do app (gtag.js).
 4. Criar a **Conversion Action** (`Lead - {App}`) → pegar o **conversion label**.
 5. Colar o label nas envs da landing (`NEXT_PUBLIC_GOOGLE_ADS_LEAD_LABEL` + `NEXT_PUBLIC_GOOGLE_ADS_ID`) → **redeploy**.
-6. Criar a campanha **Search** (não PMax — ver abaixo), trocando:
+6. **Final URL suffix (OBRIGATÓRIO, nível campanha):** em Settings → Additional settings → Campaign URL options:
+   ```
+   utm_source=google&utm_medium=cpc&utm_campaign={slug}_beta&utm_term={keyword}
+   ```
+   Sem isso, o clique chega na LP só com `gclid` e o lead pago do Google fica sem
+   atribuição completa no dashboard — o CAC por canal (critério de kill) depende disso.
+   (A LP também captura `gclid` como rede de segurança, mas o suffix é o caminho principal.)
+7. Criar a campanha **Search** (não PMax — ver abaixo), trocando:
    - Palavras-chave (foco em dor do nicho)
    - Localizações / idioma
    - URL de destino + sitelinks
    - Headlines / descriptions
-7. Cadastrar o cartão `{APP}-GOOGLE` no perfil de pagamento (Organização).
-8. **Revisar anti-patterns** (o wizard empurra PMax, orçamento alto, Display).
-9. Renomear com versão (`{App}_Search_Lead_v1`).
-10. Publicar → revisão Google.
-11. **Validar disparo** da conversão (Tag Assistant) antes de confiar no painel.
-12. Ler dados só **+72h** depois.
+8. Cadastrar o cartão `{APP}-GOOGLE` no perfil de pagamento (Organização).
+9. **Revisar anti-patterns** (o wizard empurra PMax, orçamento alto, Display).
+10. Renomear com versão e prefixo do slug (`{slug}_Search_Lead_v1`).
+11. Publicar → revisão Google.
+12. **Validar disparo** da conversão (Tag Assistant) antes de confiar no painel.
+13. Ler dados só **+72h** depois.
 
 ### Por que duplicar/clonar
 Tendo a primeira campanha validada (MilhasGrupo), as próximas saem por cópia: você reusa a estrutura cuidadosa (Search puro, sem Display/Partners, bid de cliques no início) e só troca palavras-chave, copy e URL. Clonar dentro da mesma MCC é nativo.

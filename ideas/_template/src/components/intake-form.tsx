@@ -123,6 +123,16 @@ export function IntakeForm() {
         />
       </div>
 
+      {/* Honeypot: bots fill it, humans never see it; dropped server-side. */}
+      <input
+        type="text"
+        name="website"
+        tabIndex={-1}
+        autoComplete="off"
+        aria-hidden="true"
+        className="hidden"
+      />
+
       <Button type="submit" size="lg" disabled={submitting} className="w-full">
         {submitting ? "Enviando…" : "Enviar"}
       </Button>

@@ -90,6 +90,16 @@ export function IntakeForm() {
         helper="Os alertas chegam em segundos. Telegram é mais rápido."
       />
 
+      {/* Honeypot: bots fill it, humans never see it; dropped server-side. */}
+      <input
+        type="text"
+        name="website"
+        tabIndex={-1}
+        autoComplete="off"
+        aria-hidden="true"
+        className="hidden"
+      />
+
       <Button type="submit" size="lg" disabled={submitting} className="w-full">
         {submitting ? "Enviando…" : "Quero receber os alertas"}
       </Button>
