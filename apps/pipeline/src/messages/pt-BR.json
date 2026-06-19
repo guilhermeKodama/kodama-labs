@@ -32,7 +32,8 @@
     "openMenu": "Abrir menu",
     "closeMenu": "Fechar menu",
     "collapse": "Recolher menu",
-    "expand": "Expandir menu"
+    "expand": "Expandir menu",
+    "roadmap": "Roadmap"
   },
   "portfolio": {
     "title": "Portfólio",
@@ -231,6 +232,22 @@
       "title": "Configuração por ideia (fonte: o idea.yaml de cada ideia)",
       "missing": "— não configurado",
       "syncedAt": "Último sync"
+    },
+    "import": {
+      "title": "Importar leads (CSV / planilha)",
+      "help": "Suba o histórico de leads de uma vez (ex.: export do seu Google Sheets). Re-importável — rodar de novo atualiza sem duplicar. Baixe o template pra ver as colunas.",
+      "idea": "Ideia",
+      "channel": "Atribuir ao canal",
+      "channelAuto": "Auto (pela coluna utm_source)",
+      "choose": "Escolher CSV",
+      "importing": "Importando…",
+      "template": "Baixar template",
+      "hint": "Obrigatório: email. Recomendado: status (new/active/customer/cold/lost ou novo/ativo/cliente…), created_at (data do lead, aceita DD/MM/AAAA), e activated_at/converted_at se souber. Colunas extras (group_size, issuances…) viram dados do lead.",
+      "done": "{created} criados · {updated} atualizados · {skipped} ignorados",
+      "rowErrors": "linha(s) com problema",
+      "noRows": "Nenhuma linha com email no CSV",
+      "parseError": "Não consegui ler o CSV",
+      "failed": "Falha na importação"
     }
   }
 }

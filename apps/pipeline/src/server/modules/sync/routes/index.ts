@@ -57,7 +57,9 @@ export const importLeadsRoute = createRoute({
       z.object({
         ok: z.boolean(),
         created: z.number().optional(),
+        updated: z.number().optional(),
         skipped: z.number().optional(),
+        errors: z.array(z.string()).optional(),
         error: z.string().optional(),
       }),
       "Import result",

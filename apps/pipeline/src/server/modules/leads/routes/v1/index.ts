@@ -12,6 +12,10 @@ import type { AppRouteHandler } from "@pipeline/server/types";
 import { LEAD_STATUSES } from "@/lib/funnel/lead-status";
 import type { LeadStatus, Prisma } from "@/generated/prisma";
 import { InvalidTransitionError, transitionLead } from "../../service";
+import {
+  importLeads,
+  importLeadsPayloadSchema,
+} from "@pipeline/server/modules/sync/import-leads";
 
 const LeadStatusEnum = z.enum(LEAD_STATUSES);
 
@@ -205,8 +209,43 @@ export const patchHandler: AppRouteHandler<typeof patchRoute> = async (c) => {
   return c.json(serialize(updated), OK);
 };
 
+// UI-facing CSV import (the /ops uploader posts here, behind dashboard auth).
+// The CLI uses /sync/import-leads with SYNC_SECRET; both call the same service.
+export const importRoute = createRoute({
+  path: "/v1/leads/import",
+  method: "post",
+  tags: ["Leads"],
+  summary: "Import leads from a parsed CSV",
+  request: {
+    body: jsonContentRequired(importLeadsPayloadSchema, "Parsed CSV rows"),
+  },
+  responses: {
+    [OK]: jsonContent(
+      z.object({
+        ok: z.boolean(),
+        created: z.number().optional(),
+        updated: z.number().optional(),
+        skipped: z.number().optional(),
+        errors: z.array(z.string()).optional(),
+        error: z.string().optional(),
+      }),
+      "Import result",
+    ),
+    [UNPROCESSABLE_ENTITY]: jsonContent(
+      z.object({ message: z.string() }),
+      "Invalid payload",
+    ),
+  },
+});
+
+export const importHandler: AppRouteHandler<typeof importRoute> = async (c) => {
+  const result = await importLeads(c.req.valid("json"));
+  return c.json(result, OK);
+};
+
 const router = createRouter()
   .openapi(listRoute, listHandler)
-  .openapi(patchRoute, patchHandler);
+  .openapi(patchRoute, patchHandler)
+  .openapi(importRoute, importHandler);
 
 export default router;

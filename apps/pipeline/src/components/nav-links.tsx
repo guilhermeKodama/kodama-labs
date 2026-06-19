@@ -3,13 +3,14 @@
 import { useTranslations } from "next-intl";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, Users, Wrench } from "lucide-react";
+import { LayoutDashboard, Users, Wrench, Map } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const navItems = [
   { href: "/", labelKey: "portfolio", icon: LayoutDashboard },
   { href: "/leads", labelKey: "leads", icon: Users },
   { href: "/ops", labelKey: "ops", icon: Wrench },
+  { href: "/roadmap", labelKey: "roadmap", icon: Map },
 ] as const;
 
 export function NavLinks({

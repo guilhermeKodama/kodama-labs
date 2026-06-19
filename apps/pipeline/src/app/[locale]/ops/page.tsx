@@ -4,6 +4,7 @@ import { prisma } from "@pipeline/server/lib/prisma";
 import { env } from "@/env";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
+import { CsvImportCard } from "./csv-import-card";
 import { ManualSpendForm } from "./manual-spend-form";
 
 export const dynamic = "force-dynamic";
@@ -99,6 +100,12 @@ export default async function OpsPage({ params }: PageProps) {
         <div className="rounded-lg border bg-card p-4">
           <ManualSpendForm ideas={ideas.map((i) => ({ slug: i.slug, name: i.name }))} />
         </div>
+      </section>
+
+      <section className="space-y-2">
+        <h2 className="text-sm font-semibold">{t("import.title")}</h2>
+        <p className="text-xs text-muted-foreground">{t("import.help")}</p>
+        <CsvImportCard ideas={ideas.map((i) => ({ slug: i.slug, name: i.name }))} />
       </section>
 
       <section className="space-y-2">

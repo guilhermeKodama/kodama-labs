@@ -32,7 +32,8 @@
     "openMenu": "Abrir menu",
     "closeMenu": "Fechar menu",
     "collapse": "Recolher menu",
-    "expand": "Expandir menu"
+    "expand": "Expandir menu",
+    "roadmap": "Roadmap"
   },
   "portfolio": {
     "title": "Portfólio",
@@ -231,6 +232,22 @@
       "title": "Configuração por ideia (fonte: o idea.yaml de cada ideia)",
       "missing": "— não configurado",
       "syncedAt": "Último sync"
+    },
+    "import": {
+      "title": "Import leads (CSV / spreadsheet)",
+      "help": "Bulk-load your lead history at once (e.g. a Google Sheets export). Re-runnable — importing again updates without duplicating. Download the template to see the columns.",
+      "idea": "Idea",
+      "channel": "Attribute to channel",
+      "channelAuto": "Auto (from utm_source column)",
+      "choose": "Choose CSV",
+      "importing": "Importing…",
+      "template": "Download template",
+      "hint": "Required: email. Recommended: status, created_at (accepts DD/MM/YYYY), and activated_at/converted_at when known. Extra columns become lead form data.",
+      "done": "{created} created · {updated} updated · {skipped} skipped",
+      "rowErrors": "row(s) with issues",
+      "noRows": "No rows with an email in the CSV",
+      "parseError": "Couldn't read the CSV",
+      "failed": "Import failed"
     }
   }
 }

@@ -50,7 +50,7 @@ gates: # §7 Go / No-Go (week 4) — metric items auto-evaluate; manual items ar
     - { label: "< 3 issuances in 8 weeks", manual: true }
 
 ads:
-  meta_ad_account_id: null # act_XXXXXXXXXX — create with timezone America/Sao_Paulo + BRL
+  meta_ad_account_id: act_1673984080394594 # conta "MilhasGrupo Ads" (BRL, America/Sao_Paulo)
   google_customer_id: null # 10 digits, no dashes (shared account under the MCC)
   google_campaign_prefix: milhasgrupo # campaign names must start with this
 
