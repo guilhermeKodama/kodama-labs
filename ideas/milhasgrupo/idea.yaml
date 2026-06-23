@@ -55,7 +55,7 @@ ads:
   google_campaign_prefix: milhasgrupo # campaign names must start with this
 
 tracking:
-  ga4_property_id: null # numeric property id (Admin → Property Settings), NOT G-XXXX
+  ga4_property_id: "542947106" # numeric property id (Admin → Property Settings), NOT G-XXXX
 
 ads_launched_at: null # YYYY-MM-DD; starts the 72h learning clock + day-28 countdown
 go_no_go_at: null # defaults to launch + 28d in the dashboard when null
