@@ -12,6 +12,7 @@ interface HeaderProps {
   action?: {
     label: string;
     onClick: () => void;
+    icon?: LucideIcon;
   };
   secondaryAction?: {
     label: string;
@@ -54,7 +55,11 @@ export function Header({ title, description, action, secondaryAction }: HeaderPr
               onClick={action.onClick}
               className="bg-gradient-to-r from-emerald-500 to-cyan-500 text-white hover:from-emerald-600 hover:to-cyan-600"
             >
-              <Plus className="mr-2 h-4 w-4" />
+              {action.icon ? (
+                <action.icon className="mr-2 h-4 w-4" />
+              ) : (
+                <Plus className="mr-2 h-4 w-4" />
+              )}
               {action.label}
             </Button>
           )}

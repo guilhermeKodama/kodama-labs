@@ -116,8 +116,75 @@ model User {
   sessions                 Session[]
   investmentAccounts       InvestmentAccount[]
   merchantCategoryMappings MerchantCategoryMapping[]
+  fireGoal                 FireGoal?
 
   @@map("users")
+}
+
+// ============================================
+// FIRE (Financial Independence / Liberdade Financeira)
+// ============================================
+
+// A user's single FIRE plan. Lean/Fat/Coast/Barista are computed views of this
+// plan, not separate rows. `phases` is a value object (array of contribution
+// phases) validated by Zod at the API boundary. All inputs are editable.
+model FireGoal {
+  id                    String   @id @default(uuid())
+  userId                String   @unique
+  name                  String?
+  targetMonthlyIncome   Float // primary input: desired monthly income in retirement (today's money)
+  safeWithdrawalRate    Float    @default(0.035)
+  nominalAnnualReturn   Float    @default(0.10)
+  annualInflation       Float    @default(0.045) // IPCA; the real return is derived from these two
+  monthlyIncome         Float? // optional, for savings-rate reporting
+  planningMode          String   @default("by_date") // by_date | by_contribution
+  targetYear            Int? // used in by_date mode
+  phaseProfile          String   @default("front_loaded") // front_loaded | constant | back_loaded | custom
+  phases                Json // [{ order, label, fromMonth, toMonth | null, monthlyContribution }]
+  baristaMonthlyIncome  Float?
+  coastStopYear         Int?
+  leanMultiplier        Float    @default(0.7)
+  fatMultiplier         Float    @default(1.6)
+  includeEntityBalances Boolean  @default(false) // base = portfolio + investment cash
+  includeBusinessInvestments Boolean @default(false) // also count business-entity investments
+  currency              String   @default("BRL")
+  // Whole-life modelling (ProjectionLab-style): accumulate then withdraw.
+  currentAge            Int? // anchors the age axis + decumulation horizon
+  retirementAge         Int? // optional explicit retirement age (else retire at FIRE)
+  lifeExpectancyAge     Int      @default(95)
+  annualVolatility      Float    @default(0.12) // sd of real annual return, for Monte Carlo
+  milestones            Json     @default("[]") // MilestoneDef[]: { id, name, type, value }
+  withdrawalStrategy    String   @default("perpetuity") // perpetuity (live off yield) | depletion (spend down to ~0 by life expectancy)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  user      User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  snapshots FireSnapshot[]
+
+  @@map("fire_goals")
+}
+
+// Forward-only monthly progress snapshot. Portfolio market value can only be
+// observed in the present (prices are spot, with no historical series), so
+// history is recorded going forward, one row per calendar month.
+model FireSnapshot {
+  id                     String    @id @default(uuid())
+  goalId                 String
+  period                 Int // year*100 + month (e.g. 202606) — dedupe key
+  snapshotDate           DateTime
+  currentInvested        Float
+  currentMonthlyExpenses Float // for tracking the income-target gap over time
+  fireNumber             Float
+  progress               Float // currentInvested / fireNumber
+  monthsToFire           Int?
+  projectedFireDate      DateTime?
+  createdAt              DateTime  @default(now())
+
+  goal FireGoal @relation(fields: [goalId], references: [id], onDelete: Cascade)
+
+  @@unique([goalId, period])
+  @@index([goalId, period])
+  @@map("fire_snapshots")
 }
 
 // ============================================
