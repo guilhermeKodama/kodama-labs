@@ -7,5 +7,6 @@ export { useRecurringTransferStore } from "./recurring-transfer-store";
 export { useBudgetStore } from "./budget-store";
 export { useCreditCardStore } from "./credit-card-store";
 export { useInvestmentStore } from "./investment-store";
+export { useFireStore } from "./fire-store";
 export { useAttachmentStore } from "./attachment-store";
 export { useUIStore } from "./ui-store";

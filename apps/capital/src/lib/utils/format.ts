@@ -103,3 +103,50 @@ export function getCurrencySymbol(currency: string, locale: string = 'en-US'): s
     .formatToParts(0)
     .find((part) => part.type === 'currency')?.value ?? currency;
 }
+
+// ============================================
+// Money input helpers (shared by CurrencyInput)
+// ============================================
+
+const CURRENCY_LOCALES: Record<string, string> = {
+  BRL: 'pt-BR',
+  USD: 'en-US',
+  EUR: 'de-DE',
+  GBP: 'en-GB',
+  JPY: 'ja-JP',
+  CAD: 'en-CA',
+  AUD: 'en-AU',
+  CHF: 'de-CH',
+  CNY: 'zh-CN',
+};
+
+/**
+ * The number-formatting locale that matches a currency's conventions, so an
+ * amount renders the way speakers of that currency expect regardless of the UI
+ * language (e.g. BRL always uses "1.234,56").
+ */
+export function localeForCurrency(currency: string): string {
+  return CURRENCY_LOCALES[currency] ?? 'en-US';
+}
+
+/**
+ * Format a number for a money input: always exactly 2 decimals with locale
+ * grouping and decimal separator (e.g. 80656.36 -> "80.656,36" in pt-BR).
+ */
+export function formatMoneyInput(value: number, locale: string = 'pt-BR'): string {
+  return new Intl.NumberFormat(locale, {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(value);
+}
+
+/**
+ * Interpret raw input as a "cents mask": keep only digits and read them as an
+ * integer number of cents, so typing "8065636" yields 80656.36. Non-digits
+ * (separators, letters, pasted formatting) are ignored.
+ */
+export function parseMoneyDigits(input: string): number {
+  const digits = input.replace(/\D/g, '');
+  if (!digits) return 0;
+  return Number((parseInt(digits, 10) / 100).toFixed(2));
+}
