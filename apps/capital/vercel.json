@@ -20,6 +20,10 @@
     {
       "path": "/api/cron/update-rates",
       "schedule": "0 * * * *"
+    },
+    {
+      "path": "/api/cron/fire-snapshot",
+      "schedule": "0 3 1 * *"
     }
   ]
 }
