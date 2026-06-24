@@ -16,6 +16,7 @@ import {
   Receipt,
   CreditCard,
   LogOut,
+  Flame,
 } from 'lucide-react';
 import { Link, usePathname } from '@/i18n/navigation';
 import { cn } from '@/lib/utils';
@@ -38,6 +39,7 @@ const mainNavItems = [
 const moreNavItems = [
   { href: '/recurring', icon: Repeat, labelKey: 'recurring' },
   { href: '/investments', icon: PiggyBank, labelKey: 'investments' },
+  { href: '/fire', icon: Flame, labelKey: 'fire' },
   { href: '/budgets', icon: Target, labelKey: 'budgets' },
   { href: '/reports', icon: FileBarChart, labelKey: 'reports' },
   { href: '/tax', icon: Receipt, labelKey: 'tax' },
