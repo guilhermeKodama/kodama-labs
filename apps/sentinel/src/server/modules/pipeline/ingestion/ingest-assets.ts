@@ -4,7 +4,8 @@ import { runJob, getOrCreateCursor, updateCursor } from "@sentinel/server/lib/jo
 import { streamTseAssets, type TseRawRow } from "@/lib/gov-apis/tse";
 import { BudgetTracker, YieldSignal } from "@sentinel/server/lib/budget-tracker";
 
-const ELECTION_YEARS = [2020, 2022, 2024];
+// 2026 added so it flows in automatically once TSE opens the 2026 registry.
+const ELECTION_YEARS = [2020, 2022, 2024, 2026];
 const POLITE_DELAY_MS = 2000;
 const TOTAL_BUDGET_MS = 120_000;
 const CURSOR_SAVE_EVERY = 500;

@@ -9,6 +9,13 @@ import { processPoliticians } from "@sentinel/server/modules/pipeline/processing
 import { processDonations } from "@sentinel/server/modules/pipeline/processing/process-donations";
 import { processAssets } from "@sentinel/server/modules/pipeline/processing/process-assets";
 import { processServidores } from "@sentinel/server/modules/pipeline/processing/process-servidores";
+import { seedCandidacies } from "@sentinel/server/modules/pipeline/processing/seed-candidacies";
+import { processParliamentaryExpenses } from "@sentinel/server/modules/pipeline/processing/process-parliamentary-expenses";
+import { processVotacoes } from "@sentinel/server/modules/pipeline/processing/process-votacoes";
+import { processProposicoes } from "@sentinel/server/modules/pipeline/processing/process-proposicoes";
+import { loadKeyVotes } from "@sentinel/server/modules/pipeline/processing/load-key-votes";
+import { loadStances } from "@sentinel/server/modules/pipeline/processing/load-stances";
+import { processNews } from "@sentinel/server/modules/pipeline/processing/process-news";
 import type { JobResult } from "@sentinel/server/lib/job-runner";
 import { BudgetTracker } from "@sentinel/server/lib/budget-tracker";
 
@@ -30,6 +37,13 @@ const modules: { name: string; fn: () => Promise<{ success: boolean; result?: Jo
   { name: "donations", fn: processDonations },
   { name: "assets", fn: processAssets },
   { name: "servidores", fn: processServidores },
+  { name: "candidacies", fn: seedCandidacies },
+  { name: "parliamentary-expenses", fn: processParliamentaryExpenses },
+  { name: "votacoes", fn: processVotacoes },
+  { name: "proposicoes", fn: processProposicoes },
+  { name: "key-votes", fn: loadKeyVotes },
+  { name: "stances", fn: loadStances },
+  { name: "news", fn: processNews },
 ];
 
 function withTimeout(
