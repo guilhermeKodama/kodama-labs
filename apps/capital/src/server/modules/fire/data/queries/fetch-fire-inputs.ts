@@ -8,11 +8,6 @@ export interface FireInputHolding {
   currency: string;
   entityType: string;
 }
-export interface FireInputAccount {
-  cashBalance: number;
-  currency: string;
-  entityType: string;
-}
 export interface FireInputSpend {
   amount: number;
   exchangeRate: number;
@@ -24,7 +19,6 @@ export interface FireInputs {
   baseCurrency: string;
   timezone: string;
   holdings: FireInputHolding[];
-  accounts: FireInputAccount[];
   /** Currency code -> base-currency per unit (derived from each currency's manualRate). */
   currencyRates: Record<string, number>;
   expenses: FireInputSpend[];
@@ -55,7 +49,7 @@ export async function fetchFireInputs(
 
   const ownership = { OR: [{ business: { userId } }, { personalAccount: { userId } }] };
 
-  const [holdings, accounts, currencies, expenses, contributions, income] = await Promise.all([
+  const [holdings, currencies, expenses, contributions, income] = await Promise.all([
     db.investmentHolding.findMany({
       where: { account: { userId }, isActive: true },
       select: {
@@ -65,10 +59,6 @@ export async function fetchFireInputs(
         currency: true,
         account: { select: { entityType: true } },
       },
-    }),
-    db.investmentAccount.findMany({
-      where: { userId, isActive: true },
-      select: { cashBalance: true, currency: true, entityType: true },
     }),
     db.currency.findMany({ where: { userId }, select: { code: true, manualRate: true } }),
     db.transaction.findMany({
@@ -107,7 +97,6 @@ export async function fetchFireInputs(
     baseCurrency,
     timezone,
     holdings: mappedHoldings,
-    accounts,
     currencyRates,
     expenses,
     contributions,

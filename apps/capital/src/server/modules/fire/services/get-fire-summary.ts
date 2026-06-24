@@ -58,8 +58,7 @@ export async function getFireSummary(
   // opt-in via the plan toggle.
   const includeBusiness = goal?.includeBusinessInvestments ?? false;
   const holdings = inputs.holdings.filter((h) => includeBusiness || h.entityType === "personal");
-  const accounts = inputs.accounts.filter((a) => includeBusiness || a.entityType === "personal");
-  const currentInvested = computeCurrentInvested(holdings, accounts, inputs.currencyRates);
+  const currentInvested = computeCurrentInvested(holdings, inputs.currencyRates);
 
   const currentMonthlyExpenses = computeCurrentMonthlyExpenses(inputs.expenses, {
     months: TRAILING_MONTHS,
