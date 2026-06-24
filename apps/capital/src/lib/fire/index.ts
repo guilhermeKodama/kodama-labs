@@ -21,4 +21,5 @@ export * from './target';
 export * from './dates';
 export * from './lifecycle';
 export * from './monte-carlo';
+export * from './depletion-plan';
 export * from './milestones';

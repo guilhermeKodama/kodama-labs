@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import {
   Dialog,
@@ -27,12 +27,14 @@ import { formatCurrency, localeForCurrency } from '@/lib/utils/format';
 import {
   buildPhaseShape,
   computeFireNumber,
-  depletionFireNumber,
   monthsUntilYear,
   resolvePhases,
   solveBaseContributionForDate,
+  solveDepletionPlan,
   toMonthlyRate,
   toRealReturn,
+  MC_SEED,
+  MC_TRIALS,
   type PhaseProfile,
   type WithdrawalStrategy,
 } from '@/lib/fire';
@@ -151,38 +153,58 @@ function FirePlanForm({
     profile === 'custom' ? null : resolvePhases(buildPhaseShape(profile), baseContribution);
 
   // In "by date" mode the contribution is an OUTPUT: solve the base contribution
-  // (and its phases) needed to hit the target year — mirroring the server. Custom
-  // shapes don't apply here, so the math falls back to a preset shape.
+  // needed to hit the target year, mirroring the server EXACTLY so the preview
+  // equals what saving produces. Spend-down inverts the seeded Monte Carlo (so the
+  // median lands at ~0 at life expectancy); perpetuity uses the full-number solve.
+  // Custom shapes don't apply here, so the math falls back to a preset shape.
   const byDateProfile: PhaseProfile = profile === 'custom' ? 'front_loaded' : profile;
-  const realAnnualReturn = toRealReturn(num(nominalReturn) / 100, num(inflation) / 100);
-  const monthlyRealReturn = toMonthlyRate(realAnnualReturn);
-  const targetMonths = monthsUntilYear(Number(targetYear) || currentYear, new Date());
-  const horizonMonths =
-    currentAge && Number(lifeExpectancyAge) > Number(currentAge)
-      ? Math.ceil((Number(lifeExpectancyAge) - Number(currentAge)) * 12)
-      : null;
-  const solveTarget =
-    strategy === 'depletion' && horizonMonths != null
-      ? depletionFireNumber(
-          {
-            targetMonthlyIncome: targetIncome,
-            realAnnualReturn,
-            safeWithdrawalRate: num(swr) / 100,
-          },
-          num(volatility) / 100,
-          Math.max(0, horizonMonths - targetMonths)
-        )
-      : computeFireNumber(targetIncome * 12, num(swr) / 100);
-  const requiredBase =
-    planningMode === 'by_date'
-      ? solveBaseContributionForDate({
+  const requiredBase = useMemo(() => {
+    if (planningMode !== 'by_date') return null;
+    const shape = buildPhaseShape(byDateProfile);
+    const targetMonths = monthsUntilYear(Number(targetYear) || currentYear, new Date());
+    const realAnnualReturn = toRealReturn(num(nominalReturn) / 100, num(inflation) / 100);
+    const ageNum = Number(currentAge);
+    const lifeNum = Number(lifeExpectancyAge);
+    if (strategy === 'depletion' && currentAge !== '' && lifeNum > ageNum) {
+      return (
+        solveDepletionPlan({
           currentInvested: suggested.currentInvested,
-          monthlyRealReturn,
-          fireNumber: solveTarget,
+          targetMonthlyIncome: targetIncome,
+          safeWithdrawalRate: num(swr) / 100,
+          realAnnualReturn,
+          annualVolatility: num(volatility) / 100,
+          currentAge: ageNum,
+          lifeExpectancyAge: lifeNum,
+          planningMode: 'by_date',
+          shape,
           targetMonths,
-          shape: buildPhaseShape(byDateProfile),
-        })
-      : null;
+          seed: MC_SEED,
+          trials: MC_TRIALS,
+        }).baseContribution ?? Infinity
+      );
+    }
+    return solveBaseContributionForDate({
+      currentInvested: suggested.currentInvested,
+      monthlyRealReturn: toMonthlyRate(realAnnualReturn),
+      fireNumber: computeFireNumber(targetIncome * 12, num(swr) / 100),
+      targetMonths,
+      shape,
+    });
+  }, [
+    planningMode,
+    strategy,
+    byDateProfile,
+    targetYear,
+    currentYear,
+    nominalReturn,
+    inflation,
+    currentAge,
+    lifeExpectancyAge,
+    suggested.currentInvested,
+    targetIncome,
+    swr,
+    volatility,
+  ]);
   const requiredPhases =
     requiredBase != null && Number.isFinite(requiredBase)
       ? resolvePhases(buildPhaseShape(byDateProfile), requiredBase)
