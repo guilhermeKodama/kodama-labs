@@ -15,6 +15,15 @@ import { resolveDepletion } from './target';
  * module is for the distribution (bands) and the chance of success.
  */
 
+/**
+ * Default Monte-Carlo trial count for the displayed bands and the depletion
+ * solve. Shared so the server, the page and the plan dialog all run identical
+ * (seeded) simulations and therefore agree by construction.
+ */
+export const MC_TRIALS = 1000;
+/** Default seed — reproducible and identical across server, page and dialog. */
+export const MC_SEED = 987654321;
+
 /** Tiny deterministic uint32-seeded PRNG → [0, 1). */
 export function mulberry32(seed: number): () => number {
   let s = seed >>> 0;
@@ -121,7 +130,12 @@ export function runMonteCarlo(a: FireAssumptions, opts: MonteCarloOptions): Mont
       horizonMonthIndex
     ).retirementMonthIndex;
   }
-  const retirementYear = Math.floor(retirementMonthIndex / MONTHS_PER_YEAR);
+  // Fractional retirement point in years. The boundary year is split: a fraction
+  // accumulates, the rest withdraws — so a sub-year retirementMonthIndex moves the
+  // median's depletion smoothly (a whole-year step is too coarse to land the p50
+  // at the horizon). An integer-year retirement reduces to the old hard switch.
+  const retirementYearFrac = retirementMonthIndex / MONTHS_PER_YEAR;
+  const retirementYear = Math.floor(retirementYearFrac);
 
   const years = Math.ceil(opts.lifeExpectancyAge - opts.currentAge);
   const annualWithdrawal = a.targetMonthlyIncome * MONTHS_PER_YEAR;
@@ -151,10 +165,16 @@ export function runMonteCarlo(a: FireAssumptions, opts: MonteCarloOptions): Mont
     let depletedBeforeEnd = false;
     for (let y = 0; y < years; y++) {
       const g = Math.max(-0.99, mean + sd * nextNormal(rng));
-      if (y < retirementYear) {
+      // 1 ⇒ full accumulation year, 0 ⇒ full withdrawal year, in between ⇒ the
+      // retirement boundary year (accumulate part, withdraw the rest).
+      const accFraction = Math.min(1, Math.max(0, retirementYearFrac - y));
+      if (accFraction >= 1) {
         nw = nw * (1 + g) + annualContribution[y];
       } else {
-        nw = Math.max(0, nw * (1 + g) - annualWithdrawal);
+        nw = Math.max(
+          0,
+          nw * (1 + g) + accFraction * annualContribution[y] - (1 - accFraction) * annualWithdrawal
+        );
         if (nw === 0) {
           solvent = false;
           if (y < years - 1) depletedBeforeEnd = true;

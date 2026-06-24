@@ -1,6 +1,6 @@
 import type { DbClient } from "@capital/server/lib/prisma";
 import { getUserToday } from "@capital/server/lib/date-utils";
-import type { ContributionPhase, PhaseProfile, WithdrawalStrategy } from "@/lib/fire";
+import type { ContributionPhase, PhaseProfile, PlanningMode, WithdrawalStrategy } from "@/lib/fire";
 import {
   buildProjection,
   computeCoastFire,
@@ -9,15 +9,17 @@ import {
   computeScenarios,
   computeTiers,
   buildPhaseShape,
-  depletionFireNumber,
-  monthsToFirePhased,
   phasesToShape,
   resolvePhases,
+  resolveRetirementMonth,
   solveBaseContributionForDate,
+  solveDepletionPlan,
   projectFireDate,
   monthsUntilYear,
   toMonthlyRate,
   toRealReturn,
+  MC_SEED,
+  MC_TRIALS,
 } from "@/lib/fire";
 import {
   buildAssumptions,
@@ -121,32 +123,53 @@ export async function getFireSummary(
   let effectivePhases: ContributionPhase[] = goalPhases;
   let requiredContribution: FireSummaryResponse["requiredContribution"] = null;
 
-  if (goal.planningMode === "by_date" && goal.targetYear) {
-    const targetMonths = monthsUntilYear(goal.targetYear, now);
-    if (targetMonths > 0) {
-      const shape =
-        goal.phaseProfile === "custom"
-          ? phasesToShape(goalPhases)
-          : buildPhaseShape(goal.phaseProfile as PhaseProfile);
-      // Hit the strategy's target by the chosen date: living off the yield needs the
-      // full perpetuity number; spending down needs only the annuity that lasts to
-      // the horizon (so the prescribed contribution is much smaller).
-      const solveTarget =
-        canUseDepletion && horizonMonthIndex != null
-          ? depletionFireNumber(
-              {
-                targetMonthlyIncome: goal.targetMonthlyIncome,
-                realAnnualReturn,
-                safeWithdrawalRate: goal.safeWithdrawalRate,
-              },
-              goal.annualVolatility,
-              Math.max(0, horizonMonthIndex - targetMonths)
-            )
-          : perpetuityFireNumber;
+  const targetMonths =
+    goal.planningMode === "by_date" && goal.targetYear ? monthsUntilYear(goal.targetYear, now) : null;
+  const shape =
+    goal.phaseProfile === "custom"
+      ? phasesToShape(goalPhases)
+      : buildPhaseShape(goal.phaseProfile as PhaseProfile);
+
+  // Spend-down ("depletion") is sized by inverting the seeded Monte Carlo so the
+  // median net worth lands at ~0 at life expectancy — there is no closed form. The
+  // resolved retirement month is the single source of truth the client pins into
+  // its lifecycle + Monte Carlo, so every view agrees.
+  const depletionPlan =
+    canUseDepletion && goal.currentAge != null
+      ? solveDepletionPlan({
+          currentInvested,
+          targetMonthlyIncome: goal.targetMonthlyIncome,
+          safeWithdrawalRate: goal.safeWithdrawalRate,
+          realAnnualReturn,
+          annualVolatility: goal.annualVolatility,
+          currentAge: goal.currentAge,
+          lifeExpectancyAge: goal.lifeExpectancyAge,
+          planningMode: goal.planningMode as PlanningMode,
+          phases: goalPhases,
+          shape,
+          targetMonths: targetMonths ?? undefined,
+          seed: MC_SEED,
+          trials: MC_TRIALS,
+        })
+      : null;
+
+  if (goal.planningMode === "by_date" && targetMonths != null && targetMonths > 0) {
+    if (depletionPlan) {
+      // Spend-down: the prescribed contribution comes from the same MC solve.
+      effectivePhases = depletionPlan.phases ?? goalPhases;
+      requiredContribution = {
+        baseContribution:
+          depletionPlan.baseContribution != null && Number.isFinite(depletionPlan.baseContribution)
+            ? depletionPlan.baseContribution
+            : null,
+        phases: depletionPlan.phases ?? resolvePhases(shape, 0),
+      };
+    } else {
+      // Perpetuity: the contribution needed to reach the full number by the year.
       const baseContribution = solveBaseContributionForDate({
         currentInvested,
         monthlyRealReturn,
-        fireNumber: solveTarget,
+        fireNumber: perpetuityFireNumber,
         targetMonths,
         shape,
       });
@@ -180,31 +203,31 @@ export async function getFireSummary(
     annualVolatility: goal.annualVolatility,
   });
 
-  // Strategy-aware headline number + time-to-FIRE. For by_date depletion the
-  // retirement is pinned to the chosen year, so size the annuity to that date
-  // rather than the natural crossing computeFireResult uses.
+  // Strategy-aware headline number + time-to-FIRE, plus the canonical retirement
+  // month. Depletion comes from the MC solve; perpetuity pins retirement exactly
+  // where the lifecycle does (the FIRE crossing / chosen age), so the client's
+  // chart, marker, gauge and hero all agree by construction.
   let fireNumber = result.fireNumber;
   let monthsToFire = result.monthsToFire;
-  if (
-    canUseDepletion &&
-    horizonMonthIndex != null &&
-    goal.planningMode === "by_date" &&
-    goal.targetYear
-  ) {
-    const targetMonths = monthsUntilYear(goal.targetYear, now);
-    if (targetMonths > 0) {
-      fireNumber = depletionFireNumber(
-        {
-          targetMonthlyIncome: goal.targetMonthlyIncome,
-          realAnnualReturn,
-          safeWithdrawalRate: goal.safeWithdrawalRate,
-        },
-        goal.annualVolatility,
-        Math.max(0, horizonMonthIndex - targetMonths)
-      );
-      monthsToFire = monthsToFirePhased(currentInvested, effectivePhases, monthlyRealReturn, fireNumber);
-    }
+  let retirementMonthIndex = 0;
+  if (depletionPlan) {
+    fireNumber = depletionPlan.fireNumber;
+    monthsToFire = depletionPlan.monthsToFire;
+    retirementMonthIndex = depletionPlan.retirementMonthIndex;
+  } else if (goal.currentAge != null && horizonMonthIndex != null) {
+    retirementMonthIndex = resolveRetirementMonth(
+      assumptions,
+      {
+        currentAge: goal.currentAge,
+        retirementAge: goal.retirementAge ?? undefined,
+        lifeExpectancyAge: goal.lifeExpectancyAge,
+      },
+      monthlyRealReturn,
+      fireNumber,
+      horizonMonthIndex
+    ).retirementMonthIndex;
   }
+  const retirementAge = goal.currentAge != null ? goal.currentAge + retirementMonthIndex / 12 : 0;
   const progress = fireNumber > 0 ? currentInvested / fireNumber : 0;
   const reached = currentInvested >= fireNumber;
   const sampling = Number.isFinite(monthsToFire) && monthsToFire <= 360 ? 1 : 12;
@@ -261,6 +284,8 @@ export async function getFireSummary(
       currentMonthlyPassiveIncome: result.currentMonthlyPassiveIncome,
       realAnnualReturn,
       savingsRate: result.savingsRate,
+      retirementMonthIndex,
+      retirementAge,
     },
     gap,
     requiredContribution,
