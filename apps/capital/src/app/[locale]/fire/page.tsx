@@ -32,6 +32,8 @@ import {
   runMonteCarlo,
   evaluateMilestones,
   toMonthlyRate,
+  MC_SEED,
+  MC_TRIALS,
   type MilestoneDef,
   type WithdrawalStrategy,
 } from '@/lib/fire';
@@ -51,9 +53,6 @@ import {
   type SnapshotRow,
   type SnapshotEdit,
 } from '@/components/fire';
-
-const MC_TRIALS = 1000;
-const MC_SEED = 987654321;
 
 function MetricCard({
   label,
@@ -162,10 +161,14 @@ export default function FirePage() {
       },
       currentInvested
     );
+    // The server resolves the canonical retirement month (depletion: the MC solve;
+    // perpetuity: the FIRE crossing). Pinning it here makes the chart curve,
+    // retirement marker, milestones, success gauge and hero all agree.
     const opts = {
       currentAge: goal.currentAge,
       lifeExpectancyAge: goal.lifeExpectancyAge,
       retirementAge: goal.retirementAge ?? undefined,
+      retirementMonthIndex: summary.result?.retirementMonthIndex,
       annualVolatility: goal.annualVolatility,
     };
     try {
@@ -175,7 +178,9 @@ export default function FirePage() {
         annualVolatility: goal.annualVolatility,
         trials: MC_TRIALS,
         seed: MC_SEED,
-        successCriterion: strategy === 'depletion' ? 'lasted_to_horizon' : 'never_depleted',
+        // Spend-down: success = "leaves a surplus" (P(net worth > 0 at the end)),
+        // which is ~50% by design — the median spends down to ~0 at life expectancy.
+        successCriterion: strategy === 'depletion' ? 'positive_at_end' : 'never_depleted',
       });
       const annualExpenses = goal.targetMonthlyIncome * 12;
       // The strategy-aware target (the perpetuity number, or the smaller spend-down
