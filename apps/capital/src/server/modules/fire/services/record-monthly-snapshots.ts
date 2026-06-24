@@ -31,10 +31,7 @@ export async function recordMonthlySnapshots(
       const holdings = inputs.holdings.filter(
         (h) => goal.includeBusinessInvestments || h.entityType === "personal"
       );
-      const accounts = inputs.accounts.filter(
-        (a) => goal.includeBusinessInvestments || a.entityType === "personal"
-      );
-      const currentInvested = computeCurrentInvested(holdings, accounts, inputs.currencyRates);
+      const currentInvested = computeCurrentInvested(holdings, inputs.currencyRates);
       const currentMonthlyExpenses = computeCurrentMonthlyExpenses(inputs.expenses, {
         months: TRAILING_MONTHS,
       });

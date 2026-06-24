@@ -21,11 +21,6 @@ export interface FireHoldingInput {
   currency?: string;
 }
 
-export interface FireAccountInput {
-  cashBalance: number;
-  currency?: string;
-}
-
 /** A spent transaction (already an expense). `amount` is in `currency`; `exchangeRate` converts to base. */
 export interface FireSpendInput {
   amount: number;
@@ -53,24 +48,20 @@ const rateFor = (rates: Record<string, number>, currency?: string): number =>
   currency ? rates[currency] ?? 1 : 1;
 
 /**
- * The FIRE base: portfolio market value + investment-account cash, in base
- * currency. `currencyRates` maps a currency code to base-currency-per-unit
- * (missing => 1, i.e. already base).
+ * The FIRE base: total portfolio market value (current quantity × price, cost
+ * basis as fallback) in base currency. Only invested positions count —
+ * uninvested account cash (including negative/margin balances) is deliberately
+ * excluded, so this equals the Investimentos "Valor da Carteira". `currencyRates`
+ * maps a currency code to base-currency-per-unit (missing => 1, i.e. already base).
  */
 export function computeCurrentInvested(
   holdings: FireHoldingInput[],
-  accounts: FireAccountInput[],
   currencyRates: Record<string, number> = {}
 ): number {
-  const holdingsTotal = holdings.reduce(
+  return holdings.reduce(
     (sum, h) => sum + holdingValue(h) * rateFor(currencyRates, h.currency),
     0
   );
-  const cashTotal = accounts.reduce(
-    (sum, a) => sum + a.cashBalance * rateFor(currencyRates, a.currency),
-    0
-  );
-  return holdingsTotal + cashTotal;
 }
 
 interface TrailingOptions {
