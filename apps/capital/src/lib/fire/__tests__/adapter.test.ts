@@ -20,21 +20,20 @@ describe('holdingValue', () => {
 });
 
 describe('computeCurrentInvested', () => {
-  it('sums market value + cash, converting by currency rate', () => {
+  it('sums position market value, converting by currency rate (account cash is excluded)', () => {
     const invested = computeCurrentInvested(
       [
         { currentQuantity: 100, currentPrice: 10, totalInvested: 800, currency: 'BRL' },
         { currentQuantity: 5, currentPrice: 20, totalInvested: 90, currency: 'USD' }, // 100 * 5.5
       ],
-      [{ cashBalance: 1_000, currency: 'BRL' }],
       { USD: 5.5 }
     );
-    expect(invested).toBe(1_000 /*BRL holding*/ + 550 /*USD holding*/ + 1_000 /*cash*/);
+    expect(invested).toBe(1_000 /*BRL holding*/ + 550 /*USD holding*/);
   });
 
   it('defaults missing currency rates to 1', () => {
     expect(
-      computeCurrentInvested([{ currentQuantity: 1, currentPrice: 100, totalInvested: 50 }], [])
+      computeCurrentInvested([{ currentQuantity: 1, currentPrice: 100, totalInvested: 50 }])
     ).toBe(100);
   });
 });
