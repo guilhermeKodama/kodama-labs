@@ -93,6 +93,10 @@ export const FireResultSchema = z.object({
   currentMonthlyPassiveIncome: z.number(),
   realAnnualReturn: z.number(),
   savingsRate: z.number().nullable(),
+  // Canonical retirement timing — the single source of truth the client pins into
+  // the lifecycle + Monte Carlo, so the chart, marker, gauge and hero all agree.
+  retirementMonthIndex: z.number(),
+  retirementAge: z.number(),
 });
 
 export const FireGapSchema = z.object({
