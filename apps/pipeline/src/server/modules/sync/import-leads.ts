@@ -38,6 +38,9 @@ const STATUS_ALIASES: Record<string, LeadStatus> = {
   convertido: "CUSTOMER",
   cold: "COLD",
   frio: "COLD",
+  inativo: "COLD", // parou de responder/usar — re-engajável
+  falha_envio: "COLD", // não conseguimos contatar (envio falhou) — re-engajável
+  "falha envio": "COLD",
   lost: "LOST",
   perdido: "LOST",
   descartado: "LOST",
