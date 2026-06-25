@@ -23,13 +23,15 @@ function googleConfigured(): boolean {
   );
 }
 
-// The shared Google account hosts campaigns for several ideas; campaign names
-// must start with the idea's prefix (longest match wins). No match → ideaId
-// null: the spend is still ingested and surfaces as "unassigned" in the UI.
+// One idea owns a dedicated Google account → every campaign is that idea's, no
+// naming convention needed. Only when several ideas SHARE one account do we
+// disambiguate by campaign-name prefix (longest match wins); no match there →
+// ideaId null, still ingested and surfaced as "unassigned" in the UI.
 function resolveIdea(
   campaignName: string,
   ideas: Array<{ id: string; googleCampaignPrefix: string | null; slug: string }>,
 ): string | null {
+  if (ideas.length === 1) return ideas[0]!.id;
   const name = campaignName.toLowerCase();
   let best: { id: string; length: number } | null = null;
   for (const idea of ideas) {
