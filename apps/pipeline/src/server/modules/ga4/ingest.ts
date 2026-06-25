@@ -1,16 +1,16 @@
 import { env } from "@/env";
 import { prisma } from "@pipeline/server/lib/prisma";
-import { dateKey, dayInTz } from "@pipeline/server/lib/dates";
+import { dateKey, dayInTz, ingestSince } from "@pipeline/server/lib/dates";
 import { fetchDailySessions } from "@pipeline/server/lib/ga4";
 import type { JobResult } from "@pipeline/server/lib/job-runner";
 import { mapChannel, type ChannelValue } from "@/lib/funnel/map-channel";
 import { pollableIdeaFilter } from "../ad-spend/ingest-meta";
 
-// Window D-4..D-1: GA4 reprocesses data for 24-48h, so each run re-pulls a
-// few closed days and overwrites. "Today" is intentionally excluded — GA4
-// intraday is unreliable; same-day kill signals come from the ads APIs.
-const DEFAULT_WINDOW_DAYS = 4;
-
+// "Today" (D-0) is intentionally excluded — GA4 intraday is unreliable; same-day
+// kill signals come from the ads APIs. GA4 reprocesses for ~24-48h, so the 4-day
+// incremental overlap re-pulls and overwrites the recently-closed days. First
+// sight of a property → backfill from launch (or a 90-day lookback). startOverride
+// (?start=) forces an explicit backfill start.
 export async function ingestGa4(startOverride?: string): Promise<JobResult> {
   if (!env.GA4_SA_KEY_BASE64) {
     return {
@@ -22,7 +22,7 @@ export async function ingestGa4(startOverride?: string): Promise<JobResult> {
 
   const ideas = await prisma.idea.findMany({
     where: { ga4PropertyId: { not: null }, ...pollableIdeaFilter() },
-    select: { id: true, slug: true, ga4PropertyId: true, timezone: true },
+    select: { id: true, slug: true, ga4PropertyId: true, timezone: true, adsLaunchedAt: true },
   });
 
   let recordsIn = 0;
@@ -31,7 +31,23 @@ export async function ingestGa4(startOverride?: string): Promise<JobResult> {
 
   for (const idea of ideas) {
     try {
-      const since = startOverride ?? dayInTz(idea.timezone, -DEFAULT_WINDOW_DAYS);
+      // First sight → backfill from launch; afterwards → trailing overlap only.
+      const latest = startOverride
+        ? null
+        : (
+            await prisma.ga4SessionsDaily.aggregate({
+              where: { ideaId: idea.id },
+              _max: { date: true },
+            })
+          )._max.date;
+      const since =
+        startOverride ??
+        ingestSince(latest, {
+          adsLaunchedAt: idea.adsLaunchedAt,
+          timezone: idea.timezone,
+          overlapDays: 4,
+          backfillLookbackDays: 90,
+        });
       const until = dayInTz(idea.timezone, -1);
       if (since > until) continue;
 

@@ -84,6 +84,10 @@
       "meta": "Meta",
       "google": "Google"
     },
+    "period": {
+      "days": "{count} days",
+      "custom": "Custom"
+    },
     "warnings": {
       "ga4Undercount": "GA4 está capturando ~{pct}% dos cliques pagos (adblock/consent) — bounce e sessões subestimados.",
       "manualOverlap": "{days} dia(s) com entrada manual E dados de API no mesmo canal — risco de dupla contagem; apague as linhas manuais em Operações.",

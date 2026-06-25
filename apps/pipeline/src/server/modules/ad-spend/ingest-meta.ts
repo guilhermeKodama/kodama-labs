@@ -1,6 +1,6 @@
 import { env } from "@/env";
 import { prisma } from "@pipeline/server/lib/prisma";
-import { dateKey, dayInTz } from "@pipeline/server/lib/dates";
+import { dateKey, dayInTz, ingestSince } from "@pipeline/server/lib/dates";
 import {
   fetchMetaAccountInfo,
   fetchMetaDailyInsights,
@@ -20,10 +20,12 @@ export function pollableIdeaFilter() {
   };
 }
 
-// Window: today + trailing N days, re-pulled every run — both platforms
-// restate history (attribution windows, invalid-click cleanup), so upserts
-// overwrite rather than append.
-export async function ingestMetaAds(windowDays = 7): Promise<JobResult> {
+// Window: backfill from launch on first sight of an idea, then stay incremental
+// with a 7-day trailing overlap — both platforms restate history (attribution
+// windows, invalid-click cleanup), so upserts overwrite rather than append.
+// forceDays (from ?days=N) overrides both with a fixed window for a manual
+// re-backfill.
+export async function ingestMetaAds(forceDays?: number): Promise<JobResult> {
   if (!env.META_SYSTEM_USER_TOKEN) {
     return {
       recordsIn: 0,
@@ -34,7 +36,13 @@ export async function ingestMetaAds(windowDays = 7): Promise<JobResult> {
 
   const ideas = await prisma.idea.findMany({
     where: { metaAdAccountId: { not: null }, ...pollableIdeaFilter() },
-    select: { id: true, slug: true, metaAdAccountId: true, timezone: true },
+    select: {
+      id: true,
+      slug: true,
+      metaAdAccountId: true,
+      timezone: true,
+      adsLaunchedAt: true,
+    },
   });
 
   let recordsIn = 0;
@@ -57,8 +65,25 @@ export async function ingestMetaAds(windowDays = 7): Promise<JobResult> {
         );
       }
 
-      const since = dayInTz(idea.timezone, -windowDays);
+      // First sight → backfill from launch; afterwards → trailing overlap only.
+      const latest =
+        forceDays != null
+          ? null
+          : (
+              await prisma.adSpendDaily.aggregate({
+                where: { ideaId: idea.id, channel: "META" },
+                _max: { date: true },
+              })
+            )._max.date;
+      const since = ingestSince(latest, {
+        adsLaunchedAt: idea.adsLaunchedAt,
+        timezone: idea.timezone,
+        overlapDays: 7,
+        backfillLookbackDays: 90,
+        forceDays,
+      });
       const until = dayInTz(idea.timezone, 0);
+      if (since > until) continue;
       window[idea.slug] = { since, until };
 
       const rows = await fetchMetaDailyInsights(accountId, since, until);

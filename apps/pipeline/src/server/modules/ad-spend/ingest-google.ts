@@ -1,6 +1,6 @@
 import { env } from "@/env";
 import { prisma } from "@pipeline/server/lib/prisma";
-import { dateKey, dayInTz } from "@pipeline/server/lib/dates";
+import { dateKey, dayInTz, ingestSince } from "@pipeline/server/lib/dates";
 import type { JobResult } from "@pipeline/server/lib/job-runner";
 import { pollableIdeaFilter } from "./ingest-meta";
 
@@ -43,7 +43,9 @@ function resolveIdea(
   return best?.id ?? null;
 }
 
-export async function ingestGoogleAds(windowDays = 7): Promise<JobResult> {
+// Window: backfill from launch on first sight, then incremental with a 7-day
+// trailing overlap. forceDays (from ?days=N) forces a fixed window.
+export async function ingestGoogleAds(forceDays?: number): Promise<JobResult> {
   if (!googleConfigured()) {
     return {
       recordsIn: 0,
@@ -60,6 +62,7 @@ export async function ingestGoogleAds(windowDays = 7): Promise<JobResult> {
       googleCustomerId: true,
       googleCampaignPrefix: true,
       timezone: true,
+      adsLaunchedAt: true,
     },
   });
   if (ideas.length === 0) {
@@ -102,8 +105,25 @@ export async function ingestGoogleAds(windowDays = 7): Promise<JobResult> {
         throw new Error(`customer ${customerId} timezone is ${tz}, expected ${timezone}`);
       }
 
-      const since = dayInTz(timezone, -windowDays);
+      // First sight of this account → backfill from launch; then overlap only.
+      const latest =
+        forceDays != null
+          ? null
+          : (
+              await prisma.adSpendDaily.aggregate({
+                where: { accountId: customerId, channel: "GOOGLE" },
+                _max: { date: true },
+              })
+            )._max.date;
+      const since = ingestSince(latest, {
+        adsLaunchedAt: customerIdeas[0]!.adsLaunchedAt,
+        timezone,
+        overlapDays: 7,
+        backfillLookbackDays: 90,
+        forceDays,
+      });
       const until = dayInTz(timezone, 0);
+      if (since > until) continue;
 
       const raw = (await customer.query(`
         SELECT segments.date, campaign.id, campaign.name,
