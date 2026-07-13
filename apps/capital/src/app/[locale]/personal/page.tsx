@@ -254,13 +254,9 @@ export default function PersonalPage() {
   }
 
   const handleCreateTransaction = async (data: CreateTransactionFormData) => {
-    const created = await addTransaction(data);
-    if (created) {
-      setEditingTransaction(created);
-      toast.success(t('transactions.toast.created'));
-    } else {
-      toast.error(t('transactions.toast.createError'));
-    }
+    await addTransaction(data);
+    setIsDialogOpen(false);
+    toast.success(t('transactions.toast.created'));
   };
 
   const handleUpdateTransaction = async (data: CreateTransactionFormData) => {
