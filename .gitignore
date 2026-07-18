@@ -78,3 +78,6 @@ yarn.lock
 
 # Local blob storage (dev fallback when BLOB_READ_WRITE_TOKEN is not set)
 .local-blob
+
+# Agentic Coding
+.opencode/
