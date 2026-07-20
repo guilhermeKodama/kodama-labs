@@ -16,7 +16,6 @@ import {
 } from '@/components/ui/card';
 import { Link } from '@/i18n/navigation';
 import { client } from '@/lib/api-client';
-import { useUser } from '@/lib/user-context';
 
 function LoginForm() {
   const t = useTranslations();
@@ -159,7 +158,3 @@ export default function LoginPage() {
     </div>
   );
 }
-SELECT table_name
-  FROM information_schema.tables
-  WHERE table_schema = 'public'
-  ORDER BY table_name;
