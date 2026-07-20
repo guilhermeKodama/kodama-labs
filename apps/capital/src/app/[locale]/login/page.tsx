@@ -42,7 +42,8 @@ function LoginForm() {
       });
 
       if (res.ok) {
-        await refetchUser();
+        // User data is already returned from login - no need to refetch
+        // The UserProvider will fetch the current session on mount via useEffect
         router.push(redirectTo);
       } else {
         const data = await res.json();

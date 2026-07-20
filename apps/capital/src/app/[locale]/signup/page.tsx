@@ -40,7 +40,8 @@ export default function SignupPage() {
       });
 
       if (res.ok) {
-        await refetchUser();
+        // Session is already created during signup - redirect directly
+        // The UserProvider will fetch the current session on mount via useEffect
         router.push('/dashboard');
       } else {
         const data = await res.json();
