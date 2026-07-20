@@ -22,7 +22,6 @@ function LoginForm() {
   const t = useTranslations();
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { refetchUser } = useUser();
   
   const redirectTo = searchParams.get('redirect') || '/dashboard';
   
@@ -160,3 +159,7 @@ export default function LoginPage() {
     </div>
   );
 }
+SELECT table_name
+  FROM information_schema.tables
+  WHERE table_schema = 'public'
+  ORDER BY table_name;
