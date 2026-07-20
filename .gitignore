@@ -10,6 +10,9 @@ build
 out
 .swc
 
+# Next.js generated files
+next-env.d.ts
+
 # Turbo
 .turbo
 
