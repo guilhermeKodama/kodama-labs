@@ -1,0 +1,61 @@
+# MilhasGrupo — pipeline dashboard config
+# Machine-readable mirror of validation.md §5/§7. Prose stays in validation.md;
+# this file is what the dashboard syncs (no idea.yaml = idea not tracked).
+# Ratios are FRACTIONS: 0.015 = 1.5%. Money values are BRL.
+schema_version: 1
+name: MilhasGrupo
+status: hypothesis # hypothesis | validating | validated | killed | paused
+landing_url: null # set when the LP deploys; required to promote to validating
+timezone: America/Sao_Paulo
+
+budget:
+  total: 3000 # upper bound of the R$ 2-3K plan
+  weeks: 3
+
+economics:
+  price_monthly: null # free during beta
+  projected_ltv: 1500
+  max_cac: 400 # blended kill ceiling (KILL: CAC > R$ 400 both channels)
+  cac_ceiling_per_lead: 200 # validation CAC ceiling per qualified lead (CPL kill line)
+  channel_kill_cac: 500 # kill a single channel above this
+
+decision_matrix: # 2D: CAC (R$) × Lead→Active — §5 decision matrix
+  - { cac_max: 100, ar_min: 0.70, decision: double_down }
+  - { cac_max: 200, ar_min: 0.50, decision: optimize }
+  - { cac_max: 300, ar_min: 0.30, decision: hold_fix }
+  - { decision: kill }
+
+funnel_targets: # healthy / death pairs from §5 funnel targets
+  ctr: { healthy: 0.015, death: 0.005 }
+  ctr_google: { healthy: 0.03, death: 0.01 } # Google search CTR runs higher than Meta
+  bounce: { healthy: 0.60, death: 0.80 }
+  session_to_lead: { healthy: 0.05, death: 0.01 }
+  ar: { healthy: 0.60, death: 0.30 }
+  pcr: { healthy: 0.30, death: 0.10 } # "Active → Issuance"
+
+gates: # §7 Go / No-Go (week 4) — metric items auto-evaluate; manual items are a checklist
+  go:
+    - { metric: cac, op: lt, value: 300 }
+    - { metric: session_to_lead, op: gt, value: 0.05 }
+    - { label: "15+ active beta users from 20 spots", manual: true }
+    - { label: "5+ confirmed issuances (alert → booking)", manual: true }
+  pivot:
+    - { label: "High traffic, low conversion → message wrong", manual: true }
+    - { label: "High conversion, low engagement → product wrong", manual: true }
+    - { label: "High engagement, no payment → pricing wrong", manual: true }
+  kill:
+    - { metric: cac, op: gt, value: 400 }
+    - { metric: ar, op: lt, value: 0.30 }
+    - { metric: session_to_lead, op: lt, value: 0.01, label: "after 2 creative iterations" }
+    - { label: "< 3 issuances in 8 weeks", manual: true }
+
+ads:
+  meta_ad_account_id: act_1673984080394594 # conta "MilhasGrupo Ads" (BRL, America/Sao_Paulo)
+  google_customer_id: "1562959715" # 10 dígitos sem traços — conta dedicada do milhasgrupo sob o MCC Kodama Labs
+  google_campaign_prefix: milhasgrupo # só desambigua quando várias ideias dividem 1 conta; conta dedicada atribui tudo à ideia
+
+tracking:
+  ga4_property_id: "542947106" # numeric property id (Admin → Property Settings), NOT G-XXXX
+
+ads_launched_at: "2026-05-29" # YYYY-MM-DD; starts the 72h learning clock + day-28 countdown
+go_no_go_at: null # defaults to launch + 28d in the dashboard when null

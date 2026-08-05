@@ -7,7 +7,7 @@
     "dev": "turbo dev --filter=!@infrastructure/postgres",
     "dev:db": "turbo dev --filter=@infrastructure/postgres",
     "db:up": "pnpm --filter @infrastructure/postgres start",
-    "db:migrate": "pnpm --filter @wallex/capital exec prisma migrate deploy && pnpm --filter @wallex/sentinel exec prisma migrate deploy",
+    "db:migrate": "pnpm --filter @wallex/capital exec prisma migrate deploy && pnpm --filter @wallex/sentinel exec prisma migrate deploy && pnpm --filter @wallex/pipeline exec prisma migrate deploy",
     "setup:local": "pnpm db:up && pnpm db:migrate",
     "dev:docs": "turbo dev --filter=@wallex/docs",
     "lint": "turbo lint",
@@ -18,12 +18,14 @@
     "db:dump": "bash infrastructure/postgres/db-backup.sh dump",
     "db:restore": "bash infrastructure/postgres/db-backup.sh restore",
     "db:backups": "bash infrastructure/postgres/db-backup.sh list",
-    "db:generate": "pnpm --filter @wallex/capital exec prisma generate && pnpm --filter @wallex/sentinel exec prisma generate",
+    "db:generate": "pnpm --filter @wallex/capital exec prisma generate && pnpm --filter @wallex/sentinel exec prisma generate && pnpm --filter @wallex/pipeline exec prisma generate",
     "test": "turbo test --filter=@wallex/capital",
-    "new:idea": "node scripts/new-idea.mjs"
+    "new:idea": "node scripts/new-idea.mjs",
+    "sync:ideas": "node scripts/sync-ideas.mjs"
   },
   "devDependencies": {
     "husky": "^9.1.7",
+    "js-yaml": "^4.1.0",
     "prettier": "^3.2.5",
     "turbo": "^2.0.5",
     "typescript": "^5.4.5"

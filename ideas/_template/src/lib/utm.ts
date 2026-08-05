@@ -5,6 +5,8 @@ export type UtmPayload = {
   utm_content: string;
   utm_term: string;
   referrer: string;
+  gclid: string;
+  wbraid: string;
 };
 
 const STORAGE_KEY = "utm_attribution";
@@ -16,6 +18,8 @@ const EMPTY: UtmPayload = {
   utm_content: "",
   utm_term: "",
   referrer: "",
+  gclid: "",
+  wbraid: "",
 };
 
 function readFromUrl(): UtmPayload {
@@ -27,6 +31,11 @@ function readFromUrl(): UtmPayload {
     utm_content: params.get("utm_content") ?? "",
     utm_term: params.get("utm_term") ?? "",
     referrer: document.referrer,
+    // Google Ads auto-tagging: clicks may arrive with gclid/wbraid and no
+    // utm_* params at all — without these, paid Google leads would be
+    // unattributable (per-channel CAC depends on them).
+    gclid: params.get("gclid") ?? "",
+    wbraid: params.get("wbraid") ?? "",
   };
 }
 
@@ -53,6 +62,8 @@ export function captureUtms(): void {
     utm_content: stored.utm_content || fromUrl.utm_content,
     utm_term: stored.utm_term || fromUrl.utm_term,
     referrer: stored.referrer || fromUrl.referrer,
+    gclid: stored.gclid || fromUrl.gclid,
+    wbraid: stored.wbraid || fromUrl.wbraid,
   };
   try {
     sessionStorage.setItem(STORAGE_KEY, JSON.stringify(merged));

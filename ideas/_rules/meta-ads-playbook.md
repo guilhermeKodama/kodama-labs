@@ -88,9 +88,16 @@ Cria 3 conjuntos, um para cada ângulo criativo, para comparar limpo qual ângul
 ### UTMs (padrão)
 No campo **Parâmetros de URL** do anúncio (Rastreamento), sem `?` na frente:
 ```
-utm_source=meta&utm_campaign={APP}_beta&utm_content={NOME_DO_CRIATIVO}
+utm_source=meta&utm_medium=paid&utm_campaign={APP}_beta&utm_content={NOME_DO_CRIATIVO}
 ```
 A Meta **não** preenche UTM automaticamente — sempre manual, e o `utm_content` muda por criativo.
+O `utm_medium=paid` é obrigatório: é o que separa tráfego pago de orgânico no GA4 e no dashboard de pipeline.
+
+### Conta de anúncios (criação — irreversível)
+Ao criar a conta de anúncios da ideia: **fuso horário America/Sao_Paulo + moeda BRL**.
+Ambos são permanentes; conta com fuso errado desalinha os dias do funil no dashboard
+(o job de ingestão verifica e falha alto em caso de mismatch). Copie o `act_…` para o
+`idea.yaml` (`ads.meta_ad_account_id`).
 
 ---
 

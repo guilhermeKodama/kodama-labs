@@ -1,0 +1,9 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "installCommand": "cd ../.. && pnpm install --frozen-lockfile",
+  "crons": [
+    { "path": "/api/cron/ingest/meta-ads", "schedule": "0 3,9,15,21 * * *" },
+    { "path": "/api/cron/ingest/google-ads", "schedule": "10 3,9,15,21 * * *" },
+    { "path": "/api/cron/ingest/ga4", "schedule": "0 9 * * *" }
+  ]
+}

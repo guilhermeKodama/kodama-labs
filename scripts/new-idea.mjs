@@ -13,6 +13,7 @@ const PLACEHOLDER_NAME = "{{IDEA_NAME}}";
 const PLACEHOLDER_SLUG = "{{IDEA_SLUG}}";
 const FILES_WITH_PLACEHOLDERS = [
   "README.md",
+  "idea.yaml",
   "src/app/layout.tsx",
   "src/components/hero.tsx",
   "src/components/footer.tsx",
@@ -82,8 +83,10 @@ console.log(`✓ ideas/${slug}/ ready.`);
 console.log("");
 console.log("Next steps:");
 console.log("  1. Fill in ideas/" + slug + "/validation.md BEFORE writing code.");
-console.log("  2. From repo root: pnpm install   (picks up the new workspace package)");
-console.log("  3. From repo root: pnpm dev --filter=@ideas/" + slug + "   (serves on http://localhost:3100)");
+console.log("  2. Fill in ideas/" + slug + "/idea.yaml (targets, economics, kill criteria) —");
+console.log("     it syncs to the pipeline dashboard on push to main (pnpm sync:ideas to test).");
+console.log("  3. From repo root: pnpm install   (picks up the new workspace package)");
+console.log("  4. From repo root: pnpm dev --filter=@ideas/" + slug + "   (serves on http://localhost:3100)");
 console.log("     (or: cd ideas/" + slug + " && pnpm dev)");
 console.log("");
 console.log("Remember the 5-day clock starts when you start coding.");

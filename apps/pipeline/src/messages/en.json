@@ -1,0 +1,257 @@
+{
+  "app": {
+    "name": "Pipeline",
+    "tagline": "Métricas de validação das ideias",
+    "metaTitle": "Pipeline — Métricas de validação das ideias",
+    "metaDescription": "Funil de aquisição paga das ideias em validação: spend, sessões, leads, CAC e decisão go/kill."
+  },
+  "common": {
+    "appName": "Pipeline",
+    "loading": "Carregando...",
+    "error": "Ocorreu um erro",
+    "noData": "Nenhum dado disponível",
+    "search": "Buscar...",
+    "filter": "Filtrar",
+    "refresh": "Atualizar",
+    "clear": "Limpar",
+    "back": "Voltar",
+    "save": "Salvar",
+    "cancel": "Cancelar",
+    "version": "v0.1.0",
+    "languageSwitcher": {
+      "label": "Idioma",
+      "switchTo": "Alterar idioma",
+      "pt-BR": "Português",
+      "en": "English"
+    }
+  },
+  "nav": {
+    "portfolio": "Portfólio",
+    "leads": "Leads",
+    "ops": "Operações",
+    "openMenu": "Abrir menu",
+    "closeMenu": "Fechar menu",
+    "collapse": "Recolher menu",
+    "expand": "Expandir menu",
+    "roadmap": "Roadmap"
+  },
+  "portfolio": {
+    "title": "Portfólio",
+    "subtitle": "Saúde do funil e decisão go/kill de cada ideia em validação.",
+    "stats": {
+      "activeIdeas": "Ideias ativas",
+      "totalSpend": "Spend total",
+      "totalLeads": "Leads",
+      "totalCustomers": "Clientes"
+    },
+    "unassignedSpend": "Spend não atribuído a nenhuma ideia: {total} ({campaigns}). Ajuste o prefixo das campanhas ou o idea.yaml.",
+    "parkedLeads": "{count} lead(s) estacionados no inbox com erro.",
+    "seeOps": "Ver em Operações",
+    "empty": "Nenhuma ideia sincada ainda. Crie o idea.yaml da ideia e rode pnpm sync:ideas.",
+    "columns": {
+      "idea": "Ideia",
+      "status": "Status",
+      "spend": "Spend",
+      "leads": "Leads",
+      "customers": "Clientes",
+      "cac": "CAC / teto",
+      "health": "Saúde",
+      "verdict": "Veredito"
+    }
+  },
+  "idea": {
+    "backToPortfolio": "Portfólio",
+    "status": {
+      "HYPOTHESIS": "Hipótese",
+      "VALIDATING": "Validando",
+      "VALIDATED": "Validada",
+      "KILLED": "Encerrada",
+      "PAUSED": "Pausada",
+      "ARCHIVED": "Arquivada"
+    },
+    "verdict": {
+      "DOUBLE_DOWN": "Dobrar aposta",
+      "SCALE": "Escalar",
+      "OPTIMIZE": "Otimizar",
+      "HOLD_FIX": "Segurar e corrigir",
+      "KILL": "Kill",
+      "COLLECTING": "Coletando dados"
+    },
+    "pacing": "{spent} de {budget} gastos · dia {day} de {totalDays}",
+    "spentOnly": "{spent} gastos até agora",
+    "channels": {
+      "all": "Todos",
+      "meta": "Meta",
+      "google": "Google"
+    },
+    "period": {
+      "days": "{count} days",
+      "custom": "Custom"
+    },
+    "warnings": {
+      "ga4Undercount": "GA4 está capturando ~{pct}% dos cliques pagos (adblock/consent) — bounce e sessões subestimados.",
+      "manualOverlap": "{days} dia(s) com entrada manual E dados de API no mesmo canal — risco de dupla contagem; apague as linhas manuais em Operações.",
+      "channelKill": "CAC do canal {channel} passou da linha de kill por canal ({ceiling}).",
+      "staleAds": "Dados de ads com {hours}h de atraso — verifique os jobs em Operações.",
+      "staleGa4": "Dados do GA4 com {hours}h de atraso — verifique os jobs em Operações."
+    },
+    "charts": {
+      "spendCplCac": "Spend / CPL / CAC acumulado",
+      "ctrBounce": "CTR e Bounce por dia",
+      "spend": "Spend",
+      "cacRunning": "CAC acumulado",
+      "cacCeiling": "teto CAC",
+      "bounce": "Bounce",
+      "noData": "Sem dados no período — lance as campanhas ou registre spend manual em Operações."
+    },
+    "gates": {
+      "title": "Critérios de decisão (do idea.yaml — escritos antes de gastar R$ 1)",
+      "go": "GO",
+      "pivot": "PIVOT",
+      "kill": "KILL",
+      "current": "atual"
+    },
+    "gateMetrics": {
+      "cac": "CAC",
+      "cpl": "CPL",
+      "ctr": "CTR",
+      "bounce": "Bounce",
+      "session_to_lead": "Sessão → Lead",
+      "ar": "Lead → Ativo",
+      "pcr": "Ativo → Cliente"
+    },
+    "pacingNoDay": "{spent} de {budget} gastos · campanhas ainda não lançadas"
+  },
+  "funnel": {
+    "stages": {
+      "cost": "Custo",
+      "impressions": "Impressões",
+      "clicks": "Cliques",
+      "sessions": "Sessões",
+      "leads": "Leads",
+      "active": "Ativos",
+      "customers": "Clientes"
+    },
+    "metrics": {
+      "CPM": "CPM",
+      "CPC": "CPC",
+      "CTR": "CTR",
+      "BOUNCE_RATE": "Bounce",
+      "SESSION_TO_LEAD": "Conv. LP",
+      "CPL": "CPL",
+      "AR": "AR",
+      "PCR": "PCR",
+      "CAC": "CAC"
+    },
+    "ceiling": "teto",
+    "thresholdLine": "Meta da ideia: {healthy} · Linha de morte: {death}",
+    "sampleLine": "Amostra: {n} de {required} {basis} necessários para significância",
+    "sampleBasis": {
+      "spendCents": "centavos",
+      "impressions": "impressões",
+      "clicks": "cliques",
+      "sessions": "sessões",
+      "engagedSessions": "sessões engajadas",
+      "leads": "leads",
+      "activated": "ativos",
+      "customers": "clientes"
+    },
+    "cacHint": "clique para ver o cálculo e o diagnóstico",
+    "aria": "Pipeline do funil: custo, impressões, cliques, sessões, leads, ativos e clientes conectados por taxas de conversão"
+  },
+  "diagnosis": {
+    "cpm_high": "CPM alto: público caro ou leilão saturado — revise segmentação e formato do anúncio.",
+    "ctr_low": "Anúncio não está atraindo cliques: público errado, keyword errada ou criativo fraco.",
+    "bounce_high": "Rejeição alta na LP: a promessa do anúncio não bate com a página (desencontro anúncio → LP).",
+    "session_to_lead_low": "Conversão da LP baixa: problema em algum ponto antes do lead — LP, fonte de tráfego, formulário ou tracking.",
+    "cpl_high": "CPL alto: problema em algum ponto anterior do pipeline — LP, fonte, formulário ou tracking.",
+    "ar_low": "Taxa de ativação baixa: problema de onboarding/produto, ou lead fora do ICP.",
+    "pcr_low": "Conversão paga baixa: não vê valor, dor não é crítica ou preço errado.",
+    "pcr_mid": "Funciona, mas precisa otimizar: oferta, funil ou preço (faixa 10–30%).",
+    "cac_high": "CAC acima da zona saudável — otimize landing, criativo e segmentação antes de escalar.",
+    "cac_over_kill": "CAC passou da linha de kill — pause ou mate o canal/ideia conforme os critérios.",
+    "cac_zero_customers_over_kill": "R$ {spend} gastos e 0 clientes — o CAC efetivo já passou da linha de kill (R$ {killCac}).",
+    "learning_phase": "Fase de aprendizado do algoritmo — leia esses dados só após 72h ({hoursRemaining}h restantes).",
+    "insufficient": "Amostra insuficiente para ler este indicador — continue coletando."
+  },
+  "leads": {
+    "title": "Leads",
+    "subtitle": "{total} lead(s) — fonte da verdade do funil. Avance o status conforme o playbook.",
+    "empty": "Nenhum lead ainda. Quando a LP receber o primeiro form, ele aparece aqui.",
+    "updateFailed": "Não foi possível atualizar",
+    "statusUpdated": "Status atualizado para {status}",
+    "resubmits": "{count} reenvio(s) do formulário",
+    "showingFirst": "Mostrando os {shown} mais recentes de {total} — use os filtros para refinar.",
+    "status": {
+      "NEW": "Novo",
+      "ONBOARDING": "Onboarding",
+      "QUALIFIED": "Qualificado",
+      "ACTIVE": "Ativo",
+      "CUSTOMER": "Cliente",
+      "COLD": "Frio",
+      "LOST": "Perdido"
+    },
+    "filters": {
+      "allIdeas": "Todas as ideias",
+      "allStatuses": "Todos os status",
+      "searchPlaceholder": "Buscar e-mail, contato, nome…"
+    },
+    "columns": {
+      "lead": "Lead",
+      "idea": "Ideia",
+      "channel": "Canal",
+      "campaign": "Campanha",
+      "status": "Status",
+      "created": "Criado"
+    }
+  },
+  "ops": {
+    "title": "Operações",
+    "subtitle": "Saúde dos jobs de ingestão, inbox de leads e configuração por ideia.",
+    "jobs": {
+      "title": "Jobs de ingestão",
+      "empty": "Nenhum job rodou ainda — os crons disparam no Vercel, ou chame /api/cron/ingest/* com o CRON_SECRET."
+    },
+    "manual": {
+      "title": "Entrada manual de spend",
+      "help": "Copie os números diários dos painéis de ads enquanto as APIs não estão conectadas. Reenviar o mesmo dia edita o valor.",
+      "idea": "Ideia",
+      "channel": "Canal",
+      "date": "Dia",
+      "spend": "Spend (R$)",
+      "impressions": "Impressões",
+      "clicks": "Cliques",
+      "save": "Salvar dia",
+      "saving": "Salvando…",
+      "saved": "Spend registrado",
+      "failed": "Falha ao registrar",
+      "overlapWarning": "Salvo — mas há dados de API para esse mesmo dia/canal. Apague a linha manual para não contar em dobro."
+    },
+    "inbox": {
+      "title": "Inbox de leads estacionados",
+      "help": "Payloads que chegaram mas não viraram lead (assinatura inválida, ideia desconhecida, payload malformado). Nada se perde.",
+      "empty": "Nenhum lead estacionado."
+    },
+    "config": {
+      "title": "Configuração por ideia (fonte: o idea.yaml de cada ideia)",
+      "missing": "— não configurado",
+      "syncedAt": "Último sync"
+    },
+    "import": {
+      "title": "Import leads (CSV / spreadsheet)",
+      "help": "Bulk-load your lead history at once (e.g. a Google Sheets export). Re-runnable — importing again updates without duplicating. Download the template to see the columns.",
+      "idea": "Idea",
+      "channel": "Attribute to channel",
+      "channelAuto": "Auto (from utm_source column)",
+      "choose": "Choose CSV",
+      "importing": "Importing…",
+      "template": "Download template",
+      "hint": "Required: email. Recommended: status, created_at (accepts DD/MM/YYYY), and activated_at/converted_at when known. Extra columns become lead form data.",
+      "done": "{created} created · {updated} updated · {skipped} skipped",
+      "rowErrors": "row(s) with issues",
+      "noRows": "No rows with an email in the CSV",
+      "parseError": "Couldn't read the CSV",
+      "failed": "Import failed"
+    }
+  }
+}
