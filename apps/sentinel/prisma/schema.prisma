@@ -25,6 +25,10 @@ enum DataSource {
   TSE
   CAMARA
   SENADO
+  CAMARA_LEGISLATIVE
+  STF
+  CURATED
+  NEWS
 }
 
 enum JobStatus {
@@ -41,6 +45,8 @@ enum AlertType {
   SUSPICIOUS_NETWORK
   AI_FLAG
   POLITICAL_LINK
+  LEGAL_HISTORY
+  VOTING_INCOHERENCE
 }
 
 enum Severity {
@@ -559,6 +565,18 @@ model Politician {
   servants  PublicServant[]
   relatives PoliticianRelative[]
 
+  candidacies           Candidacy[]
+  parliamentaryExpenses ParliamentaryExpense[]
+  authoredBills         BillAuthorship[]
+  votes                 LegislativeVote[]
+  committeeRoles        CommitteeMembership[]
+  termHistory           MandateTerm[]
+  partyChanges          PartyAffiliationChange[]
+  stances               PolicyStance[]
+  legalProceedings      LegalProceeding[]
+  scorecards            PoliticianScorecard[]
+  news                  PoliticianNews[]
+
   @@index([cpf])
   @@index([party])
   @@index([state])
@@ -702,4 +720,294 @@ model JobRun {
   @@index([layer])
   @@index([startedAt])
   @@map("job_runs")
+}
+
+// ============================================
+// LAYER 2c: ELECTIONS 2026 — CANDIDACY & PARLIAMENTARY SPENDING
+// ============================================
+
+model Candidacy {
+  id           String     @id @default(cuid())
+  politicianId String
+  electionYear Int
+  position     String?
+  state        String?
+  ballotNumber String?
+  party        String?
+  coalition    String?
+  status       String // INCUMBENT | PRESUMED | OFFICIAL | WITHDRAWN | REJECTED
+  result       String? // ELEITO | NAO_ELEITO | 2_TURNO | null
+  source       DataSource
+  rawRecordId  String?
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  politician Politician @relation(fields: [politicianId], references: [id], onDelete: Cascade)
+
+  @@unique([politicianId, electionYear])
+  @@index([electionYear, status])
+  @@index([politicianId])
+  @@map("candidacies")
+}
+
+model ParliamentaryExpense {
+  id           String    @id @default(cuid())
+  politicianId String
+  house        String // CAMARA | SENADO
+  year         Int
+  month        Int
+  category     String // código estável → codes.ceapCategory
+  supplierName String
+  supplierDoc  String? // CNPJ/CPF do fornecedor — cruza com Entity.cnpj/Sanction/Contract
+  amount       Decimal
+  documentDate DateTime?
+  documentId   String? // codDocumento (chave natural)
+  documentUrl  String?
+  rawRecordId  String?
+  createdAt    DateTime  @default(now())
+
+  politician Politician @relation(fields: [politicianId], references: [id], onDelete: Cascade)
+
+  @@unique([house, documentId])
+  @@index([politicianId])
+  @@index([politicianId, year, month])
+  @@index([category])
+  @@index([supplierDoc])
+  @@map("parliamentary_expenses")
+}
+
+// ============================================
+// LAYER 2d: LEGISLATIVE ACTIVITY
+// ============================================
+
+model LegislativeProposal {
+  id          String    @id @default(cuid())
+  house       String
+  externalId  String
+  type        String
+  number      Int?
+  year        Int?
+  title       String
+  themes      String[]
+  summary     String?
+  presentedAt DateTime?
+  status      String?
+  rawRecordId String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  authorships BillAuthorship[]
+  votes       LegislativeVote[]
+
+  @@unique([house, externalId])
+  @@index([type, year])
+  @@map("legislative_proposals")
+}
+
+model BillAuthorship {
+  id           String   @id @default(cuid())
+  politicianId String
+  proposalId   String
+  role         String   @default("AUTHOR") // AUTHOR | COAUTHOR | RAPPORTEUR
+  createdAt    DateTime @default(now())
+
+  politician Politician          @relation(fields: [politicianId], references: [id], onDelete: Cascade)
+  proposal   LegislativeProposal @relation(fields: [proposalId], references: [id], onDelete: Cascade)
+
+  @@unique([politicianId, proposalId, role])
+  @@index([politicianId])
+  @@index([proposalId])
+  @@map("bill_authorships")
+}
+
+model LegislativeVote {
+  id             String    @id @default(cuid())
+  politicianId   String
+  votacaoId      String
+  proposalId     String?
+  house          String
+  vote           String // SIM | NAO | ABSTENCAO | OBSTRUCAO | AUSENTE → codes.voteDirection
+  votacaoDate    DateTime?
+  votacaoTitle   String?
+  orientationGov String? // orientação do governo (p/ gov_alignment)
+  rawRecordId    String?
+  createdAt      DateTime  @default(now())
+
+  politician Politician           @relation(fields: [politicianId], references: [id], onDelete: Cascade)
+  proposal   LegislativeProposal? @relation(fields: [proposalId], references: [id])
+
+  @@unique([politicianId, votacaoId])
+  @@index([politicianId])
+  @@index([votacaoId])
+  @@index([proposalId])
+  @@map("legislative_votes")
+}
+
+model CommitteeMembership {
+  id           String    @id @default(cuid())
+  politicianId String
+  house        String
+  committee    String
+  role         String // TITULAR | SUPLENTE | PRESIDENTE | RELATOR
+  startDate    DateTime?
+  endDate      DateTime?
+  rawRecordId  String?
+  createdAt    DateTime  @default(now())
+
+  politician Politician @relation(fields: [politicianId], references: [id], onDelete: Cascade)
+
+  @@index([politicianId])
+  @@index([committee])
+  @@map("committee_memberships")
+}
+
+model MandateTerm {
+  id           String    @id @default(cuid())
+  politicianId String
+  house        String
+  legislature  Int
+  position     String
+  state        String?
+  party        String?
+  startDate    DateTime?
+  endDate      DateTime?
+  rawRecordId  String?
+  createdAt    DateTime  @default(now())
+
+  politician Politician @relation(fields: [politicianId], references: [id], onDelete: Cascade)
+
+  @@unique([politicianId, legislature, house])
+  @@index([politicianId])
+  @@map("mandate_terms")
+}
+
+model PartyAffiliationChange {
+  id           String    @id @default(cuid())
+  politicianId String
+  fromParty    String?
+  toParty      String
+  changeDate   DateTime?
+  rawRecordId  String?
+  createdAt    DateTime  @default(now())
+
+  politician Politician @relation(fields: [politicianId], references: [id], onDelete: Cascade)
+
+  @@index([politicianId])
+  @@map("party_affiliation_changes")
+}
+
+// ============================================
+// LAYER 2e: DISCURSO × AÇÃO (curated key votes + declared stances)
+// ============================================
+
+model KeyVote {
+  id                 String   @id @default(cuid())
+  slug               String   @unique
+  theme              String // código → codes.theme
+  label              String
+  description        String
+  house              String
+  votacaoExternalId  String? // liga a LegislativeVote.votacaoId
+  proposalExternalId String?
+  favorableVote      String // qual voto (SIM/NAO) conta como "a favor da pauta"
+  createdAt          DateTime @default(now())
+
+  @@index([theme])
+  @@map("key_votes")
+}
+
+model PolicyStance {
+  id           String     @id @default(cuid())
+  politicianId String
+  theme        String // código → codes.theme
+  stance       String // FAVOR | CONTRA | NEUTRO
+  source       DataSource // CURATED | TSE | CAMARA
+  confidence   Float?
+  verifiedBy   String? // "manual" | "ai:<model>" | "tse-proposta"
+  sourceUrl    String?
+  rawRecordId  String?
+  createdAt    DateTime   @default(now())
+
+  politician Politician @relation(fields: [politicianId], references: [id], onDelete: Cascade)
+
+  @@unique([politicianId, theme, source])
+  @@index([politicianId])
+  @@map("policy_stances")
+}
+
+// ============================================
+// LAYER 3b: LEGAL HISTORY, SCORECARDS & NEWS
+// ============================================
+
+model LegalProceeding {
+  id              String     @id @default(cuid())
+  politicianId    String
+  kind            String // CRIMINAL | IMPROBIDADE | ELECTORAL | REJECTED_ACCOUNTS | INELIGIBILITY | CIVIL
+  status          String // INVESTIGATION | INDICTED | CONVICTED_1ST | CONVICTED_APPEAL | ACQUITTED | ARCHIVED | SERVING_SENTENCE
+  court           String?
+  caseNumber      String?
+  title           String
+  description     String?
+  decisionDate    DateTime?
+  isFinal         Boolean    @default(false) // trânsito em julgado
+  makesIneligible Boolean    @default(false) // Lei da Ficha Limpa
+  source          DataSource // TSE | TCU | STF | CURATED
+  confidence      Float?
+  verifiedBy      String?
+  sourceUrl       String?
+  rawRecordId     String?
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+
+  politician Politician @relation(fields: [politicianId], references: [id], onDelete: Cascade)
+
+  @@index([politicianId])
+  @@index([kind])
+  @@index([status])
+  @@index([makesIneligible])
+  @@map("legal_proceedings")
+}
+
+model PoliticianScorecard {
+  id           String   @id @default(cuid())
+  politicianId String
+  electionYear Int
+  metric       String // gov_alignment | attendance_rate | wealth_growth | funding_mix | coherence_authorship | coherence_stance | expense_total | term_count | party_switches
+  valueNum     Float?
+  valueText    String?
+  details      Json
+  computedAt   DateTime @default(now())
+
+  politician Politician @relation(fields: [politicianId], references: [id], onDelete: Cascade)
+
+  @@unique([politicianId, electionYear, metric])
+  @@index([politicianId])
+  @@index([metric])
+  @@map("politician_scorecards")
+}
+
+model PoliticianNews {
+  id              String    @id @default(cuid())
+  politicianId    String
+  title           String
+  url             String
+  source          String // veículo normalizado contra a allowlist
+  author          String?
+  publishedAt     DateTime?
+  snippet         String?
+  imageUrl        String?
+  themes          String[]
+  matchConfidence Float? // confiança do match nome→político
+  credibility     String? // TRUSTED | MIXED | LOW | UNKNOWN (da allowlist)
+  factCheckStatus String    @default("UNVERIFIED") // UNVERIFIED | VERIFIED | DISPUTED | FALSE
+  factCheckUrl    String?
+  rawRecordId     String?
+  createdAt       DateTime  @default(now())
+
+  politician Politician @relation(fields: [politicianId], references: [id], onDelete: Cascade)
+
+  @@unique([politicianId, url])
+  @@index([politicianId, publishedAt])
+  @@index([factCheckStatus])
+  @@map("politician_news")
 }

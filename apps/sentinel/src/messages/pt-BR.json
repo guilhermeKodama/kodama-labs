@@ -32,6 +32,7 @@
     "contracts": "Contratos",
     "entities": "Entidades",
     "politicians": "Políticos",
+    "elections": "Eleições 2026",
     "network": "Rede",
     "alerts": "Alertas",
     "analysis": "Análise IA",
@@ -46,7 +47,9 @@
       "SANCTIONED_ENTITY": "Sanção Pública Registrada",
       "SUSPICIOUS_NETWORK": "Vínculo Societário a Revisar",
       "AI_FLAG": "Sinalização da Análise IA",
-      "POLITICAL_LINK": "Vínculo Político a Revisar"
+      "POLITICAL_LINK": "Vínculo Político a Revisar",
+      "LEGAL_HISTORY": "Registro Legal a Verificar",
+      "VOTING_INCOHERENCE": "Divergência Discurso × Voto"
     },
     "severity": {
       "LOW": "Baixo",
@@ -113,6 +116,33 @@
       "contract": "Contrato",
       "entity": "Entidade",
       "procurement_item": "Item de licitação"
+    },
+    "theme": {
+      "seguranca": "Segurança",
+      "direitos": "Direitos e cidadania",
+      "ambiente": "Meio ambiente",
+      "economia": "Economia",
+      "tributacao": "Tributação",
+      "saude": "Saúde",
+      "educacao": "Educação",
+      "trabalho": "Trabalho"
+    },
+    "proceedingKind": {
+      "CRIMINAL": "Criminal",
+      "IMPROBIDADE": "Improbidade administrativa",
+      "ELECTORAL": "Eleitoral",
+      "REJECTED_ACCOUNTS": "Contas julgadas",
+      "INELIGIBILITY": "Inelegibilidade",
+      "CIVIL": "Cível"
+    },
+    "proceedingStatus": {
+      "INVESTIGATION": "Em investigação",
+      "INDICTED": "Denunciado",
+      "CONVICTED_1ST": "Condenação em 1ª instância",
+      "CONVICTED_APPEAL": "Condenação em 2ª instância",
+      "ACQUITTED": "Absolvido",
+      "ARCHIVED": "Arquivado",
+      "SERVING_SENTENCE": "Cumprindo pena"
     }
   },
   "alerts": {
@@ -209,10 +239,31 @@
       "donorConcentration": {
         "title": "Empresa consta com doação para {politicianCount} políticos e contratos governamentais",
         "description": "{entityName} ({entityCnpj}) consta com doação de {totalDonated} para: {politicianNames} — possui {contractCount} contrato(s)."
+      },
+      "legalHistory": {
+        "title": "Registro legal a verificar: {politicianName}",
+        "description": "{politicianName} ({party}/{state}) consta em registro público de {source}: {reason}. Material para verificação, não constitui afirmação de culpa."
       }
     }
   },
   "pages": {
+    "elections2026": {
+      "title": "Eleições 2026",
+      "subtitle": "Dossiê público dos políticos para ajudar na decisão de voto — dinheiro, atuação e histórico reunidos.",
+      "tseNote": "A lista oficial de candidaturas de 2026 só é publicada pelo TSE após o fim do registro (meados de agosto de 2026). Até lá, esta página reúne quem está em mandato hoje e candidatos de eleições anteriores.",
+      "stats": {
+        "activeMandates": "Em mandato",
+        "linkAlerts": "Alertas de vínculos",
+        "withLinks": "Políticos com vínculos",
+        "donations": "Doações mapeadas"
+      },
+      "officesTitle": "Explorar por cargo",
+      "highlightsTitle": "Destaques",
+      "mostLinks": "Mais vínculos a revisar",
+      "topDonations": "Maiores doações recebidas",
+      "empty": "Sem dados ainda",
+      "browseAll": "Ver todos os políticos →"
+    },
     "dashboard": {
       "title": "Painel",
       "stats": {

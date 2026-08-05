@@ -13,6 +13,7 @@ import {
   Brain,
   Activity,
   Landmark,
+  Vote,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -22,6 +23,7 @@ const navItems = [
   { href: "/contracts", labelKey: "contracts", icon: ScrollText },
   { href: "/entities", labelKey: "entities", icon: Building2 },
   { href: "/politicians", labelKey: "politicians", icon: Landmark },
+  { href: "/elections/2026", labelKey: "elections", icon: Vote },
   { href: "/network", labelKey: "network", icon: Network },
   { href: "/alerts", labelKey: "alerts", icon: AlertTriangle },
   { href: "/analysis", labelKey: "analysis", icon: Brain },
