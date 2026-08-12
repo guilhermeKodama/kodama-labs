@@ -16,13 +16,11 @@ import {
 } from '@/components/ui/card';
 import { Link } from '@/i18n/navigation';
 import { client } from '@/lib/api-client';
-import { useUser } from '@/lib/user-context';
 
 export default function SignupPage() {
   const t = useTranslations();
   const router = useRouter();
-  const { refetchUser } = useUser();
-  
+
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
