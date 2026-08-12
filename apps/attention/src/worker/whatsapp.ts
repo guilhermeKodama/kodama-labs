@@ -2,12 +2,13 @@ import { Client, LocalAuth } from "whatsapp-web.js";
 import qrcode from "qrcode-terminal";
 import { prisma } from "../server/lib/prisma";
 import { hashIdentifier } from "../server/lib/hash";
+import { env } from "../env";
 
 const client = new Client({
-  authStrategy: new LocalAuth({ dataPath: ".wwebjs_auth" }),
+  authStrategy: new LocalAuth({ dataPath: env.WHATSAPP_AUTH_DIR }),
   puppeteer: {
     headless: true,
-    executablePath: process.env.WHATSAPP_CHROMIUM_PATH || undefined,
+    executablePath: env.WHATSAPP_CHROMIUM_PATH || undefined,
     args: ["--no-sandbox", "--disable-setuid-sandbox"],
   },
 });

@@ -86,5 +86,8 @@ yarn.lock
 **/.wwebjs_auth/
 **/.wwebjs_cache/
 
+# Cloudflare Tunnel config (machine-specific tunnel id + credentials path — never commit)
+apps/attention/cloudflared/config.yml
+
 # Agentic Coding
 .opencode/

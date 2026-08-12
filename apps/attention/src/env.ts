@@ -14,6 +14,12 @@ export const env = createEnv({
     VAPID_PRIVATE_KEY: z.string().min(1),
     VAPID_SUBJECT: z.string().default("mailto:guilherme.kodama@gmail.com"),
     WHATSAPP_HASH_SALT: z.string().default("dev-salt-change-me"),
+    // Absolute by default and outside the repo — the session must not depend on which
+    // checkout/worktree the code happens to run from.
+    WHATSAPP_AUTH_DIR: z
+      .string()
+      .default("/home/kodama/.local/share/attention/wwebjs-auth"),
+    WHATSAPP_CHROMIUM_PATH: z.string().optional(),
   },
   client: {
     NEXT_PUBLIC_APP_URL: z.string().url().optional(),
@@ -26,6 +32,8 @@ export const env = createEnv({
     VAPID_PRIVATE_KEY: process.env.VAPID_PRIVATE_KEY,
     VAPID_SUBJECT: process.env.VAPID_SUBJECT,
     WHATSAPP_HASH_SALT: process.env.WHATSAPP_HASH_SALT,
+    WHATSAPP_AUTH_DIR: process.env.WHATSAPP_AUTH_DIR,
+    WHATSAPP_CHROMIUM_PATH: process.env.WHATSAPP_CHROMIUM_PATH,
     NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL,
     NEXT_PUBLIC_VAPID_PUBLIC_KEY: process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY,
   },
