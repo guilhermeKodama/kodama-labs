@@ -7,7 +7,7 @@ services:
       POSTGRES_USER: root
       POSTGRES_PASSWORD: root
       POSTGRES_DB: wallex
-      POSTGRES_MULTIPLE_DATABASES: capital,sentinel
+      POSTGRES_MULTIPLE_DATABASES: capital,sentinel,attention
     ports:
       - "5433:5432"
     volumes:

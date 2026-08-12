@@ -1,0 +1,67 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum MessageDirection {
+  IN
+  OUT
+}
+
+model PushSubscription {
+  id          String    @id @default(cuid())
+  endpoint    String    @unique
+  p256dh      String
+  auth        String
+  deviceLabel String?
+  userAgent   String?
+  createdAt   DateTime  @default(now())
+  lastSeenAt  DateTime  @default(now())
+  deadAt      DateTime?
+
+  beacons Beacon[]
+
+  @@index([deadAt])
+}
+
+model Beacon {
+  id             String    @id @default(cuid())
+  seq            Int       @default(autoincrement())
+  subscriptionId String
+  subscription   PushSubscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  sentAt         DateTime  @default(now())
+  receivedAt     DateTime?
+  ackedAt        DateTime?
+  sendError      String?
+
+  @@index([subscriptionId, sentAt])
+  @@index([sentAt])
+}
+
+model FocusWindow {
+  id       String    @id @default(cuid())
+  label    String
+  startsAt DateTime  @default(now())
+  endsAt   DateTime?
+
+  @@index([startsAt])
+}
+
+model WhatsAppMessageMeta {
+  id         String            @id @default(cuid())
+  chatIdHash String
+  senderHash String
+  isGroup    Boolean
+  direction  MessageDirection
+  length     Int
+  occurredAt DateTime
+  createdAt  DateTime          @default(now())
+
+  @@index([chatIdHash, occurredAt])
+}

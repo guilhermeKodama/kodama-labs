@@ -82,5 +82,9 @@ yarn.lock
 # Local blob storage (dev fallback when BLOB_READ_WRITE_TOKEN is not set)
 .local-blob
 
+# WhatsApp session data (grants full account access — never commit)
+**/.wwebjs_auth/
+**/.wwebjs_cache/
+
 # Agentic Coding
 .opencode/

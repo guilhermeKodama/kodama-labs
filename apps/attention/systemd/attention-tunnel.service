@@ -1,0 +1,16 @@
+[Unit]
+Description=Attention — Cloudflare Tunnel
+After=network-online.target attention-web.service
+Wants=network-online.target
+Requires=attention-web.service
+
+[Service]
+Type=simple
+User=__USER__
+WorkingDirectory=__REPO_PATH__/apps/attention
+ExecStart=cloudflared tunnel --config __REPO_PATH__/apps/attention/cloudflared/config.yml run attention
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

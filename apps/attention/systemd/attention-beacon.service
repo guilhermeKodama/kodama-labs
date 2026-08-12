@@ -1,0 +1,15 @@
+[Unit]
+Description=Attention — periodic beacon worker
+After=network-online.target docker.service attention-web.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=__USER__
+WorkingDirectory=__REPO_PATH__/apps/attention
+ExecStart=pnpm run worker:beacon
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
