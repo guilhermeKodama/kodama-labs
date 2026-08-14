@@ -1,4 +1,6 @@
+import { toDataURL } from "qrcode";
 import { prisma } from "@/server/lib/prisma";
+import { QrAutoRefresh } from "@/components/qr-auto-refresh";
 import { triggerBeaconNow, startFocusWindow, endFocusWindow } from "./actions";
 
 export const dynamic = "force-dynamic";
@@ -23,8 +25,34 @@ function fmtDate(d: Date): string {
   return d.toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "medium" });
 }
 
+function hoursAgo(hours: number): Date {
+  return new Date(Date.now() - hours * 60 * 60 * 1000);
+}
+
+function timeAgo(d: Date): string {
+  const diffMin = Math.floor((Date.now() - d.getTime()) / 60_000);
+  if (diffMin < 1) return "agora";
+  if (diffMin < 60) return `há ${diffMin} min`;
+  const diffH = Math.floor(diffMin / 60);
+  if (diffH < 24) return `há ${diffH}h`;
+  return `há ${Math.floor(diffH / 24)}d`;
+}
+
 export default async function LabPage() {
-  const [focusWindows, beacons, deadSubs, liveSubs] = await Promise.all([
+  const since24h = hoursAgo(24);
+
+  const [
+    focusWindows,
+    beacons,
+    deadSubs,
+    liveSubs,
+    waStatus,
+    waMessagesIn24h,
+    waMessagesOut24h,
+    waChatCount,
+    waContactCount,
+    waMessages,
+  ] = await Promise.all([
     prisma.focusWindow.findMany({ orderBy: { startsAt: "desc" } }),
     prisma.beacon.findMany({ orderBy: { sentAt: "desc" }, include: { subscription: true } }),
     prisma.pushSubscription.findMany({
@@ -32,7 +60,19 @@ export default async function LabPage() {
       orderBy: { deadAt: "desc" },
     }),
     prisma.pushSubscription.findMany({ where: { deadAt: null }, orderBy: { createdAt: "desc" } }),
+    prisma.integrationStatus.findUnique({ where: { channel: "whatsapp" } }),
+    prisma.message.count({ where: { direction: "IN", occurredAt: { gte: since24h } } }),
+    prisma.message.count({ where: { direction: "OUT", occurredAt: { gte: since24h } } }),
+    prisma.chat.count(),
+    prisma.contact.count(),
+    prisma.message.findMany({
+      orderBy: { occurredAt: "desc" },
+      take: 50,
+      include: { chat: true, sender: true },
+    }),
   ]);
+
+  const waQrDataUrl = waStatus?.qrPayload ? await toDataURL(waStatus.qrPayload) : null;
 
   const sent = beacons.length;
   const received = beacons.filter((b) => b.receivedAt).length;
@@ -71,6 +111,90 @@ export default async function LabPage() {
           </button>
         </form>
       </div>
+
+      <section className="flex flex-col gap-3">
+        <h2 className="text-base font-medium">WhatsApp</h2>
+        {waStatus?.state === "NEEDS_QR" && <QrAutoRefresh />}
+        <div className="rounded-lg bg-neutral-900 p-4">
+          <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-sm">
+            <p>
+              <span className="text-neutral-400">Estado</span>{" "}
+              <span className="font-medium">{waStatus?.state ?? "não iniciado"}</span>
+            </p>
+            <p>
+              <span className="text-neutral-400">Última mensagem</span>{" "}
+              {waStatus?.lastMessageAt ? timeAgo(waStatus.lastMessageAt) : "—"}
+            </p>
+            <p>
+              <span className="text-neutral-400">Sessão desde</span>{" "}
+              {waStatus?.sessionStartedAt ? fmtDate(waStatus.sessionStartedAt) : "—"}
+            </p>
+          </div>
+          {waStatus?.lastError && (
+            <p className="mt-2 text-sm text-red-400">Erro: {waStatus.lastError}</p>
+          )}
+          {waQrDataUrl && (
+            <div className="mt-4 flex flex-col items-start gap-2">
+              <p className="text-sm text-neutral-400">
+                Escaneie com WhatsApp → Aparelhos conectados (o código atualiza sozinho):
+              </p>
+              {/* eslint-disable-next-line @next/next/no-img-element -- data URL, sem otimização de imagem aplicável */}
+              <img src={waQrDataUrl} alt="QR code do WhatsApp" width={200} height={200} />
+            </div>
+          )}
+        </div>
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <div className="rounded-lg bg-neutral-900 p-4">
+            <p className="text-xs text-neutral-400">Mensagens 24h (recebidas)</p>
+            <p className="mt-1 text-lg font-medium">{waMessagesIn24h}</p>
+          </div>
+          <div className="rounded-lg bg-neutral-900 p-4">
+            <p className="text-xs text-neutral-400">Mensagens 24h (enviadas)</p>
+            <p className="mt-1 text-lg font-medium">{waMessagesOut24h}</p>
+          </div>
+          <div className="rounded-lg bg-neutral-900 p-4">
+            <p className="text-xs text-neutral-400">Chats</p>
+            <p className="mt-1 text-lg font-medium">{waChatCount}</p>
+          </div>
+          <div className="rounded-lg bg-neutral-900 p-4">
+            <p className="text-xs text-neutral-400">Contatos</p>
+            <p className="mt-1 text-lg font-medium">{waContactCount}</p>
+          </div>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-sm">
+            <thead className="text-neutral-400">
+              <tr>
+                <th className="py-1.5 pr-3 font-normal">Hora</th>
+                <th className="py-1.5 pr-3 font-normal">Chat</th>
+                <th className="py-1.5 pr-3 font-normal">Remetente</th>
+                <th className="py-1.5 pr-3 font-normal">Direção</th>
+                <th className="py-1.5 font-normal">Mensagem</th>
+              </tr>
+            </thead>
+            <tbody>
+              {waMessages.map((m) => (
+                <tr key={m.id} className="border-t border-neutral-800">
+                  <td className="py-1.5 pr-3 text-neutral-400">{fmtDate(m.occurredAt)}</td>
+                  <td className="py-1.5 pr-3">{m.chat.name ?? m.chat.waChatId}</td>
+                  <td className="py-1.5 pr-3">
+                    {m.direction === "OUT" ? "você" : (m.sender?.name ?? m.sender?.pushname ?? "—")}
+                  </td>
+                  <td className="py-1.5 pr-3">{m.direction}</td>
+                  <td className="py-1.5 text-neutral-300">{m.body ?? "[expirada]"}</td>
+                </tr>
+              ))}
+              {waMessages.length === 0 && (
+                <tr>
+                  <td colSpan={5} className="py-3 text-neutral-500">
+                    Nenhuma mensagem ainda.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </section>
 
       <section className="grid grid-cols-2 gap-3 sm:grid-cols-5">
         {stats.map((s) => (

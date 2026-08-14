@@ -53,6 +53,8 @@ model FocusWindow {
   @@index([startsAt])
 }
 
+// Congelada a partir da Etapa 1 — o worker parou de escrever aqui. Fica como
+// artefato do soak de entrega até a migration de limpeza da Etapa 6.
 model WhatsAppMessageMeta {
   id         String            @id @default(cuid())
   chatIdHash String
@@ -64,4 +66,58 @@ model WhatsAppMessageMeta {
   createdAt  DateTime          @default(now())
 
   @@index([chatIdHash, occurredAt])
+}
+
+model Chat {
+  id            String    @id @default(cuid())
+  waChatId      String    @unique
+  name          String?
+  isGroup       Boolean
+  lastMessageAt DateTime?
+  backfilledAt  DateTime?
+  createdAt     DateTime  @default(now())
+
+  messages Message[]
+}
+
+model Contact {
+  id          String   @id @default(cuid())
+  waContactId String   @unique
+  name        String?
+  pushname    String?
+  isMyContact Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  messages Message[]
+}
+
+model Message {
+  id                String           @id @default(cuid())
+  waMessageId       String           @unique
+  chatId            String
+  chat              Chat             @relation(fields: [chatId], references: [id])
+  senderContactId   String?
+  sender            Contact?         @relation(fields: [senderContactId], references: [id])
+  direction         MessageDirection
+  type              String
+  body              String?
+  hasMedia          Boolean          @default(false)
+  mentionedMe       Boolean          @default(false)
+  quotedWaMessageId String?
+  occurredAt        DateTime
+  createdAt         DateTime         @default(now())
+
+  @@index([chatId, occurredAt])
+  @@index([occurredAt])
+}
+
+model IntegrationStatus {
+  id               String    @id @default(cuid())
+  channel          String    @unique
+  state            String
+  lastEventAt      DateTime  @default(now())
+  lastMessageAt    DateTime?
+  qrPayload        String?
+  sessionStartedAt DateTime?
+  lastError        String?
 }

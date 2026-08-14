@@ -9,10 +9,9 @@ const eslintConfig = defineConfig([
     ".next/**",
     "out/**",
     "build/**",
+    "dist/**",
     "next-env.d.ts",
     "src/generated/**",
-    ".wwebjs_auth/**",
-    ".wwebjs_cache/**",
   ]),
 ]);
 

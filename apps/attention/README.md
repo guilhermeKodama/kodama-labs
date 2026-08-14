@@ -86,33 +86,27 @@ pnpm --filter @wallex/attention build
 
 Ver `/lab` no dia 7 pra decidir.
 
-## 7. WhatsApp (Trilha B, em paralelo)
+## 7. WhatsApp
 
-Precisa de dependências de Chromium no Linux (Debian/Ubuntu):
-
-```bash
-sudo apt-get install -y chromium libnss3 libatk1.0-0 libatk-bridge2.0-0 libcups2 \
-  libxcomposite1 libxdamage1 libxrandr2 libgbm1 libasound2
-```
-
-Se preferir usar o Chromium do sistema em vez do bundled pelo puppeteer, aponte
-`WHATSAPP_CHROMIUM_PATH` no `.env` para o binário (ex: `/usr/bin/chromium`).
+Via Baileys (WebSocket direto, sem navegador — nenhuma dependência de sistema extra):
 
 ```bash
 pnpm --filter @wallex/attention worker:whatsapp
 ```
 
-Escaneie o QR impresso no terminal com **WhatsApp → Aparelhos conectados** no celular. A sessão
-fica em `.wwebjs_auth/` (gitignored — contém acesso completo à conta, nunca commitar).
+Escaneie o QR impresso no terminal com **WhatsApp → Aparelhos conectados** no celular (ou pelo QR
+renderizado em `/lab`, quando o worker estiver rodando como serviço). A sessão fica em
+`WHATSAPP_AUTH_DIR` (default fora do repo, gitignored se você optar por um caminho dentro dele —
+contém acesso completo à conta, nunca commitar).
 
 Depois de validar manualmente, subir como serviço:
 
 ```bash
-sudo systemctl enable --now attention-whatsapp
+systemctl --user enable --now attention-whatsapp
 ```
 
-Só metadados são gravados (`chatIdHash`, `senderHash`, `direction`, `length`) — nunca o corpo da
-mensagem.
+Conteúdo real das mensagens é gravado (nomes reais, corpo do texto) — corpo é purgado depois de
+`RETENTION_DAYS` (default 7), metadados e scores ficam.
 
 ## Troubleshooting
 
@@ -120,5 +114,7 @@ mensagem.
   sim, reabra a PWA e clique em "Ativar notificações" de novo.
 - **`pnpm` não encontrado pelo systemd**: rode `which pnpm` e ajuste `ExecStart` nas units para
   o caminho absoluto.
-- **whatsapp-web.js não conecta**: confira `journalctl -u attention-whatsapp -f`. Erros de
-  Chromium geralmente são dependência de sistema faltando (lista acima).
+- **WhatsApp não conecta ou desloga sozinho**: confira `journalctl --user -u attention-whatsapp -f`.
+  Reconexões muito rápidas em sequência podem levar o WhatsApp a deslogar o aparelho por conta
+  própria — evite reiniciar o worker repetidamente em pouco tempo. Um logout confirmado
+  (`DisconnectReason.loggedOut`) já limpa a sessão automaticamente e pede um QR novo no próximo boot.

@@ -198,6 +198,17 @@ isso esta POC usa `whatsapp-web.js`. Nenhuma das opções elimina o risco de ban
 de manutenção (quebram quando WhatsApp muda protocolo/internals) — vale checar qual está mais
 ativamente mantida antes de reconfirmar a escolha.
 
+**Decisão revisada (Etapa 1, 2026-08-13): trocado para Baileys.** Na prática, `whatsapp-web.js`
+se mostrou instável nesta máquina — crash em `Client.inject()`/`getChats()` por "Execution
+context was destroyed" mesmo com cache de versão desabilitado, hang na reconexão sem crash nem
+progresso, e um logout forçado pelo próprio WhatsApp após reconexões rápidas em sequência. Baileys
+já é usado de forma estável e instantânea nesta mesma máquina por outra ferramenta (openclaw) na
+mesma conta. Elimina toda a classe de problema ligada a Puppeteer/navegador (sem página pra
+navegar, sem contexto de execução pra destruir). O trade-off de fingerprint permanece teórico —
+não observado como problema real no uso do openclaw — e o desenho de segurança do produto (envio
+só aprovado por humano, nunca em massa) já era o que mais reduzia risco de ban em qualquer das
+duas bibliotecas.
+
 **Instagram DM (pior das três)**: oficial exige conta Professional (Business/Creator) + app Meta
 + App Review pra permissão de mensagens, e mesmo aprovado a cobertura de DMs é parcial. Converter
 pra Creator é reversível e destrava a rota oficial. Rota não-oficial (`instagrapi`,
@@ -328,12 +339,12 @@ também falhe. Ver a Trilha A desta POC — é exatamente essa suposição que e
 
 1. **Entrega**: uma PWA auto-hospedada notifica o iPhone de forma confiável e atravessa o Foco
    quando está na allowlist de notificações do app (Ajustes → Foco → Apps).
-2. **WhatsApp**: uma sessão de cliente não-oficial (`whatsapp-web.js`) sobrevive dias sem re-QR
-   e sem levar ban.
+2. **WhatsApp**: uma sessão de cliente não-oficial (Baileys, ver revisão da decisão acima) sobrevive
+   dias sem re-QR e sem levar ban.
 
 Se (1) falhar, o produto muda de forma (app iOS nativo com Time Sensitive/Critical Alerts,
 US$99/ano de conta Apple Developer, ou reforça Pushover como canal primário). Se (2) falhar, o
-canal mais importante do produto some e é preciso reavaliar (Baileys, bridge Matrix, ou tirar
+canal mais importante do produto some e é preciso reavaliar (bridge Matrix, ou tirar
 WhatsApp do escopo).
 
 ## Decisões já tomadas nesta POC, e por quê
@@ -342,7 +353,7 @@ WhatsApp do escopo).
 |---|---|---|
 | Servidor = desktop Linux, sempre ligado | Vercel/serverless | IMAP IDLE e a sessão do WhatsApp precisam de socket vivo 24/7; serverless não serve |
 | Exposição = Cloudflare Tunnel | Tailscale | O Mac do trabalho do usuário **bloqueia instalação de VPN** — Cloudflare Tunnel expõe um hostname HTTPS comum, sem cliente instalado |
-| `whatsapp-web.js` (Puppeteer) | Baileys | Roda o cliente web oficial por dentro, fingerprint de protocolo menor que uma reimplementação. Com desktop dedicado, o custo de RAM do Chromium deixou de ser um problema |
+| Baileys (WebSocket direto) | `whatsapp-web.js` (Puppeteer) | Revisado na Etapa 1: `whatsapp-web.js` se mostrou instável nesta máquina (crashes, hang, logout forçado por reconexão rápida); Baileys já rodava estável na mesma conta via outra ferramenta (openclaw). Elimina a classe de bug ligada a navegador/Puppeteer |
 | PWA em vez de app nativo, primeiro | App iOS nativo direto | PWA cobre os três dispositivos com um código só; iOS permite marcar a PWA como exceção de Foco, o que pode já resolver o furo de DND sem custo nenhum |
 | Metadados hasheados no WhatsApp, nunca corpo | Guardar a mensagem completa | A trilha B só precisa provar sobrevivência de sessão + virar dado de bootstrap pro score de reciprocidade — não deveria reter conteúdo pessoal antes de existir auth |
 | Sem auth nas rotas por enquanto | Auth desde o início | Só trafegam beacons sintéticos e metadados hasheados. **Cloudflare Access entra antes de qualquer conteúdo real de mensagem tocar o app** — isso é bloqueador pra expandir escopo, não detalhe |

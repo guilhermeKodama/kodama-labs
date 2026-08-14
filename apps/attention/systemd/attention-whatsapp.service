@@ -1,15 +1,15 @@
 [Unit]
-Description=Attention — WhatsApp metadata worker
+Description=Attention — WhatsApp ingestion worker
 After=network-online.target docker.service
 Wants=network-online.target
 
 [Service]
 Type=simple
-User=__USER__
-WorkingDirectory=__REPO_PATH__/apps/attention
+WorkingDirectory=/home/kodama/Documents/Github/kodama-labs/apps/attention
+Environment=PATH=/home/linuxbrew/.linuxbrew/opt/node@24/bin:/home/linuxbrew/.linuxbrew/bin:/home/linuxbrew/.linuxbrew/sbin:/home/kodama/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 ExecStart=pnpm run worker:whatsapp
 Restart=always
 RestartSec=10
 
 [Install]
-WantedBy=multi-user.target
+WantedBy=default.target

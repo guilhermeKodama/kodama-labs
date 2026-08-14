@@ -6,11 +6,11 @@ Requires=attention-web.service
 
 [Service]
 Type=simple
-User=__USER__
-WorkingDirectory=__REPO_PATH__/apps/attention
-ExecStart=cloudflared tunnel --config __REPO_PATH__/apps/attention/cloudflared/config.yml run attention
+WorkingDirectory=/home/kodama/Documents/Github/kodama-labs/apps/attention
+Environment=PATH=/home/linuxbrew/.linuxbrew/opt/node@24/bin:/home/linuxbrew/.linuxbrew/bin:/home/linuxbrew/.linuxbrew/sbin:/home/kodama/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+ExecStart=/home/kodama/.local/bin/cloudflared tunnel --config /home/kodama/Documents/Github/kodama-labs/apps/attention/cloudflared/config.yml run attention
 Restart=always
 RestartSec=5
 
 [Install]
-WantedBy=multi-user.target
+WantedBy=default.target
