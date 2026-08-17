@@ -7,6 +7,8 @@ type IntegrationStatusUpdate = {
   sessionStartedAt?: Date | null;
   lastError?: string | null;
   ownWid?: string | null;
+  consecutiveFailures?: number;
+  nextRetryAt?: Date | null;
 };
 
 export async function setIntegrationStatus(

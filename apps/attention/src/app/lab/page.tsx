@@ -48,6 +48,7 @@ function timeAgo(d: Date): string {
 
 export default async function LabPage() {
   const since24h = hoursAgo(24);
+  const now = hoursAgo(0);
 
   const [
     focusWindows,
@@ -94,6 +95,7 @@ export default async function LabPage() {
   ]);
 
   const waQrDataUrl = waStatus?.qrPayload ? await toDataURL(waStatus.qrPayload) : null;
+  const waCooldownActive = !!waStatus?.nextRetryAt && waStatus.nextRetryAt.getTime() > now.getTime();
 
   const sent = beacons.length;
   const received = beacons.filter((b) => b.receivedAt).length;
@@ -135,7 +137,7 @@ export default async function LabPage() {
 
       <section className="flex flex-col gap-3">
         <h2 className="text-base font-medium">WhatsApp</h2>
-        {waStatus?.state === "NEEDS_QR" && <QrAutoRefresh />}
+        {(waStatus?.state === "NEEDS_QR" || waCooldownActive) && <QrAutoRefresh />}
         <div className="rounded-lg bg-neutral-900 p-4">
           <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-sm">
             <p>
@@ -154,14 +156,22 @@ export default async function LabPage() {
           {waStatus?.lastError && (
             <p className="mt-2 text-sm text-red-400">Erro: {waStatus.lastError}</p>
           )}
-          {waQrDataUrl && (
-            <div className="mt-4 flex flex-col items-start gap-2">
-              <p className="text-sm text-neutral-400">
-                Escaneie com WhatsApp → Aparelhos conectados (o código atualiza sozinho):
-              </p>
-              {/* eslint-disable-next-line @next/next/no-img-element -- data URL, sem otimização de imagem aplicável */}
-              <img src={waQrDataUrl} alt="QR code do WhatsApp" width={200} height={200} />
-            </div>
+          {waCooldownActive ? (
+            <p className="mt-2 text-sm text-amber-400">
+              Cooldown ativo ({waStatus!.consecutiveFailures} falha{waStatus!.consecutiveFailures === 1 ? "" : "s"}{" "}
+              consecutiva{waStatus!.consecutiveFailures === 1 ? "" : "s"}) — próxima tentativa às{" "}
+              {waStatus!.nextRetryAt!.toLocaleTimeString("pt-BR")}. Não vai tentar reconectar antes disso.
+            </p>
+          ) : (
+            waQrDataUrl && (
+              <div className="mt-4 flex flex-col items-start gap-2">
+                <p className="text-sm text-neutral-400">
+                  Escaneie com WhatsApp → Aparelhos conectados (o código atualiza sozinho):
+                </p>
+                {/* eslint-disable-next-line @next/next/no-img-element -- data URL, sem otimização de imagem aplicável */}
+                <img src={waQrDataUrl} alt="QR code do WhatsApp" width={200} height={200} />
+              </div>
+            )
           )}
         </div>
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">

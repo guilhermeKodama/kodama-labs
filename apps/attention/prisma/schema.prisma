@@ -153,15 +153,17 @@ model Message {
 }
 
 model IntegrationStatus {
-  id               String    @id @default(cuid())
-  channel          String    @unique
-  state            String
-  lastEventAt      DateTime  @default(now())
-  lastMessageAt    DateTime?
-  qrPayload        String?
-  sessionStartedAt DateTime?
-  lastError        String?
-  ownWid           String?
+  id                 String    @id @default(cuid())
+  channel            String    @unique
+  state              String
+  lastEventAt        DateTime  @default(now())
+  lastMessageAt      DateTime?
+  qrPayload          String?
+  sessionStartedAt   DateTime?
+  lastError          String?
+  ownWid             String?
+  consecutiveFailures Int      @default(0)
+  nextRetryAt        DateTime?
 }
 
 model Job {

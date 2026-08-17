@@ -17,6 +17,7 @@ import type { Boom } from "@hapi/boom";
 import pino from "pino";
 import qrcode from "qrcode-terminal";
 import { env } from "../env";
+import { prisma } from "../server/lib/prisma";
 import { setIntegrationStatus } from "../server/whatsapp/status";
 import { shouldIngest, ingestMessage, upsertContacts, upsertChats } from "../server/whatsapp/ingest";
 import { handleSend } from "../server/whatsapp/send";
@@ -29,6 +30,33 @@ let sendLoopRunning = false;
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+// Persisted (not in-memory) so the cooldown survives systemd restarting the
+// process — that's the whole point. 479 failed reconnect attempts happened
+// over 23h once because every close() just exited and RestartSec=10 brought
+// it right back for another immediate try. Same backoff shape as the job
+// queue's fail(): 30s base, doubling, capped at 1h.
+async function waitForCooldown(): Promise<void> {
+  const current = await prisma.integrationStatus.findUnique({ where: { channel: "whatsapp" } });
+  if (!current?.nextRetryAt) return;
+  const waitMs = current.nextRetryAt.getTime() - Date.now();
+  if (waitMs <= 0) return;
+  console.warn(
+    `[whatsapp] cooldown ativo (${current.consecutiveFailures} falha(s) consecutiva(s)) — próxima tentativa às ${current.nextRetryAt.toLocaleTimeString("pt-BR")}, aguardando ${Math.round(waitMs / 1000)}s`
+  );
+  await sleep(waitMs);
+}
+
+async function recordConnectionFailure(reasonLabel: string): Promise<void> {
+  const current = await prisma.integrationStatus.findUnique({ where: { channel: "whatsapp" } });
+  const consecutiveFailures = (current?.consecutiveFailures ?? 0) + 1;
+  const backoffMs = Math.min(30_000 * 2 ** consecutiveFailures, 60 * 60 * 1000);
+  const nextRetryAt = new Date(Date.now() + backoffMs);
+  console.warn(
+    `[whatsapp] ${reasonLabel} — falha consecutiva #${consecutiveFailures}, próxima tentativa em ${Math.round(backoffMs / 1000)}s`
+  );
+  await setIntegrationStatus("whatsapp", { consecutiveFailures, nextRetryAt });
 }
 
 // Self-scheduling like the jobs worker's loop, not setInterval — a send
@@ -55,6 +83,7 @@ async function sendPollLoop(sock: WASocket): Promise<void> {
 }
 
 async function start() {
+  await waitForCooldown();
   await setIntegrationStatus("whatsapp", { state: "CONNECTING" });
 
   // eslint-disable-next-line react-hooks/rules-of-hooks -- not a React hook, just named like one
@@ -94,6 +123,8 @@ async function start() {
         sessionStartedAt: new Date(),
         lastError: null,
         ownWid,
+        consecutiveFailures: 0,
+        nextRetryAt: null,
       });
 
       sendLoopRunning = true;
@@ -122,7 +153,9 @@ async function start() {
           lastError: `connection closed (status ${statusCode})`,
         });
       }
-      // systemd Restart=always brings the worker back up either way.
+      await recordConnectionFailure(loggedOut ? "logout" : "desconexão");
+      // systemd Restart=always brings the process back up quickly either way —
+      // waitForCooldown() at the top of start() is what actually paces retries.
       process.exit(1);
     }
   }
