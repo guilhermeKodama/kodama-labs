@@ -12,6 +12,7 @@ import { prisma } from "../lib/prisma";
 import { env } from "../../env";
 import { setIntegrationStatus } from "./status";
 import { transcribeAudio } from "./transcribe";
+import { enqueue } from "../jobs/queue";
 
 const STATUS_BROADCAST_JID = "status@broadcast";
 
@@ -202,7 +203,7 @@ export async function ingestMessage(msg: WAMessage, { ownWid, sock }: IngestOpti
   if (existing) {
     if (body) await prisma.message.update({ where: { id: existing.id }, data: { body } });
   } else {
-    await prisma.message.create({
+    const created = await prisma.message.create({
       data: {
         waMessageId,
         chatId,
@@ -216,6 +217,29 @@ export async function ingestMessage(msg: WAMessage, { ownWid, sock }: IngestOpti
         occurredAt,
       },
     });
+
+    if (direction === "IN") {
+      // Only triage genuinely fresh messages — a catch-up/history-sync dump
+      // shouldn't trigger a triage stampede for things days or weeks old.
+      const withinTriageWindow = occurredAt.getTime() >= Date.now() - 24 * 60 * 60 * 1000;
+      if (withinRetention && withinTriageWindow) {
+        try {
+          await enqueue("triage", { messageId: created.id }, { uniqueKey: `triage:${created.id}` });
+        } catch (error) {
+          console.error("[whatsapp] falha ao enfileirar triagem", error);
+        }
+      }
+    } else {
+      // Replied from the phone — any queued/snoozed items in this chat are moot.
+      try {
+        await prisma.message.updateMany({
+          where: { chatId, queueState: { in: ["QUEUED", "SNOOZED"] } },
+          data: { queueState: "RESOLVED_BY_REPLY" },
+        });
+      } catch (error) {
+        console.error("[whatsapp] falha ao auto-resolver fila", error);
+      }
+    }
   }
 
   const now = new Date();

@@ -11,7 +11,12 @@ self.addEventListener("push", (event) => {
 });
 
 async function handlePush(event) {
-  let payload = { title: "Attention", body: "Novo beacon", beaconId: null, url: "/lab" };
+  // beaconId (soak/telemetry) and notifId (digest/now/health) are mutually
+  // exclusive but share this one handler — both round-trip through
+  // /api/beacon/* because that's the only path with a Cloudflare Access
+  // Bypass policy; a fetch to any other path would 302 into an HTML login
+  // page the .catch(()=>{}) below would silently swallow.
+  let payload = { title: "Attention", body: "Novo beacon", beaconId: null, notifId: null, kind: null, tag: null, badge: null, url: "/lab" };
   if (event.data) {
     try {
       payload = { ...payload, ...event.data.json() };
@@ -20,39 +25,48 @@ async function handlePush(event) {
     }
   }
 
-  const receiptPromise = payload.beaconId
-    ? fetch("/api/beacon/receipt", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ beaconId: payload.beaconId }),
-      }).catch(() => {})
-    : Promise.resolve();
+  const receiptPromise =
+    payload.beaconId || payload.notifId
+      ? fetch("/api/beacon/receipt", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ beaconId: payload.beaconId, notifId: payload.notifId }),
+        }).catch(() => {})
+      : Promise.resolve();
 
   const showPromise = self.registration.showNotification(payload.title, {
     body: payload.body,
-    tag: payload.beaconId ?? undefined,
-    data: { beaconId: payload.beaconId, url: payload.url ?? "/lab" },
+    tag: payload.tag ?? payload.notifId ?? payload.beaconId ?? undefined,
+    icon: "/icon-192.png",
+    badge: "/icon-192.png",
+    data: { beaconId: payload.beaconId, notifId: payload.notifId, url: payload.url ?? "/lab" },
   });
 
-  await Promise.all([receiptPromise, showPromise]);
+  const badgePromise =
+    typeof payload.badge === "number" && self.navigator.setAppBadge
+      ? self.navigator.setAppBadge(payload.badge).catch(() => {})
+      : Promise.resolve();
+
+  await Promise.all([receiptPromise, showPromise, badgePromise]);
 }
 
 self.addEventListener("notificationclick", (event) => {
-  const { beaconId, url } = event.notification.data || {};
+  const { beaconId, notifId, url } = event.notification.data || {};
   event.notification.close();
-  event.waitUntil(handleClick(beaconId, url));
+  event.waitUntil(handleClick(beaconId, notifId, url));
 });
 
-async function handleClick(beaconId, url) {
+async function handleClick(beaconId, notifId, url) {
   const target = url || "/lab";
 
-  const ackPromise = beaconId
-    ? fetch("/api/beacon/ack", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ beaconId }),
-      }).catch(() => {})
-    : Promise.resolve();
+  const ackPromise =
+    beaconId || notifId
+      ? fetch("/api/beacon/ack", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ beaconId, notifId }),
+        }).catch(() => {})
+      : Promise.resolve();
 
   const focusPromise = (async () => {
     const allClients = await self.clients.matchAll({ type: "window", includeUncontrolled: true });

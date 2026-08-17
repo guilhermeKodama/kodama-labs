@@ -1,7 +1,15 @@
 import { toDataURL } from "qrcode";
 import { prisma } from "@/server/lib/prisma";
+import { spTodayStart } from "@/server/lib/timezone";
 import { QrAutoRefresh } from "@/components/qr-auto-refresh";
-import { triggerBeaconNow, startFocusWindow, endFocusWindow } from "./actions";
+import {
+  triggerBeaconNow,
+  startFocusWindow,
+  endFocusWindow,
+  dispararDigestAgora,
+  testarEnvioSelfChat,
+  triarUltimosDias,
+} from "./actions";
 
 export const dynamic = "force-dynamic";
 
@@ -52,6 +60,10 @@ export default async function LabPage() {
     waChatCount,
     waContactCount,
     waMessages,
+    llmStatsToday,
+    llmErrors24h,
+    failedJobsCount,
+    lastDigest,
   ] = await Promise.all([
     prisma.focusWindow.findMany({ orderBy: { startsAt: "desc" } }),
     prisma.beacon.findMany({ orderBy: { sentAt: "desc" }, include: { subscription: true } }),
@@ -70,6 +82,15 @@ export default async function LabPage() {
       take: 50,
       include: { chat: true, sender: true },
     }),
+    prisma.llmCall.aggregate({
+      where: { createdAt: { gte: spTodayStart() } },
+      _count: { _all: true },
+      _sum: { inputTokens: true, outputTokens: true },
+      _avg: { durationMs: true },
+    }),
+    prisma.llmCall.count({ where: { error: { not: null }, createdAt: { gte: since24h } } }),
+    prisma.job.count({ where: { status: "FAILED" } }),
+    prisma.digest.findFirst({ orderBy: { scheduledFor: "desc" } }),
   ]);
 
   const waQrDataUrl = waStatus?.qrPayload ? await toDataURL(waStatus.qrPayload) : null;
@@ -169,7 +190,9 @@ export default async function LabPage() {
                 <th className="py-1.5 pr-3 font-normal">Chat</th>
                 <th className="py-1.5 pr-3 font-normal">Remetente</th>
                 <th className="py-1.5 pr-3 font-normal">Direção</th>
-                <th className="py-1.5 font-normal">Mensagem</th>
+                <th className="py-1.5 pr-3 font-normal">Mensagem</th>
+                <th className="py-1.5 pr-3 font-normal">Nível</th>
+                <th className="py-1.5 font-normal">Resumo</th>
               </tr>
             </thead>
             <tbody>
@@ -181,18 +204,82 @@ export default async function LabPage() {
                     {m.direction === "OUT" ? "você" : (m.sender?.name ?? m.sender?.pushname ?? "—")}
                   </td>
                   <td className="py-1.5 pr-3">{m.direction}</td>
-                  <td className="py-1.5 text-neutral-300">{m.body ?? "[expirada]"}</td>
+                  <td className="py-1.5 pr-3 text-neutral-300">{m.body ?? "[expirada]"}</td>
+                  <td className="py-1.5 pr-3">{m.triageNivel ?? "—"}</td>
+                  <td className="py-1.5 text-neutral-300">{m.triageResumo ?? "—"}</td>
                 </tr>
               ))}
               {waMessages.length === 0 && (
                 <tr>
-                  <td colSpan={5} className="py-3 text-neutral-500">
+                  <td colSpan={7} className="py-3 text-neutral-500">
                     Nenhuma mensagem ainda.
                   </td>
                 </tr>
               )}
             </tbody>
           </table>
+        </div>
+      </section>
+
+      <section className="flex flex-col gap-3">
+        <div className="flex items-center justify-between">
+          <h2 className="text-base font-medium">Curadoria</h2>
+          <a href="/fila" className="text-sm text-neutral-400 underline underline-offset-2">
+            ver fila →
+          </a>
+        </div>
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <div className="rounded-lg bg-neutral-900 p-4">
+            <p className="text-xs text-neutral-400">Triagens hoje</p>
+            <p className="mt-1 text-lg font-medium">{llmStatsToday._count._all}</p>
+          </div>
+          <div className="rounded-lg bg-neutral-900 p-4">
+            <p className="text-xs text-neutral-400">Latência média</p>
+            <p className="mt-1 text-lg font-medium">{fmtMs(llmStatsToday._avg.durationMs)}</p>
+          </div>
+          <div className="rounded-lg bg-neutral-900 p-4">
+            <p className="text-xs text-neutral-400">Erros de LLM (24h)</p>
+            <p className="mt-1 text-lg font-medium">{llmErrors24h}</p>
+          </div>
+          <div className="rounded-lg bg-neutral-900 p-4">
+            <p className="text-xs text-neutral-400">Jobs falhados</p>
+            <p className="mt-1 text-lg font-medium">{failedJobsCount}</p>
+          </div>
+        </div>
+        <div className="rounded-lg bg-neutral-900 p-4 text-sm">
+          {lastDigest ? (
+            <p>
+              <span className="text-neutral-400">Último digest</span>{" "}
+              <span className="font-medium">{lastDigest.windowLabel}</span>{" "}
+              {lastDigest.pushSkipped ? (
+                <span className="text-neutral-400">(fila vazia, sem push)</span>
+              ) : (
+                <span className="text-neutral-400">
+                  {lastDigest.shownCount} mostradas · {lastDigest.filteredCount} filtradas
+                  {lastDigest.sentAt ? ` · ${fmtDate(lastDigest.sentAt)}` : ""}
+                </span>
+              )}
+            </p>
+          ) : (
+            <p className="text-neutral-400">Nenhum digest rodou ainda.</p>
+          )}
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <form action={dispararDigestAgora}>
+            <button className="rounded-md border border-neutral-700 bg-neutral-900 px-3 py-1.5 text-sm">
+              Disparar digest agora
+            </button>
+          </form>
+          <form action={testarEnvioSelfChat}>
+            <button className="rounded-md border border-neutral-700 bg-neutral-900 px-3 py-1.5 text-sm">
+              Teste de envio (self-chat)
+            </button>
+          </form>
+          <form action={triarUltimosDias}>
+            <button className="rounded-md border border-neutral-700 bg-neutral-900 px-3 py-1.5 text-sm">
+              Triar últimos 3 dias
+            </button>
+          </form>
         </div>
       </section>
 

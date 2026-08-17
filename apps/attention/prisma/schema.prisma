@@ -14,6 +14,31 @@ enum MessageDirection {
   OUT
 }
 
+enum JobStatus {
+  QUEUED
+  RUNNING
+  DONE
+  FAILED
+  CANCELED
+  EXPIRED
+}
+
+enum QueueState {
+  QUEUED
+  SNOOZED
+  DISMISSED
+  RESOLVED_BY_REPLY
+  REPLIED
+}
+
+enum DraftStatus {
+  DRAFT
+  APPROVED
+  SENT
+  CANCELED
+  EXPIRED
+}
+
 model PushSubscription {
   id          String    @id @default(cuid())
   endpoint    String    @unique
@@ -25,7 +50,8 @@ model PushSubscription {
   lastSeenAt  DateTime  @default(now())
   deadAt      DateTime?
 
-  beacons Beacon[]
+  beacons       Beacon[]
+  notifications Notification[]
 
   @@index([deadAt])
 }
@@ -107,8 +133,23 @@ model Message {
   occurredAt        DateTime
   createdAt         DateTime         @default(now())
 
+  // Triagem (Digest MVP) — sobrevivem à purga do body, são a fonte de
+  // exibição na /fila e no digest depois que o body vira NULL.
+  triageNivel           String?
+  triagePrecisaResposta Boolean?
+  triagePrazo           String?
+  triageResumo          String?
+  triagedAt             DateTime?
+
+  queueState   QueueState?
+  snoozedUntil DateTime?
+  digestId     String?
+  digest       Digest?      @relation(fields: [digestId], references: [id])
+  drafts       ReplyDraft[]
+
   @@index([chatId, occurredAt])
   @@index([occurredAt])
+  @@index([queueState, snoozedUntil])
 }
 
 model IntegrationStatus {
@@ -120,4 +161,83 @@ model IntegrationStatus {
   qrPayload        String?
   sessionStartedAt DateTime?
   lastError        String?
+  ownWid           String?
+}
+
+model Job {
+  id          String    @id @default(cuid())
+  type        String // "triage" | "draft" | "digest" | "send"
+  payload     Json
+  uniqueKey   String?   @unique
+  status      JobStatus @default(QUEUED)
+  runAt       DateTime  @default(now())
+  attempts    Int       @default(0)
+  maxAttempts Int       @default(5)
+  lastError   String?
+  claimedAt   DateTime?
+  finishedAt  DateTime?
+  createdAt   DateTime  @default(now())
+
+  @@index([status, runAt])
+}
+
+model LlmCall {
+  id           String   @id @default(cuid())
+  purpose      String // "triage" | "draft"
+  model        String
+  inputTokens  Int      @default(0)
+  outputTokens Int      @default(0)
+  durationMs   Int      @default(0)
+  messageId    String?
+  error        String?
+  createdAt    DateTime @default(now())
+
+  @@index([createdAt])
+}
+
+model Digest {
+  id            String    @id @default(cuid())
+  windowLabel   String
+  scheduledFor  DateTime  @unique
+  sentAt        DateTime?
+  pushSkipped   Boolean   @default(false)
+  shownCount    Int       @default(0)
+  filteredCount Int       @default(0)
+  createdAt     DateTime  @default(now())
+
+  messages Message[]
+}
+
+model Notification {
+  id             String    @id @default(cuid())
+  kind           String // "digest" | "now" | "health"
+  title          String
+  body           String
+  url            String
+  tag            String?
+  subscriptionId String
+  subscription   PushSubscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  sentAt         DateTime  @default(now())
+  receivedAt     DateTime?
+  ackedAt        DateTime?
+  sendError      String?
+
+  @@index([kind, sentAt])
+}
+
+model ReplyDraft {
+  id              String      @id @default(cuid())
+  messageId       String
+  message         Message     @relation(fields: [messageId], references: [id])
+  text            String
+  model           String
+  status          DraftStatus @default(DRAFT)
+  approvedAt      DateTime?
+  sentAt          DateTime?
+  sentWaMessageId String?
+  error           String?
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  @@index([messageId, createdAt])
 }

@@ -1,0 +1,15 @@
+[Unit]
+Description=Attention — triage/draft/digest jobs worker
+After=network-online.target docker.service attention-web.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/kodama/Documents/Github/kodama-labs/apps/attention
+Environment=PATH=/home/linuxbrew/.linuxbrew/opt/node@24/bin:/home/linuxbrew/.linuxbrew/bin:/home/linuxbrew/.linuxbrew/sbin:/home/kodama/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+ExecStart=pnpm run worker:jobs
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=default.target

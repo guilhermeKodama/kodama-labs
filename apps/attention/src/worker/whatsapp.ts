@@ -11,6 +11,7 @@ import makeWASocket, {
   fetchLatestBaileysVersion,
   DisconnectReason,
   type ConnectionState,
+  type WASocket,
 } from "@whiskeysockets/baileys";
 import type { Boom } from "@hapi/boom";
 import pino from "pino";
@@ -18,10 +19,40 @@ import qrcode from "qrcode-terminal";
 import { env } from "../env";
 import { setIntegrationStatus } from "../server/whatsapp/status";
 import { shouldIngest, ingestMessage, upsertContacts, upsertChats } from "../server/whatsapp/ingest";
+import { handleSend } from "../server/whatsapp/send";
+import { claim, fail } from "../server/jobs/queue";
 
 const logger = pino({ level: "warn" });
 
 let ownWid: string | null = null;
+let sendLoopRunning = false;
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+// Self-scheduling like the jobs worker's loop, not setInterval — a send
+// involves real network I/O to WhatsApp, and a stopped flag (below) needs to
+// take effect between iterations rather than racing a fresh setInterval firing.
+async function sendPollLoop(sock: WASocket): Promise<void> {
+  while (sendLoopRunning) {
+    const start = Date.now();
+    try {
+      const jobs = await claim(["send"], 1);
+      for (const job of jobs) {
+        try {
+          await handleSend(job, { sock, ownWid: ownWid! });
+        } catch (error) {
+          console.error(`[whatsapp] job send (${job.id}) falhou`, error);
+          await fail(job.id, error, job.attempts, job.maxAttempts);
+        }
+      }
+    } catch (error) {
+      console.error("[whatsapp] falha ao consumir fila de envio", error);
+    }
+    await sleep(Math.max(0, 5_000 - (Date.now() - start)));
+  }
+}
 
 async function start() {
   await setIntegrationStatus("whatsapp", { state: "CONNECTING" });
@@ -62,10 +93,15 @@ async function start() {
         qrPayload: null,
         sessionStartedAt: new Date(),
         lastError: null,
+        ownWid,
       });
+
+      sendLoopRunning = true;
+      void sendPollLoop(sock);
     }
 
     if (connection === "close") {
+      sendLoopRunning = false;
       const statusCode = (lastDisconnect?.error as Boom | undefined)?.output?.statusCode;
       const loggedOut = statusCode === DisconnectReason.loggedOut;
       console.error(

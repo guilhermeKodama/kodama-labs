@@ -6,6 +6,7 @@ type IntegrationStatusUpdate = {
   qrPayload?: string | null;
   sessionStartedAt?: Date | null;
   lastError?: string | null;
+  ownWid?: string | null;
 };
 
 export async function setIntegrationStatus(

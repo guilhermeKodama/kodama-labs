@@ -22,6 +22,13 @@ export const env = createEnv({
     RETENTION_DAYS: z.coerce.number().int().positive().default(7),
     // Local whisper-rocm instance already running on this machine (OpenAI-compatible API).
     WHISPER_API_URL: z.string().url().default("http://localhost:8083"),
+    // Local Ollama instance (native, not the empty Docker one on 11435) — GPU-accelerated triage/drafts.
+    OLLAMA_API_URL: z.string().url().default("http://localhost:11434"),
+    TRIAGE_MODEL: z.string().default("gemma4:12b"),
+    DRAFT_MODEL: z.string().default("gemma4:12b"),
+    LLM_TIMEOUT_MS: z.coerce.number().int().positive().default(120_000),
+    DIGEST_WINDOWS: z.string().default("08:00,13:00,18:00,21:00"),
+    AGORA_MAX_PER_DAY: z.coerce.number().int().positive().default(5),
   },
   client: {
     NEXT_PUBLIC_APP_URL: z.string().url().optional(),
@@ -37,6 +44,12 @@ export const env = createEnv({
     WHATSAPP_AUTH_DIR: process.env.WHATSAPP_AUTH_DIR,
     RETENTION_DAYS: process.env.RETENTION_DAYS,
     WHISPER_API_URL: process.env.WHISPER_API_URL,
+    OLLAMA_API_URL: process.env.OLLAMA_API_URL,
+    TRIAGE_MODEL: process.env.TRIAGE_MODEL,
+    DRAFT_MODEL: process.env.DRAFT_MODEL,
+    LLM_TIMEOUT_MS: process.env.LLM_TIMEOUT_MS,
+    DIGEST_WINDOWS: process.env.DIGEST_WINDOWS,
+    AGORA_MAX_PER_DAY: process.env.AGORA_MAX_PER_DAY,
     NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL,
     NEXT_PUBLIC_VAPID_PUBLIC_KEY: process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY,
   },

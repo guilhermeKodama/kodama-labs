@@ -17,7 +17,8 @@
     "worker:beacon": "node --env-file=.env --import tsx src/worker/beacon.ts",
     "worker:whatsapp:build": "esbuild src/worker/whatsapp.ts --bundle --platform=node --format=esm --packages=external --external:./src/generated/prisma/index.js --outfile=dist/worker-whatsapp.mjs",
     "worker:whatsapp": "pnpm run worker:whatsapp:build && node --env-file=.env dist/worker-whatsapp.mjs",
-    "worker:maintenance": "node --env-file=.env --import tsx src/worker/maintenance.ts"
+    "worker:maintenance": "node --env-file=.env --import tsx src/worker/maintenance.ts",
+    "worker:jobs": "node --env-file=.env --import tsx src/worker/jobs.ts"
   },
   "dependencies": {
     "@hapi/boom": "^10.0.1",
