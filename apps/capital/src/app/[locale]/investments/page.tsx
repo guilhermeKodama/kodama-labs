@@ -584,7 +584,7 @@ export default function InvestmentsPage() {
                       (h) => h.accountId === account.id && h.isActive
                     );
                     const accountTotal = accountHoldings.reduce(
-                      (sum, h) => sum + h.totalInvested,
+                      (sum, h) => sum + holdingValue(h),
                       0
                     );
 
