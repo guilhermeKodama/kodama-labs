@@ -11,6 +11,7 @@ import {
   ensureSourcesSeeded,
 } from "../server/jobs/handlers";
 import { spTodayStart } from "../server/lib/timezone";
+import { prisma } from "../server/lib/prisma";
 
 const TICK_MS = 5_000;
 
@@ -24,6 +25,27 @@ async function scheduleDailyDiscover(): Promise<void> {
     await enqueue("discover", {}, { uniqueKey: `discover:${today}` });
   } catch (error) {
     console.error("[jobs] falha ao agendar discover diário", error);
+  }
+}
+
+const MIN_NEW_DECISIONS_TO_RETRAIN = 10;
+
+// Same idempotent-per-day pattern as scheduleDailyDiscover. Retrains only
+// when there's enough new signal to matter — trainScoringModel() itself
+// also enforces the 10-decision floor, this just avoids enqueuing (and
+// logging) a task that would immediately no-op most days.
+async function scheduleTrainingIfNeeded(): Promise<void> {
+  try {
+    const lastModel = await prisma.scoringModel.findFirst({ orderBy: { trainedAt: "desc" } });
+    const newDecisions = await prisma.triageDecision.count({
+      where: lastModel ? { decidedAt: { gt: lastModel.trainedAt } } : {},
+    });
+    if (newDecisions < MIN_NEW_DECISIONS_TO_RETRAIN) return;
+
+    const today = spTodayStart().toISOString().slice(0, 10);
+    await enqueue("train-model", {}, { uniqueKey: `train-model:auto:${today}` });
+  } catch (error) {
+    console.error("[jobs] falha ao agendar retreino do modelo", error);
   }
 }
 
@@ -92,6 +114,11 @@ async function loop(): Promise<void> {
       await scheduleDailyDiscover();
     } catch (error) {
       console.error("[jobs] falha no agendador diário", error);
+    }
+    try {
+      await scheduleTrainingIfNeeded();
+    } catch (error) {
+      console.error("[jobs] falha no agendador de retreino", error);
     }
     try {
       await processTasks();

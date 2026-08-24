@@ -1,27 +1,7 @@
 import { prisma } from "../../lib/prisma";
 import type { JobStatus } from "../../../generated/prisma";
 
-export const STATUS_LABELS: Record<JobStatus, string> = {
-  RADAR: "0 - Radar",
-  TRIAGEM: "1 - Triagem",
-  SHORTLIST: "2 - Shortlist",
-  APLICADA: "3 - Aplicada",
-  ENTREVISTA: "4 - Entrevista",
-  OFERTA: "5 - Oferta",
-  CONTRATADA: "6 - Contratada",
-  DESCARTADA: "X - Descartada",
-};
-
-export const FUNNEL_ORDER: JobStatus[] = [
-  "RADAR",
-  "TRIAGEM",
-  "SHORTLIST",
-  "APLICADA",
-  "ENTREVISTA",
-  "OFERTA",
-  "CONTRATADA",
-  "DESCARTADA",
-];
+export { STATUS_LABELS, FUNNEL_ORDER } from "../../../lib/job-status";
 
 export type JobListItem = Awaited<ReturnType<typeof listJobs>>[number];
 

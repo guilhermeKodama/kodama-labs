@@ -18,12 +18,13 @@ export default async function RootLayout({
 }>) {
   const cookieStore = await cookies();
   const defaultCollapsed = cookieStore.get("careers_sidebar_collapsed")?.value === "1";
+  const theme = cookieStore.get("careers_theme")?.value === "light" ? "light" : "dark";
   const counts = await getSidebarCounts();
 
   return (
-    <html lang="pt-BR" suppressHydrationWarning>
+    <html lang="pt-BR" className={theme}>
       <body className="antialiased">
-        <ThemeProvider attribute="class" defaultTheme="dark" enableSystem={false} disableTransitionOnChange>
+        <ThemeProvider initialTheme={theme}>
           <div className="flex h-dvh w-full overflow-hidden bg-background text-foreground">
             <AppSidebar defaultCollapsed={defaultCollapsed} counts={counts} />
             <main className="flex min-w-0 flex-1 flex-col overflow-hidden">{children}</main>

@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "../../lib/prisma";
 import type { JobStatus } from "../../../generated/prisma";
 import { enqueue } from "../../jobs/queue";
+import { buildFeatureVector } from "../../ml/features";
 
 /**
  * Every status/interest change made by hand here is exactly the training
@@ -12,7 +13,7 @@ import { enqueue } from "../../jobs/queue";
  * bump interestSource to USER, never a silent field update.
  */
 export async function updateJobStatus(jobId: string, toStatus: JobStatus, reason?: string): Promise<void> {
-  const job = await prisma.job.findUniqueOrThrow({ where: { id: jobId } });
+  const job = await prisma.job.findUniqueOrThrow({ where: { id: jobId }, include: { company: true } });
   await prisma.job.update({
     where: { id: jobId },
     data: {
@@ -24,10 +25,28 @@ export async function updateJobStatus(jobId: string, toStatus: JobStatus, reason
   await prisma.jobStatusChange.create({
     data: { jobId, fromStatus: job.status, toStatus, actor: "user", reason },
   });
+
+  if (toStatus === "SHORTLIST" || toStatus === "DESCARTADA") {
+    const profile = await prisma.searchProfile.findFirst({ where: { isActive: true }, orderBy: { version: "desc" } });
+    if (profile) {
+      await prisma.triageDecision.create({
+        data: {
+          jobId,
+          label: toStatus === "SHORTLIST" ? "SHORTLIST" : "DESCARTAR",
+          reason: toStatus === "DESCARTADA" ? (reason ?? job.rejectionReason) : null,
+          featuresSnapshot: buildFeatureVector(job, job.company, profile),
+          modelId: job.autoTriageModelId,
+          wasCorrection: job.autoTriagedAt !== null,
+        },
+      });
+    }
+  }
+
   revalidatePath("/");
   revalidatePath(`/vaga/${jobId}`);
   revalidatePath("/triagem");
   revalidatePath("/auto");
+  revalidatePath("/lab");
 }
 
 export async function updateJobInterest(jobId: string, interest: number): Promise<void> {
