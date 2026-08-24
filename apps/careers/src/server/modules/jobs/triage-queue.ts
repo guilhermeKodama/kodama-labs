@@ -7,7 +7,11 @@ import { prisma } from "../../lib/prisma";
 export async function getTriageQueue() {
   return prisma.job.findMany({
     where: { status: { in: ["RADAR", "TRIAGEM"] } },
-    include: { company: { select: { name: true, slug: true, health: true, stage: true } }, scores: { orderBy: { createdAt: "desc" }, take: 1 } },
+    include: {
+      company: { select: { name: true, slug: true, health: true, stage: true } },
+      scores: { orderBy: { createdAt: "desc" }, take: 1 },
+      rawPostings: { orderBy: { lastSeenAt: "desc" }, take: 1, select: { url: true, descriptionText: true } },
+    },
     orderBy: { discoveredAt: "asc" },
     take: 50,
   });
