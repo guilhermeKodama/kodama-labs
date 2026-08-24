@@ -15,6 +15,7 @@ export const STATUS_LABELS: Record<JobStatus, string> = {
   OFERTA: "5 - Oferta",
   CONTRATADA: "6 - Contratada",
   DESCARTADA: "X - Descartada",
+  REJEITADA: "X - Recusada",
 };
 
 export const FUNNEL_ORDER: JobStatus[] = [
@@ -26,4 +27,5 @@ export const FUNNEL_ORDER: JobStatus[] = [
   "OFERTA",
   "CONTRATADA",
   "DESCARTADA",
+  "REJEITADA",
 ];
