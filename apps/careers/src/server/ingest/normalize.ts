@@ -10,6 +10,14 @@ async function countJobsCreatedToday(): Promise<number> {
   return prisma.job.count({ where: { createdAt: { gte: spTodayStart() } } });
 }
 
+// profile.avoidStack is free-text edited by hand (e.g. "C / C++") and can
+// contain regex metacharacters — interpolating it unescaped crashes the
+// normalize task ("Nothing to repeat") the first time a real entry like
+// that is hit, taking the whole raw posting's processing down with it.
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 function declaredSalaryBelowFloor(salaryMax: number | null, floor: number): boolean {
   // Only discards when a number was actually DECLARED and it's below the
   // floor — a posting with no salary at all is never discarded on this
@@ -65,7 +73,7 @@ export async function normalizeRawPosting(rawPostingId: string): Promise<Posting
   }
 
   for (const avoided of profile.avoidStack) {
-    if (new RegExp(`\\b${avoided}\\b`, "i").test(title)) {
+    if (new RegExp(`\\b${escapeRegExp(avoided)}\\b`, "i").test(title)) {
       await prisma.rawPosting.update({
         where: { id: raw.id },
         data: { decision: "FILTERED_OUT", filterReason: `stack a evitar no título: ${avoided}`, processedAt: new Date() },
