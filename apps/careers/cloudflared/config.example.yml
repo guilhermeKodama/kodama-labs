@@ -1,0 +1,7 @@
+tunnel: __TUNNEL_ID__
+credentials-file: __CREDENTIALS_PATH__
+
+ingress:
+  - hostname: __HOSTNAME__
+    service: http://localhost:3006
+  - service: http_status:404

@@ -1,0 +1,19 @@
+[Unit]
+Description=Careers — Next.js web (UI + server actions)
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/kodama/Documents/Github/kodama-labs/apps/careers
+Environment=PATH=/home/linuxbrew/.linuxbrew/opt/node@24/bin:/home/linuxbrew/.linuxbrew/bin:/home/linuxbrew/.linuxbrew/sbin:/home/kodama/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+# Unlike attention-web (which requires a manual build before every restart),
+# this builds on every start — a git pull + systemctl restart is always
+# enough, nothing to remember.
+ExecStartPre=pnpm run build
+ExecStart=pnpm run start
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=default.target

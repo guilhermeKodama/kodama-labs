@@ -1,0 +1,16 @@
+[Unit]
+Description=Careers — Cloudflare Tunnel
+After=network-online.target careers-web.service
+Wants=network-online.target
+Requires=careers-web.service
+
+[Service]
+Type=simple
+WorkingDirectory=/home/kodama/Documents/Github/kodama-labs/apps/careers
+Environment=PATH=/home/linuxbrew/.linuxbrew/opt/node@24/bin:/home/linuxbrew/.linuxbrew/bin:/home/linuxbrew/.linuxbrew/sbin:/home/kodama/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+ExecStart=/home/kodama/.local/bin/cloudflared tunnel --config /home/kodama/Documents/Github/kodama-labs/apps/careers/cloudflared/config.yml run careers
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=default.target

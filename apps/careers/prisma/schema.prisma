@@ -1,0 +1,927 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// ============================================================
+// ENUMS
+// ============================================================
+
+// Every "yes/no" field in the vault is really a five-state judgement with a
+// justification attached (e.g. "sim", "provável não (bootstrapped)", "a
+// confirmar (startup YC)"). The enum drives filter/sort; the free text lives
+// in a sibling *Note column so nothing is lost.
+enum Tristate {
+  SIM
+  PROVAVEL_SIM
+  A_CONFIRMAR
+  PROVAVEL_NAO
+  NAO
+}
+
+// Declaration order IS the funnel order — declaring it this way gives
+// `ORDER BY status` the right shape for free, with DESCARTADA last.
+enum JobStatus {
+  RADAR // "0 - Radar"
+  TRIAGEM // "1 - Triagem"
+  SHORTLIST // "2 - Shortlist"
+  APLICADA // "3 - Aplicada"
+  ENTREVISTA // "4 - Entrevista"
+  OFERTA // "5 - Oferta"
+  CONTRATADA // "6 - Contratada"
+  DESCARTADA // "X - Descartada"
+}
+
+enum Track {
+  IC
+  MANAGER
+}
+
+enum Seniority {
+  JUNIOR
+  MID
+  SENIOR
+  STAFF
+  SENIOR_STAFF
+  PRINCIPAL
+  UNKNOWN
+}
+
+enum WorkModel {
+  REMOTO
+  HIBRIDO
+  PRESENCIAL
+  DESCONHECIDO
+}
+
+enum CompanyHealth {
+  FORTE
+  ATENCAO
+  RISCO
+  A_CONFIRMAR
+}
+
+enum AtsProvider {
+  GREENHOUSE
+  LEVER
+  ASHBY
+  SMARTRECRUITERS
+  WORKABLE
+  RECRUITEE
+  BREEZY
+  OTHER
+}
+
+enum SourceKind {
+  ATS // per-company board (needs a CompanyBoard)
+  AGGREGATOR // remoteok / remotive / arbeitnow / himalayas / jobicy / wwr
+  FORUM // HN who-is-hiring
+  SCRAPE // linkedin guest — opt-in, fragile, ToS-violating
+}
+
+// Lifecycle of a fetched posting BEFORE it becomes a Job. This is the dedup
+// memory: a posting rejected today must not cost anything tomorrow.
+enum PostingDecision {
+  PENDING // fetched, not yet normalized (or deferred by the daily cap)
+  FILTERED_OUT // failed a hard filter — never reconsidered unless content changes
+  DUPLICATE // matched an existing Job; recorded as a JobSighting
+  PROMOTED // became a Job
+  NEEDS_REVIEW // too little data to decide (LinkedIn title-only cards)
+}
+
+enum InterestSource {
+  AGENT
+  USER
+}
+
+enum ScoreSource {
+  MODEL // learned logistic-regression tiebreaker
+  LLM // structured-output call, only in the uncertainty band
+  USER // manual override
+}
+
+// The two judgements the user cares most about, promoted from prose to
+// columns so "show me everything the agent called OPERA" is a SQL query.
+enum BuildVsOperate {
+  CONSTROI
+  MEIO_TERMO
+  OPERA
+  INDETERMINADO
+}
+
+enum DocumentKind {
+  TAILORED_RESUME
+  COVER_LETTER
+}
+
+enum DocumentStatus {
+  DRAFT
+  APPROVED
+  SENT
+  DISCARDED
+}
+
+enum TaskStatus {
+  QUEUED
+  RUNNING
+  DONE
+  FAILED
+  CANCELED
+  EXPIRED
+}
+
+enum RunStatus {
+  RUNNING
+  OK
+  PARTIAL
+  FAILED
+}
+
+enum TriageLabel {
+  SHORTLIST
+  DESCARTAR
+}
+
+enum RuleProposalStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+}
+
+// ============================================================
+// SEARCH PROFILE — _config.yaml, versioned and form-editable
+// ============================================================
+
+// Append-only. Editing the profile in the UI writes a NEW row with
+// version+1 and flips isActive. Old JobScores keep a FK to the exact
+// version they were produced under, so a score from July stays
+// explainable after the profile changes in September.
+model SearchProfile {
+  id       String  @id @default(cuid())
+  version  Int     @unique
+  isActive Boolean @default(false)
+  label    String? // "pós-corte HN", "expansão infra core"
+
+  // --- obrigatorio (hard filters) ---
+  requireRemote        Boolean  @default(true)
+  requirePaysUsd       Boolean  @default(true)
+  requireHiresBrazil   Boolean  @default(true)
+  contractForms        String[]
+  excludePeopleMgmt    Boolean  @default(true)
+  salaryFloorUsdAnnual Int      @default(165000)
+
+  // --- perfil ---
+  track            Track     @default(IC)
+  builderOrOperator String   @default("builder")
+  targetTitles     String[]
+  minSeniority     Seniority @default(SENIOR)
+  yearsExperience  Int       @default(13)
+  currentTitle     String?
+  acceptedFormats  String[]
+  coreStack        String[]
+  domains          String[]
+
+  // --- preferencias ---
+  wantsEquity           Boolean  @default(true)
+  equityWeight           String  @default("alto")
+  salaryTargetUsdAnnual  Int     @default(187000)
+  referenceCompanies     String[]
+  preferredSectors       String[]
+  prioritizeYc           Boolean @default(true)
+  bonusCoreInfra         Boolean @default(true)
+  desiredStack           String[]
+  timezoneBase           String  @default("America/Sao_Paulo")
+  minOverlapHours        Int     @default(4)
+  companySizes           String[]
+  avoidStack             String[]
+
+  // --- fit (the highest-signal prose; fed verbatim to the model) ---
+  wantToDo       String[]
+  doNotWant      String[]
+  desiredCulture String[]
+
+  // --- excluir ---
+  excludedCompanies    String[]
+  excludedTitleSubstrs String[]
+
+  // --- operacional ---
+  maxJobsPerDay           Int       @default(10)
+  maxJobsPerCompanyPerRun Int       @default(3)
+  initialStatus           JobStatus @default(TRIAGEM)
+  dedupBy                 String[]  @default(["empresa", "cargo"])
+
+  // Anything in _config.yaml this schema doesn't model yet. The importer
+  // writes leftovers here rather than dropping them.
+  extras Json?
+
+  createdAt DateTime @default(now())
+
+  scores           JobScore[]
+  generatedDocs    GeneratedDocument[]
+  ruleProposals    ProfileRuleProposal[]
+
+  @@index([isActive])
+}
+
+// The resume text is part of the scoring rubric's cached prefix, so it is
+// versioned exactly like the profile. Two tracks exist in the vault today
+// (Product and Systems) — label is the track, version is the revision.
+model ResumeVersion {
+  id           String  @id @default(cuid())
+  label        String // "Product" | "Systems"
+  version      Int
+  originalName String?
+  blobUrl      String?
+  pathname     String?
+  mimeType     String?
+  sizeBytes    Int?
+
+  // Source of truth for editing: a Tiptap document, block-editable like a
+  // Notion page. contentText is the flattened plain text kept in sync on
+  // write — it's the stable cache prefix for scoring calls and the input to
+  // suggestion generation. The PDF is an *export*, not the source.
+  contentJson Json
+  contentText String @default("")
+
+  isDefault Boolean  @default(false)
+  notes     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  applications  Application[]
+  scores        JobScore[]
+  generatedDocs GeneratedDocument[]
+  suggestions   ResumeSuggestion[]
+
+  @@unique([label, version])
+  @@index([isDefault])
+}
+
+// A general-purpose context library: _key_results.md, the GitHub portfolio,
+// _why_<company>.md, uploaded PDFs of past reviews, etc. Nothing here enters
+// a prompt unless includeInPrompt is explicitly on — this is a library the
+// user curates, not an automatic feed.
+model ContextDocument {
+  id              String   @id @default(cuid())
+  kind            String // "key_results" | "github_portfolio" | "why_company" | "upload"
+  title           String
+  bodyText        String
+  blobUrl         String?
+  pathname        String?
+  mimeType        String?
+  sizeBytes       Int?
+  includeInPrompt Boolean  @default(false)
+  sortOrder       Float    @default(0)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([includeInPrompt, sortOrder])
+}
+
+// ============================================================
+// COMPANIES + WATCHLIST
+// ============================================================
+
+model Company {
+  id   String @id @default(cuid())
+  name String
+  slug String @unique
+
+  // --- watchlist (_watchlist.md) ---
+  isFavorite   Boolean  @default(false)
+  priority     Int? // 1-4, lower is checked first
+  sectorGroup  String? // the "## 🗄️ Bancos de dados..." heading it sat under
+  stackSummary String? // "TS/Node/Postgres"
+  careersUrl   String?
+  pjBrazil     Tristate @default(A_CONFIRMAR) // "PJ-BR" column: Alta / Média / Confirmar
+  pjBrazilNote String?
+
+  // --- health profile (_empresa-*.md frontmatter) ---
+  health           CompanyHealth @default(A_CONFIRMAR)
+  foundedYear      Int?
+  headcount        Int?
+  stage            String? // free text: "Série A", "Series B", "bootstrapped/lucrativa"
+  totalRaisedRaw   String? // "~$124M" — prose, kept verbatim
+  totalRaisedUsd   BigInt? // best-effort parse; null when unparseable
+  lastRoundRaw     String?
+  valuationRaw     String?
+  profitable       Tristate @default(A_CONFIRMAR)
+  profitableNote   String?
+  profileUpdatedAt DateTime?
+  // The full _empresa-*.md body (Financeiro / Time / Sinais / Riscos / Fontes)
+  // imported verbatim as an immutable archive. Editable prose goes in Note.
+  healthMarkdown   String?
+  sources          String[]
+
+  isExcluded    Boolean @default(false)
+  exclusionNote String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  boards  CompanyBoard[]
+  aliases CompanyAlias[]
+  jobs    Job[]
+  notes   Note[]
+
+  @@index([isFavorite, priority])
+  @@index([health])
+  @@index([name])
+}
+
+// Same company appears under different names across sources. Resolution is:
+// slug, then alias, then create.
+model CompanyAlias {
+  id        String  @id @default(cuid())
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  alias     String  @unique // already slugified
+
+  @@index([companyId])
+}
+
+// A company can have more than one board (mid-ATS-migration), and each board
+// needs its OWN health + persisted backoff — a dead board must not stop a
+// working one from being polled. Poll targets are boards, not companies.
+model CompanyBoard {
+  id        String      @id @default(cuid())
+  companyId String
+  company   Company     @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  provider  AtsProvider
+  slug      String
+
+  enabled     Boolean   @default(true)
+  lastFetchAt DateTime?
+  lastOkAt    DateTime?
+  lastJobCount        Int?
+  lastError            String?
+  consecutiveFailures  Int       @default(0)
+  nextRetryAt          DateTime?
+  verifiedAt           DateTime?
+  note                 String?
+
+  // Prevents a known-homonym incident (e.g. a Lever slug that resolves to an
+  // unrelated fintech of the same name) from silently recurring.
+  @@unique([provider, slug])
+  @@index([companyId])
+  @@index([enabled, nextRetryAt])
+}
+
+// ============================================================
+// SOURCES + RAW PAYLOADS
+// ============================================================
+
+// The source registry lives in the DB so it is UI-toggleable and so the
+// backoff SURVIVES a restart — same lesson as apps/attention's WhatsApp
+// worker, where in-memory backoff produced 479 reconnects in 23h.
+model Source {
+  key         String     @id // "ats:ashby" | "remoteok" | "hn" | "linkedin_guest"
+  kind        SourceKind
+  label       String
+  enabled     Boolean    @default(false) // opt-in by default; ATS + core aggregators seeded true
+  priority    Int        @default(100) // lower runs first
+  rateLimitMs Int        @default(1000)
+  maxPerRun   Int        @default(50)
+  config      Json?
+
+  lastRunAt           DateTime?
+  lastOkAt            DateTime?
+  lastError            String?
+  consecutiveFailures  Int       @default(0)
+  nextRetryAt          DateTime?
+
+  runs        SourceRun[]
+  rawPostings RawPosting[]
+  sightings   JobSighting[]
+
+  @@index([enabled, priority])
+}
+
+model IngestionRun {
+  id         String    @id @default(cuid())
+  runDate    DateTime  @db.Date
+  runType    String    @default("daily") // "daily" | "deep_sweep" | "manual"
+  startedAt  DateTime  @default(now())
+  finishedAt DateTime?
+  status     RunStatus @default(RUNNING)
+  cap        Int
+  fetched    Int       @default(0)
+  considered Int       @default(0)
+  duplicates Int       @default(0)
+  filtered   Int       @default(0)
+  promoted   Int       @default(0)
+  deferred   Int       @default(0)
+  warnings   String[]
+
+  sourceRuns SourceRun[]
+
+  @@unique([runDate, runType])
+  @@index([startedAt(sort: Desc)])
+}
+
+// The _run-log.md contract, as a table.
+model SourceRun {
+  id        String       @id @default(cuid())
+  runId     String
+  run       IngestionRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+  sourceKey String
+  source    Source       @relation(fields: [sourceKey], references: [key])
+  boardId   String?
+
+  startedAt  DateTime  @default(now())
+  finishedAt DateTime?
+  status     RunStatus @default(RUNNING)
+  httpStatus Int?
+  fetched    Int       @default(0)
+  promoted   Int       @default(0)
+  durationMs Int?
+  error      String?
+  warnings   String[]
+
+  @@index([runId])
+  @@index([sourceKey, startedAt])
+}
+
+// The untouched source payload, staged before normalization. Four reasons
+// this table exists: re-normalize after a parser bug without re-fetching;
+// contentHash short-circuits the daily run (most postings are unchanged day
+// to day, so this is nearly free); a posting filtered out today costs
+// nothing tomorrow (decision is the dedup memory); and it keeps Job narrow
+// so the data table stays fast.
+model RawPosting {
+  id         String @id @default(cuid())
+  sourceKey  String
+  source     Source @relation(fields: [sourceKey], references: [key])
+  externalId String // stable per source: greenhouse id, ashby uuid, HN comment id
+
+  url             String?
+  title           String?
+  companyName     String?
+  locationRaw     String?
+  descriptionText String?
+  compensationRaw String?
+  postedAt        DateTime?
+  payload         Json
+  contentHash     String // sha256 over the normalized (title, location, description, compensation)
+
+  decision        PostingDecision @default(PENDING)
+  filterReason    String?
+  needsEnrichment Boolean         @default(false) // LinkedIn cards: title-only, no body
+
+  firstSeenAt DateTime  @default(now())
+  lastSeenAt  DateTime  @default(now())
+  changedAt   DateTime?
+  processedAt DateTime?
+
+  jobId String?
+  job   Job?    @relation(fields: [jobId], references: [id], onDelete: SetNull)
+
+  sightings JobSighting[]
+
+  @@unique([sourceKey, externalId])
+  @@index([decision, lastSeenAt])
+  @@index([contentHash])
+  @@index([jobId])
+}
+
+// ============================================================
+// JOBS
+// ============================================================
+
+model Job {
+  id        String  @id @default(cuid())
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id])
+
+  title String
+  // Normalized title used for dedup: quotes stripped, parentheticals removed,
+  // trailing location removed, whitespace collapsed, lowercased. Kept as a
+  // visible column (not folded into a synthetic key) so a bad dedup
+  // collision is debuggable from the data table.
+  dedupTitle String
+
+  track         Track     @default(IC)
+  seniority     Seniority @default(UNKNOWN)
+  seniorityNote String?
+  workModel     WorkModel @default(DESCONHECIDO)
+  locationRaw   String?
+  regions       String[] // normalized from locationRaw: ["worldwide"], ["americas","latam"], ...
+
+  hiresBrazil     Tristate @default(A_CONFIRMAR)
+  hiresBrazilNote String?
+  equity          Tristate @default(A_CONFIRMAR)
+  equityNote      String?
+
+  currency     String?
+  currencyNote String?
+  salaryMin    Int?
+  salaryMax    Int?
+  salaryPeriod String? @default("YEAR")
+  salaryRaw    String?
+
+  stack      String[]
+  sector     String?
+  sectorTags String[]
+
+  canonicalUrl String?
+
+  status JobStatus @default(TRIAGEM)
+
+  // Effective interest, denormalized so the data table sorts without a join
+  // to the latest score. Written by the scorer, overwritten by the user.
+  interest       Int            @default(3)
+  interestSource InterestSource @default(AGENT)
+
+  // Manual drag-and-drop order — deliberately separate from `interest` and
+  // from any score. A float so a row can be inserted between two neighbours
+  // without renumbering the table. Null until the user drags something.
+  manualRank Float?
+
+  // Denormalized from the latest score for filtering — the two rules the
+  // user's own decisions weigh most heavily.
+  peopleManagement Boolean?
+  buildVsOperate   BuildVsOperate @default(INDETERMINADO)
+
+  // The learned-model / LLM / user compatibility score shown in the table.
+  compatibilityScore Int?
+  scoreSource        ScoreSource?
+
+  autoTriagedAt    DateTime?
+  autoTriageModelId String?
+
+  // User-written rejection reason. The single best training signal available
+  // — fed back as few-shot examples in the scoring prompt.
+  rejectionReason String?
+  rejectedAt      DateTime?
+
+  discoveredAt DateTime  @default(now())
+  closedAt     DateTime? // posting vanished from its board
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  latestScoreId String?   @unique
+  latestScore   JobScore? @relation("JobLatestScore", fields: [latestScoreId], references: [id])
+
+  scores          JobScore[]        @relation("JobScores")
+  sightings       JobSighting[]
+  rawPostings     RawPosting[]
+  applications    Application[]
+  statusChanges   JobStatusChange[]
+  notes           Note[]
+  generatedDocs   GeneratedDocument[]
+  llmCalls        LlmCall[]
+  triageDecisions TriageDecision[]
+  suggestions     ResumeSuggestion[]
+
+  // dedup_por: [empresa, cargo] from the original config, kept exactly.
+  @@unique([companyId, dedupTitle])
+  @@index([status, interest(sort: Desc)])
+  @@index([interest(sort: Desc), discoveredAt(sort: Desc)])
+  @@index([manualRank])
+  @@index([companyId, status])
+  @@index([discoveredAt(sort: Desc)])
+  @@index([closedAt])
+}
+
+// One Job, many sightings. The same posting can arrive from two sources
+// (e.g. a company's own ATS and an aggregator); that's evidence, not a
+// duplicate row. Also drives closedAt: a full board fetch that no longer
+// lists a sighting marks it closed.
+model JobSighting {
+  id        String @id @default(cuid())
+  jobId     String
+  job       Job    @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  sourceKey String
+  source    Source @relation(fields: [sourceKey], references: [key])
+
+  rawPostingId String?
+  rawPosting   RawPosting? @relation(fields: [rawPostingId], references: [id], onDelete: SetNull)
+
+  externalId  String
+  url         String?
+  firstSeenAt DateTime  @default(now())
+  lastSeenAt  DateTime  @default(now())
+  closedAt    DateTime?
+
+  @@unique([sourceKey, externalId])
+  @@index([jobId])
+  @@index([lastSeenAt])
+}
+
+// ============================================================
+// SCORING — rubric snapshot lives here
+// ============================================================
+
+// Scores are append-only. A score is only meaningful relative to the rubric
+// that produced it: (SearchProfile version, ResumeVersion, model, prompt
+// template version). rubricHash is a sha256 over the canonicalized
+// rendering of all four, and doubles as the score Task's uniqueKey — so
+// re-running a score with an unchanged rubric is a free no-op.
+model JobScore {
+  id    String @id @default(cuid())
+  jobId String
+  job   Job    @relation("JobScores", fields: [jobId], references: [id], onDelete: Cascade)
+
+  profileVersionId String
+  profileVersion   SearchProfile  @relation(fields: [profileVersionId], references: [id])
+  resumeVersionId  String?
+  resumeVersion    ResumeVersion? @relation(fields: [resumeVersionId], references: [id])
+  model            String // "claude-haiku-4-5" | "vault-import" | "learned-model"
+  promptVersion    String // "score-v1"
+  rubricHash       String
+
+  interest Int // 1-5
+  verdict  String // "avancar" | "revisar" | "descartar"
+
+  // The three labeled paragraphs from the original vault's "## Fit" section.
+  // Live on the SCORE, not the Job, so an old rationale stays attached to
+  // the old rubric that produced it.
+  fitWhy       String?
+  fitRedFlags  String?
+  fitToConfirm String?
+
+  peopleManagement Boolean?
+  buildVsOperate   BuildVsOperate @default(INDETERMINADO)
+  signals          String[] // ["yc","core_infra","compiled_lang","avoid_stack"]
+
+  llmCallId  String?
+  importNote String? // "unstructured" when the imported body had no three labels
+  createdAt  DateTime @default(now())
+
+  latestFor Job? @relation("JobLatestScore")
+
+  @@unique([jobId, rubricHash])
+  @@index([jobId, createdAt(sort: Desc)])
+  @@index([rubricHash])
+}
+
+model JobStatusChange {
+  id         String     @id @default(cuid())
+  jobId      String
+  job        Job        @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  fromStatus JobStatus?
+  toStatus   JobStatus
+  actor      String     @default("user") // "user" | "agent" | "import"
+  reason     String?
+  changedAt  DateTime   @default(now())
+
+  @@index([jobId, changedAt])
+}
+
+// ============================================================
+// LEARNED TRIAGE MODEL
+// ============================================================
+
+// Every triage decision the user makes, whether from the fast-triage flow,
+// the data table, or a manual override on a job page. wasCorrection is set
+// when the decision reverses an auto-triage call — those get up-weighted in
+// training, since they're exactly the cases the model got wrong.
+model TriageDecision {
+  id               String      @id @default(cuid())
+  jobId            String
+  job              Job         @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  label            TriageLabel
+  reason           String?
+  featuresSnapshot Json
+  modelId          String?
+  model            ScoringModel? @relation(fields: [modelId], references: [id])
+  wasCorrection    Boolean     @default(false)
+  decidedAt        DateTime    @default(now())
+
+  @@index([jobId, decidedAt])
+  @@index([modelId])
+}
+
+// One row per training run. Logistic regression over ~20 structured
+// features — coefficients ARE the explanation, which is what /lab renders.
+// shadowMode is on by default: a new version only auto-discards once the
+// user has reviewed its cross-validated precision and turned it on.
+model ScoringModel {
+  id             String   @id @default(cuid())
+  version        Int      @unique
+  coefficients   Json
+  intercept      Float
+  threshold      Float
+  precision      Float
+  recall         Float
+  auc            Float?
+  trainedOnCount Int
+  shadowMode     Boolean  @default(true)
+  activatedAt    DateTime?
+  trainedAt      DateTime @default(now())
+
+  decisions TriageDecision[]
+
+  @@index([trainedAt(sort: Desc)])
+}
+
+// A rule the distillation job proposes for SearchProfile.doNotWant /
+// wantToDo, mined from recent decisions + reasons. Never applied
+// automatically — the user accepts (which edits the active profile) or
+// rejects it from /perfil.
+model ProfileRuleProposal {
+  id               String              @id @default(cuid())
+  profileVersionId String
+  profileVersion   SearchProfile       @relation(fields: [profileVersionId], references: [id])
+  proposedRule     String
+  targetField      String // "doNotWant" | "wantToDo" | "avoidStack" | "excludedCompanies"
+  evidenceJobIds   String[]
+  rationale        String
+  status           RuleProposalStatus  @default(PENDING)
+  createdAt        DateTime            @default(now())
+  resolvedAt       DateTime?
+
+  @@index([status, createdAt])
+}
+
+// ============================================================
+// APPLICATIONS + GENERATED DOCUMENTS
+// ============================================================
+
+model Application {
+  id    String @id @default(cuid())
+  jobId String
+  job   Job    @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  resumeVersionId  String?
+  resumeVersion    ResumeVersion?      @relation(fields: [resumeVersionId], references: [id])
+  coverLetterId    String?
+  coverLetter      GeneratedDocument?  @relation("ApplicationCoverLetter", fields: [coverLetterId], references: [id])
+  tailoredResumeId String?
+  tailoredResume   GeneratedDocument?  @relation("ApplicationTailoredResume", fields: [tailoredResumeId], references: [id])
+
+  appliedAt   DateTime @default(now())
+  channel     String? // "ats" | "email" | "referral"
+  externalRef String?
+  notes       String?
+
+  @@index([jobId, appliedAt])
+}
+
+// A cover letter or a generated resume variant tied to a job. contentJson
+// mirrors ResumeVersion's Tiptap shape so it's editable the same way.
+model GeneratedDocument {
+  id    String       @id @default(cuid())
+  jobId String
+  job   Job          @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  kind  DocumentKind
+
+  baseResumeVersionId String?
+  baseResumeVersion   ResumeVersion? @relation(fields: [baseResumeVersionId], references: [id])
+  profileVersionId    String?
+  profileVersion      SearchProfile? @relation(fields: [profileVersionId], references: [id])
+
+  model           String
+  contentMarkdown String
+  contentJson     Json?
+  blobUrl         String?
+  pathname        String?
+  status          DocumentStatus @default(DRAFT)
+  llmCallId       String?
+  error           String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  coverLetterFor    Application[] @relation("ApplicationCoverLetter")
+  tailoredResumeFor Application[] @relation("ApplicationTailoredResume")
+
+  @@index([jobId, kind, createdAt])
+}
+
+// A single suggested edit against the active resume, generated for one job.
+// Rendered inline in the Tiptap editor as a diff; accept/reject is per row.
+// Accepting edits the draft — the resume only becomes a new ResumeVersion
+// when the user explicitly saves.
+model ResumeSuggestion {
+  id              String    @id @default(cuid())
+  jobId           String
+  job             Job       @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  resumeVersionId String
+  resumeVersion   ResumeVersion @relation(fields: [resumeVersionId], references: [id])
+
+  kind        String // "bullet" | "keyword" | "context"
+  anchorText  String? // the text in the document this suggestion attaches to
+  beforeText  String?
+  afterText   String
+  rationale   String?
+  accepted    Boolean?
+  llmCallId   String?
+  createdAt   DateTime  @default(now())
+  resolvedAt  DateTime?
+
+  @@index([jobId, resumeVersionId])
+}
+
+// ============================================================
+// NOTES (Tiptap)
+// ============================================================
+
+// Polymorphic by nullable FK: attached to a job, to a company, or standalone
+// (both null).
+model Note {
+  id    String  @id @default(cuid())
+  title String?
+
+  contentJson Json
+  contentText String @default("")
+
+  jobId     String?
+  job       Job?     @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  companyId String?
+  company   Company? @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  pinned    Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([jobId, updatedAt])
+  @@index([companyId, updatedAt])
+  @@index([updatedAt(sort: Desc)])
+}
+
+// ============================================================
+// QUEUE + LLM ACCOUNTING
+// ============================================================
+
+// Copied from apps/attention's job queue, renamed Task to free the name for
+// job postings: FOR UPDATE SKIP LOCKED claim, uniqueKey idempotency,
+// exponential backoff on failure, zombie requeue.
+model Task {
+  id          String     @id @default(cuid())
+  type        String // discover | fetch-source | normalize | score | generate-doc | rescore-all | import-vault | train-model | distill-rules
+  payload     Json
+  uniqueKey   String?    @unique
+  status      TaskStatus @default(QUEUED)
+  runAt       DateTime   @default(now())
+  attempts    Int        @default(0)
+  maxAttempts Int        @default(5)
+  lastError   String?
+  claimedAt   DateTime?
+  finishedAt  DateTime?
+  createdAt   DateTime   @default(now())
+
+  @@index([status, runAt])
+}
+
+model LlmCall {
+  id           String   @id @default(cuid())
+  purpose      String // "score" | "tailored_resume" | "cover_letter" | "suggest" | "distill_rules"
+  model        String
+  inputTokens  Int      @default(0)
+  outputTokens Int      @default(0)
+  cacheCreationInputTokens Int @default(0)
+  cacheReadInputTokens     Int @default(0)
+  costUsd      Decimal  @default(0) @db.Decimal(12, 6)
+  durationMs   Int      @default(0)
+  jobId        String?
+  job          Job?     @relation(fields: [jobId], references: [id], onDelete: SetNull)
+  rubricHash   String?
+  error        String?
+  createdAt    DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([purpose, createdAt])
+}
+
+// ============================================================
+// PUSH NOTIFICATIONS
+// ============================================================
+
+model PushSubscription {
+  id          String    @id @default(cuid())
+  endpoint    String    @unique
+  p256dh      String
+  auth        String
+  deviceLabel String?
+  userAgent   String?
+  createdAt   DateTime  @default(now())
+  lastSeenAt  DateTime  @default(now())
+  deadAt      DateTime?
+
+  notifications PushNotification[]
+
+  @@index([deadAt])
+}
+
+model PushNotification {
+  id             String           @id @default(cuid())
+  kind           String // "digest" | "new-job" | "health"
+  title          String
+  body           String
+  url            String
+  tag            String?
+  subscriptionId String
+  subscription   PushSubscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  sentAt         DateTime         @default(now())
+  receivedAt     DateTime?
+  ackedAt        DateTime?
+  sendError      String?
+
+  @@index([kind, sentAt])
+}
