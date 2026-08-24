@@ -19,8 +19,8 @@ export default async function CompanyDetailPage({ params }: { params: Promise<{ 
   const company = await getCompanyDetail(slug);
   if (!company) notFound();
 
-  const openJobs = company.jobs.filter((j) => j.status !== "DESCARTADA");
-  const discardedJobs = company.jobs.filter((j) => j.status === "DESCARTADA");
+  const openJobs = company.jobs.filter((j) => j.status !== "DESCARTADA" && j.status !== "REJEITADA");
+  const discardedJobs = company.jobs.filter((j) => j.status === "DESCARTADA" || j.status === "REJEITADA");
 
   return (
     <div className="flex h-full flex-col overflow-auto">

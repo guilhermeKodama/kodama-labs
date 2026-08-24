@@ -44,7 +44,7 @@ export async function handleScore(payload: { jobId: string }): Promise<void> {
 
 export async function handleRescoreAll(): Promise<void> {
   const jobs = await prisma.job.findMany({
-    where: { status: { notIn: ["DESCARTADA", "CONTRATADA"] } },
+    where: { status: { notIn: ["DESCARTADA", "CONTRATADA", "REJEITADA"] } },
     select: { id: true },
   });
   // Staggered runAt so a full re-score doesn't fire hundreds of Haiku calls

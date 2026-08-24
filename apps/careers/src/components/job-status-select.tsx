@@ -6,7 +6,7 @@ import { STATUS_LABELS } from "@/lib/job-status";
 import type { JobStatus } from "@/generated/prisma";
 import { cn } from "@/lib/utils";
 
-const OPTIONS: JobStatus[] = ["RADAR", "TRIAGEM", "SHORTLIST", "APLICADA", "ENTREVISTA", "OFERTA", "CONTRATADA", "DESCARTADA"];
+const OPTIONS: JobStatus[] = ["RADAR", "TRIAGEM", "SHORTLIST", "APLICADA", "ENTREVISTA", "OFERTA", "CONTRATADA", "DESCARTADA", "REJEITADA"];
 
 export function JobStatusSelect({ jobId, status }: { jobId: string; status: JobStatus }) {
   const [isPending, startTransition] = useTransition();

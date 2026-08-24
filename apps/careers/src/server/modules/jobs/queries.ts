@@ -22,7 +22,7 @@ export async function listJobs(view: "triagem" | "funil" | "processo" | "todas",
     view === "triagem"
       ? { status: { in: ["RADAR", "TRIAGEM", "SHORTLIST", "APLICADA"] as JobStatus[] } }
       : view === "funil"
-        ? { status: { not: "DESCARTADA" as JobStatus } }
+        ? { status: { notIn: ["DESCARTADA", "REJEITADA"] as JobStatus[] } }
         : view === "processo"
           ? { status: { in: ["APLICADA", "ENTREVISTA", "OFERTA"] as JobStatus[] } }
           : {};

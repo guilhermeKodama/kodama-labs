@@ -35,7 +35,8 @@ enum JobStatus {
   ENTREVISTA // "4 - Entrevista"
   OFERTA // "5 - Oferta"
   CONTRATADA // "6 - Contratada"
-  DESCARTADA // "X - Descartada"
+  DESCARTADA // "X - Descartada" — user chose not to pursue (a real preference signal, trains the model)
+  REJEITADA // "X - Recusada" — company said no after APLICADA+ (not a preference signal — must never feed TriageDecision)
 }
 
 enum Track {
