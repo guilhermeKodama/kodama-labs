@@ -10,6 +10,25 @@ export async function triggerTraining(): Promise<void> {
 }
 
 /**
+ * Re-runs scoreJob() for every job still in the funnel — each call checks
+ * the current ScoringModel before touching the LLM (see llm/score.ts), so
+ * this is how an already-queued backlog gets evaluated against a model
+ * trained after those jobs were first scored. Staggered by handleRescoreAll
+ * itself to stay inside the daily LLM budget.
+ */
+export async function triggerRescoreAll(): Promise<void> {
+  await enqueue("rescore-all", {}, { uniqueKey: `rescore-all:manual:${Date.now()}` });
+  revalidatePath("/auto");
+  revalidatePath("/triagem");
+  revalidatePath("/");
+}
+
+export async function triggerDistillation(): Promise<void> {
+  await enqueue("distill-rules", {}, { uniqueKey: `distill-rules:manual:${Date.now()}` });
+  revalidatePath("/perfil");
+}
+
+/**
  * Flips the latest ScoringModel out of shadow mode — the one explicit,
  * user-initiated action the whole design gates real auto-discard behind
  * (see server/ml/train.ts). Refuses if the model never cleared the

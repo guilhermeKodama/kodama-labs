@@ -49,6 +49,20 @@ async function scheduleTrainingIfNeeded(): Promise<void> {
   }
 }
 
+// Rolling 7-day bucket rather than a calendar-week key — simpler than
+// pulling in a date library for "roughly weekly", and distillRules() itself
+// already enforces the minimum-decisions floor so an early/late trigger by
+// a day or two costs nothing.
+async function scheduleDistillationIfNeeded(): Promise<void> {
+  try {
+    const daysSinceEpoch = Math.floor(spTodayStart().getTime() / (24 * 60 * 60 * 1000));
+    const week = Math.floor(daysSinceEpoch / 7);
+    await enqueue("distill-rules", {}, { uniqueKey: `distill-rules:auto:${week}` });
+  } catch (error) {
+    console.error("[jobs] falha ao agendar destilação de regras", error);
+  }
+}
+
 // Deliberately excludes "fetch-source" — that type is claimed ONLY by
 // worker:sources (see src/worker/sources.ts). This is the isolation the
 // two-worker split exists for: network I/O against a slow or hostile board
@@ -119,6 +133,11 @@ async function loop(): Promise<void> {
       await scheduleTrainingIfNeeded();
     } catch (error) {
       console.error("[jobs] falha no agendador de retreino", error);
+    }
+    try {
+      await scheduleDistillationIfNeeded();
+    } catch (error) {
+      console.error("[jobs] falha no agendador de destilação", error);
     }
     try {
       await processTasks();

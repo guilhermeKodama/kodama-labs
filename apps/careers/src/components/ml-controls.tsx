@@ -3,6 +3,7 @@
 import { useTransition } from "react";
 import { toast } from "sonner";
 import { triggerTraining, activateAutoTriage, revertToShadowMode } from "@/server/modules/ml/actions";
+import { TaskProgress } from "@/components/task-progress";
 import { cn } from "@/lib/utils";
 
 type Model = { precision: number; shadowMode: boolean } | null;
@@ -14,6 +15,7 @@ export function MlControls({ model, pendingDecisions }: { model: Model; pendingD
 
   return (
     <div className="mt-3 flex flex-col gap-2">
+      <TaskProgress types={["train-model"]} label="Treinando modelo" />
       <button
         type="button"
         disabled={isPending}
