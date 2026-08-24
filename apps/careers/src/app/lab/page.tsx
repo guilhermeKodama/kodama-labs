@@ -1,6 +1,7 @@
 import { prisma } from "@/server/lib/prisma";
 import { spTodayStart } from "@/server/lib/timezone";
 import { PushSetup } from "@/components/push-setup";
+import { MlControls } from "@/components/ml-controls";
 import { env } from "@/env";
 
 export const dynamic = "force-dynamic";
@@ -32,6 +33,10 @@ export default async function LabPage() {
         where: { createdAt: { gte: spTodayStart() } },
       }),
     ]);
+
+  const pendingDecisions = await prisma.triageDecision.count({
+    where: latestModel ? { decidedAt: { gt: latestModel.trainedAt } } : {},
+  });
 
   const cacheRead = cacheStats._sum.cacheReadInputTokens ?? 0;
   const totalRead = cacheRead + (cacheStats._sum.inputTokens ?? 0);
@@ -146,6 +151,7 @@ export default async function LabPage() {
                 Nenhum modelo treinado ainda. Triagem manual gera os rótulos necessários.
               </p>
             )}
+            <MlControls model={latestModel} pendingDecisions={pendingDecisions} />
           </div>
         </div>
       </div>

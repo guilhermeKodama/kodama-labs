@@ -5,8 +5,64 @@ import { env } from "../../env";
 import { parseJson } from "./anthropic";
 import type { Job, Company, SearchProfile } from "../../generated/prisma";
 import crypto from "node:crypto";
+import { buildFeatureVector, featureVectorToArray, FEATURE_KEYS } from "../ml/features";
+import { predictProba } from "../ml/logistic-regression";
 
 export const PROMPT_VERSION = "score-v1";
+
+/**
+ * Layer 2 of the 4-layer triage design (see server/ml/train.ts): a cheap
+ * logistic-regression pre-filter that runs BEFORE any LLM call. Only ever
+ * acts on the discard side (auto-shortlist stays opt-in per the product
+ * rule) and only when confident enough to clear the model's own
+ * cross-validated threshold. Returns true if it handled the job (LLM call
+ * skipped entirely — this is the cost savings layer 3 is designed around).
+ * Shadow mode still skips the LLM and records the prediction as
+ * compatibilityScore/scoreSource, it just doesn't touch job.status —
+ * that's what makes the concordance on /auto meaningful later.
+ */
+async function tryLayer2Discard(job: Job, company: Company, profile: SearchProfile): Promise<boolean> {
+  const model = await prisma.scoringModel.findFirst({ orderBy: { version: "desc" } });
+  if (!model) return false;
+
+  const vector = buildFeatureVector(job, company, profile);
+  const array = featureVectorToArray(vector);
+  const coefficients = model.coefficients as Record<string, number>;
+  const weights = FEATURE_KEYS.map((k) => coefficients[k] ?? 0);
+  const proba = predictProba({ weights, bias: model.intercept }, array);
+
+  if (proba >= model.threshold) return false; // not confident enough — fall through to the LLM
+
+  const pct = Math.round(proba * 100);
+  await prisma.job.update({
+    where: { id: job.id },
+    data: { compatibilityScore: pct, scoreSource: "MODEL" },
+  });
+
+  if (!model.shadowMode) {
+    await prisma.job.update({
+      where: { id: job.id },
+      data: {
+        status: "DESCARTADA",
+        rejectedAt: new Date(),
+        rejectionReason: `Auto-descartada pelo modelo v${model.version} — score ${pct}%`,
+        autoTriagedAt: new Date(),
+        autoTriageModelId: model.id,
+      },
+    });
+    await prisma.jobStatusChange.create({
+      data: {
+        jobId: job.id,
+        fromStatus: job.status,
+        toStatus: "DESCARTADA",
+        actor: "agent",
+        reason: `modelo v${model.version}, score ${pct}%`,
+      },
+    });
+  }
+
+  return true;
+}
 
 export const ScoreSchema = z.object({
   interesse: z.number().int().min(1).max(5),
@@ -152,10 +208,14 @@ function rubricHash(parts: string[]): string {
   return crypto.createHash("sha256").update(parts.join(" ")).digest("hex");
 }
 
-export async function scoreJob(jobId: string): Promise<{ scoreId: string; deferred: boolean }> {
+export async function scoreJob(jobId: string): Promise<{ scoreId: string | null; deferred: boolean }> {
   const job = await prisma.job.findUniqueOrThrow({ where: { id: jobId }, include: { company: true } });
   const profile = await prisma.searchProfile.findFirst({ where: { isActive: true }, orderBy: { version: "desc" } });
   if (!profile) throw new Error("Nenhum SearchProfile ativo.");
+
+  const modelResult = await tryLayer2Discard(job, job.company, profile);
+  if (modelResult) return { scoreId: null, deferred: false };
+
   const resume = await prisma.resumeVersion.findFirst({ where: { isDefault: true } });
 
   const blockA = RUBRIC_INSTRUCTIONS;
