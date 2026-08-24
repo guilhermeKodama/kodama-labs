@@ -2,7 +2,7 @@
 
 import { useTransition } from "react";
 import { updateJobStatus } from "@/server/modules/jobs/actions";
-import { STATUS_LABELS } from "@/server/modules/jobs/queries";
+import { STATUS_LABELS } from "@/lib/job-status";
 import type { JobStatus } from "@/generated/prisma";
 import { cn } from "@/lib/utils";
 

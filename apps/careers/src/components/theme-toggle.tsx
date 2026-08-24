@@ -1,19 +1,11 @@
 "use client";
 
-import * as React from "react";
-import { useTheme } from "next-themes";
+import { useTheme } from "@/components/theme-provider";
 import { Sun, Moon } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export function ThemeToggle() {
   const { theme, setTheme } = useTheme();
-  const [mounted, setMounted] = React.useState(false);
-  React.useEffect(() => setMounted(true), []);
-
-  // Avoid a hydration mismatch: the server has no idea which theme the
-  // client will resolve to (next-themes reads localStorage on mount), so
-  // render a neutral placeholder until we know.
-  if (!mounted) return <div className="h-[30px] w-full rounded-lg bg-muted" />;
 
   return (
     <div className="flex gap-0.5 rounded-lg border border-border bg-card p-0.5">
