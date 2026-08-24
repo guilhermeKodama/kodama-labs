@@ -34,6 +34,13 @@ export async function triggerDistillation(): Promise<void> {
  * (see server/ml/train.ts). Refuses if the model never cleared the
  * cross-validated precision bar; the UI is expected to hide this action
  * in that case too, this is the backstop.
+ *
+ * Also re-enqueues scoring for every job still in the funnel: without this,
+ * jobs the model flagged as "would discard" *before* activation (visible on
+ * /auto as shadow predictions) just sit there — nothing re-evaluates them
+ * once shadowMode flips, since scoreJob() only runs when a score task is
+ * actually claimed for that job. Activating should act on the backlog it
+ * was just shown, not silently leave it stale.
  */
 export async function activateAutoTriage(): Promise<{ error?: string }> {
   const model = await prisma.scoringModel.findFirst({ orderBy: { version: "desc" } });
@@ -44,8 +51,11 @@ export async function activateAutoTriage(): Promise<{ error?: string }> {
     where: { id: model.id },
     data: { shadowMode: false, activatedAt: new Date() },
   });
+  await enqueue("rescore-all", {}, { uniqueKey: `rescore-all:activate:${model.id}` });
   revalidatePath("/lab");
   revalidatePath("/auto");
+  revalidatePath("/triagem");
+  revalidatePath("/");
   return {};
 }
 
