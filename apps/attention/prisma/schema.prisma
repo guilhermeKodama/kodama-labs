@@ -1,0 +1,245 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum MessageDirection {
+  IN
+  OUT
+}
+
+enum JobStatus {
+  QUEUED
+  RUNNING
+  DONE
+  FAILED
+  CANCELED
+  EXPIRED
+}
+
+enum QueueState {
+  QUEUED
+  SNOOZED
+  DISMISSED
+  RESOLVED_BY_REPLY
+  REPLIED
+}
+
+enum DraftStatus {
+  DRAFT
+  APPROVED
+  SENT
+  CANCELED
+  EXPIRED
+}
+
+model PushSubscription {
+  id          String    @id @default(cuid())
+  endpoint    String    @unique
+  p256dh      String
+  auth        String
+  deviceLabel String?
+  userAgent   String?
+  createdAt   DateTime  @default(now())
+  lastSeenAt  DateTime  @default(now())
+  deadAt      DateTime?
+
+  beacons       Beacon[]
+  notifications Notification[]
+
+  @@index([deadAt])
+}
+
+model Beacon {
+  id             String    @id @default(cuid())
+  seq            Int       @default(autoincrement())
+  subscriptionId String
+  subscription   PushSubscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  sentAt         DateTime  @default(now())
+  receivedAt     DateTime?
+  ackedAt        DateTime?
+  sendError      String?
+
+  @@index([subscriptionId, sentAt])
+  @@index([sentAt])
+}
+
+model FocusWindow {
+  id       String    @id @default(cuid())
+  label    String
+  startsAt DateTime  @default(now())
+  endsAt   DateTime?
+
+  @@index([startsAt])
+}
+
+// Congelada a partir da Etapa 1 — o worker parou de escrever aqui. Fica como
+// artefato do soak de entrega até a migration de limpeza da Etapa 6.
+model WhatsAppMessageMeta {
+  id         String            @id @default(cuid())
+  chatIdHash String
+  senderHash String
+  isGroup    Boolean
+  direction  MessageDirection
+  length     Int
+  occurredAt DateTime
+  createdAt  DateTime          @default(now())
+
+  @@index([chatIdHash, occurredAt])
+}
+
+model Chat {
+  id            String    @id @default(cuid())
+  waChatId      String    @unique
+  name          String?
+  isGroup       Boolean
+  lastMessageAt DateTime?
+  backfilledAt  DateTime?
+  createdAt     DateTime  @default(now())
+
+  messages Message[]
+}
+
+model Contact {
+  id          String   @id @default(cuid())
+  waContactId String   @unique
+  name        String?
+  pushname    String?
+  isMyContact Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  messages Message[]
+}
+
+model Message {
+  id                String           @id @default(cuid())
+  waMessageId       String           @unique
+  chatId            String
+  chat              Chat             @relation(fields: [chatId], references: [id])
+  senderContactId   String?
+  sender            Contact?         @relation(fields: [senderContactId], references: [id])
+  direction         MessageDirection
+  type              String
+  body              String?
+  hasMedia          Boolean          @default(false)
+  mentionedMe       Boolean          @default(false)
+  quotedWaMessageId String?
+  occurredAt        DateTime
+  createdAt         DateTime         @default(now())
+
+  // Triagem (Digest MVP) — sobrevivem à purga do body, são a fonte de
+  // exibição na /fila e no digest depois que o body vira NULL.
+  triageNivel           String?
+  triagePrecisaResposta Boolean?
+  triagePrazo           String?
+  triageResumo          String?
+  triagedAt             DateTime?
+
+  queueState   QueueState?
+  snoozedUntil DateTime?
+  digestId     String?
+  digest       Digest?      @relation(fields: [digestId], references: [id])
+  drafts       ReplyDraft[]
+
+  @@index([chatId, occurredAt])
+  @@index([occurredAt])
+  @@index([queueState, snoozedUntil])
+}
+
+model IntegrationStatus {
+  id                 String    @id @default(cuid())
+  channel            String    @unique
+  state              String
+  lastEventAt        DateTime  @default(now())
+  lastMessageAt      DateTime?
+  qrPayload          String?
+  sessionStartedAt   DateTime?
+  lastError          String?
+  ownWid             String?
+  consecutiveFailures Int      @default(0)
+  nextRetryAt        DateTime?
+}
+
+model Job {
+  id          String    @id @default(cuid())
+  type        String // "triage" | "draft" | "digest" | "send"
+  payload     Json
+  uniqueKey   String?   @unique
+  status      JobStatus @default(QUEUED)
+  runAt       DateTime  @default(now())
+  attempts    Int       @default(0)
+  maxAttempts Int       @default(5)
+  lastError   String?
+  claimedAt   DateTime?
+  finishedAt  DateTime?
+  createdAt   DateTime  @default(now())
+
+  @@index([status, runAt])
+}
+
+model LlmCall {
+  id           String   @id @default(cuid())
+  purpose      String // "triage" | "draft"
+  model        String
+  inputTokens  Int      @default(0)
+  outputTokens Int      @default(0)
+  durationMs   Int      @default(0)
+  messageId    String?
+  error        String?
+  createdAt    DateTime @default(now())
+
+  @@index([createdAt])
+}
+
+model Digest {
+  id            String    @id @default(cuid())
+  windowLabel   String
+  scheduledFor  DateTime  @unique
+  sentAt        DateTime?
+  pushSkipped   Boolean   @default(false)
+  shownCount    Int       @default(0)
+  filteredCount Int       @default(0)
+  createdAt     DateTime  @default(now())
+
+  messages Message[]
+}
+
+model Notification {
+  id             String    @id @default(cuid())
+  kind           String // "digest" | "now" | "health"
+  title          String
+  body           String
+  url            String
+  tag            String?
+  subscriptionId String
+  subscription   PushSubscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  sentAt         DateTime  @default(now())
+  receivedAt     DateTime?
+  ackedAt        DateTime?
+  sendError      String?
+
+  @@index([kind, sentAt])
+}
+
+model ReplyDraft {
+  id              String      @id @default(cuid())
+  messageId       String
+  message         Message     @relation(fields: [messageId], references: [id])
+  text            String
+  model           String
+  status          DraftStatus @default(DRAFT)
+  approvedAt      DateTime?
+  sentAt          DateTime?
+  sentWaMessageId String?
+  error           String?
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  @@index([messageId, createdAt])
+}

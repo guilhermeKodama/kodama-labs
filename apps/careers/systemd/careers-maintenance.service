@@ -1,0 +1,15 @@
+[Unit]
+Description=Careers — periodic maintenance worker (zombie requeue, stale-job close, raw-posting prune)
+After=network-online.target docker.service careers-web.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/kodama/Documents/Github/kodama-labs/apps/careers
+Environment=PATH=/home/linuxbrew/.linuxbrew/opt/node@24/bin:/home/linuxbrew/.linuxbrew/bin:/home/linuxbrew/.linuxbrew/sbin:/home/kodama/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+ExecStart=pnpm run worker:maintenance
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=default.target

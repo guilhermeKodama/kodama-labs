@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Dump and restore local PostgreSQL databases (capital + sentinel).
+# Dump and restore local PostgreSQL databases (capital + sentinel + attention + careers).
 #
 # Usage:
 #   pnpm db:dump              # creates timestamped dump in ./backups/
@@ -12,7 +12,7 @@ set -euo pipefail
 
 CONTAINER="postgres"
 PG_USER="root"
-DATABASES=("capital" "sentinel")
+DATABASES=("capital" "sentinel" "attention" "careers")
 BACKUP_DIR="$(cd "$(dirname "$0")" && pwd)/backups"
 
 action="${1:-}"
@@ -113,9 +113,9 @@ cmd_list() {
     local base
     base=$(basename "$f")
     local tag
-    tag=$(echo "$base" | sed -E 's/_(capital|sentinel)\.sql\.gz$//')
+    tag=$(echo "$base" | sed -E 's/_(capital|sentinel|attention|careers)\.sql\.gz$//')
     local db
-    db=$(echo "$base" | sed -E 's/^.*_(capital|sentinel)\.sql\.gz$/\1/')
+    db=$(echo "$base" | sed -E 's/^.*_(capital|sentinel|attention|careers)\.sql\.gz$/\1/')
     local size
     size=$(du -h "$f" | cut -f1)
 

@@ -1,0 +1,177 @@
+[
+  {
+    "company": "Supabase",
+    "provider": "ASHBY",
+    "slug": "supabase"
+  },
+  {
+    "company": "PostHog",
+    "provider": "ASHBY",
+    "slug": "posthog"
+  },
+  {
+    "company": "Materialize",
+    "provider": "ASHBY",
+    "slug": "materialize"
+  },
+  {
+    "company": "Inngest",
+    "provider": "ASHBY",
+    "slug": "inngest"
+  },
+  {
+    "company": "Resend",
+    "provider": "ASHBY",
+    "slug": "resend"
+  },
+  {
+    "company": "Railway",
+    "provider": "ASHBY",
+    "slug": "railway"
+  },
+  {
+    "company": "Redpanda",
+    "provider": "ASHBY",
+    "slug": "redpanda-data"
+  },
+  {
+    "company": "Convex",
+    "provider": "ASHBY",
+    "slug": "convex-dev"
+  },
+  {
+    "company": "Tinybird",
+    "provider": "LEVER",
+    "slug": "tinybird"
+  },
+  {
+    "company": "ClickHouse",
+    "provider": "GREENHOUSE",
+    "slug": "clickhouse"
+  },
+  {
+    "company": "Temporal",
+    "provider": "GREENHOUSE",
+    "slug": "temporaltechnologies"
+  },
+  {
+    "company": "Grafana Labs",
+    "provider": "GREENHOUSE",
+    "slug": "grafanalabs"
+  },
+  {
+    "company": "GitLab",
+    "provider": "GREENHOUSE",
+    "slug": "gitlab"
+  },
+  {
+    "company": "Elastic",
+    "provider": "GREENHOUSE",
+    "slug": "elastic"
+  },
+  {
+    "company": "Sourcegraph",
+    "provider": "GREENHOUSE",
+    "slug": "sourcegraph91"
+  },
+  {
+    "company": "Fingerprint",
+    "provider": "GREENHOUSE",
+    "slug": "fingerprint"
+  },
+  {
+    "company": "Metabase",
+    "provider": "LEVER",
+    "slug": "metabase"
+  },
+  {
+    "company": "TigerData",
+    "provider": "ASHBY",
+    "slug": "tigerdata"
+  },
+  {
+    "company": "PlanetScale",
+    "provider": "GREENHOUSE",
+    "slug": "planetscale"
+  },
+  {
+    "company": "Storyblok",
+    "provider": "GREENHOUSE",
+    "slug": "storyblok"
+  },
+  {
+    "company": "Zed Industries",
+    "provider": "ASHBY",
+    "slug": "zed"
+  },
+  {
+    "company": "Kraken",
+    "provider": "ASHBY",
+    "slug": "kraken.com"
+  },
+  {
+    "company": "Parity Technologies",
+    "provider": "ASHBY",
+    "slug": "parity"
+  },
+  {
+    "company": "Trigger.dev",
+    "provider": "ASHBY",
+    "slug": "triggerdev"
+  },
+  {
+    "company": "Percona",
+    "provider": "ASHBY",
+    "slug": "percona"
+  },
+  {
+    "company": "Customer.io",
+    "provider": "GREENHOUSE",
+    "slug": "customerio"
+  },
+  {
+    "company": "DuckDuckGo",
+    "provider": "ASHBY",
+    "slug": "duck-duck-go"
+  },
+  {
+    "company": "Mastra",
+    "provider": "ASHBY",
+    "slug": "mastra"
+  },
+  {
+    "company": "LanceDB",
+    "provider": "ASHBY",
+    "slug": "lancedb"
+  },
+  {
+    "company": "Speechify",
+    "provider": "GREENHOUSE",
+    "slug": "speechify"
+  },
+  {
+    "company": "Akuity",
+    "provider": "GREENHOUSE",
+    "slug": "akuity"
+  },
+  {
+    "company": "Infisical",
+    "provider": "ASHBY",
+    "slug": "infisical"
+  },
+  {
+    "company": "Nango",
+    "provider": "ASHBY",
+    "slug": "nango"
+  },
+  {
+    "company": "Firecrawl",
+    "provider": "ASHBY",
+    "slug": "firecrawl"
+  },
+  {
+    "company": "Zapier",
+    "provider": "ASHBY",
+    "slug": "zapier"
+  }
+]
