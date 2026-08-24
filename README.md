@@ -39,6 +39,9 @@ Every Next app is pinned to a fixed port so `pnpm dev` doesn't silently auto-bum
 | `apps/capital` | 3000 |
 | `apps/docs` | 3001 |
 | `apps/sentinel` | 3002 |
+| `apps/kodamalabs` | 3003 |
+| `apps/attention` | 3005 |
+| `apps/careers` | 3006 |
 | `ideas/*` | 3100 |
 
 Ideas share port 3100 — run one prototype at a time, or pass `next dev --port 3101` to run a second in parallel.

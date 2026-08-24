@@ -88,6 +88,10 @@ yarn.lock
 
 # Cloudflare Tunnel config (machine-specific tunnel id + credentials path — never commit)
 apps/attention/cloudflared/config.yml
+apps/careers/cloudflared/config.yml
+
+# Local blob fallback (resumes, context docs) when BLOB_READ_WRITE_TOKEN is unset
+apps/careers/.local-blob
 
 # Agentic Coding
 .opencode/

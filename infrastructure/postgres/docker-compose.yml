@@ -1,17 +1,17 @@
 services:
   postgres:
-    image: postgres:18
+    image: postgres:17
     container_name: postgres
     restart: always
     environment:
       POSTGRES_USER: root
       POSTGRES_PASSWORD: root
       POSTGRES_DB: wallex
-      POSTGRES_MULTIPLE_DATABASES: capital,sentinel,attention
+      POSTGRES_MULTIPLE_DATABASES: capital,sentinel,attention,careers
     ports:
       - "5433:5432"
     volumes:
-      - postgres_data:/var/lib/postgresql
+      - postgres_data:/var/lib/postgresql/data
       - ./init-databases.sh:/docker-entrypoint-initdb.d/init-databases.sh
       - ./postgresql.conf:/etc/postgresql/postgresql.conf:ro
     command: postgres -c config_file=/etc/postgresql/postgresql.conf
