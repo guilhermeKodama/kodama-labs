@@ -110,7 +110,16 @@ export function crossValidate(X: number[][], y: number[], k = 5, minPrecision = 
   let bestPrecision = 0;
   let bestRecall = 0;
 
-  for (let t = 0.05; t <= 0.6; t += 0.01) {
+  // Capped well below 0.5: with a small, discard-skewed label set (this
+  // product's actual data — most triage decisions are "no"), precision
+  // alone stays deceptively high even at a loose threshold, because
+  // "discard" is already the majority class. A threshold near 0.5 reads as
+  // "more likely than not to be discard", not the "confident" zone this
+  // layer is supposed to require before acting without a human. Capping
+  // the sweep keeps the selected threshold in a genuinely low-probability
+  // band regardless of how skewed the training labels are.
+  const MAX_THRESHOLD = 0.15;
+  for (let t = 0.05; t <= MAX_THRESHOLD; t += 0.01) {
     const belowThreshold = allPreds.filter((p) => p.proba < t);
     if (belowThreshold.length < 5) continue; // too few samples to trust the estimate
     const truePositives = belowThreshold.filter((p) => p.actual === 0).length;
