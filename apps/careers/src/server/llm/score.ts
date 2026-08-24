@@ -7,8 +7,18 @@ import type { Job, Company, SearchProfile } from "../../generated/prisma";
 import crypto from "node:crypto";
 import { buildFeatureVector, featureVectorToArray, FEATURE_KEYS } from "../ml/features";
 import { predictProba } from "../ml/logistic-regression";
+import { spTodayStart } from "../lib/timezone";
 
 export const PROMPT_VERSION = "score-v1";
+
+// Circuit breaker: bounds the worst case if a newly-trained model turns out
+// bad (e.g. an unstable threshold on a small/skewed label set — see
+// logistic-regression.ts's crossValidate comment) from sweeping the whole
+// queue in one run. From the original design doc, never implemented until
+// exactly this failure mode happened live: a threshold that ballooned
+// across two automatic retrainings auto-discarded 46 jobs in minutes,
+// including ones already in SHORTLIST/APLICADA.
+const MAX_AUTO_DISCARDS_PER_DAY = 15;
 
 /**
  * Layer 2 of the 4-layer triage design (see server/ml/train.ts): a cheap
@@ -22,6 +32,13 @@ export const PROMPT_VERSION = "score-v1";
  * that's what makes the concordance on /auto meaningful later.
  */
 async function tryLayer2Discard(job: Job, company: Company, profile: SearchProfile): Promise<boolean> {
+  // Never touch a job the user has already moved past triage — a wrong
+  // discard prediction on RADAR/TRIAGEM costs a missed opportunity the
+  // human can still catch on /auto; on SHORTLIST/APLICADA/ENTREVISTA/OFERTA
+  // it silently erases real progress. This model only ever has an opinion
+  // worth acting on before a human decision exists.
+  if (job.status !== "RADAR" && job.status !== "TRIAGEM") return false;
+
   const model = await prisma.scoringModel.findFirst({ orderBy: { version: "desc" } });
   if (!model) return false;
 
@@ -40,6 +57,16 @@ async function tryLayer2Discard(job: Job, company: Company, profile: SearchProfi
   });
 
   if (!model.shadowMode) {
+    const discardedToday = await prisma.job.count({
+      where: { autoTriagedAt: { gte: spTodayStart() } },
+    });
+    if (discardedToday >= MAX_AUTO_DISCARDS_PER_DAY) {
+      console.warn(
+        `[score] teto diário de auto-descarte atingido (${MAX_AUTO_DISCARDS_PER_DAY}) — vaga ${job.id} fica em modo sombra até amanhã`
+      );
+      return true;
+    }
+
     await prisma.job.update({
       where: { id: job.id },
       data: {
