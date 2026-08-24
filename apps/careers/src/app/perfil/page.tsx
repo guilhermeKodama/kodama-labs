@@ -1,5 +1,7 @@
 import { prisma } from "@/server/lib/prisma";
 import { saveSearchProfile, resolveRuleProposal } from "@/server/modules/search-profile/actions";
+import { triggerDistillation } from "@/server/modules/ml/actions";
+import { TaskProgress } from "@/components/task-progress";
 
 export const dynamic = "force-dynamic";
 
@@ -47,6 +49,13 @@ export default async function ProfilePage() {
         <span className="rounded-md bg-secondary px-2 py-0.5 text-xs text-muted-foreground">
           v{profile.version} · ativa
         </span>
+        <div className="flex-1" />
+        <TaskProgress types={["distill-rules"]} label="Analisando decisões recentes" />
+        <form action={triggerDistillation}>
+          <button type="submit" className="rounded-lg border border-border px-3 py-1.5 text-xs font-medium hover:bg-secondary">
+            Gerar sugestões de regra agora
+          </button>
+        </form>
       </div>
 
       <form action={saveSearchProfile} className="mx-auto flex w-full max-w-3xl flex-col gap-6 px-6 py-6">
