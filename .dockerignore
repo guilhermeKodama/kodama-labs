@@ -1,0 +1,12 @@
+.claude
+.git
+node_modules
+**/node_modules
+**/.next
+**/src/generated
+**/.env
+**/.env.*
+apps/*/cloudflared/config.yml
+.turbo
+**/.turbo
+infrastructure/postgres/backups

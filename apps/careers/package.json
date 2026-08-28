@@ -4,7 +4,7 @@
   "description": "Job search tracking: search parameters, ranked applications, learned triage, resume versioning",
   "private": true,
   "scripts": {
-    "dev": "prisma generate && next dev",
+    "dev": "prisma generate && next dev --port 3006",
     "build": "prisma generate && prisma migrate deploy && next build",
     "start": "next start --port 3006",
     "lint": "eslint --max-warnings 0",
@@ -14,10 +14,10 @@
     "db:migrate:deploy": "prisma migrate deploy",
     "db:push": "prisma db push",
     "db:reset": "prisma migrate reset --force",
-    "worker:jobs": "node --env-file=.env --import tsx src/worker/jobs.ts",
-    "worker:sources": "node --env-file=.env --import tsx src/worker/sources.ts",
-    "worker:maintenance": "node --env-file=.env --import tsx src/worker/maintenance.ts",
-    "import:vault": "node --env-file=.env --import tsx src/scripts/import-vault.ts"
+    "worker:jobs": "node --env-file-if-exists=.env --import tsx src/worker/jobs.ts",
+    "worker:sources": "node --env-file-if-exists=.env --import tsx src/worker/sources.ts",
+    "worker:maintenance": "node --env-file-if-exists=.env --import tsx src/worker/maintenance.ts",
+    "import:vault": "node --env-file-if-exists=.env --import tsx src/scripts/import-vault.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.73.0",

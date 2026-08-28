@@ -10,6 +10,11 @@ export function generateStaticParams() {
   return routing.locales.map((locale) => ({ locale }));
 }
 
+// Every page under [locale] reads live data straight from Postgres — force
+// dynamic rendering so `next build` doesn't attempt to prerender them (which
+// requires a reachable DB at build time; the Docker build stage has none).
+export const dynamic = "force-dynamic";
+
 export async function generateMetadata({
   params,
 }: {

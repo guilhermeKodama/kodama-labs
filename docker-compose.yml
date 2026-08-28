@@ -1,0 +1,170 @@
+name: kodama-prod
+
+networks:
+  kodama:
+    external: true
+
+x-restart: &restart
+  restart: unless-stopped
+
+services:
+  # ── careers ─────────────────────────────────────────────────────────────
+  careers-migrate:
+    build: { context: ., dockerfile: Dockerfile, target: careers, args: { NEXT_PUBLIC_APP_URL: "${CAREERS_APP_URL:-https://careers.kodamalabs.ai}", NEXT_PUBLIC_VAPID_PUBLIC_KEY: "BKQd4fNvNY4Q7IA-teiYts6qi7rFRzBmjcJhQUjqXoRdsmbJh6y4AgGERaeGFQXsgV5oYXbASXGPxtogrxo69AE" } }
+    image: kodama-careers:latest
+    env_file: apps/careers/.env.production
+    command: ["pnpm", "exec", "prisma", "migrate", "deploy"]
+    networks: [kodama]
+
+  careers-web:
+    <<: *restart
+    image: kodama-careers:latest
+    depends_on: { careers-migrate: { condition: service_completed_successfully } }
+    env_file: apps/careers/.env.production
+    ports: ["${CAREERS_WEB_PORT:-3006}:3006"]
+    volumes:
+      - /home/kodama/.local/share/careers/blob:/home/kodama/.local/share/careers/blob
+    networks: [kodama]
+
+  careers-jobs:
+    <<: *restart
+    image: kodama-careers:latest
+    depends_on: { careers-migrate: { condition: service_completed_successfully } }
+    env_file: apps/careers/.env.production
+    command: ["pnpm", "run", "worker:jobs"]
+    volumes:
+      - /home/kodama/.local/share/careers/blob:/home/kodama/.local/share/careers/blob
+    networks: [kodama]
+
+  careers-sources:
+    <<: *restart
+    image: kodama-careers:latest
+    depends_on: { careers-migrate: { condition: service_completed_successfully } }
+    env_file: apps/careers/.env.production
+    command: ["pnpm", "run", "worker:sources"]
+    networks: [kodama]
+
+  careers-maintenance:
+    <<: *restart
+    image: kodama-careers:latest
+    depends_on: { careers-migrate: { condition: service_completed_successfully } }
+    env_file: apps/careers/.env.production
+    command: ["pnpm", "run", "worker:maintenance"]
+    volumes:
+      - /home/kodama/.local/share/careers/blob:/home/kodama/.local/share/careers/blob
+    networks: [kodama]
+
+  # ── attention ───────────────────────────────────────────────────────────
+  attention-migrate:
+    build: { context: ., dockerfile: Dockerfile, target: attention, args: { NEXT_PUBLIC_APP_URL: "${ATTENTION_APP_URL:-https://attentio.dev}", NEXT_PUBLIC_VAPID_PUBLIC_KEY: "BNc3iQ75zEEvAk1rsm56R8pc01BDQUb0ax4JYrtWcBvnxmek6HjHlxJ57Bfjfc6xRo7gX8cPRU0MvlrpPEQszmg" } }
+    image: kodama-attention:latest
+    env_file: apps/attention/.env.production
+    command: ["pnpm", "exec", "prisma", "migrate", "deploy"]
+    networks: [kodama]
+
+  attention-web:
+    <<: *restart
+    image: kodama-attention:latest
+    depends_on: { attention-migrate: { condition: service_completed_successfully } }
+    env_file: apps/attention/.env.production
+    ports: ["${ATTENTION_WEB_PORT:-3005}:3005"]
+    extra_hosts: ["host.docker.internal:host-gateway"]
+    networks: [kodama]
+
+  attention-beacon:
+    <<: *restart
+    image: kodama-attention:latest
+    depends_on: { attention-migrate: { condition: service_completed_successfully } }
+    env_file: apps/attention/.env.production
+    command: ["pnpm", "run", "worker:beacon"]
+    extra_hosts: ["host.docker.internal:host-gateway"]
+    networks: [kodama]
+
+  attention-whatsapp:
+    <<: *restart
+    image: kodama-attention:latest
+    depends_on: { attention-migrate: { condition: service_completed_successfully } }
+    env_file: apps/attention/.env.production
+    command: ["node", "dist/worker-whatsapp.mjs"]
+    volumes:
+      - /home/kodama/.local/share/attention/baileys-auth:/home/kodama/.local/share/attention/baileys-auth
+    extra_hosts: ["host.docker.internal:host-gateway"]
+    networks: [kodama]
+
+  attention-maintenance:
+    <<: *restart
+    image: kodama-attention:latest
+    depends_on: { attention-migrate: { condition: service_completed_successfully } }
+    env_file: apps/attention/.env.production
+    command: ["pnpm", "run", "worker:maintenance"]
+    extra_hosts: ["host.docker.internal:host-gateway"]
+    networks: [kodama]
+
+  attention-jobs:
+    <<: *restart
+    image: kodama-attention:latest
+    depends_on: { attention-migrate: { condition: service_completed_successfully } }
+    env_file: apps/attention/.env.production
+    command: ["pnpm", "run", "worker:jobs"]
+    extra_hosts: ["host.docker.internal:host-gateway"]
+    networks: [kodama]
+
+  # ── capital ─────────────────────────────────────────────────────────────
+  capital-migrate:
+    build: { context: ., dockerfile: Dockerfile, target: capital }
+    image: kodama-capital:latest
+    env_file: apps/capital/.env.production
+    command: ["pnpm", "exec", "prisma", "migrate", "deploy"]
+    networks: [kodama]
+
+  capital-web:
+    <<: *restart
+    image: kodama-capital:latest
+    depends_on: { capital-migrate: { condition: service_completed_successfully } }
+    env_file: apps/capital/.env.production
+    ports: ["${CAPITAL_WEB_PORT:-3000}:3000"]
+    networks: [kodama]
+
+  # ── sentinel ────────────────────────────────────────────────────────────
+  sentinel-migrate:
+    build: { context: ., dockerfile: Dockerfile, target: sentinel }
+    image: kodama-sentinel:latest
+    env_file: apps/sentinel/.env.production
+    command: ["pnpm", "exec", "prisma", "migrate", "deploy"]
+    networks: [kodama]
+
+  sentinel-web:
+    <<: *restart
+    image: kodama-sentinel:latest
+    depends_on: { sentinel-migrate: { condition: service_completed_successfully } }
+    env_file: apps/sentinel/.env.production
+    ports: ["${SENTINEL_WEB_PORT:-3002}:3002"]
+    networks: [kodama]
+
+  # ── ingress / cron ──────────────────────────────────────────────────────
+  cloudflared:
+    <<: *restart
+    image: cloudflare/cloudflared:latest
+    command: ["tunnel", "--config", "/etc/cloudflared-config/config.yml", "run", "attention"]
+    volumes:
+      - /home/kodama/.cloudflared:/etc/cloudflared:ro
+      - ./infrastructure/cloudflared/config.yml:/etc/cloudflared-config/config.yml:ro
+    networks: [kodama]
+
+  # Reuses the capital image (full workspace already installed) — no separate
+  # build target. Not brought up by a plain `compose up -d`; started
+  # explicitly once capital/sentinel secrets exist (see runbook Fase 5-6).
+  cronjobs:
+    <<: *restart
+    image: kodama-capital:latest
+    working_dir: /repo/infrastructure/cronjobs
+    command: ["pnpm", "run", "start"]
+    env_file: infrastructure/cronjobs/.env.production
+    environment:
+      CAPITAL_BASE_URL: http://capital-web:3000
+      SENTINEL_BASE_URL: http://sentinel-web:3002
+      CRON_APPS: "${CRON_APPS:-capital,sentinel}"
+    volumes:
+      - ./apps/capital/vercel.json:/repo/apps/capital/vercel.json:ro
+      - ./apps/sentinel/vercel.json:/repo/apps/sentinel/vercel.json:ro
+    networks: [kodama]

@@ -29,21 +29,30 @@ interface AppConfig {
   cronSecret?: string;
 }
 
-// Configuration for apps with cron jobs
-const APPS: AppConfig[] = [
+// Configuration for apps with cron jobs. baseUrl/cronSecret are env-driven so
+// this same runner works pointed at localhost (dev) or at the container
+// network (e.g. http://capital-web:3000, prod compose) without code changes.
+const ALL_APPS: AppConfig[] = [
   {
     name: "capital",
-    baseUrl: "http://localhost:3000",
+    baseUrl: process.env.CAPITAL_BASE_URL ?? "http://localhost:3000",
     vercelJsonPath: join(__dirname, "../../../apps/capital/vercel.json"),
-    cronSecret: process.env.CRON_SECRET,
+    cronSecret: process.env.CAPITAL_CRON_SECRET ?? process.env.CRON_SECRET,
   },
   {
     name: "sentinel",
-    baseUrl: "http://localhost:3002",
+    baseUrl: process.env.SENTINEL_BASE_URL ?? "http://localhost:3002",
     vercelJsonPath: join(__dirname, "../../../apps/sentinel/vercel.json"),
-    cronSecret: process.env.CRON_SECRET,
+    cronSecret: process.env.SENTINEL_CRON_SECRET ?? process.env.CRON_SECRET,
   },
 ];
+
+// CRON_APPS gates a staged Vercel exit — e.g. CRON_APPS=capital runs only
+// capital's crons locally while sentinel's still fire from Vercel.
+const enabledNames = (process.env.CRON_APPS ?? "capital,sentinel")
+  .split(",")
+  .map((n) => n.trim());
+const APPS: AppConfig[] = ALL_APPS.filter((app) => enabledNames.includes(app.name));
 
 /**
  * Reads and parses vercel.json

@@ -20,6 +20,13 @@ services:
       resources:
         limits:
           memory: 8g
+    networks:
+      default: {}
+      kodama: {}
 
 volumes:
   postgres_data:
+
+networks:
+  kodama:
+    external: true

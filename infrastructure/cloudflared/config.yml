@@ -1,0 +1,13 @@
+tunnel: ab16031c-dce9-4a61-a287-36f7da8dcb4e
+credentials-file: /etc/cloudflared/ab16031c-dce9-4a61-a287-36f7da8dcb4e.json
+
+ingress:
+  - hostname: attentio.dev
+    service: http://attention-web:3005
+  - hostname: careers.kodamalabs.ai
+    service: http://careers-web:3006
+  - hostname: capital.kodamalabs.ai
+    service: http://capital-web:3000
+  - hostname: sentinel.kodamalabs.ai
+    service: http://sentinel-web:3002
+  - service: http_status:404
