@@ -1,5 +1,6 @@
 import type { ParsedStatement, ParsedBankTransaction, ParsedStatementAccount } from "./types";
 import type { ParsedTransaction } from "@capital/server/modules/credit-cards/services/parsers/types";
+import { nubankParser } from "@capital/server/modules/credit-cards/services/parsers/nubank";
 
 /**
  * Extract the text content of an OFX/SGML tag.
@@ -171,6 +172,13 @@ export interface ParsedOfxCreditCardStatement {
  * also amount-negative post-flip but must still become a BillTransaction
  * (calculateBillTotal decides whether it belongs to the current cycle),
  * not be dropped like the card-payment line is.
+ *
+ * OFX has no dedicated installment field either - like Nubank's CSV
+ * export, installments are embedded in MEMO as "- Parcela X/Y", so MEMO
+ * is run through the same parseInstallmentFromDescription() the CSV path
+ * uses (nubankParser's - its regex is bank-agnostic, matching the plain
+ * "(X/Y)" suffix too), and its cleanDescription (suffix stripped) is what
+ * becomes ParsedTransaction.description.
  */
 export function parseOfxCreditCardContent(raw: string): ParsedOfxCreditCardStatement {
   const fi = extractBlock(raw, "FI");
@@ -192,10 +200,18 @@ export function parseOfxCreditCardContent(raw: string): ParsedOfxCreditCardState
     const trnType = extractTag(block, "TRNTYPE");
     const memo = extractTag(block, "MEMO");
     const amount = -parseFloat(extractTag(block, "TRNAMT"));
+    // Installments aren't a distinct OFX field - Nubank (and apparently
+    // every bank this format has been seen from) embeds them in MEMO the
+    // same "- Parcela X/Y" way CSV descriptions do, so the exact same
+    // extraction the CSV path uses applies here instead of leaving OFX
+    // rows with no installment info at all.
+    const installmentInfo = nubankParser.parseInstallmentFromDescription(memo);
     return {
       date: extractTag(block, "DTPOSTED").slice(0, 8).replace(/(\d{4})(\d{2})(\d{2})/, "$1-$2-$3"),
-      description: memo,
+      description: installmentInfo.cleanDescription,
       amount,
+      installmentNumber: installmentInfo.installmentNumber,
+      totalInstallments: installmentInfo.totalInstallments,
       isPayment: isOfxCreditCardPayment(trnType, memo),
     };
   });

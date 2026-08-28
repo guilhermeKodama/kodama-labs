@@ -315,6 +315,13 @@ VERSION:102
 <FITID>cc3
 <MEMO>Pagamento recebido
 </STMTTRN>
+<STMTTRN>
+<TRNTYPE>DEBIT
+<DTPOSTED>20260812120000[0:GMT]
+<TRNAMT>-199.00
+<FITID>cc4
+<MEMO>Loja Eletronicos - Parcela 2/6
+</STMTTRN>
 </BANKTRANLIST>
 <LEDGERBAL>
 <BALAMT>-25.90
@@ -334,8 +341,8 @@ describe("parseOfxCreditCardContent", () => {
     expect(parsed.currency).toBe("BRL");
   });
 
-  it("parses 3 transactions", () => {
-    expect(parsed.transactions).toHaveLength(3);
+  it("parses 4 transactions", () => {
+    expect(parsed.transactions).toHaveLength(4);
   });
 
   it("flips a charge's sign to positive (CSV convention) and is not a payment", () => {
@@ -356,6 +363,20 @@ describe("parseOfxCreditCardContent", () => {
     const payment = parsed.transactions[2]!;
     expect(payment.amount).toBe(-500);
     expect(payment.isPayment).toBe(true);
+  });
+
+  it("extracts installment info embedded in MEMO, same as the CSV parsers do", () => {
+    const installment = parsed.transactions[3]!;
+    expect(installment.amount).toBe(199);
+    expect(installment.installmentNumber).toBe(2);
+    expect(installment.totalInstallments).toBe(6);
+    expect(installment.description).toBe("Loja Eletronicos");
+  });
+
+  it("leaves installmentNumber/totalInstallments undefined for non-installment lines", () => {
+    const charge = parsed.transactions[0]!;
+    expect(charge.installmentNumber).toBeUndefined();
+    expect(charge.totalInstallments).toBeUndefined();
   });
 
   it("throws when there is no CCSTMTRS block (e.g. a checking-account OFX)", () => {
