@@ -10,3 +10,4 @@ export { useInvestmentStore } from "./investment-store";
 export { useFireStore } from "./fire-store";
 export { useAttachmentStore } from "./attachment-store";
 export { useUIStore } from "./ui-store";
+export { useAssistantStore } from "./assistant-store";

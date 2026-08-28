@@ -10,6 +10,7 @@ interface CreateInvestmentTransactionData {
   fees?: number;
   date: Date;
   notes?: string;
+  externalId?: string;
 }
 
 export async function insertInvestmentTransaction(

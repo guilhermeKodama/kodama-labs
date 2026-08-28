@@ -17,6 +17,7 @@ import {
   CreditCard,
   LogOut,
   Flame,
+  Sparkles,
 } from 'lucide-react';
 import { Link, usePathname } from '@/i18n/navigation';
 import { cn } from '@/lib/utils';
@@ -31,6 +32,7 @@ import { useUser } from '@/lib/user-context';
 
 const mainNavItems = [
   { href: '/dashboard', icon: LayoutDashboard, labelKey: 'dashboard' },
+  { href: '/assistant', icon: Sparkles, labelKey: 'assistant' },
   { href: '/businesses', icon: Building2, labelKey: 'businesses' },
   { href: '/personal', icon: User, labelKey: 'personal' },
   { href: '/transfers', icon: ArrowLeftRight, labelKey: 'transfers' },

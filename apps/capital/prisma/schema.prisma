@@ -91,6 +91,38 @@ enum AttachmentKind {
   TRANSFER_RECEIPT
 }
 
+enum AgentConversationStatus {
+  active
+  archived
+}
+
+enum AgentTurnStatus {
+  running
+  completed
+  failed
+  cancelled
+}
+
+enum ImportPlanKind {
+  import
+  revert
+}
+
+enum ImportPlanStatus {
+  proposed
+  confirmed
+  committed
+  rejected
+  superseded
+  reverted
+}
+
+enum StatementFileType {
+  ofx
+  csv
+  pdf
+}
+
 // ============================================
 // USER
 // ============================================
@@ -117,6 +149,7 @@ model User {
   investmentAccounts       InvestmentAccount[]
   merchantCategoryMappings MerchantCategoryMapping[]
   fireGoal                 FireGoal?
+  agentConversations       AgentConversation[]
 
   @@map("users")
 }
@@ -634,6 +667,7 @@ model InvestmentAccount {
   userId      String
   name        String // e.g., "Interactive Brokers", "NuInvest", "Tesouro Direto"
   broker      String? // Broker identifier
+  externalId  String? // Broker account number, when known (statement imports)
   entityType  EntityType
   currency    String     @default("BRL")
   cashBalance Float      @default(0) // Available cash in the account (not invested)
@@ -704,6 +738,11 @@ model InvestmentTransaction {
   fees         Float                     @default(0) // Brokerage fees, taxes
   date         DateTime
   notes        String?
+  // Dedup key for statement imports. Native broker id when available;
+  // otherwise a deterministic hash (see agent knowledge base
+  // 20-dedup-rules.md) so re-uploading the same statement reconciles
+  // cleanly instead of duplicating positions.
+  externalId   String?
   createdAt    DateTime                  @default(now())
   updatedAt    DateTime                  @updatedAt
 
@@ -712,9 +751,11 @@ model InvestmentTransaction {
   linkedTransactionId String?           @unique
   linkedTransaction   Transaction?      @relation(fields: [linkedTransactionId], references: [id], onDelete: SetNull)
 
+  @@unique([holdingId, externalId])
   @@index([holdingId])
   @@index([type])
   @@index([date])
+  @@index([externalId])
   @@map("investment_transactions")
 }
 
@@ -775,6 +816,9 @@ model StatementImport {
   ledgerBalance        Float?
   ledgerCurrency       String?
   categorizationStatus String     @default("pending") // pending, processing, completed, failed
+  // "manual" (existing wizard) or "agent" (assistant chat)
+  source               String     @default("manual")
+  revertedAt           DateTime?
   createdAt            DateTime   @default(now())
   updatedAt            DateTime   @updatedAt
 
@@ -785,10 +829,17 @@ model StatementImport {
   personalAccount   PersonalAccount? @relation(fields: [personalAccountId], references: [id], onDelete: Cascade)
   transactions      Transaction[]
 
+  // Assistant linkage - set only when source == "agent"
+  conversationId String?
+  conversation   AgentConversation? @relation(fields: [conversationId], references: [id], onDelete: SetNull)
+  importPlanId   String?            @unique
+  importPlan     ImportPlan?        @relation(fields: [importPlanId], references: [id], onDelete: SetNull)
+
   @@index([userId])
   @@index([categorizationStatus])
   @@index([businessId])
   @@index([personalAccountId])
+  @@index([conversationId])
   @@map("statement_imports")
 }
 
@@ -822,4 +873,154 @@ model Attachment {
   @@index([recurringTransferId])
   @@index([kind])
   @@map("attachments")
+}
+
+// ============================================
+// AI ASSISTANT (statement-sync chat agent)
+//
+// A conversation holds messages, uploaded statement files, and the
+// import/revert plans the agent proposes from them. Domain writes only
+// ever happen through ImportPlan.status == "committed", which itself
+// requires "confirmed" - a state only the authenticated REST confirm
+// endpoint can set (see modules/assistant/routes/v1/post-plan-confirm.ts).
+// The agent's tool calls never reach Prisma directly; every tool wraps
+// an existing module service, and every write is audited in AgentAction.
+// ============================================
+
+model AgentConversation {
+  id            String                   @id @default(uuid())
+  userId        String
+  title         String?
+  status        AgentConversationStatus  @default(active)
+  lastMessageAt DateTime                 @default(now())
+  createdAt     DateTime                 @default(now())
+  updatedAt     DateTime                 @updatedAt
+
+  user             User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages         AgentMessage[]
+  turns            AgentTurn[]
+  files            ConversationFile[]
+  plans            ImportPlan[]
+  actions          AgentAction[]
+  statementImports StatementImport[]
+
+  @@index([userId, lastMessageAt])
+  @@map("agent_conversations")
+}
+
+model AgentMessage {
+  id             String   @id @default(uuid())
+  conversationId String
+  turnId         String?
+  role           String // "user" | "assistant" - wire format verbatim
+  content        Json // Anthropic ContentBlockParam[] (text/document/tool_use/tool_result/thinking)
+  kind           String // "user_text" | "assistant" | "tool_results" - UI block filtering
+  createdAt      DateTime @default(now())
+
+  conversation AgentConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  turn         AgentTurn?        @relation(fields: [turnId], references: [id], onDelete: SetNull)
+
+  @@index([conversationId, createdAt])
+  @@index([turnId])
+  @@map("agent_messages")
+}
+
+model AgentTurn {
+  id                       String          @id @default(uuid())
+  conversationId           String
+  status                   AgentTurnStatus @default(running)
+  model                    String
+  iterations               Int             @default(0)
+  inputTokens              Int             @default(0)
+  outputTokens             Int             @default(0)
+  cacheCreationInputTokens Int             @default(0)
+  cacheReadInputTokens     Int             @default(0)
+  costUsd                  Decimal         @default(0) @db.Decimal(12, 6)
+  durationMs               Int             @default(0)
+  error                    String?
+  createdAt                DateTime        @default(now())
+  completedAt              DateTime?
+
+  conversation AgentConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  messages     AgentMessage[]
+  actions      AgentAction[]
+
+  @@index([conversationId])
+  @@index([createdAt])
+  @@map("agent_turns")
+}
+
+model ConversationFile {
+  id             String            @id @default(uuid())
+  conversationId String
+  userId         String
+  fileType       StatementFileType
+  statementKind  String? // "bank_ofx" | "card_csv" | "investment_pdf" | "unknown"
+  blobUrl        String
+  pathname       String
+  mimeType       String
+  sizeBytes      Int
+  originalName   String
+  parseStatus    String            @default("pending") // pending | parsed | failed | not_applicable
+  parsedPayload  Json? // ParsedStatement / parsed CSV rows - server-side cache for get_parsed_rows
+  parseError     String?
+  createdAt      DateTime          @default(now())
+
+  conversation AgentConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  importPlans  ImportPlan[]
+
+  @@index([conversationId])
+  @@map("conversation_files")
+}
+
+model ImportPlan {
+  id             String            @id @default(uuid())
+  conversationId String
+  userId         String
+  kind           ImportPlanKind    @default(import)
+  status         ImportPlanStatus  @default(proposed)
+  entityType     EntityType?
+  entityId       String?
+  fileId         String?
+  payload        Json // validated plan (transactions/transfers/investmentTransactions/...)
+  payloadHash    String // sha256 of payload - the UI confirm endpoint echoes this back
+  summary        Json // counts for the plan/duplicate-review cards
+  warnings       Json              @default("[]")
+  confirmedAt    DateTime?
+  confirmedVia   String? // "ui_button"
+  committedAt    DateTime?
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+
+  conversation    AgentConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  file            ConversationFile? @relation(fields: [fileId], references: [id], onDelete: SetNull)
+  statementImport StatementImport?
+  actions         AgentAction[]
+
+  @@index([conversationId, status])
+  @@map("import_plans")
+}
+
+model AgentAction {
+  id             String   @id @default(uuid())
+  userId         String
+  conversationId String
+  turnId         String?
+  planId         String?
+  toolName       String
+  input          Json
+  output         Json?
+  status         String // "success" | "error"
+  error          String?
+  createdRecords Json? // [{model:"Transaction",id},{model:"Transfer",id},...] - powers revert
+  durationMs     Int      @default(0)
+  createdAt      DateTime @default(now())
+
+  conversation AgentConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  turn         AgentTurn?        @relation(fields: [turnId], references: [id], onDelete: SetNull)
+  plan         ImportPlan?       @relation(fields: [planId], references: [id], onDelete: SetNull)
+
+  @@index([conversationId, createdAt])
+  @@index([planId])
+  @@map("agent_actions")
 }

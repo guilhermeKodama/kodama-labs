@@ -12,6 +12,7 @@ interface CreateInvestmentTransactionInput {
   fees?: number;
   date: Date;
   notes?: string;
+  externalId?: string;
 }
 
 /**
