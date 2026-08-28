@@ -1770,7 +1770,8 @@
         "reviewDuplicates": "Review duplicates",
         "confirm": "Confirm and import",
         "discard": "Discard",
-        "bills": "{count, plural, one {# bill} other {# bills}}"
+        "bills": "{count, plural, one {# bill} other {# bills}}",
+        "billItems": "{count, plural, one {# item} other {# items}}"
       },
       "duplicates": {
         "title": "Possible duplicates",

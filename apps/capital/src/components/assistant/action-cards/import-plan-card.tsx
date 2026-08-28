@@ -63,6 +63,14 @@ export function ImportPlanCard({
   };
 
   const balances = summary.ledgerBalance !== undefined;
+  // A bill-only plan has nothing in the transaction/transfer/investment
+  // counters - showing that grid (all zeros) reads as "empty plan", not
+  // "this bill is what's being proposed". Lead with the bill instead.
+  const isBillOnly =
+    !!summary.billCount &&
+    !summary.newTransactionCount &&
+    !summary.transferCount &&
+    !summary.investmentTransactionCount;
 
   return (
     <ActionCardShell
@@ -94,49 +102,66 @@ export function ImportPlanCard({
         )
       }
     >
-      <div className="grid grid-cols-3 gap-3">
-        <div className="rounded-lg border border-emerald-500/25 bg-emerald-500/[0.08] p-3.5">
-          <p className="text-2xl font-bold leading-none text-emerald-400">
-            {summary.newTransactionCount ?? 0}
-          </p>
-          <p className="mt-1 text-xs text-slate-400">{t('new')}</p>
+      {isBillOnly ? (
+        <div className="flex items-center gap-4 rounded-lg border border-cyan-500/25 bg-cyan-500/[0.08] p-3.5">
+          <div>
+            <p className="text-2xl font-bold leading-none text-cyan-400">
+              {formatMoney(summary.billTotalPreviewAmount, summary.currency)}
+            </p>
+            <p className="mt-1 text-xs text-slate-400">
+              {t('bills', { count: summary.billCount ?? 0 })}
+              {!!summary.billTransactionPreviewCount &&
+                ` · ${t('billItems', { count: summary.billTransactionPreviewCount })}`}
+            </p>
+          </div>
         </div>
-        <div className="rounded-lg border border-slate-700 bg-slate-800/50 p-3.5">
-          <p className="text-2xl font-bold leading-none text-slate-300">
-            {summary.skipDuplicateCount ?? 0}
-          </p>
-          <p className="mt-1 text-xs text-slate-400">{t('duplicates')}</p>
-        </div>
-        <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3.5">
-          <p className="text-2xl font-bold leading-none text-amber-400">{summary.linkFuzzyCount ?? 0}</p>
-          <p className="mt-1 text-xs text-amber-400/80">{t('review')}</p>
-        </div>
-      </div>
+      ) : (
+        <>
+          <div className="grid grid-cols-3 gap-3">
+            <div className="rounded-lg border border-emerald-500/25 bg-emerald-500/[0.08] p-3.5">
+              <p className="text-2xl font-bold leading-none text-emerald-400">
+                {summary.newTransactionCount ?? 0}
+              </p>
+              <p className="mt-1 text-xs text-slate-400">{t('new')}</p>
+            </div>
+            <div className="rounded-lg border border-slate-700 bg-slate-800/50 p-3.5">
+              <p className="text-2xl font-bold leading-none text-slate-300">
+                {summary.skipDuplicateCount ?? 0}
+              </p>
+              <p className="mt-1 text-xs text-slate-400">{t('duplicates')}</p>
+            </div>
+            <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3.5">
+              <p className="text-2xl font-bold leading-none text-amber-400">{summary.linkFuzzyCount ?? 0}</p>
+              <p className="mt-1 text-xs text-amber-400/80">{t('review')}</p>
+            </div>
+          </div>
 
-      <div className="mt-4 flex items-center justify-between border-t border-slate-800 pt-3.5 text-sm">
-        <div className="flex gap-5">
-          <div>
-            <p className="text-[11px] text-slate-500">{t('income')}</p>
-            <p className="mono text-emerald-400">{formatMoney(summary.totalIncome, summary.currency)}</p>
+          <div className="mt-4 flex items-center justify-between border-t border-slate-800 pt-3.5 text-sm">
+            <div className="flex gap-5">
+              <div>
+                <p className="text-[11px] text-slate-500">{t('income')}</p>
+                <p className="mono text-emerald-400">{formatMoney(summary.totalIncome, summary.currency)}</p>
+              </div>
+              <div>
+                <p className="text-[11px] text-slate-500">{t('expenses')}</p>
+                <p className="mono text-red-400">{formatMoney(summary.totalExpense, summary.currency)}</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              {!!summary.billCount && (
+                <span className="rounded-full bg-slate-700/50 px-2.5 py-1 text-[11px] text-slate-300">
+                  {t('bills', { count: summary.billCount })} · {formatMoney(summary.billTotalPreviewAmount, summary.currency)}
+                </span>
+              )}
+              {balances && (
+                <span className="rounded-full bg-emerald-500/10 px-2.5 py-1 text-[11px] text-emerald-400">
+                  {t('balanceMatch')}
+                </span>
+              )}
+            </div>
           </div>
-          <div>
-            <p className="text-[11px] text-slate-500">{t('expenses')}</p>
-            <p className="mono text-red-400">{formatMoney(summary.totalExpense, summary.currency)}</p>
-          </div>
-        </div>
-        <div className="flex items-center gap-2">
-          {!!summary.billCount && (
-            <span className="rounded-full bg-slate-700/50 px-2.5 py-1 text-[11px] text-slate-300">
-              {t('bills', { count: summary.billCount })}
-            </span>
-          )}
-          {balances && (
-            <span className="rounded-full bg-emerald-500/10 px-2.5 py-1 text-[11px] text-emerald-400">
-              {t('balanceMatch')}
-            </span>
-          )}
-        </div>
-      </div>
+        </>
+      )}
 
       {warnings.length > 0 && (
         <ul className="mt-3 space-y-1 text-xs text-amber-400/90">

@@ -1770,7 +1770,8 @@
         "reviewDuplicates": "Revisar duplicatas",
         "confirm": "Confirmar e importar",
         "discard": "Descartar",
-        "bills": "{count, plural, one {# fatura} other {# faturas}}"
+        "bills": "{count, plural, one {# fatura} other {# faturas}}",
+        "billItems": "{count, plural, one {# item} other {# itens}}"
       },
       "duplicates": {
         "title": "Possíveis duplicatas",

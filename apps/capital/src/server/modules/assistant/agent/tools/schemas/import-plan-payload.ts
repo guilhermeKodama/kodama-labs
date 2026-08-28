@@ -170,6 +170,8 @@ export function computePlanSummary(payload: ImportPlanPayload) {
     creditCardCount: payload.creditCards.length,
     billCount: payload.bills.length,
     billTransactionPreviewCount: payload.bills.reduce((sum, b) => sum + b.previewTransactionCount, 0),
+    billTotalPreviewAmount:
+      Math.round(payload.bills.reduce((sum, b) => sum + b.previewTotalAmount, 0) * 100) / 100,
     investmentTransactionCount: payload.investmentTransactions.length,
     totalIncome: Math.round(income * 100) / 100,
     totalExpense: Math.round(expense * 100) / 100,

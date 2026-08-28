@@ -60,6 +60,7 @@ export interface ImportPlan {
     creditCardCount?: number;
     billCount?: number;
     billTransactionPreviewCount?: number;
+    billTotalPreviewAmount?: number;
     investmentTransactionCount?: number;
     totalIncome?: number;
     totalExpense?: number;
