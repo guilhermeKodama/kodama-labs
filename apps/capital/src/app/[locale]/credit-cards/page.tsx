@@ -500,6 +500,9 @@ export default function CreditCardsPage() {
             <CardContent>
               <InstallmentsTable
                 installments={installments}
+                creditCards={creditCards}
+                bills={bills}
+                billTransactions={billTransactions}
                 currency={settings.baseCurrency}
               />
             </CardContent>
