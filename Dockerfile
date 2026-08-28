@@ -13,6 +13,33 @@ RUN apt-get update && apt-get install -y --no-install-recommends openssl && rm -
 RUN corepack enable
 WORKDIR /repo
 
+# All 4 apps validate env eagerly via @t3-oss/env-nextjs at module-import
+# time, which next build triggers while collecting page data — long before
+# any real secret is available (those come from compose env_file: at
+# container start; .dockerignore deliberately keeps .env.production out of
+# this image). Every field but two has a schema .default(), so real
+# validation is left ON (SKIP_ENV_VALIDATION would strip those defaults too,
+# not just the required-field check, causing more failures than it fixes).
+# The only two fields with no default anywhere across the 4 apps:
+# attention's VAPID_PRIVATE_KEY (server-only, never reaches a client bundle —
+# safe as a throwaway build-time value) and NEXT_PUBLIC_VAPID_PUBLIC_KEY,
+# which is already supplied correctly per-target as a real build ARG below.
+# web-push validates the key decodes to exactly 32 bytes, so it must be a
+# syntactically-real (but not the actual secret) VAPID-shaped value — this
+# one is freshly random, unrelated to the real key injected at runtime.
+ENV VAPID_PRIVATE_KEY="AI_lg0JA7DY9SIzNWl7gUarPNnnLaidU7lE-W2-vuyo"
+
+# Separately: every app instantiates `new PrismaClient()` at module scope in
+# a lib file, so merely importing it — which next build does for every
+# route while collecting page data, dynamic or not — constructs the client
+# immediately. Prisma reads DATABASE_URL/DIRECT_URL straight from
+# process.env (schema.prisma's env("DATABASE_URL")), bypassing the
+# t3-env layer entirely, and validates the URL string at construction time
+# (not query time) — so these need a real placeholder too, independent of
+# the schema defaults above.
+ENV DATABASE_URL="postgresql://placeholder:placeholder@placeholder:5432/placeholder"
+ENV DIRECT_URL="postgresql://placeholder:placeholder@placeholder:5432/placeholder"
+
 COPY pnpm-workspace.yaml package.json pnpm-lock.yaml* ./
 COPY apps/careers/package.json apps/careers/package.json
 COPY apps/attention/package.json apps/attention/package.json
