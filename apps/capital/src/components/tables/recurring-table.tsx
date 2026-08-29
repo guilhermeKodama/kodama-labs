@@ -16,6 +16,7 @@ import {
   Repeat,
   Check,
   AlertCircle,
+  Hand,
 } from 'lucide-react';
 import {
   Table,
@@ -249,17 +250,25 @@ export function RecurringTable({
                   {formatCurrency(recurring.amount * recurring.exchangeRate, settings.baseCurrency)}
                 </TableCell>
                 <TableCell>
-                  <Badge
-                    variant="outline"
-                    className={cn(
-                      'border-0',
-                      recurring.isActive
-                        ? 'bg-emerald-500/10 text-emerald-400'
-                        : 'bg-slate-500/10 text-slate-400'
+                  <div className="flex items-center gap-1.5">
+                    <Badge
+                      variant="outline"
+                      className={cn(
+                        'border-0',
+                        recurring.isActive
+                          ? 'bg-emerald-500/10 text-emerald-400'
+                          : 'bg-slate-500/10 text-slate-400'
+                      )}
+                    >
+                      {recurring.isActive ? t('status.active') : t('status.paused')}
+                    </Badge>
+                    {!recurring.autoGenerateTransaction && (
+                      <Badge variant="outline" className="border-slate-700 text-slate-400">
+                        <Hand className="mr-1 h-3 w-3" />
+                        {t('status.manual')}
+                      </Badge>
                     )}
-                  >
-                    {recurring.isActive ? t('status.active') : t('status.paused')}
-                  </Badge>
+                  </div>
                 </TableCell>
                 <TableCell>
                   <div className="flex items-center gap-1">

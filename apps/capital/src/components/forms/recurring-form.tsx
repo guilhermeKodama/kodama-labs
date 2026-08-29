@@ -9,6 +9,7 @@ import { parseInputDateUTC, formatInputDateUTC } from '@/lib/utils/date';
 import {
   Form,
   FormControl,
+  FormDescription,
   FormField,
   FormItem,
   FormLabel,
@@ -74,6 +75,7 @@ export function RecurringForm({
       frequency: recurring?.frequency || 'monthly',
       startDate: recurring?.startDate ? new Date(recurring.startDate) : new Date(),
       endDate: recurring?.endDate ? new Date(recurring.endDate) : undefined,
+      autoGenerateTransaction: recurring?.autoGenerateTransaction ?? true,
     },
   });
 
@@ -469,6 +471,25 @@ export function RecurringForm({
             />
           )}
         </div>
+
+        {/* Auto-generate Transaction Toggle */}
+        <FormField
+          control={form.control}
+          name="autoGenerateTransaction"
+          render={({ field }) => (
+            <FormItem className="flex flex-row items-center justify-between gap-3 rounded-lg border border-slate-800 bg-slate-900/40 p-3">
+              <div className="min-w-0 space-y-1">
+                <FormLabel className="text-sm text-slate-300">{t('form.autoGenerate')}</FormLabel>
+                <FormDescription className="text-xs text-slate-500">
+                  {t('form.autoGenerateHint')}
+                </FormDescription>
+              </div>
+              <FormControl>
+                <Switch checked={field.value} onCheckedChange={field.onChange} />
+              </FormControl>
+            </FormItem>
+          )}
+        />
 
         {/* Actions */}
         <div className="flex justify-end gap-2 pt-4">

@@ -1150,7 +1150,9 @@
       "startDate": "Start Date",
       "endDate": "End Date",
       "hasEndDate": "Set end date",
-      "descriptionPlaceholder": "e.g., Monthly rent, Netflix subscription"
+      "descriptionPlaceholder": "e.g., Monthly rent, Netflix subscription",
+      "autoGenerate": "Record automatically",
+      "autoGenerateHint": "The transaction is recorded on its due date. Turn this off to be reminded only, and confirm it yourself with Mark as Paid."
     },
     "dialog": {
       "createTitle": "Create Recurring Transaction",
@@ -1171,7 +1173,8 @@
       "active": "Active",
       "paused": "Paused",
       "dueToday": "Due Today",
-      "overdue": "Overdue"
+      "overdue": "Overdue",
+      "manual": "Manual"
     },
     "actions": {
       "pause": "Pause",

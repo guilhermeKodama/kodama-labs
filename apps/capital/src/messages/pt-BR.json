@@ -1150,7 +1150,9 @@
       "startDate": "Data de Início",
       "endDate": "Data de Término",
       "hasEndDate": "Definir data de término",
-      "descriptionPlaceholder": "ex: Aluguel mensal, Assinatura Netflix"
+      "descriptionPlaceholder": "ex: Aluguel mensal, Assinatura Netflix",
+      "autoGenerate": "Lançar automaticamente",
+      "autoGenerateHint": "A transação é lançada na data de vencimento. Desligue para receber só um lembrete e confirmar você mesmo em Marcar como Pago."
     },
     "dialog": {
       "createTitle": "Criar Transação Recorrente",
@@ -1171,7 +1173,8 @@
       "active": "Ativo",
       "paused": "Pausado",
       "dueToday": "Vence Hoje",
-      "overdue": "Atrasado"
+      "overdue": "Atrasado",
+      "manual": "Manual"
     },
     "actions": {
       "pause": "Pausar",

@@ -119,6 +119,7 @@ export const useRecurringTransactionStore = create<RecurringTransactionStore>()(
           nextDueDate: parseLocalDate(r.nextDueDate),
           lastGeneratedDate: r.lastGeneratedDate ? parseLocalDate(r.lastGeneratedDate) : undefined,
           isActive: r.isActive,
+          autoGenerateTransaction: r.autoGenerateTransaction,
           createdAt: new Date(r.createdAt),
           updatedAt: new Date(r.updatedAt),
         })),
@@ -152,6 +153,7 @@ export const useRecurringTransactionStore = create<RecurringTransactionStore>()(
           endDate: input.endDate 
             ? (input.endDate instanceof Date ? input.endDate.toISOString() : input.endDate)
             : undefined,
+          autoGenerateTransaction: input.autoGenerateTransaction,
           businessId: input.entityType === 'business' ? input.entityId : undefined,
           personalAccountId: input.entityType === 'personal' ? input.entityId : undefined,
         },
@@ -178,6 +180,7 @@ export const useRecurringTransactionStore = create<RecurringTransactionStore>()(
         nextDueDate: parseLocalDate(data.nextDueDate),
         lastGeneratedDate: data.lastGeneratedDate ? parseLocalDate(data.lastGeneratedDate) : undefined,
         isActive: data.isActive,
+        autoGenerateTransaction: data.autoGenerateTransaction,
         createdAt: new Date(data.createdAt),
         updatedAt: new Date(data.updatedAt),
       };
@@ -218,6 +221,7 @@ export const useRecurringTransactionStore = create<RecurringTransactionStore>()(
             ? (input.endDate instanceof Date ? input.endDate.toISOString() : input.endDate)
             : input.endDate === null ? null : undefined,
           isActive: input.isActive,
+          autoGenerateTransaction: input.autoGenerateTransaction,
         },
       });
 
@@ -245,6 +249,7 @@ export const useRecurringTransactionStore = create<RecurringTransactionStore>()(
                 nextDueDate: parseLocalDate(data.nextDueDate),
                 lastGeneratedDate: data.lastGeneratedDate ? parseLocalDate(data.lastGeneratedDate) : undefined,
                 isActive: data.isActive,
+                autoGenerateTransaction: data.autoGenerateTransaction,
                 createdAt: new Date(data.createdAt),
                 updatedAt: new Date(data.updatedAt),
               }
@@ -380,10 +385,11 @@ export const useRecurringTransactionStore = create<RecurringTransactionStore>()(
           startDate: parseLocalDate(data.recurring.startDate),
           endDate: data.recurring.endDate ? parseLocalDate(data.recurring.endDate) : undefined,
           nextDueDate: parseLocalDate(data.recurring.nextDueDate),
-          lastGeneratedDate: data.recurring.lastGeneratedDate 
-            ? parseLocalDate(data.recurring.lastGeneratedDate) 
+          lastGeneratedDate: data.recurring.lastGeneratedDate
+            ? parseLocalDate(data.recurring.lastGeneratedDate)
             : undefined,
           isActive: data.recurring.isActive,
+          autoGenerateTransaction: data.recurring.autoGenerateTransaction,
           createdAt: new Date(data.recurring.createdAt),
           updatedAt: new Date(data.recurring.updatedAt),
         },

@@ -42,6 +42,7 @@ const RecurringSchema = z.object({
   nextDueDate: z.string(),
   lastGeneratedDate: z.string().nullable(),
   isActive: z.boolean(),
+  autoGenerateTransaction: z.boolean(),
   businessId: z.string().nullable(),
   personalAccountId: z.string().nullable(),
   createdAt: z.string(),
@@ -131,6 +132,7 @@ export const handler: AppRouteHandler<typeof route> = async (c) => {
           lastGeneratedDate:
             result.recurring.lastGeneratedDate?.toISOString() ?? null,
           isActive: result.recurring.isActive,
+          autoGenerateTransaction: result.recurring.autoGenerateTransaction,
           businessId: result.recurring.businessId,
           personalAccountId: result.recurring.personalAccountId,
           createdAt: result.recurring.createdAt.toISOString(),

@@ -17,6 +17,7 @@ interface CreateRecurringInput {
   frequency: RecurrenceFrequency;
   startDate: Date;
   endDate?: Date;
+  autoGenerateTransaction?: boolean;
   businessId?: string;
   personalAccountId?: string;
 }
@@ -41,6 +42,7 @@ export async function createRecurring(
     {
       ...input,
       exchangeRate: input.exchangeRate ?? 1,
+      autoGenerateTransaction: input.autoGenerateTransaction ?? true,
       nextDueDate: input.startDate,
     },
     db
