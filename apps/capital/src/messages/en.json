@@ -25,6 +25,7 @@
   },
   "nav": {
     "dashboard": "Dashboard",
+    "assistant": "Assistant",
     "businesses": "Businesses",
     "personal": "Personal",
     "transfers": "Transfers",
@@ -1519,7 +1520,8 @@
       "createExpense": "Create Expense",
       "createNewExpense": "Create new expense transaction",
       "linkExisting": "Link to existing transaction",
-      "noExpenseTransactions": "No Credit Card expense transactions found"
+      "noExpenseTransactions": "No Credit Card expense transactions found",
+      "saveDates": "Save"
     },
     "upload": {
       "title": "Upload Credit Card Bill",
@@ -1692,6 +1694,120 @@
     "toast": {
       "imported": "Bank statement imported!",
       "error": "Failed to import statement"
+    }
+  },
+  "assistant": {
+    "title": "Assistant",
+    "newConversation": "New conversation",
+    "emptyRail": "No conversations yet",
+    "backToList": "Back",
+    "today": "Today",
+    "last7Days": "Last 7 days",
+    "older": "Older",
+    "untitled": "New conversation",
+    "rename": "Rename",
+    "delete": "Delete",
+    "onboarding": {
+      "headline": "Your financial assistant",
+      "subtitle": "Send statements for me to reconcile, or ask about your spending, cards and investments.",
+      "capImport": "Syncs OFX statements, CSV bills and investment PDFs with your account",
+      "capDuplicates": "Detects duplicates and asks you to confirm before importing anything",
+      "capUndo": "Everything can be undone afterwards",
+      "capQuestions": "Answers questions about your transactions, cards and investment positions"
+    },
+    "prompts": {
+      "sendStatement": "Send a bank statement",
+      "reconcileCard": "Reconcile a credit card bill",
+      "importInvestments": "Import an investment report (PDF)",
+      "autoMessage": "Here's the file. Can you reconcile it against my account?"
+    },
+    "composer": {
+      "placeholder": "Send a message or drop a file…",
+      "send": "Send",
+      "stop": "Stop",
+      "attach": "Attach",
+      "dropHint": "Drop your statements here — OFX, CSV or PDF · max 15MB",
+      "fileTooLarge": "File is larger than {max}",
+      "fileTypeInvalid": "Unsupported file type",
+      "waitTurn": "Wait for the assistant to finish before sending another message"
+    },
+    "context": {
+      "title": "Conversation context",
+      "strip": "Context ({count})",
+      "empty": "No files in this conversation",
+      "removeFromContext": "Remove",
+      "status": {
+        "uploading": "Uploading…",
+        "parsing": "{processed}/{total} processed",
+        "ready": "{count} transactions",
+        "error": "Failed to read",
+        "notApplicable": "PDF attached"
+      },
+      "retry": "Retry",
+      "outOfContext": "Out of context — will not be read in future turns"
+    },
+    "thread": {
+      "streaming": "Replying…",
+      "jumpToBottom": "Jump to latest",
+      "retryMessage": "Retry",
+      "connectionLost": "Connection lost",
+      "sending": "Sending…"
+    },
+    "cards": {
+      "common": {
+        "decided": "Decided: {decision} · {time}",
+        "superseded": "Replaced by a newer plan",
+        "confirmSelections": "Confirm decisions"
+      },
+      "importPlan": {
+        "title": "Import plan",
+        "new": "new",
+        "duplicates": "duplicates",
+        "review": "to review",
+        "income": "Income",
+        "expenses": "Expenses",
+        "balanceMatch": "Balance matches",
+        "balanceMismatch": "Balance mismatch",
+        "reviewDuplicates": "Review duplicates",
+        "confirm": "Confirm and import",
+        "discard": "Discard",
+        "bills": "{count, plural, one {# bill} other {# bills}}",
+        "billItems": "{count, plural, one {# item} other {# items}}"
+      },
+      "duplicates": {
+        "title": "Possible duplicates",
+        "fromStatement": "From statement",
+        "existingEntry": "Existing entry",
+        "keepBoth": "Keep both",
+        "merge": "Merge",
+        "skip": "Skip",
+        "confidence": {
+          "high": "High match",
+          "medium": "Medium match",
+          "low": "Low match"
+        }
+      },
+      "confirm": {
+        "title": "Confirm import",
+        "cancel": "Cancel"
+      },
+      "result": {
+        "title": "Import complete",
+        "imported": "{count} transactions created",
+        "duplicatesSkipped": "{count} duplicates skipped",
+        "merged": "{count} entries updated",
+        "transfersCreated": "{count} transfers recorded",
+        "undo": "Undo import",
+        "undoWindow": "Undo available for the next {hours}h",
+        "undone": "Import undone"
+      }
+    },
+    "errors": {
+      "turnFailed": "The assistant hit an error",
+      "retryable": "Try again",
+      "uploadFailed": "File upload failed",
+      "cardAlreadyAnswered": "That decision was already made",
+      "llmNotConfigured": "Assistant is currently unavailable"
     }
   }
 }

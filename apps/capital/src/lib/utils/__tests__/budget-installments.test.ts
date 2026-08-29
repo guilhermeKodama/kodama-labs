@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { convertInstallmentsToTransactions } from '../budget';
-import type { Installment, CreditCard, CreditCardBill, BillTransaction } from '@/types';
+import { convertInstallmentsToTransactions, groupTransactionsByMonth } from '../budget';
+import type { Installment, CreditCard, CreditCardBill, BillTransaction, Transaction } from '@/types';
 
 // ============================================================
 // Test data based on user's actual dataset
@@ -324,5 +324,89 @@ describe('convertInstallmentsToTransactions', () => {
     for (const tx of febTxs) {
       console.log(`  ${tx.description}: R$${tx.amount.toFixed(2)}`);
     }
+  });
+});
+
+// ============================================================
+// groupTransactionsByMonth
+//
+// Extracted from InstallmentsTable, which used to compute its own
+// month buckets from `startDate + paidInstallments` directly on
+// Installment rows - wrong, because startDate gets overwritten to the
+// latest bill's date on every re-upload (see process-bill-csv.ts), so
+// that offset double-counted elapsed months and grew/oscillated
+// instead of decreasing. Fixed by piping convertInstallmentsToTransactions'
+// (already correct, tested above) output through this instead.
+// ============================================================
+
+// Local-noon construction, same convention as parseLocalDate (see
+// src/lib/utils/date.ts) - a raw `new Date('2026-02-01')` parses as UTC
+// midnight, which rolls back to the previous local day/month in any
+// timezone behind UTC and would make these tests fail depending on
+// where they run.
+function localDate(year: number, month: number, day: number): Date {
+  return new Date(year, month - 1, day, 12, 0, 0);
+}
+
+function tx(overrides: Partial<Transaction>): Transaction {
+  return {
+    id: 'tx-1',
+    entityId: 'personal-1',
+    entityType: 'personal',
+    type: 'expense',
+    amount: 100,
+    currency: 'BRL',
+    exchangeRate: 1,
+    description: 'Test',
+    category: 'Shopping',
+    date: localDate(2026, 2, 1),
+    createdAt: localDate(2026, 2, 1),
+    updatedAt: localDate(2026, 2, 1),
+    ...overrides,
+  };
+}
+
+describe('groupTransactionsByMonth', () => {
+  it('sums multiple transactions in the same month', () => {
+    const result = groupTransactionsByMonth([
+      tx({ date: localDate(2026, 2, 5), amount: 100 }),
+      tx({ date: localDate(2026, 2, 20), amount: 50 }),
+    ]);
+    expect(result).toEqual([{ month: '2026-02', label: 'Feb 2026', amount: 150 }]);
+  });
+
+  it('sorts months chronologically regardless of input order', () => {
+    const result = groupTransactionsByMonth([
+      tx({ date: localDate(2026, 4, 1), amount: 10 }),
+      tx({ date: localDate(2026, 2, 1), amount: 20 }),
+      tx({ date: localDate(2026, 3, 1), amount: 30 }),
+    ]);
+    expect(result.map((r) => r.month)).toEqual(['2026-02', '2026-03', '2026-04']);
+  });
+
+  it('rounds each month total to cents', () => {
+    const result = groupTransactionsByMonth([
+      tx({ date: localDate(2026, 2, 1), amount: 10.003 }),
+      tx({ date: localDate(2026, 2, 1), amount: 0.004 }),
+    ]);
+    expect(result[0]!.amount).toBe(10.01);
+  });
+
+  it('returns an empty array for no transactions', () => {
+    expect(groupTransactionsByMonth([])).toEqual([]);
+  });
+
+  it('combined with convertInstallmentsToTransactions, still decreases month over month (the regression this whole suite exists for)', () => {
+    const grouped = groupTransactionsByMonth(
+      convertInstallmentsToTransactions(INSTALLMENTS, [CARD], [JANUARY_BILL], BILL_TRANSACTIONS)
+    );
+
+    const byMonth = new Map(grouped.map((g) => [g.month, g.amount]));
+    const feb = byMonth.get('2026-02') ?? 0;
+    const mar = byMonth.get('2026-03') ?? 0;
+    const apr = byMonth.get('2026-04') ?? 0;
+
+    expect(feb).toBeGreaterThanOrEqual(mar);
+    expect(mar).toBeGreaterThanOrEqual(apr);
   });
 });

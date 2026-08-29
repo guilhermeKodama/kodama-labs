@@ -61,6 +61,9 @@ interface CreditCardActions {
   // Link bill to existing transaction
   linkBillToTransaction: (billId: string, transactionId: string) => Promise<void>;
 
+  // Update bill's own closingDate/dueDate
+  updateBill: (id: string, data: { closingDate?: string; dueDate?: string }) => Promise<void>;
+
   // Delete bill
   deleteBill: (id: string) => Promise<void>;
 
@@ -344,6 +347,38 @@ export const useCreditCardStore = create<CreditCardStore>()((set, get) => ({
       // Refresh bills to get updated status
       await get().fetchBills();
       set({ isLoading: false });
+    } catch (error) {
+      set({
+        error: error instanceof Error ? error.message : 'Unknown error',
+        isLoading: false,
+      });
+    }
+  },
+
+  // Update bill's own closingDate/dueDate
+  updateBill: async (id, data) => {
+    set({ isLoading: true, error: null });
+    try {
+      const res = await client.v1['credit-cards'].bills[':id'].$put({
+        param: { id },
+        json: data,
+      });
+
+      if (!res.ok) throw new Error('Failed to update bill');
+
+      const updated = await res.json();
+      set((state) => ({
+        bills: state.bills.map((bill) =>
+          bill.id === id
+            ? {
+                ...bill,
+                closingDate: parseLocalDate(updated.closingDate),
+                dueDate: parseLocalDate(updated.dueDate),
+              }
+            : bill
+        ),
+        isLoading: false,
+      }));
     } catch (error) {
       set({
         error: error instanceof Error ? error.message : 'Unknown error',

@@ -6,6 +6,7 @@ import type { AppRouteHandler } from "@capital/server/types";
 import { prisma } from "@capital/server/lib/prisma";
 import { requireUserId } from "@capital/server/lib/auth-middleware";
 import { routeConfig } from "../../constants";
+import { linkBillToTransaction } from "../../services/link-bill-transaction";
 
 const LinkBillSchema = z.object({
   transactionId: z.string().min(1),
@@ -47,61 +48,7 @@ export const handler: AppRouteHandler<typeof route> = async (c) => {
     const { id } = c.req.valid("param");
     const { transactionId } = c.req.valid("json");
 
-    // Verify bill ownership
-    const bill = await prisma.creditCardBill.findFirst({
-      where: {
-        id,
-        creditCard: {
-          OR: [
-            { business: { userId } },
-            { personalAccount: { userId } },
-          ],
-        },
-      },
-      select: { id: true, transactionId: true },
-    });
-
-    if (!bill) {
-      return c.json(
-        { error: { code: "NOT_FOUND", message: "Bill not found" } },
-        NOT_FOUND
-      );
-    }
-
-    if (bill.transactionId) {
-      return c.json(
-        { error: { code: "BAD_REQUEST", message: "Bill is already linked to a transaction" } },
-        BAD_REQUEST
-      );
-    }
-
-    // Verify the transaction exists and belongs to the user
-    const transaction = await prisma.transaction.findFirst({
-      where: {
-        id: transactionId,
-        OR: [
-          { business: { userId } },
-          { personalAccount: { userId } },
-        ],
-      },
-      select: { id: true },
-    });
-
-    if (!transaction) {
-      return c.json(
-        { error: { code: "NOT_FOUND", message: "Transaction not found" } },
-        NOT_FOUND
-      );
-    }
-
-    // Link the bill to the transaction and mark as paid
-    const updated = await prisma.creditCardBill.update({
-      where: { id },
-      data: {
-        transactionId,
-        status: "paid",
-      },
-    });
+    const updated = await linkBillToTransaction(userId, { billId: id, transactionId }, prisma);
 
     return c.json(
       {
@@ -113,6 +60,12 @@ export const handler: AppRouteHandler<typeof route> = async (c) => {
     );
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";
+    if (message.includes("not found") || message.includes("access denied")) {
+      return c.json({ error: { code: "NOT_FOUND", message } }, NOT_FOUND);
+    }
+    if (message.includes("already linked")) {
+      return c.json({ error: { code: "BAD_REQUEST", message } }, BAD_REQUEST);
+    }
     return c.json(
       { error: { code: "INTERNAL_SERVER_ERROR", message } },
       INTERNAL_SERVER_ERROR

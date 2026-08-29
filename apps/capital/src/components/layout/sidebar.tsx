@@ -19,6 +19,7 @@ import {
   LogOut,
   ChevronsLeft,
   ChevronsRight,
+  Sparkles,
 } from 'lucide-react';
 import { Link, usePathname } from '@/i18n/navigation';
 import { ThemeToggle } from '@/components/theme-toggle';
@@ -30,6 +31,7 @@ import { Button } from '@/components/ui/button';
 
 const navItems = [
   { href: '/dashboard', icon: LayoutDashboard, labelKey: 'dashboard' },
+  { href: '/assistant', icon: Sparkles, labelKey: 'assistant' },
   { href: '/businesses', icon: Building2, labelKey: 'businesses' },
   { href: '/personal', icon: User, labelKey: 'personal' },
   { href: '/transfers', icon: ArrowLeftRight, labelKey: 'transfers' },

@@ -5,5 +5,6 @@ export type {
   StatementParserConfig,
 } from "./types";
 
-export { parseOfxContent, parseOfxDate } from "./ofx-parser";
+export { parseOfxContent, parseOfxDate, parseOfxCreditCardContent } from "./ofx-parser";
+export type { ParsedOfxCreditCardStatement } from "./ofx-parser";
 export { detectStatementBank } from "./detect-bank";

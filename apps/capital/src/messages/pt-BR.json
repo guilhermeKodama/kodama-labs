@@ -25,6 +25,7 @@
   },
   "nav": {
     "dashboard": "Painel",
+    "assistant": "Assistente",
     "businesses": "Empresas",
     "personal": "Pessoal",
     "transfers": "Transferências",
@@ -1519,7 +1520,8 @@
       "createExpense": "Criar Despesa",
       "createNewExpense": "Criar nova transação de despesa",
       "linkExisting": "Vincular a transação existente",
-      "noExpenseTransactions": "Nenhuma transação de despesa de Cartão de Crédito encontrada"
+      "noExpenseTransactions": "Nenhuma transação de despesa de Cartão de Crédito encontrada",
+      "saveDates": "Salvar"
     },
     "upload": {
       "title": "Enviar Fatura do Cartão",
@@ -1692,6 +1694,120 @@
     "toast": {
       "imported": "Extrato bancário importado!",
       "error": "Falha ao importar extrato"
+    }
+  },
+  "assistant": {
+    "title": "Assistente",
+    "newConversation": "Nova conversa",
+    "emptyRail": "Nenhuma conversa ainda",
+    "backToList": "Voltar",
+    "today": "Hoje",
+    "last7Days": "Últimos 7 dias",
+    "older": "Anteriores",
+    "untitled": "Nova conversa",
+    "rename": "Renomear",
+    "delete": "Excluir",
+    "onboarding": {
+      "headline": "Seu assistente financeiro",
+      "subtitle": "Envie extratos para eu conciliar, ou pergunte sobre seus gastos, cartões e investimentos.",
+      "capImport": "Sincroniza extratos OFX, faturas CSV e PDFs de investimento com sua conta",
+      "capDuplicates": "Detecta duplicatas e pede sua confirmação antes de importar qualquer coisa",
+      "capUndo": "Tudo pode ser desfeito depois",
+      "capQuestions": "Responde perguntas sobre suas transações, cartões e posições de investimento"
+    },
+    "prompts": {
+      "sendStatement": "Enviar extrato bancário",
+      "reconcileCard": "Conciliar fatura do cartão de crédito",
+      "importInvestments": "Importar relatório de investimentos (PDF)",
+      "autoMessage": "Aqui está o arquivo. Pode conciliar com a minha conta?"
+    },
+    "composer": {
+      "placeholder": "Envie uma mensagem ou solte um arquivo…",
+      "send": "Enviar",
+      "stop": "Parar",
+      "attach": "Anexar",
+      "dropHint": "Solte seus extratos aqui — OFX, CSV ou PDF · máx 15MB",
+      "fileTooLarge": "Arquivo maior que {max}",
+      "fileTypeInvalid": "Tipo de arquivo não suportado",
+      "waitTurn": "Aguarde o assistente terminar antes de enviar outra mensagem"
+    },
+    "context": {
+      "title": "Contexto da conversa",
+      "strip": "Contexto ({count})",
+      "empty": "Nenhum arquivo nesta conversa",
+      "removeFromContext": "Remover",
+      "status": {
+        "uploading": "Enviando…",
+        "parsing": "{processed}/{total} processadas",
+        "ready": "{count} transações",
+        "error": "Falha ao ler",
+        "notApplicable": "PDF anexado"
+      },
+      "retry": "Tentar novamente",
+      "outOfContext": "Fora do contexto — não será lido nos próximos turnos"
+    },
+    "thread": {
+      "streaming": "Respondendo…",
+      "jumpToBottom": "Voltar ao fim",
+      "retryMessage": "Tentar novamente",
+      "connectionLost": "Conexão perdida",
+      "sending": "Enviando…"
+    },
+    "cards": {
+      "common": {
+        "decided": "Decidido: {decision} · {time}",
+        "superseded": "Substituído por um plano mais recente",
+        "confirmSelections": "Confirmar decisões"
+      },
+      "importPlan": {
+        "title": "Plano de importação",
+        "new": "novas",
+        "duplicates": "duplicatas",
+        "review": "para revisar",
+        "income": "Receitas",
+        "expenses": "Despesas",
+        "balanceMatch": "Saldo confere",
+        "balanceMismatch": "Saldo não confere",
+        "reviewDuplicates": "Revisar duplicatas",
+        "confirm": "Confirmar e importar",
+        "discard": "Descartar",
+        "bills": "{count, plural, one {# fatura} other {# faturas}}",
+        "billItems": "{count, plural, one {# item} other {# itens}}"
+      },
+      "duplicates": {
+        "title": "Possíveis duplicatas",
+        "fromStatement": "Do extrato",
+        "existingEntry": "Lançamento existente",
+        "keepBoth": "Manter ambas",
+        "merge": "Mesclar",
+        "skip": "Ignorar",
+        "confidence": {
+          "high": "Alta correspondência",
+          "medium": "Média correspondência",
+          "low": "Baixa correspondência"
+        }
+      },
+      "confirm": {
+        "title": "Confirmar importação",
+        "cancel": "Cancelar"
+      },
+      "result": {
+        "title": "Importação concluída",
+        "imported": "{count} transações criadas",
+        "duplicatesSkipped": "{count} duplicatas ignoradas",
+        "merged": "{count} lançamentos atualizados",
+        "transfersCreated": "{count} transferências registradas",
+        "undo": "Desfazer importação",
+        "undoWindow": "Pode desfazer nas próximas {hours}h",
+        "undone": "Importação desfeita"
+      }
+    },
+    "errors": {
+      "turnFailed": "O assistente encontrou um erro",
+      "retryable": "Tentar de novo",
+      "uploadFailed": "Falha no envio do arquivo",
+      "cardAlreadyAnswered": "Essa decisão já foi tomada",
+      "llmNotConfigured": "Assistente indisponível no momento"
     }
   }
 }

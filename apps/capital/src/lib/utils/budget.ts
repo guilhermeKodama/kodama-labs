@@ -6,6 +6,7 @@ import {
   isWithinInterval,
   differenceInDays,
   addMonths,
+  format,
 } from 'date-fns';
 import { parseLocalDate } from '@/lib/utils/date';
 import type {
@@ -918,4 +919,36 @@ export function convertInstallmentsToTransactions(
   }
 
   return result;
+}
+
+/**
+ * Sum a list of transactions into one amount per calendar month,
+ * chronologically sorted. Used to turn convertInstallmentsToTransactions'
+ * per-occurrence virtual transactions into a month-by-month projection
+ * (e.g. for a "future installment load" summary) without each caller
+ * re-implementing the grouping.
+ */
+export function groupTransactionsByMonth(
+  transactions: Transaction[]
+): Array<{ month: string; label: string; amount: number }> {
+  const totals: Record<string, number> = {};
+
+  for (const tx of transactions) {
+    const key = format(tx.date, 'yyyy-MM');
+    totals[key] = (totals[key] || 0) + tx.amount;
+  }
+
+  return Object.entries(totals)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([month, amount]) => {
+      // `new Date(month + '-01')` would parse as UTC midnight and roll
+      // back a day in any timezone behind UTC, mislabeling the month -
+      // build the label from the same numbers the key came from instead.
+      const [year, monthNum] = month.split('-').map(Number);
+      return {
+        month,
+        label: format(new Date(year, monthNum - 1, 1, 12), 'MMM yyyy'),
+        amount: Math.round(amount * 100) / 100,
+      };
+    });
 }

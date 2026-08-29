@@ -5,9 +5,7 @@ import { jsonContent } from "stoker/openapi/helpers";
 import type { AppRouteHandler } from "@capital/server/types";
 import { prisma } from "@capital/server/lib/prisma";
 import { requireUserId } from "@capital/server/lib/auth-middleware";
-import { parseLocalDate } from "@capital/server/lib/date-utils";
-import { createTransfer } from "@capital/server/modules/transfers/services/create-transfer";
-import { normalizeDescription } from "../../utils";
+import { executeImport } from "../../services/execute-import";
 import { routeConfig } from "../../constants";
 
 // ---------------------------------------------------------------------------
@@ -35,11 +33,7 @@ const TransferInputSchema = z.object({
   date: z.string().min(1),
   amount: z.number().positive(),
   description: z.string().optional(),
-  direction: z.enum([
-    "profit_distribution",
-    "capital_injection",
-    "reimbursement",
-  ]),
+  direction: z.enum(["profit_distribution", "capital_injection", "reimbursement"]),
   counterpartyEntityType: z.enum(["business", "personal"]),
   counterpartyEntityId: z.string().min(1),
 });
@@ -123,79 +117,12 @@ export const route = createRoute({
 });
 
 // ---------------------------------------------------------------------------
-// System categories
-// ---------------------------------------------------------------------------
-
-const SYSTEM_EXPENSE_CATEGORIES = [
-  "Credit Card",
-  "Subscriptions",
-  "Groceries",
-  "Restaurants & Dining",
-  "Transportation",
-  "Shopping",
-  "Entertainment",
-  "Health & Pharmacy",
-  "Travel",
-  "Education",
-  "Personal Care",
-  "Home",
-  "Fees & Charges",
-  "Other",
-];
-
-const SYSTEM_INCOME_CATEGORIES = [
-  "Salary",
-  "Freelance",
-  "Investment Returns",
-  "Transfers",
-  "Other Income",
-];
-
-async function ensureSystemCategories(userId: string) {
-  const existing = await prisma.category.findMany({
-    where: { userId },
-    select: { name: true, type: true },
-  });
-  const existingKeys = new Set(existing.map((c) => `${c.type}:${c.name}`));
-
-  const toCreate: Array<{
-    userId: string;
-    name: string;
-    type: "expense" | "income";
-    isDefault: boolean;
-    isSystem: boolean;
-  }> = [];
-
-  for (const name of SYSTEM_EXPENSE_CATEGORIES) {
-    if (!existingKeys.has(`expense:${name}`)) {
-      toCreate.push({
-        userId,
-        name,
-        type: "expense",
-        isDefault: true,
-        isSystem: true,
-      });
-    }
-  }
-  for (const name of SYSTEM_INCOME_CATEGORIES) {
-    if (!existingKeys.has(`income:${name}`)) {
-      toCreate.push({
-        userId,
-        name,
-        type: "income",
-        isDefault: true,
-        isSystem: true,
-      });
-    }
-  }
-
-  if (toCreate.length > 0) {
-    await prisma.category.createMany({ data: toCreate, skipDuplicates: true });
-  }
-}
-
-// ---------------------------------------------------------------------------
 // Handler
+//
+// Thin adapter over services/execute-import.ts: translates this route's
+// wire format (fuzzyDuplicates) into the canonical ImportPlanPayload shape
+// (duplicateDecisions) that execute-import.ts also serves to the
+// assistant's commit_plan tool, so both surfaces share one write path.
 // ---------------------------------------------------------------------------
 
 export const handler: AppRouteHandler<typeof route> = async (c) => {
@@ -203,349 +130,50 @@ export const handler: AppRouteHandler<typeof route> = async (c) => {
     const userId = requireUserId(c);
     const body = c.req.valid("json");
 
-    // Verify entity ownership
-    if (body.entityType === "personal") {
-      const pa = await prisma.personalAccount.findFirst({
-        where: { id: body.entityId, userId },
-        select: { id: true },
-      });
-      if (!pa) {
-        return c.json(
-          {
-            error: {
-              code: "BAD_REQUEST",
-              message: "Personal account not found or access denied",
-            },
-          },
-          BAD_REQUEST
-        );
-      }
-    } else {
-      const biz = await prisma.business.findFirst({
-        where: { id: body.entityId, userId },
-        select: { id: true },
-      });
-      if (!biz) {
-        return c.json(
-          {
-            error: {
-              code: "BAD_REQUEST",
-              message: "Business not found or access denied",
-            },
-          },
-          BAD_REQUEST
-        );
-      }
-    }
-
-    // --- Auto-set initialBalance on first-ever import ---
-    if (body.ledgerBalance != null) {
-      const priorImports = await prisma.statementImport.count({
-        where: body.entityType === "personal"
-          ? { personalAccountId: body.entityId }
-          : { businessId: body.entityId },
-      });
-      if (priorImports === 0) {
-        if (body.entityType === "personal") {
-          await prisma.personalAccount.update({
-            where: { id: body.entityId },
-            data: { initialBalance: body.ledgerBalance },
-          });
-        } else {
-          await prisma.business.update({
-            where: { id: body.entityId },
-            data: { initialBalance: body.ledgerBalance },
-          });
-        }
-      }
-    }
-
-    await ensureSystemCategories(userId);
-
-    // Load merchant category mappings
-    const mappings = await prisma.merchantCategoryMapping.findMany({
-      where: { userId },
-      select: { normalizedDescription: true, category: true },
-    });
-    const mappingLookup = new Map(
-      mappings.map((m) => [m.normalizedDescription, m.category])
-    );
-
-    // --- Server-side deduplication ---
-    // Query existing externalIds to prevent double-inserts
-    const incomingExternalIds = body.transactions.map((t) => t.externalId);
-    const existingTxs = await prisma.transaction.findMany({
-      where: {
-        externalId: { in: incomingExternalIds },
-        OR: [
-          { business: { userId } },
-          { personalAccount: { userId } },
-        ],
-      },
-      select: { externalId: true },
-    });
-    const existingExternalIds = new Set(
-      existingTxs.map((t) => t.externalId)
-    );
-
-    // --- Handle fuzzy duplicates: link externalId to existing transactions ---
-    let fuzzyDuplicatesLinked = 0;
-    const fuzzyLinkedExternalIds = new Set<string>();
-    if (body.fuzzyDuplicates && body.fuzzyDuplicates.length > 0) {
-      for (const fd of body.fuzzyDuplicates) {
-        await prisma.transaction.update({
-          where: { id: fd.existingTransactionId },
-          data: { externalId: fd.externalId },
-        });
-        fuzzyLinkedExternalIds.add(fd.externalId);
-        fuzzyDuplicatesLinked++;
-      }
-    }
-
-    const newTransactions = body.transactions.filter(
-      (t) => !existingExternalIds.has(t.externalId) && !fuzzyLinkedExternalIds.has(t.externalId)
-    );
-    const duplicatesSkipped =
-      body.transactions.length - newTransactions.length - fuzzyDuplicatesLinked;
-
-    // Create StatementImport record
-    const statementImport = await prisma.statementImport.create({
-      data: {
-        userId,
+    const result = await executeImport(
+      userId,
+      {
         entityType: body.entityType,
+        entityId: body.entityId,
+        currency: body.currency,
         bankName: body.bankName,
         fileName: body.fileName,
-        transactionCount: newTransactions.length,
         ledgerBalance: body.ledgerBalance,
-        ledgerCurrency: body.currency,
-        categorizationStatus: "pending",
-        businessId:
-          body.entityType === "business" ? body.entityId : undefined,
-        personalAccountId:
-          body.entityType === "personal" ? body.entityId : undefined,
+        transactions: body.transactions,
+        transfers: body.transfers ?? [],
+        investmentTransfers: body.investmentTransfers ?? [],
+        creditCards: body.creditCards ?? [],
+        bills: [],
+        reconciliations: body.reconciliations ?? [],
+        duplicateDecisions: (body.fuzzyDuplicates ?? []).map((fd) => ({
+          externalId: fd.externalId,
+          resolution: "link_fuzzy" as const,
+          existingTransactionId: fd.existingTransactionId,
+        })),
+        investmentTransactions: [],
       },
-    });
-
-    // Create credit cards if requested
-    let creditCardsCreated = 0;
-    if (body.creditCards && body.creditCards.length > 0) {
-      for (const card of body.creditCards) {
-        await prisma.creditCard.create({
-          data: {
-            entityType: body.entityType,
-            bankName: card.bankName,
-            lastFourDigits: card.lastFourDigits,
-            creditLimit: 0,
-            closingDay: card.closingDay,
-            dueDay: card.dueDay,
-            currency: card.currency,
-            businessId:
-              body.entityType === "business" ? body.entityId : undefined,
-            personalAccountId:
-              body.entityType === "personal" ? body.entityId : undefined,
-          },
-        });
-        creditCardsCreated++;
-      }
-    }
-
-    // Collect externalIds from transfers/investment transfers to check for duplicates
-    const transferExternalIds = [
-      ...(body.transfers ?? []).map((t) => t.externalId),
-      ...(body.investmentTransfers ?? []).map((t) => t.externalId),
-    ].filter(Boolean);
-
-    const existingTransferFitIds = new Set<string>();
-    if (transferExternalIds.length > 0) {
-      const found = await prisma.transfer.findMany({
-        where: { externalId: { in: transferExternalIds } },
-        select: { externalId: true },
-      });
-      for (const f of found) {
-        if (f.externalId) existingTransferFitIds.add(f.externalId);
-      }
-    }
-
-    // Create transfers if provided
-    let transfersCreated = 0;
-    if (body.transfers && body.transfers.length > 0) {
-      for (const tr of body.transfers) {
-        if (existingTransferFitIds.has(tr.externalId)) continue;
-        const isOutgoing = tr.direction === "capital_injection";
-        const fromEntityType = isOutgoing
-          ? body.entityType
-          : tr.counterpartyEntityType;
-        const fromEntityId = isOutgoing
-          ? body.entityId
-          : tr.counterpartyEntityId;
-        const toEntityType = isOutgoing
-          ? tr.counterpartyEntityType
-          : body.entityType;
-        const toEntityId = isOutgoing
-          ? tr.counterpartyEntityId
-          : body.entityId;
-
-        await prisma.transfer.create({
-          data: {
-            fromEntityType,
-            toEntityType,
-            direction: tr.direction,
-            amount: tr.amount,
-            currency: body.currency,
-            exchangeRate: 1,
-            description: tr.description,
-            date: parseLocalDate(tr.date),
-            externalId: tr.externalId,
-            fromBusinessId:
-              fromEntityType === "business" ? fromEntityId : undefined,
-            fromPersonalAccountId:
-              fromEntityType === "personal" ? fromEntityId : undefined,
-            toBusinessId:
-              toEntityType === "business" ? toEntityId : undefined,
-            toPersonalAccountId:
-              toEntityType === "personal" ? toEntityId : undefined,
-          },
-        });
-        transfersCreated++;
-      }
-    }
-
-    // Create investment transfers if provided
-    let investmentTransfersCreated = 0;
-    if (body.investmentTransfers && body.investmentTransfers.length > 0) {
-      for (const it of body.investmentTransfers) {
-        if (existingTransferFitIds.has(it.externalId)) continue;
-        if (it.direction === "investment_deposit") {
-          await createTransfer(
-            userId,
-            {
-              fromEntityType: body.entityType as "personal" | "business",
-              toEntityType: body.entityType as "personal" | "business",
-              direction: "investment_deposit",
-              amount: it.amount,
-              currency: body.currency,
-              exchangeRate: 1,
-              description: it.description,
-              date: parseLocalDate(it.date),
-              fromBusinessId:
-                body.entityType === "business" ? body.entityId : undefined,
-              fromPersonalAccountId:
-                body.entityType === "personal" ? body.entityId : undefined,
-              toInvestmentAccountId: it.investmentAccountId,
-              externalId: it.externalId,
-            },
-            prisma
-          );
-        } else {
-          await createTransfer(
-            userId,
-            {
-              fromEntityType: body.entityType as "personal" | "business",
-              toEntityType: body.entityType as "personal" | "business",
-              direction: "investment_withdrawal",
-              amount: it.amount,
-              currency: body.currency,
-              exchangeRate: 1,
-              description: it.description,
-              date: parseLocalDate(it.date),
-              toBusinessId:
-                body.entityType === "business" ? body.entityId : undefined,
-              toPersonalAccountId:
-                body.entityType === "personal" ? body.entityId : undefined,
-              fromInvestmentAccountId: it.investmentAccountId,
-              externalId: it.externalId,
-            },
-            prisma
-          );
-        }
-        investmentTransfersCreated++;
-      }
-    }
-
-    // --- Reconciliation: update changed transactions ---
-    let reconciledCount = 0;
-    if (body.reconciliations && body.reconciliations.length > 0) {
-      for (const rec of body.reconciliations) {
-        const updateData: Record<string, unknown> = {};
-        if (rec.updates.amount !== undefined) {
-          updateData.amount = rec.updates.amount;
-        }
-        if (rec.updates.date !== undefined) {
-          updateData.date = parseLocalDate(rec.updates.date);
-        }
-        if (rec.updates.description !== undefined) {
-          updateData.description = rec.updates.description;
-        }
-
-        if (Object.keys(updateData).length > 0) {
-          await prisma.transaction.update({
-            where: { id: rec.existingTransactionId },
-            data: updateData,
-          });
-          reconciledCount++;
-        }
-      }
-    }
-
-    // Build transaction data with category mapping, using skipDuplicates as safety net
-    let importedCount = 0;
-    if (newTransactions.length > 0) {
-      const txData = newTransactions.map((t) => {
-        const mapped = mappingLookup.get(normalizeDescription(t.description));
-        return {
-          entityType: body.entityType as "personal" | "business",
-          type: t.type as "income" | "expense",
-          amount: t.amount,
-          currency: body.currency,
-          description: t.description,
-          category: mapped ?? "Uncategorized",
-          date: parseLocalDate(t.date),
-          externalId: t.externalId,
-          statementImportId: statementImport.id,
-          businessId:
-            body.entityType === "business" ? body.entityId : undefined,
-          personalAccountId:
-            body.entityType === "personal" ? body.entityId : undefined,
-        };
-      });
-
-      const result = await prisma.transaction.createMany({
-        data: txData,
-        skipDuplicates: true,
-      });
-      importedCount = result.count;
-
-      const allCategorized = txData.every(
-        (t) => t.category !== "Uncategorized"
-      );
-      if (allCategorized) {
-        await prisma.statementImport.update({
-          where: { id: statementImport.id },
-          data: { categorizationStatus: "completed" },
-        });
-      }
-    } else {
-      await prisma.statementImport.update({
-        where: { id: statementImport.id },
-        data: { categorizationStatus: "completed" },
-      });
-    }
+      prisma,
+      { source: "manual" }
+    );
 
     return c.json(
       {
-        imported: importedCount,
-        duplicatesSkipped,
-        reconciled: reconciledCount,
-        transfersCreated,
-        creditCardsCreated,
-        investmentTransfersCreated,
-        fuzzyDuplicatesLinked,
-        statementImportId: statementImport.id,
+        imported: result.imported,
+        duplicatesSkipped: result.duplicatesSkipped,
+        reconciled: result.reconciled,
+        transfersCreated: result.transfersCreated,
+        creditCardsCreated: result.creditCardsCreated,
+        investmentTransfersCreated: result.investmentTransfersCreated,
+        fuzzyDuplicatesLinked: result.fuzzyDuplicatesLinked,
+        statementImportId: result.statementImportId,
       },
       CREATED
     );
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "Unknown error";
+    if (message.includes("not found") || message.includes("access denied")) {
+      return c.json({ error: { code: "BAD_REQUEST", message } }, BAD_REQUEST);
+    }
     return c.json(
       { error: { code: "INTERNAL_ERROR", message } },
       INTERNAL_SERVER_ERROR

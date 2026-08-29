@@ -2,6 +2,7 @@ import type { DbClient } from "@capital/server/lib/prisma";
 import { insertBill } from "../data/commands/insert-bill";
 import { insertBillTransactions } from "../data/commands/insert-bill-transactions";
 import { parseCsvContent, parseDate, computeCycleStart } from "./parsers";
+import { parseOfxCreditCardContent } from "@capital/server/modules/bank-statements/services/parsers";
 import type { ParsedTransaction } from "./parsers";
 
 // Re-export for backwards compatibility (tests, other consumers)
@@ -75,8 +76,16 @@ export function calculateBillTotal(
 }
 
 /**
- * Process a CSV credit card bill: parse CSV, save bill + transactions, create installments.
- * AI categorization is handled asynchronously via cron job.
+ * Process a credit card bill file: parse it, save bill + transactions,
+ * create installments. AI categorization is handled asynchronously via
+ * cron job.
+ *
+ * Despite the name/field ("csvContent"), this also accepts a card OFX
+ * (<CCSTMTRS>) - some banks, Nubank included, export bills that way
+ * instead of CSV. Format is sniffed here so every caller (the manual
+ * upload route, the assistant's import-plan commit) stays agnostic to
+ * which one a given file turned out to be; everything past parsing
+ * operates on the same ParsedTransaction[] shape either way.
  *
  * If a bill already exists for the same creditCardId + closingDate, it is atomically
  * replaced: old bill is deleted (cascading transactions + installments) and a new one
@@ -87,11 +96,12 @@ export async function processBillCsv(
   input: ProcessBillCsvInput,
   db: DbClient
 ) {
-  // 1. Parse CSV
-  const parsedTransactions = parseCsvContent(input.csvContent);
+  const parsedTransactions = /<CCSTMTRS>/i.test(input.csvContent.slice(0, 4096))
+    ? parseOfxCreditCardContent(input.csvContent).transactions
+    : parseCsvContent(input.csvContent);
 
   if (parsedTransactions.length === 0) {
-    throw new Error("No valid transactions found in CSV");
+    throw new Error("No valid transactions found in the bill file");
   }
 
   // 2. Calculate bill total and filter charge transactions

@@ -3,10 +3,13 @@
 import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { format } from 'date-fns';
-import { FileText, Trash2, Loader2, Sparkles, AlertCircle, Link2, Plus } from 'lucide-react';
+import { FileText, Trash2, Loader2, Sparkles, AlertCircle, Link2, Plus, Pencil } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { formatCurrency } from '@/lib/utils/format';
+import { formatInputDate, parseInputDate } from '@/lib/utils/date';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import {
   Popover,
   PopoverContent,
@@ -20,6 +23,7 @@ interface BillsTableProps {
   expenseTransactions?: Transaction[];
   onCreateExpense?: (billId: string) => void;
   onLinkTransaction?: (billId: string, transactionId: string) => void;
+  onUpdateBill?: (billId: string, data: { closingDate?: string; dueDate?: string }) => void;
   onDelete?: (billId: string) => void;
 }
 
@@ -29,10 +33,14 @@ export function BillsTable({
   expenseTransactions = [],
   onCreateExpense,
   onLinkTransaction,
+  onUpdateBill,
   onDelete,
 }: BillsTableProps) {
   const t = useTranslations('creditCards');
   const [linkingBillId, setLinkingBillId] = useState<string | null>(null);
+  const [editingBillId, setEditingBillId] = useState<string | null>(null);
+  const [editClosingDate, setEditClosingDate] = useState('');
+  const [editDueDate, setEditDueDate] = useState('');
 
   if (bills.length === 0) {
     return (
@@ -214,6 +222,64 @@ export function BillsTable({
                               </div>
                             </>
                           )}
+                        </div>
+                      </PopoverContent>
+                    </Popover>
+                  )}
+                  {onUpdateBill && (
+                    <Popover
+                      open={editingBillId === bill.id}
+                      onOpenChange={(open) => {
+                        setEditingBillId(open ? bill.id : null);
+                        if (open) {
+                          setEditClosingDate(formatInputDate(bill.closingDate));
+                          setEditDueDate(formatInputDate(bill.dueDate));
+                        }
+                      }}
+                    >
+                      <PopoverTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7 text-slate-400 hover:text-white"
+                        >
+                          <Pencil className="h-3.5 w-3.5" />
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent
+                        className="w-72 border-slate-700 bg-slate-800 p-3"
+                        align="end"
+                      >
+                        <div className="space-y-3">
+                          <div className="space-y-1.5">
+                            <Label className="text-xs text-slate-300">{t('bill.closingDate')}</Label>
+                            <Input
+                              type="date"
+                              value={editClosingDate}
+                              onChange={(e) => setEditClosingDate(e.target.value)}
+                              className="h-8 border-slate-700 bg-slate-900 text-sm text-white"
+                            />
+                          </div>
+                          <div className="space-y-1.5">
+                            <Label className="text-xs text-slate-300">{t('bill.dueDate')}</Label>
+                            <Input
+                              type="date"
+                              value={editDueDate}
+                              onChange={(e) => setEditDueDate(e.target.value)}
+                              className="h-8 border-slate-700 bg-slate-900 text-sm text-white"
+                            />
+                          </div>
+                          <Button
+                            size="sm"
+                            className="w-full bg-emerald-600 text-white hover:bg-emerald-700"
+                            disabled={!parseInputDate(editClosingDate) || !parseInputDate(editDueDate)}
+                            onClick={() => {
+                              onUpdateBill(bill.id, { closingDate: editClosingDate, dueDate: editDueDate });
+                              setEditingBillId(null);
+                            }}
+                          >
+                            {t('bill.saveDates')}
+                          </Button>
                         </div>
                       </PopoverContent>
                     </Popover>

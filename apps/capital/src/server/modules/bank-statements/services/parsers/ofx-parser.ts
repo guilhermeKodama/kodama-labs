@@ -1,4 +1,6 @@
 import type { ParsedStatement, ParsedBankTransaction, ParsedStatementAccount } from "./types";
+import type { ParsedTransaction } from "@capital/server/modules/credit-cards/services/parsers/types";
+import { nubankParser } from "@capital/server/modules/credit-cards/services/parsers/nubank";
 
 /**
  * Extract the text content of an OFX/SGML tag.
@@ -136,4 +138,83 @@ export function parseOfxContent(raw: string): ParsedStatement {
     ledgerBalance,
     balanceDate,
   };
+}
+
+/** Keywords (lowercase) identifying a card-payment line, mirroring the CSV bank parsers' paymentKeywords. */
+const CC_PAYMENT_KEYWORDS = ["pagamento recebido", "pagamento efetuado", "payment received", "payment thank you"];
+
+function isOfxCreditCardPayment(trnType: string, memo: string): boolean {
+  if (trnType.toUpperCase() === "PAYMENT") return true;
+  const lower = memo.toLowerCase();
+  return CC_PAYMENT_KEYWORDS.some((kw) => lower.includes(kw));
+}
+
+export interface ParsedOfxCreditCardStatement {
+  bankName: string;
+  accountId: string;
+  currency: string;
+  transactions: ParsedTransaction[];
+}
+
+/**
+ * Parse a credit-card OFX statement (<CCSTMTRS>, distinct from the
+ * <STMTRS> a checking/savings statement uses - some banks, Nubank
+ * included, export card bills as OFX rather than CSV). Produces the same
+ * ParsedTransaction[] shape the CSV parsers do, so everything downstream
+ * of parsing (bill creation, categorization, installment linking) never
+ * needs to know which format the file came in as.
+ *
+ * OFX's sign convention for a credit card is the same as for a checking
+ * account: a charge is a negative TRNAMT (money leaving available
+ * credit), a payment is positive. That is the OPPOSITE of this app's CSV
+ * convention (positive = charge), so amounts are flipped here. isPayment
+ * is judged by TRNTYPE/MEMO, not by sign alone - a refund/estorno is
+ * also amount-negative post-flip but must still become a BillTransaction
+ * (calculateBillTotal decides whether it belongs to the current cycle),
+ * not be dropped like the card-payment line is.
+ *
+ * OFX has no dedicated installment field either - like Nubank's CSV
+ * export, installments are embedded in MEMO as "- Parcela X/Y", so MEMO
+ * is run through the same parseInstallmentFromDescription() the CSV path
+ * uses (nubankParser's - its regex is bank-agnostic, matching the plain
+ * "(X/Y)" suffix too), and its cleanDescription (suffix stripped) is what
+ * becomes ParsedTransaction.description.
+ */
+export function parseOfxCreditCardContent(raw: string): ParsedOfxCreditCardStatement {
+  const fi = extractBlock(raw, "FI");
+  const bankName = extractTag(fi, "ORG");
+
+  const ccstmtrs = extractBlock(raw, "CCSTMTRS");
+  if (!ccstmtrs) {
+    throw new Error("No CCSTMTRS block found in OFX file");
+  }
+
+  const currency = extractTag(ccstmtrs, "CURDEF");
+  const acctFrom = extractBlock(ccstmtrs, "CCACCTFROM");
+  const accountId = extractTag(acctFrom, "ACCTID");
+
+  const tranList = extractBlock(ccstmtrs, "BANKTRANLIST");
+  const trnBlocks = extractAllBlocks(tranList, "STMTTRN");
+
+  const transactions: ParsedTransaction[] = trnBlocks.map((block) => {
+    const trnType = extractTag(block, "TRNTYPE");
+    const memo = extractTag(block, "MEMO");
+    const amount = -parseFloat(extractTag(block, "TRNAMT"));
+    // Installments aren't a distinct OFX field - Nubank (and apparently
+    // every bank this format has been seen from) embeds them in MEMO the
+    // same "- Parcela X/Y" way CSV descriptions do, so the exact same
+    // extraction the CSV path uses applies here instead of leaving OFX
+    // rows with no installment info at all.
+    const installmentInfo = nubankParser.parseInstallmentFromDescription(memo);
+    return {
+      date: extractTag(block, "DTPOSTED").slice(0, 8).replace(/(\d{4})(\d{2})(\d{2})/, "$1-$2-$3"),
+      description: installmentInfo.cleanDescription,
+      amount,
+      installmentNumber: installmentInfo.installmentNumber,
+      totalInstallments: installmentInfo.totalInstallments,
+      isPayment: isOfxCreditCardPayment(trnType, memo),
+    };
+  });
+
+  return { bankName, accountId, currency: currency || "BRL", transactions };
 }

@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { readFileSync, existsSync } from "fs";
 import { join } from "path";
-import { parseOfxContent, parseOfxDate } from "../parsers/ofx-parser";
+import { parseOfxContent, parseOfxDate, parseOfxCreditCardContent } from "../parsers/ofx-parser";
 import { detectStatementBank } from "../parsers/detect-bank";
 import { extractShortTitle } from "../../utils";
 
@@ -267,6 +267,124 @@ if (HAS_LOCAL_OFX_FILES) {
     });
   });
 }
+
+// ---------------------------------------------------------------------------
+// parseOfxCreditCardContent (synthetic - no personal card OFX fixture)
+// ---------------------------------------------------------------------------
+
+const CC_OFX = `OFXHEADER:100
+DATA:OFXSGML
+VERSION:102
+<OFX>
+<SIGNONMSGSRSV1>
+<SONRS>
+<STATUS><CODE>0<SEVERITY>INFO</STATUS>
+<FI><ORG>NU PAGAMENTOS S.A.<FID>260</FI>
+</SONRS>
+</SIGNONMSGSRSV1>
+<CREDITCARDMSGSRSV1>
+<CCSTMTTRNRS>
+<TRNUID>1
+<STATUS><CODE>0<SEVERITY>INFO</STATUS>
+<CCSTMTRS>
+<CURDEF>BRL
+<CCACCTFROM>
+<ACCTID>1234
+</CCACCTFROM>
+<BANKTRANLIST>
+<DTSTART>20260801
+<DTEND>20260822
+<STMTTRN>
+<TRNTYPE>DEBIT
+<DTPOSTED>20260805120000[0:GMT]
+<TRNAMT>-45.90
+<FITID>cc1
+<MEMO>Uber *Trip
+</STMTTRN>
+<STMTTRN>
+<TRNTYPE>CREDIT
+<DTPOSTED>20260810120000[0:GMT]
+<TRNAMT>20.00
+<FITID>cc2
+<MEMO>Estorno Amazon
+</STMTTRN>
+<STMTTRN>
+<TRNTYPE>CREDIT
+<DTPOSTED>20260814120000[0:GMT]
+<TRNAMT>500.00
+<FITID>cc3
+<MEMO>Pagamento recebido
+</STMTTRN>
+<STMTTRN>
+<TRNTYPE>DEBIT
+<DTPOSTED>20260812120000[0:GMT]
+<TRNAMT>-199.00
+<FITID>cc4
+<MEMO>Loja Eletronicos - Parcela 2/6
+</STMTTRN>
+</BANKTRANLIST>
+<LEDGERBAL>
+<BALAMT>-25.90
+<DTASOF>20260822120000[0:GMT]
+</LEDGERBAL>
+</CCSTMTRS>
+</CCSTMTTRNRS>
+</CREDITCARDMSGSRSV1>
+</OFX>`;
+
+describe("parseOfxCreditCardContent", () => {
+  const parsed = parseOfxCreditCardContent(CC_OFX);
+
+  it("extracts bank name and card account id", () => {
+    expect(parsed.bankName).toBe("NU PAGAMENTOS S.A.");
+    expect(parsed.accountId).toBe("1234");
+    expect(parsed.currency).toBe("BRL");
+  });
+
+  it("parses 4 transactions", () => {
+    expect(parsed.transactions).toHaveLength(4);
+  });
+
+  it("flips a charge's sign to positive (CSV convention) and is not a payment", () => {
+    const charge = parsed.transactions[0]!;
+    expect(charge.amount).toBe(45.9);
+    expect(charge.isPayment).toBe(false);
+    expect(charge.description).toBe("Uber *Trip");
+    expect(charge.date).toBe("2026-08-05");
+  });
+
+  it("flips a refund's sign to negative but does not treat it as a payment", () => {
+    const refund = parsed.transactions[1]!;
+    expect(refund.amount).toBe(-20);
+    expect(refund.isPayment).toBe(false);
+  });
+
+  it("detects the card-payment line by memo keyword, sign flipped negative", () => {
+    const payment = parsed.transactions[2]!;
+    expect(payment.amount).toBe(-500);
+    expect(payment.isPayment).toBe(true);
+  });
+
+  it("extracts installment info embedded in MEMO, same as the CSV parsers do", () => {
+    const installment = parsed.transactions[3]!;
+    expect(installment.amount).toBe(199);
+    expect(installment.installmentNumber).toBe(2);
+    expect(installment.totalInstallments).toBe(6);
+    expect(installment.description).toBe("Loja Eletronicos");
+  });
+
+  it("leaves installmentNumber/totalInstallments undefined for non-installment lines", () => {
+    const charge = parsed.transactions[0]!;
+    expect(charge.installmentNumber).toBeUndefined();
+    expect(charge.totalInstallments).toBeUndefined();
+  });
+
+  it("throws when there is no CCSTMTRS block (e.g. a checking-account OFX)", () => {
+    expect(() => parseOfxCreditCardContent("<OFX><STMTRS></STMTRS></OFX>")).toThrow(
+      "No CCSTMTRS block found"
+    );
+  });
+});
 
 // ---------------------------------------------------------------------------
 // extractShortTitle

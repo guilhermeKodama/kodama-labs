@@ -6,42 +6,44 @@ import { format, addMonths } from 'date-fns';
 import { Repeat, CalendarClock } from 'lucide-react';
 import { formatCurrency } from '@/lib/utils/format';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import type { Installment } from '@/types';
+import { convertInstallmentsToTransactions, groupTransactionsByMonth } from '@/lib/utils/budget';
+import type { Installment, CreditCard, CreditCardBill, BillTransaction } from '@/types';
 
 interface InstallmentsTableProps {
   installments: Installment[];
+  creditCards: CreditCard[];
+  bills: CreditCardBill[];
+  billTransactions: BillTransaction[];
   currency: string;
 }
 
-export function InstallmentsTable({ installments, currency }: InstallmentsTableProps) {
+export function InstallmentsTable({
+  installments,
+  creditCards,
+  bills,
+  billTransactions,
+  currency,
+}: InstallmentsTableProps) {
   const t = useTranslations('creditCards');
 
-  // Calculate future monthly projections
+  // Future monthly projections - reuses convertInstallmentsToTransactions
+  // (already covered by budget-installments.test.ts) instead of a second,
+  // parallel calculation. That matters here specifically because
+  // Installment.startDate gets overwritten to the latest bill's
+  // transaction date every time a new bill updates it (see
+  // process-bill-csv.ts) - a naive `startDate + paidInstallments` offset
+  // double-counts elapsed months and compounds worse with every re-upload,
+  // which is what produced the growing/oscillating totals here. The
+  // shared function anchors on the source bill's closing date instead.
   const monthlyProjections = useMemo(() => {
-    const projections: Record<string, number> = {};
-
-    for (const inst of installments) {
-      if (!inst.isActive) continue;
-      const remaining = inst.totalInstallments - inst.paidInstallments;
-      if (remaining <= 0) continue;
-
-      const startDate = new Date(inst.startDate);
-
-      for (let i = 0; i < remaining; i++) {
-        const futureDate = addMonths(startDate, inst.paidInstallments + i);
-        const key = format(futureDate, 'yyyy-MM');
-        projections[key] = (projections[key] || 0) + inst.installmentAmount;
-      }
-    }
-
-    return Object.entries(projections)
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(([month, amount]) => ({
-        month,
-        label: format(new Date(month + '-01'), 'MMM yyyy'),
-        amount: Math.round(amount * 100) / 100,
-      }));
-  }, [installments]);
+    const virtualTransactions = convertInstallmentsToTransactions(
+      installments,
+      creditCards,
+      bills,
+      billTransactions
+    );
+    return groupTransactionsByMonth(virtualTransactions);
+  }, [installments, creditCards, bills, billTransactions]);
 
   const totalFutureAmount = useMemo(() => {
     return installments
