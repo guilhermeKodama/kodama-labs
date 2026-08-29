@@ -1,0 +1,93 @@
+---
+title: Deploy
+description: Como publicar mudanças de careers, attention, capital e sentinel nos containers de produção
+---
+
+# Deploy
+
+Só funciona a partir do **checkout principal** do repo no servidor (`/home/kodama/Documents/Github/kodama-labs`) — nunca de um worktree. É de lá que o `docker compose` lê o `docker-compose.yml`, o `Dockerfile` e os `.env.production` de cada app.
+
+## Deploy completo (código mudou)
+
+```bash
+git pull
+
+docker --context desktop-linux compose build      # reconstrói as 4 imagens
+docker --context desktop-linux compose up -d       # recria migrate → depois web/workers
+```
+
+O que acontece em `up -d`:
+
+1. Pra cada app, o serviço `<app>-migrate` é recriado com a imagem nova e roda `prisma migrate deploy` contra o banco de produção real (`postgres:5432/<app>`, não o `_dev`).
+2. `web` e os workers do app têm `depends_on: { <app>-migrate: { condition: service_completed_successfully } }` — só são recriados depois que a migration terminar com sucesso.
+3. Se não houver migration nova, o passo 1 é um no-op rápido ("No pending migrations to apply") e tudo segue.
+
+Isso significa que **nunca é preciso rodar migration manualmente em produção** — faz parte do próprio `up -d`. E se uma migration falhar, os serviços dependentes simplesmente não são recriados (ficam na versão anterior rodando), em vez de subir num estado inconsistente.
+
+Buildar todas as 4 imagens de uma vez é o padrão simples. Pra buildar só uma (mudança isolada num app):
+
+```bash
+docker --context desktop-linux compose build careers-migrate
+docker --context desktop-linux compose up -d careers-web careers-jobs careers-sources careers-maintenance
+```
+
+(o alvo de build é sempre o `-migrate` de cada app — é o serviço que declara o `build:` no compose; os outros serviços do mesmo app reusam a mesma imagem)
+
+## Reiniciar sem rebuildar
+
+Só quer bounce de um serviço (não mudou código, só quer aplicar uma env var nova ou recuperar de um estado ruim)? Use `restart`, não `up -d` — `restart` não aciona o `depends_on`, então não passa pelo migrate:
+
+```bash
+docker --context desktop-linux compose restart careers-web
+```
+
+Se por algum motivo precisar do `up -d` mesmo sem rebuild (ex.: pra recriar o container do zero), passe `--no-deps` pra pular a checagem de dependência:
+
+```bash
+docker --context desktop-linux compose up -d --no-deps careers-web
+```
+
+## Verificando
+
+```bash
+docker --context desktop-linux compose ps -a
+docker --context desktop-linux compose logs -f careers-web
+curl -fsS -o /dev/null -w "%{http_code}\n" http://localhost:13006/
+```
+
+Migrate deve aparecer como `Exited (0)`; web/workers como `Up`.
+
+## Secrets
+
+Cada app tem um `apps/<app>/.env.production` no checkout principal — nunca commitado, nunca copiado pra dentro da imagem (o `.dockerignore` exclui todo `.env*` do build context de propósito; os containers recebem essas variáveis via `env_file:` do compose, injetadas no processo em tempo de execução, não gravadas em nenhuma camada da imagem).
+
+Se um secret mudar (rotacionar uma API key, por exemplo), edita o `.env.production` do app e roda `compose restart <app>-web` (ou os workers relevantes) — não precisa rebuild, já que o valor não está na imagem.
+
+`capital` e `sentinel` ainda dependem parcialmente de secrets que só existem na Vercel (`CRON_SECRET`, `ANTHROPIC_API_KEY`, etc. — puxar com `vercel env pull` antes de esperar essas duas rodarem 100% fora da Vercel).
+
+## cronjobs (capital / sentinel)
+
+Esses dois apps não têm workers — o trabalho periódico deles é feito pelo serviço `cronjobs`, que lê `vercel.json` de cada app e dispara os endpoints de cron via HTTP, igual a Vercel faria. Ele não sobe com um `compose up -d` genérico — precisa ser ligado explicitamente:
+
+```bash
+docker --context desktop-linux compose up -d cronjobs
+```
+
+A variável `CRON_APPS` (no `.env` da raiz do repo) controla quais apps têm crons ativos localmente — útil pra migrar um de cada vez sem duplicar disparos com a Vercel.
+
+## Se algo der errado
+
+Os serviços systemd antigos (`careers-*`, `attention-*`) continuam instalados no servidor, só desabilitados — não foram removidos. Rollback de emergência:
+
+```bash
+docker --context desktop-linux compose stop careers-web careers-jobs careers-sources careers-maintenance
+systemctl --user enable --now careers-web careers-jobs careers-sources careers-maintenance
+```
+
+Isso decai com o tempo: o `careers-web.service` builda o checkout atual no `ExecStartPre`, então semanas depois do cutover ele vai buildar e servir o que quer que `main` tenha virado — não é mais um "voltar pro estado de antes", é só "voltar a rodar fora de container". Pra rollback de verdade, o alvo real são as imagens Docker anteriores, não o systemd.
+
+## O que não é tocado por um deploy normal
+
+- `postgres`, `redis`, `qdrant` — infra compartilhada, tem compose próprio (`infrastructure/postgres/`), não sobe/desce junto com os apps.
+- `cloudflared` — só muda se `infrastructure/cloudflared/config.yml` mudar (novo hostname, por exemplo).
+- `whisper-rocm` — fora do Docker Desktop inteiramente (ver [Visão geral](/docs/infrastructure)), gerenciado separado.

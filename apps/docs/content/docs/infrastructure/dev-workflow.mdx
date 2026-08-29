@@ -1,0 +1,78 @@
+---
+title: Fluxo de dev
+description: Como rodar careers, attention, capital e sentinel localmente sem tocar em dados de produção
+---
+
+# Fluxo de dev
+
+## Pré-requisito
+
+O Docker Desktop precisa estar rodando — é ele quem hospeda o Postgres compartilhado na porta `5433`. Sem ele no ar, `pnpm dev` sobe mas todo acesso a banco falha.
+
+## Rodando um app
+
+Nada de configuração extra — cada `apps/<app>/.env` já aponta pro banco `_dev` correspondente:
+
+```bash
+cd apps/careers && pnpm dev      # :3006, lê careers_dev
+cd apps/attention && pnpm dev    # :3005, lê attention_dev
+cd apps/capital && pnpm dev      # :3000, lê capital_dev
+cd apps/sentinel && pnpm dev     # :3002, lê sentinel_dev
+```
+
+Ou todos de uma vez, da raiz:
+
+```bash
+pnpm dev
+```
+
+Essas portas (`3000/3002/3005/3006`) nunca colidem com os containers de produção — eles publicam em `13xxx`. Dá pra ter prod servindo tráfego real e dev rodando ao mesmo tempo sem conflito.
+
+## Workers em dev
+
+`careers` e `attention` têm workers em background além do web. Pra rodar localmente, terminal separado por worker:
+
+```bash
+# careers
+cd apps/careers
+pnpm run worker:jobs
+pnpm run worker:sources
+pnpm run worker:maintenance
+
+# attention
+cd apps/attention
+pnpm run worker:beacon
+pnpm run worker:jobs
+pnpm run worker:maintenance
+pnpm run worker:whatsapp   # abre QR code na primeira vez
+```
+
+`capital` e `sentinel` não têm workers — o trabalho periódico deles é via cron HTTP (ver [Deploy](/docs/infrastructure/deploy)).
+
+## Banco vazio por padrão — e como popular
+
+`<app>_dev` nasce com o schema migrado mas **zero linhas**. É proposital: nenhum bug local consegue tocar em dado real, mesmo por acidente.
+
+Se precisar de dados realistas pra testar contra, restaura um dump de produção dentro do banco `_dev` (nunca no de prod):
+
+```bash
+# lista backups disponíveis
+pnpm db:backups
+
+# restaura um dump específico — edite o script/comando pra apontar pro banco _dev,
+# ou peça pra alguém aplicar isso pra você caso não tenha certeza do fluxo
+pnpm db:restore <label>
+```
+
+Sempre confirme qual `DATABASE_URL` está ativa antes de rodar um restore — `_dev` é seguro, o banco de prod não é.
+
+## Migrations em dev
+
+Schema mudou? Cria a migration normalmente contra o banco `_dev`:
+
+```bash
+cd apps/careers
+pnpm run db:migrate   # prisma migrate dev — cria e aplica a migration
+```
+
+Isso grava o arquivo de migration no repo. Ele só chega em produção no próximo [deploy](/docs/infrastructure/deploy), que roda `prisma migrate deploy` contra o banco real como parte do processo — não precisa aplicar manualmente em prod.
