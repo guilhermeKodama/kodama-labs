@@ -81,6 +81,25 @@ export async function validateImportPlanPayload(
     }
   }
 
+  // Transfer counterparties must belong to the user - a transfer writes
+  // directly into fromBusinessId/toBusinessId (or the personal equivalent)
+  // in execute-import.ts with no other ownership check downstream, so this
+  // is the only gate against pointing a transfer at another tenant's
+  // business/personalAccount.
+  const counterpartyKeys = new Map<string, { entityType: "business" | "personal"; entityId: string }>();
+  for (const tr of payload.transfers) {
+    counterpartyKeys.set(`${tr.counterpartyEntityType}:${tr.counterpartyEntityId}`, {
+      entityType: tr.counterpartyEntityType,
+      entityId: tr.counterpartyEntityId,
+    });
+  }
+  for (const { entityType, entityId } of counterpartyKeys.values()) {
+    const counterparty = await fetchEntityForAgent(userId, entityType, entityId, db);
+    if (!counterparty) {
+      throw new Error(`Transfer counterparty ${entityType} ${entityId} not found or access denied`);
+    }
+  }
+
   // Investment accounts referenced must belong to the user.
   const investmentAccountIds = new Set([
     ...payload.investmentTransfers.map((t) => t.investmentAccountId),

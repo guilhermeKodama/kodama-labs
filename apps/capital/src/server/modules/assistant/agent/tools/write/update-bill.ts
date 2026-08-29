@@ -9,8 +9,8 @@ export const updateBillTool = defineTool({
     "Correct a bill's own closingDate/dueDate after it was created. These live on the bill itself, not on the CreditCard (which only holds the recurring closingDay/dueDay used as a default for new bills) - so this is the right tool when a specific bill's dates are wrong (e.g. guessed incorrectly from a statement import) and fixing the card's recurring day wouldn't touch this bill's own values. Does NOT require plan confirmation - one bounded, explicitly-requested correction, fully reversible by calling again, and every call is audited.",
   inputSchema: z.object({
     billId: z.string(),
-    closingDate: z.string().optional(),
-    dueDate: z.string().optional(),
+    closingDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "must be YYYY-MM-DD").optional(),
+    dueDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "must be YYYY-MM-DD").optional(),
   }),
   access: "write_domain",
   handler: async (ctx, input) => {

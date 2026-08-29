@@ -9,9 +9,11 @@ import { requireUserId } from "@capital/server/lib/auth-middleware";
 import { routeConfig } from "../../constants";
 import { updateBill } from "../../services/update-bill";
 
+const DATE_ONLY_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+
 const UpdateBillSchema = z.object({
-  closingDate: z.string().optional(),
-  dueDate: z.string().optional(),
+  closingDate: z.string().regex(DATE_ONLY_PATTERN, "must be YYYY-MM-DD").optional(),
+  dueDate: z.string().regex(DATE_ONLY_PATTERN, "must be YYYY-MM-DD").optional(),
 });
 
 const BillResponseSchema = z.object({
