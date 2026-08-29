@@ -1520,7 +1520,8 @@
       "createExpense": "Create Expense",
       "createNewExpense": "Create new expense transaction",
       "linkExisting": "Link to existing transaction",
-      "noExpenseTransactions": "No Credit Card expense transactions found"
+      "noExpenseTransactions": "No Credit Card expense transactions found",
+      "saveDates": "Save"
     },
     "upload": {
       "title": "Upload Credit Card Bill",

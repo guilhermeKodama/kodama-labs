@@ -22,6 +22,7 @@ import { fundInvestmentAccountTool } from "./write/fund-investment-account";
 import { manageCreditCard } from "./write/manage-credit-card";
 import { updateBillTransactions } from "./write/update-bill-transactions";
 import { linkBillToTransactionTool } from "./write/link-bill-to-transaction";
+import { updateBillTool } from "./write/update-bill";
 import { presentCard } from "./ui/present-card";
 
 /**
@@ -55,5 +56,6 @@ export const AGENT_TOOLS: AnyAgentToolDef[] = [
   manageCreditCard,
   updateBillTransactions,
   linkBillToTransactionTool,
+  updateBillTool,
   presentCard,
 ];

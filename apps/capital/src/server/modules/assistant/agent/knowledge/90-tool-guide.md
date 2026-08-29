@@ -21,6 +21,7 @@ Além de `record_merchant_category`, as tools de gestão de investimentos (`mana
 - `manage_credit_card`: criar, editar ou ativar/desativar um cartão. Mesma regra de "sem delete" - desativar é a forma de remover, porque cartão carrega faturas e parcelamentos.
 - `update_bill_transactions`: recategoriza lançamentos de fatura já gravados (até 100 por chamada) - mesmo racional que `update_transactions`, só que para `BillTransaction` em vez de `Transaction`.
 - `link_bill_to_transaction`: liga uma fatura ao ledger - `create_expense` gera a despesa da fatura, `link_existing` amarra a uma `Transaction` que já existe (o caso comum: o pagamento da fatura apareceu num extrato bancário). Ver `51-playbook-card-csv.md` para quando usar cada uma.
+- `update_bill`: corrige `closingDate`/`dueDate` de UMA fatura já criada. Diferente de `manage_credit_card`'s `closingDay`/`dueDay` (o padrão recorrente do cartão, usado só em faturas futuras) - os dois campos são independentes de propósito, corrigir um não corrige o outro. Ver "Corrigindo fechamento/vencimento depois de importado" em `51-playbook-card-csv.md`.
 
 Continua exigindo o fluxo de duas fases qualquer coisa que vem de arquivo (extrato bancário, fatura, PDF de investimento) - porque aí sim o conteúdo não é confiável - e qualquer coisa que crie, apague ou altere valor/data/saldo de lançamentos em massa. Uma fatura de cartão nova é sempre proposta via `propose_import_plan.bills`, nunca `manage_credit_card` + escrita direta de lançamentos - ver `51-playbook-card-csv.md`.
 

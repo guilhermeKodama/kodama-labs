@@ -68,6 +68,7 @@ export default function CreditCardsPage() {
     fetchBillTransactions,
     uploadBill,
     deleteBill,
+    updateBill,
     createBillExpense,
     linkBillToTransaction,
     updateBillTransactionCategory,
@@ -419,6 +420,7 @@ export default function CreditCardsPage() {
                 expenseTransactions={transactions.filter((tx) => tx.type === 'expense')}
                 onCreateExpense={handleCreateExpenseFromBill}
                 onLinkTransaction={handleLinkTransaction}
+                onUpdateBill={updateBill}
                 onDelete={handleDeleteBill}
               />
             </CardContent>

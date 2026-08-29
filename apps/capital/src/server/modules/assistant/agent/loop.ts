@@ -51,6 +51,7 @@ const TOOL_LABELS: Record<string, string> = {
   manage_credit_card: "Gerenciando cartão de crédito",
   update_bill_transactions: "Atualizando lançamentos de fatura",
   link_bill_to_transaction: "Vinculando fatura ao lançamento",
+  update_bill: "Corrigindo datas da fatura",
   present_card: "Preparando card de decisão",
 };
 

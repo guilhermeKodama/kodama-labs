@@ -1520,7 +1520,8 @@
       "createExpense": "Criar Despesa",
       "createNewExpense": "Criar nova transação de despesa",
       "linkExisting": "Vincular a transação existente",
-      "noExpenseTransactions": "Nenhuma transação de despesa de Cartão de Crédito encontrada"
+      "noExpenseTransactions": "Nenhuma transação de despesa de Cartão de Crédito encontrada",
+      "saveDates": "Salvar"
     },
     "upload": {
       "title": "Enviar Fatura do Cartão",
