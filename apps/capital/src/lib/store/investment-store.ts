@@ -39,13 +39,13 @@ interface InvestmentActions {
   // Accounts
   fetchAccounts: (filters?: { entityType?: EntityType }) => Promise<void>;
   addAccount: (input: CreateInvestmentAccountInput) => Promise<InvestmentAccount | null>;
-  updateAccount: (id: string, input: UpdateInvestmentAccountInput) => Promise<void>;
+  updateAccount: (id: string, input: UpdateInvestmentAccountInput) => Promise<boolean>;
   deleteAccount: (id: string) => Promise<void>;
 
   // Holdings
   fetchHoldings: (filters?: { accountId?: string; assetClass?: AssetClass; isActive?: boolean }) => Promise<void>;
   addHolding: (input: CreateInvestmentHoldingInput) => Promise<InvestmentHolding | null>;
-  updateHolding: (id: string, input: UpdateInvestmentHoldingInput) => Promise<void>;
+  updateHolding: (id: string, input: UpdateInvestmentHoldingInput) => Promise<boolean>;
   deleteHolding: (id: string) => Promise<void>;
 
   // Transactions
@@ -55,7 +55,7 @@ interface InvestmentActions {
     type?: InvestmentTransactionType;
   }) => Promise<void>;
   addTransaction: (input: CreateInvestmentTransactionInput) => Promise<InvestmentTransaction | null>;
-  updateTransaction: (id: string, input: UpdateInvestmentTransactionInput) => Promise<void>;
+  updateTransaction: (id: string, input: UpdateInvestmentTransactionInput) => Promise<boolean>;
   deleteTransaction: (id: string) => Promise<void>;
 
   // Fund / Withdraw
@@ -201,8 +201,10 @@ export const useInvestmentStore = create<InvestmentStore>()((set, get) => ({
         ),
         isLoading: false,
       }));
+      return true;
     } catch (error) {
       set({ error: error instanceof Error ? error.message : 'Unknown error', isLoading: false });
+      return false;
     }
   },
 
@@ -344,8 +346,10 @@ export const useInvestmentStore = create<InvestmentStore>()((set, get) => ({
         ),
         isLoading: false,
       }));
+      return true;
     } catch (error) {
       set({ error: error instanceof Error ? error.message : 'Unknown error', isLoading: false });
+      return false;
     }
   },
 
@@ -476,8 +480,10 @@ export const useInvestmentStore = create<InvestmentStore>()((set, get) => ({
       get().fetchTransactions();
       get().fetchHoldings();
       get().fetchAccounts();
+      return true;
     } catch (error) {
       set({ error: error instanceof Error ? error.message : 'Unknown error', isLoading: false });
+      return false;
     }
   },
 

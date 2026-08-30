@@ -17,6 +17,7 @@ interface CreateRecurringData {
   startDate: Date;
   endDate?: Date;
   nextDueDate: Date;
+  autoGenerateTransaction: boolean;
   businessId?: string;
   personalAccountId?: string;
 }

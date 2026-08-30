@@ -1,13 +1,7 @@
 'use client';
 
 import { useTranslations } from 'next-intl';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
+import { FormDialog } from '@/components/dialogs/form-dialog';
 import { TransactionForm } from '@/components/forms/transaction-form';
 import { AttachmentUploader } from '@/components/attachments/attachment-uploader';
 import type { Transaction, TransactionType, EntityType } from '@/types';
@@ -37,44 +31,40 @@ export function TransactionDialog({
   const t = useTranslations('transactions');
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[90vh] overflow-y-auto border-slate-800 bg-slate-900 sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle className="text-white">
-            {transaction ? t('dialog.editTitle') : t('dialog.createTitle')}
-          </DialogTitle>
-          <DialogDescription className="text-slate-400">
-            {transaction ? t('dialog.editDescription') : t('dialog.createDescription')}
-          </DialogDescription>
-        </DialogHeader>
-        <TransactionForm
-          entityId={entityId}
-          entityType={entityType}
-          transaction={transaction}
-          defaultType={defaultType}
-          onSubmit={onSubmit}
-          onCancel={() => onOpenChange(false)}
-          isLoading={isLoading}
-        />
-        {transaction ? (
-          <div className="space-y-4 border-t border-slate-800 pt-4">
-            <AttachmentUploader
-              ownerType="transaction"
-              ownerId={transaction.id}
-              kind="BILL"
-              label="Bills"
-              helperText="Invoice or bill received before payment."
-            />
-            <AttachmentUploader
-              ownerType="transaction"
-              ownerId={transaction.id}
-              kind="RECEIPT"
-              label="Receipts"
-              helperText="Proof that the payment was made."
-            />
-          </div>
-        ) : null}
-      </DialogContent>
-    </Dialog>
+    <FormDialog
+      open={open}
+      onOpenChange={onOpenChange}
+      title={transaction ? t('dialog.editTitle') : t('dialog.createTitle')}
+      description={transaction ? t('dialog.editDescription') : t('dialog.createDescription')}
+      className="sm:max-w-md"
+    >
+      <TransactionForm
+        entityId={entityId}
+        entityType={entityType}
+        transaction={transaction}
+        defaultType={defaultType}
+        onSubmit={onSubmit}
+        onCancel={() => onOpenChange(false)}
+        isLoading={isLoading}
+      />
+      {transaction ? (
+        <div className="space-y-4 border-t border-slate-800 pt-4">
+          <AttachmentUploader
+            ownerType="transaction"
+            ownerId={transaction.id}
+            kind="BILL"
+            label="Bills"
+            helperText="Invoice or bill received before payment."
+          />
+          <AttachmentUploader
+            ownerType="transaction"
+            ownerId={transaction.id}
+            kind="RECEIPT"
+            label="Receipts"
+            helperText="Proof that the payment was made."
+          />
+        </div>
+      ) : null}
+    </FormDialog>
   );
 }

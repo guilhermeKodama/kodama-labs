@@ -54,6 +54,7 @@ import {
 } from '@/lib/utils/budget';
 import { formatCurrency } from '@/lib/utils/format';
 import { toast } from 'sonner';
+import { useDialogForm } from '@/hooks/use-dialog-form';
 import type { Budget, EntityType } from '@/types';
 import type { CreateBudgetFormData } from '@/lib/validations';
 
@@ -295,25 +296,44 @@ export default function BudgetsPage() {
   // Handlers
   // ============================================
 
-  const handleCreate = async (data: CreateBudgetFormData) => {
-    const result = await addBudget(data);
+  const openEditDialog = (budget: Budget) => {
+    setEditingBudget(budget);
     setPrefillCategory(undefined);
     setPrefillEntityId(undefined);
     setPrefillEntityType(undefined);
-    if (result) {
-      toast.success(t('budgets.toast.created'));
-    } else {
-      toast.error(t('budgets.toast.createError'));
-    }
+    setIsDialogOpen(true);
   };
 
-  const handleUpdate = async (data: CreateBudgetFormData) => {
-    if (editingBudget) {
-      await updateBudget(editingBudget.id, data);
-      setEditingBudget(undefined);
-      toast.success(t('budgets.toast.updated'));
-    }
+  const closeDialog = () => {
+    setIsDialogOpen(false);
+    setEditingBudget(undefined);
+    setPrefillCategory(undefined);
+    setPrefillEntityId(undefined);
+    setPrefillEntityType(undefined);
   };
+
+  const createForm = useDialogForm({
+    onOpenChange: setIsDialogOpen,
+    action: addBudget,
+    onSuccess: () => {
+      // Only clear the unbudgeted-spending prefill once the create actually
+      // succeeds — a failed create should leave the dialog exactly as the
+      // user had it, so they can retry without re-entering everything.
+      setPrefillCategory(undefined);
+      setPrefillEntityId(undefined);
+      setPrefillEntityType(undefined);
+      toast.success(t('budgets.toast.created'));
+    },
+    errorMessage: t('budgets.toast.createError'),
+  });
+
+  const updateForm = useDialogForm({
+    onOpenChange: closeDialog,
+    action: (data: CreateBudgetFormData) =>
+      editingBudget ? updateBudget(editingBudget.id, data) : Promise.resolve(false),
+    onSuccess: () => toast.success(t('budgets.toast.updated')),
+    errorMessage: t('budgets.toast.updateError'),
+  });
 
   const handleDelete = async () => {
     if (deletingBudget) {
@@ -330,22 +350,6 @@ export default function BudgetsPage() {
         ? t('budgets.toast.paused')
         : t('budgets.toast.resumed')
     );
-  };
-
-  const openEditDialog = (budget: Budget) => {
-    setEditingBudget(budget);
-    setPrefillCategory(undefined);
-    setPrefillEntityId(undefined);
-    setPrefillEntityType(undefined);
-    setIsDialogOpen(true);
-  };
-
-  const closeDialog = () => {
-    setIsDialogOpen(false);
-    setEditingBudget(undefined);
-    setPrefillCategory(undefined);
-    setPrefillEntityId(undefined);
-    setPrefillEntityType(undefined);
   };
 
   // Copy yearly budgets to next year
@@ -712,7 +716,8 @@ export default function BudgetsPage() {
         open={isDialogOpen}
         onOpenChange={closeDialog}
         budget={editingBudget}
-        onSubmit={editingBudget ? handleUpdate : handleCreate}
+        onSubmit={editingBudget ? updateForm.submit : createForm.submit}
+        isLoading={editingBudget ? updateForm.isSubmitting : createForm.isSubmitting}
         defaultEntityId={prefillEntityId}
         defaultEntityType={prefillEntityType}
         defaultCategory={prefillCategory}

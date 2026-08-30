@@ -190,6 +190,7 @@ export interface RecurringTransaction {
   nextDueDate: Date;
   lastGeneratedDate?: Date;
   isActive: boolean;
+  autoGenerateTransaction: boolean;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -206,6 +207,7 @@ export interface CreateRecurringTransactionInput {
   frequency: RecurrenceFrequency;
   startDate: Date;
   endDate?: Date;
+  autoGenerateTransaction?: boolean;
 }
 
 export interface UpdateRecurringTransactionInput {
@@ -219,6 +221,7 @@ export interface UpdateRecurringTransactionInput {
   startDate?: Date;
   endDate?: Date;
   isActive?: boolean;
+  autoGenerateTransaction?: boolean;
 }
 
 // --------------------------------------------

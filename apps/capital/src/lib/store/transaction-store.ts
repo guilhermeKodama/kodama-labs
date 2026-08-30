@@ -23,7 +23,7 @@ interface TransactionActions {
     type?: TransactionType;
   }) => Promise<void>;
   addTransaction: (input: CreateTransactionInput) => Promise<Transaction | null>;
-  updateTransaction: (id: string, input: UpdateTransactionInput) => Promise<void>;
+  updateTransaction: (id: string, input: UpdateTransactionInput) => Promise<boolean>;
   deleteTransaction: (id: string) => Promise<void>;
   deleteTransactionsByEntity: (entityId: string) => Promise<void>;
   getTransactionsByEntity: (entityId: string, entityType: EntityType) => Transaction[];
@@ -190,11 +190,13 @@ export const useTransactionStore = create<TransactionStore>()((set, get) => ({
         ),
         isLoading: false,
       }));
+      return true;
     } catch (error) {
       set({
         error: error instanceof Error ? error.message : 'Unknown error',
         isLoading: false,
       });
+      return false;
     }
   },
 

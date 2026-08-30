@@ -61,6 +61,7 @@ import {
 import { COMMON_CURRENCIES, getCurrencyByCode } from '@/lib/utils/currency';
 import { toast } from 'sonner';
 import { client } from '@/lib/api-client';
+import { useDialogForm } from '@/hooks/use-dialog-form';
 import type { TransactionType, Category } from '@/types';
 
 export default function SettingsPage() {
@@ -154,10 +155,15 @@ export default function SettingsPage() {
     toast.success(t('settings.currencies.added'));
   };
 
-  const handleAddCategory = (name: string, type: TransactionType) => {
-    addCategory(name, type);
-    toast.success(t('settings.categories.added'));
-  };
+  const categoryForm = useDialogForm({
+    onOpenChange: setShowCategoryDialog,
+    action: ({ name, type }: { name: string; type: TransactionType }) => addCategory(name, type),
+    onSuccess: () => toast.success(t('settings.categories.added')),
+    errorMessage: t('settings.categories.addError'),
+  });
+
+  const handleAddCategory = (name: string, type: TransactionType) =>
+    categoryForm.submit({ name, type });
 
   const handleDeleteCategory = () => {
     if (deletingCategory) {
@@ -691,6 +697,7 @@ export default function SettingsPage() {
         open={showCategoryDialog}
         onOpenChange={setShowCategoryDialog}
         onSubmit={handleAddCategory}
+        isLoading={categoryForm.isSubmitting}
       />
 
       {/* Delete Category Confirmation */}

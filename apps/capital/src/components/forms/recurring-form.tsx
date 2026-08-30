@@ -6,6 +6,8 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { useTranslations, useLocale } from 'next-intl';
 import { Button } from '@/components/ui/button';
 import { parseInputDateUTC, formatInputDateUTC } from '@/lib/utils/date';
+import { Zap, Bell } from 'lucide-react';
+import { cn } from '@/lib/utils';
 import {
   Form,
   FormControl,
@@ -74,6 +76,7 @@ export function RecurringForm({
       frequency: recurring?.frequency || 'monthly',
       startDate: recurring?.startDate ? new Date(recurring.startDate) : new Date(),
       endDate: recurring?.endDate ? new Date(recurring.endDate) : undefined,
+      autoGenerateTransaction: recurring?.autoGenerateTransaction ?? true,
     },
   });
 
@@ -81,6 +84,7 @@ export function RecurringForm({
   const selectedCurrency = form.watch('currency');
   const selectedEntityType = form.watch('entityType');
   const hasEndDate = form.watch('endDate') !== undefined && form.watch('endDate') !== null;
+  const isAutoMode = form.watch('autoGenerateTransaction');
 
   // Set default currency when currencies are loaded
   useEffect(() => {
@@ -141,6 +145,59 @@ export function RecurringForm({
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+        {/* Mode: this decides the whole behavior, so it leads the form */}
+        <FormField
+          control={form.control}
+          name="autoGenerateTransaction"
+          render={({ field }) => (
+            <FormItem className="space-y-2">
+              <FormLabel className="text-slate-300">{t('form.mode.label')}</FormLabel>
+              <div className="grid grid-cols-2 gap-3">
+                <button
+                  type="button"
+                  onClick={() => field.onChange(true)}
+                  aria-pressed={field.value}
+                  className={cn(
+                    'flex flex-col items-start gap-1 rounded-lg border p-3 text-left transition-colors',
+                    field.value
+                      ? 'border-cyan-500 bg-cyan-500/10'
+                      : 'border-slate-700 bg-slate-800/50 hover:border-slate-600'
+                  )}
+                >
+                  <span className="flex items-center gap-2 text-sm font-medium text-white">
+                    <Zap className="h-4 w-4 shrink-0 text-cyan-400" />
+                    {t('form.mode.auto.title')}
+                  </span>
+                  <span className="text-xs text-slate-500">
+                    {t('form.mode.auto.description')}
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => field.onChange(false)}
+                  aria-pressed={!field.value}
+                  className={cn(
+                    'flex flex-col items-start gap-1 rounded-lg border p-3 text-left transition-colors',
+                    !field.value
+                      ? 'border-purple-500 bg-purple-500/10'
+                      : 'border-slate-700 bg-slate-800/50 hover:border-slate-600'
+                  )}
+                >
+                  <span className="flex items-center gap-2 text-sm font-medium text-white">
+                    <Bell className="h-4 w-4 shrink-0 text-purple-400" />
+                    {t('form.mode.reminder.title')}
+                  </span>
+                  <span className="text-xs text-slate-500">
+                    {t('form.mode.reminder.description')}
+                  </span>
+                </button>
+              </div>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+
         {/* Entity Selection */}
         <div className="grid grid-cols-2 gap-4">
           <FormField
@@ -278,7 +335,9 @@ export function RecurringForm({
             name="amount"
             render={({ field }) => (
               <FormItem>
-                <FormLabel className="text-slate-300">{tTransactions('form.amount')}</FormLabel>
+                <FormLabel className="text-slate-300">
+                  {isAutoMode ? tTransactions('form.amount') : t('form.estimatedAmount')}
+                </FormLabel>
                 <FormControl>
                   <CurrencyInput
                     value={field.value}

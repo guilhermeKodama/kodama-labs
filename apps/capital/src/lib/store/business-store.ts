@@ -11,7 +11,7 @@ interface BusinessState {
 interface BusinessActions {
   fetchBusinesses: () => Promise<void>;
   addBusiness: (input: CreateBusinessInput) => Promise<Business | null>;
-  updateBusiness: (id: string, input: UpdateBusinessInput) => Promise<void>;
+  updateBusiness: (id: string, input: UpdateBusinessInput) => Promise<boolean>;
   deleteBusiness: (id: string) => Promise<void>;
   getBusiness: (id: string) => Business | undefined;
   setLoading: (loading: boolean) => void;
@@ -137,11 +137,13 @@ export const useBusinessStore = create<BusinessStore>()((set, get) => ({
         ),
         isLoading: false,
       }));
+      return true;
     } catch (error) {
       set({
         error: error instanceof Error ? error.message : 'Unknown error',
         isLoading: false,
       });
+      return false;
     }
   },
 

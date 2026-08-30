@@ -6,13 +6,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { useTranslations, useLocale } from 'next-intl';
 import { RefreshCw } from 'lucide-react';
 import { z } from 'zod';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
+import { FormDialog } from '@/components/dialogs/form-dialog';
 import { Button } from '@/components/ui/button';
 import {
   Form,
@@ -68,13 +62,13 @@ export function RebalanceDialog({
     if (!holding) return;
     const adjustmentAmount = data.newValue - holding.totalInvested;
     if (adjustmentAmount === 0) {
+      // Nothing to save — close directly instead of calling onSubmit.
       onOpenChange(false);
       return;
     }
-    const success = await onSubmit(holding.id, adjustmentAmount);
-    if (success) {
-      onOpenChange(false);
-    }
+    // Closing on success is owned by the caller (via the `onOpenChange` it
+    // wires into its own useDialogForm hook) — this only forwards the submit.
+    await onSubmit(holding.id, adjustmentAmount);
   };
 
   if (!holding) return null;
@@ -83,88 +77,85 @@ export function RebalanceDialog({
   const diff = newValue - holding.totalInvested;
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="border-slate-800 bg-slate-900 sm:max-w-sm">
-        <DialogHeader>
-          <DialogTitle className="text-white">{t('title')}</DialogTitle>
-          <DialogDescription className="text-slate-400">
-            {t('description')}
-          </DialogDescription>
-        </DialogHeader>
-
-        <div className="rounded-lg border border-slate-700 bg-slate-800/50 p-4">
-          <p className="text-sm font-medium text-white">{holding.name}</p>
-          {holding.account && (
-            <p className="text-xs text-slate-500">{holding.account.name}</p>
-          )}
-          <div className="mt-2 flex items-center justify-between">
-            <span className="text-xs text-slate-400">{t('currentValue')}</span>
-            <span className="font-mono text-sm font-semibold text-white">
-              {formatCurrency(holding.totalInvested, holding.currency)}
-            </span>
-          </div>
+    <FormDialog
+      open={open}
+      onOpenChange={onOpenChange}
+      title={t('title')}
+      description={t('description')}
+      className="sm:max-w-sm"
+    >
+      <div className="rounded-lg border border-slate-700 bg-slate-800/50 p-4">
+        <p className="text-sm font-medium text-white">{holding.name}</p>
+        {holding.account && (
+          <p className="text-xs text-slate-500">{holding.account.name}</p>
+        )}
+        <div className="mt-2 flex items-center justify-between">
+          <span className="text-xs text-slate-400">{t('currentValue')}</span>
+          <span className="font-mono text-sm font-semibold text-white">
+            {formatCurrency(holding.totalInvested, holding.currency)}
+          </span>
         </div>
+      </div>
 
-        <Form {...form}>
-          <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-4">
-            <FormField
-              control={form.control}
-              name="newValue"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel className="text-slate-300">
-                    {t('actualValue')}
-                  </FormLabel>
-                  <FormControl>
-                    <CurrencyInput
-                      value={field.value}
-                      onChange={field.onChange}
-                      locale={locale}
-                      className="border-slate-700 bg-slate-800 text-white"
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            {diff !== 0 && newValue > 0 && (
-              <div className="rounded-md border border-slate-700 bg-slate-800/30 px-3 py-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs text-slate-400">{t('adjustment')}</span>
-                  <span
-                    className={`font-mono text-sm font-medium ${
-                      diff > 0 ? 'text-emerald-400' : 'text-red-400'
-                    }`}
-                  >
-                    {diff > 0 ? '+' : ''}
-                    {formatCurrency(diff, holding.currency)}
-                  </span>
-                </div>
-              </div>
+      <Form {...form}>
+        <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-4">
+          <FormField
+            control={form.control}
+            name="newValue"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel className="text-slate-300">
+                  {t('actualValue')}
+                </FormLabel>
+                <FormControl>
+                  <CurrencyInput
+                    value={field.value}
+                    onChange={field.onChange}
+                    locale={locale}
+                    className="border-slate-700 bg-slate-800 text-white"
+                  />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
             )}
+          />
 
-            <div className="flex justify-end gap-2 pt-2">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => onOpenChange(false)}
-                className="border-slate-700 text-slate-300 hover:bg-slate-800 hover:text-white"
-              >
-                {tCommon('cancel')}
-              </Button>
-              <Button
-                type="submit"
-                disabled={isLoading || diff === 0}
-                className="bg-gradient-to-r from-blue-500 to-indigo-500 text-white hover:from-blue-600 hover:to-indigo-600"
-              >
-                <RefreshCw className="mr-2 h-4 w-4" />
-                {t('submit')}
-              </Button>
+          {diff !== 0 && newValue > 0 && (
+            <div className="rounded-md border border-slate-700 bg-slate-800/30 px-3 py-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-slate-400">{t('adjustment')}</span>
+                <span
+                  className={`font-mono text-sm font-medium ${
+                    diff > 0 ? 'text-emerald-400' : 'text-red-400'
+                  }`}
+                >
+                  {diff > 0 ? '+' : ''}
+                  {formatCurrency(diff, holding.currency)}
+                </span>
+              </div>
             </div>
-          </form>
-        </Form>
-      </DialogContent>
-    </Dialog>
+          )}
+
+          <div className="flex justify-end gap-2 pt-2">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => onOpenChange(false)}
+              className="border-slate-700 text-slate-300 hover:bg-slate-800 hover:text-white"
+            >
+              {tCommon('cancel')}
+            </Button>
+            <Button
+              type="submit"
+              disabled={isLoading || diff === 0}
+              className="bg-gradient-to-r from-blue-500 to-indigo-500 text-white hover:from-blue-600 hover:to-indigo-600"
+            >
+              <RefreshCw className="mr-2 h-4 w-4" />
+              {t('submit')}
+            </Button>
+          </div>
+        </form>
+      </Form>
+    </FormDialog>
   );
 }

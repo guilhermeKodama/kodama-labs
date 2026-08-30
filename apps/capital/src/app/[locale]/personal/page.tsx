@@ -64,8 +64,9 @@ import { useRecurringTransferStore } from '@/lib/store/recurring-transfer-store'
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { client } from '@/lib/api-client';
+import { useDialogForm } from '@/hooks/use-dialog-form';
 import type { Transaction, Transfer } from '@/types';
-import type { CreateTransactionFormData } from '@/lib/validations';
+import type { CreateTransactionFormData, CreateTransferFormData } from '@/lib/validations';
 import type { DateRange } from 'react-day-picker';
 
 interface StatementImportStatus {
@@ -239,6 +240,49 @@ export default function PersonalPage() {
     toast.success(t('bankStatements.toast.imported'));
   }, [fetchTransactions, fetchInvestmentAccounts, t]);
 
+  const closeDialog = () => {
+    setIsDialogOpen(false);
+    setEditingTransaction(undefined);
+  };
+
+  const closeTransferDialog = () => {
+    setIsTransferDialogOpen(false);
+    setEditingTransfer(undefined);
+  };
+
+  // Hooks must run unconditionally, before the early return below.
+  const createTransactionForm = useDialogForm({
+    onOpenChange: setIsDialogOpen,
+    action: addTransaction,
+    onSuccess: () => toast.success(t('transactions.toast.created')),
+    errorMessage: t('transactions.toast.createError'),
+  });
+
+  const updateTransactionForm = useDialogForm({
+    onOpenChange: closeDialog,
+    action: (data: CreateTransactionFormData) =>
+      editingTransaction ? updateTransaction(editingTransaction.id, data) : Promise.resolve(false),
+    onSuccess: () => toast.success(t('transactions.toast.updated')),
+    errorMessage: t('transactions.toast.updateError'),
+  });
+
+  const editTransferForm = useDialogForm({
+    onOpenChange: closeTransferDialog,
+    action: async (data: CreateTransferFormData) => {
+      if (!editingTransfer) return null;
+      // No PUT /transfers/:id endpoint exists yet, so this is delete-then-recreate.
+      // Bail out (without deleting) if editingTransfer is already gone; bail out
+      // (without a false "success") if the delete succeeds but the recreate fails —
+      // that state is a real, known gap, tracked separately, but at least this
+      // won't lie about it.
+      const deleted = await deleteTransfer(editingTransfer.id);
+      if (!deleted) return null;
+      return addTransfer(data);
+    },
+    onSuccess: () => toast.success(t('transfers.toast.updated')),
+    errorMessage: t('transfers.toast.editError'),
+  });
+
   if (!personalAccount) {
     return (
       <AppShell>
@@ -252,21 +296,6 @@ export default function PersonalPage() {
       </AppShell>
     );
   }
-
-  const handleCreateTransaction = async (data: CreateTransactionFormData) => {
-    await addTransaction(data);
-    setIsDialogOpen(false);
-    toast.success(t('transactions.toast.created'));
-  };
-
-  const handleUpdateTransaction = async (data: CreateTransactionFormData) => {
-    if (editingTransaction) {
-      await updateTransaction(editingTransaction.id, data);
-      setIsDialogOpen(false);
-      setEditingTransaction(undefined);
-      toast.success(t('transactions.toast.updated'));
-    }
-  };
 
   const handleDeleteTransaction = async () => {
     if (deletingTransaction) {
@@ -284,16 +313,6 @@ export default function PersonalPage() {
     }
   };
 
-  const handleEditTransfer = async (data: import('@/lib/validations').CreateTransferFormData) => {
-    if (editingTransfer) {
-      await deleteTransfer(editingTransfer.id);
-      await addTransfer(data);
-      setEditingTransfer(undefined);
-      setIsTransferDialogOpen(false);
-      toast.success(t('transfers.toast.created'));
-    }
-  };
-
   const openEditDialog = (transaction: Transaction) => {
     setEditingTransaction(transaction);
     setIsDialogOpen(true);
@@ -302,16 +321,6 @@ export default function PersonalPage() {
   const openEditTransferDialog = (transfer: Transfer) => {
     setEditingTransfer(transfer);
     setIsTransferDialogOpen(true);
-  };
-
-  const closeDialog = () => {
-    setIsDialogOpen(false);
-    setEditingTransaction(undefined);
-  };
-
-  const closeTransferDialog = () => {
-    setIsTransferDialogOpen(false);
-    setEditingTransfer(undefined);
   };
 
   return (
@@ -504,7 +513,8 @@ export default function PersonalPage() {
         entityId={personalAccount.id}
         entityType="personal"
         transaction={editingTransaction}
-        onSubmit={editingTransaction ? handleUpdateTransaction : handleCreateTransaction}
+        onSubmit={editingTransaction ? updateTransactionForm.submit : createTransactionForm.submit}
+        isLoading={editingTransaction ? updateTransactionForm.isSubmitting : createTransactionForm.isSubmitting}
       />
 
       {/* Transfer Edit Dialog */}
@@ -512,7 +522,8 @@ export default function PersonalPage() {
         open={isTransferDialogOpen}
         onOpenChange={closeTransferDialog}
         transfer={editingTransfer}
-        onSubmit={handleEditTransfer}
+        onSubmit={editTransferForm.submit}
+        isLoading={editTransferForm.isSubmitting}
       />
 
       {/* Attachments Dialog — Transaction */}

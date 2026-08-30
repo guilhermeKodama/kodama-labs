@@ -2,14 +2,8 @@
 
 import { useState } from 'react';
 import { useTranslations } from 'next-intl';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
+import { DialogFooter } from '@/components/ui/dialog';
+import { FormDialog } from '@/components/dialogs/form-dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -26,7 +20,8 @@ interface FireSnapshotDialogProps {
   onOpenChange: (open: boolean) => void;
   baseCurrency: string;
   initial: SnapshotEdit | null;
-  onSubmit: (period: number, currentInvested: number) => void;
+  onSubmit: (period: number, currentInvested: number) => Promise<unknown>;
+  isLoading?: boolean;
 }
 
 const periodToMonthValue = (period: number) => {
@@ -39,26 +34,31 @@ const monthValueToPeriod = (v: string): number | null => {
   return y && m ? y * 100 + m : null;
 };
 
-export function FireSnapshotDialog({ open, onOpenChange, baseCurrency, initial, onSubmit }: FireSnapshotDialogProps) {
+export function FireSnapshotDialog({
+  open,
+  onOpenChange,
+  baseCurrency,
+  initial,
+  onSubmit,
+  isLoading,
+}: FireSnapshotDialogProps) {
   const t = useTranslations('fire.history');
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="border-slate-800 bg-slate-900 sm:max-w-sm">
-        <DialogHeader>
-          <DialogTitle className="text-white">{initial ? t('editSnapshot') : t('addSnapshot')}</DialogTitle>
-          <DialogDescription className="text-slate-400">{t('snapshotDialogHint')}</DialogDescription>
-        </DialogHeader>
-        <SnapshotForm
-          baseCurrency={baseCurrency}
-          initial={initial}
-          onCancel={() => onOpenChange(false)}
-          onSubmit={(p, v) => {
-            onSubmit(p, v);
-            onOpenChange(false);
-          }}
-        />
-      </DialogContent>
-    </Dialog>
+    <FormDialog
+      open={open}
+      onOpenChange={onOpenChange}
+      title={initial ? t('editSnapshot') : t('addSnapshot')}
+      description={t('snapshotDialogHint')}
+      className="sm:max-w-sm"
+    >
+      <SnapshotForm
+        baseCurrency={baseCurrency}
+        initial={initial}
+        onCancel={() => onOpenChange(false)}
+        onSubmit={onSubmit}
+        isLoading={isLoading}
+      />
+    </FormDialog>
   );
 }
 
@@ -67,11 +67,13 @@ function SnapshotForm({
   initial,
   onSubmit,
   onCancel,
+  isLoading,
 }: {
   baseCurrency: string;
   initial: SnapshotEdit | null;
-  onSubmit: (period: number, currentInvested: number) => void;
+  onSubmit: (period: number, currentInvested: number) => Promise<unknown>;
   onCancel: () => void;
+  isLoading?: boolean;
 }) {
   const t = useTranslations('fire.history');
   const tCommon = useTranslations('common');
@@ -124,9 +126,10 @@ function SnapshotForm({
         </Button>
         <Button
           onClick={submit}
+          disabled={isLoading}
           className="bg-gradient-to-r from-emerald-500 to-cyan-500 text-white hover:from-emerald-600 hover:to-cyan-600"
         >
-          {tCommon('save')}
+          {isLoading ? tCommon('loading') : tCommon('save')}
         </Button>
       </DialogFooter>
     </>

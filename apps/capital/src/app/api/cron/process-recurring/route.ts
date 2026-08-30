@@ -54,6 +54,9 @@ export async function GET(request: NextRequest) {
     const dueRecurring = await prisma.recurringTransaction.findMany({
       where: {
         isActive: true,
+        // Manual entries are reminders only: skipped entirely, so nextDueDate
+        // never advances and they stay visibly overdue until Mark as Paid.
+        autoGenerateTransaction: true,
         nextDueDate: {
           lte: todayEnd,
         },

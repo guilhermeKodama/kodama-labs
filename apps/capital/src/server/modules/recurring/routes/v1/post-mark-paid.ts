@@ -1,7 +1,7 @@
 import { createRoute, z } from "@hono/zod-openapi";
 import { OK, NOT_FOUND, BAD_REQUEST, UNAUTHORIZED, INTERNAL_SERVER_ERROR } from "stoker/http-status-codes";
 import { jsonContent } from "stoker/openapi/helpers";
-import { toDateString } from "@capital/server/lib/date-utils";
+import { toDateString, parseLocalDate } from "@capital/server/lib/date-utils";
 
 import type { AppRouteHandler } from "@capital/server/types";
 import { prisma } from "@capital/server/lib/prisma";
@@ -42,10 +42,18 @@ const RecurringSchema = z.object({
   nextDueDate: z.string(),
   lastGeneratedDate: z.string().nullable(),
   isActive: z.boolean(),
+  autoGenerateTransaction: z.boolean(),
   businessId: z.string().nullable(),
   personalAccountId: z.string().nullable(),
   createdAt: z.string(),
   updatedAt: z.string(),
+});
+
+const MarkPaidSchema = z.object({
+  /** The real amount paid — reminder entries store only an estimate. */
+  amount: z.number().positive().optional(),
+  /** The date the payment actually happened, if not the scheduled due date. */
+  date: z.string().optional(),
 });
 
 const ResponseSchema = z.object({
@@ -66,11 +74,12 @@ export const route = createRoute({
   tags: [...routeConfig.v1.defaultTags],
   summary: "Mark recurring transaction as paid",
   description:
-    "Creates a transaction for the current due date and advances to the next occurrence for the authenticated user",
+    "Creates a transaction for the current due date and advances to the next occurrence. Optionally accepts the real amount/date — reminder entries store only an estimate, so the user supplies the true value when confirming.",
   request: {
     params: z.object({
       id: z.string(),
     }),
+    body: jsonContent(MarkPaidSchema, "Optional real amount and payment date"),
   },
   responses: {
     [OK]: jsonContent(ResponseSchema, "Transaction created and recurring updated"),
@@ -94,7 +103,11 @@ export const handler: AppRouteHandler<typeof route> = async (c) => {
   try {
     const userId = requireUserId(c);
     const { id } = c.req.valid("param");
-    const result = await markRecurringAsPaid(userId, id, prisma);
+    const body = c.req.valid("json");
+    const result = await markRecurringAsPaid(userId, id, prisma, {
+      amount: body.amount,
+      date: body.date ? parseLocalDate(body.date) : undefined,
+    });
 
     return c.json(
       {
@@ -131,6 +144,7 @@ export const handler: AppRouteHandler<typeof route> = async (c) => {
           lastGeneratedDate:
             result.recurring.lastGeneratedDate?.toISOString() ?? null,
           isActive: result.recurring.isActive,
+          autoGenerateTransaction: result.recurring.autoGenerateTransaction,
           businessId: result.recurring.businessId,
           personalAccountId: result.recurring.personalAccountId,
           createdAt: result.recurring.createdAt.toISOString(),

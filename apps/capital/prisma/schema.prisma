@@ -445,22 +445,23 @@ model RecurringTransfer {
 // ============================================
 
 model RecurringTransaction {
-  id                String              @id @default(uuid())
-  entityType        EntityType
-  type              TransactionType
-  amount            Float
-  currency          String
-  exchangeRate      Float               @default(1)
-  description       String
-  category          String
-  frequency         RecurrenceFrequency
-  startDate         DateTime
-  endDate           DateTime?
-  nextDueDate       DateTime
-  lastGeneratedDate DateTime?
-  isActive          Boolean             @default(true)
-  createdAt         DateTime            @default(now())
-  updatedAt         DateTime            @updatedAt
+  id                      String              @id @default(uuid())
+  entityType              EntityType
+  type                    TransactionType
+  amount                  Float
+  currency                String
+  exchangeRate            Float               @default(1)
+  description             String
+  category                String
+  frequency               RecurrenceFrequency
+  startDate               DateTime
+  endDate                 DateTime?
+  nextDueDate             DateTime
+  lastGeneratedDate       DateTime?
+  isActive                Boolean             @default(true)
+  autoGenerateTransaction Boolean             @default(true)
+  createdAt               DateTime            @default(now())
+  updatedAt               DateTime            @updatedAt
 
   // Relations - polymorphic association
   businessId        String?

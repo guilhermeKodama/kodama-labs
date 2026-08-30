@@ -24,6 +24,7 @@ import { Button } from '@/components/ui/button';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { toast } from 'sonner';
 import { useFireStore } from '@/lib/store';
+import { useDialogForm } from '@/hooks/use-dialog-form';
 import type { FireGoalInput, FireGoalResponse, MilestoneInput } from '@/lib/store/fire-store';
 import { formatCurrency, formatPercent, formatDate } from '@/lib/utils/format';
 import { buildAssumptions } from '@/lib/fire/adapter';
@@ -302,12 +303,15 @@ export default function FirePage() {
       return { label, actual: s.currentInvested, projected };
     });
   }, [summary, computed]);
-  const handleAddMilestone = async (m: MilestoneInput) => {
-    if (!summary?.goal) return;
-    const saved = await saveGoal(goalToInput(summary.goal, { milestones: [...summary.goal.milestones, m] }));
-    if (saved) toast.success(t('milestones.added'));
-    else toast.error(t('milestones.addError'));
-  };
+  const milestoneForm = useDialogForm({
+    onOpenChange: setMilestoneDialogOpen,
+    action: (m: MilestoneInput) =>
+      summary?.goal
+        ? saveGoal(goalToInput(summary.goal, { milestones: [...summary.goal.milestones, m] }))
+        : Promise.resolve(null),
+    onSuccess: () => toast.success(t('milestones.added')),
+    errorMessage: t('milestones.addError'),
+  });
   const handleRemoveMilestone = async (id: string) => {
     if (!summary?.goal) return;
     const saved = await saveGoal(
@@ -324,11 +328,15 @@ export default function FirePage() {
     setEditingSnapshot({ period: s.period, currentInvested: s.currentInvested });
     setSnapshotDialogOpen(true);
   };
-  const handleSubmitSnapshot = async (period: number, currentInvested: number) => {
-    const ok = await upsertSnapshot(period, { currentInvested });
-    if (ok) toast.success(t('history.snapshotSaved'));
-    else toast.error(t('snapshotFailed'));
-  };
+  const snapshotForm = useDialogForm({
+    onOpenChange: setSnapshotDialogOpen,
+    action: (data: { period: number; currentInvested: number }) =>
+      upsertSnapshot(data.period, { currentInvested: data.currentInvested }),
+    onSuccess: () => toast.success(t('history.snapshotSaved')),
+    errorMessage: t('snapshotFailed'),
+  });
+  const handleSubmitSnapshot = (period: number, currentInvested: number) =>
+    snapshotForm.submit({ period, currentInvested });
   const handleDeleteSnapshot = async (period: number) => {
     const ok = await deleteSnapshot(period);
     if (ok) toast.success(t('history.snapshotDeleted'));
@@ -581,7 +589,8 @@ export default function FirePage() {
         open={milestoneDialogOpen}
         onOpenChange={setMilestoneDialogOpen}
         baseCurrency={baseCurrency}
-        onSubmit={handleAddMilestone}
+        onSubmit={milestoneForm.submit}
+        isLoading={milestoneForm.isSubmitting}
       />
       <FireSnapshotDialog
         open={snapshotDialogOpen}
@@ -589,6 +598,7 @@ export default function FirePage() {
         baseCurrency={baseCurrency}
         initial={editingSnapshot}
         onSubmit={handleSubmitSnapshot}
+        isLoading={snapshotForm.isSubmitting}
       />
     </AppShell>
   );
