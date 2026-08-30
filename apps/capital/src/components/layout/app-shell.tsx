@@ -5,6 +5,7 @@ import { Sidebar } from './sidebar';
 import { BottomNav } from './bottom-nav';
 import { OnboardingDialog } from '@/components/onboarding/onboarding-dialog';
 import { useSettingsStore, useUIStore } from '@/lib/store';
+import { useUser } from '@/lib/user-context';
 import { cn } from '@/lib/utils';
 
 interface AppShellProps {
@@ -25,11 +26,16 @@ function useIsMounted() {
 export function AppShell({ children, fullBleed = false }: AppShellProps) {
   const { isInitialized } = useSettingsStore();
   const { sidebarCollapsed } = useUIStore();
+  const { isAuthenticated } = useUser();
   const mounted = useIsMounted();
   const [onboardingDismissed, setOnboardingDismissed] = useState(false);
 
-  // Derive showOnboarding from state instead of using useEffect
-  const showOnboarding = mounted && !isInitialized && !onboardingDismissed;
+  // Derive showOnboarding from state instead of using useEffect.
+  // Gated on isAuthenticated: the wizard's job is first-time setup for a
+  // LOGGED-IN user — for an invalid/expired session, isInitialized never
+  // turns true (users.me 401s) and the wizard would loop forever against
+  // an API that rejects every submit.
+  const showOnboarding = mounted && isAuthenticated && !isInitialized && !onboardingDismissed;
 
   const handleOnboardingComplete = useCallback(() => {
     setOnboardingDismissed(true);

@@ -1,36 +1,64 @@
 "use client";
 
-import { type ReactNode } from "react";
+import { useEffect, type ReactNode } from "react";
 import { useInitializeData } from "@/hooks/use-initialize-data";
 import { useUser } from "@/lib/user-context";
+import { usePathname, useRouter } from "@/i18n/navigation";
 
 interface DataInitializerProps {
   children: ReactNode;
 }
 
-export function DataInitializer({ children }: DataInitializerProps) {
-  const { isLoading: userLoading, isAuthenticated, error: userError } = useUser();
-  const { isLoading: dataLoading, isInitialized } = useInitializeData();
+// Must match the middleware's publicRoutes (src/middleware.ts) — the two lists
+// split one responsibility: the middleware can only see that a capital_session
+// cookie EXISTS (edge runtime, no DB), so a stale/expired cookie sails past it.
+// Whether the session is actually VALID is only known here, after auth/me
+// resolves — so this component owns the "cookie present but session dead" case.
+const PUBLIC_ROUTES = ["/", "/login", "/signup"];
 
-  // Don't show loading if not authenticated - middleware will redirect
+function LoadingScreen() {
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-neutral-950">
+      <div className="flex flex-col items-center gap-4">
+        <div className="relative">
+          <div className="h-12 w-12 rounded-full border-4 border-emerald-500/30" />
+          <div className="absolute inset-0 h-12 w-12 animate-spin rounded-full border-4 border-transparent border-t-emerald-500" />
+        </div>
+        <p className="text-sm text-neutral-400">Loading Capital...</p>
+      </div>
+    </div>
+  );
+}
+
+export function DataInitializer({ children }: DataInitializerProps) {
+  const { isLoading: userLoading, isAuthenticated, error: userError, logout } = useUser();
+  const { isLoading: dataLoading, isInitialized } = useInitializeData();
+  const pathname = usePathname();
+  const router = useRouter();
+
+  const isPublicRoute = PUBLIC_ROUTES.includes(pathname);
+
+  // Unauthenticated on a protected route: clear the dead cookie (otherwise the
+  // middleware keeps letting the browser back in) and send them to login.
+  // Without this, a stale session rendered an empty dashboard with the
+  // onboarding wizard looping on 401s.
+  useEffect(() => {
+    if (!userLoading && !isAuthenticated && !isPublicRoute) {
+      void logout().finally(() => router.replace("/login"));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userLoading, isAuthenticated, isPublicRoute]);
+
   if (!isAuthenticated && !userLoading) {
-    return <>{children}</>;
+    // Public pages render normally for visitors; protected pages show the
+    // loading screen while the redirect above kicks in — never the app shell.
+    return isPublicRoute ? <>{children}</> : <LoadingScreen />;
   }
 
   const isLoading = userLoading || (dataLoading && !isInitialized);
 
   if (isLoading) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-neutral-950">
-        <div className="flex flex-col items-center gap-4">
-          <div className="relative">
-            <div className="h-12 w-12 rounded-full border-4 border-emerald-500/30" />
-            <div className="absolute inset-0 h-12 w-12 animate-spin rounded-full border-4 border-transparent border-t-emerald-500" />
-          </div>
-          <p className="text-sm text-neutral-400">Loading Capital...</p>
-        </div>
-      </div>
-    );
+    return <LoadingScreen />;
   }
 
   if (userError && isAuthenticated) {
