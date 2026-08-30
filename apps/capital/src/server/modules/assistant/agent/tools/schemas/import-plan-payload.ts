@@ -63,6 +63,30 @@ export const ImportPlanReconciliationSchema = z.object({
   }),
 });
 
+// direction may only change within the from/to shape the transfer already
+// has (business<->personal side unchanged) - switching e.g. capital_injection
+// to profit_distribution would also need to swap which side is business vs
+// personal, which this reconciliation does not support. Enforced in
+// execute-import.ts, not here.
+export const ImportPlanTransferReconciliationSchema = z.object({
+  existingTransferId: z.string().min(1),
+  externalId: z.string().min(1),
+  updates: z.object({
+    amount: z.number().positive().optional(),
+    date: z.string().min(1).optional(),
+    description: z.string().min(1).optional(),
+    direction: z
+      .enum([
+        "profit_distribution",
+        "capital_injection",
+        "reimbursement",
+        "investment_deposit",
+        "investment_withdrawal",
+      ])
+      .optional(),
+  }),
+});
+
 export const ImportPlanDuplicateDecisionSchema = z.object({
   externalId: z.string().min(1),
   resolution: z.enum(["skip_duplicate", "link_fuzzy", "import_anyway"]),
@@ -130,6 +154,7 @@ export const ImportPlanPayloadSchema = z.object({
   creditCards: z.array(ImportPlanCreditCardSchema).default([]),
   bills: z.array(ImportPlanBillSchema).default([]),
   reconciliations: z.array(ImportPlanReconciliationSchema).default([]),
+  transferReconciliations: z.array(ImportPlanTransferReconciliationSchema).default([]),
   duplicateDecisions: z.array(ImportPlanDuplicateDecisionSchema).default([]),
   investmentTransactions: z.array(ImportPlanInvestmentTransactionSchema).default([]),
 });
@@ -166,6 +191,7 @@ export function computePlanSummary(payload: ImportPlanPayload) {
     skipDuplicateCount: payload.duplicateDecisions.filter((d) => d.resolution === "skip_duplicate").length,
     linkFuzzyCount: payload.duplicateDecisions.filter((d) => d.resolution === "link_fuzzy").length,
     reconciliationCount: payload.reconciliations.length,
+    transferReconciliationCount: payload.transferReconciliations.length,
     transferCount: payload.transfers.length + payload.investmentTransfers.length,
     creditCardCount: payload.creditCards.length,
     billCount: payload.bills.length,

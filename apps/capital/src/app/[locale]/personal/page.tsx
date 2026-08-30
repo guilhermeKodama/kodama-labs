@@ -82,7 +82,7 @@ export default function PersonalPage() {
   
   const { transactions, addTransaction, updateTransaction, deleteTransaction, fetchTransactions } =
     useTransactionStore();
-  const { transfers, addTransfer, deleteTransfer, fetchTransfers } = useTransferStore();
+  const { transfers, updateTransfer, deleteTransfer, fetchTransfers } = useTransferStore();
   const fetchAttachments = useAttachmentStore((s) => s.fetchByOwnerType);
 
   useEffect(() => {
@@ -286,11 +286,10 @@ export default function PersonalPage() {
 
   const handleEditTransfer = async (data: import('@/lib/validations').CreateTransferFormData) => {
     if (editingTransfer) {
-      await deleteTransfer(editingTransfer.id);
-      await addTransfer(data);
+      await updateTransfer(editingTransfer.id, data);
       setEditingTransfer(undefined);
       setIsTransferDialogOpen(false);
-      toast.success(t('transfers.toast.created'));
+      toast.success(t('transfers.toast.updated'));
     }
   };
 

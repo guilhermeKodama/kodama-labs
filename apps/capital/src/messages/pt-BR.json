@@ -520,6 +520,7 @@
     },
     "toast": {
       "created": "Transferência criada com sucesso!",
+      "updated": "Transferência atualizada com sucesso!",
       "deleted": "Transferência excluída com sucesso!",
       "error": "Falha ao criar transferência"
     },

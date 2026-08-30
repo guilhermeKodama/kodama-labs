@@ -80,7 +80,7 @@ export default function BusinessDetailPage() {
   const { businesses, getBusiness } = useBusinessStore();
   const { transactions, addTransaction, updateTransaction, deleteTransaction, fetchTransactions } =
     useTransactionStore();
-  const { transfers, addTransfer, deleteTransfer, fetchTransfers } = useTransferStore();
+  const { transfers, updateTransfer, deleteTransfer, fetchTransfers } = useTransferStore();
   const { settings, personalAccount } = useSettingsStore();
   const { creditCards } = useCreditCardStore();
   const { recurringTransactions } = useRecurringTransactionStore();
@@ -294,12 +294,10 @@ export default function BusinessDetailPage() {
 
   const handleEditTransfer = async (data: import('@/lib/validations').CreateTransferFormData) => {
     if (editingTransfer) {
-      // Delete old transfer and create new one
-      await deleteTransfer(editingTransfer.id);
-      await addTransfer(data);
+      await updateTransfer(editingTransfer.id, data);
       setEditingTransfer(undefined);
       setIsTransferDialogOpen(false);
-      toast.success(t('transfers.toast.created'));
+      toast.success(t('transfers.toast.updated'));
     }
   };
 

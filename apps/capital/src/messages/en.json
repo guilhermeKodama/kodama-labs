@@ -520,6 +520,7 @@
     },
     "toast": {
       "created": "Transfer created successfully!",
+      "updated": "Transfer updated successfully!",
       "deleted": "Transfer deleted successfully!",
       "error": "Failed to create transfer"
     },

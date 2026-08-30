@@ -56,6 +56,7 @@ export interface ImportPlan {
     skipDuplicateCount?: number;
     linkFuzzyCount?: number;
     reconciliationCount?: number;
+    transferReconciliationCount?: number;
     transferCount?: number;
     creditCardCount?: number;
     billCount?: number;

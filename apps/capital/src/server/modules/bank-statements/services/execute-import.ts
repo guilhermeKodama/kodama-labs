@@ -1,8 +1,9 @@
-import type { PrismaClient } from "@/generated/prisma";
+import type { PrismaClient, TransferDirection } from "@/generated/prisma";
 import type { DbClient } from "@capital/server/lib/prisma";
 import { parseLocalDate } from "@capital/server/lib/date-utils";
 import { getObjectBuffer } from "@/lib/storage";
 import { createTransfer } from "@capital/server/modules/transfers/services/create-transfer";
+import { updateTransferService } from "@capital/server/modules/transfers/services/update-transfer";
 import { createInvestmentHolding } from "@capital/server/modules/investments/services/create-investment-holding";
 import { createInvestmentTransaction } from "@capital/server/modules/investments/services/create-investment-transaction";
 import { processBillCsv } from "@capital/server/modules/credit-cards/services/process-bill-csv";
@@ -65,6 +66,47 @@ async function ensureSystemCategories(userId: string, db: DbClient) {
   }
 }
 
+interface TransferShapeFields {
+  fromBusinessId: string | null;
+  fromPersonalAccountId: string | null;
+  toBusinessId: string | null;
+  toPersonalAccountId: string | null;
+  toInvestmentAccountId: string | null;
+  fromInvestmentAccountId: string | null;
+}
+
+/**
+ * A transfer reconciliation may relabel `direction` only when the new
+ * direction expects exactly the from/to fields the transfer already has
+ * populated - e.g. profit_distribution <-> reimbursement (both
+ * business->personal) is safe, but switching to capital_injection would
+ * also require swapping which side is the business and which is personal,
+ * which reconciliation does not attempt (it only ever calls
+ * updateTransferService with the direction field, never new entity ids).
+ */
+function directionMatchesExistingShape(
+  direction: TransferDirection,
+  transfer: TransferShapeFields
+): boolean {
+  switch (direction) {
+    case "profit_distribution":
+    case "reimbursement":
+      return !!transfer.fromBusinessId && !!transfer.toPersonalAccountId;
+    case "capital_injection":
+      return !!transfer.fromPersonalAccountId && !!transfer.toBusinessId;
+    case "investment_deposit":
+      return (
+        !!transfer.toInvestmentAccountId &&
+        (!!transfer.fromBusinessId || !!transfer.fromPersonalAccountId)
+      );
+    case "investment_withdrawal":
+      return (
+        !!transfer.fromInvestmentAccountId &&
+        (!!transfer.toBusinessId || !!transfer.toPersonalAccountId)
+      );
+  }
+}
+
 export interface CreatedRecordRef {
   model: string;
   id: string;
@@ -74,6 +116,7 @@ export interface ExecuteImportResult {
   imported: number;
   duplicatesSkipped: number;
   reconciled: number;
+  transferReconciled: number;
   transfersCreated: number;
   creditCardsCreated: number;
   billsCreated: number;
@@ -380,6 +423,42 @@ export async function executeImport(
         }
       }
 
+      let transferReconciledCount = 0;
+      for (const rec of input.transferReconciliations) {
+        const updateData: Parameters<typeof updateTransferService>[2] = {};
+        if (rec.updates.amount !== undefined) updateData.amount = rec.updates.amount;
+        if (rec.updates.date !== undefined) updateData.date = parseLocalDate(rec.updates.date);
+        if (rec.updates.description !== undefined) updateData.description = rec.updates.description;
+
+        if (rec.updates.direction !== undefined) {
+          const existing = await tx.transfer.findUnique({
+            where: { id: rec.existingTransferId },
+            select: {
+              fromBusinessId: true,
+              fromPersonalAccountId: true,
+              toBusinessId: true,
+              toPersonalAccountId: true,
+              toInvestmentAccountId: true,
+              fromInvestmentAccountId: true,
+            },
+          });
+          if (!existing) {
+            throw new Error(`Transfer reconciliation target ${rec.existingTransferId} not found`);
+          }
+          if (!directionMatchesExistingShape(rec.updates.direction, existing)) {
+            throw new Error(
+              `Cannot change transfer ${rec.existingTransferId} to direction "${rec.updates.direction}" via reconciliation - that would require moving it to a different counterparty side, which reconciliation does not support. Delete and recreate the transfer instead.`
+            );
+          }
+          updateData.direction = rec.updates.direction;
+        }
+
+        if (Object.keys(updateData).length > 0) {
+          await updateTransferService(userId, rec.existingTransferId, updateData, tx);
+          transferReconciledCount++;
+        }
+      }
+
       let importedCount = 0;
       if (newTransactions.length > 0) {
         const txData = newTransactions.map((t) => {
@@ -463,6 +542,7 @@ export async function executeImport(
         imported: importedCount,
         duplicatesSkipped,
         reconciled: reconciledCount,
+        transferReconciled: transferReconciledCount,
         transfersCreated,
         creditCardsCreated,
         billsCreated,

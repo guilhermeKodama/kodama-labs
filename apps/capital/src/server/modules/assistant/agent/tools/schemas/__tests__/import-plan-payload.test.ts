@@ -68,6 +68,23 @@ describe("computePlanSummary", () => {
     expect(summary.linkFuzzyCount).toBe(1);
   });
 
+  it("counts transferReconciliations", () => {
+    const payload = ImportPlanPayloadSchema.parse({
+      entityType: "personal",
+      entityId: "pa_1",
+      currency: "BRL",
+      transferReconciliations: [
+        {
+          existingTransferId: "tr_1",
+          externalId: "ext_1",
+          updates: { amount: 250, description: "Corrected" },
+        },
+      ],
+    });
+    const summary = computePlanSummary(payload);
+    expect(summary.transferReconciliationCount).toBe(1);
+  });
+
   it("rounds totals to cents", () => {
     const payload = ImportPlanPayloadSchema.parse({
       entityType: "personal",

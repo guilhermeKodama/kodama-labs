@@ -145,6 +145,7 @@ export const handler: AppRouteHandler<typeof route> = async (c) => {
         creditCards: body.creditCards ?? [],
         bills: [],
         reconciliations: body.reconciliations ?? [],
+        transferReconciliations: [],
         duplicateDecisions: (body.fuzzyDuplicates ?? []).map((fd) => ({
           externalId: fd.externalId,
           resolution: "link_fuzzy" as const,
