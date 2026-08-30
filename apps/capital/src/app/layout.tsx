@@ -1,17 +1,23 @@
 import type { Metadata, Viewport } from "next";
-import { Space_Grotesk, JetBrains_Mono } from "next/font/google";
+import localFont from "next/font/local";
 import "./globals.css";
 import { UserProvider } from "@/lib/user-context";
 import { PwaRegister } from "@/components/pwa-register";
 
-const spaceGrotesk = Space_Grotesk({
+// Vendored (next/font/local), not next/font/google: the google variant
+// downloads fonts from fonts.googleapis.com DURING `next build`, and that
+// fetch flaps inside the Docker build VM — it broke several image builds in
+// a row before being pinned locally. Variable-weight latin woff2s, ~64KB.
+const spaceGrotesk = localFont({
+  src: "./fonts/space-grotesk-latin-var.woff2",
+  weight: "300 700",
   variable: "--font-sans",
-  subsets: ["latin"],
 });
 
-const jetbrainsMono = JetBrains_Mono({
+const jetbrainsMono = localFont({
+  src: "./fonts/jetbrains-mono-latin-var.woff2",
+  weight: "100 800",
   variable: "--font-mono",
-  subsets: ["latin"],
 });
 
 export const metadata: Metadata = {
