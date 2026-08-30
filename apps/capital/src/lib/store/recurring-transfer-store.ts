@@ -34,7 +34,7 @@ interface RecurringTransferActions {
     isActive?: boolean;
   }) => Promise<void>;
   addRecurringTransfer: (input: CreateRecurringTransferInput) => Promise<RecurringTransfer | null>;
-  updateRecurringTransfer: (id: string, input: UpdateRecurringTransferInput) => Promise<void>;
+  updateRecurringTransfer: (id: string, input: UpdateRecurringTransferInput) => Promise<boolean>;
   deleteRecurringTransfer: (id: string) => Promise<void>;
   toggleRecurringTransfer: (id: string) => Promise<void>;
   markAsPaid: (id: string) => Promise<MarkAsPaidResult | null>;
@@ -248,11 +248,13 @@ export const useRecurringTransferStore = create<RecurringTransferStore>()((set, 
         ),
         isLoading: false,
       }));
+      return true;
     } catch (error) {
       set({
         error: error instanceof Error ? error.message : 'Unknown error',
         isLoading: false,
       });
+      return false;
     }
   },
 

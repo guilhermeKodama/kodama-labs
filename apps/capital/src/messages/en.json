@@ -143,6 +143,8 @@
       "fire": "Independence (FIRE)",
       "addCustom": "Add milestone",
       "addCustomHint": "Create a custom goal with a criterion.",
+      "added": "Milestone added",
+      "addError": "Failed to add milestone",
       "reachedNow": "Reached ✓",
       "projectedFor": "Age {age} · {year}",
       "notProjected": "Beyond horizon",
@@ -363,7 +365,9 @@
     },
     "toast": {
       "created": "Business created successfully!",
+      "createError": "Failed to create business",
       "updated": "Business updated successfully!",
+      "updateError": "Failed to update business",
       "deleted": "Business deleted successfully!"
     },
     "notFound": {
@@ -450,6 +454,7 @@
       "created": "Transaction added successfully!",
       "createError": "Failed to create transaction",
       "updated": "Transaction updated successfully!",
+      "updateError": "Failed to update transaction",
       "deleted": "Transaction deleted successfully!"
     }
   },
@@ -521,6 +526,7 @@
     "toast": {
       "created": "Transfer created successfully!",
       "updated": "Transfer updated successfully!",
+      "editError": "Failed to update transfer",
       "deleted": "Transfer deleted successfully!",
       "error": "Failed to create transfer"
     },
@@ -573,6 +579,7 @@
         "created": "Recurring transfer created successfully!",
         "createError": "Failed to create recurring transfer",
         "updated": "Recurring transfer updated successfully!",
+        "updateError": "Failed to update recurring transfer",
         "deleted": "Recurring transfer deleted successfully!",
         "paused": "Recurring transfer paused",
         "resumed": "Recurring transfer resumed",
@@ -1022,6 +1029,7 @@
       "type": "Category Type",
       "empty": "No custom categories yet",
       "added": "Category added successfully!",
+      "addError": "Failed to add category",
       "deleted": "Category deleted successfully!",
       "deleteTitle": "Delete Category?",
       "deleteDescription": "Are you sure you want to delete the category \"{name}\"? This won't affect existing transactions."
@@ -1092,6 +1100,7 @@
     "summary": "Convert {amount} {type} into a {direction} transfer {preposition} {entity}",
     "converting": "Converting...",
     "success": "Transaction converted to transfer",
+    "error": "Failed to convert transaction to transfer",
     "income": "income",
     "expense": "expense",
     "to": "to",
@@ -1133,7 +1142,7 @@
   "recurring": {
     "title": "Recurring Transactions",
     "subtitle": "Manage your recurring income and expenses",
-    "addRecurring": "Add Recurring",
+    "addRecurring": "Add Recurring Transaction",
     "list": "Recurring Transactions",
     "frequencies": {
       "daily": "Daily",
@@ -1155,11 +1164,35 @@
       "startDate": "Start Date",
       "endDate": "End Date",
       "hasEndDate": "Set end date",
-      "descriptionPlaceholder": "e.g., Monthly rent, Netflix subscription"
+      "descriptionPlaceholder": "e.g., Monthly rent, Netflix subscription",
+      "estimatedAmount": "Estimated amount",
+      "mode": {
+        "label": "How should this work?",
+        "auto": {
+          "title": "Automatic",
+          "description": "Recorded on its own, on the due date, with the amount saved here."
+        },
+        "reminder": {
+          "title": "Reminder only",
+          "description": "Nothing is recorded. We flag it on the due date and you enter the real amount."
+        }
+      }
+    },
+    "mode": {
+      "auto": "Automatic",
+      "reminder": "Reminder"
+    },
+    "payment": {
+      "title": "Record payment",
+      "description": "Confirm the real amount paid for {description}.",
+      "estimateHint": "Estimated: {amount}",
+      "amountLabel": "Amount paid",
+      "dateLabel": "Payment date",
+      "confirm": "Record payment"
     },
     "dialog": {
       "createTitle": "Create Recurring Transaction",
-      "createDescription": "Set up a transaction that repeats automatically.",
+      "createDescription": "Set up something that repeats. You choose whether we record it for you or just remind you.",
       "editTitle": "Edit Recurring Transaction",
       "editDescription": "Update the recurring transaction details."
     },
@@ -1168,6 +1201,7 @@
       "type": "Type",
       "entity": "Entity",
       "frequency": "Frequency",
+      "mode": "Mode",
       "nextDue": "Next Due",
       "amount": "Amount",
       "status": "Status"
@@ -1182,6 +1216,7 @@
       "pause": "Pause",
       "resume": "Resume",
       "markPaid": "Mark as Paid",
+      "registerPayment": "Record payment",
       "attach": "Attach bill"
     },
     "filter": {
@@ -1192,7 +1227,7 @@
     },
     "empty": {
       "title": "No recurring transactions",
-      "description": "Set up recurring transactions to automatically track regular income and expenses."
+      "description": "Add your regular income and expenses to have them recorded on the due date, or just to be reminded."
     },
     "delete": {
       "title": "Delete Recurring Transaction?",
@@ -1210,11 +1245,14 @@
       "created": "Recurring transaction created!",
       "createError": "Failed to create recurring transaction",
       "updated": "Recurring transaction updated!",
+      "updateError": "Failed to update recurring transaction",
       "deleted": "Recurring transaction deleted!",
       "paused": "Recurring transaction paused",
       "resumed": "Recurring transaction resumed",
       "markedPaid": "Transaction recorded and due date advanced!",
-      "markPaidError": "Failed to mark as paid"
+      "markPaidError": "Failed to mark as paid",
+      "paymentRegistered": "Payment recorded and due date advanced!",
+      "paymentError": "Failed to record payment"
     }
   },
   "budgets": {
@@ -1394,6 +1432,7 @@
       "created": "Budget created!",
       "createError": "Failed to create budget. It may already exist for this period.",
       "updated": "Budget updated!",
+      "updateError": "Failed to update budget",
       "deleted": "Budget deleted!",
       "paused": "Budget paused",
       "resumed": "Budget resumed",
@@ -1559,10 +1598,13 @@
     },
     "toast": {
       "created": "Credit card added!",
+      "createError": "Failed to create credit card",
       "updated": "Credit card updated!",
+      "updateError": "Failed to update credit card",
       "deleted": "Credit card deleted!",
       "billUploaded": "Bill uploaded and categorized!",
       "billReplaced": "Bill replaced successfully!",
+      "uploadError": "Failed to upload bill",
       "expenseCreated": "Expense created from bill!",
       "billLinked": "Bill linked to transaction!"
     }

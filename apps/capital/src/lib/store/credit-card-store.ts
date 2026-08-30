@@ -32,7 +32,7 @@ interface CreditCardActions {
     isActive?: boolean;
   }) => Promise<void>;
   addCreditCard: (input: CreateCreditCardInput) => Promise<CreditCard | null>;
-  updateCreditCard: (id: string, input: UpdateCreditCardInput) => Promise<void>;
+  updateCreditCard: (id: string, input: UpdateCreditCardInput) => Promise<boolean>;
   deleteCreditCard: (id: string) => Promise<void>;
 
   // Bills
@@ -214,11 +214,13 @@ export const useCreditCardStore = create<CreditCardStore>()((set, get) => ({
         ),
         isLoading: false,
       }));
+      return true;
     } catch (error) {
       set({
         error: error instanceof Error ? error.message : 'Unknown error',
         isLoading: false,
       });
+      return false;
     }
   },
 

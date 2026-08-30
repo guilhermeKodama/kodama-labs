@@ -66,8 +66,9 @@ import { useRecurringTransferStore } from '@/lib/store/recurring-transfer-store'
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { client } from '@/lib/api-client';
+import { useDialogForm } from '@/hooks/use-dialog-form';
 import type { Transaction, Transfer } from '@/types';
-import type { CreateTransactionFormData } from '@/lib/validations';
+import type { CreateTransactionFormData, CreateTransferFormData } from '@/lib/validations';
 import type { DateRange } from 'react-day-picker';
 
 export default function BusinessDetailPage() {
@@ -235,6 +236,45 @@ export default function BusinessDetailPage() {
     return () => clearInterval(interval);
   }, [pendingCategorization, fetchTransactions]);
 
+  const closeDialog = () => {
+    setIsDialogOpen(false);
+    setEditingTransaction(undefined);
+  };
+
+  const closeTransferDialog = () => {
+    setIsTransferDialogOpen(false);
+    setEditingTransfer(undefined);
+  };
+
+  // Hooks must run unconditionally, before the early return below.
+  const createTransactionForm = useDialogForm({
+    onOpenChange: setIsDialogOpen,
+    action: addTransaction,
+    onSuccess: (created) => {
+      // Offer to attach a bill/receipt right away via the standalone attach
+      // dialog, instead of keeping the create dialog open in disguise as edit.
+      setAttachingTransaction(created);
+      toast.success(t('transactions.toast.created'));
+    },
+    errorMessage: t('transactions.toast.createError'),
+  });
+
+  const updateTransactionForm = useDialogForm({
+    onOpenChange: closeDialog,
+    action: (data: CreateTransactionFormData) =>
+      editingTransaction ? updateTransaction(editingTransaction.id, data) : Promise.resolve(false),
+    onSuccess: () => toast.success(t('transactions.toast.updated')),
+    errorMessage: t('transactions.toast.updateError'),
+  });
+
+  const editTransferForm = useDialogForm({
+    onOpenChange: closeTransferDialog,
+    action: (data: CreateTransferFormData) =>
+      editingTransfer ? updateTransfer(editingTransfer.id, data) : Promise.resolve(null),
+    onSuccess: () => toast.success(t('transfers.toast.updated')),
+    errorMessage: t('transfers.toast.editError'),
+  });
+
   if (!business) {
     return (
       <AppShell>
@@ -257,25 +297,6 @@ export default function BusinessDetailPage() {
     );
   }
 
-  const handleCreateTransaction = async (data: CreateTransactionFormData) => {
-    const created = await addTransaction(data);
-    if (created) {
-      setEditingTransaction(created);
-      toast.success(t('transactions.toast.created'));
-    } else {
-      toast.error(t('transactions.toast.createError'));
-    }
-  };
-
-  const handleUpdateTransaction = async (data: CreateTransactionFormData) => {
-    if (editingTransaction) {
-      await updateTransaction(editingTransaction.id, data);
-      setIsDialogOpen(false);
-      setEditingTransaction(undefined);
-      toast.success(t('transactions.toast.updated'));
-    }
-  };
-
   const handleDeleteTransaction = async () => {
     if (deletingTransaction) {
       await deleteTransaction(deletingTransaction.id);
@@ -292,15 +313,6 @@ export default function BusinessDetailPage() {
     }
   };
 
-  const handleEditTransfer = async (data: import('@/lib/validations').CreateTransferFormData) => {
-    if (editingTransfer) {
-      await updateTransfer(editingTransfer.id, data);
-      setEditingTransfer(undefined);
-      setIsTransferDialogOpen(false);
-      toast.success(t('transfers.toast.updated'));
-    }
-  };
-
   const openEditDialog = (transaction: Transaction) => {
     setEditingTransaction(transaction);
     setIsDialogOpen(true);
@@ -309,16 +321,6 @@ export default function BusinessDetailPage() {
   const openEditTransferDialog = (transfer: Transfer) => {
     setEditingTransfer(transfer);
     setIsTransferDialogOpen(true);
-  };
-
-  const closeDialog = () => {
-    setIsDialogOpen(false);
-    setEditingTransaction(undefined);
-  };
-
-  const closeTransferDialog = () => {
-    setIsTransferDialogOpen(false);
-    setEditingTransfer(undefined);
   };
 
   return (
@@ -553,7 +555,8 @@ export default function BusinessDetailPage() {
         entityId={businessId}
         entityType="business"
         transaction={editingTransaction}
-        onSubmit={editingTransaction ? handleUpdateTransaction : handleCreateTransaction}
+        onSubmit={editingTransaction ? updateTransactionForm.submit : createTransactionForm.submit}
+        isLoading={editingTransaction ? updateTransactionForm.isSubmitting : createTransactionForm.isSubmitting}
       />
 
       {/* Transfer Edit Dialog */}
@@ -561,7 +564,8 @@ export default function BusinessDetailPage() {
         open={isTransferDialogOpen}
         onOpenChange={closeTransferDialog}
         transfer={editingTransfer}
-        onSubmit={handleEditTransfer}
+        onSubmit={editTransferForm.submit}
+        isLoading={editTransferForm.isSubmitting}
       />
 
       {/* Attachments Dialog — Transaction */}

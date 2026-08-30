@@ -2,14 +2,8 @@
 
 import { useState } from 'react';
 import { useTranslations } from 'next-intl';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
+import { DialogFooter } from '@/components/ui/dialog';
+import { FormDialog } from '@/components/dialogs/form-dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -30,28 +24,33 @@ interface FireMilestoneDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   baseCurrency: string;
-  onSubmit: (milestone: MilestoneInput) => void;
+  onSubmit: (milestone: MilestoneInput) => Promise<unknown>;
+  isLoading?: boolean;
 }
 
-export function FireMilestoneDialog({ open, onOpenChange, baseCurrency, onSubmit }: FireMilestoneDialogProps) {
+export function FireMilestoneDialog({
+  open,
+  onOpenChange,
+  baseCurrency,
+  onSubmit,
+  isLoading,
+}: FireMilestoneDialogProps) {
   const t = useTranslations('fire.milestones');
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="border-slate-800 bg-slate-900 sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle className="text-white">{t('addCustom')}</DialogTitle>
-          <DialogDescription className="text-slate-400">{t('addCustomHint')}</DialogDescription>
-        </DialogHeader>
-        <MilestoneForm
-          baseCurrency={baseCurrency}
-          onCancel={() => onOpenChange(false)}
-          onSubmit={(m) => {
-            onSubmit(m);
-            onOpenChange(false);
-          }}
-        />
-      </DialogContent>
-    </Dialog>
+    <FormDialog
+      open={open}
+      onOpenChange={onOpenChange}
+      title={t('addCustom')}
+      description={t('addCustomHint')}
+      className="sm:max-w-md"
+    >
+      <MilestoneForm
+        baseCurrency={baseCurrency}
+        onCancel={() => onOpenChange(false)}
+        onSubmit={onSubmit}
+        isLoading={isLoading}
+      />
+    </FormDialog>
   );
 }
 
@@ -59,10 +58,12 @@ function MilestoneForm({
   baseCurrency,
   onSubmit,
   onCancel,
+  isLoading,
 }: {
   baseCurrency: string;
-  onSubmit: (m: MilestoneInput) => void;
+  onSubmit: (m: MilestoneInput) => Promise<unknown>;
   onCancel: () => void;
+  isLoading?: boolean;
 }) {
   const t = useTranslations('fire.milestones');
   const tCommon = useTranslations('common');
@@ -136,9 +137,10 @@ function MilestoneForm({
         </Button>
         <Button
           onClick={submit}
+          disabled={isLoading}
           className="bg-gradient-to-r from-emerald-500 to-cyan-500 text-white hover:from-emerald-600 hover:to-cyan-600"
         >
-          {tCommon('save')}
+          {isLoading ? tCommon('loading') : tCommon('save')}
         </Button>
       </DialogFooter>
     </>

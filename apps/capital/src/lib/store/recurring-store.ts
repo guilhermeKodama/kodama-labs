@@ -36,6 +36,12 @@ interface MarkAsPaidResult {
   recurring: RecurringTransaction;
 }
 
+/** The real amount/date, supplied when confirming a reminder-mode entry. */
+export interface MarkAsPaidOverrides {
+  amount?: number;
+  date?: Date;
+}
+
 interface RecurringTransactionActions {
   fetchRecurringTransactions: (filters?: {
     businessId?: string;
@@ -44,10 +50,10 @@ interface RecurringTransactionActions {
     isActive?: boolean;
   }) => Promise<void>;
   addRecurringTransaction: (input: CreateRecurringTransactionInput) => Promise<RecurringTransaction | null>;
-  updateRecurringTransaction: (id: string, input: UpdateRecurringTransactionInput) => Promise<void>;
+  updateRecurringTransaction: (id: string, input: UpdateRecurringTransactionInput) => Promise<boolean>;
   deleteRecurringTransaction: (id: string) => Promise<void>;
   toggleRecurringTransaction: (id: string) => Promise<void>;
-  markAsPaid: (id: string) => Promise<MarkAsPaidResult | null>;
+  markAsPaid: (id: string, overrides?: MarkAsPaidOverrides) => Promise<MarkAsPaidResult | null>;
   updateLastGeneratedDate: (id: string, date: Date) => Promise<void>;
   getRecurringTransactionsByEntity: (entityId: string, entityType: EntityType) => RecurringTransaction[];
   setLoading: (loading: boolean) => void;
@@ -119,6 +125,7 @@ export const useRecurringTransactionStore = create<RecurringTransactionStore>()(
           nextDueDate: parseLocalDate(r.nextDueDate),
           lastGeneratedDate: r.lastGeneratedDate ? parseLocalDate(r.lastGeneratedDate) : undefined,
           isActive: r.isActive,
+          autoGenerateTransaction: r.autoGenerateTransaction,
           createdAt: new Date(r.createdAt),
           updatedAt: new Date(r.updatedAt),
         })),
@@ -152,6 +159,7 @@ export const useRecurringTransactionStore = create<RecurringTransactionStore>()(
           endDate: input.endDate 
             ? (input.endDate instanceof Date ? input.endDate.toISOString() : input.endDate)
             : undefined,
+          autoGenerateTransaction: input.autoGenerateTransaction,
           businessId: input.entityType === 'business' ? input.entityId : undefined,
           personalAccountId: input.entityType === 'personal' ? input.entityId : undefined,
         },
@@ -178,6 +186,7 @@ export const useRecurringTransactionStore = create<RecurringTransactionStore>()(
         nextDueDate: parseLocalDate(data.nextDueDate),
         lastGeneratedDate: data.lastGeneratedDate ? parseLocalDate(data.lastGeneratedDate) : undefined,
         isActive: data.isActive,
+        autoGenerateTransaction: data.autoGenerateTransaction,
         createdAt: new Date(data.createdAt),
         updatedAt: new Date(data.updatedAt),
       };
@@ -218,6 +227,7 @@ export const useRecurringTransactionStore = create<RecurringTransactionStore>()(
             ? (input.endDate instanceof Date ? input.endDate.toISOString() : input.endDate)
             : input.endDate === null ? null : undefined,
           isActive: input.isActive,
+          autoGenerateTransaction: input.autoGenerateTransaction,
         },
       });
 
@@ -245,6 +255,7 @@ export const useRecurringTransactionStore = create<RecurringTransactionStore>()(
                 nextDueDate: parseLocalDate(data.nextDueDate),
                 lastGeneratedDate: data.lastGeneratedDate ? parseLocalDate(data.lastGeneratedDate) : undefined,
                 isActive: data.isActive,
+                autoGenerateTransaction: data.autoGenerateTransaction,
                 createdAt: new Date(data.createdAt),
                 updatedAt: new Date(data.updatedAt),
               }
@@ -252,11 +263,13 @@ export const useRecurringTransactionStore = create<RecurringTransactionStore>()(
         ),
         isLoading: false,
       }));
+      return true;
     } catch (error) {
       set({
         error: error instanceof Error ? error.message : 'Unknown error',
         isLoading: false,
       });
+      return false;
     }
   },
 
@@ -318,11 +331,15 @@ export const useRecurringTransactionStore = create<RecurringTransactionStore>()(
   },
 
   // Mark recurring transaction as paid - creates a transaction and advances to next due date
-  markAsPaid: async (id: string) => {
+  markAsPaid: async (id: string, overrides?: MarkAsPaidOverrides) => {
     set({ isLoading: true, error: null });
     try {
       const res = await client.v1.recurring[':id']['mark-paid'].$post({
         param: { id },
+        json: {
+          amount: overrides?.amount,
+          date: overrides?.date ? overrides.date.toISOString() : undefined,
+        },
       });
 
       if (!res.ok) {
@@ -380,10 +397,11 @@ export const useRecurringTransactionStore = create<RecurringTransactionStore>()(
           startDate: parseLocalDate(data.recurring.startDate),
           endDate: data.recurring.endDate ? parseLocalDate(data.recurring.endDate) : undefined,
           nextDueDate: parseLocalDate(data.recurring.nextDueDate),
-          lastGeneratedDate: data.recurring.lastGeneratedDate 
-            ? parseLocalDate(data.recurring.lastGeneratedDate) 
+          lastGeneratedDate: data.recurring.lastGeneratedDate
+            ? parseLocalDate(data.recurring.lastGeneratedDate)
             : undefined,
           isActive: data.recurring.isActive,
+          autoGenerateTransaction: data.recurring.autoGenerateTransaction,
           createdAt: new Date(data.recurring.createdAt),
           updatedAt: new Date(data.recurring.updatedAt),
         },

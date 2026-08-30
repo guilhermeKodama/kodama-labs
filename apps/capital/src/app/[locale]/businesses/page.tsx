@@ -33,6 +33,7 @@ import {
 } from '@/lib/store';
 import { calculateEntitySummary } from '@/lib/utils/calculations';
 import { toast } from 'sonner';
+import { useDialogForm } from '@/hooks/use-dialog-form';
 import type { Business } from '@/types';
 import type { CreateBusinessFormData } from '@/lib/validations';
 
@@ -62,19 +63,31 @@ export default function BusinessesPage() {
     );
   }, [businesses, transactions, transfers, settings.baseCurrency]);
 
-  const handleCreate = async (data: CreateBusinessFormData) => {
-    // userId is now taken from session on the backend
-    await addBusiness(data);
-    toast.success(t('businesses.toast.created'));
+  const openEditDialog = (business: Business) => {
+    setEditingBusiness(business);
+    setIsDialogOpen(true);
   };
 
-  const handleUpdate = async (data: CreateBusinessFormData) => {
-    if (editingBusiness) {
-      await updateBusiness(editingBusiness.id, data);
-      setEditingBusiness(undefined);
-      toast.success(t('businesses.toast.updated'));
-    }
+  const closeDialog = () => {
+    setIsDialogOpen(false);
+    setEditingBusiness(undefined);
   };
+
+  // userId is now taken from session on the backend
+  const createForm = useDialogForm({
+    onOpenChange: setIsDialogOpen,
+    action: addBusiness,
+    onSuccess: () => toast.success(t('businesses.toast.created')),
+    errorMessage: t('businesses.toast.createError'),
+  });
+
+  const updateForm = useDialogForm({
+    onOpenChange: closeDialog,
+    action: (data: CreateBusinessFormData) =>
+      editingBusiness ? updateBusiness(editingBusiness.id, data) : Promise.resolve(false),
+    onSuccess: () => toast.success(t('businesses.toast.updated')),
+    errorMessage: t('businesses.toast.updateError'),
+  });
 
   const handleDelete = async () => {
     if (deletingBusiness) {
@@ -85,16 +98,6 @@ export default function BusinessesPage() {
       setDeletingBusiness(undefined);
       toast.success(t('businesses.toast.deleted'));
     }
-  };
-
-  const openEditDialog = (business: Business) => {
-    setEditingBusiness(business);
-    setIsDialogOpen(true);
-  };
-
-  const closeDialog = () => {
-    setIsDialogOpen(false);
-    setEditingBusiness(undefined);
   };
 
   return (
@@ -182,7 +185,8 @@ export default function BusinessesPage() {
         open={isDialogOpen}
         onOpenChange={closeDialog}
         business={editingBusiness}
-        onSubmit={editingBusiness ? handleUpdate : handleCreate}
+        onSubmit={editingBusiness ? updateForm.submit : createForm.submit}
+        isLoading={editingBusiness ? updateForm.isSubmitting : createForm.isSubmitting}
       />
 
       {/* Delete Confirmation */}

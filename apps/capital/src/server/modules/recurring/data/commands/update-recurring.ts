@@ -17,6 +17,7 @@ interface UpdateRecurringData {
   nextDueDate?: Date;
   lastGeneratedDate?: Date;
   isActive?: boolean;
+  autoGenerateTransaction?: boolean;
 }
 
 /**

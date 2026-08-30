@@ -58,8 +58,8 @@ import {
 } from '@/lib/store';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
+import { useDialogForm } from '@/hooks/use-dialog-form';
 import type { Transfer, RecurringTransfer, CreateRecurringTransferInput } from '@/types';
-import type { CreateTransferFormData } from '@/lib/validations';
 import type { RecurringTransferFormData } from '@/components/forms/recurring-transfer-form';
 import type { DateRange } from 'react-day-picker';
 import { Link } from '@/i18n/navigation';
@@ -176,21 +176,6 @@ export default function TransfersPage() {
 
   const { fetchAccounts: fetchInvestmentAccounts } = useInvestmentStore();
 
-  const handleCreateTransfer = async (data: CreateTransferFormData) => {
-    const result = await addTransfer(data);
-    if (result) {
-      setIsDialogOpen(false);
-      setAttachingTransfer(result);
-      toast.success(t('transfers.toast.created'));
-      // Refresh investment accounts if this was an investment transfer
-      if (data.direction === 'investment_deposit' || data.direction === 'investment_withdrawal') {
-        fetchInvestmentAccounts();
-      }
-    } else {
-      toast.error(t('transfers.toast.error'));
-    }
-  };
-
   const handleDeleteTransfer = async () => {
     if (deletingTransfer) {
       await deleteTransfer(deletingTransfer.id);
@@ -199,33 +184,38 @@ export default function TransfersPage() {
     }
   };
 
-  const handleCreateRecurringTransfer = async (data: RecurringTransferFormData) => {
-    const input: CreateRecurringTransferInput = {
-      fromEntityId: data.fromEntityId,
-      fromEntityType: data.fromEntityType,
-      toEntityId: data.toEntityId,
-      toEntityType: data.toEntityType,
-      direction: data.direction,
-      amount: data.amount,
-      currency: data.currency,
-      exchangeRate: data.exchangeRate,
-      description: data.description,
-      frequency: data.frequency,
-      startDate: data.startDate,
-      endDate: data.endDate ?? undefined,
-    };
-    const created = await addRecurringTransfer(input);
-    if (created) {
-      setEditingRecurring(created);
-      toast.success(t('transfers.recurring.toast.created'));
-    } else {
-      toast.error(t('transfers.recurring.toast.createError'));
-    }
+  const openEditRecurringDialog = (recurring: RecurringTransfer) => {
+    setEditingRecurring(recurring);
+    setIsRecurringDialogOpen(true);
   };
 
-  const handleUpdateRecurringTransfer = async (data: RecurringTransferFormData) => {
-    if (editingRecurring) {
-      await updateRecurringTransfer(editingRecurring.id, {
+  const closeRecurringDialog = () => {
+    setIsRecurringDialogOpen(false);
+    setEditingRecurring(undefined);
+  };
+
+  const createTransferForm = useDialogForm({
+    onOpenChange: setIsDialogOpen,
+    action: addTransfer,
+    onSuccess: (result, data) => {
+      setAttachingTransfer(result);
+      toast.success(t('transfers.toast.created'));
+      // Refresh investment accounts if this was an investment transfer
+      if (data.direction === 'investment_deposit' || data.direction === 'investment_withdrawal') {
+        fetchInvestmentAccounts();
+      }
+    },
+    errorMessage: t('transfers.toast.error'),
+  });
+
+  const createRecurringTransferForm = useDialogForm({
+    onOpenChange: setIsRecurringDialogOpen,
+    action: (data: RecurringTransferFormData) => {
+      const input: CreateRecurringTransferInput = {
+        fromEntityId: data.fromEntityId,
+        fromEntityType: data.fromEntityType,
+        toEntityId: data.toEntityId,
+        toEntityType: data.toEntityType,
         direction: data.direction,
         amount: data.amount,
         currency: data.currency,
@@ -234,12 +224,36 @@ export default function TransfersPage() {
         frequency: data.frequency,
         startDate: data.startDate,
         endDate: data.endDate ?? undefined,
-      });
-      setIsRecurringDialogOpen(false);
-      setEditingRecurring(undefined);
-      toast.success(t('transfers.recurring.toast.updated'));
-    }
-  };
+      };
+      return addRecurringTransfer(input);
+    },
+    onSuccess: (created) => {
+      // Offer to attach a receipt right away via the standalone attach
+      // dialog, instead of keeping the create dialog open in disguise as edit.
+      setAttachingRecurringTransfer(created);
+      toast.success(t('transfers.recurring.toast.created'));
+    },
+    errorMessage: t('transfers.recurring.toast.createError'),
+  });
+
+  const updateRecurringTransferForm = useDialogForm({
+    onOpenChange: closeRecurringDialog,
+    action: (data: RecurringTransferFormData) =>
+      editingRecurring
+        ? updateRecurringTransfer(editingRecurring.id, {
+            direction: data.direction,
+            amount: data.amount,
+            currency: data.currency,
+            exchangeRate: data.exchangeRate,
+            description: data.description,
+            frequency: data.frequency,
+            startDate: data.startDate,
+            endDate: data.endDate ?? undefined,
+          })
+        : Promise.resolve(false),
+    onSuccess: () => toast.success(t('transfers.recurring.toast.updated')),
+    errorMessage: t('transfers.recurring.toast.updateError'),
+  });
 
   const handleDeleteRecurringTransfer = async () => {
     if (deletingRecurring) {
@@ -274,16 +288,6 @@ export default function TransfersPage() {
       setMarkingPaidId(null);
     }
   }, [markAsPaid, fetchTransfers, t]);
-
-  const openEditRecurringDialog = (recurring: RecurringTransfer) => {
-    setEditingRecurring(recurring);
-    setIsRecurringDialogOpen(true);
-  };
-
-  const closeRecurringDialog = () => {
-    setIsRecurringDialogOpen(false);
-    setEditingRecurring(undefined);
-  };
 
   // Show message if no businesses exist
   if (businesses.length === 0) {
@@ -517,7 +521,8 @@ export default function TransfersPage() {
       <TransferDialog
         open={isDialogOpen}
         onOpenChange={setIsDialogOpen}
-        onSubmit={handleCreateTransfer}
+        onSubmit={createTransferForm.submit}
+        isLoading={createTransferForm.isSubmitting}
       />
 
       {/* Recurring Transfer Dialog */}
@@ -525,7 +530,8 @@ export default function TransfersPage() {
         open={isRecurringDialogOpen}
         onOpenChange={closeRecurringDialog}
         recurringTransfer={editingRecurring}
-        onSubmit={editingRecurring ? handleUpdateRecurringTransfer : handleCreateRecurringTransfer}
+        onSubmit={editingRecurring ? updateRecurringTransferForm.submit : createRecurringTransferForm.submit}
+        isLoading={editingRecurring ? updateRecurringTransferForm.isSubmitting : createRecurringTransferForm.isSubmitting}
       />
 
       {/* Attachments Dialog — Transfer */}

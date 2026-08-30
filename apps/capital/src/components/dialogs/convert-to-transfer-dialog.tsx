@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useTranslations } from 'next-intl';
+import { toast } from 'sonner';
 import {
   ArrowLeftRight,
   Building2,
@@ -297,6 +298,7 @@ export function ConvertToTransferDialog({
       onComplete();
     } catch (error) {
       console.error('Failed to convert transaction:', error);
+      toast.error(t('convertTransfer.error'));
     } finally {
       setIsConverting(false);
     }

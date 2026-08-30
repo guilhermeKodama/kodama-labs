@@ -21,6 +21,7 @@ export const createRecurringTransactionSchema = z.object({
   frequency: recurrenceFrequencySchema,
   startDate: z.coerce.date(),
   endDate: z.coerce.date().optional().nullable().transform((val) => val ?? undefined),
+  autoGenerateTransaction: z.boolean().default(true),
 });
 
 export const updateRecurringTransactionSchema = createRecurringTransactionSchema.partial().omit({

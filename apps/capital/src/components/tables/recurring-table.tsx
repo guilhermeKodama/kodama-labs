@@ -16,6 +16,9 @@ import {
   Repeat,
   Check,
   AlertCircle,
+  Zap,
+  Bell,
+  Banknote,
 } from 'lucide-react';
 import {
   Table,
@@ -46,6 +49,8 @@ interface RecurringTableProps {
   onDelete?: (recurring: RecurringTransaction) => void;
   onToggle?: (recurring: RecurringTransaction) => void;
   onMarkPaid?: (recurring: RecurringTransaction) => void;
+  /** Reminder-mode rows: opens a dialog to enter the real amount before booking. */
+  onRegisterPayment?: (recurring: RecurringTransaction) => void;
   onAttach?: (recurring: RecurringTransaction) => void;
   isMarkingPaid?: string | null; // ID of the recurring being marked as paid
 }
@@ -112,6 +117,7 @@ export function RecurringTable({
   onDelete,
   onToggle,
   onMarkPaid,
+  onRegisterPayment,
   onAttach,
   isMarkingPaid,
 }: RecurringTableProps) {
@@ -157,6 +163,7 @@ export function RecurringTable({
             <TableHead className="text-slate-400">{t('table.type')}</TableHead>
             <TableHead className="text-slate-400">{t('table.entity')}</TableHead>
             <TableHead className="text-slate-400">{t('table.frequency')}</TableHead>
+            <TableHead className="text-slate-400">{t('table.mode')}</TableHead>
             <TableHead className="text-slate-400">{t('table.nextDue')}</TableHead>
             <TableHead className="text-right text-slate-400">{t('table.amount')}</TableHead>
             <TableHead className="text-slate-400">{t('table.status')}</TableHead>
@@ -169,6 +176,12 @@ export function RecurringTable({
             const Icon = config.icon;
             const dueStatus = recurring.isActive ? getDueStatus(new Date(recurring.nextDueDate)) : null;
             const isBeingMarkedPaid = isMarkingPaid === recurring.id;
+            // Auto rows settle in one click with the saved amount. Reminder rows
+            // store only an estimate, so they open a dialog for the real value.
+            const isAuto = recurring.autoGenerateTransaction;
+            const settleLabel = isAuto ? t('actions.markPaid') : t('actions.registerPayment');
+            const SettleIcon = isAuto ? Check : Banknote;
+            const onSettle = isAuto ? onMarkPaid : onRegisterPayment;
 
             return (
               <TableRow
@@ -217,6 +230,19 @@ export function RecurringTable({
                   </Badge>
                 </TableCell>
                 <TableCell>
+                  {recurring.autoGenerateTransaction ? (
+                    <Badge variant="outline" className="border-0 bg-cyan-500/10 text-cyan-400">
+                      <Zap className="mr-1 h-3 w-3" />
+                      {t('mode.auto')}
+                    </Badge>
+                  ) : (
+                    <Badge variant="outline" className="border-0 bg-purple-500/10 text-purple-400">
+                      <Bell className="mr-1 h-3 w-3" />
+                      {t('mode.reminder')}
+                    </Badge>
+                  )}
+                </TableCell>
+                <TableCell>
                   <div className="flex items-center gap-2">
                     <div className={cn(
                       'flex items-center gap-1',
@@ -246,6 +272,7 @@ export function RecurringTable({
                     recurring.type === 'expense' ? 'text-red-400' : 'text-emerald-400'
                   )}
                 >
+                  {!recurring.autoGenerateTransaction && '~'}
                   {formatCurrency(recurring.amount * recurring.exchangeRate, settings.baseCurrency)}
                 </TableCell>
                 <TableCell>
@@ -263,22 +290,6 @@ export function RecurringTable({
                 </TableCell>
                 <TableCell>
                   <div className="flex items-center gap-1">
-                    {/* Mark as Paid button - only show for active recurring that are due */}
-                    {onMarkPaid && recurring.isActive && (dueStatus === 'overdue' || dueStatus === 'due-today') && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => onMarkPaid(recurring)}
-                        disabled={isBeingMarkedPaid}
-                        className={cn(
-                          'h-8 border-emerald-600 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 hover:text-emerald-300',
-                          isBeingMarkedPaid && 'opacity-50 cursor-not-allowed'
-                        )}
-                      >
-                        <Check className="mr-1 h-3 w-3" />
-                        {t('actions.markPaid')}
-                      </Button>
-                    )}
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
                         <Button
@@ -293,14 +304,14 @@ export function RecurringTable({
                         align="end"
                         className="border-slate-700 bg-slate-900"
                       >
-                        {onMarkPaid && recurring.isActive && (
+                        {onSettle && recurring.isActive && (
                           <DropdownMenuItem
-                            onClick={() => onMarkPaid(recurring)}
+                            onClick={() => onSettle(recurring)}
                             disabled={isBeingMarkedPaid}
                             className="text-emerald-400 focus:bg-emerald-500/10 focus:text-emerald-400"
                           >
-                            <Check className="mr-2 h-4 w-4" />
-                            {t('actions.markPaid')}
+                            <SettleIcon className="mr-2 h-4 w-4" />
+                            {settleLabel}
                           </DropdownMenuItem>
                         )}
                         {onToggle && (

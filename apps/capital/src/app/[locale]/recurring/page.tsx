@@ -25,7 +25,7 @@ import { AppShell } from '@/components/layout';
 import { Header } from '@/components/layout/header';
 import { SummaryCard } from '@/components/cards';
 import { RecurringTable } from '@/components/tables';
-import { RecurringDialog, AttachmentsDialog } from '@/components/dialogs';
+import { RecurringDialog, RecurringPaymentDialog, AttachmentsDialog } from '@/components/dialogs';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Calendar } from '@/components/ui/calendar';
@@ -60,6 +60,7 @@ import {
 } from '@/lib/store';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+import { useDialogForm } from '@/hooks/use-dialog-form';
 import type { RecurringTransaction } from '@/types';
 import type { CreateRecurringTransactionFormData } from '@/lib/validations';
 import type { DateRange } from 'react-day-picker';
@@ -91,6 +92,7 @@ export default function RecurringPage() {
   const [deletingRecurring, setDeletingRecurring] = useState<RecurringTransaction | undefined>();
   const [markingPaidId, setMarkingPaidId] = useState<string | null>(null);
   const [attachingRecurring, setAttachingRecurring] = useState<RecurringTransaction | undefined>();
+  const [payingRecurring, setPayingRecurring] = useState<RecurringTransaction | undefined>();
   const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined);
   const [selectedEntityId, setSelectedEntityId] = useState<string>('all');
 
@@ -182,24 +184,56 @@ export default function RecurringPage() {
     }
   }
 
-  const handleCreate = async (data: CreateRecurringTransactionFormData) => {
-    const created = await addRecurringTransaction(data);
-    if (created) {
-      setEditingRecurring(created);
-      toast.success(t('recurring.toast.created'));
-    } else {
-      toast.error(t('recurring.toast.createError'));
-    }
+  const openEditDialog = (recurring: RecurringTransaction) => {
+    setEditingRecurring(recurring);
+    setIsDialogOpen(true);
   };
 
-  const handleUpdate = async (data: CreateRecurringTransactionFormData) => {
-    if (editingRecurring) {
-      await updateRecurringTransaction(editingRecurring.id, data);
-      setIsDialogOpen(false);
-      setEditingRecurring(undefined);
-      toast.success(t('recurring.toast.updated'));
-    }
+  const closeDialog = () => {
+    setIsDialogOpen(false);
+    setEditingRecurring(undefined);
   };
+
+  const closePaymentDialog = (open: boolean) => {
+    if (!open) setPayingRecurring(undefined);
+  };
+
+  // Reminder mode: the stored amount is only an estimate, so the dialog
+  // supplies the real amount/date before the transaction is booked.
+  const paymentForm = useDialogForm({
+    onOpenChange: closePaymentDialog,
+    action: (values: { amount: number; date: Date }) =>
+      payingRecurring
+        ? markAsPaid(payingRecurring.id, values)
+        : Promise.resolve(null),
+    onSuccess: () => {
+      void fetchTransactions();
+      toast.success(t('recurring.toast.paymentRegistered'));
+    },
+    errorMessage: t('recurring.toast.paymentError'),
+  });
+
+  const createForm = useDialogForm({
+    onOpenChange: setIsDialogOpen,
+    action: addRecurringTransaction,
+    onSuccess: (created) => {
+      // Offer to attach the bill right away, instead of keeping the create
+      // dialog open in disguise as an edit dialog.
+      setAttachingRecurring(created);
+      toast.success(t('recurring.toast.created'));
+    },
+    errorMessage: t('recurring.toast.createError'),
+  });
+
+  const updateForm = useDialogForm({
+    onOpenChange: closeDialog,
+    action: (data: CreateRecurringTransactionFormData) =>
+      editingRecurring
+        ? updateRecurringTransaction(editingRecurring.id, data)
+        : Promise.resolve(false),
+    onSuccess: () => toast.success(t('recurring.toast.updated')),
+    errorMessage: t('recurring.toast.updateError'),
+  });
 
   const handleDelete = async () => {
     if (deletingRecurring) {
@@ -235,16 +269,6 @@ export default function RecurringPage() {
       setMarkingPaidId(null);
     }
   }, [markAsPaid, fetchTransactions, t]);
-
-  const openEditDialog = (recurring: RecurringTransaction) => {
-    setEditingRecurring(recurring);
-    setIsDialogOpen(true);
-  };
-
-  const closeDialog = () => {
-    setIsDialogOpen(false);
-    setEditingRecurring(undefined);
-  };
 
   return (
     <AppShell>
@@ -421,6 +445,7 @@ export default function RecurringPage() {
             onDelete={setDeletingRecurring}
             onToggle={handleToggle}
             onMarkPaid={handleMarkPaid}
+            onRegisterPayment={setPayingRecurring}
             onAttach={setAttachingRecurring}
             isMarkingPaid={markingPaidId}
           />
@@ -432,7 +457,17 @@ export default function RecurringPage() {
         open={isDialogOpen}
         onOpenChange={closeDialog}
         recurring={editingRecurring}
-        onSubmit={editingRecurring ? handleUpdate : handleCreate}
+        onSubmit={editingRecurring ? updateForm.submit : createForm.submit}
+        isLoading={editingRecurring ? updateForm.isSubmitting : createForm.isSubmitting}
+      />
+
+      {/* Register Payment Dialog (reminder mode: enter the real amount) */}
+      <RecurringPaymentDialog
+        open={!!payingRecurring}
+        onOpenChange={closePaymentDialog}
+        recurring={payingRecurring}
+        onSubmit={paymentForm.submit}
+        isLoading={paymentForm.isSubmitting}
       />
 
       {/* Attachments Dialog (from kebab "Anexar") */}

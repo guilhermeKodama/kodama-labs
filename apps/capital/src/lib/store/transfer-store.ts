@@ -17,8 +17,8 @@ interface TransferActions {
     toPersonalAccountId?: string;
   }) => Promise<void>;
   addTransfer: (input: CreateTransferInput) => Promise<Transfer | null>;
-  updateTransfer: (id: string, input: CreateTransferInput) => Promise<void>;
-  deleteTransfer: (id: string) => Promise<void>;
+  updateTransfer: (id: string, input: CreateTransferInput) => Promise<Transfer | null>;
+  deleteTransfer: (id: string) => Promise<boolean>;
   deleteTransfersByEntity: (entityId: string) => Promise<void>;
   getTransfersByEntity: (entityId: string) => Transfer[];
   setLoading: (loading: boolean) => void;
@@ -183,35 +183,35 @@ export const useTransferStore = create<TransferStore>()((set, get) => ({
       }
 
       const data = await res.json();
+      const updated: Transfer = {
+        id: data.id,
+        fromEntityId: data.fromBusinessId ?? data.fromPersonalAccountId ?? '',
+        fromEntityType: data.fromEntityType,
+        toEntityId: data.toBusinessId ?? data.toPersonalAccountId ?? '',
+        toEntityType: data.toEntityType,
+        direction: data.direction,
+        amount: data.amount,
+        currency: data.currency,
+        exchangeRate: data.exchangeRate,
+        description: data.description ?? undefined,
+        date: parseLocalDate(data.date),
+        toInvestmentAccountId: data.toInvestmentAccountId ?? undefined,
+        fromInvestmentAccountId: data.fromInvestmentAccountId ?? undefined,
+        createdAt: new Date(data.createdAt),
+        updatedAt: new Date(data.updatedAt),
+      };
+
       set((state) => ({
-        transfers: state.transfers.map((t) =>
-          t.id === id
-            ? {
-                id: data.id,
-                fromEntityId: data.fromBusinessId ?? data.fromPersonalAccountId ?? '',
-                fromEntityType: data.fromEntityType,
-                toEntityId: data.toBusinessId ?? data.toPersonalAccountId ?? '',
-                toEntityType: data.toEntityType,
-                direction: data.direction,
-                amount: data.amount,
-                currency: data.currency,
-                exchangeRate: data.exchangeRate,
-                description: data.description ?? undefined,
-                date: parseLocalDate(data.date),
-                toInvestmentAccountId: data.toInvestmentAccountId ?? undefined,
-                fromInvestmentAccountId: data.fromInvestmentAccountId ?? undefined,
-                createdAt: new Date(data.createdAt),
-                updatedAt: new Date(data.updatedAt),
-              }
-            : t
-        ),
+        transfers: state.transfers.map((t) => (t.id === id ? updated : t)),
         isLoading: false,
       }));
+      return updated;
     } catch (error) {
       set({
         error: error instanceof Error ? error.message : 'Unknown error',
         isLoading: false,
       });
+      return null;
     }
   },
 
@@ -231,11 +231,13 @@ export const useTransferStore = create<TransferStore>()((set, get) => ({
         transfers: state.transfers.filter((t) => t.id !== id),
         isLoading: false,
       }));
+      return true;
     } catch (error) {
       set({
         error: error instanceof Error ? error.message : 'Unknown error',
         isLoading: false,
       });
+      return false;
     }
   },
 
