@@ -304,11 +304,17 @@ export default function FirePage() {
   }, [summary, computed]);
   const handleAddMilestone = async (m: MilestoneInput) => {
     if (!summary?.goal) return;
-    await saveGoal(goalToInput(summary.goal, { milestones: [...summary.goal.milestones, m] }));
+    const saved = await saveGoal(goalToInput(summary.goal, { milestones: [...summary.goal.milestones, m] }));
+    if (saved) toast.success(t('milestones.added'));
+    else toast.error(t('milestones.addError'));
   };
   const handleRemoveMilestone = async (id: string) => {
     if (!summary?.goal) return;
-    await saveGoal(goalToInput(summary.goal, { milestones: summary.goal.milestones.filter((x) => x.id !== id) }));
+    const saved = await saveGoal(
+      goalToInput(summary.goal, { milestones: summary.goal.milestones.filter((x) => x.id !== id) })
+    );
+    if (saved) toast.success(t('milestones.removed'));
+    else toast.error(t('milestones.removeError'));
   };
   const handleAddSnapshot = () => {
     setEditingSnapshot(null);
@@ -320,12 +326,12 @@ export default function FirePage() {
   };
   const handleSubmitSnapshot = async (period: number, currentInvested: number) => {
     const ok = await upsertSnapshot(period, { currentInvested });
-    if (ok) toast.success(t('snapshotSaved'));
+    if (ok) toast.success(t('history.snapshotSaved'));
     else toast.error(t('snapshotFailed'));
   };
   const handleDeleteSnapshot = async (period: number) => {
     const ok = await deleteSnapshot(period);
-    if (ok) toast.success(t('snapshotDeleted'));
+    if (ok) toast.success(t('history.snapshotDeleted'));
     else toast.error(t('snapshotFailed'));
   };
 
