@@ -16,10 +16,12 @@ import {
 } from '@/components/ui/card';
 import { Link } from '@/i18n/navigation';
 import { client } from '@/lib/api-client';
+import { useUser } from '@/lib/user-context';
 
 function LoginForm() {
   const t = useTranslations();
   const router = useRouter();
+  const { refetchUser } = useUser();
   const searchParams = useSearchParams();
   
   const redirectTo = searchParams.get('redirect') || '/dashboard';
@@ -40,8 +42,13 @@ function LoginForm() {
       });
 
       if (res.ok) {
-        // User data is already returned from login - no need to refetch
-        // The UserProvider will fetch the current session on mount via useEffect
+        // UserProvider only fetches on its own mount (once, near the root) —
+        // a client-side router.push to /dashboard doesn't remount it, so
+        // isAuthenticated stayed false after a successful login until a full
+        // reload. DataInitializer's redirect-when-unauthenticated guard then
+        // bounced straight back to /login. Refetch here so the provider's
+        // state is correct before navigating.
+        await refetchUser();
         router.push(redirectTo);
       } else {
         const data = await res.json();

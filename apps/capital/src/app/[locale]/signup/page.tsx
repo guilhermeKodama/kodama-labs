@@ -16,10 +16,12 @@ import {
 } from '@/components/ui/card';
 import { Link } from '@/i18n/navigation';
 import { client } from '@/lib/api-client';
+import { useUser } from '@/lib/user-context';
 
 export default function SignupPage() {
   const t = useTranslations();
   const router = useRouter();
+  const { refetchUser } = useUser();
 
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
@@ -38,8 +40,9 @@ export default function SignupPage() {
       });
 
       if (res.ok) {
-        // Session is already created during signup - redirect directly
-        // The UserProvider will fetch the current session on mount via useEffect
+        // Same fix as login: UserProvider only fetches on its own mount, so
+        // a client-side push doesn't pick up the new session without this.
+        await refetchUser();
         router.push('/dashboard');
       } else {
         const data = await res.json();
