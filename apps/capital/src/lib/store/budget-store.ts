@@ -89,7 +89,7 @@ interface BudgetActions {
   }) => Promise<void>;
   fetchDashboard: (year?: number, month?: number) => Promise<void>;
   addBudget: (input: CreateBudgetInput) => Promise<Budget | null>;
-  updateBudget: (id: string, input: UpdateBudgetInput) => Promise<void>;
+  updateBudget: (id: string, input: UpdateBudgetInput) => Promise<boolean>;
   deleteBudget: (id: string) => Promise<void>;
   toggleBudget: (id: string) => Promise<void>;
   getBudgetsByEntity: (entityId: string, entityType: EntityType) => Budget[];
@@ -281,11 +281,13 @@ export const useBudgetStore = create<BudgetStore>()((set, get) => ({
         ),
         isLoading: false,
       }));
+      return true;
     } catch (error) {
       set({
         error: error instanceof Error ? error.message : 'Unknown error',
         isLoading: false,
       });
+      return false;
     }
   },
 

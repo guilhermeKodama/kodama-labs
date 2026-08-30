@@ -32,7 +32,7 @@ interface SettingsActions {
   addCurrency: (input: CreateCurrencyInput) => Promise<void>;
   updateCurrencyRate: (code: string, rate: number) => Promise<void>;
   removeCurrency: (code: string) => Promise<void>;
-  addCategory: (name: string, type: TransactionType, color?: string) => Promise<void>;
+  addCategory: (name: string, type: TransactionType, color?: string) => Promise<Category | null>;
   removeCategory: (id: string) => Promise<void>;
   
   // Tax settings (local for now - could be moved to API later)
@@ -337,11 +337,13 @@ export const useSettingsStore = create<SettingsStore>()((set, get) => ({
         categories: [...state.categories, newCategory],
         isLoading: false,
       }));
+      return newCategory;
     } catch (error) {
       set({
         error: error instanceof Error ? error.message : 'Unknown error',
         isLoading: false,
       });
+      return null;
     }
   },
 

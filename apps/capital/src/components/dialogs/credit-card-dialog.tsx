@@ -1,15 +1,9 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useTranslations } from 'next-intl';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
+import { FormDialog } from '@/components/dialogs/form-dialog';
+import { DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -42,7 +36,8 @@ interface CreditCardDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   card?: CreditCard;
-  onSubmit: (data: CreditCardFormData) => Promise<void>;
+  onSubmit: (data: CreditCardFormData) => void;
+  isLoading?: boolean;
 }
 
 const CARD_COLORS = [
@@ -58,7 +53,7 @@ const CARD_COLORS = [
   '#84CC16', // Lime
 ];
 
-export function CreditCardDialog({ open, onOpenChange, card, onSubmit }: CreditCardDialogProps) {
+export function CreditCardDialog({ open, onOpenChange, card, onSubmit, isLoading }: CreditCardDialogProps) {
   const t = useTranslations('creditCards');
   const tCommon = useTranslations('common');
   const { businesses } = useBusinessStore();
@@ -74,9 +69,17 @@ export function CreditCardDialog({ open, onOpenChange, card, onSubmit }: CreditC
   const [dueDay, setDueDay] = useState('');
   const [color, setColor] = useState(CARD_COLORS[3]);
   const [currency, setCurrency] = useState('BRL');
-  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  useEffect(() => {
+  // Re-seed the form whenever the dialog is (re)opened or switches which card
+  // it's editing. Adjusted directly during render (React's documented
+  // alternative to an effect for this) instead of via useEffect, so the
+  // reset lands in the same commit rather than a cascading extra render.
+  const [seededFor, setSeededFor] = useState<{ open: boolean; card?: CreditCard }>({
+    open,
+    card,
+  });
+  if (seededFor.open !== open || seededFor.card !== card) {
+    setSeededFor({ open, card });
     if (card) {
       setEntityType(card.entityType);
       setBankName(card.bankName);
@@ -99,218 +102,206 @@ export function CreditCardDialog({ open, onOpenChange, card, onSubmit }: CreditC
       setColor(CARD_COLORS[3]);
       setCurrency('BRL');
     }
-  }, [card, open]);
+  }
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    setIsSubmitting(true);
-
-    try {
-      await onSubmit({
-        entityType,
-        bankName,
-        lastFourDigits,
-        nickname: nickname || undefined,
-        creditLimit: parseFloat(creditLimit),
-        closingDay: parseInt(closingDay),
-        dueDay: parseInt(dueDay),
-        color,
-        currency,
-        businessId: entityType === 'business' ? businessId : undefined,
-        personalAccountId: entityType === 'personal' ? personalAccount?.id : undefined,
-      });
-      onOpenChange(false);
-    } finally {
-      setIsSubmitting(false);
-    }
+    onSubmit({
+      entityType,
+      bankName,
+      lastFourDigits,
+      nickname: nickname || undefined,
+      creditLimit: parseFloat(creditLimit),
+      closingDay: parseInt(closingDay),
+      dueDay: parseInt(dueDay),
+      color,
+      currency,
+      businessId: entityType === 'business' ? businessId : undefined,
+      personalAccountId: entityType === 'personal' ? personalAccount?.id : undefined,
+    });
   };
 
   const isEdit = !!card;
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="border-slate-800 bg-slate-900 sm:max-w-[500px]">
-        <DialogHeader>
-          <DialogTitle className="text-white">
-            {isEdit ? t('dialog.editTitle') : t('dialog.createTitle')}
-          </DialogTitle>
-          <DialogDescription className="text-slate-400">
-            {isEdit ? t('dialog.editDescription') : t('dialog.createDescription')}
-          </DialogDescription>
-        </DialogHeader>
-
-        <form onSubmit={handleSubmit} className="space-y-4">
-          {/* Entity Type */}
-          {!isEdit && (
-            <div className="space-y-2">
-              <Label className="text-slate-300">{t('form.entityType')}</Label>
-              <Select value={entityType} onValueChange={(v) => setEntityType(v as EntityType)}>
-                <SelectTrigger className="border-slate-700 bg-slate-800 text-white">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent className="border-slate-700 bg-slate-800">
-                  <SelectItem value="personal">{t('form.personal')}</SelectItem>
-                  <SelectItem value="business">{t('form.business')}</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          )}
-
-          {/* Business selector */}
-          {entityType === 'business' && !isEdit && (
-            <div className="space-y-2">
-              <Label className="text-slate-300">{t('form.selectBusiness')}</Label>
-              <Select value={businessId} onValueChange={setBusinessId}>
-                <SelectTrigger className="border-slate-700 bg-slate-800 text-white">
-                  <SelectValue placeholder={t('form.selectBusiness')} />
-                </SelectTrigger>
-                <SelectContent className="border-slate-700 bg-slate-800">
-                  {businesses.map((b) => (
-                    <SelectItem key={b.id} value={b.id}>
-                      {b.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          )}
-
-          {/* Bank Name */}
+    <FormDialog
+      open={open}
+      onOpenChange={onOpenChange}
+      title={isEdit ? t('dialog.editTitle') : t('dialog.createTitle')}
+      description={isEdit ? t('dialog.editDescription') : t('dialog.createDescription')}
+      className="max-h-none overflow-y-visible sm:max-w-[500px]"
+    >
+      <form onSubmit={handleSubmit} className="space-y-4">
+        {/* Entity Type */}
+        {!isEdit && (
           <div className="space-y-2">
-            <Label className="text-slate-300">{t('form.bankName')}</Label>
+            <Label className="text-slate-300">{t('form.entityType')}</Label>
+            <Select value={entityType} onValueChange={(v) => setEntityType(v as EntityType)}>
+              <SelectTrigger className="border-slate-700 bg-slate-800 text-white">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent className="border-slate-700 bg-slate-800">
+                <SelectItem value="personal">{t('form.personal')}</SelectItem>
+                <SelectItem value="business">{t('form.business')}</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        )}
+
+        {/* Business selector */}
+        {entityType === 'business' && !isEdit && (
+          <div className="space-y-2">
+            <Label className="text-slate-300">{t('form.selectBusiness')}</Label>
+            <Select value={businessId} onValueChange={setBusinessId}>
+              <SelectTrigger className="border-slate-700 bg-slate-800 text-white">
+                <SelectValue placeholder={t('form.selectBusiness')} />
+              </SelectTrigger>
+              <SelectContent className="border-slate-700 bg-slate-800">
+                {businesses.map((b) => (
+                  <SelectItem key={b.id} value={b.id}>
+                    {b.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
+
+        {/* Bank Name */}
+        <div className="space-y-2">
+          <Label className="text-slate-300">{t('form.bankName')}</Label>
+          <Input
+            value={bankName}
+            onChange={(e) => setBankName(e.target.value)}
+            placeholder={t('form.bankNamePlaceholder')}
+            className="border-slate-700 bg-slate-800 text-white"
+            required
+          />
+        </div>
+
+        {/* Last 4 Digits + Nickname */}
+        <div className="grid grid-cols-2 gap-4">
+          <div className="space-y-2">
+            <Label className="text-slate-300">{t('form.lastFour')}</Label>
             <Input
-              value={bankName}
-              onChange={(e) => setBankName(e.target.value)}
-              placeholder={t('form.bankNamePlaceholder')}
-              className="border-slate-700 bg-slate-800 text-white"
+              value={lastFourDigits}
+              onChange={(e) => {
+                const val = e.target.value.replace(/\D/g, '').slice(0, 4);
+                setLastFourDigits(val);
+              }}
+              placeholder={t('form.lastFourPlaceholder')}
+              className="border-slate-700 bg-slate-800 text-white font-mono"
+              maxLength={4}
               required
             />
           </div>
-
-          {/* Last 4 Digits + Nickname */}
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label className="text-slate-300">{t('form.lastFour')}</Label>
-              <Input
-                value={lastFourDigits}
-                onChange={(e) => {
-                  const val = e.target.value.replace(/\D/g, '').slice(0, 4);
-                  setLastFourDigits(val);
-                }}
-                placeholder={t('form.lastFourPlaceholder')}
-                className="border-slate-700 bg-slate-800 text-white font-mono"
-                maxLength={4}
-                required
-              />
-            </div>
-            <div className="space-y-2">
-              <Label className="text-slate-300">{t('form.nickname')}</Label>
-              <Input
-                value={nickname}
-                onChange={(e) => setNickname(e.target.value)}
-                placeholder={t('form.nicknamePlaceholder')}
-                className="border-slate-700 bg-slate-800 text-white"
-              />
-            </div>
-          </div>
-
-          {/* Credit Limit + Currency */}
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label className="text-slate-300">{t('form.creditLimit')}</Label>
-              <Input
-                type="number"
-                value={creditLimit}
-                onChange={(e) => setCreditLimit(e.target.value)}
-                className="border-slate-700 bg-slate-800 text-white"
-                min="0"
-                step="0.01"
-                required
-              />
-            </div>
-            <div className="space-y-2">
-              <Label className="text-slate-300">{t('form.currency')}</Label>
-              <Select value={currency} onValueChange={setCurrency}>
-                <SelectTrigger className="border-slate-700 bg-slate-800 text-white">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent className="border-slate-700 bg-slate-800">
-                  {currencies.map((c) => (
-                    <SelectItem key={c.code} value={c.code}>
-                      {c.symbol} {c.code}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-
-          {/* Closing Day + Due Day */}
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label className="text-slate-300">{t('form.closingDay')}</Label>
-              <Input
-                type="number"
-                value={closingDay}
-                onChange={(e) => setClosingDay(e.target.value)}
-                className="border-slate-700 bg-slate-800 text-white"
-                min="1"
-                max="31"
-                required
-              />
-            </div>
-            <div className="space-y-2">
-              <Label className="text-slate-300">{t('form.dueDay')}</Label>
-              <Input
-                type="number"
-                value={dueDay}
-                onChange={(e) => setDueDay(e.target.value)}
-                className="border-slate-700 bg-slate-800 text-white"
-                min="1"
-                max="31"
-                required
-              />
-            </div>
-          </div>
-
-          {/* Card Color */}
           <div className="space-y-2">
-            <Label className="text-slate-300">{t('form.color')}</Label>
-            <div className="flex flex-wrap gap-2">
-              {CARD_COLORS.map((c) => (
-                <button
-                  key={c}
-                  type="button"
-                  onClick={() => setColor(c)}
-                  className={cn(
-                    'h-8 w-8 rounded-full border-2 transition-all',
-                    color === c ? 'border-white scale-110' : 'border-transparent'
-                  )}
-                  style={{ backgroundColor: c }}
-                />
-              ))}
-            </div>
+            <Label className="text-slate-300">{t('form.nickname')}</Label>
+            <Input
+              value={nickname}
+              onChange={(e) => setNickname(e.target.value)}
+              placeholder={t('form.nicknamePlaceholder')}
+              className="border-slate-700 bg-slate-800 text-white"
+            />
           </div>
+        </div>
 
-          <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => onOpenChange(false)}
-              className="border-slate-700 text-slate-300 hover:bg-slate-800"
-            >
-              {tCommon('cancel')}
-            </Button>
-            <Button
-              type="submit"
-              disabled={isSubmitting || !bankName || lastFourDigits.length !== 4 || !creditLimit || !closingDay || !dueDay}
-              className="bg-emerald-600 text-white hover:bg-emerald-700"
-            >
-              {isSubmitting ? tCommon('loading') : (isEdit ? tCommon('save') : tCommon('create'))}
-            </Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
+        {/* Credit Limit + Currency */}
+        <div className="grid grid-cols-2 gap-4">
+          <div className="space-y-2">
+            <Label className="text-slate-300">{t('form.creditLimit')}</Label>
+            <Input
+              type="number"
+              value={creditLimit}
+              onChange={(e) => setCreditLimit(e.target.value)}
+              className="border-slate-700 bg-slate-800 text-white"
+              min="0"
+              step="0.01"
+              required
+            />
+          </div>
+          <div className="space-y-2">
+            <Label className="text-slate-300">{t('form.currency')}</Label>
+            <Select value={currency} onValueChange={setCurrency}>
+              <SelectTrigger className="border-slate-700 bg-slate-800 text-white">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent className="border-slate-700 bg-slate-800">
+                {currencies.map((c) => (
+                  <SelectItem key={c.code} value={c.code}>
+                    {c.symbol} {c.code}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+
+        {/* Closing Day + Due Day */}
+        <div className="grid grid-cols-2 gap-4">
+          <div className="space-y-2">
+            <Label className="text-slate-300">{t('form.closingDay')}</Label>
+            <Input
+              type="number"
+              value={closingDay}
+              onChange={(e) => setClosingDay(e.target.value)}
+              className="border-slate-700 bg-slate-800 text-white"
+              min="1"
+              max="31"
+              required
+            />
+          </div>
+          <div className="space-y-2">
+            <Label className="text-slate-300">{t('form.dueDay')}</Label>
+            <Input
+              type="number"
+              value={dueDay}
+              onChange={(e) => setDueDay(e.target.value)}
+              className="border-slate-700 bg-slate-800 text-white"
+              min="1"
+              max="31"
+              required
+            />
+          </div>
+        </div>
+
+        {/* Card Color */}
+        <div className="space-y-2">
+          <Label className="text-slate-300">{t('form.color')}</Label>
+          <div className="flex flex-wrap gap-2">
+            {CARD_COLORS.map((c) => (
+              <button
+                key={c}
+                type="button"
+                onClick={() => setColor(c)}
+                className={cn(
+                  'h-8 w-8 rounded-full border-2 transition-all',
+                  color === c ? 'border-white scale-110' : 'border-transparent'
+                )}
+                style={{ backgroundColor: c }}
+              />
+            ))}
+          </div>
+        </div>
+
+        <DialogFooter>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => onOpenChange(false)}
+            className="border-slate-700 text-slate-300 hover:bg-slate-800"
+          >
+            {tCommon('cancel')}
+          </Button>
+          <Button
+            type="submit"
+            disabled={isLoading || !bankName || lastFourDigits.length !== 4 || !creditLimit || !closingDay || !dueDay}
+            className="bg-emerald-600 text-white hover:bg-emerald-700"
+          >
+            {isLoading ? tCommon('loading') : (isEdit ? tCommon('save') : tCommon('create'))}
+          </Button>
+        </DialogFooter>
+      </form>
+    </FormDialog>
   );
 }

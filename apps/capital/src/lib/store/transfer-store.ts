@@ -17,7 +17,7 @@ interface TransferActions {
     toPersonalAccountId?: string;
   }) => Promise<void>;
   addTransfer: (input: CreateTransferInput) => Promise<Transfer | null>;
-  deleteTransfer: (id: string) => Promise<void>;
+  deleteTransfer: (id: string) => Promise<boolean>;
   deleteTransfersByEntity: (entityId: string) => Promise<void>;
   getTransfersByEntity: (entityId: string) => Transfer[];
   setLoading: (loading: boolean) => void;
@@ -153,11 +153,13 @@ export const useTransferStore = create<TransferStore>()((set, get) => ({
         transfers: state.transfers.filter((t) => t.id !== id),
         isLoading: false,
       }));
+      return true;
     } catch (error) {
       set({
         error: error instanceof Error ? error.message : 'Unknown error',
         isLoading: false,
       });
+      return false;
     }
   },
 

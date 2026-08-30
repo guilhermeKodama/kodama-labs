@@ -50,6 +50,7 @@ import {
 } from '@/lib/store';
 import { formatCurrency } from '@/lib/utils/format';
 import { toast } from 'sonner';
+import { useDialogForm } from '@/hooks/use-dialog-form';
 import type { CreditCard, CreditCardBill, Installment } from '@/types';
 
 export default function CreditCardsPage() {
@@ -174,22 +175,30 @@ export default function CreditCardsPage() {
   };
 
   // Handlers
-  const handleCreateCard = async (data: Parameters<typeof addCreditCard>[0]) => {
-    const result = await addCreditCard(data);
-    if (result) {
-      toast.success(t('creditCards.toast.created'));
-    } else {
-      toast.error('Failed to create credit card');
-    }
+  const openEditDialog = (card: CreditCard) => {
+    setEditingCard(card);
+    setIsCardDialogOpen(true);
   };
 
-  const handleUpdateCard = async (data: Parameters<typeof updateCreditCard>[1]) => {
-    if (editingCard) {
-      await updateCreditCard(editingCard.id, data);
-      setEditingCard(undefined);
-      toast.success(t('creditCards.toast.updated'));
-    }
+  const closeCardDialog = () => {
+    setIsCardDialogOpen(false);
+    setEditingCard(undefined);
   };
+
+  const createCardForm = useDialogForm({
+    onOpenChange: setIsCardDialogOpen,
+    action: addCreditCard,
+    onSuccess: () => toast.success(t('creditCards.toast.created')),
+    errorMessage: t('creditCards.toast.createError'),
+  });
+
+  const updateCardForm = useDialogForm({
+    onOpenChange: closeCardDialog,
+    action: (data: Parameters<typeof updateCreditCard>[1]) =>
+      editingCard ? updateCreditCard(editingCard.id, data) : Promise.resolve(false),
+    onSuccess: () => toast.success(t('creditCards.toast.updated')),
+    errorMessage: t('creditCards.toast.updateError'),
+  });
 
   const handleDeleteCard = async () => {
     if (deletingCard) {
@@ -227,35 +236,42 @@ export default function CreditCardsPage() {
     toast.success(t('creditCards.toast.billLinked'));
   };
 
-  const handleUploadBill = async (data: Parameters<typeof uploadBill>[0] & { createExpense: boolean }) => {
-    const { createExpense: shouldCreateExpense, ...uploadData } = data;
-    const result = await uploadBill(uploadData);
-    if (result) {
-      // Create expense transaction if user chose that option (only for new uploads, not replacements)
-      if (shouldCreateExpense && result.bill && !result.replaced) {
-        const selectedCard = creditCards.find((c: CreditCard) => c.id === data.creditCardId);
-        if (selectedCard) {
-          await createBillExpense({
-            billId: result.bill.id,
-            entityType: selectedCard.entityType,
-            // Use the card's own entity ID for correct association
-            businessId: selectedCard.entityType === 'business' ? selectedCard.entityId : undefined,
-            personalAccountId: selectedCard.entityType === 'personal' ? selectedCard.entityId : undefined,
-            currency: selectedCard.currency,
-            date: data.dueDate,
-          });
-          await fetchTransactions();
-          toast.success(t('creditCards.toast.expenseCreated'));
+  const uploadBillForm = useDialogForm({
+    onOpenChange: setIsUploadDialogOpen,
+    action: async (data: Parameters<typeof uploadBill>[0] & { createExpense: boolean }) => {
+      const { createExpense: shouldCreateExpense, ...uploadData } = data;
+      const result = await uploadBill(uploadData);
+      if (result) {
+        // Create expense transaction if user chose that option (only for new uploads, not replacements)
+        if (shouldCreateExpense && result.bill && !result.replaced) {
+          const selectedCard = creditCards.find((c: CreditCard) => c.id === data.creditCardId);
+          if (selectedCard) {
+            await createBillExpense({
+              billId: result.bill.id,
+              entityType: selectedCard.entityType,
+              // Use the card's own entity ID for correct association
+              businessId: selectedCard.entityType === 'business' ? selectedCard.entityId : undefined,
+              personalAccountId: selectedCard.entityType === 'personal' ? selectedCard.entityId : undefined,
+              currency: selectedCard.currency,
+              date: data.dueDate,
+            });
+            await fetchTransactions();
+            toast.success(t('creditCards.toast.expenseCreated'));
+          }
         }
+        // Refresh data to reflect new installments
+        await fetchInstallments();
       }
+      return result;
+    },
+    onSuccess: (result) => {
       toast.success(result.replaced
         ? t('creditCards.toast.billReplaced')
         : t('creditCards.toast.billUploaded')
       );
-      // Refresh data to reflect new installments
-      await fetchInstallments();
-    }
-  };
+    },
+    errorMessage: t('creditCards.toast.uploadError'),
+  });
 
   // Bills sorted by closing date descending (latest first) for the dropdown
   const sortedBills = useMemo(
@@ -268,16 +284,6 @@ export default function CreditCardsPage() {
   const handleSelectBill = (billId: string) => {
     setSelectedBillId(billId);
     fetchBillTransactions(billId);
-  };
-
-  const openEditDialog = (card: CreditCard) => {
-    setEditingCard(card);
-    setIsCardDialogOpen(true);
-  };
-
-  const closeCardDialog = () => {
-    setIsCardDialogOpen(false);
-    setEditingCard(undefined);
   };
 
   return (
@@ -628,7 +634,8 @@ export default function CreditCardsPage() {
         open={isCardDialogOpen}
         onOpenChange={closeCardDialog}
         card={editingCard}
-        onSubmit={editingCard ? handleUpdateCard : handleCreateCard}
+        onSubmit={editingCard ? updateCardForm.submit : createCardForm.submit}
+        isLoading={editingCard ? updateCardForm.isSubmitting : createCardForm.isSubmitting}
       />
 
       {/* Bill Upload Dialog */}
@@ -638,7 +645,8 @@ export default function CreditCardsPage() {
         creditCards={creditCards}
         bills={bills}
         expenseTransactions={transactions.filter((t) => t.type === 'expense')}
-        onSubmit={handleUploadBill}
+        onSubmit={uploadBillForm.submit}
+        isLoading={uploadBillForm.isSubmitting}
       />
 
       {/* Delete Confirmation */}
