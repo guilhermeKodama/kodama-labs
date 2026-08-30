@@ -314,7 +314,11 @@ export default function FirePage() {
   });
   const handleRemoveMilestone = async (id: string) => {
     if (!summary?.goal) return;
-    await saveGoal(goalToInput(summary.goal, { milestones: summary.goal.milestones.filter((x) => x.id !== id) }));
+    const saved = await saveGoal(
+      goalToInput(summary.goal, { milestones: summary.goal.milestones.filter((x) => x.id !== id) })
+    );
+    if (saved) toast.success(t('milestones.removed'));
+    else toast.error(t('milestones.removeError'));
   };
   const handleAddSnapshot = () => {
     setEditingSnapshot(null);
@@ -335,7 +339,7 @@ export default function FirePage() {
     snapshotForm.submit({ period, currentInvested });
   const handleDeleteSnapshot = async (period: number) => {
     const ok = await deleteSnapshot(period);
-    if (ok) toast.success(t('snapshotDeleted'));
+    if (ok) toast.success(t('history.snapshotDeleted'));
     else toast.error(t('snapshotFailed'));
   };
 
