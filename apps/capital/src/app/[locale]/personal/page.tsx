@@ -83,7 +83,7 @@ export default function PersonalPage() {
   
   const { transactions, addTransaction, updateTransaction, deleteTransaction, fetchTransactions } =
     useTransactionStore();
-  const { transfers, addTransfer, deleteTransfer, fetchTransfers } = useTransferStore();
+  const { transfers, updateTransfer, deleteTransfer, fetchTransfers } = useTransferStore();
   const fetchAttachments = useAttachmentStore((s) => s.fetchByOwnerType);
 
   useEffect(() => {
@@ -268,17 +268,8 @@ export default function PersonalPage() {
 
   const editTransferForm = useDialogForm({
     onOpenChange: closeTransferDialog,
-    action: async (data: CreateTransferFormData) => {
-      if (!editingTransfer) return null;
-      // No PUT /transfers/:id endpoint exists yet, so this is delete-then-recreate.
-      // Bail out (without deleting) if editingTransfer is already gone; bail out
-      // (without a false "success") if the delete succeeds but the recreate fails —
-      // that state is a real, known gap, tracked separately, but at least this
-      // won't lie about it.
-      const deleted = await deleteTransfer(editingTransfer.id);
-      if (!deleted) return null;
-      return addTransfer(data);
-    },
+    action: (data: CreateTransferFormData) =>
+      editingTransfer ? updateTransfer(editingTransfer.id, data) : Promise.resolve(null),
     onSuccess: () => toast.success(t('transfers.toast.updated')),
     errorMessage: t('transfers.toast.editError'),
   });

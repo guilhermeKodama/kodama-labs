@@ -17,6 +17,7 @@ interface TransferActions {
     toPersonalAccountId?: string;
   }) => Promise<void>;
   addTransfer: (input: CreateTransferInput) => Promise<Transfer | null>;
+  updateTransfer: (id: string, input: CreateTransferInput) => Promise<Transfer | null>;
   deleteTransfer: (id: string) => Promise<boolean>;
   deleteTransfersByEntity: (entityId: string) => Promise<void>;
   getTransfersByEntity: (entityId: string) => Transfer[];
@@ -128,6 +129,83 @@ export const useTransferStore = create<TransferStore>()((set, get) => ({
 
       const transfers = get().transfers;
       return transfers[transfers.length - 1] || null;
+    } catch (error) {
+      set({
+        error: error instanceof Error ? error.message : 'Unknown error',
+        isLoading: false,
+      });
+      return null;
+    }
+  },
+
+  // Update transfer via API
+  updateTransfer: async (id: string, input: CreateTransferInput) => {
+    set({ isLoading: true, error: null });
+    try {
+      const isInvestmentDeposit = input.direction === 'investment_deposit';
+      const isInvestmentWithdrawal = input.direction === 'investment_withdrawal';
+
+      // Full replace: explicitly null out the from/to and investment fields that
+      // no longer apply, so switching direction/entity type on edit doesn't leave
+      // stale foreign keys behind.
+      const body: Record<string, unknown> = {
+        fromEntityType: input.fromEntityType,
+        toEntityType: input.toEntityType,
+        direction: input.direction,
+        amount: input.amount,
+        currency: input.currency,
+        exchangeRate: input.exchangeRate,
+        description: input.description ?? null,
+        date: input.date instanceof Date ? input.date.toISOString() : input.date,
+        fromBusinessId: !isInvestmentWithdrawal && input.fromEntityType === 'business' ? input.fromEntityId : null,
+        fromPersonalAccountId: !isInvestmentWithdrawal && input.fromEntityType === 'personal' ? input.fromEntityId : null,
+        toBusinessId: !isInvestmentDeposit && input.toEntityType === 'business' ? input.toEntityId : null,
+        toPersonalAccountId: !isInvestmentDeposit && input.toEntityType === 'personal' ? input.toEntityId : null,
+        toInvestmentAccountId: isInvestmentDeposit ? (input.toInvestmentAccountId ?? null) : null,
+        fromInvestmentAccountId: isInvestmentWithdrawal ? (input.fromInvestmentAccountId ?? null) : null,
+      };
+
+      // Use raw fetch to ensure all fields (including explicit nulls) are sent
+      const baseUrl = typeof window !== 'undefined' ? window.location.origin : '';
+      const res = await fetch(`${baseUrl}/api/v1/transfers/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify(body),
+      });
+
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => null);
+        throw new Error(
+          (errorData as { error?: { message?: string } })?.error?.message
+            || 'Failed to update transfer'
+        );
+      }
+
+      const data = await res.json();
+      const updated: Transfer = {
+        id: data.id,
+        fromEntityId: data.fromBusinessId ?? data.fromPersonalAccountId ?? '',
+        fromEntityType: data.fromEntityType,
+        toEntityId: data.toBusinessId ?? data.toPersonalAccountId ?? '',
+        toEntityType: data.toEntityType,
+        direction: data.direction,
+        amount: data.amount,
+        currency: data.currency,
+        exchangeRate: data.exchangeRate,
+        description: data.description ?? undefined,
+        date: parseLocalDate(data.date),
+        toInvestmentAccountId: data.toInvestmentAccountId ?? undefined,
+        fromInvestmentAccountId: data.fromInvestmentAccountId ?? undefined,
+        createdAt: new Date(data.createdAt),
+        updatedAt: new Date(data.updatedAt),
+      };
+
+      set((state) => ({
+        transfers: state.transfers.map((t) => (t.id === id ? updated : t)),
+        isLoading: false,
+      }));
+      return updated;
     } catch (error) {
       set({
         error: error instanceof Error ? error.message : 'Unknown error',

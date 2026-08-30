@@ -81,7 +81,7 @@ export default function BusinessDetailPage() {
   const { businesses, getBusiness } = useBusinessStore();
   const { transactions, addTransaction, updateTransaction, deleteTransaction, fetchTransactions } =
     useTransactionStore();
-  const { transfers, addTransfer, deleteTransfer, fetchTransfers } = useTransferStore();
+  const { transfers, updateTransfer, deleteTransfer, fetchTransfers } = useTransferStore();
   const { settings, personalAccount } = useSettingsStore();
   const { creditCards } = useCreditCardStore();
   const { recurringTransactions } = useRecurringTransactionStore();
@@ -269,12 +269,8 @@ export default function BusinessDetailPage() {
 
   const editTransferForm = useDialogForm({
     onOpenChange: closeTransferDialog,
-    action: async (data: CreateTransferFormData) => {
-      if (!editingTransfer) return null;
-      const deleted = await deleteTransfer(editingTransfer.id);
-      if (!deleted) return null;
-      return addTransfer(data);
-    },
+    action: (data: CreateTransferFormData) =>
+      editingTransfer ? updateTransfer(editingTransfer.id, data) : Promise.resolve(null),
     onSuccess: () => toast.success(t('transfers.toast.updated')),
     errorMessage: t('transfers.toast.editError'),
   });

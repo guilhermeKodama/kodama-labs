@@ -175,6 +175,29 @@ export async function validateImportPlanPayload(
     }
   }
 
+  // Transfer reconciliation targets must belong to the user.
+  if (payload.transferReconciliations.length > 0) {
+    const ids = payload.transferReconciliations.map((r) => r.existingTransferId);
+    const owned = await db.transfer.findMany({
+      where: {
+        id: { in: ids },
+        OR: [
+          { fromBusiness: { userId } },
+          { fromPersonalAccount: { userId } },
+          { toBusiness: { userId } },
+          { toPersonalAccount: { userId } },
+        ],
+      },
+      select: { id: true },
+    });
+    const ownedIds = new Set(owned.map((t) => t.id));
+    for (const id of ids) {
+      if (!ownedIds.has(id)) {
+        throw new Error(`Transfer reconciliation target ${id} not found or access denied`);
+      }
+    }
+  }
+
   // Bills: exactly one of creditCardId/newCreditCard, the referenced
   // file/card must belong to the user, and warn (not throw) when a bill
   // already exists for the same card+period - processBillCsv will REPLACE
@@ -221,6 +244,7 @@ export async function validateImportPlanPayload(
     payload.investmentTransfers.length === 0 &&
     payload.investmentTransactions.length === 0 &&
     payload.reconciliations.length === 0 &&
+    payload.transferReconciliations.length === 0 &&
     payload.bills.length === 0
   ) {
     warnings.push("This plan has nothing to write - every row was a plain skip.");
