@@ -143,6 +143,8 @@
       "fire": "Independência (FIRE)",
       "addCustom": "Adicionar marco",
       "addCustomHint": "Crie uma meta personalizada com um critério.",
+      "added": "Marco adicionado",
+      "addError": "Falha ao adicionar marco",
       "reachedNow": "Atingido ✓",
       "projectedFor": "Idade {age} · {year}",
       "notProjected": "Fora do horizonte",
@@ -359,7 +361,9 @@
     },
     "toast": {
       "created": "Empresa criada com sucesso!",
+      "createError": "Falha ao criar empresa",
       "updated": "Empresa atualizada com sucesso!",
+      "updateError": "Falha ao atualizar empresa",
       "deleted": "Empresa excluída com sucesso!"
     },
     "notFound": {
@@ -446,6 +450,7 @@
       "created": "Transação adicionada com sucesso!",
       "createError": "Falha ao criar transação",
       "updated": "Transação atualizada com sucesso!",
+      "updateError": "Falha ao atualizar transação",
       "deleted": "Transação excluída com sucesso!"
     }
   },
@@ -516,6 +521,8 @@
     },
     "toast": {
       "created": "Transferência criada com sucesso!",
+      "updated": "Transferência atualizada com sucesso!",
+      "editError": "Falha ao atualizar transferência",
       "deleted": "Transferência excluída com sucesso!",
       "error": "Falha ao criar transferência"
     },
@@ -568,6 +575,7 @@
         "created": "Transferência recorrente criada com sucesso!",
         "createError": "Falha ao criar transferência recorrente",
         "updated": "Transferência recorrente atualizada com sucesso!",
+        "updateError": "Falha ao atualizar transferência recorrente",
         "deleted": "Transferência recorrente excluída com sucesso!",
         "paused": "Transferência recorrente pausada",
         "resumed": "Transferência recorrente retomada",
@@ -1017,6 +1025,7 @@
       "type": "Tipo de Categoria",
       "empty": "Nenhuma categoria personalizada ainda",
       "added": "Categoria adicionada com sucesso!",
+      "addError": "Falha ao adicionar categoria",
       "deleted": "Categoria excluída com sucesso!",
       "deleteTitle": "Excluir Categoria?",
       "deleteDescription": "Tem certeza que deseja excluir a categoria \"{name}\"? Isso não afetará transações existentes."
@@ -1087,6 +1096,7 @@
     "summary": "Converter {amount} {type} em uma transferência de {direction} {preposition} {entity}",
     "converting": "Convertendo...",
     "success": "Transação convertida em transferência",
+    "error": "Falha ao converter transação em transferência",
     "income": "receita",
     "expense": "despesa",
     "to": "para",
@@ -1128,7 +1138,7 @@
   "recurring": {
     "title": "Transações Recorrentes",
     "subtitle": "Gerencie suas receitas e despesas recorrentes",
-    "addRecurring": "Adicionar Recorrente",
+    "addRecurring": "Adicionar Transação Recorrente",
     "list": "Transações Recorrentes",
     "frequencies": {
       "daily": "Diário",
@@ -1151,12 +1161,34 @@
       "endDate": "Data de Término",
       "hasEndDate": "Definir data de término",
       "descriptionPlaceholder": "ex: Aluguel mensal, Assinatura Netflix",
-      "autoGenerate": "Lançar automaticamente",
-      "autoGenerateHint": "A transação é lançada na data de vencimento. Desligue para receber só um lembrete e confirmar você mesmo em Marcar como Pago."
+      "estimatedAmount": "Valor estimado",
+      "mode": {
+        "label": "Como isso deve funcionar?",
+        "auto": {
+          "title": "Automático",
+          "description": "Lançado sozinho, na data de vencimento, com o valor salvo aqui."
+        },
+        "reminder": {
+          "title": "Só lembrete",
+          "description": "Nada é lançado. Avisamos no vencimento e você informa o valor real."
+        }
+      }
+    },
+    "mode": {
+      "auto": "Automático",
+      "reminder": "Lembrete"
+    },
+    "payment": {
+      "title": "Registrar pagamento",
+      "description": "Confirme o valor real pago de {description}.",
+      "estimateHint": "Estimado: {amount}",
+      "amountLabel": "Valor pago",
+      "dateLabel": "Data do pagamento",
+      "confirm": "Registrar pagamento"
     },
     "dialog": {
       "createTitle": "Criar Transação Recorrente",
-      "createDescription": "Configure uma transação que se repete automaticamente.",
+      "createDescription": "Configure algo que se repete. Você escolhe se lançamos sozinhos ou se é só um lembrete.",
       "editTitle": "Editar Transação Recorrente",
       "editDescription": "Atualize os detalhes da transação recorrente."
     },
@@ -1165,6 +1197,7 @@
       "type": "Tipo",
       "entity": "Entidade",
       "frequency": "Frequência",
+      "mode": "Modo",
       "nextDue": "Próximo Vencimento",
       "amount": "Valor",
       "status": "Status"
@@ -1173,13 +1206,13 @@
       "active": "Ativo",
       "paused": "Pausado",
       "dueToday": "Vence Hoje",
-      "overdue": "Atrasado",
-      "manual": "Manual"
+      "overdue": "Atrasado"
     },
     "actions": {
       "pause": "Pausar",
       "resume": "Retomar",
       "markPaid": "Marcar como Pago",
+      "registerPayment": "Registrar pagamento",
       "attach": "Anexar boleto"
     },
     "filter": {
@@ -1190,7 +1223,7 @@
     },
     "empty": {
       "title": "Nenhuma transação recorrente",
-      "description": "Configure transações recorrentes para rastrear automaticamente receitas e despesas regulares."
+      "description": "Cadastre suas receitas e despesas fixas para lançarmos sozinhos no vencimento, ou só para receber um lembrete."
     },
     "delete": {
       "title": "Excluir Transação Recorrente?",
@@ -1208,11 +1241,14 @@
       "created": "Transação recorrente criada!",
       "createError": "Falha ao criar transação recorrente",
       "updated": "Transação recorrente atualizada!",
+      "updateError": "Falha ao atualizar transação recorrente",
       "deleted": "Transação recorrente excluída!",
       "paused": "Transação recorrente pausada",
       "resumed": "Transação recorrente retomada",
       "markedPaid": "Transação registrada e data avançada!",
-      "markPaidError": "Falha ao marcar como pago"
+      "markPaidError": "Falha ao marcar como pago",
+      "paymentRegistered": "Pagamento registrado e data avançada!",
+      "paymentError": "Falha ao registrar pagamento"
     }
   },
   "budgets": {
@@ -1392,6 +1428,7 @@
       "created": "Orçamento criado!",
       "createError": "Falha ao criar orçamento. Ele pode já existir para este período.",
       "updated": "Orçamento atualizado!",
+      "updateError": "Falha ao atualizar orçamento",
       "deleted": "Orçamento excluído!",
       "paused": "Orçamento pausado",
       "resumed": "Orçamento retomado",
@@ -1557,10 +1594,13 @@
     },
     "toast": {
       "created": "Cartão de crédito adicionado!",
+      "createError": "Falha ao criar cartão de crédito",
       "updated": "Cartão de crédito atualizado!",
+      "updateError": "Falha ao atualizar cartão de crédito",
       "deleted": "Cartão de crédito excluído!",
       "billUploaded": "Fatura enviada e categorizada!",
       "billReplaced": "Fatura substituída com sucesso!",
+      "uploadError": "Falha ao enviar a fatura",
       "expenseCreated": "Despesa criada a partir da fatura!",
       "billLinked": "Fatura vinculada à transação!"
     }

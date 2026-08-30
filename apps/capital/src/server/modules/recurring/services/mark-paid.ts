@@ -31,10 +31,18 @@ function getNextOccurrence(
   }
 }
 
+interface MarkPaidOverrides {
+  /** The real amount paid. Reminder entries store an estimate; this is the truth. */
+  amount?: number;
+  /** The date the payment actually happened, if not the scheduled due date. */
+  date?: Date;
+}
+
 export async function markRecurringAsPaid(
   userId: string,
   id: string,
-  db: PrismaClient
+  db: PrismaClient,
+  overrides: MarkPaidOverrides = {}
 ) {
   // Verify ownership through data layer
   const recurring = await fetchRecurringById(userId, id, db);
@@ -48,8 +56,14 @@ export async function markRecurringAsPaid(
   }
 
   const now = new Date();
-  const transactionDate = toNoonUTC(recurring.nextDueDate);
-  const nextDueDate = getNextOccurrence(transactionDate, recurring.frequency);
+  const scheduledDate = toNoonUTC(recurring.nextDueDate);
+  const transactionDate = overrides.date
+    ? toNoonUTC(overrides.date)
+    : scheduledDate;
+  const amount = overrides.amount ?? recurring.amount;
+  // Advance from the SCHEDULED date, not the (possibly late) payment date —
+  // paying a bill three days late must not drag the whole schedule forward.
+  const nextDueDate = getNextOccurrence(scheduledDate, recurring.frequency);
 
   // Use a transaction so the new Transaction + attachment carry-over + recurring
   // advancement either all commit or none do.
@@ -58,7 +72,7 @@ export async function markRecurringAsPaid(
       data: {
         entityType: recurring.entityType,
         type: recurring.type,
-        amount: recurring.amount,
+        amount,
         currency: recurring.currency,
         exchangeRate: recurring.exchangeRate,
         description: recurring.description,

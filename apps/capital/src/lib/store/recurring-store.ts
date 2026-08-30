@@ -36,6 +36,12 @@ interface MarkAsPaidResult {
   recurring: RecurringTransaction;
 }
 
+/** The real amount/date, supplied when confirming a reminder-mode entry. */
+export interface MarkAsPaidOverrides {
+  amount?: number;
+  date?: Date;
+}
+
 interface RecurringTransactionActions {
   fetchRecurringTransactions: (filters?: {
     businessId?: string;
@@ -44,10 +50,10 @@ interface RecurringTransactionActions {
     isActive?: boolean;
   }) => Promise<void>;
   addRecurringTransaction: (input: CreateRecurringTransactionInput) => Promise<RecurringTransaction | null>;
-  updateRecurringTransaction: (id: string, input: UpdateRecurringTransactionInput) => Promise<void>;
+  updateRecurringTransaction: (id: string, input: UpdateRecurringTransactionInput) => Promise<boolean>;
   deleteRecurringTransaction: (id: string) => Promise<void>;
   toggleRecurringTransaction: (id: string) => Promise<void>;
-  markAsPaid: (id: string) => Promise<MarkAsPaidResult | null>;
+  markAsPaid: (id: string, overrides?: MarkAsPaidOverrides) => Promise<MarkAsPaidResult | null>;
   updateLastGeneratedDate: (id: string, date: Date) => Promise<void>;
   getRecurringTransactionsByEntity: (entityId: string, entityType: EntityType) => RecurringTransaction[];
   setLoading: (loading: boolean) => void;
@@ -257,11 +263,13 @@ export const useRecurringTransactionStore = create<RecurringTransactionStore>()(
         ),
         isLoading: false,
       }));
+      return true;
     } catch (error) {
       set({
         error: error instanceof Error ? error.message : 'Unknown error',
         isLoading: false,
       });
+      return false;
     }
   },
 
@@ -323,11 +331,15 @@ export const useRecurringTransactionStore = create<RecurringTransactionStore>()(
   },
 
   // Mark recurring transaction as paid - creates a transaction and advances to next due date
-  markAsPaid: async (id: string) => {
+  markAsPaid: async (id: string, overrides?: MarkAsPaidOverrides) => {
     set({ isLoading: true, error: null });
     try {
       const res = await client.v1.recurring[':id']['mark-paid'].$post({
         param: { id },
+        json: {
+          amount: overrides?.amount,
+          date: overrides?.date ? overrides.date.toISOString() : undefined,
+        },
       });
 
       if (!res.ok) {
