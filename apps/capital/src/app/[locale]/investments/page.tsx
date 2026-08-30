@@ -65,6 +65,7 @@ import { formatCurrency } from '@/lib/utils/format';
 import { convertToBaseCurrency } from '@/lib/utils/currency';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
+import { useDialogForm } from '@/hooks/use-dialog-form';
 import type {
   InvestmentAccount,
   InvestmentHolding,
@@ -99,6 +100,7 @@ export default function InvestmentsPage() {
     updateHolding,
     deleteHolding,
     addTransaction,
+    updateTransaction,
     deleteTransaction,
   } = useInvestmentStore();
   const { addTransfer } = useTransferStore();
@@ -210,44 +212,73 @@ export default function InvestmentsPage() {
       .sort((a, b) => b.total - a.total);
   }, [holdingsByAssetClass, totals.total]);
 
+  // ---- Dialog close helpers (close + clear whichever "editing" state the
+  // dialog was showing, so a failed submit leaves it open with the same
+  // record still loaded, and a cancel/backdrop dismissal doesn't leave stale
+  // "editing" state around for next time the dialog opens in create mode) ----
+
+  const closeAccountDialog = () => {
+    setIsAccountDialogOpen(false);
+    setEditingAccount(undefined);
+  };
+
+  const closeHoldingDialog = () => {
+    setIsHoldingDialogOpen(false);
+    setEditingHolding(undefined);
+  };
+
+  const closeTransactionDialog = () => {
+    setIsTransactionDialogOpen(false);
+    setEditingTransaction(undefined);
+  };
+
+  const closeFundWithdrawDialog = (open: boolean) => {
+    if (!open) setFundWithdrawAccount(null);
+  };
+
+  const closeRebalanceDialog = (open: boolean) => {
+    if (!open) setRebalancingHolding(null);
+  };
+
   // ---- Handlers ----
 
-  const handleCreateAccount = async (data: CreateInvestmentAccountFormData) => {
-    const result = await addAccount({
-      name: data.name,
-      broker: data.broker || undefined,
-      entityType: data.entityType,
-      currency: data.currency,
-      businessId: data.entityType === 'business' ? data.entityId : undefined,
-      personalAccountId: data.entityType === 'personal' ? data.entityId : undefined,
-    });
-    if (result) {
-      toast.success(t('investments.accounts.toast.created'));
-    } else {
-      toast.error('Failed to create account');
-    }
-  };
-
-  const handleUpdateAccount = async (data: CreateInvestmentAccountFormData) => {
-    if (editingAccount) {
-      await updateAccount(editingAccount.id, {
+  const createAccountForm = useDialogForm({
+    onOpenChange: setIsAccountDialogOpen,
+    action: (data: CreateInvestmentAccountFormData) =>
+      addAccount({
         name: data.name,
         broker: data.broker || undefined,
+        entityType: data.entityType,
         currency: data.currency,
-      });
-      setEditingAccount(undefined);
-      toast.success(t('investments.accounts.toast.updated'));
-    }
-  };
+        businessId: data.entityType === 'business' ? data.entityId : undefined,
+        personalAccountId: data.entityType === 'personal' ? data.entityId : undefined,
+      }),
+    onSuccess: () => toast.success(t('investments.accounts.toast.created')),
+    errorMessage: 'Failed to create account',
+  });
+
+  const updateAccountForm = useDialogForm({
+    onOpenChange: closeAccountDialog,
+    action: (data: CreateInvestmentAccountFormData) =>
+      editingAccount
+        ? updateAccount(editingAccount.id, {
+            name: data.name,
+            broker: data.broker || undefined,
+            currency: data.currency,
+          })
+        : Promise.resolve(false),
+    onSuccess: () => toast.success(t('investments.accounts.toast.updated')),
+    errorMessage: 'Failed to update account',
+  });
 
   const handleCreateHolding = async (data: CreateInvestmentHoldingFormData) => {
     const result = await addHolding(data);
-    if (!result) {
-      toast.error('Failed to create holding');
-      return;
-    }
+    if (!result) return null;
 
-    // If initial position fields are filled, create an initial transaction
+    // If initial position fields are filled, create an initial transaction.
+    // The holding row itself already saved at this point, so this is still
+    // treated as an overall success (close + success toast) even if this
+    // secondary step fails — it just gets its own separate error toast.
     if (data.initialAmount && data.initialAmount > 0) {
       const isTickerAsset = ['stocks', 'fii', 'etf', 'bdr', 'crypto', 'international_stocks', 'international_etf'].includes(data.assetClass);
       const txResult = await addTransaction({
@@ -261,37 +292,75 @@ export default function InvestmentsPage() {
       });
       if (!txResult) {
         toast.error('Holding created but failed to set initial position');
-        return;
+      } else {
+        fetchPortfolioSummary();
       }
-      fetchPortfolioSummary();
     }
 
-    toast.success(t('investments.holdings.toast.created'));
+    return result;
   };
 
-  const handleUpdateHolding = async (data: CreateInvestmentHoldingFormData) => {
-    if (editingHolding) {
-      await updateHolding(editingHolding.id, {
-        name: data.name,
-        ticker: data.ticker,
-        assetClass: data.assetClass,
-        subType: data.subType,
-        currency: data.currency,
-      });
-      setEditingHolding(undefined);
-      toast.success(t('investments.holdings.toast.updated'));
-    }
-  };
+  const createHoldingForm = useDialogForm({
+    onOpenChange: setIsHoldingDialogOpen,
+    action: handleCreateHolding,
+    onSuccess: () => toast.success(t('investments.holdings.toast.created')),
+    errorMessage: 'Failed to create holding',
+  });
+
+  const updateHoldingForm = useDialogForm({
+    onOpenChange: closeHoldingDialog,
+    action: (data: CreateInvestmentHoldingFormData) =>
+      editingHolding
+        ? updateHolding(editingHolding.id, {
+            name: data.name,
+            ticker: data.ticker,
+            assetClass: data.assetClass,
+            subType: data.subType,
+            currency: data.currency,
+          })
+        : Promise.resolve(false),
+    onSuccess: () => toast.success(t('investments.holdings.toast.updated')),
+    errorMessage: 'Failed to update holding',
+  });
 
   const handleCreateTransaction = async (data: CreateInvestmentTransactionFormData) => {
     const result = await addTransaction(data);
     if (result) {
-      toast.success(t('investments.transactions.toast.created'));
       fetchPortfolioSummary();
-    } else {
-      toast.error('Failed to create transaction');
     }
+    return result;
   };
+
+  const createTransactionForm = useDialogForm({
+    onOpenChange: closeTransactionDialog,
+    action: handleCreateTransaction,
+    onSuccess: () => toast.success(t('investments.transactions.toast.created')),
+    errorMessage: 'Failed to create transaction',
+  });
+
+  const handleUpdateTransaction = async (data: CreateInvestmentTransactionFormData) => {
+    if (!editingTransaction) return false;
+    const success = await updateTransaction(editingTransaction.id, {
+      type: data.type,
+      quantity: data.quantity,
+      pricePerUnit: data.pricePerUnit,
+      totalAmount: data.totalAmount,
+      fees: data.fees,
+      date: data.date,
+      notes: data.notes,
+    });
+    if (success) {
+      fetchPortfolioSummary();
+    }
+    return success;
+  };
+
+  const updateTransactionForm = useDialogForm({
+    onOpenChange: closeTransactionDialog,
+    action: handleUpdateTransaction,
+    onSuccess: () => toast.success(t('investments.transactions.toast.updated')),
+    errorMessage: 'Failed to update transaction',
+  });
 
   const handleDeleteConfirm = async () => {
     if (!deletingItem) return;
@@ -358,6 +427,16 @@ export default function InvestmentsPage() {
     return !!result;
   };
 
+  // handleFundWithdraw already shows its own success/error toast above, so
+  // this only needs the hook for the shared loading + close-on-success wiring.
+  const fundWithdrawForm = useDialogForm({
+    onOpenChange: closeFundWithdrawDialog,
+    action: (payload: {
+      accountId: string;
+      data: { amount: number; currency: string; exchangeRate?: number; description?: string; date: Date };
+    }) => handleFundWithdraw(payload.accountId, payload.data),
+  });
+
   const handleRebalance = async (holdingId: string, adjustmentAmount: number) => {
     const result = await addTransaction({
       holdingId,
@@ -375,6 +454,14 @@ export default function InvestmentsPage() {
     toast.error(t('investments.rebalance.toast.error'));
     return false;
   };
+
+  // handleRebalance already shows its own success/error toast above, so this
+  // only needs the hook for the shared loading + close-on-success wiring.
+  const rebalanceForm = useDialogForm({
+    onOpenChange: closeRebalanceDialog,
+    action: (payload: { holdingId: string; adjustmentAmount: number }) =>
+      handleRebalance(payload.holdingId, payload.adjustmentAmount),
+  });
 
   // ---- Action buttons for header ----
   const getHeaderAction = () => {
@@ -826,51 +913,43 @@ export default function InvestmentsPage() {
       {/* Dialogs */}
       <InvestmentAccountDialog
         open={isAccountDialogOpen}
-        onOpenChange={(open) => {
-          setIsAccountDialogOpen(open);
-          if (!open) setEditingAccount(undefined);
-        }}
+        onOpenChange={closeAccountDialog}
         account={editingAccount}
-        onSubmit={editingAccount ? handleUpdateAccount : handleCreateAccount}
+        onSubmit={editingAccount ? updateAccountForm.submit : createAccountForm.submit}
+        isLoading={editingAccount ? updateAccountForm.isSubmitting : createAccountForm.isSubmitting}
       />
 
       <InvestmentHoldingDialog
         open={isHoldingDialogOpen}
-        onOpenChange={(open) => {
-          setIsHoldingDialogOpen(open);
-          if (!open) setEditingHolding(undefined);
-        }}
+        onOpenChange={closeHoldingDialog}
         holding={editingHolding}
-        onSubmit={editingHolding ? handleUpdateHolding : handleCreateHolding}
+        onSubmit={editingHolding ? updateHoldingForm.submit : createHoldingForm.submit}
+        isLoading={editingHolding ? updateHoldingForm.isSubmitting : createHoldingForm.isSubmitting}
       />
 
       <InvestmentTransactionDialog
         open={isTransactionDialogOpen}
-        onOpenChange={(open) => {
-          setIsTransactionDialogOpen(open);
-          if (!open) setEditingTransaction(undefined);
-        }}
+        onOpenChange={closeTransactionDialog}
         transaction={editingTransaction}
-        onSubmit={handleCreateTransaction}
+        onSubmit={editingTransaction ? updateTransactionForm.submit : createTransactionForm.submit}
+        isLoading={editingTransaction ? updateTransactionForm.isSubmitting : createTransactionForm.isSubmitting}
       />
 
       <FundWithdrawDialog
         open={!!fundWithdrawAccount}
-        onOpenChange={(open) => {
-          if (!open) setFundWithdrawAccount(null);
-        }}
+        onOpenChange={closeFundWithdrawDialog}
         account={fundWithdrawAccount}
         mode={fundWithdrawMode}
-        onSubmit={handleFundWithdraw}
+        onSubmit={(accountId, data) => fundWithdrawForm.submit({ accountId, data })}
+        isLoading={fundWithdrawForm.isSubmitting}
       />
 
       <RebalanceDialog
         open={!!rebalancingHolding}
-        onOpenChange={(open) => {
-          if (!open) setRebalancingHolding(null);
-        }}
+        onOpenChange={closeRebalanceDialog}
         holding={rebalancingHolding}
-        onSubmit={handleRebalance}
+        onSubmit={(holdingId, adjustmentAmount) => rebalanceForm.submit({ holdingId, adjustmentAmount })}
+        isLoading={rebalanceForm.isSubmitting}
       />
 
       {/* Delete Confirmation */}
