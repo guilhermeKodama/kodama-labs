@@ -56,11 +56,11 @@ export function SummaryCard({
 
   return (
     <Card className="border-slate-800 bg-slate-900/50 backdrop-blur-sm">
-      <CardContent className="p-6">
+      <CardContent className="p-4 sm:p-6">
         <div className="flex items-start justify-between">
           <div className="space-y-2">
             <p className="text-sm font-medium text-slate-400">{title}</p>
-            <p className="text-2xl font-bold text-white">{displayValue}</p>
+            <p className="text-xl font-bold text-white sm:text-2xl">{displayValue}</p>
             {trend && (
               <p
                 className={cn(
@@ -75,11 +75,11 @@ export function SummaryCard({
           </div>
           <div
             className={cn(
-              'flex h-12 w-12 items-center justify-center rounded-lg bg-gradient-to-br',
+              'flex size-10 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br sm:size-12',
               styles.icon
             )}
           >
-            <Icon className={cn('h-6 w-6', styles.iconColor)} />
+            <Icon className={cn('h-5 w-5 sm:h-6 sm:w-6', styles.iconColor)} />
           </div>
         </div>
       </CardContent>

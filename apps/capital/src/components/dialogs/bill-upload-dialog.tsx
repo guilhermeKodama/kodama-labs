@@ -121,7 +121,7 @@ export function BillUploadDialog({
       onOpenChange={onOpenChange}
       title={t('upload.title')}
       description={t('upload.description')}
-      className="max-h-none overflow-y-visible sm:max-w-[550px]"
+      className="sm:max-w-[550px]"
     >
       <form onSubmit={handleSubmit} className="space-y-4">
         {/* Credit Card selector */}
@@ -176,7 +176,7 @@ export function BillUploadDialog({
         </div>
 
         {/* Closing Date + Due Date */}
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div className="space-y-2">
             <Label className="text-slate-300">{t('upload.closingDate')}</Label>
             <Input

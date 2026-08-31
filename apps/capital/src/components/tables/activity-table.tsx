@@ -37,6 +37,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { MobileList, MobileListItem } from '@/components/tables/mobile-list';
 import { cn } from '@/lib/utils';
 import { formatCurrency, formatDate } from '@/lib/utils/format';
 import { AttachmentBadge } from '@/components/attachments/attachment-badge';
@@ -104,6 +105,155 @@ type FilterType = 'all' | 'income' | 'expense' | 'investment' | 'transfer';
 type SortField = 'date' | 'amount';
 type SortDirection = 'asc' | 'desc';
 
+/** Per-item display properties shared by the desktop row and the mobile card. */
+function getItemDisplay(item: ActivityItem, t: ReturnType<typeof useTranslations>) {
+  const isTransaction = item.type === 'transaction';
+  const isTransfer = item.type === 'transfer';
+  const isIncoming = item.transferDirection === 'incoming';
+
+  let Icon = ArrowLeftRight;
+  let badgeColor = 'text-purple-400';
+  let badgeBg = 'bg-purple-500/10';
+  let typeLabel = '';
+  let amountPrefix = '';
+  let amountColor = 'text-white';
+
+  if (isTransaction && item.transactionType) {
+    const config = transactionTypeConfig[item.transactionType];
+    Icon = config.icon;
+    badgeColor = config.color;
+    badgeBg = config.bgColor;
+    typeLabel = t(`transactions.types.${item.transactionType}`);
+    amountPrefix = item.transactionType === 'expense' ? '-' : '+';
+    amountColor = item.transactionType === 'expense' ? 'text-red-400' : 'text-white';
+  } else if (isTransfer) {
+    Icon = ArrowLeftRight;
+    badgeColor = 'text-purple-400';
+    badgeBg = 'bg-purple-500/10';
+    typeLabel = isIncoming
+      ? t('activity.incomingTransfer')
+      : t('activity.outgoingTransfer');
+    amountPrefix = isIncoming ? '+' : '-';
+    amountColor = isIncoming ? 'text-emerald-400' : 'text-red-400';
+  }
+
+  return { isTransaction, isTransfer, isIncoming, Icon, badgeColor, badgeBg, typeLabel, amountPrefix, amountColor };
+}
+
+interface RowActionsProps {
+  item: ActivityItem;
+  isTransaction: boolean;
+  isTransfer: boolean;
+  onEditTransaction?: (transaction: Transaction) => void;
+  onDeleteTransaction?: (transaction: Transaction) => void;
+  onAttachTransaction?: (transaction: Transaction) => void;
+  onConvertToTransfer?: (transaction: Transaction) => void;
+  onEditTransfer?: (transfer: Transfer) => void;
+  onDeleteTransfer?: (transfer: Transfer) => void;
+  onAttachTransfer?: (transfer: Transfer) => void;
+}
+
+/** The row-level actions menu, shared by the desktop table and the mobile card list. */
+function RowActions({
+  item,
+  isTransaction,
+  isTransfer,
+  onEditTransaction,
+  onDeleteTransaction,
+  onAttachTransaction,
+  onConvertToTransfer,
+  onEditTransfer,
+  onDeleteTransfer,
+  onAttachTransfer,
+}: RowActionsProps) {
+  const t = useTranslations();
+
+  const hasActions =
+    (isTransaction && (onEditTransaction || onDeleteTransaction || onAttachTransaction || onConvertToTransfer)) ||
+    (isTransfer && (onEditTransfer || onDeleteTransfer || onAttachTransfer));
+
+  if (!hasActions) return null;
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="size-9 text-slate-400 hover:bg-slate-800 hover:text-white md:size-8"
+        >
+          <MoreVertical className="h-4 w-4" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="border-slate-700 bg-slate-900">
+        {isTransaction && onAttachTransaction && item.originalTransaction && (
+          <DropdownMenuItem
+            onClick={() => onAttachTransaction(item.originalTransaction!)}
+            className="text-slate-300 focus:bg-slate-800 focus:text-white"
+          >
+            <Paperclip className="mr-2 h-4 w-4" />
+            {t('transactions.table.attach')}
+          </DropdownMenuItem>
+        )}
+        {isTransaction && onEditTransaction && item.originalTransaction && (
+          <DropdownMenuItem
+            onClick={() => onEditTransaction(item.originalTransaction!)}
+            className="text-slate-300 focus:bg-slate-800 focus:text-white"
+          >
+            <Pencil className="mr-2 h-4 w-4" />
+            {t('common.edit')}
+          </DropdownMenuItem>
+        )}
+        {isTransaction && onConvertToTransfer && item.originalTransaction && (
+          <DropdownMenuItem
+            onClick={() => onConvertToTransfer(item.originalTransaction!)}
+            className="text-purple-400 focus:bg-purple-500/10 focus:text-purple-400"
+          >
+            <ArrowLeftRight className="mr-2 h-4 w-4" />
+            {t('activity.convertToTransfer')}
+          </DropdownMenuItem>
+        )}
+        {isTransaction && onDeleteTransaction && item.originalTransaction && (
+          <DropdownMenuItem
+            onClick={() => onDeleteTransaction(item.originalTransaction!)}
+            className="text-red-400 focus:bg-red-500/10 focus:text-red-400"
+          >
+            <Trash2 className="mr-2 h-4 w-4" />
+            {t('common.delete')}
+          </DropdownMenuItem>
+        )}
+        {isTransfer && onAttachTransfer && item.originalTransfer && (
+          <DropdownMenuItem
+            onClick={() => onAttachTransfer(item.originalTransfer!)}
+            className="text-slate-300 focus:bg-slate-800 focus:text-white"
+          >
+            <Paperclip className="mr-2 h-4 w-4" />
+            {t('transfers.actions.attach')}
+          </DropdownMenuItem>
+        )}
+        {isTransfer && onEditTransfer && item.originalTransfer && (
+          <DropdownMenuItem
+            onClick={() => onEditTransfer(item.originalTransfer!)}
+            className="text-slate-300 focus:bg-slate-800 focus:text-white"
+          >
+            <Pencil className="mr-2 h-4 w-4" />
+            {t('common.edit')}
+          </DropdownMenuItem>
+        )}
+        {isTransfer && onDeleteTransfer && item.originalTransfer && (
+          <DropdownMenuItem
+            onClick={() => onDeleteTransfer(item.originalTransfer!)}
+            className="text-red-400 focus:bg-red-500/10 focus:text-red-400"
+          >
+            <Trash2 className="mr-2 h-4 w-4" />
+            {t('common.delete')}
+          </DropdownMenuItem>
+        )}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
 export function ActivityTable({
   transactions,
   transfers = [],
@@ -150,7 +300,7 @@ export function ActivityTable({
     transfers.forEach((tr) => {
       const isIncoming = tr.toEntityId === entityId;
       const isOutgoing = tr.fromEntityId === entityId;
-      
+
       if (!isIncoming && !isOutgoing) return;
 
       // For investment transfers, resolve the counterparty from the investment account
@@ -161,7 +311,7 @@ export function ActivityTable({
         counterpartyName = entityNames[tr.fromInvestmentAccountId] || tr.description || '';
       } else {
         const counterpartyId = isIncoming ? tr.fromEntityId : tr.toEntityId;
-        counterpartyName = entityNames[counterpartyId] || 
+        counterpartyName = entityNames[counterpartyId] ||
           (isIncoming ? t('transfers.form.from') : t('transfers.form.to'));
       }
 
@@ -170,7 +320,7 @@ export function ActivityTable({
         type: 'transfer',
         date: new Date(tr.date),
         description: tr.description || (
-          isIncoming 
+          isIncoming
             ? t('activity.transferFrom', { name: counterpartyName })
             : t('activity.transferTo', { name: counterpartyName })
         ),
@@ -237,6 +387,15 @@ export function ActivityTable({
   }
 
   const hasTransfers = transfers.length > 0;
+  const rowActionHandlers = {
+    onEditTransaction,
+    onDeleteTransaction,
+    onAttachTransaction,
+    onConvertToTransfer,
+    onEditTransfer,
+    onDeleteTransfer,
+    onAttachTransfer,
+  };
 
   return (
     <div className="space-y-4">
@@ -246,7 +405,7 @@ export function ActivityTable({
           value={filterType}
           onValueChange={(value) => setFilterType(value as FilterType)}
         >
-          <SelectTrigger className="w-[180px] border-slate-700 bg-slate-800 text-slate-300">
+          <SelectTrigger className="w-full border-slate-700 bg-slate-800 text-slate-300 sm:w-[180px]">
             <Filter className="mr-2 h-4 w-4" />
             <SelectValue />
           </SelectTrigger>
@@ -287,8 +446,82 @@ export function ActivityTable({
         </Select>
       </div>
 
-      {/* Table */}
-      <div className="rounded-lg border border-slate-800 bg-slate-900/50 overflow-hidden">
+      {/* Mobile: card list */}
+      <MobileList className="md:hidden">
+        {filteredAndSorted.map((item) => {
+          const { isTransaction, isTransfer, isIncoming, Icon, badgeColor, badgeBg, typeLabel, amountPrefix, amountColor } =
+            getItemDisplay(item, t);
+
+          const detail = isTransaction
+            ? item.category ?? typeLabel
+            : isTransfer
+              ? item.counterpartyName
+                ? `${isIncoming ? t('activity.from') : t('activity.to')} ${item.counterpartyName}`
+                : typeLabel
+              : undefined;
+
+          const showApprox = item.currency !== settings.baseCurrency && item.exchangeRate !== 1;
+
+          return (
+            <MobileListItem
+              key={item.id}
+              leading={
+                <span className={cn('flex size-9 items-center justify-center rounded-lg', badgeBg)}>
+                  <Icon className={cn('h-4 w-4', badgeColor)} />
+                </span>
+              }
+              title={item.description}
+              titleExtra={
+                <>
+                  {isTransaction && item.originalTransaction && (
+                    <AttachmentBadge
+                      ownerType="transaction"
+                      ownerId={item.originalTransaction.id}
+                      onClick={
+                        onAttachTransaction
+                          ? () => onAttachTransaction(item.originalTransaction!)
+                          : undefined
+                      }
+                    />
+                  )}
+                  {isTransfer && item.originalTransfer && (
+                    <AttachmentBadge
+                      ownerType="transfer"
+                      ownerId={item.originalTransfer.id}
+                      onClick={
+                        onAttachTransfer ? () => onAttachTransfer(item.originalTransfer!) : undefined
+                      }
+                    />
+                  )}
+                </>
+              }
+              subtitle={
+                <>
+                  {formatDate(item.date)}
+                  {detail ? ` · ${detail}` : ''}
+                </>
+              }
+              trailing={
+                <span className={amountColor}>
+                  {amountPrefix}
+                  {formatCurrency(item.amount, item.currency)}
+                </span>
+              }
+              trailingSub={
+                showApprox
+                  ? `≈ ${formatCurrency(item.amount * item.exchangeRate, settings.baseCurrency)}`
+                  : undefined
+              }
+              actions={
+                <RowActions item={item} isTransaction={isTransaction} isTransfer={isTransfer} {...rowActionHandlers} />
+              }
+            />
+          );
+        })}
+      </MobileList>
+
+      {/* Desktop: table */}
+      <div className="hidden overflow-hidden rounded-lg border border-slate-800 bg-slate-900/50 md:block">
         <Table className="table-fixed">
           <TableHeader>
             <TableRow className="border-slate-800 hover:bg-transparent">
@@ -324,36 +557,8 @@ export function ActivityTable({
           </TableHeader>
           <TableBody>
             {filteredAndSorted.map((item) => {
-              const isTransaction = item.type === 'transaction';
-              const isTransfer = item.type === 'transfer';
-              const isIncoming = item.transferDirection === 'incoming';
-
-              // Determine display properties
-              let Icon = ArrowLeftRight;
-              let badgeColor = 'text-purple-400';
-              let badgeBg = 'bg-purple-500/10';
-              let typeLabel = '';
-              let amountPrefix = '';
-              let amountColor = 'text-white';
-
-              if (isTransaction && item.transactionType) {
-                const config = transactionTypeConfig[item.transactionType];
-                Icon = config.icon;
-                badgeColor = config.color;
-                badgeBg = config.bgColor;
-                typeLabel = t(`transactions.types.${item.transactionType}`);
-                amountPrefix = item.transactionType === 'expense' ? '-' : '+';
-                amountColor = item.transactionType === 'expense' ? 'text-red-400' : 'text-white';
-              } else if (isTransfer) {
-                Icon = ArrowLeftRight;
-                badgeColor = 'text-purple-400';
-                badgeBg = 'bg-purple-500/10';
-                typeLabel = isIncoming 
-                  ? t('activity.incomingTransfer')
-                  : t('activity.outgoingTransfer');
-                amountPrefix = isIncoming ? '+' : '-';
-                amountColor = isIncoming ? 'text-emerald-400' : 'text-red-400';
-              }
+              const { isTransaction, isTransfer, isIncoming, Icon, badgeColor, badgeBg, typeLabel, amountPrefix, amountColor } =
+                getItemDisplay(item, t);
 
               return (
                 <TableRow
@@ -456,88 +661,7 @@ export function ActivityTable({
                   </TableCell>
                   {(onEditTransaction || onDeleteTransaction || onAttachTransaction || onConvertToTransfer || onEditTransfer || onDeleteTransfer || onAttachTransfer) && (
                     <TableCell>
-                      {(isTransaction && (onEditTransaction || onDeleteTransaction || onAttachTransaction || onConvertToTransfer)) ||
-                       (isTransfer && (onEditTransfer || onDeleteTransfer || onAttachTransfer)) ? (
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-8 w-8 text-slate-400 hover:bg-slate-800 hover:text-white"
-                            >
-                              <MoreVertical className="h-4 w-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent
-                            align="end"
-                            className="border-slate-700 bg-slate-900"
-                          >
-                            {isTransaction && onAttachTransaction && item.originalTransaction && (
-                              <DropdownMenuItem
-                                onClick={() => onAttachTransaction(item.originalTransaction!)}
-                                className="text-slate-300 focus:bg-slate-800 focus:text-white"
-                              >
-                                <Paperclip className="mr-2 h-4 w-4" />
-                                {t('transactions.table.attach')}
-                              </DropdownMenuItem>
-                            )}
-                            {isTransaction && onEditTransaction && item.originalTransaction && (
-                              <DropdownMenuItem
-                                onClick={() => onEditTransaction(item.originalTransaction!)}
-                                className="text-slate-300 focus:bg-slate-800 focus:text-white"
-                              >
-                                <Pencil className="mr-2 h-4 w-4" />
-                                {t('common.edit')}
-                              </DropdownMenuItem>
-                            )}
-                            {isTransaction && onConvertToTransfer && item.originalTransaction && (
-                              <DropdownMenuItem
-                                onClick={() => onConvertToTransfer(item.originalTransaction!)}
-                                className="text-purple-400 focus:bg-purple-500/10 focus:text-purple-400"
-                              >
-                                <ArrowLeftRight className="mr-2 h-4 w-4" />
-                                {t('activity.convertToTransfer')}
-                              </DropdownMenuItem>
-                            )}
-                            {isTransaction && onDeleteTransaction && item.originalTransaction && (
-                              <DropdownMenuItem
-                                onClick={() => onDeleteTransaction(item.originalTransaction!)}
-                                className="text-red-400 focus:bg-red-500/10 focus:text-red-400"
-                              >
-                                <Trash2 className="mr-2 h-4 w-4" />
-                                {t('common.delete')}
-                              </DropdownMenuItem>
-                            )}
-                            {isTransfer && onAttachTransfer && item.originalTransfer && (
-                              <DropdownMenuItem
-                                onClick={() => onAttachTransfer(item.originalTransfer!)}
-                                className="text-slate-300 focus:bg-slate-800 focus:text-white"
-                              >
-                                <Paperclip className="mr-2 h-4 w-4" />
-                                {t('transfers.actions.attach')}
-                              </DropdownMenuItem>
-                            )}
-                            {isTransfer && onEditTransfer && item.originalTransfer && (
-                              <DropdownMenuItem
-                                onClick={() => onEditTransfer(item.originalTransfer!)}
-                                className="text-slate-300 focus:bg-slate-800 focus:text-white"
-                              >
-                                <Pencil className="mr-2 h-4 w-4" />
-                                {t('common.edit')}
-                              </DropdownMenuItem>
-                            )}
-                            {isTransfer && onDeleteTransfer && item.originalTransfer && (
-                              <DropdownMenuItem
-                                onClick={() => onDeleteTransfer(item.originalTransfer!)}
-                                className="text-red-400 focus:bg-red-500/10 focus:text-red-400"
-                              >
-                                <Trash2 className="mr-2 h-4 w-4" />
-                                {t('common.delete')}
-                              </DropdownMenuItem>
-                            )}
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      ) : null}
+                      <RowActions item={item} isTransaction={isTransaction} isTransfer={isTransfer} {...rowActionHandlers} />
                     </TableCell>
                   )}
                 </TableRow>

@@ -346,7 +346,7 @@ export function ConvertToTransferDialog({
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="max-h-[90vh] overflow-y-auto border-slate-800 bg-slate-900 sm:max-w-md">
+      <DialogContent className="max-h-[90dvh] overflow-y-auto border-slate-800 bg-slate-900 sm:max-w-md">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-white">
             <ArrowLeftRight className="h-5 w-5 text-purple-400" />

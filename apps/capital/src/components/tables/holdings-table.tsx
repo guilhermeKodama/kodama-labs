@@ -78,7 +78,7 @@ export function HoldingsTable({
 
   return (
     <div className="overflow-x-auto">
-      <Table>
+      <Table className="min-w-[900px]">
         <TableHeader>
           <TableRow className="border-slate-800 hover:bg-transparent">
             <TableHead className="text-slate-400">Asset</TableHead>

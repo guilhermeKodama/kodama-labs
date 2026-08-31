@@ -10,8 +10,6 @@ import { cn } from '@/lib/utils';
 
 interface AppShellProps {
   children: React.ReactNode;
-  /** Skip the centered max-width padding wrapper for pages that own their own layout (e.g. the chat, which needs an edge-to-edge, internally-scrolling column). */
-  fullBleed?: boolean;
 }
 
 // Custom hook to track client-side mounting without setState in effect
@@ -23,7 +21,7 @@ function useIsMounted() {
   );
 }
 
-export function AppShell({ children, fullBleed = false }: AppShellProps) {
+export function AppShell({ children }: AppShellProps) {
   const { isInitialized } = useSettingsStore();
   const { sidebarCollapsed } = useUIStore();
   const { isAuthenticated } = useUser();
@@ -53,22 +51,11 @@ export function AppShell({ children, fullBleed = false }: AppShellProps) {
       {/* Main content — margin tracks sidebar width on desktop. */}
       <main
         className={cn(
-          'pb-20 transition-[margin] duration-200 ease-out lg:pb-0',
-          sidebarCollapsed ? 'lg:ml-16' : 'lg:ml-64'
+          'pb-safe-nav transition-[margin] duration-200 ease-out md:pb-0',
+          sidebarCollapsed ? 'md:ml-16' : 'md:ml-64'
         )}
       >
-        {fullBleed ? (
-          <div className="h-[calc(100dvh-4rem)] lg:h-dvh">{children}</div>
-        ) : (
-          <div
-            className={cn(
-              'mx-auto p-4 sm:p-6 lg:p-8',
-              sidebarCollapsed ? 'max-w-[1800px]' : 'max-w-7xl'
-            )}
-          >
-            {children}
-          </div>
-        )}
+        {children}
       </main>
 
       {/* Onboarding dialog */}

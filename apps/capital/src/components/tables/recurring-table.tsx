@@ -37,6 +37,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { MobileList, MobileListItem } from '@/components/tables/mobile-list';
 import { cn } from '@/lib/utils';
 import { formatCurrency } from '@/lib/utils/format';
 import type { RecurringTransaction, TransactionType } from '@/types';
@@ -111,6 +112,108 @@ function getDueStatus(nextDueDate: Date): 'overdue' | 'due-today' | 'upcoming' {
   return 'upcoming';
 }
 
+interface RowActionsProps {
+  recurring: RecurringTransaction;
+  onEdit?: (recurring: RecurringTransaction) => void;
+  onDelete?: (recurring: RecurringTransaction) => void;
+  onToggle?: (recurring: RecurringTransaction) => void;
+  onAttach?: (recurring: RecurringTransaction) => void;
+  onSettle?: (recurring: RecurringTransaction) => void;
+  settleLabel: string;
+  SettleIcon: typeof Check;
+  isBeingMarkedPaid: boolean;
+}
+
+/** The row-level actions menu, shared by the desktop table and the mobile card list. */
+function RowActions({
+  recurring,
+  onEdit,
+  onDelete,
+  onToggle,
+  onAttach,
+  onSettle,
+  settleLabel,
+  SettleIcon,
+  isBeingMarkedPaid,
+}: RowActionsProps) {
+  const t = useTranslations('recurring');
+  const tCommon = useTranslations('common');
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="size-9 text-slate-400 hover:bg-slate-800 hover:text-white md:size-8"
+        >
+          <MoreVertical className="h-4 w-4" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="border-slate-700 bg-slate-900">
+        {onSettle && recurring.isActive && (
+          <DropdownMenuItem
+            onClick={() => onSettle(recurring)}
+            disabled={isBeingMarkedPaid}
+            className="text-emerald-400 focus:bg-emerald-500/10 focus:text-emerald-400"
+          >
+            <SettleIcon className="mr-2 h-4 w-4" />
+            {settleLabel}
+          </DropdownMenuItem>
+        )}
+        {onToggle && (
+          <DropdownMenuItem
+            onClick={() => onToggle(recurring)}
+            className="text-slate-300 focus:bg-slate-800 focus:text-white"
+          >
+            {recurring.isActive ? (
+              <>
+                <Pause className="mr-2 h-4 w-4" />
+                {t('actions.pause')}
+              </>
+            ) : (
+              <>
+                <Play className="mr-2 h-4 w-4" />
+                {t('actions.resume')}
+              </>
+            )}
+          </DropdownMenuItem>
+        )}
+        {onAttach && (
+          <DropdownMenuItem
+            onClick={() => onAttach(recurring)}
+            className="text-slate-300 focus:bg-slate-800 focus:text-white"
+          >
+            <Paperclip className="mr-2 h-4 w-4" />
+            {t('actions.attach')}
+          </DropdownMenuItem>
+        )}
+        {onEdit && (
+          <DropdownMenuItem
+            onClick={() => onEdit(recurring)}
+            className="text-slate-300 focus:bg-slate-800 focus:text-white"
+          >
+            <Pencil className="mr-2 h-4 w-4" />
+            {tCommon('edit')}
+          </DropdownMenuItem>
+        )}
+        {onDelete && (
+          <>
+            <DropdownMenuSeparator className="bg-slate-700" />
+            <DropdownMenuItem
+              onClick={() => onDelete(recurring)}
+              className="text-red-400 focus:bg-red-500/10 focus:text-red-400"
+            >
+              <Trash2 className="mr-2 h-4 w-4" />
+              {tCommon('delete')}
+            </DropdownMenuItem>
+          </>
+        )}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
 export function RecurringTable({
   recurringTransactions,
   onEdit,
@@ -155,222 +258,243 @@ export function RecurringTable({
   }
 
   return (
-    <div className="rounded-lg border border-slate-800 bg-slate-900/50">
-      <Table>
-        <TableHeader>
-          <TableRow className="border-slate-800 hover:bg-transparent">
-            <TableHead className="text-slate-400">{t('table.description')}</TableHead>
-            <TableHead className="text-slate-400">{t('table.type')}</TableHead>
-            <TableHead className="text-slate-400">{t('table.entity')}</TableHead>
-            <TableHead className="text-slate-400">{t('table.frequency')}</TableHead>
-            <TableHead className="text-slate-400">{t('table.mode')}</TableHead>
-            <TableHead className="text-slate-400">{t('table.nextDue')}</TableHead>
-            <TableHead className="text-right text-slate-400">{t('table.amount')}</TableHead>
-            <TableHead className="text-slate-400">{t('table.status')}</TableHead>
-            <TableHead className="w-[50px]"></TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {sortedRecurringTransactions.map((recurring) => {
-            const config = typeConfig[recurring.type];
-            const Icon = config.icon;
-            const dueStatus = recurring.isActive ? getDueStatus(new Date(recurring.nextDueDate)) : null;
-            const isBeingMarkedPaid = isMarkingPaid === recurring.id;
-            // Auto rows settle in one click with the saved amount. Reminder rows
-            // store only an estimate, so they open a dialog for the real value.
-            const isAuto = recurring.autoGenerateTransaction;
-            const settleLabel = isAuto ? t('actions.markPaid') : t('actions.registerPayment');
-            const SettleIcon = isAuto ? Check : Banknote;
-            const onSettle = isAuto ? onMarkPaid : onRegisterPayment;
+    <div>
+      {/* Mobile: card list */}
+      <MobileList className="md:hidden">
+        {sortedRecurringTransactions.map((recurring) => {
+          const config = typeConfig[recurring.type];
+          const Icon = config.icon;
+          const dueStatus = recurring.isActive ? getDueStatus(new Date(recurring.nextDueDate)) : null;
+          const isBeingMarkedPaid = isMarkingPaid === recurring.id;
+          const isAuto = recurring.autoGenerateTransaction;
+          const settleLabel = isAuto ? t('actions.markPaid') : t('actions.registerPayment');
+          const SettleIcon = isAuto ? Check : Banknote;
+          const onSettle = isAuto ? onMarkPaid : onRegisterPayment;
 
-            return (
-              <TableRow
-                key={recurring.id}
-                className={cn(
-                  'border-slate-800 hover:bg-slate-800/50',
-                  !recurring.isActive && 'opacity-50',
-                  dueStatus === 'overdue' && 'bg-red-500/5',
-                  dueStatus === 'due-today' && 'bg-amber-500/5'
-                )}
-              >
-                <TableCell className="font-medium text-white">
-                  <div className="flex items-center gap-2">
-                    {dueStatus === 'overdue' && (
-                      <AlertCircle className="h-4 w-4 text-red-400 flex-shrink-0" />
-                    )}
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span>{recurring.description}</span>
-                        <AttachmentBadge
-                          ownerType="recurringTransaction"
-                          ownerId={recurring.id}
-                          onClick={onAttach ? () => onAttach(recurring) : undefined}
-                        />
-                      </div>
-                      <div className="text-xs text-slate-500">{recurring.category}</div>
-                    </div>
-                  </div>
-                </TableCell>
-                <TableCell>
-                  <Badge
-                    variant="outline"
-                    className={cn('border-0', config.bgColor, config.color)}
-                  >
-                    <Icon className="mr-1 h-3 w-3" />
-                    {tTransactions(`types.${recurring.type}`)}
-                  </Badge>
-                </TableCell>
-                <TableCell className="text-slate-300">
-                  {getEntityName(recurring.entityId, recurring.entityType)}
-                </TableCell>
-                <TableCell>
-                  <Badge variant="outline" className="border-slate-700 text-slate-400">
-                    <Repeat className="mr-1 h-3 w-3" />
-                    {t(`frequencies.${recurring.frequency}`)}
-                  </Badge>
-                </TableCell>
-                <TableCell>
-                  {recurring.autoGenerateTransaction ? (
-                    <Badge variant="outline" className="border-0 bg-cyan-500/10 text-cyan-400">
-                      <Zap className="mr-1 h-3 w-3" />
-                      {t('mode.auto')}
-                    </Badge>
-                  ) : (
-                    <Badge variant="outline" className="border-0 bg-purple-500/10 text-purple-400">
-                      <Bell className="mr-1 h-3 w-3" />
-                      {t('mode.reminder')}
-                    </Badge>
+          return (
+            <MobileListItem
+              key={recurring.id}
+              className={cn(
+                !recurring.isActive && 'opacity-50',
+                dueStatus === 'overdue' && 'bg-red-500/5',
+                dueStatus === 'due-today' && 'bg-amber-500/5'
+              )}
+              leading={
+                <span className={cn('flex size-9 items-center justify-center rounded-lg', config.bgColor)}>
+                  <Icon className={cn('h-4 w-4', config.color)} />
+                </span>
+              }
+              title={
+                <>
+                  {dueStatus === 'overdue' && (
+                    <AlertCircle className="mr-1 inline h-3.5 w-3.5 shrink-0 text-red-400" />
                   )}
-                </TableCell>
-                <TableCell>
-                  <div className="flex items-center gap-2">
-                    <div className={cn(
-                      'flex items-center gap-1',
-                      dueStatus === 'overdue' && 'text-red-400',
-                      dueStatus === 'due-today' && 'text-amber-400',
-                      dueStatus === 'upcoming' && 'text-slate-300',
-                      !recurring.isActive && 'text-slate-500'
-                    )}>
-                      <Calendar className="h-3 w-3" />
-                      {formatDateUTC(new Date(recurring.nextDueDate))}
-                    </div>
-                    {dueStatus === 'due-today' && (
-                      <Badge variant="outline" className="border-0 bg-amber-500/10 text-amber-400 text-xs">
-                        {t('status.dueToday')}
-                      </Badge>
-                    )}
-                    {dueStatus === 'overdue' && (
-                      <Badge variant="outline" className="border-0 bg-red-500/10 text-red-400 text-xs">
-                        {t('status.overdue')}
-                      </Badge>
-                    )}
-                  </div>
-                </TableCell>
-                <TableCell
+                  {recurring.description}
+                </>
+              }
+              titleExtra={
+                <AttachmentBadge
+                  ownerType="recurringTransaction"
+                  ownerId={recurring.id}
+                  onClick={onAttach ? () => onAttach(recurring) : undefined}
+                />
+              }
+              subtitle={
+                <span
                   className={cn(
-                    'text-right font-medium',
-                    recurring.type === 'expense' ? 'text-red-400' : 'text-emerald-400'
+                    dueStatus === 'overdue' && 'text-red-400',
+                    dueStatus === 'due-today' && 'text-amber-400'
                   )}
                 >
+                  {t(`frequencies.${recurring.frequency}`)} · {formatDateUTC(new Date(recurring.nextDueDate))}
+                </span>
+              }
+              trailing={
+                <span className={recurring.type === 'expense' ? 'text-red-400' : 'text-emerald-400'}>
                   {!recurring.autoGenerateTransaction && '~'}
                   {formatCurrency(recurring.amount * recurring.exchangeRate, settings.baseCurrency)}
-                </TableCell>
-                <TableCell>
-                  <Badge
-                    variant="outline"
+                </span>
+              }
+              trailingSub={
+                <Badge
+                  variant="outline"
+                  className={cn(
+                    'border-0',
+                    recurring.isActive ? 'bg-emerald-500/10 text-emerald-400' : 'bg-slate-500/10 text-slate-400'
+                  )}
+                >
+                  {recurring.isActive ? t('status.active') : t('status.paused')}
+                </Badge>
+              }
+              actions={
+                <RowActions
+                  recurring={recurring}
+                  onEdit={onEdit}
+                  onDelete={onDelete}
+                  onToggle={onToggle}
+                  onAttach={onAttach}
+                  onSettle={onSettle}
+                  settleLabel={settleLabel}
+                  SettleIcon={SettleIcon}
+                  isBeingMarkedPaid={isBeingMarkedPaid}
+                />
+              }
+            />
+          );
+        })}
+      </MobileList>
+
+      {/* Desktop: table */}
+      <div className="hidden rounded-lg border border-slate-800 bg-slate-900/50 md:block">
+        <Table>
+          <TableHeader>
+            <TableRow className="border-slate-800 hover:bg-transparent">
+              <TableHead className="text-slate-400">{t('table.description')}</TableHead>
+              <TableHead className="text-slate-400">{t('table.type')}</TableHead>
+              <TableHead className="text-slate-400">{t('table.entity')}</TableHead>
+              <TableHead className="text-slate-400">{t('table.frequency')}</TableHead>
+              <TableHead className="text-slate-400">{t('table.mode')}</TableHead>
+              <TableHead className="text-slate-400">{t('table.nextDue')}</TableHead>
+              <TableHead className="text-right text-slate-400">{t('table.amount')}</TableHead>
+              <TableHead className="text-slate-400">{t('table.status')}</TableHead>
+              <TableHead className="w-[50px]"></TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {sortedRecurringTransactions.map((recurring) => {
+              const config = typeConfig[recurring.type];
+              const Icon = config.icon;
+              const dueStatus = recurring.isActive ? getDueStatus(new Date(recurring.nextDueDate)) : null;
+              const isBeingMarkedPaid = isMarkingPaid === recurring.id;
+              const isAuto = recurring.autoGenerateTransaction;
+              const settleLabel = isAuto ? t('actions.markPaid') : t('actions.registerPayment');
+              const SettleIcon = isAuto ? Check : Banknote;
+              const onSettle = isAuto ? onMarkPaid : onRegisterPayment;
+
+              return (
+                <TableRow
+                  key={recurring.id}
+                  className={cn(
+                    'border-slate-800 hover:bg-slate-800/50',
+                    !recurring.isActive && 'opacity-50',
+                    dueStatus === 'overdue' && 'bg-red-500/5',
+                    dueStatus === 'due-today' && 'bg-amber-500/5'
+                  )}
+                >
+                  <TableCell className="font-medium text-white">
+                    <div className="flex items-center gap-2">
+                      {dueStatus === 'overdue' && (
+                        <AlertCircle className="h-4 w-4 text-red-400 flex-shrink-0" />
+                      )}
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span>{recurring.description}</span>
+                          <AttachmentBadge
+                            ownerType="recurringTransaction"
+                            ownerId={recurring.id}
+                            onClick={onAttach ? () => onAttach(recurring) : undefined}
+                          />
+                        </div>
+                        <div className="text-xs text-slate-500">{recurring.category}</div>
+                      </div>
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <Badge
+                      variant="outline"
+                      className={cn('border-0', config.bgColor, config.color)}
+                    >
+                      <Icon className="mr-1 h-3 w-3" />
+                      {tTransactions(`types.${recurring.type}`)}
+                    </Badge>
+                  </TableCell>
+                  <TableCell className="text-slate-300">
+                    {getEntityName(recurring.entityId, recurring.entityType)}
+                  </TableCell>
+                  <TableCell>
+                    <Badge variant="outline" className="border-slate-700 text-slate-400">
+                      <Repeat className="mr-1 h-3 w-3" />
+                      {t(`frequencies.${recurring.frequency}`)}
+                    </Badge>
+                  </TableCell>
+                  <TableCell>
+                    {recurring.autoGenerateTransaction ? (
+                      <Badge variant="outline" className="border-0 bg-cyan-500/10 text-cyan-400">
+                        <Zap className="mr-1 h-3 w-3" />
+                        {t('mode.auto')}
+                      </Badge>
+                    ) : (
+                      <Badge variant="outline" className="border-0 bg-purple-500/10 text-purple-400">
+                        <Bell className="mr-1 h-3 w-3" />
+                        {t('mode.reminder')}
+                      </Badge>
+                    )}
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex items-center gap-2">
+                      <div className={cn(
+                        'flex items-center gap-1',
+                        dueStatus === 'overdue' && 'text-red-400',
+                        dueStatus === 'due-today' && 'text-amber-400',
+                        dueStatus === 'upcoming' && 'text-slate-300',
+                        !recurring.isActive && 'text-slate-500'
+                      )}>
+                        <Calendar className="h-3 w-3" />
+                        {formatDateUTC(new Date(recurring.nextDueDate))}
+                      </div>
+                      {dueStatus === 'due-today' && (
+                        <Badge variant="outline" className="border-0 bg-amber-500/10 text-amber-400 text-xs">
+                          {t('status.dueToday')}
+                        </Badge>
+                      )}
+                      {dueStatus === 'overdue' && (
+                        <Badge variant="outline" className="border-0 bg-red-500/10 text-red-400 text-xs">
+                          {t('status.overdue')}
+                        </Badge>
+                      )}
+                    </div>
+                  </TableCell>
+                  <TableCell
                     className={cn(
-                      'border-0',
-                      recurring.isActive
-                        ? 'bg-emerald-500/10 text-emerald-400'
-                        : 'bg-slate-500/10 text-slate-400'
+                      'text-right font-medium',
+                      recurring.type === 'expense' ? 'text-red-400' : 'text-emerald-400'
                     )}
                   >
-                    {recurring.isActive ? t('status.active') : t('status.paused')}
-                  </Badge>
-                </TableCell>
-                <TableCell>
-                  <div className="flex items-center gap-1">
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8 text-slate-400 hover:bg-slate-800 hover:text-white"
-                        >
-                          <MoreVertical className="h-4 w-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent
-                        align="end"
-                        className="border-slate-700 bg-slate-900"
-                      >
-                        {onSettle && recurring.isActive && (
-                          <DropdownMenuItem
-                            onClick={() => onSettle(recurring)}
-                            disabled={isBeingMarkedPaid}
-                            className="text-emerald-400 focus:bg-emerald-500/10 focus:text-emerald-400"
-                          >
-                            <SettleIcon className="mr-2 h-4 w-4" />
-                            {settleLabel}
-                          </DropdownMenuItem>
-                        )}
-                        {onToggle && (
-                          <DropdownMenuItem
-                            onClick={() => onToggle(recurring)}
-                            className="text-slate-300 focus:bg-slate-800 focus:text-white"
-                          >
-                            {recurring.isActive ? (
-                              <>
-                                <Pause className="mr-2 h-4 w-4" />
-                                {t('actions.pause')}
-                              </>
-                            ) : (
-                              <>
-                                <Play className="mr-2 h-4 w-4" />
-                                {t('actions.resume')}
-                              </>
-                            )}
-                          </DropdownMenuItem>
-                        )}
-                        {onAttach && (
-                          <DropdownMenuItem
-                            onClick={() => onAttach(recurring)}
-                            className="text-slate-300 focus:bg-slate-800 focus:text-white"
-                          >
-                            <Paperclip className="mr-2 h-4 w-4" />
-                            {t('actions.attach')}
-                          </DropdownMenuItem>
-                        )}
-                        {onEdit && (
-                          <DropdownMenuItem
-                            onClick={() => onEdit(recurring)}
-                            className="text-slate-300 focus:bg-slate-800 focus:text-white"
-                          >
-                            <Pencil className="mr-2 h-4 w-4" />
-                            {tCommon('edit')}
-                          </DropdownMenuItem>
-                        )}
-                        {onDelete && (
-                          <>
-                            <DropdownMenuSeparator className="bg-slate-700" />
-                            <DropdownMenuItem
-                              onClick={() => onDelete(recurring)}
-                              className="text-red-400 focus:bg-red-500/10 focus:text-red-400"
-                            >
-                              <Trash2 className="mr-2 h-4 w-4" />
-                              {tCommon('delete')}
-                            </DropdownMenuItem>
-                          </>
-                        )}
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </div>
-                </TableCell>
-              </TableRow>
-            );
-          })}
-        </TableBody>
-      </Table>
+                    {!recurring.autoGenerateTransaction && '~'}
+                    {formatCurrency(recurring.amount * recurring.exchangeRate, settings.baseCurrency)}
+                  </TableCell>
+                  <TableCell>
+                    <Badge
+                      variant="outline"
+                      className={cn(
+                        'border-0',
+                        recurring.isActive
+                          ? 'bg-emerald-500/10 text-emerald-400'
+                          : 'bg-slate-500/10 text-slate-400'
+                      )}
+                    >
+                      {recurring.isActive ? t('status.active') : t('status.paused')}
+                    </Badge>
+                  </TableCell>
+                  <TableCell>
+                    <RowActions
+                      recurring={recurring}
+                      onEdit={onEdit}
+                      onDelete={onDelete}
+                      onToggle={onToggle}
+                      onAttach={onAttach}
+                      onSettle={onSettle}
+                      settleLabel={settleLabel}
+                      SettleIcon={SettleIcon}
+                      isBeingMarkedPaid={isBeingMarkedPaid}
+                    />
+                  </TableCell>
+                </TableRow>
+              );
+            })}
+          </TableBody>
+        </Table>
+      </div>
     </div>
   );
 }

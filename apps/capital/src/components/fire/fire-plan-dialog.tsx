@@ -68,7 +68,7 @@ export function FirePlanDialog(props: FirePlanDialogProps) {
   const t = useTranslations('fire.form');
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[90vh] overflow-y-auto border-slate-800 bg-slate-900 sm:max-w-lg">
+      <DialogContent className="max-h-[90dvh] overflow-y-auto border-slate-800 bg-slate-900 sm:max-w-lg">
         <DialogHeader>
           <DialogTitle className="text-white">{t('title')}</DialogTitle>
           <DialogDescription className="text-slate-400">{t('description')}</DialogDescription>
@@ -381,7 +381,7 @@ function FirePlanForm({
                 <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
                   {t('requiredContributionLabel')}
                 </p>
-                <div className="grid grid-cols-3 gap-2 text-center">
+                <div className="grid grid-cols-1 gap-2 text-center sm:grid-cols-3">
                   {requiredPhases.map((p, i) => (
                     <div key={i} className="rounded-md border border-emerald-500/20 bg-emerald-500/10 p-2">
                       <p className="text-[11px] uppercase tracking-wide text-slate-500">{phaseLabels[i]}</p>
@@ -405,7 +405,7 @@ function FirePlanForm({
                 />
               </div>
               {previewPhases && (
-                <div className="grid grid-cols-3 gap-2 text-center">
+                <div className="grid grid-cols-1 gap-2 text-center sm:grid-cols-3">
                   {previewPhases.map((p, i) => (
                     <div key={i} className="rounded-md bg-slate-800/60 p-2">
                       <p className="text-[11px] uppercase tracking-wide text-slate-500">{phaseLabels[i]}</p>
@@ -416,7 +416,7 @@ function FirePlanForm({
               )}
             </>
           ) : (
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
               {[0, 1, 2].map((i) => (
                 <div key={i} className="space-y-1">
                   <Label className="text-[11px] uppercase tracking-wide text-slate-500">{phaseLabels[i]}</Label>

@@ -37,7 +37,9 @@
     "creditCards": "Credit Cards",
     "settings": "Settings",
     "fire": "Financial Freedom",
-    "baseCurrency": "Base Currency"
+    "baseCurrency": "Base Currency",
+    "more": "More",
+    "moreMenuTitle": "More options"
   },
   "fire": {
     "title": "Financial Freedom",

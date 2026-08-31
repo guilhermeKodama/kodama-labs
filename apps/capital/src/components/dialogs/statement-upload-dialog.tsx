@@ -760,7 +760,7 @@ export function StatementUploadDialog({
 
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o) handleClose(); }}>
-      <DialogContent className="border-slate-800 bg-slate-900 sm:max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
+      <DialogContent className="flex h-dvh max-h-dvh w-full max-w-full flex-col overflow-hidden rounded-none border-slate-800 bg-slate-900 sm:h-auto sm:max-h-[90dvh] sm:max-w-2xl sm:rounded-lg">
         <DialogHeader>
           <DialogTitle className="text-white">
             {importResult ? t('success.title') : t('title')}
@@ -884,7 +884,7 @@ export function StatementUploadDialog({
                     const decision = fuzzyDecisions.get(tx.fitId) ?? 'same';
                     return (
                       <div key={tx.fitId} className="rounded-lg border border-slate-700 bg-slate-800/30 p-4 space-y-3">
-                        <div className="grid grid-cols-2 gap-3">
+                        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                           {/* OFX (imported) side */}
                           <div className="rounded-md border border-blue-500/30 bg-blue-500/5 p-3 space-y-1">
                             <p className="text-[10px] font-medium uppercase tracking-wider text-blue-400">{t('dedup.bankStatement')}</p>

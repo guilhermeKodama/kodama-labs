@@ -97,7 +97,7 @@ export function BillsTable({
 
   return (
     <div className="overflow-x-auto">
-      <table className="w-full">
+      <table className="w-full min-w-[640px]">
         <thead>
           <tr className="border-b border-slate-800">
             <th className="pb-3 text-left text-xs font-medium text-slate-400">Card</th>

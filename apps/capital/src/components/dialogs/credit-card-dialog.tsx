@@ -129,7 +129,7 @@ export function CreditCardDialog({ open, onOpenChange, card, onSubmit, isLoading
       onOpenChange={onOpenChange}
       title={isEdit ? t('dialog.editTitle') : t('dialog.createTitle')}
       description={isEdit ? t('dialog.editDescription') : t('dialog.createDescription')}
-      className="max-h-none overflow-y-visible sm:max-w-[500px]"
+      className="sm:max-w-[500px]"
     >
       <form onSubmit={handleSubmit} className="space-y-4">
         {/* Entity Type */}
@@ -180,7 +180,7 @@ export function CreditCardDialog({ open, onOpenChange, card, onSubmit, isLoading
         </div>
 
         {/* Last 4 Digits + Nickname */}
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div className="space-y-2">
             <Label className="text-slate-300">{t('form.lastFour')}</Label>
             <Input
@@ -207,7 +207,7 @@ export function CreditCardDialog({ open, onOpenChange, card, onSubmit, isLoading
         </div>
 
         {/* Credit Limit + Currency */}
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div className="space-y-2">
             <Label className="text-slate-300">{t('form.creditLimit')}</Label>
             <Input
@@ -238,7 +238,7 @@ export function CreditCardDialog({ open, onOpenChange, card, onSubmit, isLoading
         </div>
 
         {/* Closing Day + Due Day */}
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div className="space-y-2">
             <Label className="text-slate-300">{t('form.closingDay')}</Label>
             <Input
