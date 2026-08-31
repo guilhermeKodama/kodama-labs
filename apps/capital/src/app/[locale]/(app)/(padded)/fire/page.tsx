@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useTranslations, useLocale } from 'next-intl';
 import {
   Flame,
@@ -126,17 +126,13 @@ function goalToInput(goal: FireGoalResponse, overrides: Partial<FireGoalInput> =
 export default function FirePage() {
   const t = useTranslations('fire');
   const locale = useLocale();
-  const { summary, isLoading, isSaving, fetchSummary, saveGoal, recordSnapshot, upsertSnapshot, deleteSnapshot } =
+  const { summary, isLoading, isSaving, saveGoal, recordSnapshot, upsertSnapshot, deleteSnapshot } =
     useFireStore();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [milestoneDialogOpen, setMilestoneDialogOpen] = useState(false);
   const [recording, setRecording] = useState(false);
   const [snapshotDialogOpen, setSnapshotDialogOpen] = useState(false);
   const [editingSnapshot, setEditingSnapshot] = useState<SnapshotEdit | null>(null);
-
-  useEffect(() => {
-    fetchSummary();
-  }, [fetchSummary]);
 
   const baseCurrency = summary?.baseCurrency ?? 'BRL';
   const fmt = useMemo(() => (n: number) => formatCurrency(n, baseCurrency, locale), [baseCurrency, locale]);

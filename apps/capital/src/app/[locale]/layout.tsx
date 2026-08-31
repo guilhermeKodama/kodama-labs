@@ -5,6 +5,7 @@ import { NuqsAdapter } from 'nuqs/adapters/next/app';
 import { Toaster } from '@/components/ui/sonner';
 import { ThemeProvider } from '@/components/theme-provider';
 import { DataInitializer } from '@/components/providers/data-initializer';
+import { PwaRegister } from '@/components/pwa-register';
 import { routing } from '@/i18n/routing';
 
 export function generateStaticParams() {
@@ -46,6 +47,7 @@ export default async function LocaleLayout({
             {children}
           </DataInitializer>
           <Toaster />
+          <PwaRegister />
         </ThemeProvider>
       </NuqsAdapter>
     </NextIntlClientProvider>

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo, useCallback, useEffect } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import { useQueryState, parseAsStringLiteral } from 'nuqs';
 import { useTranslations } from 'next-intl';
 import { useLocale } from 'next-intl';
@@ -53,7 +53,6 @@ import {
   useSettingsStore,
   useRecurringTransferStore,
   useInvestmentStore,
-  useAttachmentStore,
 } from '@/lib/store';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
@@ -80,12 +79,6 @@ export default function TransfersPage() {
     toggleRecurringTransfer,
     markAsPaid,
   } = useRecurringTransferStore();
-  const fetchAttachments = useAttachmentStore((s) => s.fetchByOwnerType);
-
-  useEffect(() => {
-    void fetchAttachments('transfer');
-    void fetchAttachments('recurringTransfer');
-  }, [fetchAttachments]);
 
   // Use nuqs for URL-synced tab state
   const [activeTab, setActiveTab] = useQueryState(

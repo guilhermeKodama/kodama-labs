@@ -57,6 +57,7 @@ export const useAttachmentStore = create<AttachmentState & AttachmentActions>()(
         const params = new URLSearchParams({ ownerType });
         const res = await fetch(`/api/v1/attachments?${params.toString()}`, {
           credentials: 'include',
+          cache: 'no-store',
         });
         if (!res.ok) return;
         const data = (await res.json()) as ApiAttachment[];

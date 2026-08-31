@@ -1,9 +1,11 @@
 "use client";
 
-import { useEffect, type ReactNode } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 import { useInitializeData } from "@/hooks/use-initialize-data";
 import { useUser } from "@/lib/user-context";
 import { usePathname, useRouter } from "@/i18n/navigation";
+import { refreshAllData } from "@/lib/refresh-data";
+import { useSettingsStore } from "@/lib/store/settings-store";
 
 interface DataInitializerProps {
   children: ReactNode;
@@ -48,6 +50,35 @@ export function DataInitializer({ children }: DataInitializerProps) {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userLoading, isAuthenticated, isPublicRoute]);
+
+  // Silent revalidation on navigation: refreshAllData's own staleness gate
+  // keeps this from firing on every route inside a single stale window.
+  // Data already in the stores stays on screen the whole time — this never
+  // shows a loading state. Deliberately keyed on [pathname] alone (reading
+  // isInitialized from the store rather than depending on it) — the effect
+  // should re-run for exactly one reason, an actual route change, not
+  // whenever the initial-load flag happens to flip too.
+  const isFirstPathname = useRef(true);
+  useEffect(() => {
+    if (isFirstPathname.current) {
+      isFirstPathname.current = false;
+      return;
+    }
+    if (useSettingsStore.getState().isInitialized) void refreshAllData();
+  }, [pathname]);
+
+  // Resume from background — an iOS PWA can sit paused for hours without a
+  // navigation ever happening, which is the exact case that was reported as
+  // "data never refreshes." This is the other half of that fix.
+  useEffect(() => {
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "visible" && useSettingsStore.getState().isInitialized) {
+        void refreshAllData();
+      }
+    };
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    return () => document.removeEventListener("visibilitychange", onVisibilityChange);
+  }, []);
 
   if (!isAuthenticated && !userLoading) {
     // Public pages render normally for visitors; protected pages show the

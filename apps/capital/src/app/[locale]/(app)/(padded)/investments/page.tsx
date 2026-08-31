@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo, useEffect, useCallback } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import { useTranslations } from 'next-intl';
 import { useLocale } from 'next-intl';
 import {
@@ -89,8 +89,6 @@ export default function InvestmentsPage() {
     holdings,
     transactions,
     fetchAccounts,
-    fetchHoldings,
-    fetchTransactions,
     fetchPortfolioSummary,
     addAccount,
     updateAccount,
@@ -153,14 +151,6 @@ export default function InvestmentsPage() {
   const clearFilter = () => {
     setDateRange(undefined);
   };
-
-  // Fetch data on mount
-  useEffect(() => {
-    fetchAccounts();
-    fetchHoldings();
-    fetchTransactions();
-    fetchPortfolioSummary();
-  }, [fetchAccounts, fetchHoldings, fetchTransactions, fetchPortfolioSummary]);
 
   // Helper: convert holding amount to base currency
   const toBase = useCallback(

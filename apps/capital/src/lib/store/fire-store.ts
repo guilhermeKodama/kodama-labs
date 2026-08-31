@@ -48,11 +48,7 @@ export const useFireStore = create<FireState & FireActions>()((set, get) => ({
   fetchSummary: async () => {
     set({ isLoading: true, error: null });
     try {
-      // no-store: a PUT to /goal doesn't invalidate the browser cache for the
-      // /summary GET, so without this a re-fetch after saving can return stale.
-      const res = await client.v1.fire.summary.$get(undefined, {
-        init: { cache: 'no-store' },
-      });
+      const res = await client.v1.fire.summary.$get();
       if (!res.ok) throw new Error('Failed to fetch FIRE summary');
       const summary = (await res.json()) as FireSummaryResponse;
       set({ summary, isLoading: false });

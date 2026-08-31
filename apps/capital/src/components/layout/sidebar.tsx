@@ -17,7 +17,11 @@ import { useUIStore } from '@/lib/store';
 import { Button } from '@/components/ui/button';
 import { NAV_ITEMS, isNavItemActive } from './nav-items';
 
-export function Sidebar() {
+interface SidebarProps {
+  buildVersion: string;
+}
+
+export function Sidebar({ buildVersion }: SidebarProps) {
   const t = useTranslations('nav');
   const tAuth = useTranslations('auth');
   const pathname = usePathname();
@@ -118,6 +122,7 @@ export function Sidebar() {
             <p className="mt-2 text-xs text-slate-500">
               {t('baseCurrency')}: {user.baseCurrency}
             </p>
+            <p className="mt-1 text-[10px] text-slate-600">v. {buildVersion.slice(0, 8)}</p>
           </div>
         )}
 

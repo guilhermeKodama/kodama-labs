@@ -140,10 +140,19 @@
   }
   body {
     @apply bg-background text-foreground;
-    /* Prevent horizontal rubber-banding from ever surfacing an accidental
-       page-level x-overflow as a swipe-back gesture on mobile. Vertical
-       overscroll is untouched so pull-to-refresh keeps working. */
+    /* Suppress the browser's own overscroll affordances at the document
+       boundary so neither ever shows next to (or races) a custom gesture:
+       - x: prevents horizontal rubber-banding from surfacing an accidental
+         page-level x-overflow as a swipe-back navigation gesture on mobile.
+       - y: prevents Android Chrome's native pull-to-refresh from competing
+         with <PullToRefresh> (components/layout/pull-to-refresh.tsx) for the
+         same "drag down at scrollY 0" gesture. `contain`, not `none`, so a
+         scrollable descendant could still show its own local overscroll
+         feedback. iOS Safari doesn't fully honor this property for its own
+         rubber-band bounce — PullToRefresh's touchmove preventDefault()
+         is the primary defense there; this is the secondary one for Chrome. */
     overscroll-behavior-x: none;
+    overscroll-behavior-y: contain;
   }
 }
 

@@ -2,7 +2,6 @@ import type { Metadata, Viewport } from "next";
 import localFont from "next/font/local";
 import "./globals.css";
 import { UserProvider } from "@/lib/user-context";
-import { PwaRegister } from "@/components/pwa-register";
 
 // Vendored (next/font/local), not next/font/google: the google variant
 // downloads fonts from fonts.googleapis.com DURING `next build`, and that
@@ -51,7 +50,6 @@ export default function RootLayout({
             Access login page — see manifest.webmanifest/route.ts for the full
             explanation. React 19 hoists this into <head> on its own. */}
         <link rel="manifest" href="/manifest.webmanifest" crossOrigin="use-credentials" />
-        <PwaRegister />
         <UserProvider>{children}</UserProvider>
       </body>
     </html>

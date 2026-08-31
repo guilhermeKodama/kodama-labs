@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo, useCallback, useEffect } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import { useTranslations } from 'next-intl';
 import {
   format,
@@ -56,7 +56,6 @@ import {
   useTransactionStore,
   useSettingsStore,
   useBusinessStore,
-  useAttachmentStore,
 } from '@/lib/store';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
@@ -82,11 +81,6 @@ export default function RecurringPage() {
   const { fetchTransactions } = useTransactionStore();
   const { settings, personalAccount } = useSettingsStore();
   const { businesses } = useBusinessStore();
-  const fetchAttachments = useAttachmentStore((s) => s.fetchByOwnerType);
-
-  useEffect(() => {
-    void fetchAttachments('recurringTransaction');
-  }, [fetchAttachments]);
 
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingRecurring, setEditingRecurring] = useState<RecurringTransaction | undefined>();

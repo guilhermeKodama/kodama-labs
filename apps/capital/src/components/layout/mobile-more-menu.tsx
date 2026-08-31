@@ -20,6 +20,7 @@ import { MOBILE_MORE_ITEMS, isNavItemActive } from './nav-items';
 interface MobileMoreMenuProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  buildVersion: string;
 }
 
 /**
@@ -27,7 +28,7 @@ interface MobileMoreMenuProps {
  * primary bar, plus the user/theme/language/logout controls the sidebar
  * hosts on desktop (there's no sidebar on mobile to put them in).
  */
-export function MobileMoreMenu({ open, onOpenChange }: MobileMoreMenuProps) {
+export function MobileMoreMenu({ open, onOpenChange, buildVersion }: MobileMoreMenuProps) {
   const t = useTranslations('nav');
   const tAuth = useTranslations('auth');
   const pathname = usePathname();
@@ -55,6 +56,7 @@ export function MobileMoreMenu({ open, onOpenChange }: MobileMoreMenuProps) {
               <p className="mt-2 text-xs text-muted-foreground">
                 {t('baseCurrency')}: {user.baseCurrency}
               </p>
+              <p className="mt-1 text-[10px] text-muted-foreground/70">v. {buildVersion.slice(0, 8)}</p>
             </div>
           )}
 

@@ -59,7 +59,6 @@ export default function CreditCardsPage() {
     bills,
     billTransactions,
     installments,
-    fetchCreditCards,
     addCreditCard,
     updateCreditCard,
     deleteCreditCard,
@@ -83,13 +82,6 @@ export default function CreditCardsPage() {
   const [deletingCard, setDeletingCard] = useState<CreditCard | undefined>();
   const [selectedBillId, setSelectedBillId] = useState<string | null>(null);
   const [selectedView, setSelectedView] = useState<string>('cards');
-
-  // Fetch data on mount
-  useEffect(() => {
-    fetchCreditCards();
-    fetchBills();
-    fetchInstallments();
-  }, [fetchCreditCards, fetchBills, fetchInstallments]);
 
   // Derive the effective bill id: use explicit selection, or fall back to the most recent bill
   const effectiveBillId = useMemo(() => {

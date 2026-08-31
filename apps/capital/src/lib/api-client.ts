@@ -48,6 +48,11 @@ export const client = hc<AppType>(`${getBaseUrl()}/api`, {
     fetch(input, {
       ...init,
       credentials: "include",
+      // Every store fetch is meant to reflect the current server state —
+      // stores are the app's only cache layer. Without this, the browser's
+      // HTTP cache could serve a stale GET after a mutating POST/PUT/DELETE
+      // (this bit fire-store's /summary specifically; see git history).
+      cache: "no-store",
     }),
 });
 

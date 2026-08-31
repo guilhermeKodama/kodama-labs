@@ -1,8 +1,18 @@
-self.addEventListener("install", () => self.skipWaiting());
-self.addEventListener("activate", (event) => event.waitUntil(self.clients.claim()));
+import { getBuildId } from "@/lib/build-id";
+
+// Route handler, not public/sw.js: a static file is byte-identical across
+// every deploy, so the browser's periodic SW update check never finds a
+// diff and installed PWAs (iOS standalone especially) never learn a new
+// version exists. Embedding BUILD_ID makes every deploy produce a different
+// script, which is what actually drives updatefound → controllerchange.
+export function GET() {
+  const body = `const BUILD = "${getBuildId()}"; // bump source: deploy, not hand-edited
+
 // Pass-through deliberado: existe só para satisfazer o critério de
 // instalabilidade do Chrome/Edge. Nada é cacheado — cachear respostas atrás
 // do Cloudflare Access arriscaria servir a tela de login no lugar do app.
+self.addEventListener("install", () => self.skipWaiting());
+self.addEventListener("activate", (event) => event.waitUntil(self.clients.claim()));
 self.addEventListener("fetch", () => {});
 
 // v2: push notifications for reminder-mode recurring transactions.
@@ -62,3 +72,14 @@ async function focusOrOpen(target) {
 // use-push-subscription.ts (on every app load, if permission is already
 // granted) is what actually keeps the server's copy current.
 self.addEventListener("pushsubscriptionchange", () => {});
+`;
+
+  return new Response(body, {
+    headers: {
+      "Content-Type": "text/javascript; charset=utf-8",
+      // Must never be cached by Cloudflare's edge or the browser's HTTP
+      // cache — that would defeat the whole point of the BUILD_ID diff.
+      "Cache-Control": "no-store, must-revalidate",
+    },
+  });
+}

@@ -8,12 +8,16 @@ import { cn } from '@/lib/utils';
 import { MOBILE_PRIMARY_ITEMS, MOBILE_MORE_ITEMS, isNavItemActive } from './nav-items';
 import { MobileMoreMenu } from './mobile-more-menu';
 
+interface BottomNavProps {
+  buildVersion: string;
+}
+
 /**
  * Phone/tablet nav (<md): 4 primary destinations plus a "Mais" trigger that
  * opens a bottom sheet with the remaining 9 — see nav-items.ts for which
  * items land where and why. Replaces the old 5-item + dropdown "More" bar.
  */
-export function BottomNav() {
+export function BottomNav({ buildVersion }: BottomNavProps) {
   const t = useTranslations('nav');
   const pathname = usePathname();
   const [moreOpen, setMoreOpen] = useState(false);
@@ -55,7 +59,7 @@ export function BottomNav() {
         </div>
       </nav>
 
-      <MobileMoreMenu open={moreOpen} onOpenChange={setMoreOpen} />
+      <MobileMoreMenu open={moreOpen} onOpenChange={setMoreOpen} buildVersion={buildVersion} />
     </>
   );
 }

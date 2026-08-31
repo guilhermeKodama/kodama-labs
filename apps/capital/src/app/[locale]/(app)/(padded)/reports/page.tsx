@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo, useEffect, useCallback } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import { useTranslations, useLocale } from 'next-intl';
 import { format, startOfYear, endOfYear, eachMonthOfInterval } from 'date-fns';
 import { ptBR, enUS } from 'date-fns/locale';
@@ -81,11 +81,7 @@ export default function ReportsPage() {
   const { transfers } = useTransferStore();
   const { businesses } = useBusinessStore();
   const { settings, personalAccount, currencies } = useSettingsStore();
-  const {
-    holdings,
-    fetchHoldings,
-    fetchAccounts,
-  } = useInvestmentStore();
+  const { holdings } = useInvestmentStore();
 
   const currentYear = new Date().getFullYear();
   const [selectedYear, setSelectedYear] = useState(currentYear);
@@ -96,11 +92,6 @@ export default function ReportsPage() {
     return { preset: 'thisMonth', from, to };
   });
 
-  // Fetch investment data on mount
-  useEffect(() => {
-    fetchHoldings();
-    fetchAccounts();
-  }, [fetchHoldings, fetchAccounts]);
   const [selectedType, setSelectedType] = useState<TransactionType | 'all'>('all');
 
   // Prepare entities list (needed for filter bar and comparison chart)

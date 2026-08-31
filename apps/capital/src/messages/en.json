@@ -14,6 +14,7 @@
     "save": "Save",
     "create": "Create",
     "loading": "Loading...",
+    "refreshing": "Refreshing...",
     "personal": "Personal",
     "business": "Business",
     "done": "Done",
@@ -250,6 +251,10 @@
     "light": "Light",
     "dark": "Dark",
     "system": "System"
+  },
+  "pwa": {
+    "updateAvailable": "New version available",
+    "reload": "Update"
   },
   "onboarding": {
     "welcome": "Welcome to Capital",

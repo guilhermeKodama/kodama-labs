@@ -1,4 +1,5 @@
 import { AppShell } from '@/components/layout';
+import { getBuildId } from '@/lib/build-id';
 
 /**
  * Chrome for every authenticated screen: sidebar/bottom-nav, the
@@ -10,5 +11,5 @@ import { AppShell } from '@/components/layout';
  * `assistant/layout.tsx` respectively, since they differ per section.
  */
 export default function AppLayout({ children }: { children: React.ReactNode }) {
-  return <AppShell>{children}</AppShell>;
+  return <AppShell buildVersion={getBuildId()}>{children}</AppShell>;
 }

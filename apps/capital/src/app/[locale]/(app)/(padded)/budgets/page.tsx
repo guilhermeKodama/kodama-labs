@@ -74,18 +74,8 @@ export default function BudgetsPage() {
     bills,
     allBillTransactions,
     installments,
-    fetchCreditCards,
-    fetchBills,
     fetchAllBillTransactions,
-    fetchInstallments,
   } = useCreditCardStore();
-
-  // Load credit card data for budget integration
-  useEffect(() => {
-    fetchCreditCards();
-    fetchBills();
-    fetchInstallments();
-  }, [fetchCreditCards, fetchBills, fetchInstallments]);
 
   // After bills are loaded, fetch all bill transactions
   useEffect(() => {

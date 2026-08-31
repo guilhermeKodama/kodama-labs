@@ -10,6 +10,9 @@ import { cn } from '@/lib/utils';
 
 interface AppShellProps {
   children: React.ReactNode;
+  /** Short, stable-per-deploy id shown in the sidebar/more-menu footer so a
+   *  reinstalled or freshly-reloaded PWA is visibly on a new build. */
+  buildVersion: string;
 }
 
 // Custom hook to track client-side mounting without setState in effect
@@ -21,7 +24,7 @@ function useIsMounted() {
   );
 }
 
-export function AppShell({ children }: AppShellProps) {
+export function AppShell({ children, buildVersion }: AppShellProps) {
   const { isInitialized } = useSettingsStore();
   const { sidebarCollapsed } = useUIStore();
   const { isAuthenticated } = useUser();
@@ -45,8 +48,8 @@ export function AppShell({ children }: AppShellProps) {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950">
-      <Sidebar />
-      <BottomNav />
+      <Sidebar buildVersion={buildVersion} />
+      <BottomNav buildVersion={buildVersion} />
 
       {/* Main content — margin tracks sidebar width on desktop. */}
       <main

@@ -66,7 +66,7 @@ export function usePushSubscription() {
   // On mount: detect current state, and if permission is already granted and
   // the browser still holds a subscription, silently re-POST it. This is the
   // reliable way to keep the server's copy alive — the service worker can't
-  // fetch() past Cloudflare Access (see public/sw.js), so a subscription
+  // fetch() past Cloudflare Access (see app/sw.js/route.ts), so a subscription
   // rotation there would otherwise go unnoticed.
   useEffect(() => {
     let cancelled = false;

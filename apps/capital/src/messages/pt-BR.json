@@ -14,6 +14,7 @@
     "save": "Salvar",
     "create": "Criar",
     "loading": "Carregando...",
+    "refreshing": "Atualizando...",
     "personal": "Pessoal",
     "business": "Empresa",
     "done": "Concluir",
@@ -250,6 +251,10 @@
     "light": "Claro",
     "dark": "Escuro",
     "system": "Sistema"
+  },
+  "pwa": {
+    "updateAvailable": "Nova versão disponível",
+    "reload": "Atualizar"
   },
   "onboarding": {
     "welcome": "Bem-vindo ao Capital",

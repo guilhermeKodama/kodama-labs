@@ -10,10 +10,12 @@ import { NextResponse } from "next/server";
 export function GET() {
   return NextResponse.json(
     {
+      id: "/",
       name: "Capital — gestão financeira",
       short_name: "Capital",
       description: "Finanças PJ + PF, multi-moeda, investimentos e FIRE.",
       start_url: "/dashboard",
+      scope: "/",
       display: "standalone",
       background_color: "#0a0a0a",
       theme_color: "#0a0a0a",
@@ -26,6 +28,14 @@ export function GET() {
         { src: "/icon-512.png?v=2", sizes: "512x512", type: "image/png" },
       ],
     },
-    { headers: { "Content-Type": "application/manifest+json" } }
+    {
+      headers: {
+        "Content-Type": "application/manifest+json",
+        // Same reasoning as /sw.js: this sits behind Cloudflare, and an
+        // edge-cached stale manifest (wrong scope/id/icons) would be much
+        // harder to notice than a stale script.
+        "Cache-Control": "no-cache",
+      },
+    }
   );
 }
