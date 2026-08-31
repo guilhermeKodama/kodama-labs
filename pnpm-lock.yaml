@@ -230,6 +230,9 @@ importers:
       vaul:
         specifier: ^1.1.2
         version: 1.1.2(@types/react-dom@18.3.7(@types/react@18.3.27))(@types/react@18.3.27)(react-dom@19.2.3(react@19.2.3))(react@19.2.3)
+      web-push:
+        specifier: ^3.6.7
+        version: 3.6.7
       yahoo-finance2:
         specifier: ^3.13.0
         version: 3.13.0
@@ -261,6 +264,9 @@ importers:
       '@types/react-dom':
         specifier: ^18.3.0
         version: 18.3.7(@types/react@18.3.27)
+      '@types/web-push':
+        specifier: ^3.6.4
+        version: 3.6.4
       eslint:
         specifier: ^9
         version: 9.39.2(jiti@2.6.1)

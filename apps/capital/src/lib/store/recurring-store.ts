@@ -54,6 +54,8 @@ interface RecurringTransactionActions {
   deleteRecurringTransaction: (id: string) => Promise<void>;
   toggleRecurringTransaction: (id: string) => Promise<void>;
   markAsPaid: (id: string, overrides?: MarkAsPaidOverrides) => Promise<MarkAsPaidResult | null>;
+  /** Advances to the next occurrence WITHOUT creating a transaction. */
+  skipOccurrence: (id: string) => Promise<boolean>;
   updateLastGeneratedDate: (id: string, date: Date) => Promise<void>;
   getRecurringTransactionsByEntity: (entityId: string, entityType: EntityType) => RecurringTransaction[];
   setLoading: (loading: boolean) => void;
@@ -126,6 +128,7 @@ export const useRecurringTransactionStore = create<RecurringTransactionStore>()(
           lastGeneratedDate: r.lastGeneratedDate ? parseLocalDate(r.lastGeneratedDate) : undefined,
           isActive: r.isActive,
           autoGenerateTransaction: r.autoGenerateTransaction,
+          reminders: r.reminders ?? undefined,
           createdAt: new Date(r.createdAt),
           updatedAt: new Date(r.updatedAt),
         })),
@@ -160,6 +163,7 @@ export const useRecurringTransactionStore = create<RecurringTransactionStore>()(
             ? (input.endDate instanceof Date ? input.endDate.toISOString() : input.endDate)
             : undefined,
           autoGenerateTransaction: input.autoGenerateTransaction,
+          reminders: input.reminders,
           businessId: input.entityType === 'business' ? input.entityId : undefined,
           personalAccountId: input.entityType === 'personal' ? input.entityId : undefined,
         },
@@ -187,6 +191,7 @@ export const useRecurringTransactionStore = create<RecurringTransactionStore>()(
         lastGeneratedDate: data.lastGeneratedDate ? parseLocalDate(data.lastGeneratedDate) : undefined,
         isActive: data.isActive,
         autoGenerateTransaction: data.autoGenerateTransaction,
+        reminders: data.reminders ?? undefined,
         createdAt: new Date(data.createdAt),
         updatedAt: new Date(data.updatedAt),
       };
@@ -228,6 +233,7 @@ export const useRecurringTransactionStore = create<RecurringTransactionStore>()(
             : input.endDate === null ? null : undefined,
           isActive: input.isActive,
           autoGenerateTransaction: input.autoGenerateTransaction,
+          reminders: input.reminders,
         },
       });
 
@@ -256,6 +262,7 @@ export const useRecurringTransactionStore = create<RecurringTransactionStore>()(
                 lastGeneratedDate: data.lastGeneratedDate ? parseLocalDate(data.lastGeneratedDate) : undefined,
                 isActive: data.isActive,
                 autoGenerateTransaction: data.autoGenerateTransaction,
+                reminders: data.reminders ?? undefined,
                 createdAt: new Date(data.createdAt),
                 updatedAt: new Date(data.updatedAt),
               }
@@ -402,6 +409,7 @@ export const useRecurringTransactionStore = create<RecurringTransactionStore>()(
             : undefined,
           isActive: data.recurring.isActive,
           autoGenerateTransaction: data.recurring.autoGenerateTransaction,
+          reminders: data.recurring.reminders ?? undefined,
           createdAt: new Date(data.recurring.createdAt),
           updatedAt: new Date(data.recurring.updatedAt),
         },
@@ -412,6 +420,46 @@ export const useRecurringTransactionStore = create<RecurringTransactionStore>()(
         isLoading: false,
       });
       return null;
+    }
+  },
+
+  // Advance to the next occurrence WITHOUT creating a transaction — for
+  // reminder-mode entries that don't need a booked transaction this cycle
+  // (e.g. waived or tracked elsewhere) but should still stop nagging.
+  skipOccurrence: async (id: string) => {
+    set({ isLoading: true, error: null });
+    try {
+      const res = await client.v1.recurring[':id'].skip.$post({
+        param: { id },
+      });
+
+      if (!res.ok) {
+        throw new Error('Failed to skip recurring transaction occurrence');
+      }
+
+      const data = await res.json();
+      set((state) => ({
+        recurringTransactions: state.recurringTransactions.map((rt) =>
+          rt.id === id
+            ? {
+                ...rt,
+                nextDueDate: parseLocalDate(data.nextDueDate),
+                lastGeneratedDate: data.lastGeneratedDate
+                  ? parseLocalDate(data.lastGeneratedDate)
+                  : undefined,
+                updatedAt: new Date(data.updatedAt),
+              }
+            : rt
+        ),
+        isLoading: false,
+      }));
+      return true;
+    } catch (error) {
+      set({
+        error: error instanceof Error ? error.message : 'Unknown error',
+        isLoading: false,
+      });
+      return false;
     }
   },
 

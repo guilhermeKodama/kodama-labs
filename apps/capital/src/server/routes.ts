@@ -18,6 +18,7 @@ import v1Fire from "./modules/fire/routes/v1";
 import v1BankStatements from "./modules/bank-statements/routes/v1";
 import v1Attachments from "./modules/attachments/routes/v1";
 import v1Assistant from "./modules/assistant/routes/v1";
+import v1Push from "./modules/push/routes/v1";
 
 export function registerRoutes<T extends AppOpenAPI>(app: T) {
   return app
@@ -38,5 +39,6 @@ export function registerRoutes<T extends AppOpenAPI>(app: T) {
     .route("/", v1Fire)
     .route("/", v1BankStatements)
     .route("/", v1Attachments)
-    .route("/", v1Assistant);
+    .route("/", v1Assistant)
+    .route("/", v1Push);
 }

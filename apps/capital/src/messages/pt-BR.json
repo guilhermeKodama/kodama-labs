@@ -1000,6 +1000,18 @@
       "theme": "Tema",
       "language": "Idioma"
     },
+    "notifications": {
+      "title": "Notificações",
+      "description": "Receba push para lembretes de transações recorrentes",
+      "enable": "Ativar notificações",
+      "enabling": "Ativando...",
+      "disable": "Desativar",
+      "enabled": "Notificações ativadas neste dispositivo",
+      "denied": "Permissão negada. Ative em Ajustes do navegador para receber lembretes.",
+      "unsupported": "Este navegador não suporta notificações push.",
+      "iosInstallHint": "No iPhone, adicione o Capital à Tela de Início pelo Safari antes de ativar.",
+      "error": "Não foi possível ativar as notificações agora."
+    },
     "baseCurrency": {
       "title": "Moeda Base",
       "description": "Sua moeda de referência para todos os cálculos",
@@ -1156,7 +1168,8 @@
       "total": "Total de Recorrentes",
       "active": "Ativos",
       "monthlyIncome": "Receita Mensal",
-      "monthlyExpense": "Despesa Mensal"
+      "monthlyExpense": "Despesa Mensal",
+      "monthlyInvestment": "Investimento Mensal"
     },
     "form": {
       "entityType": "Tipo de Entidade",
@@ -1177,6 +1190,29 @@
         "reminder": {
           "title": "Só lembrete",
           "description": "Nada é lançado. Avisamos no vencimento e você informa o valor real."
+        }
+      },
+      "reminders": {
+        "title": "Lembretes",
+        "add": "Adicionar lembrete",
+        "remove": "Remover lembrete",
+        "preset": {
+          "onTheDay": "No dia",
+          "oneDayBefore": "1 dia antes",
+          "twoDaysBefore": "2 dias antes",
+          "threeDaysBefore": "3 dias antes",
+          "oneWeekBefore": "1 semana antes"
+        },
+        "overdue": {
+          "label": "Continuar lembrando diariamente após o vencimento",
+          "description": "Enquanto não for marcado como pago ou concluído, você recebe um lembrete todo dia.",
+          "timeLabel": "Horário do lembrete diário"
+        },
+        "push": {
+          "notEnabled": "Ative as notificações para receber estes lembretes no celular.",
+          "enableButton": "Ativar notificações",
+          "iosInstallHint": "No iPhone, adicione o Capital à Tela de Início pelo Safari antes de ativar.",
+          "denied": "Permissão de notificações negada. Ative em Ajustes do navegador."
         }
       }
     },
@@ -1219,13 +1255,16 @@
       "resume": "Retomar",
       "markPaid": "Marcar como Pago",
       "registerPayment": "Registrar pagamento",
-      "attach": "Anexar boleto"
+      "attach": "Anexar boleto",
+      "skip": "Concluir sem lançar"
     },
     "filter": {
       "thisMonth": "Este Mês",
       "nextMonth": "Próximo Mês",
       "selectDates": "Selecionar datas",
-      "allEntities": "Todas Entidades"
+      "allEntities": "Todas Entidades",
+      "allTypes": "Todos os Tipos",
+      "allCategories": "Todas Categorias"
     },
     "empty": {
       "title": "Nenhuma transação recorrente",
@@ -1234,6 +1273,11 @@
     "delete": {
       "title": "Excluir Transação Recorrente?",
       "description": "Isso impedirá que transações futuras sejam geradas. Transações existentes não serão afetadas."
+    },
+    "skip": {
+      "title": "Concluir sem lançar transação?",
+      "description": "Avança para o próximo vencimento sem criar uma transação. Use quando esta cobrança não precisa ser registrada desta vez (foi isenta, paga em outro lugar, etc).",
+      "confirm": "Concluir"
     },
     "attachments": {
       "title": "Anexos",
@@ -1254,7 +1298,9 @@
       "markedPaid": "Transação registrada e data avançada!",
       "markPaidError": "Falha ao marcar como pago",
       "paymentRegistered": "Pagamento registrado e data avançada!",
-      "paymentError": "Falha ao registrar pagamento"
+      "paymentError": "Falha ao registrar pagamento",
+      "skipped": "Concluído! Vencimento avançado sem lançar transação.",
+      "skipError": "Falha ao concluir"
     }
   },
   "budgets": {

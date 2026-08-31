@@ -17,6 +17,7 @@ import { Header } from '@/components/layout/header';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { LanguageSwitcher } from '@/components/language-switcher';
 import { CategoryDialog } from '@/components/dialogs';
+import { PushSettingsCard } from '@/components/push/push-settings-card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -247,6 +248,9 @@ export default function SettingsPage() {
             </div>
           </CardContent>
         </Card>
+
+        {/* Push Notifications */}
+        <PushSettingsCard />
 
         {/* Base Currency */}
         <Card className="border-slate-800 bg-slate-900/50 backdrop-blur-sm">

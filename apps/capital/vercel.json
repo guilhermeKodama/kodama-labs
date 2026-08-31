@@ -6,6 +6,10 @@
       "schedule": "0 6 * * *"
     },
     {
+      "path": "/api/cron/send-reminders",
+      "schedule": "*/5 * * * *"
+    },
+    {
       "path": "/api/cron/categorize-bills",
       "schedule": "*/2 * * * *"
     },

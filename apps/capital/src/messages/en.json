@@ -1000,6 +1000,18 @@
       "theme": "Theme",
       "language": "Language"
     },
+    "notifications": {
+      "title": "Notifications",
+      "description": "Get push notifications for recurring transaction reminders",
+      "enable": "Enable notifications",
+      "enabling": "Enabling...",
+      "disable": "Disable",
+      "enabled": "Notifications enabled on this device",
+      "denied": "Permission denied. Enable it in your browser settings to get reminders.",
+      "unsupported": "This browser doesn't support push notifications.",
+      "iosInstallHint": "On iPhone, add Capital to your Home Screen from Safari before enabling.",
+      "error": "Couldn't enable notifications right now."
+    },
     "baseCurrency": {
       "title": "Base Currency",
       "description": "Your reference currency for all calculations",
@@ -1156,7 +1168,8 @@
       "total": "Total Recurring",
       "active": "Active",
       "monthlyIncome": "Monthly Income",
-      "monthlyExpense": "Monthly Expense"
+      "monthlyExpense": "Monthly Expense",
+      "monthlyInvestment": "Monthly Investment"
     },
     "form": {
       "entityType": "Entity Type",
@@ -1177,6 +1190,29 @@
         "reminder": {
           "title": "Reminder only",
           "description": "Nothing is recorded. We flag it on the due date and you enter the real amount."
+        }
+      },
+      "reminders": {
+        "title": "Reminders",
+        "add": "Add reminder",
+        "remove": "Remove reminder",
+        "preset": {
+          "onTheDay": "On the day",
+          "oneDayBefore": "1 day before",
+          "twoDaysBefore": "2 days before",
+          "threeDaysBefore": "3 days before",
+          "oneWeekBefore": "1 week before"
+        },
+        "overdue": {
+          "label": "Keep reminding daily after the due date",
+          "description": "Until it's marked as paid or done, you'll get a reminder every day.",
+          "timeLabel": "Daily reminder time"
+        },
+        "push": {
+          "notEnabled": "Turn on notifications to get these reminders on your phone.",
+          "enableButton": "Enable notifications",
+          "iosInstallHint": "On iPhone, add Capital to your Home Screen from Safari before enabling.",
+          "denied": "Notification permission denied. Enable it in your browser settings."
         }
       }
     },
@@ -1219,13 +1255,16 @@
       "resume": "Resume",
       "markPaid": "Mark as Paid",
       "registerPayment": "Record payment",
-      "attach": "Attach bill"
+      "attach": "Attach bill",
+      "skip": "Mark done, no transaction"
     },
     "filter": {
       "thisMonth": "This Month",
       "nextMonth": "Next Month",
       "selectDates": "Select dates",
-      "allEntities": "All Entities"
+      "allEntities": "All Entities",
+      "allTypes": "All Types",
+      "allCategories": "All Categories"
     },
     "empty": {
       "title": "No recurring transactions",
@@ -1234,6 +1273,11 @@
     "delete": {
       "title": "Delete Recurring Transaction?",
       "description": "This will stop future transactions from being generated. Existing transactions will not be affected."
+    },
+    "skip": {
+      "title": "Mark as done without a transaction?",
+      "description": "Advances to the next due date without creating a transaction. Use this when this charge doesn't need to be recorded this time (waived, paid elsewhere, etc).",
+      "confirm": "Mark done"
     },
     "attachments": {
       "title": "Attachments",
@@ -1254,7 +1298,9 @@
       "markedPaid": "Transaction recorded and due date advanced!",
       "markPaidError": "Failed to mark as paid",
       "paymentRegistered": "Payment recorded and due date advanced!",
-      "paymentError": "Failed to record payment"
+      "paymentError": "Failed to record payment",
+      "skipped": "Done! Due date advanced without a transaction.",
+      "skipError": "Failed to mark as done"
     }
   },
   "budgets": {

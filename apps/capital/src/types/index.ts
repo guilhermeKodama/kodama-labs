@@ -1,3 +1,5 @@
+import type { RemindersConfig } from '@/lib/validations/reminders';
+
 // ============================================
 // CAPITAL - Core TypeScript Types
 // ============================================
@@ -191,6 +193,8 @@ export interface RecurringTransaction {
   lastGeneratedDate?: Date;
   isActive: boolean;
   autoGenerateTransaction: boolean;
+  /** Only meaningful when autoGenerateTransaction is false. */
+  reminders?: RemindersConfig;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -208,6 +212,7 @@ export interface CreateRecurringTransactionInput {
   startDate: Date;
   endDate?: Date;
   autoGenerateTransaction?: boolean;
+  reminders?: RemindersConfig;
 }
 
 export interface UpdateRecurringTransactionInput {
@@ -222,6 +227,7 @@ export interface UpdateRecurringTransactionInput {
   endDate?: Date;
   isActive?: boolean;
   autoGenerateTransaction?: boolean;
+  reminders?: RemindersConfig;
 }
 
 // --------------------------------------------

@@ -150,8 +150,52 @@ model User {
   merchantCategoryMappings MerchantCategoryMapping[]
   fireGoal                 FireGoal?
   agentConversations       AgentConversation[]
+  pushSubscriptions        PushSubscription[]
 
   @@map("users")
+}
+
+// ============================================
+// PUSH NOTIFICATIONS
+// ============================================
+
+// One row per browser/device subscribed to Web Push. Endpoint is globally
+// unique (it identifies the browser's push service channel), so re-subscribing
+// the same device upserts by endpoint rather than creating duplicates.
+model PushSubscription {
+  id          String    @id @default(uuid())
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  endpoint    String    @unique
+  p256dh      String
+  auth        String
+  deviceLabel String?
+  userAgent   String?
+  createdAt   DateTime  @default(now())
+  lastSeenAt  DateTime  @default(now())
+  deadAt      DateTime? // set once the push service returns 404/410 (subscription expired)
+
+  @@index([userId])
+  @@index([deadAt])
+  @@map("push_subscriptions")
+}
+
+// Idempotency ledger for reminder pushes: one row per (recurring item,
+// occurrence, slot) so a cron tick that overlaps a prior one — or a re-run —
+// never double-sends. daysBefore >= 0 is a configured pre-due/day-of entry;
+// daysBefore < 0 is an overdue nag, where -N means "N days overdue".
+model ReminderDispatch {
+  id                     String               @id @default(uuid())
+  recurringTransactionId String
+  recurringTransaction   RecurringTransaction @relation(fields: [recurringTransactionId], references: [id], onDelete: Cascade)
+  occurrenceDate         DateTime // the nextDueDate (noon UTC) this dispatch was computed against
+  daysBefore             Int
+  sentAt                 DateTime             @default(now())
+  sentCount              Int                  @default(0)
+  failCount              Int                  @default(0)
+
+  @@unique([recurringTransactionId, occurrenceDate, daysBefore])
+  @@map("reminder_dispatches")
 }
 
 // ============================================
@@ -460,6 +504,10 @@ model RecurringTransaction {
   lastGeneratedDate       DateTime?
   isActive                Boolean             @default(true)
   autoGenerateTransaction Boolean             @default(true)
+  // Reminder-mode push config: { entries: [{daysBefore, time}], overdue: {enabled, time} }.
+  // Validated by remindersConfigSchema at the API boundary. NULL = feature not
+  // configured for this row (the reminder cron skips it entirely).
+  reminders               Json?
   createdAt               DateTime            @default(now())
   updatedAt               DateTime            @updatedAt
 
@@ -472,7 +520,8 @@ model RecurringTransaction {
   // Generated transactions
   generatedTransactions Transaction[]
 
-  attachments Attachment[]
+  attachments        Attachment[]
+  reminderDispatches ReminderDispatch[]
 
   @@index([businessId])
   @@index([personalAccountId])

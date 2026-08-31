@@ -1,8 +1,10 @@
 import type { DbClient } from "@capital/server/lib/prisma";
+import type { Prisma } from "@/generated/prisma";
 import type {
   TransactionType,
   RecurrenceFrequency,
 } from "@/generated/prisma";
+import type { RemindersConfig } from "@/lib/validations/reminders";
 
 interface UpdateRecurringData {
   type?: TransactionType;
@@ -18,6 +20,9 @@ interface UpdateRecurringData {
   lastGeneratedDate?: Date;
   isActive?: boolean;
   autoGenerateTransaction?: boolean;
+  // Omitted (undefined) = leave unchanged. There is deliberately no way to
+  // null this out through the update path (see put-recurring.ts).
+  reminders?: RemindersConfig;
 }
 
 /**
@@ -51,7 +56,10 @@ export async function updateRecurring(
 
   return db.recurringTransaction.update({
     where: { id },
-    data,
+    data: {
+      ...data,
+      reminders: data.reminders as Prisma.InputJsonValue | undefined,
+    },
   });
 }
 
@@ -66,6 +74,9 @@ export async function updateRecurringSystem(
 ) {
   return db.recurringTransaction.update({
     where: { id },
-    data,
+    data: {
+      ...data,
+      reminders: data.reminders as Prisma.InputJsonValue | undefined,
+    },
   });
 }

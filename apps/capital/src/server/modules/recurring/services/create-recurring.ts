@@ -4,6 +4,7 @@ import type {
   TransactionType,
   RecurrenceFrequency,
 } from "@/generated/prisma";
+import type { RemindersConfig } from "@/lib/validations/reminders";
 import { insertRecurring } from "../data/commands/insert-recurring";
 
 interface CreateRecurringInput {
@@ -18,6 +19,7 @@ interface CreateRecurringInput {
   startDate: Date;
   endDate?: Date;
   autoGenerateTransaction?: boolean;
+  reminders?: RemindersConfig;
   businessId?: string;
   personalAccountId?: string;
 }

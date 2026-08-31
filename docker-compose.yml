@@ -111,7 +111,7 @@ services:
 
   # ── capital ─────────────────────────────────────────────────────────────
   capital-migrate:
-    build: { context: ., dockerfile: Dockerfile, target: capital }
+    build: { context: ., dockerfile: Dockerfile, target: capital, args: { NEXT_PUBLIC_VAPID_PUBLIC_KEY: "BIZPytT1AcEzKXA5YQRz6V7tso9r_1uFeSfAuDhTLOotQ3_p8aIwOJwTKaEBWpG9xCSfUobWA2k00AumltvwztE" } }
     image: kodama-capital:latest
     env_file: apps/capital/.env.production
     command: ["pnpm", "exec", "prisma", "migrate", "deploy"]

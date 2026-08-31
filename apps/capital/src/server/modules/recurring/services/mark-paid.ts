@@ -1,35 +1,7 @@
 import type { PrismaClient } from "@/generated/prisma";
-import {
-  addDays,
-  addWeeks,
-  addMonths,
-  addYears,
-} from "date-fns";
-import type { RecurrenceFrequency } from "@/generated/prisma";
 import { toNoonUTC } from "@capital/server/lib/date-utils";
+import { getNextOccurrence } from "@capital/server/lib/recurrence";
 import { fetchRecurringById } from "../data/queries/fetch-recurring";
-
-/**
- * Calculate the next occurrence date based on frequency
- */
-function getNextOccurrence(
-  currentDate: Date,
-  frequency: RecurrenceFrequency
-): Date {
-  const date = toNoonUTC(currentDate);
-  switch (frequency) {
-    case "daily":
-      return addDays(date, 1);
-    case "weekly":
-      return addWeeks(date, 1);
-    case "monthly":
-      return addMonths(date, 1);
-    case "yearly":
-      return addYears(date, 1);
-    default:
-      return addMonths(date, 1);
-  }
-}
 
 interface MarkPaidOverrides {
   /** The real amount paid. Reminder entries store an estimate; this is the truth. */

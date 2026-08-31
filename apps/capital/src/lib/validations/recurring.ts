@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { transactionTypeSchema } from './transaction';
+import { remindersConfigSchema } from './reminders';
 
 export const recurrenceFrequencySchema = z.enum(['daily', 'weekly', 'monthly', 'yearly']);
 
@@ -22,6 +23,9 @@ export const createRecurringTransactionSchema = z.object({
   startDate: z.coerce.date(),
   endDate: z.coerce.date().optional().nullable().transform((val) => val ?? undefined),
   autoGenerateTransaction: z.boolean().default(true),
+  // Only meaningful when autoGenerateTransaction is false. Kept (not cleared)
+  // when switching back to automatic mode — see recurring-form.tsx.
+  reminders: remindersConfigSchema.optional(),
 });
 
 export const updateRecurringTransactionSchema = createRecurringTransactionSchema.partial().omit({

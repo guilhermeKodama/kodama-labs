@@ -17,6 +17,7 @@ import {
   Repeat,
   TrendingUp,
   TrendingDown,
+  PiggyBank,
   CalendarIcon,
   Play,
   X,
@@ -60,7 +61,7 @@ import {
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { useDialogForm } from '@/hooks/use-dialog-form';
-import type { RecurringTransaction } from '@/types';
+import type { RecurringTransaction, TransactionType } from '@/types';
 import type { CreateRecurringTransactionFormData } from '@/lib/validations';
 import type { DateRange } from 'react-day-picker';
 
@@ -76,6 +77,7 @@ export default function RecurringPage() {
     deleteRecurringTransaction,
     toggleRecurringTransaction,
     markAsPaid,
+    skipOccurrence,
   } = useRecurringTransactionStore();
   const { fetchTransactions } = useTransactionStore();
   const { settings, personalAccount } = useSettingsStore();
@@ -89,19 +91,39 @@ export default function RecurringPage() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingRecurring, setEditingRecurring] = useState<RecurringTransaction | undefined>();
   const [deletingRecurring, setDeletingRecurring] = useState<RecurringTransaction | undefined>();
+  const [skippingRecurring, setSkippingRecurring] = useState<RecurringTransaction | undefined>();
+  const [isSkipping, setIsSkipping] = useState(false);
   const [markingPaidId, setMarkingPaidId] = useState<string | null>(null);
   const [attachingRecurring, setAttachingRecurring] = useState<RecurringTransaction | undefined>();
   const [payingRecurring, setPayingRecurring] = useState<RecurringTransaction | undefined>();
   const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined);
   const [selectedEntityId, setSelectedEntityId] = useState<string>('all');
+  const [selectedType, setSelectedType] = useState<'all' | TransactionType>('all');
+  const [selectedCategory, setSelectedCategory] = useState<string>('all');
 
-  // Filter recurring transactions by date range and entity
+  // Categories actually present on recurring items, not the full settings list —
+  // keeps the filter free of options that would always return zero rows.
+  const availableCategories = useMemo(() => {
+    return [...new Set(recurringTransactions.map((rt) => rt.category))].sort();
+  }, [recurringTransactions]);
+
+  // Filter recurring transactions by date range, entity, type and category
   const filteredRecurringTransactions = useMemo(() => {
     let filtered = recurringTransactions;
 
     // Filter by entity
     if (selectedEntityId !== 'all') {
       filtered = filtered.filter((rt) => rt.entityId === selectedEntityId);
+    }
+
+    // Filter by transaction type
+    if (selectedType !== 'all') {
+      filtered = filtered.filter((rt) => rt.type === selectedType);
+    }
+
+    // Filter by category
+    if (selectedCategory !== 'all') {
+      filtered = filtered.filter((rt) => rt.category === selectedCategory);
     }
 
     // Filter by date range
@@ -116,7 +138,7 @@ export default function RecurringPage() {
     }
 
     return filtered;
-  }, [recurringTransactions, dateRange, selectedEntityId]);
+  }, [recurringTransactions, dateRange, selectedEntityId, selectedType, selectedCategory]);
 
   // Calculate summaries (based on filtered data)
   const summaries = useMemo(() => {
@@ -137,12 +159,20 @@ export default function RecurringPage() {
         return sum + monthlyAmount * rt.exchangeRate;
       }, 0);
 
+    const monthlyInvestment = active
+      .filter((rt) => rt.type === 'investment')
+      .reduce((sum, rt) => {
+        const monthlyAmount = getMonthlyAmount(rt);
+        return sum + monthlyAmount * rt.exchangeRate;
+      }, 0);
+
     return {
       total: filteredRecurringTransactions.length,
       active: active.length,
       paused: paused.length,
       monthlyIncome,
       monthlyExpense,
+      monthlyInvestment,
     };
   }, [filteredRecurringTransactions]);
 
@@ -242,6 +272,24 @@ export default function RecurringPage() {
     }
   };
 
+  // Concluir sem lançar: advances the occurrence without booking a
+  // transaction — for reminder-mode entries that don't need one this cycle.
+  const handleSkip = async () => {
+    if (!skippingRecurring) return;
+    setIsSkipping(true);
+    try {
+      const success = await skipOccurrence(skippingRecurring.id);
+      if (success) {
+        toast.success(t('recurring.toast.skipped'));
+      } else {
+        toast.error(t('recurring.toast.skipError'));
+      }
+    } finally {
+      setIsSkipping(false);
+      setSkippingRecurring(undefined);
+    }
+  };
+
   const handleToggle = async (recurring: RecurringTransaction) => {
     await toggleRecurringTransaction(recurring.id);
     toast.success(
@@ -281,7 +329,7 @@ export default function RecurringPage() {
       />
 
       {/* Summary Cards */}
-      <div className="mb-8 grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
+      <div className="mb-8 grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-5">
         <SummaryCard
           title={t('recurring.summary.total')}
           value={summaries.total}
@@ -309,6 +357,13 @@ export default function RecurringPage() {
           currency={settings.baseCurrency}
           icon={TrendingDown}
           variant="expense"
+        />
+        <SummaryCard
+          title={t('recurring.summary.monthlyInvestment')}
+          value={summaries.monthlyInvestment}
+          currency={settings.baseCurrency}
+          icon={PiggyBank}
+          variant="investment"
         />
       </div>
 
@@ -349,6 +404,51 @@ export default function RecurringPage() {
                       className="text-slate-300 focus:bg-slate-800 focus:text-white"
                     >
                       {business.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+              {/* Type Filter */}
+              <Select
+                value={selectedType}
+                onValueChange={(value) => setSelectedType(value as 'all' | TransactionType)}
+              >
+                <SelectTrigger className="w-[160px] border-slate-700 bg-slate-800 text-white">
+                  <SelectValue placeholder={t('recurring.filter.allTypes')} />
+                </SelectTrigger>
+                <SelectContent className="border-slate-700 bg-slate-900">
+                  <SelectItem value="all" className="text-slate-300 focus:bg-slate-800 focus:text-white">
+                    {t('recurring.filter.allTypes')}
+                  </SelectItem>
+                  <SelectItem value="income" className="text-slate-300 focus:bg-slate-800 focus:text-white">
+                    {t('transactions.types.income')}
+                  </SelectItem>
+                  <SelectItem value="expense" className="text-slate-300 focus:bg-slate-800 focus:text-white">
+                    {t('transactions.types.expense')}
+                  </SelectItem>
+                  <SelectItem value="investment" className="text-slate-300 focus:bg-slate-800 focus:text-white">
+                    {t('transactions.types.investment')}
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+
+              {/* Category Filter */}
+              <Select value={selectedCategory} onValueChange={setSelectedCategory}>
+                <SelectTrigger className="w-[180px] border-slate-700 bg-slate-800 text-white">
+                  <SelectValue placeholder={t('recurring.filter.allCategories')} />
+                </SelectTrigger>
+                <SelectContent className="border-slate-700 bg-slate-900">
+                  <SelectItem value="all" className="text-slate-300 focus:bg-slate-800 focus:text-white">
+                    {t('recurring.filter.allCategories')}
+                  </SelectItem>
+                  {availableCategories.map((category) => (
+                    <SelectItem
+                      key={category}
+                      value={category}
+                      className="text-slate-300 focus:bg-slate-800 focus:text-white"
+                    >
+                      {category}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -445,6 +545,7 @@ export default function RecurringPage() {
             onToggle={handleToggle}
             onMarkPaid={handleMarkPaid}
             onRegisterPayment={setPayingRecurring}
+            onSkip={setSkippingRecurring}
             onAttach={setAttachingRecurring}
             isMarkingPaid={markingPaidId}
           />
@@ -509,6 +610,35 @@ export default function RecurringPage() {
               className="bg-red-500 text-white hover:bg-red-600"
             >
               {t('common.delete')}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Skip Confirmation (Concluir sem lançar) */}
+      <AlertDialog
+        open={!!skippingRecurring}
+        onOpenChange={(open) => { if (!open) setSkippingRecurring(undefined); }}
+      >
+        <AlertDialogContent className="border-slate-800 bg-slate-900">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-white">
+              {t('recurring.skip.title')}
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-slate-400">
+              {t('recurring.skip.description')}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="border-slate-700 text-slate-300 hover:bg-slate-800 hover:text-white">
+              {t('common.cancel')}
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleSkip}
+              disabled={isSkipping}
+              className="bg-slate-700 text-white hover:bg-slate-600"
+            >
+              {t('recurring.skip.confirm')}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

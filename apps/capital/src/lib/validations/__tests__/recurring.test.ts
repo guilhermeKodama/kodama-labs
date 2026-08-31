@@ -29,6 +29,36 @@ describe('createRecurringTransactionSchema', () => {
     });
     expect(result.autoGenerateTransaction).toBe(false);
   });
+
+  it('accepts a valid reminders config', () => {
+    const result = createRecurringTransactionSchema.parse({
+      ...baseInput,
+      autoGenerateTransaction: false,
+      reminders: {
+        entries: [{ daysBefore: 0, time: '09:00' }],
+        overdue: { enabled: true, time: '09:00' },
+      },
+    });
+    expect(result.reminders?.entries).toHaveLength(1);
+    expect(result.reminders?.overdue.enabled).toBe(true);
+  });
+
+  it('rejects a malformed reminders config', () => {
+    const result = createRecurringTransactionSchema.safeParse({
+      ...baseInput,
+      autoGenerateTransaction: false,
+      reminders: {
+        entries: [{ daysBefore: 0, time: '9:00' }], // missing leading zero
+        overdue: { enabled: true, time: '09:00' },
+      },
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('omits reminders when not provided', () => {
+    const result = createRecurringTransactionSchema.parse(baseInput);
+    expect(result.reminders).toBeUndefined();
+  });
 });
 
 describe('updateRecurringTransactionSchema', () => {

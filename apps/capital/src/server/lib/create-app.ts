@@ -45,6 +45,7 @@ export function createApp() {
   app.use("/v1/bank-statements/*", authMiddleware);
   app.use("/v1/attachments/*", authMiddleware);
   app.use("/v1/assistant/*", authMiddleware);
+  app.use("/v1/push/*", authMiddleware);
 
   // Error handling
   app.notFound(notFound);

@@ -6,6 +6,7 @@ import { toDateString } from "@capital/server/lib/date-utils";
 import type { AppRouteHandler } from "@capital/server/types";
 import { prisma } from "@capital/server/lib/prisma";
 import { requireUserId } from "@capital/server/lib/auth-middleware";
+import { remindersConfigSchema, type RemindersConfig } from "@/lib/validations/reminders";
 import { listRecurring } from "../../services/list-recurring";
 import { routeConfig } from "../../constants";
 
@@ -25,6 +26,7 @@ const RecurringSchema = z.object({
   lastGeneratedDate: z.string().nullable(),
   isActive: z.boolean(),
   autoGenerateTransaction: z.boolean(),
+  reminders: remindersConfigSchema.nullable(),
   businessId: z.string().nullable(),
   personalAccountId: z.string().nullable(),
   createdAt: z.string(),
@@ -85,6 +87,7 @@ export const handler: AppRouteHandler<typeof route> = async (c) => {
         lastGeneratedDate: r.lastGeneratedDate?.toISOString() ?? null,
         isActive: r.isActive,
         autoGenerateTransaction: r.autoGenerateTransaction,
+        reminders: (r.reminders as RemindersConfig | null) ?? null,
         businessId: r.businessId,
         personalAccountId: r.personalAccountId,
         createdAt: r.createdAt.toISOString(),

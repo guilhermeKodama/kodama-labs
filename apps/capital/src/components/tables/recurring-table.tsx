@@ -19,6 +19,7 @@ import {
   Zap,
   Bell,
   Banknote,
+  SkipForward,
 } from 'lucide-react';
 import {
   Table,
@@ -52,6 +53,8 @@ interface RecurringTableProps {
   onMarkPaid?: (recurring: RecurringTransaction) => void;
   /** Reminder-mode rows: opens a dialog to enter the real amount before booking. */
   onRegisterPayment?: (recurring: RecurringTransaction) => void;
+  /** Advances to the next occurrence WITHOUT creating a transaction. */
+  onSkip?: (recurring: RecurringTransaction) => void;
   onAttach?: (recurring: RecurringTransaction) => void;
   isMarkingPaid?: string | null; // ID of the recurring being marked as paid
 }
@@ -119,6 +122,7 @@ interface RowActionsProps {
   onToggle?: (recurring: RecurringTransaction) => void;
   onAttach?: (recurring: RecurringTransaction) => void;
   onSettle?: (recurring: RecurringTransaction) => void;
+  onSkip?: (recurring: RecurringTransaction) => void;
   settleLabel: string;
   SettleIcon: typeof Check;
   isBeingMarkedPaid: boolean;
@@ -132,6 +136,7 @@ function RowActions({
   onToggle,
   onAttach,
   onSettle,
+  onSkip,
   settleLabel,
   SettleIcon,
   isBeingMarkedPaid,
@@ -159,6 +164,15 @@ function RowActions({
           >
             <SettleIcon className="mr-2 h-4 w-4" />
             {settleLabel}
+          </DropdownMenuItem>
+        )}
+        {onSkip && recurring.isActive && (
+          <DropdownMenuItem
+            onClick={() => onSkip(recurring)}
+            className="text-slate-300 focus:bg-slate-800 focus:text-white"
+          >
+            <SkipForward className="mr-2 h-4 w-4" />
+            {t('actions.skip')}
           </DropdownMenuItem>
         )}
         {onToggle && (
@@ -221,6 +235,7 @@ export function RecurringTable({
   onToggle,
   onMarkPaid,
   onRegisterPayment,
+  onSkip,
   onAttach,
   isMarkingPaid,
 }: RecurringTableProps) {
@@ -334,6 +349,7 @@ export function RecurringTable({
                   onToggle={onToggle}
                   onAttach={onAttach}
                   onSettle={onSettle}
+                  onSkip={onSkip}
                   settleLabel={settleLabel}
                   SettleIcon={SettleIcon}
                   isBeingMarkedPaid={isBeingMarkedPaid}
@@ -484,6 +500,7 @@ export function RecurringTable({
                       onToggle={onToggle}
                       onAttach={onAttach}
                       onSettle={onSettle}
+                      onSkip={onSkip}
                       settleLabel={settleLabel}
                       SettleIcon={SettleIcon}
                       isBeingMarkedPaid={isBeingMarkedPaid}

@@ -89,6 +89,11 @@ CMD ["pnpm", "start"]
 
 # ---------------------------------------------------------------------------
 FROM base AS capital
+# Next.js inlines NEXT_PUBLIC_* into the client bundle at build time — must
+# be an ARG, not just runtime `environment:` in compose, or the subscribe
+# flow ships with an empty VAPID key and silently no-ops.
+ARG NEXT_PUBLIC_VAPID_PUBLIC_KEY
+ENV NEXT_PUBLIC_VAPID_PUBLIC_KEY=$NEXT_PUBLIC_VAPID_PUBLIC_KEY
 RUN cd apps/capital && pnpm exec next build
 WORKDIR /repo/apps/capital
 ENV PORT=3000

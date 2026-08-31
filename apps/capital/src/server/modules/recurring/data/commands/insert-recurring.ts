@@ -1,9 +1,11 @@
 import type { DbClient } from "@capital/server/lib/prisma";
+import type { Prisma } from "@/generated/prisma";
 import type {
   EntityType,
   TransactionType,
   RecurrenceFrequency,
 } from "@/generated/prisma";
+import type { RemindersConfig } from "@/lib/validations/reminders";
 
 interface CreateRecurringData {
   entityType: EntityType;
@@ -18,6 +20,7 @@ interface CreateRecurringData {
   endDate?: Date;
   nextDueDate: Date;
   autoGenerateTransaction: boolean;
+  reminders?: RemindersConfig;
   businessId?: string;
   personalAccountId?: string;
 }
@@ -55,6 +58,9 @@ export async function insertRecurring(
   }
 
   return db.recurringTransaction.create({
-    data,
+    data: {
+      ...data,
+      reminders: data.reminders as Prisma.InputJsonValue | undefined,
+    },
   });
 }
