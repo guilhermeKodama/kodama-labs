@@ -83,7 +83,7 @@ export function DuplicateReviewCard({ conversationId, card }: DuplicateReviewCar
               <ConfidenceBadge confidence={pair.confidence} label={tConfidence(pair.confidence)} />
               <span className="text-[11px] text-slate-500">{pair.reason}</span>
             </div>
-            <div className="grid grid-cols-2 gap-2.5">
+            <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
               <div className="rounded-lg border border-blue-500/25 bg-blue-500/5 p-2.5">
                 <p className="mb-1 text-[10px] font-medium uppercase tracking-wide text-blue-400">
                   {t('fromStatement')}

@@ -189,7 +189,7 @@ export function InvestmentTransactionForm({
 
         {/* Quantity + Price per Unit — only for ticker-based buy/sell/split */}
         {showQuantityAndPrice && (
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <FormField
               control={form.control}
               name="quantity"
@@ -234,7 +234,7 @@ export function InvestmentTransactionForm({
         )}
 
         {/* Total Amount + Fees — always shown */}
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <FormField
             control={form.control}
             name="totalAmount"

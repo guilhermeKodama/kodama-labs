@@ -51,7 +51,7 @@ export function OnboardingDialog({ open, onComplete }: OnboardingDialogProps) {
   return (
     <Dialog open={open} onOpenChange={() => {}}>
       <DialogContent
-        className="border-slate-800 bg-slate-900 sm:max-w-md [&>button]:hidden"
+        className="max-h-[90dvh] overflow-y-auto border-slate-800 bg-slate-900 sm:max-w-md [&>button]:hidden"
         onPointerDownOutside={(e) => e.preventDefault()}
         onEscapeKeyDown={(e) => e.preventDefault()}
       >

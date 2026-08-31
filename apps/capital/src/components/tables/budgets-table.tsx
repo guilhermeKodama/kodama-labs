@@ -208,7 +208,7 @@ export function BudgetsTable({
 
       {/* Table */}
       <div className="rounded-lg border border-slate-800 bg-slate-900/50">
-        <Table>
+        <Table className="min-w-[1000px]">
           <TableHeader>
             <TableRow className="border-slate-800 hover:bg-transparent">
               <TableHead className="w-[30px]"></TableHead>
@@ -444,7 +444,8 @@ export function BudgetsTable({
                               {t('drillDown.noTransactions')}
                             </p>
                           ) : (
-                            <table className="w-full text-sm">
+                            <div className="overflow-x-auto">
+                            <table className="w-full min-w-[420px] text-sm">
                               <thead>
                                 <tr className="border-b border-slate-700">
                                   <th className="pb-2 text-left text-xs text-slate-500">{t('drillDown.date')}</th>
@@ -466,6 +467,7 @@ export function BudgetsTable({
                                 ))}
                               </tbody>
                             </table>
+                            </div>
                           )}
                         </div>
                       </TableCell>

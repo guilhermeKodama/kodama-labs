@@ -36,6 +36,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { MobileList, MobileListItem } from '@/components/tables/mobile-list';
 import { cn } from '@/lib/utils';
 import { formatCurrency, formatDate } from '@/lib/utils/format';
 import type { Transaction, TransactionType } from '@/types';
@@ -74,6 +75,63 @@ const typeConfig: Record<
 
 type SortField = 'date' | 'amount' | 'type';
 type SortDirection = 'asc' | 'desc';
+
+interface RowActionsProps {
+  transaction: Transaction;
+  onEdit?: (transaction: Transaction) => void;
+  onDelete?: (transaction: Transaction) => void;
+  onAttach?: (transaction: Transaction) => void;
+}
+
+/** The row-level actions menu, shared by the desktop table and the mobile card list. */
+function RowActions({ transaction, onEdit, onDelete, onAttach }: RowActionsProps) {
+  const t = useTranslations('transactions');
+
+  if (!onEdit && !onDelete && !onAttach) return null;
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="size-9 text-slate-400 hover:bg-slate-800 hover:text-white md:size-8"
+        >
+          <MoreVertical className="h-4 w-4" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="border-slate-700 bg-slate-900">
+        {onAttach && (
+          <DropdownMenuItem
+            onClick={() => onAttach(transaction)}
+            className="text-slate-300 focus:bg-slate-800 focus:text-white"
+          >
+            <Paperclip className="mr-2 h-4 w-4" />
+            {t('table.attach')}
+          </DropdownMenuItem>
+        )}
+        {onEdit && (
+          <DropdownMenuItem
+            onClick={() => onEdit(transaction)}
+            className="text-slate-300 focus:bg-slate-800 focus:text-white"
+          >
+            <Pencil className="mr-2 h-4 w-4" />
+            {t('table.edit')}
+          </DropdownMenuItem>
+        )}
+        {onDelete && (
+          <DropdownMenuItem
+            onClick={() => onDelete(transaction)}
+            className="text-red-400 focus:bg-red-500/10 focus:text-red-400"
+          >
+            <Trash2 className="mr-2 h-4 w-4" />
+            {t('table.delete')}
+          </DropdownMenuItem>
+        )}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
 
 export function TransactionsTable({
   transactions,
@@ -139,7 +197,7 @@ export function TransactionsTable({
           value={filterType}
           onValueChange={(value) => setFilterType(value as TransactionType | 'all')}
         >
-          <SelectTrigger className="w-[180px] border-slate-700 bg-slate-800 text-slate-300">
+          <SelectTrigger className="w-full border-slate-700 bg-slate-800 text-slate-300 sm:w-[180px]">
             <Filter className="mr-2 h-4 w-4" />
             <SelectValue />
           </SelectTrigger>
@@ -172,8 +230,43 @@ export function TransactionsTable({
         </Select>
       </div>
 
-      {/* Table */}
-      <div className="rounded-lg border border-slate-800 bg-slate-900/50">
+      {/* Mobile: card list */}
+      <MobileList className="md:hidden">
+        {filteredAndSorted.map((transaction) => {
+          const config = typeConfig[transaction.type];
+          const Icon = config.icon;
+
+          return (
+            <MobileListItem
+              key={transaction.id}
+              leading={
+                <span className={cn('flex size-9 items-center justify-center rounded-lg', config.bgColor)}>
+                  <Icon className={cn('h-4 w-4', config.color)} />
+                </span>
+              }
+              title={transaction.description}
+              titleExtra={
+                <AttachmentBadge
+                  ownerType="transaction"
+                  ownerId={transaction.id}
+                  onClick={onAttach ? () => onAttach(transaction) : undefined}
+                />
+              }
+              subtitle={`${formatDate(transaction.date)} · ${transaction.category}`}
+              trailing={
+                <span className={transaction.type === 'expense' ? 'text-red-400' : 'text-foreground'}>
+                  {transaction.type === 'expense' ? '-' : '+'}
+                  {formatCurrency(transaction.amount, transaction.currency)}
+                </span>
+              }
+              actions={<RowActions transaction={transaction} onEdit={onEdit} onDelete={onDelete} onAttach={onAttach} />}
+            />
+          );
+        })}
+      </MobileList>
+
+      {/* Desktop: table */}
+      <div className="hidden rounded-lg border border-slate-800 bg-slate-900/50 md:block">
         <Table>
           <TableHeader>
             <TableRow className="border-slate-800 hover:bg-transparent">
@@ -268,49 +361,7 @@ export function TransactionsTable({
                   </TableCell>
                   {(onEdit || onDelete || onAttach) && (
                     <TableCell>
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8 text-slate-400 hover:bg-slate-800 hover:text-white"
-                          >
-                            <MoreVertical className="h-4 w-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent
-                          align="end"
-                          className="border-slate-700 bg-slate-900"
-                        >
-                          {onAttach && (
-                            <DropdownMenuItem
-                              onClick={() => onAttach(transaction)}
-                              className="text-slate-300 focus:bg-slate-800 focus:text-white"
-                            >
-                              <Paperclip className="mr-2 h-4 w-4" />
-                              {t('table.attach')}
-                            </DropdownMenuItem>
-                          )}
-                          {onEdit && (
-                            <DropdownMenuItem
-                              onClick={() => onEdit(transaction)}
-                              className="text-slate-300 focus:bg-slate-800 focus:text-white"
-                            >
-                              <Pencil className="mr-2 h-4 w-4" />
-                              {t('table.edit')}
-                            </DropdownMenuItem>
-                          )}
-                          {onDelete && (
-                            <DropdownMenuItem
-                              onClick={() => onDelete(transaction)}
-                              className="text-red-400 focus:bg-red-500/10 focus:text-red-400"
-                            >
-                              <Trash2 className="mr-2 h-4 w-4" />
-                              {t('table.delete')}
-                            </DropdownMenuItem>
-                          )}
-                        </DropdownMenuContent>
-                      </DropdownMenu>
+                      <RowActions transaction={transaction} onEdit={onEdit} onDelete={onDelete} onAttach={onAttach} />
                     </TableCell>
                   )}
                 </TableRow>

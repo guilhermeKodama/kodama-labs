@@ -117,7 +117,7 @@ export function ImportPlanCard({
         </div>
       ) : (
         <>
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             <div className="rounded-lg border border-emerald-500/25 bg-emerald-500/[0.08] p-3.5">
               <p className="text-2xl font-bold leading-none text-emerald-400">
                 {summary.newTransactionCount ?? 0}

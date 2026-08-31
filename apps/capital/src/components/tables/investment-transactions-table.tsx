@@ -52,7 +52,7 @@ export function InvestmentTransactionsTable({
 
   return (
     <div className="overflow-x-auto">
-      <Table>
+      <Table className="min-w-[800px]">
         <TableHeader>
           <TableRow className="border-slate-800 hover:bg-transparent">
             <TableHead className="text-slate-400">Date</TableHead>

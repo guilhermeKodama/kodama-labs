@@ -152,7 +152,7 @@ export function RecurringForm({
           render={({ field }) => (
             <FormItem className="space-y-2">
               <FormLabel className="text-slate-300">{t('form.mode.label')}</FormLabel>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <button
                   type="button"
                   onClick={() => field.onChange(true)}
@@ -199,7 +199,7 @@ export function RecurringForm({
         />
 
         {/* Entity Selection */}
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <FormField
             control={form.control}
             name="entityType"
@@ -329,7 +329,7 @@ export function RecurringForm({
         />
 
         {/* Amount and Currency */}
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <FormField
             control={form.control}
             name="amount"

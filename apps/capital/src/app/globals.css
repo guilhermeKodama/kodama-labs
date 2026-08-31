@@ -3,6 +3,22 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/* Safe-area utilities for iOS notch/home-indicator devices. The app opts
+   into drawing under the status bar / home indicator via viewportFit:
+   "cover" (see src/app/layout.tsx), so anything fixed to a screen edge
+   needs one of these to avoid sitting under system UI. */
+@utility pt-safe {
+  padding-top: env(safe-area-inset-top, 0px);
+}
+@utility pb-safe {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+/* For content that scrolls behind the fixed bottom nav (h-16): reserves
+   the bar's height plus whatever inset the device adds on top of it. */
+@utility pb-safe-nav {
+  padding-bottom: calc(4rem + env(safe-area-inset-bottom, 0px));
+}
+
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
@@ -119,8 +135,15 @@
   * {
     @apply border-border outline-ring/50;
   }
+  html {
+    -webkit-tap-highlight-color: transparent;
+  }
   body {
     @apply bg-background text-foreground;
+    /* Prevent horizontal rubber-banding from ever surfacing an accidental
+       page-level x-overflow as a swipe-back gesture on mobile. Vertical
+       overscroll is untouched so pull-to-refresh keeps working. */
+    overscroll-behavior-x: none;
   }
 }
 

@@ -3,23 +3,10 @@
 import { useTranslations } from 'next-intl';
 import { useRouter } from 'next/navigation';
 import {
-  LayoutDashboard,
-  Building2,
-  User,
-  ArrowLeftRight,
-  PiggyBank,
-  FileBarChart,
-  Settings,
   TrendingUp,
-  Repeat,
-  Target,
-  Flame,
-  Receipt,
-  CreditCard,
   LogOut,
   ChevronsLeft,
   ChevronsRight,
-  Sparkles,
 } from 'lucide-react';
 import { Link, usePathname } from '@/i18n/navigation';
 import { ThemeToggle } from '@/components/theme-toggle';
@@ -28,22 +15,7 @@ import { cn } from '@/lib/utils';
 import { useUser } from '@/lib/user-context';
 import { useUIStore } from '@/lib/store';
 import { Button } from '@/components/ui/button';
-
-const navItems = [
-  { href: '/dashboard', icon: LayoutDashboard, labelKey: 'dashboard' },
-  { href: '/assistant', icon: Sparkles, labelKey: 'assistant' },
-  { href: '/businesses', icon: Building2, labelKey: 'businesses' },
-  { href: '/personal', icon: User, labelKey: 'personal' },
-  { href: '/transfers', icon: ArrowLeftRight, labelKey: 'transfers' },
-  { href: '/recurring', icon: Repeat, labelKey: 'recurring' },
-  { href: '/investments', icon: PiggyBank, labelKey: 'investments' },
-  { href: '/fire', icon: Flame, labelKey: 'fire' },
-  { href: '/budgets', icon: Target, labelKey: 'budgets' },
-  { href: '/reports', icon: FileBarChart, labelKey: 'reports' },
-  { href: '/tax', icon: Receipt, labelKey: 'tax' },
-  { href: '/credit-cards', icon: CreditCard, labelKey: 'creditCards' },
-  { href: '/settings', icon: Settings, labelKey: 'settings' },
-] as const;
+import { NAV_ITEMS, isNavItemActive } from './nav-items';
 
 export function Sidebar() {
   const t = useTranslations('nav');
@@ -61,7 +33,7 @@ export function Sidebar() {
   return (
     <aside
       className={cn(
-        'fixed left-0 top-0 z-40 hidden h-screen flex-col border-r border-slate-800 bg-slate-950 transition-[width] duration-200 ease-out lg:flex',
+        'fixed left-0 top-0 z-40 hidden h-screen flex-col border-r border-slate-800 bg-slate-950 transition-[width] duration-200 ease-out md:flex',
         sidebarCollapsed ? 'w-16' : 'w-64'
       )}
     >
@@ -112,9 +84,8 @@ export function Sidebar() {
 
       {/* Navigation */}
       <nav className={cn('flex-1 space-y-1', sidebarCollapsed ? 'p-2' : 'p-4')}>
-        {navItems.map((item) => {
-          const isActive =
-            pathname === item.href || pathname.startsWith(`${item.href}/`);
+        {NAV_ITEMS.map((item) => {
+          const isActive = isNavItemActive(pathname, item.href);
           return (
             <Link
               key={item.href}

@@ -40,7 +40,7 @@ export function AttachmentsDialog({
 }: AttachmentsDialogProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[90vh] overflow-y-auto border-slate-800 bg-slate-900 sm:max-w-lg">
+      <DialogContent className="max-h-[90dvh] overflow-y-auto border-slate-800 bg-slate-900 sm:max-w-lg">
         <DialogHeader>
           <DialogTitle className="text-white">{title}</DialogTitle>
           {description ? (

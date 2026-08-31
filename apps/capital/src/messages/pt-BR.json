@@ -37,7 +37,9 @@
     "creditCards": "Cartões de Crédito",
     "settings": "Configurações",
     "fire": "Liberdade Financeira",
-    "baseCurrency": "Moeda Base"
+    "baseCurrency": "Moeda Base",
+    "more": "Mais",
+    "moreMenuTitle": "Mais opções"
   },
   "fire": {
     "title": "Liberdade Financeira",

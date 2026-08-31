@@ -32,10 +32,10 @@ export function Header({ title, description, action, secondaryAction }: HeaderPr
           )}
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           {/* Mobile only: language and theme */}
-          <div className="flex items-center gap-2 lg:hidden">
-            <LanguageSwitcher />
+          <div className="flex items-center gap-2 md:hidden">
+            <LanguageSwitcher compact />
             <ThemeToggle />
           </div>
 
