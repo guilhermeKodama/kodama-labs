@@ -16,6 +16,7 @@
 //   list-environments
 //   list-variables <environmentName>
 //   create-environment <environmentName>
+//   rename-environment <environmentName> <newName>
 //   append-variables <environmentName> <varsJsonFile>
 //     varsJsonFile: JSON array of {"name":"X","value":"Y","concealed":true}
 //   create-local-env-file <environmentName> <mountPath>
@@ -106,6 +107,20 @@ async function main() {
     case "create-environment":
       output = await callTool("create_environment", { accountId, environmentName: args[0] });
       break;
+    case "rename-environment": {
+      // The Environments API can't update or delete an individual variable —
+      // append_variables only ever adds. Correcting a wrong value therefore
+      // means renaming the old Environment aside and recreating it, which is
+      // what this exists for.
+      const env = findEnv(args[0]);
+      output = await callTool("rename_environment", {
+        accountId,
+        environmentId: env.environmentId,
+        environmentName: env.name,
+        newName: args[1],
+      });
+      break;
+    }
     case "append-variables": {
       const env = findEnv(args[0]);
       const allVariables = JSON.parse(readFileSync(args[1], "utf8"));
