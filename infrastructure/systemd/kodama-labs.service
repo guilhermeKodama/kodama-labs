@@ -1,0 +1,29 @@
+# systemd USER unit (~/.config/systemd/user/) — the stack lives in Docker
+# Desktop's per-user engine, NOT the system docker.service. Runs at boot via
+# loginctl linger; see README.md in this directory.
+[Unit]
+Description=kodama-labs Docker stack (postgres + apps) — converge on boot
+# Ordering is best-effort; the ExecStartPre poll below is what actually
+# guarantees the engine is ready (covers GUI-autostart too).
+After=docker-desktop.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+WorkingDirectory=/home/kodama/Documents/Github/kodama-labs
+# Pin to Docker Desktop's engine regardless of CLI context.
+Environment=DOCKER_HOST=unix:///home/kodama/.docker/desktop/docker.sock
+# Wait up to 10 min for the Docker Desktop engine to come up.
+ExecStartPre=/bin/sh -c 'for i in $(seq 1 120); do /usr/local/bin/docker info >/dev/null 2>&1 && exit 0; sleep 5; done; echo "docker engine never became ready" >&2; exit 1'
+ExecStartPre=/bin/sh -c '/usr/local/bin/docker network inspect kodama >/dev/null 2>&1 || /usr/local/bin/docker network create kodama'
+ExecStart=/usr/local/bin/docker compose -f infrastructure/postgres/docker-compose.yml up -d
+ExecStart=/usr/local/bin/docker compose up -d
+TimeoutStartSec=1200
+# If the engine still wasn't up (e.g. Desktop only starts on GUI login),
+# keep retrying instead of giving up for the rest of the boot.
+Restart=on-failure
+RestartSec=30
+StartLimitIntervalSec=0
+
+[Install]
+WantedBy=default.target

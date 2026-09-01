@@ -4,8 +4,11 @@ networks:
   kodama:
     external: true
 
+# "always" (not "unless-stopped") so services come back after a reboot even if
+# they were manually stopped beforehand — the host must converge to "stack up"
+# on every boot (see infrastructure/systemd/kodama-labs.service).
 x-restart: &restart
-  restart: unless-stopped
+  restart: always
 
 services:
   # ── careers ─────────────────────────────────────────────────────────────
@@ -152,8 +155,8 @@ services:
     networks: [kodama]
 
   # Reuses the capital image (full workspace already installed) — no separate
-  # build target. Not brought up by a plain `compose up -d`; started
-  # explicitly once capital/sentinel secrets exist (see runbook Fase 5-6).
+  # build target. Requires capital/sentinel secrets to exist (see runbook
+  # Fase 5-6); comes up with the rest of the stack on `compose up -d`.
   cronjobs:
     <<: *restart
     image: kodama-capital:latest
