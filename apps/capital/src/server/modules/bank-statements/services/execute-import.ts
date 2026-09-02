@@ -8,6 +8,7 @@ import { createInvestmentHolding } from "@capital/server/modules/investments/ser
 import { createInvestmentTransaction } from "@capital/server/modules/investments/services/create-investment-transaction";
 import { processBillCsv } from "@capital/server/modules/credit-cards/services/process-bill-csv";
 import { normalizeDescription } from "../utils";
+import { resolveTransferSides, checkTransferDirection } from "./transfer-flow";
 import type { ImportPlanPayload } from "@capital/server/modules/assistant/agent/tools/schemas/import-plan-payload";
 
 const SYSTEM_EXPENSE_CATEGORIES = [
@@ -353,11 +354,31 @@ export async function executeImport(
       let transfersCreated = 0;
       for (const tr of input.transfers) {
         if (existingTransferFitIds.has(tr.externalId)) continue;
-        const isOutgoing = tr.direction === "capital_injection";
-        const fromEntityType = isOutgoing ? input.entityType : tr.counterpartyEntityType;
-        const fromEntityId = isOutgoing ? input.entityId : tr.counterpartyEntityId;
-        const toEntityType = isOutgoing ? tr.counterpartyEntityType : input.entityType;
-        const toEntityId = isOutgoing ? tr.counterpartyEntityId : input.entityId;
+        // Payer/payee come from `flow` (which way the money moved on the
+        // statement), never from `direction` (why it moved). Reading
+        // them off the label assumed the imported statement was always
+        // the personal one, so on a business statement every transfer
+        // landed pointing the wrong way - an outgoing profit
+        // distribution was written as money coming in.
+        const { fromEntityType, fromEntityId, toEntityType, toEntityId } = resolveTransferSides({
+          flow: tr.flow,
+          entityType: input.entityType,
+          entityId: input.entityId,
+          counterpartyEntityType: tr.counterpartyEntityType,
+          counterpartyEntityId: tr.counterpartyEntityId,
+        });
+        // Defense in depth: propose_import_plan already rejects a label
+        // that contradicts the sides, but the manual wizard route posts
+        // straight here without that validation.
+        const directionCheck = checkTransferDirection(tr.direction, {
+          fromEntityType,
+          toEntityType,
+        });
+        if (directionCheck.status === "violation") {
+          throw new Error(
+            `Transfer ${tr.externalId} is inconsistent: ${directionCheck.message}. The statement row is an ${tr.flow === "outflow" ? "outflow" : "inflow"}, so either the direction or the counterparty is wrong.`
+          );
+        }
 
         const created = await tx.transfer.create({
           data: {

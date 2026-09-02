@@ -65,7 +65,7 @@ export const reconcileStatement = defineTool({
       toClassify,
       reconContext.entities,
       reconContext.investmentAccounts,
-      payload.bankName
+      { importedEntityType: input.entityType, bankName: payload.bankName }
     );
     const classificationByFitId = new Map(classified.map((c) => [c.fitId, c]));
 

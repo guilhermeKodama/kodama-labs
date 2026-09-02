@@ -2,6 +2,18 @@ import type { DbClient } from "@capital/server/lib/prisma";
 import type { ImportPlanPayload } from "../tools/schemas/import-plan-payload";
 import { fetchEntityForAgent } from "../../data/queries/fetch-entity-for-agent";
 import { parseLocalDate } from "@capital/server/lib/date-utils";
+import type { OfxParsedPayload } from "../../services/detect-and-parse-file";
+import {
+  flowForRowType,
+  flowForInvestmentDirection,
+  resolveTransferSides,
+  checkTransferDirection,
+} from "@capital/server/modules/bank-statements/services/transfer-flow";
+
+/** Two amounts are the same money if they agree to the cent. */
+function sameAmount(a: number, b: number): boolean {
+  return Math.round(a * 100) === Math.round(b * 100);
+}
 
 /**
  * Hard invariants (throws - the tool call fails and the model must fix
@@ -25,10 +37,104 @@ export async function validateImportPlanPayload(
   }
   const file = await db.conversationFile.findFirst({
     where: { id: payload.fileId, userId },
-    select: { id: true },
+    select: { id: true, parseStatus: true, parsedPayload: true },
   });
   if (!file) {
     throw new Error(`File ${payload.fileId} not found or access denied`);
+  }
+
+  // ---------------------------------------------------------------------
+  // Every row the plan writes is checked back against the file it claims
+  // to come from. The parsed rows are the only source of truth for which
+  // way the money went - the model restates it as `type` / `flow` and
+  // gets to be wrong about it, so nothing here trusts that restatement.
+  // This is what stops an outgoing transfer from being saved as income.
+  // ---------------------------------------------------------------------
+  const parsed =
+    file.parseStatus === "parsed" && file.parsedPayload
+      ? (file.parsedPayload as unknown as OfxParsedPayload)
+      : undefined;
+  const rowsByFitId = new Map(
+    parsed?.kind === "bank_ofx" ? parsed.rows.map((r) => [r.fitId, r]) : []
+  );
+  const unverifiable: string[] = [];
+
+  for (const t of payload.transactions) {
+    const row = rowsByFitId.get(t.externalId);
+    if (!row) {
+      unverifiable.push(t.externalId);
+      continue;
+    }
+    if (t.type !== row.type) {
+      throw new Error(
+        `Transaction ${t.externalId} is typed "${t.type}" but the statement row is an ${row.type} ("${row.description}"). The row's sign decides this, not the description.`
+      );
+    }
+    if (!sameAmount(t.amount, Math.abs(row.amount))) {
+      throw new Error(
+        `Transaction ${t.externalId} has amount ${t.amount} but the statement row is ${Math.abs(row.amount)}`
+      );
+    }
+  }
+
+  for (const tr of payload.transfers) {
+    const row = rowsByFitId.get(tr.externalId);
+    if (row) {
+      const rowFlow = flowForRowType(row.type);
+      if (tr.flow !== rowFlow) {
+        throw new Error(
+          `Transfer ${tr.externalId} is marked as an ${tr.flow} but the statement row is an ${row.type} ("${row.description}"), i.e. an ${rowFlow}. A transfer never changes the sign of the row it came from.`
+        );
+      }
+      if (!sameAmount(tr.amount, Math.abs(row.amount))) {
+        throw new Error(
+          `Transfer ${tr.externalId} has amount ${tr.amount} but the statement row is ${Math.abs(row.amount)}`
+        );
+      }
+    } else {
+      unverifiable.push(tr.externalId);
+    }
+
+    // Independent of the file: the label has to agree with who ends up
+    // paying whom once the flow has decided the sides.
+    const sides = resolveTransferSides({
+      flow: tr.flow,
+      entityType: payload.entityType,
+      entityId: payload.entityId,
+      counterpartyEntityType: tr.counterpartyEntityType,
+      counterpartyEntityId: tr.counterpartyEntityId,
+    });
+    const check = checkTransferDirection(tr.direction, sides);
+    if (check.status === "violation") {
+      throw new Error(
+        `Transfer ${tr.externalId}: ${check.message}. The row is an ${tr.flow}, so fix the direction or the counterparty - never the flow.`
+      );
+    }
+  }
+
+  for (const it of payload.investmentTransfers) {
+    const row = rowsByFitId.get(it.externalId);
+    if (!row) {
+      unverifiable.push(it.externalId);
+      continue;
+    }
+    const expected = flowForInvestmentDirection(it.direction);
+    if (expected !== flowForRowType(row.type)) {
+      throw new Error(
+        `Investment transfer ${it.externalId} is a "${it.direction}" (an ${expected}) but the statement row is an ${row.type} ("${row.description}")`
+      );
+    }
+    if (!sameAmount(it.amount, Math.abs(row.amount))) {
+      throw new Error(
+        `Investment transfer ${it.externalId} has amount ${it.amount} but the statement row is ${Math.abs(row.amount)}`
+      );
+    }
+  }
+
+  if (unverifiable.length > 0) {
+    warnings.push(
+      `${unverifiable.length} row(s) could not be checked against the file's parsed rows (${unverifiable.slice(0, 3).join(", ")}${unverifiable.length > 3 ? ", ..." : ""}) - their amount and direction are taken on trust.`
+    );
   }
 
   // externalIds that are about to become NEW transactions must not already

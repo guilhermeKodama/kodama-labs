@@ -58,6 +58,8 @@ export interface ImportPlan {
     reconciliationCount?: number;
     transferReconciliationCount?: number;
     transferCount?: number;
+    transferOutflow?: number;
+    transferInflow?: number;
     creditCardCount?: number;
     billCount?: number;
     billTransactionPreviewCount?: number;

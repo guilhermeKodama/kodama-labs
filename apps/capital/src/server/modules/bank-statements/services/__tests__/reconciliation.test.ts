@@ -309,6 +309,60 @@ describe("classifyTransactions", () => {
     });
   });
 
+  // The fixture is a personal statement. Classifying it as if it were a
+  // business statement flips what the same rows mean: money leaving a
+  // business towards another entity is a distribution, not an injection.
+  describe("with the imported entity declared", () => {
+    it("always reports the flow straight from the row's sign", () => {
+      const classified = classifyTransactions(normalized, [LARISSA_BUSINESS], [], {
+        importedEntityType: "personal",
+      });
+      const out = classified.find((t) => t.fitId === FITIDS.PIX_TO_LARISSA)!;
+      const inn = classified.find((t) => t.fitId === FITIDS.TRANSFER_FROM_LARISSA)!;
+      expect(
+        out.candidates.find((c) => c.type === "entity_transfer")!.transferDetails?.suggestedFlow
+      ).toBe("outflow");
+      expect(
+        inn.candidates.find((c) => c.type === "entity_transfer")!.transferDetails?.suggestedFlow
+      ).toBe("inflow");
+    });
+
+    it("suggests profit_distribution for money leaving a business towards a person", () => {
+      const personalCounterparty: EntityInfo = {
+        id: "pa-001",
+        name: "Larissa Ruba Psicologia Ltda",
+        entityType: "personal",
+      };
+      const classified = classifyTransactions(normalized, [personalCounterparty], [], {
+        importedEntityType: "business",
+      });
+      const tx = classified.find((t) => t.fitId === FITIDS.PIX_TO_LARISSA)!;
+      const transfer = tx.candidates.find((c) => c.type === "entity_transfer")!;
+      expect(transfer.transferDetails?.suggestedFlow).toBe("outflow");
+      // The entity-blind heuristic said capital_injection here, which
+      // execute-import then read back as money coming IN to the business.
+      expect(transfer.transferDetails?.suggestedDirection).toBe("profit_distribution");
+    });
+
+    it("leaves the label unpinned between two businesses but keeps the flow right", () => {
+      const classified = classifyTransactions(normalized, [LARISSA_BUSINESS], [], {
+        importedEntityType: "business",
+      });
+      const tx = classified.find((t) => t.fitId === FITIDS.PIX_TO_LARISSA)!;
+      const transfer = tx.candidates.find((c) => c.type === "entity_transfer")!;
+      expect(transfer.transferDetails?.suggestedFlow).toBe("outflow");
+    });
+
+    it("keeps the personal-side reading when the personal account is imported", () => {
+      const classified = classifyTransactions(normalized, [LARISSA_BUSINESS], [], {
+        importedEntityType: "personal",
+      });
+      const tx = classified.find((t) => t.fitId === FITIDS.PIX_TO_LARISSA)!;
+      const transfer = tx.candidates.find((c) => c.type === "entity_transfer")!;
+      expect(transfer.transferDetails?.suggestedDirection).toBe("capital_injection");
+    });
+  });
+
   describe("needsResolution scenarios", () => {
     it("should NOT need resolution when only one non-regular candidate", () => {
       const classified = classifyTransactions(normalized, [LARISSA_BUSINESS], []);
@@ -386,7 +440,7 @@ describe("classifyTransactions", () => {
         amount: 5000,
         type: "expense",
       };
-      const classified = classifyTransactions([syntheticTx], [], [], "NU PAGAMENTOS S.A.");
+      const classified = classifyTransactions([syntheticTx], [], [], { bankName: "NU PAGAMENTOS S.A." });
       const tx = classified[0];
       const cc = tx.candidates.find((c) => c.type === "credit_card_payment")!;
       expect(cc).toBeDefined();

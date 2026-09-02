@@ -42,6 +42,7 @@ const ClassificationCandidateSchema = z.object({
       suggestedEntityId: z.string(),
       suggestedEntityName: z.string(),
       suggestedEntityType: z.enum(["business", "personal"]),
+      suggestedFlow: z.enum(["outflow", "inflow"]),
       suggestedDirection: z.enum([
         "profit_distribution",
         "capital_injection",
@@ -285,11 +286,15 @@ export const handler: AppRouteHandler<typeof route> = async (c) => {
       (t) => t.status !== "duplicate"
     );
 
+    // No importedEntityType: the manual wizard lets the user pick the
+    // entity after parsing, so the suggested direction here is only a
+    // starting point. The wizard re-derives it from suggestedFlow once
+    // an entity is selected.
     const classified = classifyTransactions(
       transactionsToClassify,
       entities,
       investmentAccounts,
-      bankName
+      { bankName }
     );
     const classificationMap = new Map(classified.map((c) => [c.fitId, c]));
 

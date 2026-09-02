@@ -10,11 +10,20 @@ export const ImportPlanTransactionSchema = z.object({
   category: z.string().optional(),
 });
 
+// `flow` and `direction` answer different questions and both are
+// required. `flow` is which way the money moved on the statement being
+// imported ("outflow" = it left this entity's account) and is a fact:
+// it must equal the sign of the parsed row, which
+// validate-import-plan-payload.ts checks against the file. `direction`
+// is only the label for WHY it moved, and the same label sits on
+// opposite flows depending on whose statement this is - so it must
+// never be used to infer the sides. See services/transfer-flow.ts.
 export const ImportPlanTransferSchema = z.object({
   externalId: z.string().min(1),
   date: z.string().min(1),
   amount: z.number().positive(),
   description: z.string().optional(),
+  flow: z.enum(["outflow", "inflow"]),
   direction: z.enum(["profit_distribution", "capital_injection", "reimbursement"]),
   counterpartyEntityType: z.enum(["business", "personal"]),
   counterpartyEntityId: z.string().min(1),
@@ -186,6 +195,18 @@ export function computePlanSummary(payload: ImportPlanPayload) {
     .filter((t) => t.type === "expense")
     .reduce((sum, t) => sum + t.amount, 0);
 
+  // Cash impact of the transfers, so the plan card can show "R$ X saiu /
+  // R$ Y entrou" - a transfer pointing the wrong way is invisible in a
+  // bare count, and a count is all the user had to confirm against.
+  const transferOutflow = [
+    ...payload.transfers.filter((t) => t.flow === "outflow"),
+    ...payload.investmentTransfers.filter((t) => t.direction === "investment_deposit"),
+  ].reduce((sum, t) => sum + t.amount, 0);
+  const transferInflow = [
+    ...payload.transfers.filter((t) => t.flow === "inflow"),
+    ...payload.investmentTransfers.filter((t) => t.direction === "investment_withdrawal"),
+  ].reduce((sum, t) => sum + t.amount, 0);
+
   return {
     newTransactionCount: payload.transactions.length,
     skipDuplicateCount: payload.duplicateDecisions.filter((d) => d.resolution === "skip_duplicate").length,
@@ -193,6 +214,8 @@ export function computePlanSummary(payload: ImportPlanPayload) {
     reconciliationCount: payload.reconciliations.length,
     transferReconciliationCount: payload.transferReconciliations.length,
     transferCount: payload.transfers.length + payload.investmentTransfers.length,
+    transferOutflow: Math.round(transferOutflow * 100) / 100,
+    transferInflow: Math.round(transferInflow * 100) / 100,
     creditCardCount: payload.creditCards.length,
     billCount: payload.bills.length,
     billTransactionPreviewCount: payload.bills.reduce((sum, b) => sum + b.previewTransactionCount, 0),

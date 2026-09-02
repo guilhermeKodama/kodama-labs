@@ -22,6 +22,8 @@ Um lançamento único: `amount` (sempre positivo - o sinal vem de `type`), `type
 
 Dinheiro que se move **entre** entidades do próprio usuário - nunca é `income`/`expense`. Tem `fromEntityType`/`toEntityType` e os pares `from*Id`/`to*Id` correspondentes (incluindo `fromInvestmentAccountId`/`toInvestmentAccountId` para aportes e resgates).
 
+O sentido do dinheiro está em `from*`/`to*` (quem pagou, quem recebeu), **não** em `direction` - o mesmo `direction` aparece nos dois sentidos dependendo de qual lado é o extrato importado. Ver `30-transfer-classification.md`.
+
 `direction` diz a natureza:
 - `capital_injection` - o usuário colocou dinheiro pessoal numa empresa.
 - `profit_distribution` - a empresa distribuiu lucro para o usuário.

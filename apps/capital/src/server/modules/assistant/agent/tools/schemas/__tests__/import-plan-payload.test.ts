@@ -99,3 +99,69 @@ describe("computePlanSummary", () => {
     expect(summary.totalIncome).toBe(10.01);
   });
 });
+
+describe("ImportPlanTransferSchema flow", () => {
+  const transfer = {
+    externalId: "t1",
+    date: "2026-03-03",
+    amount: 800,
+    flow: "outflow",
+    direction: "capital_injection",
+    counterpartyEntityType: "business",
+    counterpartyEntityId: "biz_1",
+  };
+
+  // A transfer with no stated flow is exactly the plan that used to be
+  // accepted and then have its direction guessed from the label.
+  it("refuses a transfer that does not say which way the money went", () => {
+    const withoutFlow: Record<string, unknown> = { ...transfer };
+    delete withoutFlow.flow;
+    expect(() =>
+      ImportPlanPayloadSchema.parse({
+        entityType: "personal",
+        entityId: "pa_1",
+        currency: "BRL",
+        transfers: [withoutFlow],
+      })
+    ).toThrow();
+  });
+
+  it("refuses a flow that is neither an outflow nor an inflow", () => {
+    expect(() =>
+      ImportPlanPayloadSchema.parse({
+        entityType: "personal",
+        entityId: "pa_1",
+        currency: "BRL",
+        transfers: [{ ...transfer, flow: "incoming" }],
+      })
+    ).toThrow();
+  });
+});
+
+describe("computePlanSummary transfer totals", () => {
+  it("splits transfers into what leaves and what arrives", () => {
+    const payload = ImportPlanPayloadSchema.parse({
+      entityType: "personal",
+      entityId: "pa_1",
+      currency: "BRL",
+      transfers: [
+        {
+          externalId: "t1", date: "2026-03-03", amount: 800, flow: "outflow",
+          direction: "capital_injection", counterpartyEntityType: "business", counterpartyEntityId: "biz_1",
+        },
+        {
+          externalId: "t2", date: "2026-03-04", amount: 200, flow: "inflow",
+          direction: "profit_distribution", counterpartyEntityType: "business", counterpartyEntityId: "biz_1",
+        },
+      ],
+      investmentTransfers: [
+        { externalId: "t3", date: "2026-03-05", amount: 50, direction: "investment_deposit", investmentAccountId: "inv_1" },
+        { externalId: "t4", date: "2026-03-06", amount: 25, direction: "investment_withdrawal", investmentAccountId: "inv_1" },
+      ],
+    });
+    const summary = computePlanSummary(payload);
+    expect(summary.transferOutflow).toBe(850);
+    expect(summary.transferInflow).toBe(225);
+    expect(summary.transferCount).toBe(4);
+  });
+});

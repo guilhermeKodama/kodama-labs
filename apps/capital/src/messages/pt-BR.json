@@ -1872,7 +1872,9 @@
         "confirm": "Confirmar e importar",
         "discard": "Descartar",
         "bills": "{count, plural, one {# fatura} other {# faturas}}",
-        "billItems": "{count, plural, one {# item} other {# itens}}"
+        "billItems": "{count, plural, one {# item} other {# itens}}",
+        "transfersOut": "Transferências saindo",
+        "transfersIn": "Transferências entrando"
       },
       "duplicates": {
         "title": "Possíveis duplicatas",

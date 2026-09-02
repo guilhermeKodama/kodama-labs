@@ -1,5 +1,13 @@
 import type { ParsedBankTransaction } from "./parsers/types";
 import { extractShortTitle } from "../utils";
+import {
+  flowForRowType,
+  suggestDirectionForFlow,
+  type TransferFlow,
+  type TransferEntityType,
+  type EntityTransferDirection,
+  type InvestmentTransferDirection,
+} from "./transfer-flow";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -13,19 +21,21 @@ export type ClassificationType =
 
 export type Confidence = "high" | "medium" | "low";
 
-export type TransferDirection =
-  | "profit_distribution"
-  | "capital_injection"
-  | "reimbursement";
+export type TransferDirection = EntityTransferDirection;
 
-export type InvestmentDirection =
-  | "investment_deposit"
-  | "investment_withdrawal";
+export type InvestmentDirection = InvestmentTransferDirection;
 
 export interface TransferDetails {
   suggestedEntityId: string;
   suggestedEntityName: string;
   suggestedEntityType: "business" | "personal";
+  /**
+   * Which way the money moved on this statement. Read straight off the
+   * row's sign, so it is always right - unlike suggestedDirection, which
+   * is only a guess at the reason and needs to know whose statement this
+   * is to even be well-defined.
+   */
+  suggestedFlow: TransferFlow;
   suggestedDirection: TransferDirection;
 }
 
@@ -186,12 +196,26 @@ export function normalizeTransactions(
 // classifyTransactions: produce ALL possible classifications per transaction
 // ---------------------------------------------------------------------------
 
+export interface ClassificationContext {
+  /**
+   * The entity whose statement is being imported. Without it the
+   * suggested direction is only a guess: "money left this account" is
+   * a capital_injection from a personal account but a
+   * profit_distribution from a business one. Omit it only where the
+   * entity genuinely isn't chosen yet (the manual wizard picks it after
+   * parsing) - `suggestedFlow` is correct either way.
+   */
+  importedEntityType?: TransferEntityType;
+  bankName?: string;
+}
+
 export function classifyTransactions(
   transactions: NormalizedTransaction[],
   entities: EntityInfo[],
   investmentAccounts: InvestmentAccountInfo[] = [],
-  bankName: string = ""
+  context: ClassificationContext = {}
 ): ClassifiedTransaction[] {
+  const bankName = context.bankName ?? "";
   const entityCandidates = entities.map((e) => ({
     ...e,
     normalized: normalizeForMatch(e.name),
@@ -259,8 +283,19 @@ export function classifyTransactions(
           entity.normalized.includes(normalizedCounterparty);
 
         if (matches) {
-          const suggestedDirection: TransferDirection =
-            tx.type === "expense" ? "capital_injection" : "profit_distribution";
+          const suggestedFlow = flowForRowType(tx.type);
+          // When the caller hasn't said whose statement this is, assume
+          // the counterparty's opposite - which for the business-only
+          // entity list means the personal account, the historical
+          // assumption. The caller that knows (reconcile_statement)
+          // passes it and gets the right label.
+          const importedEntityType: TransferEntityType =
+            context.importedEntityType ?? (entity.entityType === "business" ? "personal" : "business");
+          const suggestedDirection = suggestDirectionForFlow(
+            suggestedFlow,
+            importedEntityType,
+            entity.entityType
+          );
 
           candidates.push({
             type: "entity_transfer",
@@ -269,6 +304,7 @@ export function classifyTransactions(
               suggestedEntityId: entity.id,
               suggestedEntityName: entity.name,
               suggestedEntityType: entity.entityType,
+              suggestedFlow,
               suggestedDirection,
             },
           });

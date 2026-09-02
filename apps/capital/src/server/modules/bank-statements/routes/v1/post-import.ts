@@ -28,11 +28,15 @@ const CreditCardInputSchema = z.object({
   currency: z.string().length(3),
 });
 
+// `flow` is which way the money moved on the statement being imported,
+// taken from the sign of the row - it, not `direction`, decides which
+// side is the payer. See services/transfer-flow.ts.
 const TransferInputSchema = z.object({
   externalId: z.string().min(1),
   date: z.string().min(1),
   amount: z.number().positive(),
   description: z.string().optional(),
+  flow: z.enum(["outflow", "inflow"]),
   direction: z.enum(["profit_distribution", "capital_injection", "reimbursement"]),
   counterpartyEntityType: z.enum(["business", "personal"]),
   counterpartyEntityId: z.string().min(1),

@@ -39,6 +39,10 @@ import {
 } from '@/components/ui/select';
 import type { Business, EntityType, CreditCard as CreditCardType, InvestmentAccount } from '@/types';
 import { client } from '@/lib/api-client';
+import {
+  flowForRowType,
+  allowedDirectionsForFlow,
+} from '@capital/server/modules/bank-statements/services/transfer-flow';
 import { useInvestmentStore } from '@/lib/store';
 
 // ---------------------------------------------------------------------------
@@ -52,6 +56,7 @@ interface ClassificationCandidate {
     suggestedEntityId: string;
     suggestedEntityName: string;
     suggestedEntityType: 'business' | 'personal';
+    suggestedFlow: 'outflow' | 'inflow';
     suggestedDirection: 'profit_distribution' | 'capital_injection' | 'reimbursement';
   };
   investmentDetails?: {
@@ -206,6 +211,23 @@ export function StatementUploadDialog({
 
   // Entity state
   const [entityType, setEntityType] = useState<EntityType>(defaultEntityType ?? 'personal');
+
+  // The parser suggests a direction without knowing whose statement this
+  // is; once the entity is picked, only some labels still agree with the
+  // row's sign. Keep the suggestion when it survives, else take the
+  // first label that does.
+  const pickDirection = (
+    txType: 'income' | 'expense',
+    counterpartyEntityType: 'business' | 'personal',
+    suggested: 'profit_distribution' | 'capital_injection' | 'reimbursement'
+  ) => {
+    const allowed = allowedDirectionsForFlow(
+      flowForRowType(txType),
+      entityType,
+      counterpartyEntityType
+    );
+    return allowed.includes(suggested) ? suggested : allowed[0];
+  };
   const [entityId, setEntityId] = useState<string>(defaultEntityId ?? personalAccountId ?? '');
 
   // Fuzzy duplicate decisions: map fitId -> 'same' (skip import) | 'different' (import as new)
@@ -337,7 +359,11 @@ export function StatementUploadDialog({
               resolution.entityId = candidate.transferDetails.suggestedEntityId;
               resolution.entityName = candidate.transferDetails.suggestedEntityName;
               resolution.entityType = candidate.transferDetails.suggestedEntityType;
-              resolution.direction = candidate.transferDetails.suggestedDirection;
+              resolution.direction = pickDirection(
+                tx.type,
+                candidate.transferDetails.suggestedEntityType,
+                candidate.transferDetails.suggestedDirection
+              );
             }
             if (candidate.type === 'investment_transfer' && candidate.investmentDetails) {
               resolution.investmentDirection = candidate.investmentDetails.direction;
@@ -530,6 +556,7 @@ export function StatementUploadDialog({
     date: string;
     amount: number;
     description: string;
+    flow: 'outflow' | 'inflow';
     direction: 'profit_distribution' | 'capital_injection' | 'reimbursement';
     counterpartyEntityType: 'business' | 'personal';
     counterpartyEntityId: string;
@@ -562,12 +589,18 @@ export function StatementUploadDialog({
       if (!res) continue;
 
       if (res.classification === 'entity_transfer' && res.entityId && res.direction && res.entityType) {
+        // The row's sign is the flow, full stop. The label only gets to
+        // say why the money moved, so a label that disagrees with the
+        // sign is replaced rather than sent - the server rejects it.
+        const flow = flowForRowType(tx.type);
+        const allowed = allowedDirectionsForFlow(flow, entityType, res.entityType);
         resolvedTransfers.push({
           externalId: tx.fitId,
           date: tx.date,
           amount: tx.amount,
           description: tx.description,
-          direction: res.direction,
+          flow,
+          direction: allowed.includes(res.direction) ? res.direction : allowed[0],
           counterpartyEntityType: res.entityType,
           counterpartyEntityId: res.entityId,
         });
@@ -639,11 +672,7 @@ export function StatementUploadDialog({
     }
 
     for (const tr of resolvedTransfers) {
-      if (tr.direction === 'capital_injection') {
-        netImpact -= tr.amount;
-      } else {
-        netImpact += tr.amount;
-      }
+      netImpact += tr.flow === 'outflow' ? -tr.amount : tr.amount;
     }
 
     for (const it of resolvedInvestmentTransfers) {
@@ -986,7 +1015,11 @@ export function StatementUploadDialog({
                                       newRes.entityId = candidate.transferDetails.suggestedEntityId;
                                       newRes.entityName = candidate.transferDetails.suggestedEntityName;
                                       newRes.entityType = candidate.transferDetails.suggestedEntityType;
-                                      newRes.direction = candidate.transferDetails.suggestedDirection;
+                                      newRes.direction = pickDirection(
+                                        tx.type,
+                                        candidate.transferDetails.suggestedEntityType,
+                                        candidate.transferDetails.suggestedDirection
+                                      );
                                     }
                                     if (candidate.type === 'investment_transfer' && candidate.investmentDetails) {
                                       newRes.investmentDirection = candidate.investmentDetails.direction;
@@ -1067,9 +1100,15 @@ export function StatementUploadDialog({
                                         <SelectValue placeholder={t('resolve.direction')} />
                                       </SelectTrigger>
                                       <SelectContent className="border-slate-700 bg-slate-900">
-                                        <SelectItem value="capital_injection">{t('transfers.directionOptions.capital_injection')}</SelectItem>
-                                        <SelectItem value="profit_distribution">{t('transfers.directionOptions.profit_distribution')}</SelectItem>
-                                        <SelectItem value="reimbursement">{t('transfers.directionOptions.reimbursement')}</SelectItem>
+                                        {allowedDirectionsForFlow(
+                                          flowForRowType(tx.type),
+                                          entityType,
+                                          resolution?.entityType ?? 'business'
+                                        ).map((d) => (
+                                          <SelectItem key={d} value={d}>
+                                            {t(`transfers.directionOptions.${d}` as Parameters<typeof t>[0])}
+                                          </SelectItem>
+                                        ))}
                                       </SelectContent>
                                     </Select>
 

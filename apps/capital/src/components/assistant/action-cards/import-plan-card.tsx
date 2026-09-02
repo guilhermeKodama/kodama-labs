@@ -137,7 +137,7 @@ export function ImportPlanCard({
           </div>
 
           <div className="mt-4 flex items-center justify-between border-t border-slate-800 pt-3.5 text-sm">
-            <div className="flex gap-5">
+            <div className="flex flex-wrap gap-5">
               <div>
                 <p className="text-[11px] text-slate-500">{t('income')}</p>
                 <p className="mono text-emerald-400">{formatMoney(summary.totalIncome, summary.currency)}</p>
@@ -146,6 +146,20 @@ export function ImportPlanCard({
                 <p className="text-[11px] text-slate-500">{t('expenses')}</p>
                 <p className="mono text-red-400">{formatMoney(summary.totalExpense, summary.currency)}</p>
               </div>
+              {/* A transfer pointing the wrong way is invisible in a bare
+                  count, and a count was all there was to confirm against. */}
+              {!!summary.transferOutflow && (
+                <div>
+                  <p className="text-[11px] text-slate-500">{t('transfersOut')}</p>
+                  <p className="mono text-red-400">{formatMoney(summary.transferOutflow, summary.currency)}</p>
+                </div>
+              )}
+              {!!summary.transferInflow && (
+                <div>
+                  <p className="text-[11px] text-slate-500">{t('transfersIn')}</p>
+                  <p className="mono text-emerald-400">{formatMoney(summary.transferInflow, summary.currency)}</p>
+                </div>
+              )}
             </div>
             <div className="flex items-center gap-2">
               {!!summary.billCount && (
