@@ -5,7 +5,7 @@ import { getAnthropicClient, estimateCostUsd } from "@capital/server/lib/anthrop
 import { AGENT_TOOLS } from "./tools/index";
 import { toAnthropicTools, executeTool } from "./tools/registry";
 import { loadAgentKnowledge } from "./knowledge/index";
-import { buildApiMessages, type CapitalFileRefBlock } from "./message-content";
+import { buildApiMessages, hydrateMediaRef, type CapitalFileRefBlock } from "./message-content";
 import { insertAgentMessage, updateAgentMessageContent } from "../data/commands/insert-agent-message";
 import { insertAgentTurn, updateAgentTurn, fetchAgentTurnStatus } from "../data/commands/manage-agent-turn";
 import { fetchMessageHistory } from "../data/queries/fetch-message-history";
@@ -30,6 +30,7 @@ export interface RunAgentTurnInput {
 const TOOL_LABELS: Record<string, string> = {
   get_context_snapshot: "Consultando contas e categorias",
   list_statement_files: "Verificando arquivos da conversa",
+  read_attachment: "Abrindo comprovante anexado",
   get_parsed_rows: "Lendo linhas do extrato",
   reconcile_statement: "Comparando com o histórico",
   search_transactions: "Buscando transações",
@@ -169,15 +170,16 @@ export async function runAgentTurn(input: RunAgentTurnInput, emit: EmitFn): Prom
     if (input.fileIds?.length) {
       const files = await prisma.conversationFile.findMany({
         where: { id: { in: input.fileIds }, conversationId: input.conversationId, userId: input.userId },
-        select: { id: true, fileType: true, originalName: true, blobUrl: true },
+        select: { id: true, fileType: true, originalName: true, blobUrl: true, mimeType: true },
       });
       for (const f of files) {
-        if (f.fileType === "pdf") {
+        if (f.fileType === "pdf" || f.fileType === "image") {
           const ref: CapitalFileRefBlock = {
             type: "capital_file_ref",
             fileId: f.id,
             originalName: f.originalName,
             blobUrl: f.blobUrl,
+            mediaType: f.mimeType,
           };
           userBlocks.push(ref);
         } else {
@@ -322,7 +324,11 @@ export async function runAgentTurn(input: RunAgentTurnInput, emit: EmitFn): Prom
         break;
       }
 
-      const toolResultBlocks: Anthropic.ToolResultBlockParam[] = [];
+      // Two shapes of the same results: the API call gets any media
+      // inlined as base64, the DB row gets a capital_file_ref marker in
+      // its place so agent_messages never stores those bytes.
+      const toolResultBlocksForApi: Anthropic.ToolResultBlockParam[] = [];
+      const toolResultBlocksForDb: unknown[] = [];
 
       for (const block of toolUseBlocks) {
         emit({
@@ -376,12 +382,49 @@ export async function runAgentTurn(input: RunAgentTurnInput, emit: EmitFn): Prom
           }
         }
 
-        toolResultBlocks.push({
-          type: "tool_result",
+        const summaryBlock = { type: "text" as const, text: JSON.stringify(result.output) };
+
+        if (result.media?.length) {
+          const apiContent: Anthropic.ToolResultBlockParam["content"] = [summaryBlock];
+          const dbContent: unknown[] = [summaryBlock];
+          for (const ref of result.media) {
+            const fileRef: CapitalFileRefBlock = {
+              type: "capital_file_ref",
+              fileId: ref.attachmentId,
+              originalName: ref.originalName,
+              blobUrl: ref.blobUrl,
+              mediaType: ref.mediaType,
+            };
+            dbContent.push(fileRef);
+            const hydrated = await hydrateMediaRef(ref);
+            apiContent.push(hydrated ?? {
+              type: "text",
+              text: `[Não foi possível carregar o anexo "${ref.originalName}".]`,
+            });
+          }
+          toolResultBlocksForApi.push({
+            type: "tool_result",
+            tool_use_id: block.id,
+            content: apiContent,
+            is_error: result.isError,
+          });
+          toolResultBlocksForDb.push({
+            type: "tool_result",
+            tool_use_id: block.id,
+            content: dbContent,
+            is_error: result.isError,
+          });
+          continue;
+        }
+
+        const plain = {
+          type: "tool_result" as const,
           tool_use_id: block.id,
           content: JSON.stringify(result.output),
           is_error: result.isError,
-        });
+        };
+        toolResultBlocksForApi.push(plain);
+        toolResultBlocksForDb.push(plain);
       }
 
       const toolResultMessage = await insertAgentMessage(
@@ -389,7 +432,7 @@ export async function runAgentTurn(input: RunAgentTurnInput, emit: EmitFn): Prom
           conversationId: input.conversationId,
           turnId: turn.id,
           role: "user",
-          content: toolResultBlocks,
+          content: toolResultBlocksForDb,
           kind: "tool_results",
         },
         prisma
@@ -404,7 +447,7 @@ export async function runAgentTurn(input: RunAgentTurnInput, emit: EmitFn): Prom
         },
       });
 
-      apiMessages = [...apiMessages, { role: "user", content: toolResultBlocks }];
+      apiMessages = [...apiMessages, { role: "user", content: toolResultBlocksForApi }];
 
       if (totalCost >= maxCostUsd) {
         budgetExceeded = true;

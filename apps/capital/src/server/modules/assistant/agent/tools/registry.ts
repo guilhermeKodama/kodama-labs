@@ -122,10 +122,41 @@ export function toAnthropicTools(defs: AnyAgentToolDef[]): Anthropic.Tool[] {
   }));
 }
 
+/**
+ * A file a tool wants Claude to actually SEE this turn (read_attachment's
+ * receipt image, for instance). The tool returns refs, not bytes: the
+ * loop hydrates them into image/document blocks for the API call and
+ * persists the ref itself, so the same megabytes never land in
+ * agent_messages or the AgentAction audit row.
+ */
+export interface ToolMediaRef {
+  attachmentId: string;
+  originalName: string;
+  blobUrl: string;
+  mediaType: string;
+}
+
+/**
+ * Well-known key a handler sets to attach media to its result. Stripped
+ * off `output` by executeTool before anything is logged or serialized,
+ * so no other tool and no downstream consumer has to know about it.
+ */
+export const TOOL_MEDIA_KEY = "__media";
+
+function extractMedia(output: unknown): { output: unknown; media?: ToolMediaRef[] } {
+  if (!output || typeof output !== "object" || !(TOOL_MEDIA_KEY in output)) {
+    return { output };
+  }
+  const { [TOOL_MEDIA_KEY]: media, ...rest } = output as Record<string, unknown>;
+  return { output: rest, media: Array.isArray(media) ? (media as ToolMediaRef[]) : undefined };
+}
+
 export interface ToolExecutionResult {
   toolUseId: string;
   toolName: string;
   output: unknown;
+  /** Files to inline into this turn's tool_result; see ToolMediaRef. */
+  media?: ToolMediaRef[];
   isError: boolean;
   durationMs: number;
 }
@@ -169,7 +200,10 @@ export async function executeTool(
   }
 
   try {
-    const output = await def.handler(ctx, parsed.data);
+    const raw = await def.handler(ctx, parsed.data);
+    // Split media off before the audit log and the return value - the
+    // rest of the pipeline only ever sees the plain JSON summary.
+    const { output, media } = extractMedia(raw);
     const durationMs = Date.now() - startedAt;
     if (def.access !== "read") {
       await insertAgentAction(
@@ -181,13 +215,13 @@ export async function executeTool(
           input: parsed.data,
           output,
           status: "success",
-          createdRecords: output.createdRecords,
+          createdRecords: raw.createdRecords,
           durationMs,
         },
         ctx.db
       );
     }
-    return { toolUseId, toolName: name, output, isError: false, durationMs };
+    return { toolUseId, toolName: name, output, media, isError: false, durationMs };
   } catch (error) {
     const durationMs = Date.now() - startedAt;
     const message = error instanceof Error ? error.message : "Unknown error";

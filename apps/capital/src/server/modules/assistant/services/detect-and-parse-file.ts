@@ -1,4 +1,5 @@
 import type { StatementFileType } from "@/generated/prisma";
+import type { AllowedImageMediaType } from "../constants";
 import { parseOfxContent, parseOfxCreditCardContent } from "@capital/server/modules/bank-statements/services/parsers";
 import { normalizeTransactions } from "@capital/server/modules/bank-statements/services/reconciliation";
 import { parseCsvContent } from "@capital/server/modules/credit-cards/services/parsers";
@@ -6,7 +7,32 @@ import { toDateString } from "@capital/server/lib/date-utils";
 
 export interface DetectedFile {
   fileType: StatementFileType;
-  statementKind: "bank_ofx" | "card_ofx" | "card_csv" | "investment_pdf" | "unknown";
+  statementKind: "bank_ofx" | "card_ofx" | "card_csv" | "investment_pdf" | "image" | "unknown";
+  /** Sniffed media type, set for images - this is what goes to the API as `media_type`. */
+  mediaType?: AllowedImageMediaType;
+}
+
+/**
+ * Magic numbers for the four image formats the Messages API accepts.
+ * Sniffed rather than trusted from Content-Type for the same reason OFX
+ * is: a pasted screenshot arrives with whatever type the browser felt
+ * like putting on the clipboard blob.
+ */
+function detectImageMediaType(buffer: Buffer): AllowedImageMediaType | null {
+  if (buffer.byteLength < 12) return null;
+  if (buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff) return "image/jpeg";
+  if (buffer.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))) {
+    return "image/png";
+  }
+  if (
+    buffer.subarray(0, 4).toString("latin1") === "RIFF" &&
+    buffer.subarray(8, 12).toString("latin1") === "WEBP"
+  ) {
+    return "image/webp";
+  }
+  const gifHeader = buffer.subarray(0, 6).toString("latin1");
+  if (gifHeader === "GIF87a" || gifHeader === "GIF89a") return "image/gif";
+  return null;
 }
 
 /**
@@ -27,6 +53,10 @@ export function detectFile(buffer: Buffer, originalName: string): DetectedFile {
   }
   if (buffer.subarray(0, 4).toString("latin1") === "%PDF") {
     return { fileType: "pdf", statementKind: "investment_pdf" };
+  }
+  const imageMediaType = detectImageMediaType(buffer);
+  if (imageMediaType) {
+    return { fileType: "image", statementKind: "image", mediaType: imageMediaType };
   }
   if (/\.csv$/i.test(originalName)) {
     return { fileType: "csv", statementKind: "card_csv" };
@@ -82,13 +112,15 @@ export interface ParseFileResult {
  * Parse OFX/CSV deterministically at upload time so the agent never has to
  * transcribe a statement - it reads structured rows via the
  * get_parsed_rows tool instead. PDFs are not parsed here; they are handed
- * to Claude as document blocks when a turn references them.
+ * to Claude as document blocks when a turn references them, and images
+ * as image blocks.
  */
 export function parseStatementFile(
   buffer: Buffer,
   detected: DetectedFile
 ): ParseFileResult {
-  if (detected.fileType === "pdf") {
+  // PDFs and images are read by the model itself, not parsed here.
+  if (detected.fileType === "pdf" || detected.fileType === "image") {
     return { parseStatus: "not_applicable" };
   }
 

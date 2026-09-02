@@ -6,7 +6,7 @@ import type { OfxParsedPayload, CsvParsedPayload } from "../../../services/detec
 export const listStatementFiles = defineTool({
   name: "list_statement_files",
   description:
-    "List the files attached to this conversation, with a summary of each (bank/period/currency/row count for OFX, row count for CSV, parse status). Never inlines full row data - use get_parsed_rows to page through rows.",
+    "List the files attached to this conversation, with a summary of each (bank/period/currency/row count for OFX, row count for CSV, parse status). PDFs and images have no summary - they are attached to the message itself for you to read directly. Never inlines full row data - use get_parsed_rows to page through rows.",
   inputSchema: z.object({}),
   access: "read",
   handler: async (ctx) => {

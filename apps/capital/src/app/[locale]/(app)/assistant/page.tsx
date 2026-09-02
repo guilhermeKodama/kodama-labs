@@ -9,7 +9,11 @@ import { ConversationRail } from '@/components/assistant/conversation-rail';
 import { ConversationDrawer } from '@/components/assistant/conversation-drawer';
 import { SuggestedPrompts } from '@/components/assistant/suggested-prompts';
 import { Textarea } from '@/components/ui/textarea';
-import { ALLOWED_STATEMENT_EXTENSIONS, MAX_STATEMENT_FILE_BYTES } from '@/lib/assistant/constants';
+import {
+  ASSISTANT_FILE_ACCEPT,
+  namePastedImage,
+  validateAssistantFile,
+} from '@/lib/assistant/constants';
 
 export default function AssistantIndexPage() {
   const t = useTranslations('assistant');
@@ -33,18 +37,28 @@ export default function AssistantIndexPage() {
   // orphan row in the rail.
   const startedIdRef = useRef<string | null>(null);
 
-  const addDraftFile = (file: File) => {
-    const ext = file.name.split('.').pop()?.toLowerCase();
-    if (!ext || !ALLOWED_STATEMENT_EXTENSIONS.includes(ext)) {
-      setFileError(t('composer.fileTypeInvalid'));
-      return;
-    }
-    if (file.size > MAX_STATEMENT_FILE_BYTES) {
-      setFileError(t('composer.fileTooLarge', { max: '15MB' }));
+  const addDraftFile = (raw: File) => {
+    const file = namePastedImage(raw, Date.now());
+    const rejection = validateAssistantFile(file);
+    if (rejection) {
+      setFileError(
+        rejection.reason === 'type'
+          ? t('composer.fileTypeInvalid')
+          : t('composer.fileTooLarge', { max: rejection.maxLabel })
+      );
       return;
     }
     setFileError(null);
     setDraftFiles((prev) => [...prev, file]);
+  };
+
+  // Same Ctrl+V path as the thread composer - a pasted screenshot here
+  // starts the conversation instead of joining one.
+  const handlePaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    const files = Array.from(e.clipboardData.files);
+    if (files.length === 0) return;
+    e.preventDefault();
+    files.forEach(addDraftFile);
   };
 
   const removeDraftFile = (index: number) => {
@@ -200,6 +214,7 @@ export default function AssistantIndexPage() {
                     void handleSend();
                   }
                 }}
+                onPaste={handlePaste}
                 placeholder={t('composer.placeholder')}
                 disabled={starting}
                 enterKeyHint="send"
@@ -217,7 +232,7 @@ export default function AssistantIndexPage() {
                 <input
                   ref={fileInputRef}
                   type="file"
-                  accept=".ofx,.csv,.pdf"
+                  accept={ASSISTANT_FILE_ACCEPT}
                   className="hidden"
                   onChange={(e) => {
                     const file = e.target.files?.[0];

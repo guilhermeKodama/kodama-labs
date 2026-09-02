@@ -3,6 +3,7 @@ import type { ChatMessage as ChatMessageData } from '@/types/assistant';
 import { MarkdownContent } from './markdown-content';
 import { ToolActivity } from './tool-activity';
 import { CardResponseChip } from './card-response-chip';
+import { MessageAttachments } from './message-attachments';
 import { ImportPlanCard } from './action-cards/import-plan-card';
 import { DuplicateReviewCard } from './action-cards/duplicate-review-card';
 import { PlanResultCard } from './action-cards/plan-result-card';
@@ -19,14 +20,18 @@ export function ChatMessage({ conversationId, message }: ChatMessageProps) {
       return <CardResponseChip text={block.text} />;
     }
     const text = block?.kind === 'text' ? block.text : '';
+    const attachments = message.blocks.find((b) => b.kind === 'attachments');
     return (
-      <div className="flex justify-end">
-        <div
-          className="max-w-[520px] rounded-2xl bg-slate-800 px-4 py-3 text-[14px] text-slate-100"
-          style={{ opacity: message.status === 'sending' ? 0.6 : 1 }}
-        >
-          {text}
-        </div>
+      <div
+        className="flex flex-col items-end"
+        style={{ opacity: message.status === 'sending' ? 0.6 : 1 }}
+      >
+        {text && (
+          <div className="max-w-[520px] rounded-2xl bg-slate-800 px-4 py-3 text-[14px] text-slate-100">
+            {text}
+          </div>
+        )}
+        {attachments && <MessageAttachments files={attachments.files} />}
       </div>
     );
   }

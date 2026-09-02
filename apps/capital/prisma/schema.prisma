@@ -121,6 +121,7 @@ enum StatementFileType {
   ofx
   csv
   pdf
+  image
 }
 
 // ============================================

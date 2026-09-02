@@ -154,6 +154,9 @@ export async function searchTransactionsForAgent(
         category: true,
         externalId: true,
         statementImportId: true,
+        // Surfaced so the agent knows a receipt exists to open with
+        // read_attachment - without it, attachments are invisible to it.
+        _count: { select: { attachments: true } },
       },
     }),
   ]);

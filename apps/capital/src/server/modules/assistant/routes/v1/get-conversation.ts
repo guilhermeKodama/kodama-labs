@@ -19,10 +19,13 @@ const MessageSchema = z.object({
 
 const FileSchema = z.object({
   id: z.string(),
-  fileType: z.enum(["ofx", "csv", "pdf"]),
+  fileType: z.enum(["ofx", "csv", "pdf", "image"]),
   statementKind: z.string().nullable(),
   originalName: z.string(),
   mimeType: z.string(),
+  // Exposed so the client can show an image thumbnail; the file belongs
+  // to the requesting user and this route is already authenticated.
+  blobUrl: z.string(),
   sizeBytes: z.number(),
   parseStatus: z.enum(["pending", "parsed", "failed", "not_applicable"]),
   parseError: z.string().nullable(),
@@ -112,6 +115,7 @@ export const handler: AppRouteHandler<typeof route> = async (c) => {
           statementKind: f.statementKind,
           originalName: f.originalName,
           mimeType: f.mimeType,
+          blobUrl: f.blobUrl,
           sizeBytes: f.sizeBytes,
           // Prisma models this as a plain string column (see schema
           // comment on ConversationFile.parseStatus); only detect-and-parse-file.ts

@@ -24,6 +24,7 @@ import { updateBillTransactions } from "./write/update-bill-transactions";
 import { linkBillToTransactionTool } from "./write/link-bill-to-transaction";
 import { updateBillTool } from "./write/update-bill";
 import { presentCard } from "./ui/present-card";
+import { readAttachment } from "./read/read-attachment";
 
 /**
  * The complete allowlist. Order is deliberate and stable (reads first,
@@ -58,4 +59,9 @@ export const AGENT_TOOLS: AnyAgentToolDef[] = [
   linkBillToTransactionTool,
   updateBillTool,
   presentCard,
+  // Appended rather than grouped with the other reads on purpose: the
+  // array order is the request's tool-array prefix, and inserting in the
+  // middle would invalidate the prompt cache for every existing
+  // conversation.
+  readAttachment,
 ];

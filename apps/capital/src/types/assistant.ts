@@ -15,7 +15,7 @@ export interface ConversationSummary {
   createdAt: string;
 }
 
-export type FileType = "ofx" | "csv" | "pdf";
+export type FileType = "ofx" | "csv" | "pdf" | "image";
 export type ParseStatus = "pending" | "parsed" | "failed" | "not_applicable";
 
 export interface ConversationFile {
@@ -24,6 +24,8 @@ export interface ConversationFile {
   statementKind: string | null;
   originalName: string;
   mimeType: string;
+  /** Only needed to render an image thumbnail; absent on optimistic rows. */
+  blobUrl?: string;
   sizeBytes: number;
   parseStatus: ParseStatus;
   parseError: string | null;
@@ -104,7 +106,16 @@ export type MessageBlock =
   | { kind: "plan"; planId: string; planKind: PlanKind; summary: ImportPlan["summary"]; payloadHash: string; warnings: string[]; status: PlanStatus }
   | { kind: "plan_result"; planId: string; planKind: PlanKind; result: Record<string, unknown> }
   | { kind: "card"; card: DuplicateReviewCard }
-  | { kind: "card_response"; text: string };
+  | { kind: "card_response"; text: string }
+  | { kind: "attachments"; files: MessageAttachment[] };
+
+/** A file the user attached to their own message, rendered under the bubble. */
+export interface MessageAttachment {
+  fileId: string;
+  originalName: string;
+  mediaType?: string;
+  blobUrl?: string;
+}
 
 export interface ChatMessage {
   id: string;

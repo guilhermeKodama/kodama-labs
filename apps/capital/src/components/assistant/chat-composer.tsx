@@ -5,7 +5,11 @@ import { useTranslations } from 'next-intl';
 import { Paperclip, ArrowUp, Square } from 'lucide-react';
 import { Textarea } from '@/components/ui/textarea';
 import { useAssistantStore } from '@/lib/store';
-import { MAX_STATEMENT_FILE_BYTES, ALLOWED_STATEMENT_EXTENSIONS } from '@/lib/assistant/constants';
+import {
+  ASSISTANT_FILE_ACCEPT,
+  namePastedImage,
+  validateAssistantFile,
+} from '@/lib/assistant/constants';
 
 interface ChatComposerProps {
   conversationId: string;
@@ -26,14 +30,15 @@ export function ChatComposer({ conversationId, turnRunning }: ChatComposerProps)
 
   const handleFiles = async (files: FileList | File[]) => {
     setFileError(null);
-    for (const file of Array.from(files)) {
-      const ext = file.name.split('.').pop()?.toLowerCase();
-      if (!ext || !ALLOWED_STATEMENT_EXTENSIONS.includes(ext)) {
-        setFileError(t('fileTypeInvalid'));
-        continue;
-      }
-      if (file.size > MAX_STATEMENT_FILE_BYTES) {
-        setFileError(t('fileTooLarge', { max: '15MB' }));
+    for (const raw of Array.from(files)) {
+      const file = namePastedImage(raw, Date.now());
+      const rejection = validateAssistantFile(file);
+      if (rejection) {
+        setFileError(
+          rejection.reason === 'type'
+            ? t('fileTypeInvalid')
+            : t('fileTooLarge', { max: rejection.maxLabel })
+        );
         continue;
       }
       // uploadFile resolves to null on failure and records why in the store -
@@ -42,6 +47,15 @@ export function ChatComposer({ conversationId, turnRunning }: ChatComposerProps)
         setFileError(useAssistantStore.getState().error ?? tErrors('uploadFailed'));
       }
     }
+  };
+
+  // Pasting a screenshot is the primary way images get here - Ctrl+V
+  // straight into the composer, no file picker.
+  const handlePaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    const files = Array.from(e.clipboardData.files);
+    if (files.length === 0) return;
+    e.preventDefault();
+    void handleFiles(files);
   };
 
   const handleSend = () => {
@@ -83,6 +97,7 @@ export function ChatComposer({ conversationId, turnRunning }: ChatComposerProps)
           value={text}
           onChange={(e) => setText(e.target.value)}
           onKeyDown={handleKeyDown}
+          onPaste={handlePaste}
           placeholder={t('placeholder')}
           disabled={turnRunning}
           enterKeyHint="send"
@@ -101,7 +116,7 @@ export function ChatComposer({ conversationId, turnRunning }: ChatComposerProps)
             ref={fileInputRef}
             type="file"
             multiple
-            accept=".ofx,.csv,.pdf"
+            accept={ASSISTANT_FILE_ACCEPT}
             className="hidden"
             onChange={(e) => {
               if (e.target.files?.length) void handleFiles(e.target.files);

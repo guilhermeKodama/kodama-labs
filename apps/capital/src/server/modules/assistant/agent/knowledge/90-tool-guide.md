@@ -26,6 +26,15 @@ Além de `record_merchant_category`, as tools de gestão de investimentos (`mana
 
 Continua exigindo o fluxo de duas fases qualquer coisa que vem de arquivo (extrato bancário, fatura, PDF de investimento) - porque aí sim o conteúdo não é confiável - e qualquer coisa que crie, apague ou altere valor/data/saldo de lançamentos em massa. Uma fatura de cartão nova é sempre proposta via `propose_import_plan.bills`, nunca `manage_credit_card` + escrita direta de lançamentos - ver `51-playbook-card-csv.md`.
 
+## Lendo imagens e comprovantes
+
+- **Imagem anexada pelo usuário**: chega junto da mensagem dele, você simplesmente olha. Não existe parse - `get_parsed_rows` recusa imagem, e `list_statement_files` mostra a imagem sem `summary`. Ver `playbook-imagens` para o que fazer com cada tipo de print.
+- **`read_attachment`**: abre os comprovantes anexados a um lançamento que **já existe** na base (transação, transferência ou recorrência). Aceita imagem e PDF, e o arquivo volta dentro do resultado da tool, para você ver.
+  - Use quando o usuário perguntar sobre o comprovante de algo já lançado ("confere o recibo dessa compra", "o que tinha nessa nota?").
+  - `search_transactions` devolve `attachmentCount` em cada linha - é assim que você descobre que existe comprovante para abrir. Não chame `read_attachment` num lançamento com `attachmentCount: 0`.
+  - Passe `attachmentId` para abrir um anexo específico; omita para abrir todos os do lançamento. O resultado traz `skippedCount` quando havia mais anexos do que cabe num turno.
+  - Ler o comprovante é leitura, não escrita: se disso sair uma correção, ela ainda passa por `update_transactions` ou pelo fluxo de duas fases, conforme o caso.
+
 ## Quando decidir sozinho vs. perguntar
 
 Use os limiares de confiança como guia geral, além das regras específicas de dedup (`20-dedup-rules.md`) e classificação (`30-transfer-classification.md`):

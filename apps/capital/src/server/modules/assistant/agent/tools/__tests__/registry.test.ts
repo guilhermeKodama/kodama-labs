@@ -1,6 +1,12 @@
 import { describe, it, expect, vi } from "vitest";
 import { z } from "zod";
-import { defineTool, executeTool, toAnthropicTools, type ToolContext } from "../registry";
+import {
+  defineTool,
+  executeTool,
+  toAnthropicTools,
+  TOOL_MEDIA_KEY,
+  type ToolContext,
+} from "../registry";
 import { AGENT_TOOLS } from "../index";
 
 function fakeCtx(db: unknown = {}): ToolContext {
@@ -28,6 +34,24 @@ const writeTool = defineTool({
   handler: async (_ctx, input) => ({
     ok: true,
     createdRecords: [{ model: "Thing", id: `t_${input.amount}` }],
+  }),
+});
+
+const mediaTool = defineTool({
+  name: "media_tool",
+  description: "Returns a file for Claude to look at, alongside a JSON summary.",
+  inputSchema: z.object({}),
+  access: "write_domain",
+  handler: async () => ({
+    loadedCount: 1,
+    [TOOL_MEDIA_KEY]: [
+      {
+        attachmentId: "att_1",
+        originalName: "recibo.png",
+        blobUrl: "blob://recibo.png",
+        mediaType: "image/png",
+      },
+    ],
   }),
 });
 
@@ -188,5 +212,39 @@ describe("toAnthropicTools", () => {
     for (const tool of tools) {
       expect(tool.strict, `tool "${tool.name}" set strict`).toBeUndefined();
     }
+  });
+});
+
+describe("executeTool - media escape hatch", () => {
+  it("splits __media off the output so only the JSON summary is returned", async () => {
+    const db = { agentAction: { create: vi.fn() } };
+    const result = await executeTool([mediaTool], fakeCtx(db), "call_1", "media_tool", {});
+
+    expect(result.isError).toBe(false);
+    expect(result.output).toEqual({ loadedCount: 1 });
+    expect(result.media).toEqual([
+      {
+        attachmentId: "att_1",
+        originalName: "recibo.png",
+        blobUrl: "blob://recibo.png",
+        mediaType: "image/png",
+      },
+    ]);
+  });
+
+  it("never writes the media refs into the audit row", async () => {
+    const create = vi.fn();
+    const db = { agentAction: { create } };
+    await executeTool([mediaTool], fakeCtx(db), "call_1", "media_tool", {});
+
+    const audited = create.mock.calls[0]![0].data.output;
+    expect(audited).toEqual({ loadedCount: 1 });
+    expect(JSON.stringify(audited)).not.toContain(TOOL_MEDIA_KEY);
+  });
+
+  it("leaves media undefined for a tool that returns none", async () => {
+    const result = await executeTool([echoTool], fakeCtx(), "call_1", "echo_read", { text: "hi" });
+    expect(result.media).toBeUndefined();
+    expect(result.output).toEqual({ text: "hi" });
   });
 });

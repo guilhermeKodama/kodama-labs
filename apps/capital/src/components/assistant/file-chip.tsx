@@ -1,7 +1,7 @@
 'use client';
 
 import { useTranslations } from 'next-intl';
-import { Loader2, Check, AlertTriangle, FileText } from 'lucide-react';
+import { Loader2, Check, AlertTriangle, FileText, Image as ImageIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { ConversationFile } from '@/types/assistant';
 
@@ -9,6 +9,11 @@ const TYPE_STYLES: Record<ConversationFile['fileType'], string> = {
   ofx: 'bg-blue-500/15 text-blue-400',
   csv: 'bg-amber-500/15 text-amber-400',
   pdf: 'bg-red-500/15 text-red-400',
+  image: 'bg-violet-500/15 text-violet-400',
+};
+
+const TYPE_LABELS: Partial<Record<ConversationFile['fileType'], string>> = {
+  image: 'IMG',
 };
 
 interface FileChipProps {
@@ -30,14 +35,23 @@ export function FileChip({ file, onRemove, compact = false }: FileChipProps) {
         compact && 'py-1'
       )}
     >
-      <span
-        className={cn(
-          'mono flex-shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium tracking-wide',
-          TYPE_STYLES[file.fileType]
-        )}
-      >
-        {file.fileType.toUpperCase()}
-      </span>
+      {file.fileType === 'image' && file.blobUrl ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={file.blobUrl}
+          alt={file.originalName}
+          className="h-7 w-7 flex-shrink-0 rounded object-cover"
+        />
+      ) : (
+        <span
+          className={cn(
+            'mono flex-shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium tracking-wide',
+            TYPE_STYLES[file.fileType]
+          )}
+        >
+          {TYPE_LABELS[file.fileType] ?? file.fileType.toUpperCase()}
+        </span>
+      )}
       <div className="min-w-0">
         <p className="truncate text-xs text-slate-200">{file.originalName}</p>
         {!compact && (
@@ -55,7 +69,12 @@ export function FileChip({ file, onRemove, compact = false }: FileChipProps) {
             )}
             {file.parseStatus === 'not_applicable' && (
               <>
-                <FileText className="h-3 w-3" /> {t('notApplicable')}
+                {file.fileType === 'image' ? (
+                  <ImageIcon className="h-3 w-3" />
+                ) : (
+                  <FileText className="h-3 w-3" />
+                )}{' '}
+                {file.fileType === 'image' ? t('imageAttached') : t('notApplicable')}
               </>
             )}
             {file.parseStatus === 'failed' && (

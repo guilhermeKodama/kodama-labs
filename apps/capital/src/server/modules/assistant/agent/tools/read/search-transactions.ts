@@ -6,7 +6,7 @@ import { parseLocalDate } from "@capital/server/lib/date-utils";
 export const searchTransactions = defineTool({
   name: "search_transactions",
   description:
-    "Search the user's existing transactions - by entity, date range, description substring, amount range, a batch of externalIds, or a statement import batch. Use this to check whether something the statement mentions was already entered manually, or to look up a specific import's contents. Capped at 50 rows per call.",
+    "Search the user's existing transactions - by entity, date range, description substring, amount range, a batch of externalIds, or a statement import batch. Use this to check whether something the statement mentions was already entered manually, or to look up a specific import's contents. Each row reports attachmentCount - when it is above zero you can open the receipt with read_attachment. Capped at 50 rows per call.",
   inputSchema: z.object({
     entityType: z.enum(["business", "personal"]).optional(),
     entityId: z.string().optional(),
@@ -53,6 +53,7 @@ export const searchTransactions = defineTool({
         category: r.category,
         externalId: r.externalId,
         statementImportId: r.statementImportId,
+        attachmentCount: r._count.attachments,
       })),
     };
   },

@@ -219,8 +219,11 @@ export const useAssistantStore = create<AssistantState & AssistantActions>()((se
   },
 
   sendMessage: async (conversationId, input) => {
-    const activeFileIds = (get().filesByConversation[conversationId] ?? [])
-      .filter((f) => f.fileType === "pdf" && f.active !== false)
+    const conversationFiles = get().filesByConversation[conversationId] ?? [];
+    // PDFs and images are the only types that go in as content blocks -
+    // OFX/CSV are read through get_parsed_rows instead.
+    const activeFileIds = conversationFiles
+      .filter((f) => (f.fileType === "pdf" || f.fileType === "image") && f.active !== false)
       .map((f) => f.id);
     const fileIds = input.fileIds ?? activeFileIds;
 
@@ -228,6 +231,23 @@ export const useAssistantStore = create<AssistantState & AssistantActions>()((se
     const optimisticBlocks: MessageBlock[] = input.cardResponse
       ? [{ kind: "card_response", text: input.cardResponse.decisions.map((d) => `${d.pairId}: ${d.label}`).join(", ") }]
       : [{ kind: "text", text: input.text ?? "" }];
+
+    // Mirror what the server will persist as capital_file_ref, so the
+    // attachment shows up the instant the user hits send rather than
+    // only after a reload.
+    if (!input.cardResponse && fileIds.length > 0) {
+      const attached = conversationFiles
+        .filter((f) => fileIds.includes(f.id))
+        .map((f) => ({
+          fileId: f.id,
+          originalName: f.originalName,
+          mediaType: f.mimeType,
+          blobUrl: f.blobUrl,
+        }));
+      if (attached.length > 0) {
+        optimisticBlocks.push({ kind: "attachments", files: attached });
+      }
+    }
 
     set((state) => ({
       messagesByConversation: {

@@ -28,6 +28,11 @@ export const getParsedRows = defineTool({
         "This is a PDF - it has no parsed rows. Read it from the document block attached to the message instead."
       );
     }
+    if (file.fileType === "image") {
+      throw new Error(
+        "This is an image - it has no parsed rows. The image itself is attached to the message; just look at it."
+      );
+    }
     if (file.parseStatus !== "parsed" || !file.parsedPayload) {
       throw new Error(`File is not parsed (status: ${file.parseStatus})`);
     }

@@ -1,4 +1,4 @@
-import type { ChatMessage, MessageBlock, DuplicateReviewCard } from "@/types/assistant";
+import type { ChatMessage, MessageBlock, MessageAttachment, DuplicateReviewCard } from "@/types/assistant";
 
 export interface RawAgentMessage {
   id: string;
@@ -81,16 +81,31 @@ export function parseHistoryToMessages(rows: RawAgentMessage[]): ChatMessage[] {
     if (row.role === "user") {
       const blocks = Array.isArray(row.content) ? (row.content as AnthropicLikeBlock[]) : [];
       const textBlock = blocks.find((b) => b.type === "text");
+      const userBlocks: MessageBlock[] = [
+        row.kind === "card_response"
+          ? { kind: "card_response", text: textBlock?.text ?? "" }
+          : { kind: "text", text: textBlock?.text ?? "" },
+      ];
+      // capital_file_ref is the marker the server persists in place of a
+      // PDF/image's bytes - it's what lets a reloaded thread still show
+      // the screenshot the user sent.
+      const attachments: MessageAttachment[] = blocks
+        .filter((b) => b.type === "capital_file_ref")
+        .map((b) => ({
+          fileId: String(b.fileId ?? ""),
+          originalName: String(b.originalName ?? ""),
+          mediaType: typeof b.mediaType === "string" ? b.mediaType : undefined,
+          blobUrl: typeof b.blobUrl === "string" ? b.blobUrl : undefined,
+        }));
+      if (attachments.length > 0) {
+        userBlocks.push({ kind: "attachments", files: attachments });
+      }
       messages.push({
         id: row.id,
         role: "user",
         status: "complete",
         createdAt: row.createdAt,
-        blocks: [
-          row.kind === "card_response"
-            ? { kind: "card_response", text: textBlock?.text ?? "" }
-            : { kind: "text", text: textBlock?.text ?? "" },
-        ],
+        blocks: userBlocks,
       });
       continue;
     }

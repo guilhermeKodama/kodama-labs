@@ -18,10 +18,11 @@ const FormSchema = z.object({
 
 const ConversationFileSchema = z.object({
   id: z.string(),
-  fileType: z.enum(["ofx", "csv", "pdf"]),
+  fileType: z.enum(["ofx", "csv", "pdf", "image"]),
   statementKind: z.string().nullable(),
   originalName: z.string(),
   mimeType: z.string(),
+  blobUrl: z.string(),
   sizeBytes: z.number(),
   parseStatus: z.enum(["pending", "parsed", "failed", "not_applicable"]),
   parseError: z.string().nullable(),
@@ -31,9 +32,9 @@ export const route = createRoute({
   path: "/v1/assistant/conversations/{id}/files",
   method: "post",
   tags: [...routeConfig.v1.defaultTags],
-  summary: "Upload a statement file into a conversation",
+  summary: "Upload a statement file or image into a conversation",
   description:
-    "Uploads an OFX/CSV/PDF statement, storing the blob and parsing OFX/CSV deterministically",
+    "Uploads an OFX/CSV/PDF statement or an image (screenshot/receipt), storing the blob and parsing OFX/CSV deterministically",
   request: {
     params: z.object({ id: z.string() }),
     body: {
@@ -81,6 +82,7 @@ export const handler: AppRouteHandler<typeof route> = async (c) => {
         statementKind: conversationFile.statementKind,
         originalName: conversationFile.originalName,
         mimeType: conversationFile.mimeType,
+        blobUrl: conversationFile.blobUrl,
         sizeBytes: conversationFile.sizeBytes,
         parseStatus: conversationFile.parseStatus as "pending" | "parsed" | "failed" | "not_applicable",
         parseError: conversationFile.parseError,

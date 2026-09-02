@@ -147,13 +147,11 @@
       "addCustom": "Add milestone",
       "addCustomHint": "Create a custom goal with a criterion.",
       "added": "Milestone added",
-      "addError": "Failed to add milestone",
+      "addError": "Could not add the milestone",
       "reachedNow": "Reached ✓",
       "projectedFor": "Age {age} · {year}",
       "notProjected": "Beyond horizon",
       "remove": "Remove",
-      "added": "Milestone added",
-      "addError": "Could not add the milestone",
       "removed": "Milestone removed",
       "removeError": "Could not remove the milestone",
       "milestoneName": "Name",
@@ -1826,7 +1824,7 @@
       "send": "Send",
       "stop": "Stop",
       "attach": "Attach",
-      "dropHint": "Drop your statements here — OFX, CSV or PDF · max 15MB",
+      "dropHint": "Drop statements or images here — OFX, CSV, PDF, JPG or PNG",
       "fileTooLarge": "File is larger than {max}",
       "fileTypeInvalid": "Unsupported file type",
       "waitTurn": "Wait for the assistant to finish before sending another message"
@@ -1841,7 +1839,8 @@
         "parsing": "{processed}/{total} processed",
         "ready": "{count} transactions",
         "error": "Failed to read",
-        "notApplicable": "PDF attached"
+        "notApplicable": "PDF attached",
+        "imageAttached": "Image attached"
       },
       "retry": "Retry",
       "outOfContext": "Out of context — will not be read in future turns"

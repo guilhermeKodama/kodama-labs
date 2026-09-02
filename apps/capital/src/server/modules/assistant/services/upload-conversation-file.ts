@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { slugify, sanitizeExtension, joinPath } from "@repo/storage";
 import type { DbClient } from "@capital/server/lib/prisma";
 import { putObject } from "@/lib/storage";
-import { MAX_STATEMENT_FILE_BYTES } from "../constants";
+import { MAX_IMAGE_FILE_BYTES, MAX_STATEMENT_FILE_BYTES } from "../constants";
 import { detectFile, parseStatementFile } from "./detect-and-parse-file";
 import { insertConversationFile } from "../data/commands/insert-conversation-file";
 
@@ -31,7 +31,8 @@ function buildConversationFilePath(conversationId: string, originalName: string)
  * Upload a statement file into a conversation's context: store the blob,
  * then parse OFX/CSV deterministically so the agent reads structured rows
  * via a tool instead of transcribing the file itself. PDFs are stored but
- * left unparsed - they go to Claude as document blocks when referenced.
+ * left unparsed - they go to Claude as document blocks when referenced,
+ * and images as image blocks.
  */
 export async function uploadConversationFile(
   userId: string,
@@ -47,8 +48,13 @@ export async function uploadConversationFile(
   const detected = detectFile(input.file.buffer, input.file.originalName);
   if (detected.statementKind === "unknown") {
     throw new Error(
-      "Unrecognized file type - only OFX, CSV and PDF statements are allowed"
+      "Unrecognized file type - only OFX, CSV, PDF and image files are allowed"
     );
+  }
+  // Tighter than the statement limit: an image above this is rejected by
+  // the Messages API, so it would upload fine and then break the turn.
+  if (detected.fileType === "image" && input.file.buffer.byteLength > MAX_IMAGE_FILE_BYTES) {
+    throw new Error(`Image exceeds maximum size of ${MAX_IMAGE_FILE_BYTES} bytes`);
   }
 
   const pathname = buildConversationFilePath(input.conversationId, input.file.originalName);
@@ -64,7 +70,10 @@ export async function uploadConversationFile(
       statementKind: detected.statementKind,
       blobUrl: uploaded.url,
       pathname: uploaded.pathname,
-      mimeType: input.file.mimeType,
+      // Sniffed type wins over the browser's - it's what buildApiMessages
+      // hands the API as media_type, and a pasted screenshot's declared
+      // type is unreliable.
+      mimeType: detected.mediaType ?? input.file.mimeType,
       sizeBytes: input.file.buffer.byteLength,
       originalName: input.file.originalName,
       parseStatus: parsed.parseStatus,
