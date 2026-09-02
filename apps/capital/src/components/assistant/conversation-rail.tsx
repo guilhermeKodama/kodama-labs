@@ -2,6 +2,7 @@
 
 import { useEffect } from 'react';
 import { useTranslations, useLocale } from 'next-intl';
+import { toast } from 'sonner';
 import { Plus, MoreHorizontal, Trash2 } from 'lucide-react';
 import { useRouter } from '@/i18n/navigation';
 import { cn } from '@/lib/utils';
@@ -16,6 +17,9 @@ import type { ConversationSummary } from '@/types/assistant';
 
 interface ConversationRailProps {
   activeConversationId?: string;
+  /** Set by the mobile drawer so picking anything closes the sheet behind it.
+   *  Undefined on desktop, where the rail is always-on and has nothing to close. */
+  onNavigate?: () => void;
 }
 
 function formatCreatedAt(createdAt: string, locale: string): string {
@@ -49,28 +53,44 @@ function groupConversations(conversations: ConversationSummary[]) {
   return { today, last7, older };
 }
 
-export function ConversationRail({ activeConversationId }: ConversationRailProps) {
+export function ConversationRail({ activeConversationId, onNavigate }: ConversationRailProps) {
   const t = useTranslations('assistant');
   const locale = useLocale();
   const router = useRouter();
   const conversations = useAssistantStore((s) => s.conversations);
   const conversationsLoaded = useAssistantStore((s) => s.conversationsLoaded);
   const fetchConversations = useAssistantStore((s) => s.fetchConversations);
-  const createConversation = useAssistantStore((s) => s.createConversation);
   const archiveConversation = useAssistantStore((s) => s.archiveConversation);
 
   useEffect(() => {
     if (!conversationsLoaded) void fetchConversations();
   }, [conversationsLoaded, fetchConversations]);
 
-  const handleNew = async () => {
-    const id = await createConversation();
-    if (id) router.push(`/assistant/${id}`);
+  // Just go to the index screen — the first message is what creates the
+  // conversation (see assistant/page.tsx's handleSend). Creating one here
+  // minted an empty orphan row for every click that never got typed into,
+  // and was a second unguarded async path that could fail silently.
+  const handleNew = () => {
+    onNavigate?.();
+    router.push('/assistant');
+  };
+
+  const handleSelect = (id: string) => {
+    onNavigate?.();
+    router.push(`/assistant/${id}`);
   };
 
   const handleDelete = async (id: string) => {
     await archiveConversation(id);
-    if (id === activeConversationId) router.push('/assistant');
+    const error = useAssistantStore.getState().error;
+    if (error) {
+      toast.error(error);
+      return;
+    }
+    if (id === activeConversationId) {
+      onNavigate?.();
+      router.push('/assistant');
+    }
   };
 
   const { today, last7, older } = groupConversations(conversations);
@@ -90,7 +110,7 @@ export function ConversationRail({ activeConversationId }: ConversationRailProps
           >
             <button
               type="button"
-              onClick={() => router.push(`/assistant/${c.id}`)}
+              onClick={() => handleSelect(c.id)}
               className="min-w-0 flex-1 text-left"
             >
               <p
@@ -104,7 +124,7 @@ export function ConversationRail({ activeConversationId }: ConversationRailProps
               <p className="truncate text-xs text-slate-600">{formatCreatedAt(c.createdAt, locale)}</p>
             </button>
             <DropdownMenu>
-              <DropdownMenuTrigger className="rounded p-1 text-slate-600 opacity-0 hover:bg-slate-700 hover:text-slate-300 group-hover:opacity-100">
+              <DropdownMenuTrigger className="rounded p-2 text-slate-600 opacity-100 hover:bg-slate-700 hover:text-slate-300 md:p-1 md:opacity-0 md:group-hover:opacity-100">
                 <MoreHorizontal className="h-3.5 w-3.5" />
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="border-slate-700 bg-slate-900">
@@ -124,7 +144,7 @@ export function ConversationRail({ activeConversationId }: ConversationRailProps
   };
 
   return (
-    <div className="flex h-full w-full flex-col border-r border-slate-800 bg-slate-950 sm:w-64">
+    <div className="flex h-full w-full flex-col bg-slate-950 md:w-64 md:border-r md:border-slate-800">
       <div className="border-b border-slate-800 p-3">
         <button
           type="button"

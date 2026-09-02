@@ -3,10 +3,9 @@
 import { useEffect } from 'react';
 import { useParams } from 'next/navigation';
 import { useTranslations } from 'next-intl';
-import { ChevronLeft } from 'lucide-react';
-import { Link } from '@/i18n/navigation';
 import { useAssistantStore } from '@/lib/store';
 import { ConversationRail } from '@/components/assistant/conversation-rail';
+import { ConversationDrawer } from '@/components/assistant/conversation-drawer';
 import { ChatThread } from '@/components/assistant/chat-thread';
 import { ChatComposer } from '@/components/assistant/chat-composer';
 import { ContextStrip } from '@/components/assistant/context-strip';
@@ -54,33 +53,32 @@ export default function AssistantConversationPage() {
   const conversation = conversations.find((c) => c.id === conversationId);
 
   return (
-    <>
-      <div className="flex h-full">
-        <div className="hidden sm:block">
-          <ConversationRail activeConversationId={conversationId} />
-        </div>
-        <div className="flex min-w-0 flex-1 flex-col">
-          <div className="flex h-16 flex-shrink-0 items-center gap-2 border-b border-slate-800 px-4 sm:px-8">
-            <Link href="/assistant" className="rounded p-1.5 text-slate-400 hover:bg-slate-800 sm:hidden">
-              <ChevronLeft className="h-4 w-4" />
-            </Link>
-            <h1 className="truncate text-[15px] font-semibold text-white">
-              {conversation?.title || t('untitled')}
-            </h1>
-          </div>
-
-          <ChatThread conversationId={conversationId} messages={messages} />
-
-          {turnError && (
-            <div className="mx-6 mb-2 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-400 sm:mx-8">
-              {turnError}
-            </div>
-          )}
-
-          <ContextStrip conversationId={conversationId} files={activeFiles} />
-          <ChatComposer conversationId={conversationId} turnRunning={turnRunning} />
-        </div>
+    <div className="flex h-full">
+      <div className="hidden md:block">
+        <ConversationRail activeConversationId={conversationId} />
       </div>
-    </>
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+        <div className="flex h-16 flex-shrink-0 items-center gap-2 border-b border-slate-800 px-3 md:px-8">
+          {/* Opens the conversation list rather than going "back" to the empty
+              onboarding screen - the list is what a phone otherwise can't
+              reach, and it already contains "Nova conversa". */}
+          <ConversationDrawer activeConversationId={conversationId} />
+          <h1 className="truncate text-[15px] font-semibold text-white">
+            {conversation?.title || t('untitled')}
+          </h1>
+        </div>
+
+        <ChatThread conversationId={conversationId} messages={messages} />
+
+        {turnError && (
+          <div className="mx-6 mb-2 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-400 md:mx-8">
+            {turnError}
+          </div>
+        )}
+
+        <ContextStrip conversationId={conversationId} files={activeFiles} />
+        <ChatComposer conversationId={conversationId} turnRunning={turnRunning} />
+      </div>
+    </div>
   );
 }

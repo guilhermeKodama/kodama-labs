@@ -1906,6 +1906,7 @@
     },
     "errors": {
       "turnFailed": "O assistente encontrou um erro",
+      "startFailed": "Não foi possível iniciar a conversa",
       "retryable": "Tentar de novo",
       "uploadFailed": "Falha no envio do arquivo",
       "cardAlreadyAnswered": "Essa decisão já foi tomada",

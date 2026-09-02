@@ -9,6 +9,7 @@ import { useCreditCardStore } from "@/lib/store/credit-card-store";
 import { useInvestmentStore } from "@/lib/store/investment-store";
 import { useFireStore } from "@/lib/store/fire-store";
 import { useAttachmentStore } from "@/lib/store/attachment-store";
+import { useAssistantStore } from "@/lib/store/assistant-store";
 
 // Navigation/resume revalidations skip the network while data is younger
 // than this; pull-to-refresh bypasses it with { force: true }.
@@ -47,6 +48,10 @@ async function fetchEverything(): Promise<void> {
     attachments.fetchByOwnerType("transfer"),
     attachments.fetchByOwnerType("recurringTransaction"),
     attachments.fetchByOwnerType("recurringTransfer"),
+    // Conversation LIST only. Per-conversation messages are deliberately not
+    // refreshed here: the loadedConversations guard in the thread page exists
+    // to stop a GET clobbering an in-flight stream with a pre-turn snapshot.
+    useAssistantStore.getState().fetchConversations(),
   ]);
 }
 

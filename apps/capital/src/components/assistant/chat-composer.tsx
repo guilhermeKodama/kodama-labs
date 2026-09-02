@@ -14,6 +14,7 @@ interface ChatComposerProps {
 
 export function ChatComposer({ conversationId, turnRunning }: ChatComposerProps) {
   const t = useTranslations('assistant.composer');
+  const tErrors = useTranslations('assistant.errors');
   const sendMessage = useAssistantStore((s) => s.sendMessage);
   const uploadFile = useAssistantStore((s) => s.uploadFile);
   const cancelTurn = useAssistantStore((s) => s.cancelTurn);
@@ -35,7 +36,11 @@ export function ChatComposer({ conversationId, turnRunning }: ChatComposerProps)
         setFileError(t('fileTooLarge', { max: '15MB' }));
         continue;
       }
-      await uploadFile(conversationId, file);
+      // uploadFile resolves to null on failure and records why in the store -
+      // without this the file just silently never appeared in the context.
+      if ((await uploadFile(conversationId, file)) === null) {
+        setFileError(useAssistantStore.getState().error ?? tErrors('uploadFailed'));
+      }
     }
   };
 
@@ -60,7 +65,7 @@ export function ChatComposer({ conversationId, turnRunning }: ChatComposerProps)
 
   return (
     <div
-      className="relative px-6 pb-6 sm:px-8"
+      className="relative flex-shrink-0 px-4 pb-4 md:px-8 md:pb-6"
       onDragOver={(e) => {
         e.preventDefault();
         setDragging(true);
@@ -69,7 +74,7 @@ export function ChatComposer({ conversationId, turnRunning }: ChatComposerProps)
       onDrop={handleDrop}
     >
       {dragging && (
-        <div className="absolute inset-x-6 inset-y-0 z-10 flex items-center justify-center rounded-2xl border-2 border-dashed border-emerald-500/50 bg-slate-950/90 text-sm text-emerald-400 sm:inset-x-8">
+        <div className="absolute inset-x-4 inset-y-0 z-10 flex items-center justify-center rounded-2xl border-2 border-dashed border-emerald-500/50 bg-slate-950/90 text-sm text-emerald-400 md:inset-x-8">
           {t('dropHint')}
         </div>
       )}
@@ -80,13 +85,14 @@ export function ChatComposer({ conversationId, turnRunning }: ChatComposerProps)
           onKeyDown={handleKeyDown}
           placeholder={t('placeholder')}
           disabled={turnRunning}
-          className="min-h-[44px] resize-none border-0 bg-transparent text-[15px] leading-relaxed text-slate-200 shadow-none placeholder:text-slate-500 focus-visible:ring-0"
+          enterKeyHint="send"
+          className="max-h-40 min-h-[44px] resize-none border-0 bg-transparent text-[15px] leading-relaxed text-slate-200 shadow-none placeholder:text-slate-500 focus-visible:ring-0"
         />
         <div className="mt-1 flex items-center justify-between px-2">
           <button
             type="button"
             onClick={() => fileInputRef.current?.click()}
-            className="flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs text-slate-400 hover:bg-slate-800 hover:text-slate-200"
+            className="flex items-center gap-1.5 rounded-lg px-3 py-2.5 text-xs text-slate-400 hover:bg-slate-800 hover:text-slate-200 md:py-1.5"
           >
             <Paperclip className="h-4 w-4" />
             {t('attach')}
@@ -105,8 +111,9 @@ export function ChatComposer({ conversationId, turnRunning }: ChatComposerProps)
           {turnRunning ? (
             <button
               type="button"
+              onPointerDown={(e) => e.preventDefault()}
               onClick={() => void cancelTurn(conversationId)}
-              className="flex items-center gap-1.5 rounded-lg border border-slate-600 px-3 py-1.5 text-xs font-medium text-slate-200 hover:bg-slate-800"
+              className="flex items-center gap-1.5 rounded-lg border border-slate-600 px-3 py-2.5 text-xs font-medium text-slate-200 hover:bg-slate-800 md:py-1.5"
             >
               <Square className="h-3 w-3 fill-current" />
               {t('stop')}
@@ -114,9 +121,11 @@ export function ChatComposer({ conversationId, turnRunning }: ChatComposerProps)
           ) : (
             <button
               type="button"
+              onPointerDown={(e) => e.preventDefault()}
               onClick={handleSend}
               disabled={!text.trim()}
-              className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-r from-emerald-500 to-cyan-500 text-white disabled:opacity-30"
+              aria-label={t('send')}
+              className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-lg bg-gradient-to-r from-emerald-500 to-cyan-500 text-white disabled:opacity-30 md:h-9 md:w-9"
             >
               <ArrowUp className="h-4 w-4" />
             </button>

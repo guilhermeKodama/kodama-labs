@@ -1906,6 +1906,7 @@
     },
     "errors": {
       "turnFailed": "The assistant hit an error",
+      "startFailed": "Couldn't start the conversation",
       "retryable": "Try again",
       "uploadFailed": "File upload failed",
       "cardAlreadyAnswered": "That decision was already made",

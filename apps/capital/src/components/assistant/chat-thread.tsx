@@ -35,7 +35,7 @@ export function ChatThread({ conversationId, messages }: ChatThreadProps) {
 
   return (
     <div className="relative flex-1 overflow-hidden">
-      <div ref={containerRef} onScroll={handleScroll} className="h-full space-y-7 overflow-y-auto px-6 py-7 sm:px-8">
+      <div ref={containerRef} onScroll={handleScroll} className="h-full space-y-7 overflow-y-auto px-4 py-7 md:px-8">
         {messages.map((message) => (
           <ChatMessage key={message.id} conversationId={conversationId} message={message} />
         ))}

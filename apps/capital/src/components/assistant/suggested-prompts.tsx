@@ -38,29 +38,35 @@ export function SuggestedPrompts({ onFilePicked }: SuggestedPromptsProps) {
   };
 
   return (
-    <div className="grid gap-2.5 sm:grid-cols-3">
-      <input
-        ref={inputRef}
-        type="file"
-        accept={pendingAccept}
-        className="hidden"
-        onChange={(e) => {
-          const file = e.target.files?.[0];
-          if (file) onFilePicked(file);
-          e.target.value = '';
-        }}
-      />
-      {PROMPTS.map(({ icon: Icon, key, accept }) => (
-        <button
-          key={key}
-          type="button"
-          onClick={() => openPicker(accept)}
-          className="flex items-center gap-2.5 rounded-xl border border-slate-800 bg-slate-900/50 px-4 py-3 text-left text-sm text-slate-300 transition-colors hover:border-slate-700 hover:bg-slate-800/50"
-        >
-          <Icon className="h-4 w-4 flex-shrink-0 text-emerald-400" />
-          {t(key)}
-        </button>
-      ))}
+    // A container query, not `sm:`: the viewport can be wide while this column
+    // is not - with the sidebar and the rail both out, a ~800px window leaves
+    // ~300px here, and viewport-keyed columns overflowed into a horizontal
+    // scrollbar. `@container` has to sit on an ancestor of what queries it.
+    <div className="@container/prompts">
+      <div className="grid gap-2.5 @md/prompts:grid-cols-3">
+        <input
+          ref={inputRef}
+          type="file"
+          accept={pendingAccept}
+          className="hidden"
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            if (file) onFilePicked(file);
+            e.target.value = '';
+          }}
+        />
+        {PROMPTS.map(({ icon: Icon, key, accept }) => (
+          <button
+            key={key}
+            type="button"
+            onClick={() => openPicker(accept)}
+            className="flex items-center gap-2.5 rounded-xl border border-slate-800 bg-slate-900/50 px-4 py-3 text-left text-sm text-slate-300 transition-colors hover:border-slate-700 hover:bg-slate-800/50"
+          >
+            <Icon className="h-4 w-4 flex-shrink-0 text-emerald-400" />
+            {t(key)}
+          </button>
+        ))}
+      </div>
     </div>
   );
 }

@@ -47,7 +47,7 @@ export function AppShell({ children, buildVersion }: AppShellProps) {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950">
+    <div className="min-h-dvh bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950">
       <Sidebar buildVersion={buildVersion} />
       <BottomNav buildVersion={buildVersion} />
 

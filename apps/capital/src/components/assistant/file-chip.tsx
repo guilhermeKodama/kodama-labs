@@ -23,7 +23,7 @@ export function FileChip({ file, onRemove, compact = false }: FileChipProps) {
   return (
     <div
       className={cn(
-        'flex items-center gap-2 rounded-lg border px-2.5 py-1.5',
+        'flex min-w-0 items-center gap-2 rounded-lg border px-2.5 py-1.5',
         file.parseStatus === 'failed'
           ? 'border-red-500/30 bg-red-500/5'
           : 'border-slate-700 bg-slate-800/50',

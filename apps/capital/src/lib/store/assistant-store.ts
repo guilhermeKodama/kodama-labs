@@ -17,6 +17,11 @@ interface AssistantState {
   turnRunning: Record<string, boolean>;
   turnErrorByConversation: Record<string, string | undefined>;
   loadedConversations: Record<string, boolean>;
+  /** Last failure from a non-streaming action (create/fetch/upload/archive).
+   *  Per-turn streaming errors keep their own per-conversation slot in
+   *  `turnErrorByConversation` — this one is for everything else, which
+   *  until now failed completely silently. */
+  error: string | null;
 }
 
 interface AssistantActions {
@@ -38,6 +43,15 @@ interface AssistantActions {
   cancelTurn: (conversationId: string) => Promise<void>;
   renameConversation: (id: string, title: string) => Promise<void>;
   archiveConversation: (id: string) => Promise<void>;
+  setError: (error: string | null) => void;
+}
+
+/** Pull the API's error message out of a failed response, falling back to a
+ *  labelled status code when the body isn't the JSON envelope we expect
+ *  (an HTML error page, a proxy timeout, an empty body). */
+async function readError(res: Response, fallback: string): Promise<string> {
+  const body = (await res.json().catch(() => null)) as { error?: { message?: string } } | null;
+  return body?.error?.message ?? `${fallback} (${res.status})`;
 }
 
 function updateBlock(
@@ -56,53 +70,88 @@ export const useAssistantStore = create<AssistantState & AssistantActions>()((se
   turnRunning: {},
   turnErrorByConversation: {},
   loadedConversations: {},
+  error: null,
+
+  setError: (error) => set({ error }),
 
   fetchConversations: async () => {
-    const res = await client.v1.assistant.conversations.$get({ query: {} });
-    if (!res.ok) return;
-    const data = await res.json();
-    set({ conversations: data, conversationsLoaded: true });
+    try {
+      const res = await client.v1.assistant.conversations.$get({ query: {} });
+      if (!res.ok) {
+        set({ error: await readError(res, "Falha ao carregar conversas") });
+        return;
+      }
+      const data = await res.json();
+      set({ conversations: data, conversationsLoaded: true, error: null });
+    } catch (err) {
+      set({ error: err instanceof Error ? err.message : "Falha ao carregar conversas" });
+    }
   },
 
   createConversation: async (title) => {
-    const res = await client.v1.assistant.conversations.$post({ json: { title } });
-    if (!res.ok) return null;
-    const conversation = await res.json();
-    set((state) => ({ conversations: [conversation, ...state.conversations] }));
-    return conversation.id;
+    try {
+      const res = await client.v1.assistant.conversations.$post({ json: { title } });
+      if (!res.ok) {
+        set({ error: await readError(res, "Falha ao criar conversa") });
+        return null;
+      }
+      const conversation = await res.json();
+      set((state) => ({ conversations: [conversation, ...state.conversations], error: null }));
+      return conversation.id;
+    } catch (err) {
+      set({ error: err instanceof Error ? err.message : "Falha ao criar conversa" });
+      return null;
+    }
   },
 
   fetchConversation: async (id) => {
-    const res = await client.v1.assistant.conversations[":id"].$get({ param: { id } });
-    if (!res.ok) return;
-    const data = await res.json();
-    const messages = parseHistoryToMessages(data.messages as RawAgentMessage[]);
-    const files: ConversationFile[] = data.files.map((f) => ({ ...f, active: true }));
-    set((state) => ({
-      messagesByConversation: { ...state.messagesByConversation, [id]: messages },
-      filesByConversation: { ...state.filesByConversation, [id]: files },
-      loadedConversations: { ...state.loadedConversations, [id]: true },
-    }));
+    try {
+      const res = await client.v1.assistant.conversations[":id"].$get({ param: { id } });
+      if (!res.ok) {
+        set({ error: await readError(res, "Falha ao carregar conversa") });
+        return;
+      }
+      const data = await res.json();
+      const messages = parseHistoryToMessages(data.messages as RawAgentMessage[]);
+      const files: ConversationFile[] = data.files.map((f) => ({ ...f, active: true }));
+      set((state) => ({
+        messagesByConversation: { ...state.messagesByConversation, [id]: messages },
+        filesByConversation: { ...state.filesByConversation, [id]: files },
+        loadedConversations: { ...state.loadedConversations, [id]: true },
+        error: null,
+      }));
+    } catch (err) {
+      set({ error: err instanceof Error ? err.message : "Falha ao carregar conversa" });
+    }
   },
 
   uploadFile: async (conversationId, file) => {
-    const formData = new FormData();
-    formData.append("file", file);
-    const res = await fetch(`/api/v1/assistant/conversations/${conversationId}/files`, {
-      method: "POST",
-      credentials: "include",
-      body: formData,
-    });
-    if (!res.ok) return null;
-    const uploaded = (await res.json()) as ConversationFile;
-    const withActive: ConversationFile = { ...uploaded, active: true };
-    set((state) => ({
-      filesByConversation: {
-        ...state.filesByConversation,
-        [conversationId]: [...(state.filesByConversation[conversationId] ?? []), withActive],
-      },
-    }));
-    return withActive;
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const res = await fetch(`/api/v1/assistant/conversations/${conversationId}/files`, {
+        method: "POST",
+        credentials: "include",
+        body: formData,
+      });
+      if (!res.ok) {
+        set({ error: await readError(res, "Falha no envio do arquivo") });
+        return null;
+      }
+      const uploaded = (await res.json()) as ConversationFile;
+      const withActive: ConversationFile = { ...uploaded, active: true };
+      set((state) => ({
+        filesByConversation: {
+          ...state.filesByConversation,
+          [conversationId]: [...(state.filesByConversation[conversationId] ?? []), withActive],
+        },
+        error: null,
+      }));
+      return withActive;
+    } catch (err) {
+      set({ error: err instanceof Error ? err.message : "Falha no envio do arquivo" });
+      return null;
+    }
   },
 
   toggleFileActive: (conversationId, fileId) => {
@@ -154,9 +203,19 @@ export const useAssistantStore = create<AssistantState & AssistantActions>()((se
   },
 
   archiveConversation: async (id) => {
-    const res = await client.v1.assistant.conversations[":id"].$delete({ param: { id } });
-    if (!res.ok) return;
-    set((state) => ({ conversations: state.conversations.filter((c) => c.id !== id) }));
+    try {
+      const res = await client.v1.assistant.conversations[":id"].$delete({ param: { id } });
+      if (!res.ok) {
+        set({ error: await readError(res, "Falha ao excluir conversa") });
+        return;
+      }
+      set((state) => ({
+        conversations: state.conversations.filter((c) => c.id !== id),
+        error: null,
+      }));
+    } catch (err) {
+      set({ error: err instanceof Error ? err.message : "Falha ao excluir conversa" });
+    }
   },
 
   sendMessage: async (conversationId, input) => {
