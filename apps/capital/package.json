@@ -10,10 +10,10 @@
     "lint": "eslint --max-warnings 0",
     "typecheck": "tsc --noEmit",
     "db:generate": "prisma generate",
-    "db:migrate": "prisma migrate dev",
-    "db:push": "prisma db push",
-    "db:seed": "tsx prisma/seed.ts",
-    "db:reset": "prisma migrate reset --force",
+    "db:migrate": "node scripts/assert-dev-db.mjs 'prisma migrate dev' && prisma migrate dev",
+    "db:push": "node scripts/assert-dev-db.mjs 'prisma db push' && prisma db push",
+    "db:seed": "node scripts/assert-dev-db.mjs 'prisma db seed' && tsx prisma/seed.ts",
+    "db:reset": "node scripts/assert-dev-db.mjs 'prisma migrate reset' && prisma migrate reset --force",
     "test": "vitest run"
   },
   "dependencies": {

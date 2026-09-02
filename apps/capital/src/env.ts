@@ -8,10 +8,11 @@ export const env = createEnv({
   // the field is genuinely optional (same footgun careers hit first).
   emptyStringAsUndefined: true,
   server: {
-    DATABASE_URL: z
-      .string()
-      .url()
-      .default("postgresql://root:root@localhost:5433/capital"),
+    // No default on purpose. This used to fall back to the PRODUCTION
+    // database (capital), so any context that didn't load a .env - vitest
+    // being the dangerous one - silently read and wrote prod. Failing
+    // loudly on a missing DATABASE_URL is the only safe behaviour.
+    DATABASE_URL: z.string().url(),
     DIRECT_URL: z.string().url().optional(),
     NODE_ENV: z
       .enum(["development", "production", "test"])

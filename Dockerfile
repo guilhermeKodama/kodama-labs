@@ -97,6 +97,12 @@ ENV NEXT_PUBLIC_VAPID_PUBLIC_KEY=$NEXT_PUBLIC_VAPID_PUBLIC_KEY
 RUN cd apps/capital && pnpm exec next build
 WORKDIR /repo/apps/capital
 ENV PORT=3000
+# Explicit rather than relying on `next start` to infer it. capital's
+# src/server/lib/db-guard.ts refuses to connect to a non-_dev/_test
+# database unless NODE_ENV=production, so an unset value here would take
+# the container down at startup instead of protecting anything. Set after
+# the build so it cannot affect the install/build stages above.
+ENV NODE_ENV=production
 CMD ["pnpm", "start"]
 
 # ---------------------------------------------------------------------------
