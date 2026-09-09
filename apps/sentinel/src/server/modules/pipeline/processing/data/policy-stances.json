@@ -1,0 +1,12 @@
+{
+  "_note": "Posições declaradas ('discurso') por político, curadas editorialmente ou extraídas por IA — sempre rotuladas como não-oficiais (source CURATED). Compara-se com como a pessoa de fato vota nas pautas-chave (codes.theme). cpf = 11 dígitos; stance = FAVOR | CONTRA | NEUTRO. sourceUrl aponta para a evidência pública (entrevista, programa de governo, rede social).",
+  "stances": [
+    {
+      "cpf": "00000000000",
+      "theme": "seguranca",
+      "stance": "FAVOR",
+      "sourceUrl": "https://exemplo.org/declaracao",
+      "verifiedBy": "manual"
+    }
+  ]
+}

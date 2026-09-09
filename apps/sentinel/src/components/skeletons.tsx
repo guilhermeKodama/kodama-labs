@@ -169,6 +169,31 @@ export function SectionCardSkeleton({
   );
 }
 
+/** Scorecard strip: a row of compact mini-metric cards. */
+export function ScorecardSkeleton({ count = 4 }: { count?: number }) {
+  return (
+    <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
+      {Array.from({ length: count }, (_, i) => (
+        <div key={i} className="rounded-lg border bg-card p-3">
+          <Skeleton className="h-3 w-16" />
+          <Skeleton className="h-5 w-12 mt-1.5" />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/** Tab bar: a row of tab labels under a bottom border. */
+export function TabsBarSkeleton({ count = 6 }: { count?: number }) {
+  return (
+    <div className="mb-6 flex gap-4 border-b pb-2">
+      {Array.from({ length: count }, (_, i) => (
+        <Skeleton key={i} className="h-5 w-20" />
+      ))}
+    </div>
+  );
+}
+
 /**
  * Detail-page header: back link, title, badge row and meta line —
  * the common shape of [id] pages.

@@ -6,6 +6,9 @@ let cpfCacheTime = 0;
 let seqToCpfCache: Map<string, string> | null = null;
 let seqCacheTime = 0;
 
+let extIdCache: Map<string, string> | null = null;
+let extIdCacheTime = 0;
+
 const TTL = 5 * 60 * 1000;
 
 export async function getCpfToPoliticianId(): Promise<Map<string, string>> {
@@ -18,9 +21,27 @@ export async function getCpfToPoliticianId(): Promise<Map<string, string>> {
   return cpfCache;
 }
 
+/**
+ * Maps Politician.externalId → id. For Câmara deputies externalId is the
+ * numeric deputy id (as string); used to attribute legislative data
+ * (expenses, votes, bills) back to the politician.
+ */
+export async function getExternalIdToPoliticianId(): Promise<Map<string, string>> {
+  if (extIdCache && Date.now() - extIdCacheTime < TTL) return extIdCache;
+  const rows = await prisma.politician.findMany({
+    where: { externalId: { not: null } },
+    select: { id: true, externalId: true },
+  });
+  extIdCache = new Map(rows.map((r) => [r.externalId!, r.id]));
+  extIdCacheTime = Date.now();
+  return extIdCache;
+}
+
 export function invalidatePoliticianCache() {
   cpfCache = null;
   cpfCacheTime = 0;
+  extIdCache = null;
+  extIdCacheTime = 0;
 }
 
 export async function getSeqToCpfMap(): Promise<Map<string, string>> {

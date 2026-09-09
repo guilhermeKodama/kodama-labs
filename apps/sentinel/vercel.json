@@ -15,6 +15,10 @@
     { "path": "/api/cron/ingest/donations", "schedule": "0 6 * * *" },
     { "path": "/api/cron/ingest/assets", "schedule": "0 6 * * *" },
     { "path": "/api/cron/ingest/senadores", "schedule": "0 6 * * *" },
-    { "path": "/api/cron/ingest/servidores", "schedule": "0 6 * * *" }
+    { "path": "/api/cron/ingest/servidores", "schedule": "0 6 * * *" },
+    { "path": "/api/cron/ingest/parliamentary-expenses", "schedule": "30 7 * * *" },
+    { "path": "/api/cron/ingest/votacoes", "schedule": "0 8 * * *" },
+    { "path": "/api/cron/ingest/proposicoes", "schedule": "30 8 * * *" },
+    { "path": "/api/cron/ingest/news", "schedule": "0 9 * * *" }
   ]
 }

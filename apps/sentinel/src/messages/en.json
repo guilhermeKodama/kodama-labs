@@ -32,6 +32,7 @@
     "contracts": "Contracts",
     "entities": "Entities",
     "politicians": "Politicians",
+    "elections": "2026 Elections",
     "network": "Network",
     "alerts": "Alerts",
     "analysis": "AI Analysis",
@@ -46,7 +47,9 @@
       "SANCTIONED_ENTITY": "Public Sanction on Record",
       "SUSPICIOUS_NETWORK": "Ownership Link to Review",
       "AI_FLAG": "AI Analysis Flag",
-      "POLITICAL_LINK": "Political Link to Review"
+      "POLITICAL_LINK": "Political Link to Review",
+      "LEGAL_HISTORY": "Legal Record to Verify",
+      "VOTING_INCOHERENCE": "Discourse × Vote Divergence"
     },
     "severity": {
       "LOW": "Low",
@@ -113,6 +116,33 @@
       "contract": "Contract",
       "entity": "Entity",
       "procurement_item": "Procurement item"
+    },
+    "theme": {
+      "seguranca": "Public safety",
+      "direitos": "Rights and citizenship",
+      "ambiente": "Environment",
+      "economia": "Economy",
+      "tributacao": "Taxation",
+      "saude": "Health",
+      "educacao": "Education",
+      "trabalho": "Labor"
+    },
+    "proceedingKind": {
+      "CRIMINAL": "Criminal",
+      "IMPROBIDADE": "Administrative misconduct",
+      "ELECTORAL": "Electoral",
+      "REJECTED_ACCOUNTS": "Accounts ruled on",
+      "INELIGIBILITY": "Ineligibility",
+      "CIVIL": "Civil"
+    },
+    "proceedingStatus": {
+      "INVESTIGATION": "Under investigation",
+      "INDICTED": "Indicted",
+      "CONVICTED_1ST": "Convicted (1st instance)",
+      "CONVICTED_APPEAL": "Convicted (appeal)",
+      "ACQUITTED": "Acquitted",
+      "ARCHIVED": "Archived",
+      "SERVING_SENTENCE": "Serving sentence"
     }
   },
   "alerts": {
@@ -209,10 +239,31 @@
       "donorConcentration": {
         "title": "Company recorded with donations to {politicianCount} politicians and government contracts",
         "description": "{entityName} ({entityCnpj}) is recorded as having donated {totalDonated} to: {politicianNames} — holds {contractCount} contract(s)."
+      },
+      "legalHistory": {
+        "title": "Legal record worth reviewing: {politicianName}",
+        "description": "{politicianName} ({party}/{state}) appears in a public record from {source}: {reason}. Material for verification, not a statement of guilt."
       }
     }
   },
   "pages": {
+    "elections2026": {
+      "title": "2026 Elections",
+      "subtitle": "A public dossier on politicians to support your vote — money, legislative record and history in one place.",
+      "tseNote": "The official 2026 candidate list is only published by the TSE after registration closes (mid-August 2026). Until then, this page gathers current office-holders and candidates from previous elections.",
+      "stats": {
+        "activeMandates": "In office",
+        "linkAlerts": "Link alerts",
+        "withLinks": "Politicians with links",
+        "donations": "Mapped donations"
+      },
+      "officesTitle": "Browse by office",
+      "highlightsTitle": "Highlights",
+      "mostLinks": "Most links to review",
+      "topDonations": "Largest donations received",
+      "empty": "No data yet",
+      "browseAll": "View all politicians →"
+    },
     "dashboard": {
       "title": "Dashboard",
       "stats": {
