@@ -66,16 +66,19 @@ export default async function ProfilePage() {
               <div key={p.id} className="rounded-xl border border-dashed border-yellow-500/40 bg-yellow-500/5 p-3.5">
                 <p className="text-sm">{p.proposedRule}</p>
                 <p className="mt-1 text-xs text-muted-foreground">{p.rationale}</p>
+                {/* type must stay "submit": formAction is only honoured on a
+                    submit button, so type="button" makes the click a no-op
+                    (no submission happens, the bound action never runs). */}
                 <div className="mt-2 flex gap-2">
                   <button
-                    type="button"
+                    type="submit"
                     formAction={resolveRuleProposal.bind(null, p.id, true)}
                     className="rounded-lg bg-primary px-2.5 py-1 text-xs font-semibold text-primary-foreground"
                   >
                     Adicionar ao perfil
                   </button>
                   <button
-                    type="button"
+                    type="submit"
                     formAction={resolveRuleProposal.bind(null, p.id, false)}
                     className="rounded-lg border border-border px-2.5 py-1 text-xs text-muted-foreground"
                   >
