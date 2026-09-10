@@ -17,7 +17,9 @@
 //
 // usage: node --import tsx src/scripts/rebuild-feature-snapshots.ts [--dry-run]
 
-import { writeFileSync } from "node:fs";
+import { mkdirSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+import { env } from "../env";
 import { prisma } from "../server/lib/prisma";
 import { buildFeatureVector, FEATURE_KEYS, type FeatureVector } from "../server/ml/features";
 
@@ -36,7 +38,13 @@ async function main() {
   });
   console.log(`${decisions.length} decisões de triagem`);
 
-  const backupPath = `/tmp/careers-featuresSnapshot-backup-${Date.now()}.json`;
+  // Under CAREERS_BLOB_DIR, not /tmp: this normally runs inside a container
+  // (the real DB is not reachable from the host on this machine), and the
+  // blob dir is the one bind-mounted path that survives a recreate. A backup
+  // that dies with the container wouldn't make this reversible.
+  const backupDir = join(env.CAREERS_BLOB_DIR, "snapshot-backups");
+  mkdirSync(backupDir, { recursive: true });
+  const backupPath = join(backupDir, `featuresSnapshot-v${profile.version}-${Date.now()}.json`);
   writeFileSync(
     backupPath,
     JSON.stringify(
