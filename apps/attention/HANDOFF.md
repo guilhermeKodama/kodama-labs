@@ -368,7 +368,8 @@ smoke test end-to-end via curl: subscribe → grava no Postgres → `/lab` refle
 - Rotas `/api/push/subscribe`, `/api/beacon/receipt`, `/api/beacon/ack`
 - `/lab` — dashboard com estatísticas de entrega, latência p50/p95, recorte por janela de Foco,
   subscriptions mortas, disparo manual de beacon
-- `worker/beacon.ts` — dispara a cada 30 min para toda subscription viva
+- ~~`worker/beacon.ts` — dispara a cada 30 min para toda subscription viva~~ (removido em
+  2026-09-11 depois do gate de entrega; beacon agora só pelo disparo manual em `/lab`)
 - `worker/whatsapp.ts` — captura metadados via `message_create` (inclui mensagens enviadas pelo
   próprio usuário, necessário para `direction: OUT`)
 - Units systemd (web, tunnel, beacon, whatsapp) + `cloudflared/config.example.yml`

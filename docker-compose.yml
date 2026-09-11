@@ -74,15 +74,6 @@ services:
     extra_hosts: ["host.docker.internal:host-gateway"]
     networks: [kodama]
 
-  attention-beacon:
-    <<: *restart
-    image: kodama-attention:latest
-    depends_on: { attention-migrate: { condition: service_completed_successfully } }
-    env_file: apps/attention/.env.production
-    command: ["pnpm", "run", "worker:beacon"]
-    extra_hosts: ["host.docker.internal:host-gateway"]
-    networks: [kodama]
-
   attention-whatsapp:
     <<: *restart
     image: kodama-attention:latest

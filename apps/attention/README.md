@@ -75,8 +75,12 @@ o passo 4 nesse domínio antes de considerar o soak iniciado.
 sed -i "s|__REPO_PATH__|$(pwd)/../..|g; s|__USER__|$(whoami)|g" systemd/*.service
 sudo cp systemd/attention-*.service /etc/systemd/system/
 sudo systemctl daemon-reload
-sudo systemctl enable --now attention-web attention-tunnel attention-beacon
+sudo systemctl enable --now attention-web attention-tunnel
 ```
+
+O worker de beacon periódico (a cada 30 min) foi removido depois que o gate de entrega passou —
+ele gerava ~48 pushes/dia por subscription. Pra testar entrega hoje, use "Disparar beacon agora"
+em `/lab`.
 
 `attention-web` builda? Não — builde manualmente antes (e a cada `git pull`):
 
