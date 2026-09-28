@@ -197,7 +197,14 @@ export async function handleMcpRequest(
     }
 
     case "tools/call": {
-      const { name, arguments: args } = params;
+      if (!params || typeof params !== "object") {
+        throw new Error("Invalid params");
+      }
+
+      const { name, arguments: args } = params as {
+        name: string;
+        arguments: unknown;
+      };
 
       try {
         switch (name) {
