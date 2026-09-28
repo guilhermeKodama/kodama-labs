@@ -4,7 +4,7 @@ import { prisma } from "@capital/server/lib/prisma";
 
 const db = prisma;
 
-const TEST_USER_ID = "test-user-mcp-inv-001";
+const TEST_USER_ID = "test-user-mcp-inv-002";
 
 describe("MCP Investment Tools", () => {
   let accountId: string;

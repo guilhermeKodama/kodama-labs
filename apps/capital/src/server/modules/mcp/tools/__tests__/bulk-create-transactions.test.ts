@@ -4,14 +4,13 @@ import { prisma } from "@capital/server/lib/prisma";
 
 const db = prisma;
 
-// Test user ID - this should exist in the test database
-const TEST_USER_ID = "test-user-mcp-001";
+// Test user ID - unique per test file to avoid conflicts
+const TEST_USER_ID = "test-user-mcp-bulk-001";
 
 describe("MCP bulk create transactions", () => {
   let personalAccountId: string;
 
   beforeEach(async () => {
-    // Setup test user and personal account
     // Clean up any existing test data first
     await db.transaction.deleteMany({
       where: {
@@ -22,15 +21,16 @@ describe("MCP bulk create transactions", () => {
       },
     });
     await db.personalAccount.deleteMany({ where: { userId: TEST_USER_ID } });
+    await db.category.deleteMany({ where: { userId: TEST_USER_ID } });
     await db.user.deleteMany({ where: { id: TEST_USER_ID } });
 
     // Create test user
     await db.user.create({
       data: {
         id: TEST_USER_ID,
-        email: "mcp-test@example.com",
+        email: "mcp-bulk-test@example.com",
         passwordHash: "test-hash",
-        name: "MCP Test User",
+        name: "MCP Bulk Test User",
         baseCurrency: "BRL",
       },
     });

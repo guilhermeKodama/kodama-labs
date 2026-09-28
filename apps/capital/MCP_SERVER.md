@@ -14,7 +14,7 @@ The Capital app exposes an MCP (Model Context Protocol) server at `/mcp` that al
 POST https://capital.kodamalabs.ai/mcp
 ```
 
-The endpoint uses **Streamable HTTP (SSE)** transport compatible with MCP clients.
+The endpoint implements the **MCP Streamable HTTP transport** specification in stateless mode, compatible with standard MCP clients.
 
 ## Authentication
 
@@ -46,7 +46,7 @@ CF-Access-Client-Secret: <service-token-secret>
 
 ### 2. Application Bearer Token
 
-Independent of Cloudflare, the app itself validates a bearer token:
+Independent of Cloudflare, the app itself validates a bearer token using constant-time comparison:
 
 ```
 Authorization: Bearer <MCP_API_KEY>
@@ -67,7 +67,7 @@ Authorization: Bearer <MCP_API_KEY>
 
 3. Share the `MCP_API_KEY` with the MCP client (Contador) securely (e.g., via 1Password)
 
-**Security Note:** Both authentication layers must pass. The service token validates that the request comes from an authorized service (Cloudflare layer), and the bearer token validates that the request has app-level permission.
+**Security Note:** Both authentication layers must pass. The service token validates that the request comes from an authorized service (Cloudflare layer), and the bearer token validates that the request has app-level permission. Bearer token comparison uses `crypto.timingSafeEqual()` to prevent timing attacks.
 
 ## Available Tools
 
@@ -322,23 +322,23 @@ Add a new asset/position to an investment account.
 
 ## MCP Client Configuration
 
-For MCP clients like Claude Desktop or custom implementations, configure the connection like this:
+For MCP clients like Claude Desktop or custom implementations using the official SDK, configure the connection like this:
 
-**Example for a TypeScript MCP client:**
+**Example for TypeScript MCP client:**
 ```typescript
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js";
+import { WebStandardStreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 
-const transport = new SSEClientTransport(
-  new URL("https://capital.kodamalabs.ai/mcp"),
-  {
-    headers: {
-      "Authorization": "Bearer <MCP_API_KEY>",
-      "CF-Access-Client-Id": "<service-token-client-id>",
-      "CF-Access-Client-Secret": "<service-token-secret>",
-    },
-  }
+const transport = new WebStandardStreamableHTTPClientTransport(
+  new URL("https://capital.kodamalabs.ai/mcp")
 );
+
+// Set auth headers
+transport.setHeaders({
+  "Authorization": "Bearer <MCP_API_KEY>",
+  "CF-Access-Client-Id": "<service-token-client-id>",
+  "CF-Access-Client-Secret": "<service-token-secret>",
+});
 
 const client = new Client(
   { name: "contador", version: "1.0.0" },
@@ -356,6 +356,24 @@ const result = await client.callTool({
   arguments: { type: "income" },
 });
 ```
+
+## Protocol Compliance
+
+The server implements the MCP Streamable HTTP transport specification:
+
+- **Initialization**: Handles `initialize` request with protocol version negotiation (supports `2024-11-05`)
+- **Capabilities**: Advertises `tools` capability
+- **Server Info**: Returns `capital-accounting` v1.0.0
+- **Notifications**: Handles `notifications/initialized` (HTTP 202, no body)
+- **Tools**: `tools/list` and `tools/call` with proper error handling
+- **Error Handling**: Tool errors returned as `isError` results, not transport errors
+- **Stateless Mode**: No session management (sessionId is undefined)
+- **HTTP Methods**:
+  - `POST /mcp`: Handle JSON-RPC requests
+  - `GET /mcp`: 405 Method Not Allowed
+  - `DELETE /mcp`: 405 Method Not Allowed
+
+The implementation uses `@modelcontextprotocol/sdk` v1.30.1 with `WebStandardStreamableHTTPServerTransport` for full spec compliance.
 
 ## Deployment Steps
 
