@@ -146,8 +146,10 @@ describe("MCP Investment Tools", () => {
 
     it("should throw error when user does not own the holding", async () => {
       const otherUserId = "other-user-001";
-      await db.user.create({
-        data: {
+      await db.user.upsert({
+        where: { id: otherUserId },
+        update: {},
+        create: {
           id: otherUserId,
           email: "other@example.com",
           passwordHash: "test-hash",

@@ -16,6 +16,7 @@ function createMockNextRequest(
     method,
     headers: {
       "Content-Type": "application/json",
+      Accept: "application/json, text/event-stream",
       ...headers,
     },
   };
@@ -170,6 +171,13 @@ describe("MCP Server End-to-End", () => {
       );
 
       const response = await POST(request as unknown as NextRequest);
+      
+      // Debug: log response if not 200
+      if (response.status !== 200) {
+        const text = await response.clone().text();
+        console.error(`Response status: ${response.status}, body:`, text);
+      }
+      
       expect(response.status).toBe(200);
 
       const data = (await response.json()) as Record<string, unknown>;
@@ -228,6 +236,7 @@ describe("MCP Server End-to-End", () => {
       expect(data.result.tools.length).toBe(10);
 
       // Check for expected tools
+      const result = data.result as { tools: Array<{ name: string }> };
       const toolNames = result.tools.map((t) => t.name);
       expect(toolNames).toContain("bulk_create_transactions");
       expect(toolNames).toContain("list_transactions");
@@ -330,6 +339,11 @@ describe("MCP Server End-to-End", () => {
         async send(message: unknown) {
           const request = createMockNextRequest("POST", message, this.headers);
           const response = await POST(request as unknown as NextRequest);
+
+          // HTTP 202 Accepted (for notifications/initialized) - no response body expected
+          if (response.status === 202) {
+            return;
+          }
 
           if (!response.ok) {
             throw new Error(`HTTP ${response.status}`);

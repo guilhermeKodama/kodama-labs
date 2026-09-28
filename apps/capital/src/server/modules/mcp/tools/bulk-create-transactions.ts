@@ -16,7 +16,7 @@ async function findDuplicates(
   db: DbClient
 ) {
   const duplicateMap = new Map<string, string>(); // key -> existing transaction ID
-  const batchKeys = new Set<string>(); // Track keys within this batch
+  const batchKeyIndices = new Map<string, number>(); // Track first occurrence index within this batch
 
   // Fetch all existing transactions for the user in the date range of the batch
   const minDate = new Date(
@@ -47,7 +47,8 @@ async function findDuplicates(
   }
 
   // Check each item for duplicates
-  for (const item of items) {
+  for (let i = 0; i < items.length; i++) {
+    const item = items[i];
     const key = createDedupeKey(
       new Date(item.date),
       item.amount,
@@ -57,17 +58,20 @@ async function findDuplicates(
     // Check against existing transactions
     const existingId = existingMap.get(key);
     if (existingId) {
-      duplicateMap.set(key, existingId);
+      duplicateMap.set(`${i}:${key}`, existingId);
       continue;
     }
 
     // Check against items already in this batch
-    if (batchKeys.has(key)) {
-      duplicateMap.set(key, "batch-duplicate");
+    const firstIndex = batchKeyIndices.get(key);
+    if (firstIndex !== undefined) {
+      // This is a duplicate of an earlier item in the batch
+      duplicateMap.set(`${i}:${key}`, "batch-duplicate");
       continue;
     }
 
-    batchKeys.add(key);
+    // Record this as the first occurrence of this key in the batch
+    batchKeyIndices.set(key, i);
   }
 
   return duplicateMap;
@@ -106,7 +110,8 @@ export async function bulkCreateTransactions(
   // Find duplicates first
   const duplicateMap = await findDuplicates(userId, items, db);
 
-  for (const item of items) {
+  for (let i = 0; i < items.length; i++) {
+    const item = items[i];
     const key = createDedupeKey(
       new Date(item.date),
       item.amount,
@@ -114,7 +119,7 @@ export async function bulkCreateTransactions(
     );
 
     // Check if this is a duplicate
-    const existingId = duplicateMap.get(key);
+    const existingId = duplicateMap.get(`${i}:${key}`);
     if (existingId) {
       result.duplicates.push({
         description: item.description,
