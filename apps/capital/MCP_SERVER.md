@@ -16,6 +16,8 @@ POST https://capital.kodamalabs.ai/mcp
 
 The endpoint implements the **MCP Streamable HTTP transport** specification in stateless mode, compatible with standard MCP clients.
 
+**Note:** The `/mcp` endpoint bypasses the Next.js session middleware (no `capital_session` cookie required) and is excluded from next-intl locale handling. Authentication is handled entirely through the two-layer auth described below.
+
 ## Authentication
 
 Two layers of authentication are required:
