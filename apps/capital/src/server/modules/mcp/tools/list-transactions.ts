@@ -1,6 +1,7 @@
 import type { DbClient } from "@capital/server/lib/prisma";
 import type { ListTransactionsParams, TransactionSummary } from "../lib/types";
 import { fetchTransactions } from "../../transactions/data/queries/fetch-transactions";
+import { parseDateRangeFilter } from "../lib/date-helpers";
 
 /**
  * List transactions with optional filters and monthly summaries.
@@ -10,14 +11,15 @@ export async function listTransactions(
   params: ListTransactionsParams,
   db: DbClient
 ) {
+  const dateFilters = parseDateRangeFilter(params.dateFrom, params.dateTo);
+  
   const filters = {
     ...(params.businessId && { businessId: params.businessId }),
     ...(params.personalAccountId && { personalAccountId: params.personalAccountId }),
     ...(params.entityType && { entityType: params.entityType }),
     ...(params.type && { type: params.type }),
     ...(params.category && { category: params.category }),
-    ...(params.dateFrom && { dateFrom: new Date(params.dateFrom) }),
-    ...(params.dateTo && { dateTo: new Date(params.dateTo) }),
+    ...dateFilters,
   };
 
   const transactions = await fetchTransactions(userId, filters, db);

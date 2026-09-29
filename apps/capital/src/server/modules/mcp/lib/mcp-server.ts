@@ -19,6 +19,18 @@ import {
   addInvestmentAsset,
 } from "../tools/investments";
 
+// Date string schema that accepts both YYYY-MM-DD and full ISO strings
+const DateStringSchema = z.string().refine(
+  (val) => {
+    // Accept YYYY-MM-DD format
+    if (/^\d{4}-\d{2}-\d{2}$/.test(val)) return true;
+    // Accept ISO datetime format
+    if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{3})?Z?$/.test(val)) return true;
+    return false;
+  },
+  { message: "Date must be in YYYY-MM-DD or ISO datetime format" }
+);
+
 // Zod schemas for tool parameters
 const BulkCreateTransactionsInputSchema = z.object({
   transactions: z.array(
@@ -30,7 +42,7 @@ const BulkCreateTransactionsInputSchema = z.object({
       exchangeRate: z.number().positive().optional(),
       description: z.string().min(1),
       category: z.string().min(1),
-      date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+      date: DateStringSchema,
       isTaxDeductible: z.boolean().optional(),
       businessId: z.string().uuid().optional(),
       personalAccountId: z.string().uuid().optional(),
@@ -40,8 +52,8 @@ const BulkCreateTransactionsInputSchema = z.object({
 });
 
 const ListTransactionsInputSchema = z.object({
-  dateFrom: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
-  dateTo: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  dateFrom: DateStringSchema.optional(),
+  dateTo: DateStringSchema.optional(),
   type: z.enum(["income", "expense", "investment"]).optional(),
   category: z.string().optional(),
   entityType: z.enum(["business", "personal"]).optional(),
@@ -57,7 +69,7 @@ const UpdateTransactionInputSchema = z.object({
   exchangeRate: z.number().positive().optional(),
   description: z.string().min(1).optional(),
   category: z.string().min(1).optional(),
-  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  date: DateStringSchema.optional(),
   isTaxDeductible: z.boolean().optional(),
 });
 

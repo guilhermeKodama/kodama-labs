@@ -2,6 +2,7 @@ import type { DbClient } from "@capital/server/lib/prisma";
 import { updateTransactionService } from "../../transactions/services/update-transaction";
 import { deleteTransactionService } from "../../transactions/services/delete-transaction";
 import { fetchTransactionById } from "../../transactions/data/queries/fetch-transactions";
+import { parseLocalDate } from "@capital/server/lib/date-utils";
 import type { TransactionType } from "@/generated/prisma";
 
 export interface UpdateTransactionParams {
@@ -37,7 +38,7 @@ export async function updateTransactionTool(
     ...(params.exchangeRate !== undefined && { exchangeRate: params.exchangeRate }),
     ...(params.description && { description: params.description }),
     ...(params.category && { category: params.category }),
-    ...(params.date && { date: new Date(params.date) }),
+    ...(params.date && { date: parseLocalDate(params.date) }),
     ...(params.isTaxDeductible !== undefined && { isTaxDeductible: params.isTaxDeductible }),
   };
 
