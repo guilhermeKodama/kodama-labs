@@ -2,6 +2,8 @@ import type { DbClient } from "@capital/server/lib/prisma";
 import type { BulkCreateTransactionItem, BulkCreateResult } from "../lib/types";
 import { insertTransaction } from "../../transactions/data/commands/insert-transaction";
 import { fetchTransactions } from "../../transactions/data/queries/fetch-transactions";
+import { parseLocalDate } from "@capital/server/lib/date-utils";
+import { parseDateRangeFilter } from "../lib/date-helpers";
 
 /**
  * Detect duplicates by matching date + amount + description
@@ -19,19 +21,14 @@ async function findDuplicates(
   const batchKeyIndices = new Map<string, number>(); // Track first occurrence index within this batch
 
   // Fetch all existing transactions for the user in the date range of the batch
-  const minDate = new Date(
-    Math.min(...items.map((item) => new Date(item.date).getTime()))
-  );
-  const maxDate = new Date(
-    Math.max(...items.map((item) => new Date(item.date).getTime()))
-  );
+  const minDateStr = items.reduce((min, item) => item.date < min ? item.date : min, items[0].date);
+  const maxDateStr = items.reduce((max, item) => item.date > max ? item.date : max, items[0].date);
+  
+  const dateRange = parseDateRangeFilter(minDateStr, maxDateStr);
 
   const existingTransactions = await fetchTransactions(
     userId,
-    {
-      dateFrom: minDate,
-      dateTo: maxDate,
-    },
+    dateRange,
     db
   );
 
@@ -50,7 +47,7 @@ async function findDuplicates(
   for (let i = 0; i < items.length; i++) {
     const item = items[i];
     const key = createDedupeKey(
-      new Date(item.date),
+      parseLocalDate(item.date),
       item.amount,
       item.description
     );
@@ -113,7 +110,7 @@ export async function bulkCreateTransactions(
   for (let i = 0; i < items.length; i++) {
     const item = items[i];
     const key = createDedupeKey(
-      new Date(item.date),
+      parseLocalDate(item.date),
       item.amount,
       item.description
     );
@@ -147,7 +144,7 @@ export async function bulkCreateTransactions(
         userId,
         {
           ...item,
-          date: new Date(item.date),
+          date: parseLocalDate(item.date),
           exchangeRate: item.exchangeRate ?? 1,
         },
         db

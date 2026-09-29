@@ -341,4 +341,56 @@ describe("MCP bulk create transactions", () => {
     });
     expect(count).toBe(15);
   });
+
+  it("should normalize dates to noon UTC (12:00:00.000Z) like the UI does", async () => {
+    const items = [
+      {
+        entityType: "personal" as const,
+        type: "income" as const,
+        amount: 100.0,
+        currency: "BRL",
+        description: "Test transaction with YYYY-MM-DD date",
+        category: "Dividends",
+        date: "2026-07-01",
+        personalAccountId,
+      },
+      {
+        entityType: "personal" as const,
+        type: "income" as const,
+        amount: 200.0,
+        currency: "BRL",
+        description: "Test transaction with ISO datetime",
+        category: "Dividends",
+        date: "2026-07-02T08:30:00.000Z",
+        personalAccountId,
+      },
+    ];
+
+    const result = await bulkCreateTransactions(
+      TEST_USER_ID,
+      items,
+      false,
+      db
+    );
+
+    expect(result.created).toHaveLength(2);
+    expect(result.errors).toHaveLength(0);
+
+    // Fetch the created transactions to verify dates
+    const created = await db.transaction.findMany({
+      where: {
+        personalAccountId,
+        description: {
+          startsWith: "Test transaction",
+        },
+      },
+      orderBy: { date: "asc" },
+    });
+
+    expect(created).toHaveLength(2);
+    
+    // Both should be normalized to noon UTC (12:00:00.000Z)
+    expect(created[0].date.toISOString()).toBe("2026-07-01T12:00:00.000Z");
+    expect(created[1].date.toISOString()).toBe("2026-07-02T12:00:00.000Z");
+  });
 });

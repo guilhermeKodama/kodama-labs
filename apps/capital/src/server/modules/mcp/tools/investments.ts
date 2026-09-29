@@ -2,6 +2,7 @@ import type { DbClient } from "@capital/server/lib/prisma";
 import type { InvestmentPosition, AdjustPositionParams } from "../lib/types";
 import { listInvestmentHoldings } from "../../investments/services/list-investment-holdings";
 import { createInvestmentHolding } from "../../investments/services/create-investment-holding";
+import { parseLocalDate } from "@capital/server/lib/date-utils";
 import type { AssetClass } from "@/generated/prisma";
 
 /**
@@ -95,7 +96,7 @@ export async function adjustPosition(
       pricePerUnit: params.averageCost,
       totalAmount: totalInvested,
       fees: 0,
-      date: new Date(),
+      date: parseLocalDate(new Date().toISOString().split('T')[0]), // Today at noon UTC
       notes: params.notes ?? "Manual adjustment via MCP",
     },
   });
