@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import createIntlMiddleware from "next-intl/middleware";
 import { routing } from "./i18n/routing";
+import { isExcludedPath } from "./lib/middleware-helpers";
 
 // Public routes that don't require authentication
 const publicRoutes = ["/", "/login", "/signup"];
@@ -14,13 +15,8 @@ const intlMiddleware = createIntlMiddleware(routing);
 export default async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  // Skip middleware for API routes, static files, and Next.js internals
-  if (
-    pathname.startsWith("/api") ||
-    pathname.startsWith("/_next") ||
-    pathname.startsWith("/_vercel") ||
-    pathname.includes(".")
-  ) {
+  // Skip middleware for API routes, MCP endpoint, static files, and Next.js internals
+  if (isExcludedPath(pathname)) {
     return NextResponse.next();
   }
 
@@ -68,9 +64,10 @@ export default async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  // Match all pathnames except for
-  // - API routes
-  // - Next.js internals (_next)
-  // - Static files (assets, images, etc.)
-  matcher: ["/((?!api|_next|_vercel|.*\\..*).*)", "/"],
+  matcher: [
+    // Match all paths...
+    "/(.*)",
+    // Except root
+    "/",
+  ],
 };
