@@ -15,10 +15,16 @@ import { randomUUID } from "node:crypto";
 import { env } from "@/env";
 import type { AttachmentKind } from "@/generated/prisma";
 
+// Always pass localDir explicitly — @repo/storage defaults to
+// cwd-relative (path.resolve(process.cwd(), ".local-blob")), which is
+// exactly the fragility apps/attention's WHATSAPP_AUTH_DIR comment warns
+// about: a systemd service's cwd is whatever WorkingDirectory says, and
+// must not silently determine where uploaded files live.
 function options(): StorageOptions {
   return {
     token: env.BLOB_READ_WRITE_TOKEN,
-    appUrl: env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000",
+    localDir: env.CAPITAL_BLOB_DIR,
+    appUrl: env.NEXT_PUBLIC_APP_URL,
   };
 }
 

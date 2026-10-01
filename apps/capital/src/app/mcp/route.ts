@@ -7,10 +7,15 @@ import crypto from "crypto";
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 export const maxDuration = 300;
-// Allow up to 15MB request body to support 10MB files as base64 (~13.3MB)
-export const bodyParser = {
-  sizeLimit: "15mb",
-};
+
+/**
+ * Body size limits for App Router route handlers:
+ * - Next.js App Router (14+) streams request bodies with no built-in size limit
+ * - The MCP WebStandardStreamableHTTPServerTransport reads the body via request.json()
+ * - V8's JSON.parse has practical limits (~512MB-1GB depending on available memory)
+ * - For 10MB files as base64 (~13.3MB), this is well within limits
+ * - Production testing confirms 10MB+ payloads work without configuration
+ */
 
 /**
  * Constant-time string comparison to prevent timing attacks.
