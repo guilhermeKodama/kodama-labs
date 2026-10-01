@@ -18,6 +18,15 @@ import {
   adjustPosition,
   addInvestmentAsset,
 } from "../tools/investments";
+import {
+  attachReceipt,
+  listTransactionAttachments,
+  deleteAttachment,
+} from "../tools/attachments";
+import {
+  MAX_FILE_SIZE_BYTES,
+  ALLOWED_MIME_TYPES,
+} from "../../attachments/constants";
 
 // Date string schema that accepts both YYYY-MM-DD and full ISO strings
 const DateStringSchema = z.string().refine(
@@ -104,6 +113,21 @@ const AddInvestmentAssetInputSchema = z.object({
     "international_etf",
   ]),
   currency: z.string().length(3).optional(),
+});
+
+const AttachReceiptInputSchema = z.object({
+  transactionId: z.string().uuid(),
+  filename: z.string().min(1),
+  mimeType: z.enum(Array.from(ALLOWED_MIME_TYPES) as [string, ...string[]]),
+  contentBase64: z.string().min(1),
+});
+
+const ListAttachmentsInputSchema = z.object({
+  transactionId: z.string().uuid(),
+});
+
+const DeleteAttachmentInputSchema = z.object({
+  attachmentId: z.string().uuid(),
 });
 
 /**
@@ -359,6 +383,78 @@ export function createCapitalMcpServer(userId: string, db: DbClient) {
     },
     async (params) => {
       const result = await addInvestmentAsset(userId, params, db);
+      return {
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify(result, null, 2),
+          },
+        ],
+      };
+    }
+  );
+
+  // Register tool: attach_receipt
+  server.registerTool(
+    "attach_receipt",
+    {
+      description:
+        "Attach a receipt (image or PDF) to a transaction via base64-encoded content. " +
+        "Accepted mime types: application/pdf, image/jpeg, image/png, image/webp. " +
+        `Maximum file size: ${Math.round(MAX_FILE_SIZE_BYTES / 1024 / 1024)} MB. ` +
+        "Note: base64 encoding increases size by ~33%, so a 10 MB file becomes ~13.3 MB encoded. " +
+        "The attachment will be stored using the same backend as the UI (local filesystem in dev, " +
+        "Vercel Blob in production) and will be visible in the transaction detail page.",
+      inputSchema: AttachReceiptInputSchema,
+    },
+    async (params) => {
+      const result = await attachReceipt(userId, params, db);
+      return {
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify(result, null, 2),
+          },
+        ],
+      };
+    }
+  );
+
+  // Register tool: list_attachments
+  server.registerTool(
+    "list_attachments",
+    {
+      description:
+        "List all attachments for a transaction. Returns attachment metadata including " +
+        "ID, filename, mime type, size, and URL. Use this to check what's already attached " +
+        "before uploading to avoid duplicates.",
+      inputSchema: ListAttachmentsInputSchema,
+    },
+    async (params) => {
+      const result = await listTransactionAttachments(userId, params, db);
+      return {
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify(result, null, 2),
+          },
+        ],
+      };
+    }
+  );
+
+  // Register tool: delete_attachment
+  server.registerTool(
+    "delete_attachment",
+    {
+      description:
+        "Delete an attachment by ID. Verifies the attachment belongs to a transaction " +
+        "owned by the authenticated user. This will remove both the database record and " +
+        "the stored file (best-effort).",
+      inputSchema: DeleteAttachmentInputSchema,
+    },
+    async (params) => {
+      const result = await deleteAttachment(userId, params, db);
       return {
         content: [
           {
