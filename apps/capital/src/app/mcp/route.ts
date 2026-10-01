@@ -7,6 +7,10 @@ import crypto from "crypto";
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 export const maxDuration = 300;
+// Allow up to 15MB request body to support 10MB files as base64 (~13.3MB)
+export const bodyParser = {
+  sizeLimit: "15mb",
+};
 
 /**
  * Constant-time string comparison to prevent timing attacks.
