@@ -189,6 +189,32 @@ describe("MCP Attachment Tools", () => {
       expect(result.mimeType).toBe("image/jpeg");
     });
 
+    it("should handle large files up to 10 MB", async () => {
+      // Create a 5 MB file to test large uploads (well within the 10 MB limit)
+      const fiveMB = 5 * 1024 * 1024;
+      const largeContent = Buffer.alloc(fiveMB, "A");
+      const base64Content = largeContent.toString("base64");
+
+      // Verify base64 size is ~33% larger (about 6.7 MB)
+      expect(base64Content.length).toBeGreaterThan(fiveMB);
+      expect(base64Content.length).toBeLessThan(fiveMB * 1.4);
+
+      const result = await attachReceipt(
+        TEST_USER_ID,
+        {
+          transactionId,
+          filename: "large-receipt.pdf",
+          mimeType: "application/pdf",
+          contentBase64: base64Content,
+        },
+        db
+      );
+
+      expect(result.filename).toBe("large-receipt.pdf");
+      expect(result.sizeBytes).toBe(fiveMB);
+      expect(result.id).toBeDefined();
+    });
+
     it("should reject transaction not owned by user", async () => {
       const content = Buffer.from("test content");
       const base64Content = content.toString("base64");

@@ -117,6 +117,8 @@ services:
     depends_on: { capital-migrate: { condition: service_completed_successfully } }
     env_file: apps/capital/.env.production
     ports: ["${CAPITAL_WEB_PORT:-3000}:3000"]
+    volumes:
+      - ${HOME}/.local/share/capital/blob:/home/kodama/.local/share/capital/blob
     networks: [kodama]
 
   # ── sentinel ────────────────────────────────────────────────────────────
@@ -159,6 +161,7 @@ services:
       SENTINEL_BASE_URL: http://sentinel-web:3002
       CRON_APPS: "${CRON_APPS:-capital,sentinel}"
     volumes:
+      - ${HOME}/.local/share/capital/blob:/home/kodama/.local/share/capital/blob
       - ./apps/capital/vercel.json:/repo/apps/capital/vercel.json:ro
       - ./apps/sentinel/vercel.json:/repo/apps/sentinel/vercel.json:ro
     networks: [kodama]
