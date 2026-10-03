@@ -537,17 +537,18 @@ model RecurringTransaction {
 // ============================================
 
 model Budget {
-  id         String       @id @default(uuid())
-  entityType EntityType
-  category   String
-  amount     Float
-  currency   String
-  period     BudgetPeriod
-  year       Int
-  month      Int? // 1-12 for monthly budgets
-  isActive   Boolean      @default(true)
-  createdAt  DateTime     @default(now())
-  updatedAt  DateTime     @updatedAt
+  id           String       @id @default(uuid())
+  entityType   EntityType
+  category     String
+  amount       Float
+  currency     String
+  period       BudgetPeriod
+  year         Int
+  month        Int? // 1-12 for monthly budgets
+  effectiveFrom DateTime    // Effective-dated budgets: when this budget takes effect
+  isActive     Boolean      @default(true)
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
 
   // Relations - polymorphic association
   businessId        String?
@@ -555,12 +556,13 @@ model Budget {
   personalAccountId String?
   personalAccount   PersonalAccount? @relation(fields: [personalAccountId], references: [id], onDelete: Cascade)
 
-  @@unique([businessId, category, period, year, month])
-  @@unique([personalAccountId, category, period, year, month])
+  @@unique([businessId, category, effectiveFrom])
+  @@unique([personalAccountId, category, effectiveFrom])
   @@index([businessId])
   @@index([personalAccountId])
   @@index([entityType])
   @@index([year, month])
+  @@index([effectiveFrom])
   @@map("budgets")
 }
 

@@ -24,6 +24,13 @@ import {
   deleteAttachment,
 } from "../tools/attachments";
 import {
+  listBudgets,
+  createBudget,
+  updateBudget,
+  deleteBudget,
+  getBudgetStatus,
+} from "../tools/budgets";
+import {
   MAX_FILE_SIZE_BYTES,
   ALLOWED_MIME_TYPES,
 } from "../../attachments/constants";
@@ -128,6 +135,37 @@ const ListAttachmentsInputSchema = z.object({
 
 const DeleteAttachmentInputSchema = z.object({
   attachmentId: z.string().uuid(),
+});
+
+const ListBudgetsInputSchema = z.object({
+  accountId: z.string().uuid().optional(),
+  category: z.string().optional(),
+  effectiveDate: z.string().optional(), // YYYY-MM or YYYY-MM-DD
+});
+
+const CreateBudgetInputSchema = z.object({
+  accountId: z.string().uuid(),
+  category: z.string().min(1),
+  amount: z.number().nonnegative(),
+  currency: z.string().length(3),
+  effectiveFrom: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), // YYYY-MM-DD
+});
+
+const UpdateBudgetInputSchema = z.object({
+  budgetId: z.string().uuid(),
+  amount: z.number().nonnegative().optional(),
+  currency: z.string().length(3).optional(),
+  effectiveFrom: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(), // YYYY-MM-DD
+  isActive: z.boolean().optional(),
+});
+
+const DeleteBudgetInputSchema = z.object({
+  budgetId: z.string().uuid(),
+});
+
+const GetBudgetStatusInputSchema = z.object({
+  month: z.string().regex(/^\d{4}-\d{2}$/), // YYYY-MM
+  accountId: z.string().uuid().optional(),
 });
 
 /**
@@ -455,6 +493,128 @@ export function createCapitalMcpServer(userId: string, db: DbClient) {
     },
     async (params) => {
       const result = await deleteAttachment(userId, params, db);
+      return {
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify(result, null, 2),
+          },
+        ],
+      };
+    }
+  );
+
+  // Register tool: list_budgets
+  server.registerTool(
+    "list_budgets",
+    {
+      description:
+        "List budgets for an account, optionally filtered by category. " +
+        "If effectiveDate (YYYY-MM or YYYY-MM-DD) is provided, returns only budgets effective at that date " +
+        "(the most recent budget with effectiveFrom <= effectiveDate for each category). " +
+        "Otherwise, returns all active budgets. Budgets support effective dating: multiple budgets can exist " +
+        "for the same category with different effective dates, e.g., Shopping 2,800 BRL from Oct 2026, " +
+        "2,000 BRL from Dec 2026, 1,500 BRL from Jan 2027.",
+      inputSchema: ListBudgetsInputSchema,
+    },
+    async (params) => {
+      const result = await listBudgets(userId, params, db);
+      return {
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify(result, null, 2),
+          },
+        ],
+      };
+    }
+  );
+
+  // Register tool: create_budget
+  server.registerTool(
+    "create_budget",
+    {
+      description:
+        "Create a new budget for a category, effective from a specific date (YYYY-MM-DD). " +
+        "The budget will apply to all months from effectiveFrom onwards until a newer budget " +
+        "with a later effectiveFrom is created for the same category. Currency should typically be BRL. " +
+        "Amount must be non-negative. Multiple budgets can exist for the same category with different " +
+        "effective dates to handle budget changes over time.",
+      inputSchema: CreateBudgetInputSchema,
+    },
+    async (params) => {
+      const result = await createBudget(userId, params, db);
+      return {
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify(result, null, 2),
+          },
+        ],
+      };
+    }
+  );
+
+  // Register tool: update_budget
+  server.registerTool(
+    "update_budget",
+    {
+      description:
+        "Update an existing budget. Can change amount, currency, effectiveFrom date, or isActive status. " +
+        "Changing effectiveFrom will update when the budget takes effect. Setting isActive=false soft-deletes " +
+        "the budget. Amount must be non-negative if provided.",
+      inputSchema: UpdateBudgetInputSchema,
+    },
+    async (params) => {
+      const result = await updateBudget(userId, params, db);
+      return {
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify(result, null, 2),
+          },
+        ],
+      };
+    }
+  );
+
+  // Register tool: delete_budget
+  server.registerTool(
+    "delete_budget",
+    {
+      description:
+        "Delete a budget (soft delete by setting isActive=false). The budget will no longer appear in " +
+        "budget status calculations or listings, but the record is retained in the database.",
+      inputSchema: DeleteBudgetInputSchema,
+    },
+    async (params) => {
+      const result = await deleteBudget(userId, params, db);
+      return {
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify(result, null, 2),
+          },
+        ],
+      };
+    }
+  );
+
+  // Register tool: get_budget_status
+  server.registerTool(
+    "get_budget_status",
+    {
+      description:
+        "Get budget status for a specific month (YYYY-MM), comparing budgeted vs actual spending per category. " +
+        "Returns summary (total budgeted, actual, remaining) and per-category breakdown with percentages. " +
+        "Budgets are in BRL. Actual spending includes only expenses (not transfers or income) and is converted " +
+        "to BRL using transaction exchange rates. For each category, returns the effective budget for that month " +
+        "(most recent budget with effectiveFrom <= month start) and compares it to actual spending. " +
+        "Categories are sorted by percentUsed descending (most over-budget first).",
+      inputSchema: GetBudgetStatusInputSchema,
+    },
+    async (params) => {
+      const result = await getBudgetStatus(userId, params, db);
       return {
         content: [
           {
