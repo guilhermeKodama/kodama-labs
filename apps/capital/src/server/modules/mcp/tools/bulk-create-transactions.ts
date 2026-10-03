@@ -4,6 +4,7 @@ import { insertTransaction } from "../../transactions/data/commands/insert-trans
 import { fetchTransactions } from "../../transactions/data/queries/fetch-transactions";
 import { parseLocalDate } from "@capital/server/lib/date-utils";
 import { parseDateRangeFilter } from "../lib/date-helpers";
+import { validateCategory } from "../lib/category-validation";
 
 /**
  * Detect duplicates by matching date + amount + description
@@ -85,6 +86,37 @@ function createDedupeKey(date: Date, amount: number, description: string): strin
 }
 
 /**
+ * Validate all categories in the batch before processing.
+ */
+async function validateCategories(
+  userId: string,
+  items: BulkCreateTransactionItem[],
+  db: DbClient
+): Promise<void> {
+  const uniqueCategories = new Map<string, string>(); // category -> type
+  for (const item of items) {
+    const normalized = item.category.trim();
+    uniqueCategories.set(normalized, item.type);
+  }
+
+  const errors: string[] = [];
+  for (const [category, type] of uniqueCategories) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const validation = await validateCategory(userId, category, type as any, db);
+    if (!validation.valid) {
+      const suggestions = validation.suggestions.length > 0
+        ? ` Did you mean: ${validation.suggestions.join(", ")}?`
+        : "";
+      errors.push(`Category '${category}' (type: ${type}) not found.${suggestions}`);
+    }
+  }
+
+  if (errors.length > 0) {
+    throw new Error(`Category validation failed:\n${errors.join("\n")}`);
+  }
+}
+
+/**
  * Bulk create transactions with duplicate detection.
  * 
  * @param userId - The authenticated user ID
@@ -98,6 +130,9 @@ export async function bulkCreateTransactions(
   dryRun: boolean,
   db: DbClient
 ): Promise<BulkCreateResult> {
+  // Validate all categories first
+  await validateCategories(userId, items, db);
+
   const result: BulkCreateResult = {
     created: [],
     duplicates: [],

@@ -4,6 +4,7 @@ import type { TransactionType } from "@/generated/prisma";
 
 /**
  * List all categories for the user, optionally filtered by transaction type.
+ * Includes transaction counts per category.
  */
 export async function listCategoriesForMcp(
   userId: string,
@@ -11,6 +12,24 @@ export async function listCategoriesForMcp(
   db: DbClient
 ) {
   const categories = await listCategories(userId, type, db);
+
+  // Get transaction counts for each category
+  const categoryCounts = await db.transaction.groupBy({
+    by: ['category'],
+    where: {
+      OR: [
+        { business: { userId } },
+        { personalAccount: { userId } },
+      ],
+    },
+    _count: {
+      id: true,
+    },
+  });
+
+  const countMap = new Map(
+    categoryCounts.map((c) => [c.category, c._count.id])
+  );
 
   return {
     categories: categories.map((cat) => ({
@@ -21,6 +40,7 @@ export async function listCategoriesForMcp(
       icon: cat.icon,
       isDefault: cat.isDefault,
       isSystem: cat.isSystem,
+      transactionCount: countMap.get(cat.name) ?? 0,
     })),
   };
 }

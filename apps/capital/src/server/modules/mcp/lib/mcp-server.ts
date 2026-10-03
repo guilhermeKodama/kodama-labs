@@ -8,11 +8,24 @@ import {
   updateTransactionTool,
   deleteTransactionTool,
 } from "../tools/manage-transactions";
+import { bulkUpdateTransactions } from "../tools/bulk-update-transactions";
 import {
   listCategoriesForMcp,
   listAccounts,
   getValidTypes,
 } from "../tools/metadata";
+import {
+  createCategoryTool,
+  updateCategoryTool,
+  deleteCategoryTool,
+  mergeCategoryTool,
+} from "../tools/categories";
+import { findOrphanTransactions } from "../lib/category-validation";
+import {
+  getUserSettings,
+  updateUserSettings,
+  updateAccountSettings,
+} from "../tools/settings";
 import {
   listInvestmentPositions,
   adjustPosition,
@@ -95,6 +108,66 @@ const DeleteTransactionInputSchema = z.object({
 
 const ListCategoriesInputSchema = z.object({
   type: z.enum(["income", "expense", "investment"]).optional(),
+});
+
+const CreateCategoryInputSchema = z.object({
+  name: z.string().min(1),
+  type: z.enum(["income", "expense", "investment"]),
+  color: z.string().optional(),
+  icon: z.string().optional(),
+});
+
+const UpdateCategoryInputSchema = z.object({
+  id: z.string().uuid(),
+  name: z.string().min(1).optional(),
+  color: z.string().optional(),
+  icon: z.string().optional(),
+});
+
+const DeleteCategoryInputSchema = z.object({
+  id: z.string().uuid(),
+  reassignTo: z.string().uuid().optional(),
+});
+
+const MergeCategoriesInputSchema = z.object({
+  fromId: z.string().uuid(),
+  toId: z.string().uuid(),
+});
+
+const BulkUpdateTransactionsInputSchema = z.object({
+  updates: z.array(
+    z.object({
+      id: z.string().uuid(),
+      type: z.enum(["income", "expense", "investment"]).optional(),
+      amount: z.number().positive().optional(),
+      currency: z.string().length(3).optional(),
+      exchangeRate: z.number().positive().optional(),
+      description: z.string().min(1).optional(),
+      category: z.string().min(1).optional(),
+      date: DateStringSchema.optional(),
+      isTaxDeductible: z.boolean().optional(),
+    })
+  ),
+  dryRun: z.boolean().default(false),
+});
+
+const UpdateAccountInputSchema = z.object({
+  accountId: z.string().uuid(),
+  entityType: z.enum(["personal", "business"]),
+  name: z.string().min(1).optional(),
+  description: z.string().optional(),
+  defaultCurrency: z.string().length(3).optional(),
+  color: z.string().optional(),
+  taxRate: z.number().min(0).max(1).optional(),
+  initialBalance: z.number().optional(),
+});
+
+const UpdateUserSettingsInputSchema = z.object({
+  baseCurrency: z.string().length(3).optional(),
+  theme: z.string().optional(),
+  dateFormat: z.string().optional(),
+  numberFormat: z.string().optional(),
+  timezone: z.string().optional(),
 });
 
 const AdjustPositionInputSchema = z.object({
@@ -493,6 +566,220 @@ export function createCapitalMcpServer(userId: string, db: DbClient) {
     },
     async (params) => {
       const result = await deleteAttachment(userId, params, db);
+      return {
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify(result, null, 2),
+          },
+        ],
+      };
+    }
+  );
+
+  // Register tool: create_category
+  server.registerTool(
+    "create_category",
+    {
+      description:
+        "Create a new category for organizing transactions. Categories are per-user " +
+        "and must have a type (income, expense, or investment). Optional color and icon " +
+        "for visual organization.",
+      inputSchema: CreateCategoryInputSchema,
+    },
+    async (params) => {
+      const result = await createCategoryTool(userId, params, db);
+      return {
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify(result, null, 2),
+          },
+        ],
+      };
+    }
+  );
+
+  // Register tool: update_category
+  server.registerTool(
+    "update_category",
+    {
+      description:
+        "Update an existing category's name, type, color, or icon. NAME CHANGES CASCADE atomically " +
+        "to all tables (transactions, recurring transactions, budgets, bill transactions, mappings). " +
+        "Renaming to an existing category name for the same type is rejected (use merge_categories instead). " +
+        "TYPE CHANGES are only allowed when no transactions use the category. LOCALIZATION: System and " +
+        "default categories CAN be renamed (e.g., 'Credit Card' → 'Cartão de Crédito'). The system uses " +
+        "skipDuplicates when seeding, so renamed categories won't be duplicated on next login.",
+      inputSchema: UpdateCategoryInputSchema,
+    },
+    async (params) => {
+      const result = await updateCategoryTool(userId, params, db);
+      return {
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify(result, null, 2),
+          },
+        ],
+      };
+    }
+  );
+
+  // Register tool: delete_category
+  server.registerTool(
+    "delete_category",
+    {
+      description:
+        "Delete a category. Requires 'reassignTo' (category ID) if any transactions or " +
+        "budgets use this category - they will be reassigned first. Without reassignTo, " +
+        "fails with counts of linked transactions and budgets. Cannot delete categories " +
+        "with systemKey (required by the app).",
+      inputSchema: DeleteCategoryInputSchema,
+    },
+    async (params) => {
+      const result = await deleteCategoryTool(userId, params, db);
+      return {
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify(result, null, 2),
+          },
+        ],
+      };
+    }
+  );
+
+  // Register tool: merge_categories
+  server.registerTool(
+    "merge_categories",
+    {
+      description:
+        "Merge two categories by moving all transactions and budgets from 'fromId' to " +
+        "'toId', then deleting 'fromId'. Categories must have the same type. Returns counts " +
+        "of moved transactions and budgets. Cannot merge FROM categories with systemKey.",
+      inputSchema: MergeCategoriesInputSchema,
+    },
+    async (params) => {
+      const result = await mergeCategoryTool(userId, params, db);
+      return {
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify(result, null, 2),
+          },
+        ],
+      };
+    }
+  );
+
+  // Register tool: find_orphan_transactions
+  server.registerTool(
+    "find_orphan_transactions",
+    {
+      description:
+        "Find transactions whose category doesn't match any existing category. Returns " +
+        "counts grouped by category name and full transaction details. Useful for data " +
+        "cleanup after imports or category changes.",
+      inputSchema: z.object({}),
+    },
+    async () => {
+      const result = await findOrphanTransactions(userId, db);
+      return {
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify(result, null, 2),
+          },
+        ],
+      };
+    }
+  );
+
+  // Register tool: bulk_update_transactions
+  server.registerTool(
+    "bulk_update_transactions",
+    {
+      description:
+        "Bulk update transactions with all-or-nothing validation. Validates all updates " +
+        "(ownership, categories) first, then applies changes in a database transaction. " +
+        "Supports updating type, amount, currency, exchange rate, description, category, " +
+        "date, and tax deductible status. Dates are normalized to noon UTC via parseLocalDate. " +
+        "Returns per-transaction results. Example: Recategorize 95 transactions after reviewing " +
+        "statement imports.",
+      inputSchema: BulkUpdateTransactionsInputSchema,
+    },
+    async ({ updates, dryRun }) => {
+      const result = await bulkUpdateTransactions(userId, updates, dryRun, db);
+      return {
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify(result, null, 2),
+          },
+        ],
+      };
+    }
+  );
+
+  // Register tool: get_settings
+  server.registerTool(
+    "get_settings",
+    {
+      description:
+        "Get user-level settings: baseCurrency, theme, dateFormat, numberFormat, timezone. " +
+        "These settings apply across all accounts.",
+      inputSchema: z.object({}),
+    },
+    async () => {
+      const result = await getUserSettings(userId, db);
+      return {
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify(result, null, 2),
+          },
+        ],
+      };
+    }
+  );
+
+  // Register tool: update_settings
+  server.registerTool(
+    "update_settings",
+    {
+      description:
+        "Update user-level settings: baseCurrency, theme, dateFormat, numberFormat, timezone.",
+      inputSchema: UpdateUserSettingsInputSchema,
+    },
+    async (params) => {
+      const result = await updateUserSettings(userId, params, db);
+      return {
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify(result, null, 2),
+          },
+        ],
+      };
+    }
+  );
+
+  // Register tool: update_account
+  server.registerTool(
+    "update_account",
+    {
+      description:
+        "Update account (personal or business) settings: name, description, defaultCurrency, " +
+        "color, taxRate, initialBalance. IMPORTANT: Changing defaultCurrency requires " +
+        "force: true when the account has existing transactions (guard against accidental changes). " +
+        "Historical transaction amounts remain in their original currency as stored in the 'currency' field. " +
+        "The defaultCurrency only affects what currency new transactions default to in the UI.",
+      inputSchema: UpdateAccountInputSchema,
+    },
+    async (params) => {
+      const { accountId, entityType, ...updates } = params;
+      const result = await updateAccountSettings(userId, accountId, entityType, updates, db);
       return {
         content: [
           {
