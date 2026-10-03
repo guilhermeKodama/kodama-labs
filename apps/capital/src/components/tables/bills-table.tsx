@@ -45,8 +45,7 @@ export function BillsTable({
   const [editDueDate, setEditDueDate] = useState('');
 
   // Find the credit card category by systemKey
-  const creditCardCategory = categories.find((c) => c.systemKey === 'credit_card');
-  const creditCardCategoryName = creditCardCategory?.name || 'Credit Card';
+  const creditCardCategoryName = categories.find((c) => c.systemKey === 'credit_card')?.name;
 
   if (bills.length === 0) {
     return (
@@ -198,7 +197,7 @@ export function BillsTable({
                               </div>
                               <div className="max-h-48 overflow-y-auto">
                                 {expenseTransactions
-                                  .filter((tx) => tx.category === creditCardCategoryName)
+                                  .filter((tx) => creditCardCategoryName != null && tx.category === creditCardCategoryName)
                                   .slice(0, 20)
                                   .map((tx) => (
                                     <Button
@@ -220,7 +219,7 @@ export function BillsTable({
                                       </div>
                                     </Button>
                                   ))}
-                                {expenseTransactions.filter((tx) => tx.category === creditCardCategoryName).length === 0 && (
+                                {expenseTransactions.filter((tx) => creditCardCategoryName != null && tx.category === creditCardCategoryName).length === 0 && (
                                   <p className="px-2 py-2 text-xs text-slate-500">
                                     {t('bill.noExpenseTransactions')}
                                   </p>

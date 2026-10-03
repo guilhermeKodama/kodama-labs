@@ -60,6 +60,45 @@ function findSimilarNames(input: string, validNames: string[], maxResults = 3): 
   return scored.slice(0, maxResults).map((s) => s.name);
 }
 
+export interface CategoryNameMatch {
+  valid: boolean;
+  suggestions: string[];
+  /** Canonical stored name when valid, including a case-insensitive hit. */
+  canonicalName?: string;
+  validNames: string[];
+}
+
+/**
+ * Match a category name against an already-loaded list.
+ * Exact match wins. Otherwise a case-insensitive match is accepted and
+ * canonicalName is the stored spelling. Unknown names stay invalid.
+ */
+export function matchCategoryName(
+  categoryName: string,
+  categories: Array<{ name: string; type: TransactionType }>,
+  type: TransactionType | undefined
+): CategoryNameMatch {
+  const pool = type ? categories.filter((c) => c.type === type) : categories;
+  const validNames = pool.map((c) => c.name);
+  const normalized = categoryName.trim();
+  const exact = pool.find((c) => c.name === normalized);
+  if (exact) {
+    return { valid: true, suggestions: [], canonicalName: exact.name, validNames };
+  }
+
+  const folded = normalized.toLowerCase();
+  const insensitive = pool.find((c) => c.name.toLowerCase() === folded);
+  if (insensitive) {
+    return { valid: true, suggestions: [], canonicalName: insensitive.name, validNames };
+  }
+
+  return {
+    valid: false,
+    suggestions: findSimilarNames(normalized, validNames),
+    validNames,
+  };
+}
+
 /**
  * Validate a category name and suggest close matches if not found.
  */
@@ -68,19 +107,9 @@ export async function validateCategory(
   categoryName: string,
   type: TransactionType | undefined,
   db: DbClient
-): Promise<{ valid: boolean; suggestions: string[] }> {
+): Promise<CategoryNameMatch> {
   const categories = await fetchCategoriesByUserId(userId, type, db);
-  const validNames = categories.map((c) => c.name);
-
-  const normalized = categoryName.trim();
-  const valid = validNames.includes(normalized);
-
-  if (valid) {
-    return { valid: true, suggestions: [] };
-  }
-
-  const suggestions = findSimilarNames(normalized, validNames);
-  return { valid: false, suggestions };
+  return matchCategoryName(categoryName, categories, type);
 }
 
 /**
@@ -90,47 +119,46 @@ export async function findOrphanTransactions(
   userId: string,
   db: DbClient
 ) {
-  // Get all valid category names
   const categories = await fetchCategoriesByUserId(userId, undefined, db);
-  const validNames = new Set(categories.map((c) => c.name));
+  const validNames = categories.map((c) => c.name);
 
-  // Get all transactions
-  const transactions = await db.transaction.findMany({
-    where: {
-      OR: [
-        { business: { userId } },
-        { personalAccount: { userId } },
-      ],
-    },
-    select: {
-      id: true,
-      category: true,
-      description: true,
-      amount: true,
-      date: true,
-      type: true,
-    },
-    orderBy: {
-      date: 'desc',
-    },
-  });
+  const where = {
+    OR: [
+      { business: { userId } },
+      { personalAccount: { userId } },
+    ],
+    ...(validNames.length > 0 ? { category: { notIn: validNames } } : {}),
+  };
 
-  // Filter to orphans
-  const orphans = transactions.filter((t) => !validNames.has(t.category));
-
-  // Group by category name for stats
-  const categoryGroups = new Map<string, number>();
-  for (const orphan of orphans) {
-    categoryGroups.set(orphan.category, (categoryGroups.get(orphan.category) ?? 0) + 1);
-  }
+  const [total, groups, transactions] = await Promise.all([
+    db.transaction.count({ where }),
+    db.transaction.groupBy({
+      by: ["category"],
+      where,
+      _count: { id: true },
+    }),
+    db.transaction.findMany({
+      where,
+      select: {
+        id: true,
+        category: true,
+        description: true,
+        amount: true,
+        date: true,
+        type: true,
+      },
+      orderBy: { date: "desc" },
+      take: 100,
+    }),
+  ]);
 
   return {
-    total: orphans.length,
-    categories: Array.from(categoryGroups.entries()).map(([name, count]) => ({
-      name,
-      count,
+    total,
+    categories: groups.map((g) => ({
+      name: g.category,
+      count: g._count.id,
     })),
-    transactions: orphans.map((t) => ({
+    transactions: transactions.map((t) => ({
       id: t.id,
       category: t.category,
       description: t.description,

@@ -2,7 +2,8 @@ import type { DbClient } from "@capital/server/lib/prisma";
 import type { TransactionType } from "@/generated/prisma";
 import { fetchTransactionById } from "../../transactions/data/queries/fetch-transactions";
 import { parseLocalDate } from "@capital/server/lib/date-utils";
-import { validateCategory } from "../lib/category-validation";
+import { matchCategoryName } from "../lib/category-validation";
+import { fetchCategoriesByUserId } from "../../categories/data/queries/fetch-categories";
 
 export interface BulkUpdateTransactionItem {
   id: string;
@@ -55,23 +56,30 @@ async function validateUpdates(
     transactionMap.set(update.id, existing);
   }
 
-  // Second pass: validate categories
+  const categories = await fetchCategoriesByUserId(userId, undefined, db);
+
+  // Second pass: validate categories against the list loaded once above
   for (const update of updates) {
     if (!transactionMap.has(update.id)) continue; // Already errored
 
     if (update.category) {
       const existing = transactionMap.get(update.id);
       const targetType = update.type ?? existing.type;
-      const validation = await validateCategory(userId, update.category, targetType, db);
+      const validation = matchCategoryName(update.category, categories, targetType);
       if (!validation.valid) {
         const suggestions = validation.suggestions.length > 0
           ? ` Did you mean: ${validation.suggestions.join(", ")}?`
           : "";
+        const names = validation.validNames.length > 0
+          ? ` Valid categories: ${validation.validNames.join(", ")}.`
+          : "";
         errors.push({
           id: update.id,
-          error: `Category '${update.category}' not found.${suggestions}`,
+          error: `Category '${update.category}' not found.${suggestions}${names}`,
         });
         transactionMap.delete(update.id); // Remove from valid set
+      } else if (validation.canonicalName) {
+        update.category = validation.canonicalName;
       }
     }
   }
@@ -170,7 +178,7 @@ export async function bulkUpdateTransactions(
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     if (typeof (db as any).$transaction === "function") {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      await (db as any).$transaction(executeUpdates);
+      await (db as any).$transaction(executeUpdates, { timeout: 30_000 });
     } else {
       // Already in a transaction, execute directly
       await executeUpdates(db);

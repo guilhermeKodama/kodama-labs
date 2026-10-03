@@ -77,6 +77,36 @@ describe("MCP settings tools", () => {
   });
 
   describe("updateUserSettings", () => {
+    it("should reject a baseCurrency change when the user has transactions unless force is set", async () => {
+      await db.transaction.create({
+        data: {
+          entityType: "personal",
+          type: "expense",
+          amount: 10,
+          currency: "USD",
+          exchangeRate: 1,
+          description: "historical",
+          category: "Other",
+          date: new Date("2026-09-15"),
+          personalAccountId,
+        },
+      });
+
+      await expect(
+        updateUserSettings(TEST_USER_ID, { baseCurrency: "BRL" }, db)
+      ).rejects.toThrow(/historical totals wrong/);
+
+      const unchanged = await db.user.findUnique({ where: { id: TEST_USER_ID } });
+      expect(unchanged?.baseCurrency).toBe("USD");
+
+      const forced = await updateUserSettings(
+        TEST_USER_ID,
+        { baseCurrency: "BRL", force: true },
+        db
+      );
+      expect(forced.baseCurrency).toBe("BRL");
+    });
+
     it("should update base currency", async () => {
       const result = await updateUserSettings(
         TEST_USER_ID,

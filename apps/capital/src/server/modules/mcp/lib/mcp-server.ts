@@ -170,6 +170,7 @@ const UpdateUserSettingsInputSchema = z.object({
   dateFormat: z.string().optional(),
   numberFormat: z.string().optional(),
   timezone: z.string().optional(),
+  force: z.boolean().optional(),
 });
 
 const AdjustPositionInputSchema = z.object({
@@ -636,8 +637,9 @@ export function createCapitalMcpServer(userId: string, db: DbClient) {
         "Delete a category. Requires 'reassignTo' (category ID) if any transactions, recurring " +
         "transactions, budgets, bill transactions, or mappings use this category. Reassignment is " +
         "ATOMIC - all records are moved in a single transaction. Validates that reassignTo has the " +
-        "same type and checks for budget unique key collisions. Cannot delete default or system categories. " +
-        "Error message shows counts of all linked records.",
+        "same type, is not the category itself, and checks budget unique key (account, category, effectiveFrom) " +
+        "inside that transaction. Cannot delete isDefault, isSystem, or systemKey categories. " +
+        "Renaming those categories is still allowed via update_category.",
       inputSchema: DeleteCategoryInputSchema,
     },
     async (params) => {
@@ -660,8 +662,11 @@ export function createCapitalMcpServer(userId: string, db: DbClient) {
       description:
         "Merge two categories ATOMICALLY by moving all transactions, recurring transactions, " +
         "budgets, bill transactions, and mappings from 'fromId' to 'toId', then deleting 'fromId'. " +
-        "Categories must have the same type. Checks for budget unique key collisions and fails with " +
-        "clear error listing conflicts. Returns counts of records moved for each table.",
+        "Categories must have the same type and must not be the same id. The FROM category is refused " +
+        "when it is isDefault, isSystem, or has a systemKey — the same protection as delete_category. " +
+        "Merging into a default or system category is allowed. Budget collisions use unique key " +
+        "(account, category, effectiveFrom) and are checked inside the same transaction. " +
+        "Returns counts of records moved for each table.",
       inputSchema: MergeCategoriesInputSchema,
     },
     async (params) => {
@@ -753,7 +758,9 @@ export function createCapitalMcpServer(userId: string, db: DbClient) {
     "update_settings",
     {
       description:
-        "Update user-level settings: baseCurrency, theme, dateFormat, numberFormat, timezone.",
+        "Update user-level settings: baseCurrency, theme, dateFormat, numberFormat, timezone. " +
+        "Changing baseCurrency when the user has any transactions requires force: true. " +
+        "exchangeRate is relative to baseCurrency, so that change makes historical totals wrong.",
       inputSchema: UpdateUserSettingsInputSchema,
     },
     async (params) => {

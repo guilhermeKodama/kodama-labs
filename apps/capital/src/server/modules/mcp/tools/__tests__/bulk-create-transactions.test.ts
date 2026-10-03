@@ -380,4 +380,49 @@ describe("MCP bulk create transactions", () => {
     expect(created[0].date.toISOString()).toBe("2026-07-01T12:00:00.000Z");
     expect(created[1].date.toISOString()).toBe("2026-07-02T12:00:00.000Z");
   });
+
+  it("should normalize a case-insensitive category to the canonical name and reject unknown ones", async () => {
+    const created = await bulkCreateTransactions(
+      TEST_USER_ID,
+      [
+        {
+          entityType: "personal",
+          type: "income",
+          amount: 12,
+          currency: "BRL",
+          description: "case fold",
+          category: "dividends",
+          date: "2026-09-01",
+          personalAccountId,
+        },
+      ],
+      false,
+      db
+    );
+    expect(created.errors).toHaveLength(0);
+    const row = await db.transaction.findFirst({
+      where: { personalAccountId, description: "case fold" },
+    });
+    expect(row?.category).toBe("Dividends");
+
+    await expect(
+      bulkCreateTransactions(
+        TEST_USER_ID,
+        [
+          {
+            entityType: "personal",
+            type: "income",
+            amount: 12,
+            currency: "BRL",
+            description: "unknown",
+            category: "Not A Real Category",
+            date: "2026-09-02",
+            personalAccountId,
+          },
+        ],
+        false,
+        db
+      )
+    ).rejects.toThrow(/Valid categories: Dividends/);
+  });
 });

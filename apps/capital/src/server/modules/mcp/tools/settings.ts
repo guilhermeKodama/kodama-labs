@@ -33,12 +33,44 @@ export async function updateUserSettings(
     dateFormat?: string;
     numberFormat?: string;
     timezone?: string;
+    force?: boolean;
   },
   db: DbClient
 ) {
+  if (updates.baseCurrency) {
+    const user = await db.user.findUnique({
+      where: { id: userId },
+      select: { baseCurrency: true },
+    });
+    if (!user) {
+      throw new Error("User not found");
+    }
+
+    if (updates.baseCurrency !== user.baseCurrency) {
+      const transactionCount = await db.transaction.count({
+        where: {
+          OR: [
+            { business: { userId } },
+            { personalAccount: { userId } },
+          ],
+        },
+      });
+
+      if (transactionCount > 0 && !updates.force) {
+        throw new Error(
+          `User has ${transactionCount} transaction(s). Transaction.exchangeRate is relative to baseCurrency, ` +
+          `so changing baseCurrency makes historical totals wrong. Pass force: true to change it anyway.`
+        );
+      }
+    }
+  }
+
+  const { force: _force, ...data } = updates;
+  void _force;
+
   return db.user.update({
     where: { id: userId },
-    data: updates,
+    data,
     select: {
       baseCurrency: true,
       theme: true,

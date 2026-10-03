@@ -40,7 +40,13 @@ export async function updateTransactionTool(
       const suggestions = validation.suggestions.length > 0
         ? ` Did you mean: ${validation.suggestions.join(", ")}?`
         : "";
-      throw new Error(`Category '${params.category}' not found.${suggestions}`);
+      const names = validation.validNames.length > 0
+        ? ` Valid categories: ${validation.validNames.join(", ")}.`
+        : "";
+      throw new Error(`Category '${params.category}' not found.${suggestions}${names}`);
+    }
+    if (validation.canonicalName) {
+      params.category = validation.canonicalName;
     }
   }
 

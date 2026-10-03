@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@capital/server/lib/prisma";
 import { env } from "@/env";
 import { categorizeBillTransactions } from "@capital/server/lib/claude";
+import { BILL_LABEL_KEYS } from "@capital/server/lib/category-prompt";
+import { getSystemCategoryNames } from "@capital/server/modules/categories/lib/system-categories";
 import { normalizeDescription } from "@capital/server/modules/credit-cards/utils";
 
 // Allow up to 60 seconds for this function (Pro plan supports up to 300s)
@@ -116,6 +118,8 @@ export async function GET(request: NextRequest) {
         select: { name: true },
       });
       const categoryNames = [...new Set(categories.map((c) => c.name))];
+      const labels = await getSystemCategoryNames(userId, BILL_LABEL_KEYS, prisma);
+      const otherName = labels.other_system;
 
       const txInput = chunk.map((t, i) => ({
         index: i,
@@ -126,7 +130,9 @@ export async function GET(request: NextRequest) {
 
       const categorizations = await categorizeBillTransactions(
         txInput,
-        categoryNames
+        categoryNames,
+        otherName,
+        labels
       );
 
       const validCategorizations = categorizations.filter(
@@ -149,7 +155,7 @@ export async function GET(request: NextRequest) {
       // Save learned mappings (AI won't overwrite manual ones)
       for (const cat of validCategorizations) {
         const tx = chunk[cat.index];
-        if (cat.category === "Other") continue;
+        if (cat.category === otherName) continue;
         const normalized = normalizeDescription(tx.description);
         const existing = await prisma.merchantCategoryMapping.findUnique({
           where: {
