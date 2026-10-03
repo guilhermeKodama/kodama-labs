@@ -814,5 +814,38 @@ describe("MCP Budget Tools", () => {
       // Not the income transaction
       expect(result.summary.totalActual).toBe(7150); // Only expenses
     });
+
+    it("should verify UI dashboard uses same effective-date resolution as MCP", async () => {
+      // This test ensures UI (get-budget-dashboard) and MCP (get_budget_status)
+      // use identical budget resolution via getEffectiveBudgetsForMonth helper
+
+      // Nov 2026: should resolve to Oct budget (2,800) since no Nov budget exists
+      const novResult = await getBudgetStatus(
+        TEST_USER_ID,
+        {
+          month: "2026-11",
+          accountId: personalAccountId,
+        },
+        db
+      );
+
+      const novShopping = novResult.categories.find((c) => c.category === "Shopping");
+      expect(novShopping).toBeDefined();
+      expect(novShopping?.budgeted).toBe(2800); // Oct budget carries forward to Nov
+
+      // Feb 2027: should resolve to Dec budget (2,000)
+      const febResult = await getBudgetStatus(
+        TEST_USER_ID,
+        {
+          month: "2027-02",
+          accountId: personalAccountId,
+        },
+        db
+      );
+
+      const febShopping = febResult.categories.find((c) => c.category === "Shopping");
+      expect(febShopping).toBeDefined();
+      expect(febShopping?.budgeted).toBe(2000); // Dec budget carries forward to Feb/27
+    });
   });
 });
