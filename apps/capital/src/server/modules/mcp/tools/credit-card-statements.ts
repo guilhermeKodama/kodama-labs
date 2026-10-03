@@ -3,7 +3,7 @@ import type { DbClient } from "@capital/server/lib/prisma";
 import { parseLocalDate } from "@capital/server/lib/date-utils";
 import { amountInUserBase } from "@/lib/utils/currency";
 import type { Currency } from "@/types";
-import { matchCategoryName } from "../lib/match-category-name";
+import { matchCategoryName } from "../lib/category-validation";
 import { unknownExpenseCategoryName } from "@capital/server/modules/categories/lib/unknown-expense-category";
 
 interface InstallmentInfo {
@@ -111,7 +111,8 @@ export async function importCreditCardStatement(
         return category.name;
       }
       if (row.category) {
-        return matchCategoryName(row.category, expenseCategories) ?? fallbackName;
+        const matched = matchCategoryName(row.category, expenseCategories, "expense");
+        return matched.canonicalName ?? fallbackName;
       }
       return fallbackName;
     };

@@ -1,5 +1,6 @@
 import type { DbClient } from "@capital/server/lib/prisma";
 import { Prisma, type TransactionType } from "@/generated/prisma";
+import { billTransactionOwnedBy } from "@capital/server/modules/credit-cards/lib/bill-transaction-ownership";
 import { createCategory as createCategoryService } from "../../categories/services/create-category";
 import { updateCategoryService } from "../../categories/services/update-category";
 import { fetchCategoryById } from "../../categories/data/queries/fetch-categories";
@@ -174,14 +175,7 @@ export async function updateCategoryTool(
 
           await tx.billTransaction.updateMany({
             where: {
-              bill: {
-                creditCard: {
-                  OR: [
-                    { business: { userId } },
-                    { personalAccount: { userId } },
-                  ],
-                },
-              },
+              ...billTransactionOwnedBy(userId),
               category: existing.name,
             },
             data: { category: params.name },
@@ -249,14 +243,7 @@ export async function updateCategoryTool(
 
         await db.billTransaction.updateMany({
           where: {
-            bill: {
-              creditCard: {
-                OR: [
-                  { business: { userId } },
-                  { personalAccount: { userId } },
-                ],
-              },
-            },
+            ...billTransactionOwnedBy(userId),
             category: existing.name,
           },
           data: { category: params.name },
@@ -427,14 +414,7 @@ export async function deleteCategoryTool(
     }),
     db.billTransaction.count({
       where: {
-        bill: {
-          creditCard: {
-            OR: [
-              { business: { userId } },
-              { personalAccount: { userId } },
-            ],
-          },
-        },
+        ...billTransactionOwnedBy(userId),
         category: existing.name,
       },
     }),
@@ -504,14 +484,7 @@ export async function deleteCategoryTool(
 
         await tx.billTransaction.updateMany({
           where: {
-            bill: {
-              creditCard: {
-                OR: [
-                  { business: { userId } },
-                  { personalAccount: { userId } },
-                ],
-              },
-            },
+            ...billTransactionOwnedBy(userId),
             category: existing.name,
           },
           data: { category: targetCategory.name },
@@ -560,14 +533,7 @@ export async function deleteCategoryTool(
 
       await db.billTransaction.updateMany({
         where: {
-          bill: {
-            creditCard: {
-              OR: [
-                { business: { userId } },
-                { personalAccount: { userId } },
-              ],
-            },
-          },
+          ...billTransactionOwnedBy(userId),
           category: existing.name,
         },
         data: { category: targetCategory.name },
@@ -680,14 +646,7 @@ export async function mergeCategoryTool(
       // Move all bill transactions
       const billTxnUpdate = await tx.billTransaction.updateMany({
         where: {
-          bill: {
-            creditCard: {
-              OR: [
-                { business: { userId } },
-                { personalAccount: { userId } },
-              ],
-            },
-          },
+          ...billTransactionOwnedBy(userId),
           category: fromCategory.name,
         },
         data: {
@@ -759,14 +718,7 @@ export async function mergeCategoryTool(
 
     const billTxnUpdate = await db.billTransaction.updateMany({
       where: {
-        bill: {
-          creditCard: {
-            OR: [
-              { business: { userId } },
-              { personalAccount: { userId } },
-            ],
-          },
-        },
+        ...billTransactionOwnedBy(userId),
         category: fromCategory.name,
       },
       data: {
