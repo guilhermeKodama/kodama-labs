@@ -125,14 +125,15 @@ export function calculateEntitySummary(
   transfers: Transfer[],
   baseCurrency: string,
   initialBalance: number = 0,
-  settlementIds: Set<string> = new Set()
+  ledger?: Transaction[]
 ): EntitySummary {
   const entityTransactions = transactions.filter(
     (t) => t.entityId === entityId && t.entityType === entityType
   );
+  const none = new Set<string>();
 
-  const totalIncome = sumTransactionsByType(entityTransactions, 'income', settlementIds);
-  const totalInvestments = sumTransactionsByType(entityTransactions, 'investment', settlementIds);
+  const totalIncome = sumTransactionsByType(entityTransactions, 'income', none);
+  const totalInvestments = sumTransactionsByType(entityTransactions, 'investment', none);
 
   // Reimbursement outflows count as expenses for the originating (business) entity
   const reimbursementExpenses = transfers
@@ -144,7 +145,21 @@ export function calculateEntitySummary(
     .filter((t) => t.direction === 'reimbursement' && t.toEntityId === entityId)
     .reduce((sum, t) => sum + t.amount * t.exchangeRate, 0);
 
-  const totalExpenses = Math.max(0, sumTransactionsByType(entityTransactions, 'expense', settlementIds) + reimbursementExpenses - reimbursementCredits);
+  // Cash: every expense transaction, including card payments, and no statement purchases.
+  const cashExpenses = Math.max(
+    0,
+    sumTransactionsByType(entityTransactions, 'expense', none) + reimbursementExpenses - reimbursementCredits
+  );
+
+  const pnlTransactions = ledger
+    ? ledger.filter((t) => t.entityId === entityId && t.entityType === entityType)
+    : entityTransactions;
+  const totalExpenses = ledger
+    ? Math.max(
+        0,
+        sumTransactionsByType(pnlTransactions, 'expense', none) + reimbursementExpenses - reimbursementCredits
+      )
+    : cashExpenses;
 
   // Exclude reimbursements from incoming transfers since they are already accounted for via expense reduction
   const incomingTransfers = transfers
@@ -156,7 +171,7 @@ export function calculateEntitySummary(
     .filter((t) => t.fromEntityId === entityId && t.direction !== 'reimbursement')
     .reduce((sum, t) => sum + t.amount * t.exchangeRate, 0);
 
-  const balance = initialBalance + totalIncome - totalExpenses - totalInvestments + incomingTransfers - outgoingTransfers;
+  const balance = initialBalance + totalIncome - cashExpenses - totalInvestments + incomingTransfers - outgoingTransfers;
 
   return {
     entityId,
@@ -610,7 +625,8 @@ export function calculateEntityComparison(
   entities: Array<{ id: string; name: string; type: EntityType; color?: string; initialBalance?: number }>,
   transactions: Transaction[],
   transfers: Transfer[],
-  baseCurrency: string
+  baseCurrency: string,
+  ledger?: Transaction[]
 ): EntityComparisonData[] {
   return entities.map(entity => {
     const summary = calculateEntitySummary(
@@ -620,7 +636,8 @@ export function calculateEntityComparison(
       transactions,
       transfers,
       baseCurrency,
-      entity.initialBalance ?? 0
+      entity.initialBalance ?? 0,
+      ledger
     );
 
     return {

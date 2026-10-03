@@ -107,6 +107,8 @@ export interface Transaction {
   isTaxDeductible?: boolean; // For tax calculation helpers
   recurringTransactionId?: string; // Link to recurring transaction if auto-generated
   isCardSettlement?: boolean;
+  /** Set on statement purchases added by the P&L ledger. Absent on cash rows. */
+  source?: "card_statement";
   createdAt: Date;
   updatedAt: Date;
 }

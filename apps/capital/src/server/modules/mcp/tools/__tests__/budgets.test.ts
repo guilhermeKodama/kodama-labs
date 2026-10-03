@@ -7,6 +7,9 @@ import {
   getBudgetStatus,
 } from "../budgets";
 import { prisma } from "@capital/server/lib/prisma";
+import { buildExpenseLedger, sumLedgerExpensesByCategory } from "@/lib/utils/expense-ledger";
+import { mergeTransactionsWithCreditCard } from "@/lib/utils/budget";
+import type { Currency, Transaction } from "@/types";
 
 const db = prisma;
 
@@ -908,6 +911,173 @@ describe("MCP Budget Tools", () => {
       // Verify the effectiveFrom is normalized to noon UTC
       expect(allEntertainment[0].effectiveFrom.getUTCHours()).toBe(12);
       expect(allEntertainment[0].effectiveFrom.getUTCMinutes()).toBe(0);
+    });
+
+    it("matches the budgets page ledger for a linked payment, BRL and USD purchases, and a regular expense", async () => {
+      await db.currency.create({
+        data: {
+          userId: TEST_USER_ID,
+          code: "USD",
+          name: "US Dollar",
+          symbol: "$",
+          manualRate: 0.2,
+        },
+      });
+
+      const card = await db.creditCard.create({
+        data: {
+          entityType: "personal",
+          bankName: "Test Bank",
+          lastFourDigits: "4242",
+          creditLimit: 10000,
+          closingDay: 28,
+          dueDay: 5,
+          currency: "BRL",
+          personalAccountId,
+        },
+      });
+
+      const payment = await db.transaction.create({
+        data: {
+          entityType: "personal",
+          type: "expense",
+          amount: 5000,
+          currency: "USD",
+          exchangeRate: 5.5,
+          description: "Card payment next month",
+          category: "Shopping",
+          date: new Date("2026-11-15T12:00:00.000Z"),
+          personalAccountId,
+        },
+      });
+
+      await db.creditCardStatement.create({
+        data: {
+          creditCardId: card.id,
+          month: "2026-10",
+          closingDate: new Date("2026-10-28T12:00:00.000Z"),
+          billPaymentTransactionId: payment.id,
+          purchases: {
+            create: [
+              {
+                category: "Shopping",
+                transactionDate: new Date("2026-10-12T12:00:00.000Z"),
+                description: "Market",
+                amount: 80,
+                currency: "BRL",
+              },
+              {
+                category: "Food",
+                transactionDate: new Date("2026-10-18T12:00:00.000Z"),
+                description: "USD dinner",
+                amount: 20,
+                currency: "USD",
+              },
+            ],
+          },
+        },
+      });
+
+      const [rows, statements, currencyRows] = await Promise.all([
+        db.transaction.findMany({ where: { personalAccountId } }),
+        db.creditCardStatement.findMany({
+          where: { creditCard: { personalAccountId } },
+          include: {
+            creditCard: true,
+            purchases: true,
+          },
+        }),
+        db.currency.findMany({ where: { userId: TEST_USER_ID } }),
+      ]);
+
+      const currencies: Currency[] = currencyRows.map((row) => ({
+        code: row.code,
+        name: row.name,
+        symbol: row.symbol,
+        manualRate: row.manualRate,
+        updatedAt: row.updatedAt,
+      }));
+      const settlementIds = new Set(
+        statements
+          .map((statement) => statement.billPaymentTransactionId)
+          .filter((id): id is string => id !== null)
+      );
+      const clientTransactions: Transaction[] = rows.map((tx) => ({
+        id: tx.id,
+        entityId: personalAccountId,
+        entityType: tx.entityType,
+        type: tx.type,
+        amount: tx.amount,
+        currency: tx.currency,
+        exchangeRate: tx.exchangeRate,
+        description: tx.description,
+        category: tx.category,
+        date: tx.date,
+        isCardSettlement: settlementIds.has(tx.id),
+        createdAt: tx.createdAt,
+        updatedAt: tx.updatedAt,
+      }));
+      const ledger = buildExpenseLedger(
+        clientTransactions,
+        statements.map((statement) => ({
+          id: statement.id,
+          month: statement.month,
+          closingDate: statement.closingDate,
+          billPaymentTransactionId: statement.billPaymentTransactionId,
+          creditCard: {
+            entityId: statement.creditCard.personalAccountId ?? personalAccountId,
+            entityType: statement.creditCard.entityType,
+            currency: statement.creditCard.currency,
+          },
+          purchases: statement.purchases.map((purchase) => ({
+            id: purchase.id,
+            amount: purchase.amount,
+            currency: purchase.currency,
+            category: purchase.category,
+            description: purchase.description,
+            transactionDate: purchase.transactionDate,
+          })),
+        })),
+        "BRL",
+        currencies
+      );
+      const pageRows = mergeTransactionsWithCreditCard(
+        ledger,
+        [],
+        [],
+        [],
+        [],
+        new Set(),
+        currencies,
+        "BRL"
+      );
+      const october = sumLedgerExpensesByCategory(pageRows, 2026, 10, personalAccountId);
+      const round2 = (value: number) => Math.round(value * 100) / 100;
+
+      const result = await getBudgetStatus(
+        TEST_USER_ID,
+        { month: "2026-10", accountId: personalAccountId },
+        db
+      );
+      const shopping = result.categories.find((category) => category.category === "Shopping");
+      const food = result.categories.find((category) => category.category === "Food");
+
+      // Regular October expenses (6600 Shopping, 550 Food) plus statement purchases.
+      // USD 20 at manualRate 0.2 is 100 BRL. The November payment is not an October expense.
+      expect(shopping?.actual).toBe(round2(october.Shopping ?? 0));
+      expect(food?.actual).toBe(round2(october.Food ?? 0));
+      expect(shopping?.actual).toBe(6680);
+      expect(food?.actual).toBe(650);
+      expect(result.summary.totalActual).toBe(7330);
+
+      const november = await getBudgetStatus(
+        TEST_USER_ID,
+        { month: "2026-11", accountId: personalAccountId },
+        db
+      );
+      const novemberShopping = november.categories.find((category) => category.category === "Shopping");
+      expect(novemberShopping?.actual).toBe(0);
+      expect(november.summary.totalActual).toBe(0);
     });
   });
 });

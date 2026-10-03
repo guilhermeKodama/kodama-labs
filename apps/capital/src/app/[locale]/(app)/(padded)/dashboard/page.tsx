@@ -36,6 +36,7 @@ import {
   useRecurringTransferStore,
 } from '@/lib/store';
 import { calculateEntitySummary } from '@/lib/utils/calculations';
+import { useExpenseLedger } from '@/hooks/use-expense-ledger';
 import { formatCurrency } from '@/lib/utils/format';
 import { Link } from '@/i18n/navigation';
 
@@ -48,6 +49,7 @@ export default function DashboardPage() {
   const { settings, personalAccount } = useSettingsStore();
   const { recurringTransactions } = useRecurringTransactionStore();
   const { recurringTransfers } = useRecurringTransferStore();
+  const expenseLedger = useExpenseLedger();
   const [showAllPending, setShowAllPending] = useState(false);
   
   const dateLocale = locale === 'pt-BR' ? ptBR : enUS;
@@ -62,10 +64,11 @@ export default function DashboardPage() {
         transactions,
         transfers,
         settings.baseCurrency,
-        business.initialBalance
+        business.initialBalance,
+        expenseLedger
       )
     );
-  }, [businesses, transactions, transfers, settings.baseCurrency]);
+  }, [businesses, transactions, transfers, settings.baseCurrency, expenseLedger]);
 
   const personalSummary = useMemo(() => {
     if (!personalAccount) return null;
@@ -76,9 +79,10 @@ export default function DashboardPage() {
       transactions,
       transfers,
       settings.baseCurrency,
-      personalAccount.initialBalance
+      personalAccount.initialBalance,
+      expenseLedger
     );
-  }, [personalAccount, transactions, transfers, settings.baseCurrency, t]);
+  }, [personalAccount, transactions, transfers, settings.baseCurrency, expenseLedger, t]);
 
   // Calculate totals
   const totals = useMemo(() => {
@@ -362,6 +366,7 @@ export default function DashboardPage() {
               <EntityComparisonChart
                 entities={allEntities}
                 transactions={transactions}
+                ledger={expenseLedger}
                 transfers={transfers}
                 currency={settings.baseCurrency}
                 height={Math.max(180, allEntities.length * 50)}

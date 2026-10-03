@@ -9,6 +9,8 @@ import {
   format,
 } from 'date-fns';
 import { parseLocalDate } from '@/lib/utils/date';
+import { convertToBaseCurrency as convertAmountToBase } from '@/lib/utils/currency';
+import type { Currency } from '@/types';
 import type {
   Budget,
   BudgetProgress,
@@ -756,7 +758,9 @@ export function convertBillTransactionsToTransactions(
   billTransactions: BillTransaction[],
   bills: CreditCardBill[],
   creditCards: CreditCard[],
-  statements: Array<{ id: string; creditCardId: string; closingDate: Date | string }> = []
+  statements: Array<{ id: string; creditCardId: string; closingDate: Date | string }> = [],
+  currencies: Currency[] = [],
+  baseCurrency = "USD"
 ): Transaction[] {
   // Build lookup maps
   const billMap = new Map(bills.map((b) => [b.id, b]));
@@ -797,14 +801,18 @@ export function convertBillTransactionsToTransactions(
       continue;
     }
 
+    const currencyCode = bt.currency || card.currency;
+    const inBase = convertAmountToBase(bt.amount, currencyCode, currencies, baseCurrency);
+    const exchangeRate = bt.amount !== 0 ? inBase / bt.amount : 1;
+
     result.push({
       id: `cc-${bt.id}`,
       entityId: card.entityId,
       entityType: card.entityType,
       type: 'expense',
       amount: bt.amount,
-      currency: bt.currency || card.currency,
-      exchangeRate: 1,
+      currency: currencyCode,
+      exchangeRate,
       description: bt.description,
       category: bt.category,
       date: effectiveDate,
@@ -826,7 +834,9 @@ export function mergeTransactionsWithCreditCard(
   bills: CreditCardBill[],
   creditCards: CreditCard[],
   statements: Array<{ id: string; creditCardId: string; closingDate: Date | string; billPaymentTransactionId: string | null }> = [],
-  settlementIds: Set<string> = new Set()
+  settlementIds: Set<string> = new Set(),
+  currencies: Currency[] = [],
+  baseCurrency = "USD"
 ): Transaction[] {
   // Get IDs of regular transactions that are linked to bills (to avoid double-count)
   const linkedTransactionIds = new Set(
@@ -845,7 +855,9 @@ export function mergeTransactionsWithCreditCard(
     billTransactions,
     bills,
     creditCards,
-    statements
+    statements,
+    currencies,
+    baseCurrency
   );
 
   return [...filteredRegular, ...virtualTransactions];

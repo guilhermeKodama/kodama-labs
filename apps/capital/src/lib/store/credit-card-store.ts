@@ -11,6 +11,7 @@ import type {
   BillStatus,
   CategorizationStatus,
 } from '@/types';
+import type { ExpenseLedgerStatement } from '@/lib/utils/expense-ledger';
 import { client } from '@/lib/api-client';
 
 interface CreditCardState {
@@ -18,6 +19,7 @@ interface CreditCardState {
   bills: CreditCardBill[];
   billTransactions: BillTransaction[];
   allBillTransactions: BillTransaction[];
+  statements: ExpenseLedgerStatement[];
   installments: Installment[];
   isLoading: boolean;
   error: string | null;
@@ -40,6 +42,7 @@ interface CreditCardActions {
     creditCardId?: string;
     status?: BillStatus;
   }) => Promise<void>;
+  fetchStatements: () => Promise<void>;
   uploadBill: (data: {
     creditCardId: string;
     closingDate: string;
@@ -92,6 +95,7 @@ export const useCreditCardStore = create<CreditCardStore>()((set, get) => ({
   bills: [],
   billTransactions: [],
   allBillTransactions: [],
+  statements: [],
   installments: [],
   isLoading: false,
   error: null,
@@ -238,6 +242,42 @@ export const useCreditCardStore = create<CreditCardStore>()((set, get) => ({
         creditCards: state.creditCards.filter((c) => c.id !== id),
         isLoading: false,
       }));
+    } catch (error) {
+      set({
+        error: error instanceof Error ? error.message : 'Unknown error',
+        isLoading: false,
+      });
+    }
+  },
+
+  fetchStatements: async () => {
+    set({ isLoading: true, error: null });
+    try {
+      const res = await client.v1['credit-cards'].statements.$get();
+      if (!res.ok) throw new Error('Failed to fetch statements');
+      const data = await res.json();
+      set({
+        statements: data.map((statement) => ({
+          id: statement.id,
+          month: statement.month,
+          closingDate: statement.closingDate,
+          billPaymentTransactionId: statement.billPaymentTransactionId,
+          creditCard: {
+            entityId: statement.creditCard.entityId,
+            entityType: statement.creditCard.entityType,
+            currency: statement.creditCard.currency,
+          },
+          purchases: statement.purchases.map((purchase) => ({
+            id: purchase.id,
+            amount: purchase.amount,
+            currency: purchase.currency,
+            category: purchase.category,
+            description: purchase.description,
+            transactionDate: purchase.transactionDate,
+          })),
+        })),
+        isLoading: false,
+      });
     } catch (error) {
       set({
         error: error instanceof Error ? error.message : 'Unknown error',
@@ -602,6 +642,7 @@ export const useCreditCardStore = create<CreditCardStore>()((set, get) => ({
       bills: [],
       billTransactions: [],
       allBillTransactions: [],
+      statements: [],
       installments: [],
       isLoading: false,
       error: null,
