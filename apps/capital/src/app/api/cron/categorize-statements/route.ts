@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@capital/server/lib/prisma";
 import { env } from "@/env";
 import { categorizeStatementTransactions } from "@capital/server/lib/claude";
+import { STATEMENT_LABEL_KEYS } from "@capital/server/lib/category-prompt";
+import { getSystemCategoryNames } from "@capital/server/modules/categories/lib/system-categories";
 import { normalizeDescription } from "@capital/server/modules/bank-statements/utils";
 
 export const maxDuration = 60;
@@ -64,6 +66,9 @@ export async function GET(request: NextRequest) {
         });
         const expenseCategories = [...new Set(categories.filter((c) => c.type === "expense").map((c) => c.name))];
         const incomeCategories = [...new Set(categories.filter((c) => c.type === "income").map((c) => c.name))];
+        const labels = await getSystemCategoryNames(userId, STATEMENT_LABEL_KEYS, prisma);
+        const otherExpense = labels.other_system;
+        const otherIncome = labels.other_income;
 
         // Split by type for better categorization
         const expenseTxs = transactions.filter((t) => t.type === "expense");
@@ -78,7 +83,13 @@ export async function GET(request: NextRequest) {
             amount: t.amount,
           }));
 
-          const results = await categorizeStatementTransactions(txInput, expenseCategories, "expense");
+          const results = await categorizeStatementTransactions(
+            txInput,
+            expenseCategories,
+            "expense",
+            otherExpense,
+            labels
+          );
           for (const r of results) {
             const tx = expenseTxs[r.index];
             if (tx) updates.push({ id: tx.id, category: r.category });
@@ -92,7 +103,13 @@ export async function GET(request: NextRequest) {
             amount: t.amount,
           }));
 
-          const results = await categorizeStatementTransactions(txInput, incomeCategories, "income");
+          const results = await categorizeStatementTransactions(
+            txInput,
+            incomeCategories,
+            "income",
+            otherIncome,
+            labels
+          );
           for (const r of results) {
             const tx = incomeTxs[r.index];
             if (tx) updates.push({ id: tx.id, category: r.category });
@@ -112,7 +129,7 @@ export async function GET(request: NextRequest) {
 
           // Save learned mappings
           for (const u of updates) {
-            if (u.category === "Other" || u.category === "Other Income") continue;
+            if (u.category === otherExpense || u.category === otherIncome) continue;
             const tx = transactions.find((t) => t.id === u.id);
             if (!tx) continue;
 

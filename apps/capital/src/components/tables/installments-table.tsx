@@ -6,7 +6,8 @@ import { format, addMonths } from 'date-fns';
 import { Repeat, CalendarClock } from 'lucide-react';
 import { formatCurrency } from '@/lib/utils/format';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { convertInstallmentsToTransactions, groupTransactionsByMonth } from '@/lib/utils/budget';
+import { convertInstallmentsToTransactions, creditCardCategoryNameFrom, groupTransactionsByMonth } from '@/lib/utils/budget';
+import { useSettingsStore } from '@/lib/store';
 import type { Installment, CreditCard, CreditCardBill, BillTransaction } from '@/types';
 
 interface InstallmentsTableProps {
@@ -25,6 +26,7 @@ export function InstallmentsTable({
   currency,
 }: InstallmentsTableProps) {
   const t = useTranslations('creditCards');
+  const categories = useSettingsStore((s) => s.categories);
 
   // Future monthly projections - reuses convertInstallmentsToTransactions
   // (already covered by budget-installments.test.ts) instead of a second,
@@ -40,10 +42,11 @@ export function InstallmentsTable({
       installments,
       creditCards,
       bills,
-      billTransactions
+      billTransactions,
+      creditCardCategoryNameFrom(categories)
     );
     return groupTransactionsByMonth(virtualTransactions);
-  }, [installments, creditCards, bills, billTransactions]);
+  }, [installments, creditCards, bills, billTransactions, categories]);
 
   const totalFutureAmount = useMemo(() => {
     return installments

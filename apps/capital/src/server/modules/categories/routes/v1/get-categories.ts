@@ -17,6 +17,7 @@ const CategorySchema = z.object({
   icon: z.string().nullable(),
   isDefault: z.boolean(),
   isSystem: z.boolean(),
+  systemKey: z.string().nullable(),
   createdAt: z.string(),
   updatedAt: z.string(),
 });
@@ -65,6 +66,7 @@ export const handler: AppRouteHandler<typeof route> = async (c) => {
         icon: cat.icon,
         isDefault: cat.isDefault,
         isSystem: cat.isSystem,
+        systemKey: cat.systemKey,
         createdAt: cat.createdAt.toISOString(),
         updatedAt: cat.updatedAt.toISOString(),
       })),

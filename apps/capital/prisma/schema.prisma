@@ -579,6 +579,7 @@ model Category {
   icon      String?
   isDefault Boolean         @default(false)
   isSystem  Boolean         @default(false)
+  systemKey String?         // Stable key for system categories (e.g., "credit_card", "home")
   createdAt DateTime        @default(now())
   updatedAt DateTime        @updatedAt
 
@@ -586,6 +587,7 @@ model Category {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, name, type])
+  @@unique([userId, systemKey])
   @@index([userId])
   @@index([type])
   @@map("categories")

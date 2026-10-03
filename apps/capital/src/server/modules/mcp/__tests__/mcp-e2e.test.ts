@@ -233,7 +233,7 @@ describe("MCP Server End-to-End", () => {
       expect(data.id).toBe(2);
       expect(data.result).toHaveProperty("tools");
       expect(Array.isArray(data.result.tools)).toBe(true);
-      expect(data.result.tools.length).toBe(18); // 10 original + 3 attachment + 5 budget tools
+      expect(data.result.tools.length).toBe(27); // 10 original + 3 attachment + 5 budget + 9 category/settings tools
 
       // Check for expected tools
       const result = data.result as { tools: Array<{ name: string }> };
@@ -380,7 +380,7 @@ describe("MCP Server End-to-End", () => {
 
       // List tools
       const tools = await client.listTools();
-      expect(tools.tools.length).toBe(18); // 10 original + 3 attachment + 5 budget tools
+      expect(tools.tools.length).toBe(27); // 10 original + 3 attachment + 5 budget + 9 category/settings tools
 
       // Call a tool
       const result = await client.callTool({

@@ -1,4 +1,5 @@
 import type { PrismaClient } from "@/generated/prisma";
+import { SYSTEM_CATEGORY_DEFINITIONS } from "@capital/server/modules/categories/lib/system-categories";
 import { hashPassword } from "./password";
 
 interface SignupInput {
@@ -7,56 +8,6 @@ interface SignupInput {
   name: string;
   baseCurrency?: string;
 }
-
-const DEFAULT_INCOME_CATEGORIES = [
-  "Client Payment",
-  "Salary",
-  "Dividends",
-  "Interest",
-  "Refund",
-  "Other Income",
-];
-
-const DEFAULT_EXPENSE_CATEGORIES = [
-  "Software & Tools",
-  "Hardware",
-  "Office",
-  "Travel",
-  "Marketing",
-  "Legal & Accounting",
-  "Taxes",
-  "Insurance",
-  "Utilities",
-  "Other Expense",
-];
-
-const DEFAULT_INVESTMENT_CATEGORIES = [
-  "Stocks",
-  "Bonds",
-  "Crypto",
-  "Real Estate",
-  "Savings",
-  "Retirement",
-  "Other Investment",
-];
-
-// System expense categories for credit cards - protected from deletion
-const SYSTEM_EXPENSE_CATEGORIES = [
-  "Credit Card",
-  "Subscriptions",
-  "Groceries",
-  "Restaurants & Dining",
-  "Transportation",
-  "Shopping",
-  "Entertainment",
-  "Health & Pharmacy",
-  "Travel",
-  "Education",
-  "Personal Care",
-  "Home",
-  "Fees & Charges",
-  "Other",
-];
 
 const DEFAULT_CURRENCIES = [
   { code: "USD", name: "US Dollar", symbol: "$", manualRate: 1 },
@@ -67,39 +18,15 @@ const DEFAULT_CURRENCIES = [
 ];
 
 async function seedDefaultCategoriesForUser(userId: string, prisma: PrismaClient) {
-  const categories = [
-    ...DEFAULT_INCOME_CATEGORIES.map((name) => ({
-      userId,
-      name,
-      type: "income" as const,
-      isDefault: true,
-      isSystem: false,
-    })),
-    ...DEFAULT_EXPENSE_CATEGORIES.map((name) => ({
-      userId,
-      name,
-      type: "expense" as const,
-      isDefault: true,
-      isSystem: false,
-    })),
-    ...DEFAULT_INVESTMENT_CATEGORIES.map((name) => ({
-      userId,
-      name,
-      type: "investment" as const,
-      isDefault: true,
-      isSystem: false,
-    })),
-    ...SYSTEM_EXPENSE_CATEGORIES.map((name) => ({
-      userId,
-      name,
-      type: "expense" as const,
-      isDefault: true,
-      isSystem: true,
-    })),
-  ];
-
   await prisma.category.createMany({
-    data: categories,
+    data: SYSTEM_CATEGORY_DEFINITIONS.map((cat) => ({
+      userId,
+      name: cat.name,
+      systemKey: cat.systemKey,
+      type: cat.type,
+      isDefault: cat.isDefault,
+      isSystem: cat.isSystem,
+    })),
     skipDuplicates: true,
   });
 }

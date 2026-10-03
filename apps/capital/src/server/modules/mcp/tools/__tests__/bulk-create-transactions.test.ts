@@ -266,8 +266,7 @@ describe("MCP bulk create transactions", () => {
   });
 
   it("should handle errors gracefully and continue processing", async () => {
-    // This test verifies that non-existent categories are still accepted
-    // (category validation is at UI level, not database constraint level)
+    // This test now validates that categories must exist
     const items = [
       {
         entityType: "personal" as const,
@@ -284,33 +283,21 @@ describe("MCP bulk create transactions", () => {
         type: "income" as const,
         amount: 35.20,
         currency: "BRL",
-        description: "Non-standard category test",
-        category: "NonExistentCategory", // Still accepted
+        description: "Invalid category test",
+        category: "NonExistentCategory",
         date: "2026-09-20",
-        personalAccountId,
-      },
-      {
-        entityType: "personal" as const,
-        type: "income" as const,
-        amount: 25.30,
-        currency: "BRL",
-        description: "PVBI11 - Dividends September 2026",
-        category: "Dividends",
-        date: "2026-09-22",
         personalAccountId,
       },
     ];
 
-    const result = await bulkCreateTransactions(
-      TEST_USER_ID,
-      items,
-      false,
-      db
-    );
-
-    // All transactions should be created (no FK constraint on category)
-    expect(result.created).toHaveLength(3);
-    expect(result.errors).toHaveLength(0);
+    await expect(
+      bulkCreateTransactions(
+        TEST_USER_ID,
+        items,
+        false,
+        db
+      )
+    ).rejects.toThrow(/Category 'NonExistentCategory'/);
   });
 
   it("should create 15 dividend payments without duplicates (real-world scenario)", async () => {
@@ -392,5 +379,50 @@ describe("MCP bulk create transactions", () => {
     // Both should be normalized to noon UTC (12:00:00.000Z)
     expect(created[0].date.toISOString()).toBe("2026-07-01T12:00:00.000Z");
     expect(created[1].date.toISOString()).toBe("2026-07-02T12:00:00.000Z");
+  });
+
+  it("should normalize a case-insensitive category to the canonical name and reject unknown ones", async () => {
+    const created = await bulkCreateTransactions(
+      TEST_USER_ID,
+      [
+        {
+          entityType: "personal",
+          type: "income",
+          amount: 12,
+          currency: "BRL",
+          description: "case fold",
+          category: "dividends",
+          date: "2026-09-01",
+          personalAccountId,
+        },
+      ],
+      false,
+      db
+    );
+    expect(created.errors).toHaveLength(0);
+    const row = await db.transaction.findFirst({
+      where: { personalAccountId, description: "case fold" },
+    });
+    expect(row?.category).toBe("Dividends");
+
+    await expect(
+      bulkCreateTransactions(
+        TEST_USER_ID,
+        [
+          {
+            entityType: "personal",
+            type: "income",
+            amount: 12,
+            currency: "BRL",
+            description: "unknown",
+            category: "Not A Real Category",
+            date: "2026-09-02",
+            personalAccountId,
+          },
+        ],
+        false,
+        db
+      )
+    ).rejects.toThrow(/Valid categories: Dividends/);
   });
 });

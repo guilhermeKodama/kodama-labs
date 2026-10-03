@@ -1,5 +1,4 @@
 import type { PrismaClient, TransferDirection } from "@/generated/prisma";
-import type { DbClient } from "@capital/server/lib/prisma";
 import { parseLocalDate } from "@capital/server/lib/date-utils";
 import { getObjectBuffer } from "@/lib/storage";
 import { createTransfer } from "@capital/server/modules/transfers/services/create-transfer";
@@ -10,62 +9,7 @@ import { processBillCsv } from "@capital/server/modules/credit-cards/services/pr
 import { normalizeDescription } from "../utils";
 import { resolveTransferSides, checkTransferDirection } from "./transfer-flow";
 import type { ImportPlanPayload } from "@capital/server/modules/assistant/agent/tools/schemas/import-plan-payload";
-
-const SYSTEM_EXPENSE_CATEGORIES = [
-  "Credit Card",
-  "Subscriptions",
-  "Groceries",
-  "Restaurants & Dining",
-  "Transportation",
-  "Shopping",
-  "Entertainment",
-  "Health & Pharmacy",
-  "Travel",
-  "Education",
-  "Personal Care",
-  "Home",
-  "Fees & Charges",
-  "Other",
-];
-
-const SYSTEM_INCOME_CATEGORIES = [
-  "Salary",
-  "Freelance",
-  "Investment Returns",
-  "Transfers",
-  "Other Income",
-];
-
-async function ensureSystemCategories(userId: string, db: DbClient) {
-  const existing = await db.category.findMany({
-    where: { userId },
-    select: { name: true, type: true },
-  });
-  const existingKeys = new Set(existing.map((c) => `${c.type}:${c.name}`));
-
-  const toCreate: Array<{
-    userId: string;
-    name: string;
-    type: "expense" | "income";
-    isDefault: boolean;
-    isSystem: boolean;
-  }> = [];
-
-  for (const name of SYSTEM_EXPENSE_CATEGORIES) {
-    if (!existingKeys.has(`expense:${name}`)) {
-      toCreate.push({ userId, name, type: "expense", isDefault: true, isSystem: true });
-    }
-  }
-  for (const name of SYSTEM_INCOME_CATEGORIES) {
-    if (!existingKeys.has(`income:${name}`)) {
-      toCreate.push({ userId, name, type: "income", isDefault: true, isSystem: true });
-    }
-  }
-
-  if (toCreate.length > 0) {
-    await db.category.createMany({ data: toCreate, skipDuplicates: true });
-  }
-}
+import { ensureSystemCategories } from "@capital/server/modules/categories/lib/system-categories";
 
 interface TransferShapeFields {
   fromBusinessId: string | null;
