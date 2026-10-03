@@ -162,7 +162,7 @@ describe("MCP category CRUD tools", () => {
       expect(updated.name).toBe("Supermarket");
     });
 
-    it("should update default categories for localization", async () => {
+    it("should rename a default category and cascade the new name onto its transactions", async () => {
       const categories = await db.category.findMany({
         where: { userId: TEST_USER_ID, isDefault: true },
       });
@@ -467,7 +467,7 @@ describe("MCP category CRUD tools", () => {
   });
 
   describe("Portuguese Localization Integration", () => {
-    it("should rename Credit Card to Portuguese, create bill expense with Portuguese name, and show in linkable list", async () => {
+    it("should rename Credit Card to Portuguese and create a bill expense with that name", async () => {
       // Get the Credit Card system category
       const creditCardCategory = await db.category.findFirst({
         where: {
@@ -574,6 +574,197 @@ describe("MCP category CRUD tools", () => {
       expect(updatedCategory).not.toBeNull();
       expect(updatedCategory!.name).toBe("Cartão de Crédito");
       expect(updatedCategory!.systemKey).toBe("credit_card");
+    });
+  });
+
+  describe("guards", () => {
+    it("should reject reassigning a category to itself", async () => {
+      const category = await createCategoryTool(
+        TEST_USER_ID,
+        { name: "Temp", type: "expense" },
+        db
+      );
+      await db.transaction.create({
+        data: {
+          entityType: "personal",
+          type: "expense",
+          amount: 10,
+          currency: "BRL",
+          exchangeRate: 1,
+          description: "keep me",
+          category: "Temp",
+          date: new Date("2026-09-15"),
+          personalAccountId,
+        },
+      });
+
+      await expect(
+        deleteCategoryTool(TEST_USER_ID, { id: category.id, reassignTo: category.id }, db)
+      ).rejects.toThrow("Cannot reassign a category to itself");
+
+      const still = await db.category.findUnique({ where: { id: category.id } });
+      expect(still).not.toBeNull();
+      const tx = await db.transaction.findFirst({ where: { personalAccountId, description: "keep me" } });
+      expect(tx?.category).toBe("Temp");
+    });
+
+    it("should reject merging a category into itself", async () => {
+      const category = await createCategoryTool(
+        TEST_USER_ID,
+        { name: "Solo", type: "expense" },
+        db
+      );
+      await expect(
+        mergeCategoryTool(TEST_USER_ID, { fromId: category.id, toId: category.id }, db)
+      ).rejects.toThrow("Cannot merge a category into itself");
+      const still = await db.category.findUnique({ where: { id: category.id } });
+      expect(still).not.toBeNull();
+    });
+
+    it("should reject changing the type of a systemKey category", async () => {
+      const creditCard = await db.category.findFirst({
+        where: { userId: TEST_USER_ID, systemKey: "credit_card" },
+      });
+      await expect(
+        updateCategoryTool(TEST_USER_ID, { id: creditCard!.id, type: "income" }, db)
+      ).rejects.toThrow(/Cannot change type of system category/);
+      const row = await db.category.findUnique({ where: { id: creditCard!.id } });
+      expect(row?.type).toBe("expense");
+    });
+
+    it("should not delete an isDefault category that has no systemKey", async () => {
+      const category = await db.category.create({
+        data: {
+          userId: TEST_USER_ID,
+          name: "Legacy Default",
+          type: "expense",
+          isDefault: true,
+          isSystem: false,
+          systemKey: null,
+        },
+      });
+      await expect(
+        deleteCategoryTool(TEST_USER_ID, { id: category.id }, db)
+      ).rejects.toThrow("Cannot delete default categories");
+    });
+
+    it("should not merge from an isDefault category that has no systemKey", async () => {
+      const source = await db.category.create({
+        data: {
+          userId: TEST_USER_ID,
+          name: "Legacy Default Merge",
+          type: "expense",
+          isDefault: true,
+          systemKey: null,
+        },
+      });
+      const target = await createCategoryTool(
+        TEST_USER_ID,
+        { name: "Plain Expense", type: "expense" },
+        db
+      );
+      await expect(
+        mergeCategoryTool(TEST_USER_ID, { fromId: source.id, toId: target.id }, db)
+      ).rejects.toThrow("Cannot merge from a default category");
+    });
+
+    it("should not relabel a same-named category of the other type", async () => {
+      const expense = await createCategoryTool(
+        TEST_USER_ID,
+        { name: "Shared", type: "expense" },
+        db
+      );
+      await createCategoryTool(TEST_USER_ID, { name: "Shared", type: "income" }, db);
+      await db.transaction.create({
+        data: {
+          entityType: "personal",
+          type: "income",
+          amount: 20,
+          currency: "BRL",
+          exchangeRate: 1,
+          description: "income shared",
+          category: "Shared",
+          date: new Date("2026-09-15"),
+          personalAccountId,
+        },
+      });
+      await db.transaction.create({
+        data: {
+          entityType: "personal",
+          type: "expense",
+          amount: 20,
+          currency: "BRL",
+          exchangeRate: 1,
+          description: "expense shared",
+          category: "Shared",
+          date: new Date("2026-09-15"),
+          personalAccountId,
+        },
+      });
+
+      await updateCategoryTool(TEST_USER_ID, { id: expense.id, name: "Shared Expense" }, db);
+
+      const income = await db.transaction.findFirst({
+        where: { personalAccountId, description: "income shared" },
+      });
+      const expenseTx = await db.transaction.findFirst({
+        where: { personalAccountId, description: "expense shared" },
+      });
+      expect(income?.category).toBe("Shared");
+      expect(expenseTx?.category).toBe("Shared Expense");
+    });
+
+    it("should reject a budget collision on account and effectiveFrom inside the merge", async () => {
+      const from = await createCategoryTool(
+        TEST_USER_ID,
+        { name: "From Budget", type: "expense" },
+        db
+      );
+      const to = await createCategoryTool(
+        TEST_USER_ID,
+        { name: "To Budget", type: "expense" },
+        db
+      );
+      const effectiveFrom = new Date("2026-10-01T12:00:00.000Z");
+      await db.budget.create({
+        data: {
+          entityType: "personal",
+          category: "From Budget",
+          amount: 100,
+          currency: "BRL",
+          period: "monthly",
+          year: 2026,
+          month: 10,
+          effectiveFrom,
+          personalAccountId,
+        },
+      });
+      await db.budget.create({
+        data: {
+          entityType: "personal",
+          category: "To Budget",
+          amount: 200,
+          currency: "BRL",
+          period: "monthly",
+          year: 2026,
+          month: 10,
+          effectiveFrom,
+          personalAccountId,
+        },
+      });
+
+      await expect(
+        mergeCategoryTool(TEST_USER_ID, { fromId: from.id, toId: to.id }, db)
+      ).rejects.toThrow(/Cannot reassign budgets/);
+
+      const fromBudget = await db.budget.findFirst({
+        where: { personalAccountId, category: "From Budget" },
+      });
+      const toBudget = await db.budget.findFirst({
+        where: { personalAccountId, category: "To Budget" },
+      });
+      expect(fromBudget).not.toBeNull();
+      expect(toBudget).not.toBeNull();
     });
   });
 });

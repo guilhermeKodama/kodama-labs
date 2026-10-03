@@ -1,5 +1,5 @@
 import type { DbClient } from "@capital/server/lib/prisma";
-import type { TransactionType } from "@/generated/prisma";
+import { Prisma, type TransactionType } from "@/generated/prisma";
 import { createCategory as createCategoryService } from "../../categories/services/create-category";
 import { updateCategoryService } from "../../categories/services/update-category";
 import { fetchCategoryById } from "../../categories/data/queries/fetch-categories";
@@ -92,6 +92,12 @@ export async function updateCategoryTool(
     }
   }
 
+  if (existing.systemKey && params.type && params.type !== existing.type) {
+    throw new Error(
+      `Cannot change type of system category '${existing.name}' (systemKey: ${existing.systemKey})`
+    );
+  }
+
   // Check if trying to change type
   if (params.type && params.type !== existing.type) {
     const transactionCount = await db.transaction.count({
@@ -134,6 +140,7 @@ export async function updateCategoryTool(
           await tx.transaction.updateMany({
             where: {
               category: existing.name,
+              type: existing.type,
               OR: [
                 { business: { userId } },
                 { personalAccount: { userId } },
@@ -145,6 +152,7 @@ export async function updateCategoryTool(
           await tx.recurringTransaction.updateMany({
             where: {
               category: existing.name,
+              type: existing.type,
               OR: [
                 { business: { userId } },
                 { personalAccount: { userId } },
@@ -207,6 +215,7 @@ export async function updateCategoryTool(
         await db.transaction.updateMany({
           where: {
             category: existing.name,
+            type: existing.type,
             OR: [
               { business: { userId } },
               { personalAccount: { userId } },
@@ -218,6 +227,7 @@ export async function updateCategoryTool(
         await db.recurringTransaction.updateMany({
           where: {
             category: existing.name,
+            type: existing.type,
             OR: [
               { business: { userId } },
               { personalAccount: { userId } },
@@ -275,6 +285,82 @@ export async function updateCategoryTool(
   return updateCategoryService(userId, params.id, updates, db);
 }
 
+function isUniqueConflict(error: unknown): boolean {
+  return error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002";
+}
+
+/**
+ * Budget unique key is (account, category, effectiveFrom). Check and move inside
+ * the same transaction. A unique violation is the backstop if a row appears
+ * between the check and the update.
+ */
+async function moveBudgetsOrConflict(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  tx: any,
+  userId: string,
+  fromName: string,
+  toName: string,
+) {
+  const sourceBudgets = await tx.budget.findMany({
+    where: {
+      category: fromName,
+      OR: [
+        { business: { userId } },
+        { personalAccount: { userId } },
+      ],
+    },
+    select: {
+      businessId: true,
+      personalAccountId: true,
+      effectiveFrom: true,
+    },
+  });
+
+  const conflicts: string[] = [];
+  for (const budget of sourceBudgets) {
+    const clash = await tx.budget.findFirst({
+      where: {
+        category: toName,
+        businessId: budget.businessId,
+        personalAccountId: budget.personalAccountId,
+        effectiveFrom: budget.effectiveFrom,
+      },
+    });
+    if (clash) {
+      const key = `${budget.businessId || budget.personalAccountId}/effectiveFrom:${budget.effectiveFrom.toISOString().split("T")[0]}`;
+      conflicts.push(key);
+    }
+  }
+
+  if (conflicts.length > 0) {
+    throw new Error(
+      `Cannot reassign budgets: target category already has budgets for: ${conflicts.join(", ")}. ` +
+      `Delete or merge those budgets first.`
+    );
+  }
+
+  try {
+    return await tx.budget.updateMany({
+      where: {
+        category: fromName,
+        OR: [
+          { business: { userId } },
+          { personalAccount: { userId } },
+        ],
+      },
+      data: { category: toName },
+    });
+  } catch (error) {
+    if (isUniqueConflict(error)) {
+      throw new Error(
+        `Cannot reassign budgets: target category already has a budget for the same account and effectiveFrom. ` +
+        `Delete or merge those budgets first.`
+      );
+    }
+    throw error;
+  }
+}
+
 /**
  * Delete a category, optionally reassigning transactions and budgets.
  * All operations are atomic within a single transaction.
@@ -289,12 +375,25 @@ export async function deleteCategoryTool(
     throw new Error("Category not found or access denied");
   }
 
-  // Prevent deleting categories with systemKey - they are required by the app
+  // Same order of protection as the web app (isDefault, then isSystem), with systemKey
+  // first so a keyed row reports the stable key. Renames stay allowed in update_category.
   if (existing.systemKey) {
     throw new Error(
       `Cannot delete system category '${existing.name}' (systemKey: ${existing.systemKey}). ` +
       `System categories are required by the app. Use merge_categories to consolidate.`
     );
+  }
+
+  if (existing.isDefault) {
+    throw new Error("Cannot delete default categories");
+  }
+
+  if (existing.isSystem) {
+    throw new Error("Cannot delete system categories");
+  }
+
+  if (params.reassignTo === params.id) {
+    throw new Error("Cannot reassign a category to itself");
   }
 
   // Count all linked records across all tables
@@ -372,48 +471,6 @@ export async function deleteCategoryTool(
     }
   }
 
-  // Check for budget unique key collisions if reassigning
-  // New unique key from PR #63: (businessId, category, effectiveFrom) and (personalAccountId, category, effectiveFrom)
-  if (params.reassignTo && budgetCount > 0 && targetCategory) {
-    const sourceBudgets = await db.budget.findMany({
-      where: {
-        category: existing.name,
-        OR: [
-          { business: { userId } },
-          { personalAccount: { userId } },
-        ],
-      },
-      select: {
-        businessId: true,
-        personalAccountId: true,
-        effectiveFrom: true,
-      },
-    });
-
-    const conflicts = [];
-    for (const budget of sourceBudgets) {
-      const existing = await db.budget.findFirst({
-        where: {
-          category: targetCategory.name,
-          businessId: budget.businessId,
-          personalAccountId: budget.personalAccountId,
-          effectiveFrom: budget.effectiveFrom,
-        },
-      });
-      if (existing) {
-        const key = `${budget.businessId || budget.personalAccountId}/effectiveFrom:${budget.effectiveFrom.toISOString().split('T')[0]}`;
-        conflicts.push(key);
-      }
-    }
-
-    if (conflicts.length > 0) {
-      throw new Error(
-        `Cannot reassign budgets: target category already has budgets for: ${conflicts.join(", ")}. ` +
-        `Delete or merge those budgets first.`
-      );
-    }
-  }
-
   // Execute all operations atomically
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   if (typeof (db as any).$transaction === "function") {
@@ -443,16 +500,7 @@ export async function deleteCategoryTool(
           data: { category: targetCategory.name },
         });
 
-        await tx.budget.updateMany({
-          where: {
-            category: existing.name,
-            OR: [
-              { business: { userId } },
-              { personalAccount: { userId } },
-            ],
-          },
-          data: { category: targetCategory.name },
-        });
+        await moveBudgetsOrConflict(tx, userId, existing.name, targetCategory.name);
 
         await tx.billTransaction.updateMany({
           where: {
@@ -508,16 +556,7 @@ export async function deleteCategoryTool(
         data: { category: targetCategory.name },
       });
 
-      await db.budget.updateMany({
-        where: {
-          category: existing.name,
-          OR: [
-            { business: { userId } },
-            { personalAccount: { userId } },
-          ],
-        },
-        data: { category: targetCategory.name },
-      });
+      await moveBudgetsOrConflict(db, userId, existing.name, targetCategory.name);
 
       await db.billTransaction.updateMany({
         where: {
@@ -570,13 +609,18 @@ export async function mergeCategoryTool(
     throw new Error("Target category not found or access denied");
   }
 
+  if (params.fromId === params.toId) {
+    throw new Error("Cannot merge a category into itself");
+  }
+
   if (fromCategory.type !== toCategory.type) {
     throw new Error(
       `Cannot merge categories of different types: ${fromCategory.type} -> ${toCategory.type}`
     );
   }
 
-  // If source has a systemKey, refuse the merge - system categories must persist
+  // FROM side matches delete: systemKey, then isDefault, then isSystem.
+  // Merging into a default or system category is allowed.
   if (fromCategory.systemKey) {
     throw new Error(
       `Cannot merge from system category '${fromCategory.name}' (systemKey: ${fromCategory.systemKey}). ` +
@@ -584,46 +628,12 @@ export async function mergeCategoryTool(
     );
   }
 
-  // If target has a systemKey, that's fine - we're consolidating into a system category
-
-  // Check for budget unique key collisions
-  // New unique key from PR #63: (businessId, category, effectiveFrom) and (personalAccountId, category, effectiveFrom)
-  const sourceBudgets = await db.budget.findMany({
-    where: {
-      category: fromCategory.name,
-      OR: [
-        { business: { userId } },
-        { personalAccount: { userId } },
-      ],
-    },
-    select: {
-      businessId: true,
-      personalAccountId: true,
-      effectiveFrom: true,
-    },
-  });
-
-  const conflicts = [];
-  for (const budget of sourceBudgets) {
-    const existing = await db.budget.findFirst({
-      where: {
-        category: toCategory.name,
-        businessId: budget.businessId,
-        personalAccountId: budget.personalAccountId,
-        effectiveFrom: budget.effectiveFrom,
-      },
-    });
-    if (existing) {
-      const key = `${budget.businessId || budget.personalAccountId}/effectiveFrom:${budget.effectiveFrom.toISOString().split('T')[0]}`;
-      conflicts.push(key);
-    }
+  if (fromCategory.isDefault) {
+    throw new Error("Cannot merge from a default category");
   }
 
-  if (conflicts.length > 0) {
-    throw new Error(
-      `Cannot merge budgets: target category already has budgets for: ${conflicts.join(", ")}. ` +
-      `Delete or manually merge those budgets first.`
-    );
+  if (fromCategory.isSystem) {
+    throw new Error("Cannot merge from a system category");
   }
 
   // Execute all moves atomically
@@ -660,18 +670,12 @@ export async function mergeCategoryTool(
       });
 
       // Move all budgets
-      const budgetUpdate = await tx.budget.updateMany({
-        where: {
-          category: fromCategory.name,
-          OR: [
-            { business: { userId } },
-            { personalAccount: { userId } },
-          ],
-        },
-        data: {
-          category: toCategory.name,
-        },
-      });
+      const budgetUpdate = await moveBudgetsOrConflict(
+        tx,
+        userId,
+        fromCategory.name,
+        toCategory.name,
+      );
 
       // Move all bill transactions
       const billTxnUpdate = await tx.billTransaction.updateMany({
@@ -746,18 +750,12 @@ export async function mergeCategoryTool(
       },
     });
 
-    const budgetUpdate = await db.budget.updateMany({
-      where: {
-        category: fromCategory.name,
-        OR: [
-          { business: { userId } },
-          { personalAccount: { userId } },
-        ],
-      },
-      data: {
-        category: toCategory.name,
-      },
-    });
+    const budgetUpdate = await moveBudgetsOrConflict(
+      db,
+      userId,
+      fromCategory.name,
+      toCategory.name,
+    );
 
     const billTxnUpdate = await db.billTransaction.updateMany({
       where: {
