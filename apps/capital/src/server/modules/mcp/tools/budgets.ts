@@ -4,6 +4,7 @@ import {
   getEffectiveBudgetsForMonth,
   convertToBaseCurrency,
   shouldCountAsExpenseForBudget,
+  normalizeToMonthStart,
 } from "../../budgets/lib/budget-helpers";
 
 export interface ListBudgetsParams {
@@ -163,12 +164,12 @@ export async function createBudget(
     throw new Error("Budget amount must be non-negative");
   }
 
-  // Parse effective date (always noon UTC for consistency with transaction dates)
-  const effectiveDate = parseLocalDate(effectiveFrom);
+  // Parse effective date (always normalize to first day at noon UTC)
+  const effectiveDate = normalizeToMonthStart(parseLocalDate(effectiveFrom));
   const year = effectiveDate.getUTCFullYear();
   const month = effectiveDate.getUTCMonth() + 1;
 
-  // Check for existing budget (active or inactive)
+  // Check for existing budget (active or inactive) by comparing normalized dates
   const existing = await db.budget.findFirst({
     where: {
       personalAccountId: accountId,
@@ -274,7 +275,7 @@ export async function updateBudget(
   if (isActive !== undefined) updateData.isActive = isActive;
 
   if (effectiveFrom !== undefined) {
-    const effectiveDate = parseLocalDate(effectiveFrom);
+    const effectiveDate = normalizeToMonthStart(parseLocalDate(effectiveFrom));
     updateData.effectiveFrom = effectiveDate;
     updateData.year = effectiveDate.getUTCFullYear();
     updateData.month = effectiveDate.getUTCMonth() + 1;

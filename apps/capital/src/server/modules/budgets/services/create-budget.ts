@@ -1,6 +1,7 @@
 import type { DbClient } from "@capital/server/lib/prisma";
 import type { EntityType, BudgetPeriod } from "@/generated/prisma";
 import { insertBudget } from "../data/commands/insert-budget";
+import { normalizeToMonthStart } from "../lib/budget-helpers";
 
 interface CreateBudgetInput {
   entityType: EntityType;
@@ -36,9 +37,10 @@ export async function createBudget(
   }
 
   // Calculate effectiveFrom if not provided (backward compatibility)
-  const effectiveFrom = input.effectiveFrom || new Date(
-    Date.UTC(input.year, (input.month || 1) - 1, 1, 12, 0, 0, 0)
-  );
+  // Always normalize to first day of month at noon UTC (project convention)
+  const effectiveFrom = input.effectiveFrom 
+    ? normalizeToMonthStart(input.effectiveFrom)
+    : normalizeToMonthStart(new Date(Date.UTC(input.year, (input.month || 1) - 1, 1)));
 
   // Check for existing budget with the same entity+category+effectiveFrom
   const existing = await db.budget.findFirst({

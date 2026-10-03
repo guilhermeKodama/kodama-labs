@@ -847,5 +847,67 @@ describe("MCP Budget Tools", () => {
       expect(febShopping).toBeDefined();
       expect(febShopping?.budgeted).toBe(2000); // Dec budget carries forward to Feb/27
     });
+
+    it("should prevent duplicate budgets when creating via UI then MCP for same month", async () => {
+      // This test ensures timestamp normalization prevents duplicates
+      // UI service creates with year/month, MCP with specific date - both normalize to noon UTC
+      
+      const uiCreateBudget = (await import("../../../budgets/services/create-budget")).createBudget;
+
+      // Create via UI service for Oct 2026 (implicitly 2026-10-01 12:00 UTC)
+      const uiBudget = await uiCreateBudget(
+        TEST_USER_ID,
+        {
+          entityType: "personal",
+          personalAccountId,
+          category: "Entertainment",
+          amount: 800,
+          currency: "BRL",
+          period: "monthly",
+          year: 2026,
+          month: 10,
+        },
+        db
+      );
+
+      expect(uiBudget.id).toBeDefined();
+
+      // Attempt to create via MCP for 2026-10-15 (should normalize to 2026-10-01 12:00 UTC)
+      // This should either:
+      // (a) throw duplicate error if active budget exists, OR
+      // (b) reactivate if the UI budget was soft-deleted
+      await expect(
+        createBudget(
+          TEST_USER_ID,
+          {
+            accountId: personalAccountId,
+            category: "Entertainment",
+            amount: 900,
+            currency: "BRL",
+            effectiveFrom: "2026-10-15", // Different day, same month
+          },
+          db
+        )
+      ).rejects.toThrow("Active budget");
+
+      // Verify only one budget exists for Entertainment in Oct
+      const allEntertainment = await db.budget.findMany({
+        where: {
+          personalAccountId,
+          category: "Entertainment",
+          effectiveFrom: {
+            gte: new Date("2026-10-01T00:00:00Z"),
+            lt: new Date("2026-11-01T00:00:00Z"),
+          },
+        },
+      });
+
+      expect(allEntertainment.length).toBe(1);
+      expect(allEntertainment[0].id).toBe(uiBudget.id);
+
+      // Verify the effectiveFrom is normalized to noon UTC
+      expect(allEntertainment[0].effectiveFrom.getUTCHours()).toBe(12);
+      expect(allEntertainment[0].effectiveFrom.getUTCMinutes()).toBe(0);
+    });
   });
 });

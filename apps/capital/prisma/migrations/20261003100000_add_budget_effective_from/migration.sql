@@ -1,8 +1,8 @@
 -- Add effectiveFrom field to budgets for effective-dated budget changes
 ALTER TABLE "budgets" ADD COLUMN "effectiveFrom" TIMESTAMP(3);
 
--- Set effectiveFrom for existing budgets based on year/month
-UPDATE "budgets" SET "effectiveFrom" = make_date("year", COALESCE("month", 1), 1);
+-- Set effectiveFrom for existing budgets based on year/month at noon UTC (project convention)
+UPDATE "budgets" SET "effectiveFrom" = make_date("year", COALESCE("month", 1), 1) + interval '12 hours';
 
 -- Make effectiveFrom NOT NULL after populating
 ALTER TABLE "budgets" ALTER COLUMN "effectiveFrom" SET NOT NULL;
