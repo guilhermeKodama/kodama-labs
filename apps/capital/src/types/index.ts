@@ -590,7 +590,7 @@ export interface CreditCardBill {
 
 export interface BillTransaction {
   id: string;
-  billId: string;
+  billId: string | null;
   category: string;
   transactionDate: Date;
   description: string;

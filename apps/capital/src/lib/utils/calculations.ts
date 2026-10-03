@@ -8,16 +8,24 @@ import type {
   RecurringTransaction,
   RecurringTransfer,
 } from '@/types';
+import { shouldCountAsExpense } from './expense-classification';
 
 /**
- * Calculate the sum of transactions by type
+ * Calculate the sum of transactions by type.
+ * For expense type, only counts transactions that should be included in expense totals
+ * (excludes credit card bill payments).
  */
 export function sumTransactionsByType(
   transactions: Transaction[],
   type: TransactionType
 ): number {
   return transactions
-    .filter((t) => t.type === type)
+    .filter((t) => {
+      if (type === 'expense') {
+        return shouldCountAsExpense(t);
+      }
+      return t.type === type;
+    })
     .reduce((sum, t) => sum + t.amount * t.exchangeRate, 0);
 }
 

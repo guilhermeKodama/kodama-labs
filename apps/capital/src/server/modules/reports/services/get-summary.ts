@@ -1,5 +1,6 @@
 import type { DbClient } from "@capital/server/lib/prisma";
 import type { EntityType } from "@/generated/prisma";
+import { shouldCountAsExpense } from "../../../../lib/utils/expense-classification";
 
 export interface EntitySummary {
   entityId: string;
@@ -84,7 +85,7 @@ export async function getSummary(
 
     const totalExpenses =
       transactions
-        .filter((t) => t.type === "expense")
+        .filter((t) => shouldCountAsExpense(t))
         .reduce((sum, t) => sum + t.amount, 0) + reimbursementExpenses;
 
     const totalInvestments = transactions
@@ -141,7 +142,7 @@ export async function getSummary(
     const totalExpenses = Math.max(
       0,
       transactions
-        .filter((t) => t.type === "expense")
+        .filter((t) => shouldCountAsExpense(t))
         .reduce((sum, t) => sum + t.amount, 0) - reimbursementCredits
     );
 

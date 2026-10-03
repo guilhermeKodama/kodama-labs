@@ -2,9 +2,11 @@ import type { DbClient } from "@capital/server/lib/prisma";
 import type { ListTransactionsParams, TransactionSummary } from "../lib/types";
 import { fetchTransactions } from "../../transactions/data/queries/fetch-transactions";
 import { parseDateRangeFilter } from "../lib/date-helpers";
+import { shouldCountAsExpense } from "../../../../lib/utils/expense-classification";
 
 /**
  * List transactions with optional filters and monthly summaries.
+ * When filtering by expense type, excludes credit card bill payments from summaries.
  */
 export async function listTransactions(
   userId: string,
@@ -25,9 +27,15 @@ export async function listTransactions(
   const transactions = await fetchTransactions(userId, filters, db);
 
   // Calculate monthly totals grouped by type and category
+  // For expense type, only include transactions that count as expenses
   const summaryMap = new Map<string, TransactionSummary>();
 
   for (const txn of transactions) {
+    // Skip expenses that shouldn't count (like credit card bill payments)
+    if (txn.type === 'expense' && !shouldCountAsExpense(txn)) {
+      continue;
+    }
+
     const key = `${txn.type}|${txn.category}`;
     const existing = summaryMap.get(key);
 

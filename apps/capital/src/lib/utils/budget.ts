@@ -755,6 +755,7 @@ export function convertBillTransactionsToTransactions(
 
   const result: Transaction[] = [];
   for (const bt of billTransactions) {
+    if (!bt.billId) continue; // Skip transactions not linked to a bill
     const bill = billMap.get(bt.billId);
     if (!bill) continue;
     const card = cardMap.get(bill.creditCardId);
@@ -856,7 +857,9 @@ export function convertInstallmentsToTransactions(
   // Map billTransactionId → billId so we can find each installment's source bill
   const btToBillId = new Map<string, string>();
   for (const bt of billTransactions) {
-    btToBillId.set(bt.id, bt.billId);
+    if (bt.billId) {
+      btToBillId.set(bt.id, bt.billId);
+    }
   }
 
   // Determine which year-months are already covered by uploaded bills

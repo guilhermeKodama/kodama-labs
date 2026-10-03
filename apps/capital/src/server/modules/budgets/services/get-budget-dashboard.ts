@@ -229,6 +229,7 @@ export async function getBudgetDashboard(
 
   // Bill transactions (credit card line items)
   for (const bt of billTransactions) {
+    if (!bt.bill) continue; // Skip transactions not linked to a bill
     const card = bt.bill.creditCard;
     const entityId = card.businessId ?? card.personalAccountId ?? "";
     expenses.push({
@@ -434,6 +435,7 @@ export async function getBudgetDashboard(
     unbudgetedPrev[key].count += 1;
   }
   for (const bt of prevBillTx) {
+    if (!bt.bill) continue; // Skip transactions not linked to a bill
     const entityId = bt.bill.creditCard.businessId ?? bt.bill.creditCard.personalAccountId ?? "";
     const key = `${entityId}::${bt.category}`;
     if (budgetedKeys.has(key) || unbudgetedCurrent[key]) continue;
@@ -471,6 +473,7 @@ export async function getBudgetDashboard(
     });
   }
   for (const bt of prevBillTx) {
+    if (!bt.bill) continue; // Skip transactions not linked to a bill
     prevExpenses.push({
       entityId: bt.bill.creditCard.businessId ?? bt.bill.creditCard.personalAccountId ?? "",
       category: bt.category,

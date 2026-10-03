@@ -368,12 +368,13 @@ model Transaction {
 
   // Relations - polymorphic association
   businessId                  String?
-  business                    Business?              @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  business                    Business?               @relation(fields: [businessId], references: [id], onDelete: Cascade)
   personalAccountId           String?
-  personalAccount             PersonalAccount?       @relation(fields: [personalAccountId], references: [id], onDelete: Cascade)
-  recurringTransaction        RecurringTransaction?  @relation(fields: [recurringTransactionId], references: [id], onDelete: SetNull)
-  statementImport             StatementImport?       @relation(fields: [statementImportId], references: [id], onDelete: SetNull)
+  personalAccount             PersonalAccount?        @relation(fields: [personalAccountId], references: [id], onDelete: Cascade)
+  recurringTransaction        RecurringTransaction?   @relation(fields: [recurringTransactionId], references: [id], onDelete: SetNull)
+  statementImport             StatementImport?        @relation(fields: [statementImportId], references: [id], onDelete: SetNull)
   creditCardBills             CreditCardBill[]
+  creditCardStatementPayment  CreditCardStatement?
   linkedInvestmentTransaction InvestmentTransaction?
   attachments                 Attachment[]
 
@@ -615,6 +616,7 @@ model CreditCard {
   personalAccount   PersonalAccount? @relation(fields: [personalAccountId], references: [id], onDelete: Cascade)
 
   bills        CreditCardBill[]
+  statements   CreditCardStatement[]
   installments Installment[]
 
   @@index([businessId])
@@ -625,7 +627,34 @@ model CreditCard {
 }
 
 // ============================================
-// CREDIT CARD BILL
+// CREDIT CARD STATEMENT (monthly cycle)
+// ============================================
+
+model CreditCardStatement {
+  id                       String     @id @default(uuid())
+  creditCardId             String
+  month                    String // YYYY-MM format
+  closingDate              DateTime?
+  dueDate                  DateTime?
+  totalAmount              Float?
+  billPaymentTransactionId String?    @unique // The Transaction that paid this bill (excluded from expense totals)
+  createdAt                DateTime   @default(now())
+  updatedAt                DateTime   @updatedAt
+
+  // Relations
+  creditCard             CreditCard        @relation(fields: [creditCardId], references: [id], onDelete: Cascade)
+  billPaymentTransaction Transaction?      @relation(fields: [billPaymentTransactionId], references: [id], onDelete: SetNull)
+  purchases              BillTransaction[]
+
+  @@unique([creditCardId, month])
+  @@index([creditCardId])
+  @@index([month])
+  @@index([billPaymentTransactionId])
+  @@map("credit_card_statements")
+}
+
+// ============================================
+// CREDIT CARD BILL (legacy - being phased out, use CreditCardStatement)
 // ============================================
 
 model CreditCardBill {
@@ -655,17 +684,19 @@ model CreditCardBill {
 }
 
 // ============================================
-// BILL TRANSACTION (line items from CSV)
+// BILL TRANSACTION (line items from CSV / purchases on a statement)
 // ============================================
 
 model BillTransaction {
   id                String   @id @default(uuid())
-  billId            String
+  billId            String? // Legacy: links to CreditCardBill (being phased out)
+  statementId       String? // New: links to CreditCardStatement
   category          String
   transactionDate   DateTime
   description       String
   merchantName      String?
   amount            Float
+  currency          String   @default("BRL")
   installmentNumber Int?
   totalInstallments Int?
   isAutoCategorized Boolean  @default(false)
@@ -673,10 +704,12 @@ model BillTransaction {
   updatedAt         DateTime @updatedAt
 
   // Relations
-  bill        CreditCardBill @relation(fields: [billId], references: [id], onDelete: Cascade)
+  bill        CreditCardBill?      @relation(fields: [billId], references: [id], onDelete: Cascade)
+  statement   CreditCardStatement? @relation(fields: [statementId], references: [id], onDelete: Cascade)
   installment Installment?
 
   @@index([billId])
+  @@index([statementId])
   @@index([category])
   @@index([transactionDate])
   @@map("bill_transactions")
