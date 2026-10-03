@@ -40,6 +40,7 @@ export async function listCategoriesForMcp(
       icon: cat.icon,
       isDefault: cat.isDefault,
       isSystem: cat.isSystem,
+      systemKey: cat.systemKey,
       transactionCount: countMap.get(cat.name) ?? 0,
     })),
   };

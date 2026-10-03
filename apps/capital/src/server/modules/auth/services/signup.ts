@@ -9,53 +9,53 @@ interface SignupInput {
 }
 
 const DEFAULT_INCOME_CATEGORIES = [
-  "Client Payment",
-  "Salary",
-  "Dividends",
-  "Interest",
-  "Refund",
-  "Other Income",
+  { name: "Client Payment", systemKey: "client_payment" },
+  { name: "Salary", systemKey: "salary" },
+  { name: "Dividends", systemKey: "dividends" },
+  { name: "Interest", systemKey: "interest" },
+  { name: "Refund", systemKey: "refund" },
+  { name: "Other Income", systemKey: "other_income" },
 ];
 
 const DEFAULT_EXPENSE_CATEGORIES = [
-  "Software & Tools",
-  "Hardware",
-  "Office",
-  "Travel",
-  "Marketing",
-  "Legal & Accounting",
-  "Taxes",
-  "Insurance",
-  "Utilities",
-  "Other Expense",
+  { name: "Software & Tools", systemKey: "software_tools" },
+  { name: "Hardware", systemKey: "hardware" },
+  { name: "Office", systemKey: "office" },
+  { name: "Travel", systemKey: "travel_default" },
+  { name: "Marketing", systemKey: "marketing" },
+  { name: "Legal & Accounting", systemKey: "legal_accounting" },
+  { name: "Taxes", systemKey: "taxes" },
+  { name: "Insurance", systemKey: "insurance" },
+  { name: "Utilities", systemKey: "utilities" },
+  { name: "Other Expense", systemKey: "other_expense" },
 ];
 
 const DEFAULT_INVESTMENT_CATEGORIES = [
-  "Stocks",
-  "Bonds",
-  "Crypto",
-  "Real Estate",
-  "Savings",
-  "Retirement",
-  "Other Investment",
+  { name: "Stocks", systemKey: "stocks" },
+  { name: "Bonds", systemKey: "bonds" },
+  { name: "Crypto", systemKey: "crypto" },
+  { name: "Real Estate", systemKey: "real_estate" },
+  { name: "Savings", systemKey: "savings" },
+  { name: "Retirement", systemKey: "retirement" },
+  { name: "Other Investment", systemKey: "other_investment" },
 ];
 
 // System expense categories for credit cards - protected from deletion
 const SYSTEM_EXPENSE_CATEGORIES = [
-  "Credit Card",
-  "Subscriptions",
-  "Groceries",
-  "Restaurants & Dining",
-  "Transportation",
-  "Shopping",
-  "Entertainment",
-  "Health & Pharmacy",
-  "Travel",
-  "Education",
-  "Personal Care",
-  "Home",
-  "Fees & Charges",
-  "Other",
+  { name: "Credit Card", systemKey: "credit_card" },
+  { name: "Subscriptions", systemKey: "subscriptions" },
+  { name: "Groceries", systemKey: "groceries" },
+  { name: "Restaurants & Dining", systemKey: "restaurants_dining" },
+  { name: "Transportation", systemKey: "transportation" },
+  { name: "Shopping", systemKey: "shopping" },
+  { name: "Entertainment", systemKey: "entertainment" },
+  { name: "Health & Pharmacy", systemKey: "health_pharmacy" },
+  { name: "Travel", systemKey: "travel_system" },
+  { name: "Education", systemKey: "education" },
+  { name: "Personal Care", systemKey: "personal_care" },
+  { name: "Home", systemKey: "home" },
+  { name: "Fees & Charges", systemKey: "fees_charges" },
+  { name: "Other", systemKey: "other_system" },
 ];
 
 const DEFAULT_CURRENCIES = [
@@ -68,30 +68,34 @@ const DEFAULT_CURRENCIES = [
 
 async function seedDefaultCategoriesForUser(userId: string, prisma: PrismaClient) {
   const categories = [
-    ...DEFAULT_INCOME_CATEGORIES.map((name) => ({
+    ...DEFAULT_INCOME_CATEGORIES.map((cat) => ({
       userId,
-      name,
+      name: cat.name,
+      systemKey: cat.systemKey,
       type: "income" as const,
       isDefault: true,
       isSystem: false,
     })),
-    ...DEFAULT_EXPENSE_CATEGORIES.map((name) => ({
+    ...DEFAULT_EXPENSE_CATEGORIES.map((cat) => ({
       userId,
-      name,
+      name: cat.name,
+      systemKey: cat.systemKey,
       type: "expense" as const,
       isDefault: true,
       isSystem: false,
     })),
-    ...DEFAULT_INVESTMENT_CATEGORIES.map((name) => ({
+    ...DEFAULT_INVESTMENT_CATEGORIES.map((cat) => ({
       userId,
-      name,
+      name: cat.name,
+      systemKey: cat.systemKey,
       type: "investment" as const,
       isDefault: true,
       isSystem: false,
     })),
-    ...SYSTEM_EXPENSE_CATEGORIES.map((name) => ({
+    ...SYSTEM_EXPENSE_CATEGORIES.map((cat) => ({
       userId,
-      name,
+      name: cat.name,
+      systemKey: cat.systemKey,
       type: "expense" as const,
       isDefault: true,
       isSystem: true,

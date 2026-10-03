@@ -56,8 +56,7 @@ export async function createCategoryTool(
  * 
  * IMPORTANT: System and default categories CAN be renamed (for localization).
  * The system uses skipDuplicates when seeding, so renaming won't cause duplicates.
- * Hardcoded category name checks in code (e.g., category === "Credit Card") should
- * be replaced with isSystem/isDefault checks or stable IDs where possible.
+ * SystemKey cannot be changed once set - it provides stable identification.
  */
 export async function updateCategoryTool(
   userId: string,
@@ -67,6 +66,11 @@ export async function updateCategoryTool(
   const existing = await fetchCategoryById(userId, params.id, db);
   if (!existing) {
     throw new Error("Category not found or access denied");
+  }
+
+  // Prevent changing systemKey (it's immutable)
+  if ('systemKey' in params) {
+    throw new Error("Cannot modify systemKey - it's a stable identifier");
   }
 
   // Check if we're trying to rename to an existing category
@@ -285,12 +289,12 @@ export async function deleteCategoryTool(
     throw new Error("Category not found or access denied");
   }
 
-  if (existing.isDefault) {
-    throw new Error("Cannot delete default categories");
-  }
-
-  if (existing.isSystem) {
-    throw new Error("Cannot delete system categories");
+  // Prevent deleting categories with systemKey - they are required by the app
+  if (existing.systemKey) {
+    throw new Error(
+      `Cannot delete system category '${existing.name}' (systemKey: ${existing.systemKey}). ` +
+      `System categories are required by the app. Use merge_categories to consolidate.`
+    );
   }
 
   // Count all linked records across all tables
@@ -571,6 +575,16 @@ export async function mergeCategoryTool(
       `Cannot merge categories of different types: ${fromCategory.type} -> ${toCategory.type}`
     );
   }
+
+  // If source has a systemKey, refuse the merge - system categories must persist
+  if (fromCategory.systemKey) {
+    throw new Error(
+      `Cannot merge from system category '${fromCategory.name}' (systemKey: ${fromCategory.systemKey}). ` +
+      `System categories are required by the app and must not be deleted.`
+    );
+  }
+
+  // If target has a systemKey, that's fine - we're consolidating into a system category
 
   // Check for budget unique key collisions
   // New unique key from PR #63: (businessId, category, effectiveFrom) and (personalAccountId, category, effectiveFrom)

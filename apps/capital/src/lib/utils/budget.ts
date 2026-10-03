@@ -877,7 +877,7 @@ export function convertInstallmentsToTransactions(
     const card = cardMap.get(inst.creditCardId);
     if (!card) continue;
 
-    const category = inst.category || 'Credit Card';
+    const category = inst.category || 'Credit Card'; // Fallback for legacy data; should rarely occur
 
     // Find the bill that contains this installment's source transaction
     // and use its closing date as the anchor for projections

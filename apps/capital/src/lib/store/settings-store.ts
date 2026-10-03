@@ -141,6 +141,8 @@ export const useSettingsStore = create<SettingsStore>()((set, get) => ({
           type: cat.type,
           color: cat.color ?? undefined,
           icon: cat.icon ?? undefined,
+          isSystem: cat.isSystem ?? undefined,
+          systemKey: cat.systemKey ?? undefined,
         })),
       });
     } catch (error) {

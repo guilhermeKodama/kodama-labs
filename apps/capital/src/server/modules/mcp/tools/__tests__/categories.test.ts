@@ -45,21 +45,36 @@ describe("MCP category CRUD tools", () => {
     });
     personalAccountId = personalAccount.id;
 
-    await db.category.create({
-      data: {
-        userId: TEST_USER_ID,
-        name: "Groceries",
-        type: "expense",
-        isSystem: true,
-      },
+    // Create system expense categories with systemKeys
+    await db.category.createMany({
+      data: [
+        {
+          userId: TEST_USER_ID,
+          name: "Credit Card",
+          type: "expense",
+          isDefault: true,
+          isSystem: true,
+          systemKey: "credit_card",
+        },
+        {
+          userId: TEST_USER_ID,
+          name: "Groceries",
+          type: "expense",
+          isDefault: true,
+          isSystem: true,
+          systemKey: "groceries",
+        },
+      ],
     });
 
+    // Create default income category
     await db.category.create({
       data: {
         userId: TEST_USER_ID,
         name: "Salary",
         type: "income",
         isDefault: true,
+        systemKey: "salary",
       },
     });
   });
@@ -307,26 +322,30 @@ describe("MCP category CRUD tools", () => {
       expect(deleted).toBeNull();
     });
 
-    it("should not delete system categories", async () => {
-      const categories = await db.category.findMany({
-        where: { userId: TEST_USER_ID, isSystem: true },
+    it("should not delete system categories (legacy check)", async () => {
+      // This test now checks for systemKey instead of isSystem/isDefault
+      const systemCategory = await db.category.findFirst({
+        where: { userId: TEST_USER_ID, systemKey: "credit_card" },
       });
-      const systemCategory = categories[0];
+
+      expect(systemCategory).not.toBeNull();
 
       await expect(
-        deleteCategoryTool(TEST_USER_ID, { id: systemCategory.id }, db)
-      ).rejects.toThrow("Cannot delete system categories");
+        deleteCategoryTool(TEST_USER_ID, { id: systemCategory!.id }, db)
+      ).rejects.toThrow(/Cannot delete system category.*systemKey: credit_card/);
     });
 
-    it("should not delete default categories", async () => {
-      const categories = await db.category.findMany({
-        where: { userId: TEST_USER_ID, isDefault: true },
+    it("should not delete default categories (legacy check)", async () => {
+      // This test now checks for systemKey instead of isSystem/isDefault
+      const defaultCategory = await db.category.findFirst({
+        where: { userId: TEST_USER_ID, systemKey: "salary" },
       });
-      const defaultCategory = categories[0];
+
+      expect(defaultCategory).not.toBeNull();
 
       await expect(
-        deleteCategoryTool(TEST_USER_ID, { id: defaultCategory.id }, db)
-      ).rejects.toThrow("Cannot delete default categories");
+        deleteCategoryTool(TEST_USER_ID, { id: defaultCategory!.id }, db)
+      ).rejects.toThrow(/Cannot delete system category.*systemKey: salary/);
     });
   });
 
@@ -411,6 +430,150 @@ describe("MCP category CRUD tools", () => {
           db
         )
       ).rejects.toThrow("Cannot merge categories of different types");
+    });
+
+    it("should prevent deleting system categories with systemKey", async () => {
+      const systemCategory = await db.category.findFirst({
+        where: { userId: TEST_USER_ID, systemKey: "credit_card" },
+      });
+
+      expect(systemCategory).not.toBeNull();
+
+      await expect(
+        deleteCategoryTool(TEST_USER_ID, { id: systemCategory!.id }, db)
+      ).rejects.toThrow(/Cannot delete system category.*systemKey: credit_card/);
+    });
+
+    it("should prevent merging from system categories with systemKey", async () => {
+      const systemCategory = await db.category.findFirst({
+        where: { userId: TEST_USER_ID, systemKey: "credit_card" },
+      });
+      const userCategory = await createCategoryTool(
+        TEST_USER_ID,
+        { name: "User Expense", type: "expense" },
+        db
+      );
+
+      expect(systemCategory).not.toBeNull();
+
+      await expect(
+        mergeCategoryTool(
+          TEST_USER_ID,
+          { fromId: systemCategory!.id, toId: userCategory.id },
+          db
+        )
+      ).rejects.toThrow(/Cannot merge from system category.*systemKey: credit_card/);
+    });
+  });
+
+  describe("Portuguese Localization Integration", () => {
+    it("should rename Credit Card to Portuguese, create bill expense with Portuguese name, and show in linkable list", async () => {
+      // Get the Credit Card system category
+      const creditCardCategory = await db.category.findFirst({
+        where: {
+          userId: TEST_USER_ID,
+          systemKey: "credit_card",
+        },
+      });
+
+      expect(creditCardCategory).not.toBeNull();
+      expect(creditCardCategory!.name).toBe("Credit Card");
+
+      // Rename to Portuguese
+      const renamed = await updateCategoryTool(
+        TEST_USER_ID,
+        {
+          id: creditCardCategory!.id,
+          name: "Cartão de Crédito",
+        },
+        db
+      );
+
+      expect(renamed.name).toBe("Cartão de Crédito");
+      expect(renamed.systemKey).toBe("credit_card");
+
+      // Create a credit card
+      const creditCard = await db.creditCard.create({
+        data: {
+          entityType: "personal",
+          bankName: "Test Bank",
+          lastFourDigits: "1234",
+          creditLimit: 5000,
+          closingDay: 15,
+          dueDay: 25,
+          currency: "BRL",
+          color: "#FF5733",
+          isActive: true,
+          personalAccountId,
+        },
+      });
+
+      // Create a bill
+      const bill = await db.creditCardBill.create({
+        data: {
+          creditCardId: creditCard.id,
+          closingDate: new Date("2026-09-15"),
+          dueDate: new Date("2026-09-25"),
+          totalAmount: 1500,
+          status: "pending",
+        },
+      });
+
+      // Import the createBillExpense service
+      const { createBillExpense } = await import(
+        "@capital/server/modules/credit-cards/services/create-bill-expense"
+      );
+
+      // Create bill expense - should use Portuguese category name
+      const billExpense = await createBillExpense(
+        TEST_USER_ID,
+        {
+          billId: bill.id,
+          entityType: "personal",
+          personalAccountId,
+          currency: "BRL",
+          exchangeRate: 1,
+          date: new Date("2026-09-25"),
+        },
+        db
+      );
+
+      // Verify the transaction has the Portuguese category name
+      expect(billExpense.category).toBe("Cartão de Crédito");
+
+      // Verify it appears in a query for "Cartão de Crédito" transactions
+      const expenseTransactions = await db.transaction.findMany({
+        where: {
+          personalAccountId,
+          type: "expense",
+          category: "Cartão de Crédito",
+        },
+      });
+
+      expect(expenseTransactions).toHaveLength(1);
+      expect(expenseTransactions[0].id).toBe(billExpense.id);
+
+      // Verify old English name doesn't exist
+      const englishCategoryTransactions = await db.transaction.findMany({
+        where: {
+          personalAccountId,
+          category: "Credit Card",
+        },
+      });
+
+      expect(englishCategoryTransactions).toHaveLength(0);
+
+      // Verify the category still exists with the new name and systemKey
+      const updatedCategory = await db.category.findFirst({
+        where: {
+          userId: TEST_USER_ID,
+          systemKey: "credit_card",
+        },
+      });
+
+      expect(updatedCategory).not.toBeNull();
+      expect(updatedCategory!.name).toBe("Cartão de Crédito");
+      expect(updatedCategory!.systemKey).toBe("credit_card");
     });
   });
 });

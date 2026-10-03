@@ -15,12 +15,13 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover';
-import type { CreditCardBill, Transaction } from '@/types';
+import type { CreditCardBill, Transaction, Category } from '@/types';
 
 interface BillsTableProps {
   bills: CreditCardBill[];
   currency: string;
   expenseTransactions?: Transaction[];
+  categories?: Category[];
   onCreateExpense?: (billId: string) => void;
   onLinkTransaction?: (billId: string, transactionId: string) => void;
   onUpdateBill?: (billId: string, data: { closingDate?: string; dueDate?: string }) => void;
@@ -31,6 +32,7 @@ export function BillsTable({
   bills,
   currency,
   expenseTransactions = [],
+  categories = [],
   onCreateExpense,
   onLinkTransaction,
   onUpdateBill,
@@ -41,6 +43,10 @@ export function BillsTable({
   const [editingBillId, setEditingBillId] = useState<string | null>(null);
   const [editClosingDate, setEditClosingDate] = useState('');
   const [editDueDate, setEditDueDate] = useState('');
+
+  // Find the credit card category by systemKey
+  const creditCardCategory = categories.find((c) => c.systemKey === 'credit_card');
+  const creditCardCategoryName = creditCardCategory?.name || 'Credit Card';
 
   if (bills.length === 0) {
     return (
@@ -192,7 +198,7 @@ export function BillsTable({
                               </div>
                               <div className="max-h-48 overflow-y-auto">
                                 {expenseTransactions
-                                  .filter((tx) => tx.category === 'Credit Card')
+                                  .filter((tx) => tx.category === creditCardCategoryName)
                                   .slice(0, 20)
                                   .map((tx) => (
                                     <Button
@@ -214,7 +220,7 @@ export function BillsTable({
                                       </div>
                                     </Button>
                                   ))}
-                                {expenseTransactions.filter((tx) => tx.category === 'Credit Card').length === 0 && (
+                                {expenseTransactions.filter((tx) => tx.category === creditCardCategoryName).length === 0 && (
                                   <p className="px-2 py-2 text-xs text-slate-500">
                                     {t('bill.noExpenseTransactions')}
                                   </p>
