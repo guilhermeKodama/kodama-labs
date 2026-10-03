@@ -52,10 +52,6 @@ export async function createBillExpense(
     db
   );
 
-  if (!creditCardCategoryName) {
-    throw new Error("Credit card category not found for user");
-  }
-
   // Create expense transaction
   const transaction = await db.transaction.create({
     data: {

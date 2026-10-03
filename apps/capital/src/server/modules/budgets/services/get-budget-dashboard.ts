@@ -225,11 +225,11 @@ export async function getBudgetDashboard(
   }
 
   // Get the user's localized credit card category name
-  const creditCardCategoryName = (await getCategoryNameBySystemKey(
+  const creditCardCategoryName = await getCategoryNameBySystemKey(
     userId,
     "credit_card",
     db
-  )) || "Credit Card"; // Fallback for users without the system category
+  );
 
   // Installment projections for this month
   const billMap = new Map(bills.map((b) => [b.id, b]));
