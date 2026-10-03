@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { prisma } from "@capital/server/lib/prisma";
 import {
+  SYSTEM_CATEGORY_DEFINITIONS,
   ensureSystemCategories,
   getSystemCategory,
 } from "../system-categories";
@@ -122,5 +123,96 @@ describe("system category catalog", () => {
       where: { userId: TEST_USER_ID, type: "expense", name: { equals: "credit card", mode: "insensitive" } },
     });
     expect(count).toBe(1);
+  });
+
+  it("keeps a user-owned Groceries inside a transaction and commits", async () => {
+    await db.category.create({
+      data: {
+        userId: TEST_USER_ID,
+        name: "Groceries",
+        type: "expense",
+        isDefault: false,
+        isSystem: false,
+        systemKey: null,
+      },
+    });
+
+    await db.$transaction(async (tx) => {
+      await ensureSystemCategories(TEST_USER_ID, tx);
+      const groceries = await getSystemCategory(TEST_USER_ID, "groceries", tx);
+      expect(groceries.name).toBe("Groceries");
+      expect(groceries.systemKey).toBeNull();
+    });
+
+    const groceries = await db.category.findMany({
+      where: { userId: TEST_USER_ID, name: "Groceries", type: "expense" },
+    });
+    expect(groceries).toHaveLength(1);
+    expect(groceries[0].systemKey).toBeNull();
+    const creditCard = await db.category.findFirst({
+      where: { userId: TEST_USER_ID, systemKey: "credit_card" },
+    });
+    expect(creditCard).not.toBeNull();
+  });
+
+  it("ensures the catalog inside a transaction", async () => {
+    await db.$transaction(async (tx) => {
+      await ensureSystemCategories(TEST_USER_ID, tx);
+      const card = await getSystemCategory(TEST_USER_ID, "credit_card", tx);
+      expect(card.name).toBe("Credit Card");
+      expect(card.systemKey).toBe("credit_card");
+    });
+
+    const count = await db.category.count({ where: { userId: TEST_USER_ID } });
+    expect(count).toBe(SYSTEM_CATEGORY_DEFINITIONS.length);
+  });
+
+  it("resolves both Travel keys inside a transaction without a second Travel", async () => {
+    await db.$transaction(async (tx) => {
+      await ensureSystemCategories(TEST_USER_ID, tx);
+      const canonical = await getSystemCategory(TEST_USER_ID, "travel_default", tx);
+      const alias = await getSystemCategory(TEST_USER_ID, "travel_system", tx);
+      expect(alias.id).toBe(canonical.id);
+      expect(canonical.systemKey).toBe("travel_default");
+    });
+
+    const travels = await db.category.findMany({
+      where: { userId: TEST_USER_ID, name: "Travel", type: "expense" },
+    });
+    expect(travels).toHaveLength(1);
+  });
+
+  it("accepts a migration travel_system row as travel_default and does not insert another", async () => {
+    const legacy = await db.category.create({
+      data: {
+        userId: TEST_USER_ID,
+        name: "Travel",
+        type: "expense",
+        isDefault: true,
+        isSystem: true,
+        systemKey: "travel_system",
+      },
+    });
+
+    await db.$transaction(async (tx) => {
+      await ensureSystemCategories(TEST_USER_ID, tx);
+      const canonical = await getSystemCategory(TEST_USER_ID, "travel_default", tx);
+      const alias = await getSystemCategory(TEST_USER_ID, "travel_system", tx);
+      expect(canonical.id).toBe(legacy.id);
+      expect(alias.id).toBe(legacy.id);
+      expect(canonical.systemKey).toBe("travel_system");
+    });
+
+    const travels = await db.category.findMany({
+      where: {
+        userId: TEST_USER_ID,
+        OR: [
+          { name: "Travel", type: "expense" },
+          { systemKey: { in: ["travel_default", "travel_system"] } },
+        ],
+      },
+    });
+    expect(travels).toHaveLength(1);
+    expect(travels[0].systemKey).toBe("travel_system");
   });
 });

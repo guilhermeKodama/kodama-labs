@@ -5,7 +5,7 @@ export { getSystemCategory, ensureSystemCategories, getSystemCategoryNames } fro
 
 /**
  * Get a category by its systemKey for a given user.
- * Resolves aliases (travel_system -> travel_default) and self-heals a missing key.
+ * travel_system and travel_default resolve to the same row. Self-heals a missing key.
  */
 export async function getCategoryBySystemKey(
   userId: string,
