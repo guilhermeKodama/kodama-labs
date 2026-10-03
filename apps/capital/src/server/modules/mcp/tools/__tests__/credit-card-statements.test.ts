@@ -3,12 +3,26 @@ import { prisma } from "@capital/server/lib/prisma";
 import {
   importCreditCardStatement,
   markTransactionAsCardSettlement,
+  unmarkTransactionAsCardSettlement,
   getCreditCardStatement,
 } from "../credit-card-statements";
+import { shouldCountAsExpense } from "@/lib/utils/expense-classification";
 
 const db = prisma;
 const TEST_USER_ID = "test-user-credit-card-statements-001";
 const TEST_EMAIL = "mcp-cc-statements-test@example.com";
+
+async function ensureOtherCategory(userId: string) {
+  await db.category.create({
+    data: {
+      userId,
+      name: "Other",
+      type: "expense",
+      isSystem: true,
+      isDefault: true,
+    },
+  });
+}
 
 async function deleteStatementTestUsers() {
   const users = await db.user.findMany({
@@ -37,6 +51,7 @@ describe("importCreditCardStatement", () => {
       },
     });
     userId = user.id;
+    await ensureOtherCategory(userId);
 
     // Create personal account
     const personalAccount = await db.personalAccount.create({
@@ -147,8 +162,8 @@ describe("importCreditCardStatement", () => {
       db
     );
 
-    expect(result.created).toBe(2); // Only 2 created, 1 skipped as duplicate within batch
-    expect(result.skipped).toBe(1);
+    expect(result.created).toBe(3);
+    expect(result.skipped).toBe(0);
   });
 
   it("deduplicates against existing purchases on re-import", async () => {
@@ -251,6 +266,105 @@ describe("importCreditCardStatement", () => {
     expect(result.created).toBe(2);
     expect(result.skipped).toBe(0);
   });
+
+  it("keeps identical rows up to the incoming count", async () => {
+    const first = await importCreditCardStatement(
+      userId,
+      {
+        creditCardId,
+        statement: { month: "2026-09" },
+        rows: [
+          { date: "2026-08-10", description: "Uber", amount: 25, category: "Transport" },
+          { date: "2026-08-10", description: "Uber", amount: 25, category: "Transport" },
+        ],
+      },
+      db
+    );
+    expect(first.created).toBe(2);
+    expect(first.createdIds).toHaveLength(2);
+
+    const again = await importCreditCardStatement(
+      userId,
+      {
+        creditCardId,
+        statement: { month: "2026-09" },
+        rows: [
+          { date: "2026-08-10", description: "Uber", amount: 25, category: "Transport" },
+          { date: "2026-08-10", description: "Uber", amount: 25, category: "Transport" },
+        ],
+      },
+      db
+    );
+    expect(again.created).toBe(0);
+    expect(again.createdIds).toEqual([]);
+
+    const third = await importCreditCardStatement(
+      userId,
+      {
+        creditCardId,
+        statement: { month: "2026-09" },
+        rows: [
+          { date: "2026-08-10", description: "Uber", amount: 25 },
+          { date: "2026-08-10", description: "Uber", amount: 25 },
+          { date: "2026-08-10", description: "Uber", amount: 25 },
+        ],
+      },
+      db
+    );
+    expect(third.created).toBe(1);
+    expect(third.createdIds).toHaveLength(1);
+
+    const purchases = await db.billTransaction.findMany({
+      where: { statementId: first.statementId },
+    });
+    expect(purchases).toHaveLength(3);
+    expect(purchases.map((purchase) => purchase.id)).toEqual(
+      expect.arrayContaining([...first.createdIds, ...third.createdIds])
+    );
+  });
+
+  it("imports one copy when two concurrent calls share a payload", async () => {
+    const payload = {
+      creditCardId,
+      statement: { month: "2026-09" },
+      rows: [
+        { date: "2026-08-11", description: "Coffee", amount: 12, category: "Food" },
+      ],
+    };
+    const [a, b] = await Promise.all([
+      importCreditCardStatement(userId, payload, db),
+      importCreditCardStatement(userId, payload, db),
+    ]);
+    expect(a.created + b.created).toBe(1);
+    const purchases = await db.billTransaction.findMany({
+      where: { statementId: a.statementId },
+    });
+    expect(purchases).toHaveLength(1);
+  });
+
+  it("matches category names case-insensitively and falls back to Other", async () => {
+    await db.category.create({
+      data: { userId, name: "Groceries", type: "expense" },
+    });
+    const result = await importCreditCardStatement(
+      userId,
+      {
+        creditCardId,
+        statement: { month: "2026-09" },
+        rows: [
+          { date: "2026-08-10", description: "Market", amount: 10, category: "groceries" },
+          { date: "2026-08-11", description: "Mystery", amount: 5, category: "Not A Category" },
+        ],
+      },
+      db
+    );
+    const purchases = await db.billTransaction.findMany({
+      where: { id: { in: result.createdIds } },
+    });
+    const byDescription = Object.fromEntries(purchases.map((purchase) => [purchase.description, purchase.category]));
+    expect(byDescription.Market).toBe("Groceries");
+    expect(byDescription.Mystery).toBe("Other");
+  });
 });
 
 describe("markTransactionAsCardSettlement", () => {
@@ -284,6 +398,7 @@ describe("markTransactionAsCardSettlement", () => {
       },
     });
     userId = user.id;
+    await ensureOtherCategory(userId);
 
     // Create personal account
     const personalAccount = await db.personalAccount.create({
@@ -344,17 +459,39 @@ describe("markTransactionAsCardSettlement", () => {
 
     expect(result.success).toBe(true);
 
-    // Verify transaction category was updated
     const transaction = await db.transaction.findUnique({
       where: { id: transactionId },
     });
-    expect(transaction!.category).toBe("Credit Card");
+    expect(transaction!.category).toBe("Bank Transfer");
 
     // Verify statement link was created
     const statement = await db.creditCardStatement.findUnique({
       where: { id: statementId },
     });
     expect(statement!.billPaymentTransactionId).toBe(transactionId);
+  });
+
+  it("unmark clears the link so the payment counts as an expense again", async () => {
+    await markTransactionAsCardSettlement(userId, { transactionId, statementId }, db);
+    const unmarked = await unmarkTransactionAsCardSettlement(userId, { transactionId }, db);
+    expect(unmarked.success).toBe(true);
+
+    const statement = await db.creditCardStatement.findUnique({ where: { id: statementId } });
+    expect(statement!.billPaymentTransactionId).toBeNull();
+
+    const transaction = await db.transaction.findUnique({ where: { id: transactionId } });
+    expect(transaction!.category).toBe("Bank Transfer");
+    expect(shouldCountAsExpense(transaction!, false)).toBe(true);
+  });
+
+  it("rejects a non-expense transaction", async () => {
+    await db.transaction.update({
+      where: { id: transactionId },
+      data: { type: "income" },
+    });
+    await expect(
+      markTransactionAsCardSettlement(userId, { transactionId, statementId }, db)
+    ).rejects.toThrow("Only an expense transaction can be marked as a card settlement");
   });
 
   it("prevents linking different transaction to statement that already has one", async () => {
@@ -419,6 +556,7 @@ describe("expense classification integration", () => {
       },
     });
     userId = user.id;
+    await ensureOtherCategory(userId);
 
     // Create personal account
     const personalAccount = await db.personalAccount.create({
@@ -803,6 +941,7 @@ describe("getCreditCardStatement", () => {
       },
     });
     userId = user.id;
+    await ensureOtherCategory(userId);
 
     // Create personal account
     const personalAccount = await db.personalAccount.create({
@@ -908,6 +1047,65 @@ describe("getCreditCardStatement", () => {
     expect(result.billPayment!.amount).toBe(250.75);
     expect(result.reconciliation.paymentAmount).toBe(250.75);
     expect(result.reconciliation.difference).toBe(0);
+    expect(result.reconciliation.isReconciled).toBe(true);
+  });
+
+  it("reconciles mixed currencies in the user base and keeps the purchase date", async () => {
+    await db.user.update({
+      where: { id: userId },
+      data: { baseCurrency: "USD" },
+    });
+    await db.currency.create({
+      data: {
+        userId,
+        code: "BRL",
+        name: "Brazilian Real",
+        symbol: "R$",
+        manualRate: 5,
+      },
+    });
+
+    const imported = await importCreditCardStatement(
+      userId,
+      {
+        creditCardId,
+        statement: { month: "2026-10", closingDate: "2026-10-28" },
+        rows: [
+          {
+            date: "2026-01-15",
+            description: "PARC 3/10",
+            amount: 500,
+            currency: "BRL",
+            installment: { number: 3, total: 10 },
+          },
+        ],
+      },
+      db
+    );
+    const payment = await db.transaction.create({
+      data: {
+        entityType: "personal",
+        personalAccountId,
+        type: "expense",
+        amount: 100,
+        currency: "USD",
+        exchangeRate: 1,
+        description: "Card payment",
+        category: "Bank Transfer",
+        date: new Date("2026-11-05T12:00:00.000Z"),
+      },
+    });
+    await markTransactionAsCardSettlement(
+      userId,
+      { transactionId: payment.id, statementId: imported.statementId },
+      db
+    );
+
+    const result = await getCreditCardStatement(userId, { statementId: imported.statementId }, db);
+    expect(result.purchases[0].date.startsWith("2026-01-15")).toBe(true);
+    expect(result.reconciliation.currency).toBe("USD");
+    expect(result.reconciliation.purchasesTotal).toBe(100);
+    expect(result.reconciliation.paymentAmount).toBe(100);
     expect(result.reconciliation.isReconciled).toBe(true);
   });
 });

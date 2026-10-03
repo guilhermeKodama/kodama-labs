@@ -1,5 +1,6 @@
 import type { DbClient } from "@capital/server/lib/prisma";
 import type { EntityType, TransactionType } from "@/generated/prisma";
+import { billTransactionOwnedBy } from "@capital/server/modules/credit-cards/lib/bill-transaction-ownership";
 
 export interface SearchBillTransactionsFilters {
   creditCardId?: string;
@@ -25,10 +26,7 @@ export async function searchBillTransactionsForAgent(
   db: DbClient
 ) {
   const where = {
-    bill: {
-      creditCard: { OR: [{ business: { userId } }, { personalAccount: { userId } }] },
-      ...(filters.creditCardId && { creditCardId: filters.creditCardId }),
-    },
+    ...billTransactionOwnedBy(userId, filters.creditCardId),
     ...(filters.billId && { billId: filters.billId }),
     ...(filters.category && { category: filters.category }),
     ...(filters.descriptionContains && {

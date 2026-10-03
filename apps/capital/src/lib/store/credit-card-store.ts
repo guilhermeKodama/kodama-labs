@@ -19,7 +19,7 @@ interface CreditCardState {
   bills: CreditCardBill[];
   billTransactions: BillTransaction[];
   allBillTransactions: BillTransaction[];
-  statements: ExpenseLedgerStatement[];
+  statements: Array<ExpenseLedgerStatement & { creditCardId: string }>;
   installments: Installment[];
   isLoading: boolean;
   error: string | null;
@@ -42,7 +42,7 @@ interface CreditCardActions {
     creditCardId?: string;
     status?: BillStatus;
   }) => Promise<void>;
-  fetchStatements: () => Promise<void>;
+  fetchStatements: (range?: { from?: string; to?: string }) => Promise<void>;
   uploadBill: (data: {
     creditCardId: string;
     closingDate: string;
@@ -250,32 +250,44 @@ export const useCreditCardStore = create<CreditCardStore>()((set, get) => ({
     }
   },
 
-  fetchStatements: async () => {
+  fetchStatements: async (range) => {
     set({ isLoading: true, error: null });
     try {
-      const res = await client.v1['credit-cards'].statements.$get();
+      const res = await client.v1['credit-cards'].statements.$get({
+        query: {
+          ...(range?.from ? { from: range.from } : {}),
+          ...(range?.to ? { to: range.to } : {}),
+        },
+      });
       if (!res.ok) throw new Error('Failed to fetch statements');
       const data = await res.json();
-      set({
-        statements: data.map((statement) => ({
-          id: statement.id,
-          month: statement.month,
-          closingDate: statement.closingDate,
-          billPaymentTransactionId: statement.billPaymentTransactionId,
-          creditCard: {
-            entityId: statement.creditCard.entityId,
-            entityType: statement.creditCard.entityType,
-            currency: statement.creditCard.currency,
-          },
-          purchases: statement.purchases.map((purchase) => ({
-            id: purchase.id,
-            amount: purchase.amount,
-            currency: purchase.currency,
-            category: purchase.category,
-            description: purchase.description,
-            transactionDate: purchase.transactionDate,
-          })),
+      const statements = data.map((statement) => ({
+        id: statement.id,
+        month: statement.month,
+        closingDate: statement.closingDate,
+        billPaymentTransactionId: statement.billPaymentTransactionId,
+        creditCardId: statement.creditCard.id,
+        creditCard: {
+          entityId: statement.creditCard.entityId,
+          entityType: statement.creditCard.entityType,
+          currency: statement.creditCard.currency,
+        },
+        purchases: statement.purchases.map((purchase) => ({
+          id: purchase.id,
+          amount: purchase.amount,
+          currency: purchase.currency,
+          category: purchase.category,
+          description: purchase.description,
+          transactionDate: purchase.transactionDate,
         })),
+      }));
+      // A ranged fetch must not replace the all-time list the dashboard reads.
+      if (range?.from || range?.to) {
+        set({ isLoading: false });
+        return;
+      }
+      set({
+        statements,
         isLoading: false,
       });
     } catch (error) {
@@ -491,6 +503,12 @@ export const useCreditCardStore = create<CreditCardStore>()((set, get) => ({
             ? { ...t, category: data.category, isAutoCategorized: data.isAutoCategorized }
             : t
         ),
+        statements: state.statements.map((statement) => ({
+          ...statement,
+          purchases: statement.purchases.map((purchase) =>
+            purchase.id === id ? { ...purchase, category: data.category } : purchase
+          ),
+        })),
       }));
     } catch (error) {
       set({

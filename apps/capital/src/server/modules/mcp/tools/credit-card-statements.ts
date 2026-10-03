@@ -1,14 +1,10 @@
+import { Prisma, type PrismaClient } from "@/generated/prisma";
 import type { DbClient } from "@capital/server/lib/prisma";
 import { parseLocalDate } from "@capital/server/lib/date-utils";
-
-/**
- * Display category stored on a settlement payment.
- * Expense totals ignore this name; the statement link is the rule.
- * PR #64 replaces this return value with the credit-card systemKey helper.
- */
-export function settlementDisplayCategory(): string {
-  return "Credit Card";
-}
+import { amountInUserBase } from "@/lib/utils/currency";
+import type { Currency } from "@/types";
+import { matchCategoryName } from "../lib/match-category-name";
+import { unknownExpenseCategoryName } from "@capital/server/modules/categories/lib/unknown-expense-category";
 
 interface InstallmentInfo {
   number: number;
@@ -63,193 +59,172 @@ function createDedupeKey(
   return `${dateStr}|${amountStr}|${descStr}${installmentStr}`;
 }
 
+function rootClient(db: DbClient): PrismaClient {
+  return db as PrismaClient;
+}
+
 /**
- * Import a monthly credit card statement with idempotent dedupe logic.
+ * Import a monthly credit card statement.
  *
- * Creates or updates a CreditCardStatement, then inserts BillTransactions (purchases).
- * Deduplicates by date+amount+normalized description+installment number within the
- * statement, so re-importing the same month twice creates nothing new.
- *
- * Returns created/skipped counts and IDs.
+ * Creates or updates a CreditCardStatement, then inserts BillTransactions.
+ * Identical rows (same date, amount, description, installment) are a multiset:
+ * the import inserts only as many copies as the file has beyond the rows
+ * already stored. Re-importing the same file inserts nothing.
  */
 export async function importCreditCardStatement(
   userId: string,
   params: ImportStatementParams,
   db: DbClient
 ) {
-  // 1. Verify card ownership
-  const card = await db.creditCard.findFirst({
-    where: {
-      id: params.creditCardId,
-      OR: [
-        { business: { userId } },
-        { personalAccount: { userId } },
-      ],
-    },
-    select: {
-      id: true,
-      currency: true,
-      entityType: true,
-      businessId: true,
-      personalAccountId: true,
-    },
-  });
+  const client = rootClient(db);
+  return client.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${params.creditCardId}), hashtext(${params.statement.month}))::text`;
 
-  if (!card) {
-    throw new Error("Credit card not found or access denied");
-  }
-
-  // 2. Resolve category IDs
-  const categoryMap = new Map<string, string>();
-  
-  for (const row of params.rows) {
-    if (row.categoryId) {
-      // Validate category ownership
-      const cat = await db.category.findFirst({
-        where: { id: row.categoryId, userId },
-        select: { id: true, name: true },
-      });
-      if (!cat) {
-        throw new Error(`Category ${row.categoryId} not found or access denied`);
-      }
-      categoryMap.set(row.categoryId, cat.name);
-    } else if (row.category) {
-      // Look up category by name
-      const cat = await db.category.findFirst({
-        where: { userId, name: row.category, type: "expense" },
-        select: { id: true, name: true },
-      });
-      if (cat) {
-        categoryMap.set(row.category, cat.name);
-      } else {
-        // Category name provided but doesn't exist - use as-is (will be "Uncategorized" or custom)
-        categoryMap.set(row.category, row.category);
-      }
-    }
-  }
-
-  // 3. Create or update statement
-  const statementData = {
-    creditCardId: params.creditCardId,
-    month: params.statement.month,
-    closingDate: params.statement.closingDate ? parseLocalDate(params.statement.closingDate) : null,
-    dueDate: params.statement.dueDate ? parseLocalDate(params.statement.dueDate) : null,
-    totalAmount: params.statement.total ?? null,
-  };
-
-  const statement = await db.creditCardStatement.upsert({
-    where: {
-      creditCardId_month: {
-        creditCardId: params.creditCardId,
-        month: params.statement.month,
-      },
-    },
-    create: statementData,
-    update: {
-      closingDate: statementData.closingDate,
-      dueDate: statementData.dueDate,
-      totalAmount: statementData.totalAmount,
-    },
-    select: { id: true },
-  });
-
-  // 4. Fetch existing purchases for this statement (for dedupe)
-  const existingPurchases = await db.billTransaction.findMany({
-    where: { statementId: statement.id },
-    select: {
-      id: true,
-      transactionDate: true,
-      amount: true,
-      description: true,
-      installmentNumber: true,
-    },
-  });
-
-  const existingKeys = new Set(
-    existingPurchases.map((p) =>
-      createDedupeKey(p.transactionDate, p.amount, p.description, p.installmentNumber ?? undefined)
-    )
-  );
-
-  // 5. Dedupe within the batch and against existing
-  const toCreate: Array<{
-    statementId: string;
-    category: string;
-    transactionDate: Date;
-    description: string;
-    amount: number;
-    currency: string;
-    installmentNumber: number | null;
-    totalInstallments: number | null;
-    isAutoCategorized: boolean;
-  }> = [];
-
-  const batchKeys = new Set<string>();
-  const skippedKeys: string[] = [];
-
-  for (const row of params.rows) {
-    const date = parseLocalDate(row.date);
-    const key = createDedupeKey(date, row.amount, row.description, row.installment?.number);
-
-    // Check if already exists
-    if (existingKeys.has(key)) {
-      skippedKeys.push(key);
-      continue;
-    }
-
-    // Check if duplicate within batch
-    if (batchKeys.has(key)) {
-      skippedKeys.push(key);
-      continue;
-    }
-
-    batchKeys.add(key);
-
-    // Determine category
-    let category = "Uncategorized";
-    if (row.categoryId && categoryMap.has(row.categoryId)) {
-      category = categoryMap.get(row.categoryId)!;
-    } else if (row.category) {
-      category = categoryMap.get(row.category) ?? row.category;
-    }
-
-    toCreate.push({
-      statementId: statement.id,
-      category,
-      transactionDate: date,
-      description: row.description,
-      amount: row.amount,
-      currency: row.currency ?? card.currency,
-      installmentNumber: row.installment?.number ?? null,
-      totalInstallments: row.installment?.total ?? null,
-      isAutoCategorized: false,
-    });
-  }
-
-  // 6. Bulk insert purchases
-  const createdIds: string[] = [];
-  if (toCreate.length > 0) {
-    await db.billTransaction.createMany({
-      data: toCreate,
-    });
-
-    // Fetch the created IDs (createMany doesn't return them)
-    const created = await db.billTransaction.findMany({
+    const card = await tx.creditCard.findFirst({
       where: {
-        statementId: statement.id,
-        transactionDate: { in: toCreate.map((t) => t.transactionDate) },
+        id: params.creditCardId,
+        OR: [
+          { business: { userId } },
+          { personalAccount: { userId } },
+        ],
+      },
+      select: { id: true, currency: true },
+    });
+
+    if (!card) {
+      throw new Error("Credit card not found or access denied");
+    }
+
+    const ownedCategories = await tx.category.findMany({
+      where: { userId },
+      select: { id: true, name: true, type: true },
+    });
+    const expenseCategories = ownedCategories.filter((category) => category.type === "expense");
+    const fallbackName = await unknownExpenseCategoryName(userId, tx);
+
+    const resolveCategory = (row: StatementRow): string => {
+      if (row.categoryId) {
+        const category = ownedCategories.find((item) => item.id === row.categoryId);
+        if (!category) {
+          throw new Error(`Category ${row.categoryId} not found or access denied`);
+        }
+        return category.name;
+      }
+      if (row.category) {
+        return matchCategoryName(row.category, expenseCategories) ?? fallbackName;
+      }
+      return fallbackName;
+    };
+
+    const statementData = {
+      creditCardId: params.creditCardId,
+      month: params.statement.month,
+      closingDate: params.statement.closingDate ? parseLocalDate(params.statement.closingDate) : null,
+      dueDate: params.statement.dueDate ? parseLocalDate(params.statement.dueDate) : null,
+      totalAmount: params.statement.total ?? null,
+    };
+
+    const statement = await tx.creditCardStatement.upsert({
+      where: {
+        creditCardId_month: {
+          creditCardId: params.creditCardId,
+          month: params.statement.month,
+        },
+      },
+      create: statementData,
+      update: {
+        closingDate: statementData.closingDate,
+        dueDate: statementData.dueDate,
+        totalAmount: statementData.totalAmount,
       },
       select: { id: true },
     });
-    createdIds.push(...created.map((c) => c.id));
-  }
 
-  return {
-    statementId: statement.id,
-    created: createdIds.length,
-    skipped: skippedKeys.length,
-    createdIds,
-  };
+    await tx.$queryRaw`SELECT id FROM "credit_card_statements" WHERE id = ${statement.id} FOR UPDATE`;
+
+    const existingPurchases = await tx.billTransaction.findMany({
+      where: { statementId: statement.id },
+      select: {
+        transactionDate: true,
+        amount: true,
+        description: true,
+        installmentNumber: true,
+      },
+    });
+
+    const existingCounts = new Map<string, number>();
+    for (const purchase of existingPurchases) {
+      const key = createDedupeKey(
+        purchase.transactionDate,
+        purchase.amount,
+        purchase.description,
+        purchase.installmentNumber ?? undefined
+      );
+      existingCounts.set(key, (existingCounts.get(key) ?? 0) + 1);
+    }
+
+    const incomingGroups = new Map<string, StatementRow[]>();
+    for (const row of params.rows) {
+      const date = parseLocalDate(row.date);
+      const key = createDedupeKey(date, row.amount, row.description, row.installment?.number);
+      const group = incomingGroups.get(key) ?? [];
+      group.push(row);
+      incomingGroups.set(key, group);
+    }
+
+    const toCreate: Array<{
+      statementId: string;
+      category: string;
+      transactionDate: Date;
+      description: string;
+      amount: number;
+      currency: string;
+      installmentNumber: number | null;
+      totalInstallments: number | null;
+      isAutoCategorized: boolean;
+    }> = [];
+    let skipped = 0;
+
+    for (const [key, rows] of incomingGroups) {
+      const already = existingCounts.get(key) ?? 0;
+      const insertCount = rows.length - already;
+      if (insertCount <= 0) {
+        skipped += rows.length;
+        continue;
+      }
+      skipped += already;
+      for (const row of rows.slice(already)) {
+        const date = parseLocalDate(row.date);
+        toCreate.push({
+          statementId: statement.id,
+          category: resolveCategory(row),
+          transactionDate: date,
+          description: row.description,
+          amount: row.amount,
+          currency: row.currency ?? card.currency,
+          installmentNumber: row.installment?.number ?? null,
+          totalInstallments: row.installment?.total ?? null,
+          isAutoCategorized: false,
+        });
+      }
+    }
+
+    let createdIds: string[] = [];
+    if (toCreate.length > 0) {
+      const created = await tx.billTransaction.createManyAndReturn({
+        data: toCreate,
+        select: { id: true },
+      });
+      createdIds = created.map((row) => row.id);
+    }
+
+    return {
+      statementId: statement.id,
+      created: createdIds.length,
+      skipped,
+      createdIds,
+    };
+  });
 }
 
 interface MarkAsSettlementParams {
@@ -257,107 +232,42 @@ interface MarkAsSettlementParams {
   statementId: string;
 }
 
+const ALREADY_LINKED = "Statement already has a different bill payment transaction linked";
+
 /**
- * Mark an existing transaction as a credit card bill settlement.
- * Links the transaction to the statement's billPaymentTransactionId.
- *
- * This allows converting historical bill payment transactions (June-September)
- * into proper settlements so they're excluded from expense totals.
+ * Link an expense transaction to a statement as the bill payment.
+ * The link excludes the payment from expense totals. The category is left as-is.
  */
 export async function markTransactionAsCardSettlement(
   userId: string,
   params: MarkAsSettlementParams,
   db: DbClient
 ) {
-  // 1. Verify transaction ownership
-  const transaction = await db.transaction.findFirst({
-    where: {
-      id: params.transactionId,
-      OR: [
-        { business: { userId } },
-        { personalAccount: { userId } },
-      ],
-    },
-    select: {
-      id: true,
-      type: true,
-      category: true,
-    },
-  });
+  const client = rootClient(db);
+  return client.$transaction(async (tx) => {
+    const lockKeys = [params.transactionId, params.statementId].sort();
+    await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${lockKeys[0]}))::text`;
+    await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${lockKeys[1]}))::text`;
 
-  if (!transaction) {
-    throw new Error("Transaction not found or access denied");
-  }
-
-  // 2. Verify statement ownership
-  const statement = await db.creditCardStatement.findFirst({
-    where: {
-      id: params.statementId,
-      creditCard: {
+    const transaction = await tx.transaction.findFirst({
+      where: {
+        id: params.transactionId,
         OR: [
           { business: { userId } },
           { personalAccount: { userId } },
         ],
       },
-    },
-    select: { id: true, billPaymentTransactionId: true },
-  });
-
-  if (!statement) {
-    throw new Error("Statement not found or access denied");
-  }
-
-  // 3. Check if statement already has a payment
-  if (statement.billPaymentTransactionId && statement.billPaymentTransactionId !== params.transactionId) {
-    throw new Error("Statement already has a different bill payment transaction linked");
-  }
-
-  // 4. Set the display category. Exclusion is the statement link, not this name.
-  const displayCategory = settlementDisplayCategory();
-  if (transaction.category !== displayCategory) {
-    await db.transaction.update({
-      where: { id: params.transactionId },
-      data: { category: displayCategory },
+      select: { id: true, type: true },
     });
-  }
 
-  // 5. Link transaction to statement
-  await db.creditCardStatement.update({
-    where: { id: params.statementId },
-    data: { billPaymentTransactionId: params.transactionId },
-  });
+    if (!transaction) {
+      throw new Error("Transaction not found or access denied");
+    }
+    if (transaction.type !== "expense") {
+      throw new Error("Only an expense transaction can be marked as a card settlement");
+    }
 
-  return {
-    success: true,
-    transactionId: params.transactionId,
-    statementId: params.statementId,
-  };
-}
-
-interface GetStatementParams {
-  statementId?: string;
-  creditCardId?: string;
-  month?: string; // YYYY-MM, required if using creditCardId
-}
-
-/**
- * Get a credit card statement with purchases and reconciliation.
- *
- * Returns:
- * - Statement metadata (month, dates, total)
- * - List of purchases (BillTransactions)
- * - Reconciliation: sum of purchases vs. bill payment amount
- * - Bill payment transaction details (if linked)
- */
-export async function getCreditCardStatement(
-  userId: string,
-  params: GetStatementParams,
-  db: DbClient
-) {
-  let statement;
-
-  if (params.statementId) {
-    statement = await db.creditCardStatement.findFirst({
+    const statement = await tx.creditCardStatement.findFirst({
       where: {
         id: params.statementId,
         creditCard: {
@@ -367,44 +277,88 @@ export async function getCreditCardStatement(
           ],
         },
       },
-      include: {
-        creditCard: {
-          select: {
-            id: true,
-            bankName: true,
-            lastFourDigits: true,
-            currency: true,
-          },
-        },
-        billPaymentTransaction: {
-          select: {
-            id: true,
-            amount: true,
-            currency: true,
-            date: true,
-            description: true,
-          },
-        },
-        purchases: {
-          select: {
-            id: true,
-            category: true,
-            transactionDate: true,
-            description: true,
-            amount: true,
-            currency: true,
-            installmentNumber: true,
-            totalInstallments: true,
-          },
-          orderBy: { transactionDate: "asc" },
-        },
-      },
+      select: { id: true, billPaymentTransactionId: true },
     });
-  } else if (params.creditCardId && params.month) {
-    statement = await db.creditCardStatement.findFirst({
+
+    if (!statement) {
+      throw new Error("Statement not found or access denied");
+    }
+
+    if (
+      statement.billPaymentTransactionId &&
+      statement.billPaymentTransactionId !== params.transactionId
+    ) {
+      throw new Error(ALREADY_LINKED);
+    }
+
+    const other = await tx.creditCardStatement.findFirst({
       where: {
-        creditCardId: params.creditCardId,
-        month: params.month,
+        billPaymentTransactionId: params.transactionId,
+        NOT: { id: params.statementId },
+      },
+      select: { id: true },
+    });
+    if (other) {
+      throw new Error("Transaction is already linked as a bill payment on another statement");
+    }
+
+    if (statement.billPaymentTransactionId === params.transactionId) {
+      return {
+        success: true,
+        transactionId: params.transactionId,
+        statementId: params.statementId,
+      };
+    }
+
+    try {
+      await tx.creditCardStatement.update({
+        where: { id: params.statementId },
+        data: { billPaymentTransactionId: params.transactionId },
+      });
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+        throw new Error(ALREADY_LINKED);
+      }
+      throw error;
+    }
+
+    return {
+      success: true,
+      transactionId: params.transactionId,
+      statementId: params.statementId,
+    };
+  });
+}
+
+/**
+ * Clear the statement link on a settlement payment. The category is unchanged.
+ */
+export async function unmarkTransactionAsCardSettlement(
+  userId: string,
+  params: { transactionId: string },
+  db: DbClient
+) {
+  const client = rootClient(db);
+  return client.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${params.transactionId}))::text`;
+
+    const transaction = await tx.transaction.findFirst({
+      where: {
+        id: params.transactionId,
+        OR: [
+          { business: { userId } },
+          { personalAccount: { userId } },
+        ],
+      },
+      select: { id: true },
+    });
+    if (!transaction) {
+      throw new Error("Transaction not found or access denied");
+    }
+
+    const statement = await tx.creditCardStatement.findFirst({
+      where: {
+        billPaymentTransactionId: params.transactionId,
         creditCard: {
           OR: [
             { business: { userId } },
@@ -412,38 +366,96 @@ export async function getCreditCardStatement(
           ],
         },
       },
-      include: {
-        creditCard: {
-          select: {
-            id: true,
-            bankName: true,
-            lastFourDigits: true,
-            currency: true,
-          },
-        },
-        billPaymentTransaction: {
-          select: {
-            id: true,
-            amount: true,
-            currency: true,
-            date: true,
-            description: true,
-          },
-        },
-        purchases: {
-          select: {
-            id: true,
-            category: true,
-            transactionDate: true,
-            description: true,
-            amount: true,
-            currency: true,
-            installmentNumber: true,
-            totalInstallments: true,
-          },
-          orderBy: { transactionDate: "asc" },
-        },
+      select: { id: true },
+    });
+    if (!statement) {
+      throw new Error("Transaction is not linked as a card settlement");
+    }
+
+    await tx.creditCardStatement.update({
+      where: { id: statement.id },
+      data: { billPaymentTransactionId: null },
+    });
+
+    return {
+      success: true,
+      transactionId: params.transactionId,
+      statementId: statement.id,
+    };
+  });
+}
+
+interface GetStatementParams {
+  statementId?: string;
+  creditCardId?: string;
+  month?: string; // YYYY-MM, required if using creditCardId
+}
+
+const statementInclude = {
+  creditCard: {
+    select: {
+      id: true,
+      bankName: true,
+      lastFourDigits: true,
+      currency: true,
+    },
+  },
+  billPaymentTransaction: {
+    select: {
+      id: true,
+      amount: true,
+      currency: true,
+      exchangeRate: true,
+      date: true,
+      description: true,
+    },
+  },
+  purchases: {
+    select: {
+      id: true,
+      category: true,
+      transactionDate: true,
+      description: true,
+      amount: true,
+      currency: true,
+      installmentNumber: true,
+      totalInstallments: true,
+    },
+    orderBy: { transactionDate: "asc" as const },
+  },
+};
+
+/**
+ * Get a credit card statement with purchases and reconciliation.
+ * Purchase `date` is the original transactionDate. Reconciliation amounts
+ * are in the user's base currency.
+ */
+export async function getCreditCardStatement(
+  userId: string,
+  params: GetStatementParams,
+  db: DbClient
+) {
+  const owner = {
+    OR: [
+      { business: { userId } },
+      { personalAccount: { userId } },
+    ],
+  };
+
+  let statement;
+  if (params.statementId) {
+    statement = await db.creditCardStatement.findFirst({
+      where: { id: params.statementId, creditCard: owner },
+      include: statementInclude,
+    });
+  } else if (params.creditCardId && params.month) {
+    statement = await db.creditCardStatement.findFirst({
+      where: {
+        creditCardId: params.creditCardId,
+        month: params.month,
+        creditCard: owner,
       },
+      include: statementInclude,
     });
   } else {
     throw new Error("Must provide either statementId or (creditCardId + month)");
@@ -453,9 +465,41 @@ export async function getCreditCardStatement(
     throw new Error("Statement not found or access denied");
   }
 
-  // Calculate reconciliation
-  const purchasesTotal = statement.purchases.reduce((sum, p) => sum + p.amount, 0);
-  const paymentAmount = statement.billPaymentTransaction?.amount ?? null;
+  const user = await db.user.findUnique({
+    where: { id: userId },
+    select: { baseCurrency: true },
+  });
+  const baseCurrency = user?.baseCurrency ?? "USD";
+  const currencyRows = await db.currency.findMany({ where: { userId } });
+  const currencies: Currency[] = currencyRows.map((row) => ({
+    code: row.code,
+    name: row.name,
+    symbol: row.symbol,
+    manualRate: row.manualRate,
+    updatedAt: row.updatedAt,
+  }));
+
+  const purchasesTotal = statement.purchases.reduce(
+    (sum, purchase) =>
+      sum +
+      amountInUserBase({
+        amount: purchase.amount,
+        currency: purchase.currency,
+        currencies,
+        baseCurrency,
+      }),
+    0
+  );
+  const payment = statement.billPaymentTransaction;
+  const paymentAmount = payment
+    ? amountInUserBase({
+        amount: payment.amount,
+        currency: payment.currency,
+        exchangeRate: payment.exchangeRate,
+        currencies,
+        baseCurrency,
+      })
+    : null;
   const difference = paymentAmount !== null ? paymentAmount - purchasesTotal : null;
 
   return {
@@ -467,28 +511,29 @@ export async function getCreditCardStatement(
       totalAmount: statement.totalAmount,
       creditCard: statement.creditCard,
     },
-    purchases: statement.purchases.map((p) => ({
-      id: p.id,
-      category: p.category,
-      date: p.transactionDate.toISOString(),
-      description: p.description,
-      amount: p.amount,
-      currency: p.currency,
+    purchases: statement.purchases.map((purchase) => ({
+      id: purchase.id,
+      category: purchase.category,
+      date: purchase.transactionDate.toISOString(),
+      description: purchase.description,
+      amount: purchase.amount,
+      currency: purchase.currency,
       installment:
-        p.installmentNumber && p.totalInstallments
-          ? { number: p.installmentNumber, total: p.totalInstallments }
+        purchase.installmentNumber && purchase.totalInstallments
+          ? { number: purchase.installmentNumber, total: purchase.totalInstallments }
           : null,
     })),
-    billPayment: statement.billPaymentTransaction
+    billPayment: payment
       ? {
-          id: statement.billPaymentTransaction.id,
-          amount: statement.billPaymentTransaction.amount,
-          currency: statement.billPaymentTransaction.currency,
-          date: statement.billPaymentTransaction.date.toISOString(),
-          description: statement.billPaymentTransaction.description,
+          id: payment.id,
+          amount: payment.amount,
+          currency: payment.currency,
+          date: payment.date.toISOString(),
+          description: payment.description,
         }
       : null,
     reconciliation: {
+      currency: baseCurrency,
       purchasesTotal: Math.round(purchasesTotal * 100) / 100,
       paymentAmount,
       difference: difference !== null ? Math.round(difference * 100) / 100 : null,

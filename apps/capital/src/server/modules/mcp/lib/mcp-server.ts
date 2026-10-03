@@ -37,6 +37,7 @@ import {
 import {
   importCreditCardStatement,
   markTransactionAsCardSettlement,
+  unmarkTransactionAsCardSettlement,
   getCreditCardStatement,
 } from "../tools/credit-card-statements";
 
@@ -638,8 +639,8 @@ export function createCapitalMcpServer(userId: string, db: DbClient) {
       description:
         "Import a monthly credit card statement CSV (already parsed into rows by the client). " +
         "Creates or updates a CreditCardStatement and inserts BillTransactions (purchases). " +
-        "Idempotent: deduplicates by date+amount+normalized description+installment number " +
-        "within the statement, so re-importing the same month twice creates nothing new. " +
+        "Identical rows are kept up to the count in the file. Re-importing the same " +
+        "file inserts nothing new. Unknown category names fall back to the system Other expense. " +
         "Use this to bulk-import June–September credit card purchases. " +
         "Amounts are BRL for Nubank cards. Currency per transaction can be overridden in the row.",
       inputSchema: z.object({
@@ -688,8 +689,7 @@ export function createCapitalMcpServer(userId: string, db: DbClient) {
       description:
         "Mark an existing transaction as a credit card bill settlement/payment. " +
         "Links the transaction to the statement via billPaymentTransactionId. " +
-        "That link excludes the payment from expense totals; the category name does not. " +
-        "Also sets a display category on the payment. " +
+        "That link excludes the payment from expense totals; the category is left unchanged. " +
         "Use this to convert historical June–September bill payment transactions into " +
         "settlements after importing the statement purchases.",
       inputSchema: z.object({
@@ -699,6 +699,30 @@ export function createCapitalMcpServer(userId: string, db: DbClient) {
     },
     async (params) => {
       const result = await markTransactionAsCardSettlement(userId, params, db);
+      return {
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify(result, null, 2),
+          },
+        ],
+      };
+    }
+  );
+
+  // Register tool: unmark_transaction_as_card_settlement
+  server.registerTool(
+    "unmark_transaction_as_card_settlement",
+    {
+      description:
+        "Remove the credit card settlement link from a transaction. " +
+        "The payment counts as an expense again. The category is left unchanged.",
+      inputSchema: z.object({
+        transactionId: z.string().uuid(),
+      }),
+    },
+    async (params) => {
+      const result = await unmarkTransactionAsCardSettlement(userId, params, db);
       return {
         content: [
           {

@@ -1,5 +1,6 @@
 import type { DbClient } from "@capital/server/lib/prisma";
 import { normalizeDescription } from "../../utils";
+import { billTransactionOwnedBy } from "../../lib/bill-transaction-ownership";
 
 /**
  * Update a bill transaction's category, scoped to the authenticated user.
@@ -14,14 +15,7 @@ export async function updateBillTransaction(
   const billTx = await db.billTransaction.findFirst({
     where: {
       id,
-      bill: {
-        creditCard: {
-          OR: [
-            { business: { userId } },
-            { personalAccount: { userId } },
-          ],
-        },
-      },
+      ...billTransactionOwnedBy(userId),
     },
     select: { id: true, description: true },
   });
