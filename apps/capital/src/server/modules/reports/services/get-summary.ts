@@ -1,5 +1,9 @@
 import type { DbClient } from "@capital/server/lib/prisma";
 import type { EntityType } from "@/generated/prisma";
+import { shouldCountAsExpense, buildSettlementSet } from "../../../../lib/utils/expense-classification";
+import { amountInUserBase } from "../../../../lib/utils/currency";
+import type { Currency } from "@/types";
+import { statementInWindow } from "../../credit-cards/lib/statement-window";
 
 export interface EntitySummary {
   entityId: string;
@@ -25,6 +29,39 @@ export async function getSummary(
 ): Promise<EntitySummary[]> {
   const { userId, dateFrom, dateTo } = input;
 
+  const user = await db.user.findUnique({
+    where: { id: userId },
+    select: { baseCurrency: true },
+  });
+  if (!user) {
+    throw new Error("User not found");
+  }
+  const currencyRows = await db.currency.findMany({ where: { userId } });
+  const currencies: Currency[] = currencyRows.map((row) => ({
+    code: row.code,
+    name: row.name,
+    symbol: row.symbol,
+    manualRate: row.manualRate,
+    updatedAt: row.updatedAt,
+  }));
+
+  const txInBase = (amount: number, currency: string | undefined, exchangeRate: number | null | undefined) =>
+    amountInUserBase({
+      amount,
+      currency: currency ?? user.baseCurrency,
+      exchangeRate: exchangeRate ?? 1,
+      currencies,
+      baseCurrency: user.baseCurrency,
+    });
+
+  const purchaseInBase = (amount: number, currency: string | undefined) =>
+    amountInUserBase({
+      amount,
+      currency: currency ?? user.baseCurrency,
+      currencies,
+      baseCurrency: user.baseCurrency,
+    });
+
   // Get user's businesses and personal account
   const [businesses, personalAccount] = await Promise.all([
     db.business.findMany({
@@ -35,10 +72,27 @@ export async function getSummary(
     }),
   ]);
 
+  // Fetch all credit card statements to build settlement ID set
+  const statements = await db.creditCardStatement.findMany({
+    where: {
+      creditCard: {
+        OR: [
+          { business: { userId } },
+          { personalAccount: { userId } },
+        ],
+      },
+    },
+    select: {
+      billPaymentTransactionId: true,
+    },
+  });
+
+  const settlementIds = buildSettlementSet(statements);
+
   const summaries: EntitySummary[] = [];
 
-  // Build date filter
-  const dateFilter =
+  // Build date filter for transactions
+  const transactionDateFilter =
     dateFrom || dateTo
       ? {
           date: {
@@ -48,13 +102,15 @@ export async function getSummary(
         }
       : {};
 
+  const purchaseWindow = statementInWindow(dateFrom, dateTo);
+
   // Calculate summary for each business
   for (const business of businesses) {
-    const [transactions, reimbursementTransfers] = await Promise.all([
+    const [transactions, reimbursementTransfers, statementPurchases] = await Promise.all([
       db.transaction.findMany({
         where: {
           businessId: business.id,
-          ...dateFilter,
+          ...transactionDateFilter,
         },
       }),
       db.transfer.findMany({
@@ -71,25 +127,44 @@ export async function getSummary(
             : {}),
         },
       }),
+      // Fetch statement purchases for this business
+      db.billTransaction.findMany({
+        where: {
+          statementId: { not: null },
+          statement: {
+            creditCard: {
+              businessId: business.id,
+            },
+            ...purchaseWindow,
+          },
+        },
+      }),
     ]);
 
     const totalIncome = transactions
       .filter((t) => t.type === "income")
-      .reduce((sum, t) => sum + t.amount, 0);
+      .reduce((sum, t) => sum + txInBase(t.amount, t.currency, t.exchangeRate), 0);
 
     const reimbursementExpenses = reimbursementTransfers.reduce(
       (sum, t) => sum + t.amount,
       0
     );
 
-    const totalExpenses =
-      transactions
-        .filter((t) => t.type === "expense")
-        .reduce((sum, t) => sum + t.amount, 0) + reimbursementExpenses;
+    // Regular expense transactions (excluding settlements)
+    const regularExpenses = transactions
+      .filter((t) => t.type === "expense" && shouldCountAsExpense(t, settlementIds.has(t.id)))
+      .reduce((sum, t) => sum + txInBase(t.amount, t.currency, t.exchangeRate), 0);
+
+    const statementExpenses = statementPurchases.reduce(
+      (sum, bt) => sum + purchaseInBase(bt.amount, bt.currency),
+      0
+    );
+
+    const totalExpenses = regularExpenses + statementExpenses + reimbursementExpenses;
 
     const totalInvestments = transactions
       .filter((t) => t.type === "investment")
-      .reduce((sum, t) => sum + t.amount, 0);
+      .reduce((sum, t) => sum + txInBase(t.amount, t.currency, t.exchangeRate), 0);
 
     summaries.push({
       entityId: business.id,
@@ -100,17 +175,17 @@ export async function getSummary(
       totalInvestments,
       balance: business.initialBalance + totalIncome - totalExpenses,
       netWorth: business.initialBalance + totalIncome - totalExpenses + totalInvestments,
-      currency: business.defaultCurrency,
+      currency: user.baseCurrency,
     });
   }
 
   // Calculate summary for personal account
   if (personalAccount) {
-    const [transactions, reimbursementTransfers] = await Promise.all([
+    const [transactions, reimbursementTransfers, statementPurchases] = await Promise.all([
       db.transaction.findMany({
         where: {
           personalAccountId: personalAccount.id,
-          ...dateFilter,
+          ...transactionDateFilter,
         },
       }),
       db.transfer.findMany({
@@ -127,27 +202,47 @@ export async function getSummary(
             : {}),
         },
       }),
+      // Fetch statement purchases for personal account
+      db.billTransaction.findMany({
+        where: {
+          statementId: { not: null },
+          statement: {
+            creditCard: {
+              personalAccountId: personalAccount.id,
+            },
+            ...purchaseWindow,
+          },
+        },
+      }),
     ]);
 
     const totalIncome = transactions
       .filter((t) => t.type === "income")
-      .reduce((sum, t) => sum + t.amount, 0);
+      .reduce((sum, t) => sum + txInBase(t.amount, t.currency, t.exchangeRate), 0);
 
     const reimbursementCredits = reimbursementTransfers.reduce(
       (sum, t) => sum + t.amount,
       0
     );
 
+    // Regular expense transactions (excluding settlements)
+    const regularExpenses = transactions
+      .filter((t) => t.type === "expense" && shouldCountAsExpense(t, settlementIds.has(t.id)))
+      .reduce((sum, t) => sum + txInBase(t.amount, t.currency, t.exchangeRate), 0);
+
+    const statementExpenses = statementPurchases.reduce(
+      (sum, bt) => sum + purchaseInBase(bt.amount, bt.currency),
+      0
+    );
+
     const totalExpenses = Math.max(
       0,
-      transactions
-        .filter((t) => t.type === "expense")
-        .reduce((sum, t) => sum + t.amount, 0) - reimbursementCredits
+      regularExpenses + statementExpenses - reimbursementCredits
     );
 
     const totalInvestments = transactions
       .filter((t) => t.type === "investment")
-      .reduce((sum, t) => sum + t.amount, 0);
+      .reduce((sum, t) => sum + txInBase(t.amount, t.currency, t.exchangeRate), 0);
 
     summaries.push({
       entityId: personalAccount.id,
@@ -158,7 +253,7 @@ export async function getSummary(
       totalInvestments,
       balance: personalAccount.initialBalance + totalIncome - totalExpenses,
       netWorth: personalAccount.initialBalance + totalIncome - totalExpenses + totalInvestments,
-      currency: personalAccount.defaultCurrency,
+      currency: user.baseCurrency,
     });
   }
 

@@ -2,10 +2,14 @@ import type { DbClient } from "@capital/server/lib/prisma";
 import { parseLocalDate } from "@capital/server/lib/date-utils";
 import {
   getEffectiveBudgetsForMonth,
-  convertToBaseCurrency,
   shouldCountAsExpenseForBudget,
   normalizeToMonthStart,
 } from "../../budgets/lib/budget-helpers";
+import { buildSettlementSet } from "@/lib/utils/expense-classification";
+import { buildExpenseLedger, sumLedgerExpensesByCategory } from "@/lib/utils/expense-ledger";
+import { amountInUserBase } from "@/lib/utils/currency";
+import { statementInWindow } from "../../credit-cards/lib/statement-window";
+import type { Currency, Transaction } from "@/types";
 
 export interface ListBudgetsParams {
   accountId?: string;
@@ -445,8 +449,57 @@ export async function getBudgetStatus(
     `${year}-${String(monthNum).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`
   );
 
-  // Get all expense transactions for this account in this month
-  // Use shared helper for expense classification
+  const currencyRows = await db.currency.findMany({
+    where: { userId },
+    select: { code: true, name: true, symbol: true, manualRate: true, updatedAt: true },
+  });
+  const currencies: Currency[] = currencyRows.map((row) => ({
+    code: row.code,
+    name: row.name,
+    symbol: row.symbol,
+    manualRate: row.manualRate,
+    updatedAt: row.updatedAt,
+  }));
+
+  // Settlement links are not month-scoped: a November payment of an October
+  // statement must still be excluded when the requested month is October.
+  const settlementRows = await db.creditCardStatement.findMany({
+    where: { creditCard: { personalAccountId: account.id } },
+    select: { billPaymentTransactionId: true },
+  });
+  const settlementIds = buildSettlementSet(settlementRows);
+
+  const statements = await db.creditCardStatement.findMany({
+    where: {
+      creditCard: { personalAccountId: account.id },
+      ...statementInWindow(monthStart, monthEnd),
+    },
+    select: {
+      id: true,
+      month: true,
+      closingDate: true,
+      billPaymentTransactionId: true,
+      creditCard: {
+        select: {
+          entityType: true,
+          businessId: true,
+          personalAccountId: true,
+          currency: true,
+        },
+      },
+      purchases: {
+        select: {
+          id: true,
+          amount: true,
+          currency: true,
+          category: true,
+          description: true,
+          transactionDate: true,
+        },
+      },
+    },
+  });
+
   const transactions = await db.transaction.findMany({
     where: {
       personalAccountId: account.id,
@@ -456,17 +509,73 @@ export async function getBudgetStatus(
       },
     },
     select: {
-      category: true,
+      id: true,
+      entityType: true,
+      type: true,
       amount: true,
       currency: true,
       exchangeRate: true,
-      type: true,
+      description: true,
+      category: true,
+      date: true,
+      createdAt: true,
+      updatedAt: true,
     },
   });
 
-  // Get credit card bill transactions for this account in this month
+  const ledgerInputs: Transaction[] = transactions.map((tx) => ({
+    id: tx.id,
+    entityId: account.id,
+    entityType: tx.entityType,
+    type: tx.type,
+    amount: tx.amount,
+    currency: tx.currency,
+    exchangeRate: tx.exchangeRate,
+    description: tx.description,
+    category: tx.category,
+    date: tx.date,
+    isCardSettlement: settlementIds.has(tx.id),
+    createdAt: tx.createdAt,
+    updatedAt: tx.updatedAt,
+  }));
+
+  // Same P&L view as the budgets page: drop linked payments, add statement
+  // purchases converted to base currency. Month filtering happens below.
+  const ledger = buildExpenseLedger(
+    ledgerInputs,
+    statements.map((statement) => ({
+      id: statement.id,
+      month: statement.month,
+      closingDate: statement.closingDate,
+      billPaymentTransactionId: statement.billPaymentTransactionId,
+      creditCard: {
+        entityId:
+          statement.creditCard.personalAccountId ??
+          statement.creditCard.businessId ??
+          account.id,
+        entityType: statement.creditCard.entityType,
+        currency: statement.creditCard.currency,
+      },
+      purchases: statement.purchases,
+    })),
+    user.baseCurrency,
+    currencies
+  );
+
+  const counting = ledger.filter((tx) =>
+    shouldCountAsExpenseForBudget(tx, settlementIds)
+  );
+  const actualByCategory = sumLedgerExpensesByCategory(
+    counting,
+    year,
+    monthNum,
+    account.id
+  );
+
+  // Legacy bills only. Statement purchases are already on the ledger.
   const billTransactions = await db.billTransaction.findMany({
     where: {
+      statementId: null,
       transactionDate: {
         gte: monthStart,
         lte: monthEnd,
@@ -480,26 +589,20 @@ export async function getBudgetStatus(
     select: {
       category: true,
       amount: true,
+      currency: true,
+      bill: { select: { creditCard: { select: { currency: true } } } },
     },
   });
 
-  // Calculate actual spending per category in base currency
-  const actualByCategory: Record<string, number> = {};
-
-  // Regular transactions: only expenses count, converted to base currency
-  for (const tx of transactions) {
-    if (!shouldCountAsExpenseForBudget(tx.type)) {
-      continue; // Skip non-expenses (income, transfers, etc.)
-    }
-    const amountInBaseCurrency = convertToBaseCurrency(tx.amount, tx.exchangeRate);
-    actualByCategory[tx.category] = (actualByCategory[tx.category] || 0) + amountInBaseCurrency;
-  }
-
-  // Bill transactions: already represent expenses (purchases on card)
   for (const bt of billTransactions) {
-    // Bill amounts are in card currency, but for simplicity we add directly
-    // (UI does the same in get-budget-dashboard.ts line 235)
-    actualByCategory[bt.category] = (actualByCategory[bt.category] || 0) + bt.amount;
+    const currencyCode = bt.currency || bt.bill?.creditCard.currency || user.baseCurrency;
+    const amountInBase = amountInUserBase({
+      amount: bt.amount,
+      currency: currencyCode,
+      currencies,
+      baseCurrency: user.baseCurrency,
+    });
+    actualByCategory[bt.category] = (actualByCategory[bt.category] || 0) + amountInBase;
   }
 
   // Build category status

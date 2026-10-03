@@ -44,5 +44,8 @@ export async function updateTransaction(
   return db.transaction.update({
     where: { id },
     data,
+    include: {
+      creditCardStatementPayment: true,
+    },
   });
 }

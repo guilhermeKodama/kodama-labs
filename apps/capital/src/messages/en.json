@@ -1557,6 +1557,17 @@
       "installments": "Installments",
       "analytics": "Analytics"
     },
+    "statementPurchases": {
+      "title": "Statement purchases",
+      "description": "A purchase counts in the statement month, even when the purchase date is earlier. Both dates are shown so a January installment on an October statement is not a January expense.",
+      "purchaseDate": "Purchase date",
+      "statement": "Statement",
+      "descriptionColumn": "Description",
+      "category": "Category",
+      "amount": "Amount",
+      "empty": "No statement purchases yet.",
+      "closing": "Closes {date}"
+    },
     "billContext": {
       "viewing": "Viewing bill",
       "closingDate": "Closing",

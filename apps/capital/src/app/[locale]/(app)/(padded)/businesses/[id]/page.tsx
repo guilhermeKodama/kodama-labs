@@ -60,6 +60,7 @@ import {
   useAttachmentStore,
 } from '@/lib/store';
 import { calculateEntitySummary, calculateUpcomingExpenses } from '@/lib/utils/calculations';
+import { useExpenseLedger } from '@/hooks/use-expense-ledger';
 import { useRecurringTransactionStore } from '@/lib/store/recurring-store';
 import { useRecurringTransferStore } from '@/lib/store/recurring-transfer-store';
 import { cn } from '@/lib/utils';
@@ -183,6 +184,8 @@ export default function BusinessDetailPage() {
     return names;
   }, [businesses, personalAccount, investmentAccounts, t]);
 
+  const expenseLedger = useExpenseLedger();
+
   const summary = useMemo(() => {
     if (!business) return null;
     return calculateEntitySummary(
@@ -192,9 +195,10 @@ export default function BusinessDetailPage() {
       transactions,
       transfers,
       settings.baseCurrency,
-      business.initialBalance
+      business.initialBalance,
+      expenseLedger
     );
-  }, [business, transactions, transfers, settings.baseCurrency]);
+  }, [business, transactions, transfers, settings.baseCurrency, expenseLedger]);
 
   const upcomingExpenses = useMemo(() => {
     if (!business) return 0;

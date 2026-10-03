@@ -50,5 +50,8 @@ export async function insertTransaction(
 
   return db.transaction.create({
     data,
+    include: {
+      creditCardStatementPayment: true,
+    },
   });
 }

@@ -1,6 +1,7 @@
 import { createRouter } from "@capital/server/lib/create-app";
 
 import * as getCreditCards from "./get-credit-cards";
+import * as getStatements from "./get-statements";
 import * as postCreditCard from "./post-credit-card";
 import * as putCreditCard from "./put-credit-card";
 import * as deleteCreditCard from "./delete-credit-card";
@@ -15,6 +16,7 @@ import * as putBillTransaction from "./put-bill-transaction";
 import * as putBillLink from "./put-bill-link";
 
 const router = createRouter()
+  .openapi(getStatements.route, getStatements.handler)
   .openapi(getCreditCards.route, getCreditCards.handler)
   .openapi(postCreditCard.route, postCreditCard.handler)
   .openapi(putCreditCard.route, putCreditCard.handler)

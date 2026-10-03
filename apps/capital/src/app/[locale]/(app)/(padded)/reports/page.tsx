@@ -72,6 +72,10 @@ import { convertToBaseCurrency } from '@/lib/utils/currency';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import type { TransactionType, InvestmentHolding, AssetClass } from '@/types';
+import { useExpenseLedger } from '@/hooks/use-expense-ledger';
+
+/** Ledger rows are already settlement-free. Cash charts do not use this. */
+const EMPTY_SETTLEMENT_IDS = new Set<string>();
 
 export default function ReportsPage() {
   const t = useTranslations();
@@ -82,6 +86,7 @@ export default function ReportsPage() {
   const { businesses } = useBusinessStore();
   const { settings, personalAccount, currencies } = useSettingsStore();
   const { holdings } = useInvestmentStore();
+  const expenseLedger = useExpenseLedger();
 
   const currentYear = new Date().getFullYear();
   const [selectedYear, setSelectedYear] = useState(currentYear);
@@ -140,21 +145,20 @@ export default function ReportsPage() {
     [isEntityFiltered, selectedEntityIds]
   );
 
-  // Filter transactions by year and entity
+  // P&L rows for the selected year. Cash charts keep filteredTransactions below.
   const yearTransactions = useMemo(() => {
-    return transactions.filter((t) => {
+    return expenseLedger.filter((t) => {
       const date = new Date(t.date);
       return date.getFullYear() === selectedYear && matchesEntityFilter(t.entityId);
     });
-  }, [transactions, selectedYear, matchesEntityFilter]);
+  }, [expenseLedger, selectedYear, matchesEntityFilter]);
 
-  // Previous year transactions for comparison (also entity-filtered)
   const prevYearTransactions = useMemo(() => {
-    return transactions.filter((t) => {
+    return expenseLedger.filter((t) => {
       const date = new Date(t.date);
       return date.getFullYear() === selectedYear - 1 && matchesEntityFilter(t.entityId);
     });
-  }, [transactions, selectedYear, matchesEntityFilter]);
+  }, [expenseLedger, selectedYear, matchesEntityFilter]);
 
   // Entity-filtered transactions for Insights charts (all years)
   const filteredTransactions = useMemo(() => {
@@ -243,8 +247,8 @@ export default function ReportsPage() {
 
   // Calculate previous year totals for growth comparison
   const prevYearTotals = useMemo(() => {
-    const income = sumTransactionsByType(prevYearTransactions, 'income');
-    const expense = Math.max(0, sumTransactionsByType(prevYearTransactions, 'expense') + sumReimbursementExpenses(prevYearReimbursements) - sumReimbursementCredits(prevYearReimbursementCredits));
+    const income = sumTransactionsByType(prevYearTransactions, 'income', EMPTY_SETTLEMENT_IDS);
+    const expense = Math.max(0, sumTransactionsByType(prevYearTransactions, 'expense', EMPTY_SETTLEMENT_IDS) + sumReimbursementExpenses(prevYearReimbursements) - sumReimbursementCredits(prevYearReimbursementCredits));
     return { income, expense };
   }, [prevYearTransactions, prevYearReimbursements, prevYearReimbursementCredits]);
 
@@ -287,8 +291,8 @@ export default function ReportsPage() {
         return date.getMonth() === month.getMonth();
       });
 
-      const rawIncome = sumTransactionsByType(monthTransactions, 'income');
-      const rawExpenses = sumTransactionsByType(monthTransactions, 'expense');
+      const rawIncome = sumTransactionsByType(monthTransactions, 'income', EMPTY_SETTLEMENT_IDS);
+      const rawExpenses = sumTransactionsByType(monthTransactions, 'expense', EMPTY_SETTLEMENT_IDS);
       const investmentCatExp = sumInvestmentCategoryExpenses(monthTransactions);
       const reimbursementExp = sumReimbursementExpenses(monthReimbursements);
       const reimbursementCred = sumReimbursementCredits(monthReimbursementCreds);
@@ -309,7 +313,7 @@ export default function ReportsPage() {
         expense = Math.max(0, rawExpenses - investmentCatExp);
       }
 
-      const investmentTxs = sumTransactionsByType(monthTransactions, 'investment');
+      const investmentTxs = sumTransactionsByType(monthTransactions, 'investment', EMPTY_SETTLEMENT_IDS);
       const deposits = sumInvestmentDeposits(monthInvestmentTransfers);
       const withdrawals = sumInvestmentWithdrawals(monthInvestmentTransfers);
       const investment = Math.max(0, investmentTxs + investmentCatExp + deposits - withdrawals);
@@ -611,7 +615,7 @@ export default function ReportsPage() {
   // see any period (this month, last 3M, custom, etc.).
   const cashflowSankeyData = useMemo(() => {
     return buildCashflowSankey(
-      transactions,
+      expenseLedger,
       transfers,
       businesses,
       personalAccount,
@@ -631,7 +635,7 @@ export default function ReportsPage() {
         },
       }
     );
-  }, [transactions, transfers, businesses, personalAccount, cashflowPeriod, isEntityFiltered, selectedEntityIds, t]);
+  }, [expenseLedger, transfers, businesses, personalAccount, cashflowPeriod, isEntityFiltered, selectedEntityIds, t]);
 
   // Top expense category
   const topExpenseCategory = expenseBreakdown.length > 0 ? expenseBreakdown[0] : null;
@@ -1290,6 +1294,7 @@ export default function ReportsPage() {
                   <EntityComparisonChart
                     entities={allEntities}
                     transactions={transactions}
+                    ledger={expenseLedger}
                     transfers={transfers}
                     currency={settings.baseCurrency}
                     height={Math.max(200, allEntities.length * 60)}

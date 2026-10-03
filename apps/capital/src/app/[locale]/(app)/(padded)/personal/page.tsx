@@ -57,6 +57,7 @@ import {
   useCreditCardStore,
 } from '@/lib/store';
 import { calculateEntitySummary, calculateUpcomingExpenses } from '@/lib/utils/calculations';
+import { useExpenseLedger } from '@/hooks/use-expense-ledger';
 import { useRecurringTransactionStore } from '@/lib/store/recurring-store';
 import { useRecurringTransferStore } from '@/lib/store/recurring-transfer-store';
 import { cn } from '@/lib/utils';
@@ -180,6 +181,8 @@ export default function PersonalPage() {
     return names;
   }, [businesses, personalAccount, investmentAccounts, t]);
 
+  const expenseLedger = useExpenseLedger();
+
   const summary = useMemo(() => {
     if (!personalAccount) return null;
     return calculateEntitySummary(
@@ -189,9 +192,10 @@ export default function PersonalPage() {
       transactions,
       transfers,
       settings.baseCurrency,
-      personalAccount.initialBalance
+      personalAccount.initialBalance,
+      expenseLedger
     );
-  }, [personalAccount, transactions, transfers, settings.baseCurrency, t]);
+  }, [personalAccount, transactions, transfers, settings.baseCurrency, expenseLedger, t]);
 
   const upcomingExpenses = useMemo(() => {
     if (!personalAccount) return 0;

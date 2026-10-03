@@ -223,6 +223,66 @@ describe("MCP category CRUD tools", () => {
       expect(renamedCategory?.isDefault).toBe(true);
     });
 
+    it("renames a statement purchase and a legacy bill line together", async () => {
+      const card = await db.creditCard.create({
+        data: {
+          entityType: "personal",
+          personalAccountId,
+          bankName: "Nubank",
+          lastFourDigits: "9090",
+          creditLimit: 1000,
+          closingDay: 28,
+          dueDay: 5,
+          currency: "BRL",
+        },
+      });
+      const bill = await db.creditCardBill.create({
+        data: {
+          creditCardId: card.id,
+          closingDate: new Date("2026-09-28T12:00:00.000Z"),
+          dueDate: new Date("2026-10-05T12:00:00.000Z"),
+          totalAmount: 10,
+        },
+      });
+      const statement = await db.creditCardStatement.create({
+        data: {
+          creditCardId: card.id,
+          month: "2026-10",
+          closingDate: new Date("2026-10-28T12:00:00.000Z"),
+        },
+      });
+      const groceries = await db.category.findFirstOrThrow({
+        where: { userId: TEST_USER_ID, systemKey: "groceries" },
+      });
+      await db.billTransaction.create({
+        data: {
+          billId: bill.id,
+          category: groceries.name,
+          transactionDate: new Date("2026-09-10T12:00:00.000Z"),
+          description: "Market bill",
+          amount: 10,
+          currency: "BRL",
+        },
+      });
+      await db.billTransaction.create({
+        data: {
+          statementId: statement.id,
+          category: groceries.name,
+          transactionDate: new Date("2026-01-15T12:00:00.000Z"),
+          description: "Market statement",
+          amount: 12,
+          currency: "BRL",
+        },
+      });
+
+      await updateCategoryTool(TEST_USER_ID, { id: groceries.id, name: "Mercado" }, db);
+
+      const rows = await db.billTransaction.findMany({
+        where: { OR: [{ billId: bill.id }, { statementId: statement.id }] },
+      });
+      expect(rows.map((row) => row.category).sort()).toEqual(["Mercado", "Mercado"]);
+    });
+
     it("should throw error for non-existent category", async () => {
       await expect(
         updateCategoryTool(

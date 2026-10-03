@@ -15,7 +15,7 @@ const UpdateBillTransactionSchema = z.object({
 
 const BillTransactionSchema = z.object({
   id: z.string(),
-  billId: z.string(),
+  billId: z.string().nullable(),
   category: z.string(),
   transactionDate: z.string(),
   description: z.string(),

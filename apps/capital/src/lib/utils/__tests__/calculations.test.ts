@@ -75,9 +75,9 @@ describe('sumTransactionsByType', () => {
       mkTx({ type: 'expense', amount: 500 }),
       mkTx({ type: 'income', amount: 2000 }),
     ];
-    expect(sumTransactionsByType(txs, 'income')).toBe(3000);
-    expect(sumTransactionsByType(txs, 'expense')).toBe(500);
-    expect(sumTransactionsByType(txs, 'investment')).toBe(0);
+    expect(sumTransactionsByType(txs, 'income', new Set())).toBe(3000);
+    expect(sumTransactionsByType(txs, 'expense', new Set())).toBe(500);
+    expect(sumTransactionsByType(txs, 'investment', new Set())).toBe(0);
   });
 
   it('applies amount * exchangeRate', () => {
@@ -85,11 +85,11 @@ describe('sumTransactionsByType', () => {
       mkTx({ type: 'income', amount: 100, exchangeRate: 5.5 }),
       mkTx({ type: 'income', amount: 200, exchangeRate: 0.5 }),
     ];
-    expect(sumTransactionsByType(txs, 'income')).toBe(100 * 5.5 + 200 * 0.5);
+    expect(sumTransactionsByType(txs, 'income', new Set())).toBe(100 * 5.5 + 200 * 0.5);
   });
 
   it('returns 0 for empty array', () => {
-    expect(sumTransactionsByType([], 'income')).toBe(0);
+    expect(sumTransactionsByType([], 'income', new Set())).toBe(0);
   });
 });
 

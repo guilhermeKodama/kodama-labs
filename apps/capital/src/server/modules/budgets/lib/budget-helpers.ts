@@ -1,4 +1,5 @@
 import type { DbClient } from "@capital/server/lib/prisma";
+import { shouldCountAsExpense } from "@/lib/utils/expense-classification";
 
 /**
  * Shared budget helpers for effective-date resolution and currency conversion.
@@ -181,14 +182,12 @@ export function convertToBaseCurrency(
 }
 
 /**
- * Determine if a transaction should count toward budget actual spending.
- * 
- * Rule: Only type="expense" transactions count (not income or transfers).
- * 
- * This is the SINGLE source for the expense classification rule.
- * When PR #62 (credit card statements) merges with shouldCountAsExpense(),
- * switch this implementation to call that helper.
+ * Whether a transaction counts toward budget actual spending.
+ * Delegates to shouldCountAsExpense: expenses count, linked card settlements do not.
  */
-export function shouldCountAsExpenseForBudget(transactionType: string): boolean {
-  return transactionType === "expense";
+export function shouldCountAsExpenseForBudget(
+  transaction: { type: string; id: string },
+  settlementIds: Set<string>
+): boolean {
+  return shouldCountAsExpense(transaction, settlementIds.has(transaction.id));
 }

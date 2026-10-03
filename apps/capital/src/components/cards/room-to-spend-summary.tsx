@@ -24,12 +24,14 @@ interface RoomToSpendSummaryProps {
   budgetProgress: BudgetProgress[];
   transactions: Transaction[];
   currency: string;
+  settlementIds?: Set<string>;
 }
 
 export function RoomToSpendSummary({
   budgetProgress,
   transactions,
   currency,
+  settlementIds = new Set(),
 }: RoomToSpendSummaryProps) {
   const t = useTranslations('budgets');
 
@@ -42,23 +44,23 @@ export function RoomToSpendSummary({
     // Calculate overall projected total
     let totalProjected = 0;
     for (const p of activeBudgets) {
-      const pace = calculateBudgetPace(p.budget, transactions);
+      const pace = calculateBudgetPace(p.budget, transactions, settlementIds);
       totalProjected += pace.projectedTotal;
     }
 
     return { totalBudget, totalSpent, totalRoom, totalProjected };
-  }, [budgetProgress, transactions]);
+  }, [budgetProgress, transactions, settlementIds]);
 
   // Ranked categories sorted by room (most room first)
   const rankedCategories = useMemo(() => {
     return budgetProgress
       .filter((p) => p.budget.isActive)
       .map((p) => {
-        const pace = calculateBudgetPace(p.budget, transactions);
+        const pace = calculateBudgetPace(p.budget, transactions, settlementIds);
         return { ...p, pace };
       })
       .sort((a, b) => b.remaining - a.remaining);
-  }, [budgetProgress, transactions]);
+  }, [budgetProgress, transactions, settlementIds]);
 
   const isOverall = stats.totalRoom < 0;
 

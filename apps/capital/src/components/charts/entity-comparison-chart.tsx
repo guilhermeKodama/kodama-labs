@@ -31,6 +31,8 @@ interface Entity {
 interface EntityComparisonChartProps {
   entities: Entity[];
   transactions: Transaction[];
+  /** P&L ledger. Expenses use it; balance and net worth stay on raw transactions. */
+  ledger?: Transaction[];
   transfers: Transfer[];
   currency: string;
   height?: number;
@@ -52,6 +54,7 @@ const ENTITY_COLORS = [
 export function EntityComparisonChart({
   entities,
   transactions,
+  ledger,
   transfers,
   currency,
   height = 300,
@@ -72,8 +75,8 @@ export function EntityComparisonChart({
   };
 
   const comparisonData = useMemo(() => {
-    return calculateEntityComparison(entities, transactions, transfers, currency);
-  }, [entities, transactions, transfers, currency]);
+    return calculateEntityComparison(entities, transactions, transfers, currency, ledger);
+  }, [entities, transactions, transfers, currency, ledger]);
 
   const chartData = useMemo(() => {
     return comparisonData.map((entity, index) => ({

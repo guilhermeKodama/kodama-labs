@@ -38,6 +38,7 @@ async function fetchEverything(): Promise<void> {
     useBudgetStore.getState().fetchBudgets(),
     creditCards.fetchCreditCards(),
     creditCards.fetchBills(),
+    creditCards.fetchStatements(),
     creditCards.fetchInstallments(),
     investments.fetchAccounts(),
     investments.fetchHoldings(),
