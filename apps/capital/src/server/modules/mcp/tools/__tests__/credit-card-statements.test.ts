@@ -8,6 +8,19 @@ import {
 
 const db = prisma;
 const TEST_USER_ID = "test-user-credit-card-statements-001";
+const TEST_EMAIL = "mcp-cc-statements-test@example.com";
+
+async function deleteStatementTestUsers() {
+  const users = await db.user.findMany({
+    where: { OR: [{ email: TEST_EMAIL }, { id: TEST_USER_ID }] },
+    select: { id: true },
+  });
+  for (const user of users) {
+    await db.personalAccount.deleteMany({ where: { userId: user.id } });
+    await db.business.deleteMany({ where: { userId: user.id } });
+    await db.user.delete({ where: { id: user.id } });
+  }
+}
 
 describe("importCreditCardStatement", () => {
   let userId: string;
@@ -15,10 +28,10 @@ describe("importCreditCardStatement", () => {
   let creditCardId: string;
 
   beforeEach(async () => {
-    // Create test user with unique email
+    await deleteStatementTestUsers();
     const user = await db.user.create({
       data: {
-        email: `test-${Date.now()}-${Math.random()}@example.com`,
+        email: TEST_EMAIL,
         passwordHash: "hash",
         name: "Test User",
       },
@@ -248,7 +261,7 @@ describe("markTransactionAsCardSettlement", () => {
   let transactionId: string;
 
   beforeEach(async () => {
-    // Clean up
+    await deleteStatementTestUsers();
     await db.creditCardStatement.deleteMany({
       where: { creditCard: { OR: [{ business: { userId: TEST_USER_ID } }, { personalAccount: { userId: TEST_USER_ID } }] } },
     });
@@ -265,7 +278,7 @@ describe("markTransactionAsCardSettlement", () => {
     const user = await db.user.create({
       data: {
         id: TEST_USER_ID,
-        email: `test-${Date.now()}-${Math.random()}@example.com`,
+        email: TEST_EMAIL,
         passwordHash: "hash",
         name: "Test User",
       },
@@ -383,7 +396,7 @@ describe("expense classification integration", () => {
   let creditCardId: string;
 
   beforeEach(async () => {
-    // Clean up
+    await deleteStatementTestUsers();
     await db.creditCardStatement.deleteMany({
       where: { creditCard: { OR: [{ business: { userId: TEST_USER_ID } }, { personalAccount: { userId: TEST_USER_ID } }] } },
     });
@@ -400,7 +413,7 @@ describe("expense classification integration", () => {
     const user = await db.user.create({
       data: {
         id: TEST_USER_ID,
-        email: `test-${Date.now()}-${Math.random()}@example.com`,
+        email: TEST_EMAIL,
         passwordHash: "hash",
         name: "Test User",
       },
@@ -767,7 +780,7 @@ describe("getCreditCardStatement", () => {
   let statementId: string;
 
   beforeEach(async () => {
-    // Clean up
+    await deleteStatementTestUsers();
     await db.creditCardStatement.deleteMany({
       where: { creditCard: { OR: [{ business: { userId: TEST_USER_ID } }, { personalAccount: { userId: TEST_USER_ID } }] } },
     });
@@ -784,7 +797,7 @@ describe("getCreditCardStatement", () => {
     const user = await db.user.create({
       data: {
         id: TEST_USER_ID,
-        email: `test-${Date.now()}-${Math.random()}@example.com`,
+        email: TEST_EMAIL,
         passwordHash: "hash",
         name: "Test User",
       },

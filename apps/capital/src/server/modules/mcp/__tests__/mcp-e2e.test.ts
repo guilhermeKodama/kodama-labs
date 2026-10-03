@@ -233,7 +233,7 @@ describe("MCP Server End-to-End", () => {
       expect(data.id).toBe(2);
       expect(data.result).toHaveProperty("tools");
       expect(Array.isArray(data.result.tools)).toBe(true);
-      expect(data.result.tools.length).toBe(18); // 10 original + 3 attachment + 5 budget tools
+      expect(data.result.tools.length).toBe(21); // 10 original + 3 attachment + 5 budget + 3 statement tools
 
       // Check for expected tools
       const result = data.result as { tools: Array<{ name: string }> };
@@ -241,6 +241,9 @@ describe("MCP Server End-to-End", () => {
       expect(toolNames).toContain("bulk_create_transactions");
       expect(toolNames).toContain("list_transactions");
       expect(toolNames).toContain("adjust_position");
+      expect(toolNames).toContain("import_credit_card_statement");
+      expect(toolNames).toContain("mark_transaction_as_card_settlement");
+      expect(toolNames).toContain("get_credit_card_statement");
     });
 
     it("should handle tools/call with bulk_create_transactions in dry-run mode", async () => {
@@ -380,7 +383,11 @@ describe("MCP Server End-to-End", () => {
 
       // List tools
       const tools = await client.listTools();
-      expect(tools.tools.length).toBe(18); // 10 original + 3 attachment + 5 budget tools
+      expect(tools.tools.length).toBe(21); // 10 original + 3 attachment + 5 budget + 3 statement tools
+      const toolNames = tools.tools.map((tool) => tool.name);
+      expect(toolNames).toContain("import_credit_card_statement");
+      expect(toolNames).toContain("mark_transaction_as_card_settlement");
+      expect(toolNames).toContain("get_credit_card_statement");
 
       // Call a tool
       const result = await client.callTool({

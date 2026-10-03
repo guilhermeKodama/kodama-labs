@@ -687,8 +687,9 @@ export function createCapitalMcpServer(userId: string, db: DbClient) {
     {
       description:
         "Mark an existing transaction as a credit card bill settlement/payment. " +
-        "Links the transaction to the statement's billPaymentTransactionId and sets " +
-        "its category to 'Credit Card' so it's excluded from expense totals. " +
+        "Links the transaction to the statement via billPaymentTransactionId. " +
+        "That link excludes the payment from expense totals; the category name does not. " +
+        "Also sets a display category on the payment. " +
         "Use this to convert historical June–September bill payment transactions into " +
         "settlements after importing the statement purchases.",
       inputSchema: z.object({

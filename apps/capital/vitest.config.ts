@@ -1,4 +1,6 @@
 import { defineConfig } from 'vitest/config';
+import fs from 'node:fs';
+import os from 'node:os';
 import path from 'path';
 
 // Vitest does not read .env on its own. Without this, DATABASE_URL is
@@ -11,6 +13,14 @@ try {
 } catch {
   // No .env (fresh worktree / CI) - let env.ts report what's missing.
 }
+
+// .env points CAPITAL_BLOB_DIR at a developer home directory and leaves
+// the blob token empty, so attachment tests mkdir that path. Tests always
+// write to a temp dir and never call Vercel Blob.
+const testBlobDir = path.join(os.tmpdir(), 'capital-vitest-blob');
+fs.mkdirSync(testBlobDir, { recursive: true });
+process.env.CAPITAL_BLOB_DIR = testBlobDir;
+delete process.env.BLOB_READ_WRITE_TOKEN;
 
 export default defineConfig({
   test: {

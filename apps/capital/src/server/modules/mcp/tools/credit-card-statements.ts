@@ -1,6 +1,15 @@
 import type { DbClient } from "@capital/server/lib/prisma";
 import { parseLocalDate } from "@capital/server/lib/date-utils";
 
+/**
+ * Display category stored on a settlement payment.
+ * Expense totals ignore this name; the statement link is the rule.
+ * PR #64 replaces this return value with the credit-card systemKey helper.
+ */
+export function settlementDisplayCategory(): string {
+  return "Credit Card";
+}
+
 interface InstallmentInfo {
   number: number;
   total: number;
@@ -303,11 +312,12 @@ export async function markTransactionAsCardSettlement(
     throw new Error("Statement already has a different bill payment transaction linked");
   }
 
-  // 4. Update transaction category to "Credit Card" if not already
-  if (transaction.category !== "Credit Card") {
+  // 4. Set the display category. Exclusion is the statement link, not this name.
+  const displayCategory = settlementDisplayCategory();
+  if (transaction.category !== displayCategory) {
     await db.transaction.update({
       where: { id: params.transactionId },
-      data: { category: "Credit Card" },
+      data: { category: displayCategory },
     });
   }
 
