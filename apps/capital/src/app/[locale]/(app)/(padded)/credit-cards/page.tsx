@@ -422,6 +422,7 @@ export default function CreditCardsPage() {
                 bills={bills}
                 currency={settings.baseCurrency}
                 expenseTransactions={transactions.filter((tx) => tx.type === 'expense')}
+                categories={categories}
                 onCreateExpense={handleCreateExpenseFromBill}
                 onLinkTransaction={handleLinkTransaction}
                 onUpdateBill={updateBill}

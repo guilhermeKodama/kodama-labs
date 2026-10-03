@@ -48,6 +48,7 @@ import {
   generateBudgetInsights,
   mergeTransactionsWithCreditCard,
   convertInstallmentsToTransactions,
+  creditCardCategoryNameFrom,
   getMonthlyFromYearlyBudgets,
   calculateAllYearlyProgress,
   getYearlySummaryStats,
@@ -69,7 +70,7 @@ export default function BudgetsPage() {
     toggleBudget,
   } = useBudgetStore();
   const expenseLedger = useExpenseLedger();
-  const { settings, personalAccount, currencies } = useSettingsStore();
+  const { settings, personalAccount, currencies, categories } = useSettingsStore();
   const { businesses } = useBusinessStore();
   const {
     creditCards,
@@ -126,11 +127,12 @@ export default function BudgetsPage() {
       installments,
       creditCards,
       bills,
-      allBillTransactions
+      allBillTransactions,
+      creditCardCategoryNameFrom(categories)
     );
 
     return [...ccMerged, ...installmentTransactions];
-  }, [expenseLedger, allBillTransactions, bills, creditCards, installments, currencies, settings.baseCurrency]);
+  }, [expenseLedger, allBillTransactions, bills, creditCards, installments, currencies, categories, settings.baseCurrency]);
 
   // Entity-filtered budgets and transactions
   const filteredBudgets = useMemo(() => {

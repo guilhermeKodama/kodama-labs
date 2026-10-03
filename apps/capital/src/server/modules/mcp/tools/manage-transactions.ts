@@ -4,6 +4,7 @@ import { deleteTransactionService } from "../../transactions/services/delete-tra
 import { fetchTransactionById } from "../../transactions/data/queries/fetch-transactions";
 import { parseLocalDate } from "@capital/server/lib/date-utils";
 import type { TransactionType } from "@/generated/prisma";
+import { validateCategory } from "../lib/category-validation";
 
 export interface UpdateTransactionParams {
   id: string;
@@ -29,6 +30,24 @@ export async function updateTransactionTool(
   const existing = await fetchTransactionById(userId, params.id, db);
   if (!existing) {
     throw new Error("Transaction not found or access denied");
+  }
+
+  // Validate category if provided
+  if (params.category) {
+    const targetType = params.type ?? existing.type;
+    const validation = await validateCategory(userId, params.category, targetType, db);
+    if (!validation.valid) {
+      const suggestions = validation.suggestions.length > 0
+        ? ` Did you mean: ${validation.suggestions.join(", ")}?`
+        : "";
+      const names = validation.validNames.length > 0
+        ? ` Valid categories: ${validation.validNames.join(", ")}.`
+        : "";
+      throw new Error(`Category '${params.category}' not found.${suggestions}${names}`);
+    }
+    if (validation.canonicalName) {
+      params.category = validation.canonicalName;
+    }
   }
 
   const updates = {

@@ -845,8 +845,7 @@ export function mergeTransactionsWithCreditCard(
       .map((b) => b.transactionId!)
   );
 
-  // Filter out linked bill-expense transactions and settlements from regular transactions
-  // (they'd have category "Credit Card" and we're replacing them with granular ones)
+  // Drop linked bill payments and card settlements. Their purchases are the expenses.
   const filteredRegular = transactions.filter(
     (t) => !linkedTransactionIds.has(t.id) && !settlementIds.has(t.id)
   );
@@ -877,11 +876,18 @@ export function mergeTransactionsWithCreditCard(
  * - Totals naturally decrease month-over-month as installments complete
  * - Months covered by uploaded bills are skipped to prevent double-counting
  */
+export function creditCardCategoryNameFrom(
+  categories: Array<{ systemKey?: string | null; name: string }>
+): string | undefined {
+  return categories.find((c) => c.systemKey === "credit_card")?.name;
+}
+
 export function convertInstallmentsToTransactions(
   installments: Installment[],
   creditCards: CreditCard[],
   bills: CreditCardBill[] = [],
-  billTransactions: BillTransaction[] = []
+  billTransactions: BillTransaction[] = [],
+  creditCardCategoryName?: string
 ): Transaction[] {
   // Safety-net dedup: if the same purchase produced multiple installment records
   // across different bills (e.g., "STORE 3/10" in Jan + "STORE 4/10" in Feb),
@@ -925,7 +931,7 @@ export function convertInstallmentsToTransactions(
     const card = cardMap.get(inst.creditCardId);
     if (!card) continue;
 
-    const category = inst.category || 'Credit Card';
+    const category = inst.category || creditCardCategoryName || "";
 
     // Find the bill that contains this installment's source transaction
     // and use its closing date as the anchor for projections

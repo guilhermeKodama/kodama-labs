@@ -1,4 +1,9 @@
 import Anthropic from "@anthropic-ai/sdk";
+import {
+  buildBillCategoryPrompt,
+  buildStatementCategoryPrompt,
+  coerceToAvailableCategory,
+} from "./category-prompt";
 
 let anthropicClient: Anthropic | null = null;
 
@@ -30,19 +35,21 @@ export interface CategorizationResult {
 
 /**
  * Use Claude to auto-categorize credit card bill transactions.
- * Falls back to "Other" category if API is unavailable or fails.
+ * `fallbackCategory` is the user's current name for systemKey other_system.
+ * `labels` maps systemKey -> the user's current category name.
  */
 export async function categorizeBillTransactions(
   transactions: BillTransactionInput[],
-  availableCategories: string[]
+  availableCategories: string[],
+  fallbackCategory: string,
+  labels: Record<string, string>
 ): Promise<CategorizationResult[]> {
   const client = getClient();
 
   if (!client) {
-    // Fallback: assign "Other" to all transactions
     return transactions.map((t) => ({
       index: t.index,
-      category: "Other",
+      category: fallbackCategory,
     }));
   }
 
@@ -52,7 +59,7 @@ export async function categorizeBillTransactions(
 
   for (let i = 0; i < transactions.length; i += BATCH_SIZE) {
     const batch = transactions.slice(i, i + BATCH_SIZE);
-    const batchResults = await categorizeBatch(client, batch, availableCategories);
+    const batchResults = await categorizeBatch(client, batch, availableCategories, fallbackCategory, labels);
     results.push(...batchResults);
   }
 
@@ -66,13 +73,14 @@ export async function categorizeBillTransactions(
 export async function categorizeStatementTransactions(
   transactions: BillTransactionInput[],
   availableCategories: string[],
-  transactionType: "expense" | "income"
+  transactionType: "expense" | "income",
+  fallbackCategory: string,
+  labels: Record<string, string>
 ): Promise<CategorizationResult[]> {
   const client = getClient();
 
   if (!client) {
-    const fallback = transactionType === "income" ? "Other Income" : "Other";
-    return transactions.map((t) => ({ index: t.index, category: fallback }));
+    return transactions.map((t) => ({ index: t.index, category: fallbackCategory }));
   }
 
   const BATCH_SIZE = 50;
@@ -80,7 +88,14 @@ export async function categorizeStatementTransactions(
 
   for (let i = 0; i < transactions.length; i += BATCH_SIZE) {
     const batch = transactions.slice(i, i + BATCH_SIZE);
-    const batchResults = await categorizeStatementBatch(client, batch, availableCategories, transactionType);
+    const batchResults = await categorizeStatementBatch(
+      client,
+      batch,
+      availableCategories,
+      transactionType,
+      fallbackCategory,
+      labels
+    );
     results.push(...batchResults);
   }
 
@@ -91,37 +106,20 @@ async function categorizeStatementBatch(
   client: Anthropic,
   transactions: BillTransactionInput[],
   availableCategories: string[],
-  transactionType: "expense" | "income"
+  transactionType: "expense" | "income",
+  fallbackCategory: string,
+  labels: Record<string, string>
 ): Promise<CategorizationResult[]> {
   const transactionList = transactions
     .map((t) => `${t.index}. "${t.description}" - Amount: ${t.amount}`)
     .join("\n");
 
-  const typeLabel = transactionType === "income" ? "income/credit" : "expense/debit";
-
-  const prompt = `You are a financial categorization assistant for Brazilian bank statement transactions (${typeLabel}). Categorize each transaction into one of the available categories.
-
-Available categories:
-${availableCategories.map((c) => `- ${c}`).join("\n")}
-
-Transactions to categorize:
-${transactionList}
-
-Rules:
-- Assign exactly one category per transaction from the available list.
-- These are bank statement descriptions, not credit card merchants. Common patterns:
-  - "Transferência enviada/recebida pelo Pix - RECIPIENT - CNPJ/CPF - BANK" — Pix transfer
-  - "Pagamento de boleto efetuado - ENTITY" — bill/boleto payment
-  - "Compra no débito - STORE" — debit card purchase
-  - "Aplicação RDB" / "Resgate RDB" — investment (RDB application/redemption)
-  - "Pagamento de fatura" — credit card bill payment
-- For Pix transfers, categorize based on the RECIPIENT name and context.
-- "Pagamento de fatura" should be "Credit Card" (expense) or skipped (income).
-- "Aplicação/Resgate RDB" is investment-related.
-- Use "Other" only if absolutely no other category fits.
-
-Respond ONLY with a valid JSON array, no other text:
-[{"index": 0, "category": "Transportation"}, {"index": 1, "category": "Other"}, ...]`;
+  const prompt = buildStatementCategoryPrompt(
+    transactionList,
+    availableCategories,
+    labels,
+    transactionType
+  );
 
   try {
     const response = await client.messages.create({
@@ -141,20 +139,21 @@ Respond ONLY with a valid JSON array, no other text:
     const parsed = JSON.parse(jsonStr) as CategorizationResult[];
     return parsed.map((r) => ({
       index: r.index,
-      category: availableCategories.includes(r.category) ? r.category : "Other",
+      category: coerceToAvailableCategory(r.category, availableCategories, fallbackCategory),
       suggestedCategory: r.suggestedCategory || undefined,
     }));
   } catch (error) {
     console.error("Claude statement categorization failed:", error);
-    const fallback = transactionType === "income" ? "Other Income" : "Other";
-    return transactions.map((t) => ({ index: t.index, category: fallback }));
+    return transactions.map((t) => ({ index: t.index, category: fallbackCategory }));
   }
 }
 
 async function categorizeBatch(
   client: Anthropic,
   transactions: BillTransactionInput[],
-  availableCategories: string[]
+  availableCategories: string[],
+  fallbackCategory: string,
+  labels: Record<string, string>
 ): Promise<CategorizationResult[]> {
   const transactionList = transactions
     .map(
@@ -163,37 +162,7 @@ async function categorizeBatch(
     )
     .join("\n");
 
-  const prompt = `You are a financial categorization assistant for Brazilian credit card bills. Categorize each transaction into one of the available categories.
-
-Available categories:
-${availableCategories.map((c) => `- ${c}`).join("\n")}
-
-Transactions to categorize:
-${transactionList}
-
-Rules:
-- Assign exactly one category per transaction from the available list.
-- Use "Subscriptions" for recurring digital services (Netflix, Spotify, iCloud, Amazon Prime, Disney+, etc.).
-- Use "Groceries" for supermarkets, food stores, mercados, sacolão, açougue (e.g. Shop Fartura, Centro de Abastecimento, Mikami Mercearia).
-- Use "Restaurants & Dining" for restaurants, delivery apps, cafes, bakeries, ice cream shops, lanchonetes (e.g. Beraldo Di Cale, Padaria, Sorveteria).
-- Use "Transportation" for Uber, gas stations (Posto), parking, tolls (Sem Parar), car rental (Localiza).
-- Use "Shopping" for retail stores, online shopping (Amazon, Mercadolivre, Shopee, Cobasi, Centauro, etc.).
-- Use "Entertainment" for movies (Cinemas Kinoplex), games (Steam, PlayStation), events.
-- Use "Health & Pharmacy" for drugstores (Drogasil), medical appointments, pharmacies.
-- Use "Travel" for hotels (Booking, Ibis), flights (Latam, Azul, Decolar), travel agencies.
-- Use "Education" for courses, books, bookstores (Leitura), school-related, libraries.
-- Use "Personal Care" for beauty, gym (Lifebox), wellness, O Boticário.
-- Use "Home" for furniture, maintenance, home improvement (Leroy Merlin).
-- Use "Software & Tools" for developer/work tools (Cursor, GitHub, OpenAI, Anthropic, CompanyHero).
-- Use "Fees & Charges" for bank fees, interest charges, IOF, card fees, "Ajuste a crédito", "Estorno".
-- Use "Utilities" for phone bills, internet, electricity.
-- Use "Other" only if absolutely no other category fits.
-- If you assign "Other" because no existing category fits, also provide a suggestedCategory with a short name for what a better category would be.
-
-Respond ONLY with a valid JSON array, no other text:
-[{"index": 0, "category": "Groceries"}, {"index": 1, "category": "Other", "suggestedCategory": "Pet Supplies"}, ...]
-
-Only include "suggestedCategory" when you assign "Other" and believe a new category would be useful.`;
+  const prompt = buildBillCategoryPrompt(transactionList, availableCategories, labels);
 
   try {
     const response = await client.messages.create({
@@ -218,15 +187,14 @@ Only include "suggestedCategory" when you assign "Other" and believe a new categ
     // Validate categories are in the allowed list
     return parsed.map((r) => ({
       index: r.index,
-      category: availableCategories.includes(r.category) ? r.category : "Other",
+      category: coerceToAvailableCategory(r.category, availableCategories, fallbackCategory),
       suggestedCategory: r.suggestedCategory || undefined,
     }));
   } catch (error) {
     console.error("Claude categorization failed:", error);
-    // Fallback to "Other"
     return transactions.map((t) => ({
       index: t.index,
-      category: "Other",
+      category: fallbackCategory,
     }));
   }
 }

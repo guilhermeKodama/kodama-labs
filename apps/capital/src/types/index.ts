@@ -462,6 +462,7 @@ export interface Category {
   color?: string;
   icon?: string;
   isSystem?: boolean;
+  systemKey?: string | null;
 }
 
 // Default categories

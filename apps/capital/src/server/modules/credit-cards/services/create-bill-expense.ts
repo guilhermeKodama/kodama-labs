@@ -1,5 +1,6 @@
 import type { DbClient } from "@capital/server/lib/prisma";
 import type { EntityType } from "@/generated/prisma";
+import { getCategoryNameBySystemKey } from "@capital/server/modules/mcp/lib/category-helpers";
 
 interface CreateBillExpenseInput {
   billId: string;
@@ -44,6 +45,13 @@ export async function createBillExpense(
     throw new Error("Bill is already linked to an expense transaction");
   }
 
+  // Get the user's credit card category name (supports localization)
+  const creditCardCategoryName = await getCategoryNameBySystemKey(
+    userId,
+    "credit_card",
+    db
+  );
+
   // Create expense transaction
   const transaction = await db.transaction.create({
     data: {
@@ -53,7 +61,7 @@ export async function createBillExpense(
       currency: input.currency,
       exchangeRate: input.exchangeRate || 1,
       description: `Credit Card Bill - ${bill.creditCard.bankName} ****${bill.creditCard.lastFourDigits}`,
-      category: "Credit Card",
+      category: creditCardCategoryName,
       date: input.date,
       isTaxDeductible: false,
       businessId: input.entityType === "business" ? input.businessId : undefined,

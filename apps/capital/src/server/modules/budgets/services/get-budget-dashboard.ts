@@ -10,6 +10,7 @@ import { addMonths } from "date-fns";
 import { amountInUserBase } from "../../../../lib/utils/currency";
 import { getEffectiveBudgetsForMonth } from "../lib/budget-helpers";
 import { statementInWindow } from "../../credit-cards/lib/statement-window";
+import { getCategoryNameBySystemKey } from "@capital/server/modules/mcp/lib/category-helpers";
 
 // ============================================
 // Types
@@ -314,6 +315,13 @@ export async function getBudgetDashboard(
     });
   }
 
+  // Get the user's localized credit card category name
+  const creditCardCategoryName = await getCategoryNameBySystemKey(
+    userId,
+    "credit_card",
+    db
+  );
+
   // Installment projections for this month
   const billMap = new Map(bills.map((b) => [b.id, b]));
   for (const inst of installments) {
@@ -322,7 +330,7 @@ export async function getBudgetDashboard(
 
     const card = inst.creditCard;
     const entityId = card.businessId ?? card.personalAccountId ?? "";
-    const category = inst.billTransaction?.category || "Credit Card";
+    const category = inst.billTransaction?.category || creditCardCategoryName;
 
     // Use bill closing date as anchor
     const sourceBill = inst.billTransaction?.billId
