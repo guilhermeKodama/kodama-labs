@@ -6,6 +6,8 @@ import { analyzeSanctions } from "@sentinel/server/modules/pipeline/analysis/ana
 import { analyzeNetwork } from "@sentinel/server/modules/pipeline/analysis/analyze-network";
 import { analyzePoliticalLinks } from "@sentinel/server/modules/pipeline/analysis/analyze-political-links";
 import { analyzeAi } from "@sentinel/server/modules/pipeline/analysis/analyze-ai";
+import { analyzeScorecards } from "@sentinel/server/modules/pipeline/analysis/analyze-scorecards";
+import { analyzeLegal } from "@sentinel/server/modules/pipeline/analysis/analyze-legal";
 import type { JobResult } from "@sentinel/server/lib/job-runner";
 
 export const maxDuration = 300;
@@ -22,6 +24,8 @@ const modules: { name: string; fn: () => Promise<{ success: boolean; result?: Jo
   { name: "network", fn: analyzeNetwork },
   { name: "politicalLinks", fn: analyzePoliticalLinks },
   { name: "ai", fn: analyzeAi },
+  { name: "legal", fn: analyzeLegal },
+  { name: "scorecards", fn: analyzeScorecards },
 ];
 
 function withTimeout(

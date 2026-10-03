@@ -1,0 +1,21 @@
+{
+  "_note": "Allowlist de veículos. chave = nome normalizado (minúsculas, sem acento opcional) do veículo como aparece no agregador; valor = credibilidade TRUSTED|MIXED|LOW. Veículos fora da lista entram como UNKNOWN e aparecem atenuados na UI. Primeiro filtro de qualidade antes do filtro de fake news (IA/agências de checagem) futuro.",
+  "sources": {
+    "g1": "TRUSTED",
+    "folha de s.paulo": "TRUSTED",
+    "folha de spaulo": "TRUSTED",
+    "o estado de s. paulo": "TRUSTED",
+    "estadao": "TRUSTED",
+    "estadão": "TRUSTED",
+    "uol": "TRUSTED",
+    "bbc news brasil": "TRUSTED",
+    "agencia brasil": "TRUSTED",
+    "agência brasil": "TRUSTED",
+    "nexo jornal": "TRUSTED",
+    "cnn brasil": "MIXED",
+    "veja": "MIXED",
+    "metropoles": "MIXED",
+    "metrópoles": "MIXED",
+    "poder360": "MIXED"
+  }
+}

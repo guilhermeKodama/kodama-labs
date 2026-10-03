@@ -1,0 +1,32 @@
+{
+  "_note": "Pautas-chave curadas (editorial). Preencha votacaoExternalId com o id real da votação na Câmara (ex.: '2265603-43', obtido em dadosabertos.camara.leg.br) para a pauta acender no perfil. favorableVote indica qual voto (SIM/NAO) conta como 'a favor da pauta'. theme deve casar com codes.theme.",
+  "keyVotes": [
+    {
+      "slug": "reducao-maioridade-penal-pec-171",
+      "theme": "seguranca",
+      "label": "Redução da maioridade penal",
+      "description": "PEC 171/1993 — reduz a maioridade penal de 18 para 16 anos em crimes hediondos.",
+      "house": "CAMARA",
+      "votacaoExternalId": "",
+      "favorableVote": "SIM"
+    },
+    {
+      "slug": "combate-violencia-mulher",
+      "theme": "direitos",
+      "label": "Endurecimento de penas por violência contra a mulher",
+      "description": "Projeto que amplia penas para crimes de misoginia e violência de gênero.",
+      "house": "CAMARA",
+      "votacaoExternalId": "",
+      "favorableVote": "SIM"
+    },
+    {
+      "slug": "marco-temporal-terras-indigenas",
+      "theme": "ambiente",
+      "label": "Marco temporal de terras indígenas",
+      "description": "PL 490/2007 — estabelece marco temporal para demarcação de terras indígenas.",
+      "house": "CAMARA",
+      "votacaoExternalId": "",
+      "favorableVote": "NAO"
+    }
+  ]
+}

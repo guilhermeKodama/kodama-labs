@@ -57,6 +57,9 @@ function buildWhere(sp: Record<string, string | string[] | undefined>) {
   const state = String(sp.state ?? "");
   if (state) where.state = state;
 
+  const city = String(sp.city ?? "");
+  if (city) where.city = city;
+
   const year = String(sp.year ?? "");
   if (year) where.electionYear = parseInt(year);
 
@@ -65,16 +68,20 @@ function buildWhere(sp: Record<string, string | string[] | undefined>) {
 
 const loadFilterOptions = () =>
   cachedFilterOptions("politicians", async () => {
-    const [parties, positions, states, years] = await Promise.all([
+    const [parties, positions, states, cities, years] = await Promise.all([
       prisma.politician.groupBy({ by: ["party"], where: { party: { not: null } }, _count: true, orderBy: { _count: { party: "desc" } }, take: 50 }),
       prisma.politician.groupBy({ by: ["position"], _count: true, orderBy: { _count: { position: "desc" } }, take: 30 }),
       prisma.politician.groupBy({ by: ["state"], where: { state: { not: null } }, _count: true, orderBy: { state: "asc" } }),
+      // Cidades têm alta cardinalidade (5.570 municípios). Limita às mais
+      // representadas; o combobox da DataTable já permite busca dentro das opções.
+      prisma.politician.groupBy({ by: ["city"], where: { city: { not: null } }, _count: true, orderBy: { _count: { city: "desc" } }, take: 100 }),
       prisma.politician.groupBy({ by: ["electionYear"], where: { electionYear: { not: null } }, _count: true, orderBy: { electionYear: "desc" } }),
     ]);
     return {
       party: parties.filter((p) => p.party).map((p) => ({ label: `${p.party} (${p._count})`, value: p.party! })),
       position: positions.map((p) => ({ label: `${p.position} (${p._count})`, value: p.position })),
       state: states.filter((s) => s.state).map((s) => ({ label: s.state!, value: s.state! })),
+      city: cities.filter((c) => c.city).map((c) => ({ label: `${c.city} (${c._count})`, value: c.city! })),
       year: years.filter((y) => y.electionYear).map((y) => ({ label: String(y.electionYear!), value: String(y.electionYear!) })),
     };
   });
@@ -189,6 +196,7 @@ function isDefaultState(sp: Record<string, string | string[] | undefined>): bool
     !sp.party &&
     !sp.position &&
     !sp.state &&
+    !sp.city &&
     !sp.year &&
     !sp.cursor &&
     !sp.dir

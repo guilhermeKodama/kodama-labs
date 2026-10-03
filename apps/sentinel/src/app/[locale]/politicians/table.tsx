@@ -36,6 +36,7 @@ export function PoliticiansTable({
     party: { label: string; value: string }[];
     position: { label: string; value: string }[];
     state: { label: string; value: string }[];
+    city: { label: string; value: string }[];
     year: { label: string; value: string }[];
   };
 }) {
@@ -91,6 +92,9 @@ export function PoliticiansTable({
       header: "Cidade",
       width: "w-[12%]",
       accessorFn: (row) => row.city,
+      filterable: true,
+      filterKey: "city",
+      filterOptions: filterOptions.city,
       cell: (row) => (
         <span className="text-xs text-muted-foreground truncate block">{row.city ?? "-"}</span>
       ),

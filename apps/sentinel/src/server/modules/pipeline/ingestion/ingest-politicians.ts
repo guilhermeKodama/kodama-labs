@@ -5,7 +5,10 @@ import { streamTseCandidates, cleanCpf, type TseRawRow } from "@/lib/gov-apis/ts
 import { fetchDeputies, fetchDeputyDetail } from "@/lib/gov-apis/camara";
 import { BudgetTracker, YieldSignal } from "@sentinel/server/lib/budget-tracker";
 
-const ELECTION_YEARS = [2020, 2022, 2024];
+// 2026 is included so candidate/donation/asset data turns on automatically
+// once the TSE publishes the 2026 registry (~mid-Aug 2026). Until then the TSE
+// CDN returns 404 for 2026 and the per-year try/catch skips it gracefully.
+const ELECTION_YEARS = [2020, 2022, 2024, 2026];
 const CAMARA_BATCH_SIZE = 5;
 const POLITE_DELAY_MS = 2000;
 const TOTAL_BUDGET_MS = 120_000;
