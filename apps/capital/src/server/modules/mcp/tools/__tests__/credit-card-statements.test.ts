@@ -15,10 +15,10 @@ describe("importCreditCardStatement", () => {
   let creditCardId: string;
 
   beforeEach(async () => {
-    // Create test user
+    // Create test user with unique email
     const user = await db.user.create({
       data: {
-        email: "test@example.com",
+        email: `test-${Date.now()}-${Math.random()}@example.com`,
         passwordHash: "hash",
         name: "Test User",
       },
@@ -265,7 +265,7 @@ describe("markTransactionAsCardSettlement", () => {
     const user = await db.user.create({
       data: {
         id: TEST_USER_ID,
-        email: "test@example.com",
+        email: `test-${Date.now()}-${Math.random()}@example.com`,
         passwordHash: "hash",
         name: "Test User",
       },
@@ -400,7 +400,7 @@ describe("expense classification integration", () => {
     const user = await db.user.create({
       data: {
         id: TEST_USER_ID,
-        email: "test@example.com",
+        email: `test-${Date.now()}-${Math.random()}@example.com`,
         passwordHash: "hash",
         name: "Test User",
       },
@@ -784,7 +784,7 @@ describe("getCreditCardStatement", () => {
     const user = await db.user.create({
       data: {
         id: TEST_USER_ID,
-        email: "test@example.com",
+        email: `test-${Date.now()}-${Math.random()}@example.com`,
         passwordHash: "hash",
         name: "Test User",
       },
