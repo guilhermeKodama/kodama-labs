@@ -9,6 +9,7 @@ interface CreateBudgetData {
   period: BudgetPeriod;
   year: number;
   month?: number;
+  effectiveFrom: Date;
   businessId?: string;
   personalAccountId?: string;
 }

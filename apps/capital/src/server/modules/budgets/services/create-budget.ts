@@ -10,6 +10,7 @@ interface CreateBudgetInput {
   period: BudgetPeriod;
   year: number;
   month?: number;
+  effectiveFrom?: Date; // Optional for backward compatibility
   businessId?: string;
   personalAccountId?: string;
 }
@@ -34,7 +35,12 @@ export async function createBudget(
     throw new Error("month is required for monthly budgets");
   }
 
-  // Check for existing budget with the same entity+category+period+year+month
+  // Calculate effectiveFrom if not provided (backward compatibility)
+  const effectiveFrom = input.effectiveFrom || new Date(
+    Date.UTC(input.year, (input.month || 1) - 1, 1, 12, 0, 0, 0)
+  );
+
+  // Check for existing budget with the same entity+category+effectiveFrom
   const existing = await db.budget.findFirst({
     where: {
       OR: [
@@ -44,18 +50,23 @@ export async function createBudget(
       ...(input.businessId && { businessId: input.businessId }),
       ...(input.personalAccountId && { personalAccountId: input.personalAccountId }),
       category: input.category,
-      period: input.period,
-      year: input.year,
-      ...(input.month !== undefined && { month: input.month }),
+      effectiveFrom,
     },
   });
 
   if (existing) {
     throw new Error(
-      `A budget for "${input.category}" already exists for this period. Please edit the existing budget instead.`
+      `A budget for "${input.category}" already exists for this effective date. Please edit the existing budget instead.`
     );
   }
 
   // Data layer will verify ownership
-  return insertBudget(userId, input, db);
+  return insertBudget(
+    userId,
+    {
+      ...input,
+      effectiveFrom,
+    },
+    db
+  );
 }
