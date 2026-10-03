@@ -182,6 +182,17 @@ export async function processBillCsv(
     db
   );
 
+  const card = await db.creditCard.findFirst({
+    where: {
+      id: input.creditCardId,
+      OR: [{ business: { userId } }, { personalAccount: { userId } }],
+    },
+    select: { currency: true },
+  });
+  if (!card) {
+    throw new Error("Credit card not found");
+  }
+
   // 6. Load learned merchant-to-category mappings for this user
   const merchantMappings = await db.merchantCategoryMapping.findMany({
     where: { userId },
@@ -202,6 +213,7 @@ export async function processBillCsv(
       transactionDate: parseDate(t.date),
       description: t.description,
       amount: t.amount,
+      currency: card.currency,
       installmentNumber: t.installmentNumber,
       totalInstallments: t.totalInstallments,
       isAutoCategorized: false,

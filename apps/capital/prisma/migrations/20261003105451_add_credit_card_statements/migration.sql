@@ -14,9 +14,20 @@ CREATE TABLE "credit_card_statements" (
 );
 
 -- AlterTable
+-- currency is added nullable, backfilled from the card, then set NOT NULL.
+-- No default: new rows must set the purchase currency explicitly.
 ALTER TABLE "bill_transactions" ADD COLUMN     "statementId" TEXT,
-ADD COLUMN     "currency" TEXT NOT NULL DEFAULT 'BRL',
+ADD COLUMN     "currency" TEXT,
 ALTER COLUMN "billId" DROP NOT NULL;
+
+-- Every existing row has a bill (billId was NOT NULL). Statement rows do not exist yet.
+UPDATE "bill_transactions" AS bt
+SET "currency" = cc."currency"
+FROM "credit_card_bills" AS b
+JOIN "credit_cards" AS cc ON cc."id" = b."creditCardId"
+WHERE bt."billId" = b."id";
+
+ALTER TABLE "bill_transactions" ALTER COLUMN "currency" SET NOT NULL;
 
 -- CreateIndex
 CREATE UNIQUE INDEX "credit_card_statements_billPaymentTransactionId_key" ON "credit_card_statements"("billPaymentTransactionId");

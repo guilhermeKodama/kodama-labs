@@ -698,7 +698,7 @@ model BillTransaction {
   description       String
   merchantName      String?
   amount            Float
-  currency          String   @default("BRL")
+  currency          String
   installmentNumber Int?
   totalInstallments Int?
   isAutoCategorized Boolean  @default(false)
