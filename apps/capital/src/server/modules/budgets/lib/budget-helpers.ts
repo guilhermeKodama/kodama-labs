@@ -1,6 +1,21 @@
 import type { DbClient } from "@capital/server/lib/prisma";
 
 /**
+ * Shared budget helpers for effective-date resolution and currency conversion.
+ * 
+ * SINGLE SOURCE OF TRUTH for:
+ * - Effective-date budget resolution (used by MCP, ready for UI integration)
+ * - Currency conversion logic (transaction → user base currency)
+ * - Expense classification for budget tracking
+ * 
+ * UI Integration TODO (optional, not required for PR #63):
+ * - Update get-budget-dashboard.ts to use getEffectiveBudgetsForMonth()
+ * - Update list-budgets.ts to use getEffectiveBudgetsForMonth()
+ * - Update get-budget-progress.ts to use getEffectiveBudgetsForMonth()
+ * This will enable UI to show effective-dated budgets created by MCP.
+ */
+
+/**
  * Get the effective budget for a category at a specific month.
  * Returns the most recent active budget with effectiveFrom <= targetMonth.
  * 
