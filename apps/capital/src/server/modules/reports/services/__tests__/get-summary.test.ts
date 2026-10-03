@@ -50,6 +50,12 @@ function mockDb(overrides: {
         return Promise.resolve(overrides.personalTransfers ?? overrides.transfers ?? []);
       }),
     },
+    creditCardStatement: {
+      findMany: vi.fn().mockResolvedValue([]),
+    },
+    billTransaction: {
+      findMany: vi.fn().mockResolvedValue([]),
+    },
   } as unknown as DbClient;
 }
 
