@@ -51,12 +51,15 @@ export function getBudgetDateRange(budget: Budget): { start: Date; end: Date } {
  */
 export function calculateBudgetSpent(
   budget: Budget,
-  transactions: Transaction[]
+  transactions: Transaction[],
+  settlementIds: Set<string>
 ): number {
   const { start, end } = getBudgetDateRange(budget);
 
   return transactions
     .filter((t) => {
+      // Skip settlement transactions
+      if (t.type === 'expense' && settlementIds.has(t.id)) return false;
       // Match entity
       if (t.entityId !== budget.entityId) return false;
       // Match category
@@ -75,9 +78,10 @@ export function calculateBudgetSpent(
  */
 export function calculateBudgetProgress(
   budget: Budget,
-  transactions: Transaction[]
+  transactions: Transaction[],
+  settlementIds: Set<string>
 ): BudgetProgress {
-  const spent = calculateBudgetSpent(budget, transactions);
+  const spent = calculateBudgetSpent(budget, transactions, settlementIds);
   const remaining = budget.amount - spent;
   const percentUsed = budget.amount > 0 ? (spent / budget.amount) * 100 : 0;
   const isOverBudget = spent > budget.amount;
@@ -96,9 +100,10 @@ export function calculateBudgetProgress(
  */
 export function calculateAllBudgetProgress(
   budgets: Budget[],
-  transactions: Transaction[]
+  transactions: Transaction[],
+  settlementIds: Set<string>
 ): BudgetProgress[] {
-  return budgets.map((budget) => calculateBudgetProgress(budget, transactions));
+  return budgets.map((budget) => calculateBudgetProgress(budget, transactions, settlementIds));
 }
 
 /**
@@ -107,9 +112,10 @@ export function calculateAllBudgetProgress(
 export function getBudgetAlerts(
   budgets: Budget[],
   transactions: Transaction[],
+  settlementIds: Set<string>,
   defaultThreshold: number = 80
 ): BudgetProgress[] {
-  return calculateAllBudgetProgress(budgets, transactions).filter(
+  return calculateAllBudgetProgress(budgets, transactions, settlementIds).filter(
     (progress) => {
       const threshold = progress.budget.alertThreshold ?? defaultThreshold;
       return progress.percentUsed >= threshold && progress.budget.isActive;
@@ -147,10 +153,11 @@ export function getTotalBudgetAmount(budgets: Budget[]): number {
  */
 export function getTotalBudgetSpent(
   budgets: Budget[],
-  transactions: Transaction[]
+  transactions: Transaction[],
+  settlementIds: Set<string>
 ): number {
   return budgets.reduce((sum, b) => {
-    const spent = calculateBudgetSpent(b, transactions);
+    const spent = calculateBudgetSpent(b, transactions, settlementIds);
     return sum + spent;
   }, 0);
 }
@@ -223,7 +230,8 @@ export function groupBudgetsByCategory(
  */
 export function calculateBudgetPace(
   budget: Budget,
-  transactions: Transaction[]
+  transactions: Transaction[],
+  settlementIds: Set<string>
 ): BudgetPace {
   const { start, end } = getBudgetDateRange(budget);
   const now = new Date();
@@ -234,7 +242,7 @@ export function calculateBudgetPace(
   const daysElapsed = Math.max(0, Math.min(differenceInDays(now, periodStart) + 1, daysInPeriod));
   const daysRemaining = Math.max(0, daysInPeriod - daysElapsed);
 
-  const spent = calculateBudgetSpent(budget, transactions);
+  const spent = calculateBudgetSpent(budget, transactions, settlementIds);
   const dailySpendRate = daysElapsed > 0 ? spent / daysElapsed : 0;
   const allowedDailyRate = daysInPeriod > 0 ? budget.amount / daysInPeriod : 0;
   const projectedTotal = daysElapsed > 0
@@ -430,7 +438,7 @@ export function generateBudgetInsights(
   return budgetProgressList
     .filter((p) => p.budget.isActive)
     .map((progress) => {
-      const pace = calculateBudgetPace(progress.budget, transactions);
+      const pace = calculateBudgetPace(progress.budget, transactions, new Set());
       const { percentUsed, remaining, budget } = progress;
       const { dailySpendRate, allowedDailyRate, daysRemaining } = pace;
 
@@ -747,26 +755,47 @@ export function getMonthlyFromYearlyBudgets(
 export function convertBillTransactionsToTransactions(
   billTransactions: BillTransaction[],
   bills: CreditCardBill[],
-  creditCards: CreditCard[]
+  creditCards: CreditCard[],
+  statements: Array<{ id: string; creditCardId: string; closingDate: Date | string }> = []
 ): Transaction[] {
   // Build lookup maps
   const billMap = new Map(bills.map((b) => [b.id, b]));
   const cardMap = new Map(creditCards.map((c) => [c.id, c]));
+  const statementMap = new Map(statements.map((s) => [s.id, s]));
 
   const result: Transaction[] = [];
   for (const bt of billTransactions) {
-    if (!bt.billId) continue; // Skip transactions not linked to a bill
-    const bill = billMap.get(bt.billId);
-    if (!bill) continue;
-    const card = cardMap.get(bill.creditCardId);
-    if (!card) continue;
+    let card: CreditCard | undefined;
+    let effectiveDate: Date;
 
-    // Use the bill's closing date so each transaction is attributed to the
-    // correct billing cycle month. The CSV purchase date is preserved in the
-    // original BillTransaction record for display purposes.
-    const effectiveDate = bill.closingDate instanceof Date
-      ? bill.closingDate
-      : parseLocalDate(bill.closingDate);
+    if (bt.billId) {
+      // Legacy bill transaction
+      const bill = billMap.get(bt.billId);
+      if (!bill) continue;
+      card = cardMap.get(bill.creditCardId);
+      if (!card) continue;
+
+      // Use the bill's closing date so each transaction is attributed to the
+      // correct billing cycle month. The CSV purchase date is preserved in the
+      // original BillTransaction record for display purposes.
+      effectiveDate = bill.closingDate instanceof Date
+        ? bill.closingDate
+        : parseLocalDate(bill.closingDate);
+    } else if (bt.statementId) {
+      // Statement purchase
+      const statement = statementMap.get(bt.statementId);
+      if (!statement) continue;
+      card = cardMap.get(statement.creditCardId);
+      if (!card) continue;
+
+      // Use statement closing date for attribution
+      effectiveDate = statement.closingDate instanceof Date
+        ? statement.closingDate
+        : parseLocalDate(statement.closingDate);
+    } else {
+      // Skip transactions not linked to a bill or statement
+      continue;
+    }
 
     result.push({
       id: `cc-${bt.id}`,
@@ -774,7 +803,7 @@ export function convertBillTransactionsToTransactions(
       entityType: card.entityType,
       type: 'expense',
       amount: bt.amount,
-      currency: card.currency,
+      currency: bt.currency || card.currency,
       exchangeRate: 1,
       description: bt.description,
       category: bt.category,
@@ -789,12 +818,15 @@ export function convertBillTransactionsToTransactions(
 /**
  * Merge regular transactions with credit-card-derived virtual transactions,
  * avoiding double-counting bills that are already linked as expense transactions.
+ * Also excludes settlement transactions (card bill payments linked to statements).
  */
 export function mergeTransactionsWithCreditCard(
   transactions: Transaction[],
   billTransactions: BillTransaction[],
   bills: CreditCardBill[],
-  creditCards: CreditCard[]
+  creditCards: CreditCard[],
+  statements: Array<{ id: string; creditCardId: string; closingDate: Date | string; billPaymentTransactionId: string | null }> = [],
+  settlementIds: Set<string> = new Set()
 ): Transaction[] {
   // Get IDs of regular transactions that are linked to bills (to avoid double-count)
   const linkedTransactionIds = new Set(
@@ -803,16 +835,17 @@ export function mergeTransactionsWithCreditCard(
       .map((b) => b.transactionId!)
   );
 
-  // Filter out linked bill-expense transactions from regular transactions
+  // Filter out linked bill-expense transactions and settlements from regular transactions
   // (they'd have category "Credit Card" and we're replacing them with granular ones)
   const filteredRegular = transactions.filter(
-    (t) => !linkedTransactionIds.has(t.id)
+    (t) => !linkedTransactionIds.has(t.id) && !settlementIds.has(t.id)
   );
 
   const virtualTransactions = convertBillTransactionsToTransactions(
     billTransactions,
     bills,
-    creditCards
+    creditCards,
+    statements
   );
 
   return [...filteredRegular, ...virtualTransactions];

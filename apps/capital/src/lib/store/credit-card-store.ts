@@ -470,20 +470,25 @@ export const useCreditCardStore = create<CreditCardStore>()((set, get) => ({
 
       const data = await res.json();
       set({
-        billTransactions: data.map((t) => ({
-          id: t.id,
-          billId: t.billId,
-          category: t.category,
-          transactionDate: parseLocalDate(t.transactionDate),
-          description: t.description,
-          merchantName: t.merchantName ?? undefined,
-          amount: t.amount,
-          installmentNumber: t.installmentNumber ?? undefined,
-          totalInstallments: t.totalInstallments ?? undefined,
-          isAutoCategorized: t.isAutoCategorized,
-          createdAt: new Date(t.createdAt),
-          updatedAt: new Date(t.updatedAt),
-        })),
+        billTransactions: data.map((t) => {
+          const extended = t as typeof t & { statementId?: string | null; currency?: string };
+          return {
+            id: extended.id,
+            billId: extended.billId,
+            statementId: extended.statementId ?? null,
+            category: extended.category,
+            transactionDate: parseLocalDate(extended.transactionDate),
+            description: extended.description,
+            merchantName: extended.merchantName ?? undefined,
+            amount: extended.amount,
+            currency: extended.currency || "BRL",
+            installmentNumber: extended.installmentNumber ?? undefined,
+            totalInstallments: extended.totalInstallments ?? undefined,
+            isAutoCategorized: extended.isAutoCategorized,
+            createdAt: new Date(extended.createdAt),
+            updatedAt: new Date(extended.updatedAt),
+          };
+        }),
         isLoading: false,
       });
     } catch (error) {
@@ -511,20 +516,25 @@ export const useCreditCardStore = create<CreditCardStore>()((set, get) => ({
         if (!res.ok) continue;
         const data = await res.json();
         allTxs.push(
-          ...data.map((t) => ({
-            id: t.id,
-            billId: t.billId,
-            category: t.category,
-            transactionDate: parseLocalDate(t.transactionDate),
-            description: t.description,
-            merchantName: t.merchantName ?? undefined,
-            amount: t.amount,
-            installmentNumber: t.installmentNumber ?? undefined,
-            totalInstallments: t.totalInstallments ?? undefined,
-            isAutoCategorized: t.isAutoCategorized,
-            createdAt: new Date(t.createdAt),
-            updatedAt: new Date(t.updatedAt),
-          }))
+          ...data.map((t) => {
+            const extended = t as typeof t & { statementId?: string | null; currency?: string };
+            return {
+              id: extended.id,
+              billId: extended.billId,
+              statementId: extended.statementId ?? null,
+              category: extended.category,
+              transactionDate: parseLocalDate(extended.transactionDate),
+              description: extended.description,
+              merchantName: extended.merchantName ?? undefined,
+              amount: extended.amount,
+              currency: extended.currency || "BRL",
+              installmentNumber: extended.installmentNumber ?? undefined,
+              totalInstallments: extended.totalInstallments ?? undefined,
+              isAutoCategorized: extended.isAutoCategorized,
+              createdAt: new Date(extended.createdAt),
+              updatedAt: new Date(extended.updatedAt),
+            };
+          })
         );
       }
       set({ allBillTransactions: allTxs });

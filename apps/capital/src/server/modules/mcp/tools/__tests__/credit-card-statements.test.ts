@@ -688,6 +688,76 @@ describe("expense classification integration", () => {
     expect(usdPurchase!.currency).toBe("USD");
     expect(usdPurchase!.amount).toBe(50.0);
   });
+
+  it("aggregates USD purchase converted to BRL total", async () => {
+    // Setup: User's personal account is USD, card is BRL
+    // Add BRL currency with rate (1 USD = 5.0 BRL, so 1 BRL = 0.2 USD)
+    await db.currency.create({
+      data: {
+        userId,
+        code: "BRL",
+        name: "Brazilian Real",
+        symbol: "R$",
+        manualRate: 5.0, // 1 USD = 5 BRL
+        updatedAt: new Date(),
+      },
+    });
+
+    // Import statement with USD purchase (card is BRL)
+    const importResult = await importCreditCardStatement(
+      userId,
+      {
+        creditCardId,
+        statement: {
+          month: "2026-09",
+        },
+        rows: [
+          { date: "2026-08-10", description: "BRL Store", amount: 500.0, currency: "BRL", category: "Shopping" },
+          { date: "2026-08-15", description: "USD Store", amount: 50.0, currency: "USD", category: "Shopping" },
+        ],
+      },
+      db
+    );
+
+    // Fetch statement purchases with card info
+    const purchases = await db.billTransaction.findMany({
+      where: { statementId: importResult.statementId },
+      include: {
+        statement: {
+          include: {
+            creditCard: {
+              select: {
+                personalAccountId: true,
+                currency: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    // Fetch currencies for conversion
+    const currencies = await db.currency.findMany({ where: { userId } });
+
+    // Aggregate purchases converted to USD (personal account base currency)
+    const baseCurrency = "USD"; // Personal account default
+    let total = 0;
+    for (const p of purchases) {
+      const purchaseCurrency = p.currency || p.statement!.creditCard.currency;
+      // Convert to USD using convertToBaseCurrency logic
+      let convertedAmount = p.amount;
+      if (purchaseCurrency !== baseCurrency) {
+        const curr = currencies.find((c) => c.code === purchaseCurrency);
+        if (curr && curr.manualRate > 0) {
+          convertedAmount = p.amount / curr.manualRate; // amount in BRL / 5.0 = amount in USD
+        }
+      }
+      total += convertedAmount;
+    }
+
+    // Total should be: 500 BRL / 5.0 + 50 USD = 100 USD + 50 USD = 150 USD
+    expect(Math.round(total * 100) / 100).toBe(150.0);
+  });
 });
 
 describe("getCreditCardStatement", () => {

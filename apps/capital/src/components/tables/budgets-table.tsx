@@ -105,7 +105,7 @@ export function BudgetsTable({
   const progressWithPace = useMemo(() => {
     return budgetProgress.map((p) => ({
       ...p,
-      pace: calculateBudgetPace(p.budget, transactions),
+      pace: calculateBudgetPace(p.budget, transactions, new Set()),
     }));
   }, [budgetProgress, transactions]);
 

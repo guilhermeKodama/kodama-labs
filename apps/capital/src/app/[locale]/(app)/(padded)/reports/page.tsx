@@ -243,8 +243,8 @@ export default function ReportsPage() {
 
   // Calculate previous year totals for growth comparison
   const prevYearTotals = useMemo(() => {
-    const income = sumTransactionsByType(prevYearTransactions, 'income');
-    const expense = Math.max(0, sumTransactionsByType(prevYearTransactions, 'expense') + sumReimbursementExpenses(prevYearReimbursements) - sumReimbursementCredits(prevYearReimbursementCredits));
+    const income = sumTransactionsByType(prevYearTransactions, 'income', new Set());
+    const expense = Math.max(0, sumTransactionsByType(prevYearTransactions, 'expense', new Set()) + sumReimbursementExpenses(prevYearReimbursements) - sumReimbursementCredits(prevYearReimbursementCredits));
     return { income, expense };
   }, [prevYearTransactions, prevYearReimbursements, prevYearReimbursementCredits]);
 
@@ -287,8 +287,8 @@ export default function ReportsPage() {
         return date.getMonth() === month.getMonth();
       });
 
-      const rawIncome = sumTransactionsByType(monthTransactions, 'income');
-      const rawExpenses = sumTransactionsByType(monthTransactions, 'expense');
+      const rawIncome = sumTransactionsByType(monthTransactions, 'income', new Set());
+      const rawExpenses = sumTransactionsByType(monthTransactions, 'expense', new Set());
       const investmentCatExp = sumInvestmentCategoryExpenses(monthTransactions);
       const reimbursementExp = sumReimbursementExpenses(monthReimbursements);
       const reimbursementCred = sumReimbursementCredits(monthReimbursementCreds);
@@ -309,7 +309,7 @@ export default function ReportsPage() {
         expense = Math.max(0, rawExpenses - investmentCatExp);
       }
 
-      const investmentTxs = sumTransactionsByType(monthTransactions, 'investment');
+      const investmentTxs = sumTransactionsByType(monthTransactions, 'investment', new Set());
       const deposits = sumInvestmentDeposits(monthInvestmentTransfers);
       const withdrawals = sumInvestmentWithdrawals(monthInvestmentTransfers);
       const investment = Math.max(0, investmentTxs + investmentCatExp + deposits - withdrawals);

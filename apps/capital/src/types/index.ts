@@ -591,11 +591,13 @@ export interface CreditCardBill {
 export interface BillTransaction {
   id: string;
   billId: string | null;
+  statementId: string | null;
   category: string;
   transactionDate: Date;
   description: string;
   merchantName?: string;
   amount: number;
+  currency: string;
   installmentNumber?: number;
   totalInstallments?: number;
   isAutoCategorized: boolean;

@@ -107,11 +107,14 @@ export default function BudgetsPage() {
 
   // Merge regular transactions + credit card bill transactions + installment projections
   const mergedTransactions = useMemo(() => {
+    // TODO: Fetch statements to get settlementIds for proper exclusion
     const ccMerged = mergeTransactionsWithCreditCard(
       transactions,
       allBillTransactions,
       bills,
-      creditCards
+      creditCards,
+      [], // statements - empty for now
+      new Set() // settlementIds - empty for now
     );
 
     // Add installment future projections as virtual transactions
@@ -174,7 +177,7 @@ export default function BudgetsPage() {
     const monthlyBudgets = filteredBudgets.filter(
       (b) => b.isActive && b.period === 'monthly' && b.year === currentYear && b.month === currentMonth
     );
-    return calculateAllBudgetProgress(monthlyBudgets, filteredMergedTransactions);
+    return calculateAllBudgetProgress(monthlyBudgets, filteredMergedTransactions, new Set());
   }, [filteredBudgets, filteredMergedTransactions, currentYear, currentMonth]);
 
   // Combine monthly view: explicit monthly + derived from yearly
@@ -278,7 +281,7 @@ export default function BudgetsPage() {
   // ============================================
 
   const allBudgetProgress = useMemo(() => {
-    return calculateAllBudgetProgress(filteredBudgets, filteredMergedTransactions);
+    return calculateAllBudgetProgress(filteredBudgets, filteredMergedTransactions, new Set());
   }, [filteredBudgets, filteredMergedTransactions]);
 
   // ============================================

@@ -42,7 +42,7 @@ export function RoomToSpendSummary({
     // Calculate overall projected total
     let totalProjected = 0;
     for (const p of activeBudgets) {
-      const pace = calculateBudgetPace(p.budget, transactions);
+      const pace = calculateBudgetPace(p.budget, transactions, new Set());
       totalProjected += pace.projectedTotal;
     }
 
@@ -54,7 +54,7 @@ export function RoomToSpendSummary({
     return budgetProgress
       .filter((p) => p.budget.isActive)
       .map((p) => {
-        const pace = calculateBudgetPace(p.budget, transactions);
+        const pace = calculateBudgetPace(p.budget, transactions, new Set());
         return { ...p, pace };
       })
       .sort((a, b) => b.remaining - a.remaining);

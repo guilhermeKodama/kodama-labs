@@ -6,6 +6,7 @@ import {
   getMonthRange,
 } from "@capital/server/lib/date-utils";
 import { addMonths } from "date-fns";
+import { convertToBaseCurrency } from "../../../../lib/utils/currency";
 
 // ============================================
 // Types
@@ -126,7 +127,31 @@ export async function getBudgetDashboard(
     },
   });
 
-  // 2. Fetch regular expense transactions for the period
+  // 2. Fetch currencies and entities for FX conversion
+  const currencies = await db.currency.findMany({
+    where: { userId },
+  });
+
+  const businesses = await db.business.findMany({
+    where: { userId },
+    select: { id: true, defaultCurrency: true },
+  });
+
+  const personalAccount = await db.personalAccount.findUnique({
+    where: { userId },
+    select: { id: true, defaultCurrency: true },
+  });
+
+  // Build entity currency map
+  const entityCurrencyMap = new Map<string, string>();
+  for (const b of businesses) {
+    entityCurrencyMap.set(b.id, b.defaultCurrency);
+  }
+  if (personalAccount) {
+    entityCurrencyMap.set(personalAccount.id, personalAccount.defaultCurrency);
+  }
+
+  // 2a. Fetch regular expense transactions for the period
   const { start: periodStart, end: periodEnd } = getMonthRange(year, month);
   const transactions = await db.transaction.findMany({
     where: {
@@ -285,27 +310,41 @@ export async function getBudgetDashboard(
     });
   }
 
-  // Legacy bill transactions (credit card line items)
+  // Legacy bill transactions (credit card line items) - convert to entity base currency
   for (const bt of billTransactions) {
     if (!bt.bill) continue; // Skip transactions not linked to a bill
     const card = bt.bill.creditCard;
     const entityId = card.businessId ?? card.personalAccountId ?? "";
+    const baseCurrency = entityCurrencyMap.get(entityId) || "USD";
+    const convertedAmount = convertToBaseCurrency(
+      bt.amount,
+      bt.currency || card.currency,
+      currencies,
+      baseCurrency
+    );
     expenses.push({
       entityId,
       category: bt.category,
-      amount: bt.amount, // Already in card currency
+      amount: convertedAmount,
     });
   }
 
-  // Statement purchases (new credit card expenses)
+  // Statement purchases (new credit card expenses) - convert to entity base currency
   for (const bt of statementPurchases) {
     if (!bt.statement) continue;
     const card = bt.statement.creditCard;
     const entityId = card.businessId ?? card.personalAccountId ?? "";
+    const baseCurrency = entityCurrencyMap.get(entityId) || "USD";
+    const convertedAmount = convertToBaseCurrency(
+      bt.amount,
+      bt.currency || card.currency,
+      currencies,
+      baseCurrency
+    );
     expenses.push({
       entityId,
       category: bt.category,
-      amount: bt.amount, // Already in card currency
+      amount: convertedAmount,
     });
   }
 
@@ -490,7 +529,7 @@ export async function getBudgetDashboard(
     include: {
       bill: {
         include: {
-          creditCard: { select: { businessId: true, personalAccountId: true } },
+          creditCard: { select: { businessId: true, personalAccountId: true, currency: true } },
         },
       },
     },
@@ -512,7 +551,7 @@ export async function getBudgetDashboard(
     include: {
       statement: {
         include: {
-          creditCard: { select: { businessId: true, personalAccountId: true } },
+          creditCard: { select: { businessId: true, personalAccountId: true, currency: true } },
         },
       },
     },
@@ -537,7 +576,14 @@ export async function getBudgetDashboard(
     const key = `${entityId}::${bt.category}`;
     if (budgetedKeys.has(key) || unbudgetedCurrent[key]) continue;
     if (!unbudgetedPrev[key]) unbudgetedPrev[key] = { total: 0, count: 0, entityId, entityType: "personal" };
-    unbudgetedPrev[key].total += bt.amount;
+    const baseCurrency = entityCurrencyMap.get(entityId) || "USD";
+    const convertedAmount = convertToBaseCurrency(
+      bt.amount,
+      bt.currency || bt.bill.creditCard.currency,
+      currencies,
+      baseCurrency
+    );
+    unbudgetedPrev[key].total += convertedAmount;
     unbudgetedPrev[key].count += 1;
   }
 
@@ -548,7 +594,14 @@ export async function getBudgetDashboard(
     const key = `${entityId}::${bt.category}`;
     if (budgetedKeys.has(key) || unbudgetedCurrent[key]) continue;
     if (!unbudgetedPrev[key]) unbudgetedPrev[key] = { total: 0, count: 0, entityId, entityType: "personal" };
-    unbudgetedPrev[key].total += bt.amount;
+    const baseCurrency = entityCurrencyMap.get(entityId) || "USD";
+    const convertedAmount = convertToBaseCurrency(
+      bt.amount,
+      bt.currency || bt.statement.creditCard.currency,
+      currencies,
+      baseCurrency
+    );
+    unbudgetedPrev[key].total += convertedAmount;
     unbudgetedPrev[key].count += 1;
   }
 
@@ -587,20 +640,36 @@ export async function getBudgetDashboard(
   // Previous month legacy bill transactions
   for (const bt of prevBillTx) {
     if (!bt.bill) continue;
+    const entityId = bt.bill.creditCard.businessId ?? bt.bill.creditCard.personalAccountId ?? "";
+    const baseCurrency = entityCurrencyMap.get(entityId) || "USD";
+    const convertedAmount = convertToBaseCurrency(
+      bt.amount,
+      bt.currency || bt.bill.creditCard.currency,
+      currencies,
+      baseCurrency
+    );
     prevExpenses.push({
-      entityId: bt.bill.creditCard.businessId ?? bt.bill.creditCard.personalAccountId ?? "",
+      entityId,
       category: bt.category,
-      amount: bt.amount,
+      amount: convertedAmount,
     });
   }
 
   // Previous month statement purchases
   for (const bt of prevStatementPurchases) {
     if (!bt.statement) continue;
+    const entityId = bt.statement.creditCard.businessId ?? bt.statement.creditCard.personalAccountId ?? "";
+    const baseCurrency = entityCurrencyMap.get(entityId) || "USD";
+    const convertedAmount = convertToBaseCurrency(
+      bt.amount,
+      bt.currency || bt.statement.creditCard.currency,
+      currencies,
+      baseCurrency
+    );
     prevExpenses.push({
-      entityId: bt.statement.creditCard.businessId ?? bt.statement.creditCard.personalAccountId ?? "",
+      entityId,
       category: bt.category,
-      amount: bt.amount,
+      amount: convertedAmount,
     });
   }
 
