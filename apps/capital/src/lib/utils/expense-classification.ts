@@ -1,5 +1,4 @@
 import type { Transaction } from "@/types";
-import type { Transaction as PrismaTransaction } from "@/generated/prisma";
 
 /**
  * Determine if a transaction should count as an expense in totals, budgets, and reports.
@@ -25,7 +24,7 @@ import type { Transaction as PrismaTransaction } from "@/generated/prisma";
  * @param isCardSettlement - True if this transaction is linked as billPaymentTransactionId
  */
 export function shouldCountAsExpense(
-  transaction: Pick<Transaction, "type"> | Pick<PrismaTransaction, "type">,
+  transaction: { type: string },
   isCardSettlement: boolean = false
 ): boolean {
   if (transaction.type !== "expense") {
