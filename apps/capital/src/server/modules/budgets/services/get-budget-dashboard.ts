@@ -5,8 +5,10 @@ import {
   getUserCurrentMonth,
   getMonthRange,
 } from "@capital/server/lib/date-utils";
+import { parseLocalDate } from "@capital/server/lib/date-utils";
 import { addMonths } from "date-fns";
 import { convertToBaseCurrency } from "../../../../lib/utils/currency";
+import { getEffectiveBudgetsForMonth } from "../lib/budget-helpers";
 
 // ============================================
 // Types
@@ -105,27 +107,10 @@ export async function getBudgetDashboard(
   const year = input.year ?? getUserCurrentYear(timezone);
   const month = input.month ?? getUserCurrentMonth(timezone);
 
-  // 1. Fetch budgets for the period
-  const budgets = await db.budget.findMany({
-    where: {
-      AND: [
-        {
-          OR: [
-            { business: { userId } },
-            { personalAccount: { userId } },
-          ],
-        },
-        {
-          OR: [
-            { period: "monthly", month },
-            { period: "yearly" },
-          ],
-        },
-      ],
-      year,
-      isActive: true,
-    },
-  });
+  // 1. Fetch budgets for the period using shared effective-date resolution
+  // This ensures UI and MCP use identical budget resolution logic
+  const targetMonth = parseLocalDate(`${year}-${String(month).padStart(2, "0")}-01`);
+  const budgets = await getEffectiveBudgetsForMonth(db, userId, targetMonth);
 
   // 2. Fetch currencies and entities for FX conversion
   const currencies = await db.currency.findMany({
