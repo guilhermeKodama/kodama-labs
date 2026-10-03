@@ -73,6 +73,7 @@ export const useTransactionStore = create<TransactionStore>()((set, get) => ({
           date: parseLocalDate(t.date),
           isTaxDeductible: t.isTaxDeductible,
           recurringTransactionId: t.recurringTransactionId ?? undefined,
+          isCardSettlement: t.isCardSettlement,
           createdAt: new Date(t.createdAt),
           updatedAt: new Date(t.updatedAt),
         })),
@@ -125,6 +126,7 @@ export const useTransactionStore = create<TransactionStore>()((set, get) => ({
         date: parseLocalDate(data.date),
         isTaxDeductible: data.isTaxDeductible,
         recurringTransactionId: data.recurringTransactionId ?? undefined,
+        isCardSettlement: data.isCardSettlement,
         createdAt: new Date(data.createdAt),
         updatedAt: new Date(data.updatedAt),
       };
@@ -183,6 +185,7 @@ export const useTransactionStore = create<TransactionStore>()((set, get) => ({
                 date: parseLocalDate(data.date),
                 isTaxDeductible: data.isTaxDeductible,
                 recurringTransactionId: data.recurringTransactionId ?? undefined,
+                isCardSettlement: data.isCardSettlement,
                 createdAt: new Date(data.createdAt),
                 updatedAt: new Date(data.updatedAt),
               }

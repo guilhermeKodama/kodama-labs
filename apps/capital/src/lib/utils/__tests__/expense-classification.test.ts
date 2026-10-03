@@ -113,4 +113,27 @@ describe("sumCountingExpenses", () => {
 
     expect(result).toBe(150); // Both count
   });
+
+  it("excludes settlements when building set from isCardSettlement flag", () => {
+    // Simulate client-side scenario: API returns transactions with isCardSettlement boolean
+    const transactions = [
+      { id: "tx1", type: "expense" as const, category: "Groceries", amount: 100, exchangeRate: 1, isCardSettlement: false },
+      { id: "tx2", type: "expense" as const, category: "Credit Card", amount: 2000, exchangeRate: 1, isCardSettlement: true },
+      { id: "tx3", type: "expense" as const, category: "Shopping", amount: 50, exchangeRate: 1, isCardSettlement: false },
+      { id: "tx4", type: "expense" as const, category: "Nubank", amount: 300, exchangeRate: 1, isCardSettlement: false },
+    ];
+
+    // Build settlement set from isCardSettlement flags
+    const settlementIds = new Set(
+      transactions
+        .filter((t) => t.isCardSettlement)
+        .map((t) => t.id)
+    );
+
+    const result = sumCountingExpenses(transactions, settlementIds);
+
+    expect(result).toBe(450); // 100 + 50 + 300, excludes the settlement
+    expect(settlementIds.size).toBe(1);
+    expect(settlementIds.has("tx2")).toBe(true);
+  });
 });

@@ -92,6 +92,15 @@ export default function ReportsPage() {
     return { preset: 'thisMonth', from, to };
   });
 
+  // Build settlement set from transaction flags
+  const settlementIds = useMemo(() => {
+    return new Set(
+      transactions
+        .filter((t) => t.isCardSettlement)
+        .map((t) => t.id)
+    );
+  }, [transactions]);
+
   const [selectedType, setSelectedType] = useState<TransactionType | 'all'>('all');
 
   // Prepare entities list (needed for filter bar and comparison chart)
@@ -237,16 +246,17 @@ export default function ReportsPage() {
       yearReimbursementCredits,
       yearInvestmentTransfers,
       yearProfitDistributions,
-      viewMode
+      viewMode,
+      settlementIds
     );
-  }, [yearTransactions, yearReimbursements, yearReimbursementCredits, yearInvestmentTransfers, yearProfitDistributions, viewMode]);
+  }, [yearTransactions, yearReimbursements, yearReimbursementCredits, yearInvestmentTransfers, yearProfitDistributions, viewMode, settlementIds]);
 
   // Calculate previous year totals for growth comparison
   const prevYearTotals = useMemo(() => {
-    const income = sumTransactionsByType(prevYearTransactions, 'income', new Set());
-    const expense = Math.max(0, sumTransactionsByType(prevYearTransactions, 'expense', new Set()) + sumReimbursementExpenses(prevYearReimbursements) - sumReimbursementCredits(prevYearReimbursementCredits));
+    const income = sumTransactionsByType(prevYearTransactions, 'income', settlementIds);
+    const expense = Math.max(0, sumTransactionsByType(prevYearTransactions, 'expense', settlementIds) + sumReimbursementExpenses(prevYearReimbursements) - sumReimbursementCredits(prevYearReimbursementCredits));
     return { income, expense };
-  }, [prevYearTransactions, prevYearReimbursements, prevYearReimbursementCredits]);
+  }, [prevYearTransactions, prevYearReimbursements, prevYearReimbursementCredits, settlementIds]);
 
   // Calculate growth rates
   const growthRates = useMemo(() => ({
@@ -287,8 +297,8 @@ export default function ReportsPage() {
         return date.getMonth() === month.getMonth();
       });
 
-      const rawIncome = sumTransactionsByType(monthTransactions, 'income', new Set());
-      const rawExpenses = sumTransactionsByType(monthTransactions, 'expense', new Set());
+      const rawIncome = sumTransactionsByType(monthTransactions, 'income', settlementIds);
+      const rawExpenses = sumTransactionsByType(monthTransactions, 'expense', settlementIds);
       const investmentCatExp = sumInvestmentCategoryExpenses(monthTransactions);
       const reimbursementExp = sumReimbursementExpenses(monthReimbursements);
       const reimbursementCred = sumReimbursementCredits(monthReimbursementCreds);
@@ -309,7 +319,7 @@ export default function ReportsPage() {
         expense = Math.max(0, rawExpenses - investmentCatExp);
       }
 
-      const investmentTxs = sumTransactionsByType(monthTransactions, 'investment', new Set());
+      const investmentTxs = sumTransactionsByType(monthTransactions, 'investment', settlementIds);
       const deposits = sumInvestmentDeposits(monthInvestmentTransfers);
       const withdrawals = sumInvestmentWithdrawals(monthInvestmentTransfers);
       const investment = Math.max(0, investmentTxs + investmentCatExp + deposits - withdrawals);

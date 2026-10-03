@@ -105,16 +105,24 @@ export default function BudgetsPage() {
     [isEntityFiltered, selectedEntityIds]
   );
 
+  // Build settlement set from transaction flags
+  const settlementIds = useMemo(() => {
+    return new Set(
+      transactions
+        .filter((t) => t.isCardSettlement)
+        .map((t) => t.id)
+    );
+  }, [transactions]);
+
   // Merge regular transactions + credit card bill transactions + installment projections
   const mergedTransactions = useMemo(() => {
-    // TODO: Fetch statements to get settlementIds for proper exclusion
     const ccMerged = mergeTransactionsWithCreditCard(
       transactions,
       allBillTransactions,
       bills,
       creditCards,
       [], // statements - empty for now
-      new Set() // settlementIds - empty for now
+      settlementIds
     );
 
     // Add installment future projections as virtual transactions
@@ -126,7 +134,7 @@ export default function BudgetsPage() {
     );
 
     return [...ccMerged, ...installmentTransactions];
-  }, [transactions, allBillTransactions, bills, creditCards, installments]);
+  }, [transactions, allBillTransactions, bills, creditCards, installments, settlementIds]);
 
   // Entity-filtered budgets and transactions
   const filteredBudgets = useMemo(() => {
@@ -177,8 +185,8 @@ export default function BudgetsPage() {
     const monthlyBudgets = filteredBudgets.filter(
       (b) => b.isActive && b.period === 'monthly' && b.year === currentYear && b.month === currentMonth
     );
-    return calculateAllBudgetProgress(monthlyBudgets, filteredMergedTransactions, new Set());
-  }, [filteredBudgets, filteredMergedTransactions, currentYear, currentMonth]);
+    return calculateAllBudgetProgress(monthlyBudgets, filteredMergedTransactions, settlementIds);
+  }, [filteredBudgets, filteredMergedTransactions, currentYear, currentMonth, settlementIds]);
 
   // Combine monthly view: explicit monthly + derived from yearly
   const currentMonthProgress = useMemo(() => {
@@ -281,8 +289,8 @@ export default function BudgetsPage() {
   // ============================================
 
   const allBudgetProgress = useMemo(() => {
-    return calculateAllBudgetProgress(filteredBudgets, filteredMergedTransactions, new Set());
-  }, [filteredBudgets, filteredMergedTransactions]);
+    return calculateAllBudgetProgress(filteredBudgets, filteredMergedTransactions, settlementIds);
+  }, [filteredBudgets, filteredMergedTransactions, settlementIds]);
 
   // ============================================
   // Handlers
@@ -468,6 +476,7 @@ export default function BudgetsPage() {
             budgetProgress={currentMonthProgress}
             transactions={filteredMergedTransactions}
             currency={settings.baseCurrency}
+            settlementIds={settlementIds}
           />
 
           {/* Insights */}
@@ -484,6 +493,7 @@ export default function BudgetsPage() {
               <BudgetsTable
                 budgetProgress={currentMonthProgress}
                 transactions={filteredMergedTransactions}
+                settlementIds={settlementIds}
                 onEdit={openEditDialog}
                 onDelete={setDeletingBudget}
                 onToggle={handleToggle}
@@ -694,6 +704,7 @@ export default function BudgetsPage() {
               <BudgetsTable
                 budgetProgress={allBudgetProgress}
                 transactions={filteredMergedTransactions}
+                settlementIds={settlementIds}
                 onEdit={openEditDialog}
                 onDelete={setDeletingBudget}
                 onToggle={handleToggle}

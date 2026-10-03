@@ -106,6 +106,7 @@ export interface Transaction {
   date: Date;
   isTaxDeductible?: boolean; // For tax calculation helpers
   recurringTransactionId?: string; // Link to recurring transaction if auto-generated
+  isCardSettlement?: boolean;
   createdAt: Date;
   updatedAt: Date;
 }

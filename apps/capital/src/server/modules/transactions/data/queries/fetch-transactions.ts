@@ -44,6 +44,9 @@ export async function fetchTransactions(
           }
         : {}),
     },
+    include: {
+      creditCardStatementPayment: true,
+    },
     orderBy: { date: "desc" },
   });
 }
@@ -67,6 +70,9 @@ export async function fetchTransactionById(
         { business: { userId } },
         { personalAccount: { userId } },
       ],
+    },
+    include: {
+      creditCardStatementPayment: true,
     },
   });
 }

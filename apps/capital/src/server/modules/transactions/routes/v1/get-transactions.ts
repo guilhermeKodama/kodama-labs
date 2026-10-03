@@ -23,6 +23,7 @@ const TransactionSchema = z.object({
   businessId: z.string().nullable(),
   personalAccountId: z.string().nullable(),
   recurringTransactionId: z.string().nullable(),
+  isCardSettlement: z.boolean(),
   createdAt: z.string(),
   updatedAt: z.string(),
 });
@@ -90,6 +91,7 @@ export const handler: AppRouteHandler<typeof route> = async (c) => {
         businessId: t.businessId,
         personalAccountId: t.personalAccountId,
         recurringTransactionId: t.recurringTransactionId,
+        isCardSettlement: !!t.creditCardStatementPayment,
         createdAt: t.createdAt.toISOString(),
         updatedAt: t.updatedAt.toISOString(),
       })),
