@@ -13,16 +13,19 @@ import { shouldCountAsExpense } from './expense-classification';
 /**
  * Calculate the sum of transactions by type.
  * For expense type, only counts transactions that should be included in expense totals
- * (excludes credit card bill payments).
+ * (excludes credit card settlement payments).
+ * 
+ * @param settlementIds - Set of transaction IDs that are card settlements (optional)
  */
 export function sumTransactionsByType(
   transactions: Transaction[],
-  type: TransactionType
+  type: TransactionType,
+  settlementIds: Set<string> = new Set()
 ): number {
   return transactions
     .filter((t) => {
       if (type === 'expense') {
-        return shouldCountAsExpense(t);
+        return shouldCountAsExpense(t, settlementIds.has(t.id));
       }
       return t.type === type;
     })

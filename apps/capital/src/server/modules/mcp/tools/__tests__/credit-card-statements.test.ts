@@ -377,6 +377,319 @@ describe("markTransactionAsCardSettlement", () => {
   });
 });
 
+describe("expense classification integration", () => {
+  let userId: string;
+  let personalAccountId: string;
+  let creditCardId: string;
+
+  beforeEach(async () => {
+    // Clean up
+    await db.creditCardStatement.deleteMany({
+      where: { creditCard: { OR: [{ business: { userId: TEST_USER_ID } }, { personalAccount: { userId: TEST_USER_ID } }] } },
+    });
+    await db.creditCard.deleteMany({
+      where: { OR: [{ business: { userId: TEST_USER_ID } }, { personalAccount: { userId: TEST_USER_ID } }] },
+    });
+    await db.transaction.deleteMany({
+      where: { OR: [{ business: { userId: TEST_USER_ID } }, { personalAccount: { userId: TEST_USER_ID } }] },
+    });
+    await db.personalAccount.deleteMany({ where: { userId: TEST_USER_ID } });
+    await db.user.deleteMany({ where: { id: TEST_USER_ID } });
+
+    // Create test user
+    const user = await db.user.create({
+      data: {
+        id: TEST_USER_ID,
+        email: "test@example.com",
+        passwordHash: "hash",
+        name: "Test User",
+      },
+    });
+    userId = user.id;
+
+    // Create personal account
+    const personalAccount = await db.personalAccount.create({
+      data: {
+        userId,
+        defaultCurrency: "USD",
+      },
+    });
+    personalAccountId = personalAccount.id;
+
+    // Create credit card
+    const creditCard = await db.creditCard.create({
+      data: {
+        entityType: "personal",
+        personalAccountId,
+        bankName: "Nubank",
+        lastFourDigits: "1234",
+        creditLimit: 10000,
+        closingDay: 5,
+        dueDay: 15,
+        currency: "BRL",
+      },
+    });
+    creditCardId = creditCard.id;
+  });
+
+  it("month with imported statement + linked payment: payment excluded, purchases included, total = purchases", async () => {
+    // Import a statement with purchases
+    const importResult = await importCreditCardStatement(
+      userId,
+      {
+        creditCardId,
+        statement: {
+          month: "2026-09",
+          closingDate: "2026-09-05",
+          dueDate: "2026-09-15",
+          total: 300.0,
+        },
+        rows: [
+          { date: "2026-08-10", description: "Grocery Store", amount: 100.0, category: "Groceries" },
+          { date: "2026-08-15", description: "Restaurant", amount: 200.0, category: "Restaurants & Dining" },
+        ],
+      },
+      db
+    );
+
+    // Create a bill payment transaction
+    const paymentTx = await db.transaction.create({
+      data: {
+        entityType: "personal",
+        personalAccountId,
+        type: "expense",
+        amount: 300.0,
+        currency: "BRL",
+        description: "Nubank bill payment",
+        category: "Credit Card",
+        date: new Date("2026-09-15T12:00:00Z"),
+      },
+    });
+
+    // Link it as a settlement
+    await markTransactionAsCardSettlement(
+      userId,
+      { transactionId: paymentTx.id, statementId: importResult.statementId },
+      db
+    );
+
+    // Fetch statement to verify purchases
+    const statement = await db.creditCardStatement.findUnique({
+      where: { id: importResult.statementId },
+      include: { purchases: true },
+    });
+
+    expect(statement!.purchases).toHaveLength(2);
+    expect(statement!.billPaymentTransactionId).toBe(paymentTx.id);
+
+    // Calculate total expenses using the same logic as get-summary.ts
+    const statements = await db.creditCardStatement.findMany({
+      where: {
+        creditCard: {
+          personalAccountId,
+        },
+      },
+      select: { billPaymentTransactionId: true },
+    });
+
+    const settlementIds = new Set<string>();
+    for (const stmt of statements) {
+      if (stmt.billPaymentTransactionId) {
+        settlementIds.add(stmt.billPaymentTransactionId);
+      }
+    }
+
+    // Get all transactions
+    const transactions = await db.transaction.findMany({
+      where: { personalAccountId },
+    });
+
+    // Get statement purchases
+    const purchases = await db.billTransaction.findMany({
+      where: {
+        statementId: importResult.statementId,
+      },
+    });
+
+    // Regular expenses (excluding settlements)
+    const regularExpenses = transactions
+      .filter((t) => t.type === "expense" && !settlementIds.has(t.id))
+      .reduce((sum, t) => sum + t.amount, 0);
+
+    // Statement purchases
+    const statementExpenses = purchases.reduce((sum, p) => sum + p.amount, 0);
+
+    const totalExpenses = regularExpenses + statementExpenses;
+
+    // Total should be 300 (sum of purchases), payment should be excluded
+    expect(totalExpenses).toBe(300.0);
+    expect(settlementIds.has(paymentTx.id)).toBe(true);
+  });
+
+  it("month with credit card payment and no statement: totals unchanged vs main", async () => {
+    // Create a bill payment transaction WITHOUT linking it to a statement
+    const paymentTx = await db.transaction.create({
+      data: {
+        entityType: "personal",
+        personalAccountId,
+        type: "expense",
+        amount: 500.0,
+        currency: "BRL",
+        description: "Nubank bill payment (no statement)",
+        category: "Credit Card",
+        date: new Date("2026-09-15T12:00:00Z"),
+      },
+    });
+
+    // Fetch all statements (should be none)
+    const statements = await db.creditCardStatement.findMany({
+      where: {
+        creditCard: {
+          personalAccountId,
+        },
+      },
+      select: { billPaymentTransactionId: true },
+    });
+
+    expect(statements).toHaveLength(0);
+
+    // Calculate settlement IDs (should be empty)
+    const settlementIds = new Set<string>();
+    for (const stmt of statements) {
+      if (stmt.billPaymentTransactionId) {
+        settlementIds.add(stmt.billPaymentTransactionId);
+      }
+    }
+
+    // Get all transactions
+    const transactions = await db.transaction.findMany({
+      where: { personalAccountId },
+    });
+
+    // Regular expenses (excluding settlements)
+    const regularExpenses = transactions
+      .filter((t) => t.type === "expense" && !settlementIds.has(t.id))
+      .reduce((sum, t) => sum + t.amount, 0);
+
+    // Total should be 500 (payment still counts as expense because it's not a settlement)
+    expect(regularExpenses).toBe(500.0);
+    expect(settlementIds.has(paymentTx.id)).toBe(false);
+  });
+
+  it("no double counting with legacy bills", async () => {
+    // Create a legacy credit card bill
+    const bill = await db.creditCardBill.create({
+      data: {
+        creditCardId,
+        closingDate: new Date("2026-09-05"),
+        dueDate: new Date("2026-09-15"),
+        totalAmount: 200.0,
+        status: "paid",
+      },
+    });
+
+    // Add bill transactions (legacy)
+    await db.billTransaction.create({
+      data: {
+        billId: bill.id,
+        category: "Groceries",
+        transactionDate: new Date("2026-08-10"),
+        description: "Grocery Store",
+        amount: 100.0,
+        currency: "BRL",
+      },
+    });
+
+    await db.billTransaction.create({
+      data: {
+        billId: bill.id,
+        category: "Shopping",
+        transactionDate: new Date("2026-08-15"),
+        description: "Store",
+        amount: 100.0,
+        currency: "BRL",
+      },
+    });
+
+    // Import a NEW statement for the same card/month (should not duplicate)
+    const importResult = await importCreditCardStatement(
+      userId,
+      {
+        creditCardId,
+        statement: {
+          month: "2026-09",
+        },
+        rows: [
+          { date: "2026-08-20", description: "Restaurant", amount: 150.0, category: "Restaurants & Dining" },
+        ],
+      },
+      db
+    );
+
+    // Get all purchases
+    const allPurchases = await db.billTransaction.findMany({
+      where: {
+        OR: [
+          { billId: bill.id },
+          { statementId: importResult.statementId },
+        ],
+      },
+    });
+
+    // Should have 3 purchases total (2 legacy + 1 new)
+    expect(allPurchases).toHaveLength(3);
+
+    // Calculate total from legacy bills
+    const legacyTotal = allPurchases
+      .filter((p) => p.billId === bill.id)
+      .reduce((sum, p) => sum + p.amount, 0);
+
+    // Calculate total from statements
+    const statementTotal = allPurchases
+      .filter((p) => p.statementId === importResult.statementId)
+      .reduce((sum, p) => sum + p.amount, 0);
+
+    // Totals should be separate
+    expect(legacyTotal).toBe(200.0);
+    expect(statementTotal).toBe(150.0);
+  });
+
+  it("USD/BRL conversion of purchases", async () => {
+    // Import statement with mixed currencies
+    const importResult = await importCreditCardStatement(
+      userId,
+      {
+        creditCardId,
+        statement: {
+          month: "2026-09",
+        },
+        rows: [
+          { date: "2026-08-10", description: "Local Store", amount: 100.0, currency: "BRL", category: "Shopping" },
+          { date: "2026-08-15", description: "International Store", amount: 50.0, currency: "USD", category: "Shopping" },
+        ],
+      },
+      db
+    );
+
+    // Get purchases
+    const purchases = await db.billTransaction.findMany({
+      where: { statementId: importResult.statementId },
+    });
+
+    expect(purchases).toHaveLength(2);
+    
+    // Check currencies are stored correctly
+    const brlPurchase = purchases.find((p) => p.description === "Local Store");
+    const usdPurchase = purchases.find((p) => p.description === "International Store");
+
+    expect(brlPurchase!.currency).toBe("BRL");
+    expect(brlPurchase!.amount).toBe(100.0);
+    
+    expect(usdPurchase!.currency).toBe("USD");
+    expect(usdPurchase!.amount).toBe(50.0);
+  });
+});
+
 describe("getCreditCardStatement", () => {
   let userId: string;
   let personalAccountId: string;

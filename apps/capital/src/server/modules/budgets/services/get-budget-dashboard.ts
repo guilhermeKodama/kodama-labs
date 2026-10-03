@@ -139,10 +139,11 @@ export async function getBudgetDashboard(
     },
   });
 
-  // 3. Fetch credit card bill transactions for the period
+  // 3. Fetch credit card bill transactions for the period (legacy bills)
   const billTransactions = await db.billTransaction.findMany({
     where: {
       transactionDate: { gte: periodStart, lte: periodEnd },
+      billId: { not: null }, // Legacy bills only
       bill: {
         creditCard: {
           OR: [
@@ -167,6 +168,58 @@ export async function getBudgetDashboard(
       },
     },
   });
+
+  // 3a. Fetch statement purchases for the period (new statements)
+  const statementPurchases = await db.billTransaction.findMany({
+    where: {
+      transactionDate: { gte: periodStart, lte: periodEnd },
+      statementId: { not: null },
+      statement: {
+        creditCard: {
+          OR: [
+            { business: { userId } },
+            { personalAccount: { userId } },
+          ],
+        },
+      },
+    },
+    include: {
+      statement: {
+        include: {
+          creditCard: {
+            select: {
+              entityType: true,
+              businessId: true,
+              personalAccountId: true,
+              currency: true,
+            },
+          },
+        },
+      },
+    },
+  });
+
+  // 3b. Fetch settlement IDs to exclude from transaction expenses
+  const statements = await db.creditCardStatement.findMany({
+    where: {
+      creditCard: {
+        OR: [
+          { business: { userId } },
+          { personalAccount: { userId } },
+        ],
+      },
+    },
+    select: {
+      billPaymentTransactionId: true,
+    },
+  });
+  
+  const settlementIds = new Set<string>();
+  for (const stmt of statements) {
+    if (stmt.billPaymentTransactionId) {
+      settlementIds.add(stmt.billPaymentTransactionId);
+    }
+  }
 
   // 4. Fetch installment projections for the period
   const installments = await db.installment.findMany({
@@ -217,8 +270,13 @@ export async function getBudgetDashboard(
   type ExpenseItem = { entityId: string; category: string; amount: number };
   const expenses: ExpenseItem[] = [];
 
-  // Regular transactions
+  // Regular transactions (excluding card settlements)
   for (const tx of transactions) {
+    // Skip card settlement transactions
+    if (tx.type === "expense" && settlementIds.has(tx.id)) {
+      continue;
+    }
+    
     const entityId = tx.businessId ?? tx.personalAccountId ?? "";
     expenses.push({
       entityId,
@@ -227,10 +285,22 @@ export async function getBudgetDashboard(
     });
   }
 
-  // Bill transactions (credit card line items)
+  // Legacy bill transactions (credit card line items)
   for (const bt of billTransactions) {
     if (!bt.bill) continue; // Skip transactions not linked to a bill
     const card = bt.bill.creditCard;
+    const entityId = card.businessId ?? card.personalAccountId ?? "";
+    expenses.push({
+      entityId,
+      category: bt.category,
+      amount: bt.amount, // Already in card currency
+    });
+  }
+
+  // Statement purchases (new credit card expenses)
+  for (const bt of statementPurchases) {
+    if (!bt.statement) continue;
+    const card = bt.statement.creditCard;
     const entityId = card.businessId ?? card.personalAccountId ?? "";
     expenses.push({
       entityId,
@@ -407,6 +477,7 @@ export async function getBudgetDashboard(
   const prevBillTx = await db.billTransaction.findMany({
     where: {
       transactionDate: { gte: prevStart, lte: prevEnd },
+      billId: { not: null },
       bill: {
         creditCard: {
           OR: [
@@ -425,8 +496,32 @@ export async function getBudgetDashboard(
     },
   });
 
+  const prevStatementPurchases = await db.billTransaction.findMany({
+    where: {
+      transactionDate: { gte: prevStart, lte: prevEnd },
+      statementId: { not: null },
+      statement: {
+        creditCard: {
+          OR: [
+            { business: { userId } },
+            { personalAccount: { userId } },
+          ],
+        },
+      },
+    },
+    include: {
+      statement: {
+        include: {
+          creditCard: { select: { businessId: true, personalAccountId: true } },
+        },
+      },
+    },
+  });
+
   const unbudgetedPrev: Record<string, { total: number; count: number; entityId: string; entityType: string }> = {};
+  // Previous month transactions (excluding settlements)
   for (const tx of prevTransactions) {
+    if (settlementIds.has(tx.id)) continue; // Skip settlements
     const entityId = tx.businessId ?? tx.personalAccountId ?? "";
     const key = `${entityId}::${tx.category}`;
     if (budgetedKeys.has(key) || unbudgetedCurrent[key]) continue;
@@ -434,9 +529,22 @@ export async function getBudgetDashboard(
     unbudgetedPrev[key].total += tx.amount * tx.exchangeRate;
     unbudgetedPrev[key].count += 1;
   }
+  
+  // Previous month legacy bill transactions
   for (const bt of prevBillTx) {
     if (!bt.bill) continue; // Skip transactions not linked to a bill
     const entityId = bt.bill.creditCard.businessId ?? bt.bill.creditCard.personalAccountId ?? "";
+    const key = `${entityId}::${bt.category}`;
+    if (budgetedKeys.has(key) || unbudgetedCurrent[key]) continue;
+    if (!unbudgetedPrev[key]) unbudgetedPrev[key] = { total: 0, count: 0, entityId, entityType: "personal" };
+    unbudgetedPrev[key].total += bt.amount;
+    unbudgetedPrev[key].count += 1;
+  }
+
+  // Previous month statement purchases
+  for (const bt of prevStatementPurchases) {
+    if (!bt.statement) continue;
+    const entityId = bt.statement.creditCard.businessId ?? bt.statement.creditCard.personalAccountId ?? "";
     const key = `${entityId}::${bt.category}`;
     if (budgetedKeys.has(key) || unbudgetedCurrent[key]) continue;
     if (!unbudgetedPrev[key]) unbudgetedPrev[key] = { total: 0, count: 0, entityId, entityType: "personal" };
@@ -465,17 +573,32 @@ export async function getBudgetDashboard(
 
   // 9. Month-over-month
   const prevExpenses: ExpenseItem[] = [];
+  
+  // Previous month transactions (excluding settlements)
   for (const tx of prevTransactions) {
+    if (settlementIds.has(tx.id)) continue;
     prevExpenses.push({
       entityId: tx.businessId ?? tx.personalAccountId ?? "",
       category: tx.category,
       amount: tx.amount * tx.exchangeRate,
     });
   }
+  
+  // Previous month legacy bill transactions
   for (const bt of prevBillTx) {
-    if (!bt.bill) continue; // Skip transactions not linked to a bill
+    if (!bt.bill) continue;
     prevExpenses.push({
       entityId: bt.bill.creditCard.businessId ?? bt.bill.creditCard.personalAccountId ?? "",
+      category: bt.category,
+      amount: bt.amount,
+    });
+  }
+
+  // Previous month statement purchases
+  for (const bt of prevStatementPurchases) {
+    if (!bt.statement) continue;
+    prevExpenses.push({
+      entityId: bt.statement.creditCard.businessId ?? bt.statement.creditCard.personalAccountId ?? "",
       category: bt.category,
       amount: bt.amount,
     });

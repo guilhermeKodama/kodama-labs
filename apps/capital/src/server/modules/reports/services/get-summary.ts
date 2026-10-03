@@ -1,6 +1,6 @@
 import type { DbClient } from "@capital/server/lib/prisma";
 import type { EntityType } from "@/generated/prisma";
-import { shouldCountAsExpense } from "../../../../lib/utils/expense-classification";
+import { shouldCountAsExpense, buildSettlementSet } from "../../../../lib/utils/expense-classification";
 
 export interface EntitySummary {
   entityId: string;
@@ -36,10 +36,27 @@ export async function getSummary(
     }),
   ]);
 
+  // Fetch all credit card statements to build settlement ID set
+  const statements = await db.creditCardStatement.findMany({
+    where: {
+      creditCard: {
+        OR: [
+          { business: { userId } },
+          { personalAccount: { userId } },
+        ],
+      },
+    },
+    select: {
+      billPaymentTransactionId: true,
+    },
+  });
+
+  const settlementIds = buildSettlementSet(statements);
+
   const summaries: EntitySummary[] = [];
 
-  // Build date filter
-  const dateFilter =
+  // Build date filter for transactions
+  const transactionDateFilter =
     dateFrom || dateTo
       ? {
           date: {
@@ -49,13 +66,24 @@ export async function getSummary(
         }
       : {};
 
+  // Build date filter for bill transactions (statement purchases)
+  const billTxDateFilter =
+    dateFrom || dateTo
+      ? {
+          transactionDate: {
+            ...(dateFrom && { gte: dateFrom }),
+            ...(dateTo && { lte: dateTo }),
+          },
+        }
+      : {};
+
   // Calculate summary for each business
   for (const business of businesses) {
-    const [transactions, reimbursementTransfers] = await Promise.all([
+    const [transactions, reimbursementTransfers, statementPurchases] = await Promise.all([
       db.transaction.findMany({
         where: {
           businessId: business.id,
-          ...dateFilter,
+          ...transactionDateFilter,
         },
       }),
       db.transfer.findMany({
@@ -72,6 +100,18 @@ export async function getSummary(
             : {}),
         },
       }),
+      // Fetch statement purchases for this business
+      db.billTransaction.findMany({
+        where: {
+          statementId: { not: null },
+          statement: {
+            creditCard: {
+              businessId: business.id,
+            },
+          },
+          ...billTxDateFilter,
+        },
+      }),
     ]);
 
     const totalIncome = transactions
@@ -83,10 +123,15 @@ export async function getSummary(
       0
     );
 
-    const totalExpenses =
-      transactions
-        .filter((t) => shouldCountAsExpense(t))
-        .reduce((sum, t) => sum + t.amount, 0) + reimbursementExpenses;
+    // Regular expense transactions (excluding settlements)
+    const regularExpenses = transactions
+      .filter((t) => t.type === "expense" && shouldCountAsExpense(t, settlementIds.has(t.id)))
+      .reduce((sum, t) => sum + t.amount, 0);
+
+    // Statement purchases (credit card expenses)
+    const statementExpenses = statementPurchases.reduce((sum, bt) => sum + bt.amount, 0);
+
+    const totalExpenses = regularExpenses + statementExpenses + reimbursementExpenses;
 
     const totalInvestments = transactions
       .filter((t) => t.type === "investment")
@@ -107,11 +152,11 @@ export async function getSummary(
 
   // Calculate summary for personal account
   if (personalAccount) {
-    const [transactions, reimbursementTransfers] = await Promise.all([
+    const [transactions, reimbursementTransfers, statementPurchases] = await Promise.all([
       db.transaction.findMany({
         where: {
           personalAccountId: personalAccount.id,
-          ...dateFilter,
+          ...transactionDateFilter,
         },
       }),
       db.transfer.findMany({
@@ -128,6 +173,18 @@ export async function getSummary(
             : {}),
         },
       }),
+      // Fetch statement purchases for personal account
+      db.billTransaction.findMany({
+        where: {
+          statementId: { not: null },
+          statement: {
+            creditCard: {
+              personalAccountId: personalAccount.id,
+            },
+          },
+          ...billTxDateFilter,
+        },
+      }),
     ]);
 
     const totalIncome = transactions
@@ -139,11 +196,17 @@ export async function getSummary(
       0
     );
 
+    // Regular expense transactions (excluding settlements)
+    const regularExpenses = transactions
+      .filter((t) => t.type === "expense" && shouldCountAsExpense(t, settlementIds.has(t.id)))
+      .reduce((sum, t) => sum + t.amount, 0);
+
+    // Statement purchases (credit card expenses)
+    const statementExpenses = statementPurchases.reduce((sum, bt) => sum + bt.amount, 0);
+
     const totalExpenses = Math.max(
       0,
-      transactions
-        .filter((t) => shouldCountAsExpense(t))
-        .reduce((sum, t) => sum + t.amount, 0) - reimbursementCredits
+      regularExpenses + statementExpenses - reimbursementCredits
     );
 
     const totalInvestments = transactions
