@@ -9,10 +9,13 @@ import type { DbClient } from '@capital/server/lib/prisma';
 function mockDb(overrides: {
   businesses?: Array<{ id: string; name: string; defaultCurrency: string; initialBalance?: number }>;
   personalAccount?: { id: string; defaultCurrency: string; initialBalance?: number } | null;
-  transactions?: Array<{ type: string; amount: number }>;
+  transactions?: Array<{ type: string; amount: number; currency?: string; exchangeRate?: number }>;
   transfers?: Array<{ amount: number }>;
-  personalTransactions?: Array<{ type: string; amount: number }>;
+  personalTransactions?: Array<{ type: string; amount: number; currency?: string; exchangeRate?: number }>;
   personalTransfers?: Array<{ amount: number }>;
+  billTransactions?: Array<{ amount: number; currency?: string }>;
+  currencies?: Array<{ code: string; name: string; symbol: string; manualRate: number; updatedAt: Date }>;
+  baseCurrency?: string;
 }): DbClient {
   const businesses = (overrides.businesses ?? []).map((b) => ({
     ...b,
@@ -26,6 +29,12 @@ function mockDb(overrides: {
   let trCallCount = 0;
 
   return {
+    user: {
+      findUnique: vi.fn().mockResolvedValue({ baseCurrency: overrides.baseCurrency ?? 'BRL' }),
+    },
+    currency: {
+      findMany: vi.fn().mockResolvedValue(overrides.currencies ?? []),
+    },
     business: {
       findMany: vi.fn().mockResolvedValue(businesses),
     },
@@ -54,7 +63,7 @@ function mockDb(overrides: {
       findMany: vi.fn().mockResolvedValue([]),
     },
     billTransaction: {
-      findMany: vi.fn().mockResolvedValue([]),
+      findMany: vi.fn().mockResolvedValue(overrides.billTransactions ?? []),
     },
   } as unknown as DbClient;
 }
@@ -225,6 +234,36 @@ describe('getSummary - date filtering', () => {
 // ============================================================
 // Edge cases
 // ============================================================
+
+describe('getSummary - base currency', () => {
+  it('converts statement purchases with today\'s rate and keeps a stored exchangeRate', async () => {
+    const db = mockDb({
+      baseCurrency: 'BRL',
+      personalAccount: { id: 'pa-1', defaultCurrency: 'USD' },
+      personalTransactions: [
+        { type: 'expense', amount: 1000, currency: 'USD', exchangeRate: 5.5 },
+      ],
+      billTransactions: [
+        { amount: 20, currency: 'USD' },
+        { amount: 30, currency: 'BRL' },
+      ],
+      currencies: [
+        {
+          code: 'USD',
+          name: 'US Dollar',
+          symbol: '$',
+          manualRate: 0.2,
+          updatedAt: new Date('2026-01-01'),
+        },
+      ],
+    });
+
+    const result = await getSummary({ userId: 'user-1' }, db);
+    expect(result[0].currency).toBe('BRL');
+    // 1000 * 5.5 stored rate, plus 20 / 0.2 and 30 BRL of purchases.
+    expect(result[0].totalExpenses).toBe(5500 + 100 + 30);
+  });
+});
 
 describe('getSummary - edge cases', () => {
   it('returns empty array when no entities exist', async () => {

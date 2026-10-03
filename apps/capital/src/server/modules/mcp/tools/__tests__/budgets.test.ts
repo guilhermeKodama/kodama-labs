@@ -1079,5 +1079,95 @@ describe("MCP Budget Tools", () => {
       expect(novemberShopping?.actual).toBe(0);
       expect(november.summary.totalActual).toBe(0);
     });
+
+    it("counts a January installment on an October statement in October", async () => {
+      await db.currency.create({
+        data: {
+          userId: TEST_USER_ID,
+          code: "USD",
+          name: "US Dollar",
+          symbol: "$",
+          manualRate: 0.2,
+        },
+      });
+      const card = await db.creditCard.create({
+        data: {
+          entityType: "personal",
+          bankName: "Parcelas",
+          lastFourDigits: "1010",
+          creditLimit: 5000,
+          closingDay: 28,
+          dueDay: 5,
+          currency: "BRL",
+          personalAccountId,
+        },
+      });
+      const payment = await db.transaction.create({
+        data: {
+          entityType: "personal",
+          type: "expense",
+          amount: 5000,
+          currency: "USD",
+          exchangeRate: 5.5,
+          description: "November card payment",
+          category: "Shopping",
+          date: new Date("2026-11-15T12:00:00.000Z"),
+          personalAccountId,
+        },
+      });
+      await db.creditCardStatement.create({
+        data: {
+          creditCardId: card.id,
+          month: "2026-10",
+          closingDate: new Date("2026-10-28T12:00:00.000Z"),
+          billPaymentTransactionId: payment.id,
+          purchases: {
+            create: [
+              {
+                category: "Shopping",
+                transactionDate: new Date("2026-01-15T12:00:00.000Z"),
+                description: "PARC 3/10",
+                amount: 50,
+                currency: "BRL",
+                installmentNumber: 3,
+                totalInstallments: 10,
+              },
+              {
+                category: "Shopping",
+                transactionDate: new Date("2026-01-15T12:00:00.000Z"),
+                description: "USD installment",
+                amount: 20,
+                currency: "USD",
+              },
+            ],
+          },
+        },
+      });
+
+      const october = await getBudgetStatus(
+        TEST_USER_ID,
+        { month: "2026-10", accountId: personalAccountId },
+        db
+      );
+      const shopping = october.categories.find((category) => category.category === "Shopping");
+      // Parent October Shopping 6600 plus 50 BRL and 20 USD / 0.2.
+      expect(shopping?.actual).toBe(6600 + 50 + 100);
+
+      const january = await getBudgetStatus(
+        TEST_USER_ID,
+        { month: "2026-01", accountId: personalAccountId },
+        db
+      );
+      const januaryShopping = january.categories.find((category) => category.category === "Shopping");
+      expect(januaryShopping?.actual ?? 0).toBe(0);
+
+      const november = await getBudgetStatus(
+        TEST_USER_ID,
+        { month: "2026-11", accountId: personalAccountId },
+        db
+      );
+      const novemberShopping = november.categories.find((category) => category.category === "Shopping");
+      expect(novemberShopping?.actual).toBe(0);
+    });
   });
 });

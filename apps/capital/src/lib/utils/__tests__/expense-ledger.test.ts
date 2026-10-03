@@ -1,7 +1,11 @@
 import { describe, it, expect } from "vitest";
 import type { Currency, Transaction } from "@/types";
 import { calculateEntitySummary } from "../calculations";
-import { buildExpenseLedger, sumLedgerExpensesByCategory } from "../expense-ledger";
+import {
+  buildExpenseLedger,
+  statementPurchaseEffectiveDate,
+  sumLedgerExpensesByCategory,
+} from "../expense-ledger";
 
 const PERSONAL_ID = "personal-1";
 
@@ -126,5 +130,46 @@ describe("buildExpenseLedger", () => {
     expect(cards.balance).toBe(cash.balance);
     expect(cards.netWorth).toBe(cash.netWorth);
     expect(cards.balance).toBe(-540);
+  });
+});
+
+describe("statement month dating", () => {
+  it("counts installment 3/10 in the statement month, not the purchase month", () => {
+    const effective = statementPurchaseEffectiveDate({
+      month: "2026-10",
+      closingDate: "2026-10-28",
+    });
+    expect(effective.getFullYear()).toBe(2026);
+    expect(effective.getMonth() + 1).toBe(10);
+
+    const ledger = buildExpenseLedger(
+      [],
+      [
+        {
+          id: "stmt-oct",
+          month: "2026-10",
+          closingDate: "2026-10-28",
+          billPaymentTransactionId: null,
+          creditCard: { entityId: PERSONAL_ID, entityType: "personal", currency: "BRL" },
+          purchases: [
+            {
+              id: "parc",
+              amount: 50,
+              currency: "BRL",
+              category: "Shopping",
+              description: "PARC 3/10",
+              transactionDate: "2026-01-15",
+            },
+          ],
+        },
+      ],
+      "BRL",
+      []
+    );
+
+    const october = sumLedgerExpensesByCategory(ledger, 2026, 10, PERSONAL_ID);
+    const january = sumLedgerExpensesByCategory(ledger, 2026, 1, PERSONAL_ID);
+    expect(october.Shopping).toBe(50);
+    expect(january.Shopping ?? 0).toBe(0);
   });
 });

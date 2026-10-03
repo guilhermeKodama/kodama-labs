@@ -46,7 +46,13 @@ export const route = createRoute({
   tags: [...routeConfig.v1.defaultTags],
   summary: "List credit card statements with purchases",
   description:
-    "Returns every credit card statement for the authenticated user, including purchases, in one response.",
+    "Returns credit card statements for the authenticated user, including purchases. Optional from/to are YYYY-MM bounds on the statement month.",
+  request: {
+    query: z.object({
+      from: z.string().regex(/^\d{4}-\d{2}$/).optional(),
+      to: z.string().regex(/^\d{4}-\d{2}$/).optional(),
+    }),
+  },
   responses: {
     [OK]: jsonContent(z.array(StatementSchema), "Statements retrieved"),
     [UNAUTHORIZED]: jsonContent(ErrorResponseSchema, "Not authenticated"),
@@ -60,7 +66,8 @@ export const route = createRoute({
 export const handler: AppRouteHandler<typeof route> = async (c) => {
   try {
     const userId = requireUserId(c);
-    const statements = await fetchStatements(userId, prisma);
+    const { from, to } = c.req.valid("query");
+    const statements = await fetchStatements(userId, prisma, { from, to });
 
     return c.json(
       statements.map((statement) => ({

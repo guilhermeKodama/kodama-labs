@@ -1,6 +1,6 @@
 import type { Currency, EntityType, Transaction } from "@/types";
 import { parseLocalDate } from "@/lib/utils/date";
-import { convertToBaseCurrency } from "@/lib/utils/currency";
+import { amountInUserBase } from "@/lib/utils/currency";
 import { buildSettlementSet, shouldCountAsExpense } from "./expense-classification";
 
 export interface ExpenseLedgerPurchase {
@@ -23,6 +23,19 @@ export interface ExpenseLedgerStatement {
     currency: string;
   };
   purchases: ExpenseLedgerPurchase[];
+}
+
+/**
+ * Date a statement purchase counts in P&L and budgets.
+ * Closing date when the statement has one; otherwise noon on YYYY-MM-01.
+ * Display still uses the purchase's transactionDate.
+ */
+export function statementPurchaseEffectiveDate(statement: {
+  month: string;
+  closingDate?: Date | string | null;
+}): Date {
+  if (statement.closingDate) return parseLocalDate(statement.closingDate);
+  return parseLocalDate(`${statement.month}-01`);
 }
 
 /**
@@ -57,12 +70,12 @@ export function buildExpenseLedger(
     const card = statement.creditCard;
     for (const purchase of statement.purchases) {
       const currency = purchase.currency || card.currency;
-      const inBase = convertToBaseCurrency(
-        purchase.amount,
+      const inBase = amountInUserBase({
+        amount: purchase.amount,
         currency,
         currencies,
-        baseCurrency
-      );
+        baseCurrency,
+      });
       const exchangeRate = purchase.amount !== 0 ? inBase / purchase.amount : 1;
       purchases.push({
         id: `cc-stmt-${purchase.id}`,
@@ -74,7 +87,7 @@ export function buildExpenseLedger(
         exchangeRate,
         description: purchase.description,
         category: purchase.category,
-        date: parseLocalDate(purchase.transactionDate),
+        date: statementPurchaseEffectiveDate(statement),
         source: "card_statement",
         createdAt: now,
         updatedAt: now,

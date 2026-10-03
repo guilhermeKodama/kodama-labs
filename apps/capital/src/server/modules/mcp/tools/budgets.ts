@@ -7,7 +7,8 @@ import {
 } from "../../budgets/lib/budget-helpers";
 import { buildSettlementSet } from "@/lib/utils/expense-classification";
 import { buildExpenseLedger, sumLedgerExpensesByCategory } from "@/lib/utils/expense-ledger";
-import { convertToBaseCurrency as convertAmountToBase } from "@/lib/utils/currency";
+import { amountInUserBase } from "@/lib/utils/currency";
+import { statementInWindow } from "../../credit-cards/lib/statement-window";
 import type { Currency, Transaction } from "@/types";
 
 export interface ListBudgetsParams {
@@ -460,9 +461,19 @@ export async function getBudgetStatus(
     updatedAt: row.updatedAt,
   }));
 
-  // One query: statements and their purchases for this account.
-  const statements = await db.creditCardStatement.findMany({
+  // Settlement links are not month-scoped: a November payment of an October
+  // statement must still be excluded when the requested month is October.
+  const settlementRows = await db.creditCardStatement.findMany({
     where: { creditCard: { personalAccountId: account.id } },
+    select: { billPaymentTransactionId: true },
+  });
+  const settlementIds = buildSettlementSet(settlementRows);
+
+  const statements = await db.creditCardStatement.findMany({
+    where: {
+      creditCard: { personalAccountId: account.id },
+      ...statementInWindow(monthStart, monthEnd),
+    },
     select: {
       id: true,
       month: true,
@@ -488,7 +499,6 @@ export async function getBudgetStatus(
       },
     },
   });
-  const settlementIds = buildSettlementSet(statements);
 
   const transactions = await db.transaction.findMany({
     where: {
@@ -586,12 +596,12 @@ export async function getBudgetStatus(
 
   for (const bt of billTransactions) {
     const currencyCode = bt.currency || bt.bill?.creditCard.currency || user.baseCurrency;
-    const amountInBase = convertAmountToBase(
-      bt.amount,
-      currencyCode,
+    const amountInBase = amountInUserBase({
+      amount: bt.amount,
+      currency: currencyCode,
       currencies,
-      user.baseCurrency
-    );
+      baseCurrency: user.baseCurrency,
+    });
     actualByCategory[bt.category] = (actualByCategory[bt.category] || 0) + amountInBase;
   }
 

@@ -7,8 +7,9 @@ import {
 } from "@capital/server/lib/date-utils";
 import { parseLocalDate } from "@capital/server/lib/date-utils";
 import { addMonths } from "date-fns";
-import { convertToBaseCurrency } from "../../../../lib/utils/currency";
+import { amountInUserBase } from "../../../../lib/utils/currency";
 import { getEffectiveBudgetsForMonth } from "../lib/budget-helpers";
+import { statementInWindow } from "../../credit-cards/lib/statement-window";
 
 // ============================================
 // Types
@@ -112,29 +113,21 @@ export async function getBudgetDashboard(
   const targetMonth = parseLocalDate(`${year}-${String(month).padStart(2, "0")}-01`);
   const budgets = await getEffectiveBudgetsForMonth(db, userId, targetMonth);
 
-  // 2. Fetch currencies and entities for FX conversion
+  const user = await db.user.findUnique({
+    where: { id: userId },
+    select: { baseCurrency: true },
+  });
+  if (!user) {
+    throw new Error("User not found");
+  }
+  const baseCurrency = user.baseCurrency;
+
   const currencies = await db.currency.findMany({
     where: { userId },
   });
 
-  const businesses = await db.business.findMany({
-    where: { userId },
-    select: { id: true, defaultCurrency: true },
-  });
-
-  const personalAccount = await db.personalAccount.findUnique({
-    where: { userId },
-    select: { id: true, defaultCurrency: true },
-  });
-
-  // Build entity currency map
-  const entityCurrencyMap = new Map<string, string>();
-  for (const b of businesses) {
-    entityCurrencyMap.set(b.id, b.defaultCurrency);
-  }
-  if (personalAccount) {
-    entityCurrencyMap.set(personalAccount.id, personalAccount.defaultCurrency);
-  }
+  const inBase = (amount: number, currency: string) =>
+    amountInUserBase({ amount, currency, currencies, baseCurrency });
 
   // 2a. Fetch regular expense transactions for the period
   const { start: periodStart, end: periodEnd } = getMonthRange(year, month);
@@ -182,9 +175,9 @@ export async function getBudgetDashboard(
   // 3a. Fetch statement purchases for the period (new statements)
   const statementPurchases = await db.billTransaction.findMany({
     where: {
-      transactionDate: { gte: periodStart, lte: periodEnd },
       statementId: { not: null },
       statement: {
+        ...statementInWindow(periodStart, periodEnd),
         creditCard: {
           OR: [
             { business: { userId } },
@@ -300,13 +293,7 @@ export async function getBudgetDashboard(
     if (!bt.bill) continue; // Skip transactions not linked to a bill
     const card = bt.bill.creditCard;
     const entityId = card.businessId ?? card.personalAccountId ?? "";
-    const baseCurrency = entityCurrencyMap.get(entityId) || "USD";
-    const convertedAmount = convertToBaseCurrency(
-      bt.amount,
-      bt.currency || card.currency,
-      currencies,
-      baseCurrency
-    );
+    const convertedAmount = inBase(bt.amount, bt.currency || card.currency);
     expenses.push({
       entityId,
       category: bt.category,
@@ -314,18 +301,12 @@ export async function getBudgetDashboard(
     });
   }
 
-  // Statement purchases (new credit card expenses) - convert to entity base currency
+  // Statement purchases count in the statement month, in the user's base currency
   for (const bt of statementPurchases) {
     if (!bt.statement) continue;
     const card = bt.statement.creditCard;
     const entityId = card.businessId ?? card.personalAccountId ?? "";
-    const baseCurrency = entityCurrencyMap.get(entityId) || "USD";
-    const convertedAmount = convertToBaseCurrency(
-      bt.amount,
-      bt.currency || card.currency,
-      currencies,
-      baseCurrency
-    );
+    const convertedAmount = inBase(bt.amount, bt.currency || card.currency);
     expenses.push({
       entityId,
       category: bt.category,
@@ -522,9 +503,9 @@ export async function getBudgetDashboard(
 
   const prevStatementPurchases = await db.billTransaction.findMany({
     where: {
-      transactionDate: { gte: prevStart, lte: prevEnd },
       statementId: { not: null },
       statement: {
+        ...statementInWindow(prevStart, prevEnd),
         creditCard: {
           OR: [
             { business: { userId } },
@@ -561,13 +542,7 @@ export async function getBudgetDashboard(
     const key = `${entityId}::${bt.category}`;
     if (budgetedKeys.has(key) || unbudgetedCurrent[key]) continue;
     if (!unbudgetedPrev[key]) unbudgetedPrev[key] = { total: 0, count: 0, entityId, entityType: "personal" };
-    const baseCurrency = entityCurrencyMap.get(entityId) || "USD";
-    const convertedAmount = convertToBaseCurrency(
-      bt.amount,
-      bt.currency || bt.bill.creditCard.currency,
-      currencies,
-      baseCurrency
-    );
+    const convertedAmount = inBase(bt.amount, bt.currency || bt.bill.creditCard.currency);
     unbudgetedPrev[key].total += convertedAmount;
     unbudgetedPrev[key].count += 1;
   }
@@ -579,13 +554,7 @@ export async function getBudgetDashboard(
     const key = `${entityId}::${bt.category}`;
     if (budgetedKeys.has(key) || unbudgetedCurrent[key]) continue;
     if (!unbudgetedPrev[key]) unbudgetedPrev[key] = { total: 0, count: 0, entityId, entityType: "personal" };
-    const baseCurrency = entityCurrencyMap.get(entityId) || "USD";
-    const convertedAmount = convertToBaseCurrency(
-      bt.amount,
-      bt.currency || bt.statement.creditCard.currency,
-      currencies,
-      baseCurrency
-    );
+    const convertedAmount = inBase(bt.amount, bt.currency || bt.statement.creditCard.currency);
     unbudgetedPrev[key].total += convertedAmount;
     unbudgetedPrev[key].count += 1;
   }
@@ -626,13 +595,7 @@ export async function getBudgetDashboard(
   for (const bt of prevBillTx) {
     if (!bt.bill) continue;
     const entityId = bt.bill.creditCard.businessId ?? bt.bill.creditCard.personalAccountId ?? "";
-    const baseCurrency = entityCurrencyMap.get(entityId) || "USD";
-    const convertedAmount = convertToBaseCurrency(
-      bt.amount,
-      bt.currency || bt.bill.creditCard.currency,
-      currencies,
-      baseCurrency
-    );
+    const convertedAmount = inBase(bt.amount, bt.currency || bt.bill.creditCard.currency);
     prevExpenses.push({
       entityId,
       category: bt.category,
@@ -644,13 +607,7 @@ export async function getBudgetDashboard(
   for (const bt of prevStatementPurchases) {
     if (!bt.statement) continue;
     const entityId = bt.statement.creditCard.businessId ?? bt.statement.creditCard.personalAccountId ?? "";
-    const baseCurrency = entityCurrencyMap.get(entityId) || "USD";
-    const convertedAmount = convertToBaseCurrency(
-      bt.amount,
-      bt.currency || bt.statement.creditCard.currency,
-      currencies,
-      baseCurrency
-    );
+    const convertedAmount = inBase(bt.amount, bt.currency || bt.statement.creditCard.currency);
     prevExpenses.push({
       entityId,
       category: bt.category,

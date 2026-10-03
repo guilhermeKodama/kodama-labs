@@ -1,8 +1,12 @@
+import type { Prisma } from "@/generated/prisma";
 import type { DbClient } from "@capital/server/lib/prisma";
 import type { ListTransactionsParams, TransactionSummary } from "../lib/types";
 import { fetchTransactions } from "../../transactions/data/queries/fetch-transactions";
 import { parseDateRangeFilter } from "../lib/date-helpers";
 import { shouldCountAsExpense, buildSettlementSet } from "../../../../lib/utils/expense-classification";
+import { amountInUserBase } from "@/lib/utils/currency";
+import type { Currency } from "@/types";
+import { statementInWindow } from "../../credit-cards/lib/statement-window";
 
 /**
  * List transactions with optional filters and monthly summaries.
@@ -14,6 +18,22 @@ export async function listTransactions(
   params: ListTransactionsParams,
   db: DbClient
 ) {
+  const user = await db.user.findUnique({
+    where: { id: userId },
+    select: { baseCurrency: true },
+  });
+  if (!user) {
+    throw new Error("User not found");
+  }
+  const currencyRows = await db.currency.findMany({ where: { userId } });
+  const currencies: Currency[] = currencyRows.map((row) => ({
+    code: row.code,
+    name: row.name,
+    symbol: row.symbol,
+    manualRate: row.manualRate,
+    updatedAt: row.updatedAt,
+  }));
+
   const dateFilters = parseDateRangeFilter(params.dateFrom, params.dateTo);
   
   const filters = {
@@ -54,17 +74,9 @@ export async function listTransactions(
   }> = [];
 
   if (!params.type || params.type === 'expense') {
-    const billTxFilters: {
-      statementId: { not: null };
-      statement: {
-        creditCard: {
-          OR: Array<{ businessId?: string } | { personalAccountId?: string } | { business: { userId: string } } | { personalAccount: { userId: string } }>;
-        };
-      };
-      transactionDate?: { gte?: Date; lte?: Date };
-      category?: string;
-    } = {
+    const billTxFilters: Prisma.BillTransactionWhereInput = {
       statementId: { not: null },
+      ...(params.category ? { category: params.category } : {}),
       statement: {
         creditCard: {
           OR: [
@@ -81,19 +93,11 @@ export async function listTransactions(
               : []),
           ],
         },
+        ...(dateFilters.dateFrom || dateFilters.dateTo
+          ? statementInWindow(dateFilters.dateFrom, dateFilters.dateTo)
+          : {}),
       },
     };
-
-    if (dateFilters.dateFrom || dateFilters.dateTo) {
-      billTxFilters.transactionDate = {
-        ...(dateFilters.dateFrom && { gte: dateFilters.dateFrom }),
-        ...(dateFilters.dateTo && { lte: dateFilters.dateTo }),
-      };
-    }
-
-    if (params.category) {
-      billTxFilters.category = params.category;
-    }
 
     statementPurchases = await db.billTransaction.findMany({
       where: billTxFilters,
@@ -118,17 +122,24 @@ export async function listTransactions(
 
     const key = `${txn.type}|${txn.category}`;
     const existing = summaryMap.get(key);
+    const inBase = amountInUserBase({
+      amount: txn.amount,
+      currency: txn.currency,
+      exchangeRate: txn.exchangeRate,
+      currencies,
+      baseCurrency: user.baseCurrency,
+    });
 
     if (existing) {
-      existing.total += txn.amount;
+      existing.total += inBase;
       existing.count += 1;
     } else {
       summaryMap.set(key, {
         type: txn.type,
         category: txn.category,
-        total: txn.amount,
+        total: inBase,
         count: 1,
-        currency: txn.currency,
+        currency: user.baseCurrency,
       });
     }
   }
@@ -137,17 +148,23 @@ export async function listTransactions(
   for (const purchase of statementPurchases) {
     const key = `expense|${purchase.category}`;
     const existing = summaryMap.get(key);
+    const inBase = amountInUserBase({
+      amount: purchase.amount,
+      currency: purchase.currency,
+      currencies,
+      baseCurrency: user.baseCurrency,
+    });
 
     if (existing) {
-      existing.total += purchase.amount;
+      existing.total += inBase;
       existing.count += 1;
     } else {
       summaryMap.set(key, {
         type: 'expense',
         category: purchase.category,
-        total: purchase.amount,
+        total: inBase,
         count: 1,
-        currency: purchase.currency,
+        currency: user.baseCurrency,
       });
     }
   }

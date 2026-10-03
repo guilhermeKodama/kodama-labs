@@ -1,6 +1,9 @@
 import type { DbClient } from "@capital/server/lib/prisma";
 import type { EntityType } from "@/generated/prisma";
 import { shouldCountAsExpense, buildSettlementSet } from "../../../../lib/utils/expense-classification";
+import { amountInUserBase } from "../../../../lib/utils/currency";
+import type { Currency } from "@/types";
+import { statementInWindow } from "../../credit-cards/lib/statement-window";
 
 export interface EntitySummary {
   entityId: string;
@@ -25,6 +28,39 @@ export async function getSummary(
   db: DbClient
 ): Promise<EntitySummary[]> {
   const { userId, dateFrom, dateTo } = input;
+
+  const user = await db.user.findUnique({
+    where: { id: userId },
+    select: { baseCurrency: true },
+  });
+  if (!user) {
+    throw new Error("User not found");
+  }
+  const currencyRows = await db.currency.findMany({ where: { userId } });
+  const currencies: Currency[] = currencyRows.map((row) => ({
+    code: row.code,
+    name: row.name,
+    symbol: row.symbol,
+    manualRate: row.manualRate,
+    updatedAt: row.updatedAt,
+  }));
+
+  const txInBase = (amount: number, currency: string | undefined, exchangeRate: number | null | undefined) =>
+    amountInUserBase({
+      amount,
+      currency: currency ?? user.baseCurrency,
+      exchangeRate: exchangeRate ?? 1,
+      currencies,
+      baseCurrency: user.baseCurrency,
+    });
+
+  const purchaseInBase = (amount: number, currency: string | undefined) =>
+    amountInUserBase({
+      amount,
+      currency: currency ?? user.baseCurrency,
+      currencies,
+      baseCurrency: user.baseCurrency,
+    });
 
   // Get user's businesses and personal account
   const [businesses, personalAccount] = await Promise.all([
@@ -66,16 +102,7 @@ export async function getSummary(
         }
       : {};
 
-  // Build date filter for bill transactions (statement purchases)
-  const billTxDateFilter =
-    dateFrom || dateTo
-      ? {
-          transactionDate: {
-            ...(dateFrom && { gte: dateFrom }),
-            ...(dateTo && { lte: dateTo }),
-          },
-        }
-      : {};
+  const purchaseWindow = statementInWindow(dateFrom, dateTo);
 
   // Calculate summary for each business
   for (const business of businesses) {
@@ -108,15 +135,15 @@ export async function getSummary(
             creditCard: {
               businessId: business.id,
             },
+            ...purchaseWindow,
           },
-          ...billTxDateFilter,
         },
       }),
     ]);
 
     const totalIncome = transactions
       .filter((t) => t.type === "income")
-      .reduce((sum, t) => sum + t.amount, 0);
+      .reduce((sum, t) => sum + txInBase(t.amount, t.currency, t.exchangeRate), 0);
 
     const reimbursementExpenses = reimbursementTransfers.reduce(
       (sum, t) => sum + t.amount,
@@ -126,16 +153,18 @@ export async function getSummary(
     // Regular expense transactions (excluding settlements)
     const regularExpenses = transactions
       .filter((t) => t.type === "expense" && shouldCountAsExpense(t, settlementIds.has(t.id)))
-      .reduce((sum, t) => sum + t.amount, 0);
+      .reduce((sum, t) => sum + txInBase(t.amount, t.currency, t.exchangeRate), 0);
 
-    // Statement purchases (credit card expenses)
-    const statementExpenses = statementPurchases.reduce((sum, bt) => sum + bt.amount, 0);
+    const statementExpenses = statementPurchases.reduce(
+      (sum, bt) => sum + purchaseInBase(bt.amount, bt.currency),
+      0
+    );
 
     const totalExpenses = regularExpenses + statementExpenses + reimbursementExpenses;
 
     const totalInvestments = transactions
       .filter((t) => t.type === "investment")
-      .reduce((sum, t) => sum + t.amount, 0);
+      .reduce((sum, t) => sum + txInBase(t.amount, t.currency, t.exchangeRate), 0);
 
     summaries.push({
       entityId: business.id,
@@ -146,7 +175,7 @@ export async function getSummary(
       totalInvestments,
       balance: business.initialBalance + totalIncome - totalExpenses,
       netWorth: business.initialBalance + totalIncome - totalExpenses + totalInvestments,
-      currency: business.defaultCurrency,
+      currency: user.baseCurrency,
     });
   }
 
@@ -181,15 +210,15 @@ export async function getSummary(
             creditCard: {
               personalAccountId: personalAccount.id,
             },
+            ...purchaseWindow,
           },
-          ...billTxDateFilter,
         },
       }),
     ]);
 
     const totalIncome = transactions
       .filter((t) => t.type === "income")
-      .reduce((sum, t) => sum + t.amount, 0);
+      .reduce((sum, t) => sum + txInBase(t.amount, t.currency, t.exchangeRate), 0);
 
     const reimbursementCredits = reimbursementTransfers.reduce(
       (sum, t) => sum + t.amount,
@@ -199,10 +228,12 @@ export async function getSummary(
     // Regular expense transactions (excluding settlements)
     const regularExpenses = transactions
       .filter((t) => t.type === "expense" && shouldCountAsExpense(t, settlementIds.has(t.id)))
-      .reduce((sum, t) => sum + t.amount, 0);
+      .reduce((sum, t) => sum + txInBase(t.amount, t.currency, t.exchangeRate), 0);
 
-    // Statement purchases (credit card expenses)
-    const statementExpenses = statementPurchases.reduce((sum, bt) => sum + bt.amount, 0);
+    const statementExpenses = statementPurchases.reduce(
+      (sum, bt) => sum + purchaseInBase(bt.amount, bt.currency),
+      0
+    );
 
     const totalExpenses = Math.max(
       0,
@@ -211,7 +242,7 @@ export async function getSummary(
 
     const totalInvestments = transactions
       .filter((t) => t.type === "investment")
-      .reduce((sum, t) => sum + t.amount, 0);
+      .reduce((sum, t) => sum + txInBase(t.amount, t.currency, t.exchangeRate), 0);
 
     summaries.push({
       entityId: personalAccount.id,
@@ -222,7 +253,7 @@ export async function getSummary(
       totalInvestments,
       balance: personalAccount.initialBalance + totalIncome - totalExpenses,
       netWorth: personalAccount.initialBalance + totalIncome - totalExpenses + totalInvestments,
-      currency: personalAccount.defaultCurrency,
+      currency: user.baseCurrency,
     });
   }
 
