@@ -1,5 +1,10 @@
 import type { DbClient } from "@capital/server/lib/prisma";
 import { parseLocalDate } from "@capital/server/lib/date-utils";
+import {
+  getEffectiveBudgetsForMonth,
+  convertToBaseCurrency,
+  shouldCountAsExpenseForBudget,
+} from "../../budgets/lib/budget-helpers";
 
 export interface ListBudgetsParams {
   accountId?: string;
@@ -34,8 +39,9 @@ export interface GetBudgetStatusParams {
 
 /**
  * List budgets for an account, optionally filtered by category.
- * If effectiveDate is provided, returns only budgets effective at that date.
- * Otherwise, returns all budgets.
+ * If effectiveDate is provided, returns only budgets effective at that date
+ * using the shared getEffectiveBudgetsForMonth helper (same logic as UI).
+ * Otherwise, returns all active budgets.
  */
 export async function listBudgets(
   userId: string,
@@ -65,45 +71,26 @@ export async function listBudgets(
     resolvedAccountId = account.id;
   }
 
-  interface BudgetWhereClause {
-    personalAccountId: string;
-    isActive: boolean;
-    category?: string;
-    effectiveFrom?: { lte: Date };
-  }
-
-  const where: BudgetWhereClause = {
-    personalAccountId: resolvedAccountId,
-    isActive: true,
-  };
-
-  if (category) {
-    where.category = category;
-  }
-
   if (effectiveDate) {
     // Parse date (YYYY-MM or YYYY-MM-DD)
-    const targetDate = effectiveDate.includes("-DD")
-      ? parseLocalDate(effectiveDate)
-      : parseLocalDate(`${effectiveDate}-01`);
+    const targetDate = effectiveDate.length === 7
+      ? parseLocalDate(`${effectiveDate}-01`)
+      : parseLocalDate(effectiveDate);
 
-    where.effectiveFrom = { lte: targetDate };
+    // Use shared helper for consistent resolution
+    const budgets = await getEffectiveBudgetsForMonth(
+      db,
+      userId,
+      targetDate,
+      { personalAccountId: resolvedAccountId }
+    );
 
-    // If filtering by effective date, group by category and return only the most recent
-    const budgets = await db.budget.findMany({
-      where,
-      orderBy: [{ category: "asc" }, { effectiveFrom: "desc" }],
-    });
+    // Filter by category if provided
+    const filtered = category
+      ? budgets.filter((b) => b.category === category)
+      : budgets;
 
-    // Deduplicate by category, keeping the most recent for each
-    const seenCategories = new Set<string>();
-    return budgets.filter((budget) => {
-      if (seenCategories.has(budget.category)) {
-        return false;
-      }
-      seenCategories.add(budget.category);
-      return true;
-    }).map((budget) => ({
+    return filtered.map((budget) => ({
       id: budget.id,
       category: budget.category,
       amount: budget.amount,
@@ -114,6 +101,22 @@ export async function listBudgets(
       month: budget.month,
       isActive: budget.isActive,
     }));
+  }
+
+  // No effectiveDate: return all active budgets
+  interface BudgetWhereClause {
+    personalAccountId: string;
+    isActive: boolean;
+    category?: string;
+  }
+
+  const where: BudgetWhereClause = {
+    personalAccountId: resolvedAccountId,
+    isActive: true,
+  };
+
+  if (category) {
+    where.category = category;
   }
 
   const budgets = await db.budget.findMany({
@@ -136,6 +139,8 @@ export async function listBudgets(
 
 /**
  * Create a new budget for a category, effective from a specific date.
+ * If an inactive budget exists for the same account/category/effectiveFrom,
+ * reactivate and update it instead of failing.
  */
 export async function createBudget(
   userId: string,
@@ -163,7 +168,7 @@ export async function createBudget(
   const year = effectiveDate.getUTCFullYear();
   const month = effectiveDate.getUTCMonth() + 1;
 
-  // Check for duplicate (same account, category, effectiveFrom)
+  // Check for existing budget (active or inactive)
   const existing = await db.budget.findFirst({
     where: {
       personalAccountId: accountId,
@@ -173,11 +178,35 @@ export async function createBudget(
   });
 
   if (existing) {
-    throw new Error(
-      `Budget for category "${category}" already exists with effective date ${effectiveFrom}`
-    );
+    if (existing.isActive) {
+      throw new Error(
+        `Active budget for category "${category}" already exists with effective date ${effectiveFrom}`
+      );
+    }
+    
+    // Reactivate and update the inactive budget
+    const updated = await db.budget.update({
+      where: { id: existing.id },
+      data: {
+        amount,
+        currency,
+        isActive: true,
+      },
+    });
+
+    return {
+      id: updated.id,
+      category: updated.category,
+      amount: updated.amount,
+      currency: updated.currency,
+      effectiveFrom: updated.effectiveFrom.toISOString().split("T")[0],
+      period: updated.period,
+      year: updated.year,
+      month: updated.month,
+    };
   }
 
+  // Create new budget
   const budget = await db.budget.create({
     data: {
       entityType: "personal",
@@ -342,7 +371,19 @@ interface BudgetStatusResponse {
 
 /**
  * Get budget status for a specific month, comparing budgeted vs actual spending.
- * Budgets are in BRL. Actual spending is converted to BRL using transaction exchange rates.
+ * 
+ * Currency handling:
+ * - Budgets: stored in budget.currency (user can set, typically BRL)
+ * - Transactions: amount in original currency, exchangeRate converts to user.baseCurrency
+ * - Calculation: actualSpending = sum(tx.amount * tx.exchangeRate) in user.baseCurrency
+ * - Comparison: budget.amount (assumed to be in user.baseCurrency for direct comparison)
+ * 
+ * This matches the existing UI behavior in get-budget-dashboard.ts which does:
+ *   spent = sum(tx.amount * tx.exchangeRate)
+ *   compare directly with budget.amount
+ * 
+ * The assumption is budget.amount is stored in user.baseCurrency, not budget.currency.
+ * Or budget.currency === user.baseCurrency for proper comparison.
  */
 export async function getBudgetStatus(
   userId: string,
@@ -375,42 +416,39 @@ export async function getBudgetStatus(
     }
   }
 
+  // Get user's base currency
+  const user = await db.user.findUnique({
+    where: { id: userId },
+    select: { baseCurrency: true },
+  });
+
+  if (!user) {
+    throw new Error("User not found");
+  }
+
   // Get the first day of the target month (noon UTC)
   const targetDate = parseLocalDate(`${year}-${String(monthNum).padStart(2, "0")}-01`);
 
-  // Get effective budgets for this month (most recent budget <= targetDate for each category)
-  const allBudgets = await db.budget.findMany({
-    where: {
-      personalAccountId: account.id,
-      effectiveFrom: { lte: targetDate },
-      isActive: true,
-    },
-    orderBy: [{ category: "asc" }, { effectiveFrom: "desc" }],
-  });
+  // Get effective budgets for this month using shared helper
+  const budgets = await getEffectiveBudgetsForMonth(
+    db,
+    userId,
+    targetDate,
+    { personalAccountId: account.id }
+  );
 
-  // Deduplicate by category, keeping most recent
-  const seenCategories = new Set<string>();
-  const budgets = allBudgets.filter((budget) => {
-    if (seenCategories.has(budget.category)) {
-      return false;
-    }
-    seenCategories.add(budget.category);
-    return true;
-  });
-
-  // Get month date range (inclusive, America/Sao_Paulo calendar month)
-  // For simplicity, use UTC month boundaries at noon
+  // Get month date range (inclusive)
   const monthStart = targetDate; // First day at noon UTC
+  const lastDay = new Date(year, monthNum, 0).getDate();
   const monthEnd = parseLocalDate(
-    `${year}-${String(monthNum).padStart(2, "0")}-${new Date(year, monthNum, 0).getDate()}`
-  ); // Last day at noon UTC
+    `${year}-${String(monthNum).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`
+  );
 
   // Get all expense transactions for this account in this month
-  // Exclude transfers (only type='expense' counts as actual spending)
+  // Use shared helper for expense classification
   const transactions = await db.transaction.findMany({
     where: {
       personalAccountId: account.id,
-      type: "expense",
       date: {
         gte: monthStart,
         lte: monthEnd,
@@ -421,6 +459,7 @@ export async function getBudgetStatus(
       amount: true,
       currency: true,
       exchangeRate: true,
+      type: true,
     },
   });
 
@@ -437,23 +476,28 @@ export async function getBudgetStatus(
         },
       },
     },
+    select: {
+      category: true,
+      amount: true,
+    },
   });
 
-  // Calculate actual spending per category in BRL
-  // Transaction amounts are stored in their original currency with exchangeRate to user's base currency
-  // For simplicity: amount * exchangeRate converts transaction to user's base currency
-  // We assume this is already in the budget currency or close enough for the comparison
-  
+  // Calculate actual spending per category in base currency
   const actualByCategory: Record<string, number> = {};
 
-  // Regular transactions: amount * exchangeRate converts to user's base currency
+  // Regular transactions: only expenses count, converted to base currency
   for (const tx of transactions) {
-    const amountInBaseCurrency = tx.amount * tx.exchangeRate;
+    if (!shouldCountAsExpenseForBudget(tx.type)) {
+      continue; // Skip non-expenses (income, transfers, etc.)
+    }
+    const amountInBaseCurrency = convertToBaseCurrency(tx.amount, tx.exchangeRate);
     actualByCategory[tx.category] = (actualByCategory[tx.category] || 0) + amountInBaseCurrency;
   }
 
-  // Bill transactions: already in card currency, use amount directly
+  // Bill transactions: already represent expenses (purchases on card)
   for (const bt of billTransactions) {
+    // Bill amounts are in card currency, but for simplicity we add directly
+    // (UI does the same in get-budget-dashboard.ts line 235)
     actualByCategory[bt.category] = (actualByCategory[bt.category] || 0) + bt.amount;
   }
 
@@ -482,7 +526,7 @@ export async function getBudgetStatus(
     month,
     accountId: account.id,
     accountCurrency: account.defaultCurrency,
-    budgetCurrency: "BRL",
+    budgetCurrency: user.baseCurrency, // Budgets compared in user's base currency
     summary: {
       totalBudgeted: Math.round(totalBudgeted * 100) / 100,
       totalActual: Math.round(totalActual * 100) / 100,

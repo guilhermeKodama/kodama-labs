@@ -118,6 +118,55 @@ describe("MCP Budget Tools", () => {
       expect(budget?.personalAccountId).toBe(personalAccountId);
     });
 
+    it("should reactivate and update an inactive budget instead of failing", async () => {
+      // Create a budget
+      const budget1 = await createBudget(
+        TEST_USER_ID,
+        {
+          accountId: personalAccountId,
+          category: "Shopping",
+          amount: 2800,
+          currency: "BRL",
+          effectiveFrom: "2026-10-01",
+        },
+        db
+      );
+
+      // Soft delete it
+      await deleteBudget(TEST_USER_ID, { budgetId: budget1.id }, db);
+
+      // Verify it's inactive
+      const inactive = await db.budget.findUnique({
+        where: { id: budget1.id },
+      });
+      expect(inactive?.isActive).toBe(false);
+
+      // Create again with same category/effectiveFrom - should reactivate
+      const budget2 = await createBudget(
+        TEST_USER_ID,
+        {
+          accountId: personalAccountId,
+          category: "Shopping",
+          amount: 3000,
+          currency: "USD",
+          effectiveFrom: "2026-10-01",
+        },
+        db
+      );
+
+      // Should be same ID but updated
+      expect(budget2.id).toBe(budget1.id);
+      expect(budget2.amount).toBe(3000);
+      expect(budget2.currency).toBe("USD");
+
+      // Verify it's active again
+      const reactivated = await db.budget.findUnique({
+        where: { id: budget1.id },
+      });
+      expect(reactivated?.isActive).toBe(true);
+      expect(reactivated?.amount).toBe(3000);
+    });
+
     it("should reject negative budget amount", async () => {
       await expect(
         createBudget(
@@ -175,7 +224,7 @@ describe("MCP Budget Tools", () => {
           },
           db
         )
-      ).rejects.toThrow("already exists");
+      ).rejects.toThrow("Active budget");
     });
 
     it("should allow multiple budgets for same category with different effective dates", async () => {
@@ -644,14 +693,13 @@ describe("MCP Budget Tools", () => {
       expect(result.month).toBe("2026-10");
       expect(result.accountId).toBe(personalAccountId);
       expect(result.accountCurrency).toBe("USD");
+      // Budget currency should be user's base currency (BRL)
       expect(result.budgetCurrency).toBe("BRL");
 
       // Summary
       // Total budget: 2,800 (Shopping) + 1,500 (Food) = 4,300 BRL
-      // Total actual: (1000+200)*5.5 + 100*5.5 = 1,100 + 550 = 6,600 + 550 = 7,150 BRL... wait that's wrong
-      // Let me recalculate: Shopping: 1000*5.5 + 200*5.5 = 5,500 + 1,100 = 6,600 BRL
-      // Food: 100*5.5 = 550 BRL
-      // Total: 6,600 + 550 = 7,150 BRL
+      // Total actual: Shopping: 1000*5.5 + 200*5.5 = 6,600 BRL; Food: 100*5.5 = 550 BRL
+      // Total: 7,150 BRL
       expect(result.summary.totalBudgeted).toBe(4300);
       expect(result.summary.totalActual).toBe(7150);
       expect(result.summary.totalRemaining).toBe(4300 - 7150);
@@ -674,6 +722,41 @@ describe("MCP Budget Tools", () => {
       expect(food?.remaining).toBe(950);
       expect(food?.isOverBudget).toBe(false);
       expect(food?.percentUsed).toBeCloseTo((550 / 1500) * 100, 1);
+    });
+
+    it("should correctly convert USD account expenses to BRL budget currency via exchangeRate", async () => {
+      // This test verifies the currency conversion rule:
+      // - Personal account is in USD (defaultCurrency)
+      // - User's baseCurrency is BRL
+      // - Budget is stored with amount in BRL (user.baseCurrency)
+      // - Transaction amount (USD) * exchangeRate = amount in BRL (user.baseCurrency)
+      // - Budget comparison is done in BRL (user.baseCurrency)
+      
+      // We already have:
+      // - Shopping budget: 2,800 BRL
+      // - Shopping transaction 1: 1,000 USD * 5.5 = 5,500 BRL
+      // - Shopping transaction 2: 200 USD * 5.5 = 1,100 BRL
+      // Total: 6,600 BRL vs budget 2,800 BRL
+      
+      const result = await getBudgetStatus(
+        TEST_USER_ID,
+        {
+          month: "2026-10",
+          accountId: personalAccountId,
+        },
+        db
+      );
+
+      const shopping = result.categories.find((c) => c.category === "Shopping");
+      
+      // Verify actual spending is converted correctly
+      expect(shopping?.actual).toBe(6600); // sum(amount * exchangeRate)
+      
+      // Verify comparison is in BRL (user base currency)
+      expect(result.budgetCurrency).toBe("BRL");
+      
+      // The account's default currency (USD) is independent
+      expect(result.accountCurrency).toBe("USD");
     });
 
     it("should use effective budget for Dec 2026", async () => {
