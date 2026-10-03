@@ -177,12 +177,27 @@ describe("MCP settings tools", () => {
   });
 
   describe("updateAccountSettings", () => {
-    it("should update personal account default currency", async () => {
+    it("should update personal account default currency with force", async () => {
+      // First create a transaction so force is needed
+      await db.transaction.create({
+        data: {
+          entityType: "personal",
+          type: "expense",
+          amount: 50,
+          currency: "USD",
+          exchangeRate: 1,
+          description: "Existing transaction",
+          category: "Test",
+          date: new Date("2026-09-15"),
+          personalAccountId,
+        },
+      });
+
       const result = await updateAccountSettings(
         TEST_USER_ID,
         personalAccountId,
         "personal",
-        { defaultCurrency: "BRL" },
+        { defaultCurrency: "BRL", force: true },
         db
       );
 
@@ -190,7 +205,22 @@ describe("MCP settings tools", () => {
       expect(result.name).toBe("Personal");
     });
 
-    it("should update business account name and currency", async () => {
+    it("should update business account name and currency with force", async () => {
+      // First create a transaction so force is needed
+      await db.transaction.create({
+        data: {
+          entityType: "business",
+          type: "income",
+          amount: 100,
+          currency: "USD",
+          exchangeRate: 1,
+          description: "Existing transaction",
+          category: "Test",
+          date: new Date("2026-09-15"),
+          businessId,
+        },
+      });
+
       const result = await updateAccountSettings(
         TEST_USER_ID,
         businessId,
@@ -198,6 +228,7 @@ describe("MCP settings tools", () => {
         {
           name: "Updated Business",
           defaultCurrency: "EUR",
+          force: true,
         },
         db
       );
@@ -226,7 +257,7 @@ describe("MCP settings tools", () => {
       expect(result.color).toBe("#FF5733");
     });
 
-    it("should not affect existing transactions when changing currency", async () => {
+    it("should not affect existing transactions when changing currency with force", async () => {
       await db.transaction.create({
         data: {
           entityType: "personal",
@@ -245,7 +276,7 @@ describe("MCP settings tools", () => {
         TEST_USER_ID,
         personalAccountId,
         "personal",
-        { defaultCurrency: "BRL" },
+        { defaultCurrency: "BRL", force: true },
         db
       );
 
@@ -253,6 +284,32 @@ describe("MCP settings tools", () => {
         where: { personalAccountId },
       });
       expect(transaction?.currency).toBe("USD");
+    });
+
+    it("should require force when changing currency on account with transactions", async () => {
+      await db.transaction.create({
+        data: {
+          entityType: "personal",
+          type: "expense",
+          amount: 100,
+          currency: "USD",
+          exchangeRate: 1,
+          description: "Transaction",
+          category: "Test",
+          date: new Date("2026-09-15"),
+          personalAccountId,
+        },
+      });
+
+      await expect(
+        updateAccountSettings(
+          TEST_USER_ID,
+          personalAccountId,
+          "personal",
+          { defaultCurrency: "BRL" }, // Missing force: true
+          db
+        )
+      ).rejects.toThrow(/requires force:true/);
     });
 
     it("should throw error for non-existent personal account", async () => {

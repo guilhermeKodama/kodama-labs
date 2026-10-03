@@ -37,13 +37,6 @@ import {
   deleteAttachment,
 } from "../tools/attachments";
 import {
-  listBudgets,
-  createBudget,
-  updateBudget,
-  deleteBudget,
-  getBudgetStatus,
-} from "../tools/budgets";
-import {
   MAX_FILE_SIZE_BYTES,
   ALLOWED_MIME_TYPES,
 } from "../../attachments/constants";
@@ -120,6 +113,7 @@ const CreateCategoryInputSchema = z.object({
 const UpdateCategoryInputSchema = z.object({
   id: z.string().uuid(),
   name: z.string().min(1).optional(),
+  type: z.enum(["income", "expense", "investment"]).optional(),
   color: z.string().optional(),
   icon: z.string().optional(),
 });
@@ -160,6 +154,7 @@ const UpdateAccountInputSchema = z.object({
   color: z.string().optional(),
   taxRate: z.number().min(0).max(1).optional(),
   initialBalance: z.number().optional(),
+  force: z.boolean().optional(),
 });
 
 const UpdateUserSettingsInputSchema = z.object({
@@ -208,37 +203,6 @@ const ListAttachmentsInputSchema = z.object({
 
 const DeleteAttachmentInputSchema = z.object({
   attachmentId: z.string().uuid(),
-});
-
-const ListBudgetsInputSchema = z.object({
-  accountId: z.string().uuid().optional(),
-  category: z.string().optional(),
-  effectiveDate: z.string().optional(), // YYYY-MM or YYYY-MM-DD
-});
-
-const CreateBudgetInputSchema = z.object({
-  accountId: z.string().uuid(),
-  category: z.string().min(1),
-  amount: z.number().nonnegative(),
-  currency: z.string().length(3),
-  effectiveFrom: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), // YYYY-MM-DD
-});
-
-const UpdateBudgetInputSchema = z.object({
-  budgetId: z.string().uuid(),
-  amount: z.number().nonnegative().optional(),
-  currency: z.string().length(3).optional(),
-  effectiveFrom: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(), // YYYY-MM-DD
-  isActive: z.boolean().optional(),
-});
-
-const DeleteBudgetInputSchema = z.object({
-  budgetId: z.string().uuid(),
-});
-
-const GetBudgetStatusInputSchema = z.object({
-  month: z.string().regex(/^\d{4}-\d{2}$/), // YYYY-MM
-  accountId: z.string().uuid().optional(),
 });
 
 /**
@@ -631,10 +595,11 @@ export function createCapitalMcpServer(userId: string, db: DbClient) {
     "delete_category",
     {
       description:
-        "Delete a category. Requires 'reassignTo' (category ID) if any transactions or " +
-        "budgets use this category - they will be reassigned first. Without reassignTo, " +
-        "fails with counts of linked transactions and budgets. Cannot delete categories " +
-        "with systemKey (required by the app).",
+        "Delete a category. Requires 'reassignTo' (category ID) if any transactions, recurring " +
+        "transactions, budgets, bill transactions, or mappings use this category. Reassignment is " +
+        "ATOMIC - all records are moved in a single transaction. Validates that reassignTo has the " +
+        "same type and checks for budget unique key collisions. Cannot delete default or system categories. " +
+        "Error message shows counts of all linked records.",
       inputSchema: DeleteCategoryInputSchema,
     },
     async (params) => {
@@ -655,9 +620,10 @@ export function createCapitalMcpServer(userId: string, db: DbClient) {
     "merge_categories",
     {
       description:
-        "Merge two categories by moving all transactions and budgets from 'fromId' to " +
-        "'toId', then deleting 'fromId'. Categories must have the same type. Returns counts " +
-        "of moved transactions and budgets. Cannot merge FROM categories with systemKey.",
+        "Merge two categories ATOMICALLY by moving all transactions, recurring transactions, " +
+        "budgets, bill transactions, and mappings from 'fromId' to 'toId', then deleting 'fromId'. " +
+        "Categories must have the same type. Checks for budget unique key collisions and fails with " +
+        "clear error listing conflicts. Returns counts of records moved for each table.",
       inputSchema: MergeCategoriesInputSchema,
     },
     async (params) => {
@@ -771,137 +737,19 @@ export function createCapitalMcpServer(userId: string, db: DbClient) {
     {
       description:
         "Update account (personal or business) settings: name, description, defaultCurrency, " +
-        "color, taxRate, initialBalance. IMPORTANT: Changing defaultCurrency requires " +
-        "force: true when the account has existing transactions (guard against accidental changes). " +
-        "Historical transaction amounts remain in their original currency as stored in the 'currency' field. " +
-        "The defaultCurrency only affects what currency new transactions default to in the UI.",
+        "color, taxRate, initialBalance. CURRENCY BEHAVIOR: PersonalAccount.defaultCurrency and " +
+        "Business.defaultCurrency only affect the default currency in UI forms for new transactions. " +
+        "They DO NOT affect existing transactions. Transaction.exchangeRate stores '1 transaction.currency " +
+        "= exchangeRate * user.baseCurrency', and all totals sum amount*exchangeRate. Changing defaultCurrency " +
+        "on an account with existing transactions requires 'force: true' to confirm understanding. " +
+        "See apps/capital/src/lib/utils/calculations.ts:20-21,186,396 and " +
+        "apps/capital/src/server/modules/reports/services/get-summary.ts:104,162 for usage. " +
+        "SAFE: Yes, existing totals remain correct since they reference baseCurrency.",
       inputSchema: UpdateAccountInputSchema,
     },
     async (params) => {
       const { accountId, entityType, ...updates } = params;
       const result = await updateAccountSettings(userId, accountId, entityType, updates, db);
-      return {
-        content: [
-          {
-            type: "text",
-            text: JSON.stringify(result, null, 2),
-          },
-        ],
-      };
-    }
-  );
-
-  // Register tool: list_budgets
-  server.registerTool(
-    "list_budgets",
-    {
-      description:
-        "List budgets for an account, optionally filtered by category. " +
-        "If effectiveDate (YYYY-MM or YYYY-MM-DD) is provided, returns only budgets effective at that date " +
-        "(the most recent budget with effectiveFrom <= effectiveDate for each category). " +
-        "Otherwise, returns all active budgets. Budgets support effective dating: multiple budgets can exist " +
-        "for the same category with different effective dates, e.g., Shopping 2,800 BRL from Oct 2026, " +
-        "2,000 BRL from Dec 2026, 1,500 BRL from Jan 2027.",
-      inputSchema: ListBudgetsInputSchema,
-    },
-    async (params) => {
-      const result = await listBudgets(userId, params, db);
-      return {
-        content: [
-          {
-            type: "text",
-            text: JSON.stringify(result, null, 2),
-          },
-        ],
-      };
-    }
-  );
-
-  // Register tool: create_budget
-  server.registerTool(
-    "create_budget",
-    {
-      description:
-        "Create a new budget for a category, effective from a specific date (YYYY-MM-DD). " +
-        "The budget will apply to all months from effectiveFrom onwards until a newer budget " +
-        "with a later effectiveFrom is created for the same category. Currency should typically be BRL. " +
-        "Amount must be non-negative. Multiple budgets can exist for the same category with different " +
-        "effective dates to handle budget changes over time.",
-      inputSchema: CreateBudgetInputSchema,
-    },
-    async (params) => {
-      const result = await createBudget(userId, params, db);
-      return {
-        content: [
-          {
-            type: "text",
-            text: JSON.stringify(result, null, 2),
-          },
-        ],
-      };
-    }
-  );
-
-  // Register tool: update_budget
-  server.registerTool(
-    "update_budget",
-    {
-      description:
-        "Update an existing budget. Can change amount, currency, effectiveFrom date, or isActive status. " +
-        "Changing effectiveFrom will update when the budget takes effect. Setting isActive=false soft-deletes " +
-        "the budget. Amount must be non-negative if provided.",
-      inputSchema: UpdateBudgetInputSchema,
-    },
-    async (params) => {
-      const result = await updateBudget(userId, params, db);
-      return {
-        content: [
-          {
-            type: "text",
-            text: JSON.stringify(result, null, 2),
-          },
-        ],
-      };
-    }
-  );
-
-  // Register tool: delete_budget
-  server.registerTool(
-    "delete_budget",
-    {
-      description:
-        "Delete a budget (soft delete by setting isActive=false). The budget will no longer appear in " +
-        "budget status calculations or listings, but the record is retained in the database.",
-      inputSchema: DeleteBudgetInputSchema,
-    },
-    async (params) => {
-      const result = await deleteBudget(userId, params, db);
-      return {
-        content: [
-          {
-            type: "text",
-            text: JSON.stringify(result, null, 2),
-          },
-        ],
-      };
-    }
-  );
-
-  // Register tool: get_budget_status
-  server.registerTool(
-    "get_budget_status",
-    {
-      description:
-        "Get budget status for a specific month (YYYY-MM), comparing budgeted vs actual spending per category. " +
-        "Returns summary (total budgeted, actual, remaining) and per-category breakdown with percentages. " +
-        "Budgets are in BRL. Actual spending includes only expenses (not transfers or income) and is converted " +
-        "to BRL using transaction exchange rates. For each category, returns the effective budget for that month " +
-        "(most recent budget with effectiveFrom <= month start) and compares it to actual spending. " +
-        "Categories are sorted by percentUsed descending (most over-budget first).",
-      inputSchema: GetBudgetStatusInputSchema,
-    },
-    async (params) => {
-      const result = await getBudgetStatus(userId, params, db);
       return {
         content: [
           {

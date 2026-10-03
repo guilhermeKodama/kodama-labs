@@ -147,22 +147,65 @@ describe("MCP category CRUD tools", () => {
       expect(updated.name).toBe("Supermarket");
     });
 
-    it("should not update default categories", async () => {
+    it("should update default categories for localization", async () => {
       const categories = await db.category.findMany({
         where: { userId: TEST_USER_ID, isDefault: true },
       });
       const defaultCategory = categories[0];
+      const originalName = defaultCategory.name;
 
-      await expect(
-        updateCategoryTool(
-          TEST_USER_ID,
-          {
-            id: defaultCategory.id,
-            name: "New Name",
-          },
-          db
-        )
-      ).rejects.toThrow("Cannot modify default categories");
+      // Create a transaction using this category
+      await db.transaction.create({
+        data: {
+          entityType: "personal",
+          type: defaultCategory.type,
+          amount: 100,
+          currency: "BRL",
+          exchangeRate: 1,
+          description: "Test transaction",
+          category: defaultCategory.name,
+          date: new Date("2026-09-15"),
+          personalAccountId,
+        },
+      });
+
+      // Rename to Portuguese
+      const updated = await updateCategoryTool(
+        TEST_USER_ID,
+        {
+          id: defaultCategory.id,
+          name: "Salário", // Portuguese for Salary
+        },
+        db
+      );
+
+      expect(updated.name).toBe("Salário");
+
+      // Verify transaction was updated
+      const transaction = await db.transaction.findFirst({
+        where: { personalAccountId },
+      });
+      expect(transaction?.category).toBe("Salário");
+
+      // Verify old category doesn't exist
+      const oldCategory = await db.category.findFirst({
+        where: {
+          userId: TEST_USER_ID,
+          name: originalName,
+        },
+      });
+      // Should still exist but with new name
+      expect(oldCategory).toBeNull();
+
+      // Verify the renamed category still exists
+      const renamedCategory = await db.category.findFirst({
+        where: {
+          userId: TEST_USER_ID,
+          name: "Salário",
+        },
+      });
+      expect(renamedCategory).not.toBeNull();
+      expect(renamedCategory?.isDefault).toBe(true);
     });
 
     it("should throw error for non-existent category", async () => {
@@ -218,7 +261,7 @@ describe("MCP category CRUD tools", () => {
 
       await expect(
         deleteCategoryTool(TEST_USER_ID, { id: category.id }, db)
-      ).rejects.toThrow(/Cannot delete category with \d+ transaction/);
+      ).rejects.toThrow(/Cannot delete category with linked records/);
     });
 
     it("should reassign transactions when deleting category", async () => {

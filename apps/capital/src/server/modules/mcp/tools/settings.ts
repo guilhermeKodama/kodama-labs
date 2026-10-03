@@ -112,11 +112,26 @@ export async function getAccountSettings(
 /**
  * Update account settings.
  * 
- * IMPORTANT: Changing defaultCurrency does NOT retroactively convert existing transactions.
- * - The currency field on Transaction records stores the actual currency of that transaction
- * - The defaultCurrency only affects what currency new transactions default to in the UI
- * - Historical transaction amounts remain in their original currency
- * - For display purposes, the UI may convert at the time of display using exchange rates
+ * IMPORTANT about defaultCurrency changes:
+ * 
+ * The exchangeRate field on transactions represents "1 transaction.currency = exchangeRate user.baseCurrency".
+ * When displaying amounts, the system multiplies amount * exchangeRate to convert to baseCurrency for totals.
+ * 
+ * PersonalAccount.defaultCurrency and Business.defaultCurrency are used for:
+ * - Default currency in UI forms when creating new transactions
+ * - Currency display in entity summary reports (see get-summary.ts:104, 162)
+ * 
+ * WHAT HAPPENS if you change defaultCurrency on an account with existing transactions:
+ * - Existing transactions keep their original currency and exchangeRate fields unchanged
+ * - Those exchangeRates still convert to the user's baseCurrency (which may differ from account's defaultCurrency)
+ * - Display totals remain correct because they sum amount*exchangeRate regardless of defaultCurrency
+ * - New transactions will default to the new currency in forms
+ * 
+ * SAFE TO CHANGE: Yes, if you understand that the defaultCurrency is just a UI default for new transactions,
+ * not a conversion base for existing data. All conversions go through baseCurrency.
+ * 
+ * To prevent accidental changes, this function requires force:true when changing currency on
+ * an account that has existing transactions.
  */
 export async function updateAccountSettings(
   userId: string,
@@ -129,6 +144,7 @@ export async function updateAccountSettings(
     color?: string;
     taxRate?: number;
     initialBalance?: number;
+    force?: boolean;
   },
   db: DbClient
 ) {
@@ -144,12 +160,30 @@ export async function updateAccountSettings(
       throw new Error("Personal account not found or access denied");
     }
 
+    // Check if trying to change currency on account with transactions
+    if (updates.defaultCurrency && updates.defaultCurrency !== existing.defaultCurrency) {
+      const transactionCount = await db.transaction.count({
+        where: { personalAccountId: accountId },
+      });
+
+      if (transactionCount > 0 && !updates.force) {
+        throw new Error(
+          `Account has ${transactionCount} transaction(s). Changing defaultCurrency is safe (existing ` +
+          `transactions keep their currency and exchangeRate), but requires force:true to confirm you ` +
+          `understand this. The new currency will only affect new transactions.`
+        );
+      }
+    }
+
+    const { force: _force1, ...updateData } = updates;
+    void _force1; // Used for validation above
+
     const updated = await db.personalAccount.update({
       where: { id: accountId },
       data: {
-        ...(updates.defaultCurrency && { defaultCurrency: updates.defaultCurrency }),
-        ...(updates.taxRate !== undefined && { taxRate: updates.taxRate }),
-        ...(updates.initialBalance !== undefined && { initialBalance: updates.initialBalance }),
+        ...(updateData.defaultCurrency && { defaultCurrency: updateData.defaultCurrency }),
+        ...(updateData.taxRate !== undefined && { taxRate: updateData.taxRate }),
+        ...(updateData.initialBalance !== undefined && { initialBalance: updateData.initialBalance }),
       },
       select: {
         id: true,
@@ -176,15 +210,33 @@ export async function updateAccountSettings(
       throw new Error("Business account not found or access denied");
     }
 
+    // Check if trying to change currency on account with transactions
+    if (updates.defaultCurrency && updates.defaultCurrency !== existing.defaultCurrency) {
+      const transactionCount = await db.transaction.count({
+        where: { businessId: accountId },
+      });
+
+      if (transactionCount > 0 && !updates.force) {
+        throw new Error(
+          `Account has ${transactionCount} transaction(s). Changing defaultCurrency is safe (existing ` +
+          `transactions keep their currency and exchangeRate), but requires force:true to confirm you ` +
+          `understand this. The new currency will only affect new transactions.`
+        );
+      }
+    }
+
+    const { force: _force2, ...updateData } = updates;
+    void _force2; // Used for validation above
+
     return db.business.update({
       where: { id: accountId },
       data: {
-        ...(updates.name && { name: updates.name }),
-        ...(updates.description !== undefined && { description: updates.description }),
-        ...(updates.defaultCurrency && { defaultCurrency: updates.defaultCurrency }),
-        ...(updates.color && { color: updates.color }),
-        ...(updates.taxRate !== undefined && { taxRate: updates.taxRate }),
-        ...(updates.initialBalance !== undefined && { initialBalance: updates.initialBalance }),
+        ...(updateData.name && { name: updateData.name }),
+        ...(updateData.description !== undefined && { description: updateData.description }),
+        ...(updateData.defaultCurrency && { defaultCurrency: updateData.defaultCurrency }),
+        ...(updateData.color && { color: updateData.color }),
+        ...(updateData.taxRate !== undefined && { taxRate: updateData.taxRate }),
+        ...(updateData.initialBalance !== undefined && { initialBalance: updateData.initialBalance }),
       },
       select: {
         id: true,
