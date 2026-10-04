@@ -12,7 +12,7 @@ Só funciona a partir do **checkout principal** do repo no servidor (`/home/koda
 ```bash
 git pull
 
-docker --context desktop-linux compose build      # reconstrói as 4 imagens
+docker --context desktop-linux compose build      # reconstrói as imagens (careers, attention, capital, sentinel, kodamalabs)
 docker --context desktop-linux compose up -d       # recria migrate → depois web/workers
 ```
 
@@ -24,7 +24,7 @@ O que acontece em `up -d`:
 
 Isso significa que **nunca é preciso rodar migration manualmente em produção** — faz parte do próprio `up -d`. E se uma migration falhar, os serviços dependentes simplesmente não são recriados (ficam na versão anterior rodando), em vez de subir num estado inconsistente.
 
-Buildar todas as 4 imagens de uma vez é o padrão simples. Pra buildar só uma (mudança isolada num app):
+Buildar todas as imagens de uma vez é o padrão simples. Pra buildar só uma (mudança isolada num app):
 
 ```bash
 docker --context desktop-linux compose build careers-migrate
@@ -63,17 +63,17 @@ Cada app tem um `apps/<app>/.env.production` no checkout principal — nunca com
 
 Se um secret mudar (rotacionar uma API key, por exemplo), edita o `.env.production` do app e roda `compose restart <app>-web` (ou os workers relevantes) — não precisa rebuild, já que o valor não está na imagem.
 
-`capital` e `sentinel` ainda dependem parcialmente de secrets que só existem na Vercel (`CRON_SECRET`, `ANTHROPIC_API_KEY`, etc. — puxar com `vercel env pull` antes de esperar essas duas rodarem 100% fora da Vercel).
+`capital` e `sentinel` usam os mesmos `apps/<app>/.env.production` (`CRON_SECRET`, `ANTHROPIC_API_KEY`, e o resto). Nada disso é lido de um painel externo.
 
 ## cronjobs (capital / sentinel)
 
-Esses dois apps não têm workers — o trabalho periódico deles é feito pelo serviço `cronjobs`, que lê `vercel.json` de cada app e dispara os endpoints de cron via HTTP, igual a Vercel faria. Ele não sobe com um `compose up -d` genérico — precisa ser ligado explicitamente:
+Esses dois apps não têm workers — o trabalho periódico deles é feito pelo serviço `cronjobs`, que lê `infrastructure/cronjobs/schedules/<app>.json` e dispara os endpoints de cron via HTTP. Ele sobe com o restante do stack no `compose up -d`. Se o mount dos schedules ou o volume de blobs mudar, o container precisa ser recriado (`up -d`), não só reiniciado:
 
 ```bash
 docker --context desktop-linux compose up -d cronjobs
 ```
 
-A variável `CRON_APPS` (no `.env` da raiz do repo) controla quais apps têm crons ativos localmente — útil pra migrar um de cada vez sem duplicar disparos com a Vercel.
+A variável `CRON_APPS` (default `capital,sentinel`, no environment do serviço) escolhe quais apps o runner dispara.
 
 ## Se algo der errado
 

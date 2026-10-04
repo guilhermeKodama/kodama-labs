@@ -5,7 +5,7 @@ description: Como o kodama-labs roda em produção — dois engines Docker, quem
 
 # Infraestrutura
 
-O kodama-labs roda em um servidor Ubuntu ligado 24/7 na rede local, usado só por duas pessoas. `careers`, `attention`, `capital` e `sentinel` rodam como containers Docker nesse servidor; `kodamalabs` (a landing page pública) e `docs` continuam na Vercel — CDN global faz mais sentido pra tráfego público do que servir do IP residencial.
+O kodama-labs roda em um servidor Ubuntu ligado 24/7 na rede local, usado só por duas pessoas. `careers`, `attention`, `capital`, `sentinel` e `kodamalabs` (a landing page) rodam como containers Docker nesse servidor. `docs` (este site) fica fora do stack de produção.
 
 ## Dois engines Docker — por quê
 
@@ -13,7 +13,7 @@ A máquina tem **dois daemons Docker separados**, com stores de imagem/volume/co
 
 | Context | O que roda | Por quê |
 |---|---|---|
-| `desktop-linux` | Docker Desktop — postgres, redis, qdrant, ollama (vazio), e os 4 apps do kodama-labs | Motor principal. É o que aparece na UI do Docker Desktop (containers, logs, métricas de CPU/memória num só lugar) |
+| `desktop-linux` | Docker Desktop — postgres, redis, qdrant, ollama (vazio), e os apps do kodama-labs | Motor principal. É o que aparece na UI do Docker Desktop (containers, logs, métricas de CPU/memória num só lugar) |
 | `default` | Só o `whisper-rocm` | Docker Desktop no Linux roda dentro de uma VM leve, e essa VM **não tem acesso aos device nodes de GPU do host** (`/dev/kfd` do ROCm não existe lá — testado e confirmado). O whisper precisa da GPU AMD pra transcrição, então fica de fora do Desktop por necessidade técnica, não por escolha |
 
 Todo comando `docker`/`docker compose` precisa do context explícito: `docker --context desktop-linux ...`. Nunca depender do context default do CLI — ele pode apontar pro engine errado.
@@ -46,7 +46,10 @@ flowchart TB
             subgraph Sentinel["sentinel"]
                 SW["web :3002→13002"]
             end
-            Cron["cronjobs\n(runner de crons capital/sentinel)"]
+            subgraph Kodamalabs["kodamalabs"]
+                KW["web :3003"]
+            end
+            Cron["cronjobs\n(schedules capital/sentinel)"]
         end
 
         Ollama["ollama nativo :11434\nGPU, fora de container"]
@@ -56,6 +59,7 @@ flowchart TB
     Cloudflared --> AW
     Cloudflared --> CaW
     Cloudflared --> SW
+    Cloudflared --> KW
     Attention -.->|host.docker.internal| Ollama
     Attention -.->|host.docker.internal| Whisper
     Careers --> PG
@@ -76,8 +80,8 @@ flowchart TB
 | `sentinel` | 3002 | 13002 | |
 | `attention` | 3005 | 13005 | mantém domínio próprio `attentio.dev` — PWA instalado + push subscriptions presos à origin |
 | `careers` | 3006 | 13006 | |
-| `docs` | 3001 | — | só Vercel |
-| `kodamalabs` | 3003 | — | só Vercel |
+| `docs` | 3001 | — | fora do stack de produção |
+| `kodamalabs` | 3003 | 3003 | `kodamalabs-web`; a porta publicada segue `KODAMALABS_WEB_PORT` |
 | postgres | 5433 | 5433 | mesma instância pra dev e prod — só o **banco** muda, não a porta |
 
 Prod usa `13xxx` de propósito: assim os containers e o `pnpm dev` local nunca disputam a mesma porta, e dá pra rodar os dois ao mesmo tempo sem conflito. O Cloudflare Tunnel não depende dessas portas de host de qualquer forma — ele acessa cada container pelo nome, na porta interna (`careers-web:3006`, etc.), então a porta publicada no host é só conveniência pra acesso direto via LAN.
@@ -95,8 +99,7 @@ Os dois arquivos de env por app:
 
 ## O que fica fora do Docker
 
-- **`kodamalabs`** — landing page pública, Vercel.
-- **`docs`** — este site, Vercel.
+- **`docs`** — este site, fora do stack de produção.
 - **`whisper-rocm`** — precisa de GPU, fica no context `default`.
 - **Ollama nativo** — idem, GPU.
 - **Import do vault do Obsidian** (`careers`) — a VM do Docker Desktop não compartilha `/mnt/nas-shared` (só caminhos abaixo de `/home/kodama` são acessíveis por padrão). O import continua rodando direto no host quando necessário.
