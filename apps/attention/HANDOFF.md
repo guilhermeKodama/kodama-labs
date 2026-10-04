@@ -248,9 +248,8 @@ código nativo. Vale testar antes de escrever o agente.
 
 ## Arquitetura de hosting e de clientes
 
-WhatsApp e IMAP IDLE precisam de socket vivo 24/7 — Vercel serverless não serve. Desenho híbrido
-considerado: worker always-on (o desktop) pros conectores/sessões/sockets, dashboard Next.js
-(pode ser Vercel) batendo no mesmo Postgres.
+WhatsApp e IMAP IDLE precisam de socket vivo 24/7. O app inteiro roda no desktop
+(Next.js + workers) atrás do Cloudflare Tunnel, no mesmo Postgres.
 
 ### Alcançabilidade vs. acordar o dispositivo
 
@@ -351,7 +350,7 @@ WhatsApp do escopo).
 
 | Decisão | Alternativa descartada | Por quê |
 |---|---|---|
-| Servidor = desktop Linux, sempre ligado | Vercel/serverless | IMAP IDLE e a sessão do WhatsApp precisam de socket vivo 24/7; serverless não serve |
+| Servidor = desktop Linux, sempre ligado | serverless | IMAP IDLE e a sessão do WhatsApp precisam de socket vivo 24/7 |
 | Exposição = Cloudflare Tunnel | Tailscale | O Mac do trabalho do usuário **bloqueia instalação de VPN** — Cloudflare Tunnel expõe um hostname HTTPS comum, sem cliente instalado |
 | Baileys (WebSocket direto) | `whatsapp-web.js` (Puppeteer) | Revisado na Etapa 1: `whatsapp-web.js` se mostrou instável nesta máquina (crashes, hang, logout forçado por reconexão rápida); Baileys já rodava estável na mesma conta via outra ferramenta (openclaw). Elimina a classe de bug ligada a navegador/Puppeteer |
 | PWA em vez de app nativo, primeiro | App iOS nativo direto | PWA cobre os três dispositivos com um código só; iOS permite marcar a PWA como exceção de Foco, o que pode já resolver o furo de DND sem custo nenhum |

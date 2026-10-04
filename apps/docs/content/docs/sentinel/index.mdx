@@ -49,14 +49,14 @@ Sentinel follows a three-layer **ELT (Extract, Load, Transform)** architecture:
 | **Processing** | Transforms raw JSON into normalized relational tables | 5 minutes |
 | **Analysis** | Runs detection engines and AI to generate alerts | 5 minutes |
 
-Each layer is independent and idempotent — if a job fails, it picks up where it left off on the next run. Background jobs are orchestrated by Vercel cron routes (locally simulated by `infrastructure/cronjobs`).
+Each layer is independent and idempotent — if a job fails, it picks up where it left off on the next run. Background jobs are HTTP cron routes fired by `infrastructure/cronjobs` from `infrastructure/cronjobs/schedules/sentinel.json`.
 
 ## Tech Stack
 
 - **Framework:** Next.js 16 (App Router), React 19
 - **Database:** PostgreSQL with Prisma 6 (separate `sentinel` database)
 - **AI:** Anthropic Claude for deep procurement analysis
-- **Background Jobs:** Vercel Cron + custom job runner with logging
+- **Background Jobs:** `infrastructure/cronjobs` (node-cron) + custom job runner with logging
 - **Styling:** Tailwind CSS 4, Radix UI, shadcn-style components
 - **i18n:** next-intl (Portuguese / English)
 

@@ -1,7 +1,5 @@
 import { NextResponse } from "next/server";
 
-export const runtime = "edge";
-
 type LeadPayload = Record<string, string>;
 
 export async function POST(request: Request) {

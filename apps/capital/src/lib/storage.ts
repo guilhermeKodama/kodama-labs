@@ -8,6 +8,7 @@ import {
   slugify,
   sanitizeExtension,
   joinPath,
+  runtimeAppUrl,
   type PutBlobResult,
   type StorageOptions,
 } from "@repo/storage";
@@ -22,9 +23,8 @@ import type { AttachmentKind } from "@/generated/prisma";
 // must not silently determine where uploaded files live.
 function options(): StorageOptions {
   return {
-    token: env.BLOB_READ_WRITE_TOKEN,
     localDir: env.CAPITAL_BLOB_DIR,
-    appUrl: env.NEXT_PUBLIC_APP_URL,
+    appUrl: runtimeAppUrl(env.NEXT_PUBLIC_APP_URL),
   };
 }
 
@@ -53,7 +53,7 @@ export function readLocalBlob(pathname: string) {
 }
 
 export function isLocalBlobMode(): boolean {
-  return baseIsLocalBlobMode(options());
+  return baseIsLocalBlobMode();
 }
 
 function pickExtensionFromName(originalName: string): string {

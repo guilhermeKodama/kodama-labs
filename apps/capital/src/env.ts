@@ -20,8 +20,10 @@ export const env = createEnv({
     CRON_SECRET: z.string().optional(),
     ANTHROPIC_API_KEY: z.string().optional(),
     BRAPI_TOKEN: z.string().optional(),
-    BLOB_READ_WRITE_TOKEN: z.string().optional(),
     CAPITAL_BLOB_DIR: z.string().optional(),
+    // Runtime origin for blob URLs. Overrides the inlined NEXT_PUBLIC_APP_URL
+    // without a rebuild. Compose sets it from CAPITAL_PUBLIC_URL.
+    APP_URL: z.string().url().optional(),
     CAPITAL_AGENT_MODEL: z.string().default("claude-opus-5"),
     ASSISTANT_MAX_TOOL_ITERATIONS: z.coerce.number().int().positive().default(12),
     ASSISTANT_MAX_TURN_COST_USD: z.coerce.number().positive().default(0.5),
@@ -42,8 +44,8 @@ export const env = createEnv({
     CRON_SECRET: process.env.CRON_SECRET,
     ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY,
     BRAPI_TOKEN: process.env.BRAPI_TOKEN,
-    BLOB_READ_WRITE_TOKEN: process.env.BLOB_READ_WRITE_TOKEN,
     CAPITAL_BLOB_DIR: process.env.CAPITAL_BLOB_DIR,
+    APP_URL: process.env.APP_URL,
     CAPITAL_AGENT_MODEL: process.env.CAPITAL_AGENT_MODEL,
     ASSISTANT_MAX_TOOL_ITERATIONS: process.env.ASSISTANT_MAX_TOOL_ITERATIONS,
     ASSISTANT_MAX_TURN_COST_USD: process.env.ASSISTANT_MAX_TURN_COST_USD,

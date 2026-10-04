@@ -61,11 +61,9 @@ export interface PipelineState {
 const PIPELINE_STATE_REVALIDATE_SECONDS = 60;
 
 /**
- * Cross-Lambda cache. Previously this was an in-memory cache (10s TTL,
- * per-Lambda-instance) which cold-started repeatedly under Vercel scale-out
- * and was the source of the high-traffic raw_records GROUP BY hits in the
- * Neon query log. unstable_cache stores in Next.js' shared cache so a single
- * compute window covers every Lambda hitting it.
+ * Shared cache for pipeline totals. unstable_cache keeps one 60s window
+ * for the single Next.js process, so the dashboard does not re-run the
+ * raw_records aggregation on every request.
  */
 const cachedComputePipelineState = unstable_cache(
   () => computePipelineState(),

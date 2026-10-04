@@ -9,7 +9,7 @@ import { internalCategoryName } from "@capital/server/modules/categories/lib/int
 import { normalizeDescription } from "@capital/server/modules/credit-cards/utils";
 
 // One chunk per invocation. Matches the Claude batch size in claude.ts so each
-// run makes a single Claude API call (~5-15s) and stays well under maxDuration.
+// run makes a single Claude API call (~5-15s).
 export const BILL_CATEGORIZE_CHUNK_SIZE = 50;
 
 type BillCategorizer = typeof categorizeBillTransactions;

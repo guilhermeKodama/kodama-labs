@@ -1,66 +1,53 @@
-import {
-  put,
-  head,
-  del,
-  BlobNotFoundError,
-  type PutBlobResult,
-} from "@vercel/blob";
 import { promises as fs } from "node:fs";
 import path from "node:path";
+import {
+  LOCAL_URL_MARKER,
+  localBlobFilePath,
+  localBlobUrl,
+} from "./paths";
 
 export type StorageOptions = {
-  token?: string;
   localDir?: string;
   appUrl?: string;
 };
 
-const LOCAL_URL_MARKER = "/api/blob/";
-
-function resolveToken(opts?: StorageOptions): string | undefined {
-  return opts?.token ?? process.env.BLOB_READ_WRITE_TOKEN;
-}
+export type PutBlobResult = {
+  url: string;
+  downloadUrl: string;
+  pathname: string;
+  contentType: string;
+  contentDisposition: string;
+};
 
 function resolveLocalDir(opts?: StorageOptions): string {
   return opts?.localDir ?? path.resolve(process.cwd(), ".local-blob");
 }
 
+/**
+ * Origin baked into absolute blob URLs.
+ * `APP_URL` is read when the URL is built, so a server restart picks up a
+ * new domain. `buildTime` is the inlined `NEXT_PUBLIC_APP_URL`.
+ */
+export function runtimeAppUrl(buildTime?: string): string | undefined {
+  // Bracket access so the bundler does not inline this at build time.
+  const runtime = process.env["APP_URL"];
+  if (runtime) return runtime;
+  return buildTime;
+}
+
 function resolveAppUrl(opts?: StorageOptions): string {
   return (
-    opts?.appUrl ??
+    runtimeAppUrl(opts?.appUrl) ??
     process.env.NEXT_PUBLIC_APP_URL ??
     "http://localhost:3000"
   );
 }
 
-function localUrlFor(pathname: string, opts?: StorageOptions): string {
-  return `${resolveAppUrl(opts)}${LOCAL_URL_MARKER}${pathname}`;
-}
-
-export function isBlobConfigured(): boolean {
-  return true;
-}
-
-export function isLocalBlobMode(opts?: StorageOptions): boolean {
-  return !resolveToken(opts);
-}
-
-export function getLocalBlobDir(opts?: StorageOptions): string {
-  return resolveLocalDir(opts);
-}
-
 function resolveLocalPath(pathname: string, opts?: StorageOptions): string {
-  const baseDir = resolveLocalDir(opts);
-  const candidate = path.resolve(baseDir, pathname);
-  if (candidate !== baseDir && !candidate.startsWith(baseDir + path.sep)) {
-    throw new Error(`Refusing to access blob outside local dir: ${pathname}`);
-  }
-  return candidate;
+  return localBlobFilePath(resolveLocalDir(opts), pathname);
 }
 
-function resolveLocalPathFromUrl(
-  url: string,
-  opts?: StorageOptions,
-): string | null {
+function resolveLocalPathFromUrl(url: string, opts?: StorageOptions): string | null {
   const idx = url.indexOf(LOCAL_URL_MARKER);
   if (idx === -1) return null;
   const pathname = url.slice(idx + LOCAL_URL_MARKER.length).split("?")[0]!;
@@ -71,8 +58,20 @@ function resolveLocalPathFromUrl(
   }
 }
 
-function isLocalUrl(url: string): boolean {
+export function isLocalUrl(url: string): boolean {
   return url.includes(LOCAL_URL_MARKER);
+}
+
+export function isBlobConfigured(): boolean {
+  return true;
+}
+
+export function isLocalBlobMode(): boolean {
+  return true;
+}
+
+export function getLocalBlobDir(opts?: StorageOptions): string {
+  return resolveLocalDir(opts);
 }
 
 export async function putObject(
@@ -81,30 +80,18 @@ export async function putObject(
   contentType: string,
   opts?: StorageOptions,
 ): Promise<PutBlobResult> {
-  const token = resolveToken(opts);
-  if (!token) {
-    const filePath = resolveLocalPath(pathname, opts);
-    await fs.mkdir(path.dirname(filePath), { recursive: true });
-    await fs.writeFile(filePath, body);
-    await fs.writeFile(
-      `${filePath}.meta.json`,
-      JSON.stringify({ contentType }),
-    );
-    const url = localUrlFor(pathname, opts);
-    return {
-      url,
-      downloadUrl: url,
-      pathname,
-      contentType,
-      contentDisposition: `inline; filename="${path.basename(pathname)}"`,
-    };
-  }
-  return put(pathname, body, {
-    access: "public",
-    addRandomSuffix: false,
+  const filePath = resolveLocalPath(pathname, opts);
+  await fs.mkdir(path.dirname(filePath), { recursive: true });
+  await fs.writeFile(filePath, body);
+  await fs.writeFile(`${filePath}.meta.json`, JSON.stringify({ contentType }));
+  const url = localBlobUrl(resolveAppUrl(opts), pathname);
+  return {
+    url,
+    downloadUrl: url,
+    pathname,
     contentType,
-    token,
-  });
+    contentDisposition: `inline; filename="${path.basename(pathname)}"`,
+  };
 }
 
 export async function headObject(
@@ -121,15 +108,13 @@ export async function headObject(
       return null;
     }
   }
-  const token = resolveToken(opts);
-  if (!token) return null;
-  try {
-    const res = await head(url, { token });
-    return { size: res.size };
-  } catch (err) {
-    if (err instanceof BlobNotFoundError) return null;
-    throw err;
+  const response = await fetch(url, { method: "HEAD" });
+  if (response.status === 404) return null;
+  if (!response.ok) {
+    throw new Error(`Blob head failed: ${response.status} for ${url}`);
   }
+  const length = response.headers.get("content-length");
+  return { size: length ? Number(length) : 0 };
 }
 
 export async function getObjectBuffer(
@@ -145,39 +130,21 @@ export async function getObjectBuffer(
       return null;
     }
   }
-  try {
-    const response = await fetch(url);
-    if (!response.ok) {
-      if (response.status === 404) return null;
-      throw new Error(`Blob fetch failed: ${response.status} for ${url}`);
-    }
-    const arrayBuffer = await response.arrayBuffer();
-    return Buffer.from(arrayBuffer);
-  } catch (err) {
-    if (err instanceof Error && err.message.includes("404")) return null;
-    throw err;
+  const response = await fetch(url);
+  if (!response.ok) {
+    if (response.status === 404) return null;
+    throw new Error(`Blob fetch failed: ${response.status} for ${url}`);
   }
+  const arrayBuffer = await response.arrayBuffer();
+  return Buffer.from(arrayBuffer);
 }
 
-export async function deleteObject(
-  url: string,
-  opts?: StorageOptions,
-): Promise<void> {
-  if (isLocalUrl(url)) {
-    const filePath = resolveLocalPathFromUrl(url, opts);
-    if (!filePath) return;
-    await fs.rm(filePath, { force: true });
-    await fs.rm(`${filePath}.meta.json`, { force: true });
-    return;
-  }
-  const token = resolveToken(opts);
-  if (!token) return;
-  try {
-    await del(url, { token });
-  } catch (err) {
-    if (err instanceof BlobNotFoundError) return;
-    throw err;
-  }
+export async function deleteObject(url: string, opts?: StorageOptions): Promise<void> {
+  if (!isLocalUrl(url)) return;
+  const filePath = resolveLocalPathFromUrl(url, opts);
+  if (!filePath) return;
+  await fs.rm(filePath, { force: true });
+  await fs.rm(`${filePath}.meta.json`, { force: true });
 }
 
 export async function readLocalBlob(
@@ -220,5 +187,3 @@ export function joinPath(...segments: string[]): string {
     .map((s) => s.replace(/^\/+|\/+$/g, ""))
     .join("/");
 }
-
-export type { PutBlobResult } from "@vercel/blob";

@@ -27,4 +27,4 @@ The card renders automatically based on the project's category.
 
 ## Deploy
 
-Vercel project root = `apps/kodamalabs`. Framework: Next.js (auto). `vercel.json` already overrides the install command to run from monorepo root. Custom domain `kodamalabs.ai` is configured in the Vercel dashboard.
+`kodamalabs-web` in the root `docker-compose.yml` (`kodama-prod`), port 3003. The Cloudflare tunnel routes `kodamalabs.ai` and `www.kodamalabs.ai` at it. DNS cutover is done on the registrar, not in this repo.

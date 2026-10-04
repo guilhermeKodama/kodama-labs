@@ -27,7 +27,7 @@ export const projects: Project[] = [
     slug: 'sentinel',
     category: 'flagship',
     status: 'live',
-    stack: ['Next.js', 'Prisma', 'Claude API', 'Vercel Cron'],
+    stack: ['Next.js', 'Prisma', 'Claude API', 'node-cron'],
     accent: 'cyan',
     links: { live: 'https://sentinela-gov.com.br/en/dashboard' },
   },

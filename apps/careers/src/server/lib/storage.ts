@@ -1,4 +1,4 @@
-import { putObject, deleteObject, slugify, sanitizeExtension, joinPath, type StorageOptions } from "@repo/storage";
+import { putObject, deleteObject, slugify, sanitizeExtension, joinPath, runtimeAppUrl, type StorageOptions } from "@repo/storage";
 import { env } from "../../env";
 
 // Always pass localDir explicitly — @repo/storage defaults to
@@ -8,9 +8,8 @@ import { env } from "../../env";
 // must not silently determine where uploaded files live.
 function storageOpts(): StorageOptions {
   return {
-    token: env.BLOB_READ_WRITE_TOKEN,
     localDir: env.CAREERS_BLOB_DIR,
-    appUrl: env.NEXT_PUBLIC_APP_URL,
+    appUrl: runtimeAppUrl(env.NEXT_PUBLIC_APP_URL),
   };
 }
 

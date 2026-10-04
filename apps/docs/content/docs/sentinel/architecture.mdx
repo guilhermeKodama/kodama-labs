@@ -88,7 +88,7 @@ flowchart TB
 
 ### Request Flow
 
-1. **Vercel Cron** (or local `infrastructure/cronjobs`) sends HTTP GET requests to the cron API routes on a fixed schedule
+1. **`infrastructure/cronjobs`** sends HTTP GET requests to the cron API routes on the schedule in `infrastructure/cronjobs/schedules/sentinel.json`
 2. Each cron route authenticates via `Authorization: Bearer $CRON_SECRET` and runs its jobs sequentially
 3. Jobs use the **job runner** (`job-runner.ts`) which creates a `JobRun` record, executes the logic, and updates the record with results (records in/out, status, duration)
 4. Jobs read from and write to the PostgreSQL `sentinel` database via Prisma
@@ -179,6 +179,7 @@ apps/sentinel/
 │           ├── ingestion/         # Layer 1: Raw data extraction
 │           ├── processing/        # Layer 2: Data transformation
 │           └── analysis/          # Layer 3: Detection + AI
-├── vercel.json                    # Cron schedule definitions
 └── .env                           # Environment variables
 ```
+
+Cron schedules live in `infrastructure/cronjobs/schedules/sentinel.json`, outside this tree.

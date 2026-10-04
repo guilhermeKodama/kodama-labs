@@ -9,6 +9,7 @@ import {
   slugify,
   sanitizeExtension,
   joinPath,
+  runtimeAppUrl,
   type PutBlobResult,
   type StorageOptions,
 } from "@repo/storage";
@@ -16,8 +17,8 @@ import { env } from "@/env";
 
 function options(): StorageOptions {
   return {
-    token: env.BLOB_READ_WRITE_TOKEN,
-    appUrl: env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3002",
+    localDir: env.SENTINEL_BLOB_DIR,
+    appUrl: runtimeAppUrl(env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3002"),
   };
 }
 
@@ -26,7 +27,7 @@ export function isBlobConfigured(): boolean {
 }
 
 export function isLocalBlobMode(): boolean {
-  return baseIsLocalBlobMode(options());
+  return baseIsLocalBlobMode();
 }
 
 export function getLocalBlobDir(): string {

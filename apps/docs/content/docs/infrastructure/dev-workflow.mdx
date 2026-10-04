@@ -71,7 +71,9 @@ Schema mudou? Cria a migration normalmente contra o banco `_dev`:
 
 ```bash
 cd apps/careers
-pnpm run db:migrate   # prisma migrate dev — cria e aplica a migration
+pnpm run db:migrate:dev   # prisma migrate dev — cria e aplica a migration
 ```
+
+`pnpm run db:migrate` aplica migrations que já existem (`prisma migrate deploy`). Não cria arquivo novo.
 
 Isso grava o arquivo de migration no repo. Ele só chega em produção no próximo [deploy](/docs/infrastructure/deploy), que roda `prisma migrate deploy` contra o banco real como parte do processo — não precisa aplicar manualmente em prod.

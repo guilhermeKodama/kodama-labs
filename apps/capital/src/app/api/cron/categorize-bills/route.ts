@@ -3,16 +3,12 @@ import { prisma } from "@capital/server/lib/prisma";
 import { env } from "@/env";
 import { categorizeClaimedBillChunk } from "./categorize-bill-chunk";
 
-// Allow up to 60 seconds for this function (Pro plan supports up to 300s)
-export const maxDuration = 60;
-
 /**
  * Cron endpoint that processes pending bill categorizations via Claude API.
  * Runs every 2 minutes. Processes one chunk of transactions per run; the bill
  * stays in "processing" until all its uncategorized transactions are done.
  */
 export async function GET(request: NextRequest) {
-  // Verify the request is from Vercel Cron
   const authHeader = request.headers.get("authorization");
   const cronSecret = env.CRON_SECRET;
 

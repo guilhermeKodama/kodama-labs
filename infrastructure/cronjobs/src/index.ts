@@ -1,75 +1,44 @@
 /**
- * Local Cron Runner
+ * Cron runner.
  *
- * Reads vercel.json from apps and schedules cron jobs locally using node-cron.
- * This simulates Vercel's cron behavior in development.
+ * Reads infrastructure/cronjobs/schedules/<app>.json and fires each path
+ * on the app's base URL. Works against localhost in dev and against the
+ * compose network in prod (CAPITAL_BASE_URL / SENTINEL_BASE_URL).
  */
 
 import "dotenv/config";
 import cron from "node-cron";
-import { readFileSync, existsSync } from "fs";
-import { join, dirname } from "path";
-import { fileURLToPath } from "url";
-
-const __dirname = dirname(fileURLToPath(import.meta.url));
-
-interface VercelCron {
-  path: string;
-  schedule: string;
-}
-
-interface VercelConfig {
-  crons?: VercelCron[];
-}
+import { CRON_APPS, readScheduleFile, scheduleFilePath, type CronJob } from "./schedules";
 
 interface AppConfig {
   name: string;
   baseUrl: string;
-  vercelJsonPath: string;
+  scheduleFile: string;
   cronSecret?: string;
 }
 
-// Configuration for apps with cron jobs. baseUrl/cronSecret are env-driven so
-// this same runner works pointed at localhost (dev) or at the container
-// network (e.g. http://capital-web:3000, prod compose) without code changes.
-const ALL_APPS: AppConfig[] = [
-  {
-    name: "capital",
-    baseUrl: process.env.CAPITAL_BASE_URL ?? "http://localhost:3000",
-    vercelJsonPath: join(__dirname, "../../../apps/capital/vercel.json"),
-    cronSecret: process.env.CAPITAL_CRON_SECRET ?? process.env.CRON_SECRET,
-  },
-  {
-    name: "sentinel",
-    baseUrl: process.env.SENTINEL_BASE_URL ?? "http://localhost:3002",
-    vercelJsonPath: join(__dirname, "../../../apps/sentinel/vercel.json"),
-    cronSecret: process.env.SENTINEL_CRON_SECRET ?? process.env.CRON_SECRET,
-  },
-];
+const BASE_URLS: Record<(typeof CRON_APPS)[number]["name"], string> = {
+  capital: process.env.CAPITAL_BASE_URL ?? "http://localhost:3000",
+  sentinel: process.env.SENTINEL_BASE_URL ?? "http://localhost:3002",
+};
 
-// CRON_APPS gates a staged Vercel exit — e.g. CRON_APPS=capital runs only
-// capital's crons locally while sentinel's still fire from Vercel.
+const CRON_SECRETS: Record<(typeof CRON_APPS)[number]["name"], string | undefined> = {
+  capital: process.env.CAPITAL_CRON_SECRET ?? process.env.CRON_SECRET,
+  sentinel: process.env.SENTINEL_CRON_SECRET ?? process.env.CRON_SECRET,
+};
+
+const ALL_APPS: AppConfig[] = CRON_APPS.map((app) => ({
+  name: app.name,
+  baseUrl: BASE_URLS[app.name],
+  scheduleFile: app.scheduleFile,
+  cronSecret: CRON_SECRETS[app.name],
+}));
+
+// CRON_APPS limits which apps this process fires. Default is both.
 const enabledNames = (process.env.CRON_APPS ?? "capital,sentinel")
   .split(",")
   .map((n) => n.trim());
 const APPS: AppConfig[] = ALL_APPS.filter((app) => enabledNames.includes(app.name));
-
-/**
- * Reads and parses vercel.json
- */
-function readVercelConfig(path: string): VercelConfig {
-  try {
-    if (!existsSync(path)) {
-      console.warn(`[Cron] vercel.json not found at ${path}`);
-      return {};
-    }
-    const content = readFileSync(path, "utf-8");
-    return JSON.parse(content) as VercelConfig;
-  } catch (error) {
-    console.error(`[Cron] Error reading vercel.json:`, error);
-    return {};
-  }
-}
 
 /**
  * Calls a cron endpoint
@@ -117,17 +86,26 @@ async function triggerCronEndpoint(
 /**
  * Schedules cron jobs for an app
  */
-function scheduleAppCrons(app: AppConfig): number {
-  const config = readVercelConfig(app.vercelJsonPath);
+function loadAppCrons(app: AppConfig): CronJob[] {
+  try {
+    return readScheduleFile(scheduleFilePath(app.scheduleFile)).crons;
+  } catch (error) {
+    console.error(`[Cron] Error reading ${app.scheduleFile}:`, error);
+    return [];
+  }
+}
 
-  if (!config.crons || config.crons.length === 0) {
+function scheduleAppCrons(app: AppConfig): number {
+  const crons = loadAppCrons(app);
+
+  if (crons.length === 0) {
     console.log(`[Cron] No crons found for ${app.name}`);
     return 0;
   }
 
   let scheduled = 0;
 
-  for (const { path, schedule } of config.crons) {
+  for (const { path, schedule } of crons) {
     if (!cron.validate(schedule)) {
       console.error(
         `[Cron] Invalid schedule "${schedule}" for ${app.name}${path}`
@@ -152,7 +130,7 @@ function scheduleAppCrons(app: AppConfig): number {
 function main(): void {
   console.log("");
   console.log("╔══════════════════════════════════════╗");
-  console.log("║     Local Cron Runner (Dev Mode)     ║");
+  console.log("║             Cron Runner              ║");
   console.log("╚══════════════════════════════════════╝");
   console.log("");
   

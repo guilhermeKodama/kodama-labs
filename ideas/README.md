@@ -44,12 +44,15 @@ Either way, the landing renders at http://localhost:3100.
 
 Fill in `validation.md` **before** writing code. If you can't articulate the riskiest assumption in one sentence, the idea isn't ready.
 
-## Deploying an idea to Vercel
+## Running an idea
 
-1. New Vercel project, **root directory = `ideas/<slug>`**.
-2. Framework preset: Next.js (auto-detected).
-3. Install command is inherited from the idea's `vercel.json`.
-4. Add env vars: `NEXT_PUBLIC_META_PIXEL_ID`, `NEXT_PUBLIC_GA_ID`, `LEADS_WEBHOOK_URL`.
+Ideas stay on the laptop. They are not part of the `kodama-prod` compose stack.
+
+```sh
+pnpm dev --filter=@ideas/<slug>   # http://localhost:3100
+```
+
+Copy `.env.example` to `.env.local` for `NEXT_PUBLIC_META_PIXEL_ID`, `NEXT_PUBLIC_GA_ID`, and `LEADS_WEBHOOK_URL` when you need them.
 
 ## Folder layout
 

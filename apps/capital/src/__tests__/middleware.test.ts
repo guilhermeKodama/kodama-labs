@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { isExcludedPath } from "../lib/middleware-helpers";
+import { isExcludedPath, middlewareConfig } from "../lib/middleware-helpers";
 
 describe("Middleware", () => {
   describe("isExcludedPath helper", () => {
@@ -23,8 +23,12 @@ describe("Middleware", () => {
       expect(isExcludedPath("/_next/static")).toBe(true);
     });
 
-    it("should exclude /_vercel internals", () => {
-      expect(isExcludedPath("/_vercel/insights")).toBe(true);
+    it("does not special-case /_vercel", () => {
+      expect(isExcludedPath("/_vercel/insights")).toBe(false);
+    });
+
+    it("keeps the matcher aimed at app routes", () => {
+      expect(middlewareConfig.matcher).toEqual(["/(.*)", "/"]);
     });
 
     it("should exclude paths with dots (static files)", () => {

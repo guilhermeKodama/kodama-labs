@@ -3,8 +3,6 @@ import { prisma } from "@capital/server/lib/prisma";
 import { env } from "@/env";
 import { categorizeClaimedStatementImport } from "./categorize-statement-import";
 
-export const maxDuration = 60;
-
 /**
  * Cron endpoint that processes pending statement import categorizations via Claude API.
  * Processes 1 import per run.

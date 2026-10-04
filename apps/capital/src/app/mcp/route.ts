@@ -6,7 +6,6 @@ import crypto from "crypto";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
-export const maxDuration = 300;
 
 /**
  * Body size limits for App Router route handlers:

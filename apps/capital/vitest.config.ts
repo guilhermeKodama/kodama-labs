@@ -14,13 +14,11 @@ try {
   // No .env (fresh worktree / CI) - let env.ts report what's missing.
 }
 
-// .env points CAPITAL_BLOB_DIR at a developer home directory and leaves
-// the blob token empty, so attachment tests mkdir that path. Tests always
-// write to a temp dir and never call Vercel Blob.
+// .env points CAPITAL_BLOB_DIR at a developer home directory. Tests always
+// write to a temp dir instead.
 const testBlobDir = path.join(os.tmpdir(), 'capital-vitest-blob');
 fs.mkdirSync(testBlobDir, { recursive: true });
 process.env.CAPITAL_BLOB_DIR = testBlobDir;
-delete process.env.BLOB_READ_WRITE_TOKEN;
 
 export default defineConfig({
   test: {

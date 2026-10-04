@@ -530,8 +530,7 @@ export function createCapitalMcpServer(userId: string, db: DbClient) {
         "Accepted mime types: application/pdf, image/jpeg, image/png, image/webp. " +
         `Maximum file size: ${Math.round(MAX_FILE_SIZE_BYTES / 1024 / 1024)} MB. ` +
         "Note: base64 encoding increases size by ~33%, so a 10 MB file becomes ~13.3 MB encoded. " +
-        "The attachment will be stored using the same backend as the UI (local filesystem in dev, " +
-        "Vercel Blob in production) and will be visible in the transaction detail page.",
+        "The attachment is stored on the server filesystem and will be visible in the transaction detail page.",
       inputSchema: AttachReceiptInputSchema,
     },
     async (params) => {

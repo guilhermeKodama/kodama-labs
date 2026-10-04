@@ -8,7 +8,6 @@ export function isExcludedPath(pathname: string): boolean {
     pathname === "/mcp" ||
     pathname.startsWith("/mcp/") ||
     pathname.startsWith("/_next") ||
-    pathname.startsWith("/_vercel") ||
     pathname.includes(".")
   );
 }

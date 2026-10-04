@@ -24,6 +24,8 @@ services:
     image: kodama-careers:latest
     depends_on: { careers-migrate: { condition: service_completed_successfully } }
     env_file: apps/careers/.env.production
+    environment:
+      APP_URL: "${CAREERS_APP_URL:-https://careers.kodamalabs.ai}"
     ports: ["${CAREERS_WEB_PORT:-3006}:3006"]
     volumes:
       - /home/kodama/.local/share/careers/blob:/home/kodama/.local/share/careers/blob
@@ -34,6 +36,8 @@ services:
     image: kodama-careers:latest
     depends_on: { careers-migrate: { condition: service_completed_successfully } }
     env_file: apps/careers/.env.production
+    environment:
+      APP_URL: "${CAREERS_APP_URL:-https://careers.kodamalabs.ai}"
     command: ["pnpm", "run", "worker:jobs"]
     volumes:
       - /home/kodama/.local/share/careers/blob:/home/kodama/.local/share/careers/blob
@@ -52,6 +56,8 @@ services:
     image: kodama-careers:latest
     depends_on: { careers-migrate: { condition: service_completed_successfully } }
     env_file: apps/careers/.env.production
+    environment:
+      APP_URL: "${CAREERS_APP_URL:-https://careers.kodamalabs.ai}"
     command: ["pnpm", "run", "worker:maintenance"]
     volumes:
       - /home/kodama/.local/share/careers/blob:/home/kodama/.local/share/careers/blob
@@ -105,7 +111,7 @@ services:
 
   # ── capital ─────────────────────────────────────────────────────────────
   capital-migrate:
-    build: { context: ., dockerfile: Dockerfile, target: capital, args: { NEXT_PUBLIC_VAPID_PUBLIC_KEY: "BIZPytT1AcEzKXA5YQRz6V7tso9r_1uFeSfAuDhTLOotQ3_p8aIwOJwTKaEBWpG9xCSfUobWA2k00AumltvwztE" } }
+    build: { context: ., dockerfile: Dockerfile, target: capital, args: { NEXT_PUBLIC_APP_URL: "${CAPITAL_PUBLIC_URL:-https://capital.kodamalabs.ai}", NEXT_PUBLIC_VAPID_PUBLIC_KEY: "BIZPytT1AcEzKXA5YQRz6V7tso9r_1uFeSfAuDhTLOotQ3_p8aIwOJwTKaEBWpG9xCSfUobWA2k00AumltvwztE" } }
     image: kodama-capital:latest
     env_file: apps/capital/.env.production
     command: ["pnpm", "exec", "prisma", "migrate", "deploy"]
@@ -116,6 +122,8 @@ services:
     image: kodama-capital:latest
     depends_on: { capital-migrate: { condition: service_completed_successfully } }
     env_file: apps/capital/.env.production
+    environment:
+      APP_URL: "${CAPITAL_PUBLIC_URL:-https://capital.kodamalabs.ai}"
     ports: ["${CAPITAL_WEB_PORT:-3000}:3000"]
     volumes:
       - ${HOME}/.local/share/capital/blob:/home/kodama/.local/share/capital/blob
@@ -123,7 +131,7 @@ services:
 
   # ── sentinel ────────────────────────────────────────────────────────────
   sentinel-migrate:
-    build: { context: ., dockerfile: Dockerfile, target: sentinel }
+    build: { context: ., dockerfile: Dockerfile, target: sentinel, args: { NEXT_PUBLIC_APP_URL: "${SENTINEL_PUBLIC_URL:-https://sentinel.kodamalabs.ai}" } }
     image: kodama-sentinel:latest
     env_file: apps/sentinel/.env.production
     command: ["pnpm", "exec", "prisma", "migrate", "deploy"]
@@ -134,7 +142,22 @@ services:
     image: kodama-sentinel:latest
     depends_on: { sentinel-migrate: { condition: service_completed_successfully } }
     env_file: apps/sentinel/.env.production
+    environment:
+      APP_URL: "${SENTINEL_PUBLIC_URL:-https://sentinel.kodamalabs.ai}"
+      SENTINEL_BLOB_DIR: /home/kodama/.local/share/sentinel/blob
     ports: ["${SENTINEL_WEB_PORT:-3002}:3002"]
+    volumes:
+      - /home/kodama/.local/share/sentinel/blob:/home/kodama/.local/share/sentinel/blob
+    networks: [kodama]
+
+  # ── kodamalabs ──────────────────────────────────────────────────────────
+  # Marketing site. No database. Public host is chosen at DNS cutover;
+  # the tunnel config lists kodamalabs.ai and www.
+  kodamalabs-web:
+    <<: *restart
+    build: { context: ., dockerfile: Dockerfile, target: kodamalabs }
+    image: kodama-kodamalabs:latest
+    ports: ["${KODAMALABS_WEB_PORT:-13003}:3003"]
     networks: [kodama]
 
   # ── ingress / cron ──────────────────────────────────────────────────────
@@ -162,6 +185,5 @@ services:
       CRON_APPS: "${CRON_APPS:-capital,sentinel}"
     volumes:
       - ${HOME}/.local/share/capital/blob:/home/kodama/.local/share/capital/blob
-      - ./apps/capital/vercel.json:/repo/apps/capital/vercel.json:ro
-      - ./apps/sentinel/vercel.json:/repo/apps/sentinel/vercel.json:ro
+      - ./infrastructure/cronjobs/schedules:/repo/infrastructure/cronjobs/schedules:ro
     networks: [kodama]
