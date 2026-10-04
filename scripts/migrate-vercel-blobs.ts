@@ -7,11 +7,16 @@
  * Safe to re-run: rows whose URL is already local are skipped, and a
  * file that is already on disk is not downloaded again.
  *
- * Run inside the app container (the image contains this repo and the
- * generated Prisma client):
+ * A failed row stays on its Vercel URL, so the next page would select it
+ * again. `--after <id>` (exclusive, ordered by id) skips that page.
+ * The run prints failed ids and the resume id.
+ *
+ * Run inside the app container. The process cwd is the app directory;
+ * the Prisma client path is resolved from this file, not from cwd.
  *
  *   pnpm exec tsx /repo/scripts/migrate-vercel-blobs.ts --app capital
  *   pnpm exec tsx /repo/scripts/migrate-vercel-blobs.ts --app capital --apply --limit 100
+ *   pnpm exec tsx /repo/scripts/migrate-vercel-blobs.ts --app capital --apply --limit 100 --after <id>
  *
  * Required env (already set on the compose services):
  *   DATABASE_URL
@@ -22,47 +27,64 @@
  * Optional: BLOB_READ_WRITE_TOKEN is sent only as a Bearer header on GET
  * when a public fetch would fail. It is never used to delete.
  */
-import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { pathToFileURL } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import {
   isVercelBlobUrl,
   rewriteBlobReference,
   localBlobFilePath,
 } from "../packages/storage/src/paths.ts";
 
-type AppName = "capital" | "careers" | "sentinel";
+export type AppName = "capital" | "careers" | "sentinel";
 
-type TableSpec = {
+export type TableSpec = {
   name: string;
   model: string;
   urlField: string;
   pathnameField: string | null;
+  /** Null when the model has no mime column (careers GeneratedDocument). */
+  contentTypeField: string | null;
 };
 
-const TABLES: Record<AppName, TableSpec[]> = {
+export const TABLES: Record<AppName, TableSpec[]> = {
   capital: [
-    { name: "attachments", model: "attachment", urlField: "blobUrl", pathnameField: "pathname" },
+    {
+      name: "attachments",
+      model: "attachment",
+      urlField: "blobUrl",
+      pathnameField: "pathname",
+      contentTypeField: "mimeType",
+    },
     {
       name: "conversation_files",
       model: "conversationFile",
       urlField: "blobUrl",
       pathnameField: "pathname",
+      contentTypeField: "mimeType",
     },
   ],
   careers: [
-    { name: "ResumeVersion", model: "resumeVersion", urlField: "blobUrl", pathnameField: "pathname" },
+    {
+      name: "ResumeVersion",
+      model: "resumeVersion",
+      urlField: "blobUrl",
+      pathnameField: "pathname",
+      contentTypeField: "mimeType",
+    },
     {
       name: "ContextDocument",
       model: "contextDocument",
       urlField: "blobUrl",
       pathnameField: "pathname",
+      contentTypeField: "mimeType",
     },
     {
       name: "GeneratedDocument",
       model: "generatedDocument",
       urlField: "blobUrl",
       pathnameField: "pathname",
+      contentTypeField: null,
     },
   ],
   sentinel: [
@@ -71,12 +93,14 @@ const TABLES: Record<AppName, TableSpec[]> = {
       model: "procurementDocument",
       urlField: "storageKey",
       pathnameField: null,
+      contentTypeField: "mimeType",
     },
     {
       name: "contract_documents",
       model: "contractDocument",
       urlField: "storageKey",
       pathnameField: null,
+      contentTypeField: "mimeType",
     },
   ],
 };
@@ -87,7 +111,7 @@ const BLOB_DIR_ENV: Record<AppName, string> = {
   sentinel: "SENTINEL_BLOB_DIR",
 };
 
-type Counts = {
+export type Counts = {
   table: string;
   pending: number;
   selected: number;
@@ -95,6 +119,8 @@ type Counts = {
   reusedFile: number;
   downloaded: number;
   failed: number;
+  failedIds: string[];
+  resumeAfter: string | null;
 };
 
 type Delegate = {
@@ -102,6 +128,7 @@ type Delegate = {
   findMany(args: {
     where: Record<string, unknown>;
     take?: number;
+    orderBy: { id: "asc" };
     select: Record<string, boolean>;
   }): Promise<Array<Record<string, unknown>>>;
   update(args: { where: { id: string }; data: Record<string, unknown> }): Promise<unknown>;
@@ -114,6 +141,76 @@ type PrismaLike = Record<string, Delegate> & {
     update(args: { where: { id: string }; data: { data: unknown } }): Promise<unknown>;
   };
 };
+
+export type BatchRow = { id: string; ok: boolean };
+
+/** Exclusive id cursor. Rows at or before `after` are not selected. */
+export function batchWhere(
+  urlField: string,
+  after: string | undefined,
+): Record<string, unknown> {
+  const where: Record<string, unknown> = {
+    [urlField]: { contains: "blob.vercel-storage.com" },
+  };
+  if (after) where.id = { gt: after };
+  return where;
+}
+
+export function summarizeBatch(rows: BatchRow[]): {
+  failedIds: string[];
+  resumeAfter: string | null;
+} {
+  return {
+    failedIds: rows.filter((row) => !row.ok).map((row) => row.id),
+    resumeAfter: rows.length > 0 ? rows[rows.length - 1]!.id : null,
+  };
+}
+
+/** Prisma client entry next to this repo, independent of process.cwd(). */
+export function prismaClientEntry(scriptFile: string, app: AppName): string {
+  return path.resolve(
+    path.dirname(scriptFile),
+    "..",
+    "apps",
+    app,
+    "src",
+    "generated",
+    "prisma",
+    "index.js",
+  );
+}
+
+/**
+ * Write `body` via a temp file in the same directory, then rename.
+ * When `contentLengthHeader` is present it must match `body.length`.
+ * A mismatch throws before the final path exists.
+ */
+export async function writeBlobFile(
+  filePath: string,
+  body: Buffer,
+  contentLengthHeader: string | null,
+): Promise<void> {
+  if (contentLengthHeader != null && contentLengthHeader !== "") {
+    const expected = Number(contentLengthHeader);
+    if (!Number.isInteger(expected) || expected < 0 || expected !== body.length) {
+      throw new Error(
+        `content-length ${contentLengthHeader} does not match downloaded size ${body.length}`,
+      );
+    }
+  }
+  const tmp = path.join(
+    path.dirname(filePath),
+    `.${path.basename(filePath)}.${process.pid}.partial`,
+  );
+  await mkdir(path.dirname(filePath), { recursive: true });
+  try {
+    await writeFile(tmp, body);
+    await rename(tmp, filePath);
+  } catch (error) {
+    await rm(tmp, { force: true });
+    throw error;
+  }
+}
 
 function argValue(flag: string): string | undefined {
   const index = process.argv.indexOf(flag);
@@ -129,6 +226,7 @@ function parseArgs(): {
   app: AppName;
   apply: boolean;
   limit: number;
+  after: string | undefined;
   appUrl: string;
   blobDir: string;
 } {
@@ -149,12 +247,21 @@ function parseArgs(): {
   if (!blobDir) {
     throw new Error(`Set ${BLOB_DIR_ENV[app]} or pass --blob-dir`);
   }
-  return { app, apply: process.argv.includes("--apply"), limit, appUrl, blobDir };
+  return {
+    app,
+    apply: process.argv.includes("--apply"),
+    limit,
+    after: argValue("--after"),
+    appUrl,
+    blobDir,
+  };
 }
 
 async function loadPrisma(app: AppName): Promise<PrismaLike> {
-  const entry = path.resolve(`apps/${app}/src/generated/prisma/index.js`);
-  const mod = (await import(pathToFileURL(entry).href)) as { PrismaClient: new () => PrismaLike };
+  const entry = prismaClientEntry(fileURLToPath(import.meta.url), app);
+  const mod = (await import(pathToFileURL(entry).href)) as {
+    PrismaClient: new () => PrismaLike;
+  };
   return new mod.PrismaClient();
 }
 
@@ -167,7 +274,22 @@ function emptyCounts(table: string): Counts {
     reusedFile: 0,
     downloaded: 0,
     failed: 0,
+    failedIds: [],
+    resumeAfter: null,
   };
+}
+
+function selectFor(table: TableSpec): Record<string, boolean> {
+  const select: Record<string, boolean> = { id: true, [table.urlField]: true };
+  if (table.pathnameField) select[table.pathnameField] = true;
+  if (table.contentTypeField) select[table.contentTypeField] = true;
+  return select;
+}
+
+function contentTypeOf(row: Record<string, unknown>, field: string | null): string {
+  if (!field) return "";
+  const value = row[field];
+  return typeof value === "string" ? value : "";
 }
 
 async function materialize(options: {
@@ -177,12 +299,14 @@ async function materialize(options: {
   contentType: string;
   apply: boolean;
   counts: Counts;
+  rowId: string;
 }): Promise<boolean> {
   let filePath: string;
   try {
     filePath = localBlobFilePath(options.blobDir, options.key);
   } catch (error) {
     options.counts.failed += 1;
+    options.counts.failedIds.push(options.rowId);
     console.error(`[fail] unsafe key for ${options.url}:`, error);
     return false;
   }
@@ -211,11 +335,13 @@ async function materialize(options: {
     response = await fetch(options.url, { headers });
   } catch (error) {
     options.counts.failed += 1;
+    options.counts.failedIds.push(options.rowId);
     console.error(`[fail] download ${options.url}:`, error);
     return false;
   }
   if (!response.ok) {
     options.counts.failed += 1;
+    options.counts.failedIds.push(options.rowId);
     console.error(`[fail] download ${options.url}: HTTP ${response.status}`);
     return false;
   }
@@ -225,8 +351,14 @@ async function materialize(options: {
     options.contentType ||
     response.headers.get("content-type") ||
     "application/octet-stream";
-  await mkdir(path.dirname(filePath), { recursive: true });
-  await writeFile(filePath, body);
+  try {
+    await writeBlobFile(filePath, body, response.headers.get("content-length"));
+  } catch (error) {
+    options.counts.failed += 1;
+    options.counts.failedIds.push(options.rowId);
+    console.error(`[fail] write ${options.url}:`, error);
+    return false;
+  }
   const metaPath = `${filePath}.meta.json`;
   let metaExists = false;
   try {
@@ -236,7 +368,7 @@ async function materialize(options: {
     metaExists = false;
   }
   if (!metaExists) {
-    await writeFile(metaPath, JSON.stringify({ contentType }));
+    await writeBlobFile(metaPath, Buffer.from(JSON.stringify({ contentType })), null);
   }
   options.counts.downloaded += 1;
   return true;
@@ -245,27 +377,38 @@ async function materialize(options: {
 async function migrateTable(
   prisma: PrismaLike,
   table: TableSpec,
-  options: { apply: boolean; limit: number; appUrl: string; blobDir: string },
+  options: {
+    apply: boolean;
+    limit: number;
+    after: string | undefined;
+    appUrl: string;
+    blobDir: string;
+  },
 ): Promise<Counts> {
   const counts = emptyCounts(table.name);
-  const where = { [table.urlField]: { contains: "blob.vercel-storage.com" } };
+  const where = batchWhere(table.urlField, options.after);
   const delegate = prisma[table.model];
   if (!delegate) throw new Error(`Prisma model ${table.model} is missing`);
 
-  counts.pending = await delegate.count({ where });
-  const select: Record<string, boolean> = { id: true, [table.urlField]: true, mimeType: true };
-  if (table.pathnameField) select[table.pathnameField] = true;
-
+  counts.pending = await delegate.count({
+    where: batchWhere(table.urlField, undefined),
+  });
   const rows = await delegate.findMany({
     where,
+    orderBy: { id: "asc" },
     ...(options.limit > 0 ? { take: options.limit } : {}),
-    select,
+    select: selectFor(table),
   });
   counts.selected = rows.length;
+  const outcomes: BatchRow[] = [];
 
   for (const row of rows) {
+    const id = String(row.id);
     const url = row[table.urlField];
-    if (typeof url !== "string" || !isVercelBlobUrl(url)) continue;
+    if (typeof url !== "string" || !isVercelBlobUrl(url)) {
+      outcomes.push({ id, ok: true });
+      continue;
+    }
     const pathname =
       table.pathnameField && typeof row[table.pathnameField] === "string"
         ? (row[table.pathnameField] as string)
@@ -275,7 +418,9 @@ async function migrateTable(
       rewritten = rewriteBlobReference(url, options.appUrl, pathname);
     } catch (error) {
       counts.failed += 1;
-      console.error(`[fail] ${table.name} ${String(row.id)}:`, error);
+      counts.failedIds.push(id);
+      outcomes.push({ id, ok: false });
+      console.error(`[fail] ${table.name} ${id}:`, error);
       continue;
     }
 
@@ -283,28 +428,42 @@ async function migrateTable(
       url,
       key: rewritten.key,
       blobDir: options.blobDir,
-      contentType: typeof row.mimeType === "string" ? row.mimeType : "",
+      contentType: contentTypeOf(row, table.contentTypeField),
       apply: options.apply,
       counts,
+      rowId: id,
     });
-    if (!ok) continue;
+    if (!ok) {
+      outcomes.push({ id, ok: false });
+      continue;
+    }
 
     if (options.apply) {
       const data: Record<string, unknown> = { [table.urlField]: rewritten.localUrl };
       if (table.pathnameField) data[table.pathnameField] = rewritten.key;
-      await delegate.update({ where: { id: String(row.id) }, data });
+      await delegate.update({ where: { id }, data });
     }
     counts.migrated += 1;
+    outcomes.push({ id, ok: true });
   }
 
+  const summary = summarizeBatch(outcomes);
+  counts.resumeAfter = summary.resumeAfter;
   return counts;
 }
 
 async function migrateRawRecords(
   prisma: PrismaLike,
-  options: { apply: boolean; limit: number; appUrl: string; blobDir: string },
+  options: {
+    apply: boolean;
+    limit: number;
+    after: string | undefined;
+    appUrl: string;
+    blobDir: string;
+  },
 ): Promise<Counts> {
   const counts = emptyCounts("raw_records._blobUrl");
+  const after = options.after ?? "";
   const pending = await prisma.$queryRaw<Array<{ count: number }>>`
     SELECT count(*)::int AS count
     FROM raw_records
@@ -318,25 +477,35 @@ async function migrateRawRecords(
           SELECT id, data
           FROM raw_records
           WHERE data->>'_blobUrl' LIKE '%blob.vercel-storage.com%'
+            AND (${after} = '' OR id > ${after})
+          ORDER BY id
           LIMIT ${options.limit}
         `
       : await prisma.$queryRaw<Array<{ id: string; data: Record<string, unknown> }>>`
           SELECT id, data
           FROM raw_records
           WHERE data->>'_blobUrl' LIKE '%blob.vercel-storage.com%'
+            AND (${after} = '' OR id > ${after})
+          ORDER BY id
         `;
   counts.selected = rows.length;
+  const outcomes: BatchRow[] = [];
 
   for (const row of rows) {
     const data = row.data;
     const url = data._blobUrl;
-    if (typeof url !== "string" || !isVercelBlobUrl(url)) continue;
+    if (typeof url !== "string" || !isVercelBlobUrl(url)) {
+      outcomes.push({ id: row.id, ok: true });
+      continue;
+    }
     const pathname = typeof data._blobPathname === "string" ? data._blobPathname : null;
     let rewritten: { key: string; localUrl: string };
     try {
       rewritten = rewriteBlobReference(url, options.appUrl, pathname);
     } catch (error) {
       counts.failed += 1;
+      counts.failedIds.push(row.id);
+      outcomes.push({ id: row.id, ok: false });
       console.error(`[fail] raw_records ${row.id}:`, error);
       continue;
     }
@@ -348,8 +517,12 @@ async function migrateRawRecords(
       contentType: mime,
       apply: options.apply,
       counts,
+      rowId: row.id,
     });
-    if (!ok) continue;
+    if (!ok) {
+      outcomes.push({ id: row.id, ok: false });
+      continue;
+    }
     if (options.apply) {
       await prisma.rawRecord.update({
         where: { id: row.id },
@@ -363,8 +536,10 @@ async function migrateRawRecords(
       });
     }
     counts.migrated += 1;
+    outcomes.push({ id: row.id, ok: true });
   }
 
+  counts.resumeAfter = summarizeBatch(outcomes).resumeAfter;
   return counts;
 }
 
@@ -372,33 +547,50 @@ function printCounts(counts: Counts): void {
   console.log(
     `${counts.table}: pending=${counts.pending} selected=${counts.selected} migrated=${counts.migrated} reused=${counts.reusedFile} downloaded=${counts.downloaded} failed=${counts.failed}`,
   );
+  if (counts.resumeAfter) {
+    console.log(`${counts.table}: resume --after ${counts.resumeAfter}`);
+  }
 }
 
 async function main(): Promise<void> {
   const options = parseArgs();
   console.log(
-    `${options.apply ? "apply" : "dry-run"} app=${options.app} limit=${options.limit === 0 ? "none" : options.limit} blobDir=${options.blobDir} appUrl=${options.appUrl}`,
+    `${options.apply ? "apply" : "dry-run"} app=${options.app} limit=${options.limit === 0 ? "none" : options.limit} after=${options.after ?? ""} blobDir=${options.blobDir} appUrl=${options.appUrl}`,
   );
   const prisma = await loadPrisma(options.app);
   let failed = 0;
+  const failedIds: string[] = [];
   try {
     for (const table of TABLES[options.app]) {
       const counts = await migrateTable(prisma, table, options);
       printCounts(counts);
       failed += counts.failed;
+      failedIds.push(...counts.failedIds);
     }
     if (options.app === "sentinel") {
       const counts = await migrateRawRecords(prisma, options);
       printCounts(counts);
       failed += counts.failed;
+      failedIds.push(...counts.failedIds);
     }
   } finally {
     await prisma.$disconnect();
   }
+  console.log(
+    failedIds.length > 0 ? `failed ids: ${failedIds.join(", ")}` : "failed ids: none",
+  );
   if (failed > 0) process.exitCode = 1;
 }
 
-main().catch((error: unknown) => {
-  console.error(error);
-  process.exit(1);
-});
+function isDirectRun(): boolean {
+  const entry = process.argv[1];
+  if (!entry) return false;
+  return import.meta.url === pathToFileURL(entry).href;
+}
+
+if (isDirectRun()) {
+  main().catch((error: unknown) => {
+    console.error(error);
+    process.exit(1);
+  });
+}

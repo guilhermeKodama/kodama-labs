@@ -14,6 +14,7 @@
         "TRANSPARENCIA_API_KEY",
         "BRAPI_TOKEN",
         "NEXT_PUBLIC_APP_URL",
+        "APP_URL",
         "CAPITAL_BLOB_DIR",
         "SENTINEL_BLOB_DIR",
         "VAPID_PRIVATE_KEY",

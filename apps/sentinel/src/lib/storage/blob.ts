@@ -9,6 +9,7 @@ import {
   slugify,
   sanitizeExtension,
   joinPath,
+  runtimeAppUrl,
   type PutBlobResult,
   type StorageOptions,
 } from "@repo/storage";
@@ -17,7 +18,7 @@ import { env } from "@/env";
 function options(): StorageOptions {
   return {
     localDir: env.SENTINEL_BLOB_DIR,
-    appUrl: env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3002",
+    appUrl: runtimeAppUrl(env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3002"),
   };
 }
 

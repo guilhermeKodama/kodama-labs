@@ -39,6 +39,9 @@ export const env = createEnv({
       .default("/mnt/nas-shared/obsidian/kodama-vault/vagas"),
 
     MAX_JOBS_PER_DAY: z.coerce.number().int().positive().default(10),
+    // Runtime origin for blob URLs. Overrides the inlined NEXT_PUBLIC_APP_URL
+    // without a rebuild. Compose sets it from CAREERS_APP_URL.
+    APP_URL: z.string().url().optional(),
   },
   client: {
     NEXT_PUBLIC_APP_URL: z.string().url().optional(),
@@ -58,6 +61,7 @@ export const env = createEnv({
     CAREERS_BLOB_DIR: process.env.CAREERS_BLOB_DIR,
     VAULT_VAGAS_DIR: process.env.VAULT_VAGAS_DIR,
     MAX_JOBS_PER_DAY: process.env.MAX_JOBS_PER_DAY,
+    APP_URL: process.env.APP_URL,
     NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL,
     NEXT_PUBLIC_VAPID_PUBLIC_KEY: process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY,
   },

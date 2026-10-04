@@ -81,7 +81,7 @@ flowchart TB
 | `attention` | 3005 | 13005 | mantém domínio próprio `attentio.dev` — PWA instalado + push subscriptions presos à origin |
 | `careers` | 3006 | 13006 | |
 | `docs` | 3001 | — | fora do stack de produção |
-| `kodamalabs` | 3003 | 3003 | `kodamalabs-web`; a porta publicada segue `KODAMALABS_WEB_PORT` |
+| `kodamalabs` | 3003 | 13003 | `kodamalabs-web`; a porta publicada segue `KODAMALABS_WEB_PORT` |
 | postgres | 5433 | 5433 | mesma instância pra dev e prod — só o **banco** muda, não a porta |
 
 Prod usa `13xxx` de propósito: assim os containers e o `pnpm dev` local nunca disputam a mesma porta, e dá pra rodar os dois ao mesmo tempo sem conflito. O Cloudflare Tunnel não depende dessas portas de host de qualquer forma — ele acessa cada container pelo nome, na porta interna (`careers-web:3006`, etc.), então a porta publicada no host é só conveniência pra acesso direto via LAN.

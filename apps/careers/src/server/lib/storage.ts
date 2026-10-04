@@ -1,4 +1,4 @@
-import { putObject, deleteObject, slugify, sanitizeExtension, joinPath, type StorageOptions } from "@repo/storage";
+import { putObject, deleteObject, slugify, sanitizeExtension, joinPath, runtimeAppUrl, type StorageOptions } from "@repo/storage";
 import { env } from "../../env";
 
 // Always pass localDir explicitly — @repo/storage defaults to
@@ -9,7 +9,7 @@ import { env } from "../../env";
 function storageOpts(): StorageOptions {
   return {
     localDir: env.CAREERS_BLOB_DIR,
-    appUrl: env.NEXT_PUBLIC_APP_URL,
+    appUrl: runtimeAppUrl(env.NEXT_PUBLIC_APP_URL),
   };
 }
 

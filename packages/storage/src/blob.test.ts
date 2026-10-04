@@ -14,6 +14,7 @@ async function tempDir(): Promise<string> {
 
 afterEach(async () => {
   vi.unstubAllGlobals();
+  delete process.env.APP_URL;
   await Promise.all(dirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })));
 });
 
@@ -46,6 +47,27 @@ describe("local blob storage", () => {
     await deleteObject(stored.url, opts);
     await expect(getObjectBuffer(stored.url, opts)).resolves.toBeNull();
     await expect(headObject(stored.url, opts)).resolves.toBeNull();
+  });
+
+  it("prefers runtime APP_URL over the build-time appUrl", async () => {
+    const localDir = await tempDir();
+    process.env.APP_URL = "https://runtime.example";
+    const stored = await putObject(
+      "capital/user/file.pdf",
+      Buffer.from("x"),
+      "application/pdf",
+      { localDir, appUrl: "https://build.example" },
+    );
+    expect(stored.url).toBe("https://runtime.example/api/blob/capital/user/file.pdf");
+
+    delete process.env.APP_URL;
+    const fallback = await putObject(
+      "capital/user/other.pdf",
+      Buffer.from("y"),
+      "application/pdf",
+      { localDir, appUrl: "https://build.example" },
+    );
+    expect(fallback.url).toBe("https://build.example/api/blob/capital/user/other.pdf");
   });
 
   it("fetches a legacy remote url without deleting it", async () => {

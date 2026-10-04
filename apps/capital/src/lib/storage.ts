@@ -8,6 +8,7 @@ import {
   slugify,
   sanitizeExtension,
   joinPath,
+  runtimeAppUrl,
   type PutBlobResult,
   type StorageOptions,
 } from "@repo/storage";
@@ -23,7 +24,7 @@ import type { AttachmentKind } from "@/generated/prisma";
 function options(): StorageOptions {
   return {
     localDir: env.CAPITAL_BLOB_DIR,
-    appUrl: env.NEXT_PUBLIC_APP_URL,
+    appUrl: runtimeAppUrl(env.NEXT_PUBLIC_APP_URL),
   };
 }
 

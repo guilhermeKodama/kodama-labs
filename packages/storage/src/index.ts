@@ -10,6 +10,7 @@ export {
   slugify,
   sanitizeExtension,
   joinPath,
+  runtimeAppUrl,
   type StorageOptions,
   type PutBlobResult,
 } from "./blob";

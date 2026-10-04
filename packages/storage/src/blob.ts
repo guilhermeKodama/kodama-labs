@@ -23,8 +23,24 @@ function resolveLocalDir(opts?: StorageOptions): string {
   return opts?.localDir ?? path.resolve(process.cwd(), ".local-blob");
 }
 
+/**
+ * Origin baked into absolute blob URLs.
+ * `APP_URL` is read when the URL is built, so a server restart picks up a
+ * new domain. `buildTime` is the inlined `NEXT_PUBLIC_APP_URL`.
+ */
+export function runtimeAppUrl(buildTime?: string): string | undefined {
+  // Bracket access so the bundler does not inline this at build time.
+  const runtime = process.env["APP_URL"];
+  if (runtime) return runtime;
+  return buildTime;
+}
+
 function resolveAppUrl(opts?: StorageOptions): string {
-  return opts?.appUrl ?? process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
+  return (
+    runtimeAppUrl(opts?.appUrl) ??
+    process.env.NEXT_PUBLIC_APP_URL ??
+    "http://localhost:3000"
+  );
 }
 
 function resolveLocalPath(pathname: string, opts?: StorageOptions): string {

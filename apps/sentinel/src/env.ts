@@ -15,6 +15,9 @@ export const env = createEnv({
     ANTHROPIC_API_KEY: z.string().optional(),
     TRANSPARENCIA_API_KEY: z.string().optional(),
     SENTINEL_BLOB_DIR: z.string().optional(),
+    // Runtime origin for blob URLs. Overrides the inlined NEXT_PUBLIC_APP_URL
+    // without a rebuild. Compose sets it from SENTINEL_PUBLIC_URL.
+    APP_URL: z.string().url().optional(),
   },
   client: {
     NEXT_PUBLIC_APP_URL: z.string().url().optional(),
@@ -28,6 +31,7 @@ export const env = createEnv({
     ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY,
     TRANSPARENCIA_API_KEY: process.env.TRANSPARENCIA_API_KEY,
     SENTINEL_BLOB_DIR: process.env.SENTINEL_BLOB_DIR,
+    APP_URL: process.env.APP_URL,
   },
   skipValidation: !!process.env.SKIP_ENV_VALIDATION,
 });

@@ -24,6 +24,8 @@ services:
     image: kodama-careers:latest
     depends_on: { careers-migrate: { condition: service_completed_successfully } }
     env_file: apps/careers/.env.production
+    environment:
+      APP_URL: "${CAREERS_APP_URL:-https://careers.kodamalabs.ai}"
     ports: ["${CAREERS_WEB_PORT:-3006}:3006"]
     volumes:
       - /home/kodama/.local/share/careers/blob:/home/kodama/.local/share/careers/blob
@@ -34,6 +36,8 @@ services:
     image: kodama-careers:latest
     depends_on: { careers-migrate: { condition: service_completed_successfully } }
     env_file: apps/careers/.env.production
+    environment:
+      APP_URL: "${CAREERS_APP_URL:-https://careers.kodamalabs.ai}"
     command: ["pnpm", "run", "worker:jobs"]
     volumes:
       - /home/kodama/.local/share/careers/blob:/home/kodama/.local/share/careers/blob
@@ -52,6 +56,8 @@ services:
     image: kodama-careers:latest
     depends_on: { careers-migrate: { condition: service_completed_successfully } }
     env_file: apps/careers/.env.production
+    environment:
+      APP_URL: "${CAREERS_APP_URL:-https://careers.kodamalabs.ai}"
     command: ["pnpm", "run", "worker:maintenance"]
     volumes:
       - /home/kodama/.local/share/careers/blob:/home/kodama/.local/share/careers/blob
@@ -116,6 +122,8 @@ services:
     image: kodama-capital:latest
     depends_on: { capital-migrate: { condition: service_completed_successfully } }
     env_file: apps/capital/.env.production
+    environment:
+      APP_URL: "${CAPITAL_PUBLIC_URL:-https://capital.kodamalabs.ai}"
     ports: ["${CAPITAL_WEB_PORT:-3000}:3000"]
     volumes:
       - ${HOME}/.local/share/capital/blob:/home/kodama/.local/share/capital/blob
@@ -135,6 +143,7 @@ services:
     depends_on: { sentinel-migrate: { condition: service_completed_successfully } }
     env_file: apps/sentinel/.env.production
     environment:
+      APP_URL: "${SENTINEL_PUBLIC_URL:-https://sentinel.kodamalabs.ai}"
       SENTINEL_BLOB_DIR: /home/kodama/.local/share/sentinel/blob
     ports: ["${SENTINEL_WEB_PORT:-3002}:3002"]
     volumes:
@@ -148,7 +157,7 @@ services:
     <<: *restart
     build: { context: ., dockerfile: Dockerfile, target: kodamalabs }
     image: kodama-kodamalabs:latest
-    ports: ["${KODAMALABS_WEB_PORT:-3003}:3003"]
+    ports: ["${KODAMALABS_WEB_PORT:-13003}:3003"]
     networks: [kodama]
 
   # ── ingress / cron ──────────────────────────────────────────────────────
