@@ -26,7 +26,7 @@ export function isBlobConfigured(): boolean {
 }
 
 export function isLocalBlobMode(): boolean {
-  return baseIsLocalBlobMode(options());
+  return baseIsLocalBlobMode();
 }
 
 export function getLocalBlobDir(): string {

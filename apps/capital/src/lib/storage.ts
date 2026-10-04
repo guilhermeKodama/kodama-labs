@@ -52,7 +52,7 @@ export function readLocalBlob(pathname: string) {
 }
 
 export function isLocalBlobMode(): boolean {
-  return baseIsLocalBlobMode(options());
+  return baseIsLocalBlobMode();
 }
 
 function pickExtensionFromName(originalName: string): string {
