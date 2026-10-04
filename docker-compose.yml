@@ -162,6 +162,5 @@ services:
       CRON_APPS: "${CRON_APPS:-capital,sentinel}"
     volumes:
       - ${HOME}/.local/share/capital/blob:/home/kodama/.local/share/capital/blob
-      - ./apps/capital/vercel.json:/repo/apps/capital/vercel.json:ro
-      - ./apps/sentinel/vercel.json:/repo/apps/sentinel/vercel.json:ro
+      - ./infrastructure/cronjobs/schedules:/repo/infrastructure/cronjobs/schedules:ro
     networks: [kodama]
