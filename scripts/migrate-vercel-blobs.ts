@@ -7,16 +7,18 @@
  * Safe to re-run: rows whose URL is already local are skipped, and a
  * file that is already on disk is not downloaded again.
  *
- * A failed row stays on its Vercel URL, so the next page would select it
- * again. `--after <id>` (exclusive, ordered by id) skips that page.
- * The run prints failed ids and the resume id.
+ * A failed row stays on its Vercel URL, so the next page of that table
+ * would select it again. Resume one table at a time:
+ * `--table <name> --after <id>` (`--after` is exclusive, ordered by id).
+ * `--after` without `--table` is an error. The run prints failed ids and,
+ * per table, the resume command.
  *
  * Run inside the app container. The process cwd is the app directory;
  * the Prisma client path is resolved from this file, not from cwd.
  *
  *   pnpm exec tsx /repo/scripts/migrate-vercel-blobs.ts --app capital
  *   pnpm exec tsx /repo/scripts/migrate-vercel-blobs.ts --app capital --apply --limit 100
- *   pnpm exec tsx /repo/scripts/migrate-vercel-blobs.ts --app capital --apply --limit 100 --after <id>
+ *   pnpm exec tsx /repo/scripts/migrate-vercel-blobs.ts --app capital --apply --limit 100 --table attachments --after <id>
  *
  * Required env (already set on the compose services):
  *   DATABASE_URL
@@ -105,6 +107,52 @@ export const TABLES: Record<AppName, TableSpec[]> = {
   ],
 };
 
+/** Sentinel JSON copies live in `raw_records.data`, not a Prisma blob column. */
+export const RAW_RECORDS_TABLE = "raw_records._blobUrl";
+
+export function tableNames(app: AppName): string[] {
+  const names = TABLES[app].map((table) => table.name);
+  if (app === "sentinel") names.push(RAW_RECORDS_TABLE);
+  return names;
+}
+
+/** Tables this invocation will touch. No `--table` means every table. */
+export function tablesToProcess(app: AppName, table: string | undefined): string[] {
+  const names = tableNames(app);
+  if (!table) return names;
+  return names.filter((name) => name === table);
+}
+
+/**
+ * `--after` applies only to the table named by `--table`.
+ * Every other table, and a run with no `--table`, starts at the first id.
+ */
+export function afterCursorFor(
+  tableName: string,
+  selectedTable: string | undefined,
+  after: string | undefined,
+): string | undefined {
+  if (!selectedTable || selectedTable !== tableName) return undefined;
+  return after;
+}
+
+export function resumeCommand(options: {
+  app: AppName;
+  table: string;
+  after: string;
+  apply: boolean;
+  limit: number;
+}): string {
+  const parts = [
+    "pnpm exec tsx /repo/scripts/migrate-vercel-blobs.ts",
+    `--app ${options.app}`,
+  ];
+  if (options.apply) parts.push("--apply");
+  parts.push(`--limit ${options.limit}`);
+  parts.push(`--table ${options.table}`, `--after ${options.after}`);
+  return parts.join(" ");
+}
+
 const BLOB_DIR_ENV: Record<AppName, string> = {
   capital: "CAPITAL_BLOB_DIR",
   careers: "CAREERS_BLOB_DIR",
@@ -180,17 +228,37 @@ export function prismaClientEntry(scriptFile: string, app: AppName): string {
   );
 }
 
+export type WriteBlobOptions = {
+  /** Wire `Content-Encoding`. Fetch decompresses this, so the header length is the encoded size. */
+  contentEncoding?: string | null;
+  /** True when `body` is already decoded and `Content-Length` is not the decoded size. */
+  decompressed?: boolean;
+};
+
+/** Compare `Content-Length` only for an undecoded body. */
+export function shouldCheckContentLength(options?: WriteBlobOptions): boolean {
+  if (options?.decompressed) return false;
+  if (options?.contentEncoding) return false;
+  return true;
+}
+
 /**
  * Write `body` via a temp file in the same directory, then rename.
- * When `contentLengthHeader` is present it must match `body.length`.
+ * When `contentLengthHeader` is present it must match `body.length`,
+ * unless the response was content-encoded or the body was decompressed.
  * A mismatch throws before the final path exists.
  */
 export async function writeBlobFile(
   filePath: string,
   body: Buffer,
   contentLengthHeader: string | null,
+  options?: WriteBlobOptions,
 ): Promise<void> {
-  if (contentLengthHeader != null && contentLengthHeader !== "") {
+  if (
+    shouldCheckContentLength(options) &&
+    contentLengthHeader != null &&
+    contentLengthHeader !== ""
+  ) {
     const expected = Number(contentLengthHeader);
     if (!Number.isInteger(expected) || expected < 0 || expected !== body.length) {
       throw new Error(
@@ -212,49 +280,68 @@ export async function writeBlobFile(
   }
 }
 
-function argValue(flag: string): string | undefined {
-  const index = process.argv.indexOf(flag);
+function argValue(argv: string[], flag: string): string | undefined {
+  const index = argv.indexOf(flag);
   if (index === -1) return undefined;
-  const value = process.argv[index + 1];
+  const value = argv[index + 1];
   if (!value || value.startsWith("--")) {
     throw new Error(`${flag} requires a value`);
   }
   return value;
 }
 
-function parseArgs(): {
+export type MigrationArgs = {
   app: AppName;
   apply: boolean;
   limit: number;
+  table: string | undefined;
   after: string | undefined;
   appUrl: string;
   blobDir: string;
-} {
-  const app = argValue("--app");
+};
+
+export function parseMigrationArgs(
+  argv: string[],
+  env: Record<string, string | undefined>,
+): MigrationArgs {
+  const app = argValue(argv, "--app");
   if (app !== "capital" && app !== "careers" && app !== "sentinel") {
     throw new Error("--app must be capital, careers, or sentinel");
   }
-  const limitRaw = argValue("--limit");
+  const limitRaw = argValue(argv, "--limit");
   const limit = limitRaw === undefined ? 100 : Number(limitRaw);
   if (!Number.isInteger(limit) || limit < 0) {
     throw new Error("--limit must be a non-negative integer (0 means no cap)");
   }
-  const appUrl = argValue("--app-url") ?? process.env.NEXT_PUBLIC_APP_URL;
+  const table = argValue(argv, "--table");
+  const after = argValue(argv, "--after");
+  if (after && !table) {
+    throw new Error("--after requires --table");
+  }
+  if (table && !tableNames(app).includes(table)) {
+    throw new Error(`--table must be one of: ${tableNames(app).join(", ")}`);
+  }
+  const appUrl = argValue(argv, "--app-url") ?? env.NEXT_PUBLIC_APP_URL;
   if (!appUrl) {
     throw new Error("Set NEXT_PUBLIC_APP_URL or pass --app-url");
   }
-  const blobDir = argValue("--blob-dir") ?? process.env[BLOB_DIR_ENV[app]];
+  const blobDir = argValue(argv, "--blob-dir") ?? env[BLOB_DIR_ENV[app]];
   if (!blobDir) {
     throw new Error(`Set ${BLOB_DIR_ENV[app]} or pass --blob-dir`);
   }
   return {
     app,
-    apply: process.argv.includes("--apply"),
+    apply: argv.includes("--apply"),
     limit,
-    after: argValue("--after"),
+    table,
+    after,
     appUrl,
     blobDir,
   };
+}
+
+function parseArgs(): MigrationArgs {
+  return parseMigrationArgs(process.argv, process.env);
 }
 
 async function loadPrisma(app: AppName): Promise<PrismaLike> {
@@ -351,8 +438,12 @@ async function materialize(options: {
     options.contentType ||
     response.headers.get("content-type") ||
     "application/octet-stream";
+  const contentEncoding = response.headers.get("content-encoding");
   try {
-    await writeBlobFile(filePath, body, response.headers.get("content-length"));
+    await writeBlobFile(filePath, body, response.headers.get("content-length"), {
+      contentEncoding,
+      decompressed: Boolean(contentEncoding),
+    });
   } catch (error) {
     options.counts.failed += 1;
     options.counts.failedIds.push(options.rowId);
@@ -462,7 +553,7 @@ async function migrateRawRecords(
     blobDir: string;
   },
 ): Promise<Counts> {
-  const counts = emptyCounts("raw_records._blobUrl");
+  const counts = emptyCounts(RAW_RECORDS_TABLE);
   const after = options.after ?? "";
   const pending = await prisma.$queryRaw<Array<{ count: number }>>`
     SELECT count(*)::int AS count
@@ -543,33 +634,47 @@ async function migrateRawRecords(
   return counts;
 }
 
-function printCounts(counts: Counts): void {
+function printCounts(
+  options: { app: AppName; apply: boolean; limit: number },
+  counts: Counts,
+): void {
   console.log(
     `${counts.table}: pending=${counts.pending} selected=${counts.selected} migrated=${counts.migrated} reused=${counts.reusedFile} downloaded=${counts.downloaded} failed=${counts.failed}`,
   );
   if (counts.resumeAfter) {
-    console.log(`${counts.table}: resume --after ${counts.resumeAfter}`);
+    console.log(
+      `${counts.table}: ${resumeCommand({
+        app: options.app,
+        table: counts.table,
+        after: counts.resumeAfter,
+        apply: options.apply,
+        limit: options.limit,
+      })}`,
+    );
   }
 }
 
 async function main(): Promise<void> {
   const options = parseArgs();
   console.log(
-    `${options.apply ? "apply" : "dry-run"} app=${options.app} limit=${options.limit === 0 ? "none" : options.limit} after=${options.after ?? ""} blobDir=${options.blobDir} appUrl=${options.appUrl}`,
+    `${options.apply ? "apply" : "dry-run"} app=${options.app} limit=${options.limit === 0 ? "none" : options.limit} table=${options.table ?? "all"} after=${options.after ?? ""} blobDir=${options.blobDir} appUrl=${options.appUrl}`,
   );
   const prisma = await loadPrisma(options.app);
   let failed = 0;
   const failedIds: string[] = [];
   try {
-    for (const table of TABLES[options.app]) {
-      const counts = await migrateTable(prisma, table, options);
-      printCounts(counts);
-      failed += counts.failed;
-      failedIds.push(...counts.failedIds);
-    }
-    if (options.app === "sentinel") {
-      const counts = await migrateRawRecords(prisma, options);
-      printCounts(counts);
+    for (const name of tablesToProcess(options.app, options.table)) {
+      const after = afterCursorFor(name, options.table, options.after);
+      const tableOptions = { ...options, after };
+      const counts =
+        name === RAW_RECORDS_TABLE
+          ? await migrateRawRecords(prisma, tableOptions)
+          : await migrateTable(
+              prisma,
+              TABLES[options.app].find((table) => table.name === name)!,
+              tableOptions,
+            );
+      printCounts(options, counts);
       failed += counts.failed;
       failedIds.push(...counts.failedIds);
     }

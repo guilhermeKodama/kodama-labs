@@ -7,9 +7,13 @@ import { Prisma as CareersPrisma } from "../apps/careers/src/generated/prisma/in
 import { Prisma as SentinelPrisma } from "../apps/sentinel/src/generated/prisma/index.js";
 import {
   TABLES,
+  afterCursorFor,
   batchWhere,
+  parseMigrationArgs,
   prismaClientEntry,
+  resumeCommand,
   summarizeBatch,
+  tablesToProcess,
   writeBlobFile,
   type AppName,
   type TableSpec,
@@ -86,6 +90,57 @@ describe("table columns exist on the Prisma DMMF", () => {
   });
 });
 
+const baseArgs = ["--app-url", "http://localhost", "--blob-dir", "/tmp/blob"];
+
+describe("table cursor", () => {
+  it("rejects --after without --table", () => {
+    expect(() =>
+      parseMigrationArgs(["--app", "capital", "--after", "id-9", ...baseArgs], {}),
+    ).toThrow(/--after requires --table/);
+  });
+
+  it("applies --after only to the named table", () => {
+    const plan = parseMigrationArgs(
+      ["--app", "capital", "--table", "attachments", "--after", "id-9", ...baseArgs],
+      {},
+    );
+    expect(tablesToProcess(plan.app, plan.table)).toEqual(["attachments"]);
+    expect(afterCursorFor("attachments", plan.table, plan.after)).toBe("id-9");
+    expect(afterCursorFor("conversation_files", plan.table, plan.after)).toBeUndefined();
+    expect(
+      resumeCommand({
+        app: "capital",
+        table: "attachments",
+        after: "id-9",
+        apply: true,
+        limit: 100,
+      }),
+    ).toContain("--table attachments --after id-9");
+
+    const careers = parseMigrationArgs(
+      ["--app", "careers", "--table", "GeneratedDocument", "--after", "id-2", ...baseArgs],
+      {},
+    );
+    expect(tablesToProcess("careers", careers.table)).toEqual(["GeneratedDocument"]);
+    expect(afterCursorFor("ResumeVersion", careers.table, careers.after)).toBeUndefined();
+    expect(afterCursorFor("ContextDocument", careers.table, careers.after)).toBeUndefined();
+    expect(afterCursorFor("GeneratedDocument", careers.table, careers.after)).toBe("id-2");
+  });
+
+  it("processes every table from the start when --table is omitted", () => {
+    const plan = parseMigrationArgs(["--app", "capital", ...baseArgs], {});
+    expect(plan.table).toBeUndefined();
+    expect(plan.after).toBeUndefined();
+    expect(tablesToProcess("capital", plan.table)).toEqual([
+      "attachments",
+      "conversation_files",
+    ]);
+    for (const name of tablesToProcess("capital", plan.table)) {
+      expect(afterCursorFor(name, plan.table, plan.after)).toBeUndefined();
+    }
+  });
+});
+
 describe("cursor", () => {
   it("skips ids at or before --after and reports failed ids plus the resume id", () => {
     expect(batchWhere("blobUrl", "b")).toEqual({
@@ -130,5 +185,19 @@ describe("writeBlobFile", () => {
       /content-length/,
     );
     await expect(stat(filePath)).rejects.toThrow();
+  });
+
+  it("skips the content-length check for encoded or decompressed bodies", async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), "blob-write-"));
+    dirs.push(dir);
+    const encoded = path.join(dir, "encoded.pdf");
+    const decoded = path.join(dir, "decoded.pdf");
+    const body = Buffer.from("decompressed-bytes");
+
+    await writeBlobFile(encoded, body, "4", { contentEncoding: "gzip" });
+    await writeBlobFile(decoded, body, "4", { decompressed: true });
+
+    expect(await readFile(encoded)).toEqual(body);
+    expect(await readFile(decoded)).toEqual(body);
   });
 });
