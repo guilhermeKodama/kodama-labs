@@ -22,7 +22,6 @@ import type { AttachmentKind } from "@/generated/prisma";
 // must not silently determine where uploaded files live.
 function options(): StorageOptions {
   return {
-    token: env.BLOB_READ_WRITE_TOKEN,
     localDir: env.CAPITAL_BLOB_DIR,
     appUrl: env.NEXT_PUBLIC_APP_URL,
   };

@@ -27,8 +27,7 @@ export interface DeleteAttachmentParams {
  * Attach a receipt (image or PDF) to a transaction via base64 content.
  * 
  * This uses the same storage backend as the UI attachment uploader.
- * Files are stored either locally (development) or in Vercel Blob (production)
- * depending on BLOB_READ_WRITE_TOKEN configuration.
+ * Files are stored on the server filesystem.
  */
 export async function attachReceipt(
   userId: string,

@@ -13,3 +13,14 @@ export {
   type StorageOptions,
   type PutBlobResult,
 } from "./blob";
+
+export {
+  LOCAL_URL_MARKER,
+  isVercelBlobUrl,
+  isRelativeBlobKey,
+  pathnameFromVercelBlobUrl,
+  storageKeyForBlob,
+  localBlobUrl,
+  localBlobFilePath,
+  rewriteBlobReference,
+} from "./paths";

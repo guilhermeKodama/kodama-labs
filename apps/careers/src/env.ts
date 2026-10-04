@@ -33,7 +33,6 @@ export const env = createEnv({
     CAREERS_BLOB_DIR: z
       .string()
       .default("/home/kodama/.local/share/careers/blob"),
-    BLOB_READ_WRITE_TOKEN: z.string().optional(),
 
     VAULT_VAGAS_DIR: z
       .string()
@@ -57,7 +56,6 @@ export const env = createEnv({
     VAPID_PRIVATE_KEY: process.env.VAPID_PRIVATE_KEY,
     VAPID_SUBJECT: process.env.VAPID_SUBJECT,
     CAREERS_BLOB_DIR: process.env.CAREERS_BLOB_DIR,
-    BLOB_READ_WRITE_TOKEN: process.env.BLOB_READ_WRITE_TOKEN,
     VAULT_VAGAS_DIR: process.env.VAULT_VAGAS_DIR,
     MAX_JOBS_PER_DAY: process.env.MAX_JOBS_PER_DAY,
     NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL,

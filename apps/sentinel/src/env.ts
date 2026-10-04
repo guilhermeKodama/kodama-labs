@@ -14,7 +14,7 @@ export const env = createEnv({
     CRON_SECRET: z.string().optional(),
     ANTHROPIC_API_KEY: z.string().optional(),
     TRANSPARENCIA_API_KEY: z.string().optional(),
-    BLOB_READ_WRITE_TOKEN: z.string().optional(),
+    SENTINEL_BLOB_DIR: z.string().optional(),
   },
   client: {
     NEXT_PUBLIC_APP_URL: z.string().url().optional(),
@@ -27,7 +27,7 @@ export const env = createEnv({
     CRON_SECRET: process.env.CRON_SECRET,
     ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY,
     TRANSPARENCIA_API_KEY: process.env.TRANSPARENCIA_API_KEY,
-    BLOB_READ_WRITE_TOKEN: process.env.BLOB_READ_WRITE_TOKEN,
+    SENTINEL_BLOB_DIR: process.env.SENTINEL_BLOB_DIR,
   },
   skipValidation: !!process.env.SKIP_ENV_VALIDATION,
 });

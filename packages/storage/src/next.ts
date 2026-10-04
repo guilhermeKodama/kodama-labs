@@ -7,7 +7,7 @@ export function createLocalBlobHandler(opts?: StorageOptions) {
     _request: Request,
     { params }: RouteContext,
   ): Promise<Response> {
-    if (!isLocalBlobMode(opts)) {
+    if (!isLocalBlobMode()) {
       return new Response(JSON.stringify({ error: "Not found" }), {
         status: 404,
         headers: { "Content-Type": "application/json" },

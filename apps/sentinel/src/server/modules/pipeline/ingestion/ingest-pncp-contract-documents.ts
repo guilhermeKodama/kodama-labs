@@ -77,7 +77,7 @@ export async function ingestPncpContractDocuments() {
   return runJob("ingest-pncp-contract-documents", "ingestion", async () => {
     if (!isBlobConfigured()) {
       console.warn(
-        "[ingest-pncp-contract-documents] Vercel Blob not configured (BLOB_READ_WRITE_TOKEN missing); skipping",
+        "[ingest-pncp-contract-documents] blob storage is not configured; skipping",
       );
       return { recordsIn: 0, recordsOut: 0 };
     }

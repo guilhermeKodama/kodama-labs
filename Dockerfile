@@ -91,8 +91,12 @@ CMD ["pnpm", "start"]
 FROM base AS capital
 # Next.js inlines NEXT_PUBLIC_* into the client bundle at build time — must
 # be an ARG, not just runtime `environment:` in compose, or the subscribe
-# flow ships with an empty VAPID key and silently no-ops.
+# flow ships with an empty VAPID key and blob URLs ship with an empty host.
+# Defaults match the tunnel hostnames; compose overrides them from
+# CAPITAL_PUBLIC_URL / the VAPID arg so cutover can point at another domain.
+ARG NEXT_PUBLIC_APP_URL=https://capital.kodamalabs.ai
 ARG NEXT_PUBLIC_VAPID_PUBLIC_KEY
+ENV NEXT_PUBLIC_APP_URL=$NEXT_PUBLIC_APP_URL
 ENV NEXT_PUBLIC_VAPID_PUBLIC_KEY=$NEXT_PUBLIC_VAPID_PUBLIC_KEY
 RUN cd apps/capital && pnpm exec next build
 WORKDIR /repo/apps/capital
@@ -107,6 +111,8 @@ CMD ["pnpm", "start"]
 
 # ---------------------------------------------------------------------------
 FROM base AS sentinel
+ARG NEXT_PUBLIC_APP_URL=https://sentinel.kodamalabs.ai
+ENV NEXT_PUBLIC_APP_URL=$NEXT_PUBLIC_APP_URL
 RUN cd apps/sentinel && pnpm exec next build
 WORKDIR /repo/apps/sentinel
 ENV PORT=3002
