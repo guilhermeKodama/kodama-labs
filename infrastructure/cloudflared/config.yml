@@ -10,4 +10,8 @@ ingress:
     service: http://capital-web:3000
   - hostname: sentinel.kodamalabs.ai
     service: http://sentinel-web:3002
+  - hostname: kodamalabs.ai
+    service: http://kodamalabs-web:3003
+  - hostname: www.kodamalabs.ai
+    service: http://kodamalabs-web:3003
   - service: http_status:404

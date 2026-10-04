@@ -141,6 +141,16 @@ services:
       - /home/kodama/.local/share/sentinel/blob:/home/kodama/.local/share/sentinel/blob
     networks: [kodama]
 
+  # ── kodamalabs ──────────────────────────────────────────────────────────
+  # Marketing site. No database. Public host is chosen at DNS cutover;
+  # the tunnel config lists kodamalabs.ai and www.
+  kodamalabs-web:
+    <<: *restart
+    build: { context: ., dockerfile: Dockerfile, target: kodamalabs }
+    image: kodama-kodamalabs:latest
+    ports: ["${KODAMALABS_WEB_PORT:-3003}:3003"]
+    networks: [kodama]
+
   # ── ingress / cron ──────────────────────────────────────────────────────
   cloudflared:
     <<: *restart

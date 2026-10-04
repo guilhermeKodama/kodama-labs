@@ -110,6 +110,13 @@ ENV NODE_ENV=production
 CMD ["pnpm", "start"]
 
 # ---------------------------------------------------------------------------
+FROM base AS kodamalabs
+RUN cd apps/kodamalabs && pnpm exec next build
+WORKDIR /repo/apps/kodamalabs
+ENV PORT=3003
+CMD ["pnpm", "start"]
+
+# ---------------------------------------------------------------------------
 FROM base AS sentinel
 ARG NEXT_PUBLIC_APP_URL=https://sentinel.kodamalabs.ai
 ENV NEXT_PUBLIC_APP_URL=$NEXT_PUBLIC_APP_URL
