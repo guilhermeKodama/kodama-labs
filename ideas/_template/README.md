@@ -21,11 +21,9 @@ Or from inside this folder: drop the `--filter` flag.
 
 Copy `.env.example` to `.env.local` and fill what you need. All vars are optional locally.
 
-## Deploy
+## Run
 
-1. New Vercel project, **root directory = `ideas/{{IDEA_SLUG}}`**.
-2. Add env vars from `.env.example`.
-3. Push. Vercel auto-detects Next.js.
+Ideas are local prototypes. From the repo root: `pnpm dev --filter=@ideas/{{IDEA_SLUG}}` (http://localhost:3100). Put env vars from `.env.example` in `.env.local`.
 
 ## Structure
 
@@ -52,7 +50,7 @@ All ad tracking loads conditionally on env vars — no env, no script. The funne
 | Lead | step 1 submitted (email captured) | `Lead` | `generate_lead` | `conversion` (if `LEAD_LABEL` set) |
 | CompleteRegistration | step 2 submitted (contact captured) | `CompleteRegistration` | `sign_up` | — |
 
-Set `NEXT_PUBLIC_META_PIXEL_ID`, `NEXT_PUBLIC_GA_ID`, `NEXT_PUBLIC_GOOGLE_ADS_ID` and `NEXT_PUBLIC_GOOGLE_ADS_LEAD_LABEL` in Vercel. See `.env.example`.
+Set `NEXT_PUBLIC_META_PIXEL_ID`, `NEXT_PUBLIC_GA_ID`, `NEXT_PUBLIC_GOOGLE_ADS_ID` and `NEXT_PUBLIC_GOOGLE_ADS_LEAD_LABEL` in `.env.local`. See `.env.example`.
 
 > Routes are English (`/start`, `/thanks`); user-facing copy is whatever language your audience speaks (default pt-BR in the boilerplate).
 

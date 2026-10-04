@@ -67,7 +67,7 @@
 - Login, payment, account syncing
 - Complex multi-currency, withdrawal optimization
 
-**Stack:** reuse Capital's components + Next.js/Vercel landing; native form or Tally; Pixel (Meta) + gtag/Conversion Action (Google). **Build: well under the 5-day Sprint ceiling.**
+**Stack:** reuse Capital's components + a Next.js landing; native form or Tally; Pixel (Meta) + gtag/Conversion Action (Google). **Build: well under the 5-day Sprint ceiling.**
 
 ## 5. Validation via Paid Traffic
 

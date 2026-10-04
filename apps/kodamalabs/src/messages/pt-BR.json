@@ -76,7 +76,7 @@
   },
   "footer": {
     "tagline": "Uma empresa guarda-chuva para software ambicioso.",
-    "builtWith": "Feito com Next.js · Hospedado na Vercel"
+    "builtWith": "Feito com Next.js · Self-hosted"
   },
   "projects": {
     "capital": {
@@ -96,7 +96,7 @@
       "tagline": "Transparência com IA para compras públicas brasileiras.",
       "description": "Ingere continuamente dados de compras federais, sinaliza padrões anômalos de preço e proximidade política, e produz relatórios em linguagem neutra para jornalistas e cidadãos. Disciplina: apontar o que vale revisar — nunca acusar.",
       "challenges": [
-        "Escalar a análise com Claude sobre uma base contínua de dados governamentais sem estourar o orçamento de crons da Vercel.",
+        "Escalar a análise com Claude sobre uma base contínua de dados governamentais num único servidor sempre ligado.",
         "Mapear relações políticas (família, doações, anomalias patrimoniais) sem cruzar a linha da difamação.",
         "Pipeline de alertas multi-estágio com deduplicação determinística entre critérios sobrepostos."
       ],

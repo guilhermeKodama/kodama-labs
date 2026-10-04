@@ -170,7 +170,7 @@ Ex. MilhasGrupo: `emitir passagem com milhas familia`, `nao consigo emitir 4 pas
    ```
    'send_to': 'AW-XXXXXXXXX/LABEL_AQUI'
    ```
-6. Colar nas envs da landing (Vercel) e **redeploy**:
+6. Colar nas envs da landing (`.env.local`) e reiniciar o dev server:
    - `NEXT_PUBLIC_GOOGLE_ADS_ID = AW-XXXXXXXXX`
    - `NEXT_PUBLIC_GOOGLE_ADS_LEAD_LABEL = LABEL_AQUI`
 
@@ -258,7 +258,7 @@ O Google empurra automações e gasto da mesma forma que o Meta. Ignorar:
 - [ ] Cartões virtuais `{APP}-META` e `{APP}-GOOGLE` emitidos + limites definidos
 - [ ] Google tag instalada na landing
 - [ ] Conversion Action `Lead - {App}` criada (value fixo, Count One)
-- [ ] Label colado no Vercel (`NEXT_PUBLIC_GOOGLE_ADS_LEAD_LABEL` + `_ID`) + redeploy
+- [ ] Label colado no `.env.local` (`NEXT_PUBLIC_GOOGLE_ADS_LEAD_LABEL` + `_ID`) + restart do dev server
 - [ ] Campanha **Search** (não PMax)
 - [ ] Keywords de dor coladas (phrase/exact no início)
 - [ ] Localização "Presence" + idioma Português

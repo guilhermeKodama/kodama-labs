@@ -76,7 +76,7 @@
   },
   "footer": {
     "tagline": "An umbrella for ambitious software.",
-    "builtWith": "Built with Next.js · Deployed on Vercel"
+    "builtWith": "Built with Next.js · Self-hosted"
   },
   "projects": {
     "capital": {
@@ -96,7 +96,7 @@
       "tagline": "AI-powered transparency for Brazilian public procurement.",
       "description": "Continuously ingests federal procurement data, flags unusual pricing patterns and political proximity, and produces neutral-language reports for journalists and citizens. Discipline: surface what's worth reviewing — never accuse.",
       "challenges": [
-        "Scaling Claude analysis across a continuous government dataset while staying inside Vercel's cron budget.",
+        "Scaling Claude analysis across a continuous government dataset on one always-on server.",
         "Mapping political relationships (family, donations, wealth anomalies) without crossing into defamation territory.",
         "Multi-stage alert pipeline with deterministic deduplication across overlapping criteria."
       ],

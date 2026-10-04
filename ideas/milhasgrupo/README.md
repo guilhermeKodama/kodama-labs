@@ -21,11 +21,9 @@ Or from inside this folder: drop the `--filter` flag.
 
 Copy `.env.example` to `.env.local` and fill what you need. All vars are optional locally.
 
-## Deploy
+## Run
 
-1. New Vercel project, **root directory = `ideas/milhasgrupo`**.
-2. Add env vars from `.env.example`.
-3. Push. Vercel auto-detects Next.js.
+Local prototype: `pnpm dev --filter=@ideas/milhasgrupo` (http://localhost:3100). Put env vars from `.env.example` in `.env.local`.
 
 ## Structure
 
@@ -103,18 +101,18 @@ The `/api/lead` route POSTs every submission as JSON to `LEADS_WEBHOOK_URL`. Poi
    > **After editing the script later, redeploy via Deploy → Manage deployments → ✏️ → Version: New version → Deploy.** Just saving doesn't update the live endpoint.
 
 4. **Deploy → New deployment → Type: Web app**. Execute as: *me*. Who has access: *Anyone*. Copy the Web app URL.
-5. In Vercel → Project → Settings → Environment Variables, set `LEADS_WEBHOOK_URL` to that URL. Redeploy.
+5. Set `LEADS_WEBHOOK_URL` in `.env.local` to that URL and restart `pnpm dev`.
 6. Smoke test: visit the production landing, submit the form, confirm a row lands in the Sheet.
 
 ### 2. Analytics — Meta Pixel + GA4 + Google Ads
 
 All three load via `src/lib/analytics.tsx` and stay silent if the corresponding env vars are unset. To wire them up:
 
-- **Meta Pixel** — Meta Ads Manager → Events Manager → create Pixel → copy ID. Set `NEXT_PUBLIC_META_PIXEL_ID` in Vercel.
-- **GA4** — Google Analytics → Admin → Data Streams → new Web stream → copy *Measurement ID* (starts with `G-`). Set `NEXT_PUBLIC_GA_ID` in Vercel.
-- **Google Ads** — Google Ads → Tools → Conversions → new conversion (Website → Lead) → copy the `AW-XXXXXXX` ID and the conversion *label*. Set `NEXT_PUBLIC_GOOGLE_ADS_ID` and `NEXT_PUBLIC_GOOGLE_ADS_LEAD_LABEL` in Vercel.
+- **Meta Pixel** — Meta Ads Manager → Events Manager → create Pixel → copy ID. Set `NEXT_PUBLIC_META_PIXEL_ID` in `.env.local`.
+- **GA4** — Google Analytics → Admin → Data Streams → new Web stream → copy *Measurement ID* (starts with `G-`). Set `NEXT_PUBLIC_GA_ID` in `.env.local`.
+- **Google Ads** — Google Ads → Tools → Conversions → new conversion (Website → Lead) → copy the `AW-XXXXXXX` ID and the conversion *label*. Set `NEXT_PUBLIC_GOOGLE_ADS_ID` and `NEXT_PUBLIC_GOOGLE_ADS_LEAD_LABEL` in `.env.local`.
 
-Redeploy. The full funnel fires automatically:
+Restart the dev server. The full funnel fires automatically:
 
 | Event | When | Meta Pixel | GA4 | Google Ads |
 | --- | --- | --- | --- | --- |
