@@ -62,41 +62,130 @@ function findSimilarNames(input: string, validNames: string[], maxResults = 3): 
 
 export interface CategoryNameMatch {
   valid: boolean;
+  /** True when the name matches a row that is hidden from pickers. */
+  archived: boolean;
   suggestions: string[];
   /** Canonical stored name when valid, including a case-insensitive hit. */
   canonicalName?: string;
+  /** Names that can be assigned to new records. Archived names are omitted. */
   validNames: string[];
 }
+
+type CategoryLookupRow = {
+  name: string;
+  type: TransactionType;
+  isArchived?: boolean;
+};
 
 /**
  * Match a category name against an already-loaded list.
  * Exact match wins. Otherwise a case-insensitive match is accepted and
- * canonicalName is the stored spelling. Unknown names stay invalid.
+ * canonicalName is the stored spelling. An archived match is not valid for
+ * a new assignment. Unknown names stay invalid. Suggestions come from the
+ * visible names only.
  */
 export function matchCategoryName(
   categoryName: string,
-  categories: Array<{ name: string; type: TransactionType }>,
+  categories: CategoryLookupRow[],
   type: TransactionType | undefined
 ): CategoryNameMatch {
   const pool = type ? categories.filter((c) => c.type === type) : categories;
-  const validNames = pool.map((c) => c.name);
+  const validNames = pool.filter((c) => !c.isArchived).map((c) => c.name);
   const normalized = categoryName.trim();
   const exact = pool.find((c) => c.name === normalized);
   if (exact) {
-    return { valid: true, suggestions: [], canonicalName: exact.name, validNames };
+    return {
+      valid: !exact.isArchived,
+      archived: !!exact.isArchived,
+      suggestions: [],
+      canonicalName: exact.name,
+      validNames,
+    };
   }
 
   const folded = normalized.toLowerCase();
   const insensitive = pool.find((c) => c.name.toLowerCase() === folded);
   if (insensitive) {
-    return { valid: true, suggestions: [], canonicalName: insensitive.name, validNames };
+    return {
+      valid: !insensitive.isArchived,
+      archived: !!insensitive.isArchived,
+      suggestions: [],
+      canonicalName: insensitive.name,
+      validNames,
+    };
   }
 
   return {
     valid: false,
+    archived: false,
     suggestions: findSimilarNames(normalized, validNames),
     validNames,
   };
+}
+
+export function formatCategoryValidationError(
+  categoryName: string,
+  type: TransactionType | undefined,
+  validation: CategoryNameMatch
+): string {
+  if (validation.archived) {
+    const name = validation.canonicalName ?? categoryName;
+    return (
+      `Category '${name}' is archived and cannot be assigned. ` +
+      `Unarchive it or choose a visible category.`
+    );
+  }
+  const suggestions = validation.suggestions.length > 0
+    ? ` Did you mean: ${validation.suggestions.join(", ")}?`
+    : "";
+  const names = validation.validNames.length > 0
+    ? ` Valid categories: ${validation.validNames.join(", ")}.`
+    : "";
+  const typeLabel = type ? ` (type: ${type})` : "";
+  return `Category '${categoryName}' not found${typeLabel}.${suggestions}${names}`;
+}
+
+/**
+ * Reject a user-facing assignment of an archived category.
+ * Unknown names are left alone so existing free-text writers keep working.
+ * Passing currentName allows an update that does not change the category.
+ *
+ * Internal system writes must not call this. They resolve a system key
+ * (credit_card, other_system, other_income) and write that name even when
+ * the row is archived.
+ */
+export async function rejectArchivedAssignment(
+  userId: string,
+  categoryName: string,
+  type: TransactionType | undefined,
+  db: DbClient,
+  currentName?: string
+): Promise<void> {
+  const categories = await fetchCategoriesByUserId(userId, type, db, {
+    includeArchived: true,
+  });
+  const validation = matchCategoryName(categoryName, categories, type);
+  if (!validation.archived) return;
+  if (
+    currentName &&
+    validation.canonicalName &&
+    currentName.toLowerCase() === validation.canonicalName.toLowerCase()
+  ) {
+    return;
+  }
+  throw new Error(formatCategoryValidationError(categoryName, type, validation));
+}
+
+/** Lowercased names of archived categories, for skipping learned mappings. */
+export async function archivedCategoryNameSet(
+  userId: string,
+  db: DbClient
+): Promise<Set<string>> {
+  const rows = await db.category.findMany({
+    where: { userId, isArchived: true },
+    select: { name: true },
+  });
+  return new Set(rows.map((row) => row.name.toLowerCase()));
 }
 
 /**
@@ -108,7 +197,9 @@ export async function validateCategory(
   type: TransactionType | undefined,
   db: DbClient
 ): Promise<CategoryNameMatch> {
-  const categories = await fetchCategoriesByUserId(userId, type, db);
+  const categories = await fetchCategoriesByUserId(userId, type, db, {
+    includeArchived: true,
+  });
   return matchCategoryName(categoryName, categories, type);
 }
 
@@ -119,7 +210,9 @@ export async function findOrphanTransactions(
   userId: string,
   db: DbClient
 ) {
-  const categories = await fetchCategoriesByUserId(userId, undefined, db);
+  const categories = await fetchCategoriesByUserId(userId, undefined, db, {
+    includeArchived: true,
+  });
   const validNames = categories.map((c) => c.name);
 
   const where = {

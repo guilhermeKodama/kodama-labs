@@ -315,7 +315,8 @@ export async function getBudgetDashboard(
     });
   }
 
-  // Get the user's localized credit card category name
+  // Installment projections keep the credit_card name when that category is
+  // archived. getCategoryNameBySystemKey does not unarchive the row.
   const creditCardCategoryName = await getCategoryNameBySystemKey(
     userId,
     "credit_card",

@@ -53,6 +53,11 @@ import {
   unmarkTransactionAsCardSettlement,
   getCreditCardStatement,
 } from "../tools/credit-card-statements";
+import {
+  listCreditCardsForMcp,
+  createCreditCardTool,
+  updateCreditCardTool,
+} from "../tools/credit-cards";
 
 // Date string schema that accepts both YYYY-MM-DD and full ISO strings
 const DateStringSchema = z.string().refine(
@@ -114,6 +119,7 @@ const DeleteTransactionInputSchema = z.object({
 
 const ListCategoriesInputSchema = z.object({
   type: z.enum(["income", "expense", "investment"]).optional(),
+  includeArchived: z.boolean().optional(),
 });
 
 const CreateCategoryInputSchema = z.object({
@@ -129,6 +135,7 @@ const UpdateCategoryInputSchema = z.object({
   type: z.enum(["income", "expense", "investment"]).optional(),
   color: z.string().optional(),
   icon: z.string().optional(),
+  isArchived: z.boolean().optional(),
 });
 
 const DeleteCategoryInputSchema = z.object({
@@ -381,14 +388,14 @@ export function createCapitalMcpServer(userId: string, db: DbClient) {
     "list_categories",
     {
       description:
-        "List all available categories, optionally filtered by transaction type " +
-        "(income, expense, investment). Categories include system defaults and " +
-        "user-created ones. Example categories: 'Dividends' (income), 'Groceries' " +
-        "(expense), 'Stocks' (investment).",
+        "List categories, optionally filtered by transaction type " +
+        "(income, expense, investment). Archived categories are hidden unless " +
+        "includeArchived is true. Archiving hides a category from pickers; existing " +
+        "transactions, budgets, and reports still use it. Each row includes isArchived.",
       inputSchema: ListCategoriesInputSchema,
     },
-    async ({ type }) => {
-      const result = await listCategoriesForMcp(userId, type, db);
+    async ({ type, includeArchived }) => {
+      const result = await listCategoriesForMcp(userId, type, db, includeArchived ?? false);
       return {
         content: [
           {
@@ -619,7 +626,11 @@ export function createCapitalMcpServer(userId: string, db: DbClient) {
         "Renaming to an existing category name for the same type is rejected (use merge_categories instead). " +
         "TYPE CHANGES are only allowed when no transactions use the category. LOCALIZATION: System and " +
         "default categories CAN be renamed (e.g., 'Credit Card' → 'Cartão de Crédito'). The system uses " +
-        "skipDuplicates when seeding, so renamed categories won't be duplicated on next login.",
+        "skipDuplicates when seeding, so renamed categories won't be duplicated on next login. " +
+        "Set isArchived to hide a category from pickers without deleting it, including " +
+        "system and default categories. Existing transactions keep the name. " +
+        "Assigning an archived category to a new transaction is rejected. " +
+        "Unarchive by setting isArchived to false.",
       inputSchema: UpdateCategoryInputSchema,
     },
     async (params) => {
@@ -1054,6 +1065,106 @@ export function createCapitalMcpServer(userId: string, db: DbClient) {
     },
     async (params) => {
       const result = await getCreditCardStatement(userId, params, db);
+      return {
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify(result, null, 2),
+          },
+        ],
+      };
+    }
+  );
+
+  // Register tool: list_credit_cards
+  server.registerTool(
+    "list_credit_cards",
+    {
+      description:
+        "List credit cards owned by the user. Use this to find a card id before " +
+        "import_credit_card_statement. There is no brand field; bankName is the issuer " +
+        "(for example Nubank) and lastFourDigits is the last 4. Filter with accountId " +
+        "(a personal account id or a business id from list_accounts), entityType, " +
+        "or lastFourDigits (exactly 4 digits, for example 3308 or 7809). " +
+        "Returns inactive cards too. latestStatementMonth is the newest imported " +
+        "statement month (YYYY-MM) or null.",
+      inputSchema: z.object({
+        accountId: z.string().uuid().optional(),
+        entityType: z.enum(["personal", "business"]).optional(),
+        lastFourDigits: z.string().regex(/^\d{4}$/).optional(),
+      }),
+    },
+    async (params) => {
+      const result = await listCreditCardsForMcp(userId, params, db);
+      return {
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify(result, null, 2),
+          },
+        ],
+      };
+    }
+  );
+
+  // Register tool: create_credit_card
+  server.registerTool(
+    "create_credit_card",
+    {
+      description:
+        "Create a credit card on an account the user owns. Same validation as the web " +
+        "API: personal requires personalAccountId, business requires businessId, " +
+        "lastFourDigits is 4 digits, closingDay and dueDay are 1-31, currency is a " +
+        "3-letter code, and creditLimit is a positive number (required; there is no default). " +
+        "List cards first so you do not create a duplicate last-4.",
+      inputSchema: z.object({
+        entityType: z.enum(["personal", "business"]),
+        bankName: z.string().min(1),
+        lastFourDigits: z.string().regex(/^\d{4}$/),
+        nickname: z.string().optional(),
+        creditLimit: z.number().positive(),
+        closingDay: z.number().int().min(1).max(31),
+        dueDay: z.number().int().min(1).max(31),
+        color: z.string().optional(),
+        currency: z.string().length(3),
+        businessId: z.string().uuid().optional(),
+        personalAccountId: z.string().uuid().optional(),
+      }),
+    },
+    async (params) => {
+      const result = await createCreditCardTool(userId, params, db);
+      return {
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify(result, null, 2),
+          },
+        ],
+      };
+    }
+  );
+
+  // Register tool: update_credit_card
+  server.registerTool(
+    "update_credit_card",
+    {
+      description:
+        "Update a credit card's bankName, nickname, lastFourDigits, closingDay, dueDay, " +
+        "or isActive. Does not change currency or which account owns the card. " +
+        "Use this to fix a last-4 or closing day instead of creating a second card. " +
+        "Set isActive to false to hide a mistaken duplicate.",
+      inputSchema: z.object({
+        id: z.string().uuid(),
+        bankName: z.string().min(1).optional(),
+        nickname: z.string().optional(),
+        lastFourDigits: z.string().regex(/^\d{4}$/).optional(),
+        closingDay: z.number().int().min(1).max(31).optional(),
+        dueDay: z.number().int().min(1).max(31).optional(),
+        isActive: z.boolean().optional(),
+      }),
+    },
+    async (params) => {
+      const result = await updateCreditCardTool(userId, params, db);
       return {
         content: [
           {

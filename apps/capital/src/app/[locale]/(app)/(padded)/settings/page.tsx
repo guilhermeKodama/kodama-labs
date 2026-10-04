@@ -12,6 +12,8 @@ import {
   Plus,
   Tag,
   Wallet,
+  Archive,
+  ArchiveRestore,
 } from 'lucide-react';
 import { Header } from '@/components/layout/header';
 import { ThemeToggle } from '@/components/theme-toggle';
@@ -77,6 +79,7 @@ export default function SettingsPage() {
     removeCurrency,
     addCategory,
     removeCategory,
+    setCategoryArchived,
     resetApp,
   } = useSettingsStore();
   const { businesses, updateBusiness } = useBusinessStore();
@@ -89,6 +92,7 @@ export default function SettingsPage() {
   const [newCurrencyCode, setNewCurrencyCode] = useState('');
   const [newCurrencyRate, setNewCurrencyRate] = useState('1');
   const [deletingCategory, setDeletingCategory] = useState<Category | undefined>();
+  const [showArchived, setShowArchived] = useState(false);
 
   // Initial balance state
   const [personalInitialBalance, setPersonalInitialBalance] = useState<string>(
@@ -208,11 +212,25 @@ export default function SettingsPage() {
     toast.success(t('settings.data.exportSuccess'));
   };
 
-  // Group categories by type
+  const handleArchiveCategory = async (category: Category) => {
+    try {
+      await setCategoryArchived(category.id, !category.isArchived);
+      toast.success(
+        category.isArchived
+          ? t('settings.categories.unarchived')
+          : t('settings.categories.archived')
+      );
+    } catch {
+      toast.error(t('settings.categories.archiveError'));
+    }
+  };
+
+  // Group categories by type. Archived rows stay out of the list until asked for.
+  const visibleCategories = categories.filter((c) => showArchived || !c.isArchived);
   const categoriesByType = {
-    income: categories.filter((c) => c.type === 'income'),
-    expense: categories.filter((c) => c.type === 'expense'),
-    investment: categories.filter((c) => c.type === 'investment'),
+    income: visibleCategories.filter((c) => c.type === 'income'),
+    expense: visibleCategories.filter((c) => c.type === 'expense'),
+    investment: visibleCategories.filter((c) => c.type === 'investment'),
   };
 
   return (
@@ -408,6 +426,17 @@ export default function SettingsPage() {
                   </CardDescription>
                 </div>
               </div>
+              <div className="flex items-center gap-2">
+              <Button
+                onClick={() => setShowArchived((value) => !value)}
+                size="sm"
+                variant="outline"
+                className="border-slate-700 text-slate-300"
+              >
+                {showArchived
+                  ? t('settings.categories.hideArchived')
+                  : t('settings.categories.showArchived')}
+              </Button>
               <Button
                 onClick={() => setShowCategoryDialog(true)}
                 size="sm"
@@ -416,10 +445,11 @@ export default function SettingsPage() {
                 <Plus className="mr-2 h-4 w-4" />
                 {t('settings.categories.add')}
               </Button>
+              </div>
             </div>
           </CardHeader>
           <CardContent>
-            {categories.length === 0 ? (
+            {visibleCategories.length === 0 ? (
               <p className="py-4 text-center text-slate-400">
                 {t('settings.categories.empty')}
               </p>
@@ -435,9 +465,22 @@ export default function SettingsPage() {
                       {categoriesByType.income.map((category) => (
                         <div
                           key={category.id}
-                          className="group flex items-center gap-2 rounded-lg border border-slate-800 bg-slate-800/50 px-3 py-2"
+                          className={`group flex items-center gap-2 rounded-lg border border-slate-800 bg-slate-800/50 px-3 py-2 ${category.isArchived ? 'opacity-60' : ''}`}
                         >
                           <span className="text-slate-300">{category.name}</span>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => handleArchiveCategory(category)}
+                            title={category.isArchived ? t('settings.categories.unarchive') : t('settings.categories.archive')}
+                            className="h-5 w-5 text-slate-500 opacity-0 transition-opacity hover:bg-slate-700 hover:text-slate-200 group-hover:opacity-100"
+                          >
+                            {category.isArchived ? (
+                              <ArchiveRestore className="h-3 w-3" />
+                            ) : (
+                              <Archive className="h-3 w-3" />
+                            )}
+                          </Button>
                           <Button
                             variant="ghost"
                             size="icon"
@@ -462,9 +505,22 @@ export default function SettingsPage() {
                       {categoriesByType.expense.map((category) => (
                         <div
                           key={category.id}
-                          className="group flex items-center gap-2 rounded-lg border border-slate-800 bg-slate-800/50 px-3 py-2"
+                          className={`group flex items-center gap-2 rounded-lg border border-slate-800 bg-slate-800/50 px-3 py-2 ${category.isArchived ? 'opacity-60' : ''}`}
                         >
                           <span className="text-slate-300">{category.name}</span>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => handleArchiveCategory(category)}
+                            title={category.isArchived ? t('settings.categories.unarchive') : t('settings.categories.archive')}
+                            className="h-5 w-5 text-slate-500 opacity-0 transition-opacity hover:bg-slate-700 hover:text-slate-200 group-hover:opacity-100"
+                          >
+                            {category.isArchived ? (
+                              <ArchiveRestore className="h-3 w-3" />
+                            ) : (
+                              <Archive className="h-3 w-3" />
+                            )}
+                          </Button>
                           <Button
                             variant="ghost"
                             size="icon"
@@ -489,9 +545,22 @@ export default function SettingsPage() {
                       {categoriesByType.investment.map((category) => (
                         <div
                           key={category.id}
-                          className="group flex items-center gap-2 rounded-lg border border-slate-800 bg-slate-800/50 px-3 py-2"
+                          className={`group flex items-center gap-2 rounded-lg border border-slate-800 bg-slate-800/50 px-3 py-2 ${category.isArchived ? 'opacity-60' : ''}`}
                         >
                           <span className="text-slate-300">{category.name}</span>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => handleArchiveCategory(category)}
+                            title={category.isArchived ? t('settings.categories.unarchive') : t('settings.categories.archive')}
+                            className="h-5 w-5 text-slate-500 opacity-0 transition-opacity hover:bg-slate-700 hover:text-slate-200 group-hover:opacity-100"
+                          >
+                            {category.isArchived ? (
+                              <ArchiveRestore className="h-3 w-3" />
+                            ) : (
+                              <Archive className="h-3 w-3" />
+                            )}
+                          </Button>
                           <Button
                             variant="ghost"
                             size="icon"

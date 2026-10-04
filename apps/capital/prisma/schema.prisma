@@ -578,9 +578,10 @@ model Category {
   type      TransactionType
   color     String?
   icon      String?
-  isDefault Boolean         @default(false)
-  isSystem  Boolean         @default(false)
-  systemKey String?         // Stable key for system categories (e.g., "credit_card", "home")
+  isDefault  Boolean         @default(false)
+  isSystem   Boolean         @default(false)
+  systemKey  String?         // Stable key for system categories (e.g., "credit_card", "home")
+  isArchived Boolean         @default(false) // Hidden from pickers; still valid on existing rows
   createdAt DateTime        @default(now())
   updatedAt DateTime        @updatedAt
 

@@ -463,6 +463,7 @@ export interface Category {
   icon?: string;
   isSystem?: boolean;
   systemKey?: string | null;
+  isArchived?: boolean;
 }
 
 // Default categories

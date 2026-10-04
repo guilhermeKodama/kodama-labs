@@ -34,7 +34,8 @@ import {
 } from '@/lib/validations';
 import { useSettingsStore, useBusinessStore } from '@/lib/store';
 import { usePushSubscription } from '@/components/push/use-push-subscription';
-import type { RecurringTransaction, TransactionType, EntityType, RecurrenceFrequency } from '@/types';
+import type { RecurringTransaction, EntityType, RecurrenceFrequency } from '@/types';
+import { pickerCategoryNames } from '@/lib/utils/category-picker';
 import {
   DEFAULT_INCOME_CATEGORIES,
   DEFAULT_EXPENSE_CATEGORIES,
@@ -241,26 +242,16 @@ export function RecurringForm({
     }
   }, [selectedEntityType, personalAccount, businesses, form]);
 
-  const getCategoriesForType = (type: TransactionType) => {
-    const customCategories = categories
-      .filter((c) => c.type === type)
-      .map((c) => c.name);
-
-    if (customCategories.length > 0) {
-      return customCategories;
-    }
-
-    switch (type) {
-      case 'income':
-        return DEFAULT_INCOME_CATEGORIES;
-      case 'expense':
-        return DEFAULT_EXPENSE_CATEGORIES;
-      case 'investment':
-        return DEFAULT_INVESTMENT_CATEGORIES;
-    }
-  };
-
-  const categoryOptions = getCategoriesForType(selectedType);
+  const categoryOptions = pickerCategoryNames(
+    categories,
+    selectedType,
+    recurring?.category,
+    selectedType === 'income'
+      ? DEFAULT_INCOME_CATEGORIES
+      : selectedType === 'investment'
+        ? DEFAULT_INVESTMENT_CATEGORIES
+        : DEFAULT_EXPENSE_CATEGORIES
+  );
   const showExchangeRate = selectedCurrency !== settings.baseCurrency;
 
   const frequencyOptions: RecurrenceFrequency[] = ['daily', 'weekly', 'monthly', 'yearly'];

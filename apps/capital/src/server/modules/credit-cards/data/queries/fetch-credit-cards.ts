@@ -6,6 +6,7 @@ interface FetchCreditCardsFilters {
   personalAccountId?: string;
   entityType?: EntityType;
   isActive?: boolean;
+  lastFourDigits?: string;
 }
 
 /**
@@ -31,6 +32,10 @@ export async function fetchCreditCards(
       }),
       ...(filters.entityType && { entityType: filters.entityType }),
       ...(filters.isActive !== undefined && { isActive: filters.isActive }),
+      ...(filters.lastFourDigits && { lastFourDigits: filters.lastFourDigits }),
+    },
+    include: {
+      business: { select: { name: true } },
     },
     orderBy: { createdAt: "desc" },
   });

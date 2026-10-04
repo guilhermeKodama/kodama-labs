@@ -428,9 +428,15 @@ The implementation uses `@modelcontextprotocol/sdk` v1.30.1 with `WebStandardStr
 - Verify Cloudflare Tunnel is running: `docker compose -p kodama-prod ps cloudflared`
 - Check that `capital-web` service is healthy: `docker compose -p kodama-prod ps capital-web`
 
+## Credit cards and category archive
+
+`list_credit_cards`, `create_credit_card`, and `update_credit_card` sit on the same services as the web API. `list_credit_cards` accepts optional `accountId` (personal account or business), `entityType`, and `lastFourDigits` (exactly 4 digits). There is no brand column; `bankName` plus `lastFourDigits` identify a card. `create_credit_card` requires `creditLimit`. `update_credit_card` changes name, last 4, closing day, due day, and `isActive` only.
+
+`list_categories` hides archived categories unless `includeArchived` is true. `update_category` accepts `isArchived`. Archiving hides a category from pickers. Existing transactions, budgets, and reports keep it. Assigning an archived category to a new transaction is rejected. System writes that resolve `credit_card`, `other_system`, or `other_income` still use that name when the row is archived.
+
 ## Migration Notes
 
-No database migrations are required. The MCP server uses existing tables and services.
+Category archiving adds `categories.isArchived` (`BOOLEAN NOT NULL DEFAULT false`). No backfill. Deploy the migration before the app that reads the column. The rest of the MCP server uses existing tables.
 
 ## Security Considerations
 

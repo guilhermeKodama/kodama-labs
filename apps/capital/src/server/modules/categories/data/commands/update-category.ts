@@ -4,6 +4,7 @@ interface UpdateCategoryData {
   name?: string;
   color?: string;
   icon?: string;
+  isArchived?: boolean;
 }
 
 /**

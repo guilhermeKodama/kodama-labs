@@ -45,7 +45,8 @@ export async function createBillExpense(
     throw new Error("Bill is already linked to an expense transaction");
   }
 
-  // Get the user's credit card category name (supports localization)
+  // Internal write: the credit_card system category is applied even when the
+  // owner has archived it. Do not route this through rejectArchivedAssignment.
   const creditCardCategoryName = await getCategoryNameBySystemKey(
     userId,
     "credit_card",

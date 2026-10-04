@@ -34,6 +34,7 @@ interface SettingsActions {
   removeCurrency: (code: string) => Promise<void>;
   addCategory: (name: string, type: TransactionType, color?: string) => Promise<Category | null>;
   removeCategory: (id: string) => Promise<void>;
+  setCategoryArchived: (id: string, isArchived: boolean) => Promise<void>;
   
   // Tax settings (local for now - could be moved to API later)
   updateTaxSettings: (settings: Partial<TaxSettings>) => void;
@@ -127,7 +128,9 @@ export const useSettingsStore = create<SettingsStore>()((set, get) => ({
   // Fetch categories from API (userId is now taken from session on the backend)
   fetchCategories: async () => {
     try {
-      const res = await client.v1.categories.$get({ query: {} });
+      const res = await client.v1.categories.$get({
+        query: { includeArchived: "true" },
+      });
 
       if (!res.ok) {
         throw new Error('Failed to fetch categories');
@@ -143,6 +146,7 @@ export const useSettingsStore = create<SettingsStore>()((set, get) => ({
           icon: cat.icon ?? undefined,
           isSystem: cat.isSystem ?? undefined,
           systemKey: cat.systemKey ?? undefined,
+          isArchived: cat.isArchived ?? false,
         })),
       });
     } catch (error) {
@@ -346,6 +350,33 @@ export const useSettingsStore = create<SettingsStore>()((set, get) => ({
         isLoading: false,
       });
       return null;
+    }
+  },
+
+  setCategoryArchived: async (id: string, isArchived: boolean) => {
+    set({ isLoading: true, error: null });
+    try {
+      const res = await client.v1.categories[':id'].$put({
+        param: { id },
+        json: { isArchived },
+      });
+
+      if (!res.ok) {
+        throw new Error('Failed to update category');
+      }
+
+      set((state) => ({
+        categories: state.categories.map((category) =>
+          category.id === id ? { ...category, isArchived } : category
+        ),
+        isLoading: false,
+      }));
+    } catch (error) {
+      set({
+        error: error instanceof Error ? error.message : 'Unknown error',
+        isLoading: false,
+      });
+      throw error;
     }
   },
 

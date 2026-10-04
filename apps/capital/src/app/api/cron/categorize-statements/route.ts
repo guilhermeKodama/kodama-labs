@@ -62,13 +62,26 @@ export async function GET(request: NextRequest) {
         // Fetch user's categories (both expense and income)
         const categories = await prisma.category.findMany({
           where: { userId },
-          select: { name: true, type: true },
+          select: { name: true, type: true, isArchived: true },
         });
-        const expenseCategories = [...new Set(categories.filter((c) => c.type === "expense").map((c) => c.name))];
-        const incomeCategories = [...new Set(categories.filter((c) => c.type === "income").map((c) => c.name))];
         const labels = await getSystemCategoryNames(userId, STATEMENT_LABEL_KEYS, prisma);
         const otherExpense = labels.other_system;
         const otherIncome = labels.other_income;
+        // Archived names stay off the prompt. Fallback labels are internal
+        // writes and stay assignable even when those rows are archived.
+        const visible = categories.filter((c) => !c.isArchived);
+        const expenseCategories = [
+          ...new Set([
+            ...visible.filter((c) => c.type === "expense").map((c) => c.name),
+            otherExpense,
+          ]),
+        ];
+        const incomeCategories = [
+          ...new Set([
+            ...visible.filter((c) => c.type === "income").map((c) => c.name),
+            otherIncome,
+          ]),
+        ];
 
         // Split by type for better categorization
         const expenseTxs = transactions.filter((t) => t.type === "expense");

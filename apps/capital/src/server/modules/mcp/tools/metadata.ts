@@ -9,9 +9,10 @@ import type { TransactionType } from "@/generated/prisma";
 export async function listCategoriesForMcp(
   userId: string,
   type: TransactionType | undefined,
-  db: DbClient
+  db: DbClient,
+  includeArchived = false
 ) {
-  const categories = await listCategories(userId, type, db);
+  const categories = await listCategories(userId, type, db, { includeArchived });
 
   // Get transaction counts for each category
   const categoryCounts = await db.transaction.groupBy({
@@ -41,6 +42,7 @@ export async function listCategoriesForMcp(
       isDefault: cat.isDefault,
       isSystem: cat.isSystem,
       systemKey: cat.systemKey,
+      isArchived: cat.isArchived,
       transactionCount: countMap.get(cat.name) ?? 0,
     })),
   };

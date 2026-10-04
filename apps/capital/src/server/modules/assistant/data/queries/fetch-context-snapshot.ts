@@ -33,7 +33,7 @@ export async function fetchContextSnapshot(userId: string, db: DbClient) {
       select: { id: true, defaultCurrency: true },
     }),
     db.category.findMany({
-      where: { userId },
+      where: { userId, isArchived: false },
       select: { name: true, type: true, isSystem: true },
       orderBy: { name: "asc" },
     }),

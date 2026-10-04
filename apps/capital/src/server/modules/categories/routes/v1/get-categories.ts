@@ -18,6 +18,7 @@ const CategorySchema = z.object({
   isDefault: z.boolean(),
   isSystem: z.boolean(),
   systemKey: z.string().nullable(),
+  isArchived: z.boolean(),
   createdAt: z.string(),
   updatedAt: z.string(),
 });
@@ -38,6 +39,7 @@ export const route = createRoute({
   request: {
     query: z.object({
       type: z.enum(["income", "expense", "investment"]).optional(),
+      includeArchived: z.enum(["true", "false"]).optional(),
     }),
   },
   responses: {
@@ -53,8 +55,10 @@ export const route = createRoute({
 export const handler: AppRouteHandler<typeof route> = async (c) => {
   try {
     const userId = requireUserId(c);
-    const { type } = c.req.valid("query");
-    const categories = await listCategories(userId, type, prisma);
+    const { type, includeArchived } = c.req.valid("query");
+    const categories = await listCategories(userId, type, prisma, {
+      includeArchived: includeArchived === "true",
+    });
 
     return c.json(
       categories.map((cat) => ({
@@ -67,6 +71,7 @@ export const handler: AppRouteHandler<typeof route> = async (c) => {
         isDefault: cat.isDefault,
         isSystem: cat.isSystem,
         systemKey: cat.systemKey,
+        isArchived: cat.isArchived,
         createdAt: cat.createdAt.toISOString(),
         updatedAt: cat.updatedAt.toISOString(),
       })),

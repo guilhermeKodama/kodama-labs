@@ -115,11 +115,18 @@ export async function GET(request: NextRequest) {
       // Fetch user's expense categories
       const categories = await prisma.category.findMany({
         where: { userId, type: "expense" },
-        select: { name: true },
+        select: { name: true, isArchived: true },
       });
-      const categoryNames = [...new Set(categories.map((c) => c.name))];
       const labels = await getSystemCategoryNames(userId, BILL_LABEL_KEYS, prisma);
       const otherName = labels.other_system;
+      // Archived names stay off the prompt. The other_system fallback is an
+      // internal write and stays assignable even when that row is archived.
+      const categoryNames = [
+        ...new Set([
+          ...categories.filter((c) => !c.isArchived).map((c) => c.name),
+          otherName,
+        ]),
+      ];
 
       const txInput = chunk.map((t, i) => ({
         index: i,

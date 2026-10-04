@@ -1,4 +1,5 @@
 import type { DbClient } from "@capital/server/lib/prisma";
+import { rejectArchivedAssignment } from "../lib/category-validation";
 import { parseLocalDate } from "@capital/server/lib/date-utils";
 import {
   getEffectiveBudgetsForMonth,
@@ -167,6 +168,8 @@ export async function createBudget(
   if (amount < 0) {
     throw new Error("Budget amount must be non-negative");
   }
+
+  await rejectArchivedAssignment(userId, category, "expense", db);
 
   // Parse effective date (always normalize to first day at noon UTC)
   const effectiveDate = normalizeToMonthStart(parseLocalDate(effectiveFrom));
