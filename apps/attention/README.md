@@ -25,7 +25,8 @@ Do root do monorepo:
 
 ```bash
 pnpm db:up
-pnpm --filter @wallex/attention db:migrate:dev
+pnpm --filter @wallex/attention db:migrate      # apply existing migrations
+pnpm --filter @wallex/attention db:migrate:dev  # create a new migration
 ```
 
 ## 3. Rodar local

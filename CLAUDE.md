@@ -66,6 +66,17 @@ using this — not worth it for reading env vars.
    `append-variables`.
 3. Add the app to this doc's list above.
 
+## Builds and migrations
+
+`pnpm build` / `turbo build` generate the Prisma client and run `next build`.
+They do not connect to a real database and they do not migrate. A missing
+`DATABASE_URL` is filled with a placeholder for the build process only.
+
+Apply migrations with `pnpm db:migrate` (`prisma migrate deploy` in capital,
+sentinel, attention, and careers) or, in production, the compose
+`*-migrate` services. Create new migrations with `pnpm --filter <app>
+db:migrate:dev`.
+
 ## Postgres
 
 Shared Postgres 17 in Docker (port 5433), one DB per app — see

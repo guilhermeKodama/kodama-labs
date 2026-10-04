@@ -1,13 +1,15 @@
 #!/usr/bin/env node
 /**
- * Guard for the Prisma CLI scripts (db:migrate, db:push, db:seed,
- * db:reset). Those talk to Postgres directly and never import
- * src/server/lib/prisma.ts, so the runtime guard cannot see them - and
- * `prisma migrate reset --force` against production would be
- * unrecoverable.
+ * Guard for the Prisma CLI scripts that create or destroy schema
+ * (db:migrate:dev, db:push, db:seed, db:reset). Those talk to Postgres
+ * directly and never import src/server/lib/prisma.ts, so the runtime
+ * guard cannot see them - and `prisma migrate reset --force` against
+ * production would be unrecoverable.
  *
- * Deliberately NOT wired to `build`, which runs `prisma migrate deploy`
- * and must keep working against production on deploy.
+ * Not wired to `build` or `db:migrate`. `build` only generates the client
+ * and runs `next build`. `db:migrate` is `prisma migrate deploy`, which
+ * is how production (the compose `capital-migrate` service) applies
+ * migrations.
  */
 import path from "node:path";
 import { fileURLToPath } from "node:url";

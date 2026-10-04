@@ -88,7 +88,7 @@ Postgres runs in Docker on port `5433` (`infrastructure/postgres`). To manage it
 
 ```sh
 pnpm db:up      # start postgres in the background
-pnpm db:migrate # apply capital + sentinel migrations
+pnpm db:migrate # apply capital, sentinel, attention, and careers migrations (`prisma migrate deploy`; not part of `pnpm build`)
 pnpm dev:db     # foreground postgres logs (optional)
 ```
 
