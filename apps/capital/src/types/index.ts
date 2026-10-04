@@ -106,6 +106,9 @@ export interface Transaction {
   date: Date;
   isTaxDeductible?: boolean; // For tax calculation helpers
   recurringTransactionId?: string; // Link to recurring transaction if auto-generated
+  isCardSettlement?: boolean;
+  /** Set on statement purchases added by the P&L ledger. Absent on cash rows. */
+  source?: "card_statement";
   createdAt: Date;
   updatedAt: Date;
 }
@@ -591,12 +594,14 @@ export interface CreditCardBill {
 
 export interface BillTransaction {
   id: string;
-  billId: string;
+  billId: string | null;
+  statementId: string | null;
   category: string;
   transactionDate: Date;
   description: string;
   merchantName?: string;
   amount: number;
+  currency: string;
   installmentNumber?: number;
   totalInstallments?: number;
   isAutoCategorized: boolean;

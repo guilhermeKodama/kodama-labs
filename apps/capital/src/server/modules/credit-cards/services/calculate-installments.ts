@@ -36,6 +36,10 @@ export async function createInstallmentFromBillTransaction(
     throw new Error("Transaction does not have installment info");
   }
 
+  if (!billTransaction.bill) {
+    throw new Error("Bill transaction must be linked to a bill to create installment");
+  }
+
   const totalAmount = billTransaction.amount * billTransaction.totalInstallments;
 
   return db.installment.create({

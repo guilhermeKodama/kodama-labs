@@ -83,6 +83,43 @@ export function convertToBaseCurrency(
 }
 
 /**
+ * Convert a money amount into the user's base currency.
+ *
+ * `manualRate` means "1 unit of baseCurrency = X units of this currency".
+ * Frankfurter is queried as `?base=${baseCurrency}&symbols=foreign`, and that
+ * rate is stored on the currencies table. `convertToBaseCurrency` therefore
+ * divides: `amountInBase = amount / manualRate`.
+ *
+ * Worked example: base BRL, USD `manualRate` 0.2 (1 BRL = 0.2 USD).
+ * 20 USD / 0.2 = 100 BRL.
+ *
+ * A stored `exchangeRate` is the inverse (base currency per 1 foreign unit),
+ * the same value regular transactions persist (`exchangeRate = 1 / manualRate`).
+ * When it is passed, it wins and today's `manualRate` is not applied:
+ * `amountInBase = amount * exchangeRate`.
+ * A USD expense stored with `exchangeRate` 5.5 stays `amount * 5.5` even when
+ * today's USD `manualRate` is 0.2.
+ *
+ * Omit `exchangeRate` for statement purchases and legacy bill rows. Those have
+ * no stored rate, so they convert with today's `manualRate`.
+ */
+export function amountInUserBase(input: {
+  amount: number;
+  currency: string;
+  exchangeRate?: number | null;
+  currencies: Currency[];
+  baseCurrency: string;
+}): number {
+  if (input.exchangeRate != null) return input.amount * input.exchangeRate;
+  return convertToBaseCurrency(
+    input.amount,
+    input.currency,
+    input.currencies,
+    input.baseCurrency
+  );
+}
+
+/**
  * Format currency code for display
  */
 export function formatCurrencyCode(code: string): string {

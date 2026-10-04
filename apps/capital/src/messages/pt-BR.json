@@ -1557,6 +1557,17 @@
       "installments": "Parcelas",
       "analytics": "Análises"
     },
+    "statementPurchases": {
+      "title": "Compras da fatura",
+      "description": "Uma compra conta no mês da fatura, mesmo quando a data da compra é anterior. As duas datas aparecem para que uma parcela de janeiro numa fatura de outubro não seja uma despesa de janeiro.",
+      "purchaseDate": "Data da compra",
+      "statement": "Fatura",
+      "descriptionColumn": "Descrição",
+      "category": "Categoria",
+      "amount": "Valor",
+      "empty": "Nenhuma compra de fatura ainda.",
+      "closing": "Fecha em {date}"
+    },
     "billContext": {
       "viewing": "Visualizando fatura",
       "closingDate": "Fechamento",

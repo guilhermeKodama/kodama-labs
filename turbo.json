@@ -39,7 +39,8 @@
       "persistent": true
     },
     "test": {
-      "cache": false
+      "cache": false,
+      "passThroughEnv": ["DATABASE_URL"]
     },
     "db:reset": {
       "cache": false

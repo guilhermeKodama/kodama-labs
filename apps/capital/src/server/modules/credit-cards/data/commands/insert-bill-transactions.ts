@@ -7,6 +7,7 @@ interface CreateBillTransactionData {
   description: string;
   merchantName?: string;
   amount: number;
+  currency: string;
   installmentNumber?: number;
   totalInstallments?: number;
   isAutoCategorized?: boolean;

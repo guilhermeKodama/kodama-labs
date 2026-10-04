@@ -42,10 +42,12 @@ function makeBillTx(id: string, billId: string, category: string, amount: number
   return {
     id,
     billId,
+    statementId: null,
     category,
     transactionDate: new Date(date),
     description: `Test item ${id}`,
     amount,
+    currency: "BRL",
     installmentNumber: instNum,
     totalInstallments: totalInst,
     isAutoCategorized: true,

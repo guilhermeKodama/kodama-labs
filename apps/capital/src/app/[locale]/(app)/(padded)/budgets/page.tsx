@@ -34,11 +34,13 @@ import {
 } from '@/components/ui/alert-dialog';
 import {
   useBudgetStore,
-  useTransactionStore,
   useSettingsStore,
   useCreditCardStore,
   useBusinessStore,
 } from '@/lib/store';
+import { useExpenseLedger } from '@/hooks/use-expense-ledger';
+
+const EMPTY_SETTLEMENT_IDS = new Set<string>();
 import {
   calculateAllBudgetProgress,
   getUnbudgetedSpending,
@@ -67,8 +69,8 @@ export default function BudgetsPage() {
     deleteBudget,
     toggleBudget,
   } = useBudgetStore();
-  const { transactions } = useTransactionStore();
-  const { settings, personalAccount, categories } = useSettingsStore();
+  const expenseLedger = useExpenseLedger();
+  const { settings, personalAccount, currencies, categories } = useSettingsStore();
   const { businesses } = useBusinessStore();
   const {
     creditCards,
@@ -106,16 +108,21 @@ export default function BudgetsPage() {
     [isEntityFiltered, selectedEntityIds]
   );
 
-  // Merge regular transactions + credit card bill transactions + installment projections
+  // Ledger already drops settlement payments and adds statement purchases.
+  // Pass statements=[] so those purchases are not merged a second time.
+  // Legacy bill rows still come through allBillTransactions.
   const mergedTransactions = useMemo(() => {
     const ccMerged = mergeTransactionsWithCreditCard(
-      transactions,
+      expenseLedger,
       allBillTransactions,
       bills,
-      creditCards
+      creditCards,
+      [],
+      EMPTY_SETTLEMENT_IDS,
+      currencies,
+      settings.baseCurrency
     );
 
-    // Add installment future projections as virtual transactions
     const installmentTransactions = convertInstallmentsToTransactions(
       installments,
       creditCards,
@@ -125,7 +132,7 @@ export default function BudgetsPage() {
     );
 
     return [...ccMerged, ...installmentTransactions];
-  }, [transactions, allBillTransactions, bills, creditCards, installments, categories]);
+  }, [expenseLedger, allBillTransactions, bills, creditCards, installments, currencies, categories, settings.baseCurrency]);
 
   // Entity-filtered budgets and transactions
   const filteredBudgets = useMemo(() => {
@@ -176,7 +183,7 @@ export default function BudgetsPage() {
     const monthlyBudgets = filteredBudgets.filter(
       (b) => b.isActive && b.period === 'monthly' && b.year === currentYear && b.month === currentMonth
     );
-    return calculateAllBudgetProgress(monthlyBudgets, filteredMergedTransactions);
+    return calculateAllBudgetProgress(monthlyBudgets, filteredMergedTransactions, EMPTY_SETTLEMENT_IDS);
   }, [filteredBudgets, filteredMergedTransactions, currentYear, currentMonth]);
 
   // Combine monthly view: explicit monthly + derived from yearly
@@ -280,7 +287,7 @@ export default function BudgetsPage() {
   // ============================================
 
   const allBudgetProgress = useMemo(() => {
-    return calculateAllBudgetProgress(filteredBudgets, filteredMergedTransactions);
+    return calculateAllBudgetProgress(filteredBudgets, filteredMergedTransactions, EMPTY_SETTLEMENT_IDS);
   }, [filteredBudgets, filteredMergedTransactions]);
 
   // ============================================

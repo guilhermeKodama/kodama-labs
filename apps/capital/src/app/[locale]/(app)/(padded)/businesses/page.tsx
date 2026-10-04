@@ -31,6 +31,7 @@ import {
   useSettingsStore,
 } from '@/lib/store';
 import { calculateEntitySummary } from '@/lib/utils/calculations';
+import { useExpenseLedger } from '@/hooks/use-expense-ledger';
 import { toast } from 'sonner';
 import { useDialogForm } from '@/hooks/use-dialog-form';
 import type { Business } from '@/types';
@@ -43,6 +44,7 @@ export default function BusinessesPage() {
   const { transactions, deleteTransactionsByEntity } = useTransactionStore();
   const { transfers, deleteTransfersByEntity } = useTransferStore();
   const { settings } = useSettingsStore();
+  const expenseLedger = useExpenseLedger();
 
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingBusiness, setEditingBusiness] = useState<Business | undefined>();
@@ -57,10 +59,11 @@ export default function BusinessesPage() {
         transactions,
         transfers,
         settings.baseCurrency,
-        business.initialBalance
+        business.initialBalance,
+        expenseLedger
       )
     );
-  }, [businesses, transactions, transfers, settings.baseCurrency]);
+  }, [businesses, transactions, transfers, settings.baseCurrency, expenseLedger]);
 
   const openEditDialog = (business: Business) => {
     setEditingBusiness(business);

@@ -20,6 +20,7 @@ import { BillUploadDialog } from '@/components/dialogs/bill-upload-dialog';
 import { BillsTable } from '@/components/tables/bills-table';
 import { InstallmentsTable } from '@/components/tables/installments-table';
 import { BillTransactionsTable } from '@/components/tables/bill-transactions-table';
+import { StatementPurchasesTable } from '@/components/tables/statement-purchases-table';
 import { CategoryPieChart } from '@/components/charts';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -57,12 +58,14 @@ export default function CreditCardsPage() {
   const {
     creditCards,
     bills,
+    statements,
     billTransactions,
     installments,
     addCreditCard,
     updateCreditCard,
     deleteCreditCard,
     fetchBills,
+    fetchStatements,
     fetchInstallments,
     fetchBillTransactions,
     uploadBill,
@@ -96,6 +99,10 @@ export default function CreditCardsPage() {
     }
     return null;
   }, [bills, selectedBillId]);
+
+  useEffect(() => {
+    fetchStatements();
+  }, [fetchStatements]);
 
   // Fetch bill transactions whenever the effective bill changes
   useEffect(() => {
@@ -470,7 +477,29 @@ export default function CreditCardsPage() {
                 )}
               </div>
             </CardHeader>
-            <CardContent>
+            <CardContent className="space-y-8">
+              <div>
+                <h3 className="mb-1 text-sm font-medium text-white">
+                  {t('creditCards.statementPurchases.title')}
+                </h3>
+                <p className="mb-4 text-xs text-slate-400">
+                  {t('creditCards.statementPurchases.description')}
+                </p>
+                <StatementPurchasesTable
+                  statements={statements}
+                  cardNames={Object.fromEntries(
+                    creditCards.map((card) => [
+                      card.id,
+                      `${card.bankName} ****${card.lastFourDigits}`,
+                    ])
+                  )}
+                  currency={settings.baseCurrency}
+                  categories={categories}
+                  onUpdateCategory={(txId, category) => {
+                    updateBillTransactionCategory(txId, category);
+                  }}
+                />
+              </div>
               {effectiveBillId ? (
                 <BillTransactionsTable
                   transactions={billTransactions}

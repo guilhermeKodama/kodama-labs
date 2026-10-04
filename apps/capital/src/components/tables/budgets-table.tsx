@@ -57,6 +57,7 @@ type StatusFilter = 'all' | 'onTrack' | 'nearLimit' | 'overBudget';
 interface BudgetsTableProps {
   budgetProgress: BudgetProgress[];
   transactions?: Transaction[];
+  settlementIds?: Set<string>;
   onEdit?: (budget: BudgetProgress['budget']) => void;
   onDelete?: (budget: BudgetProgress['budget']) => void;
   onToggle?: (budget: BudgetProgress['budget']) => void;
@@ -70,6 +71,7 @@ const MONTH_NAMES = [
 export function BudgetsTable({
   budgetProgress,
   transactions: externalTransactions,
+  settlementIds = new Set(),
   onEdit,
   onDelete,
   onToggle,
@@ -105,9 +107,9 @@ export function BudgetsTable({
   const progressWithPace = useMemo(() => {
     return budgetProgress.map((p) => ({
       ...p,
-      pace: calculateBudgetPace(p.budget, transactions),
+      pace: calculateBudgetPace(p.budget, transactions, settlementIds),
     }));
-  }, [budgetProgress, transactions]);
+  }, [budgetProgress, transactions, settlementIds]);
 
   // Filter and sort
   const filteredAndSorted = useMemo(() => {

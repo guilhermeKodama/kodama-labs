@@ -8,16 +8,27 @@ import type {
   RecurringTransaction,
   RecurringTransfer,
 } from '@/types';
+import { shouldCountAsExpense } from './expense-classification';
 
 /**
- * Calculate the sum of transactions by type
+ * Calculate the sum of transactions by type.
+ * For expense type, only counts transactions that should be included in expense totals
+ * (excludes credit card settlement payments).
+ * 
+ * @param settlementIds - Set of transaction IDs that are card settlements (optional)
  */
 export function sumTransactionsByType(
   transactions: Transaction[],
-  type: TransactionType
+  type: TransactionType,
+  settlementIds: Set<string>
 ): number {
   return transactions
-    .filter((t) => t.type === type)
+    .filter((t) => {
+      if (type === 'expense') {
+        return shouldCountAsExpense(t, settlementIds.has(t.id));
+      }
+      return t.type === type;
+    })
     .reduce((sum, t) => sum + t.amount * t.exchangeRate, 0);
 }
 
@@ -113,14 +124,16 @@ export function calculateEntitySummary(
   transactions: Transaction[],
   transfers: Transfer[],
   baseCurrency: string,
-  initialBalance: number = 0
+  initialBalance: number = 0,
+  ledger?: Transaction[]
 ): EntitySummary {
   const entityTransactions = transactions.filter(
     (t) => t.entityId === entityId && t.entityType === entityType
   );
+  const none = new Set<string>();
 
-  const totalIncome = sumTransactionsByType(entityTransactions, 'income');
-  const totalInvestments = sumTransactionsByType(entityTransactions, 'investment');
+  const totalIncome = sumTransactionsByType(entityTransactions, 'income', none);
+  const totalInvestments = sumTransactionsByType(entityTransactions, 'investment', none);
 
   // Reimbursement outflows count as expenses for the originating (business) entity
   const reimbursementExpenses = transfers
@@ -132,7 +145,21 @@ export function calculateEntitySummary(
     .filter((t) => t.direction === 'reimbursement' && t.toEntityId === entityId)
     .reduce((sum, t) => sum + t.amount * t.exchangeRate, 0);
 
-  const totalExpenses = Math.max(0, sumTransactionsByType(entityTransactions, 'expense') + reimbursementExpenses - reimbursementCredits);
+  // Cash: every expense transaction, including card payments, and no statement purchases.
+  const cashExpenses = Math.max(
+    0,
+    sumTransactionsByType(entityTransactions, 'expense', none) + reimbursementExpenses - reimbursementCredits
+  );
+
+  const pnlTransactions = ledger
+    ? ledger.filter((t) => t.entityId === entityId && t.entityType === entityType)
+    : entityTransactions;
+  const totalExpenses = ledger
+    ? Math.max(
+        0,
+        sumTransactionsByType(pnlTransactions, 'expense', none) + reimbursementExpenses - reimbursementCredits
+      )
+    : cashExpenses;
 
   // Exclude reimbursements from incoming transfers since they are already accounted for via expense reduction
   const incomingTransfers = transfers
@@ -144,7 +171,7 @@ export function calculateEntitySummary(
     .filter((t) => t.fromEntityId === entityId && t.direction !== 'reimbursement')
     .reduce((sum, t) => sum + t.amount * t.exchangeRate, 0);
 
-  const balance = initialBalance + totalIncome - totalExpenses - totalInvestments + incomingTransfers - outgoingTransfers;
+  const balance = initialBalance + totalIncome - cashExpenses - totalInvestments + incomingTransfers - outgoingTransfers;
 
   return {
     entityId,
@@ -248,10 +275,11 @@ export function calculateYearlyTotals(
   yearReimbursementCredits: Transfer[],
   yearInvestmentTransfers: Transfer[],
   yearProfitDistributions: Transfer[],
-  viewMode: ReportsViewMode
+  viewMode: ReportsViewMode,
+  settlementIds: Set<string> = new Set()
 ): YearlyTotals {
-  const rawIncome = sumTransactionsByType(yearTransactions, 'income');
-  const rawExpenses = sumTransactionsByType(yearTransactions, 'expense');
+  const rawIncome = sumTransactionsByType(yearTransactions, 'income', settlementIds);
+  const rawExpenses = sumTransactionsByType(yearTransactions, 'expense', settlementIds);
   const investmentCatExp = sumInvestmentCategoryExpenses(yearTransactions);
 
   const reimbursementExp = sumReimbursementExpenses(yearReimbursements);
@@ -273,7 +301,7 @@ export function calculateYearlyTotals(
     expense = Math.max(0, rawExpenses - investmentCatExp);
   }
 
-  const investmentTxs = sumTransactionsByType(yearTransactions, 'investment');
+  const investmentTxs = sumTransactionsByType(yearTransactions, 'investment', settlementIds);
   const deposits = sumInvestmentDeposits(yearInvestmentTransfers);
   const withdrawals = sumInvestmentWithdrawals(yearInvestmentTransfers);
   const investment = Math.max(0, investmentTxs + investmentCatExp + deposits - withdrawals);
@@ -597,7 +625,8 @@ export function calculateEntityComparison(
   entities: Array<{ id: string; name: string; type: EntityType; color?: string; initialBalance?: number }>,
   transactions: Transaction[],
   transfers: Transfer[],
-  baseCurrency: string
+  baseCurrency: string,
+  ledger?: Transaction[]
 ): EntityComparisonData[] {
   return entities.map(entity => {
     const summary = calculateEntitySummary(
@@ -607,7 +636,8 @@ export function calculateEntityComparison(
       transactions,
       transfers,
       baseCurrency,
-      entity.initialBalance ?? 0
+      entity.initialBalance ?? 0,
+      ledger
     );
 
     return {

@@ -11,6 +11,7 @@ import type {
   BillStatus,
   CategorizationStatus,
 } from '@/types';
+import type { ExpenseLedgerStatement } from '@/lib/utils/expense-ledger';
 import { client } from '@/lib/api-client';
 
 interface CreditCardState {
@@ -18,6 +19,7 @@ interface CreditCardState {
   bills: CreditCardBill[];
   billTransactions: BillTransaction[];
   allBillTransactions: BillTransaction[];
+  statements: Array<ExpenseLedgerStatement & { creditCardId: string }>;
   installments: Installment[];
   isLoading: boolean;
   error: string | null;
@@ -40,6 +42,7 @@ interface CreditCardActions {
     creditCardId?: string;
     status?: BillStatus;
   }) => Promise<void>;
+  fetchStatements: (range?: { from?: string; to?: string }) => Promise<void>;
   uploadBill: (data: {
     creditCardId: string;
     closingDate: string;
@@ -92,6 +95,7 @@ export const useCreditCardStore = create<CreditCardStore>()((set, get) => ({
   bills: [],
   billTransactions: [],
   allBillTransactions: [],
+  statements: [],
   installments: [],
   isLoading: false,
   error: null,
@@ -238,6 +242,54 @@ export const useCreditCardStore = create<CreditCardStore>()((set, get) => ({
         creditCards: state.creditCards.filter((c) => c.id !== id),
         isLoading: false,
       }));
+    } catch (error) {
+      set({
+        error: error instanceof Error ? error.message : 'Unknown error',
+        isLoading: false,
+      });
+    }
+  },
+
+  fetchStatements: async (range) => {
+    set({ isLoading: true, error: null });
+    try {
+      const res = await client.v1['credit-cards'].statements.$get({
+        query: {
+          ...(range?.from ? { from: range.from } : {}),
+          ...(range?.to ? { to: range.to } : {}),
+        },
+      });
+      if (!res.ok) throw new Error('Failed to fetch statements');
+      const data = await res.json();
+      const statements = data.map((statement) => ({
+        id: statement.id,
+        month: statement.month,
+        closingDate: statement.closingDate,
+        billPaymentTransactionId: statement.billPaymentTransactionId,
+        creditCardId: statement.creditCard.id,
+        creditCard: {
+          entityId: statement.creditCard.entityId,
+          entityType: statement.creditCard.entityType,
+          currency: statement.creditCard.currency,
+        },
+        purchases: statement.purchases.map((purchase) => ({
+          id: purchase.id,
+          amount: purchase.amount,
+          currency: purchase.currency,
+          category: purchase.category,
+          description: purchase.description,
+          transactionDate: purchase.transactionDate,
+        })),
+      }));
+      // A ranged fetch must not replace the all-time list the dashboard reads.
+      if (range?.from || range?.to) {
+        set({ isLoading: false });
+        return;
+      }
+      set({
+        statements,
+        isLoading: false,
+      });
     } catch (error) {
       set({
         error: error instanceof Error ? error.message : 'Unknown error',
@@ -451,6 +503,12 @@ export const useCreditCardStore = create<CreditCardStore>()((set, get) => ({
             ? { ...t, category: data.category, isAutoCategorized: data.isAutoCategorized }
             : t
         ),
+        statements: state.statements.map((statement) => ({
+          ...statement,
+          purchases: statement.purchases.map((purchase) =>
+            purchase.id === id ? { ...purchase, category: data.category } : purchase
+          ),
+        })),
       }));
     } catch (error) {
       set({
@@ -470,20 +528,25 @@ export const useCreditCardStore = create<CreditCardStore>()((set, get) => ({
 
       const data = await res.json();
       set({
-        billTransactions: data.map((t) => ({
-          id: t.id,
-          billId: t.billId,
-          category: t.category,
-          transactionDate: parseLocalDate(t.transactionDate),
-          description: t.description,
-          merchantName: t.merchantName ?? undefined,
-          amount: t.amount,
-          installmentNumber: t.installmentNumber ?? undefined,
-          totalInstallments: t.totalInstallments ?? undefined,
-          isAutoCategorized: t.isAutoCategorized,
-          createdAt: new Date(t.createdAt),
-          updatedAt: new Date(t.updatedAt),
-        })),
+        billTransactions: data.map((t) => {
+          const extended = t as typeof t & { statementId?: string | null; currency?: string };
+          return {
+            id: extended.id,
+            billId: extended.billId,
+            statementId: extended.statementId ?? null,
+            category: extended.category,
+            transactionDate: parseLocalDate(extended.transactionDate),
+            description: extended.description,
+            merchantName: extended.merchantName ?? undefined,
+            amount: extended.amount,
+            currency: extended.currency || "BRL",
+            installmentNumber: extended.installmentNumber ?? undefined,
+            totalInstallments: extended.totalInstallments ?? undefined,
+            isAutoCategorized: extended.isAutoCategorized,
+            createdAt: new Date(extended.createdAt),
+            updatedAt: new Date(extended.updatedAt),
+          };
+        }),
         isLoading: false,
       });
     } catch (error) {
@@ -511,20 +574,25 @@ export const useCreditCardStore = create<CreditCardStore>()((set, get) => ({
         if (!res.ok) continue;
         const data = await res.json();
         allTxs.push(
-          ...data.map((t) => ({
-            id: t.id,
-            billId: t.billId,
-            category: t.category,
-            transactionDate: parseLocalDate(t.transactionDate),
-            description: t.description,
-            merchantName: t.merchantName ?? undefined,
-            amount: t.amount,
-            installmentNumber: t.installmentNumber ?? undefined,
-            totalInstallments: t.totalInstallments ?? undefined,
-            isAutoCategorized: t.isAutoCategorized,
-            createdAt: new Date(t.createdAt),
-            updatedAt: new Date(t.updatedAt),
-          }))
+          ...data.map((t) => {
+            const extended = t as typeof t & { statementId?: string | null; currency?: string };
+            return {
+              id: extended.id,
+              billId: extended.billId,
+              statementId: extended.statementId ?? null,
+              category: extended.category,
+              transactionDate: parseLocalDate(extended.transactionDate),
+              description: extended.description,
+              merchantName: extended.merchantName ?? undefined,
+              amount: extended.amount,
+              currency: extended.currency || "BRL",
+              installmentNumber: extended.installmentNumber ?? undefined,
+              totalInstallments: extended.totalInstallments ?? undefined,
+              isAutoCategorized: extended.isAutoCategorized,
+              createdAt: new Date(extended.createdAt),
+              updatedAt: new Date(extended.updatedAt),
+            };
+          })
         );
       }
       set({ allBillTransactions: allTxs });
@@ -592,6 +660,7 @@ export const useCreditCardStore = create<CreditCardStore>()((set, get) => ({
       bills: [],
       billTransactions: [],
       allBillTransactions: [],
+      statements: [],
       installments: [],
       isLoading: false,
       error: null,
