@@ -150,7 +150,7 @@ export function formatCategoryValidationError(
  * Unknown names are left alone so existing free-text writers keep working.
  * Passing currentName allows an update that does not change the category.
  *
- * Internal system writes must not call this. They resolve a system key
+ * Internal system writes must not call this. They call internalCategoryName
  * (credit_card, other_system, other_income) and write that name even when
  * the row is archived.
  */

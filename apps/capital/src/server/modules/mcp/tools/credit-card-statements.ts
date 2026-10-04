@@ -4,7 +4,7 @@ import { parseLocalDate } from "@capital/server/lib/date-utils";
 import { amountInUserBase } from "@/lib/utils/currency";
 import type { Currency } from "@/types";
 import { matchCategoryName } from "../lib/category-validation";
-import { unknownExpenseCategoryName } from "@capital/server/modules/categories/lib/unknown-expense-category";
+import { internalCategoryName } from "@capital/server/modules/categories/lib/internal-category";
 
 interface InstallmentInfo {
   number: number;
@@ -100,9 +100,7 @@ export async function importCreditCardStatement(
       select: { id: true, name: true, type: true, isArchived: true },
     });
     const expenseCategories = ownedCategories.filter((category) => category.type === "expense");
-    // Fallback writes other_system even when that row is archived. This is an
-    // internal system write, not a user assignment.
-    const fallbackName = await unknownExpenseCategoryName(userId, tx);
+    const fallbackName = await internalCategoryName(userId, "other_system", tx);
 
     const resolveCategory = (row: StatementRow): string => {
       if (row.categoryId) {

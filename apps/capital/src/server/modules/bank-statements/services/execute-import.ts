@@ -434,16 +434,19 @@ export async function executeImport(
       if (newTransactions.length > 0) {
         const txData = newTransactions.map((t) => {
           const mapped = mappingLookup.get(normalizeDescription(t.description));
-          const explicit = t.category && !archivedNames.has(t.category.toLowerCase())
-            ? t.category
-            : undefined;
+          if (t.category && archivedNames.has(t.category.toLowerCase())) {
+            throw new Error(
+              `Category '${t.category}' is archived and cannot be assigned. ` +
+              `Unarchive it or choose a visible category. Row: ${t.description}`
+            );
+          }
           return {
             entityType: input.entityType,
             type: t.type,
             amount: t.amount,
             currency: input.currency,
             description: t.description,
-            category: explicit ?? mapped ?? "Uncategorized",
+            category: t.category ?? mapped ?? "Uncategorized",
             date: parseLocalDate(t.date),
             externalId: t.externalId,
             statementImportId: statementImport.id,

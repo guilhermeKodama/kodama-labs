@@ -133,6 +133,50 @@ describe("MCP credit card tools", () => {
     await expect(
       updateCreditCardTool(USER_A, { id: foreign.id, lastFourDigits: "1111" }, db)
     ).rejects.toThrow(/Credit card not found/);
+
+    const businessB = (await db.business.create({
+      data: { userId: USER_B, name: "Other Co", defaultCurrency: "BRL" },
+    })).id;
+    await expect(
+      createCreditCardTool(USER_A, {
+        entityType: "business",
+        bankName: "Nubank",
+        lastFourDigits: "7809",
+        creditLimit: 2000,
+        closingDay: 2,
+        dueDay: 9,
+        currency: "BRL",
+        businessId: businessB,
+      }, db)
+    ).rejects.toThrow(/access denied/);
+
+    await expect(
+      createCreditCardTool(USER_A, {
+        entityType: "personal",
+        bankName: "Nubank",
+        lastFourDigits: "7809",
+        creditLimit: 2000,
+        closingDay: 2,
+        dueDay: 9,
+        currency: "BRL",
+        personalAccountId: personalA,
+        businessId: businessA,
+      }, db)
+    ).rejects.toThrow(/businessId is not allowed/);
+
+    await expect(
+      createCreditCardTool(USER_A, {
+        entityType: "business",
+        bankName: "Nubank",
+        lastFourDigits: "7809",
+        creditLimit: 2000,
+        closingDay: 2,
+        dueDay: 9,
+        currency: "BRL",
+        businessId: businessA,
+        personalAccountId: personalA,
+      }, db)
+    ).rejects.toThrow(/personalAccountId is not allowed/);
   });
 
   it("updates last 4 and closing day without changing currency", async () => {

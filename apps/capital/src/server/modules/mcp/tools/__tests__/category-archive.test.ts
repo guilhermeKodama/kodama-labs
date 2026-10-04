@@ -3,6 +3,13 @@ import { prisma } from "@capital/server/lib/prisma";
 import { getSystemCategory } from "@capital/server/modules/categories/lib/system-categories";
 import { createBillExpense } from "@capital/server/modules/credit-cards/services/create-bill-expense";
 import { getSummary } from "@capital/server/modules/reports/services/get-summary";
+import { createBudget as createWebBudget } from "@capital/server/modules/budgets/services/create-budget";
+import { updateBudgetService } from "@capital/server/modules/budgets/services/update-budget";
+import { getBudgetDashboard } from "@capital/server/modules/budgets/services/get-budget-dashboard";
+import { createRecurring } from "@capital/server/modules/recurring/services/create-recurring";
+import { updateRecurring } from "@capital/server/modules/recurring/data/commands/update-recurring";
+import { buildExpenseLedger } from "@/lib/utils/expense-ledger";
+import type { Transaction } from "@/types";
 import {
   updateCategoryTool,
   mergeCategoryTool,
@@ -17,6 +24,28 @@ import { listTransactions } from "../list-transactions";
 const db = prisma;
 const USER = "test-user-category-archive-001";
 const OTHER = "test-user-category-archive-002";
+
+async function expenseLedger(personalAccountId: string) {
+  const rows = await db.transaction.findMany({
+    where: { personalAccountId },
+    orderBy: { id: "asc" },
+  });
+  const ledgerRows: Transaction[] = rows.map((row) => ({
+    id: row.id,
+    entityId: row.personalAccountId ?? "",
+    entityType: row.entityType,
+    type: row.type,
+    amount: row.amount,
+    currency: row.currency,
+    exchangeRate: row.exchangeRate,
+    description: row.description,
+    category: row.category,
+    date: row.date,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+  }));
+  return buildExpenseLedger(ledgerRows, [], "BRL");
+}
 
 async function resetUsers() {
   await db.user.deleteMany({ where: { id: { in: [USER, OTHER] } } });
@@ -178,6 +207,7 @@ describe("category archive", () => {
       },
     });
 
+    const dashboardInput = { year: 2026, month: 10, timezone: "UTC" } as const;
     const beforeStatus = await getBudgetStatus(USER, { month: "2026-10", accountId: personalAccountId }, db);
     const beforeSummary = await getSummary({ userId: USER }, db);
     const beforeList = await listTransactions(USER, {
@@ -185,6 +215,8 @@ describe("category archive", () => {
       dateTo: "2026-10-31",
       category: "Groceries",
     }, db);
+    const beforeDashboard = await getBudgetDashboard(USER, dashboardInput, db);
+    const beforeLedger = await expenseLedger(personalAccountId);
 
     await db.category.update({
       where: { id: groceries.id },
@@ -198,6 +230,8 @@ describe("category archive", () => {
       dateTo: "2026-10-31",
       category: "Groceries",
     }, db);
+    const afterDashboard = await getBudgetDashboard(USER, dashboardInput, db);
+    const afterLedger = await expenseLedger(personalAccountId);
 
     expect(afterStatus).toEqual(beforeStatus);
     expect(afterStatus.categories.find((row) => row.category === "Groceries")?.budgeted).toBe(800);
@@ -205,6 +239,9 @@ describe("category archive", () => {
     expect(afterSummary).toEqual(beforeSummary);
     expect(afterList).toEqual(beforeList);
     expect(afterList.transactions.some((row) => row.category === "Groceries")).toBe(true);
+    expect(afterDashboard).toEqual(beforeDashboard);
+    expect(afterLedger).toEqual(beforeLedger);
+    expect(afterLedger.filter((row) => row.category === "Groceries").reduce((sum, row) => sum + row.amount, 0)).toBe(120);
   });
 
   it("allows an update that keeps an archived category and rejects a new one", async () => {
@@ -259,6 +296,78 @@ describe("category archive", () => {
     await expect(
       updateCategoryTool(OTHER, { id: travel.id, isArchived: true }, db)
     ).rejects.toThrow(/access denied|not found/i);
+  });
+
+  it("rejects a web budget and recurring write on an archived category", async () => {
+    await db.category.create({
+      data: { userId: USER, name: "Travel", type: "expense", isArchived: true },
+    });
+    await db.category.create({
+      data: { userId: USER, name: "Shopping", type: "expense", isArchived: true },
+    });
+    const groceries = await db.category.create({
+      data: { userId: USER, name: "Groceries", type: "expense" },
+    });
+
+    await expect(createWebBudget(USER, {
+      entityType: "personal",
+      personalAccountId,
+      category: "Travel",
+      amount: 100,
+      currency: "BRL",
+      period: "monthly",
+      year: 2026,
+      month: 10,
+    }, db)).rejects.toThrow(/archived/);
+
+    const budget = await createWebBudget(USER, {
+      entityType: "personal",
+      personalAccountId,
+      category: "Groceries",
+      amount: 80,
+      currency: "BRL",
+      period: "monthly",
+      year: 2026,
+      month: 10,
+    }, db);
+    const recurring = await createRecurring(USER, {
+      entityType: "personal",
+      personalAccountId,
+      type: "expense",
+      amount: 40,
+      currency: "BRL",
+      description: "market",
+      category: "Groceries",
+      frequency: "monthly",
+      startDate: new Date("2026-10-01T12:00:00.000Z"),
+    }, db);
+    await db.category.update({
+      where: { id: groceries.id },
+      data: { isArchived: true },
+    });
+    const keptBudget = await updateBudgetService(USER, budget.id, { category: "Groceries" }, db);
+    expect(keptBudget.category).toBe("Groceries");
+    await expect(
+      updateBudgetService(USER, budget.id, { category: "Shopping" }, db)
+    ).rejects.toThrow(/archived/);
+
+    await expect(createRecurring(USER, {
+      entityType: "personal",
+      personalAccountId,
+      type: "expense",
+      amount: 40,
+      currency: "BRL",
+      description: "fare",
+      category: "Travel",
+      frequency: "monthly",
+      startDate: new Date("2026-10-01T12:00:00.000Z"),
+    }, db)).rejects.toThrow(/archived/);
+
+    const keptRecurring = await updateRecurring(USER, recurring.id, { category: "Groceries" }, db);
+    expect(keptRecurring.category).toBe("Groceries");
+    await expect(
+      updateRecurring(USER, recurring.id, { category: "Shopping" }, db)
+    ).rejects.toThrow(/archived/);
   });
 
   it("rejects a new budget on an archived category", async () => {

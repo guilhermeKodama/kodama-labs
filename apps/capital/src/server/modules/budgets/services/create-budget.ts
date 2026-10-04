@@ -1,5 +1,6 @@
 import type { DbClient } from "@capital/server/lib/prisma";
 import type { EntityType, BudgetPeriod } from "@/generated/prisma";
+import { rejectArchivedAssignment } from "@capital/server/modules/mcp/lib/category-validation";
 import { insertBudget } from "../data/commands/insert-budget";
 import { normalizeToMonthStart } from "../lib/budget-helpers";
 
@@ -35,6 +36,8 @@ export async function createBudget(
   if (input.period === "monthly" && !input.month) {
     throw new Error("month is required for monthly budgets");
   }
+
+  await rejectArchivedAssignment(userId, input.category, "expense", db);
 
   // Calculate effectiveFrom if not provided (backward compatibility)
   // Always normalize to first day of month at noon UTC (project convention)

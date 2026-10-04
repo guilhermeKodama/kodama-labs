@@ -28,6 +28,12 @@ export async function createCreditCard(
   if (input.entityType === "personal" && !input.personalAccountId) {
     throw new Error("personalAccountId is required for personal entity type");
   }
+  if (input.entityType === "personal" && input.businessId) {
+    throw new Error("businessId is not allowed for a personal credit card");
+  }
+  if (input.entityType === "business" && input.personalAccountId) {
+    throw new Error("personalAccountId is not allowed for a business credit card");
+  }
 
   // Validate closing/due days
   if (input.closingDay < 1 || input.closingDay > 31) {
