@@ -5,6 +5,7 @@ import type {
   RecurrenceFrequency,
 } from "@/generated/prisma";
 import type { RemindersConfig } from "@/lib/validations/reminders";
+import { rejectArchivedAssignment } from "@capital/server/modules/mcp/lib/category-validation";
 import { insertRecurring } from "../data/commands/insert-recurring";
 
 interface CreateRecurringInput {
@@ -37,6 +38,8 @@ export async function createRecurring(
       "personalAccountId is required for personal entity type"
     );
   }
+
+  await rejectArchivedAssignment(userId, input.category, input.type, db);
 
   // Data layer will verify ownership
   return insertRecurring(

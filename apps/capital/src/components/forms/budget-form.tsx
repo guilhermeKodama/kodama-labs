@@ -28,6 +28,7 @@ import {
 import { useSettingsStore, useBusinessStore } from '@/lib/store';
 import type { Budget, EntityType } from '@/types';
 import { DEFAULT_EXPENSE_CATEGORIES } from '@/types';
+import { pickerCategoryNames } from '@/lib/utils/category-picker';
 
 interface BudgetFormProps {
   budget?: Budget;
@@ -98,11 +99,12 @@ export function BudgetForm({
     }
   }, [selectedEntityType, personalAccount, businesses, form]);
 
-  // Get expense categories
-  const expenseCategories = categories
-    .filter((c) => c.type === 'expense')
-    .map((c) => c.name);
-  const categoryOptions = expenseCategories.length > 0 ? expenseCategories : DEFAULT_EXPENSE_CATEGORIES;
+  const categoryOptions = pickerCategoryNames(
+    categories,
+    'expense',
+    budget?.category,
+    DEFAULT_EXPENSE_CATEGORIES
+  );
 
   // Generate year options (5 years back and forward)
   const yearOptions = Array.from({ length: 11 }, (_, i) => currentYear - 5 + i);

@@ -4,7 +4,7 @@ import { parseLocalDate } from "@capital/server/lib/date-utils";
 import { amountInUserBase } from "@/lib/utils/currency";
 import type { Currency } from "@/types";
 import { matchCategoryName } from "../lib/category-validation";
-import { unknownExpenseCategoryName } from "@capital/server/modules/categories/lib/unknown-expense-category";
+import { internalCategoryName } from "@capital/server/modules/categories/lib/internal-category";
 
 interface InstallmentInfo {
   number: number;
@@ -97,10 +97,10 @@ export async function importCreditCardStatement(
 
     const ownedCategories = await tx.category.findMany({
       where: { userId },
-      select: { id: true, name: true, type: true },
+      select: { id: true, name: true, type: true, isArchived: true },
     });
     const expenseCategories = ownedCategories.filter((category) => category.type === "expense");
-    const fallbackName = await unknownExpenseCategoryName(userId, tx);
+    const fallbackName = await internalCategoryName(userId, "other_system", tx);
 
     const resolveCategory = (row: StatementRow): string => {
       if (row.categoryId) {
@@ -108,11 +108,23 @@ export async function importCreditCardStatement(
         if (!category) {
           throw new Error(`Category ${row.categoryId} not found or access denied`);
         }
+        if (category.isArchived) {
+          throw new Error(
+            `Category '${category.name}' is archived and cannot be assigned. ` +
+            `Unarchive it or choose a visible category.`
+          );
+        }
         return category.name;
       }
       if (row.category) {
         const matched = matchCategoryName(row.category, expenseCategories, "expense");
-        return matched.canonicalName ?? fallbackName;
+        if (matched.archived) {
+          throw new Error(
+            `Category '${matched.canonicalName ?? row.category}' is archived and cannot be assigned. ` +
+            `Unarchive it or choose a visible category.`
+          );
+        }
+        if (matched.canonicalName) return matched.canonicalName;
       }
       return fallbackName;
     };

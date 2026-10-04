@@ -1,6 +1,7 @@
 import type { DbClient } from "@capital/server/lib/prisma";
 import { normalizeDescription } from "../../utils";
 import { billTransactionOwnedBy } from "../../lib/bill-transaction-ownership";
+import { rejectArchivedAssignment } from "@capital/server/modules/mcp/lib/category-validation";
 
 /**
  * Update a bill transaction's category, scoped to the authenticated user.
@@ -17,12 +18,14 @@ export async function updateBillTransaction(
       id,
       ...billTransactionOwnedBy(userId),
     },
-    select: { id: true, description: true },
+    select: { id: true, description: true, category: true },
   });
 
   if (!billTx) {
     throw new Error("Bill transaction not found");
   }
+
+  await rejectArchivedAssignment(userId, data.category, "expense", db, billTx.category);
 
   const updated = await db.billTransaction.update({
     where: { id },

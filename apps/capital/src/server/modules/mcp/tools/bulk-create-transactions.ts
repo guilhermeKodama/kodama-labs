@@ -1,10 +1,11 @@
+import type { TransactionType } from "@/generated/prisma";
 import type { DbClient } from "@capital/server/lib/prisma";
 import type { BulkCreateTransactionItem, BulkCreateResult } from "../lib/types";
 import { insertTransaction } from "../../transactions/data/commands/insert-transaction";
 import { fetchTransactions } from "../../transactions/data/queries/fetch-transactions";
 import { parseLocalDate } from "@capital/server/lib/date-utils";
 import { parseDateRangeFilter } from "../lib/date-helpers";
-import { matchCategoryName } from "../lib/category-validation";
+import { formatCategoryValidationError, matchCategoryName } from "../lib/category-validation";
 import { fetchCategoriesByUserId } from "../../categories/data/queries/fetch-categories";
 
 /**
@@ -100,20 +101,16 @@ async function validateCategories(
     uniqueCategories.set(normalized, item.type);
   }
 
-  const categories = await fetchCategoriesByUserId(userId, undefined, db);
+  const categories = await fetchCategoriesByUserId(userId, undefined, db, {
+    includeArchived: true,
+  });
   const canonical = new Map<string, string>();
   const errors: string[] = [];
   for (const [category, type] of uniqueCategories) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const validation = matchCategoryName(category, categories, type as any);
     if (!validation.valid) {
-      const suggestions = validation.suggestions.length > 0
-        ? ` Did you mean: ${validation.suggestions.join(", ")}?`
-        : "";
-      const names = validation.validNames.length > 0
-        ? ` Valid categories: ${validation.validNames.join(", ")}.`
-        : "";
-      errors.push(`Category '${category}' (type: ${type}) not found.${suggestions}${names}`);
+      errors.push(formatCategoryValidationError(category, type as TransactionType, validation));
     } else if (validation.canonicalName) {
       canonical.set(`${type}:${category}`, validation.canonicalName);
     }

@@ -1,6 +1,7 @@
 import type { DbClient } from "@capital/server/lib/prisma";
 import type { EntityType, TransactionType } from "@/generated/prisma";
 import { insertTransaction } from "../data/commands/insert-transaction";
+import { rejectArchivedAssignment } from "@capital/server/modules/mcp/lib/category-validation";
 
 interface CreateTransactionInput {
   entityType: EntityType;
@@ -31,6 +32,8 @@ export async function createTransaction(
       "personalAccountId is required for personal entity type"
     );
   }
+
+  await rejectArchivedAssignment(userId, input.category, input.type, db);
 
   // Data layer will verify ownership
   return insertTransaction(

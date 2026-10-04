@@ -4,7 +4,7 @@ import { deleteTransactionService } from "../../transactions/services/delete-tra
 import { fetchTransactionById } from "../../transactions/data/queries/fetch-transactions";
 import { parseLocalDate } from "@capital/server/lib/date-utils";
 import type { TransactionType } from "@/generated/prisma";
-import { validateCategory } from "../lib/category-validation";
+import { formatCategoryValidationError, validateCategory } from "../lib/category-validation";
 
 export interface UpdateTransactionParams {
   id: string;
@@ -36,14 +36,12 @@ export async function updateTransactionTool(
   if (params.category) {
     const targetType = params.type ?? existing.type;
     const validation = await validateCategory(userId, params.category, targetType, db);
-    if (!validation.valid) {
-      const suggestions = validation.suggestions.length > 0
-        ? ` Did you mean: ${validation.suggestions.join(", ")}?`
-        : "";
-      const names = validation.validNames.length > 0
-        ? ` Valid categories: ${validation.validNames.join(", ")}.`
-        : "";
-      throw new Error(`Category '${params.category}' not found.${suggestions}${names}`);
+    const keepsCurrent =
+      validation.archived &&
+      validation.canonicalName != null &&
+      existing.category.toLowerCase() === validation.canonicalName.toLowerCase();
+    if (!validation.valid && !keepsCurrent) {
+      throw new Error(formatCategoryValidationError(params.category, targetType, validation));
     }
     if (validation.canonicalName) {
       params.category = validation.canonicalName;

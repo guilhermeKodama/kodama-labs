@@ -10,6 +10,7 @@ import { normalizeDescription } from "../utils";
 import { resolveTransferSides, checkTransferDirection } from "./transfer-flow";
 import type { ImportPlanPayload } from "@capital/server/modules/assistant/agent/tools/schemas/import-plan-payload";
 import { ensureSystemCategories } from "@capital/server/modules/categories/lib/system-categories";
+import { archivedCategoryNameSet } from "@capital/server/modules/mcp/lib/category-validation";
 
 interface TransferShapeFields {
   fromBusinessId: string | null;
@@ -145,7 +146,12 @@ export async function executeImport(
         where: { userId },
         select: { normalizedDescription: true, category: true },
       });
-      const mappingLookup = new Map(mappings.map((m) => [m.normalizedDescription, m.category]));
+      const archivedNames = await archivedCategoryNameSet(userId, tx);
+      const mappingLookup = new Map(
+        mappings
+          .filter((m) => !archivedNames.has(m.category.toLowerCase()))
+          .map((m) => [m.normalizedDescription, m.category])
+      );
 
       // Server-side dedup safety net (propose_import_plan already checked
       // this at proposal time, but the plan can be minutes old by commit).
@@ -428,6 +434,12 @@ export async function executeImport(
       if (newTransactions.length > 0) {
         const txData = newTransactions.map((t) => {
           const mapped = mappingLookup.get(normalizeDescription(t.description));
+          if (t.category && archivedNames.has(t.category.toLowerCase())) {
+            throw new Error(
+              `Category '${t.category}' is archived and cannot be assigned. ` +
+              `Unarchive it or choose a visible category. Row: ${t.description}`
+            );
+          }
           return {
             entityType: input.entityType,
             type: t.type,

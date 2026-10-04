@@ -1,14 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@capital/server/lib/prisma";
 import { env } from "@/env";
-import { categorizeBillTransactions } from "@capital/server/lib/claude";
-import { BILL_LABEL_KEYS } from "@capital/server/lib/category-prompt";
-import { getSystemCategoryNames } from "@capital/server/modules/categories/lib/system-categories";
-import { normalizeDescription } from "@capital/server/modules/credit-cards/utils";
-
-// One chunk per invocation. Matches the Claude batch size in claude.ts so each
-// run makes a single Claude API call (~5-15s).
-const CHUNK_SIZE = 50;
+import { categorizeClaimedBillChunk } from "./categorize-bill-chunk";
 
 /**
  * Cron endpoint that processes pending bill categorizations via Claude API.
@@ -70,31 +63,12 @@ export async function GET(request: NextRequest) {
         throw new Error("Could not determine user for bill");
       }
 
-      // Pull the next chunk of uncategorized transactions for this bill.
-      // Progress marker is `category === "Uncategorized"`: once a transaction
-      // gets a real category (manual or AI), it falls out of this query, so
-      // subsequent cron runs naturally pick up the next chunk.
-      const chunk = await prisma.billTransaction.findMany({
-        where: {
-          billId: pendingBill.id,
-          category: "Uncategorized",
-        },
-        select: {
-          id: true,
-          description: true,
-          merchantName: true,
-          amount: true,
-        },
-        orderBy: { createdAt: "asc" },
-        take: CHUNK_SIZE,
+      const chunkResult = await categorizeClaimedBillChunk(prisma, {
+        billId: pendingBill.id,
+        userId,
       });
 
-      if (chunk.length === 0) {
-        // Nothing left to categorize for this bill — mark completed.
-        await prisma.creditCardBill.update({
-          where: { id: pendingBill.id },
-          data: { categorizationStatus: "completed" },
-        });
+      if (chunkResult.kind === "already-done") {
         return NextResponse.json({
           success: true,
           message: `Bill ${pendingBill.id} already fully categorized`,
@@ -108,95 +82,7 @@ export async function GET(request: NextRequest) {
         });
       }
 
-      // Fetch user's expense categories
-      const categories = await prisma.category.findMany({
-        where: { userId, type: "expense" },
-        select: { name: true },
-      });
-      const categoryNames = [...new Set(categories.map((c) => c.name))];
-      const labels = await getSystemCategoryNames(userId, BILL_LABEL_KEYS, prisma);
-      const otherName = labels.other_system;
-
-      const txInput = chunk.map((t, i) => ({
-        index: i,
-        description: t.description,
-        merchantName: t.merchantName ?? undefined,
-        amount: t.amount,
-      }));
-
-      const categorizations = await categorizeBillTransactions(
-        txInput,
-        categoryNames,
-        otherName,
-        labels
-      );
-
-      const validCategorizations = categorizations.filter(
-        (cat) => chunk[cat.index] !== undefined
-      );
-
-      await prisma.$transaction(
-        validCategorizations.map((cat) => {
-          const tx = chunk[cat.index];
-          return prisma.billTransaction.update({
-            where: { id: tx.id },
-            data: {
-              category: cat.category,
-              isAutoCategorized: true,
-            },
-          });
-        })
-      );
-
-      // Save learned mappings (AI won't overwrite manual ones)
-      for (const cat of validCategorizations) {
-        const tx = chunk[cat.index];
-        if (cat.category === otherName) continue;
-        const normalized = normalizeDescription(tx.description);
-        const existing = await prisma.merchantCategoryMapping.findUnique({
-          where: {
-            userId_normalizedDescription: {
-              userId,
-              normalizedDescription: normalized,
-            },
-          },
-          select: { source: true },
-        });
-        if (existing?.source === "manual") continue;
-        await prisma.merchantCategoryMapping.upsert({
-          where: {
-            userId_normalizedDescription: {
-              userId,
-              normalizedDescription: normalized,
-            },
-          },
-          update: { category: cat.category },
-          create: {
-            userId,
-            normalizedDescription: normalized,
-            category: cat.category,
-            source: "ai",
-          },
-        });
-      }
-
-      // Did we exhaust the bill? If yes, mark completed; otherwise leave it as
-      // "processing" so the next cron run picks up the next chunk.
-      const remaining = await prisma.billTransaction.count({
-        where: {
-          billId: pendingBill.id,
-          category: "Uncategorized",
-        },
-      });
-
-      const isDone = remaining === 0;
-      if (isDone) {
-        await prisma.creditCardBill.update({
-          where: { id: pendingBill.id },
-          data: { categorizationStatus: "completed" },
-        });
-      }
-
+      const isDone = chunkResult.status === "completed";
       return NextResponse.json({
         success: true,
         message: isDone
@@ -205,9 +91,9 @@ export async function GET(request: NextRequest) {
         processedAt: new Date().toISOString(),
         result: {
           billId: pendingBill.id,
-          processedInThisRun: chunk.length,
-          remaining,
-          status: isDone ? "completed" : "processing",
+          processedInThisRun: chunkResult.processedInThisRun,
+          remaining: chunkResult.remaining,
+          status: chunkResult.status,
         },
       });
     } catch (error) {

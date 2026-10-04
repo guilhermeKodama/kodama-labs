@@ -18,6 +18,7 @@ export interface UpdateCategoryParams {
   type?: TransactionType;
   color?: string;
   icon?: string;
+  isArchived?: boolean;
 }
 
 export interface DeleteCategoryParams {
@@ -133,6 +134,7 @@ export async function updateCategoryTool(
             ...(params.type && { type: params.type }),
             ...(params.color !== undefined && { color: params.color }),
             ...(params.icon !== undefined && { icon: params.icon }),
+            ...(params.isArchived !== undefined && { isArchived: params.isArchived }),
           },
         });
 
@@ -201,6 +203,7 @@ export async function updateCategoryTool(
           ...(params.type && { type: params.type }),
           ...(params.color !== undefined && { color: params.color }),
           ...(params.icon !== undefined && { icon: params.icon }),
+          ...(params.isArchived !== undefined && { isArchived: params.isArchived }),
         },
       });
 
@@ -267,6 +270,7 @@ export async function updateCategoryTool(
     ...(params.type && { type: params.type }),
     ...(params.color !== undefined && { color: params.color }),
     ...(params.icon !== undefined && { icon: params.icon }),
+    ...(params.isArchived !== undefined && { isArchived: params.isArchived }),
   };
 
   return updateCategoryService(userId, params.id, updates, db);
@@ -577,6 +581,12 @@ export async function mergeCategoryTool(
 
   if (params.fromId === params.toId) {
     throw new Error("Cannot merge a category into itself");
+  }
+
+  if (toCategory.isArchived) {
+    throw new Error(
+      `Cannot merge into archived category '${toCategory.name}'. Unarchive it first.`
+    );
   }
 
   if (fromCategory.type !== toCategory.type) {

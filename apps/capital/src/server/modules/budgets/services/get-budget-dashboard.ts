@@ -10,7 +10,7 @@ import { addMonths } from "date-fns";
 import { amountInUserBase } from "../../../../lib/utils/currency";
 import { getEffectiveBudgetsForMonth } from "../lib/budget-helpers";
 import { statementInWindow } from "../../credit-cards/lib/statement-window";
-import { getCategoryNameBySystemKey } from "@capital/server/modules/mcp/lib/category-helpers";
+import { internalCategoryName } from "@capital/server/modules/categories/lib/internal-category";
 
 // ============================================
 // Types
@@ -315,8 +315,7 @@ export async function getBudgetDashboard(
     });
   }
 
-  // Get the user's localized credit card category name
-  const creditCardCategoryName = await getCategoryNameBySystemKey(
+  const creditCardCategoryName = await internalCategoryName(
     userId,
     "credit_card",
     db

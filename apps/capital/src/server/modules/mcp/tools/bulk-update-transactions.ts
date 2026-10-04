@@ -2,7 +2,7 @@ import type { DbClient } from "@capital/server/lib/prisma";
 import type { TransactionType } from "@/generated/prisma";
 import { fetchTransactionById } from "../../transactions/data/queries/fetch-transactions";
 import { parseLocalDate } from "@capital/server/lib/date-utils";
-import { matchCategoryName } from "../lib/category-validation";
+import { formatCategoryValidationError, matchCategoryName } from "../lib/category-validation";
 import { fetchCategoriesByUserId } from "../../categories/data/queries/fetch-categories";
 
 export interface BulkUpdateTransactionItem {
@@ -56,7 +56,9 @@ async function validateUpdates(
     transactionMap.set(update.id, existing);
   }
 
-  const categories = await fetchCategoriesByUserId(userId, undefined, db);
+  const categories = await fetchCategoriesByUserId(userId, undefined, db, {
+    includeArchived: true,
+  });
 
   // Second pass: validate categories against the list loaded once above
   for (const update of updates) {
@@ -66,16 +68,14 @@ async function validateUpdates(
       const existing = transactionMap.get(update.id);
       const targetType = update.type ?? existing.type;
       const validation = matchCategoryName(update.category, categories, targetType);
-      if (!validation.valid) {
-        const suggestions = validation.suggestions.length > 0
-          ? ` Did you mean: ${validation.suggestions.join(", ")}?`
-          : "";
-        const names = validation.validNames.length > 0
-          ? ` Valid categories: ${validation.validNames.join(", ")}.`
-          : "";
+      const keepsCurrent =
+        validation.archived &&
+        validation.canonicalName != null &&
+        existing.category.toLowerCase() === validation.canonicalName.toLowerCase();
+      if (!validation.valid && !keepsCurrent) {
         errors.push({
           id: update.id,
-          error: `Category '${update.category}' not found.${suggestions}${names}`,
+          error: formatCategoryValidationError(update.category, targetType, validation),
         });
         transactionMap.delete(update.id); // Remove from valid set
       } else if (validation.canonicalName) {

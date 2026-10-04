@@ -215,4 +215,19 @@ describe("system category catalog", () => {
     expect(travels).toHaveLength(1);
     expect(travels[0].systemKey).toBe("travel_system");
   });
+
+  it("resolves an archived system category without unarchiving it", async () => {
+    const created = await getSystemCategory(TEST_USER_ID, "credit_card", db);
+    await db.category.update({
+      where: { id: created.id },
+      data: { isArchived: true },
+    });
+
+    const resolved = await getSystemCategory(TEST_USER_ID, "credit_card", db);
+
+    expect(resolved.id).toBe(created.id);
+    expect(resolved.isArchived).toBe(true);
+    const reread = await db.category.findUnique({ where: { id: created.id } });
+    expect(reread?.isArchived).toBe(true);
+  });
 });

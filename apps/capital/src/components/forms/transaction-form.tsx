@@ -30,6 +30,7 @@ import {
   DEFAULT_INCOME_CATEGORIES,
   DEFAULT_EXPENSE_CATEGORIES,
 } from '@/types';
+import { pickerCategoryNames } from '@/lib/utils/category-picker';
 
 interface TransactionFormProps {
   entityId: string;
@@ -106,27 +107,12 @@ export function TransactionForm({
     }
   }, [selectedCurrency, currencies, settings.baseCurrency, form]);
 
-  const getCategoriesForType = (type: TransactionType) => {
-    // First check custom categories from store
-    const customCategories = categories
-      .filter((c) => c.type === type)
-      .map((c) => c.name);
-    
-    if (customCategories.length > 0) {
-      return customCategories;
-    }
-    
-    // Fall back to defaults
-    switch (type) {
-      case 'income':
-        return DEFAULT_INCOME_CATEGORIES;
-      case 'expense':
-      default:
-        return DEFAULT_EXPENSE_CATEGORIES;
-    }
-  };
-
-  const categoryOptions = getCategoriesForType(selectedType);
+  const categoryOptions = pickerCategoryNames(
+    categories,
+    selectedType,
+    transaction?.category,
+    selectedType === 'income' ? DEFAULT_INCOME_CATEGORIES : DEFAULT_EXPENSE_CATEGORIES
+  );
   const showExchangeRate = selectedCurrency !== settings.baseCurrency;
 
   return (
