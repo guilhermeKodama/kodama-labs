@@ -50,7 +50,7 @@ export function BillTransactionsTable({
 
   // Get unique expense category names for the dropdown
   const expenseCategories = categories
-    .filter((c) => c.type === 'expense')
+    .filter((c) => c.type === 'expense' && !c.isArchived)
     .map((c) => c.name);
   const uniqueCategories = [...new Set(expenseCategories)].sort();
 
@@ -169,7 +169,10 @@ export function BillTransactionsTable({
                         </div>
                       </SelectTrigger>
                       <SelectContent className="border-slate-700 bg-slate-800 max-h-[300px]">
-                        {uniqueCategories.map((cat) => (
+                        {(uniqueCategories.includes(tx.category)
+                          ? uniqueCategories
+                          : [tx.category, ...uniqueCategories]
+                        ).map((cat) => (
                           <SelectItem key={cat} value={cat} className="text-sm">
                             {cat}
                           </SelectItem>

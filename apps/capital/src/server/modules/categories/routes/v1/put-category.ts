@@ -12,6 +12,7 @@ const UpdateCategorySchema = z.object({
   name: z.string().min(1).optional(),
   color: z.string().optional(),
   icon: z.string().optional(),
+  isArchived: z.boolean().optional(),
 });
 
 const CategorySchema = z.object({
@@ -22,6 +23,7 @@ const CategorySchema = z.object({
   color: z.string().nullable(),
   icon: z.string().nullable(),
   isDefault: z.boolean(),
+  isArchived: z.boolean(),
   createdAt: z.string(),
   updatedAt: z.string(),
 });
@@ -73,6 +75,7 @@ export const handler: AppRouteHandler<typeof route> = async (c) => {
         color: category.color,
         icon: category.icon,
         isDefault: category.isDefault,
+        isArchived: category.isArchived,
         createdAt: category.createdAt.toISOString(),
         updatedAt: category.updatedAt.toISOString(),
       },

@@ -10,8 +10,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import type { Category } from '@/types';
+import { DEFAULT_EXPENSE_CATEGORIES, type Category } from '@/types';
 import type { ExpenseLedgerStatement } from '@/lib/utils/expense-ledger';
+import { pickerCategoryNames } from '@/lib/utils/category-picker';
 
 interface StatementPurchasesTableProps {
   statements: Array<ExpenseLedgerStatement & { creditCardId: string }>;
@@ -29,9 +30,6 @@ export function StatementPurchasesTable({
   onUpdateCategory,
 }: StatementPurchasesTableProps) {
   const t = useTranslations();
-  const expenseCategories = [
-    ...new Set(categories.filter((category) => category.type === 'expense').map((category) => category.name)),
-  ].sort();
 
   const rows = statements.flatMap((statement) =>
     statement.purchases.map((purchase) => ({
@@ -74,9 +72,12 @@ export function StatementPurchasesTable({
         </thead>
         <tbody>
           {rows.map((row) => {
-            const options = expenseCategories.includes(row.category)
-              ? expenseCategories
-              : [...expenseCategories, row.category].sort();
+            const options = pickerCategoryNames(
+              categories,
+              'expense',
+              row.category,
+              DEFAULT_EXPENSE_CATEGORIES
+            );
             const closing = row.closingDate
               ? format(new Date(row.closingDate), 'MMM dd, yyyy')
               : null;

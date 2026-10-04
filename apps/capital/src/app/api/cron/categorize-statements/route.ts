@@ -1,10 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@capital/server/lib/prisma";
 import { env } from "@/env";
-import { categorizeStatementTransactions } from "@capital/server/lib/claude";
-import { STATEMENT_LABEL_KEYS } from "@capital/server/lib/category-prompt";
-import { getSystemCategoryNames } from "@capital/server/modules/categories/lib/system-categories";
-import { normalizeDescription } from "@capital/server/modules/bank-statements/utils";
+import { categorizeClaimedStatementImport } from "./categorize-statement-import";
 
 export const maxDuration = 60;
 
@@ -43,120 +40,10 @@ export async function GET(request: NextRequest) {
 
     try {
       const userId = pendingImport.userId;
-
-      // Fetch transactions that need categorization
-      const transactions = await prisma.transaction.findMany({
-        where: {
-          statementImportId: pendingImport.id,
-          category: "Uncategorized",
-        },
-        select: {
-          id: true,
-          description: true,
-          amount: true,
-          type: true,
-        },
+      const categorized = await categorizeClaimedStatementImport(prisma, {
+        importId: pendingImport.id,
+        userId,
       });
-
-      if (transactions.length > 0) {
-        // Fetch user's categories (both expense and income)
-        const categories = await prisma.category.findMany({
-          where: { userId },
-          select: { name: true, type: true },
-        });
-        const expenseCategories = [...new Set(categories.filter((c) => c.type === "expense").map((c) => c.name))];
-        const incomeCategories = [...new Set(categories.filter((c) => c.type === "income").map((c) => c.name))];
-        const labels = await getSystemCategoryNames(userId, STATEMENT_LABEL_KEYS, prisma);
-        const otherExpense = labels.other_system;
-        const otherIncome = labels.other_income;
-
-        // Split by type for better categorization
-        const expenseTxs = transactions.filter((t) => t.type === "expense");
-        const incomeTxs = transactions.filter((t) => t.type === "income");
-
-        const updates: Array<{ id: string; category: string }> = [];
-
-        if (expenseTxs.length > 0) {
-          const txInput = expenseTxs.map((t, i) => ({
-            index: i,
-            description: t.description,
-            amount: t.amount,
-          }));
-
-          const results = await categorizeStatementTransactions(
-            txInput,
-            expenseCategories,
-            "expense",
-            otherExpense,
-            labels
-          );
-          for (const r of results) {
-            const tx = expenseTxs[r.index];
-            if (tx) updates.push({ id: tx.id, category: r.category });
-          }
-        }
-
-        if (incomeTxs.length > 0) {
-          const txInput = incomeTxs.map((t, i) => ({
-            index: i,
-            description: t.description,
-            amount: t.amount,
-          }));
-
-          const results = await categorizeStatementTransactions(
-            txInput,
-            incomeCategories,
-            "income",
-            otherIncome,
-            labels
-          );
-          for (const r of results) {
-            const tx = incomeTxs[r.index];
-            if (tx) updates.push({ id: tx.id, category: r.category });
-          }
-        }
-
-        // Batch update transaction categories
-        if (updates.length > 0) {
-          await prisma.$transaction(
-            updates.map((u) =>
-              prisma.transaction.update({
-                where: { id: u.id },
-                data: { category: u.category },
-              })
-            )
-          );
-
-          // Save learned mappings
-          for (const u of updates) {
-            if (u.category === otherExpense || u.category === otherIncome) continue;
-            const tx = transactions.find((t) => t.id === u.id);
-            if (!tx) continue;
-
-            const normalized = normalizeDescription(tx.description);
-            const existing = await prisma.merchantCategoryMapping.findUnique({
-              where: {
-                userId_normalizedDescription: { userId, normalizedDescription: normalized },
-              },
-              select: { source: true },
-            });
-            if (existing?.source === "manual") continue;
-
-            await prisma.merchantCategoryMapping.upsert({
-              where: {
-                userId_normalizedDescription: { userId, normalizedDescription: normalized },
-              },
-              update: { category: u.category },
-              create: {
-                userId,
-                normalizedDescription: normalized,
-                category: u.category,
-                source: "ai",
-              },
-            });
-          }
-        }
-      }
 
       await prisma.statementImport.update({
         where: { id: pendingImport.id },
@@ -169,7 +56,7 @@ export async function GET(request: NextRequest) {
         processedAt: new Date().toISOString(),
         result: {
           importId: pendingImport.id,
-          transactionCount: transactions.length,
+          transactionCount: categorized.transactionCount,
           status: "completed",
         },
       });

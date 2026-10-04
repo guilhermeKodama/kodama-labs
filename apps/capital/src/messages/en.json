@@ -1048,6 +1048,13 @@
       "added": "Category added successfully!",
       "addError": "Failed to add category",
       "deleted": "Category deleted successfully!",
+      "showArchived": "Show archived",
+      "hideArchived": "Hide archived",
+      "archive": "Archive",
+      "unarchive": "Unarchive",
+      "archived": "Category archived",
+      "unarchived": "Category restored",
+      "archiveError": "Failed to update category",
       "deleteTitle": "Delete Category?",
       "deleteDescription": "Are you sure you want to delete the category \"{name}\"? This won't affect existing transactions."
     },

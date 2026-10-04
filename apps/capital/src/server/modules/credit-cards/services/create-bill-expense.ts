@@ -1,6 +1,6 @@
 import type { DbClient } from "@capital/server/lib/prisma";
 import type { EntityType } from "@/generated/prisma";
-import { getCategoryNameBySystemKey } from "@capital/server/modules/mcp/lib/category-helpers";
+import { internalCategoryName } from "@capital/server/modules/categories/lib/internal-category";
 
 interface CreateBillExpenseInput {
   billId: string;
@@ -45,8 +45,7 @@ export async function createBillExpense(
     throw new Error("Bill is already linked to an expense transaction");
   }
 
-  // Get the user's credit card category name (supports localization)
-  const creditCardCategoryName = await getCategoryNameBySystemKey(
+  const creditCardCategoryName = await internalCategoryName(
     userId,
     "credit_card",
     db

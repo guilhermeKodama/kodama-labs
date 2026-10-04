@@ -1048,6 +1048,13 @@
       "added": "Categoria adicionada com sucesso!",
       "addError": "Falha ao adicionar categoria",
       "deleted": "Categoria excluída com sucesso!",
+      "showArchived": "Mostrar arquivadas",
+      "hideArchived": "Ocultar arquivadas",
+      "archive": "Arquivar",
+      "unarchive": "Restaurar",
+      "archived": "Categoria arquivada",
+      "unarchived": "Categoria restaurada",
+      "archiveError": "Falha ao atualizar a categoria",
       "deleteTitle": "Excluir Categoria?",
       "deleteDescription": "Tem certeza que deseja excluir a categoria \"{name}\"? Isso não afetará transações existentes."
     },

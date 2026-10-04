@@ -10,6 +10,7 @@ export { parseCsvContent } from "./parsers";
 export type { ParsedTransaction } from "./parsers";
 
 import { normalizeDescription } from "../utils";
+import { archivedCategoryNameSet } from "@capital/server/modules/mcp/lib/category-validation";
 
 interface ProcessBillCsvInput {
   creditCardId: string;
@@ -198,8 +199,11 @@ export async function processBillCsv(
     where: { userId },
     select: { normalizedDescription: true, category: true },
   });
+  const archivedNames = await archivedCategoryNameSet(userId, db);
   const mappingLookup = new Map(
-    merchantMappings.map((m) => [m.normalizedDescription, m.category])
+    merchantMappings
+      .filter((m) => !archivedNames.has(m.category.toLowerCase()))
+      .map((m) => [m.normalizedDescription, m.category])
   );
 
   // 7. Create bill transactions, applying: preserved manual > learned mapping > Uncategorized

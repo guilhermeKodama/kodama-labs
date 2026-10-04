@@ -6,6 +6,7 @@ interface UpdateCategoryInput {
   name?: string;
   color?: string;
   icon?: string;
+  isArchived?: boolean;
 }
 
 export async function updateCategoryService(
@@ -19,7 +20,12 @@ export async function updateCategoryService(
     throw new Error("Category not found");
   }
 
-  if (existing.isDefault) {
+  // Everything except isArchived stays locked on default categories.
+  // Archiving hides the row from pickers without breaking systemKey.
+  const changesContent = Object.entries(input).some(
+    ([key, value]) => key !== "isArchived" && value !== undefined
+  );
+  if (existing.isDefault && changesContent) {
     throw new Error("Cannot modify default categories");
   }
 

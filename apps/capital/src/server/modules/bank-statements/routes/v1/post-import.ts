@@ -129,6 +129,16 @@ export const route = createRoute({
 // assistant's commit_plan tool, so both surfaces share one write path.
 // ---------------------------------------------------------------------------
 
+/** Validation failures the import dialog should show verbatim. */
+export function isBankStatementClientError(message: string): boolean {
+  return (
+    message.includes("not found") ||
+    message.includes("access denied") ||
+    message.includes("is archived") ||
+    message.includes("Cannot change transfer")
+  );
+}
+
 export const handler: AppRouteHandler<typeof route> = async (c) => {
   try {
     const userId = requireUserId(c);
@@ -176,7 +186,9 @@ export const handler: AppRouteHandler<typeof route> = async (c) => {
     );
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "Unknown error";
-    if (message.includes("not found") || message.includes("access denied")) {
+    // The import dialog reads error.message. Archived categories and illegal
+    // transfer directions are client errors, so the thrown text is not a 500.
+    if (isBankStatementClientError(message)) {
       return c.json({ error: { code: "BAD_REQUEST", message } }, BAD_REQUEST);
     }
     return c.json(

@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { defineTool } from "../registry";
+import { rejectArchivedAssignment } from "@capital/server/modules/mcp/lib/category-validation";
 import { normalizeDescription } from "../../../../bank-statements/utils";
 
 export const recordMerchantCategory = defineTool({
@@ -18,6 +19,7 @@ export const recordMerchantCategory = defineTool({
     // mapping stored with different casing would just silently never
     // match.
     const normalizedDescription = normalizeDescription(input.normalizedDescription);
+    await rejectArchivedAssignment(ctx.userId, input.category, undefined, ctx.db);
     const mapping = await ctx.db.merchantCategoryMapping.upsert({
       where: {
         userId_normalizedDescription: {

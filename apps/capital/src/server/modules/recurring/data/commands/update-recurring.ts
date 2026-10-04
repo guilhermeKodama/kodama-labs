@@ -5,6 +5,7 @@ import type {
   RecurrenceFrequency,
 } from "@/generated/prisma";
 import type { RemindersConfig } from "@/lib/validations/reminders";
+import { rejectArchivedAssignment } from "@capital/server/modules/mcp/lib/category-validation";
 
 interface UpdateRecurringData {
   type?: TransactionType;
@@ -47,11 +48,21 @@ export async function updateRecurring(
         { personalAccount: { userId } },
       ],
     },
-    select: { id: true },
+    select: { id: true, category: true, type: true },
   });
 
   if (!recurring) {
     throw new Error("Recurring transaction not found");
+  }
+
+  if (data.category !== undefined) {
+    await rejectArchivedAssignment(
+      userId,
+      data.category,
+      data.type ?? recurring.type,
+      db,
+      recurring.category
+    );
   }
 
   return db.recurringTransaction.update({
