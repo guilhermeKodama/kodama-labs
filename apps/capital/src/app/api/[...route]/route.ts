@@ -1,12 +1,11 @@
-import { handle } from "hono/vercel";
 import app from "@capital/server/app";
+
+// Same adapter hono/vercel shipped: Next route handlers already speak Fetch.
+const handle = (honoApp: { fetch: (req: Request) => Response | Promise<Response> }) =>
+  (req: Request) => honoApp.fetch(req);
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
-// The assistant's agent loop can run several tool-calling iterations
-// per turn (see modules/assistant/agent/loop.ts) - the platform default
-// is too short for that, though most turns finish well under this.
-export const maxDuration = 300;
 
 export const GET = handle(app);
 export const POST = handle(app);

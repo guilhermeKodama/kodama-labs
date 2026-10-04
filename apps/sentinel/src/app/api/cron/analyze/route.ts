@@ -8,9 +8,7 @@ import { analyzePoliticalLinks } from "@sentinel/server/modules/pipeline/analysi
 import { analyzeAi } from "@sentinel/server/modules/pipeline/analysis/analyze-ai";
 import type { JobResult } from "@sentinel/server/lib/job-runner";
 
-export const maxDuration = 300;
-
-const BUDGET_MS = (maxDuration - 30) * 1000;
+const BUDGET_MS = 270_000;
 const MODULE_TIMEOUT_MS = 120_000;
 
 type ModuleOutcome = { name: string; result?: JobResult; error?: string };

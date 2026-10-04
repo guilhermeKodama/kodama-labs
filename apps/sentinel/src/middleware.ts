@@ -10,7 +10,6 @@ export default async function middleware(request: NextRequest) {
   if (
     pathname.startsWith("/api") ||
     pathname.startsWith("/_next") ||
-    pathname.startsWith("/_vercel") ||
     pathname.includes(".")
   ) {
     return NextResponse.next();
@@ -20,5 +19,5 @@ export default async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/((?!api|_next|_vercel|.*\\..*).*)", "/"],
+  matcher: ["/((?!api|_next|.*\\..*).*)", "/"],
 };

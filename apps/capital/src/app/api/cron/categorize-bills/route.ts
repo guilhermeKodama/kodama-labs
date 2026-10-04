@@ -6,11 +6,8 @@ import { BILL_LABEL_KEYS } from "@capital/server/lib/category-prompt";
 import { getSystemCategoryNames } from "@capital/server/modules/categories/lib/system-categories";
 import { normalizeDescription } from "@capital/server/modules/credit-cards/utils";
 
-// Allow up to 60 seconds for this function (Pro plan supports up to 300s)
-export const maxDuration = 60;
-
 // One chunk per invocation. Matches the Claude batch size in claude.ts so each
-// run makes a single Claude API call (~5-15s) and stays well under maxDuration.
+// run makes a single Claude API call (~5-15s).
 const CHUNK_SIZE = 50;
 
 /**
@@ -19,7 +16,6 @@ const CHUNK_SIZE = 50;
  * stays in "processing" until all its uncategorized transactions are done.
  */
 export async function GET(request: NextRequest) {
-  // Verify the request is from Vercel Cron
   const authHeader = request.headers.get("authorization");
   const cronSecret = env.CRON_SECRET;
 

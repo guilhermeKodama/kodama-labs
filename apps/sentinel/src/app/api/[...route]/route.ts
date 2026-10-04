@@ -1,5 +1,8 @@
-import { handle } from "hono/vercel";
 import app from "@sentinel/server/app";
+
+// Same adapter hono/vercel shipped: Next route handlers already speak Fetch.
+const handle = (honoApp: { fetch: (req: Request) => Response | Promise<Response> }) =>
+  (req: Request) => honoApp.fetch(req);
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;

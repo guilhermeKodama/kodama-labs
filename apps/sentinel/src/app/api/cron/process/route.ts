@@ -12,8 +12,6 @@ import { processServidores } from "@sentinel/server/modules/pipeline/processing/
 import type { JobResult } from "@sentinel/server/lib/job-runner";
 import { BudgetTracker } from "@sentinel/server/lib/budget-tracker";
 
-export const maxDuration = 300;
-
 const BUDGET_MS = 200_000;
 const MODULE_TIMEOUT_MS = 60_000;
 const IDLE_THRESHOLD = 10;

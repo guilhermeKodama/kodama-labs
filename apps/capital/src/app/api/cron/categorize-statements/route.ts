@@ -6,8 +6,6 @@ import { STATEMENT_LABEL_KEYS } from "@capital/server/lib/category-prompt";
 import { getSystemCategoryNames } from "@capital/server/modules/categories/lib/system-categories";
 import { normalizeDescription } from "@capital/server/modules/bank-statements/utils";
 
-export const maxDuration = 60;
-
 /**
  * Cron endpoint that processes pending statement import categorizations via Claude API.
  * Processes 1 import per run.

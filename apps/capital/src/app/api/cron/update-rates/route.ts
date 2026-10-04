@@ -3,9 +3,6 @@ import { prisma } from "@capital/server/lib/prisma";
 import { env } from "@/env";
 import { updateAllCurrencyRates } from "@capital/server/modules/currencies/services/update-rates-from-api";
 
-// Allow up to 30 seconds for this function
-export const maxDuration = 30;
-
 /**
  * Cron endpoint that fetches latest exchange rates from Frankfurter API
  * and updates all users' currency rates.

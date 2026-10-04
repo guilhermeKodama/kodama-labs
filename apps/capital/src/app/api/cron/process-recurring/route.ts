@@ -32,7 +32,6 @@ function getNextOccurrence(currentDate: Date, frequency: RecurrenceFrequency): D
 }
 
 export async function GET(request: NextRequest) {
-  // Verify the request is from Vercel Cron
   const authHeader = request.headers.get("authorization");
   const cronSecret = env.CRON_SECRET;
 

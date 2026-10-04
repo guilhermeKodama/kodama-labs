@@ -3,8 +3,6 @@ import { prisma } from "@capital/server/lib/prisma";
 import { env } from "@/env";
 import { recordMonthlySnapshots } from "@capital/server/modules/fire/services/record-monthly-snapshots";
 
-export const maxDuration = 60;
-
 /**
  * Monthly cron: on the 1st of each month, snapshot every user's FIRE progress
  * for the month that just ended. Runs unattended — progress accrues without any

@@ -2,7 +2,6 @@ import { getPipelineState } from "@sentinel/server/modules/pipeline/get-pipeline
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
-export const maxDuration = 60;
 
 const INTERVAL_MS = 5_000;
 const MAX_STREAM_DURATION_MS = 50_000;
