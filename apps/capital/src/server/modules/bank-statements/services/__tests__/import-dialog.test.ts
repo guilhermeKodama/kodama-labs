@@ -195,7 +195,7 @@ describe("POST /v2/imports (bank statement)", () => {
     const commit = await call("POST", "/v2/imports", bankPlan(ifood));
     expect(commit.status).toBe(200);
     const r = commit.body;
-    expect(r).toMatchObject({ imported: 4, skipped: 1, rulesCreated: 1, cardPaymentsCreated: 1, rowsImported: 4, fuzzyDuplicatesLinked: 1, accountId: bank2, accountName: "Nubank PF" });
+    expect(r).toMatchObject({ imported: 4, skipped: 1, rulesCreated: 1, cardPaymentsCreated: 1, rowsImported: 4, fuzzyDuplicatesLinked: 1, accountId: bank2, accountName: "Nubank PF", viewName: "Importação · extrato-setembro" });
     expect(r.importId).toBe(r.statementImportId);
 
     const rows = await live({ importId: r.importId });

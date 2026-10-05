@@ -1,3 +1,121 @@
 {
-  "action": "Import statement"
+  "action": "Import statement",
+  "dialog": {
+    "title": "Import statement",
+    "desc": "The file becomes a plan; nothing is saved until you confirm, and the whole import can be undone later."
+  },
+  "steps": {
+    "file": "File",
+    "review": "Review",
+    "confirm": "Confirm"
+  },
+  "nav": {
+    "back": "Back",
+    "continue": "Continue",
+    "commit": "Import {count, plural, one {# transaction} other {# transactions}}",
+    "committing": "Importing…",
+    "assistant": "Send to the assistant"
+  },
+  "file": {
+    "drop": "Drag the statement or card bill here, or",
+    "choose": "choose a file",
+    "change": "change file",
+    "reading": "Reading…",
+    "help": "Accepts OFX, CSV, card bill PDFs and photos/screenshots. You can also drop several files or send them to the assistant.",
+    "many": "{first} and {count, plural, one {# more file} other {# more files}}",
+    "sizeKB": "{size} KB",
+    "sizeMB": "{size} MB",
+    "assistantNote": "PDFs and photos are read by the assistant: it builds the plan from the file and you confirm it in the conversation.",
+    "assistantPrompt": "Import this file."
+  },
+  "meta": {
+    "bank": "Bank",
+    "kind": "Type",
+    "period": "Period",
+    "count": "Transactions",
+    "range": "{from} – {to}",
+    "kinds": {
+      "bank_ofx": "Bank statement",
+      "card_ofx": "Card bill",
+      "card_csv": "Card bill",
+      "pdf": "PDF",
+      "image": "Photo or screenshot"
+    }
+  },
+  "fields": {
+    "account": "Import into account",
+    "entity": "Entity",
+    "hints": {
+      "cardNumber": "Detected from the card number in the file",
+      "accountNumber": "Detected from the account number in the file",
+      "only": "The only account of this type",
+      "bank": "Detected from the file's bank",
+      "default": "The entity's main account",
+      "chooseCard": "Choose the card of this bill",
+      "chooseAccount": "Choose the account of this statement"
+    }
+  },
+  "monthShort": "{abbr} ’{yy}",
+  "linkBill": "Link to the {month} bill (due {due}) and do not count the bill payment as spending",
+  "linkBillNoDue": "Link to the {month} bill and do not count the bill payment as spending",
+  "review": {
+    "all": "All",
+    "pill": "{label} · {count}",
+    "status": {
+      "rule": "Rule applied",
+      "ai": "AI suggestion",
+      "need": "No category",
+      "dup": "Duplicate"
+    },
+    "placeholder": "Choose category…",
+    "search": "Search category, account or entity…",
+    "duplicateOf": "already exists: {description} {date}",
+    "include": "Import {description}",
+    "empty": "No rows with this status.",
+    "footer": "Showing {shown} of {total} · categories you choose here become rules for future statements",
+    "use": {
+      "transfer": "Transfer · {name}",
+      "deposit": "Contribution · {name}",
+      "withdrawal": "Withdrawal · {name}",
+      "cardPayment": "Bill · {name}"
+    },
+    "hints": {
+      "transfer": "entity",
+      "invest": "broker",
+      "card": "card"
+    }
+  },
+  "confirm": {
+    "included": "To import",
+    "ignored": "Skipped",
+    "ignoredDuplicates": "duplicates",
+    "ignoredSomeDuplicates": "{count, plural, one {# duplicate} other {# duplicates}}",
+    "total": "Total",
+    "rules": "New rules",
+    "card": "The {month} {bank} bill ends up with {count, plural, one {# purchase} other {# purchases}} and {total}.",
+    "cardPayment": "The {due} payment comes out of {account} and does not count as spending.",
+    "cardPaymentNoAccount": "The {due} payment does not count as spending.",
+    "transfers": "{count, plural, one {# row is booked as a transfer (bill payment, contribution or between entities) and does not count as spending.} other {# rows are booked as transfers (bill payments, contributions or between entities) and do not count as spending.}}"
+  },
+  "done": {
+    "title": "{count, plural, one {# transaction imported} other {# transactions imported}} into {account}",
+    "body": "All reviewed. The view “{view}” was created for you to check.",
+    "bodyNoView": "All reviewed.",
+    "openView": "Open the import's view",
+    "undo": "Undo import",
+    "undone": "Import undone"
+  },
+  "history": {
+    "date": "Date",
+    "file": "File",
+    "account": "Account",
+    "rows": "Transactions",
+    "status": "Status",
+    "imported": "Imported",
+    "reverted": "Undone",
+    "revert": "Undo",
+    "viaAssistant": "via assistant",
+    "empty": "No imports yet.",
+    "revertedToast": "Import undone · {file}"
+  }
 }

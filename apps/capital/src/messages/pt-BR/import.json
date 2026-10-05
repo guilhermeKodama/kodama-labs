@@ -1,3 +1,121 @@
 {
-  "action": "Importar extrato"
+  "action": "Importar extrato",
+  "dialog": {
+    "title": "Importar extrato",
+    "desc": "O arquivo vira um plano; nada é gravado até você confirmar, e a importação inteira pode ser desfeita depois."
+  },
+  "steps": {
+    "file": "Arquivo",
+    "review": "Revisar",
+    "confirm": "Confirmar"
+  },
+  "nav": {
+    "back": "Voltar",
+    "continue": "Continuar",
+    "commit": "Importar {count, plural, one {# lançamento} other {# lançamentos}}",
+    "committing": "Importando…",
+    "assistant": "Mandar pelo assistente"
+  },
+  "file": {
+    "drop": "Arraste o extrato ou a fatura para cá, ou",
+    "choose": "escolha um arquivo",
+    "change": "trocar arquivo",
+    "reading": "Lendo…",
+    "help": "Aceita OFX, CSV, PDF de fatura e foto/print. Também dá para arrastar vários arquivos ou mandar pelo assistente.",
+    "many": "{first} e mais {count, plural, one {# arquivo} other {# arquivos}}",
+    "sizeKB": "{size} KB",
+    "sizeMB": "{size} MB",
+    "assistantNote": "PDFs e fotos são lidos pelo assistente: ele monta o plano com o arquivo e você confirma na conversa.",
+    "assistantPrompt": "Importe este arquivo."
+  },
+  "meta": {
+    "bank": "Banco",
+    "kind": "Tipo",
+    "period": "Período",
+    "count": "Lançamentos",
+    "range": "{from} – {to}",
+    "kinds": {
+      "bank_ofx": "Extrato bancário",
+      "card_ofx": "Fatura de cartão",
+      "card_csv": "Fatura de cartão",
+      "pdf": "PDF",
+      "image": "Foto ou print"
+    }
+  },
+  "fields": {
+    "account": "Importar na conta",
+    "entity": "Entidade",
+    "hints": {
+      "cardNumber": "Detectado pelo número do cartão no arquivo",
+      "accountNumber": "Detectado pelo número da conta no arquivo",
+      "only": "Única conta desse tipo",
+      "bank": "Detectado pelo banco do arquivo",
+      "default": "Conta principal da entidade",
+      "chooseCard": "Escolha o cartão desta fatura",
+      "chooseAccount": "Escolha a conta deste extrato"
+    }
+  },
+  "monthShort": "{abbr}/{yy}",
+  "linkBill": "Vincular à fatura de {month} (vence {due}) e não contar o pagamento da fatura como gasto",
+  "linkBillNoDue": "Vincular à fatura de {month} e não contar o pagamento da fatura como gasto",
+  "review": {
+    "all": "Todas",
+    "pill": "{label} · {count}",
+    "status": {
+      "rule": "Regra aplicada",
+      "ai": "Sugestão da IA",
+      "need": "Sem categoria",
+      "dup": "Duplicada"
+    },
+    "placeholder": "Escolher categoria…",
+    "search": "Buscar categoria, conta ou entidade…",
+    "duplicateOf": "já existe: {description} {date}",
+    "include": "Importar {description}",
+    "empty": "Nenhuma linha com esse status.",
+    "footer": "Mostrando {shown} de {total} · categorias escolhidas aqui viram regras para os próximos extratos",
+    "use": {
+      "transfer": "Transferência · {name}",
+      "deposit": "Aporte · {name}",
+      "withdrawal": "Resgate · {name}",
+      "cardPayment": "Fatura · {name}"
+    },
+    "hints": {
+      "transfer": "entidade",
+      "invest": "corretora",
+      "card": "cartão"
+    }
+  },
+  "confirm": {
+    "included": "Serão importadas",
+    "ignored": "Ignoradas",
+    "ignoredDuplicates": "duplicadas",
+    "ignoredSomeDuplicates": "{count, plural, one {# duplicada} other {# duplicadas}}",
+    "total": "Total",
+    "rules": "Regras novas",
+    "card": "A fatura de {month} do {bank} fica com {count, plural, one {# compra} other {# compras}} e {total}.",
+    "cardPayment": "O pagamento de {due} sai de {account} e não conta como gasto.",
+    "cardPaymentNoAccount": "O pagamento de {due} não conta como gasto.",
+    "transfers": "{count, plural, one {# linha entra como transferência (pagamento de fatura, aporte ou entre entidades) e não conta como gasto.} other {# linhas entram como transferências (pagamento de fatura, aporte ou entre entidades) e não contam como gasto.}}"
+  },
+  "done": {
+    "title": "{count, plural, one {# lançamento importado} other {# lançamentos importados}} em {account}",
+    "body": "Tudo revisado. A view “{view}” foi criada para você conferir.",
+    "bodyNoView": "Tudo revisado.",
+    "openView": "Abrir a view da importação",
+    "undo": "Desfazer importação",
+    "undone": "Importação desfeita"
+  },
+  "history": {
+    "date": "Data",
+    "file": "Arquivo",
+    "account": "Conta",
+    "rows": "Lançamentos",
+    "status": "Status",
+    "imported": "Importada",
+    "reverted": "Desfeita",
+    "revert": "Desfazer",
+    "viaAssistant": "via assistente",
+    "empty": "Nenhuma importação ainda.",
+    "revertedToast": "Importação desfeita · {file}"
+  }
 }

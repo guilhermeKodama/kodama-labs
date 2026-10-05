@@ -46,6 +46,19 @@ export function decodeImportContent(content: string, encoding?: "base64" | "text
 }
 
 /**
+ * Text of a statement file. Brazilian banks still export OFX and CSV in
+ * Windows-1252 (CHARSET:1252); bytes that are not valid UTF-8 are read as
+ * that, so "PAGAMENTO CARTÃO" does not turn into "PAGAMENTO CART\uFFFDO".
+ */
+export function statementText(buffer: Buffer): string {
+  try {
+    return new TextDecoder("utf-8", { fatal: true }).decode(buffer);
+  } catch {
+    return new TextDecoder("windows-1252").decode(buffer);
+  }
+}
+
+/**
  * Kind of one file, from its content (the name only decides between a CSV
  * and nothing). A file that is neither OFX, PDF nor image is read as a card
  * bill CSV when it parses as one.
@@ -63,7 +76,7 @@ export function detectImportKind(buffer: Buffer, name: string): ImportFileKind |
       return "image";
     default:
       try {
-        return parseCsvContent(buffer.toString("utf8")).length ? "card_csv" : null;
+        return parseCsvContent(statementText(buffer)).length ? "card_csv" : null;
       } catch {
         return null;
       }
@@ -129,7 +142,7 @@ export function parseBankFiles(files: DecodedImportFile[]): ParsedBankImport {
   for (const file of files) {
     let parsed: ReturnType<typeof parseOfxContent>;
     try {
-      parsed = parseOfxContent(file.buffer.toString("utf8"));
+      parsed = parseOfxContent(statementText(file.buffer));
     } catch (err) {
       throw invalidFile(err);
     }
@@ -197,7 +210,7 @@ export function parseCardFiles(files: DecodedImportFile[]): ParsedCardImport {
   const parsed: ParsedTransaction[] = [];
 
   for (const file of files) {
-    const text = file.buffer.toString("utf8");
+    const text = statementText(file.buffer);
     try {
       if (file.kind === "card_ofx") {
         const ofx = parseOfxCreditCardContent(text);

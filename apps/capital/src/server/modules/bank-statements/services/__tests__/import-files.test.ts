@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { ImportPlanPayloadSchema, hashPlanPayload } from "@capital/server/modules/assistant/agent/tools/schemas/import-plan-payload";
 import { paymentStatementMonth } from "../card-payments";
-import { accountNumberMatches, bankDisplayName, decodeImportContent, decodeImportFiles, lastDigits, parseBankFiles, parseCardFiles } from "../import-files";
+import { accountNumberMatches, bankDisplayName, decodeImportContent, decodeImportFiles, lastDigits, parseBankFiles, parseCardFiles, statementText } from "../import-files";
 import { BANK_OFX, CARD_CSV, CARD_OFX } from "./fixtures/import-files";
 
 describe("decodeImportContent", () => {
@@ -14,6 +14,19 @@ describe("decodeImportContent", () => {
   it("honours an explicit encoding", () => {
     expect(decodeImportContent("QUJDRA==", "text").toString("utf8")).toBe("QUJDRA==");
     expect(decodeImportContent("QUJDRA==", "base64").toString("utf8")).toBe("ABCD");
+  });
+});
+
+describe("statementText", () => {
+  it("reads UTF-8, and falls back to Windows-1252 for the bytes UTF-8 cannot read", () => {
+    expect(statementText(Buffer.from("PAGAMENTO CARTÃO", "utf8"))).toBe("PAGAMENTO CARTÃO");
+    expect(statementText(Buffer.from("PAGAMENTO CARTÃO · 1ª", "latin1"))).toBe("PAGAMENTO CARTÃO · 1ª");
+  });
+
+  it("keeps the accents of a Windows-1252 OFX sent as base64", () => {
+    const ofx = BANK_OFX.replace("UBER *TRIP", "PADARIA SÃO JOSÉ");
+    const [file] = decodeImportFiles([{ name: "extrato.ofx", content: Buffer.from(ofx, "latin1").toString("base64"), encoding: "base64" }]);
+    expect(parseBankFiles([file]).transactions.some((t) => t.memo.includes("PADARIA SÃO JOSÉ"))).toBe(true);
   });
 });
 

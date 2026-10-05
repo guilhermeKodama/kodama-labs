@@ -6,8 +6,6 @@ import { ImportPlanPayloadSchema } from "@capital/server/modules/assistant/agent
 import { importCardStatement } from "@capital/server/modules/credit-cards/services/import-card-statement";
 import { LedgerError } from "@capital/server/modules/ledger/lib/errors";
 import { analyzeImport } from "../../services/analyze-import";
-import { analyzeStatement } from "../../services/analyze-statement";
-import { decodeImportContent } from "../../services/import-files";
 import { executeImport, type CreatedRecordRef } from "../../services/execute-import";
 import { executeRevert } from "../../services/execute-revert";
 import { importCardBill } from "../../services/import-card-bill";
@@ -29,8 +27,6 @@ const analyzeRoute = createRoute({
       files: z.array(z.object({ name: z.string().optional(), content: z.string().min(1), encoding: z.enum(["base64", "text"]).optional() })).min(1).max(10),
       accountId: z.string().min(1).nullish(),
       ai: z.boolean().optional(),
-      /** The old Ajustes wizard's response (rows with reconciliation candidates); goes away with that wizard. */
-      legacy: z.boolean().optional(),
     })
   ),
   responses: v2Responses,
@@ -42,7 +38,7 @@ const commitRoute = createRoute({
   tags,
   summary: "Commit a reviewed import plan",
   description:
-    "One transaction and one undo batch (source import). The response has importId, batchId, accountName, imported, skipped, rulesCreated and viewId, the saved view “Importação · <arquivo>” that shows exactly this import.",
+    "One transaction and one undo batch (source import). The response has importId, batchId, accountName, imported, skipped, rulesCreated, and viewId and viewName, the saved view “Importação · <arquivo>” that shows exactly this import.",
   request: jsonBody(ImportPlanPayloadSchema),
   responses: v2Responses,
 });
@@ -146,7 +142,6 @@ export const v2Imports = createRouter()
     analyzeRoute,
     v2Handler(analyzeRoute, async (c, userId) => {
       const body = c.req.valid("json");
-      if (body.legacy) return analyzeStatement(userId, body.files.map((f) => ({ content: decodeImportContent(f.content, f.encoding).toString("utf8") })), prisma);
       return analyzeImport(userId, { files: body.files, accountId: body.accountId, ai: body.ai }, prisma);
     })
   )

@@ -63,6 +63,8 @@ export interface ExecuteImportResult {
   skipped: number;
   /** The "Importação · <arquivo>" view filtered on this import (createView), else null. */
   viewId: string | null;
+  /** That view's name, for the done message. */
+  viewName: string | null;
 }
 
 export interface ExecuteImportOptions {
@@ -83,7 +85,7 @@ function fileLabel(fileName: string | null | undefined, fallback: string): strin
 }
 
 /** Saved view showing exactly this import's rows, whatever their dates. */
-async function createImportView(userId: string, importId: string, label: string, tx: DbClient): Promise<string> {
+async function createImportView(userId: string, importId: string, label: string, tx: DbClient): Promise<{ id: string; name: string }> {
   const locale = await loadUserLocale(userId, tx);
   const name = VIEW_NAME[locale].replace("{file}", label).slice(0, 120);
   const view = await createView(
@@ -96,7 +98,7 @@ async function createImportView(userId: string, importId: string, label: string,
     }),
     tx
   );
-  return view.id;
+  return { id: view.id, name: view.name };
 }
 
 /**
@@ -557,7 +559,7 @@ export async function executeImport(
     patchCreatedRecord(records, "Import", imp.id, finished);
 
     const batchId = await recordMutation(tx, userId, "import", `Import ${imp.fileName ?? imp.bankName ?? imp.id}`, records, { source: "import" });
-    const viewId = options.createView ? await createImportView(userId, imp.id, fileLabel(input.fileName, input.bankName ?? target.name), tx) : null;
+    const view = options.createView ? await createImportView(userId, imp.id, fileLabel(input.fileName, input.bankName ?? target.name), tx) : null;
     return {
       imported,
       duplicatesSkipped,
@@ -584,7 +586,8 @@ export async function executeImport(
       paymentLinked,
       rowsImported,
       skipped: duplicatesSkipped + cardRowsSkipped,
-      viewId,
+      viewId: view?.id ?? null,
+      viewName: view?.name ?? null,
     };
   });
 }
