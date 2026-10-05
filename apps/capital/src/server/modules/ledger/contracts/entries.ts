@@ -54,7 +54,35 @@ export const entryPatchSchema = z
     accountId: z.string(),
     entityId: z.string(),
     isTaxDeductible: z.boolean(),
+    /** Simple entries only: income <-> expense keeps the magnitude and flips the sign. */
+    kind: z.enum(["income", "expense"]),
+    /** Transfers only: both endpoints (and the direction) change in one atomic write. */
+    fromAccountId: z.string(),
+    toAccountId: z.string(),
+    /** Transfers only. Without it, moved endpoints re-infer the direction unless it was set by hand. */
+    direction: transferDirectionSchema,
+    /** Transfers only: true books the legs as a reimbursement (expense legs), false back to a plain transfer. */
+    reimbursement: z.boolean(),
   })
   .partial()
   .refine((p) => Object.keys(p).length > 0, "Empty patch");
 export type EntryPatch = z.infer<typeof entryPatchSchema>;
+
+// ---------------------------------------------------------------------------
+// Scoped delete
+// ---------------------------------------------------------------------------
+
+export const DELETE_SCOPES = ["one", "future", "all"] as const;
+export type DeleteScope = (typeof DELETE_SCOPES)[number];
+
+/**
+ * one = this entry (its whole transfer); future = this occurrence or parcel
+ * and the later ones, ending the recurrence or closing the plan; all = every
+ * occurrence or parcel, deactivating the recurrence or the plan.
+ */
+export const deleteEntrySchema = z.object({
+  scope: z.enum(DELETE_SCOPES).default("one"),
+  /** Linked entries (an aporte that funded an operation, or an operation's cash leg): also delete the operation. Default true. */
+  withLinkedOperation: z.boolean().optional(),
+});
+export type DeleteEntryInput = z.infer<typeof deleteEntrySchema>;

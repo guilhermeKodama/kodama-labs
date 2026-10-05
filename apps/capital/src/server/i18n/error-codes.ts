@@ -48,6 +48,9 @@ export const ERROR_CODES = {
 
   // Entries and transfers
   "entry.not_found": "Transaction not found",
+  "entry.scope_unavailable": "This transaction is not part of a recurrence or an installment plan, so only it can be deleted",
+  "entry.kind_locked": "The type of an investment operation's cash cannot change; edit the operation instead",
+  "entry.not_transfer": "Only a transfer has a source and a destination account",
   "transfer.same_account": "A transfer needs two different accounts",
   "transfer.from_account_not_found": "Source account not found",
   "transfer.to_account_not_found": "Destination account not found",

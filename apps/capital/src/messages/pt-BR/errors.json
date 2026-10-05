@@ -44,7 +44,10 @@
     "not_credit_card": "Essa conta não é um cartão de crédito."
   },
   "entry": {
-    "not_found": "Transação não encontrada. Pode ter sido excluída."
+    "not_found": "Transação não encontrada. Pode ter sido excluída.",
+    "scope_unavailable": "Esta transação não faz parte de uma recorrência nem de um parcelamento; só ela pode ser excluída.",
+    "kind_locked": "O tipo do caixa de uma operação de investimento não muda. Edite a operação em Investimentos.",
+    "not_transfer": "Só uma transferência tem conta de origem e de destino."
   },
   "transfer": {
     "same_account": "Uma transferência precisa de duas contas diferentes.",

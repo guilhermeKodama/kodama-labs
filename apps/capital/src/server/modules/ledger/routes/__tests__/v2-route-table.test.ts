@@ -10,6 +10,9 @@ const EXPECTED = [
   "POST /v2/ledger/entries",
   "PATCH /v2/ledger/entries/{id}",
   "DELETE /v2/ledger/entries/{id}",
+  "GET /v2/ledger/entries/{id}/delete-options",
+  "POST /v2/ledger/entries/{id}/delete",
+  "GET /v2/ledger/entries/{id}/history",
   "POST /v2/ledger/bulk",
   "GET /v2/mutations",
   "POST /v2/mutations/{id}/undo",
@@ -36,6 +39,7 @@ const EXPECTED = [
   "PATCH /v2/rules/{id}",
   "DELETE /v2/rules/{id}",
   "POST /v2/rules/test",
+  "POST /v2/rules/suggest",
 ].sort();
 
 describe("ledger v2 route table", () => {
