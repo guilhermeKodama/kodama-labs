@@ -1,6 +1,7 @@
 import { createRoute, z } from "@hono/zod-openapi";
 import { describe, expect, it } from "vitest";
 import { ZodError } from "zod";
+import { Prisma } from "@/generated/prisma";
 import { createTestApp } from "@capital/server/lib/create-app";
 import { createRouter } from "@capital/server/lib/router";
 import { jsonBody, v2Handler, v2Responses } from "@capital/server/lib/v2";
@@ -35,6 +36,10 @@ router.openapi(
         throw new ZodError([{ code: "custom", path: ["rows", 0, "date"], message: "Bad date" }]);
       case "plain-not-found":
         throw new Error("Currency not found");
+      case "prisma-missing":
+        throw new Prisma.PrismaClientKnownRequestError("No record was found for a query. (at /src/server/x.ts:1)", { code: "P2025", clientVersion: Prisma.prismaVersion.client });
+      case "prisma-unique":
+        throw new Prisma.PrismaClientKnownRequestError("Unique constraint failed on the fields: (`userId`,`name`)", { code: "P2002", clientVersion: Prisma.prismaVersion.client });
       case "boom":
         throw new Error("boom");
       default:
@@ -42,6 +47,12 @@ router.openapi(
     }
   })
 );
+
+// A route that throws instead of answering, like the v1 routes: the app's onError maps it.
+router.get("/test-envelope-plain/:kind", (c) => {
+  if (c.req.param("kind") === "ledger") throw new LedgerError("No FIRE plan", 400, { code: "fire.no_plan" });
+  throw new Error("Conversation not found or access denied");
+});
 
 const app = createTestApp(router);
 
@@ -91,6 +102,20 @@ describe("v2 error envelope", () => {
     const res = await post("plain-not-found", { amount: 1 });
     expect(res.status).toBe(404);
     expect(res.body).toEqual({ message: "Currency not found", code: "not_found" });
+  });
+
+  it("maps Prisma's record-not-found and unique violations without leaking their message", async () => {
+    expect(await post("prisma-missing", { amount: 1 })).toEqual({ status: 404, body: { message: "Record not found", code: "not_found" } });
+    expect(await post("prisma-unique", { amount: 1 })).toEqual({ status: 409, body: { message: "A record with the same values already exists", code: "duplicate" } });
+  });
+
+  it("maps errors thrown outside v2Handler the same way", async () => {
+    const coded = await app.request("/api/test-envelope-plain/ledger");
+    expect(coded.status).toBe(400);
+    expect(await coded.json()).toEqual({ message: "No FIRE plan", code: "fire.no_plan" });
+    const plain = await app.request("/api/test-envelope-plain/plain");
+    expect(plain.status).toBe(404);
+    expect(await plain.json()).toEqual({ message: "Conversation not found or access denied", code: "not_found" });
   });
 
   it("keeps unexpected errors as 500 without a code", async () => {

@@ -1,5 +1,6 @@
 import type { DbClient } from "@capital/server/lib/prisma";
 import type { ImportPlanStatus } from "@/generated/prisma";
+import { LedgerError } from "@capital/server/modules/ledger/lib/errors";
 
 /**
  * Amend a still-proposed plan's payload (after the user answers a
@@ -13,7 +14,7 @@ export async function updateImportPlanPayload(
   db: DbClient
 ) {
   const plan = await db.importPlan.findFirst({ where: { id: planId, userId } });
-  if (!plan) throw new Error("Plan not found or access denied");
+  if (!plan) throw new LedgerError("Plan not found or access denied", 404, { code: "assistant.plan_not_found" });
   if (plan.status !== "proposed") {
     throw new Error(`Plan is "${plan.status}" - only a "proposed" plan can be amended`);
   }
@@ -43,7 +44,7 @@ export async function updateImportPlanStatus(
   db: DbClient
 ) {
   const plan = await db.importPlan.findFirst({ where: { id: planId, userId } });
-  if (!plan) throw new Error("Plan not found or access denied");
+  if (!plan) throw new LedgerError("Plan not found or access denied", 404, { code: "assistant.plan_not_found" });
 
   return db.importPlan.update({
     where: { id: planId },

@@ -1,16 +1,14 @@
 import { createRoute, z } from "@hono/zod-openapi";
-import { CREATED, BAD_REQUEST, UNAUTHORIZED, INTERNAL_SERVER_ERROR } from "stoker/http-status-codes";
+import { CREATED, BAD_REQUEST, NOT_FOUND, UNAUTHORIZED, UNPROCESSABLE_ENTITY, INTERNAL_SERVER_ERROR } from "stoker/http-status-codes";
 import { jsonContent } from "stoker/openapi/helpers";
 
 import type { AppRouteHandler } from "@capital/server/types";
 import { prisma } from "@capital/server/lib/prisma";
 import { requireUserId } from "@capital/server/lib/auth-middleware";
+import { ApiErrorSchema } from "@capital/server/lib/http-error";
+import { LedgerError } from "@capital/server/modules/ledger/lib/errors";
 import { uploadConversationFile } from "../../services/upload-conversation-file";
 import { routeConfig } from "../../constants";
-
-const ErrorResponseSchema = z.object({
-  error: z.object({ code: z.string(), message: z.string() }),
-});
 
 const FormSchema = z.object({
   file: z.custom<File>().openapi({ type: "string", format: "binary" }),
@@ -44,61 +42,47 @@ export const route = createRoute({
   },
   responses: {
     [CREATED]: jsonContent(ConversationFileSchema, "File uploaded"),
-    [BAD_REQUEST]: jsonContent(ErrorResponseSchema, "Invalid file"),
-    [UNAUTHORIZED]: jsonContent(ErrorResponseSchema, "Not authenticated"),
-    [INTERNAL_SERVER_ERROR]: jsonContent(ErrorResponseSchema, "Internal server error"),
+    [BAD_REQUEST]: jsonContent(ApiErrorSchema, "No file in the form"),
+    [NOT_FOUND]: jsonContent(ApiErrorSchema, "Conversation not found"),
+    [UNPROCESSABLE_ENTITY]: jsonContent(ApiErrorSchema, "File too large or of an unsupported type"),
+    [UNAUTHORIZED]: jsonContent(ApiErrorSchema, "Not authenticated"),
+    [INTERNAL_SERVER_ERROR]: jsonContent(ApiErrorSchema, "Internal server error"),
   },
 });
 
 export const handler: AppRouteHandler<typeof route> = async (c) => {
-  try {
-    const userId = requireUserId(c);
-    const { id: conversationId } = c.req.valid("param");
-    const body = await c.req.parseBody();
+  const userId = requireUserId(c);
+  const { id: conversationId } = c.req.valid("param");
+  const body = await c.req.parseBody();
 
-    const file = body["file"];
-    if (!(file instanceof File)) {
-      return c.json(
-        { error: { code: "BAD_REQUEST", message: "file is required" } },
-        BAD_REQUEST
-      );
-    }
-
-    const buffer = Buffer.from(await file.arrayBuffer());
-
-    const conversationFile = await uploadConversationFile(
-      userId,
-      {
-        conversationId,
-        file: { buffer, mimeType: file.type, originalName: file.name },
-      },
-      prisma
-    );
-
-    return c.json(
-      {
-        id: conversationFile.id,
-        fileType: conversationFile.fileType,
-        statementKind: conversationFile.statementKind,
-        originalName: conversationFile.originalName,
-        mimeType: conversationFile.mimeType,
-        blobUrl: conversationFile.blobUrl,
-        sizeBytes: conversationFile.sizeBytes,
-        parseStatus: conversationFile.parseStatus as "pending" | "parsed" | "failed" | "not_applicable",
-        parseError: conversationFile.parseError,
-      },
-      CREATED
-    );
-  } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : "Unknown error";
-    if (
-      message.includes("exceeds maximum") ||
-      message.includes("Unrecognized file type") ||
-      message.includes("not found") ||
-      message.includes("access denied")
-    ) {
-      return c.json({ error: { code: "BAD_REQUEST", message } }, BAD_REQUEST);
-    }
-    return c.json({ error: { code: "INTERNAL_ERROR", message } }, INTERNAL_SERVER_ERROR);
+  const file = body["file"];
+  if (!(file instanceof File)) {
+    throw new LedgerError("file is required", 400, { code: "assistant.file_required" });
   }
+
+  const buffer = Buffer.from(await file.arrayBuffer());
+
+  const conversationFile = await uploadConversationFile(
+    userId,
+    {
+      conversationId,
+      file: { buffer, mimeType: file.type, originalName: file.name },
+    },
+    prisma
+  );
+
+  return c.json(
+    {
+      id: conversationFile.id,
+      fileType: conversationFile.fileType,
+      statementKind: conversationFile.statementKind,
+      originalName: conversationFile.originalName,
+      mimeType: conversationFile.mimeType,
+      blobUrl: conversationFile.blobUrl,
+      sizeBytes: conversationFile.sizeBytes,
+      parseStatus: conversationFile.parseStatus as "pending" | "parsed" | "failed" | "not_applicable",
+      parseError: conversationFile.parseError,
+    },
+    CREATED
+  );
 };

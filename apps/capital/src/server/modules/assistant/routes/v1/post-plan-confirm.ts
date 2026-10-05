@@ -5,15 +5,14 @@ import { jsonContent } from "stoker/openapi/helpers";
 import type { AppRouteHandler } from "@capital/server/types";
 import { prisma } from "@capital/server/lib/prisma";
 import { requireUserId } from "@capital/server/lib/auth-middleware";
+import { ApiErrorSchema } from "@capital/server/lib/http-error";
+import { LedgerError } from "@capital/server/modules/ledger/lib/errors";
 import { fetchImportPlanById } from "../../data/queries/fetch-import-plan";
 import { updateImportPlanStatus } from "../../data/commands/update-import-plan";
 import { routeConfig } from "../../constants";
 
 const ConfirmRequestSchema = z.object({ payloadHash: z.string() });
 const PlanStatusResponseSchema = z.object({ planId: z.string(), status: z.string() });
-const ErrorResponseSchema = z.object({
-  error: z.object({ code: z.string(), message: z.string() }),
-});
 
 // ---------------------------------------------------------------------------
 // This is THE security boundary of the whole feature: the only place a
@@ -37,57 +36,40 @@ export const confirmRoute = createRoute({
   },
   responses: {
     [OK]: jsonContent(PlanStatusResponseSchema, "Plan confirmed"),
-    [BAD_REQUEST]: jsonContent(ErrorResponseSchema, "Hash mismatch or wrong status"),
-    [NOT_FOUND]: jsonContent(ErrorResponseSchema, "Plan not found"),
-    [UNAUTHORIZED]: jsonContent(ErrorResponseSchema, "Not authenticated"),
-    [INTERNAL_SERVER_ERROR]: jsonContent(ErrorResponseSchema, "Internal server error"),
+    [BAD_REQUEST]: jsonContent(ApiErrorSchema, "Hash mismatch or wrong status"),
+    [NOT_FOUND]: jsonContent(ApiErrorSchema, "Plan not found"),
+    [UNAUTHORIZED]: jsonContent(ApiErrorSchema, "Not authenticated"),
+    [INTERNAL_SERVER_ERROR]: jsonContent(ApiErrorSchema, "Internal server error"),
   },
 });
 
 export const confirmHandler: AppRouteHandler<typeof confirmRoute> = async (c) => {
-  try {
-    const userId = requireUserId(c);
-    const { planId } = c.req.valid("param");
-    const { payloadHash } = c.req.valid("json");
+  const userId = requireUserId(c);
+  const { planId } = c.req.valid("param");
+  const { payloadHash } = c.req.valid("json");
 
-    const plan = await fetchImportPlanById(userId, planId, prisma);
-    if (!plan) {
-      return c.json({ error: { code: "NOT_FOUND", message: "Plan not found" } }, NOT_FOUND);
-    }
-    if (plan.status !== "proposed") {
-      return c.json(
-        { error: { code: "BAD_REQUEST", message: `Plan is "${plan.status}", not "proposed"` } },
-        BAD_REQUEST
-      );
-    }
-    if (plan.payloadHash !== payloadHash) {
-      return c.json(
-        {
-          error: {
-            code: "BAD_REQUEST",
-            message: "payloadHash does not match - the plan changed since it was displayed, re-read it before confirming",
-          },
-        },
-        BAD_REQUEST
-      );
-    }
-
-    const updated = await updateImportPlanStatus(
-      userId,
-      planId,
-      "confirmed",
-      { confirmedAt: new Date(), confirmedVia: "ui_button" },
-      prisma
-    );
-
-    return c.json({ planId: updated.id, status: updated.status }, OK);
-  } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : "Unknown error";
-    if (message.includes("not found") || message.includes("access denied")) {
-      return c.json({ error: { code: "NOT_FOUND", message } }, NOT_FOUND);
-    }
-    return c.json({ error: { code: "INTERNAL_ERROR", message } }, INTERNAL_SERVER_ERROR);
+  const plan = await fetchImportPlanById(userId, planId, prisma);
+  if (!plan) {
+    throw new LedgerError("Plan not found", 404, { code: "assistant.plan_not_found" });
   }
+  if (plan.status !== "proposed") {
+    throw new LedgerError(`Plan is "${plan.status}", not "proposed"`, 400, { code: "assistant.plan_not_proposed", params: { status: plan.status } });
+  }
+  if (plan.payloadHash !== payloadHash) {
+    throw new LedgerError("payloadHash does not match - the plan changed since it was displayed, re-read it before confirming", 400, {
+      code: "assistant.plan_changed",
+    });
+  }
+
+  const updated = await updateImportPlanStatus(
+    userId,
+    planId,
+    "confirmed",
+    { confirmedAt: new Date(), confirmedVia: "ui_button" },
+    prisma
+  );
+
+  return c.json({ planId: updated.id, status: updated.status }, OK);
 };
 
 export const rejectRoute = createRoute({
@@ -101,33 +83,25 @@ export const rejectRoute = createRoute({
   },
   responses: {
     [OK]: jsonContent(PlanStatusResponseSchema, "Plan rejected"),
-    [BAD_REQUEST]: jsonContent(ErrorResponseSchema, "Wrong status"),
-    [NOT_FOUND]: jsonContent(ErrorResponseSchema, "Plan not found"),
-    [UNAUTHORIZED]: jsonContent(ErrorResponseSchema, "Not authenticated"),
-    [INTERNAL_SERVER_ERROR]: jsonContent(ErrorResponseSchema, "Internal server error"),
+    [BAD_REQUEST]: jsonContent(ApiErrorSchema, "Wrong status"),
+    [NOT_FOUND]: jsonContent(ApiErrorSchema, "Plan not found"),
+    [UNAUTHORIZED]: jsonContent(ApiErrorSchema, "Not authenticated"),
+    [INTERNAL_SERVER_ERROR]: jsonContent(ApiErrorSchema, "Internal server error"),
   },
 });
 
 export const rejectHandler: AppRouteHandler<typeof rejectRoute> = async (c) => {
-  try {
-    const userId = requireUserId(c);
-    const { planId } = c.req.valid("param");
+  const userId = requireUserId(c);
+  const { planId } = c.req.valid("param");
 
-    const plan = await fetchImportPlanById(userId, planId, prisma);
-    if (!plan) {
-      return c.json({ error: { code: "NOT_FOUND", message: "Plan not found" } }, NOT_FOUND);
-    }
-    if (plan.status !== "proposed") {
-      return c.json(
-        { error: { code: "BAD_REQUEST", message: `Plan is "${plan.status}", not "proposed"` } },
-        BAD_REQUEST
-      );
-    }
-
-    const updated = await updateImportPlanStatus(userId, planId, "rejected", {}, prisma);
-    return c.json({ planId: updated.id, status: updated.status }, OK);
-  } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : "Unknown error";
-    return c.json({ error: { code: "INTERNAL_ERROR", message } }, INTERNAL_SERVER_ERROR);
+  const plan = await fetchImportPlanById(userId, planId, prisma);
+  if (!plan) {
+    throw new LedgerError("Plan not found", 404, { code: "assistant.plan_not_found" });
   }
+  if (plan.status !== "proposed") {
+    throw new LedgerError(`Plan is "${plan.status}", not "proposed"`, 400, { code: "assistant.plan_not_proposed", params: { status: plan.status } });
+  }
+
+  const updated = await updateImportPlanStatus(userId, planId, "rejected", {}, prisma);
+  return c.json({ planId: updated.id, status: updated.status }, OK);
 };

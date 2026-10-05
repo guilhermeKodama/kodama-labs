@@ -1,6 +1,8 @@
 import type { DbClient } from "@capital/server/lib/prisma";
 import { Prisma } from "@/generated/prisma";
 import { formatDateOnly } from "@capital/server/lib/date-utils";
+import { st } from "@capital/server/i18n";
+import { loadUserLocale } from "@capital/server/i18n/user-locale";
 import {
   aggregationKey,
   ledgerQuerySchema,
@@ -422,9 +424,12 @@ export async function selectEntryIds(userId: string, selection: LedgerSelectionQ
   return rows.map((r) => r.id);
 }
 
+/** CSV export columns, in order; the header row is each one's name in the user's locale (ledger.csv.*). */
+const CSV_COLUMNS = ["date", "description", "entity", "account", "category", "kind", "amount", "currency", "amountBase", "notes"] as const;
+
 /** CSV export of a query (all pages, up to 20k rows) with names resolved. */
 export async function exportLedgerCsv(userId: string, selection: LedgerSelectionQuery, db: DbClient): Promise<string> {
-  const timezone = await userTimezone(userId, db);
+  const [timezone, locale] = await Promise.all([userTimezone(userId, db), loadUserLocale(userId, db)]);
   const { sql: where } = buildWhere(userId, selection, timezone);
   const rows = await db.$queryRaw<
     { date: Date; description: string; entity: string; account: string; category: string | null; kind: string; amount: Prisma.Decimal; currency: string; amountBase: Prisma.Decimal; notes: string | null }[]
@@ -441,7 +446,7 @@ export async function exportLedgerCsv(userId: string, selection: LedgerSelection
     const s = v == null ? "" : String(v);
     return /[",\n;]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
   };
-  const header = ["date", "description", "entity", "account", "category", "kind", "amount", "currency", "amountBase", "notes"];
+  const header = CSV_COLUMNS.map((column) => esc(st(locale, `ledger.csv.${column}`)));
   const lines = rows.map((r) =>
     [formatDateOnly(r.date), r.description, r.entity, r.account, r.category, r.kind, toNumber(r.amount), r.currency, toNumber(r.amountBase), r.notes]
       .map(esc)

@@ -1,8 +1,9 @@
 /**
- * Stable error codes of the HTTP API. Every error a v2 route returns carries
- * one in its JSON envelope ({ message, code, params?, issues? }), so the UI
- * can show `t("errors." + code, params)` instead of the English `message`,
- * which stays as it is for the MCP server and the assistant.
+ * Stable error codes of the HTTP API. Every error a v1 or v2 route returns
+ * carries one in its JSON envelope ({ message, code, params?, issues? }),
+ * except unexpected 5xx errors, so the UI can show `t("errors." + code, params)`
+ * instead of the English `message`, which stays as it is for the MCP server
+ * and the assistant.
  *
  * Each value is the English meaning. `{name}` placeholders name the `params`
  * the server sends with that code (ICU syntax, so the text can seed the
@@ -15,6 +16,7 @@ export const ERROR_CODES = {
   // Generic
   validation: "The request is invalid; issues lists each problem",
   not_found: "The record was not found",
+  duplicate: "A record with the same values already exists",
 
   // Session and login
   "auth.required": "You need to log in",
@@ -143,6 +145,21 @@ export const ERROR_CODES = {
   "import.reconcile_target_not_found": "Transfer {transferId} to reconcile was not found",
   "import.reconcile_direction_change": "Transfer {transferId} cannot change to direction {direction} through reconciliation; delete and recreate it",
   "import.holding_unresolved": "Investment transaction {externalId} resolved to no holding",
+
+  // Assistant (v1)
+  "assistant.conversation_not_found": "Conversation not found",
+  "assistant.plan_not_found": "Plan not found",
+  "assistant.plan_not_proposed": "The plan is {status}; only a proposed plan can be confirmed or rejected",
+  "assistant.plan_changed": "The plan changed since it was shown; review it again before confirming",
+  "assistant.message_required": "Send a message, answer the card or attach a file",
+  "assistant.turn_running": "The assistant is still answering in this conversation",
+  "assistant.file_required": "A file is required",
+  "assistant.file_too_large": "The file exceeds the maximum size of {maxBytes} bytes",
+  "assistant.image_too_large": "The image exceeds the maximum size of {maxBytes} bytes",
+  "assistant.file_type_unsupported": "Only OFX, CSV, PDF and image files are allowed",
+
+  // FIRE (v1)
+  "fire.no_plan": "Set up the FIRE plan first",
 } as const;
 
 export type ErrorCode = keyof typeof ERROR_CODES;

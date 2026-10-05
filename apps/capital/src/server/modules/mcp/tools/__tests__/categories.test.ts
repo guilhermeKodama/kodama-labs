@@ -89,7 +89,7 @@ describe("delete_category", () => {
     await expense(f.categories.Food);
     await expect(deleteCategoryTool(USER, { id: f.categories.Food, reassignTo: f.categories.Consulting }, prisma)).rejects.toThrow(/different type/);
     const sys = await getSystemCategory(USER, "groceries", prisma);
-    await expect(deleteCategoryTool(USER, { id: sys.id }, prisma)).rejects.toThrow(/system category 'Groceries' \(systemKey: groceries\)/);
+    await expect(deleteCategoryTool(USER, { id: sys.id }, prisma)).rejects.toThrow(/system category 'Mercado' \(systemKey: groceries\)/);
     const def = await prisma.category.create({ data: { userId: USER, name: "Legacy default", type: "expense", isDefault: true } });
     await expect(deleteCategoryTool(USER, { id: def.id }, prisma)).rejects.toThrow(/Cannot delete default categories/);
     const legacySys = await prisma.category.create({ data: { userId: USER, name: "Legacy system", type: "expense", isSystem: true } });

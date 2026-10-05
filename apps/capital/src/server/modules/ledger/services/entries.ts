@@ -474,16 +474,19 @@ export async function purgeTrash(db: DbClient, days = 30, userId?: string) {
   return { groups: groups.count, entries: entries.count };
 }
 
+/** Copies entries (whole transfers when a leg is selected); each copy's description gets the localized "(cópia)" suffix. */
 export async function duplicateEntries(userId: string, ids: string[], db: DbClient) {
   return inTransaction(db, async (tx) => {
     const { entryIds, groupIds } = await expandSelection(userId, ids, tx);
     const entries = await tx.ledgerEntry.findMany({ where: { id: { in: entryIds } } });
+    const suffix = st(await loadUserLocale(userId, tx), "common.copySuffix");
+    const copyOf = (description: string) => `${description} ${suffix}`;
     const records: MutationRecordInput[] = [];
     const groupMap = new Map<string, string>();
     for (const gid of groupIds) {
       const g = await tx.transferGroup.findUniqueOrThrow({ where: { id: gid } });
       const copy = await tx.transferGroup.create({
-        data: { userId, direction: g.direction, description: g.description, date: g.date },
+        data: { userId, direction: g.direction, description: g.description && copyOf(g.description), date: g.date },
       });
       groupMap.set(gid, copy.id);
       records.push({ model: "TransferGroup", recordId: copy.id, before: null, after: snapshot(copy) });
@@ -502,7 +505,7 @@ export async function duplicateEntries(userId: string, ids: string[], db: DbClie
           amountBase: e.amountBase,
           date: e.date,
           effectiveDate: e.effectiveDate,
-          description: e.description,
+          description: copyOf(e.description),
           notes: e.notes,
           merchantName: e.merchantName,
           categoryId: e.categoryId,

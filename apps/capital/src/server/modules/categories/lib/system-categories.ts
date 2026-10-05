@@ -1,5 +1,8 @@
 import type { TransactionType } from "@/generated/prisma";
 import type { DbClient } from "@capital/server/lib/prisma";
+import { st, type Locale } from "@capital/server/i18n";
+import type { SystemCategoryNameKey } from "@capital/server/i18n/categories";
+import { loadUserLocale } from "@capital/server/i18n/user-locale";
 
 export interface SystemCategoryDefinition {
   systemKey: string;
@@ -11,6 +14,8 @@ export interface SystemCategoryDefinition {
 
 /**
  * One catalog for signup seeding, ensure-on-import, and systemKey lookup.
+ * `name` is the legacy English name that pre-key rows are matched by; a new
+ * row is named in its owner's locale (systemCategoryName).
  * Keys match the backfill in 20261003113000_add_category_system_key.
  * `travel_system` and `travel_default` are one Travel row: the migration can
  * key an existing isSystem Travel as `travel_system`, and the catalog seeds
@@ -74,13 +79,23 @@ export function resolveSystemKey(key: string): string {
   return SYSTEM_KEY_ALIASES[key] ?? key;
 }
 
-function definitionFor(key: string): SystemCategoryDefinition {
+/** The catalog row for a key or alias, or undefined for a key the catalog does not know. */
+export function findSystemCategoryDefinition(key: string): SystemCategoryDefinition | undefined {
   const resolved = resolveSystemKey(key);
-  const def = SYSTEM_CATEGORY_DEFINITIONS.find((d) => d.systemKey === resolved);
+  return SYSTEM_CATEGORY_DEFINITIONS.find((d) => d.systemKey === resolved);
+}
+
+function definitionFor(key: string): SystemCategoryDefinition {
+  const def = findSystemCategoryDefinition(key);
   if (!def) {
     throw new Error(`Unknown system category key: ${key}`);
   }
   return def;
+}
+
+/** A catalog category's name in `locale` (categories.system.<key>); in English it is the catalog's own name. */
+export function systemCategoryName(key: string, locale: Locale): string {
+  return st(locale, `categories.system.${definitionFor(key).systemKey as SystemCategoryNameKey}`);
 }
 
 /** Both Travel keys match either row. Every other key matches only itself. */
@@ -111,11 +126,12 @@ async function findByLookupKeys(userId: string, keys: readonly string[], db: DbC
  * 2. isDefault or isSystem row of the right type whose name matches the legacy
  *    English name, case-insensitive, and whose systemKey is null. Sets the
  *    canonical systemKey.
- * 3. Insert the catalog row, skipping a (userId, name, type) or systemKey conflict.
+ * 3. Insert the catalog row, named in the user's locale (`locale`, else
+ *    User.locale), skipping a (userId, name, type) or systemKey conflict.
  * 4. Re-read by systemKey, then by (userId, name, type). Write systemKey only
  *    when it is null AND the row is isDefault or isSystem. Never steal a key.
  */
-export async function getSystemCategory(userId: string, key: string, db: DbClient) {
+export async function getSystemCategory(userId: string, key: string, db: DbClient, locale?: Locale) {
   const resolvedKey = resolveSystemKey(key);
   const keys = lookupKeys(key);
   const def = definitionFor(key);
@@ -139,11 +155,12 @@ export async function getSystemCategory(userId: string, key: string, db: DbClien
     });
   }
 
+  const name = systemCategoryName(resolvedKey, locale ?? (await loadUserLocale(userId, db)));
   await db.category.createMany({
     data: [
       {
         userId,
-        name: def.name,
+        name,
         type: def.type,
         systemKey: resolvedKey,
         isDefault: def.isDefault,
@@ -160,7 +177,7 @@ export async function getSystemCategory(userId: string, key: string, db: DbClien
     where: {
       userId,
       type: def.type,
-      name: { equals: def.name, mode: "insensitive" },
+      name: { equals: name, mode: "insensitive" },
     },
   });
   if (!existing) {
@@ -177,10 +194,11 @@ export async function getSystemCategory(userId: string, key: string, db: DbClien
   return existing;
 }
 
-/** Ensure every catalog key exists. Alias keys (travel_system) are not created. */
+/** Ensure every catalog key exists, named in the user's locale. Alias keys (travel_system) are not created. */
 export async function ensureSystemCategories(userId: string, db: DbClient) {
+  const locale = await loadUserLocale(userId, db);
   for (const def of SYSTEM_CATEGORY_DEFINITIONS) {
-    await getSystemCategory(userId, def.systemKey, db);
+    await getSystemCategory(userId, def.systemKey, db, locale);
   }
 }
 

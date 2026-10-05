@@ -155,8 +155,18 @@ describe("queryLedger", () => {
     expect(ids).toHaveLength(2);
     const csv = await exportLedgerCsv(USER, { period: sept, dateField: "date", filters: [{ field: "categoryId", op: "in", values: [f.categories.Groceries] }], deleted: "exclude" }, prisma);
     const lines = csv.split("\n");
-    expect(lines[0]).toBe("date,description,entity,account,category,kind,amount,currency,amountBase,notes");
+    expect(lines[0]).toBe("Data,Descrição,Entidade,Conta,Categoria,Tipo,Valor,Moeda,Valor na moeda base,Observações");
     expect(lines).toHaveLength(3);
     expect(lines[1]).toContain("Mercado B,PF,Conta principal,Groceries,expense,-300");
+  });
+
+  it("writes the CSV header in the user's locale", async () => {
+    await prisma.user.update({ where: { id: USER }, data: { locale: "en" } });
+    try {
+      const csv = await exportLedgerCsv(USER, { period: sept, dateField: "date", filters: [], deleted: "exclude" }, prisma);
+      expect(csv.split("\n")[0]).toBe("Date,Description,Entity,Account,Category,Type,Amount,Currency,Amount in base currency,Notes");
+    } finally {
+      await prisma.user.update({ where: { id: USER }, data: { locale: "pt-BR" } });
+    }
   });
 });

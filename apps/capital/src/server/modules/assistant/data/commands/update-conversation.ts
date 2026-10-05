@@ -1,5 +1,5 @@
 import type { DbClient } from "@capital/server/lib/prisma";
-import { ForbiddenError } from "@capital/server/lib/auth-middleware";
+import { LedgerError } from "@capital/server/modules/ledger/lib/errors";
 
 async function verifyConversationOwnership(
   userId: string,
@@ -10,11 +10,8 @@ async function verifyConversationOwnership(
     where: { id: conversationId },
     select: { userId: true },
   });
-  if (!conversation) {
-    throw new Error("Conversation not found");
-  }
-  if (conversation.userId !== userId) {
-    throw new ForbiddenError("conversation");
+  if (!conversation || conversation.userId !== userId) {
+    throw new LedgerError("Conversation not found or access denied", 404, { code: "assistant.conversation_not_found" });
   }
 }
 

@@ -31,14 +31,16 @@ export function serializeView(v: SavedView) {
   };
 }
 
-/** The built-in "Todas" view, created on first access. */
+/** The built-in "Todas" view, created on first access and named in the user's locale. */
 export async function ensureBuiltinViews(userId: string, db: DbClient) {
+  const where = { userId_builtinKey: { userId, builtinKey: BUILTIN_ALL_VIEW_KEY } };
+  if (await db.savedView.findUnique({ where, select: { id: true } })) return;
   await db.savedView.upsert({
-    where: { userId_builtinKey: { userId, builtinKey: BUILTIN_ALL_VIEW_KEY } },
+    where,
     create: {
       userId,
       dataset: "ledger",
-      name: "Todas",
+      name: st(await loadUserLocale(userId, db), "views.builtin.all"),
       position: 0,
       isBuiltin: true,
       builtinKey: BUILTIN_ALL_VIEW_KEY,

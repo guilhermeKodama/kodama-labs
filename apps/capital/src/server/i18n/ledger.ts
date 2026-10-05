@@ -14,7 +14,7 @@ export const ledger = defineDictionary(
       card_payment: "Pagamento de fatura",
       between_accounts: "Transferência entre contas",
     },
-    /** CSV export column headers (the export still writes the raw field names). */
+    /** CSV export column headers (exportLedgerCsv), by column. */
     csv: {
       date: "Data",
       description: "Descrição",

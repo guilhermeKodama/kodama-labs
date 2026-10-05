@@ -159,6 +159,10 @@ describe("updates, trash and undo", () => {
     const copies = await prisma.ledgerEntry.findMany({ where: { id: { in: d.entryIds } } });
     expect(new Set(copies.map((c) => c.transferGroupId)).size).toBe(1);
     expect(copies[0].transferGroupId).not.toBe(t.transferGroupId);
+    const original = await prisma.ledgerEntry.findUniqueOrThrow({ where: { id: t.entryIds[0] } });
+    expect(copies.every((c) => c.description === `${original.description} (cópia)`)).toBe(true);
+    const group = await prisma.transferGroup.findUniqueOrThrow({ where: { id: copies[0].transferGroupId! } });
+    expect(group.description).toMatch(/ \(cópia\)$/);
   });
 });
 

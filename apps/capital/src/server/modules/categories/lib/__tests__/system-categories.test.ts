@@ -1,27 +1,39 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, afterAll } from "vitest";
 import { prisma } from "@capital/server/lib/prisma";
 import {
   SYSTEM_CATEGORY_DEFINITIONS,
   ensureSystemCategories,
   getSystemCategory,
 } from "../system-categories";
+import { localizeSystemCategories } from "../localize-system-categories";
 
 const db = prisma;
 const TEST_USER_ID = "test-user-system-categories-001";
+const PT_USER_ID = "test-user-system-categories-ptbr-001";
 
+async function resetUser(id: string, locale: string) {
+  await db.category.deleteMany({ where: { userId: id } });
+  await db.user.deleteMany({ where: { id } });
+  await db.user.create({
+    data: {
+      id,
+      email: `${id}@example.com`,
+      passwordHash: "test-hash",
+      name: "System Categories",
+      baseCurrency: "BRL",
+      locale,
+    },
+  });
+}
+
+afterAll(async () => {
+  await db.user.deleteMany({ where: { id: { in: [TEST_USER_ID, PT_USER_ID] } } });
+});
+
+// An English-speaking user: the catalog's own names, which legacy rows are matched by.
 describe("system category catalog", () => {
   beforeEach(async () => {
-    await db.category.deleteMany({ where: { userId: TEST_USER_ID } });
-    await db.user.deleteMany({ where: { id: TEST_USER_ID } });
-    await db.user.create({
-      data: {
-        id: TEST_USER_ID,
-        email: "system-categories@example.com",
-        passwordHash: "test-hash",
-        name: "System Categories",
-        baseCurrency: "BRL",
-      },
-    });
+    await resetUser(TEST_USER_ID, "en");
   });
 
   it("does not recreate an English category after it was renamed", async () => {
@@ -229,5 +241,76 @@ describe("system category catalog", () => {
     expect(resolved.isArchived).toBe(true);
     const reread = await db.category.findUnique({ where: { id: created.id } });
     expect(reread?.isArchived).toBe(true);
+  });
+});
+
+describe("system category names in the user's locale", () => {
+  beforeEach(async () => {
+    await resetUser(PT_USER_ID, "pt-BR");
+  });
+
+  it("names new system categories in the user's locale", async () => {
+    await ensureSystemCategories(PT_USER_ID, db);
+    expect((await getSystemCategory(PT_USER_ID, "groceries", db)).name).toBe("Mercado");
+    expect(await getSystemCategory(PT_USER_ID, "travel_system", db)).toMatchObject({ name: "Viagens", systemKey: "travel_default" });
+    expect(await db.category.count({ where: { userId: PT_USER_ID } })).toBe(SYSTEM_CATEGORY_DEFINITIONS.length);
+    expect(await db.category.count({ where: { userId: PT_USER_ID, name: "Groceries" } })).toBe(0);
+  });
+
+  it("still self-heals a legacy English row and keeps its name", async () => {
+    const legacy = await db.category.create({
+      data: { userId: PT_USER_ID, name: "Groceries", type: "expense", isDefault: true, isSystem: true, systemKey: null },
+    });
+    const resolved = await getSystemCategory(PT_USER_ID, "groceries", db);
+    expect(resolved).toMatchObject({ id: legacy.id, name: "Groceries", systemKey: "groceries" });
+    expect(await db.category.count({ where: { userId: PT_USER_ID, name: "Mercado" } })).toBe(0);
+  });
+
+  it("returns a user-owned category that already has the localized name, without keying it", async () => {
+    const owned = await db.category.create({ data: { userId: PT_USER_ID, name: "Mercado", type: "expense" } });
+    const resolved = await getSystemCategory(PT_USER_ID, "groceries", db);
+    expect(resolved.id).toBe(owned.id);
+    expect(resolved.systemKey).toBeNull();
+  });
+
+  it("localizes rows still named in English, keeps renamed ones and skips taken names", async () => {
+    const create = (name: string, systemKey: string | null, type: "income" | "expense" = "expense") =>
+      db.category.create({ data: { userId: PT_USER_ID, name, type, systemKey, isDefault: systemKey != null, isSystem: systemKey != null } });
+    const groceries = await create("Groceries", "groceries");
+    const travel = await create("Travel", "travel_system");
+    const salary = await create("Salary", "salary", "income");
+    const renamed = await create("Meu cartão", "credit_card");
+    const taxes = await create("Taxes", "taxes");
+    await create("impostos", null);
+
+    const dry = await localizeSystemCategories(db, { userId: PT_USER_ID, dryRun: true });
+    expect(dry.renamed.map((r) => [r.id, r.to]).sort()).toEqual(
+      [
+        [groceries.id, "Mercado"],
+        [travel.id, "Viagens"],
+        [salary.id, "Salário"],
+      ].sort()
+    );
+    expect(dry.conflicts).toEqual([{ id: taxes.id, userId: PT_USER_ID, name: "Taxes", wanted: "Impostos" }]);
+    expect((await db.category.findUniqueOrThrow({ where: { id: groceries.id } })).name).toBe("Groceries");
+
+    const run = await localizeSystemCategories(db, { userId: PT_USER_ID });
+    expect(run.renamed).toHaveLength(3);
+    const names = await db.category.findMany({ where: { id: { in: [groceries.id, travel.id, salary.id, renamed.id, taxes.id] } } });
+    expect(Object.fromEntries(names.map((c) => [c.id, c.name]))).toEqual({
+      [groceries.id]: "Mercado",
+      [travel.id]: "Viagens",
+      [salary.id]: "Salário",
+      [renamed.id]: "Meu cartão",
+      [taxes.id]: "Taxes",
+    });
+    expect((await localizeSystemCategories(db, { userId: PT_USER_ID })).renamed).toEqual([]);
+  });
+
+  it("leaves an English-speaking user's categories alone", async () => {
+    await resetUser(TEST_USER_ID, "en");
+    await ensureSystemCategories(TEST_USER_ID, db);
+    const result = await localizeSystemCategories(db, { userId: TEST_USER_ID });
+    expect(result).toEqual({ renamed: [], conflicts: [] });
   });
 });

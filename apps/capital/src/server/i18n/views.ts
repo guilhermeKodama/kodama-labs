@@ -62,3 +62,9 @@ export const views = defineDictionary(
     },
   }
 );
+
+type SeededViewNames = (typeof views)["pt-BR"];
+/** Seed keys (SavedView.seedKey) per dataset; `views.<dataset>.<seedKey>` is each seeded view's name. */
+export type LedgerViewSeedKey = keyof SeededViewNames["ledger"];
+export type HoldingsViewSeedKey = keyof SeededViewNames["holdings"];
+export type InvestmentOpsViewSeedKey = keyof SeededViewNames["investment_ops"];

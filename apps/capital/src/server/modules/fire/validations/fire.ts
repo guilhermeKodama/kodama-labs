@@ -195,10 +195,6 @@ export const SnapshotUpsertSchema = z.object({
   currentMonthlyExpenses: z.number().nonnegative().optional(),
 });
 
-export const ErrorResponseSchema = z.object({
-  error: z.object({ code: z.string(), message: z.string() }),
-});
-
 export type FireGoalInput = z.infer<typeof FireGoalInputSchema>;
 export type FirePhaseInput = z.infer<typeof PhaseSchema>;
 export type MilestoneInput = z.infer<typeof MilestoneSchema>;
