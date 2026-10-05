@@ -67,6 +67,7 @@ export async function ensureStatement(
     throw new LedgerError(
       "Statements only exist for credit card accounts",
       422,
+      { code: "account.not_credit_card" },
     );
   const closingDay = account.closingDay ?? 1;
   const existing = await db.cardStatement.findUnique({
@@ -134,9 +135,13 @@ export async function markStatementPayment(
       }),
     ]);
     if (!entry)
-      throw new LedgerError("Transaction not found or access denied", 404);
+      throw new LedgerError("Transaction not found or access denied", 404, {
+        code: "entry.not_found",
+      });
     if (!statement)
-      throw new LedgerError("Statement not found or access denied", 404);
+      throw new LedgerError("Statement not found or access denied", 404, {
+        code: "statement.not_found",
+      });
     if (
       statement.paymentGroupId &&
       statement.paymentGroupId !== entry.transferGroupId
@@ -144,6 +149,7 @@ export async function markStatementPayment(
       throw new LedgerError(
         "Statement already has a different bill payment transaction linked",
         409,
+        { code: "statement.payment_conflict" },
       );
     }
     if (entry.transferGroupId) {
@@ -154,17 +160,20 @@ export async function markStatementPayment(
         throw new LedgerError(
           "Transaction is already linked as a bill payment on another statement",
           409,
+          { code: "statement.entry_linked_elsewhere" },
         );
       if (other) return { statement: other, groupId: entry.transferGroupId };
       throw new LedgerError(
         "Transaction is a transfer and cannot be a card settlement",
         422,
+        { code: "statement.transfer_not_settlement" },
       );
     }
     if (entry.kind !== "expense")
       throw new LedgerError(
         "Only an expense transaction can be marked as a card settlement",
         422,
+        { code: "statement.settlement_requires_expense" },
       );
 
     const group = await db.transferGroup.create({
@@ -224,11 +233,14 @@ export async function unmarkStatementPayment(
       where: { id: entryId, userId },
     });
     if (!entry)
-      throw new LedgerError("Transaction not found or access denied", 404);
+      throw new LedgerError("Transaction not found or access denied", 404, {
+        code: "entry.not_found",
+      });
     if (!entry.transferGroupId)
       throw new LedgerError(
         "Transaction is not linked as a card settlement",
         422,
+        { code: "statement.not_settlement" },
       );
     const statement = await db.cardStatement.findFirst({
       where: { paymentGroupId: entry.transferGroupId },
@@ -240,6 +252,7 @@ export async function unmarkStatementPayment(
       throw new LedgerError(
         "Transaction is not linked as a card settlement",
         422,
+        { code: "statement.not_settlement" },
       );
     if (statement)
       await db.cardStatement.update({
@@ -272,7 +285,7 @@ export async function updateStatementDates(
     const statement = await db.cardStatement.findFirst({
       where: { id: statementId, account: { userId } },
     });
-    if (!statement) throw new LedgerError("Statement not found or access denied", 404);
+    if (!statement) throw new LedgerError("Statement not found or access denied", 404, { code: "statement.not_found" });
     const updated = await db.cardStatement.update({
       where: { id: statementId },
       data: {

@@ -80,7 +80,7 @@ export async function createRule(userId: string, input: RuleInput, db: DbClient)
     try {
       new RegExp(input.pattern);
     } catch {
-      throw new LedgerError("Invalid regular expression", 422);
+      throw new LedgerError("Invalid regular expression", 422, { code: "rule.invalid_regex" });
     }
   }
   const pattern = input.matchType === "equals" ? normalizeDescription(input.pattern) : input.pattern;
@@ -91,20 +91,20 @@ export async function createRule(userId: string, input: RuleInput, db: DbClient)
 
 export async function updateRule(userId: string, ruleId: string, patch: Partial<RuleInput>, db: DbClient) {
   const rule = await db.categorizationRule.findFirst({ where: { id: ruleId, userId } });
-  if (!rule) throw new LedgerError("Rule not found", 404);
+  if (!rule) throw new LedgerError("Rule not found", 404, { code: "rule.not_found" });
   if (patch.categoryId) await assertCategory(userId, patch.categoryId, db);
   return db.categorizationRule.update({ where: { id: ruleId }, data: patch });
 }
 
 export async function deleteRule(userId: string, ruleId: string, db: DbClient) {
   const { count } = await db.categorizationRule.deleteMany({ where: { id: ruleId, userId } });
-  if (!count) throw new LedgerError("Rule not found", 404);
+  if (!count) throw new LedgerError("Rule not found", 404, { code: "rule.not_found" });
 }
 
 async function assertCategory(userId: string, categoryId: string, db: DbClient) {
   const category = await db.category.findFirst({ where: { id: categoryId, userId } });
-  if (!category) throw new LedgerError("Category not found", 404);
-  if (category.isArchived) throw new LedgerError(`Category "${category.name}" is archived`, 422);
+  if (!category) throw new LedgerError("Category not found", 404, { code: "category.not_found" });
+  if (category.isArchived) throw new LedgerError(`Category "${category.name}" is archived`, 422, { code: "category.archived", params: { name: category.name } });
   return category;
 }
 

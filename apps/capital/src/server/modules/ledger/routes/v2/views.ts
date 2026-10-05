@@ -1,0 +1,29 @@
+import { createRoute, z } from "@hono/zod-openapi";
+import { createRouter } from "@capital/server/lib/router";
+import { prisma } from "@capital/server/lib/prisma";
+import { idParams, jsonBody, v2Handler, v2Responses } from "@capital/server/lib/v2";
+import { savedViewInputSchema, savedViewPatchSchema } from "../../contracts";
+import { createView, deleteView, duplicateView, listViews, reorderViews, updateView } from "../../services/views";
+
+const tags = ["Ledger v2"];
+
+const listViewsRoute = createRoute({ method: "get", path: "/v2/views", tags, summary: "Saved views", request: { query: z.object({ dataset: z.string().optional() }) }, responses: v2Responses });
+const createViewRoute = createRoute({ method: "post", path: "/v2/views", tags, summary: "Create a view", request: jsonBody(savedViewInputSchema), responses: v2Responses });
+const patchViewRoute = createRoute({ method: "patch", path: "/v2/views/{id}", tags, summary: "Update a view (auto-save)", request: { params: idParams, ...jsonBody(savedViewPatchSchema) }, responses: v2Responses });
+const deleteViewRoute = createRoute({ method: "delete", path: "/v2/views/{id}", tags, summary: "Delete a view", request: { params: idParams }, responses: v2Responses });
+const duplicateViewRoute = createRoute({ method: "post", path: "/v2/views/{id}/duplicate", tags, summary: "Duplicate a view", request: { params: idParams, ...jsonBody(z.object({ name: z.string().optional() })) }, responses: v2Responses });
+const reorderViewsRoute = createRoute({ method: "put", path: "/v2/views/order", tags, summary: "Reorder views", request: jsonBody(z.object({ ids: z.array(z.string()).min(1) })), responses: v2Responses });
+
+export const ledgerViewRoutes = createRouter()
+  .openapi(listViewsRoute, v2Handler(listViewsRoute, (c, userId) => listViews(userId, prisma, c.req.valid("query").dataset)))
+  .openapi(createViewRoute, v2Handler(createViewRoute, (c, userId) => createView(userId, c.req.valid("json"), prisma)))
+  .openapi(patchViewRoute, v2Handler(patchViewRoute, (c, userId) => updateView(userId, c.req.valid("param").id, c.req.valid("json"), prisma)))
+  .openapi(
+    deleteViewRoute,
+    v2Handler(deleteViewRoute, async (c, userId) => {
+      await deleteView(userId, c.req.valid("param").id, prisma);
+      return { ok: true };
+    })
+  )
+  .openapi(duplicateViewRoute, v2Handler(duplicateViewRoute, (c, userId) => duplicateView(userId, c.req.valid("param").id, prisma, c.req.valid("json").name)))
+  .openapi(reorderViewsRoute, v2Handler(reorderViewsRoute, (c, userId) => reorderViews(userId, c.req.valid("json").ids, prisma)));

@@ -29,13 +29,13 @@ export interface HoldingInput {
 
 async function brokerage(userId: string, accountId: string, db: DbClient) {
   const account = await getOwnedAccount(userId, accountId, db);
-  if (account.type !== "brokerage") throw new LedgerError("Holdings live on brokerage accounts", 422);
+  if (account.type !== "brokerage") throw new LedgerError("Holdings live on brokerage accounts", 422, { code: "holding.requires_brokerage" });
   return account;
 }
 
 export async function getOwnedHolding(userId: string, holdingId: string, db: DbClient) {
   const holding = await db.investmentHolding.findFirst({ where: { id: holdingId, account: { userId } }, include: { account: true } });
-  if (!holding) throw new LedgerError("Holding not found or access denied", 404);
+  if (!holding) throw new LedgerError("Holding not found or access denied", 404, { code: "holding.not_found" });
   return holding;
 }
 
@@ -280,7 +280,7 @@ export async function recordOperation(userId: string, input: OperationInput, db:
 export async function updateOperation(userId: string, operationId: string, patch: Partial<Omit<OperationInput, "holdingId" | "fundFromAccountId">>, db: DbClient) {
   return inTransaction(db, async (tx) => {
     const op = await tx.investmentOperation.findFirst({ where: { id: operationId, holding: { account: { userId } } }, include: { holding: { include: { account: true } } } });
-    if (!op) throw notFound("Investment operation");
+    if (!op) throw notFound("Investment operation", "operation.not_found");
     const merged = {
       type: patch.type ?? op.type,
       totalAmount: patch.totalAmount ?? op.totalAmount,
@@ -321,7 +321,7 @@ export async function updateOperation(userId: string, operationId: string, patch
 export async function deleteOperation(userId: string, operationId: string, db: DbClient) {
   return inTransaction(db, async (tx) => {
     const op = await tx.investmentOperation.findFirst({ where: { id: operationId, holding: { account: { userId } } } });
-    if (!op) throw notFound("Investment operation");
+    if (!op) throw notFound("Investment operation", "operation.not_found");
     await tx.investmentOperation.delete({ where: { id: op.id } });
     if (op.cashEntryId) await tx.ledgerEntry.deleteMany({ where: { id: op.cashEntryId } });
     await recalculateHolding(op.holdingId, tx);
@@ -400,7 +400,7 @@ export async function moveBrokerageCash(
     const checking = input.counterpartAccountId ? await getOwnedAccount(userId, input.counterpartAccountId, tx) : await getDefaultAccount(entity, tx);
     if (input.direction === "withdraw") {
       const balances = await accountBalances(userId, tx, [broker.id]);
-      if ((balances.get(broker.id) ?? 0) + 1e-9 < input.amount) throw new LedgerError("Insufficient cash balance in investment account", 422);
+      if ((balances.get(broker.id) ?? 0) + 1e-9 < input.amount) throw new LedgerError("Insufficient cash balance in investment account", 422, { code: "brokerage.insufficient_cash" });
     }
     const from = input.direction === "deposit" ? checking.id : broker.id;
     const to = input.direction === "deposit" ? broker.id : checking.id;
@@ -493,7 +493,7 @@ export async function setTargets(userId: string, input: TargetInput[], db: DbCli
     : null;
   const targets = toAllocationTargets(input, etfCurrency);
   const total = targets.reduce((s, t) => s + t.targetPercent, 0);
-  if (Math.abs(total - 1) > 0.0001 && Math.abs(total - 100) > 0.01) throw new LedgerError("Targets must add up to 100%", 422);
+  if (Math.abs(total - 1) > 0.0001 && Math.abs(total - 100) > 0.01) throw new LedgerError("Targets must add up to 100%", 422, { code: "portfolio.targets_sum" });
   const scale = total > 1.5 ? 100 : 1;
   return inTransaction(db, async (tx) => {
     await tx.portfolioTarget.deleteMany({ where: { userId } });
@@ -508,10 +508,10 @@ export async function setTargets(userId: string, input: TargetInput[], db: DbCli
  * its holdings in proportion to their current value.
  */
 export async function rebalanceSuggestion(userId: string, amount: number, mode: "class" | "asset", db: DbClient) {
-  if (!(amount > 0)) throw new LedgerError("Amount must be positive", 422);
+  if (!(amount > 0)) throw new LedgerError("Amount must be positive", 422, { code: "rebalance.invalid_amount" });
   const summary = await portfolioSummary(userId, db);
   const targets = await getTargets(userId, db);
-  if (!targets.length) throw new LedgerError("Set allocation targets first", 422);
+  if (!targets.length) throw new LedgerError("Set allocation targets first", 422, { code: "rebalance.no_targets" });
   const total = summary.marketValue;
   const after = total + amount;
   const current = new Map(summary.allocation.map((a) => [a.allocationClass, a.marketValue]));

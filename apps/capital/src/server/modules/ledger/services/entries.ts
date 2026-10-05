@@ -3,6 +3,8 @@ import type { DbClient } from "@capital/server/lib/prisma";
 import { Prisma } from "@/generated/prisma";
 import type { Account, Entity, LedgerEntry, LedgerKind, TransferDirection } from "@/generated/prisma";
 import { parseLocalDate } from "@capital/server/lib/date-utils";
+import { st, type Locale } from "@capital/server/i18n";
+import { loadUserLocale } from "@capital/server/i18n/user-locale";
 import type { CreateEntryInput, EntryPatch } from "../contracts";
 import { LedgerError, notFound } from "../lib/errors";
 import { loadFx, type FxContext } from "../lib/fx";
@@ -40,13 +42,13 @@ export interface WriteResult {
 
 async function assertAssignableCategory(userId: string, categoryId: string, db: DbClient) {
   const category = await db.category.findFirst({ where: { id: categoryId, userId } });
-  if (!category) throw new LedgerError("Category not found", 404);
-  if (category.isArchived) throw new LedgerError(`Category "${category.name}" is archived and cannot be assigned`, 422);
+  if (!category) throw new LedgerError("Category not found", 404, { code: "category.not_found" });
+  if (category.isArchived) throw new LedgerError(`Category "${category.name}" is archived and cannot be assigned`, 422, { code: "category.archived", params: { name: category.name } });
   return category;
 }
 
 function assertWritableAccount(account: Account) {
-  if (account.archivedAt) throw new LedgerError(`Account "${account.name}" is archived`, 422);
+  if (account.archivedAt) throw new LedgerError(`Account "${account.name}" is archived`, 422, { code: "account.archived", params: { name: account.name } });
 }
 
 async function effectiveDateFor(account: Account, date: Date, db: DbClient, statementMonth?: string) {
@@ -186,13 +188,13 @@ async function createTransferIn(
   opts: WriteOptions,
   records: MutationRecordInput[]
 ): Promise<Omit<WriteResult, "batchId">> {
-  if (input.fromAccountId === input.toAccountId) throw new LedgerError("A transfer needs two different accounts", 422);
+  if (input.fromAccountId === input.toAccountId) throw new LedgerError("A transfer needs two different accounts", 422, { code: "transfer.same_account" });
   const [from, to] = await Promise.all([
     tx.account.findFirst({ where: { id: input.fromAccountId, userId }, include: { entity: true } }),
     tx.account.findFirst({ where: { id: input.toAccountId, userId }, include: { entity: true } }),
   ]);
-  if (!from) throw notFound("Source account");
-  if (!to) throw notFound("Destination account");
+  if (!from) throw notFound("Source account", "transfer.from_account_not_found");
+  if (!to) throw notFound("Destination account", "transfer.to_account_not_found");
   assertWritableAccount(from);
   assertWritableAccount(to);
 
@@ -213,7 +215,7 @@ async function createTransferIn(
     toAmount = input.toAmount ?? round(-fromBase / fx.rateFor(to.currency), 2);
     toRate = toAmount ? -fromBase / toAmount : 1;
   }
-  const description = input.description ?? defaultTransferDescription(direction, from, to);
+  const description = input.description ?? defaultTransferDescription(await loadUserLocale(userId, tx), direction, from, to);
 
   const group = await tx.transferGroup.create({
     data: {
@@ -283,18 +285,9 @@ async function createTransferIn(
   return { entryIds: [fromLeg.id, toLeg.id], transferGroupId: group.id };
 }
 
-const DIRECTION_LABELS: Record<TransferDirection, string> = {
-  profit_distribution: "Distribuição de lucros",
-  capital_injection: "Aporte de capital",
-  reimbursement: "Reembolso",
-  investment_deposit: "Aporte em investimento",
-  investment_withdrawal: "Resgate de investimento",
-  card_payment: "Pagamento de fatura",
-  between_accounts: "Transferência entre contas",
-};
-
-function defaultTransferDescription(direction: TransferDirection, from: Account, to: Account) {
-  return `${DIRECTION_LABELS[direction]}: ${from.name} → ${to.name}`;
+/** "Distribuição de lucros: Kodama LTDA → PF", in the user's locale. */
+function defaultTransferDescription(locale: Locale, direction: TransferDirection, from: Account, to: Account) {
+  return st(locale, "ledger.transferDescription", { direction: st(locale, `ledger.direction.${direction}`), from: from.name, to: to.name });
 }
 
 // ---------------------------------------------------------------------------
@@ -310,7 +303,7 @@ export async function updateEntry(userId: string, entryId: string, patch: Intern
     const records: MutationRecordInput[] = opts.collect ?? [];
     const fx = await loadFx(userId, tx);
     const entry = await tx.ledgerEntry.findFirst({ where: { id: entryId, userId, deletedAt: null } });
-    if (!entry) throw notFound("Transaction");
+    if (!entry) throw notFound("Transaction", "entry.not_found");
     if (entry.transferGroupId) await updateTransferIn(tx, userId, entry, patch, records);
     else await updateSimpleIn(tx, userId, entry, patch, fx, records);
     const batchId =
@@ -376,7 +369,7 @@ async function updateSimpleIn(
 
 async function updateTransferIn(tx: DbClient, userId: string, entry: LedgerEntry, patch: InternalPatch, records: MutationRecordInput[]) {
   const group = await tx.transferGroup.findUniqueOrThrow({ where: { id: entry.transferGroupId! }, include: { legs: true } });
-  if (patch.kind && patch.kind !== entry.kind) throw new LedgerError("Transfers cannot change type; delete and recreate instead", 422);
+  if (patch.kind && patch.kind !== entry.kind) throw new LedgerError("Transfers cannot change type; delete and recreate instead", 422, { code: "transfer.kind_change" });
   const date = patch.date ? parseLocalDate(patch.date) : group.date;
   const groupData = {
     ...(patch.date && { date }),
@@ -442,7 +435,7 @@ async function expandSelection(userId: string, ids: string[], tx: DbClient, incl
 export async function softDeleteEntries(userId: string, ids: string[], db: DbClient, opts: { summary?: string; record?: boolean } = {}) {
   return inTransaction(db, async (tx) => {
     const { entryIds, groupIds } = await expandSelection(userId, ids, tx);
-    if (!entryIds.length) throw notFound("Transaction");
+    if (!entryIds.length) throw notFound("Transaction", "entry.not_found");
     const now = new Date();
     const records: MutationRecordInput[] = [];
     const before = await tx.ledgerEntry.findMany({ where: { id: { in: entryIds } } });
@@ -561,6 +554,6 @@ export async function bulkUpdateEntries(userId: string, ids: string[], patch: Bu
 
 export async function getEntry(userId: string, id: string, db: DbClient) {
   const entry = await db.ledgerEntry.findFirst({ where: { id, userId }, include: ENTRY_CONTEXT_INCLUDE });
-  if (!entry) throw notFound("Transaction");
+  if (!entry) throw notFound("Transaction", "entry.not_found");
   return serializeEntry(entry);
 }

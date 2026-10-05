@@ -56,13 +56,13 @@ export function serializeRule(r: RecurringRule) {
 }
 
 async function validate(userId: string, input: Partial<RecurringRuleInput>, db: DbClient, currentCategoryId: string | null = null) {
-  if (input.amount !== undefined && !(input.amount > 0)) throw new LedgerError("Amount must be positive", 422);
-  if (input.kind === "transfer" && !input.toAccountId) throw new LedgerError("Recurring transfers need toAccountId", 422);
+  if (input.amount !== undefined && !(input.amount > 0)) throw new LedgerError("Amount must be positive", 422, { code: "recurring.invalid_amount" });
+  if (input.kind === "transfer" && !input.toAccountId) throw new LedgerError("Recurring transfers need toAccountId", 422, { code: "recurring.transfer_needs_destination" });
   if (input.toAccountId) await getOwnedAccount(userId, input.toAccountId, db);
   if (input.categoryId) {
     const c = await db.category.findFirst({ where: { id: input.categoryId, userId } });
-    if (!c) throw notFound("Category");
-    if (c.isArchived && c.id !== currentCategoryId) throw new LedgerError(`Category "${c.name}" is archived and cannot be assigned`, 422);
+    if (!c) throw notFound("Category", "category.not_found");
+    if (c.isArchived && c.id !== currentCategoryId) throw new LedgerError(`Category "${c.name}" is archived and cannot be assigned`, 422, { code: "category.archived", params: { name: c.name } });
   }
   if (input.reminders) remindersConfigSchema.parse(input.reminders);
 }
@@ -96,7 +96,7 @@ export async function createRecurringRule(userId: string, input: RecurringRuleIn
 
 export async function updateRecurringRule(userId: string, ruleId: string, patch: Partial<RecurringRuleInput> & { isActive?: boolean; nextDueDate?: string }, db: DbClient) {
   const rule = await db.recurringRule.findFirst({ where: { id: ruleId, userId } });
-  if (!rule) throw notFound("Recurring rule");
+  if (!rule) throw notFound("Recurring rule", "recurring.not_found");
   await validate(userId, { ...patch, kind: patch.kind ?? rule.kind, toAccountId: patch.toAccountId ?? rule.toAccountId }, db, rule.categoryId);
   const account = patch.accountId ? await getOwnedAccount(userId, patch.accountId, db) : null;
   return db.recurringRule.update({
@@ -124,7 +124,7 @@ export async function updateRecurringRule(userId: string, ruleId: string, patch:
 
 export async function deleteRecurringRule(userId: string, ruleId: string, db: DbClient) {
   const { count } = await db.recurringRule.deleteMany({ where: { id: ruleId, userId } });
-  if (!count) throw notFound("Recurring rule");
+  if (!count) throw notFound("Recurring rule", "recurring.not_found");
 }
 
 export async function listRecurringRules(userId: string, db: DbClient, opts: { includeInactive?: boolean; entityId?: string } = {}) {
@@ -192,7 +192,7 @@ export async function materializeRule(rule: RecurringRule, date: Date, db: DbCli
 export async function markRulePaid(userId: string, ruleId: string, db: DbClient, opts: { date?: string; amount?: number } = {}) {
   return inTransaction(db, async (tx) => {
     const rule = await tx.recurringRule.findFirst({ where: { id: ruleId, userId } });
-    if (!rule) throw notFound("Recurring rule");
+    if (!rule) throw notFound("Recurring rule", "recurring.not_found");
     const date = opts.date ? parseLocalDate(opts.date) : rule.nextDueDate;
     const result = await materializeRule(rule, date, tx, { amount: opts.amount });
     const updated = await tx.recurringRule.update({
@@ -205,7 +205,7 @@ export async function markRulePaid(userId: string, ruleId: string, db: DbClient,
 
 export async function skipRuleOccurrence(userId: string, ruleId: string, db: DbClient) {
   const rule = await db.recurringRule.findFirst({ where: { id: ruleId, userId } });
-  if (!rule) throw notFound("Recurring rule");
+  if (!rule) throw notFound("Recurring rule", "recurring.not_found");
   return db.recurringRule.update({ where: { id: rule.id }, data: { nextDueDate: getNextOccurrence(rule.nextDueDate, rule.frequency) } });
 }
 

@@ -29,8 +29,8 @@ export interface ExecuteRevertResult {
 export async function executeRevert(userId: string, payload: RevertPlanPayload, db: PrismaClient): Promise<ExecuteRevertResult> {
   return inTransaction(db, async (tx) => {
     const imp = await tx.import.findFirst({ where: { id: payload.statementImportId, userId } });
-    if (!imp) throw new LedgerError("Statement import not found or access denied", 404);
-    if (imp.revertedAt) throw new LedgerError("This import was already reverted", 409);
+    if (!imp) throw new LedgerError("Statement import not found or access denied", 404, { code: "import.not_found" });
+    if (imp.revertedAt) throw new LedgerError("This import was already reverted", 409, { code: "import.already_reverted" });
     const ids = (...models: string[]) => payload.createdRecords.filter((r) => models.includes(r.model)).map((r) => r.id);
 
     const opIds = ids("InvestmentOperation", "InvestmentTransaction");

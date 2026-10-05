@@ -68,8 +68,8 @@ function restoreData(snap: Record<string, unknown>): Record<string, unknown> {
 export async function undoBatch(userId: string, batchId: string, db: DbClient) {
   return inTransaction(db, async (tx) => {
     const batch = await tx.mutationBatch.findFirst({ where: { id: batchId, userId }, include: { records: true } });
-    if (!batch) throw new LedgerError("Mutation batch not found", 404);
-    if (batch.undoneAt) throw new LedgerError("Batch already undone", 409);
+    if (!batch) throw new LedgerError("Mutation batch not found", 404, { code: "undo.not_found" });
+    if (batch.undoneAt) throw new LedgerError("Batch already undone", 409, { code: "undo.already_undone" });
 
     const touched = batch.records.map((r) => r.recordId);
     const newer = await tx.mutationRecord.findFirst({
@@ -78,7 +78,7 @@ export async function undoBatch(userId: string, batchId: string, db: DbClient) {
         batch: { userId, createdAt: { gt: batch.createdAt }, undoneAt: null },
       },
     });
-    if (newer) throw new LedgerError("A newer change touched these rows; undo it first", 409);
+    if (newer) throw new LedgerError("A newer change touched these rows; undo it first", 409, { code: "undo.newer_change" });
 
     const ordered = [...batch.records].reverse();
     // Created rows: drop entries before their groups.

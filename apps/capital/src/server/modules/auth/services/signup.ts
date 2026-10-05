@@ -23,7 +23,7 @@ const DEFAULT_CURRENCIES = [
 /** A new user starts with the PF entity and its main account, the system categories, currencies and the "Todas" view. */
 export async function signup(input: SignupInput, prisma: PrismaClient) {
   const existingUser = await prisma.user.findUnique({ where: { email: input.email } });
-  if (existingUser) throw new LedgerError("User with this email already exists", 409);
+  if (existingUser) throw new LedgerError("User with this email already exists", 409, { code: "auth.email_taken" });
   const passwordHash = await hashPassword(input.password);
 
   return prisma.$transaction(async (tx) => {

@@ -1,7 +1,7 @@
 import { getCookie } from "hono/cookie";
-import { HTTPException } from "hono/http-exception";
 import type { Context, MiddlewareHandler } from "hono";
 
+import { HttpError } from "./http-error";
 import { prisma } from "./prisma";
 import { validateSession } from "../modules/auth/services/session";
 import type { AppBindings } from "../types";
@@ -16,17 +16,13 @@ export const authMiddleware: MiddlewareHandler<AppBindings> = async (c, next) =>
   const sessionId = getCookie(c, SESSION_COOKIE_NAME);
 
   if (!sessionId) {
-    throw new HTTPException(401, {
-      message: "Authentication required",
-    });
+    throw new HttpError(401, "Authentication required", { code: "auth.required" });
   }
 
   const session = await validateSession(sessionId, prisma);
 
   if (!session) {
-    throw new HTTPException(401, {
-      message: "Session expired or invalid",
-    });
+    throw new HttpError(401, "Session expired or invalid", { code: "auth.session_invalid" });
   }
 
   // Set userId in context for use by route handlers
@@ -44,9 +40,7 @@ export function requireUserId(c: Context<AppBindings>): string {
   const userId = c.get("userId");
 
   if (!userId) {
-    throw new HTTPException(401, {
-      message: "Authentication required",
-    });
+    throw new HttpError(401, "Authentication required", { code: "auth.required" });
   }
 
   return userId;

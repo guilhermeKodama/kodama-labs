@@ -25,7 +25,7 @@ export async function analyzeStatement(userId: string, files: { content: string 
     try {
       parsed = parseOfxContent(file.content);
     } catch (err) {
-      throw new LedgerError(err instanceof Error ? err.message : "Invalid OFX file", 400);
+      throw new LedgerError(err instanceof Error ? err.message : "Invalid OFX file", 400, { code: "import.invalid_file" });
     }
     bankName ||= parsed.bankName;
     accountId ||= parsed.account.accountId;

@@ -71,8 +71,8 @@ export async function importCardStatement(userId: string, input: ImportCardState
   return inTransaction(db, async (tx) => {
     await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${input.accountId}), hashtext(${input.month}))::text`;
     const account = await tx.account.findFirst({ where: { id: input.accountId, userId } });
-    if (!account) throw new LedgerError("Credit card not found or access denied", 404);
-    if (account.type !== "credit_card") throw new LedgerError("Account is not a credit card", 422);
+    if (!account) throw new LedgerError("Credit card not found or access denied", 404, { code: "account.not_found" });
+    if (account.type !== "credit_card") throw new LedgerError("Account is not a credit card", 422, { code: "account.not_credit_card" });
 
     const statement = await ensureStatement(account, input.month, tx, {
       ...(input.closingDate && { closingDate: parseLocalDate(input.closingDate) }),
@@ -90,14 +90,17 @@ export async function importCardStatement(userId: string, input: ImportCardState
     const resolve = (row: StatementRowInput): { categoryId: string | null; auto: boolean } => {
       if (row.categoryId) {
         const c = categories.find((x) => x.id === row.categoryId);
-        if (!c) throw new LedgerError(`Category ${row.categoryId} not found or access denied`, 404);
-        if (c.isArchived) throw new LedgerError(`Category '${c.name}' is archived and cannot be assigned. Unarchive it or choose a visible category.`, 422);
+        if (!c) throw new LedgerError(`Category ${row.categoryId} not found or access denied`, 404, { code: "category.not_found" });
+        if (c.isArchived) {
+          throw new LedgerError(`Category '${c.name}' is archived and cannot be assigned. Unarchive it or choose a visible category.`, 422, { code: "category.archived", params: { name: c.name } });
+        }
         return { categoryId: c.id, auto: false };
       }
       if (row.category) {
         const matched = matchCategoryName(row.category, expense, "expense");
         if (matched.archived) {
-          throw new LedgerError(`Category '${matched.canonicalName ?? row.category}' is archived and cannot be assigned. Unarchive it or choose a visible category.`, 422);
+          const name = matched.canonicalName ?? row.category;
+          throw new LedgerError(`Category '${name}' is archived and cannot be assigned. Unarchive it or choose a visible category.`, 422, { code: "category.archived", params: { name } });
         }
         if (matched.canonicalName) return { categoryId: expense.find((c) => c.name === matched.canonicalName)!.id, auto: false };
       }
@@ -242,7 +245,7 @@ export function calculateBillTotal(parsed: ParsedTransaction[], closingDate: Dat
 /** Parse a card bill file (CSV or card OFX) into statement rows. */
 export function parseCardFile(content: string): ParsedTransaction[] {
   const parsed = /<CCSTMTRS>/i.test(content.slice(0, 4096)) ? parseOfxCreditCardContent(content).transactions : parseCsvContent(content);
-  if (!parsed.length) throw new LedgerError("No valid transactions found in the bill file", 422);
+  if (!parsed.length) throw new LedgerError("No valid transactions found in the bill file", 422, { code: "import.no_transactions" });
   return parsed;
 }
 

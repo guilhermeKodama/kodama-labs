@@ -1,4 +1,5 @@
 import type { DbClient } from "@capital/server/lib/prisma";
+import { LedgerError } from "./errors";
 
 export interface FxContext {
   baseCurrency: string;
@@ -16,7 +17,7 @@ export async function loadFx(userId: string, db: DbClient): Promise<FxContext> {
     db.user.findUnique({ where: { id: userId }, select: { baseCurrency: true } }),
     db.currency.findMany({ where: { userId }, select: { code: true, manualRate: true } }),
   ]);
-  if (!user) throw new Error("User not found");
+  if (!user) throw new LedgerError("User not found", 404, { code: "user.not_found" });
   const rates = new Map(currencies.map((c) => [c.code, c.manualRate]));
   return {
     baseCurrency: user.baseCurrency,

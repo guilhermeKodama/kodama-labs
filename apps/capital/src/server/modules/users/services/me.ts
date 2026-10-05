@@ -30,7 +30,7 @@ export function serializeUser(user: User) {
 /** Current user, preferences, and the entities the UI scopes by. */
 export async function getMe(userId: string, db: DbClient) {
   const user = await db.user.findUnique({ where: { id: userId } });
-  if (!user) throw new LedgerError("User not found", 404);
+  if (!user) throw new LedgerError("User not found", 404, { code: "user.not_found" });
   const personal = await getPersonalEntity(userId, db);
   const entities = await listEntities(userId, db);
   return {
@@ -47,12 +47,12 @@ export async function getMe(userId: string, db: DbClient) {
  */
 export async function updatePreferences(userId: string, patch: PreferencesPatch, db: DbClient, opts: { force?: boolean } = {}) {
   const user = await db.user.findUnique({ where: { id: userId } });
-  if (!user) throw new LedgerError("User not found", 404);
+  if (!user) throw new LedgerError("User not found", 404, { code: "user.not_found" });
   if (patch.timezone) {
     try {
       new Intl.DateTimeFormat("en-US", { timeZone: patch.timezone });
     } catch {
-      throw new LedgerError(`Unknown timezone '${patch.timezone}'`, 422);
+      throw new LedgerError(`Unknown timezone '${patch.timezone}'`, 422, { code: "user.invalid_timezone", params: { timezone: patch.timezone } });
     }
   }
   if (patch.baseCurrency && patch.baseCurrency !== user.baseCurrency) {
@@ -60,7 +60,8 @@ export async function updatePreferences(userId: string, patch: PreferencesPatch,
     if (entries > 0 && !opts.force) {
       throw new LedgerError(
         `User has ${entries} transaction(s). Base amounts are stored in the current base currency, so changing it makes historical totals wrong. Pass force: true to change it anyway.`,
-        409
+        409,
+        { code: "user.base_currency_locked", params: { count: entries } }
       );
     }
   }

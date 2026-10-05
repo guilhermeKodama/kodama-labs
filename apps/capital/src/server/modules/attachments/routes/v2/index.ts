@@ -46,11 +46,11 @@ export const v2Attachments = createRouter()
   .openapi(uploadRoute, v2Handler(uploadRoute, async (c, userId) => {
     const body = await c.req.parseBody();
     const file = body["file"];
-    if (!(file instanceof File)) throw new LedgerError("file is required", 400);
+    if (!(file instanceof File)) throw new LedgerError("file is required", 400, { code: "attachment.file_required" });
     const kind = kindSchema.safeParse(body["kind"]);
     const ownerType = ownerTypeSchema.safeParse(body["ownerType"]);
     const ownerId = body["ownerId"];
-    if (!kind.success || !ownerType.success || typeof ownerId !== "string" || !ownerId) throw new LedgerError("kind, ownerType and ownerId are required", 400);
+    if (!kind.success || !ownerType.success || typeof ownerId !== "string" || !ownerId) throw new LedgerError("kind, ownerType and ownerId are required", 400, { code: "attachment.fields_required" });
     const created = await uploadAttachment(
       userId,
       { kind: kind.data, ownerType: ownerType.data, ownerId, file: { buffer: Buffer.from(await file.arrayBuffer()), mimeType: file.type, originalName: file.name } },

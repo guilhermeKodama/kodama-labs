@@ -172,9 +172,9 @@ function groupKeySql(g: GroupKey): Prisma.Sql {
 function aggSql(agg: Aggregation): Prisma.Sql {
   const numeric = NUMERIC_SQL[agg.field];
   const any = numeric ?? CATEGORICAL_SQL[agg.field];
-  if (!any) throw new LedgerError(`Unknown aggregation field ${agg.field}`, 422);
+  if (!any) throw new LedgerError(`Unknown aggregation field ${agg.field}`, 422, { code: "query.unknown_aggregation_field", params: { field: agg.field } });
   if (["sum", "avg", "median", "min", "max"].includes(agg.fn) && !numeric) {
-    throw new LedgerError(`${agg.fn} needs a numeric field, got ${agg.field}`, 422);
+    throw new LedgerError(`${agg.fn} needs a numeric field, got ${agg.field}`, 422, { code: "query.aggregation_needs_numeric", params: { fn: agg.fn, field: agg.field } });
   }
   switch (agg.fn) {
     case "sum":
@@ -261,7 +261,7 @@ function decodeCursor(cursor?: string): number {
     const { o } = JSON.parse(Buffer.from(cursor, "base64url").toString("utf8"));
     return Number.isInteger(o) && o >= 0 ? o : 0;
   } catch {
-    throw new LedgerError("Invalid cursor", 422);
+    throw new LedgerError("Invalid cursor", 422, { code: "query.invalid_cursor" });
   }
 }
 
@@ -350,7 +350,7 @@ async function fetchRows(db: DbClient, where: Prisma.Sql, q: LedgerQuery) {
 
 async function userTimezone(userId: string, db: DbClient) {
   const user = await db.user.findUnique({ where: { id: userId }, select: { timezone: true } });
-  if (!user) throw new LedgerError("User not found", 404);
+  if (!user) throw new LedgerError("User not found", 404, { code: "user.not_found" });
   return user.timezone;
 }
 
@@ -418,7 +418,7 @@ export async function selectEntryIds(userId: string, selection: LedgerSelectionQ
   const timezone = await userTimezone(userId, db);
   const { sql: where } = buildWhere(userId, selection, timezone);
   const rows = await db.$queryRaw<{ id: string }[]>`SELECT le.id ${FROM} ${where} LIMIT ${cap + 1}`;
-  if (rows.length > cap) throw new LedgerError(`Selection matches more than ${cap} rows; narrow the filters`, 422);
+  if (rows.length > cap) throw new LedgerError(`Selection matches more than ${cap} rows; narrow the filters`, 422, { code: "query.selection_too_large", params: { cap } });
   return rows.map((r) => r.id);
 }
 

@@ -19,12 +19,12 @@ export interface BudgetInput {
 async function assertBudgetTargets(userId: string, input: { entityId?: string | null; categoryId?: string }, db: DbClient) {
   if (input.entityId) {
     const entity = await db.entity.findFirst({ where: { id: input.entityId, userId } });
-    if (!entity) throw notFound("Entity");
+    if (!entity) throw notFound("Entity", "entity.not_found");
   }
   if (input.categoryId) {
     const category = await db.category.findFirst({ where: { id: input.categoryId, userId } });
-    if (!category) throw notFound("Category");
-    if (category.isArchived) throw new LedgerError(`Category "${category.name}" is archived`, 422);
+    if (!category) throw notFound("Category", "category.not_found");
+    if (category.isArchived) throw new LedgerError(`Category "${category.name}" is archived`, 422, { code: "category.archived", params: { name: category.name } });
   }
 }
 
@@ -33,13 +33,13 @@ function effectiveDate(value: string) {
 }
 
 export async function createBudget(userId: string, input: BudgetInput, db: DbClient) {
-  if (input.amount < 0) throw new LedgerError("Budget amount must be non-negative", 422);
+  if (input.amount < 0) throw new LedgerError("Budget amount must be non-negative", 422, { code: "budget.negative_amount" });
   await assertBudgetTargets(userId, input, db);
   const effectiveFrom = effectiveDate(input.effectiveFrom);
   const clash = await db.budget.findFirst({
     where: { userId, entityId: input.entityId ?? null, categoryId: input.categoryId, effectiveFrom },
   });
-  if (clash?.isActive) throw new LedgerError("A budget for this category already starts in that month; update it instead", 409);
+  if (clash?.isActive) throw new LedgerError("A budget for this category already starts in that month; update it instead", 409, { code: "budget.clash" });
   if (clash) {
     return db.budget.update({
       where: { id: clash.id },
@@ -73,14 +73,14 @@ export async function updateBudget(
   db: DbClient
 ) {
   const budget = await db.budget.findFirst({ where: { id: budgetId, userId } });
-  if (!budget) throw notFound("Budget");
-  if (patch.amount !== undefined && patch.amount < 0) throw new LedgerError("Budget amount must be non-negative", 422);
+  if (!budget) throw notFound("Budget", "budget.not_found");
+  if (patch.amount !== undefined && patch.amount < 0) throw new LedgerError("Budget amount must be non-negative", 422, { code: "budget.negative_amount" });
   const effectiveFrom = patch.effectiveFrom ? effectiveDate(patch.effectiveFrom) : undefined;
   if (effectiveFrom) {
     const clash = await db.budget.findFirst({
       where: { userId, entityId: budget.entityId, categoryId: budget.categoryId, effectiveFrom, id: { not: budgetId } },
     });
-    if (clash) throw new LedgerError("Another budget for this category already starts in that month", 409);
+    if (clash) throw new LedgerError("Another budget for this category already starts in that month", 409, { code: "budget.clash" });
   }
   return db.budget.update({
     where: { id: budgetId },

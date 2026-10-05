@@ -52,6 +52,7 @@ describe("v2 domain routes", () => {
     await call("POST", "/v2/ledger/entries", { kind: "expense", accountId: f.pfChecking, amount: 10, date: "2026-08-01", description: "x" });
     const res = await call("PATCH", "/v2/me", { baseCurrency: "USD" });
     expect(res.status).toBe(409);
+    expect(await res.json()).toMatchObject({ code: "user.base_currency_locked", params: { count: 1 } });
     expect((await call("PATCH", "/v2/me", { timezone: "Europe/Lisbon" })).status).toBe(200);
   });
 
@@ -86,7 +87,9 @@ describe("v2 domain routes", () => {
       ["fixed_income", 0.4],
       ["br_stocks", 0.6],
     ]);
-    expect((await call("PUT", "/v2/portfolio/targets", { targets: [{ allocationClass: "stocks", targetPercent: 100 }] })).status).toBe(422);
+    const badTargets = await call("PUT", "/v2/portfolio/targets", { targets: [{ allocationClass: "stocks", targetPercent: 100 }] });
+    expect(badTargets.status).toBe(422);
+    expect(await badTargets.json()).toMatchObject({ code: "validation", issues: expect.arrayContaining([expect.objectContaining({ path: expect.stringMatching(/^targets\.0/) })]) });
     expect((await call("POST", "/v2/holdings", { accountId: f.pfChecking, assetClass: "etf", name: "X" })).status).toBe(422);
 
     const imports = await (await call("GET", "/v2/imports")).json();

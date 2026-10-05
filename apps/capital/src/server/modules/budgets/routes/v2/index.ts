@@ -58,7 +58,7 @@ export const v2Budgets = createRouter()
       return monthOverview(userId, y, m, prisma, { entityId: q.entityId });
     }
     if (q.year) return yearOverview(userId, Number(q.year), prisma, { entityId: q.entityId });
-    throw new LedgerError("Pass month=YYYY-MM or year=YYYY", 400);
+    throw new LedgerError("Pass month=YYYY-MM or year=YYYY", 400, { code: "budget.overview_period_required" });
   }))
   .openapi(createBudgetRoute, v2Handler(createBudgetRoute, async (c, userId) => serializeBudget(await createBudget(userId, c.req.valid("json"), prisma))))
   .openapi(patchRoute, v2Handler(patchRoute, async (c, userId) => serializeBudget(await updateBudget(userId, c.req.valid("param").id, c.req.valid("json"), prisma))))

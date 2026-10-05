@@ -1,11 +1,10 @@
 import { createRoute, z } from "@hono/zod-openapi";
 import { deleteCookie, getCookie, setCookie } from "hono/cookie";
-import { HTTPException } from "hono/http-exception";
 import type { Context } from "hono";
 import { createRouter } from "@capital/server/lib/router";
 import { prisma } from "@capital/server/lib/prisma";
-import { jsonBody, v2Handler, v2Responses } from "@capital/server/lib/v2";
-import { LedgerError } from "@capital/server/modules/ledger/lib/errors";
+import { HttpError } from "@capital/server/lib/http-error";
+import { jsonBody, toHttp, v2Handler, v2Responses } from "@capital/server/lib/v2";
 import { getMe, serializeUser, updatePreferences } from "@capital/server/modules/users/services/me";
 import { SESSION_COOKIE_NAME, SESSION_EXPIRY_DAYS } from "../../constants";
 import { login } from "../../services/login";
@@ -69,7 +68,7 @@ export const v2Auth = createRouter()
       setSessionCookie(c, await createSession(user.id, prisma));
       return c.json(serializeUser(user) as never, 200);
     } catch {
-      throw new HTTPException(401, { message: "Invalid email or password" });
+      throw new HttpError(401, "Invalid email or password", { code: "auth.invalid_credentials" });
     }
   })
   .openapi(signupRoute, async (c) => {
@@ -78,8 +77,7 @@ export const v2Auth = createRouter()
       setSessionCookie(c, await createSession(user.id, prisma));
       return c.json(serializeUser(user) as never, 200);
     } catch (err) {
-      if (err instanceof LedgerError) throw new HTTPException(err.status, { message: err.message });
-      throw err;
+      throw toHttp(err);
     }
   })
   .openapi(logoutRoute, async (c) => {
