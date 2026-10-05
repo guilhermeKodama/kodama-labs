@@ -8,6 +8,7 @@
 
 import "dotenv/config";
 import cron from "node-cron";
+import { pushHeartbeat } from "./heartbeat";
 import { CRON_APPS, readScheduleFile, scheduleFilePath, type CronJob } from "./schedules";
 
 interface AppConfig {
@@ -43,10 +44,7 @@ const APPS: AppConfig[] = ALL_APPS.filter((app) => enabledNames.includes(app.nam
 /**
  * Calls a cron endpoint
  */
-async function triggerCronEndpoint(
-  app: AppConfig,
-  path: string
-): Promise<void> {
+async function triggerCronEndpoint(app: AppConfig, path: string): Promise<boolean> {
   const url = `${app.baseUrl}${path}`;
   const timestamp = new Date().toISOString();
 
@@ -66,20 +64,18 @@ async function triggerCronEndpoint(
     if (response.ok) {
       const result = await response.json();
       console.log(`[Cron] [${timestamp}] ${app.name}${path} completed:`, result);
-    } else {
-      console.error(
-        `[Cron] [${timestamp}] ${app.name}${path} failed with status ${response.status}`
-      );
+      return true;
     }
+    console.error(`[Cron] [${timestamp}] ${app.name}${path} failed with status ${response.status}`);
+    return false;
   } catch (error) {
     // App might not be running yet
     if ((error as Error).cause?.toString().includes("ECONNREFUSED")) {
-      console.warn(
-        `[Cron] [${timestamp}] ${app.name} not running at ${app.baseUrl}`
-      );
+      console.warn(`[Cron] [${timestamp}] ${app.name} not running at ${app.baseUrl}`);
     } else {
       console.error(`[Cron] [${timestamp}] ${app.name}${path} error:`, error);
     }
+    return false;
   }
 }
 
@@ -114,7 +110,7 @@ function scheduleAppCrons(app: AppConfig): number {
     }
 
     cron.schedule(schedule, () => {
-      triggerCronEndpoint(app, path);
+      void triggerCronEndpoint(app, path).then((ok) => pushHeartbeat(app.name, path, ok));
     });
 
     console.log(`[Cron] Scheduled ${app.name}${path} → "${schedule}"`);

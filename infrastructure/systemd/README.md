@@ -15,6 +15,14 @@ deploy` is idempotent). Combined with `restart: always` on all services, this
 guarantees the stack is up regardless of prior state (manually stopped,
 crashed, or removed via `compose down`).
 
+User timers and this unit only keep running after logout when lingering is enabled. It already is on this host; confirm before relying on the disk timer:
+
+```bash
+loginctl show-user kodama -p Linger
+# expected: Linger=yes
+# if not: sudo loginctl enable-linger kodama
+```
+
 Install / update (no sudo — user units):
 
 ```bash
@@ -25,6 +33,17 @@ systemctl --user enable docker-desktop.service
 ```
 
 Check: `systemctl --user status kodama-labs` and `docker ps`.
+
+Disk usage is a separate user timer (it has to run on the host, not in the Docker Desktop VM):
+
+```bash
+cp infrastructure/systemd/kodama-disk-heartbeat.service infrastructure/systemd/kodama-disk-heartbeat.timer \
+  ~/.config/systemd/user/
+systemctl --user daemon-reload
+systemctl --user enable --now kodama-disk-heartbeat.timer
+```
+
+The script and the Kuma push monitor are documented in `infrastructure/monitoring/README.md`.
 
 Caveats:
 

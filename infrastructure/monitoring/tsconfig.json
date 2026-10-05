@@ -1,0 +1,11 @@
+{
+  "extends": "../../packages/typescript-config/base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "declaration": false,
+    "declarationMap": false,
+    "rootDir": "src",
+    "lib": ["es2022"]
+  },
+  "include": ["src/**/*.ts"]
+}
