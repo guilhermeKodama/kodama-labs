@@ -21,6 +21,7 @@ import {
   updateHolding,
   updateOperation,
 } from "../../services/portfolio";
+import { updateAllPrices } from "../../services/update-prices";
 
 const tags = ["Investments v2"];
 const day = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
@@ -109,6 +110,7 @@ const cashRoute = createRoute({
   ),
   responses: v2Responses,
 });
+const refreshPricesRoute = createRoute({ method: "post", path: "/v2/holdings/refresh-prices", tags, summary: "Fetch current market prices for the user's ticker holdings", responses: v2Responses });
 const summaryRoute = createRoute({ method: "get", path: "/v2/portfolio/summary", tags, summary: "Portfolio value, allocation and cash", request: { query: z.object({ entityId: z.string().optional() }) }, responses: v2Responses });
 const getTargetsRoute = createRoute({ method: "get", path: "/v2/portfolio/targets", tags, summary: "Target allocation by asset class", responses: v2Responses });
 const putTargetsRoute = createRoute({
@@ -172,6 +174,7 @@ export const v2Investments = createRouter()
   .openapi(patchOpRoute, v2Handler(patchOpRoute, async (c, userId) => updateOperation(userId, c.req.valid("param").id, c.req.valid("json"), prisma)))
   .openapi(deleteOpRoute, v2Handler(deleteOpRoute, async (c, userId) => deleteOperation(userId, c.req.valid("param").id, prisma)))
   .openapi(cashRoute, v2Handler(cashRoute, async (c, userId) => moveBrokerageCash(userId, c.req.valid("json"), prisma)))
+  .openapi(refreshPricesRoute, v2Handler(refreshPricesRoute, async (_c, userId) => updateAllPrices(prisma, { userId })))
   .openapi(summaryRoute, v2Handler(summaryRoute, async (c, userId) => portfolioSummary(userId, prisma, c.req.valid("query"))))
   .openapi(getTargetsRoute, v2Handler(getTargetsRoute, async (_c, userId) => ({ targets: await getTargets(userId, prisma) })))
   .openapi(putTargetsRoute, v2Handler(putTargetsRoute, async (c, userId) => ({ targets: await setTargets(userId, c.req.valid("json").targets, prisma) })))

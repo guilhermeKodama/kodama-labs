@@ -1,15 +1,22 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMemo, useRef, useState } from "react";
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { parseAsString, useQueryState } from "nuqs";
 import { toast } from "sonner";
-import type { LedgerFilter, LedgerQueryResult, LedgerRow, ViewConfig } from "@capital/server/modules/ledger/contracts";
-import { api, apiPatch, apiPost } from "@/lib/api";
-import { money, todayIso } from "@/lib/money";
-import { useAccounts, useCategories } from "@/lib/catalog";
-import { useSession } from "@/lib/session";
-import { AppFrame, Btn } from "@/components/shell/chrome";
+import type { LedgerFilter, LedgerQueryInput, LedgerQueryResult, LedgerSelectionQuery, ViewConfig } from "@capital/server/modules/ledger/contracts";
+import { useRouter } from "@/i18n/navigation";
+import { api, apiDelete, apiPatch, apiPost } from "@/lib/api";
+import { useNames } from "@/lib/catalog";
+import { AppFrame, Btn, TextInput } from "@/components/shell/chrome";
+import { BulkBar } from "./bulk-bar";
+import { EntryDialog, type QuickDraft } from "./entry-dialog";
+import { EntrySheet } from "./entry-sheet";
+import { filterLabel } from "./fields";
+import { BoardView, CalendarView, ChartView, PivotView, SankeyView } from "./layouts";
+import { selectionStats, toDisplayRows, type DisplayRow } from "./rows";
+import { LedgerTable } from "./table";
+import { DisplayMenu, FilterChips, PeriodControl, rangeLabel } from "./toolbar";
 
 interface SavedView {
   id: string;
@@ -19,212 +26,352 @@ interface SavedView {
   config: ViewConfig;
 }
 
-const PERIOD_LABEL: Record<string, string> = {
-  this_month: "Este mês",
-  last_month: "Mês passado",
-  last_3m: "3 meses",
-  ytd: "Ano",
-  last_12m: "12 meses",
-  all: "Tudo",
-};
+/** A temporary narrowing (click-through from a total), never saved into the view. */
+interface Drill {
+  label?: string;
+  filters: LedgerFilter[];
+  period?: ViewConfig["period"];
+}
+
+const LAYOUT_GLYPH: Record<string, string> = { table: "▦", pivot: "▤", chart: "▮", board: "▥", calendar: "▣" };
+
+function selectionOf(config: ViewConfig): LedgerSelectionQuery {
+  return { period: config.period, dateField: config.dateField, filters: config.filters, search: config.search || undefined, deleted: "exclude" };
+}
+
+function queryOf(config: ViewConfig, cursor?: string): LedgerQueryInput {
+  const base = { ...selectionOf(config), aggregations: [{ fn: "sum" as const, field: "amountBase" as const }, { fn: "count" as const, field: "amountBase" as const }], sort: config.sort };
+  switch (config.layout) {
+    case "pivot": {
+      const [rows, cols] = config.groupBy;
+      return { ...base, includeRows: false, groupBy: rows ? [rows] : [], ...(rows && cols ? { pivot: { rows, cols, measure: { fn: "sum", field: "amountBase" } } } : {}) };
+    }
+    case "chart":
+      if (config.chart.type === "sankey") return { ...base, includeRows: false, groupBy: [{ field: "kind" }, { field: "categoryId" }] };
+      return { ...base, includeRows: false, groupBy: [config.groupBy[0] ?? { field: "date", bucket: "month" }] };
+    case "calendar":
+      return { ...base, includeRows: true, groupBy: [], page: { limit: 500, cursor } };
+    case "board":
+      return { ...base, includeRows: true, groupBy: config.groupBy.slice(0, 1), page: { limit: 300, cursor } };
+    default:
+      return { ...base, includeRows: true, groupBy: config.groupBy, page: { limit: 200, cursor } };
+  }
+}
 
 export function TransactionsScreen() {
-  const session = useSession();
-  const accounts = useAccounts();
-  const categories = useCategories(true);
+  const names = useNames();
+  const router = useRouter();
   const queryClient = useQueryClient();
   const views = useQuery({ queryKey: ["views", "ledger"], queryFn: () => api<SavedView[]>("/api/v2/views?dataset=ledger") });
   const [viewId, setViewId] = useQueryState("view", parseAsString);
+  const [drillParam, setDrillParam] = useQueryState("drill", parseAsString);
   const [createParam, setCreateParam] = useQueryState("create", parseAsString);
-  const [search, setSearch] = useState("");
-  const [detail, setDetail] = useState<LedgerRow | null>(null);
-  const [selected, setSelected] = useState<string[]>([]);
-  const [creating, setCreating] = useState(false);
   const active = views.data?.find((view) => view.id === viewId) ?? views.data?.[0];
-  const [edits, setEdits] = useState<Record<string, { config: ViewConfig; filters: LedgerFilter[] }>>({});
-  const edited = active ? edits[active.id] : undefined;
-  const config = edited?.config ?? active?.config;
-  const filters = edited?.filters ?? active?.config.filters ?? [];
+  const [overrides, setOverrides] = useState<Record<string, ViewConfig>>({});
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [allInView, setAllInView] = useState(false);
+  const [detail, setDetail] = useState<DisplayRow | null>(null);
+  const [creating, setCreating] = useState(false);
+  const [displayOpen, setDisplayOpen] = useState(false);
+  const [search, setSearch] = useState<string | null>(null);
+  const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const save = useMutation({
-    mutationFn: (next: { config: ViewConfig; filters: LedgerFilter[] }) =>
-      apiPatch(`/api/v2/views/${active!.id}`, { config: { ...next.config, filters: active!.isBuiltin ? [] : next.filters } }),
+  const saved = active ? overrides[active.id] ?? active.config : null;
+  const drill = useMemo<Drill | null>(() => {
+    if (!drillParam) return null;
+    try {
+      return JSON.parse(drillParam) as Drill;
+    } catch {
+      return null;
+    }
+  }, [drillParam]);
+  const draft = useMemo<QuickDraft | null>(() => {
+    if (!createParam) return null;
+    try {
+      return JSON.parse(createParam) as QuickDraft;
+    } catch {
+      return null;
+    }
+  }, [createParam]);
+  const config: ViewConfig | null = saved
+    ? drill
+      ? { ...saved, filters: [...saved.filters, ...drill.filters], period: drill.period ?? saved.period, layout: "table" }
+      : saved
+    : null;
+
+  const patchView = useMutation({
+    mutationFn: (body: { id: string; patch: Record<string, unknown> }) => apiPatch<SavedView>(`/api/v2/views/${body.id}`, body.patch),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["views", "ledger"] }),
+    onError: (error: Error) => toast.error(error.message),
   });
 
-  function update(next: ViewConfig, nextFilters = filters) {
-    if (!active) return;
-    setEdits((current) => ({ ...current, [active.id]: { config: next, filters: nextFilters } }));
-    save.mutate({ config: next, filters: nextFilters });
+  function resetSelection() {
+    setSelected(new Set());
+    setAllInView(false);
   }
 
-  const result = useQuery({
-    queryKey: ["ledger", active?.id, config, filters, search],
+  /** Every display change auto-saves into the view; "Todas" keeps only display preferences server-side. */
+  function update(patch: Partial<ViewConfig>) {
+    if (!active || !saved) return;
+    const next = { ...saved, ...patch };
+    setOverrides((current) => ({ ...current, [active.id]: next }));
+    patchView.mutate({ id: active.id, patch: { config: next } });
+    resetSelection();
+  }
+
+  function onSearch(text: string) {
+    setSearch(text);
+    if (searchTimer.current) clearTimeout(searchTimer.current);
+    searchTimer.current = setTimeout(() => update({ search: text.trim() || undefined }), 350);
+  }
+
+  const result = useInfiniteQuery({
+    queryKey: ["ledger", "view", active?.id, config],
     enabled: !!config,
-    queryFn: () => apiPost<LedgerQueryResult>("/api/v2/ledger/query", {
-      period: config!.period,
-      dateField: config!.dateField,
-      filters,
-      search: search || undefined,
-      groupBy: config!.groupBy,
-      aggregations: [{ fn: "sum", field: "amountBase" }, { fn: "count", field: "amountBase" }],
-      sort: config!.sort,
-      includeRows: true,
-      page: { limit: 300 },
-    }),
+    initialPageParam: undefined as string | undefined,
+    queryFn: ({ pageParam }) => apiPost<LedgerQueryResult>("/api/v2/ledger/query", queryOf(config!, pageParam)),
+    getNextPageParam: (last) => (last.pageInfo.hasMore ? last.pageInfo.nextCursor ?? undefined : undefined),
   });
+  const first = result.data?.pages[0];
+  const rawRows = useMemo(() => result.data?.pages.flatMap((p) => p.rows) ?? [], [result.data]);
+  const rows = useMemo(() => toDisplayRows(rawRows, config?.transferDisplay ?? "group"), [rawRows, config?.transferDisplay]);
+  const selectedRows = rows.filter((row) => selected.has(row.id));
+  const totals = { count: first?.totals.count ?? 0, sum: first?.totals.values["sum:amountBase"] ?? 0 };
 
-  const names = useMemo(() => ({
-    entity: new Map((session.data?.entities ?? []).map((item) => [item.id, item.name])),
-    account: new Map((accounts.data ?? []).map((item) => [item.id, item.name])),
-    category: new Map((categories.data ?? []).map((item) => [item.id, item.name])),
-  }), [session.data, accounts.data, categories.data]);
+  async function bulk(op: Record<string, unknown>, message: string) {
+    const selection = allInView && config ? { query: selectionOf(config) } : { ids: selectedRows.flatMap((row) => row.legIds) };
+    try {
+      const res = await apiPost<{ batchId: string | null; affected: number }>("/api/v2/ledger/bulk", { ...op, selection });
+      await Promise.all([queryClient.invalidateQueries({ queryKey: ["ledger"] }), queryClient.invalidateQueries({ queryKey: ["budgets"] })]);
+      toast(`${message} · ${res.affected}`, {
+        action: res.batchId
+          ? {
+              label: "Desfazer",
+              onClick: () =>
+                void apiPost(`/api/v2/mutations/${res.batchId}/undo`, {})
+                  .then(() => queryClient.invalidateQueries({ queryKey: ["ledger"] }))
+                  .catch((error: Error) => toast.error(error.message)),
+            }
+          : undefined,
+      });
+      resetSelection();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Falhou");
+    }
+  }
 
-  const draft = useMemo(() => {
-    if (!createParam) return null;
-    try { return JSON.parse(createParam) as { description: string; amount: number; date: string }; } catch { return null; }
-  }, [createParam]);
+  async function removeRow(row: DisplayRow) {
+    setDetail(null);
+    try {
+      const res = await apiPost<{ batchId: string | null }>("/api/v2/ledger/bulk", { op: "delete", selection: { ids: row.legIds } });
+      await queryClient.invalidateQueries({ queryKey: ["ledger"] });
+      toast(`“${row.description}” foi para a lixeira`, {
+        action: res.batchId ? { label: "Desfazer", onClick: () => void apiPost(`/api/v2/mutations/${res.batchId}/undo`, {}).then(() => queryClient.invalidateQueries({ queryKey: ["ledger"] })) } : undefined,
+      });
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Falhou");
+    }
+  }
 
-  if (!config || !active) return <AppFrame crumbs={["Transações", "Lançamentos"]}>…</AppFrame>;
-  const period = "preset" in config.period ? config.period : { preset: "this_month" as const, offset: 0 };
-  const rows = result.data?.rows ?? [];
-  const currency = session.data?.baseCurrency ?? "BRL";
+  async function setCategory(row: DisplayRow, categoryId: string | null) {
+    try {
+      const res = await apiPatch<{ batchId: string | null }>(`/api/v2/ledger/entries/${row.id}`, { categoryId });
+      await queryClient.invalidateQueries({ queryKey: ["ledger"] });
+      toast(`Categoria de “${row.description}” alterada`, {
+        action: res.batchId ? { label: "Desfazer", onClick: () => void apiPost(`/api/v2/mutations/${res.batchId}/undo`, {}).then(() => queryClient.invalidateQueries({ queryKey: ["ledger"] })) } : undefined,
+      });
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Falhou");
+    }
+  }
+
+  async function newView() {
+    const view = await apiPost<SavedView>("/api/v2/views", { name: "Nova view", dataset: "ledger", isFavorite: true, config: {} });
+    await queryClient.invalidateQueries({ queryKey: ["views", "ledger"] });
+    void setViewId(view.id);
+    setDisplayOpen(true);
+  }
+
+  async function exportCsv() {
+    if (!config) return;
+    try {
+      const csv = await api<string>("/api/v2/ledger/export", { method: "POST", body: JSON.stringify({ query: selectionOf(config) }) });
+      const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `capital-${active?.name ?? "lancamentos"}.csv`;
+      link.click();
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Falha ao exportar");
+    }
+  }
+
+  function drillInto(filters: LedgerFilter[], period?: ViewConfig["period"]) {
+    resetSelection();
+    void setDrillParam(JSON.stringify({ filters, period }));
+  }
+
+  const tabs = (
+    <div className="flex h-[38px] shrink-0 items-center gap-0.5 overflow-x-auto border-b border-neutral-200 px-2.5">
+      {(views.data ?? []).map((view) => {
+        const on = view.id === active?.id;
+        return (
+          <button
+            key={view.id}
+            type="button"
+            onClick={() => {
+              void setViewId(view.id);
+              void setDrillParam(null);
+              resetSelection();
+              setSearch(null);
+            }}
+            className={`inline-flex h-full items-center gap-1.5 border-b-2 px-2 text-[12.5px] whitespace-nowrap ${on ? "border-neutral-950 font-medium text-neutral-950" : "border-transparent text-neutral-400 hover:text-neutral-700"}`}
+          >
+            <span className="text-[11px] text-neutral-400">{LAYOUT_GLYPH[view.config.layout] ?? "▦"}</span>
+            {view.name}
+            {view.isBuiltin ? <span className="text-[10px] text-neutral-300">fixa</span> : null}
+          </button>
+        );
+      })}
+      <button type="button" title="Nova view" onClick={() => void newView()} className="px-2 text-[14px] text-neutral-400 hover:text-neutral-700">
+        +
+      </button>
+    </div>
+  );
+
+  if (!active || !config || !saved) {
+    return (
+      <AppFrame crumbs={["Transações", "Lançamentos"]} subheader={tabs}>
+        <p className="text-[12.5px] text-neutral-400">{views.isError ? "Não foi possível carregar as views." : "Carregando…"}</p>
+      </AppFrame>
+    );
+  }
+
+  const searchValue = search ?? saved.search ?? "";
 
   return (
     <AppFrame
-      crumbs={["Transações", "Lançamentos"]}
+      crumbs={["Transações", active.name]}
+      subheader={tabs}
       actions={
         <>
-          <span className="inline-flex h-[26px] items-center overflow-hidden rounded-[6px] border border-neutral-300 text-[12px]">
-            <button type="button" className="px-2" onClick={() => update({ ...config, period: { preset: period.preset, offset: period.offset - 1 } })}>‹</button>
-            <span className="border-x border-neutral-200 px-2">{PERIOD_LABEL[period.preset]}</span>
-            <button type="button" className="px-2 disabled:text-neutral-300" disabled={period.offset >= 0} onClick={() => update({ ...config, period: { preset: period.preset, offset: period.offset + 1 } })}>›</button>
-          </span>
-          <Btn onClick={() => window.location.assign("/settings")}>Importar extrato</Btn>
+          <Btn onClick={() => router.push("/settings?page=imports")}>Importar extrato</Btn>
           <Btn primary onClick={() => setCreating(true)}>+ Nova</Btn>
         </>
       }
+      overlay={detail ? <EntrySheet key={detail.id} row={detail} names={names} onClose={() => setDetail(null)} onDelete={(row) => void removeRow(row)} /> : null}
     >
-      <div className="-mx-3.5 -mt-3.5 flex items-center gap-0.5 overflow-x-auto border-b border-neutral-200 px-2.5">
-        {(views.data ?? []).map((view) => (
-          <button key={view.id} type="button" onClick={() => void setViewId(view.id)} className={`inline-flex h-[38px] items-center px-2 text-[12.5px] whitespace-nowrap ${view.id === active.id ? "border-b-2 border-neutral-950 font-medium" : "text-neutral-400"}`}>
-            {view.name}
-          </button>
-        ))}
+      <div className="relative flex flex-wrap items-center gap-1.5">
+        <PeriodControl config={saved} label={rangeLabel(first?.range, "preset" in saved.period ? saved.period.preset : "")} onChange={(period) => update({ period })} />
+        <FilterChips filters={saved.filters} names={names} onChange={(filters) => update({ filters })} />
+        <span className="flex-1" />
+        <TextInput value={searchValue} onChange={onSearch} placeholder="Buscar nesta view…" className="w-[180px]" />
+        <span className="relative">
+          <Btn onClick={() => setDisplayOpen((v) => !v)}>Exibição</Btn>
+          <DisplayMenu
+            key={`${active.id}:${active.name}`}
+            open={displayOpen}
+            onClose={() => setDisplayOpen(false)}
+            name={active.name}
+            isBuiltin={active.isBuiltin}
+            isFavorite={active.isFavorite}
+            config={saved}
+            onRename={(name) => patchView.mutate({ id: active.id, patch: { name } })}
+            onFavorite={(isFavorite) => patchView.mutate({ id: active.id, patch: { isFavorite } })}
+            onConfig={update}
+            onDuplicate={() =>
+              void apiPost<SavedView>(`/api/v2/views/${active.id}/duplicate`, { name: `${active.name} (cópia)` }).then(async (view) => {
+                await queryClient.invalidateQueries({ queryKey: ["views", "ledger"] });
+                void setViewId(view.id);
+                setDisplayOpen(false);
+              })
+            }
+            onDelete={() => {
+              if (!window.confirm(`Excluir a view “${active.name}”? Os lançamentos não são afetados.`)) return;
+              void apiDelete(`/api/v2/views/${active.id}`).then(async () => {
+                await queryClient.invalidateQueries({ queryKey: ["views", "ledger"] });
+                void setViewId(null);
+                setDisplayOpen(false);
+              });
+            }}
+            onExport={() => void exportCsv()}
+          />
+        </span>
       </div>
-      <div className="flex flex-wrap items-center gap-1.5">
-        {filters.map((filter, index) => (
-          <button key={index} type="button" className="inline-flex h-6 items-center rounded-[6px] border border-neutral-200 bg-neutral-50 px-2 text-[12px]" onClick={() => update(config, filters.filter((_, item) => item !== index))}>
-            {"field" in filter ? String(filter.field) : ""} ✕
-          </button>
-        ))}
-        <Btn dashed onClick={() => update(config, [...filters, { field: "kind", op: "in", values: ["expense"] }])}>+ Filtro</Btn>
-        <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Buscar nesta view…" className="ml-auto h-[26px] w-[170px] rounded-[6px] border border-neutral-300 px-2 text-[12px] outline-none" />
-        <Btn>Exibição</Btn>
-      </div>
-      <div className="overflow-hidden rounded-lg border border-neutral-200">
-        <div className="grid h-[34px] grid-cols-[28px_48px_minmax(0,2.2fr)_minmax(0,1.2fr)_minmax(0,1.1fr)_minmax(0,1fr)_150px] items-center gap-2 px-2.5 text-[11.5px] text-neutral-400">
-          <span /><span>Data</span><span>Descrição</span><span>Entidade</span><span>Conta</span><span>Categoria</span><span className="text-right">Valor</span>
-        </div>
-        {rows.map((row) => (
-          <div key={row.id} className="grid h-[34px] grid-cols-[28px_48px_minmax(0,2.2fr)_minmax(0,1.2fr)_minmax(0,1.1fr)_minmax(0,1fr)_150px] items-center gap-2 border-t border-neutral-200 px-2.5 text-[12.5px]">
-            <input type="checkbox" checked={selected.includes(row.id)} onChange={(event) => setSelected(event.target.checked ? [...selected, row.id] : selected.filter((id) => id !== row.id))} />
-            <span className="font-mono text-[11.5px] text-neutral-400">{row.date.slice(5, 10)}</span>
-            <button type="button" className="truncate text-left" onClick={() => setDetail(row)}>{row.description}</button>
-            <span><span className="inline-flex h-[18px] items-center rounded border border-neutral-200 px-1.5 text-[11px]">{names.entity.get(row.entityId)}</span></span>
-            <span className="truncate text-neutral-600">{names.account.get(row.accountId)}</span>
-            <span className="truncate text-neutral-600">{row.categoryId ? names.category.get(row.categoryId) : "—"}</span>
-            <span className={`text-right font-mono tabular-nums ${row.amountBase > 0 ? "text-emerald-700" : ""}`}>{money(row.amountBase, currency)}</span>
-          </div>
-        ))}
-        <div className="grid h-[34px] grid-cols-[28px_48px_minmax(0,2.2fr)_minmax(0,1.2fr)_minmax(0,1.1fr)_minmax(0,1fr)_150px] items-center border-t border-neutral-200 px-2.5 text-[12px]">
-          <span className="col-span-6 text-neutral-400">{result.data?.totals.count ?? 0}</span>
-          <span className="text-right font-mono font-medium tabular-nums">{money(result.data?.totals.values["sum:amountBase"] ?? 0, currency)}</span>
-        </div>
-      </div>
-      {selected.length > 0 ? (
-        <div className="flex items-center gap-2 text-[12px]">
-          <span>{selected.length} selecionadas</span>
-          <Btn onClick={() => void remove(selected, queryClient, () => setSelected([]))}>Excluir</Btn>
+      {drill ? (
+        <div className="flex items-center gap-2 rounded-lg border border-neutral-200 bg-neutral-50 px-3 py-1.5 text-[12px]">
+          <span className="text-neutral-400">Detalhe:</span>
+          <span className="truncate">{drill.label ?? drill.filters.map((f) => filterLabel(f, names)).join(" · ")}</span>
+          <button type="button" className="ml-auto text-neutral-500 underline" onClick={() => void setDrillParam(null)}>voltar à view</button>
         </div>
       ) : null}
-      {detail ? (
-        <aside className="fixed top-0 right-0 bottom-0 z-30 flex w-[320px] flex-col gap-3.5 border-l border-neutral-200 bg-white p-4">
-          <div className="flex items-center gap-2">
-            <span className="text-[14px] font-semibold">{detail.description}</span>
-            <button type="button" className="ml-auto text-neutral-400" onClick={() => setDetail(null)}>✕</button>
-          </div>
-          <span className="font-mono text-[22px] font-medium tabular-nums">{money(detail.amountBase, currency)}</span>
-          <div className="grid grid-cols-2 gap-3 text-[12.5px]">
-            <Field k="Data" v={detail.date.slice(0, 10)} />
-            <Field k="Entidade" v={names.entity.get(detail.entityId) ?? ""} />
-            <Field k="Conta" v={names.account.get(detail.accountId) ?? ""} />
-            <Field k="Categoria" v={detail.categoryId ? names.category.get(detail.categoryId) ?? "—" : "—"} />
-          </div>
-          <div className="mt-auto flex gap-1.5">
-            <Btn ghost onClick={() => void remove([detail.id], queryClient, () => setDetail(null))}>Excluir</Btn>
-          </div>
-        </aside>
+      {result.isError ? <p className="text-[12.5px] text-red-600">{(result.error as Error).message}</p> : null}
+      {config.layout === "table" ? (
+        <LedgerTable
+          rows={rows}
+          groups={first?.groups ?? []}
+          config={config}
+          names={names}
+          selected={selected}
+          onSelect={(ids, on) => {
+            setAllInView(false);
+            setSelected((current) => {
+              const next = new Set(current);
+              for (const id of ids) {
+                if (on) next.add(id);
+                else next.delete(id);
+              }
+              return next;
+            });
+          }}
+          onOpen={setDetail}
+          onCategory={(row, categoryId) => void setCategory(row, categoryId)}
+          totals={totals}
+          hasMore={!!result.hasNextPage}
+          onMore={() => void result.fetchNextPage()}
+          loading={result.isFetching}
+        />
       ) : null}
-      {(creating || draft) ? (
-        <CreateDialog
-          initial={draft}
-          accounts={accounts.data ?? []}
-          onClose={() => { setCreating(false); void setCreateParam(null); }}
-          onSaved={() => queryClient.invalidateQueries({ queryKey: ["ledger"] })}
+      {config.layout === "pivot" ? (
+        first?.pivot ? <PivotView pivot={first.pivot} config={config} names={names} onDrill={(filters) => drillInto(filters)} /> : <p className="text-[12.5px] text-neutral-400">Escolha Linhas e Colunas em Exibição.</p>
+      ) : null}
+      {config.layout === "chart" && config.chart.type !== "sankey" ? <ChartView groups={first?.groups ?? []} config={config} names={names} onDrill={(filters) => drillInto(filters)} /> : null}
+      {config.layout === "chart" && config.chart.type === "sankey" ? <SankeyView groups={first?.groups ?? []} names={names} /> : null}
+      {config.layout === "board" ? <BoardView rows={rows} groups={first?.groups ?? []} config={config} names={names} onOpen={setDetail} /> : null}
+      {config.layout === "calendar" ? (
+        <CalendarView rows={rows} range={first?.range ?? { from: null, to: null }} names={names} onDay={(day) => drillInto([], { from: day, to: day })} />
+      ) : null}
+      {selected.size > 0 || allInView ? (
+        <BulkBar
+          stats={selectionStats(selectedRows)}
+          names={names}
+          allInView={allInView}
+          canSelectAll={selected.size === rows.length && totals.count > rows.length}
+          totalInView={totals.count}
+          onSelectAll={() => setAllInView(true)}
+          onClear={resetSelection}
+          onCategory={(categoryId, createRule) => void bulk({ op: "update", patch: { categoryId }, createRule }, "Categoria alterada")}
+          onEntity={(entityId) => void bulk({ op: "update", patch: { entityId } }, `Movido para ${names.entity.get(entityId)}`)}
+          onToggleTax={() => void bulk({ op: "update", patch: { toggleTaxDeductible: true } }, "Marcação de IR alternada")}
+          onDuplicate={() => void bulk({ op: "duplicate" }, "Duplicadas")}
+          onDelete={() => {
+            const n = allInView ? totals.count : selected.size;
+            if (n > 20 && !window.confirm(`Mandar ${n} lançamentos para a lixeira?`)) return;
+            void bulk({ op: "delete" }, "Na lixeira");
+          }}
+        />
+      ) : null}
+      {creating || draft ? (
+        <EntryDialog
+          names={names}
+          draft={draft}
+          onClose={() => {
+            setCreating(false);
+            void setCreateParam(null);
+          }}
         />
       ) : null}
     </AppFrame>
-  );
-}
-
-function Field({ k, v }: { k: string; v: string }) {
-  return <div><p className="text-[11px] text-neutral-400">{k}</p><p>{v}</p></div>;
-}
-
-async function remove(ids: string[], queryClient: ReturnType<typeof useQueryClient>, done: () => void) {
-  const response = await apiPost<{ batchId: string | null }>("/api/v2/ledger/bulk", { op: "delete", selection: { ids } });
-  await queryClient.invalidateQueries({ queryKey: ["ledger"] });
-  toast("Excluído", { action: { label: "Desfazer", onClick: () => { if (response.batchId) void apiPost(`/api/v2/mutations/${response.batchId}/undo`, {}).then(() => queryClient.invalidateQueries({ queryKey: ["ledger"] })); } } });
-  done();
-}
-
-function CreateDialog({
-  initial,
-  accounts,
-  onClose,
-  onSaved,
-}: {
-  initial: { description: string; amount: number; date: string } | null;
-  accounts: { id: string; name: string; archivedAt: string | null }[];
-  onClose: () => void;
-  onSaved: () => void;
-}) {
-  const [description, setDescription] = useState(initial?.description ?? "");
-  const [amount, setAmount] = useState(initial ? String(initial.amount) : "");
-  const [date, setDate] = useState(initial?.date ?? todayIso());
-  const [accountId, setAccountId] = useState(accounts.find((account) => !account.archivedAt)?.id ?? "");
-  return (
-    <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/30" onClick={onClose}>
-      <form
-        className="w-[420px] space-y-3 rounded-[10px] border border-neutral-200 bg-white p-4"
-        onClick={(event) => event.stopPropagation()}
-        onSubmit={(event) => {
-          event.preventDefault();
-          void apiPost("/api/v2/ledger/entries", { kind: "expense", accountId, amount: Number(amount), description, date }).then(() => { onSaved(); onClose(); });
-        }}
-      >
-        <p className="text-[14px] font-semibold">Nova</p>
-        <input value={description} onChange={(event) => setDescription(event.target.value)} placeholder="Descrição" className="h-[26px] w-full rounded-[6px] border border-neutral-300 px-2 text-[12px]" />
-        <div className="flex gap-2">
-          <input value={amount} onChange={(event) => setAmount(event.target.value)} placeholder="Valor" className="h-[26px] flex-1 rounded-[6px] border border-neutral-300 px-2 text-[12px]" />
-          <input type="date" value={date} onChange={(event) => setDate(event.target.value)} className="h-[26px] rounded-[6px] border border-neutral-300 px-2 text-[12px]" />
-        </div>
-        <select value={accountId} onChange={(event) => setAccountId(event.target.value)} className="h-[26px] w-full rounded-[6px] border border-neutral-300 px-2 text-[12px]">
-          {accounts.filter((account) => !account.archivedAt).map((account) => <option key={account.id} value={account.id}>{account.name}</option>)}
-        </select>
-        <div className="flex justify-end gap-1.5"><Btn onClick={onClose}>Cancelar</Btn><Btn primary type="submit">Salvar</Btn></div>
-      </form>
-    </div>
   );
 }

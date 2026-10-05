@@ -17,7 +17,7 @@ function errorMessage(body: unknown, fallback: string): string {
 
 export async function api<T>(path: string, init?: RequestInit): Promise<T> {
   const headers = new Headers(init?.headers);
-  if (init?.body && !headers.has("content-type")) headers.set("content-type", "application/json");
+  if (typeof init?.body === "string" && !headers.has("content-type")) headers.set("content-type", "application/json");
   const res = await fetch(path, { credentials: "include", ...init, headers });
   if (!res.ok) {
     const body = await res.json().catch(() => null);
@@ -35,4 +35,16 @@ export function apiPost<T>(path: string, body: unknown): Promise<T> {
 
 export function apiPatch<T>(path: string, body: unknown): Promise<T> {
   return api<T>(path, { method: "PATCH", body: JSON.stringify(body) });
+}
+
+export function apiPut<T>(path: string, body: unknown): Promise<T> {
+  return api<T>(path, { method: "PUT", body: JSON.stringify(body) });
+}
+
+export function apiDelete<T>(path: string): Promise<T> {
+  return api<T>(path, { method: "DELETE" });
+}
+
+export function apiUpload<T>(path: string, form: FormData): Promise<T> {
+  return api<T>(path, { method: "POST", body: form });
 }

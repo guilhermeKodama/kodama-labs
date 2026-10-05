@@ -199,7 +199,8 @@ interface PriceUpdateResult {
 }
 
 export async function updateAllPrices(
-  db: DbClient
+  db: DbClient,
+  opts: { userId?: string } = {}
 ): Promise<PriceUpdateResult> {
   const result: PriceUpdateResult = {
     totalHoldings: 0,
@@ -214,6 +215,7 @@ export async function updateAllPrices(
       isActive: true,
       ticker: { not: null },
       NOT: { ticker: "" },
+      ...(opts.userId && { account: { userId: opts.userId } }),
     },
     select: {
       id: true,
