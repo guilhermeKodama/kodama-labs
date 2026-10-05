@@ -179,5 +179,11 @@
   },
   "fire": {
     "no_plan": "Set up the FIRE plan first."
+  },
+  "notifications": {
+    "device_not_found": "Device not found"
+  },
+  "tokens": {
+    "not_found": "API token not found"
   }
 }

@@ -142,6 +142,10 @@ export const ERROR_CODES = {
   "currency.base_protected": "The base currency cannot be removed",
   "currency.in_use": "{code} is used by {accounts} accounts and {entries} entries",
 
+  // Notifications and API tokens
+  "notifications.device_not_found": "Device not found",
+  "tokens.not_found": "API token not found",
+
   // Imports
   "import.not_found": "Import not found",
   "import.already_reverted": "This import was already reverted",

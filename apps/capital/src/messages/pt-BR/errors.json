@@ -179,5 +179,11 @@
   },
   "fire": {
     "no_plan": "Configure o plano FIRE primeiro."
+  },
+  "notifications": {
+    "device_not_found": "Dispositivo não encontrado"
+  },
+  "tokens": {
+    "not_found": "Token de API não encontrado"
   }
 }
