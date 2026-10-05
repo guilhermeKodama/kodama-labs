@@ -43,7 +43,7 @@ export function CategorySelect({
     <select
       value={value}
       onChange={(event) => (event.target.value === NEW ? void create() : onChange(event.target.value))}
-      className={cn("h-[26px] min-w-0 rounded-[6px] border border-neutral-300 bg-white px-1.5 text-[12.5px] outline-none", className)}
+      className={cn("h-[26px] min-w-0 rounded-[6px] border border-stroke-1 bg-editor px-1.5 text-[12.5px] outline-none", className)}
     >
       <option value="">Sem categoria (regras decidem)</option>
       {options.map((c) => (

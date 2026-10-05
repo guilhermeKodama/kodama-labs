@@ -152,7 +152,7 @@ export function TargetsDialog({ onClose }: { onClose: () => void }) {
       width={420}
       footer={
         <>
-          <span className={`mr-auto font-mono text-[12px] tabular-nums ${Math.abs(sum - 100) < 0.01 ? "text-emerald-700" : "text-amber-600"}`}>Soma {sum.toLocaleString("pt-BR")}%</span>
+          <span className={`mr-auto font-mono text-[12px] tabular-nums ${Math.abs(sum - 100) < 0.01 ? "text-pos" : "text-warn"}`}>Soma {sum.toLocaleString("pt-BR")}%</span>
           <Btn ghost onClick={onClose}>Cancelar</Btn>
           <Btn primary disabled={Math.abs(sum - 100) >= 0.01 || save.isPending} onClick={() => save.mutate()}>Salvar</Btn>
         </>
@@ -162,7 +162,7 @@ export function TargetsDialog({ onClose }: { onClose: () => void }) {
         <div key={c} className="flex items-center gap-2 text-[12.5px]">
           <span className="flex-1">{ASSET_CLASS_LABEL[c]}</span>
           <TextInput value={current[c] ?? ""} onChange={(v) => setValues({ ...current, [c]: v })} mono className="w-20 text-right" placeholder="0" />
-          <span className="text-neutral-400">%</span>
+          <span className="text-fg-3">%</span>
         </div>
       ))}
     </Modal>
@@ -195,11 +195,11 @@ export function HoldingSheet({ holding, names, onClose, onOperation }: { holding
     onError: (error: Error) => toast.error(error.message),
   });
   return (
-    <aside className="absolute top-0 right-0 bottom-0 z-30 flex w-[340px] flex-col gap-3.5 overflow-y-auto border-l border-neutral-300 bg-white p-4 shadow-[-8px_0_24px_-12px_rgba(0,0,0,0.12)]">
+    <aside className="absolute top-0 right-0 bottom-0 z-30 flex w-[340px] flex-col gap-3.5 overflow-y-auto border-l border-stroke-1 bg-editor p-4 shadow-[-8px_0_24px_-12px_rgba(0,0,0,0.12)]">
       <div className="flex items-center gap-2">
         <span className="font-mono text-[13px] font-semibold">{holding.ticker ?? "—"}</span>
         <span className="truncate text-[13px]">{holding.name}</span>
-        <button type="button" className="ml-auto text-neutral-400 hover:text-neutral-700" onClick={onClose}>✕</button>
+        <button type="button" className="ml-auto text-fg-3 hover:text-fg-strong" onClick={onClose}>✕</button>
       </div>
       <span className="font-mono text-[22px] font-medium tabular-nums">{money(holding.marketValue, holding.currency)}</span>
       <div className="grid grid-cols-2 gap-x-3 gap-y-2.5 text-[12.5px]">
@@ -214,12 +214,12 @@ export function HoldingSheet({ holding, names, onClose, onOperation }: { holding
           ["Cotação em", holding.lastPriceUpdate ? holding.lastPriceUpdate.slice(0, 10).split("-").reverse().join("/") : "—"],
         ].map(([k, v]) => (
           <div key={k} className="flex min-w-0 flex-col gap-0.5">
-            <span className="text-[11px] text-neutral-400">{k}</span>
+            <span className="text-[11px] text-fg-3">{k}</span>
             <span className="truncate">{v}</span>
           </div>
         ))}
       </div>
-      <form className="flex items-end gap-1.5 border-t border-neutral-200 pt-3" onSubmit={(event) => { event.preventDefault(); patch.mutate({ currentPrice: parseAmount(price) }); }}>
+      <form className="flex items-end gap-1.5 border-t border-stroke-3 pt-3" onSubmit={(event) => { event.preventDefault(); patch.mutate({ currentPrice: parseAmount(price) }); }}>
         <Field label="Cotação atual" className="flex-1"><TextInput value={price} onChange={setPrice} mono /></Field>
         <Btn type="submit">Atualizar</Btn>
       </form>
@@ -228,18 +228,18 @@ export function HoldingSheet({ holding, names, onClose, onOperation }: { holding
         <Field label="Preço médio" className="flex-1"><TextInput value={avg} onChange={setAvg} mono /></Field>
         <Btn type="submit">Ajustar</Btn>
       </form>
-      <div className="flex flex-col border-t border-neutral-200 pt-3">
-        <span className="pb-1 text-[11px] text-neutral-400">Operações</span>
+      <div className="flex flex-col border-t border-stroke-3 pt-3">
+        <span className="pb-1 text-[11px] text-fg-3">Operações</span>
         {(ops.data ?? []).slice(0, 12).map((op) => (
           <span key={op.id} className="flex h-7 items-center gap-2 text-[12.5px]">
-            <span className="w-12 font-mono text-[11px] text-neutral-400">{op.date.slice(5).split("-").reverse().join("/")}</span>
+            <span className="w-12 font-mono text-[11px] text-fg-3">{op.date.slice(5).split("-").reverse().join("/")}</span>
             <span className="flex-1">{OP_LABEL[op.type as keyof typeof OP_LABEL] ?? op.type}{op.quantity ? ` · ${op.quantity}` : ""}</span>
             <span className="font-mono tabular-nums">{money(op.totalAmount, holding.currency)}</span>
           </span>
         ))}
-        {ops.data && !ops.data.length ? <span className="text-[12px] text-neutral-400">Nenhuma operação.</span> : null}
+        {ops.data && !ops.data.length ? <span className="text-[12px] text-fg-3">Nenhuma operação.</span> : null}
       </div>
-      <div className="mt-auto flex flex-wrap gap-1.5 border-t border-neutral-200 pt-3">
+      <div className="mt-auto flex flex-wrap gap-1.5 border-t border-stroke-3 pt-3">
         <Btn primary onClick={onOperation}>+ Operação</Btn>
         <Btn ghost danger onClick={() => { if (window.confirm("Desativar este ativo? Ele sai da carteira, o histórico fica.")) patch.mutate({ isActive: false }, { onSuccess: onClose }); }}>Desativar</Btn>
       </div>

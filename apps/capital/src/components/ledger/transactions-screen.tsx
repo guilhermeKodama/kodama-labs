@@ -213,7 +213,7 @@ export function TransactionsScreen() {
   }
 
   const tabs = (
-    <div className="flex h-[38px] shrink-0 items-center gap-0.5 overflow-x-auto border-b border-neutral-200 px-2.5">
+    <div className="flex h-[38px] shrink-0 items-center gap-0.5 overflow-x-auto border-b border-stroke-3 px-2.5">
       {(views.data ?? []).map((view) => {
         const on = view.id === active?.id;
         return (
@@ -226,15 +226,15 @@ export function TransactionsScreen() {
               resetSelection();
               setSearch(null);
             }}
-            className={`inline-flex h-full items-center gap-1.5 border-b-2 px-2 text-[12.5px] whitespace-nowrap ${on ? "border-neutral-950 font-medium text-neutral-950" : "border-transparent text-neutral-400 hover:text-neutral-700"}`}
+            className={`inline-flex h-full items-center gap-1.5 border-b-2 px-2 text-[12.5px] whitespace-nowrap ${on ? "border-fg-1 font-medium text-fg-1" : "border-transparent text-fg-3 hover:text-fg-strong"}`}
           >
-            <span className="text-[11px] text-neutral-400">{LAYOUT_GLYPH[view.config.layout] ?? "▦"}</span>
+            <span className="text-[11px] text-fg-3">{LAYOUT_GLYPH[view.config.layout] ?? "▦"}</span>
             {view.name}
-            {view.isBuiltin ? <span className="text-[10px] text-neutral-300">fixa</span> : null}
+            {view.isBuiltin ? <span className="text-[10px] text-fg-4">fixa</span> : null}
           </button>
         );
       })}
-      <button type="button" title="Nova view" onClick={() => void newView()} className="px-2 text-[14px] text-neutral-400 hover:text-neutral-700">
+      <button type="button" title="Nova view" onClick={() => void newView()} className="px-2 text-[14px] text-fg-3 hover:text-fg-strong">
         +
       </button>
     </div>
@@ -243,7 +243,7 @@ export function TransactionsScreen() {
   if (!active || !config || !saved) {
     return (
       <AppFrame crumbs={["Transações", "Lançamentos"]} subheader={tabs}>
-        <p className="text-[12.5px] text-neutral-400">{views.isError ? "Não foi possível carregar as views." : "Carregando…"}</p>
+        <p className="text-[12.5px] text-fg-3">{views.isError ? "Não foi possível carregar as views." : "Carregando…"}</p>
       </AppFrame>
     );
   }
@@ -300,13 +300,13 @@ export function TransactionsScreen() {
         </span>
       </div>
       {drill ? (
-        <div className="flex items-center gap-2 rounded-lg border border-neutral-200 bg-neutral-50 px-3 py-1.5 text-[12px]">
-          <span className="text-neutral-400">Detalhe:</span>
+        <div className="flex items-center gap-2 rounded-lg border border-stroke-3 bg-fill-4 px-3 py-1.5 text-[12px]">
+          <span className="text-fg-3">Detalhe:</span>
           <span className="truncate">{drill.label ?? drill.filters.map((f) => filterLabel(f, names)).join(" · ")}</span>
-          <button type="button" className="ml-auto text-neutral-500 underline" onClick={() => void setDrillParam(null)}>voltar à view</button>
+          <button type="button" className="ml-auto text-fg-muted underline" onClick={() => void setDrillParam(null)}>voltar à view</button>
         </div>
       ) : null}
-      {result.isError ? <p className="text-[12.5px] text-red-600">{(result.error as Error).message}</p> : null}
+      {result.isError ? <p className="text-[12.5px] text-neg">{(result.error as Error).message}</p> : null}
       {config.layout === "table" ? (
         <LedgerTable
           rows={rows}
@@ -334,7 +334,7 @@ export function TransactionsScreen() {
         />
       ) : null}
       {config.layout === "pivot" ? (
-        first?.pivot ? <PivotView pivot={first.pivot} config={config} names={names} onDrill={(filters) => drillInto(filters)} /> : <p className="text-[12.5px] text-neutral-400">Escolha Linhas e Colunas em Exibição.</p>
+        first?.pivot ? <PivotView pivot={first.pivot} config={config} names={names} onDrill={(filters) => drillInto(filters)} /> : <p className="text-[12.5px] text-fg-3">Escolha Linhas e Colunas em Exibição.</p>
       ) : null}
       {config.layout === "chart" && config.chart.type !== "sankey" ? <ChartView groups={first?.groups ?? []} config={config} names={names} onDrill={(filters) => drillInto(filters)} /> : null}
       {config.layout === "chart" && config.chart.type === "sankey" ? <SankeyView groups={first?.groups ?? []} names={names} /> : null}

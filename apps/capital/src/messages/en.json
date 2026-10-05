@@ -18,7 +18,13 @@
     "personal": "Personal",
     "business": "Business",
     "done": "Done",
-    "next": "Next"
+    "next": "Next",
+    "createNamed": "+ Create “{name}”",
+    "search": "Search…",
+    "noResults": "No results",
+    "close": "Close",
+    "undo": "Undo",
+    "select": "Select…"
   },
   "filters": {
     "allEntities": "All Entities",

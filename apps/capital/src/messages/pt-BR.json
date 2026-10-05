@@ -18,7 +18,13 @@
     "personal": "Pessoal",
     "business": "Empresa",
     "done": "Concluir",
-    "next": "Próximo"
+    "next": "Próximo",
+    "createNamed": "+ Criar “{name}”",
+    "search": "Buscar…",
+    "noResults": "Nenhum resultado",
+    "close": "Fechar",
+    "undo": "Desfazer",
+    "select": "Selecionar…"
   },
   "filters": {
     "allEntities": "Todas as Entidades",

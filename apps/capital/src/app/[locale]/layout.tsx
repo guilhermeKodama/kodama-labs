@@ -5,6 +5,7 @@ import { NuqsAdapter } from 'nuqs/adapters/next/app';
 import { Toaster } from '@/components/ui/sonner';
 import { ThemeProvider } from '@/components/theme-provider';
 import { SessionGate } from '@/components/providers/session-gate';
+import { ThemeSync } from '@/components/providers/theme-sync';
 import { PwaRegister } from '@/components/pwa-register';
 import { routing } from '@/i18n/routing';
 
@@ -39,9 +40,11 @@ export default async function LocaleLayout({
       <NuqsAdapter>
         <ThemeProvider
           attribute="class"
-          forcedTheme="light"
+          defaultTheme="light"
+          enableSystem
           disableTransitionOnChange
         >
+          <ThemeSync />
           <SessionGate>
             {children}
           </SessionGate>

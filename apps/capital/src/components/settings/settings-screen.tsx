@@ -53,21 +53,21 @@ export function SettingsScreen() {
   }, [router]);
 
   return (
-    <div className="grid h-dvh grid-cols-[220px_minmax(0,1fr)] bg-white text-neutral-950">
-      <nav className="flex flex-col gap-0.5 overflow-y-auto border-r border-neutral-200 bg-neutral-50 p-2.5">
-        <Link href="/transactions" className="flex h-[30px] items-center gap-1.5 px-2 text-[12.5px] text-neutral-400 hover:text-neutral-700">
-          ← Voltar ao app <kbd className="ml-auto rounded border border-neutral-200 px-1 font-mono text-[10px]">Esc</kbd>
+    <div className="grid h-dvh grid-cols-[220px_minmax(0,1fr)] bg-editor text-fg-1">
+      <nav className="flex flex-col gap-0.5 overflow-y-auto border-r border-stroke-3 bg-chrome p-2.5">
+        <Link href="/transactions" className="flex h-[30px] items-center gap-1.5 px-2 text-[12.5px] text-fg-3 hover:text-fg-strong">
+          ← Voltar ao app <kbd className="ml-auto rounded border border-stroke-3 px-1 font-mono text-[10px]">Esc</kbd>
         </Link>
         <span className="px-2 pt-1.5 pb-1 text-[14px] font-semibold">Ajustes</span>
         {NAV.map((s) => (
           <div key={s.section} className="flex flex-col gap-0.5">
-            <span className="px-2 pt-3 pb-1 text-[11px] text-neutral-400">{s.section}</span>
+            <span className="px-2 pt-3 pb-1 text-[11px] text-fg-3">{s.section}</span>
             {s.items.map((i) => (
               <button
                 key={i.k}
                 type="button"
                 onClick={() => void setPage(i.k)}
-                className={cn("flex h-7 items-center rounded-[6px] px-2 text-left text-[12.5px]", i.k === item.k ? "bg-neutral-200/80 font-medium" : "text-neutral-600 hover:bg-neutral-100")}
+                className={cn("flex h-7 items-center rounded-[6px] px-2 text-left text-[12.5px]", i.k === item.k ? "bg-fill-2/80 font-medium" : "text-fg-2 hover:bg-fill-3")}
               >
                 {i.l}
               </button>
@@ -78,7 +78,7 @@ export function SettingsScreen() {
       <div className="flex min-w-0 flex-col gap-3.5 overflow-y-auto px-6 py-5">
         <div className="flex flex-col gap-1">
           <span className="text-[17px] font-semibold">{item.l}</span>
-          <span className="text-[12.5px] text-neutral-400">{item.desc}</span>
+          <span className="text-[12.5px] text-fg-3">{item.desc}</span>
         </div>
         {item.k === "prefs" ? <PrefsPage /> : null}
         {item.k === "ent" ? <EntitiesPage names={names} /> : null}
@@ -100,14 +100,14 @@ function ListDetail({ list, detail }: { list: ReactNode; detail: ReactNode }) {
   return (
     <div className="grid max-w-[920px] items-start gap-3.5 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)]">
       <div className="flex flex-col gap-0.5">{list}</div>
-      <div className="flex flex-col gap-3 rounded-[10px] border border-neutral-200 p-3.5">{detail}</div>
+      <div className="flex flex-col gap-3 rounded-[10px] border border-stroke-3 p-3.5">{detail}</div>
     </div>
   );
 }
 
 function ListItem({ on, onClick, left, right, faded }: { on: boolean; onClick: () => void; left: ReactNode; right?: ReactNode; faded?: boolean }) {
   return (
-    <button type="button" onClick={onClick} className={cn("flex h-[34px] items-center gap-2 rounded-[6px] px-2.5 text-left text-[12.5px]", on ? "bg-neutral-100" : "hover:bg-neutral-50", faded && "opacity-50")}>
+    <button type="button" onClick={onClick} className={cn("flex h-[34px] items-center gap-2 rounded-[6px] px-2.5 text-left text-[12.5px]", on ? "bg-fill-3" : "hover:bg-fill-4", faded && "opacity-50")}>
       <span className="flex min-w-0 flex-1 items-center gap-2">{left}</span>
       {right}
     </button>
@@ -140,7 +140,7 @@ function PrefsPage() {
   return (
     <div className="grid max-w-[560px] grid-cols-2 gap-3">
       <Field label="Nome"><TextInput value={name} onChange={setName} /></Field>
-      <Field label="E-mail"><TextInput value={me.email} onChange={() => undefined} className="bg-neutral-50 text-neutral-500" /></Field>
+      <Field label="E-mail"><TextInput value={me.email} onChange={() => undefined} className="bg-fill-4 text-fg-muted" /></Field>
       <Field label="Moeda base" hint="Todos os totais e views são convertidos para ela. Com lançamentos já feitos, a troca é recusada.">
         <SelectInput value={baseCurrency} onChange={setBaseCurrency} options={(currencies.data?.currencies ?? [{ code: baseCurrency, name: "" }]).map((c) => ({ value: c.code, label: c.code }))} />
       </Field>
@@ -196,9 +196,9 @@ function EntitiesPage({ names }: { names: Names }) {
       list={
         <>
           {list.map((e) => (
-            <ListItem key={e.id} on={current?.id === e.id && sel !== "new"} onClick={() => select(e.id)} faded={!!e.archivedAt} left={<><span>{e.name}</span>{e.kind === "personal" ? <Badge>PF</Badge> : null}{e.archivedAt ? <Badge>arquivada</Badge> : null}</>} right={<span className="font-mono text-[11px] text-neutral-400">{e.defaultCurrency}</span>} />
+            <ListItem key={e.id} on={current?.id === e.id && sel !== "new"} onClick={() => select(e.id)} faded={!!e.archivedAt} left={<><span>{e.name}</span>{e.kind === "personal" ? <Badge>PF</Badge> : null}{e.archivedAt ? <Badge>arquivada</Badge> : null}</>} right={<span className="font-mono text-[11px] text-fg-3">{e.defaultCurrency}</span>} />
           ))}
-          <button type="button" className={cn("h-[34px] rounded-[6px] px-2.5 text-left text-[12.5px] text-neutral-400 hover:bg-neutral-50", sel === "new" && "bg-neutral-100 text-neutral-900")} onClick={() => select("new")}>+ Novo negócio</button>
+          <button type="button" className={cn("h-[34px] rounded-[6px] px-2.5 text-left text-[12.5px] text-fg-3 hover:bg-fill-4", sel === "new" && "bg-fill-3 text-fg-ink")} onClick={() => select("new")}>+ Novo negócio</button>
         </>
       }
       detail={
@@ -209,7 +209,7 @@ function EntitiesPage({ names }: { names: Names }) {
             <Field label="Moeda padrão"><TextInput value={values.defaultCurrency} onChange={(defaultCurrency) => setForm({ ...values, defaultCurrency: defaultCurrency.toUpperCase().slice(0, 3) })} /></Field>
             <Field label="Alíquota de imposto (%)"><TextInput value={values.taxRate} onChange={(taxRate) => setForm({ ...values, taxRate })} mono /></Field>
           </div>
-          <div className="flex gap-1.5 border-t border-neutral-200 pt-2.5">
+          <div className="flex gap-1.5 border-t border-stroke-3 pt-2.5">
             <Btn primary disabled={!values.name.trim() || save.isPending} onClick={() => save.mutate()}>{sel === "new" ? "Criar" : "Salvar"}</Btn>
             {current && current.kind === "business" && sel !== "new" ? (
               <Btn
@@ -291,7 +291,7 @@ function AccountsPage({ names, types }: { names: Names; types: AccountRecord["ty
             if (!items.length) return null;
             return (
               <div key={e.id} className="flex flex-col gap-0.5">
-                <span className="px-2.5 pt-2 pb-0.5 text-[11px] text-neutral-400">{names.entity.get(e.id)}</span>
+                <span className="px-2.5 pt-2 pb-0.5 text-[11px] text-fg-3">{names.entity.get(e.id)}</span>
                 {items.map((a) => (
                   <ListItem
                     key={a.id}
@@ -299,14 +299,14 @@ function AccountsPage({ names, types }: { names: Names; types: AccountRecord["ty
                     faded={!!a.archivedAt}
                     onClick={() => { setSel(a.id); setForm(null); }}
                     left={<><span className="truncate">{a.name}</span>{a.isDefault ? <Badge>principal</Badge> : null}{a.archivedAt ? <Badge>arquivada</Badge> : null}</>}
-                    right={<span className="font-mono text-[11px] text-neutral-400 tabular-nums">{a.type === "credit_card" ? `fecha ${a.closingDay} · vence ${a.dueDay}` : a.balance != null ? money(a.balance, a.currency) : a.currency}</span>}
+                    right={<span className="font-mono text-[11px] text-fg-3 tabular-nums">{a.type === "credit_card" ? `fecha ${a.closingDay} · vence ${a.dueDay}` : a.balance != null ? money(a.balance, a.currency) : a.currency}</span>}
                   />
                 ))}
               </div>
             );
           })}
-          {!accounts.length ? <span className="px-2.5 py-2 text-[12px] text-neutral-400">Nenhuma conta deste tipo.</span> : null}
-          <button type="button" className={cn("h-[34px] rounded-[6px] px-2.5 text-left text-[12.5px] text-neutral-400 hover:bg-neutral-50", sel === "new" && "bg-neutral-100 text-neutral-900")} onClick={() => { setSel("new"); setForm(blank()); }}>
+          {!accounts.length ? <span className="px-2.5 py-2 text-[12px] text-fg-3">Nenhuma conta deste tipo.</span> : null}
+          <button type="button" className={cn("h-[34px] rounded-[6px] px-2.5 text-left text-[12.5px] text-fg-3 hover:bg-fill-4", sel === "new" && "bg-fill-3 text-fg-ink")} onClick={() => { setSel("new"); setForm(blank()); }}>
             + Nova {types[0] === "credit_card" ? "fatura de cartão" : types[0] === "brokerage" ? "corretora" : "conta"}
           </button>
         </>
@@ -338,14 +338,14 @@ function AccountsPage({ names, types }: { names: Names; types: AccountRecord["ty
               </Field>
             </div>
           ) : null}
-          <div className="flex gap-1.5 border-t border-neutral-200 pt-2.5">
+          <div className="flex gap-1.5 border-t border-stroke-3 pt-2.5">
             <Btn primary disabled={!values.name.trim() || save.isPending} onClick={() => save.mutate()}>{isNew ? "Criar" : "Salvar"}</Btn>
             {!isNew && current && !current.isDefault ? (
               <Btn onClick={() => void apiPatch(`/api/v2/accounts/${current.id}`, { archived: !current.archivedAt }).then(refresh).catch((error: Error) => toast.error(error.message))}>
                 {current.archivedAt ? "Reativar" : "Arquivar"}
               </Btn>
             ) : null}
-            {!isNew && current?.archivedAt == null ? <span className="self-center text-[11.5px] text-neutral-400">Arquivar tira dos seletores; o histórico continua.</span> : null}
+            {!isNew && current?.archivedAt == null ? <span className="self-center text-[11.5px] text-fg-3">Arquivar tira dos seletores; o histórico continua.</span> : null}
           </div>
         </>
       }
@@ -353,6 +353,7 @@ function AccountsPage({ names, types }: { names: Names; types: AccountRecord["ty
   );
 }
 
+// Stored on the category, so these stay hex (same hues as --cap-cat-*).
 const COLORS = ["#737373", "#7c3aed", "#16a34a", "#ca8a04", "#0891b2", "#db2777", "#2563eb", "#ea580c", "#dc2626"];
 
 interface Rule {
@@ -406,7 +407,7 @@ function CategoriesPage({ names }: { names: Names }) {
         <>
           {(["expense", "income", "investment"] as const).map((type) => (
             <div key={type} className="flex flex-col gap-0.5">
-              <span className="px-2.5 pt-2 pb-0.5 text-[11px] text-neutral-400">{type === "expense" ? "Despesas" : type === "income" ? "Receitas" : "Investimentos"}</span>
+              <span className="px-2.5 pt-2 pb-0.5 text-[11px] text-fg-3">{type === "expense" ? "Despesas" : type === "income" ? "Receitas" : "Investimentos"}</span>
               {cats
                 .filter((c) => c.type === type)
                 .sort((a, b) => Number(a.isArchived) - Number(b.isArchived) || a.name.localeCompare(b.name))
@@ -416,12 +417,12 @@ function CategoriesPage({ names }: { names: Names }) {
                     on={current?.id === c.id && sel !== "new"}
                     faded={c.isArchived}
                     onClick={() => { setSel(c.id); setForm(null); }}
-                    left={<><span className="size-2 shrink-0 rounded-full" style={{ background: c.color ?? "#d4d4d4" }} /><span className="truncate">{c.name}</span>{c.isArchived ? <Badge>arquivada</Badge> : null}</>}
+                    left={<><span className="size-2 shrink-0 rounded-full" style={{ background: c.color ?? "var(--cap-text-4)" }} /><span className="truncate">{c.name}</span>{c.isArchived ? <Badge>arquivada</Badge> : null}</>}
                   />
                 ))}
             </div>
           ))}
-          <button type="button" className={cn("h-[34px] rounded-[6px] px-2.5 text-left text-[12.5px] text-neutral-400 hover:bg-neutral-50", sel === "new" && "bg-neutral-100 text-neutral-900")} onClick={() => { setSel("new"); setForm({ name: "", type: "expense", color: null }); }}>
+          <button type="button" className={cn("h-[34px] rounded-[6px] px-2.5 text-left text-[12.5px] text-fg-3 hover:bg-fill-4", sel === "new" && "bg-fill-3 text-fg-ink")} onClick={() => { setSel("new"); setForm({ name: "", type: "expense", color: null }); }}>
             + Nova categoria
           </button>
         </>
@@ -435,7 +436,7 @@ function CategoriesPage({ names }: { names: Names }) {
           <Field label="Cor">
             <span className="flex gap-1.5">
               {COLORS.map((color) => (
-                <button key={color} type="button" onClick={() => setForm({ ...values, color })} className="size-[18px] rounded-full" style={{ background: color, outline: values.color === color ? "2px solid #171717" : "none", outlineOffset: 2 }} />
+                <button key={color} type="button" onClick={() => setForm({ ...values, color })} className="size-[18px] rounded-full" style={{ background: color, outline: values.color === color ? "2px solid var(--cap-text-ink)" : "none", outlineOffset: 2 }} />
               ))}
             </span>
           </Field>
@@ -444,9 +445,9 @@ function CategoriesPage({ names }: { names: Names }) {
               <Field label="Regras automáticas" hint="Descrições que caem nesta categoria ao importar ou criar">
                 <span className="flex flex-wrap items-center gap-1">
                   {catRules.map((r) => (
-                    <span key={r.id} className="inline-flex h-[18px] items-center gap-1 rounded border border-neutral-200 px-1.5 font-mono text-[11px]">
+                    <span key={r.id} className="inline-flex h-[18px] items-center gap-1 rounded border border-stroke-3 px-1.5 font-mono text-[11px]">
                       {r.pattern}
-                      <button type="button" className="text-neutral-400 hover:text-red-600" onClick={() => void apiDelete(`/api/v2/rules/${r.id}`).then(() => queryClient.invalidateQueries({ queryKey: ["rules"] }))}>✕</button>
+                      <button type="button" className="text-fg-3 hover:text-neg" onClick={() => void apiDelete(`/api/v2/rules/${r.id}`).then(() => queryClient.invalidateQueries({ queryKey: ["rules"] }))}>✕</button>
                     </span>
                   ))}
                   <form className="inline-flex gap-1" onSubmit={(event) => { event.preventDefault(); if (!rulePattern.trim()) return; void apiPost("/api/v2/rules", { matchType: "contains", pattern: rulePattern.trim(), categoryId: current.id }).then(() => { setRulePattern(""); return queryClient.invalidateQueries({ queryKey: ["rules"] }); }).catch((error: Error) => toast.error(error.message)); }}>
@@ -454,19 +455,19 @@ function CategoriesPage({ names }: { names: Names }) {
                   </form>
                 </span>
               </Field>
-              <span className="text-[12px] text-neutral-400">
+              <span className="text-[12px] text-fg-3">
                 {usage.data ? `Usada em ${usage.data.entries} lançamentos, ${usage.data.budgets} orçamentos, ${usage.data.recurring} recorrências e ${usage.data.rules} regras.` : "…"}
               </span>
             </>
           ) : null}
-          <div className="flex flex-wrap items-center gap-1.5 border-t border-neutral-200 pt-2.5">
+          <div className="flex flex-wrap items-center gap-1.5 border-t border-stroke-3 pt-2.5">
             <Btn primary disabled={!values.name.trim() || save.isPending} onClick={() => save.mutate()}>{sel === "new" ? "Criar" : "Salvar"}</Btn>
             {current && sel !== "new" ? (
               <>
                 <Btn onClick={() => void apiPatch(`/api/v2/categories/${current.id}`, { isArchived: !current.isArchived }).then(refresh).then(() => toast.success(current.isArchived ? `“${current.name}” reativada` : `“${current.name}” arquivada: some dos seletores, continua no histórico`)).catch((error: Error) => toast.error(error.message))}>
                   {current.isArchived ? "Reativar" : "Arquivar"}
                 </Btn>
-                <span className="text-[11.5px] text-neutral-400">Some dos seletores; o histórico continua igual.</span>
+                <span className="text-[11.5px] text-fg-3">Some dos seletores; o histórico continua igual.</span>
               </>
             ) : null}
           </div>
@@ -500,7 +501,7 @@ function RulesPage({ names }: { names: Names }) {
   return (
     <div className="flex max-w-[920px] flex-col gap-3">
       <form className="flex items-center gap-2" onSubmit={(event) => { event.preventDefault(); void runTest(); }}>
-        <span className="text-[12px] text-neutral-400">Testar uma descrição</span>
+        <span className="text-[12px] text-fg-3">Testar uma descrição</span>
         <TextInput value={test} onChange={setTest} placeholder="IFOOD *RESTAURANTE" className="w-[260px]" />
         <Btn type="submit">Testar</Btn>
         {result ? <span className="text-[12.5px]">{result}</span> : null}
@@ -508,22 +509,22 @@ function RulesPage({ names }: { names: Names }) {
       <form className="flex flex-wrap items-center gap-1.5" onSubmit={(event) => { event.preventDefault(); create.mutate(); }}>
         <SelectInput value={matchType} onChange={setMatchType} options={[{ value: "contains", label: "contém" }, { value: "equals", label: "é igual a" }, { value: "regex", label: "regex" }]} />
         <TextInput value={pattern} onChange={setPattern} placeholder="uber" required className="w-44" />
-        <span className="text-neutral-400">→</span>
+        <span className="text-fg-3">→</span>
         <SelectInput value={categoryId} onChange={setCategoryId} required placeholder="Categoria" options={names.categories.filter((c) => !c.isArchived).sort((a, b) => a.name.localeCompare(b.name)).map((c) => ({ value: c.id, label: c.name }))} />
         <Btn primary type="submit" disabled={!pattern.trim() || !categoryId}>+ Nova regra</Btn>
       </form>
-      <div className="overflow-hidden rounded-lg border border-neutral-200">
-        <div className="grid h-[34px] grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_110px_70px_80px_50px] items-center gap-3 px-3 text-[11.5px] text-neutral-400">
+      <div className="overflow-hidden rounded-lg border border-stroke-3">
+        <div className="grid h-[34px] grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_110px_70px_80px_50px] items-center gap-3 px-3 text-[11.5px] text-fg-3">
           <span>Descrição</span><span>Categoria</span><span>Origem</span><span className="text-right">Aplicada</span><span>Última vez</span><span />
         </div>
         {(rules.data ?? []).map((r) => (
-          <div key={r.id} className="grid h-[34px] grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_110px_70px_80px_50px] items-center gap-3 border-t border-neutral-200 px-3 text-[12.5px]">
-            <span className="truncate font-mono text-[12px]"><span className="text-neutral-400">{r.matchType === "contains" ? "contém " : r.matchType === "equals" ? "= " : "/ "}</span>{r.pattern}</span>
+          <div key={r.id} className="grid h-[34px] grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_110px_70px_80px_50px] items-center gap-3 border-t border-stroke-3 px-3 text-[12.5px]">
+            <span className="truncate font-mono text-[12px]"><span className="text-fg-3">{r.matchType === "contains" ? "contém " : r.matchType === "equals" ? "= " : "/ "}</span>{r.pattern}</span>
             <span className="truncate">{r.category?.name ?? "—"}</span>
-            <span className="text-neutral-500">{r.source === "manual" ? "Você" : r.source === "ai" ? "IA" : r.source}</span>
+            <span className="text-fg-muted">{r.source === "manual" ? "Você" : r.source === "ai" ? "IA" : r.source}</span>
             <span className="text-right font-mono tabular-nums">{r.hitCount}×</span>
-            <span className="font-mono text-[11.5px] text-neutral-400">{r.lastHitAt ? r.lastHitAt.slice(5, 10).split("-").reverse().join("/") : "—"}</span>
-            <button type="button" className="text-right text-[11px] text-neutral-400 hover:text-red-600" onClick={() => void apiDelete(`/api/v2/rules/${r.id}`).then(() => queryClient.invalidateQueries({ queryKey: ["rules"] }))}>excluir</button>
+            <span className="font-mono text-[11.5px] text-fg-3">{r.lastHitAt ? r.lastHitAt.slice(5, 10).split("-").reverse().join("/") : "—"}</span>
+            <button type="button" className="text-right text-[11px] text-fg-3 hover:text-neg" onClick={() => void apiDelete(`/api/v2/rules/${r.id}`).then(() => queryClient.invalidateQueries({ queryKey: ["rules"] }))}>excluir</button>
           </div>
         ))}
         {!rules.data?.length ? <EmptyRow>Nenhuma regra ainda. Elas também nascem quando você cria uma regra a partir de um lançamento.</EmptyRow> : null}
@@ -544,25 +545,25 @@ function CurrencyPage() {
   const refresh = () => queryClient.invalidateQueries({ queryKey: ["currencies"] });
   return (
     <div className="flex max-w-[760px] flex-col gap-3">
-      <span className="text-[12.5px]">Moeda base: <b>{base}</b> <span className="text-neutral-400">· muda em Perfil e preferências</span></span>
-      <div className="overflow-hidden rounded-lg border border-neutral-200">
-        <div className="grid h-[34px] grid-cols-[minmax(0,1.4fr)_60px_200px_90px_60px] items-center gap-3 px-3 text-[11.5px] text-neutral-400">
+      <span className="text-[12.5px]">Moeda base: <b>{base}</b> <span className="text-fg-3">· muda em Perfil e preferências</span></span>
+      <div className="overflow-hidden rounded-lg border border-stroke-3">
+        <div className="grid h-[34px] grid-cols-[minmax(0,1.4fr)_60px_200px_90px_60px] items-center gap-3 px-3 text-[11.5px] text-fg-3">
           <span>Moeda</span><span>Símbolo</span><span>Unidades por 1 {base}</span><span>Atualizada</span><span />
         </div>
         {(currencies.data?.currencies ?? []).map((c) => (
-          <div key={c.code} className="grid h-[34px] grid-cols-[minmax(0,1.4fr)_60px_200px_90px_60px] items-center gap-3 border-t border-neutral-200 px-3 text-[12.5px]">
+          <div key={c.code} className="grid h-[34px] grid-cols-[minmax(0,1.4fr)_60px_200px_90px_60px] items-center gap-3 border-t border-stroke-3 px-3 text-[12.5px]">
             <span>{c.name} ({c.code})</span>
-            <span className="text-neutral-500">{c.symbol}</span>
+            <span className="text-fg-muted">{c.symbol}</span>
             {c.code === base ? (
-              <span className="font-mono text-neutral-400">1 (base)</span>
+              <span className="font-mono text-fg-3">1 (base)</span>
             ) : (
               <form className="flex gap-1" onSubmit={(event) => { event.preventDefault(); const v = parseAmount(rates[c.code] ?? ""); if (v > 0) void apiPatch(`/api/v2/currencies/${c.code}`, { manualRate: v }).then(() => { setRates({ ...rates, [c.code]: "" }); return refresh(); }).catch((error: Error) => toast.error(error.message)); }}>
                 <TextInput value={rates[c.code] ?? String(c.manualRate)} onChange={(v) => setRates({ ...rates, [c.code]: v })} mono className="w-24" />
                 <Btn type="submit" disabled={!rates[c.code]}>OK</Btn>
               </form>
             )}
-            <span className="font-mono text-[11.5px] text-neutral-400">{c.updatedAt.slice(5, 10).split("-").reverse().join("/")}</span>
-            {c.code !== base ? <button type="button" className="text-right text-[11px] text-neutral-400 hover:text-red-600" onClick={() => void apiDelete(`/api/v2/currencies/${c.code}`).then(refresh).catch((error: Error) => toast.error(error.message))}>remover</button> : <span />}
+            <span className="font-mono text-[11.5px] text-fg-3">{c.updatedAt.slice(5, 10).split("-").reverse().join("/")}</span>
+            {c.code !== base ? <button type="button" className="text-right text-[11px] text-fg-3 hover:text-neg" onClick={() => void apiDelete(`/api/v2/currencies/${c.code}`).then(refresh).catch((error: Error) => toast.error(error.message))}>remover</button> : <span />}
           </div>
         ))}
       </div>
@@ -573,7 +574,7 @@ function CurrencyPage() {
         <Field label={`Por 1 ${base}`}><TextInput value={rate} onChange={setRate} mono className="w-24" required /></Field>
         <Btn primary type="submit">Adicionar</Btn>
       </form>
-      <p className="text-[11.5px] text-neutral-400">Cada lançamento guarda a taxa usada no dia; mudar a taxa aqui só afeta lançamentos novos.</p>
+      <p className="text-[11.5px] text-fg-3">Cada lançamento guarda a taxa usada no dia; mudar a taxa aqui só afeta lançamentos novos.</p>
     </div>
   );
 }
@@ -587,12 +588,12 @@ function TrashPage({ names }: { names: Names }) {
       <div className="flex gap-1.5">
         <Btn danger disabled={!trash.data?.rows.length} onClick={() => { if (window.confirm("Apagar de vez tudo o que está na lixeira?")) void apiDelete("/api/v2/trash").then(refresh); }}>Esvaziar lixeira</Btn>
       </div>
-      <div className="overflow-hidden rounded-lg border border-neutral-200">
+      <div className="overflow-hidden rounded-lg border border-stroke-3">
         {(trash.data?.rows ?? []).map((row) => (
-          <div key={row.id} className="flex h-[34px] items-center gap-3 border-t border-neutral-200 px-3 text-[12.5px] first:border-t-0">
-            <span className="w-12 font-mono text-[11.5px] text-neutral-400">{row.date.slice(5).split("-").reverse().join("/")}</span>
+          <div key={row.id} className="flex h-[34px] items-center gap-3 border-t border-stroke-3 px-3 text-[12.5px] first:border-t-0">
+            <span className="w-12 font-mono text-[11.5px] text-fg-3">{row.date.slice(5).split("-").reverse().join("/")}</span>
             <span className="flex-1 truncate">{row.description}</span>
-            <span className="text-neutral-500">{names.account.get(row.accountId)}</span>
+            <span className="text-fg-muted">{names.account.get(row.accountId)}</span>
             <span className="w-28 text-right font-mono tabular-nums">{money(row.amountBase, names.currency)}</span>
             <Btn ghost onClick={() => void apiPost("/api/v2/trash/restore", { ids: [row.id] }).then(refresh).catch((error: Error) => toast.error(error.message))}>Restaurar</Btn>
           </div>
@@ -615,7 +616,7 @@ function ApiPage() {
       </Field>
       <div className="col-span-2 flex gap-1.5">
         <Btn onClick={() => void navigator.clipboard.writeText(`${origin}/mcp`).then(() => toast.success("Copiado"))}>Copiar URL</Btn>
-        <a href="/api/reference" target="_blank" rel="noreferrer" className="inline-flex h-[26px] items-center rounded-[6px] px-2.5 text-[12px] font-medium text-neutral-500 hover:bg-neutral-100">Documentação da API ↗</a>
+        <a href="/api/reference" target="_blank" rel="noreferrer" className="inline-flex h-[26px] items-center rounded-[6px] px-2.5 text-[12px] font-medium text-fg-muted hover:bg-fill-3">Documentação da API ↗</a>
       </div>
     </div>
   );

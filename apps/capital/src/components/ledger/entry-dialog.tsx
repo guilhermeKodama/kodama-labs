@@ -252,7 +252,7 @@ export function EntryDialog({ names, draft, onClose }: { names: Names; draft: Qu
       }
     >
       <form
-        className="flex items-center gap-1.5 rounded-lg border border-neutral-200 bg-neutral-50 p-2"
+        className="flex items-center gap-1.5 rounded-lg border border-stroke-3 bg-fill-4 p-2"
         onSubmit={(event) => {
           event.preventDefault();
           const parsed = parseQuick(quick, names);
@@ -276,14 +276,14 @@ export function EntryDialog({ names, draft, onClose }: { names: Names; draft: Qu
       {isInvest ? (
         <>
           <Segmented value={f.investDir} options={[{ v: "deposit", l: "Aporte: conta → corretora" }, { v: "withdraw", l: "Resgate: corretora → conta" }]} onChange={(investDir) => up({ investDir })} />
-          {brokers.length === 0 ? <p className="text-[12px] text-amber-700">Cadastre uma corretora em Ajustes › Contas para registrar aportes.</p> : null}
+          {brokers.length === 0 ? <p className="text-[12px] text-warn-strong">Cadastre uma corretora em Ajustes › Contas para registrar aportes.</p> : null}
           <div className="grid grid-cols-[1fr_20px_1fr] items-end gap-2">
             <Field label={f.investDir === "deposit" ? "De (conta)" : "De (corretora)"}>
               {f.investDir === "deposit"
                 ? <SelectInput value={f.accountId} onChange={(accountId) => up({ accountId })} options={accountOptions(cashAccounts)} />
                 : <SelectInput value={f.brokerId} onChange={(brokerId) => up({ brokerId })} options={accountOptions(brokers)} />}
             </Field>
-            <span className="pb-1 text-center text-neutral-400">→</span>
+            <span className="pb-1 text-center text-fg-3">→</span>
             <Field label={f.investDir === "deposit" ? "Para (corretora)" : "Para (conta)"}>
               {f.investDir === "deposit"
                 ? <SelectInput value={f.brokerId} onChange={(brokerId) => up({ brokerId })} options={accountOptions(brokers)} />
@@ -297,7 +297,7 @@ export function EntryDialog({ names, draft, onClose }: { names: Names; draft: Qu
           <Field label="De">
             <SelectInput value={f.accountId} onChange={(accountId) => up({ accountId })} options={accountOptions(liveAccounts)} />
           </Field>
-          <span className="pb-1 text-center text-neutral-400">→</span>
+          <span className="pb-1 text-center text-fg-3">→</span>
           <Field label="Para">
             <SelectInput value={f.toAccountId} onChange={(toAccountId) => up({ toAccountId })} placeholder="Escolha a conta" options={accountOptions(liveAccounts.filter((a) => a.id !== f.accountId))} />
           </Field>
@@ -333,7 +333,7 @@ export function EntryDialog({ names, draft, onClose }: { names: Names; draft: Qu
             hint={
               suggested && !f.categoryId ? (
                 <span>
-                  Sugerido pelas regras: <b className="font-medium text-neutral-700">{suggested.name}</b> ·{" "}
+                  Sugerido pelas regras: <b className="font-medium text-fg-strong">{suggested.name}</b> ·{" "}
                   <button type="button" className="underline" onClick={() => up({ categoryId: suggested.id })}>usar</button>
                 </span>
               ) : undefined
@@ -343,7 +343,7 @@ export function EntryDialog({ names, draft, onClose }: { names: Names; draft: Qu
           </Field>
         </div>
       ) : null}
-      <div className="flex flex-col gap-2 border-t border-neutral-200 pt-2.5">
+      <div className="flex flex-col gap-2 border-t border-stroke-3 pt-2.5">
         <div className="flex flex-wrap gap-4">
           <Check checked={f.recurring} onChange={(recurring) => up({ recurring, installments: recurring ? false : f.installments })} label={isInvest ? "Aporte recorrente" : "Recorrente"} />
           {f.kind === "expense" ? <Check checked={f.installments} onChange={(installments) => up({ installments, recurring: installments ? false : f.recurring })} label="Parcelado" /> : null}

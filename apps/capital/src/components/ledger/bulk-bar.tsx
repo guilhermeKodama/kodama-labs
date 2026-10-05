@@ -44,27 +44,27 @@ export function BulkBar({
   const [rule, setRule] = useState(false);
   const cur = names.currency;
   const btn = (label: string, onClick: () => void, danger?: boolean) => (
-    <button type="button" onClick={onClick} className={`inline-flex h-7 items-center rounded-[7px] px-2.5 text-[12px] font-medium whitespace-nowrap hover:bg-neutral-200/70 ${danger ? "text-red-600" : ""}`}>
+    <button type="button" onClick={onClick} className={`inline-flex h-7 items-center rounded-[7px] px-2.5 text-[12px] font-medium whitespace-nowrap hover:bg-fill-2/70 ${danger ? "text-neg" : ""}`}>
       {label}
     </button>
   );
   return (
     <div className="pointer-events-none sticky bottom-2 z-20 flex justify-center">
-      <div className="pointer-events-auto relative flex flex-wrap items-center justify-center gap-1 rounded-xl border border-neutral-300 bg-neutral-50 p-1.5 text-[12px] shadow-lg">
-        <span className="inline-flex h-7 items-center gap-2 rounded-[7px] border border-dashed border-neutral-400 px-2.5 font-semibold whitespace-nowrap">
+      <div className="pointer-events-auto relative flex flex-wrap items-center justify-center gap-1 rounded-xl border border-stroke-1 bg-chrome p-1.5 text-[12px] shadow-lg">
+        <span className="inline-flex h-7 items-center gap-2 rounded-[7px] border border-dashed border-fg-3 px-2.5 font-semibold whitespace-nowrap">
           {allInView ? `${totalInView} selecionadas (toda a view)` : `${stats.count} selecionadas`}
-          <button type="button" title="Limpar seleção" className="font-normal text-neutral-400 hover:text-neutral-700" onClick={onClear}>✕</button>
+          <button type="button" title="Limpar seleção" className="font-normal text-fg-3 hover:text-fg-strong" onClick={onClear}>✕</button>
         </span>
         {canSelectAll && !allInView ? btn(`Selecionar todas as ${totalInView}`, onSelectAll) : null}
         {!allInView ? (
-          <span className="inline-flex gap-3 px-2.5 whitespace-nowrap text-neutral-400">
-            <span>Σ <span className="font-mono text-neutral-950 tabular-nums">{money(stats.sum, cur)}</span></span>
-            {stats.count > 1 ? <span>média <span className="font-mono text-neutral-950 tabular-nums">{money(stats.avg, cur)}</span></span> : null}
-            {stats.count > 1 ? <span>mín <span className="font-mono text-neutral-950 tabular-nums">{money(stats.min, cur)}</span></span> : null}
-            {stats.count > 1 ? <span>máx <span className="font-mono text-neutral-950 tabular-nums">{money(stats.max, cur)}</span></span> : null}
+          <span className="inline-flex gap-3 px-2.5 whitespace-nowrap text-fg-3">
+            <span>Σ <span className="font-mono text-fg-1 tabular-nums">{money(stats.sum, cur)}</span></span>
+            {stats.count > 1 ? <span>média <span className="font-mono text-fg-1 tabular-nums">{money(stats.avg, cur)}</span></span> : null}
+            {stats.count > 1 ? <span>mín <span className="font-mono text-fg-1 tabular-nums">{money(stats.min, cur)}</span></span> : null}
+            {stats.count > 1 ? <span>máx <span className="font-mono text-fg-1 tabular-nums">{money(stats.max, cur)}</span></span> : null}
           </span>
         ) : null}
-        <span className="h-5 w-px bg-neutral-300" />
+        <span className="h-5 w-px bg-stroke-1" />
         <span className="relative">
           {btn("Categoria ▾", () => setPop(pop === "cat" ? null : "cat"))}
           <Popover open={pop === "cat"} onClose={() => setPop(null)} up width={240}>
@@ -90,7 +90,7 @@ export function BulkBar({
         </span>
         {btn("Marcar IR", onToggleTax)}
         {btn("Duplicar", onDuplicate)}
-        <span className="h-5 w-px bg-neutral-300" />
+        <span className="h-5 w-px bg-stroke-1" />
         {btn("Excluir", onDelete, true)}
       </div>
     </div>

@@ -49,14 +49,14 @@ export function PeriodControl({
   const offset = "preset" in period ? period.offset : 0;
   const steppable = preset !== null && preset !== "all";
   return (
-    <span className="relative inline-flex h-[26px] shrink-0 items-center rounded-[6px] border border-neutral-300 bg-white text-[12px]">
+    <span className="relative inline-flex h-[26px] shrink-0 items-center rounded-[6px] border border-stroke-1 bg-editor text-[12px]">
       {steppable ? (
-        <button type="button" title="Período anterior" className="h-full border-r border-neutral-200 px-1.5 text-neutral-600 hover:bg-neutral-50" onClick={() => onChange({ preset: preset!, offset: offset - 1 })}>
+        <button type="button" title="Período anterior" className="h-full border-r border-stroke-3 px-1.5 text-fg-2 hover:bg-fill-4" onClick={() => onChange({ preset: preset!, offset: offset - 1 })}>
           ‹
         </button>
       ) : null}
-      <button type="button" className="flex h-full items-center gap-1.5 px-2 whitespace-nowrap hover:bg-neutral-50" onClick={() => setOpen((v) => !v)}>
-        <span className="text-neutral-400">{preset ? PERIOD_LABEL[preset] : "Intervalo"}</span>
+      <button type="button" className="flex h-full items-center gap-1.5 px-2 whitespace-nowrap hover:bg-fill-4" onClick={() => setOpen((v) => !v)}>
+        <span className="text-fg-3">{preset ? PERIOD_LABEL[preset] : "Intervalo"}</span>
         {preset !== "all" ? <span className="font-medium">{label}</span> : null}
       </button>
       {steppable ? (
@@ -64,7 +64,7 @@ export function PeriodControl({
           type="button"
           title="Próximo período"
           disabled={offset >= 0}
-          className="h-full border-l border-neutral-200 px-1.5 text-neutral-600 hover:bg-neutral-50 disabled:text-neutral-300"
+          className="h-full border-l border-stroke-3 px-1.5 text-fg-2 hover:bg-fill-4 disabled:text-fg-4"
           onClick={() => onChange({ preset: preset!, offset: offset + 1 })}
         >
           ›
@@ -87,7 +87,7 @@ export function PeriodControl({
         </div>
       </Popover>
       {offset !== 0 ? (
-        <button type="button" className="absolute top-full left-0 mt-0.5 text-[11px] whitespace-nowrap text-neutral-400 underline" onClick={() => onChange({ preset: preset!, offset: 0 })}>
+        <button type="button" className="absolute top-full left-0 mt-0.5 text-[11px] whitespace-nowrap text-fg-3 underline" onClick={() => onChange({ preset: preset!, offset: 0 })}>
           voltar para o atual
         </button>
       ) : null}
@@ -125,11 +125,11 @@ export function FilterChips({
   return (
     <>
       {filters.map((filter, index) => (
-        <span key={index} className="relative inline-flex h-6 shrink-0 items-center overflow-hidden rounded-[6px] border border-neutral-300 bg-neutral-50 text-[12px]">
-          <button type="button" className="h-full max-w-[280px] truncate px-2 hover:bg-neutral-100" onClick={() => setEditing(editing === index ? null : index)}>
+        <span key={index} className="relative inline-flex h-6 shrink-0 items-center overflow-hidden rounded-[6px] border border-stroke-1 bg-fill-4 text-[12px]">
+          <button type="button" className="h-full max-w-[280px] truncate px-2 hover:bg-fill-3" onClick={() => setEditing(editing === index ? null : index)}>
             {filterLabel(filter, names)}
           </button>
-          <button type="button" title="Remover filtro" className="h-full border-l border-neutral-200 px-1.5 text-neutral-400 hover:text-neutral-700" onClick={() => setAt(index, null)}>
+          <button type="button" title="Remover filtro" className="h-full border-l border-stroke-3 px-1.5 text-fg-3 hover:text-fg-strong" onClick={() => setAt(index, null)}>
             ✕
           </button>
           {editing === index ? (
@@ -144,10 +144,10 @@ export function FilterChips({
             <>
               <MenuLabel>{FIELD_LABEL[pendingField]} é…</MenuLabel>
               {fieldOptions(pendingField, names).map((option) => (
-                <label key={String(option.value)} className="flex h-7 cursor-pointer items-center gap-2 rounded-[5px] px-2 hover:bg-neutral-100">
+                <label key={String(option.value)} className="flex h-7 cursor-pointer items-center gap-2 rounded-[5px] px-2 hover:bg-fill-3">
                   <input
                     type="checkbox"
-                    className="size-3.5 accent-neutral-900"
+                    className="size-3.5 accent-fg-ink"
                     checked={pendingValues.includes(option.value)}
                     onChange={(event) => setPendingValues(event.target.checked ? [...pendingValues, option.value] : pendingValues.filter((v) => v !== option.value))}
                   />
@@ -203,10 +203,10 @@ function FilterEditor({ filter, names, onChange, onClose }: { filter: LedgerFilt
         {fieldOptions(field, names).map((option) => {
           const on = values.includes(option.value);
           return (
-            <label key={String(option.value)} className="flex h-7 cursor-pointer items-center gap-2 rounded-[5px] px-2 hover:bg-neutral-100">
+            <label key={String(option.value)} className="flex h-7 cursor-pointer items-center gap-2 rounded-[5px] px-2 hover:bg-fill-3">
               <input
                 type="checkbox"
-                className="size-3.5 accent-neutral-900"
+                className="size-3.5 accent-fg-ink"
                 checked={on}
                 onChange={(event) => {
                   const next = event.target.checked ? [...values, option.value] : values.filter((v) => v !== option.value);
@@ -325,7 +325,7 @@ export function DisplayMenu({
                 key={layout}
                 type="button"
                 onClick={() => onConfig({ layout, ...(layout === "pivot" && config.groupBy.length < 2 ? { groupBy: [{ field: "categoryId" }, { field: "entityId" }] } : {}), ...(layout === "board" && config.groupBy.length === 0 ? { groupBy: [{ field: "accountId" }] } : {}), ...(layout === "chart" && config.groupBy.length === 0 ? { groupBy: [{ field: "categoryId" }] } : {}) })}
-                className={`flex flex-col items-center gap-0.5 rounded-[6px] border py-1.5 text-[10.5px] ${config.layout === layout ? "border-neutral-900 text-neutral-950" : "border-neutral-200 text-neutral-400"}`}
+                className={`flex flex-col items-center gap-0.5 rounded-[6px] border py-1.5 text-[10.5px] ${config.layout === layout ? "border-fg-ink text-fg-1" : "border-stroke-3 text-fg-3"}`}
               >
                 <span className="text-[13px]">{{ table: "▦", pivot: "▤", chart: "▮", board: "▥", calendar: "▣" }[layout]}</span>
                 {{ table: "Tabela", pivot: "Pivot", chart: "Gráfico", board: "Board", calendar: "Calendário" }[layout]}
@@ -348,7 +348,7 @@ export function DisplayMenu({
             <Field label="Tipo de gráfico">
               <div className="grid grid-cols-3 gap-1">
                 {(["bar", "hbar", "line", "area", "pie", "donut", "sankey"] as const).map((type) => (
-                  <button key={type} type="button" onClick={() => onConfig({ chart: { ...chart, type } })} className={`rounded-[6px] border px-2 py-1 text-[11.5px] ${chart.type === type ? "border-neutral-900" : "border-neutral-200 text-neutral-400"}`}>
+                  <button key={type} type="button" onClick={() => onConfig({ chart: { ...chart, type } })} className={`rounded-[6px] border px-2 py-1 text-[11.5px] ${chart.type === type ? "border-fg-ink" : "border-stroke-3 text-fg-3"}`}>
                     {{ bar: "Barras", hbar: "Barras horiz.", line: "Linha", area: "Área", pie: "Pizza", donut: "Rosca", sankey: "Fluxo" }[type]}
                   </button>
                 ))}
@@ -374,7 +374,7 @@ export function DisplayMenu({
                       key={col}
                       type="button"
                       onClick={() => onConfig({ columns: on ? config.columns.filter((c) => c !== col) : COLUMN_ORDER.filter((c) => c === col || config.columns.includes(c)) })}
-                      className={`rounded-[5px] border px-1.5 py-0.5 text-[11.5px] ${on ? "border-neutral-400 bg-neutral-100" : "border-neutral-200 text-neutral-400"}`}
+                      className={`rounded-[5px] border px-1.5 py-0.5 text-[11.5px] ${on ? "border-fg-3 bg-fill-3" : "border-stroke-3 text-fg-3"}`}
                     >
                       {COLUMN_LABEL[col]}
                     </button>
@@ -388,7 +388,7 @@ export function DisplayMenu({
           <SelectInput value={config.transferDisplay} onChange={(v) => onConfig({ transferDisplay: v as "group" })} options={[{ value: "group", label: "Uma linha (origem → destino)" }, { value: "legs", label: "Duas linhas (saída + entrada)" }]} />
         </Field>
         <Check checked={isFavorite} onChange={onFavorite} label="Favorita (aparece na sidebar)" />
-        <div className="flex flex-wrap gap-1.5 border-t border-neutral-200 pt-2">
+        <div className="flex flex-wrap gap-1.5 border-t border-stroke-3 pt-2">
           <Btn onClick={onDuplicate}>Duplicar</Btn>
           <Btn onClick={onExport}>Exportar CSV</Btn>
           {!isBuiltin ? <Btn danger onClick={onDelete}>Excluir view</Btn> : null}
