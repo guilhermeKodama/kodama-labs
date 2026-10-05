@@ -39,8 +39,7 @@ export default async function LocaleLayout({
       <NuqsAdapter>
         <ThemeProvider
           attribute="class"
-          defaultTheme="dark"
-          enableSystem
+          forcedTheme="light"
           disableTransitionOnChange
         >
           <SessionGate>

@@ -1,35 +1,29 @@
 "use client";
 
 import { useState } from "react";
-import { useTranslations } from "next-intl";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { api, apiPost } from "@/lib/api";
 import { money, todayIso } from "@/lib/money";
 import { useAccounts } from "@/lib/catalog";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { AppFrame, Btn, Kpi, KpiStrip, Panel } from "@/components/shell/chrome";
 
 interface Contributions {
-  months: { month: number; deposits: number; withdrawals: number; net: number }[];
+  months: { month: number; net: number }[];
   totalNet: number;
-  averageMonthly: number;
 }
 
 interface FireSummary {
-  hasGoal: boolean;
   baseCurrency: string;
-  goal: { targetMonthlyIncome: number } | null;
-  suggestedDefaults: { suggestedMonthlyContribution: number; currentMonthlyExpenses: number };
-  projection: { monthsToFire: number | null; fireNumber: number } | null;
+  suggestedDefaults: { suggestedMonthlyContribution: number };
+  projection: { monthsToFire: number | null } | null;
 }
 
 interface Suggestion {
-  classes: { assetClass: string; amount: number; target: number; afterShare: number }[];
+  classes: { assetClass: string; amount: number }[];
 }
 
 export function ContributionsScreen() {
-  const t = useTranslations("app");
   const accounts = useAccounts();
   const queryClient = useQueryClient();
   const year = new Date().getFullYear();
@@ -37,11 +31,11 @@ export function ContributionsScreen() {
   const fire = useQuery({ queryKey: ["fire"], queryFn: () => api<FireSummary>("/api/v1/fire/summary") });
   const [amount, setAmount] = useState("");
   const [suggestion, setSuggestion] = useState<Suggestion | null>(null);
-  const [brokerId, setBrokerId] = useState("");
   const [fromId, setFromId] = useState("");
-  const brokers = (accounts.data ?? []).filter((account) => account.type === "brokerage" && !account.archivedAt);
+  const [brokerId, setBrokerId] = useState("");
+  const currency = fire.data?.baseCurrency ?? "BRL";
   const sources = (accounts.data ?? []).filter((account) => account.type !== "brokerage" && !account.archivedAt);
-
+  const brokers = (accounts.data ?? []).filter((account) => account.type === "brokerage" && !account.archivedAt);
   const suggest = useMutation({
     mutationFn: () => apiPost<Suggestion>("/api/v2/portfolio/rebalance-suggestion", { amount: Number(amount), mode: "class" }),
     onSuccess: setSuggestion,
@@ -49,59 +43,49 @@ export function ContributionsScreen() {
   });
   const deposit = useMutation({
     mutationFn: () => apiPost("/api/v2/brokerage-cash", { accountId: brokerId, counterpartAccountId: fromId, direction: "deposit", amount: Number(amount), date: todayIso() }),
-    onSuccess: async () => {
-      toast.success(t("saved"));
-      await queryClient.invalidateQueries({ queryKey: ["contributions"] });
-      await queryClient.invalidateQueries({ queryKey: ["ledger"] });
-    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["contributions"] }),
     onError: (error: Error) => toast.error(error.message),
   });
-  const goal = fire.data?.suggestedDefaults.suggestedMonthlyContribution ?? fire.data?.goal?.targetMonthlyIncome;
 
   return (
-    <div className="space-y-6 p-6">
-      <h1 className="text-xl font-semibold">{t("contributions")}</h1>
-      {fire.data ? (
-        <section className="rounded-lg border p-4">
-          <p className="text-xs text-muted-foreground">{t("fireGoal")}</p>
-          <p className="font-mono text-2xl tabular-nums">{goal != null ? money(goal, fire.data.baseCurrency) : t("none")}</p>
-          {fire.data.projection?.monthsToFire != null ? <p className="text-sm text-muted-foreground">{t("monthsToFire", { count: fire.data.projection.monthsToFire })}</p> : null}
-        </section>
-      ) : null}
-      <div className="grid grid-cols-6 gap-2 text-xs sm:grid-cols-12">
-        {(flows.data?.months ?? []).map((item) => (
-          <div key={item.month} className="rounded-md border p-2">
-            <div className="text-muted-foreground">{item.month}</div>
-            <div className="font-mono tabular-nums">{money(item.net)}</div>
+    <AppFrame crumbs={["Investimentos", "Aportes"]} actions={<Btn primary onClick={() => deposit.mutate()}>+ Aporte</Btn>}>
+      <KpiStrip>
+        <Kpi label="Meta mensal" value={money(fire.data?.suggestedDefaults.suggestedMonthlyContribution ?? 0, currency)} sub={fire.data?.projection?.monthsToFire != null ? `${fire.data.projection.monthsToFire} meses até a meta` : undefined} />
+        <Kpi label="Líquido no ano" value={money(flows.data?.totalNet ?? 0, currency)} />
+      </KpiStrip>
+      <Panel title="Histórico">
+        <div className="grid grid-cols-6 gap-2 sm:grid-cols-12">
+          {(flows.data?.months ?? []).map((item) => (
+            <div key={item.month} className="rounded-[6px] border border-neutral-200 p-2">
+              <div className="text-[11px] text-neutral-400">{item.month}</div>
+              <div className="font-mono text-[12px] tabular-nums">{money(item.net, currency)}</div>
+            </div>
+          ))}
+        </div>
+      </Panel>
+      <Panel title="Onde aportar">
+        <form className="mb-3 flex items-center gap-1.5" onSubmit={(event) => { event.preventDefault(); suggest.mutate(); }}>
+          <input value={amount} onChange={(event) => setAmount(event.target.value)} placeholder="Valor" className="h-[26px] w-28 rounded-[6px] border border-neutral-300 px-2 text-[12px]" />
+          <Btn type="submit">Sugerir</Btn>
+        </form>
+        {(suggestion?.classes ?? []).filter((item) => item.amount > 0).map((item) => (
+          <div key={item.assetClass} className="flex h-8 items-center justify-between border-t border-neutral-200 text-[12.5px]">
+            <span>{item.assetClass}</span>
+            <span className="font-mono tabular-nums">{money(item.amount, currency)}</span>
           </div>
         ))}
-      </div>
-      <p className="text-sm">{t("yearNet")} <span className="font-mono tabular-nums">{money(flows.data?.totalNet ?? 0)}</span></p>
-      <form className="flex flex-wrap items-end gap-2" onSubmit={(event) => { event.preventDefault(); suggest.mutate(); }}>
-        <Input className="w-36" inputMode="decimal" value={amount} onChange={(event) => setAmount(event.target.value)} placeholder={t("amount")} />
-        <Button type="submit">{t("suggest")}</Button>
-      </form>
-      {suggestion ? (
-        <ul className="text-sm">
-          {suggestion.classes.filter((item) => item.amount > 0).map((item) => (
-            <li key={item.assetClass} className="flex justify-between border-b py-1">
-              <span>{item.assetClass}</span>
-              <span className="font-mono tabular-nums">{money(item.amount)}</span>
-            </li>
-          ))}
-        </ul>
-      ) : null}
-      <form className="flex flex-wrap items-end gap-2" onSubmit={(event) => { event.preventDefault(); deposit.mutate(); }}>
-        <select className="h-9 rounded-md border bg-transparent px-2 text-sm" value={fromId} onChange={(event) => setFromId(event.target.value)} required>
-          <option value="">{t("fromAccount")}</option>
-          {sources.map((account) => <option key={account.id} value={account.id}>{account.name}</option>)}
-        </select>
-        <select className="h-9 rounded-md border bg-transparent px-2 text-sm" value={brokerId} onChange={(event) => setBrokerId(event.target.value)} required>
-          <option value="">{t("broker")}</option>
-          {brokers.map((account) => <option key={account.id} value={account.id}>{account.name}</option>)}
-        </select>
-        <Button type="submit" disabled={deposit.isPending}>{t("contribute")}</Button>
-      </form>
-    </div>
+        <form className="mt-3 flex flex-wrap items-center gap-1.5" onSubmit={(event) => { event.preventDefault(); deposit.mutate(); }}>
+          <select value={fromId} onChange={(event) => setFromId(event.target.value)} className="h-[26px] rounded-[6px] border border-neutral-300 px-2 text-[12px]" required>
+            <option value="">Conta</option>
+            {sources.map((account) => <option key={account.id} value={account.id}>{account.name}</option>)}
+          </select>
+          <select value={brokerId} onChange={(event) => setBrokerId(event.target.value)} className="h-[26px] rounded-[6px] border border-neutral-300 px-2 text-[12px]" required>
+            <option value="">Corretora</option>
+            {brokers.map((account) => <option key={account.id} value={account.id}>{account.name}</option>)}
+          </select>
+          <Btn primary type="submit">Aportar</Btn>
+        </form>
+      </Panel>
+    </AppFrame>
   );
 }
