@@ -198,7 +198,7 @@ function FilterEditor({ filter, names, onChange, onClose }: { filter: LedgerFilt
       <Popover open onClose={onClose} width={260}>
         <MenuLabel>{FIELD_LABEL[field]}</MenuLabel>
         <div className="flex gap-1 px-1 pb-1">
-          <Btn ghost onClick={() => onChange({ ...filter, op: filter.op === "in" ? "nin" : "in" })}>{filter.op === "in" ? "é" : "não é"} ⇄</Btn>
+          <Btn ghost onClick={() => onChange(filter.op === "in" ? { ...filter, op: "nin" } : { ...filter, op: "in" })}>{filter.op === "in" ? "é" : "não é"} ⇄</Btn>
         </div>
         {fieldOptions(field, names).map((option) => {
           const on = values.includes(option.value);

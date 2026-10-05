@@ -85,7 +85,8 @@
   "view": {
     "not_found": "View não encontrada.",
     "builtin_rename": "A view fixa não pode ser renomeada.",
-    "builtin_delete": "A view fixa não pode ser excluída."
+    "builtin_delete": "A view fixa não pode ser excluída.",
+    "not_exportable": "Só views de lançamentos podem ser exportadas."
   },
   "query": {
     "unknown_aggregation_field": "Esse cálculo não está disponível para essa coluna.",

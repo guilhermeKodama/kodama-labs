@@ -61,6 +61,8 @@ export const keys = {
   views: (dataset = "ledger") => ["views", dataset] as const,
   /** POST /v2/ledger/query with this body (a LedgerQueryInput). */
   ledgerQuery: (input: object) => ["ledger", "query", input] as const,
+  /** POST /v2/ledger/flows (the cash-flow sankey) with this body (a LedgerFlowsInput). */
+  ledgerFlows: (input: object) => ["ledger", "flows", input] as const,
   entry: (id: string) => ["ledger", "entry", id] as const,
   entryHistory: (id: string) => ["ledger", "entry", id, "history"] as const,
   deleteOptions: (id: string) => ["ledger", "entry", id, "delete-options"] as const,

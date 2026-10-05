@@ -157,7 +157,7 @@ describe("queryLedger", () => {
     const lines = csv.split("\n");
     expect(lines[0]).toBe("Data,Descrição,Entidade,Conta,Categoria,Tipo,Valor,Moeda,Valor na moeda base,Observações");
     expect(lines).toHaveLength(3);
-    expect(lines[1]).toContain("Mercado B,PF,Conta principal,Groceries,expense,-300");
+    expect(lines[1]).toContain("Mercado B,PF,Conta principal,Groceries,Saída,-300");
   });
 
   it("writes the CSV header in the user's locale", async () => {

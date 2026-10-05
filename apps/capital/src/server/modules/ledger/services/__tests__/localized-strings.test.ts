@@ -34,7 +34,7 @@ describe("localized server strings", () => {
     expect((await duplicateView(USER, view.id, prisma)).name).toBe("Mercado (cópia)");
     await prisma.user.update({ where: { id: USER }, data: { locale: "en" } });
     expect((await duplicateView(USER, view.id, prisma)).name).toBe("Mercado (copy)");
-    expect((await duplicateView(USER, view.id, prisma, "Outra")).name).toBe("Outra");
+    expect((await duplicateView(USER, view.id, prisma, { name: "Outra" })).name).toBe("Outra");
     await prisma.user.update({ where: { id: USER }, data: { locale: "pt-BR" } });
   });
 });

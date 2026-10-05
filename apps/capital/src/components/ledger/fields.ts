@@ -144,6 +144,8 @@ export function filterLabel(filter: LedgerFilter, names: Names): string {
       return `${label} contém “${filter.value}”`;
     case "between":
       return "from" in filter ? `${label}: ${filter.from} a ${filter.to}` : `${label}: ${filter.min} a ${filter.max}`;
+    case "inBuckets":
+      return `${label}: ${filter.values.join(", ")}`;
     default:
       return `${label} ${({ gt: ">", gte: "≥", lt: "<", lte: "≤", eq: "=" } as Record<string, string>)[filter.op]} ${filter.value}`;
   }
