@@ -1,9 +1,9 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import type { ReactNode } from "react";
 import { DropdownMenu } from "radix-ui";
 import { CheckIcon } from "lucide-react";
-import { OverlayScope, useOverlay } from "@/lib/shortcuts/provider";
+import { OverlayScope, useOverlayRoot } from "@/lib/shortcuts/provider";
 import { cn } from "@/lib/utils";
 import { FLOATING, MENU_ROW } from "./styles";
 
@@ -34,15 +34,9 @@ export function Menu({
   modal?: boolean;
   className?: string;
 }) {
-  const [innerOpen, setInnerOpen] = useState(false);
-  const isOpen = open ?? innerOpen;
-  const overlayId = useOverlay(isOpen);
-  const changeOpen = (next: boolean) => {
-    if (open === undefined) setInnerOpen(next);
-    onOpenChange?.(next);
-  };
+  const root = useOverlayRoot({ open, onOpenChange });
   return (
-    <DropdownMenu.Root open={isOpen} onOpenChange={changeOpen} modal={modal}>
+    <DropdownMenu.Root open={root.open} onOpenChange={root.onOpenChange} modal={modal}>
       <DropdownMenu.Trigger asChild>{trigger}</DropdownMenu.Trigger>
       <DropdownMenu.Portal>
         <DropdownMenu.Content
@@ -53,7 +47,7 @@ export function Menu({
           style={{ width }}
           className={cn(FLOATING, "max-h-[var(--radix-dropdown-menu-content-available-height)] overflow-y-auto rounded-[8px] p-1", className)}
         >
-          <OverlayScope id={overlayId}>{children}</OverlayScope>
+          <OverlayScope id={root.overlayId}>{children}</OverlayScope>
         </DropdownMenu.Content>
       </DropdownMenu.Portal>
     </DropdownMenu.Root>

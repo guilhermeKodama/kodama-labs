@@ -4,9 +4,14 @@
 export const CONTROL =
   "h-[26px] min-w-0 rounded-[6px] border border-stroke-1 bg-editor px-2 text-[12.5px] outline-none placeholder:text-fg-3 focus:border-fg-muted disabled:cursor-not-allowed disabled:bg-fill-4 disabled:text-fg-muted aria-invalid:border-neg";
 
-/** Floating surface for menus, popovers and listboxes. */
+/**
+ * Floating surface for menus, popovers and listboxes. It fades in but
+ * closes at once: Radix keeps a closing layer mounted, still taking Esc as
+ * the top layer, until its exit animation ends, so a second Esc during a
+ * fade-out (meant for the dialog underneath) would be swallowed.
+ */
 export const FLOATING =
-  "z-50 border border-stroke-1 bg-editor text-fg-1 shadow-lg outline-none data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0";
+  "z-50 border border-stroke-1 bg-editor text-fg-1 shadow-lg outline-none data-[state=open]:animate-in data-[state=open]:fade-in-0";
 
 /** 28px row inside menus and listboxes. */
 export const MENU_ROW =

@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, useMemo, useState } from "react";
+import { useId, useMemo, useState, type RefObject } from "react";
 import { useTranslations } from "next-intl";
 import { Btn, Dialog, DialogFooter, DialogHead, Field, Kbd, Select, TextInput } from "@/components/cap";
 import { ACCOUNT_TYPES, useCreateAccount, useCurrencies, type AccountRecord, type AccountType } from "@/lib/api/catalog";
@@ -12,7 +12,8 @@ import { EntitySelect } from "./entity-select";
 /**
  * "Nova conta" mini form opened from an account field: name, type,
  * entity, currency and, for cards, the closing and due days. The new
- * account is passed to `onCreated` (the field selects it).
+ * account is passed to `onCreated` (the field selects it). On close,
+ * focus goes back to `returnFocusRef` (the field), not to <body>.
  */
 export function NewAccountDialog({
   open,
@@ -21,6 +22,7 @@ export function NewAccountDialog({
   entityId,
   types,
   onCreated,
+  returnFocusRef,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -30,9 +32,20 @@ export function NewAccountDialog({
   /** Types the field accepts; the first is preselected. */
   types?: readonly AccountType[];
   onCreated: (account: AccountRecord) => void;
+  returnFocusRef?: RefObject<HTMLElement | null>;
 }) {
   return (
-    <Dialog open={open} onOpenChange={onOpenChange} width={480}>
+    <Dialog
+      open={open}
+      onOpenChange={onOpenChange}
+      width={480}
+      onCloseAutoFocus={(event) => {
+        const target = returnFocusRef?.current;
+        if (!target?.isConnected) return;
+        event.preventDefault();
+        target.focus();
+      }}
+    >
       <NewAccountForm
         initialName={initialName}
         entityId={entityId}

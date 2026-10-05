@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import { Combobox, type ComboboxOption } from "@/components/cap";
 import { MENU_ROW } from "@/components/cap/styles";
@@ -46,6 +46,7 @@ export function AccountCombobox({
   const me = useSession().data;
   const accounts = useAccounts(true);
   const [creating, setCreating] = useState<string | null>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
   const entityKey = entityId ? (typeof entityId === "string" ? entityId : entityId.join(",")) : "";
   const typesKey = types?.join(",") ?? "";
 
@@ -76,6 +77,7 @@ export function AccountCombobox({
   return (
     <>
       <Combobox
+        ref={triggerRef}
         value={value}
         onChange={onChange}
         options={options}
@@ -111,6 +113,7 @@ export function AccountCombobox({
           entityId={singleEntity}
           types={types}
           onCreated={(account) => onChange(account.id)}
+          returnFocusRef={triggerRef}
         />
       ) : null}
     </>

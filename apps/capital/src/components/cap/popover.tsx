@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import type { ReactNode } from "react";
 import { Popover as PopoverPrimitive } from "radix-ui";
-import { OverlayScope, useOverlay } from "@/lib/shortcuts/provider";
+import { OverlayScope, useOverlayRoot } from "@/lib/shortcuts/provider";
 import { cn } from "@/lib/utils";
 import { FLOATING } from "./styles";
 
@@ -31,15 +31,9 @@ export function Popover({
   onOpenChange?: (open: boolean) => void;
   className?: string;
 }) {
-  const [innerOpen, setInnerOpen] = useState(false);
-  const isOpen = open ?? innerOpen;
-  const overlayId = useOverlay(isOpen);
-  const changeOpen = (next: boolean) => {
-    if (open === undefined) setInnerOpen(next);
-    onOpenChange?.(next);
-  };
+  const root = useOverlayRoot({ open, onOpenChange });
   return (
-    <PopoverPrimitive.Root open={isOpen} onOpenChange={changeOpen}>
+    <PopoverPrimitive.Root open={root.open} onOpenChange={root.onOpenChange}>
       <PopoverPrimitive.Trigger asChild>{trigger}</PopoverPrimitive.Trigger>
       <PopoverPrimitive.Portal>
         <PopoverPrimitive.Content
@@ -54,7 +48,7 @@ export function Popover({
             className,
           )}
         >
-          <OverlayScope id={overlayId}>{children}</OverlayScope>
+          <OverlayScope id={root.overlayId}>{children}</OverlayScope>
         </PopoverPrimitive.Content>
       </PopoverPrimitive.Portal>
     </PopoverPrimitive.Root>

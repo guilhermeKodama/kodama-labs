@@ -6,6 +6,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, usePathname, useRouter } from "@/i18n/navigation";
 import { api, apiPost } from "@/lib/api/client";
 import { useLogout, useSession } from "@/lib/api/session";
+import { OverlayScope, useOverlay } from "@/lib/shortcuts/provider";
 import { cn } from "@/lib/utils";
 
 // Same look and API as before the cap primitives existed; screens may import either path.
@@ -123,7 +124,10 @@ export function Check({ checked, onChange, label }: { checked: boolean; onChange
   );
 }
 
-/** Anchored menu that closes on outside click and Escape. */
+/**
+ * Anchored menu that closes on outside click and Escape. An overlay while
+ * open: app shortcuts pause, and Esc closes only the top overlay.
+ */
 export function Popover({
   open,
   onClose,
@@ -140,20 +144,14 @@ export function Popover({
   up?: boolean;
 }) {
   const ref = useRef<HTMLDivElement>(null);
+  const overlayId = useOverlay(open, { onEscape: onClose });
   useEffect(() => {
     if (!open) return;
     const onDown = (event: MouseEvent) => {
       if (ref.current && !ref.current.contains(event.target as Node)) onClose();
     };
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onClose();
-    };
     document.addEventListener("mousedown", onDown);
-    document.addEventListener("keydown", onKey);
-    return () => {
-      document.removeEventListener("mousedown", onDown);
-      document.removeEventListener("keydown", onKey);
-    };
+    return () => document.removeEventListener("mousedown", onDown);
   }, [open, onClose]);
   if (!open) return null;
   return (
@@ -166,7 +164,7 @@ export function Popover({
         up ? "bottom-[calc(100%+6px)]" : "top-[calc(100%+6px)]",
       )}
     >
-      {children}
+      <OverlayScope id={overlayId}>{children}</OverlayScope>
     </div>
   );
 }
@@ -188,6 +186,7 @@ export function MenuLabel({ children }: { children: ReactNode }) {
   return <span className="px-2 pt-1 pb-0.5 text-[11px] text-fg-3">{children}</span>;
 }
 
+/** Rendered only while open, so it is an overlay for as long as it is mounted (like Popover). */
 export function Modal({
   title,
   description,
@@ -203,13 +202,7 @@ export function Modal({
   footer?: ReactNode;
   width?: number;
 }) {
-  useEffect(() => {
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onClose();
-    };
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [onClose]);
+  const overlayId = useOverlay(true, { onEscape: onClose });
   return (
     <div data-modal className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-backdrop/30 py-[8vh]" onMouseDown={onClose}>
       <div style={{ width }} className="flex max-w-[94vw] flex-col rounded-[10px] border border-stroke-1 bg-editor shadow-xl" onMouseDown={(event) => event.stopPropagation()}>
@@ -222,8 +215,10 @@ export function Modal({
             ✕
           </button>
         </div>
-        <div className="flex flex-col gap-3 px-4 py-3.5">{children}</div>
-        {footer ? <div className="flex items-center justify-end gap-1.5 border-t border-stroke-3 px-4 py-2.5">{footer}</div> : null}
+        <OverlayScope id={overlayId}>
+          <div className="flex flex-col gap-3 px-4 py-3.5">{children}</div>
+          {footer ? <div className="flex items-center justify-end gap-1.5 border-t border-stroke-3 px-4 py-2.5">{footer}</div> : null}
+        </OverlayScope>
       </div>
     </div>
   );

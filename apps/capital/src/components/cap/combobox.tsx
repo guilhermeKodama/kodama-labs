@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
+import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent, type ReactNode, type Ref } from "react";
 import { Popover as PopoverPrimitive } from "radix-ui";
 import { CheckIcon, ChevronDownIcon } from "lucide-react";
 import { useTranslations } from "next-intl";
@@ -36,6 +36,7 @@ export function Combobox({
   className,
   contentClassName,
   "aria-label": ariaLabel,
+  ref,
 }: {
   value: string | null;
   onChange: (value: string) => void;
@@ -57,6 +58,8 @@ export function Combobox({
   className?: string;
   contentClassName?: string;
   "aria-label"?: string;
+  /** The trigger button (to focus the field again after a dialog opened from it). */
+  ref?: Ref<HTMLButtonElement>;
 }) {
   const t = useTranslations("common");
   const listId = useId();
@@ -127,6 +130,7 @@ export function Combobox({
     <PopoverPrimitive.Root open={open} onOpenChange={changeOpen} modal>
       <PopoverPrimitive.Trigger asChild disabled={disabled}>
         <button
+          ref={ref}
           type="button"
           id={id}
           aria-label={ariaLabel}

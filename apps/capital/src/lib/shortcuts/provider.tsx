@@ -93,6 +93,31 @@ export function useOverlay(open: boolean, options: { onEscape?: () => void } = {
   return id;
 }
 
+/**
+ * useOverlay for a root that may be controlled or not (Radix Popover,
+ * Menu or Dialog wrappers): keeps its own open state when `open` is not
+ * passed, and returns the open state and handler to give the Radix root
+ * plus the id for <OverlayScope>.
+ */
+export function useOverlayRoot({
+  open,
+  defaultOpen = false,
+  onOpenChange,
+}: {
+  open?: boolean;
+  defaultOpen?: boolean;
+  onOpenChange?: (open: boolean) => void;
+}): { open: boolean; onOpenChange: (open: boolean) => void; overlayId: string } {
+  const [innerOpen, setInnerOpen] = useState(defaultOpen);
+  const isOpen = open ?? innerOpen;
+  const overlayId = useOverlay(isOpen);
+  const changeOpen = (next: boolean) => {
+    if (open === undefined) setInnerOpen(next);
+    onOpenChange?.(next);
+  };
+  return { open: isOpen, onOpenChange: changeOpen, overlayId };
+}
+
 /** Marks its subtree as the content of overlay `id` (shortcuts and nested overlays inside it). */
 export function OverlayScope({ id, children }: { id: string; children: ReactNode }) {
   return <OverlayContext.Provider value={id}>{children}</OverlayContext.Provider>;

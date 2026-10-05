@@ -4,10 +4,30 @@ import * as React from "react"
 import * as SheetPrimitive from "@radix-ui/react-dialog"
 import { XIcon } from "lucide-react"
 
+import { OverlayScope, useOverlayRoot } from "@/lib/shortcuts/provider"
 import { cn } from "@/lib/utils"
 
-function Sheet({ ...props }: React.ComponentProps<typeof SheetPrimitive.Root>) {
-  return <SheetPrimitive.Root data-slot="sheet" {...props} />
+// The open sheet's id in the overlay stack, for the content's <OverlayScope>.
+const SheetOverlayId = React.createContext<string | null>(null)
+
+/** Registers in the overlay stack while open, like the cap Sheet. */
+function Sheet({
+  open,
+  defaultOpen,
+  onOpenChange,
+  ...props
+}: React.ComponentProps<typeof SheetPrimitive.Root>) {
+  const root = useOverlayRoot({ open, defaultOpen, onOpenChange })
+  return (
+    <SheetOverlayId.Provider value={root.overlayId}>
+      <SheetPrimitive.Root
+        data-slot="sheet"
+        open={root.open}
+        onOpenChange={root.onOpenChange}
+        {...props}
+      />
+    </SheetOverlayId.Provider>
+  )
 }
 
 function SheetTrigger({
@@ -54,6 +74,7 @@ function SheetContent({
   side?: "top" | "right" | "bottom" | "left"
   showCloseButton?: boolean
 }) {
+  const overlayId = React.useContext(SheetOverlayId)
   return (
     <SheetPortal>
       <SheetOverlay />
@@ -73,7 +94,11 @@ function SheetContent({
         )}
         {...props}
       >
-        {children}
+        {overlayId ? (
+          <OverlayScope id={overlayId}>{children}</OverlayScope>
+        ) : (
+          children
+        )}
         {showCloseButton && (
           <SheetPrimitive.Close className="ring-offset-background focus:ring-ring data-[state=open]:bg-secondary absolute top-4 right-4 rounded-xs opacity-70 transition-opacity hover:opacity-100 focus:ring-2 focus:ring-offset-2 focus:outline-hidden disabled:pointer-events-none">
             <XIcon className="size-4" />

@@ -8,6 +8,7 @@ export {
   useIsMac,
   useOverlay,
   useOverlayOpen,
+  useOverlayRoot,
   useShortcut,
   useShortcutLabel,
   type ShortcutOptions,
