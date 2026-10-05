@@ -2,6 +2,7 @@ import type { DbClient } from "@capital/server/lib/prisma";
 import { Prisma } from "@/generated/prisma";
 import type { Budget } from "@/generated/prisma";
 import { formatDateOnly } from "@capital/server/lib/date-utils";
+import { entityScopeSql, entityScopeWhere, inEntityScope } from "@capital/server/lib/entity-scope";
 import { round, toNumber } from "@capital/server/modules/ledger/lib/money";
 import { getEffectiveBudgetsForMonth } from "../lib/effective-budgets";
 
@@ -43,13 +44,23 @@ function todayIn(timezone: string) {
   return { y, m, d, date: new Date(Date.UTC(y, m - 1, d, 23, 59, 59, 999)) };
 }
 
+/** Entities an overview covers (resolveEntityScope); null or absent = all. */
+export interface BudgetScope {
+  entityIds?: string[] | null;
+}
+
+/** A budget counts in a scope when it is for every entity (entityId null) or for one in the scope. */
+const budgetInScope = (entityIds: string[] | null) => (b: Pick<Budget, "entityId">) => !b.entityId || inEntityScope(entityIds, b.entityId);
+
 function spentFor(rows: SpendRow[], budget: Pick<Budget, "entityId" | "categoryId">, key: "spent" | "spent_to_date" = "spent") {
   return rows
     .filter((r) => r.category_id === budget.categoryId && (!budget.entityId || r.entity_id === budget.entityId))
     .reduce((s, r) => s + toNumber(r[key]), 0);
 }
 
-export async function monthOverview(userId: string, year: number, month: number, db: DbClient, opts: { entityId?: string } = {}) {
+export async function monthOverview(userId: string, year: number, month: number, db: DbClient, opts: BudgetScope = {}) {
+  const entityIds = opts.entityIds ?? null;
+  const inScope = (r: SpendRow) => inEntityScope(entityIds, r.entity_id);
   const user = await db.user.findUniqueOrThrow({ where: { id: userId }, select: { timezone: true, baseCurrency: true } });
   const today = todayIn(user.timezone);
   const { from, to } = monthBounds(year, month);
@@ -60,15 +71,15 @@ export async function monthOverview(userId: string, year: number, month: number,
   const asOf = isCurrent ? today.date : isPast ? to : new Date(from.getTime() - 1);
 
   const target = new Date(Date.UTC(year, month - 1, 1, 12));
-  const all = await getEffectiveBudgetsForMonth(db, userId, target);
-  const budgets = all.filter((b) => b.period === "monthly" && (!opts.entityId || !b.entityId || b.entityId === opts.entityId));
+  const all = (await getEffectiveBudgetsForMonth(db, userId, target)).filter(budgetInScope(entityIds));
+  const budgets = all.filter((b) => b.period === "monthly");
   const yearly = all.filter((b) => b.period === "yearly");
   const categories = await db.category.findMany({ where: { userId }, select: { id: true, name: true, color: true } });
   const catName = new Map(categories.map((c) => [c.id, c.name]));
 
-  const spend = (await spendByCategory(db, userId, from, to, asOf)).filter((r) => !opts.entityId || r.entity_id === opts.entityId);
+  const spend = (await spendByCategory(db, userId, from, to, asOf)).filter(inScope);
   const prevBounds = monthBounds(month === 1 ? year - 1 : year, month === 1 ? 12 : month - 1);
-  const prevSpend = (await spendByCategory(db, userId, prevBounds.from, prevBounds.to, prevBounds.to)).filter((r) => !opts.entityId || r.entity_id === opts.entityId);
+  const prevSpend = (await spendByCategory(db, userId, prevBounds.from, prevBounds.to, prevBounds.to)).filter(inScope);
   const prevBudgets = await getEffectiveBudgetsForMonth(db, userId, new Date(Date.UTC(prevBounds.from.getUTCFullYear(), prevBounds.from.getUTCMonth(), 1, 12)));
 
   const rows = budgets.map((b) => {
@@ -151,7 +162,7 @@ export async function monthOverview(userId: string, year: number, month: number,
     WHERE le."userId" = ${userId} AND le."deletedAt" IS NULL AND le.kind = 'expense' AND le."transferGroupId" IS NULL
       AND le."effectiveDate" BETWEEN ${from} AND ${to}
       AND le."categoryId" IN (${budgets.length ? Prisma.join(budgets.map((b) => b.categoryId)) : Prisma.sql`NULL`})
-      ${opts.entityId ? Prisma.sql`AND le."entityId" = ${opts.entityId}` : Prisma.empty}
+      AND ${entityScopeSql(Prisma.sql`le."entityId"`, entityIds)}
     GROUP BY 1 ORDER BY 1`;
   const totalBudget = rows.reduce((s, r) => s + r.available, 0);
   let acc = 0;
@@ -164,7 +175,7 @@ export async function monthOverview(userId: string, year: number, month: number,
   // Fixed costs coming up: active recurring rules due within this month or the next 14 days.
   const horizon = new Date(Math.max(to.getTime(), today.date.getTime() + 14 * 86400_000));
   const upcoming = await db.recurringRule.findMany({
-    where: { userId, isActive: true, nextDueDate: { lte: horizon }, ...(opts.entityId && { entityId: opts.entityId }) },
+    where: { userId, isActive: true, nextDueDate: { lte: horizon }, ...entityScopeWhere(entityIds) },
     orderBy: { nextDueDate: "asc" },
     take: 30,
   });
@@ -172,7 +183,7 @@ export async function monthOverview(userId: string, year: number, month: number,
   const yearlyRows = await Promise.all(
     yearly.map(async (b) => {
       const yb = { from: new Date(Date.UTC(year, 0, 1)), to: new Date(Date.UTC(year, 11, 31, 23, 59, 59, 999)) };
-      const s = await spendByCategory(db, userId, yb.from, yb.to, today.date);
+      const s = (await spendByCategory(db, userId, yb.from, yb.to, today.date)).filter(inScope);
       const spent = spentFor(s, b, "spent_to_date");
       return { id: b.id, entityId: b.entityId, categoryId: b.categoryId, category: catName.get(b.categoryId) ?? "?", amount: toNumber(b.amount), spent: round(spent, 2) };
     })
@@ -213,7 +224,8 @@ export async function monthOverview(userId: string, year: number, month: number,
  * from the average of the last three complete months (committed entries such
  * as future installments are added on top).
  */
-export async function yearOverview(userId: string, year: number, db: DbClient, opts: { entityId?: string } = {}) {
+export async function yearOverview(userId: string, year: number, db: DbClient, opts: BudgetScope = {}) {
+  const entityIds = opts.entityIds ?? null;
   const user = await db.user.findUniqueOrThrow({ where: { id: userId }, select: { timezone: true } });
   const today = todayIn(user.timezone);
   const from = new Date(Date.UTC(year, 0, 1));
@@ -225,15 +237,15 @@ export async function yearOverview(userId: string, year: number, db: DbClient, o
     FROM ledger_entries le
     WHERE le."userId" = ${userId} AND le."deletedAt" IS NULL AND le.kind = 'expense' AND le."transferGroupId" IS NULL
       AND le."effectiveDate" BETWEEN ${from} AND ${to}
-      ${opts.entityId ? Prisma.sql`AND le."entityId" = ${opts.entityId}` : Prisma.empty}
+      AND ${entityScopeSql(Prisma.sql`le."entityId"`, entityIds)}
     GROUP BY 1, 2`;
   const currentMonth = today.y === year ? today.m : today.y > year ? 13 : 0;
   const categories = await db.category.findMany({ where: { userId }, select: { id: true, name: true } });
   const catName = new Map(categories.map((c) => [c.id, c.name]));
 
-  const budgetsByMonth = await Promise.all(
-    Array.from({ length: 12 }, (_, i) => getEffectiveBudgetsForMonth(db, userId, new Date(Date.UTC(year, i, 1, 12))))
-  );
+  const budgetsByMonth = (
+    await Promise.all(Array.from({ length: 12 }, (_, i) => getEffectiveBudgetsForMonth(db, userId, new Date(Date.UTC(year, i, 1, 12)))))
+  ).map((bs) => bs.filter(budgetInScope(entityIds)));
   const categoryIds = new Set<string | null>([...rows.map((r) => r.category_id), ...budgetsByMonth.flat().map((b) => b.categoryId)]);
 
   const matrix = [...categoryIds].map((categoryId) => {
@@ -247,7 +259,7 @@ export async function yearOverview(userId: string, year: number, db: DbClient, o
     const projectionBase = lastThree.length ? lastThree.reduce((s, v) => s + v, 0) / lastThree.length : 0;
     const months = Array.from({ length: 12 }, (_, i) => {
       const m = i + 1;
-      const budget = budgetsByMonth[i].find((b) => b.categoryId === categoryId && b.period === "monthly" && (!opts.entityId || !b.entityId || b.entityId === opts.entityId));
+      const budget = budgetsByMonth[i].find((b) => b.categoryId === categoryId && b.period === "monthly");
       const isProjected = m > currentMonth;
       const value = isProjected ? Math.max(projectionBase, committed[i]) : actual[i];
       const budgetAmount = budget ? toNumber(budget.amount) : null;

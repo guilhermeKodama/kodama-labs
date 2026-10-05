@@ -39,11 +39,14 @@ export async function createCategoryTool(userId: string, params: CreateCategoryP
  */
 export async function updateCategoryTool(userId: string, params: UpdateCategoryParams, db: DbClient) {
   const { id, ...patch } = params;
-  return updateCategory(userId, id, patch, db);
+  const { batchId: _batchId, ...category } = await updateCategory(userId, id, patch, db);
+  void _batchId;
+  return category;
 }
 
 export async function deleteCategoryTool(userId: string, params: DeleteCategoryParams, db: DbClient) {
-  return deleteCategory(userId, params.id, params.reassignTo, db);
+  const { success, id } = await deleteCategory(userId, params.id, params.reassignTo, db);
+  return { success, id };
 }
 
 export async function mergeCategoryTool(userId: string, params: MergeCategoriesParams, db: DbClient) {

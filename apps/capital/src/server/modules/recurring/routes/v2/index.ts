@@ -24,7 +24,8 @@ const ruleFields = {
   transferDirection: z.enum(TRANSFER_DIRECTIONS).nullish(),
   amount: z.number().positive(),
   currency: z.string().length(3).optional(),
-  exchangeRate: z.number().positive().optional(),
+  // null = convert each occurrence at the rate in force when it is booked.
+  exchangeRate: z.number().positive().nullish(),
   description: z.string().min(1),
   categoryId: z.string().nullish(),
   frequency: z.enum(["daily", "weekly", "monthly", "yearly"]),
@@ -51,7 +52,7 @@ const patchRoute = createRoute({
   request: { params: idParams, ...jsonBody(z.object(ruleFields).partial().extend({ isActive: z.boolean().optional(), nextDueDate: day.optional() })) },
   responses: v2Responses,
 });
-const deleteRouteDef = createRoute({ method: "delete", path: "/v2/recurring/{id}", tags, summary: "Delete a recurring rule (booked entries stay)", request: { params: idParams }, responses: v2Responses });
+const deleteRouteDef = createRoute({ method: "delete", path: "/v2/recurring/{id}", tags, summary: "Delete a recurring rule (booked entries stay). Undoable (batchId).", request: { params: idParams }, responses: v2Responses });
 const payRoute = createRoute({
   method: "post",
   path: "/v2/recurring/{id}/pay",
@@ -68,14 +69,23 @@ export const v2Recurring = createRouter()
     const rules = await listRecurringRules(userId, prisma, { entityId: q.entityId, includeInactive: q.includeInactive === "true" });
     return { rules: rules.map(serializeRule) };
   }))
-  .openapi(createRuleRoute, v2Handler(createRuleRoute, async (c, userId) => serializeRule(await createRecurringRule(userId, c.req.valid("json"), prisma))))
-  .openapi(patchRoute, v2Handler(patchRoute, async (c, userId) => serializeRule(await updateRecurringRule(userId, c.req.valid("param").id, c.req.valid("json"), prisma))))
+  .openapi(createRuleRoute, v2Handler(createRuleRoute, async (c, userId) => {
+    const rule = await createRecurringRule(userId, c.req.valid("json"), prisma);
+    return { ...serializeRule(rule), batchId: rule.batchId };
+  }))
+  .openapi(patchRoute, v2Handler(patchRoute, async (c, userId) => {
+    const rule = await updateRecurringRule(userId, c.req.valid("param").id, c.req.valid("json"), prisma);
+    return { ...serializeRule(rule), batchId: rule.batchId };
+  }))
   .openapi(deleteRouteDef, v2Handler(deleteRouteDef, async (c, userId) => {
-    await deleteRecurringRule(userId, c.req.valid("param").id, prisma);
-    return { success: true };
+    const { batchId } = await deleteRecurringRule(userId, c.req.valid("param").id, prisma);
+    return { success: true, batchId };
   }))
   .openapi(payRoute, v2Handler(payRoute, async (c, userId) => {
     const result = await markRulePaid(userId, c.req.valid("param").id, prisma, c.req.valid("json"));
     return { ...result, rule: serializeRule(result.rule) };
   }))
-  .openapi(skipRoute, v2Handler(skipRoute, async (c, userId) => serializeRule(await skipRuleOccurrence(userId, c.req.valid("param").id, prisma))));
+  .openapi(skipRoute, v2Handler(skipRoute, async (c, userId) => {
+    const rule = await skipRuleOccurrence(userId, c.req.valid("param").id, prisma);
+    return { ...serializeRule(rule), batchId: rule.batchId };
+  }));

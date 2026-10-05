@@ -22,18 +22,18 @@ export interface AccountInput {
 
 export async function getOwnedAccount(userId: string, accountId: string, db: DbClient): Promise<Account> {
   const account = await db.account.findFirst({ where: { id: accountId, userId } });
-  if (!account) throw notFound("Account");
+  if (!account) throw notFound("Account", "account.not_found");
   return account;
 }
 
 function validateCard(input: Partial<AccountInput>, type: AccountType) {
   if (type !== "credit_card") return;
   const day = (d: number | null | undefined, label: string) => {
-    if (d == null || !Number.isInteger(d) || d < 1 || d > 31) throw new LedgerError(`${label} must be a day between 1 and 31`, 422);
+    if (d == null || !Number.isInteger(d) || d < 1 || d > 31) throw new LedgerError(`${label} must be a day between 1 and 31`, 422, { code: "account.invalid_day", params: { field: label } });
   };
   day(input.closingDay, "closingDay");
   day(input.dueDay, "dueDay");
-  if (input.creditLimit == null || input.creditLimit <= 0) throw new LedgerError("creditLimit must be positive", 422);
+  if (input.creditLimit == null || input.creditLimit <= 0) throw new LedgerError("creditLimit must be positive", 422, { code: "account.invalid_credit_limit" });
 }
 
 export async function createAccount(userId: string, input: AccountInput, db: DbClient): Promise<Account> {

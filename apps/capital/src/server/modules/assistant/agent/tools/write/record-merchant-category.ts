@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { defineTool } from "../registry";
+import { inTransaction, recordMutation, type MutationRecordInput } from "@capital/server/modules/ledger/services/mutations";
 import { learnRule } from "@capital/server/modules/ledger/services/rules";
 import { categoryResolver } from "@capital/server/modules/mcp/lib/ledger-adapter";
 
@@ -16,7 +17,13 @@ export const recordMerchantCategory = defineTool({
     // Normalized by learnRule (not trusted from the model): "equals" rules
     // compare the normalized description, so any other form never matches.
     const category = (await categoryResolver(ctx.userId, ctx.db)).resolve(input.category, undefined);
-    const rule = await learnRule(ctx.userId, input.normalizedDescription, category.id, "ai", ctx.db);
+    const rule = await inTransaction(ctx.db, async (tx) => {
+      const records: MutationRecordInput[] = [];
+      const learned = await learnRule(ctx.userId, input.normalizedDescription, category.id, "ai", tx, { collect: records });
+      // Nothing recorded when the rule already pointed at this category.
+      if (learned && records.length) await recordMutation(tx, ctx.userId, records[0].before ? "update" : "create", learned.pattern, records);
+      return learned;
+    });
     if (!rule) throw new Error("The description is empty after normalization");
     return {
       normalizedDescription: rule.pattern,

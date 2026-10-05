@@ -2,6 +2,7 @@ import { z } from "zod";
 import { zodToJsonSchema } from "zod-to-json-schema";
 import type Anthropic from "@anthropic-ai/sdk";
 import type { PrismaClient } from "@/generated/prisma";
+import { withMutationSource } from "@capital/server/modules/ledger/services/mutations";
 import { insertAgentAction, type CreatedRecordRef } from "../../data/commands/insert-agent-action";
 
 /**
@@ -200,7 +201,8 @@ export async function executeTool(
   }
 
   try {
-    const raw = await def.handler(ctx, parsed.data);
+    // Undo batches the tool records are attributed to the assistant.
+    const raw = await withMutationSource("assistant", () => def.handler(ctx, parsed.data));
     // Split media off before the audit log and the return value - the
     // rest of the pipeline only ever sees the plain JSON summary.
     const { output, media } = extractMedia(raw);

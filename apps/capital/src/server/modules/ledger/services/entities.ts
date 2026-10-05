@@ -21,7 +21,7 @@ export async function listEntities(userId: string, db: DbClient, opts: { include
 
 export async function getOwnedEntity(userId: string, entityId: string, db: DbClient): Promise<Entity> {
   const entity = await db.entity.findFirst({ where: { id: entityId, userId } });
-  if (!entity) throw notFound("Entity");
+  if (!entity) throw notFound("Entity", "entity.not_found");
   return entity;
 }
 
@@ -46,7 +46,7 @@ export async function getPersonalEntity(userId: string, db: DbClient): Promise<E
   const existing = await db.entity.findFirst({ where: { userId, kind: "personal" }, orderBy: { createdAt: "asc" } });
   if (existing) return existing;
   const user = await db.user.findUnique({ where: { id: userId }, select: { baseCurrency: true } });
-  if (!user) throw notFound("User");
+  if (!user) throw notFound("User", "user.not_found");
   const entity = await db.entity.create({
     data: { userId, kind: "personal", name: "PF", defaultCurrency: user.baseCurrency },
   });
@@ -58,10 +58,10 @@ export async function createEntity(userId: string, input: EntityInput, db: DbCli
   const kind = input.kind ?? "business";
   if (kind === "personal") {
     const pf = await db.entity.findFirst({ where: { userId, kind: "personal" } });
-    if (pf) throw new LedgerError("The user already has a personal entity", 409);
+    if (pf) throw new LedgerError("The user already has a personal entity", 409, { code: "entity.personal_exists" });
   }
   const user = await db.user.findUnique({ where: { id: userId }, select: { baseCurrency: true } });
-  if (!user) throw notFound("User");
+  if (!user) throw notFound("User", "user.not_found");
   const entity = await db.entity.create({
     data: {
       userId,
@@ -83,7 +83,7 @@ export async function createEntity(userId: string, input: EntityInput, db: DbCli
 export async function updateEntity(userId: string, entityId: string, patch: Partial<EntityInput>, db: DbClient) {
   const entity = await getOwnedEntity(userId, entityId, db);
   if (entity.kind === "personal" && patch.name !== undefined && patch.name !== entity.name) {
-    throw new LedgerError("The personal entity cannot be renamed", 422);
+    throw new LedgerError("The personal entity cannot be renamed", 422, { code: "entity.personal_rename" });
   }
   const updated = await db.entity.update({
     where: { id: entityId },
@@ -104,7 +104,7 @@ export async function updateEntity(userId: string, entityId: string, patch: Part
 
 export async function archiveEntity(userId: string, entityId: string, archived: boolean, db: DbClient) {
   const entity = await getOwnedEntity(userId, entityId, db);
-  if (entity.kind === "personal") throw new LedgerError("The personal entity cannot be archived", 422);
+  if (entity.kind === "personal") throw new LedgerError("The personal entity cannot be archived", 422, { code: "entity.personal_archive" });
   return db.entity.update({ where: { id: entityId }, data: { archivedAt: archived ? new Date() : null } });
 }
 
@@ -121,13 +121,13 @@ export async function resolveLegacyEntity(
   const id = ref.businessId ?? ref.personalAccountId ?? null;
   if (id) {
     const entity = await db.entity.findFirst({ where: { id, userId } });
-    if (!entity) throw notFound(ref.businessId ? "Business" : "Personal account");
+    if (!entity) throw notFound(ref.businessId ? "Business" : "Personal account", "entity.not_found");
     if (ref.entityType && entity.kind !== ref.entityType) {
-      throw new LedgerError(`Account ${id} is not a ${ref.entityType} account`, 422);
+      throw new LedgerError(`Account ${id} is not a ${ref.entityType} account`, 422, { code: "entity.kind_mismatch", params: { id, kind: ref.entityType } });
     }
     return entity;
   }
-  if (ref.entityType === "business") throw new LedgerError("businessId is required for business entries", 422);
+  if (ref.entityType === "business") throw new LedgerError("businessId is required for business entries", 422, { code: "entity.business_required" });
   return getPersonalEntity(userId, db);
 }
 

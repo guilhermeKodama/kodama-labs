@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { slugify, sanitizeExtension, joinPath } from "@repo/storage";
 import type { DbClient } from "@capital/server/lib/prisma";
+import { LedgerError } from "@capital/server/modules/ledger/lib/errors";
 import { putObject } from "@/lib/storage";
 import { MAX_IMAGE_FILE_BYTES, MAX_STATEMENT_FILE_BYTES } from "../constants";
 import { detectFile, parseStatementFile } from "./detect-and-parse-file";
@@ -40,21 +41,25 @@ export async function uploadConversationFile(
   db: DbClient
 ) {
   if (input.file.buffer.byteLength > MAX_STATEMENT_FILE_BYTES) {
-    throw new Error(
-      `File exceeds maximum size of ${MAX_STATEMENT_FILE_BYTES} bytes`
-    );
+    throw new LedgerError(`File exceeds maximum size of ${MAX_STATEMENT_FILE_BYTES} bytes`, 422, {
+      code: "assistant.file_too_large",
+      params: { maxBytes: MAX_STATEMENT_FILE_BYTES },
+    });
   }
 
   const detected = detectFile(input.file.buffer, input.file.originalName);
   if (detected.statementKind === "unknown") {
-    throw new Error(
-      "Unrecognized file type - only OFX, CSV, PDF and image files are allowed"
-    );
+    throw new LedgerError("Unrecognized file type - only OFX, CSV, PDF and image files are allowed", 422, {
+      code: "assistant.file_type_unsupported",
+    });
   }
   // Tighter than the statement limit: an image above this is rejected by
   // the Messages API, so it would upload fine and then break the turn.
   if (detected.fileType === "image" && input.file.buffer.byteLength > MAX_IMAGE_FILE_BYTES) {
-    throw new Error(`Image exceeds maximum size of ${MAX_IMAGE_FILE_BYTES} bytes`);
+    throw new LedgerError(`Image exceeds maximum size of ${MAX_IMAGE_FILE_BYTES} bytes`, 422, {
+      code: "assistant.image_too_large",
+      params: { maxBytes: MAX_IMAGE_FILE_BYTES },
+    });
   }
 
   const pathname = buildConversationFilePath(input.conversationId, input.file.originalName);

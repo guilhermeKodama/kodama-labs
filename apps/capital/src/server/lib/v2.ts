@@ -1,21 +1,17 @@
 import { z, type RouteConfig } from "@hono/zod-openapi";
-import { HTTPException } from "hono/http-exception";
-import { ZodError } from "zod";
 import { jsonContent, jsonContentRequired } from "stoker/openapi/helpers";
 import type { AppRouteHandler } from "../types";
 import { requireUserId } from "./auth-middleware";
-import { LedgerError } from "../modules/ledger/lib/errors";
-
-const ErrorSchema = z.object({ message: z.string() });
+import { ApiErrorSchema, toHttpError } from "./http-error";
 
 /** Shared response map for v2 routes; payloads are typed by the services and contracts. */
 export const v2Responses = {
   200: jsonContent(z.any(), "OK"),
-  400: jsonContent(ErrorSchema, "Bad request"),
-  401: jsonContent(ErrorSchema, "Not authenticated"),
-  404: jsonContent(ErrorSchema, "Not found"),
-  409: jsonContent(ErrorSchema, "Conflict"),
-  422: jsonContent(ErrorSchema, "Unprocessable"),
+  400: jsonContent(ApiErrorSchema, "Bad request"),
+  401: jsonContent(ApiErrorSchema, "Not authenticated"),
+  404: jsonContent(ApiErrorSchema, "Not found"),
+  409: jsonContent(ApiErrorSchema, "Conflict"),
+  422: jsonContent(ApiErrorSchema, "Unprocessable"),
 } as const;
 
 export function jsonBody<T extends z.ZodTypeAny>(schema: T) {
@@ -24,13 +20,11 @@ export function jsonBody<T extends z.ZodTypeAny>(schema: T) {
 
 export const idParams = z.object({ id: z.string().min(1) });
 
-function toHttp(err: unknown): unknown {
-  if (err instanceof HTTPException) return err;
-  if (err instanceof LedgerError) return new HTTPException(err.status, { message: err.message });
-  if (err instanceof ZodError) return new HTTPException(422, { message: err.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ") });
-  if (err instanceof Error && /not found|access denied/i.test(err.message)) return new HTTPException(404, { message: err.message });
-  return err;
-}
+/** A "true"/"false" query flag. z.coerce.boolean() reads any non-empty string, "false" included, as true. */
+export const queryFlag = z.enum(["true", "false"]).transform((v) => v === "true");
+
+/** Maps domain errors to HTTP errors that keep their code and params for the envelope (see toHttpError). */
+export const toHttp = toHttpError;
 
 type Ctx<R extends RouteConfig> = Parameters<AppRouteHandler<R>>[0];
 

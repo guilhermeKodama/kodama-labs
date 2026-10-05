@@ -1,11 +1,12 @@
 import { createRouter } from "./router";
 import { cors } from "hono/cors";
 import { logger } from "hono/logger";
-import { notFound, onError, serveEmojiFavicon } from "stoker/middlewares";
+import { serveEmojiFavicon } from "stoker/middlewares";
 
 import { registerRoutes } from "../routes";
 import configureOpenAPI from "./configure-open-api";
 import { authMiddleware } from "./auth-middleware";
+import { notFoundHandler, onError } from "./http-error";
 
 import type { AppOpenAPI } from "../types";
 
@@ -26,7 +27,7 @@ export function createApp() {
   app.use("/v2/*", async (c, next) => (c.req.path.startsWith("/api/v2/auth/") ? next() : authMiddleware(c, next)));
 
   // Error handling
-  app.notFound(notFound);
+  app.notFound(notFoundHandler);
   app.onError(onError);
 
   // OpenAPI documentation

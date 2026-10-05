@@ -1,11 +1,12 @@
 import { OpenAPIHono } from "@hono/zod-openapi";
-import { defaultHook } from "stoker/openapi";
 
 import type { AppBindings } from "../types";
+import { validationHook } from "./http-error";
 
 export function createRouter() {
   return new OpenAPIHono<AppBindings>({
     strict: true,
-    defaultHook,
+    // Invalid body/query/params -> 422 { message, code: "validation", issues }.
+    defaultHook: validationHook,
   });
 }

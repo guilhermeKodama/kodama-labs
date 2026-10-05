@@ -1,4 +1,5 @@
 import { createRoute, z } from "@hono/zod-openapi";
+import { readFormBody } from "@capital/server/lib/http-error";
 import { createRouter } from "@capital/server/lib/router";
 import { prisma } from "@capital/server/lib/prisma";
 import { idParams, v2Handler, v2Responses } from "@capital/server/lib/v2";
@@ -44,13 +45,13 @@ export const v2Attachments = createRouter()
     return { attachments: (await listAttachments(userId, ownerType, ownerId, prisma)).map(serializeAttachment) };
   }))
   .openapi(uploadRoute, v2Handler(uploadRoute, async (c, userId) => {
-    const body = await c.req.parseBody();
+    const body = await readFormBody(c);
     const file = body["file"];
-    if (!(file instanceof File)) throw new LedgerError("file is required", 400);
+    if (!(file instanceof File)) throw new LedgerError("file is required", 400, { code: "attachment.file_required" });
     const kind = kindSchema.safeParse(body["kind"]);
     const ownerType = ownerTypeSchema.safeParse(body["ownerType"]);
     const ownerId = body["ownerId"];
-    if (!kind.success || !ownerType.success || typeof ownerId !== "string" || !ownerId) throw new LedgerError("kind, ownerType and ownerId are required", 400);
+    if (!kind.success || !ownerType.success || typeof ownerId !== "string" || !ownerId) throw new LedgerError("kind, ownerType and ownerId are required", 400, { code: "attachment.fields_required" });
     const created = await uploadAttachment(
       userId,
       { kind: kind.data, ownerType: ownerType.data, ownerId, file: { buffer: Buffer.from(await file.arrayBuffer()), mimeType: file.type, originalName: file.name } },

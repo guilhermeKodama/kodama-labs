@@ -5,6 +5,7 @@ import { jsonContent } from "stoker/openapi/helpers";
 import type { AppRouteHandler } from "@capital/server/types";
 import { prisma } from "@capital/server/lib/prisma";
 import { requireUserId } from "@capital/server/lib/auth-middleware";
+import { ApiErrorSchema } from "@capital/server/lib/http-error";
 import { unsubscribeFromPush } from "../../services/unsubscribe";
 import { routeConfig } from "../../constants";
 
@@ -14,13 +15,6 @@ const UnsubscribeSchema = z.object({
 
 const SuccessResponseSchema = z.object({
   message: z.string(),
-});
-
-const ErrorResponseSchema = z.object({
-  error: z.object({
-    code: z.string(),
-    message: z.string(),
-  }),
 });
 
 export const route = createRoute({
@@ -34,26 +28,18 @@ export const route = createRoute({
   },
   responses: {
     [OK]: jsonContent(SuccessResponseSchema, "Subscription removed"),
-    [UNAUTHORIZED]: jsonContent(ErrorResponseSchema, "Not authenticated"),
+    [UNAUTHORIZED]: jsonContent(ApiErrorSchema, "Not authenticated"),
     [INTERNAL_SERVER_ERROR]: jsonContent(
-      ErrorResponseSchema,
+      ApiErrorSchema,
       "Internal server error"
     ),
   },
 });
 
 export const handler: AppRouteHandler<typeof route> = async (c) => {
-  try {
-    const userId = requireUserId(c);
-    const body = c.req.valid("json");
-    await unsubscribeFromPush(userId, body.endpoint, prisma);
+  const userId = requireUserId(c);
+  const body = c.req.valid("json");
+  await unsubscribeFromPush(userId, body.endpoint, prisma);
 
-    return c.json({ message: "Subscription removed" }, OK);
-  } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : "Unknown error";
-    return c.json(
-      { error: { code: "INTERNAL_ERROR", message } },
-      INTERNAL_SERVER_ERROR
-    );
-  }
+  return c.json({ message: "Subscription removed" }, OK);
 };

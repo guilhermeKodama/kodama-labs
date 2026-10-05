@@ -52,7 +52,7 @@ export const recordInvestmentTransaction = defineTool({
       return { deleted: true, createdRecords: [{ model: "InvestmentOperation", id: input.transactionId }] };
     }
 
-    const operation = await updateOperation(
+    const { operation } = await updateOperation(
       ctx.userId,
       input.transactionId,
       {

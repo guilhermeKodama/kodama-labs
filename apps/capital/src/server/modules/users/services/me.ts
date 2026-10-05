@@ -1,5 +1,6 @@
 import type { User } from "@/generated/prisma";
 import type { DbClient } from "@capital/server/lib/prisma";
+import type { Locale } from "@capital/server/i18n";
 import { LedgerError } from "@capital/server/modules/ledger/lib/errors";
 import { getPersonalEntity, listEntities } from "@capital/server/modules/ledger/services/entities";
 
@@ -10,6 +11,10 @@ export interface PreferencesPatch {
   dateFormat?: string;
   numberFormat?: string;
   timezone?: string;
+  /** UI language; names the server writes from now on follow it too. */
+  locale?: Locale;
+  /** Let the daily cron refresh the currencies' rates. */
+  fxAutoUpdate?: boolean;
 }
 
 export function serializeUser(user: User) {
@@ -22,6 +27,8 @@ export function serializeUser(user: User) {
     dateFormat: user.dateFormat,
     numberFormat: user.numberFormat,
     timezone: user.timezone,
+    locale: user.locale,
+    fxAutoUpdate: user.fxAutoUpdate,
     createdAt: user.createdAt.toISOString(),
     updatedAt: user.updatedAt.toISOString(),
   };
@@ -30,7 +37,7 @@ export function serializeUser(user: User) {
 /** Current user, preferences, and the entities the UI scopes by. */
 export async function getMe(userId: string, db: DbClient) {
   const user = await db.user.findUnique({ where: { id: userId } });
-  if (!user) throw new LedgerError("User not found", 404);
+  if (!user) throw new LedgerError("User not found", 404, { code: "user.not_found" });
   const personal = await getPersonalEntity(userId, db);
   const entities = await listEntities(userId, db);
   return {
@@ -47,12 +54,12 @@ export async function getMe(userId: string, db: DbClient) {
  */
 export async function updatePreferences(userId: string, patch: PreferencesPatch, db: DbClient, opts: { force?: boolean } = {}) {
   const user = await db.user.findUnique({ where: { id: userId } });
-  if (!user) throw new LedgerError("User not found", 404);
+  if (!user) throw new LedgerError("User not found", 404, { code: "user.not_found" });
   if (patch.timezone) {
     try {
       new Intl.DateTimeFormat("en-US", { timeZone: patch.timezone });
     } catch {
-      throw new LedgerError(`Unknown timezone '${patch.timezone}'`, 422);
+      throw new LedgerError(`Unknown timezone '${patch.timezone}'`, 422, { code: "user.invalid_timezone", params: { timezone: patch.timezone } });
     }
   }
   if (patch.baseCurrency && patch.baseCurrency !== user.baseCurrency) {
@@ -60,7 +67,8 @@ export async function updatePreferences(userId: string, patch: PreferencesPatch,
     if (entries > 0 && !opts.force) {
       throw new LedgerError(
         `User has ${entries} transaction(s). Base amounts are stored in the current base currency, so changing it makes historical totals wrong. Pass force: true to change it anyway.`,
-        409
+        409,
+        { code: "user.base_currency_locked", params: { count: entries } }
       );
     }
   }
@@ -73,6 +81,8 @@ export async function updatePreferences(userId: string, patch: PreferencesPatch,
       ...(patch.dateFormat !== undefined && { dateFormat: patch.dateFormat }),
       ...(patch.numberFormat !== undefined && { numberFormat: patch.numberFormat }),
       ...(patch.timezone !== undefined && { timezone: patch.timezone }),
+      ...(patch.locale !== undefined && { locale: patch.locale }),
+      ...(patch.fxAutoUpdate !== undefined && { fxAutoUpdate: patch.fxAutoUpdate }),
     },
   });
   return serializeUser(updated);

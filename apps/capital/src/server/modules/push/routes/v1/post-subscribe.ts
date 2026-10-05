@@ -5,6 +5,7 @@ import { jsonContent } from "stoker/openapi/helpers";
 import type { AppRouteHandler } from "@capital/server/types";
 import { prisma } from "@capital/server/lib/prisma";
 import { requireUserId } from "@capital/server/lib/auth-middleware";
+import { ApiErrorSchema } from "@capital/server/lib/http-error";
 import { subscribeToPush } from "../../services/subscribe";
 import { routeConfig } from "../../constants";
 
@@ -22,13 +23,6 @@ const SubscribeResponseSchema = z.object({
   id: z.string(),
 });
 
-const ErrorResponseSchema = z.object({
-  error: z.object({
-    code: z.string(),
-    message: z.string(),
-  }),
-});
-
 export const route = createRoute({
   path: "/v1/push/subscribe",
   method: "post",
@@ -41,36 +35,28 @@ export const route = createRoute({
   },
   responses: {
     [OK]: jsonContent(SubscribeResponseSchema, "Subscription stored"),
-    [UNAUTHORIZED]: jsonContent(ErrorResponseSchema, "Not authenticated"),
+    [UNAUTHORIZED]: jsonContent(ApiErrorSchema, "Not authenticated"),
     [INTERNAL_SERVER_ERROR]: jsonContent(
-      ErrorResponseSchema,
+      ApiErrorSchema,
       "Internal server error"
     ),
   },
 });
 
 export const handler: AppRouteHandler<typeof route> = async (c) => {
-  try {
-    const userId = requireUserId(c);
-    const body = c.req.valid("json");
-    const subscription = await subscribeToPush(
-      userId,
-      {
-        endpoint: body.endpoint,
-        p256dh: body.keys.p256dh,
-        auth: body.keys.auth,
-        deviceLabel: body.deviceLabel,
-        userAgent: body.userAgent,
-      },
-      prisma
-    );
+  const userId = requireUserId(c);
+  const body = c.req.valid("json");
+  const subscription = await subscribeToPush(
+    userId,
+    {
+      endpoint: body.endpoint,
+      p256dh: body.keys.p256dh,
+      auth: body.keys.auth,
+      deviceLabel: body.deviceLabel,
+      userAgent: body.userAgent,
+    },
+    prisma
+  );
 
-    return c.json({ id: subscription.id }, OK);
-  } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : "Unknown error";
-    return c.json(
-      { error: { code: "INTERNAL_ERROR", message } },
-      INTERNAL_SERVER_ERROR
-    );
-  }
+  return c.json({ id: subscription.id }, OK);
 };

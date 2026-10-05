@@ -76,8 +76,11 @@ describe("v2 ledger routes", () => {
   it("validates bodies and maps domain errors", async () => {
     const bad = await call("POST", "/v2/ledger/entries", { kind: "expense", accountId: f.pfChecking, amount: "x", description: "", date: "nope" });
     expect(bad.status).toBe(422);
+    expect(bad.json).toMatchObject({ code: "validation", message: expect.any(String) });
+    expect((bad.json.issues as unknown as { path: string; code: string }[]).map((i) => i.path).sort()).toEqual(["amount", "date", "description"]);
     const missing = await call("PATCH", "/v2/ledger/entries/does-not-exist", { description: "x" });
     expect(missing.status).toBe(404);
+    expect(missing.json).toEqual({ message: "Transaction not found", code: "entry.not_found" });
   });
 
   it("lists entities, accounts with balances and views", async () => {

@@ -52,8 +52,8 @@ export const v2Currencies = createRouter()
       prisma.account.count({ where: { userId, currency: code, archivedAt: null } }),
       prisma.ledgerEntry.count({ where: { userId, currency: code, deletedAt: null } }),
     ]);
-    if (user?.baseCurrency === code) throw new LedgerError("The base currency cannot be removed", 422);
-    if (accounts || entries) throw new LedgerError(`${code} is used by ${accounts} account(s) and ${entries} entr(ies)`, 409);
+    if (user?.baseCurrency === code) throw new LedgerError("The base currency cannot be removed", 422, { code: "currency.base_protected" });
+    if (accounts || entries) throw new LedgerError(`${code} is used by ${accounts} account(s) and ${entries} entr(ies)`, 409, { code: "currency.in_use", params: { code, accounts, entries } });
     await deleteCurrencyService(userId, code, prisma);
     return { success: true, code };
   }));

@@ -21,6 +21,20 @@ describe("saved views", () => {
     await expect(updateView(USER, all.id, { name: "Outra" }, prisma)).rejects.toThrow(/cannot be renamed/);
   });
 
+  it("names the built-in view in the user's locale, once", async () => {
+    const EN = "test-user-ledger-views-en-001";
+    await prisma.user.deleteMany({ where: { id: EN } });
+    await prisma.user.create({ data: { id: EN, email: `${EN}@example.com`, passwordHash: "x", name: EN, locale: "en" } });
+    try {
+      const [all] = await listViews(EN, prisma);
+      expect(all).toMatchObject({ name: "All", isBuiltin: true, builtinKey: "all" });
+      await prisma.user.update({ where: { id: EN }, data: { locale: "pt-BR" } });
+      expect((await listViews(EN, prisma)).map((v) => v.name)).toEqual(["All"]);
+    } finally {
+      await prisma.user.deleteMany({ where: { id: EN } });
+    }
+  });
+
   it("keeps display preferences on the built-in view but never its filters", async () => {
     const [all] = await listViews(USER, prisma);
     const config = viewConfigSchema.parse({

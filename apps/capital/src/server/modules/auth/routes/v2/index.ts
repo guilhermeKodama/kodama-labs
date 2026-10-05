@@ -1,11 +1,11 @@
 import { createRoute, z } from "@hono/zod-openapi";
 import { deleteCookie, getCookie, setCookie } from "hono/cookie";
-import { HTTPException } from "hono/http-exception";
 import type { Context } from "hono";
 import { createRouter } from "@capital/server/lib/router";
 import { prisma } from "@capital/server/lib/prisma";
-import { jsonBody, v2Handler, v2Responses } from "@capital/server/lib/v2";
-import { LedgerError } from "@capital/server/modules/ledger/lib/errors";
+import { HttpError } from "@capital/server/lib/http-error";
+import { DEFAULT_LOCALE, LOCALE_COOKIE_NAME, LOCALES, matchLocale, negotiateLocale, resolveLocale, type Locale } from "@capital/server/i18n";
+import { jsonBody, toHttp, v2Handler, v2Responses } from "@capital/server/lib/v2";
 import { getMe, serializeUser, updatePreferences } from "@capital/server/modules/users/services/me";
 import { SESSION_COOKIE_NAME, SESSION_EXPIRY_DAYS } from "../../constants";
 import { login } from "../../services/login";
@@ -13,6 +13,7 @@ import { createSession, deleteSession } from "../../services/session";
 import { signup } from "../../services/signup";
 
 const tags = ["Auth v2"];
+const LOCALE_COOKIE_MAX_AGE = 60 * 60 * 24 * 365;
 
 function setSessionCookie(c: Context, sessionId: string) {
   setCookie(c, SESSION_COOKIE_NAME, sessionId, {
@@ -22,6 +23,16 @@ function setSessionCookie(c: Context, sessionId: string) {
     path: "/",
     maxAge: 60 * 60 * 24 * SESSION_EXPIRY_DAYS,
   });
+}
+
+/** Keeps the UI (next-intl reads this cookie) in the user's saved language; readable by the client, which switches it too. */
+function setLocaleCookie(c: Context, locale: string) {
+  setCookie(c, LOCALE_COOKIE_NAME, resolveLocale(locale), { path: "/", sameSite: "lax", maxAge: LOCALE_COOKIE_MAX_AGE });
+}
+
+/** A new account's locale: the one the signup form sends, else the UI's locale cookie, else Accept-Language, else pt-BR. */
+function signupLocale(c: Context, requested: Locale | undefined): Locale {
+  return requested ?? matchLocale(getCookie(c, LOCALE_COOKIE_NAME)) ?? negotiateLocale(c.req.header("accept-language")) ?? DEFAULT_LOCALE;
 }
 
 const loginRoute = createRoute({
@@ -37,7 +48,16 @@ const signupRoute = createRoute({
   path: "/v2/auth/signup",
   tags,
   summary: "Create an account (PF entity, main account, categories, currencies, built-in view)",
-  request: jsonBody(z.object({ email: z.string().email(), password: z.string().min(8), name: z.string().min(1), baseCurrency: z.string().length(3).optional() })),
+  request: jsonBody(
+    z.object({
+      email: z.string().email(),
+      password: z.string().min(8),
+      name: z.string().min(1),
+      baseCurrency: z.string().regex(/^[A-Za-z]{3}$/).optional(),
+      /** UI language; without it the locale cookie or Accept-Language decides. Names the server writes (categories, views) follow it. */
+      locale: z.enum(LOCALES).optional(),
+    })
+  ),
   responses: v2Responses,
 });
 const logoutRoute = createRoute({ method: "post", path: "/v2/auth/logout", tags, summary: "End the session", responses: v2Responses });
@@ -56,6 +76,10 @@ const patchMeRoute = createRoute({
         dateFormat: z.string().min(1).optional(),
         numberFormat: z.string().min(1).optional(),
         timezone: z.string().min(1).optional(),
+        locale: z.enum(LOCALES).optional(),
+        fxAutoUpdate: z.boolean().optional(),
+        /** Change the base currency even though entries exist (their base amounts keep the old currency). */
+        force: z.boolean().optional(),
       })
       .strict()
   ),
@@ -67,19 +91,21 @@ export const v2Auth = createRouter()
     try {
       const user = await login(c.req.valid("json"), prisma);
       setSessionCookie(c, await createSession(user.id, prisma));
+      setLocaleCookie(c, user.locale);
       return c.json(serializeUser(user) as never, 200);
     } catch {
-      throw new HTTPException(401, { message: "Invalid email or password" });
+      throw new HttpError(401, "Invalid email or password", { code: "auth.invalid_credentials" });
     }
   })
   .openapi(signupRoute, async (c) => {
     try {
-      const user = await signup(c.req.valid("json"), prisma);
+      const body = c.req.valid("json");
+      const user = await signup({ ...body, locale: signupLocale(c, body.locale) }, prisma);
       setSessionCookie(c, await createSession(user.id, prisma));
+      setLocaleCookie(c, user.locale);
       return c.json(serializeUser(user) as never, 200);
     } catch (err) {
-      if (err instanceof LedgerError) throw new HTTPException(err.status, { message: err.message });
-      throw err;
+      throw toHttp(err);
     }
   })
   .openapi(logoutRoute, async (c) => {
@@ -89,4 +115,9 @@ export const v2Auth = createRouter()
     return c.json({ success: true } as never, 200);
   })
   .openapi(meRoute, v2Handler(meRoute, async (_c, userId) => getMe(userId, prisma)))
-  .openapi(patchMeRoute, v2Handler(patchMeRoute, async (c, userId) => updatePreferences(userId, c.req.valid("json"), prisma)));
+  .openapi(patchMeRoute, v2Handler(patchMeRoute, async (c, userId) => {
+    const { force, ...patch } = c.req.valid("json");
+    const user = await updatePreferences(userId, patch, prisma, { force });
+    if (patch.locale) setLocaleCookie(c, user.locale);
+    return user;
+  }));

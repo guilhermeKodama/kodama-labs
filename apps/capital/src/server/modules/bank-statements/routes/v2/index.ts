@@ -127,7 +127,7 @@ export const v2Imports = createRouter()
     v2Handler(revertRoute, async (c, userId) => {
       const { id } = c.req.valid("param");
       const imp = await prisma.import.findFirst({ where: { id, userId }, select: { id: true } });
-      if (!imp) throw new LedgerError("Import not found", 404);
+      if (!imp) throw new LedgerError("Import not found", 404, { code: "import.not_found" });
       return executeRevert(userId, { statementImportId: id, createdRecords: await createdRecordsFor(userId, id) }, prisma);
     })
   )

@@ -5,9 +5,11 @@ import { jsonContent } from "stoker/openapi/helpers";
 import type { AppRouteHandler } from "@capital/server/types";
 import { prisma } from "@capital/server/lib/prisma";
 import { requireUserId } from "@capital/server/lib/auth-middleware";
+import { ApiErrorSchema } from "@capital/server/lib/http-error";
+import { LedgerError } from "@capital/server/modules/ledger/lib/errors";
 import { recordCurrentSnapshot } from "../../services/record-current-snapshot";
 import { routeConfig } from "../../constants";
-import { ErrorResponseSchema, FireSnapshotSchema } from "../../validations/fire";
+import { FireSnapshotSchema } from "../../validations/fire";
 
 export const route = createRoute({
   path: "/v1/fire/snapshot",
@@ -17,25 +19,17 @@ export const route = createRoute({
   description: "Force-refreshes the current month's progress snapshot.",
   responses: {
     [OK]: jsonContent(FireSnapshotSchema, "Snapshot recorded"),
-    [BAD_REQUEST]: jsonContent(ErrorResponseSchema, "No FIRE plan to snapshot"),
-    [UNAUTHORIZED]: jsonContent(ErrorResponseSchema, "Not authenticated"),
-    [INTERNAL_SERVER_ERROR]: jsonContent(ErrorResponseSchema, "Internal server error"),
+    [BAD_REQUEST]: jsonContent(ApiErrorSchema, "No FIRE plan to snapshot"),
+    [UNAUTHORIZED]: jsonContent(ApiErrorSchema, "Not authenticated"),
+    [INTERNAL_SERVER_ERROR]: jsonContent(ApiErrorSchema, "Internal server error"),
   },
 });
 
 export const handler: AppRouteHandler<typeof route> = async (c) => {
-  try {
-    const userId = requireUserId(c);
-    const snapshot = await recordCurrentSnapshot(userId, prisma);
-    if (!snapshot) {
-      return c.json(
-        { error: { code: "BAD_REQUEST", message: "No FIRE plan to snapshot" } },
-        BAD_REQUEST
-      );
-    }
-    return c.json(snapshot, OK);
-  } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : "Unknown error";
-    return c.json({ error: { code: "INTERNAL_ERROR", message } }, INTERNAL_SERVER_ERROR);
+  const userId = requireUserId(c);
+  const snapshot = await recordCurrentSnapshot(userId, prisma);
+  if (!snapshot) {
+    throw new LedgerError("No FIRE plan to snapshot", 400, { code: "fire.no_plan" });
   }
+  return c.json(snapshot, OK);
 };

@@ -33,7 +33,10 @@ export async function verifyOwnerAccess(userId: string, ownerType: AttachmentOwn
       : ownerType === "transfer"
         ? await db.transferGroup.count({ where: { id: ownerId, userId } })
         : await db.recurringRule.count({ where: { id: ownerId, userId } });
-  if (!found) throw new LedgerError(`${ownerType === "entry" ? "Entry" : ownerType === "transfer" ? "Transfer" : "Recurring rule"} not found or access denied`, 404);
+  if (!found) {
+    const what = ownerType === "entry" ? "Entry" : ownerType === "transfer" ? "Transfer" : "Recurring rule";
+    throw new LedgerError(`${what} not found or access denied`, 404, { code: "attachment.owner_not_found", params: { ownerType } });
+  }
 }
 
 export async function listAttachments(userId: string, ownerType: AttachmentOwnerType, ownerId: string | undefined, db: DbClient) {
@@ -50,9 +53,9 @@ export async function uploadAttachment(
   input: { kind: AttachmentKind; ownerType: AttachmentOwnerType; ownerId: string; file: { buffer: Buffer; mimeType: string; originalName: string } },
   db: DbClient
 ) {
-  if (!ALLOWED[input.kind].includes(input.ownerType)) throw new LedgerError(`Attachment kind ${input.kind} is not allowed on ${input.ownerType}`, 422);
-  if (input.file.buffer.byteLength > MAX_FILE_SIZE_BYTES) throw new LedgerError(`File exceeds maximum size of ${MAX_FILE_SIZE_BYTES} bytes`, 422);
-  if (!ALLOWED_MIME_TYPES.has(input.file.mimeType)) throw new LedgerError(`Mime type ${input.file.mimeType} is not allowed`, 422);
+  if (!ALLOWED[input.kind].includes(input.ownerType)) throw new LedgerError(`Attachment kind ${input.kind} is not allowed on ${input.ownerType}`, 422, { code: "attachment.kind_not_allowed", params: { kind: input.kind, ownerType: input.ownerType } });
+  if (input.file.buffer.byteLength > MAX_FILE_SIZE_BYTES) throw new LedgerError(`File exceeds maximum size of ${MAX_FILE_SIZE_BYTES} bytes`, 422, { code: "attachment.too_large", params: { maxBytes: MAX_FILE_SIZE_BYTES } });
+  if (!ALLOWED_MIME_TYPES.has(input.file.mimeType)) throw new LedgerError(`Mime type ${input.file.mimeType} is not allowed`, 422, { code: "attachment.mime_not_allowed", params: { mimeType: input.file.mimeType } });
   await verifyOwnerAccess(userId, input.ownerType, input.ownerId, db);
   const uploaded = await putObject(buildAttachmentPath(input.kind, input.ownerId, input.file.originalName), input.file.buffer, input.file.mimeType);
   return db.attachment.create({
@@ -70,7 +73,7 @@ export async function uploadAttachment(
 
 export async function deleteAttachment(userId: string, attachmentId: string, db: DbClient) {
   const attachment = await db.attachment.findFirst({ where: { id: attachmentId, ...ownedBy(userId) } });
-  if (!attachment) throw new LedgerError("Attachment not found", 404);
+  if (!attachment) throw new LedgerError("Attachment not found", 404, { code: "attachment.not_found" });
   // The row is the source of truth; a dangling blob beats a row pointing at nothing.
   try {
     await deleteObject(attachment.blobUrl);

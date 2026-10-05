@@ -1,10 +1,11 @@
 import { z } from "zod";
 import { streamSSE } from "hono/streaming";
-import { CONFLICT, BAD_REQUEST } from "stoker/http-status-codes";
 import type { Context } from "hono";
 import type { AppBindings } from "@capital/server/types";
 import { prisma } from "@capital/server/lib/prisma";
 import { requireUserId } from "@capital/server/lib/auth-middleware";
+import { validationError } from "@capital/server/lib/http-error";
+import { LedgerError } from "@capital/server/modules/ledger/lib/errors";
 import { fetchConversationById } from "../../data/queries/fetch-conversations";
 import { fetchRunningTurn } from "../../data/queries/fetch-message-history";
 import { runAgentTurn } from "../../agent/loop";
@@ -36,27 +37,21 @@ export async function postMessageHandler(c: Context<AppBindings>) {
 
   const conversation = await fetchConversationById(userId, conversationId, prisma);
   if (!conversation) {
-    return c.json({ error: { code: "NOT_FOUND", message: "Conversation not found" } }, 404);
+    throw new LedgerError("Conversation not found", 404, { code: "assistant.conversation_not_found" });
   }
 
   const parsed = MessageInputSchema.safeParse(await c.req.json().catch(() => ({})));
   if (!parsed.success) {
-    return c.json({ error: { code: "BAD_REQUEST", message: parsed.error.message } }, BAD_REQUEST);
+    throw validationError(parsed.error);
   }
   const body = parsed.data;
   if (!body.text && !body.cardResponse && !body.fileIds?.length) {
-    return c.json(
-      { error: { code: "BAD_REQUEST", message: "text, cardResponse or fileIds is required" } },
-      BAD_REQUEST
-    );
+    throw new LedgerError("text, cardResponse or fileIds is required", 400, { code: "assistant.message_required" });
   }
 
   const running = await fetchRunningTurn(conversationId, prisma);
   if (running) {
-    return c.json(
-      { error: { code: "CONFLICT", message: "A turn is already running for this conversation" } },
-      CONFLICT
-    );
+    throw new LedgerError("A turn is already running for this conversation", 409, { code: "assistant.turn_running" });
   }
 
   return streamSSE(c, async (stream) => {

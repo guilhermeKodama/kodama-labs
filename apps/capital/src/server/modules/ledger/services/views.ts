@@ -1,5 +1,7 @@
 import type { DbClient } from "@capital/server/lib/prisma";
 import type { Prisma, SavedView } from "@/generated/prisma";
+import { st } from "@capital/server/i18n";
+import { loadUserLocale } from "@capital/server/i18n/user-locale";
 import {
   BUILTIN_ALL_VIEW_KEY,
   BUILTIN_PERSISTED_CONFIG_KEYS,
@@ -29,14 +31,16 @@ export function serializeView(v: SavedView) {
   };
 }
 
-/** The built-in "Todas" view, created on first access. */
+/** The built-in "Todas" view, created on first access and named in the user's locale. */
 export async function ensureBuiltinViews(userId: string, db: DbClient) {
+  const where = { userId_builtinKey: { userId, builtinKey: BUILTIN_ALL_VIEW_KEY } };
+  if (await db.savedView.findUnique({ where, select: { id: true } })) return;
   await db.savedView.upsert({
-    where: { userId_builtinKey: { userId, builtinKey: BUILTIN_ALL_VIEW_KEY } },
+    where,
     create: {
       userId,
       dataset: "ledger",
-      name: "Todas",
+      name: st(await loadUserLocale(userId, db), "views.builtin.all"),
       position: 0,
       isBuiltin: true,
       builtinKey: BUILTIN_ALL_VIEW_KEY,
@@ -77,10 +81,10 @@ export async function createView(userId: string, input: SavedViewInput, db: DbCl
  */
 export async function updateView(userId: string, viewId: string, patch: SavedViewPatch, db: DbClient) {
   const view = await db.savedView.findFirst({ where: { id: viewId, userId } });
-  if (!view) throw notFound("View");
+  if (!view) throw notFound("View", "view.not_found");
   let config: ViewConfig | undefined = patch.config;
   if (view.isBuiltin) {
-    if (patch.name !== undefined && patch.name !== view.name) throw new LedgerError("The built-in view cannot be renamed", 422);
+    if (patch.name !== undefined && patch.name !== view.name) throw new LedgerError("The built-in view cannot be renamed", 422, { code: "view.builtin_rename" });
     if (config) {
       const current = parseConfig(view.config);
       const kept = { ...current } as Record<string, unknown>;
@@ -102,24 +106,21 @@ export async function updateView(userId: string, viewId: string, patch: SavedVie
 
 export async function duplicateView(userId: string, viewId: string, db: DbClient, name?: string) {
   const view = await db.savedView.findFirst({ where: { id: viewId, userId } });
-  if (!view) throw notFound("View");
-  return createView(
-    userId,
-    { name: name ?? `${view.name} (cópia)`, dataset: view.dataset as SavedViewInput["dataset"], isFavorite: true, config: parseConfig(view.config) },
-    db
-  );
+  if (!view) throw notFound("View", "view.not_found");
+  const copyName = name ?? `${view.name} ${st(await loadUserLocale(userId, db), "common.copySuffix")}`;
+  return createView(userId, { name: copyName, dataset: view.dataset as SavedViewInput["dataset"], isFavorite: true, config: parseConfig(view.config) }, db);
 }
 
 export async function deleteView(userId: string, viewId: string, db: DbClient) {
   const view = await db.savedView.findFirst({ where: { id: viewId, userId } });
-  if (!view) throw notFound("View");
-  if (view.isBuiltin) throw new LedgerError("The built-in view cannot be deleted", 422);
+  if (!view) throw notFound("View", "view.not_found");
+  if (view.isBuiltin) throw new LedgerError("The built-in view cannot be deleted", 422, { code: "view.builtin_delete" });
   await db.savedView.delete({ where: { id: viewId } });
 }
 
 export async function reorderViews(userId: string, orderedIds: string[], db: DbClient) {
   const owned = await db.savedView.findMany({ where: { userId, id: { in: orderedIds } }, select: { id: true } });
-  if (owned.length !== orderedIds.length) throw notFound("View");
+  if (owned.length !== orderedIds.length) throw notFound("View", "view.not_found");
   await Promise.all(orderedIds.map((id, position) => db.savedView.update({ where: { id }, data: { position } })));
   return listViews(userId, db);
 }
@@ -127,7 +128,7 @@ export async function reorderViews(userId: string, orderedIds: string[], db: DbC
 /** Selection query of a saved view (period, filters, search). */
 export async function viewSelection(userId: string, viewId: string, db: DbClient) {
   const view = await db.savedView.findFirst({ where: { id: viewId, userId } });
-  if (!view) throw notFound("View");
+  if (!view) throw notFound("View", "view.not_found");
   const c = parseConfig(view.config);
   return { period: c.period, dateField: c.dateField, filters: c.filters, search: c.search, deleted: "exclude" as const };
 }

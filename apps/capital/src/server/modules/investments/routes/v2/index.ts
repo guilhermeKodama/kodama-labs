@@ -1,7 +1,8 @@
 import { createRoute, z } from "@hono/zod-openapi";
 import { createRouter } from "@capital/server/lib/router";
+import { entityScopeQuery, entityScopeSchema, resolveScopeQuery } from "@capital/server/lib/entity-scope";
 import { prisma } from "@capital/server/lib/prisma";
-import { idParams, jsonBody, v2Handler, v2Responses } from "@capital/server/lib/v2";
+import { idParams, jsonBody, queryFlag, v2Handler, v2Responses } from "@capital/server/lib/v2";
 import {
   adjustPosition,
   contributions,
@@ -12,6 +13,7 @@ import {
   listHoldings,
   listOperations,
   moveBrokerageCash,
+  OPERATION_INCLUDE,
   portfolioSummary,
   rebalanceSuggestion,
   recordOperation,
@@ -22,15 +24,18 @@ import {
   updateOperation,
 } from "../../services/portfolio";
 import { updateAllPrices } from "../../services/update-prices";
+import { ALLOCATION_CLASSES, ASSET_CLASSES } from "../../lib/allocation-class";
 
 const tags = ["Investments v2"];
 const day = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
-const assetClass = z.enum(["stocks", "fii", "etf", "bdr", "fixed_income", "crypto", "savings", "international_stocks", "international_etf"]);
+const assetClass = z.enum(ASSET_CLASSES);
+const allocationClass = z.enum(ALLOCATION_CLASSES);
 const subType = z.enum(["cdb", "rdb", "lci", "lca", "cdi", "tesouro_selic", "tesouro_ipca", "tesouro_prefixado", "debenture"]);
 const opType = z.enum(["buy", "sell", "dividend", "yield_payment", "split", "deposit", "withdrawal", "adjustment"]);
 
 const holdingFields = {
   assetClass,
+  allocationClass: allocationClass.nullish(),
   subType: subType.nullish(),
   ticker: z.string().nullish(),
   name: z.string().min(1),
@@ -52,8 +57,8 @@ const holdingsRoute = createRoute({
   method: "get",
   path: "/v2/holdings",
   tags,
-  summary: "Holdings with market value",
-  request: { query: z.object({ accountId: z.string().optional(), entityId: z.string().optional(), includeInactive: z.enum(["true", "false"]).optional() }) },
+  summary: "Holdings with market value; scope = all | pf | pj | <entityId>",
+  request: { query: z.object({ accountId: z.string().optional(), ...entityScopeQuery, includeInactive: z.enum(["true", "false"]).optional() }) },
   responses: v2Responses,
 });
 const createHoldingRoute = createRoute({ method: "post", path: "/v2/holdings", tags, summary: "Create a holding on a brokerage account", request: jsonBody(z.object({ accountId: z.string(), ...holdingFields })), responses: v2Responses });
@@ -90,7 +95,14 @@ const createOpRoute = createRoute({
   responses: v2Responses,
 });
 const patchOpRoute = createRoute({ method: "patch", path: "/v2/investment-operations/{id}", tags, summary: "Update an operation", request: { params: idParams, ...jsonBody(z.object(operationFields).partial()) }, responses: v2Responses });
-const deleteOpRoute = createRoute({ method: "delete", path: "/v2/investment-operations/{id}", tags, summary: "Delete an operation and its cash leg", request: { params: idParams }, responses: v2Responses });
+const deleteOpRoute = createRoute({
+  method: "delete",
+  path: "/v2/investment-operations/{id}",
+  tags,
+  summary: "Delete an operation; its cash leg (and with withFunding=true the transfer that paid for it) goes to the trash. Undoable (batchId).",
+  request: { params: idParams, query: z.object({ withFunding: queryFlag.optional() }) },
+  responses: v2Responses,
+});
 const cashRoute = createRoute({
   method: "post",
   path: "/v2/brokerage-cash",
@@ -111,14 +123,30 @@ const cashRoute = createRoute({
   responses: v2Responses,
 });
 const refreshPricesRoute = createRoute({ method: "post", path: "/v2/holdings/refresh-prices", tags, summary: "Fetch current market prices for the user's ticker holdings", responses: v2Responses });
-const summaryRoute = createRoute({ method: "get", path: "/v2/portfolio/summary", tags, summary: "Portfolio value, allocation and cash", request: { query: z.object({ entityId: z.string().optional() }) }, responses: v2Responses });
-const getTargetsRoute = createRoute({ method: "get", path: "/v2/portfolio/targets", tags, summary: "Target allocation by asset class", responses: v2Responses });
+const summaryRoute = createRoute({
+  method: "get",
+  path: "/v2/portfolio/summary",
+  tags,
+  summary: "Portfolio value, allocation and cash; scope = all | pf | pj | <entityId>",
+  request: { query: z.object(entityScopeQuery) },
+  responses: v2Responses,
+});
+const getTargetsRoute = createRoute({ method: "get", path: "/v2/portfolio/targets", tags, summary: "Target allocation by allocation class", responses: v2Responses });
 const putTargetsRoute = createRoute({
   method: "put",
   path: "/v2/portfolio/targets",
   tags,
-  summary: "Replace the target allocation (must sum to 100%)",
-  request: jsonBody(z.object({ targets: z.array(z.object({ assetClass, targetPercent: z.number().min(0).max(100) })) })),
+  summary: "Replace the target allocation (must sum to 100%); assetClass targets are mapped to allocation classes and summed",
+  request: jsonBody(
+    z.object({
+      targets: z.array(
+        z.union([
+          z.object({ allocationClass, targetPercent: z.number().min(0).max(100) }),
+          z.object({ assetClass, targetPercent: z.number().min(0).max(100) }),
+        ])
+      ),
+    })
+  ),
   responses: v2Responses,
 });
 const rebalanceRoute = createRoute({
@@ -126,22 +154,23 @@ const rebalanceRoute = createRoute({
   path: "/v2/portfolio/rebalance-suggestion",
   tags,
   summary: "How to split a new contribution to approach the targets (never sells)",
-  request: jsonBody(z.object({ amount: z.number().positive(), mode: z.enum(["class", "asset"]).default("class") })),
+  request: jsonBody(z.object({ amount: z.number().positive(), mode: z.enum(["class", "asset"]).default("class"), scope: entityScopeSchema.optional() })),
   responses: v2Responses,
 });
 const contributionsRoute = createRoute({
   method: "get",
   path: "/v2/contributions",
   tags,
-  summary: "Monthly contributions for a year",
-  request: { query: z.object({ year: z.coerce.number().int().min(2000).max(2100), entityId: z.string().optional() }) },
+  summary: "Monthly contributions for a year; scope = all | pf | pj | <entityId>",
+  request: { query: z.object({ year: z.coerce.number().int().min(2000).max(2100), ...entityScopeQuery }) },
   responses: v2Responses,
 });
 
 export const v2Investments = createRouter()
   .openapi(holdingsRoute, v2Handler(holdingsRoute, async (c, userId) => {
     const q = c.req.valid("query");
-    const holdings = await listHoldings(userId, prisma, { accountId: q.accountId, entityId: q.entityId, includeInactive: q.includeInactive === "true" });
+    const entityIds = await resolveScopeQuery(userId, q, prisma);
+    const holdings = await listHoldings(userId, prisma, { accountId: q.accountId, entityIds, includeInactive: q.includeInactive === "true" });
     return { holdings: holdings.map(serializeHolding) };
   }))
   .openapi(createHoldingRoute, v2Handler(createHoldingRoute, async (c, userId) => {
@@ -171,18 +200,23 @@ export const v2Investments = createRouter()
     const result = await recordOperation(userId, c.req.valid("json"), prisma);
     return { ...result, operation: serializeOperation(result.operation) };
   }))
-  .openapi(patchOpRoute, v2Handler(patchOpRoute, async (c, userId) => updateOperation(userId, c.req.valid("param").id, c.req.valid("json"), prisma)))
-  .openapi(deleteOpRoute, v2Handler(deleteOpRoute, async (c, userId) => deleteOperation(userId, c.req.valid("param").id, prisma)))
+  .openapi(patchOpRoute, v2Handler(patchOpRoute, async (c, userId) => {
+    const { id } = c.req.valid("param");
+    const { batchId } = await updateOperation(userId, id, c.req.valid("json"), prisma);
+    const operation = await prisma.investmentOperation.findUniqueOrThrow({ where: { id }, include: OPERATION_INCLUDE });
+    return { operation: serializeOperation(operation), batchId };
+  }))
+  .openapi(deleteOpRoute, v2Handler(deleteOpRoute, async (c, userId) => deleteOperation(userId, c.req.valid("param").id, prisma, { withFunding: c.req.valid("query").withFunding })))
   .openapi(cashRoute, v2Handler(cashRoute, async (c, userId) => moveBrokerageCash(userId, c.req.valid("json"), prisma)))
   .openapi(refreshPricesRoute, v2Handler(refreshPricesRoute, async (_c, userId) => updateAllPrices(prisma, { userId })))
-  .openapi(summaryRoute, v2Handler(summaryRoute, async (c, userId) => portfolioSummary(userId, prisma, c.req.valid("query"))))
+  .openapi(summaryRoute, v2Handler(summaryRoute, async (c, userId) => portfolioSummary(userId, prisma, { entityIds: await resolveScopeQuery(userId, c.req.valid("query"), prisma) })))
   .openapi(getTargetsRoute, v2Handler(getTargetsRoute, async (_c, userId) => ({ targets: await getTargets(userId, prisma) })))
   .openapi(putTargetsRoute, v2Handler(putTargetsRoute, async (c, userId) => ({ targets: await setTargets(userId, c.req.valid("json").targets, prisma) })))
   .openapi(rebalanceRoute, v2Handler(rebalanceRoute, async (c, userId) => {
-    const { amount, mode } = c.req.valid("json");
-    return rebalanceSuggestion(userId, amount, mode, prisma);
+    const { amount, mode, scope } = c.req.valid("json");
+    return rebalanceSuggestion(userId, amount, mode, prisma, { entityIds: await resolveScopeQuery(userId, { scope }, prisma) });
   }))
   .openapi(contributionsRoute, v2Handler(contributionsRoute, async (c, userId) => {
-    const { year, entityId } = c.req.valid("query");
-    return contributions(userId, year, prisma, { entityId });
+    const q = c.req.valid("query");
+    return contributions(userId, q.year, prisma, { entityIds: await resolveScopeQuery(userId, q, prisma) });
   }));

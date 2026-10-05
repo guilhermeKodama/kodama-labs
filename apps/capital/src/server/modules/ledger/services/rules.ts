@@ -1,7 +1,8 @@
 import type { DbClient } from "@capital/server/lib/prisma";
 import type { CategorizationRule } from "@/generated/prisma";
 import { normalizeDescription } from "@capital/server/modules/bank-statements/utils";
-import { LedgerError } from "../lib/errors";
+import { LedgerError, notFound } from "../lib/errors";
+import { inTransaction, recordMutation, snapshot, type MutationRecordInput } from "./mutations";
 
 export const RULE_MATCH_TYPES = ["equals", "contains", "regex"] as const;
 export type RuleMatchType = (typeof RULE_MATCH_TYPES)[number];
@@ -50,21 +51,28 @@ export async function recordRuleHits(ruleIds: string[], db: DbClient) {
   }
 }
 
-/** Learn (or move) an exact-description rule. Used by manual recategorization and bulk edits. */
+/**
+ * Learn (or move) an exact-description rule. Used by manual recategorization
+ * and bulk edits; with `collect`, a rule created or moved joins the caller's
+ * undo batch.
+ */
 export async function learnRule(
   userId: string,
   description: string,
   categoryId: string,
   source: "manual" | "ai" | "bulk",
-  db: DbClient
+  db: DbClient,
+  opts: { collect?: MutationRecordInput[] } = {}
 ) {
   const pattern = normalizeDescription(description);
   if (!pattern) return null;
-  return db.categorizationRule.upsert({
-    where: { userId_matchType_pattern: { userId, matchType: "equals", pattern } },
-    create: { userId, matchType: "equals", pattern, categoryId, source },
-    update: { categoryId, source },
-  });
+  const where = { userId_matchType_pattern: { userId, matchType: "equals", pattern } };
+  const before = opts.collect ? await db.categorizationRule.findUnique({ where }) : null;
+  const rule = await db.categorizationRule.upsert({ where, create: { userId, matchType: "equals", pattern, categoryId, source }, update: { categoryId, source } });
+  if (opts.collect && (before?.categoryId !== rule.categoryId || before?.source !== rule.source)) {
+    opts.collect.push({ model: "CategorizationRule", recordId: rule.id, before: snapshot(before), after: snapshot(rule) });
+  }
+  return rule;
 }
 
 export interface RuleInput {
@@ -74,38 +82,71 @@ export interface RuleInput {
   entityId?: string | null;
 }
 
-export async function createRule(userId: string, input: RuleInput, db: DbClient) {
-  await assertCategory(userId, input.categoryId, db);
-  if (input.matchType === "regex") {
+/** The pattern as stored: "equals" patterns normalized like the descriptions they are compared with, regexes checked. */
+function rulePattern(matchType: string, pattern: string) {
+  if (matchType === "regex") {
     try {
-      new RegExp(input.pattern);
+      new RegExp(pattern);
     } catch {
-      throw new LedgerError("Invalid regular expression", 422);
+      throw new LedgerError("Invalid regular expression", 422, { code: "rule.invalid_regex" });
     }
   }
-  const pattern = input.matchType === "equals" ? normalizeDescription(input.pattern) : input.pattern;
-  return db.categorizationRule.create({
-    data: { userId, matchType: input.matchType, pattern, categoryId: input.categoryId, entityId: input.entityId ?? null, source: "manual" },
+  return matchType === "equals" ? normalizeDescription(pattern) : pattern;
+}
+
+/** Each write below is one undo batch (batchId). */
+export async function createRule(userId: string, input: RuleInput, db: DbClient) {
+  await assertCategory(userId, input.categoryId, db);
+  if (input.entityId) await assertEntity(userId, input.entityId, db);
+  const pattern = rulePattern(input.matchType, input.pattern);
+  return inTransaction(db, async (tx) => {
+    const rule = await tx.categorizationRule.create({
+      data: { userId, matchType: input.matchType, pattern, categoryId: input.categoryId, entityId: input.entityId ?? null, source: "manual" },
+    });
+    const batchId = await recordMutation(tx, userId, "create", rule.pattern, [{ model: "CategorizationRule", recordId: rule.id, before: null, after: snapshot(rule) }]);
+    return { ...rule, batchId };
   });
 }
 
 export async function updateRule(userId: string, ruleId: string, patch: Partial<RuleInput>, db: DbClient) {
-  const rule = await db.categorizationRule.findFirst({ where: { id: ruleId, userId } });
-  if (!rule) throw new LedgerError("Rule not found", 404);
-  if (patch.categoryId) await assertCategory(userId, patch.categoryId, db);
-  return db.categorizationRule.update({ where: { id: ruleId }, data: patch });
+  return inTransaction(db, async (tx) => {
+    const rule = await tx.categorizationRule.findFirst({ where: { id: ruleId, userId } });
+    if (!rule) throw new LedgerError("Rule not found", 404, { code: "rule.not_found" });
+    if (patch.categoryId) await assertCategory(userId, patch.categoryId, tx);
+    if (patch.entityId) await assertEntity(userId, patch.entityId, tx);
+    const matchType = patch.matchType ?? rule.matchType;
+    const pattern = patch.pattern !== undefined || patch.matchType !== undefined ? rulePattern(matchType, patch.pattern ?? rule.pattern) : undefined;
+    const updated = await tx.categorizationRule.update({ where: { id: ruleId }, data: { ...patch, ...(pattern !== undefined && { pattern }) } });
+    const batchId = await recordMutation(tx, userId, "update", updated.pattern, [{ model: "CategorizationRule", recordId: rule.id, before: snapshot(rule), after: snapshot(updated) }]);
+    return { ...updated, batchId };
+  });
 }
 
+/**
+ * Deletes a rule outright; undo re-creates it under its id. The entries it
+ * categorized keep their category, but no longer name the rule (they are
+ * not part of the batch, so undoing older changes to them stays possible).
+ */
 export async function deleteRule(userId: string, ruleId: string, db: DbClient) {
-  const { count } = await db.categorizationRule.deleteMany({ where: { id: ruleId, userId } });
-  if (!count) throw new LedgerError("Rule not found", 404);
+  return inTransaction(db, async (tx) => {
+    const rule = await tx.categorizationRule.findFirst({ where: { id: ruleId, userId } });
+    if (!rule) throw new LedgerError("Rule not found", 404, { code: "rule.not_found" });
+    await tx.categorizationRule.delete({ where: { id: rule.id } });
+    const batchId = await recordMutation(tx, userId, "delete", rule.pattern, [{ model: "CategorizationRule", recordId: rule.id, before: snapshot(rule), after: null }]);
+    return { batchId };
+  });
 }
 
 async function assertCategory(userId: string, categoryId: string, db: DbClient) {
   const category = await db.category.findFirst({ where: { id: categoryId, userId } });
-  if (!category) throw new LedgerError("Category not found", 404);
-  if (category.isArchived) throw new LedgerError(`Category "${category.name}" is archived`, 422);
+  if (!category) throw new LedgerError("Category not found", 404, { code: "category.not_found" });
+  if (category.isArchived) throw new LedgerError(`Category "${category.name}" is archived`, 422, { code: "category.archived", params: { name: category.name } });
   return category;
+}
+
+/** A rule may be limited to one of the user's own entities only. */
+async function assertEntity(userId: string, entityId: string, db: DbClient) {
+  if (!(await db.entity.count({ where: { id: entityId, userId } }))) throw notFound("Entity", "entity.not_found");
 }
 
 /** Which rule (if any) would categorize `description`. */

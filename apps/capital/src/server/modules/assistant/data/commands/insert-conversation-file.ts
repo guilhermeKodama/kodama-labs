@@ -1,7 +1,7 @@
 import type { DbClient } from "@capital/server/lib/prisma";
 import type { StatementFileType } from "@/generated/prisma";
 import type { ParsedPayload } from "../../services/detect-and-parse-file";
-import { ForbiddenError } from "@capital/server/lib/auth-middleware";
+import { LedgerError } from "@capital/server/modules/ledger/lib/errors";
 
 interface InsertConversationFileInput {
   conversationId: string;
@@ -31,11 +31,8 @@ export async function insertConversationFile(
     where: { id: input.conversationId },
     select: { userId: true },
   });
-  if (!conversation) {
-    throw new Error("Conversation not found");
-  }
-  if (conversation.userId !== userId) {
-    throw new ForbiddenError("conversation");
+  if (!conversation || conversation.userId !== userId) {
+    throw new LedgerError("Conversation not found or access denied", 404, { code: "assistant.conversation_not_found" });
   }
 
   return db.conversationFile.create({

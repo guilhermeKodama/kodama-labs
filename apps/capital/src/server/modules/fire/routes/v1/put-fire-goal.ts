@@ -5,10 +5,11 @@ import { jsonContent } from "stoker/openapi/helpers";
 import type { AppRouteHandler } from "@capital/server/types";
 import { prisma } from "@capital/server/lib/prisma";
 import { requireUserId } from "@capital/server/lib/auth-middleware";
+import { ApiErrorSchema } from "@capital/server/lib/http-error";
 import { upsertFireGoal } from "../../services/upsert-fire-goal";
 import { serializeGoal } from "../../services/serialize";
 import { routeConfig } from "../../constants";
-import { ErrorResponseSchema, FireGoalInputSchema, FireGoalSchema } from "../../validations/fire";
+import { FireGoalInputSchema, FireGoalSchema } from "../../validations/fire";
 
 export const route = createRoute({
   path: "/v1/fire/goal",
@@ -21,20 +22,15 @@ export const route = createRoute({
   },
   responses: {
     [OK]: jsonContent(FireGoalSchema, "FIRE plan saved"),
-    [BAD_REQUEST]: jsonContent(ErrorResponseSchema, "Invalid request data"),
-    [UNAUTHORIZED]: jsonContent(ErrorResponseSchema, "Not authenticated"),
-    [INTERNAL_SERVER_ERROR]: jsonContent(ErrorResponseSchema, "Internal server error"),
+    [BAD_REQUEST]: jsonContent(ApiErrorSchema, "Invalid request data"),
+    [UNAUTHORIZED]: jsonContent(ApiErrorSchema, "Not authenticated"),
+    [INTERNAL_SERVER_ERROR]: jsonContent(ApiErrorSchema, "Internal server error"),
   },
 });
 
 export const handler: AppRouteHandler<typeof route> = async (c) => {
-  try {
-    const userId = requireUserId(c);
-    const body = c.req.valid("json");
-    const goal = await upsertFireGoal(userId, body, prisma);
-    return c.json(serializeGoal(goal), OK);
-  } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : "Unknown error";
-    return c.json({ error: { code: "INTERNAL_ERROR", message } }, INTERNAL_SERVER_ERROR);
-  }
+  const userId = requireUserId(c);
+  const body = c.req.valid("json");
+  const goal = await upsertFireGoal(userId, body, prisma);
+  return c.json(serializeGoal(goal), OK);
 };

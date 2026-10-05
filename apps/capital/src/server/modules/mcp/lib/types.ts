@@ -1,4 +1,4 @@
-import type { EntityType, TransactionType, AssetClass } from "@/generated/prisma";
+import type { EntityType, TransactionType, AssetClass, AllocationClass } from "@/generated/prisma";
 
 export interface BulkCreateTransactionItem {
   entityType: EntityType;
@@ -56,6 +56,8 @@ export interface InvestmentPosition {
   ticker: string | null;
   name: string;
   assetClass: AssetClass;
+  /** Portfolio class (one of six) the asset counts under on the investments screen. */
+  allocationClass: AllocationClass;
   currentQuantity: number;
   averageCost: number;
   totalInvested: number;

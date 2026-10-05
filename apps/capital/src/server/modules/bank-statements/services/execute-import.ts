@@ -8,7 +8,7 @@ import { createHolding, recordOperation } from "@capital/server/modules/investme
 import { LedgerError } from "@capital/server/modules/ledger/lib/errors";
 import { createEntry, updateEntry } from "@capital/server/modules/ledger/services/entries";
 import { getDefaultAccount } from "@capital/server/modules/ledger/services/entities";
-import { inTransaction } from "@capital/server/modules/ledger/services/mutations";
+import { inTransaction, recordMutation, snapshot, type MutationRecordInput } from "@capital/server/modules/ledger/services/mutations";
 import { loadRuleMatcher, recordRuleHits } from "@capital/server/modules/ledger/services/rules";
 import { resolveTransferSides, checkTransferDirection } from "./transfer-flow";
 
@@ -31,6 +31,8 @@ export interface ExecuteImportResult {
   fuzzyDuplicatesLinked: number;
   statementImportId: string;
   createdRecords: CreatedRecordRef[];
+  /** The import's undo batch (source "import"): undoing it removes everything the import wrote. */
+  batchId: string;
 }
 
 export interface ExecuteImportOptions {
@@ -61,7 +63,9 @@ function directionMatchesSides(direction: TransferDirection, fromKind: string, t
  * The write path shared by the v2 import route and the assistant's
  * commit_plan tool. Callers must have verified the plan (confirmed, for the
  * assistant). Runs as one transaction; every row it creates carries the
- * Import id, which is what reverting relies on.
+ * Import id, which is what reverting relies on. Everything it writes is
+ * also one undo batch with source "import" (system categories it seeds and
+ * rule hit counts aside).
  */
 export async function executeImport(
   userId: string,
@@ -71,15 +75,19 @@ export async function executeImport(
 ): Promise<ExecuteImportResult> {
   return inTransaction(db, async (tx) => {
     const createdRecords: CreatedRecordRef[] = [];
+    const records: MutationRecordInput[] = [];
     const entity = await tx.entity.findFirst({ where: { id: input.entityId, userId } });
     if (!entity || entity.kind !== input.entityType) {
-      throw new LedgerError(input.entityType === "personal" ? "Personal account not found or access denied" : "Business not found or access denied", 404);
+      throw new LedgerError(input.entityType === "personal" ? "Personal account not found or access denied" : "Business not found or access denied", 404, { code: "entity.not_found" });
     }
     const checking = await getDefaultAccount(entity, tx);
 
     if (input.ledgerBalance != null) {
       const prior = await tx.import.count({ where: { entityId: entity.id } });
-      if (prior === 0) await tx.account.update({ where: { id: checking.id }, data: { initialBalance: input.ledgerBalance } });
+      if (prior === 0) {
+        const updated = await tx.account.update({ where: { id: checking.id }, data: { initialBalance: input.ledgerBalance } });
+        records.push({ model: "Account", recordId: checking.id, before: snapshot(checking), after: snapshot(updated) });
+      }
     }
 
     await ensureSystemCategories(userId, tx);
@@ -99,8 +107,9 @@ export async function executeImport(
     for (const decision of input.duplicateDecisions) {
       if (decision.resolution !== "link_fuzzy" || !decision.existingTransactionId) continue;
       const target = await tx.ledgerEntry.findFirst({ where: { id: decision.existingTransactionId, userId } });
-      if (!target) throw new LedgerError(`Transaction ${decision.existingTransactionId} not found`, 404);
-      await tx.ledgerEntry.update({ where: { id: target.id }, data: { externalId: decision.externalId } });
+      if (!target) throw new LedgerError(`Transaction ${decision.existingTransactionId} not found`, 404, { code: "entry.not_found" });
+      const linked = await tx.ledgerEntry.update({ where: { id: target.id }, data: { externalId: decision.externalId } });
+      records.push({ model: "LedgerEntry", recordId: target.id, before: snapshot(target), after: snapshot(linked) });
       fuzzyLinked.add(decision.externalId);
       fuzzyDuplicatesLinked++;
     }
@@ -125,6 +134,7 @@ export async function executeImport(
       },
     });
     createdRecords.push({ model: "Import", id: imp.id });
+    records.push({ model: "Import", recordId: imp.id, before: null, after: snapshot(imp) });
 
     const createCard = async (card: { bankName: string; lastFourDigits: string; closingDay: number; dueDay: number; currency: string }) => {
       const created = await tx.account.create({
@@ -142,6 +152,7 @@ export async function executeImport(
         },
       });
       createdRecords.push({ model: "Account", id: created.id });
+      records.push({ model: "Account", recordId: created.id, before: null, after: snapshot(created) });
       return created;
     };
 
@@ -159,12 +170,12 @@ export async function executeImport(
         accountId = (await createCard(bill.newCreditCard)).id;
         creditCardsCreated++;
       }
-      if (!accountId) throw new LedgerError(`bills entry (fileId ${bill.fileId}) resolved to no creditCardId`, 422);
+      if (!accountId) throw new LedgerError(`bills entry (fileId ${bill.fileId}) resolved to no creditCardId`, 422, { code: "import.bill_without_card", params: { fileId: bill.fileId } });
       const file = await tx.conversationFile.findFirst({ where: { id: bill.fileId, userId }, select: { blobUrl: true } });
-      if (!file) throw new LedgerError(`File ${bill.fileId} not found or access denied`, 404);
+      if (!file) throw new LedgerError(`File ${bill.fileId} not found or access denied`, 404, { code: "import.file_not_found", params: { fileId: bill.fileId } });
       const buffer = await getObjectBuffer(file.blobUrl);
-      if (!buffer) throw new LedgerError(`File ${bill.fileId} content could not be read`, 422);
-      const result = await importCardFile(userId, { accountId, closingDate: bill.closingDate, dueDate: bill.dueDate, content: buffer.toString("utf8"), importId: imp.id }, tx);
+      if (!buffer) throw new LedgerError(`File ${bill.fileId} content could not be read`, 422, { code: "import.file_unreadable", params: { fileId: bill.fileId } });
+      const result = await importCardFile(userId, { accountId, closingDate: bill.closingDate, dueDate: bill.dueDate, content: buffer.toString("utf8"), importId: imp.id }, tx, { collect: records });
       createdRecords.push({ model: "CardStatement", id: result.statementId });
       billsCreated++;
       billTransactionsCreated += result.created;
@@ -191,20 +202,21 @@ export async function executeImport(
       if (check.status === "violation") {
         throw new LedgerError(
           `Transfer ${tr.externalId} is inconsistent: ${check.message}. The statement row is an ${tr.flow === "outflow" ? "outflow" : "inflow"}, so either the direction or the counterparty is wrong.`,
-          422
+          422,
+          { code: "import.transfer_inconsistent", params: { externalId: tr.externalId } }
         );
       }
       const [fromEntity, toEntity] = await Promise.all([
         tx.entity.findFirst({ where: { id: sides.fromEntityId, userId } }),
         tx.entity.findFirst({ where: { id: sides.toEntityId, userId } }),
       ]);
-      if (!fromEntity || !toEntity) throw new LedgerError(`Transfer ${tr.externalId} references an entity the user does not own`, 404);
+      if (!fromEntity || !toEntity) throw new LedgerError(`Transfer ${tr.externalId} references an entity the user does not own`, 404, { code: "import.transfer_entity_not_owned", params: { externalId: tr.externalId } });
       const [from, to] = await Promise.all([getDefaultAccount(fromEntity, tx), getDefaultAccount(toEntity, tx)]);
       const created = await createEntry(
         userId,
         { kind: "transfer", fromAccountId: from.id, toAccountId: to.id, amount: tr.amount, currency: input.currency, exchangeRate: 1, description: tr.description, date: tr.date, direction: tr.direction },
         tx,
-        { importId: imp.id, record: false }
+        { importId: imp.id, collect: records }
       );
       await tx.transferGroup.update({ where: { id: created.transferGroupId! }, data: { externalId: tr.externalId } });
       createdRecords.push({ model: "TransferGroup", id: created.transferGroupId! });
@@ -215,7 +227,7 @@ export async function executeImport(
     for (const it of input.investmentTransfers) {
       if (existingTransfers.has(it.externalId)) continue;
       const broker = await tx.account.findFirst({ where: { id: it.investmentAccountId, userId, type: "brokerage" } });
-      if (!broker) throw new LedgerError(`Investment account ${it.investmentAccountId} not found or access denied`, 404);
+      if (!broker) throw new LedgerError(`Investment account ${it.investmentAccountId} not found or access denied`, 404, { code: "import.investment_account_not_found", params: { accountId: it.investmentAccountId } });
       const deposit = it.direction === "investment_deposit";
       const created = await createEntry(
         userId,
@@ -231,7 +243,7 @@ export async function executeImport(
           direction: it.direction,
         },
         tx,
-        { importId: imp.id, record: false }
+        { importId: imp.id, collect: records }
       );
       await tx.transferGroup.update({ where: { id: created.transferGroupId! }, data: { externalId: it.externalId } });
       createdRecords.push({ model: "TransferGroup", id: created.transferGroupId! });
@@ -242,29 +254,37 @@ export async function executeImport(
     for (const rec of input.reconciliations) {
       const patch = { ...(rec.updates.amount !== undefined && { amount: rec.updates.amount }), ...(rec.updates.date && { date: parseLocalDate(rec.updates.date).toISOString().slice(0, 10) }), ...(rec.updates.description && { description: rec.updates.description }) };
       if (!Object.keys(patch).length) continue;
-      await updateEntry(userId, rec.existingTransactionId, patch, tx, { record: false });
+      await updateEntry(userId, rec.existingTransactionId, patch, tx, { collect: records });
       reconciled++;
     }
 
     let transferReconciled = 0;
     for (const rec of input.transferReconciliations) {
       const group = await tx.transferGroup.findFirst({ where: { id: rec.existingTransferId, userId }, include: { legs: { include: { account: true, entity: true } } } });
-      if (!group) throw new LedgerError(`Transfer reconciliation target ${rec.existingTransferId} not found`, 404);
+      if (!group) throw new LedgerError(`Transfer reconciliation target ${rec.existingTransferId} not found`, 404, { code: "import.reconcile_target_not_found", params: { transferId: rec.existingTransferId } });
       const fromLeg = group.legs.find((l) => Number(l.amount) < 0) ?? group.legs[0];
       const toLeg = group.legs.find((l) => l.id !== fromLeg.id) ?? group.legs[0];
       if (rec.updates.direction !== undefined) {
         if (!directionMatchesSides(rec.updates.direction, fromLeg.entity.kind, toLeg.entity.kind, fromLeg.account.type, toLeg.account.type)) {
           throw new LedgerError(
             `Cannot change transfer ${rec.existingTransferId} to direction "${rec.updates.direction}" via reconciliation - that would require moving it to a different counterparty side, which reconciliation does not support. Delete and recreate the transfer instead.`,
-            422
+            422,
+            { code: "import.reconcile_direction_change", params: { transferId: rec.existingTransferId, direction: rec.updates.direction } }
           );
         }
         const legKind = rec.updates.direction === "reimbursement" ? "expense" : "transfer";
-        await tx.transferGroup.update({ where: { id: group.id }, data: { direction: rec.updates.direction } });
+        const { legs, ...groupRow } = group;
+        const relabeled = await tx.transferGroup.update({ where: { id: group.id }, data: { direction: rec.updates.direction } });
         await tx.ledgerEntry.updateMany({ where: { transferGroupId: group.id }, data: { kind: legKind } });
+        records.push({ model: "TransferGroup", recordId: group.id, before: snapshot(groupRow), after: snapshot(relabeled) });
+        for (const { account: _account, entity: _entity, ...leg } of legs) {
+          void _account;
+          void _entity;
+          records.push({ model: "LedgerEntry", recordId: leg.id, before: snapshot(leg), after: snapshot({ ...leg, kind: legKind }) });
+        }
       }
       const patch = { ...(rec.updates.amount !== undefined && { amount: rec.updates.amount }), ...(rec.updates.date && { date: parseLocalDate(rec.updates.date).toISOString().slice(0, 10) }), ...(rec.updates.description && { description: rec.updates.description }) };
-      if (Object.keys(patch).length) await updateEntry(userId, fromLeg.id, patch, tx, { record: false });
+      if (Object.keys(patch).length) await updateEntry(userId, fromLeg.id, patch, tx, { collect: records });
       if (Object.keys(patch).length || rec.updates.direction !== undefined) transferReconciled++;
     }
 
@@ -277,7 +297,7 @@ export async function executeImport(
         const type = t.type === "income" ? "income" : "expense";
         const c = categories.find((x) => x.name.toLowerCase() === t.category!.toLowerCase() && x.type === type) ?? categories.find((x) => x.name.toLowerCase() === t.category!.toLowerCase());
         if (c?.isArchived) {
-          throw new LedgerError(`Category '${t.category}' is archived and cannot be assigned. Unarchive it or choose a visible category. Row: ${t.description}`, 422);
+          throw new LedgerError(`Category '${t.category}' is archived and cannot be assigned. Unarchive it or choose a visible category. Row: ${t.description}`, 422, { code: "category.archived", params: { name: c.name } });
         }
         categoryId = c?.id ?? null;
       }
@@ -294,7 +314,7 @@ export async function executeImport(
         userId,
         { kind: t.type, accountId: checking.id, amount: t.amount, currency: input.currency, description: t.description, date: t.date, categoryId, externalId: t.externalId },
         tx,
-        { importId: imp.id, record: false, skipRules: true, isAutoCategorized: auto }
+        { importId: imp.id, collect: records, skipRules: true, isAutoCategorized: auto }
       );
       createdRecords.push({ model: "LedgerEntry", id: created.entryIds[0] });
       imported++;
@@ -306,20 +326,22 @@ export async function executeImport(
     for (const it of input.investmentTransactions) {
       let holdingId = it.holdingId;
       if (!holdingId && it.newHolding) {
-        const holding = await createHolding(userId, { accountId: it.accountId, ...it.newHolding }, tx);
+        const holding = await createHolding(userId, { accountId: it.accountId, ...it.newHolding }, tx, { collect: records });
         createdRecords.push({ model: "InvestmentHolding", id: holding.id });
         holdingId = holding.id;
       }
-      if (!holdingId) throw new LedgerError(`investmentTransactions entry for externalId ${it.externalId} resolved to no holding`, 422);
+      if (!holdingId) throw new LedgerError(`investmentTransactions entry for externalId ${it.externalId} resolved to no holding`, 422, { code: "import.holding_unresolved", params: { externalId: it.externalId } });
       const { operation } = await recordOperation(
         userId,
         { holdingId, type: it.type, quantity: it.quantity, pricePerUnit: it.pricePerUnit, totalAmount: it.totalAmount, fees: it.fees, date: it.date, externalId: it.externalId, importId: imp.id },
-        tx
+        tx,
+        { collect: records }
       );
       createdRecords.push({ model: "InvestmentOperation", id: operation.id });
       investmentTransactionsCreated++;
     }
 
+    const batchId = await recordMutation(tx, userId, "import", `Import ${imp.fileName ?? imp.bankName ?? imp.id}`, records, { source: "import" });
     return {
       imported,
       duplicatesSkipped,
@@ -334,6 +356,7 @@ export async function executeImport(
       fuzzyDuplicatesLinked,
       statementImportId: imp.id,
       createdRecords,
+      batchId,
     };
   });
 }

@@ -322,6 +322,42 @@ describe("MCP Server End-to-End", () => {
       });
       expect(count).toBe(0);
     });
+
+    it("attributes the undo batch a tool writes to the MCP client", async () => {
+      const request = createMockNextRequest(
+        "POST",
+        {
+          jsonrpc: "2.0",
+          method: "tools/call",
+          params: {
+            name: "bulk_create_transactions",
+            arguments: {
+              transactions: [
+                {
+                  entityType: "personal",
+                  type: "income",
+                  amount: 12.5,
+                  currency: "BRL",
+                  description: "MCP source test",
+                  category: "Dividends",
+                  date: "2026-09-16",
+                  personalAccountId,
+                },
+              ],
+              dryRun: false,
+            },
+          },
+          id: 4,
+        },
+        { Authorization: `Bearer ${TEST_API_KEY}` }
+      );
+
+      const response = await POST(request as unknown as NextRequest);
+      expect(response.status).toBe(200);
+      const batch = await prisma.mutationBatch.findFirstOrThrow({ where: { userId: TEST_USER_ID }, orderBy: { createdAt: "desc" } });
+      expect(batch.source).toBe("mcp");
+      await prisma.ledgerEntry.deleteMany({ where: { userId: TEST_USER_ID } });
+    });
   });
 
   describe("MCP Client Integration", () => {

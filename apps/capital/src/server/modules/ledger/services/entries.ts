@@ -3,6 +3,9 @@ import type { DbClient } from "@capital/server/lib/prisma";
 import { Prisma } from "@/generated/prisma";
 import type { Account, Entity, LedgerEntry, LedgerKind, TransferDirection } from "@/generated/prisma";
 import { parseLocalDate } from "@capital/server/lib/date-utils";
+import { st, type Locale } from "@capital/server/i18n";
+import { loadUserLocale } from "@capital/server/i18n/user-locale";
+import { restoreLegOperations } from "@capital/server/modules/investments/lib/restore-operations";
 import type { CreateEntryInput, EntryPatch } from "../contracts";
 import { LedgerError, notFound } from "../lib/errors";
 import { loadFx, type FxContext } from "../lib/fx";
@@ -40,13 +43,13 @@ export interface WriteResult {
 
 async function assertAssignableCategory(userId: string, categoryId: string, db: DbClient) {
   const category = await db.category.findFirst({ where: { id: categoryId, userId } });
-  if (!category) throw new LedgerError("Category not found", 404);
-  if (category.isArchived) throw new LedgerError(`Category "${category.name}" is archived and cannot be assigned`, 422);
+  if (!category) throw new LedgerError("Category not found", 404, { code: "category.not_found" });
+  if (category.isArchived) throw new LedgerError(`Category "${category.name}" is archived and cannot be assigned`, 422, { code: "category.archived", params: { name: category.name } });
   return category;
 }
 
 function assertWritableAccount(account: Account) {
-  if (account.archivedAt) throw new LedgerError(`Account "${account.name}" is archived`, 422);
+  if (account.archivedAt) throw new LedgerError(`Account "${account.name}" is archived`, 422, { code: "account.archived", params: { name: account.name } });
 }
 
 async function effectiveDateFor(account: Account, date: Date, db: DbClient, statementMonth?: string) {
@@ -130,6 +133,7 @@ async function createSimpleIn(
       },
     });
     planId = plan.id;
+    records.push({ model: "InstallmentPlan", recordId: plan.id, before: null, after: snapshot(plan) });
   }
 
   const baseMonth = account.type === "credit_card" ? opts.statementMonth ?? statementMonthFor(date, account.closingDay ?? 1) : undefined;
@@ -186,13 +190,13 @@ async function createTransferIn(
   opts: WriteOptions,
   records: MutationRecordInput[]
 ): Promise<Omit<WriteResult, "batchId">> {
-  if (input.fromAccountId === input.toAccountId) throw new LedgerError("A transfer needs two different accounts", 422);
+  if (input.fromAccountId === input.toAccountId) throw new LedgerError("A transfer needs two different accounts", 422, { code: "transfer.same_account" });
   const [from, to] = await Promise.all([
     tx.account.findFirst({ where: { id: input.fromAccountId, userId }, include: { entity: true } }),
     tx.account.findFirst({ where: { id: input.toAccountId, userId }, include: { entity: true } }),
   ]);
-  if (!from) throw notFound("Source account");
-  if (!to) throw notFound("Destination account");
+  if (!from) throw notFound("Source account", "transfer.from_account_not_found");
+  if (!to) throw notFound("Destination account", "transfer.to_account_not_found");
   assertWritableAccount(from);
   assertWritableAccount(to);
 
@@ -213,7 +217,7 @@ async function createTransferIn(
     toAmount = input.toAmount ?? round(-fromBase / fx.rateFor(to.currency), 2);
     toRate = toAmount ? -fromBase / toAmount : 1;
   }
-  const description = input.description ?? defaultTransferDescription(direction, from, to);
+  const description = input.description ?? defaultTransferDescription(await loadUserLocale(userId, tx), direction, from, to);
 
   const group = await tx.transferGroup.create({
     data: {
@@ -276,25 +280,16 @@ async function createTransferIn(
       orderBy: { month: "desc" },
     });
     if (open) {
-      records.push({ model: "CardStatement", recordId: open.id, before: snapshot(open), after: null });
-      await tx.cardStatement.update({ where: { id: open.id }, data: { paymentGroupId: group.id } });
+      const paid = await tx.cardStatement.update({ where: { id: open.id }, data: { paymentGroupId: group.id } });
+      records.push({ model: "CardStatement", recordId: open.id, before: snapshot(open), after: snapshot(paid) });
     }
   }
   return { entryIds: [fromLeg.id, toLeg.id], transferGroupId: group.id };
 }
 
-const DIRECTION_LABELS: Record<TransferDirection, string> = {
-  profit_distribution: "Distribuição de lucros",
-  capital_injection: "Aporte de capital",
-  reimbursement: "Reembolso",
-  investment_deposit: "Aporte em investimento",
-  investment_withdrawal: "Resgate de investimento",
-  card_payment: "Pagamento de fatura",
-  between_accounts: "Transferência entre contas",
-};
-
-function defaultTransferDescription(direction: TransferDirection, from: Account, to: Account) {
-  return `${DIRECTION_LABELS[direction]}: ${from.name} → ${to.name}`;
+/** "Distribuição de lucros: Kodama LTDA → PF", in the user's locale. */
+function defaultTransferDescription(locale: Locale, direction: TransferDirection, from: Account, to: Account) {
+  return st(locale, "ledger.transferDescription", { direction: st(locale, `ledger.direction.${direction}`), from: from.name, to: to.name });
 }
 
 // ---------------------------------------------------------------------------
@@ -310,7 +305,7 @@ export async function updateEntry(userId: string, entryId: string, patch: Intern
     const records: MutationRecordInput[] = opts.collect ?? [];
     const fx = await loadFx(userId, tx);
     const entry = await tx.ledgerEntry.findFirst({ where: { id: entryId, userId, deletedAt: null } });
-    if (!entry) throw notFound("Transaction");
+    if (!entry) throw notFound("Transaction", "entry.not_found");
     if (entry.transferGroupId) await updateTransferIn(tx, userId, entry, patch, records);
     else await updateSimpleIn(tx, userId, entry, patch, fx, records);
     const batchId =
@@ -376,7 +371,7 @@ async function updateSimpleIn(
 
 async function updateTransferIn(tx: DbClient, userId: string, entry: LedgerEntry, patch: InternalPatch, records: MutationRecordInput[]) {
   const group = await tx.transferGroup.findUniqueOrThrow({ where: { id: entry.transferGroupId! }, include: { legs: true } });
-  if (patch.kind && patch.kind !== entry.kind) throw new LedgerError("Transfers cannot change type; delete and recreate instead", 422);
+  if (patch.kind && patch.kind !== entry.kind) throw new LedgerError("Transfers cannot change type; delete and recreate instead", 422, { code: "transfer.kind_change" });
   const date = patch.date ? parseLocalDate(patch.date) : group.date;
   const groupData = {
     ...(patch.date && { date }),
@@ -439,23 +434,30 @@ async function expandSelection(userId: string, ids: string[], tx: DbClient, incl
   return { entryIds: [...new Set([...entries.map((e) => e.id), ...legs.map((l) => l.id)])], groupIds };
 }
 
-export async function softDeleteEntries(userId: string, ids: string[], db: DbClient, opts: { summary?: string; record?: boolean } = {}) {
+export async function softDeleteEntries(
+  userId: string,
+  ids: string[],
+  db: DbClient,
+  opts: { summary?: string; record?: boolean; collect?: MutationRecordInput[] } = {}
+) {
   return inTransaction(db, async (tx) => {
     const { entryIds, groupIds } = await expandSelection(userId, ids, tx);
-    if (!entryIds.length) throw notFound("Transaction");
+    if (!entryIds.length) throw notFound("Transaction", "entry.not_found");
     const now = new Date();
-    const records: MutationRecordInput[] = [];
+    const records: MutationRecordInput[] = opts.collect ?? [];
     const before = await tx.ledgerEntry.findMany({ where: { id: { in: entryIds } } });
     const groupsBefore = await tx.transferGroup.findMany({ where: { id: { in: groupIds } } });
     await tx.ledgerEntry.updateMany({ where: { id: { in: entryIds } }, data: { deletedAt: now } });
     await tx.transferGroup.updateMany({ where: { id: { in: groupIds } }, data: { deletedAt: now } });
     for (const g of groupsBefore) records.push({ model: "TransferGroup", recordId: g.id, before: snapshot(g), after: snapshot({ ...g, deletedAt: now }) });
     for (const e of before) records.push({ model: "LedgerEntry", recordId: e.id, before: snapshot(e), after: snapshot({ ...e, deletedAt: now }) });
-    const batchId = opts.record === false ? null : await recordMutation(tx, userId, "delete", opts.summary ?? `${entryIds.length} entries`, records);
+    const batchId =
+      opts.record === false || opts.collect ? null : await recordMutation(tx, userId, "delete", opts.summary ?? `${entryIds.length} entries`, records);
     return { batchId, deleted: entryIds.length, entryIds };
   });
 }
 
+/** Takes entries (whole transfers) out of the trash; an investment cash leg brings back the operation deleted with it. */
 export async function restoreEntries(userId: string, ids: string[], db: DbClient) {
   return inTransaction(db, async (tx) => {
     const { entryIds, groupIds } = await expandSelection(userId, ids, tx, true);
@@ -467,8 +469,9 @@ export async function restoreEntries(userId: string, ids: string[], db: DbClient
       ...groupsBefore.map((g) => ({ model: "TransferGroup" as const, recordId: g.id, before: snapshot(g), after: snapshot({ ...g, deletedAt: null }) })),
       ...before.map((e) => ({ model: "LedgerEntry" as const, recordId: e.id, before: snapshot(e), after: snapshot({ ...e, deletedAt: null }) })),
     ];
+    const operationsRestored = await restoreLegOperations(tx, userId, before, records);
     const batchId = await recordMutation(tx, userId, "restore", `${before.length} entries`, records);
-    return { batchId, restored: before.length };
+    return { batchId, restored: before.length, operationsRestored };
   });
 }
 
@@ -481,16 +484,19 @@ export async function purgeTrash(db: DbClient, days = 30, userId?: string) {
   return { groups: groups.count, entries: entries.count };
 }
 
+/** Copies entries (whole transfers when a leg is selected); each copy's description gets the localized "(cópia)" suffix. */
 export async function duplicateEntries(userId: string, ids: string[], db: DbClient) {
   return inTransaction(db, async (tx) => {
     const { entryIds, groupIds } = await expandSelection(userId, ids, tx);
     const entries = await tx.ledgerEntry.findMany({ where: { id: { in: entryIds } } });
+    const suffix = st(await loadUserLocale(userId, tx), "common.copySuffix");
+    const copyOf = (description: string) => `${description} ${suffix}`;
     const records: MutationRecordInput[] = [];
     const groupMap = new Map<string, string>();
     for (const gid of groupIds) {
       const g = await tx.transferGroup.findUniqueOrThrow({ where: { id: gid } });
       const copy = await tx.transferGroup.create({
-        data: { userId, direction: g.direction, description: g.description, date: g.date },
+        data: { userId, direction: g.direction, description: g.description && copyOf(g.description), date: g.date },
       });
       groupMap.set(gid, copy.id);
       records.push({ model: "TransferGroup", recordId: copy.id, before: null, after: snapshot(copy) });
@@ -509,7 +515,7 @@ export async function duplicateEntries(userId: string, ids: string[], db: DbClie
           amountBase: e.amountBase,
           date: e.date,
           effectiveDate: e.effectiveDate,
-          description: e.description,
+          description: copyOf(e.description),
           notes: e.notes,
           merchantName: e.merchantName,
           categoryId: e.categoryId,
@@ -551,16 +557,17 @@ export async function bulkUpdateEntries(userId: string, ids: string[], patch: Bu
       await updateEntry(userId, e.id, p, tx, { collect: records });
       changed++;
     }
+    // Rules it learns or moves are part of the batch: undo puts them back too.
     if (opts.createRule && patch.categoryId) {
-      for (const desc of new Set(entries.map((e) => e.description))) await learnRule(userId, desc, patch.categoryId, "bulk", tx);
+      for (const desc of new Set(entries.map((e) => e.description))) await learnRule(userId, desc, patch.categoryId, "bulk", tx, { collect: records });
     }
-    const batchId = changed ? await recordMutation(tx, userId, "update", `${changed} entries`, records) : null;
+    const batchId = records.length ? await recordMutation(tx, userId, "update", `${changed} entries`, records) : null;
     return { batchId, changed, matched: entries.length };
   });
 }
 
 export async function getEntry(userId: string, id: string, db: DbClient) {
   const entry = await db.ledgerEntry.findFirst({ where: { id, userId }, include: ENTRY_CONTEXT_INCLUDE });
-  if (!entry) throw notFound("Transaction");
+  if (!entry) throw notFound("Transaction", "entry.not_found");
   return serializeEntry(entry);
 }
