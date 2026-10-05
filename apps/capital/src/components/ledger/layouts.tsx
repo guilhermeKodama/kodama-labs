@@ -4,14 +4,15 @@ import { useMemo } from "react";
 import { sankey, sankeyLinkHorizontal, type SankeyLink, type SankeyNode } from "d3-sankey";
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, Line, LineChart, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import type { GroupKey, LedgerFilter, LedgerGroup, LedgerQueryResult, ViewConfig } from "@capital/server/modules/ledger/contracts";
-import type { Names } from "@/lib/catalog";
+import type { Names } from "@/lib/api/catalog";
 import { dayLabel, money, money0 } from "@/lib/money";
 import { cn } from "@/lib/utils";
 import { EmptyRow } from "@/components/shell/chrome";
+import { CHART, CHART_AXIS, CHART_SERIES, heatColor } from "@/lib/theme/chart-colors";
 import { groupValueLabel } from "./fields";
 import type { DisplayRow } from "./rows";
 
-const PALETTE = ["#171717", "#525252", "#737373", "#a3a3a3", "#0f766e", "#b45309", "#1d4ed8", "#be123c", "#7c3aed", "#d4d4d4"];
+const PALETTE = CHART_SERIES;
 
 /** Filters that select one group value, for click-through. Date buckets are not drillable. */
 export function drillFilter(key: GroupKey | undefined, value: string | null): LedgerFilter | null {
@@ -38,12 +39,12 @@ export function PivotView({
     const filters = [drillFilter(rowKey, r), drillFilter(colKey, c)].filter(Boolean) as LedgerFilter[];
     if (filters.length) onDrill(filters);
   };
-  if (!pivot.rowKeys.length) return <div className="rounded-lg border border-neutral-200"><EmptyRow>Nada para cruzar neste recorte.</EmptyRow></div>;
+  if (!pivot.rowKeys.length) return <div className="rounded-lg border border-stroke-3"><EmptyRow>Nada para cruzar neste recorte.</EmptyRow></div>;
   return (
-    <div className="overflow-auto rounded-lg border border-neutral-200">
+    <div className="overflow-auto rounded-lg border border-stroke-3">
       <table className="w-full text-[12.5px]">
         <thead>
-          <tr className="h-[34px] text-[11.5px] text-neutral-400">
+          <tr className="h-[34px] text-[11.5px] text-fg-3">
             <th className="px-3 text-left font-normal">{rowKey ? "" : ""}</th>
             {pivot.colKeys.map((c) => (
               <th key={String(c)} className="px-3 text-right font-normal whitespace-nowrap">{colKey ? groupValueLabel(colKey, c, names) : ""}</th>
@@ -53,12 +54,12 @@ export function PivotView({
         </thead>
         <tbody>
           {pivot.rowKeys.map((r, i) => (
-            <tr key={String(r)} className="h-[34px] border-t border-neutral-200">
+            <tr key={String(r)} className="h-[34px] border-t border-stroke-3">
               <td className="px-3 whitespace-nowrap">{rowKey ? groupValueLabel(rowKey, r, names) : ""}</td>
               {pivot.cells[i].map((v, j) => (
                 <td key={j} className="px-3 text-right">
-                  {v == null ? <span className="text-neutral-300">—</span> : (
-                    <button type="button" className={cn("font-mono tabular-nums hover:underline", v > 0 && "text-emerald-700")} onClick={() => drill(r, pivot.colKeys[j])}>
+                  {v == null ? <span className="text-fg-4">—</span> : (
+                    <button type="button" className={cn("font-mono tabular-nums hover:underline", v > 0 && "text-pos")} onClick={() => drill(r, pivot.colKeys[j])}>
                       {money0(v, cur)}
                     </button>
                   )}
@@ -67,7 +68,7 @@ export function PivotView({
               <td className="px-3 text-right font-mono font-semibold tabular-nums">{pivot.rowTotals[i] == null ? "" : money0(pivot.rowTotals[i]!, cur)}</td>
             </tr>
           ))}
-          <tr className="h-[34px] border-t border-neutral-300 bg-neutral-50 font-semibold">
+          <tr className="h-[34px] border-t border-stroke-1 bg-fill-4 font-semibold">
             <td className="px-3">Total</td>
             {pivot.colTotals.map((v, j) => (
               <td key={j} className="px-3 text-right font-mono tabular-nums">{v == null ? "" : money0(v, cur)}</td>
@@ -115,33 +116,33 @@ export function ChartView({
     ).points;
   }, [groups, key, metric, cumulative, names]);
 
-  if (!data.length) return <div className="rounded-lg border border-neutral-200"><EmptyRow>Sem dados para o gráfico neste recorte.</EmptyRow></div>;
+  if (!data.length) return <div className="rounded-lg border border-stroke-3"><EmptyRow>Sem dados para o gráfico neste recorte.</EmptyRow></div>;
   const fmt = (v: number) => (metric === "count" ? String(v) : money0(v, names.currency));
   const click = (d: { key?: string | null }) => {
     const f = drillFilter(key, d.key ?? null);
     if (f) onDrill([f]);
   };
-  const axis = { tick: { fontSize: 11, fill: "#a3a3a3" }, stroke: "#e5e5e5" };
+  const axis = CHART_AXIS;
 
   return (
-    <div className="rounded-lg border border-neutral-200 p-3">
+    <div className="rounded-lg border border-stroke-3 p-3">
       <div className="h-[340px]">
         <ResponsiveContainer width="100%" height="100%">
           {type === "line" ? (
             <LineChart data={data}>
-              <CartesianGrid stroke="#f0f0f0" />
+              <CartesianGrid stroke={CHART.grid} />
               <XAxis dataKey="name" {...axis} />
               <YAxis {...axis} tickFormatter={fmt} width={80} />
               <Tooltip formatter={(v) => fmt(Number(v))} />
-              <Line dataKey="value" stroke="#171717" strokeWidth={2} dot={{ r: 2 }} />
+              <Line dataKey="value" stroke={CHART.ink} strokeWidth={2} dot={{ r: 2 }} />
             </LineChart>
           ) : type === "area" ? (
             <AreaChart data={data}>
-              <CartesianGrid stroke="#f0f0f0" />
+              <CartesianGrid stroke={CHART.grid} />
               <XAxis dataKey="name" {...axis} />
               <YAxis {...axis} tickFormatter={fmt} width={80} />
               <Tooltip formatter={(v) => fmt(Number(v))} />
-              <Area dataKey="value" stroke="#171717" fill="#e5e5e5" />
+              <Area dataKey="value" stroke={CHART.ink} fill={CHART.area} />
             </AreaChart>
           ) : type === "pie" || type === "donut" ? (
             <PieChart>
@@ -152,7 +153,7 @@ export function ChartView({
             </PieChart>
           ) : (
             <BarChart data={data} layout={type === "hbar" ? "vertical" : "horizontal"}>
-              <CartesianGrid stroke="#f0f0f0" />
+              <CartesianGrid stroke={CHART.grid} />
               {type === "hbar" ? (
                 <>
                   <XAxis type="number" {...axis} tickFormatter={fmt} />
@@ -165,12 +166,12 @@ export function ChartView({
                 </>
               )}
               <Tooltip formatter={(v) => fmt(Number(v))} />
-              <Bar dataKey="value" fill="#262626" radius={[3, 3, 0, 0]} onClick={(d) => click(d as unknown as { key?: string | null })} className="cursor-pointer" />
+              <Bar dataKey="value" fill={CHART.bar} radius={[3, 3, 0, 0]} onClick={(d) => click(d as unknown as { key?: string | null })} className="cursor-pointer" />
             </BarChart>
           )}
         </ResponsiveContainer>
       </div>
-      <p className="mt-1 text-[11px] text-neutral-400">Clique numa barra ou fatia para ver os lançamentos.</p>
+      <p className="mt-1 text-[11px] text-fg-3">Clique numa barra ou fatia para ver os lançamentos.</p>
     </div>
   );
 }
@@ -210,13 +211,13 @@ export function SankeyView({ groups, names }: { groups: LedgerGroup[]; names: Na
     return generator({ nodes: nodes.map((n) => ({ ...n })), links: links.filter((l) => l.value > 0).map((l) => ({ ...l })) });
   }, [groups, names]);
 
-  if (!layout) return <div className="rounded-lg border border-neutral-200"><EmptyRow>Sem entradas ou saídas neste recorte.</EmptyRow></div>;
+  if (!layout) return <div className="rounded-lg border border-stroke-3"><EmptyRow>Sem entradas ou saídas neste recorte.</EmptyRow></div>;
   const path = sankeyLinkHorizontal();
   return (
-    <div className="rounded-lg border border-neutral-200 p-3">
+    <div className="rounded-lg border border-stroke-3 p-3">
       <svg viewBox="0 0 900 440" className="w-full">
         {layout.links.map((link: SankeyLink<FlowNode, FlowLink>, i: number) => (
-          <path key={i} d={path(link) ?? ""} fill="none" stroke="#a3a3a3" strokeOpacity={0.35} strokeWidth={Math.max(1, link.width ?? 1)}>
+          <path key={i} d={path(link) ?? ""} fill="none" stroke={CHART.muted} strokeOpacity={0.35} strokeWidth={Math.max(1, link.width ?? 1)}>
             <title>{`${(link.source as SankeyNode<FlowNode, FlowLink>).name} → ${(link.target as SankeyNode<FlowNode, FlowLink>).name}: ${money0(link.value, names.currency)}`}</title>
           </path>
         ))}
@@ -224,8 +225,8 @@ export function SankeyView({ groups, names }: { groups: LedgerGroup[]; names: Na
           const left = (node.x0 ?? 0) < 450;
           return (
             <g key={i}>
-              <rect x={node.x0} y={node.y0} width={(node.x1 ?? 0) - (node.x0 ?? 0)} height={Math.max(1, (node.y1 ?? 0) - (node.y0 ?? 0))} fill="#262626" />
-              <text x={left ? (node.x1 ?? 0) + 6 : (node.x0 ?? 0) - 6} y={((node.y0 ?? 0) + (node.y1 ?? 0)) / 2} dy="0.35em" textAnchor={left ? "start" : "end"} fontSize={11} fill="#404040">
+              <rect x={node.x0} y={node.y0} width={(node.x1 ?? 0) - (node.x0 ?? 0)} height={Math.max(1, (node.y1 ?? 0) - (node.y0 ?? 0))} fill={CHART.bar} />
+              <text x={left ? (node.x1 ?? 0) + 6 : (node.x0 ?? 0) - 6} y={((node.y0 ?? 0) + (node.y1 ?? 0)) / 2} dy="0.35em" textAnchor={left ? "start" : "end"} fontSize={11} fill={CHART.label}>
                 {node.name} · {money0(node.value ?? 0, names.currency)}
               </text>
             </g>
@@ -250,7 +251,7 @@ export function BoardView({
   onOpen: (row: DisplayRow) => void;
 }) {
   const key = config.groupBy[0];
-  if (!key) return <div className="rounded-lg border border-neutral-200"><EmptyRow>Escolha um agrupamento em Exibição para montar as colunas.</EmptyRow></div>;
+  if (!key) return <div className="rounded-lg border border-stroke-3"><EmptyRow>Escolha um agrupamento em Exibição para montar as colunas.</EmptyRow></div>;
   const field = "bucket" in key ? null : key.field;
   const columnOf = (row: DisplayRow) => (field ? String(row[field as keyof DisplayRow] ?? "null") : row.date.slice(0, 7));
   return (
@@ -258,23 +259,23 @@ export function BoardView({
       {groups.map((g) => {
         const items = rows.filter((row) => columnOf(row) === String(g.key ?? "null"));
         return (
-          <section key={String(g.key)} className="flex w-64 shrink-0 flex-col rounded-lg border border-neutral-200 bg-neutral-50">
-            <header className="flex h-9 items-center gap-2 border-b border-neutral-200 px-3 text-[12.5px]">
+          <section key={String(g.key)} className="flex w-64 shrink-0 flex-col rounded-lg border border-stroke-3 bg-fill-4">
+            <header className="flex h-9 items-center gap-2 border-b border-stroke-3 px-3 text-[12.5px]">
               <span className="truncate font-medium">{groupValueLabel(key, g.key, names)}</span>
-              <span className="text-neutral-400">{g.count}</span>
+              <span className="text-fg-3">{g.count}</span>
               <span className="ml-auto font-mono text-[12px] tabular-nums">{money0(g.values["sum:amountBase"] ?? 0, names.currency)}</span>
             </header>
             <div className="flex flex-col gap-1.5 p-2">
               {items.slice(0, 50).map((row) => (
-                <button key={row.id} type="button" onClick={() => onOpen(row)} className="rounded-[6px] border border-neutral-200 bg-white px-2 py-1.5 text-left text-[12.5px] hover:border-neutral-300">
+                <button key={row.id} type="button" onClick={() => onOpen(row)} className="rounded-[6px] border border-stroke-3 bg-editor px-2 py-1.5 text-left text-[12.5px] hover:border-stroke-1">
                   <span className="block truncate">{row.description}</span>
-                  <span className="flex items-center justify-between text-[11px] text-neutral-400">
+                  <span className="flex items-center justify-between text-[11px] text-fg-3">
                     <span>{dayLabel(row.date)} · {row.categoryId ? names.category.get(row.categoryId) : "Sem categoria"}</span>
-                    <span className={cn("font-mono tabular-nums text-neutral-700", row.amountBase > 0 && !row.neutral && "text-emerald-700")}>{money(row.amountBase, names.currency)}</span>
+                    <span className={cn("font-mono tabular-nums text-fg-strong", row.amountBase > 0 && !row.neutral && "text-pos")}>{money(row.amountBase, names.currency)}</span>
                   </span>
                 </button>
               ))}
-              {items.length < g.count ? <span className="px-1 text-[11px] text-neutral-400">+{g.count - items.length} não carregados</span> : null}
+              {items.length < g.count ? <span className="px-1 text-[11px] text-fg-3">+{g.count - items.length} não carregados</span> : null}
             </div>
           </section>
         );
@@ -309,8 +310,8 @@ export function CalendarView({
   }
   const maxOut = Math.max(1, ...[...byDay.values()].map((d) => -d.out));
   return (
-    <div className="rounded-lg border border-neutral-200 p-3">
-      <div className="grid grid-cols-7 gap-1 text-[11px] text-neutral-400">
+    <div className="rounded-lg border border-stroke-3 p-3">
+      <div className="grid grid-cols-7 gap-1 text-[11px] text-fg-3">
         {["seg", "ter", "qua", "qui", "sex", "sáb", "dom"].map((d) => <span key={d} className="px-1">{d}</span>)}
       </div>
       <div className="mt-1 grid grid-cols-7 gap-1">
@@ -324,15 +325,15 @@ export function CalendarView({
               type="button"
               disabled={!d}
               onClick={() => onDay(iso)}
-              className="flex h-[72px] flex-col items-start rounded-[6px] border border-neutral-200 p-1.5 text-left disabled:cursor-default"
-              style={{ background: d ? `rgba(23,23,23,${(0.04 + (-d.out / maxOut) * 0.18).toFixed(3)})` : undefined }}
+              className="flex h-[72px] flex-col items-start rounded-[6px] border border-stroke-3 p-1.5 text-left disabled:cursor-default"
+              style={{ background: d ? heatColor(Number((0.04 + (-d.out / maxOut) * 0.18).toFixed(3))) : undefined }}
             >
-              <span className="text-[11px] text-neutral-400">{i + 1}</span>
+              <span className="text-[11px] text-fg-3">{i + 1}</span>
               {d ? (
                 <>
                   {d.out ? <span className="font-mono text-[11px] tabular-nums">{money0(d.out, names.currency)}</span> : null}
-                  {d.inn ? <span className="font-mono text-[11px] text-emerald-700 tabular-nums">{money0(d.inn, names.currency)}</span> : null}
-                  <span className="mt-auto text-[10px] text-neutral-400">{d.n} lanç.</span>
+                  {d.inn ? <span className="font-mono text-[11px] text-pos tabular-nums">{money0(d.inn, names.currency)}</span> : null}
+                  <span className="mt-auto text-[10px] text-fg-3">{d.n} lanç.</span>
                 </>
               ) : null}
             </button>

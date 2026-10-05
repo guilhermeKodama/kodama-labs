@@ -3,8 +3,8 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { api, apiPost } from "@/lib/api";
-import type { Names } from "@/lib/catalog";
+import { api, apiPost } from "@/lib/api/client";
+import type { Names } from "@/lib/api/catalog";
 import { money, todayIso } from "@/lib/money";
 import { cn } from "@/lib/utils";
 import { Badge, Btn, EmptyRow, Field, Segmented, SelectInput, TextInput } from "@/components/shell/chrome";
@@ -187,11 +187,11 @@ function OfxImport({ names }: { names: Names }) {
         <Field label="Extrato de">
           <SelectInput value={entityId} onChange={setEntityId} options={names.entities.map((e) => ({ value: e.id, label: names.entity.get(e.id) ?? e.name }))} />
         </Field>
-        <label className="inline-flex h-[26px] cursor-pointer items-center rounded-[6px] border border-neutral-300 px-2.5 text-[12px] font-medium hover:bg-neutral-50">
+        <label className="inline-flex h-[26px] cursor-pointer items-center rounded-[6px] border border-stroke-1 px-2.5 text-[12px] font-medium hover:bg-fill-4">
           {busy ? "Lendo…" : analysis ? "Trocar arquivo" : "Escolher arquivo OFX"}
           <input type="file" accept=".ofx,.qfx" multiple className="hidden" onChange={(event) => { if (event.target.files?.length) void analyze(event.target.files); event.target.value = ""; }} />
         </label>
-        {analysis ? <span className="text-[12px] text-neutral-500">{fileName} · {analysis.bankName} · {analysis.transactions.length} linhas</span> : null}
+        {analysis ? <span className="text-[12px] text-fg-muted">{fileName} · {analysis.bankName} · {analysis.transactions.length} linhas</span> : null}
       </div>
       {analysis ? (
         <>
@@ -200,20 +200,20 @@ function OfxImport({ names }: { names: Names }) {
             <Badge>{analysis.summary.duplicateCount} já existem</Badge>
             {analysis.summary.changedCount ? <Badge tone="warn">{analysis.summary.changedCount} mudaram</Badge> : null}
             {analysis.summary.fuzzyMatchCount ? <Badge tone="warn">{analysis.summary.fuzzyMatchCount} parecidas</Badge> : null}
-            <span className="text-neutral-400">Entradas {money(analysis.summary.totalIncome, analysis.currency)} · Saídas {money(analysis.summary.totalExpenses, analysis.currency)}</span>
+            <span className="text-fg-3">Entradas {money(analysis.summary.totalIncome, analysis.currency)} · Saídas {money(analysis.summary.totalExpenses, analysis.currency)}</span>
           </div>
-          <div className="overflow-hidden rounded-lg border border-neutral-200">
-            <div className="grid h-[34px] grid-cols-[52px_minmax(0,2fr)_120px_96px_minmax(0,1.6fr)] items-center gap-2 px-3 text-[11.5px] text-neutral-400">
+          <div className="overflow-hidden rounded-lg border border-stroke-3">
+            <div className="grid h-[34px] grid-cols-[52px_minmax(0,2fr)_120px_96px_minmax(0,1.6fr)] items-center gap-2 px-3 text-[11.5px] text-fg-3">
               <span>Data</span><span>Descrição</span><span className="text-right">Valor</span><span>Situação</span><span>Importar como</span>
             </div>
             {analysis.transactions.map((row) => {
               const decision = decisions[row.fitId] ?? defaultDecision(row);
               const value = decision.as === "transaction" ? `tx:${decision.categoryName}` : decision.as === "transfer" ? `tr:${decision.counterpartyEntityId}` : decision.as === "investment" ? `inv:${decision.investmentAccountId}` : decision.as;
               return (
-                <div key={row.fitId} className={cn("grid min-h-[34px] grid-cols-[52px_minmax(0,2fr)_120px_96px_minmax(0,1.6fr)] items-center gap-2 border-t border-neutral-200 px-3 text-[12.5px]", decision.as === "skip" && "text-neutral-400")}>
-                  <span className="font-mono text-[11.5px] text-neutral-400">{row.date.slice(5).split("-").reverse().join("/")}</span>
+                <div key={row.fitId} className={cn("grid min-h-[34px] grid-cols-[52px_minmax(0,2fr)_120px_96px_minmax(0,1.6fr)] items-center gap-2 border-t border-stroke-3 px-3 text-[12.5px]", decision.as === "skip" && "text-fg-3")}>
+                  <span className="font-mono text-[11.5px] text-fg-3">{row.date.slice(5).split("-").reverse().join("/")}</span>
                   <span className="truncate" title={row.description}>{row.description}</span>
-                  <span className={cn("text-right font-mono tabular-nums", row.type === "income" && "text-emerald-700")}>{money(row.type === "income" ? Math.abs(row.amount) : -Math.abs(row.amount), analysis.currency)}</span>
+                  <span className={cn("text-right font-mono tabular-nums", row.type === "income" && "text-pos")}>{money(row.type === "income" ? Math.abs(row.amount) : -Math.abs(row.amount), analysis.currency)}</span>
                   <span className="text-[11.5px]">
                     {{ new: "nova", duplicate: "já existe", changed: "mudou", fuzzy_match: "parecida" }[row.reconciliationStatus]}
                   </span>
@@ -227,7 +227,7 @@ function OfxImport({ names }: { names: Names }) {
                       else if (v.startsWith("inv:")) set(row.fitId, { as: "investment", investmentAccountId: v.slice(4) });
                       else if (v === "link" && row.fuzzyMatchedTransaction) set(row.fitId, { as: "link", existingId: row.fuzzyMatchedTransaction.id });
                     }}
-                    className="h-[26px] min-w-0 rounded-[6px] border border-neutral-300 bg-white px-1.5 text-[12px]"
+                    className="h-[26px] min-w-0 rounded-[6px] border border-stroke-1 bg-editor px-1.5 text-[12px]"
                   >
                     <option value="skip">Não importar</option>
                     {row.reconciliationStatus === "changed" ? <option value="update">Atualizar o lançamento existente</option> : null}
@@ -252,13 +252,13 @@ function OfxImport({ names }: { names: Names }) {
           <div className="flex items-center gap-2">
             <Btn primary disabled={commit.isPending || !entity} onClick={() => commit.mutate()}>{commit.isPending ? "Importando…" : "Importar"}</Btn>
             <Btn ghost onClick={() => setAnalysis(null)}>Cancelar</Btn>
-            <span className="text-[12px] text-neutral-400">
+            <span className="text-[12px] text-fg-3">
               {counts.transaction ?? 0} lançamentos · {counts.transfer ?? 0} transferências · {counts.investment ?? 0} aportes · {(counts.update ?? 0) + (counts.link ?? 0)} conciliados · {counts.skip ?? 0} ignorados
             </span>
           </div>
         </>
       ) : (
-        <p className="text-[12px] text-neutral-400">O extrato é comparado com o que já existe: duplicados ficam de fora e você revisa cada linha antes de importar. Para PDFs e prints, use o assistente (⌘K).</p>
+        <p className="text-[12px] text-fg-3">O extrato é comparado com o que já existe: duplicados ficam de fora e você revisa cada linha antes de importar. Para PDFs e prints, use o assistente (⌘K).</p>
       )}
     </div>
   );
@@ -286,7 +286,7 @@ function CardImport({ names }: { names: Names }) {
     },
     onError: (error: Error) => toast.error(error.message),
   });
-  if (!cards.length) return <p className="text-[12.5px] text-neutral-500">Cadastre um cartão em “Cartões de crédito” para importar a fatura.</p>;
+  if (!cards.length) return <p className="text-[12.5px] text-fg-muted">Cadastre um cartão em “Cartões de crédito” para importar a fatura.</p>;
   return (
     <div className="flex flex-col gap-2.5">
       <div className="flex flex-wrap items-end gap-2">
@@ -295,13 +295,13 @@ function CardImport({ names }: { names: Names }) {
         </Field>
         <Field label="Fechamento"><TextInput type="date" value={closing} onChange={setClosing} /></Field>
         <Field label="Vencimento"><TextInput type="date" value={due} onChange={setDue} /></Field>
-        <label className="inline-flex h-[26px] cursor-pointer items-center rounded-[6px] border border-neutral-300 px-2.5 text-[12px] font-medium hover:bg-neutral-50">
+        <label className="inline-flex h-[26px] cursor-pointer items-center rounded-[6px] border border-stroke-1 px-2.5 text-[12px] font-medium hover:bg-fill-4">
           {file ? file.name : "Escolher arquivo"}
           <input type="file" accept=".csv,.ofx,.qfx,.txt" className="hidden" onChange={(event) => setFile(event.target.files?.[0] ?? null)} />
         </label>
         <Btn primary disabled={!file || run.isPending} onClick={() => run.mutate()}>{run.isPending ? "Importando…" : "Importar fatura"}</Btn>
       </div>
-      <p className="text-[12px] text-neutral-400">Reimportar a mesma fatura não duplica: compras iguais são reconhecidas, e parcelas futuras ficam projetadas até a fatura delas chegar.</p>
+      <p className="text-[12px] text-fg-3">Reimportar a mesma fatura não duplica: compras iguais são reconhecidas, e parcelas futuras ficam projetadas até a fatura delas chegar.</p>
     </div>
   );
 }
@@ -324,17 +324,17 @@ function ImportHistory({ names }: { names: Names }) {
   return (
     <div className="flex flex-col gap-1.5">
       <span className="text-[12.5px] font-medium">Histórico</span>
-      <div className="overflow-hidden rounded-lg border border-neutral-200">
-        <div className="grid h-[34px] grid-cols-[70px_minmax(0,1.6fr)_minmax(0,1fr)_80px_90px_70px] items-center gap-2 px-3 text-[11.5px] text-neutral-400">
+      <div className="overflow-hidden rounded-lg border border-stroke-3">
+        <div className="grid h-[34px] grid-cols-[70px_minmax(0,1.6fr)_minmax(0,1fr)_80px_90px_70px] items-center gap-2 px-3 text-[11.5px] text-fg-3">
           <span>Data</span><span>Arquivo</span><span>Conta</span><span className="text-right">Lanç.</span><span>Status</span><span />
         </div>
         {(history.data ?? []).map((i) => (
-          <div key={i.id} className="grid h-[34px] grid-cols-[70px_minmax(0,1.6fr)_minmax(0,1fr)_80px_90px_70px] items-center gap-2 border-t border-neutral-200 px-3 text-[12.5px]">
-            <span className="font-mono text-[11.5px] text-neutral-400">{i.createdAt.slice(5, 10).split("-").reverse().join("/")}</span>
+          <div key={i.id} className="grid h-[34px] grid-cols-[70px_minmax(0,1.6fr)_minmax(0,1fr)_80px_90px_70px] items-center gap-2 border-t border-stroke-3 px-3 text-[12.5px]">
+            <span className="font-mono text-[11.5px] text-fg-3">{i.createdAt.slice(5, 10).split("-").reverse().join("/")}</span>
             <span className="truncate">{i.fileName ?? (i.source === "assistant" ? "via assistente" : i.bankName ?? "—")}</span>
-            <span className="truncate text-neutral-500">{i.accountId ? names.account.get(i.accountId) : i.entity?.name ?? "—"}</span>
+            <span className="truncate text-fg-muted">{i.accountId ? names.account.get(i.accountId) : i.entity?.name ?? "—"}</span>
             <span className="text-right font-mono tabular-nums">{i.entries + i.transfers}</span>
-            <span className={cn("text-[12px]", i.revertedAt ? "text-neutral-400" : "text-neutral-600")}>{i.revertedAt ? "Desfeita" : "Importada"}</span>
+            <span className={cn("text-[12px]", i.revertedAt ? "text-fg-3" : "text-fg-2")}>{i.revertedAt ? "Desfeita" : "Importada"}</span>
             {!i.revertedAt ? (
               <button type="button" className="text-right text-[12px] underline" onClick={() => { if (window.confirm("Desfazer esta importação? Tudo o que ela criou vai para a lixeira.")) revert.mutate(i.id); }}>
                 Desfazer

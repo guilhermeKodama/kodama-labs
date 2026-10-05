@@ -6,11 +6,13 @@ import { toast } from "sonner";
 import { Bar, BarChart, CartesianGrid, Legend, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import type { LedgerQueryResult } from "@capital/server/modules/ledger/contracts";
 import { useRouter } from "@/i18n/navigation";
-import { api, apiPost, apiPut } from "@/lib/api";
-import { useNames, type Names } from "@/lib/catalog";
+import { api, apiPost, apiPut } from "@/lib/api/client";
+import { useNames, type Names } from "@/lib/api/catalog";
 import { ASSET_CLASS_LABEL, dayLabel, money0, monthName, parseAmount, pct, todayIso } from "@/lib/money";
 import { cn } from "@/lib/utils";
-import { AppFrame, Btn, EmptyRow, Field, Kpi, KpiStrip, Modal, Panel, Segmented, SelectInput, TextInput } from "@/components/shell/chrome";
+import { CHART, CHART_AXIS, CHART_SERIES } from "@/lib/theme/chart-colors";
+import { Btn, EmptyRow, Field, Kpi, KpiStrip, Modal, Panel, Segmented, SelectInput, TextInput } from "@/components/shell/chrome";
+import { Page } from "@/components/shell/page";
 import { TargetsDialog } from "./dialogs";
 
 interface Contributions {
@@ -50,7 +52,7 @@ interface Suggestion {
   assets?: { holdingId: string; ticker: string | null; name: string; assetClass: string; amount: number; approxQuantity: number | null }[];
 }
 
-const CLASS_COLORS = ["#262626", "#525252", "#737373", "#a3a3a3", "#0f766e", "#b45309", "#1d4ed8", "#be123c", "#d4d4d4"];
+const CLASS_COLORS = [CHART.bar, ...CHART_SERIES.slice(1, 8), CHART_SERIES[9]];
 
 export function ContributionsScreen() {
   const names = useNames();
@@ -102,14 +104,14 @@ export function ContributionsScreen() {
   const total12 = months12.reduce((s, m) => s + m.net, 0);
 
   return (
-    <AppFrame
+    <Page
       crumbs={["Investimentos", "Aportes"]}
       actions={
         <>
-          <span className="inline-flex h-[26px] items-center rounded-[6px] border border-neutral-300 bg-white text-[12px]">
-            <button type="button" className="h-full border-r border-neutral-200 px-1.5 hover:bg-neutral-50" onClick={() => setYear(year - 1)}>‹</button>
+          <span className="inline-flex h-[26px] items-center rounded-[6px] border border-stroke-1 bg-editor text-[12px]">
+            <button type="button" className="h-full border-r border-stroke-3 px-1.5 hover:bg-fill-4" onClick={() => setYear(year - 1)}>‹</button>
             <span className="px-2 font-medium">{year}</span>
-            <button type="button" className="h-full border-l border-neutral-200 px-1.5 hover:bg-neutral-50 disabled:text-neutral-300" disabled={year >= new Date().getFullYear()} onClick={() => setYear(year + 1)}>›</button>
+            <button type="button" className="h-full border-l border-stroke-3 px-1.5 hover:bg-fill-4 disabled:text-fg-4" disabled={year >= new Date().getFullYear()} onClick={() => setYear(year + 1)}>›</button>
           </span>
           <Btn primary onClick={() => setRegistering(true)}>+ Registrar aporte</Btn>
         </>
@@ -132,36 +134,36 @@ export function ContributionsScreen() {
             <div className="h-[200px]">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={chart}>
-                  <CartesianGrid stroke="#f0f0f0" vertical={false} />
-                  <XAxis dataKey="name" tick={{ fontSize: 11, fill: "#a3a3a3" }} stroke="#e5e5e5" />
-                  <YAxis tick={{ fontSize: 11, fill: "#a3a3a3" }} stroke="#e5e5e5" tickFormatter={(v) => `${Math.round(v / 1000)}k`} width={40} />
+                  <CartesianGrid stroke={CHART.grid} vertical={false} />
+                  <XAxis dataKey="name" tick={CHART_AXIS.tick} stroke={CHART.axis} />
+                  <YAxis tick={CHART_AXIS.tick} stroke={CHART.axis} tickFormatter={(v) => `${Math.round(v / 1000)}k`} width={40} />
                   <Tooltip formatter={(v, n) => [money0(Number(v), cur), ASSET_CLASS_LABEL[String(n)] ?? (n === "aportes" ? "Aporte líquido" : String(n))]} />
-                  {target ? <ReferenceLine y={target} stroke="#b45309" strokeDasharray="4 4" label={{ value: "Meta", fontSize: 10, fill: "#b45309", position: "insideTopRight" }} /> : null}
+                  {target ? <ReferenceLine y={target} stroke={CHART.warn} strokeDasharray="4 4" label={{ value: "Meta", fontSize: 10, fill: CHART.warn, position: "insideTopRight" }} /> : null}
                   {classes.length ? (
                     <>
                       {classes.map((c, i) => <Bar key={c} dataKey={c} stackId="a" fill={CLASS_COLORS[i % CLASS_COLORS.length]} />)}
                       <Legend formatter={(v) => ASSET_CLASS_LABEL[String(v)] ?? String(v)} wrapperStyle={{ fontSize: 11 }} />
                     </>
                   ) : (
-                    <Bar dataKey="aportes" fill="#262626" />
+                    <Bar dataKey="aportes" fill={CHART.bar} />
                   )}
                 </BarChart>
               </ResponsiveContainer>
             </div>
           ) : (
-            <p className="py-10 text-center text-[12px] text-neutral-400">Nenhum aporte em {year}. Registre uma transferência conta → corretora.</p>
+            <p className="py-10 text-center text-[12px] text-fg-3">Nenhum aporte em {year}. Registre uma transferência conta → corretora.</p>
           )}
-          <p className="text-[11px] text-neutral-400">{classes.length ? "Barras = compras por classe" : "Barras = depósitos menos resgates nas corretoras"} · linha = meta mensal</p>
+          <p className="text-[11px] text-fg-3">{classes.length ? "Barras = compras por classe" : "Barras = depósitos menos resgates nas corretoras"} · linha = meta mensal</p>
         </Panel>
         <Panel title="Onde aportar este mês" trailing={<Btn ghost onClick={() => setTargetsOpen(true)}>Editar alvos</Btn>}>
           <div className="flex flex-col gap-2.5">
             <div className="flex items-center gap-2">
-              <span className="text-[12px] text-neutral-400">Vou aportar R$</span>
+              <span className="text-[12px] text-fg-3">Vou aportar R$</span>
               <TextInput value={amountText} onChange={setAmountText} mono className="w-[110px]" placeholder={target ? String(Math.round(target)) : "1.000"} />
               <span className="ml-auto"><Segmented value={mode} options={[{ v: "class", l: "Por classe" }, { v: "asset", l: "Por ativo" }]} onChange={setMode} /></span>
             </div>
             {suggestion.isError ? (
-              <p className="text-[12px] text-amber-700">
+              <p className="text-[12px] text-warn-strong">
                 {(suggestion.error as Error).message.includes("targets") ? (
                   <>Defina a alocação alvo primeiro. <button type="button" className="underline" onClick={() => setTargetsOpen(true)}>Definir alvos</button></>
                 ) : (
@@ -171,16 +173,16 @@ export function ContributionsScreen() {
             ) : null}
             {suggestion.data?.classes && mode === "class" ? (
               <table className="w-full text-[12.5px]">
-                <thead className="text-[11.5px] text-neutral-400">
+                <thead className="text-[11.5px] text-fg-3">
                   <tr className="h-7"><th className="text-left font-normal">Classe</th><th className="text-right font-normal">Atual</th><th className="text-right font-normal">Alvo</th><th className="text-right font-normal">Aportar</th><th className="text-right font-normal">Depois</th></tr>
                 </thead>
                 <tbody>
                   {suggestion.data.classes.map((c) => (
-                    <tr key={c.assetClass} className="h-8 border-t border-neutral-200">
+                    <tr key={c.assetClass} className="h-8 border-t border-stroke-3">
                       <td>{ASSET_CLASS_LABEL[c.assetClass] ?? c.assetClass}</td>
                       <td className="text-right font-mono tabular-nums">{pct(c.currentShare)}</td>
-                      <td className="text-right font-mono text-neutral-400 tabular-nums">{pct(c.target, 0)}</td>
-                      <td className={cn("text-right font-mono font-semibold tabular-nums", c.amount <= 0 && "font-normal text-neutral-300")}>{c.amount > 0 ? money0(c.amount, cur) : "—"}</td>
+                      <td className="text-right font-mono text-fg-3 tabular-nums">{pct(c.target, 0)}</td>
+                      <td className={cn("text-right font-mono font-semibold tabular-nums", c.amount <= 0 && "font-normal text-fg-4")}>{c.amount > 0 ? money0(c.amount, cur) : "—"}</td>
                       <td className="text-right font-mono tabular-nums">{pct(c.afterShare)}</td>
                     </tr>
                   ))}
@@ -189,22 +191,22 @@ export function ContributionsScreen() {
             ) : null}
             {suggestion.data?.assets && mode === "asset" ? (
               <table className="w-full text-[12.5px]">
-                <thead className="text-[11.5px] text-neutral-400">
+                <thead className="text-[11.5px] text-fg-3">
                   <tr className="h-7"><th className="text-left font-normal">Ativo</th><th className="text-left font-normal">Classe</th><th className="text-right font-normal">Aportar</th><th className="text-right font-normal">≈ Qtd</th></tr>
                 </thead>
                 <tbody>
                   {suggestion.data.assets.map((a) => (
-                    <tr key={a.holdingId} className="h-8 border-t border-neutral-200">
+                    <tr key={a.holdingId} className="h-8 border-t border-stroke-3">
                       <td><span className="font-mono font-semibold">{a.ticker ?? a.name}</span></td>
-                      <td className="text-neutral-500">{ASSET_CLASS_LABEL[a.assetClass] ?? a.assetClass}</td>
+                      <td className="text-fg-muted">{ASSET_CLASS_LABEL[a.assetClass] ?? a.assetClass}</td>
                       <td className="text-right font-mono font-semibold tabular-nums">{money0(a.amount, cur)}</td>
-                      <td className="text-right font-mono text-neutral-400 tabular-nums">{a.approxQuantity != null ? a.approxQuantity.toLocaleString("pt-BR", { maximumFractionDigits: 4 }) : "—"}</td>
+                      <td className="text-right font-mono text-fg-3 tabular-nums">{a.approxQuantity != null ? a.approxQuantity.toLocaleString("pt-BR", { maximumFractionDigits: 4 }) : "—"}</td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             ) : null}
-            {!amountText ? <p className="text-[11px] text-neutral-400">Digite o valor para ver a divisão. Só dinheiro novo: nunca sugere vender.</p> : null}
+            {!amountText ? <p className="text-[11px] text-fg-3">Digite o valor para ver a divisão. Só dinheiro novo: nunca sugere vender.</p> : null}
             <div className="flex gap-1.5">
               <Btn primary disabled={!(amount > 0)} onClick={() => setRegistering(true)}>Registrar este aporte</Btn>
             </div>
@@ -217,20 +219,20 @@ export function ContributionsScreen() {
             const deposit = row.amount > 0;
             const status = !target || !deposit ? null : row.amountBase >= target ? "na meta" : "abaixo da meta";
             return (
-              <div key={row.id} className="flex h-[34px] items-center gap-2.5 border-t border-neutral-200 px-3 text-[12.5px] first:border-t-0">
-                <span className="w-12 font-mono text-[11.5px] text-neutral-400">{dayLabel(row.date)}</span>
-                <span className={cn("w-[96px] font-mono tabular-nums", !deposit && "text-red-600")}>{money0(row.amountBase, cur)}</span>
-                <span className="truncate text-neutral-600">
+              <div key={row.id} className="flex h-[34px] items-center gap-2.5 border-t border-stroke-3 px-3 text-[12.5px] first:border-t-0">
+                <span className="w-12 font-mono text-[11.5px] text-fg-3">{dayLabel(row.date)}</span>
+                <span className={cn("w-[96px] font-mono tabular-nums", !deposit && "text-neg")}>{money0(row.amountBase, cur)}</span>
+                <span className="truncate text-fg-2">
                   {deposit ? `${names.account.get(row.counterpartAccountId ?? "") ?? "?"} → ${names.account.get(row.accountId) ?? ""}` : `${names.account.get(row.accountId) ?? ""} → ${names.account.get(row.counterpartAccountId ?? "") ?? "?"} (resgate)`}
                 </span>
                 <button
                   type="button"
-                  className="shrink-0 text-[11px] text-neutral-400 hover:text-neutral-700"
+                  className="shrink-0 text-[11px] text-fg-3 hover:text-fg-strong"
                   onClick={() => router.push(`/transactions?drill=${encodeURIComponent(JSON.stringify({ label: row.description, filters: [{ field: "description", op: "contains", value: row.description }], period: { from: row.date, to: row.date } }))}`)}
                 >
                   ver em Transações ↗
                 </button>
-                {status ? <span className={cn("ml-auto shrink-0 text-[12px]", status === "abaixo da meta" ? "text-amber-600" : "text-neutral-400")}>{status}</span> : null}
+                {status ? <span className={cn("ml-auto shrink-0 text-[12px]", status === "abaixo da meta" ? "text-warn" : "text-fg-3")}>{status}</span> : null}
               </div>
             );
           })}
@@ -243,10 +245,10 @@ export function ContributionsScreen() {
                 <Kpi label="Número FIRE" value={money0(fire.data.result.fireNumber, cur)} sub={goal ? `${money0(goal.targetMonthlyIncome, cur)}/mês · SWR ${pct(goal.safeWithdrawalRate)}` : undefined} />
                 <Kpi label="Progresso" value={pct(fire.data.result.progress)} />
               </div>
-              <span className="relative h-1.5 rounded-full bg-neutral-200">
-                <span className="absolute inset-y-0 left-0 rounded-full bg-neutral-900" style={{ width: `${Math.min(fire.data.result.progress, 1) * 100}%` }} />
+              <span className="relative h-1.5 rounded-full bg-fill-2">
+                <span className="absolute inset-y-0 left-0 rounded-full bg-fg-ink" style={{ width: `${Math.min(fire.data.result.progress, 1) * 100}%` }} />
               </span>
-              <p className="text-[12px] text-neutral-500">
+              <p className="text-[12px] text-fg-muted">
                 {fire.data.result.reached
                   ? "Meta atingida."
                   : fire.data.result.projectedFireDate
@@ -256,7 +258,7 @@ export function ContributionsScreen() {
             </div>
           ) : (
             <div className="flex flex-col gap-1.5 text-[12.5px]">
-              <p className="text-neutral-500">Sem plano FIRE. Hoje: {money0(fire.data?.suggestedDefaults.currentInvested ?? 0, cur)} investidos e {money0(fire.data?.suggestedDefaults.currentMonthlyExpenses ?? 0, cur)}/mês de gastos.</p>
+              <p className="text-fg-muted">Sem plano FIRE. Hoje: {money0(fire.data?.suggestedDefaults.currentInvested ?? 0, cur)} investidos e {money0(fire.data?.suggestedDefaults.currentMonthlyExpenses ?? 0, cur)}/mês de gastos.</p>
               <div><Btn primary onClick={() => setGoalOpen(true)}>Definir meta</Btn></div>
             </div>
           )}
@@ -272,7 +274,7 @@ export function ContributionsScreen() {
           }}
         />
       ) : null}
-    </AppFrame>
+    </Page>
   );
 }
 
@@ -315,11 +317,11 @@ function ContributionDialog({ names, initialAmount, onClose }: { names: Names; i
       <Segmented value={direction} options={[{ v: "deposit", l: "Aporte: conta → corretora" }, { v: "withdraw", l: "Resgate: corretora → conta" }]} onChange={setDirection} />
       <div className="grid grid-cols-[1fr_20px_1fr] items-end gap-2">
         <Field label={direction === "deposit" ? "De (conta)" : "Conta que recebe"}><SelectInput value={from} onChange={setFrom} options={cash.map(option)} /></Field>
-        <span className="pb-1 text-center text-neutral-400">{direction === "deposit" ? "→" : "←"}</span>
+        <span className="pb-1 text-center text-fg-3">{direction === "deposit" ? "→" : "←"}</span>
         <Field label="Corretora"><SelectInput value={broker} onChange={setBroker} placeholder={brokers.length ? undefined : "Nenhuma corretora"} options={brokers.map(option)} /></Field>
       </div>
       {fromEntity && brokerEntity && fromEntity !== brokerEntity ? (
-        <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[12px] text-amber-800">
+        <p className="rounded-lg border border-warn-soft bg-warn-wash px-3 py-2 text-[12px] text-warn-ink">
           A conta é de {names.entity.get(fromEntity)} e a corretora é de {names.entity.get(brokerEntity)}. O aporte também move dinheiro entre as entidades.
         </p>
       ) : null}

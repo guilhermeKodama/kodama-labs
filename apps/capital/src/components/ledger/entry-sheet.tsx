@@ -4,14 +4,62 @@ import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import type { LedgerRow } from "@capital/server/modules/ledger/contracts";
-import { api, apiDelete, apiPatch, apiPost, apiUpload } from "@/lib/api";
-import type { Names } from "@/lib/catalog";
+import { api, apiDelete, apiPatch, apiPost, apiUpload } from "@/lib/api/client";
+import type { Names } from "@/lib/api/catalog";
+import { keys } from "@/lib/api/keys";
 import { money, parseAmount } from "@/lib/money";
 import { cn } from "@/lib/utils";
 import { Btn, Check, Field, SelectInput, TextInput } from "@/components/shell/chrome";
 import { CategorySelect } from "./categories";
 import { KIND_LABEL } from "./fields";
-import type { DisplayRow } from "./rows";
+import { useRowActions } from "./row-actions";
+import { toDisplayRows, type DisplayRow } from "./rows";
+
+export interface EntrySheetProps {
+  /** The entry to show (any leg of a transfer). */
+  entryId: string;
+  /** The row as listed on screen; without it (a link, a ⌘K result) the sheet fetches the entry. */
+  row: DisplayRow | null;
+  names: Names;
+  onClose: () => void;
+}
+
+/**
+ * "Editar transação", the detail of one entry, opened by ?entry=<id>
+ * (mounted by overlays.tsx while that param is set).
+ *
+ * OWNER: S2. Target (mockup 5088): a 440px cap Sheet with every field
+ * editable, Histórico (GET /v2/ledger/entries/{id}/history), Duplicar,
+ * anexos, "Criar regra" and Excluir through the delete-scope question,
+ * ⌘↵ to save and Esc to close.
+ * Now: the panel from before 0c-3 (340px, over the main column); Excluir
+ * moves the row and its transfer legs to the trash, with Desfazer.
+ */
+export function EntrySheet({ entryId, row, names, onClose }: EntrySheetProps) {
+  const actions = useRowActions();
+  const fetched = useQuery({
+    queryKey: keys.entry(entryId),
+    queryFn: () => api<LedgerRow>(`/api/v2/ledger/entries/${entryId}`),
+    enabled: !row,
+  });
+  const shown = row ?? (fetched.data ? toDisplayRows([fetched.data], "group")[0] : null);
+  return (
+    <>
+      {shown ? (
+        <EntryPanel
+          row={shown}
+          names={names}
+          onClose={onClose}
+          onDelete={(target) => {
+            actions.remove(target);
+            onClose();
+          }}
+        />
+      ) : null}
+      {actions.dialogs}
+    </>
+  );
+}
 
 interface Attachment {
   id: string;
@@ -19,7 +67,7 @@ interface Attachment {
   blobUrl: string;
 }
 
-export function EntrySheet({ row, names, onClose, onDelete }: { row: DisplayRow; names: Names; onClose: () => void; onDelete: (row: DisplayRow) => void }) {
+function EntryPanel({ row, names, onClose, onDelete }: { row: DisplayRow; names: Names; onClose: () => void; onDelete: (row: DisplayRow) => void }) {
   const queryClient = useQueryClient();
   const isTransfer = row.transferGroupId !== null;
   const display = Math.abs(row.amount);
@@ -93,12 +141,12 @@ export function EntrySheet({ row, names, onClose, onDelete }: { row: DisplayRow;
   const counterpart = row.toAccountId ?? row.counterpartAccountId;
 
   return (
-    <aside className="absolute top-0 right-0 bottom-0 z-30 flex w-[340px] flex-col gap-3.5 overflow-y-auto border-l border-neutral-300 bg-white p-4 shadow-[-8px_0_24px_-12px_rgba(0,0,0,0.12)]">
+    <aside className="absolute top-0 right-0 bottom-0 z-30 flex w-[340px] flex-col gap-3.5 overflow-y-auto border-l border-stroke-1 bg-editor p-4 shadow-[-8px_0_24px_-12px_rgba(0,0,0,0.12)]">
       <div className="flex items-center gap-2">
         <span className="truncate text-[14px] font-semibold">{row.description}</span>
-        <button type="button" className="ml-auto text-neutral-400 hover:text-neutral-700" onClick={onClose}>✕</button>
+        <button type="button" className="ml-auto text-fg-3 hover:text-fg-strong" onClick={onClose}>✕</button>
       </div>
-      <span className={cn("font-mono text-[22px] font-medium tabular-nums", row.neutral ? "text-neutral-500" : row.amountBase > 0 && "text-emerald-700")}>
+      <span className={cn("font-mono text-[22px] font-medium tabular-nums", row.neutral ? "text-fg-muted" : row.amountBase > 0 && "text-pos")}>
         {row.neutral ? `⇄ ${money(Math.abs(row.amountBase), names.currency)}` : money(row.amountBase, names.currency)}
       </span>
       <div className="grid grid-cols-2 gap-x-3 gap-y-2.5 text-[12.5px]">
@@ -111,7 +159,7 @@ export function EntrySheet({ row, names, onClose, onDelete }: { row: DisplayRow;
         {row.isRecurring ? <Info k="Recorrente" v="Sim" /> : null}
         {row.importId ? <Info k="Origem" v="Importação" /> : null}
       </div>
-      <div className="flex flex-col gap-2.5 border-t border-neutral-200 pt-3">
+      <div className="flex flex-col gap-2.5 border-t border-stroke-3 pt-3">
         <Field label="Descrição"><TextInput value={description} onChange={setDescription} /></Field>
         <div className="grid grid-cols-2 gap-2">
           <Field label={`Valor (${row.currency})`}><TextInput value={amount} onChange={setAmount} mono /></Field>
@@ -129,23 +177,23 @@ export function EntrySheet({ row, names, onClose, onDelete }: { row: DisplayRow;
           </>
         ) : null}
         <Field label="Notas">
-          <textarea value={notes} onChange={(event) => setNotes(event.target.value)} rows={2} className="rounded-[6px] border border-neutral-300 px-2 py-1 text-[12.5px] outline-none focus:border-neutral-500" />
+          <textarea value={notes} onChange={(event) => setNotes(event.target.value)} rows={2} className="rounded-[6px] border border-stroke-1 px-2 py-1 text-[12.5px] outline-none focus:border-fg-muted" />
         </Field>
       </div>
-      <div className="flex flex-col gap-1.5 border-t border-neutral-200 pt-3">
-        <span className="text-[11px] text-neutral-400">Anexos</span>
+      <div className="flex flex-col gap-1.5 border-t border-stroke-3 pt-3">
+        <span className="text-[11px] text-fg-3">Anexos</span>
         {(attachments.data ?? []).map((a) => (
           <span key={a.id} className="flex items-center gap-2 text-[12.5px]">
             <a href={a.blobUrl} target="_blank" rel="noreferrer" className="truncate underline">{a.originalName}</a>
-            <button type="button" className="ml-auto text-[11px] text-neutral-400 hover:text-red-600" onClick={() => void apiDelete(`/api/v2/attachments/${a.id}`).then(() => queryClient.invalidateQueries({ queryKey: ["attachments", ownerType, ownerId] }))}>remover</button>
+            <button type="button" className="ml-auto text-[11px] text-fg-3 hover:text-neg" onClick={() => void apiDelete(`/api/v2/attachments/${a.id}`).then(() => queryClient.invalidateQueries({ queryKey: ["attachments", ownerType, ownerId] }))}>remover</button>
           </span>
         ))}
-        <label className="flex h-9 cursor-pointer items-center justify-center rounded-lg border border-dashed border-neutral-300 text-[12px] text-neutral-400 hover:border-neutral-400">
+        <label className="flex h-9 cursor-pointer items-center justify-center rounded-lg border border-dashed border-stroke-1 text-[12px] text-fg-3 hover:border-fg-3">
           Anexar comprovante
           <input type="file" className="hidden" onChange={(event) => { const file = event.target.files?.[0]; if (file) void upload(file); event.target.value = ""; }} />
         </label>
       </div>
-      <div className="mt-auto flex flex-wrap gap-1.5 border-t border-neutral-200 pt-3">
+      <div className="mt-auto flex flex-wrap gap-1.5 border-t border-stroke-3 pt-3">
         <Btn primary disabled={save.isPending} onClick={() => save.mutate()}>Salvar</Btn>
         {!isTransfer ? <Btn disabled={!categoryId || createRule.isPending} onClick={() => createRule.mutate()}>Criar regra de categoria</Btn> : null}
         <Btn ghost danger onClick={() => onDelete(row)}>Excluir</Btn>
@@ -157,7 +205,7 @@ export function EntrySheet({ row, names, onClose, onDelete }: { row: DisplayRow;
 function Info({ k, v }: { k: string; v: string }) {
   return (
     <div className="flex min-w-0 flex-col gap-0.5">
-      <span className="text-[11px] text-neutral-400">{k}</span>
+      <span className="text-[11px] text-fg-3">{k}</span>
       <span className="truncate">{v}</span>
     </div>
   );

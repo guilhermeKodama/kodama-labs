@@ -1,5 +1,5 @@
 import type { GroupKey, LedgerFilter, LedgerRow, ViewConfig } from "@capital/server/modules/ledger/contracts";
-import type { Names } from "@/lib/catalog";
+import type { Names } from "@/lib/api/catalog";
 import { ACCOUNT_TYPE_LABEL, dayLabel, monthName } from "@/lib/money";
 
 export type CategoricalField = "entityId" | "accountId" | "categoryId" | "kind" | "isTaxDeductible" | "isRecurring" | "accountType" | "currency";

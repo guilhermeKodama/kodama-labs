@@ -1,0 +1,16 @@
+{
+  "header": {
+    "create": "+ Nova transação"
+  },
+  "toast": {
+    "trashed": "“{description}” foi para a lixeira"
+  },
+  "bulk": {
+    "category": "Categoria alterada · {count}",
+    "entity": "Movido para {entity} · {count}",
+    "tax": "Marcação de IR alternada · {count}",
+    "duplicate": "Duplicadas · {count}",
+    "delete": "Na lixeira · {count}",
+    "confirmDelete": "Mandar {count} lançamentos para a lixeira?"
+  }
+}

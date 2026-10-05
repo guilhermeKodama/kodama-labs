@@ -2,7 +2,7 @@
 
 import { Fragment, useRef, useState } from "react";
 import type { LedgerGroup, ViewConfig } from "@capital/server/modules/ledger/contracts";
-import type { Names } from "@/lib/catalog";
+import type { Names } from "@/lib/api/catalog";
 import { dayLabel, money } from "@/lib/money";
 import { cn } from "@/lib/utils";
 import { Badge, EmptyRow } from "@/components/shell/chrome";
@@ -74,13 +74,13 @@ export function LedgerTable({
   const cell = (row: DisplayRow, col: string) => {
     switch (col) {
       case "date":
-        return <span className="font-mono text-[11.5px] text-neutral-400">{dayLabel(row.date)}</span>;
+        return <span className="font-mono text-[11.5px] text-fg-3">{dayLabel(row.date)}</span>;
       case "description":
         return (
           <button type="button" className="flex min-w-0 items-center gap-1.5 text-left hover:underline" onClick={() => onOpen(row)}>
             <span className="truncate">{row.description}</span>
-            {row.isRecurring ? <span className="text-[11px] text-neutral-400" title="Recorrente">↻</span> : null}
-            {row.installmentNumber ? <span className="text-[11px] text-neutral-400">parc. {row.installmentNumber}</span> : null}
+            {row.isRecurring ? <span className="text-[11px] text-fg-3" title="Recorrente">↻</span> : null}
+            {row.installmentNumber ? <span className="text-[11px] text-fg-3">parc. {row.installmentNumber}</span> : null}
             {row.isTaxDeductible ? <Badge>IR</Badge> : null}
           </button>
         );
@@ -88,18 +88,18 @@ export function LedgerTable({
         return <span className="min-w-0"><Badge>{names.entity.get(row.entityId) ?? "—"}</Badge></span>;
       case "accountId":
         return (
-          <span className="truncate text-neutral-600">
+          <span className="truncate text-fg-2">
             {names.account.get(row.accountId)}
             {row.toAccountId ? ` → ${names.account.get(row.toAccountId) ?? ""}` : ""}
           </span>
         );
       case "categoryId":
-        if (row.neutral || row.kind === "transfer") return <span className="text-neutral-400">Transferência</span>;
+        if (row.neutral || row.kind === "transfer") return <span className="text-fg-3">Transferência</span>;
         return (
           <select
             value={row.categoryId ?? ""}
             onChange={(event) => onCategory(row, event.target.value || null)}
-            className={cn("min-w-0 truncate bg-transparent outline-none hover:underline", !row.categoryId && "text-amber-600")}
+            className={cn("min-w-0 truncate bg-transparent outline-none hover:underline", !row.categoryId && "text-warn")}
           >
             <option value="">Sem categoria</option>
             {names.categories
@@ -112,14 +112,14 @@ export function LedgerTable({
           </select>
         );
       case "kind":
-        return <span className="text-neutral-600">{row.neutral ? "Transferência" : KIND_LABEL[row.kind]}</span>;
+        return <span className="text-fg-2">{row.neutral ? "Transferência" : KIND_LABEL[row.kind]}</span>;
       case "isTaxDeductible":
-        return <span className="text-neutral-500">{row.isTaxDeductible ? "Sim" : ""}</span>;
+        return <span className="text-fg-muted">{row.isTaxDeductible ? "Sim" : ""}</span>;
       case "amountBase":
         return (
           <span className="flex items-baseline justify-end gap-1.5">
-            {row.currency !== currency ? <span className="font-mono text-[10.5px] text-neutral-400">{money(row.amount, row.currency)}</span> : null}
-            <span className={cn("font-mono tabular-nums", row.neutral ? "text-neutral-400" : row.amountBase > 0 ? "text-emerald-700" : "")}>
+            {row.currency !== currency ? <span className="font-mono text-[10.5px] text-fg-3">{money(row.amount, row.currency)}</span> : null}
+            <span className={cn("font-mono tabular-nums", row.neutral ? "text-fg-3" : row.amountBase > 0 ? "text-pos" : "")}>
               {row.neutral ? `⇄ ${money(row.amountBase, currency).replace("−", "")}` : money(row.amountBase, currency)}
             </span>
           </span>
@@ -131,12 +131,12 @@ export function LedgerTable({
   const rowEl = (row: DisplayRow) => (
     <div
       key={row.id}
-      className={cn("grid h-[34px] items-center gap-2 border-t border-neutral-200 px-2.5 text-[12.5px]", selected.has(row.id) && "bg-neutral-100")}
+      className={cn("grid h-[34px] items-center gap-2 border-t border-stroke-3 px-2.5 text-[12.5px]", selected.has(row.id) && "bg-fill-3")}
       style={{ gridTemplateColumns: template }}
     >
       <input
         type="checkbox"
-        className="size-3.5 accent-neutral-900"
+        className="size-3.5 accent-fg-ink"
         checked={selected.has(row.id)}
         onClick={(event) => toggle(row, (event.target as HTMLInputElement).checked, event.shiftKey)}
         onChange={() => undefined}
@@ -152,10 +152,10 @@ export function LedgerTable({
     const allGroupOn = ids.length > 0 && ids.every((rid) => selected.has(rid));
     return (
       <div
-        className={cn("flex h-8 items-center gap-2 border-t border-neutral-200 px-2.5 text-[12px]", depth === 0 ? "bg-neutral-50" : "bg-white")}
+        className={cn("flex h-8 items-center gap-2 border-t border-stroke-3 px-2.5 text-[12px]", depth === 0 ? "bg-fill-4" : "bg-editor")}
         style={{ paddingLeft: depth ? 34 : undefined }}
       >
-        <input type="checkbox" className="size-3.5 accent-neutral-900" checked={allGroupOn} onChange={(event) => onSelect(ids, event.target.checked)} />
+        <input type="checkbox" className="size-3.5 accent-fg-ink" checked={allGroupOn} onChange={(event) => onSelect(ids, event.target.checked)} />
         <button
           type="button"
           className="flex items-center gap-2"
@@ -166,9 +166,9 @@ export function LedgerTable({
             return next;
           })}
         >
-          <span className="text-neutral-400">{isCollapsed ? "▸" : "▾"}</span>
+          <span className="text-fg-3">{isCollapsed ? "▸" : "▾"}</span>
           <span className="font-semibold">{label}</span>
-          <span className="text-neutral-400">{count}</span>
+          <span className="text-fg-3">{count}</span>
         </button>
         <span className="ml-auto font-mono font-semibold tabular-nums">{sum == null ? "" : money(sum, currency)}</span>
       </div>
@@ -219,24 +219,24 @@ export function LedgerTable({
   };
 
   return (
-    <div className="overflow-hidden rounded-lg border border-neutral-200">
-      <div className="grid h-[34px] items-center gap-2 px-2.5 text-[11.5px] text-neutral-400" style={{ gridTemplateColumns: template }}>
-        <input type="checkbox" className="size-3.5 accent-neutral-900" checked={allOn} onChange={(event) => onSelect(rows.map((r) => r.id), event.target.checked)} />
+    <div className="overflow-hidden rounded-lg border border-stroke-3">
+      <div className="grid h-[34px] items-center gap-2 px-2.5 text-[11.5px] text-fg-3" style={{ gridTemplateColumns: template }}>
+        <input type="checkbox" className="size-3.5 accent-fg-ink" checked={allOn} onChange={(event) => onSelect(rows.map((r) => r.id), event.target.checked)} />
         {columns.map((col) => (
           <span key={col} className={col === "amountBase" ? "text-right" : ""}>{COLUMN_LABEL[col]}</span>
         ))}
       </div>
       {body()}
       {hasMore ? (
-        <button type="button" onClick={onMore} className="block h-8 w-full border-t border-neutral-200 text-[12px] text-neutral-500 hover:bg-neutral-50">
+        <button type="button" onClick={onMore} className="block h-8 w-full border-t border-stroke-3 text-[12px] text-fg-muted hover:bg-fill-4">
           Carregar mais
         </button>
       ) : null}
-      <div className="flex h-[34px] items-center gap-2 border-t border-neutral-300 bg-neutral-50 px-2.5 text-[12px]">
+      <div className="flex h-[34px] items-center gap-2 border-t border-stroke-1 bg-fill-4 px-2.5 text-[12px]">
         <span className="font-medium">{totals.count} lançamentos</span>
-        <span className="text-neutral-400">{rows.length < totals.count ? `· ${rows.length} carregados` : ""}</span>
-        <span className="ml-auto text-neutral-400">Soma</span>
-        <span className={cn("w-[150px] text-right font-mono font-semibold tabular-nums", totals.sum > 0 && "text-emerald-700")}>{money(totals.sum, currency)}</span>
+        <span className="text-fg-3">{rows.length < totals.count ? `· ${rows.length} carregados` : ""}</span>
+        <span className="ml-auto text-fg-3">Soma</span>
+        <span className={cn("w-[150px] text-right font-mono font-semibold tabular-nums", totals.sum > 0 && "text-pos")}>{money(totals.sum, currency)}</span>
       </div>
     </div>
   );

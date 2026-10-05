@@ -5,11 +5,13 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Bar, CartesianGrid, ComposedChart, Line, LineChart, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { useRouter } from "@/i18n/navigation";
-import { api, apiDelete, apiPatch, apiPost } from "@/lib/api";
-import { useNames, type Names } from "@/lib/catalog";
+import { api, apiDelete, apiPatch, apiPost } from "@/lib/api/client";
+import { useNames, type Names } from "@/lib/api/catalog";
 import { dayLabel, monthKey, monthLabel, monthName, monthRange, money0, parseAmount, shiftMonth } from "@/lib/money";
 import { cn } from "@/lib/utils";
-import { AppFrame, Badge, Btn, EmptyRow, Field, Kpi, KpiStrip, Modal, Panel, Segmented, SelectInput, TextInput } from "@/components/shell/chrome";
+import { CHART, CHART_AXIS } from "@/lib/theme/chart-colors";
+import { Badge, Btn, EmptyRow, Field, Kpi, KpiStrip, Modal, Panel, Segmented, SelectInput, TextInput } from "@/components/shell/chrome";
+import { Page } from "@/components/shell/page";
 
 interface BudgetRow {
   id: string;
@@ -104,15 +106,15 @@ export function BudgetsScreen() {
   const entityOptions = [{ v: "all", l: "Todas" }, ...names.entities.map((e) => ({ v: e.id, l: names.entity.get(e.id) ?? e.name }))];
 
   return (
-    <AppFrame
+    <Page
       crumbs={["Transações", "Orçamentos"]}
       actions={
         <>
           <Segmented value={mode} options={[{ v: "month", l: "Mensal" }, { v: "year", l: "Anual" }]} onChange={setMode} />
-          <span className="inline-flex h-[26px] items-center rounded-[6px] border border-neutral-300 bg-white text-[12px]">
-            <button type="button" className="h-full border-r border-neutral-200 px-1.5 hover:bg-neutral-50" onClick={() => setMonth(shiftMonth(month, mode === "year" ? -12 : -1))}>‹</button>
+          <span className="inline-flex h-[26px] items-center rounded-[6px] border border-stroke-1 bg-editor text-[12px]">
+            <button type="button" className="h-full border-r border-stroke-3 px-1.5 hover:bg-fill-4" onClick={() => setMonth(shiftMonth(month, mode === "year" ? -12 : -1))}>‹</button>
             <span className="px-2 font-medium">{mode === "year" ? year : monthLabel(month)}</span>
-            <button type="button" className="h-full border-l border-neutral-200 px-1.5 hover:bg-neutral-50" onClick={() => setMonth(shiftMonth(month, mode === "year" ? 12 : 1))}>›</button>
+            <button type="button" className="h-full border-l border-stroke-3 px-1.5 hover:bg-fill-4" onClick={() => setMonth(shiftMonth(month, mode === "year" ? 12 : 1))}>›</button>
           </span>
           <Btn primary onClick={() => setCreating({})}>+ Orçamento</Btn>
         </>
@@ -120,7 +122,7 @@ export function BudgetsScreen() {
     >
       <div className="flex items-center gap-2">
         <Segmented value={entity} options={entityOptions} onChange={setEntity} />
-        <span className="ml-auto text-[12px] text-neutral-400">
+        <span className="ml-auto text-[12px] text-fg-3">
           {mode === "month" && data
             ? data.period.daysElapsed === 0
               ? "Mês ainda não começou"
@@ -148,8 +150,8 @@ export function BudgetsScreen() {
             </KpiStrip>
             <div className="grid items-start gap-3 xl:grid-cols-[minmax(0,1.7fr)_minmax(0,1fr)]">
               <div className="flex min-w-0 flex-col gap-3">
-                <div className="overflow-hidden rounded-lg border border-neutral-200">
-                  <div className="grid h-[34px] grid-cols-[minmax(0,1.3fr)_minmax(0,2fr)_96px_96px_110px_24px] items-center gap-3 px-3 text-[11.5px] text-neutral-400">
+                <div className="overflow-hidden rounded-lg border border-stroke-3">
+                  <div className="grid h-[34px] grid-cols-[minmax(0,1.3fr)_minmax(0,2fr)_96px_96px_110px_24px] items-center gap-3 px-3 text-[11.5px] text-fg-3">
                     <span>Categoria</span>
                     <span>Gasto / orçado{data.period.daysElapsed && data.period.daysElapsed < data.period.daysInMonth ? ` · marca = hoje (dia ${data.period.daysElapsed})` : ""}</span>
                     <span className="text-right">Gasto</span>
@@ -159,19 +161,19 @@ export function BudgetsScreen() {
                   </div>
                   {data.budgets.map((b) => {
                     const r = b.available > 0 ? b.spent / b.available : 0;
-                    const status = b.isOverBudget ? { l: "Estourado", c: "text-red-600" } : b.status === "ahead_of_pace" ? { l: "Acima do ritmo", c: "text-amber-600" } : { l: "No ritmo", c: "text-neutral-400" };
+                    const status = b.isOverBudget ? { l: "Estourado", c: "text-neg" } : b.status === "ahead_of_pace" ? { l: "Acima do ritmo", c: "text-warn" } : { l: "No ritmo", c: "text-fg-3" };
                     return (
-                      <div key={b.id} className="grid h-10 grid-cols-[minmax(0,1.3fr)_minmax(0,2fr)_96px_96px_110px_24px] items-center gap-3 border-t border-neutral-200 px-3 text-[12.5px]">
+                      <div key={b.id} className="grid h-10 grid-cols-[minmax(0,1.3fr)_minmax(0,2fr)_96px_96px_110px_24px] items-center gap-3 border-t border-stroke-3 px-3 text-[12.5px]">
                         <span className="flex min-w-0 items-center gap-1.5">
                           <button type="button" className="truncate text-left hover:underline" onClick={() => drill(b.categoryId, b.entityId, b.category)}>{b.category}</button>
                           <Badge>{b.entityId ? names.entity.get(b.entityId) ?? "—" : "Todas"}</Badge>
                         </span>
                         <span className="flex items-center gap-2">
-                          <span className="relative h-1.5 flex-1 rounded-full bg-neutral-200">
-                            <span className={cn("absolute inset-y-0 left-0 rounded-full", b.isOverBudget ? "bg-red-500" : b.status === "ahead_of_pace" ? "bg-amber-500" : "bg-neutral-600")} style={{ width: `${Math.min(r, 1) * 100}%` }} />
-                            {pace > 0 && pace < 1 ? <span className="absolute -top-[3px] h-3 w-px bg-neutral-950" style={{ left: `${pace * 100}%` }} /> : null}
+                          <span className="relative h-1.5 flex-1 rounded-full bg-fill-2">
+                            <span className={cn("absolute inset-y-0 left-0 rounded-full", b.isOverBudget ? "bg-neg-solid" : b.status === "ahead_of_pace" ? "bg-warn-solid" : "bg-fg-2")} style={{ width: `${Math.min(r, 1) * 100}%` }} />
+                            {pace > 0 && pace < 1 ? <span className="absolute -top-[3px] h-3 w-px bg-fg-1" style={{ left: `${pace * 100}%` }} /> : null}
                           </span>
-                          <span className="w-9 text-right font-mono text-[11px] text-neutral-400 tabular-nums">{Math.round(r * 100)}%</span>
+                          <span className="w-9 text-right font-mono text-[11px] text-fg-3 tabular-nums">{Math.round(r * 100)}%</span>
                         </span>
                         <span className="text-right font-mono tabular-nums">{money0(b.spent, cur)}</span>
                         {editing?.id === b.id ? (
@@ -179,7 +181,7 @@ export function BudgetsScreen() {
                             <TextInput autoFocus value={editing.value} onChange={(value) => setEditing({ id: b.id, value })} onBlur={() => setEditing(null)} mono className="w-full text-right" />
                           </form>
                         ) : (
-                          <button type="button" title="Clique para mudar o valor orçado" className={cn("text-right font-mono tabular-nums hover:underline", b.remaining < 0 ? "text-red-600" : "text-neutral-600")} onClick={() => setEditing({ id: b.id, value: String(b.amount) })}>
+                          <button type="button" title="Clique para mudar o valor orçado" className={cn("text-right font-mono tabular-nums hover:underline", b.remaining < 0 ? "text-neg" : "text-fg-2")} onClick={() => setEditing({ id: b.id, value: String(b.amount) })}>
                             {money0(b.remaining, cur)}
                           </button>
                         )}
@@ -187,7 +189,7 @@ export function BudgetsScreen() {
                         <button
                           type="button"
                           title="Remover orçamento"
-                          className="text-neutral-300 hover:text-red-600"
+                          className="text-fg-4 hover:text-neg"
                           onClick={() => {
                             if (!window.confirm(`Remover o orçamento de ${b.category}?`)) return;
                             void apiDelete(`/api/v2/budgets/${b.id}`).then(invalidate).catch((error: Error) => toast.error(error.message));
@@ -200,9 +202,9 @@ export function BudgetsScreen() {
                   })}
                   {!data.budgets.length ? <EmptyRow>Nenhum orçamento para este mês. Crie em “+ Orçamento” ou a partir dos gastos sem orçamento abaixo.</EmptyRow> : null}
                   {data.budgets.length ? (
-                    <div className="grid h-9 grid-cols-[minmax(0,1.3fr)_minmax(0,2fr)_96px_96px_110px_24px] items-center gap-3 border-t border-neutral-300 bg-neutral-50 px-3 text-[12.5px] font-semibold">
+                    <div className="grid h-9 grid-cols-[minmax(0,1.3fr)_minmax(0,2fr)_96px_96px_110px_24px] items-center gap-3 border-t border-stroke-1 bg-fill-4 px-3 text-[12.5px] font-semibold">
                       <span>Total</span>
-                      <span className="text-[11.5px] font-normal text-neutral-400">Orçamento zera no dia 1º · clique no restante para mudar o valor</span>
+                      <span className="text-[11.5px] font-normal text-fg-3">Orçamento zera no dia 1º · clique no restante para mudar o valor</span>
                       <span className="text-right font-mono tabular-nums">{money0(data.summary.totalSpent, cur)}</span>
                       <span className="text-right font-mono tabular-nums">{money0(data.summary.totalRoom, cur)}</span>
                       <span />
@@ -213,10 +215,10 @@ export function BudgetsScreen() {
                 {data.unbudgeted.length ? (
                   <Panel title="Gastos sem orçamento" pad={false}>
                     {data.unbudgeted.slice(0, 10).map((u) => (
-                      <div key={`${u.entityId}:${u.categoryId}`} className="flex h-8 items-center gap-2 border-t border-neutral-200 px-3 text-[12.5px] first:border-t-0">
+                      <div key={`${u.entityId}:${u.categoryId}`} className="flex h-8 items-center gap-2 border-t border-stroke-3 px-3 text-[12.5px] first:border-t-0">
                         <button type="button" className="truncate hover:underline" onClick={() => drill(u.categoryId, u.entityId, u.category ?? "Sem categoria")}>{u.category ?? "Sem categoria"}</button>
                         <Badge>{names.entity.get(u.entityId) ?? "—"}</Badge>
-                        <span className="text-[11px] text-neutral-400">{u.count} lanç.</span>
+                        <span className="text-[11px] text-fg-3">{u.count} lanç.</span>
                         <span className="ml-auto font-mono tabular-nums">{money0(u.spent, cur)}</span>
                         {u.categoryId ? <Btn ghost onClick={() => setCreating({ categoryId: u.categoryId!, amount: Math.ceil(u.spent / 50) * 50 })}>Orçar</Btn> : <span className="w-[52px]" />}
                       </div>
@@ -228,11 +230,11 @@ export function BudgetsScreen() {
                     {data.yearlyBudgets.map((b) => {
                       const r = b.amount > 0 ? b.spent / b.amount : 0;
                       return (
-                        <div key={b.id} className="grid h-10 grid-cols-[minmax(0,1.2fr)_minmax(0,2fr)_96px_96px] items-center gap-3 border-t border-neutral-200 px-3 text-[12.5px] first:border-t-0">
+                        <div key={b.id} className="grid h-10 grid-cols-[minmax(0,1.2fr)_minmax(0,2fr)_96px_96px] items-center gap-3 border-t border-stroke-3 px-3 text-[12.5px] first:border-t-0">
                           <span className="flex items-center gap-1.5 truncate">{b.category}<Badge>{b.entityId ? names.entity.get(b.entityId) ?? "—" : "Todas"}</Badge></span>
-                          <span className="relative h-1.5 rounded-full bg-neutral-200"><span className={cn("absolute inset-y-0 left-0 rounded-full", r > 0.9 ? "bg-amber-500" : "bg-neutral-600")} style={{ width: `${Math.min(r, 1) * 100}%` }} /></span>
+                          <span className="relative h-1.5 rounded-full bg-fill-2"><span className={cn("absolute inset-y-0 left-0 rounded-full", r > 0.9 ? "bg-warn-solid" : "bg-fg-2")} style={{ width: `${Math.min(r, 1) * 100}%` }} /></span>
                           <span className="text-right font-mono tabular-nums">{money0(b.spent, cur)}</span>
-                          <span className="text-right font-mono text-neutral-500 tabular-nums">de {money0(b.amount, cur)}</span>
+                          <span className="text-right font-mono text-fg-muted tabular-nums">de {money0(b.amount, cur)}</span>
                         </div>
                       );
                     })}
@@ -245,27 +247,27 @@ export function BudgetsScreen() {
                     <div className="h-[150px]">
                       <ResponsiveContainer width="100%" height="100%">
                         <LineChart data={data.series}>
-                          <CartesianGrid stroke="#f0f0f0" vertical={false} />
-                          <XAxis dataKey="day" tick={{ fontSize: 11, fill: "#a3a3a3" }} stroke="#e5e5e5" />
-                          <YAxis tick={{ fontSize: 11, fill: "#a3a3a3" }} stroke="#e5e5e5" tickFormatter={(v) => `${Math.round(v / 100) / 10}k`} width={40} />
+                          <CartesianGrid stroke={CHART.grid} vertical={false} />
+                          <XAxis dataKey="day" tick={CHART_AXIS.tick} stroke={CHART.axis} />
+                          <YAxis tick={CHART_AXIS.tick} stroke={CHART.axis} tickFormatter={(v) => `${Math.round(v / 100) / 10}k`} width={40} />
                           <Tooltip formatter={(v) => money0(Number(v), cur)} labelFormatter={(d) => `dia ${d}`} />
-                          {data.summary.totalBudget ? <ReferenceLine y={data.summary.totalBudget} stroke="#a3a3a3" strokeDasharray="4 4" label={{ value: "Orçado", fontSize: 10, fill: "#a3a3a3", position: "insideTopRight" }} /> : null}
-                          <Line dataKey="ideal" name="Ritmo ideal" stroke="#d4d4d4" dot={false} strokeWidth={2} />
-                          <Line dataKey="cumulative" name="Gasto acumulado" stroke="#171717" dot={false} strokeWidth={2} />
+                          {data.summary.totalBudget ? <ReferenceLine y={data.summary.totalBudget} stroke={CHART.muted} strokeDasharray="4 4" label={{ value: "Orçado", fontSize: 10, fill: CHART.muted, position: "insideTopRight" }} /> : null}
+                          <Line dataKey="ideal" name="Ritmo ideal" stroke={CHART.soft} dot={false} strokeWidth={2} />
+                          <Line dataKey="cumulative" name="Gasto acumulado" stroke={CHART.ink} dot={false} strokeWidth={2} />
                         </LineChart>
                       </ResponsiveContainer>
                     </div>
                   ) : (
-                    <p className="py-8 text-center text-[12px] text-neutral-400">Sem gastos em categorias orçadas neste mês.</p>
+                    <p className="py-8 text-center text-[12px] text-fg-3">Sem gastos em categorias orçadas neste mês.</p>
                   )}
                 </Panel>
                 <Panel title="Contas fixas · próximos dias" pad={false}>
                   {data.upcoming.map((u) => (
-                    <div key={u.id} className="flex h-8 items-center gap-2 border-t border-neutral-200 px-3 text-[12.5px] first:border-t-0">
-                      <span className="w-10 font-mono text-[11.5px] text-neutral-400">{dayLabel(u.nextDueDate)}</span>
+                    <div key={u.id} className="flex h-8 items-center gap-2 border-t border-stroke-3 px-3 text-[12.5px] first:border-t-0">
+                      <span className="w-10 font-mono text-[11.5px] text-fg-3">{dayLabel(u.nextDueDate)}</span>
                       <span className="truncate">{u.description}</span>
                       <Badge>{names.entity.get(u.entityId) ?? "—"}</Badge>
-                      <span className="ml-auto text-[11px] text-neutral-400">{u.mode === "auto" ? "auto" : "lembrete"}</span>
+                      <span className="ml-auto text-[11px] text-fg-3">{u.mode === "auto" ? "auto" : "lembrete"}</span>
                       <span className="w-[76px] text-right font-mono tabular-nums">{money0(u.amount, u.currency)}</span>
                       <Btn ghost onClick={() => void payRule(u.id, false)}>Lançar</Btn>
                       <Btn ghost onClick={() => void payRule(u.id, true)}>Pular</Btn>
@@ -277,15 +279,15 @@ export function BudgetsScreen() {
             </div>
           </>
         ) : (
-          <p className="text-[12.5px] text-neutral-400">{monthly.isError ? (monthly.error as Error).message : "Carregando…"}</p>
+          <p className="text-[12.5px] text-fg-3">{monthly.isError ? (monthly.error as Error).message : "Carregando…"}</p>
         )
       ) : yearly.data ? (
         <AnnualView data={yearly.data} names={names} onMonth={(m) => { setMonth(`${year}-${String(m).padStart(2, "0")}`); setMode("month"); }} />
       ) : (
-        <p className="text-[12.5px] text-neutral-400">{yearly.isError ? (yearly.error as Error).message : "Carregando…"}</p>
+        <p className="text-[12.5px] text-fg-3">{yearly.isError ? (yearly.error as Error).message : "Carregando…"}</p>
       )}
       {creating ? <BudgetDialog names={names} month={month} initial={creating} entity={entity} onClose={() => setCreating(null)} /> : null}
-    </AppFrame>
+    </Page>
   );
 }
 
@@ -312,15 +314,15 @@ function AnnualView({ data, names, onMonth }: { data: YearOverview; names: Names
         />
         <Kpi label="Meses estourados" value={String(data.summary.overBudgetMonths)} sub="categoria × mês" />
       </KpiStrip>
-      <div className="overflow-x-auto rounded-lg border border-neutral-200">
-        <div className="grid h-[34px] min-w-[860px] items-center gap-1 px-3 text-[11.5px] text-neutral-400" style={{ gridTemplateColumns: cols }}>
+      <div className="overflow-x-auto rounded-lg border border-stroke-3">
+        <div className="grid h-[34px] min-w-[860px] items-center gap-1 px-3 text-[11.5px] text-fg-3" style={{ gridTemplateColumns: cols }}>
           <span>Categoria</span>
-          {months.map((m) => <span key={m} className={cn("text-center", m > data.currentMonth && "text-neutral-300", m === data.currentMonth && "text-neutral-900")}>{monthName(m)}{m === data.currentMonth ? "*" : ""}</span>)}
+          {months.map((m) => <span key={m} className={cn("text-center", m > data.currentMonth && "text-fg-4", m === data.currentMonth && "text-fg-ink")}>{monthName(m)}{m === data.currentMonth ? "*" : ""}</span>)}
           <span className="text-right">Ano (proj.)</span>
           <span className="text-right">Tendência</span>
         </div>
         {data.categories.map((row) => (
-          <div key={row.categoryId ?? "none"} className="grid h-[34px] min-w-[860px] items-center gap-1 border-t border-neutral-200 px-3 text-[12.5px]" style={{ gridTemplateColumns: cols }}>
+          <div key={row.categoryId ?? "none"} className="grid h-[34px] min-w-[860px] items-center gap-1 border-t border-stroke-3 px-3 text-[12.5px]" style={{ gridTemplateColumns: cols }}>
             <span className="truncate">{row.category ?? "Sem categoria"}</span>
             {row.months.map((c) => {
               const r = c.percentUsed != null ? c.percentUsed / 100 : null;
@@ -332,7 +334,7 @@ function AnnualView({ data, names, onMonth }: { data: YearOverview; names: Names
                   onClick={() => onMonth(c.month)}
                   className={cn(
                     "inline-flex h-[26px] items-center justify-center rounded font-mono text-[11px] tabular-nums",
-                    c.isProjected ? "border border-dashed border-neutral-300 text-neutral-300" : r == null ? "text-neutral-500" : r > 1 ? "bg-neutral-300 font-semibold text-red-600" : r >= 0.9 ? "bg-neutral-200 text-neutral-700" : r >= 0.7 ? "bg-neutral-100 text-neutral-700" : "bg-neutral-50 text-neutral-600",
+                    c.isProjected ? "border border-dashed border-stroke-1 text-fg-4" : r == null ? "text-fg-muted" : r > 1 ? "bg-fill-1 font-semibold text-neg" : r >= 0.9 ? "bg-fill-2 text-fg-strong" : r >= 0.7 ? "bg-fill-3 text-fg-strong" : "bg-fill-4 text-fg-2",
                   )}
                 >
                   {r != null ? `${Math.round(r * 100)}%` : c.spent ? `${(c.spent / 1000).toLocaleString("pt-BR", { maximumFractionDigits: 1, minimumFractionDigits: 1 })}k` : "·"}
@@ -340,38 +342,38 @@ function AnnualView({ data, names, onMonth }: { data: YearOverview; names: Names
               );
             })}
             <span className="text-right font-mono text-[12px] tabular-nums">{money0(row.yearTotal, cur)}</span>
-            <span className={cn("text-right font-mono text-[11.5px]", row.trend == null ? "text-neutral-300" : row.trend > 0.1 ? "text-amber-600" : row.trend < -0.1 ? "text-emerald-700" : "text-neutral-400")}>
+            <span className={cn("text-right font-mono text-[11.5px]", row.trend == null ? "text-fg-4" : row.trend > 0.1 ? "text-warn" : row.trend < -0.1 ? "text-pos" : "text-fg-3")}>
               {row.trend == null ? "—" : row.trend > 0.1 ? `↑ ${Math.round(row.trend * 100)}%` : row.trend < -0.1 ? `↓ ${Math.round(-row.trend * 100)}%` : "→ estável"}
             </span>
           </div>
         ))}
         {!data.categories.length ? <EmptyRow>Nenhum gasto nem orçamento neste ano.</EmptyRow> : null}
       </div>
-      <p className="text-[11px] text-neutral-400">% do orçado quando há orçamento, senão o valor gasto · tracejado = projeção · * mês em andamento · clique numa célula para abrir o mês</p>
+      <p className="text-[11px] text-fg-3">% do orçado quando há orçamento, senão o valor gasto · tracejado = projeção · * mês em andamento · clique numa célula para abrir o mês</p>
       <div className="grid items-start gap-3 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)]">
         <Panel title="Gasto mensal vs orçado">
           <div className="h-[190px]">
             <ResponsiveContainer width="100%" height="100%">
               <ComposedChart data={chart}>
-                <CartesianGrid stroke="#f0f0f0" vertical={false} />
-                <XAxis dataKey="name" tick={{ fontSize: 11, fill: "#a3a3a3" }} stroke="#e5e5e5" />
-                <YAxis tick={{ fontSize: 11, fill: "#a3a3a3" }} stroke="#e5e5e5" tickFormatter={(v) => `${Math.round(v / 1000)}k`} width={40} />
+                <CartesianGrid stroke={CHART.grid} vertical={false} />
+                <XAxis dataKey="name" tick={CHART_AXIS.tick} stroke={CHART.axis} />
+                <YAxis tick={CHART_AXIS.tick} stroke={CHART.axis} tickFormatter={(v) => `${Math.round(v / 1000)}k`} width={40} />
                 <Tooltip formatter={(v) => money0(Number(v), cur)} />
-                <Bar dataKey="real" name="Realizado" stackId="a" fill="#262626" />
-                <Bar dataKey="proj" name="Projeção" stackId="a" fill="#d4d4d4" />
-                <Line dataKey="budget" name="Orçado" stroke="#b45309" strokeDasharray="4 4" dot={false} />
+                <Bar dataKey="real" name="Realizado" stackId="a" fill={CHART.bar} />
+                <Bar dataKey="proj" name="Projeção" stackId="a" fill={CHART.soft} />
+                <Line dataKey="budget" name="Orçado" stroke={CHART.warn} strokeDasharray="4 4" dot={false} />
               </ComposedChart>
             </ResponsiveContainer>
           </div>
         </Panel>
         <Panel title="Tendências do ano" pad={false}>
           {data.insights.map((ins) => (
-            <div key={`${ins.categoryId}:${ins.kind}`} className="flex flex-col gap-0.5 border-t border-neutral-200 px-3 py-2.5 first:border-t-0">
+            <div key={`${ins.categoryId}:${ins.kind}`} className="flex flex-col gap-0.5 border-t border-stroke-3 px-3 py-2.5 first:border-t-0">
               <span className="text-[12.5px] font-medium">
                 {ins.category ?? "Sem categoria"}:{" "}
                 {ins.kind === "recurring_overrun" ? `passou do orçado em ${ins.overMonths} meses` : ins.kind === "growing" ? `subiu ${Math.round((ins.trend ?? 0) * 100)}% no ano` : `caiu ${Math.round(-(ins.trend ?? 0) * 100)}% no ano`}
               </span>
-              <span className="text-[12px] text-neutral-400">{ins.kind === "recurring_overrun" ? "Vale ajustar o valor orçado." : "Comparação dos últimos 3 meses fechados com os 3 primeiros."}</span>
+              <span className="text-[12px] text-fg-3">{ins.kind === "recurring_overrun" ? "Vale ajustar o valor orçado." : "Comparação dos últimos 3 meses fechados com os 3 primeiros."}</span>
             </div>
           ))}
           {!data.insights.length ? <EmptyRow>Sem estouros recorrentes nem mudanças fortes.</EmptyRow> : null}

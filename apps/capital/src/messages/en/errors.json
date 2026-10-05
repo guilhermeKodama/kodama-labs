@@ -1,0 +1,179 @@
+{
+  "network": "Can't reach the server. Check your connection and try again.",
+  "unknown": "Something went wrong. Try again.",
+  "status": {
+    "400": "That didn't work. Check the details and try again.",
+    "401": "Your session expired. Sign in again.",
+    "403": "You don't have access to this.",
+    "404": "Not found. It may have been deleted.",
+    "409": "This changed while you were editing. Refresh and try again.",
+    "413": "The file is too large.",
+    "422": "Check the highlighted fields.",
+    "429": "Too many attempts. Wait a moment and try again.",
+    "500": "Server error. Try again in a moment."
+  },
+  "validation": "Check the highlighted fields.",
+  "bad_request": "The request could not be read. Refresh the page and try again.",
+  "not_found": "Not found. It may have been deleted.",
+  "duplicate": "A record with the same values already exists.",
+  "reference_conflict": "This conflicts with a related record: it no longer exists or is still in use.",
+  "auth": {
+    "required": "Sign in to continue.",
+    "session_invalid": "Your session expired. Sign in again.",
+    "invalid_credentials": "Wrong email or password.",
+    "email_taken": "There is already an account with this email."
+  },
+  "user": {
+    "not_found": "User not found.",
+    "invalid_timezone": "Unknown time zone: {timezone}.",
+    "base_currency_locked": "The base currency can't change while there {count, plural, one {is # entry} other {are # entries}}: converted amounts would mix two currencies."
+  },
+  "entity": {
+    "not_found": "Entity not found.",
+    "personal_exists": "You already have a personal entity.",
+    "personal_rename": "The personal entity can't be renamed.",
+    "personal_archive": "The personal entity can't be archived.",
+    "kind_mismatch": "This entity is not of the expected type.",
+    "business_required": "Business entries need a business."
+  },
+  "account": {
+    "not_found": "Account not found.",
+    "archived": "The account {name} is archived.",
+    "invalid_day": "Use a day between 1 and 31.",
+    "invalid_credit_limit": "The credit limit must be positive.",
+    "not_credit_card": "This account is not a credit card."
+  },
+  "entry": {
+    "not_found": "Transaction not found. It may have been deleted."
+  },
+  "transfer": {
+    "same_account": "A transfer needs two different accounts.",
+    "from_account_not_found": "Source account not found.",
+    "to_account_not_found": "Destination account not found.",
+    "kind_change": "A transfer can't change type. Delete it and create it again."
+  },
+  "statement": {
+    "not_found": "Statement not found.",
+    "payment_conflict": "This statement already has a different payment linked.",
+    "entry_linked_elsewhere": "This transaction already pays another statement.",
+    "transfer_not_settlement": "A transfer can't settle a card statement.",
+    "settlement_requires_expense": "Only an expense can be marked as a card payment.",
+    "not_settlement": "This transaction is not linked as a card payment."
+  },
+  "category": {
+    "not_found": "Category not found.",
+    "target_not_found": "Target category not found.",
+    "archived": "The category {name} is archived.",
+    "name_required": "Give the category a name.",
+    "name_taken": "There is already a category named {name}.",
+    "system_key_immutable": "A category's system key can't change.",
+    "system_type_locked": "The type of system category {name} can't change.",
+    "type_in_use": "The type can't change: {count, plural, one {# transaction uses} other {# transactions use}} the category.",
+    "system_protected": "System category {name} can't be deleted or merged.",
+    "default_protected": "Default category {name} can't be deleted or merged.",
+    "reassign_self": "Choose a different category to move them to.",
+    "type_mismatch": "Categories of different types can't be combined.",
+    "reassign_budget_clash": "The target category already has {count, plural, one {# budget} other {# budgets}} starting in the same months.",
+    "in_use": "The category is in use ({entries} transactions, {recurring} recurring bills, {budgets} budgets, {rules} rules). Choose a category to move them to.",
+    "merge_self": "A category can't be merged into itself.",
+    "merge_into_archived": "{name} is archived. Unarchive it before merging."
+  },
+  "rule": {
+    "not_found": "Rule not found.",
+    "invalid_regex": "Invalid regular expression."
+  },
+  "view": {
+    "not_found": "View not found.",
+    "builtin_rename": "The built-in view can't be renamed.",
+    "builtin_delete": "The built-in view can't be deleted."
+  },
+  "query": {
+    "unknown_aggregation_field": "This calculation isn't available for this column.",
+    "aggregation_needs_numeric": "This calculation only works on numeric columns.",
+    "invalid_cursor": "The list changed. Refresh the page.",
+    "selection_too_large": "The selection has more than {cap} rows. Narrow the filters."
+  },
+  "undo": {
+    "not_found": "Change not found.",
+    "already_undone": "This change was already undone.",
+    "newer_change": "A newer change touched these rows. Undo that one first.",
+    "unsupported": "This change can't be undone."
+  },
+  "trash": {
+    "operation_recorded_again": "“{description}” is the cash of an investment operation that was recorded again. Restoring it would count it twice.",
+    "operation_edited": "“{description}” is the cash of an investment operation that has since been edited to move no cash. Edit the operation instead."
+  },
+  "budget": {
+    "not_found": "Budget not found.",
+    "negative_amount": "The budget can't be negative.",
+    "clash": "There is already a budget for this category starting that month.",
+    "overview_period_required": "Choose a month or a year."
+  },
+  "recurring": {
+    "not_found": "Recurring bill not found.",
+    "invalid_amount": "The amount must be positive.",
+    "transfer_needs_destination": "A recurring transfer needs a destination account."
+  },
+  "holding": {
+    "not_found": "Holding not found.",
+    "requires_brokerage": "Holdings live in brokerage accounts.",
+    "oversell": "The sale is larger than the position."
+  },
+  "operation": {
+    "not_found": "Operation not found."
+  },
+  "brokerage": {
+    "insufficient_cash": "Not enough cash in the brokerage account."
+  },
+  "portfolio": {
+    "targets_sum": "The targets must add up to 100%."
+  },
+  "rebalance": {
+    "invalid_amount": "The amount must be positive.",
+    "no_targets": "Set the allocation targets first."
+  },
+  "attachment": {
+    "not_found": "Attachment not found.",
+    "file_required": "Choose a file.",
+    "fields_required": "The attachment is missing details.",
+    "owner_not_found": "The record this attachment belongs to was not found.",
+    "kind_not_allowed": "This kind of attachment isn't allowed here.",
+    "too_large": "The file is too large.",
+    "mime_not_allowed": "Files of type {mimeType} aren't allowed."
+  },
+  "currency": {
+    "not_found": "Currency not found.",
+    "base_protected": "The base currency can't be removed.",
+    "in_use": "{code} is used by {accounts} accounts and {entries} entries."
+  },
+  "import": {
+    "not_found": "Import not found.",
+    "already_reverted": "This import was already undone.",
+    "invalid_file": "The file couldn't be read as a bank statement or card bill.",
+    "no_transactions": "No valid transactions in the file.",
+    "bill_without_card": "The bill doesn't match any credit card.",
+    "file_not_found": "File not found. Upload it again.",
+    "file_unreadable": "The file's content couldn't be read.",
+    "transfer_inconsistent": "Transfer {externalId} is inconsistent: its direction or counterparty is wrong.",
+    "transfer_entity_not_owned": "Transfer {externalId} points to an entity you don't own.",
+    "investment_account_not_found": "Investment account not found.",
+    "reconcile_target_not_found": "The transfer to reconcile was not found.",
+    "reconcile_direction_change": "Reconciliation can't change a transfer's direction. Delete it and create it again.",
+    "holding_unresolved": "Investment transaction {externalId} matches no holding."
+  },
+  "assistant": {
+    "conversation_not_found": "Conversation not found.",
+    "plan_not_found": "Plan not found.",
+    "plan_not_proposed": "This plan was already answered.",
+    "plan_changed": "The plan changed since it was shown. Review it before confirming.",
+    "message_required": "Write a message, answer the card or attach a file.",
+    "turn_running": "The assistant is still answering.",
+    "file_required": "Choose a file.",
+    "file_too_large": "The file is too large.",
+    "image_too_large": "The image is too large.",
+    "file_type_unsupported": "Only OFX, CSV, PDF and image files."
+  },
+  "fire": {
+    "no_plan": "Set up the FIRE plan first."
+  }
+}

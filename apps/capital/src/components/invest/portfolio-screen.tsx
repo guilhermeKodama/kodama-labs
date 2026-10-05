@@ -4,11 +4,13 @@ import { useMemo, useState } from "react";
 import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Area, CartesianGrid, ComposedChart, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { api, apiDelete, apiPost } from "@/lib/api";
-import { useNames } from "@/lib/catalog";
+import { api, apiDelete, apiPost } from "@/lib/api/client";
+import { useNames } from "@/lib/api/catalog";
 import { ASSET_CLASS_LABEL, money, money0, monthName, pct } from "@/lib/money";
 import { cn } from "@/lib/utils";
-import { AppFrame, Badge, Btn, EmptyRow, Kpi, KpiStrip, MenuLabel, Panel, Popover, Segmented } from "@/components/shell/chrome";
+import { CHART, CHART_AXIS } from "@/lib/theme/chart-colors";
+import { Badge, Btn, EmptyRow, Kpi, KpiStrip, MenuLabel, Panel, Popover, Segmented } from "@/components/shell/chrome";
+import { Page } from "@/components/shell/page";
 import { HoldingSheet, OperationDialog, TargetsDialog } from "./dialogs";
 import { OP_LABEL, type Allocation, type Holding, type Operation, type PortfolioSummary } from "./types";
 
@@ -154,7 +156,7 @@ export function PortfolioScreen() {
   const brokers = names.accounts.filter((a) => a.type === "brokerage");
 
   return (
-    <AppFrame
+    <Page
       crumbs={["Investimentos", "Carteira"]}
       actions={
         <>
@@ -167,7 +169,7 @@ export function PortfolioScreen() {
     >
       <div className="flex items-center gap-2">
         <Segmented value={scope} options={[{ v: "all", l: "Consolidado" }, { v: "PF", l: "PF" }, { v: "PJ", l: "PJ" }]} onChange={setScope} />
-        <span className="ml-auto text-[12px] text-neutral-400">
+        <span className="ml-auto text-[12px] text-fg-3">
           {holdings.some((h) => h.lastPriceUpdate)
             ? `Cotações de ${new Date(Math.max(...holdings.filter((h) => h.lastPriceUpdate).map((h) => new Date(h.lastPriceUpdate!).getTime()))).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}`
             : "Sem cotações automáticas ainda"}
@@ -192,19 +194,19 @@ export function PortfolioScreen() {
               <div className="h-[180px]">
                 <ResponsiveContainer width="100%" height="100%">
                   <ComposedChart data={series}>
-                    <CartesianGrid stroke="#f0f0f0" vertical={false} />
-                    <XAxis dataKey="name" tick={{ fontSize: 11, fill: "#a3a3a3" }} stroke="#e5e5e5" />
-                    <YAxis tick={{ fontSize: 11, fill: "#a3a3a3" }} stroke="#e5e5e5" tickFormatter={(v) => `${Math.round(v / 1000)}k`} width={44} domain={["auto", "auto"]} />
+                    <CartesianGrid stroke={CHART.grid} vertical={false} />
+                    <XAxis dataKey="name" tick={CHART_AXIS.tick} stroke={CHART.axis} />
+                    <YAxis tick={CHART_AXIS.tick} stroke={CHART.axis} tickFormatter={(v) => `${Math.round(v / 1000)}k`} width={44} domain={["auto", "auto"]} />
                     <Tooltip formatter={(v) => money0(Number(v), cur)} />
-                    <Area dataKey="patrimonio" name="Patrimônio" stroke="#0f766e" fill="#ccfbf1" fillOpacity={0.5} strokeWidth={2} />
-                    <Line dataKey="aportado" name="Aportado" stroke="#a3a3a3" strokeWidth={2} dot={false} />
+                    <Area dataKey="patrimonio" name="Patrimônio" stroke={CHART.accent} fill={CHART.accentSoft} fillOpacity={0.5} strokeWidth={2} />
+                    <Line dataKey="aportado" name="Aportado" stroke={CHART.muted} strokeWidth={2} dot={false} />
                   </ComposedChart>
                 </ResponsiveContainer>
               </div>
-              <p className="text-[11px] text-neutral-400">Patrimônio: foto mensal do plano FIRE · Aportado: custo atual menos os aportes dos meses seguintes</p>
+              <p className="text-[11px] text-fg-3">Patrimônio: foto mensal do plano FIRE · Aportado: custo atual menos os aportes dos meses seguintes</p>
             </>
           ) : (
-            <p className="py-10 text-center text-[12px] text-neutral-400">
+            <p className="py-10 text-center text-[12px] text-fg-3">
               O histórico começa com as fotos mensais do patrimônio{snapshots.data?.length === 1 ? " (já existe uma; a curva aparece a partir da segunda)" : ""}. Use “Registrar mês atual”.
             </p>
           )}
@@ -217,28 +219,28 @@ export function PortfolioScreen() {
                 return (
                   <div key={a.assetClass} className="grid grid-cols-[7.5rem_1fr_44px_48px] items-center gap-3 text-[12.5px]">
                     <span className="truncate">{ASSET_CLASS_LABEL[a.assetClass] ?? a.assetClass}</span>
-                    <span className="relative h-1.5 rounded-full bg-neutral-200">
-                      <span className="absolute inset-y-0 left-0 rounded-full bg-neutral-700" style={{ width: `${Math.min(a.share * 100, 100)}%` }} />
-                      {a.target != null ? <span className="absolute -top-[3px] h-3 w-0.5 bg-neutral-950" style={{ left: `${Math.min(a.target * 100, 100)}%` }} /> : null}
+                    <span className="relative h-1.5 rounded-full bg-fill-2">
+                      <span className="absolute inset-y-0 left-0 rounded-full bg-fg-strong" style={{ width: `${Math.min(a.share * 100, 100)}%` }} />
+                      {a.target != null ? <span className="absolute -top-[3px] h-3 w-0.5 bg-fg-1" style={{ left: `${Math.min(a.target * 100, 100)}%` }} /> : null}
                     </span>
                     <span className="text-right font-mono tabular-nums">{Math.round(a.share * 100)}%</span>
-                    <span className={cn("text-right font-mono text-[11.5px] tabular-nums", diff == null ? "text-neutral-300" : Math.abs(diff) >= 5 ? "text-amber-600" : "text-neutral-400")}>
+                    <span className={cn("text-right font-mono text-[11.5px] tabular-nums", diff == null ? "text-fg-4" : Math.abs(diff) >= 5 ? "text-warn" : "text-fg-3")}>
                       {diff == null ? "sem alvo" : `${diff >= 0 ? "+" : "−"}${Math.abs(Math.round(diff))}pp`}
                     </span>
                   </div>
                 );
               })}
-              <p className="mt-1 text-[11px] text-neutral-400">Barra = atual · traço = alvo · pp = diferença para o alvo</p>
+              <p className="mt-1 text-[11px] text-fg-3">Barra = atual · traço = alvo · pp = diferença para o alvo</p>
             </div>
           ) : (
-            <p className="py-6 text-center text-[12px] text-neutral-400">Sem posições. Registre uma operação para começar.</p>
+            <p className="py-6 text-center text-[12px] text-fg-3">Sem posições. Registre uma operação para começar.</p>
           )}
         </Panel>
       </div>
-      <div className="flex items-center gap-0.5 border-b border-neutral-200">
+      <div className="flex items-center gap-0.5 border-b border-stroke-3">
         {TABS.map(([id, label, glyph]) => (
-          <button key={id} type="button" onClick={() => setTab(id)} className={cn("inline-flex h-[34px] items-center gap-1.5 border-b-2 px-2 text-[12.5px]", tab === id ? "border-neutral-950 font-medium" : "border-transparent text-neutral-400 hover:text-neutral-700")}>
-            <span className="text-[11px] text-neutral-400">{glyph}</span>
+          <button key={id} type="button" onClick={() => setTab(id)} className={cn("inline-flex h-[34px] items-center gap-1.5 border-b-2 px-2 text-[12.5px]", tab === id ? "border-fg-1 font-medium" : "border-transparent text-fg-3 hover:text-fg-strong")}>
+            <span className="text-[11px] text-fg-3">{glyph}</span>
             {label}
           </button>
         ))}
@@ -247,15 +249,15 @@ export function PortfolioScreen() {
           <Popover open={filterOpen} onClose={() => setFilterOpen(false)} align="right" width={240}>
             <MenuLabel>Classe</MenuLabel>
             {Object.entries(ASSET_CLASS_LABEL).map(([value, label]) => (
-              <label key={value} className="flex h-7 items-center gap-2 rounded-[5px] px-2 hover:bg-neutral-100">
-                <input type="checkbox" className="size-3.5 accent-neutral-900" checked={classFilter.includes(value)} onChange={(e) => setClassFilter(e.target.checked ? [...classFilter, value] : classFilter.filter((v) => v !== value))} />
+              <label key={value} className="flex h-7 items-center gap-2 rounded-[5px] px-2 hover:bg-fill-3">
+                <input type="checkbox" className="size-3.5 accent-fg-ink" checked={classFilter.includes(value)} onChange={(e) => setClassFilter(e.target.checked ? [...classFilter, value] : classFilter.filter((v) => v !== value))} />
                 {label}
               </label>
             ))}
             <MenuLabel>Corretora</MenuLabel>
             {brokers.map((b) => (
-              <label key={b.id} className="flex h-7 items-center gap-2 rounded-[5px] px-2 hover:bg-neutral-100">
-                <input type="checkbox" className="size-3.5 accent-neutral-900" checked={brokerFilter.includes(b.id)} onChange={(e) => setBrokerFilter(e.target.checked ? [...brokerFilter, b.id] : brokerFilter.filter((v) => v !== b.id))} />
+              <label key={b.id} className="flex h-7 items-center gap-2 rounded-[5px] px-2 hover:bg-fill-3">
+                <input type="checkbox" className="size-3.5 accent-fg-ink" checked={brokerFilter.includes(b.id)} onChange={(e) => setBrokerFilter(e.target.checked ? [...brokerFilter, b.id] : brokerFilter.filter((v) => v !== b.id))} />
                 {b.name}
               </label>
             ))}
@@ -264,20 +266,20 @@ export function PortfolioScreen() {
         </span>
       </div>
       {tab === "income" || tab === "ops" ? (
-        <div className="overflow-hidden rounded-lg border border-neutral-200">
-          <div className="grid h-[34px] grid-cols-[64px_minmax(0,2fr)_110px_90px_120px_60px] items-center gap-2.5 px-3 text-[11.5px] text-neutral-400">
+        <div className="overflow-hidden rounded-lg border border-stroke-3">
+          <div className="grid h-[34px] grid-cols-[64px_minmax(0,2fr)_110px_90px_120px_60px] items-center gap-2.5 px-3 text-[11.5px] text-fg-3">
             <span>Data</span><span>Ativo</span><span>Tipo</span><span className="text-right">Qtd.</span><span className="text-right">Valor</span><span />
           </div>
           {ops.map((op) => (
-            <div key={op.id} className="grid h-9 grid-cols-[64px_minmax(0,2fr)_110px_90px_120px_60px] items-center gap-2.5 border-t border-neutral-200 px-3 text-[12.5px]">
-              <span className="font-mono text-[11.5px] text-neutral-400">{op.date.slice(5).split("-").reverse().join("/")}/{op.date.slice(2, 4)}</span>
-              <span className="flex min-w-0 gap-2"><span className="font-mono text-[12px] font-semibold">{op.ticker ?? "—"}</span><span className="truncate text-neutral-400">{op.name}</span></span>
-              <span className="text-neutral-600">{OP_LABEL[op.type]}</span>
+            <div key={op.id} className="grid h-9 grid-cols-[64px_minmax(0,2fr)_110px_90px_120px_60px] items-center gap-2.5 border-t border-stroke-3 px-3 text-[12.5px]">
+              <span className="font-mono text-[11.5px] text-fg-3">{op.date.slice(5).split("-").reverse().join("/")}/{op.date.slice(2, 4)}</span>
+              <span className="flex min-w-0 gap-2"><span className="font-mono text-[12px] font-semibold">{op.ticker ?? "—"}</span><span className="truncate text-fg-3">{op.name}</span></span>
+              <span className="text-fg-2">{OP_LABEL[op.type]}</span>
               <span className="text-right font-mono tabular-nums">{op.quantity ?? ""}</span>
-              <span className={cn("text-right font-mono tabular-nums", (op.type === "dividend" || op.type === "yield_payment" || op.type === "sell") && "text-emerald-700")}>{money(op.totalAmount, cur)}</span>
+              <span className={cn("text-right font-mono tabular-nums", (op.type === "dividend" || op.type === "yield_payment" || op.type === "sell") && "text-pos")}>{money(op.totalAmount, cur)}</span>
               <button
                 type="button"
-                className="text-right text-[11px] text-neutral-400 hover:text-red-600"
+                className="text-right text-[11px] text-fg-3 hover:text-neg"
                 onClick={() => {
                   if (!window.confirm("Excluir esta operação e o lançamento de caixa dela?")) return;
                   void apiDelete(`/api/v2/investment-operations/${op.id}`)
@@ -291,15 +293,15 @@ export function PortfolioScreen() {
           ))}
           {!ops.length ? <EmptyRow>{opsQuery.isFetching ? "Carregando…" : tab === "income" ? "Nenhum provento nos últimos 12 meses." : "Nenhuma operação registrada."}</EmptyRow> : null}
           {tab === "income" && ops.length ? (
-            <div className="flex h-[34px] items-center border-t border-neutral-300 bg-neutral-50 px-3 text-[12px] font-semibold">
+            <div className="flex h-[34px] items-center border-t border-stroke-1 bg-fill-4 px-3 text-[12px] font-semibold">
               <span>Total 12m</span>
               <span className="ml-auto font-mono tabular-nums">{money(ops.reduce((s, op) => s + op.totalAmount, 0), cur)}</span>
             </div>
           ) : null}
         </div>
       ) : (
-        <div className="overflow-hidden rounded-lg border border-neutral-200">
-          <div className="grid h-[34px] items-center gap-2.5 px-3 text-[11.5px] text-neutral-400" style={{ gridTemplateColumns: COLS }}>
+        <div className="overflow-hidden rounded-lg border border-stroke-3">
+          <div className="grid h-[34px] items-center gap-2.5 px-3 text-[11.5px] text-fg-3" style={{ gridTemplateColumns: COLS }}>
             <span>Ativo</span><span>Classe</span><span>Corretora</span><span>Entidade</span>
             <span className="text-right">Valor</span><span className="text-right">% cart.</span><span className="text-right">Result.</span>
           </div>
@@ -309,28 +311,28 @@ export function PortfolioScreen() {
             return (
               <div key={key || "all"}>
                 {key ? (
-                  <div className="flex h-8 items-center gap-2 border-t border-neutral-200 bg-neutral-50 px-3 text-[12px]">
-                    <span className="text-neutral-400">▾</span>
+                  <div className="flex h-8 items-center gap-2 border-t border-stroke-3 bg-fill-4 px-3 text-[12px]">
+                    <span className="text-fg-3">▾</span>
                     <span className="font-semibold">{key}</span>
-                    <span className="text-neutral-400">{items.length}</span>
-                    {target != null ? <span className="ml-auto text-[11.5px] text-neutral-400">alvo {pct(target, 0)}</span> : <span className="ml-auto" />}
+                    <span className="text-fg-3">{items.length}</span>
+                    {target != null ? <span className="ml-auto text-[11.5px] text-fg-3">alvo {pct(target, 0)}</span> : <span className="ml-auto" />}
                     <span className="w-[120px] text-right font-mono font-semibold tabular-nums">{money0(value, cur)}</span>
-                    <span className="w-[64px] text-right font-mono text-neutral-500 tabular-nums">{total ? pct(value / total, 0) : ""}</span>
+                    <span className="w-[64px] text-right font-mono text-fg-muted tabular-nums">{total ? pct(value / total, 0) : ""}</span>
                     <span className="w-[70px]" />
                   </div>
                 ) : null}
                 {items.map((h) => (
-                  <button key={h.id} type="button" onClick={() => setDetail(h)} className="grid h-9 w-full items-center gap-2.5 border-t border-neutral-200 px-3 text-left text-[12.5px] hover:bg-neutral-50" style={{ gridTemplateColumns: COLS }}>
+                  <button key={h.id} type="button" onClick={() => setDetail(h)} className="grid h-9 w-full items-center gap-2.5 border-t border-stroke-3 px-3 text-left text-[12.5px] hover:bg-fill-4" style={{ gridTemplateColumns: COLS }}>
                     <span className="flex min-w-0 items-baseline gap-2">
                       <span className="font-mono text-[12px] font-semibold">{h.ticker ?? "—"}</span>
-                      <span className="truncate text-[12px] text-neutral-400">{h.name}</span>
+                      <span className="truncate text-[12px] text-fg-3">{h.name}</span>
                     </span>
-                    <span className="truncate text-neutral-600">{ASSET_CLASS_LABEL[h.assetClass] ?? h.assetClass}</span>
-                    <span className="truncate text-neutral-600">{h.accountName}</span>
+                    <span className="truncate text-fg-2">{ASSET_CLASS_LABEL[h.assetClass] ?? h.assetClass}</span>
+                    <span className="truncate text-fg-2">{h.accountName}</span>
                     <span className="min-w-0"><Badge>{names.entity.get(h.entityId) ?? "—"}</Badge></span>
                     <span className="text-right font-mono tabular-nums">{money0(h.marketValue, h.currency)}</span>
-                    <span className="text-right font-mono text-neutral-500 tabular-nums">{total ? pct(h.marketValue / total) : ""}</span>
-                    <span className={cn("text-right font-mono tabular-nums", h.unrealizedGainPercent == null || h.unrealizedGainPercent === 0 ? "text-neutral-400" : h.unrealizedGainPercent > 0 ? "text-emerald-700" : "text-red-600")}>
+                    <span className="text-right font-mono text-fg-muted tabular-nums">{total ? pct(h.marketValue / total) : ""}</span>
+                    <span className={cn("text-right font-mono tabular-nums", h.unrealizedGainPercent == null || h.unrealizedGainPercent === 0 ? "text-fg-3" : h.unrealizedGainPercent > 0 ? "text-pos" : "text-neg")}>
                       {h.unrealizedGainPercent == null || h.unrealizedGainPercent === 0 ? "—" : `${h.unrealizedGainPercent > 0 ? "+" : "−"}${Math.abs(h.unrealizedGainPercent * 100).toFixed(1)}%`}
                     </span>
                   </button>
@@ -343,6 +345,6 @@ export function PortfolioScreen() {
       )}
       {opDialog !== null ? <OperationDialog names={names} holdings={holdingsQuery.data ?? []} initialHoldingId={opDialog || undefined} onClose={() => setOpDialog(null)} /> : null}
       {targets ? <TargetsDialog onClose={() => setTargets(false)} /> : null}
-    </AppFrame>
+    </Page>
   );
 }
