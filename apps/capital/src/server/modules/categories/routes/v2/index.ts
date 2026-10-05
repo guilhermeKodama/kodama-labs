@@ -49,7 +49,7 @@ const deleteRouteDef = createRoute({
   method: "delete",
   path: "/v2/categories/{id}",
   tags,
-  summary: "Delete a category, optionally reassigning everything that uses it",
+  summary: "Delete a category, optionally reassigning everything that uses it. Undoable (batchId).",
   request: { params: idParams, query: z.object({ reassignTo: z.string().optional() }) },
   responses: v2Responses,
 });
@@ -57,7 +57,7 @@ const mergeRoute = createRoute({
   method: "post",
   path: "/v2/categories/merge",
   tags,
-  summary: "Move everything from one category into another and delete the source",
+  summary: "Move everything from one category into another and delete the source. Undoable (batchId).",
   request: jsonBody(z.object({ fromId: z.string(), toId: z.string() })),
   responses: v2Responses,
 });
@@ -95,7 +95,10 @@ export const v2Categories = createRouter()
     };
   }))
   .openapi(createRouteDef, v2Handler(createRouteDef, async (c, userId) => serializeCategory(await createCategory(userId, c.req.valid("json"), prisma))))
-  .openapi(patchRoute, v2Handler(patchRoute, async (c, userId) => serializeCategory(await updateCategory(userId, c.req.valid("param").id, c.req.valid("json"), prisma))))
+  .openapi(patchRoute, v2Handler(patchRoute, async (c, userId) => {
+    const category = await updateCategory(userId, c.req.valid("param").id, c.req.valid("json"), prisma);
+    return { ...serializeCategory(category), batchId: category.batchId };
+  }))
   .openapi(usageRoute, v2Handler(usageRoute, async (c, userId) => {
     const { id } = c.req.valid("param");
     await getOwnedCategory(userId, id, prisma);

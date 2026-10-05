@@ -41,10 +41,13 @@ describe("MCP bulk create transactions", () => {
     expect(r.created).toHaveLength(2);
     expect(r.errors).toEqual([]);
     const rows = await entries();
-    expect(rows.map((e) => [e.accountId, Number(e.amount), e.kind])).toEqual([
-      [f.pfChecking, 50.75, "income"],
-      [f.pjChecking, -80, "expense"],
-    ]);
+    // Both rows share a date, so the order they come back in is not fixed.
+    expect(rows.map((e) => [e.accountId, Number(e.amount), e.kind]).sort()).toEqual(
+      [
+        [f.pfChecking, 50.75, "income"],
+        [f.pjChecking, -80, "expense"],
+      ].sort()
+    );
     expect(await prisma.mutationBatch.count({ where: { userId: USER } })).toBe(1);
   });
 

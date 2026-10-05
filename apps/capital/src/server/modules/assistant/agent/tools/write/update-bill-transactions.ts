@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { defineTool } from "../registry";
 import { updateEntry } from "@capital/server/modules/ledger/services/entries";
+import { inTransaction, recordMutation, type MutationRecordInput } from "@capital/server/modules/ledger/services/mutations";
 import { learnRule } from "@capital/server/modules/ledger/services/rules";
 import { categoryResolver } from "@capital/server/modules/mcp/lib/ledger-adapter";
 
@@ -25,8 +26,13 @@ export const updateBillTransactions = defineTool({
         });
         if (!entry) throw new Error("Bill transaction not found or access denied");
         const category = resolver.resolve(update.category, "expense", entry.categoryId);
-        await updateEntry(ctx.userId, entry.id, { categoryId: category.id }, ctx.db);
-        await learnRule(ctx.userId, entry.description, category.id, "manual", ctx.db);
+        // The recategorization and the rule it learns are one undo batch.
+        await inTransaction(ctx.db, async (tx) => {
+          const records: MutationRecordInput[] = [];
+          await updateEntry(ctx.userId, entry.id, { categoryId: category.id }, tx, { collect: records });
+          await learnRule(ctx.userId, entry.description, category.id, "manual", tx, { collect: records });
+          if (records.length) await recordMutation(tx, ctx.userId, "update", entry.description, records);
+        });
         results.push({ billTransactionId: entry.id, success: true, category: category.name });
       } catch (error) {
         results.push({ billTransactionId: update.billTransactionId, success: false, error: error instanceof Error ? error.message : "Unknown error" });

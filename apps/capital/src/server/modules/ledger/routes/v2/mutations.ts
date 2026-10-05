@@ -10,7 +10,7 @@ const batchesRoute = createRoute({
   method: "get",
   path: "/v2/mutations",
   tags,
-  summary: "Recent changes (undo history); undoable=true keeps the ones that can be undone now, newest first (⌘Z takes the first)",
+  summary: "Recent changes (undo history), each with its source (user, import, assistant, mcp, system); undoable=true keeps the user-facing ones that can be undone now, newest first (⌘Z takes the first; system batches such as cron bookings are never offered)",
   request: { query: z.object({ undoable: queryFlag.optional(), limit: z.coerce.number().int().min(1).max(200).optional() }) },
   responses: v2Responses,
 });

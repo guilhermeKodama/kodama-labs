@@ -21,6 +21,7 @@ type DelegateName =
   | "account"
   | "category"
   | "ledgerEntry"
+  | "attachment"
   | "transferGroup"
   | "cardStatement"
   | "installmentPlan"
@@ -88,12 +89,20 @@ const MODELS = {
     userScoped: true,
     removable: { ledgerEntries: { none: {} }, budgets: { none: {} }, categorizationRules: { none: {} }, recurringRules: { none: {} } },
   },
-  LedgerEntry: { delegate: "ledgerEntry", owned: byUser, userScoped: true, json: ["metadata"] },
-  TransferGroup: { delegate: "transferGroup", owned: byUser, userScoped: true },
+  // Removing an entry, transfer or recurring rule cascades into its attachments, which uploads do not record (the files
+  // would be lost): one the batch created stays while it has any.
+  LedgerEntry: { delegate: "ledgerEntry", owned: byUser, userScoped: true, json: ["metadata"], removable: { attachments: { none: {} } } },
+  TransferGroup: { delegate: "transferGroup", owned: byUser, userScoped: true, removable: { legs: { none: {} }, attachments: { none: {} } } },
+  // Bills move from a recurring rule to the occurrence that books them; undo moves them back before that occurrence goes.
+  Attachment: {
+    delegate: "attachment",
+    owned: (id, userId) => ({ id, OR: [{ ledgerEntry: { userId } }, { transferGroup: { userId } }, { recurringRule: { userId } }] }),
+    userScoped: false,
+  },
   // Statements are shared by every purchase of the month: one the batch created stays while entries still use it.
   CardStatement: { delegate: "cardStatement", owned: (id, userId) => ({ id, account: { userId } }), userScoped: false, removable: { entries: { none: {} } } },
   InstallmentPlan: { delegate: "installmentPlan", owned: byUser, userScoped: true },
-  RecurringRule: { delegate: "recurringRule", owned: byUser, userScoped: true, json: ["reminders"] },
+  RecurringRule: { delegate: "recurringRule", owned: byUser, userScoped: true, json: ["reminders"], removable: { attachments: { none: {} } } },
   // A holding the batch created (a buy of a new asset) goes once its operations are gone.
   InvestmentHolding: {
     delegate: "investmentHolding",
@@ -132,6 +141,7 @@ export const RESTORE_ORDER: readonly MutationModel[] = [
   "TransferGroup",
   "CardStatement",
   "LedgerEntry",
+  "Attachment",
   "InvestmentHolding",
   "InvestmentOperation",
 ];
@@ -278,16 +288,19 @@ async function restoreRow(tx: DbClient, model: MutationModel, id: string, userId
 }
 
 /**
- * The newest snapshot of a `model` row that a live (not undone) batch of
- * the user deleted outright, among those whose `field` held `value`; e.g.
- * the operation a trashed cash leg belonged to.
+ * The newest record, in a live (not undone) batch of the user, of a `model`
+ * row whose `field` held `value` before that batch: e.g. what last happened
+ * to the operation a trashed cash leg belonged to (after = null: it was
+ * deleted outright).
  */
-export async function lastDeletedSnapshot(db: DbClient, userId: string, model: MutationModel, field: string, value: string) {
+export async function lastRecordOf(db: DbClient, userId: string, model: MutationModel, field: string, value: string) {
   const record = await db.mutationRecord.findFirst({
-    where: { model, after: { equals: Prisma.DbNull }, before: { path: [field], equals: value }, batch: { userId, undoneAt: null } },
+    where: { model, before: { path: [field], equals: value }, batch: { userId, undoneAt: null } },
     orderBy: { batch: { createdAt: "desc" } },
   });
-  return record ? { recordId: record.recordId, before: record.before as Record<string, unknown> } : null;
+  return record
+    ? { recordId: record.recordId, before: record.before as Record<string, unknown>, after: record.after as Record<string, unknown> | null }
+    : null;
 }
 
 /** Re-creates a row deleted outright from its snapshot, under its old id (and the user's, on user-scoped models). */
@@ -310,12 +323,15 @@ async function reopenRevertedImports(tx: DbClient, userId: string, records: Muta
 }
 
 /**
- * Reverts one batch: rows the batch created are removed (children first),
- * then changed or soft-deleted rows get back the `before` of the columns
- * the batch changed, and rows it deleted outright are re-created with
- * their ids (parents first). Holdings whose operations moved are
- * recalculated. Batches are undone newest-first per row, so undoing an
- * older batch after a newer one that touched the same row is rejected.
+ * Reverts one batch in three passes. Rows it deleted outright are
+ * re-created with their ids (parents first); then rows it changed or
+ * soft-deleted get back the `before` of the columns it changed, so nothing
+ * points at a row the batch created any more (a bill moved onto a booked
+ * occurrence goes back to its rule); last, rows it created are removed
+ * (children first), when their `removable` guard allows. Holdings whose
+ * operations moved are recalculated. Batches are undone newest-first per
+ * row, so undoing an older batch after a newer one that touched the same
+ * row is rejected.
  */
 export async function undoBatch(userId: string, batchId: string, db: DbClient) {
   return inTransaction(db, async (tx) => {
@@ -337,16 +353,19 @@ export async function undoBatch(userId: string, batchId: string, db: DbClient) {
     const newestFirst = [...batch.records].reverse();
     const recordsOf = (model: MutationModel) => newestFirst.filter((r) => r.model === model);
 
-    for (const model of REMOVE_ORDER) {
-      for (const rec of recordsOf(model).filter((r) => r.before === null)) {
-        await delegateOf(tx, model).deleteMany({ where: { ...spec(model).owned(rec.recordId, userId), ...spec(model).removable } });
+    for (const model of RESTORE_ORDER) {
+      for (const rec of recordsOf(model).filter((r) => r.before !== null && r.after === null)) {
+        await recreateRow(tx, model, rec.recordId, userId, rec.before as Record<string, unknown>);
       }
     }
     for (const model of RESTORE_ORDER) {
-      for (const rec of recordsOf(model).filter((r) => r.before !== null)) {
-        const before = rec.before as Record<string, unknown>;
-        if (rec.after === null) await recreateRow(tx, model, rec.recordId, userId, before);
-        else await restoreRow(tx, model, rec.recordId, userId, before, rec.after as Record<string, unknown>);
+      for (const rec of recordsOf(model).filter((r) => r.before !== null && r.after !== null)) {
+        await restoreRow(tx, model, rec.recordId, userId, rec.before as Record<string, unknown>, rec.after as Record<string, unknown>);
+      }
+    }
+    for (const model of REMOVE_ORDER) {
+      for (const rec of recordsOf(model).filter((r) => r.before === null)) {
+        await delegateOf(tx, model).deleteMany({ where: { ...spec(model).owned(rec.recordId, userId), ...spec(model).removable } });
       }
     }
     for (const model of RESTORE_ORDER) {
@@ -377,7 +396,12 @@ export interface BatchListItem {
   createdAt: Date;
 }
 
-/** Recent batches, newest first; `undoable` keeps the ones undoBatch accepts now (⌘Z takes the first). */
+/**
+ * Recent batches, newest first. `undoable` keeps the ones undoBatch accepts
+ * now that the user made (⌘Z takes the first): the system's own batches,
+ * such as recurring occurrences the cron booked, are listed but never
+ * offered to ⌘Z.
+ */
 export async function listBatches(userId: string, db: DbClient, opts: { limit?: number; undoable?: boolean } = {}): Promise<BatchListItem[]> {
   const limit = opts.limit ?? 50;
   return db.$queryRaw<BatchListItem[]>`
@@ -393,7 +417,7 @@ export async function listBatches(userId: string, db: DbClient, opts: { limit?: 
       FROM mutation_batches b
       WHERE b."userId" = ${userId}
     ) x
-    ${opts.undoable ? Prisma.sql`WHERE x.undoable` : Prisma.empty}
+    ${opts.undoable ? Prisma.sql`WHERE x.undoable AND x.source <> 'system'` : Prisma.empty}
     ORDER BY x."createdAt" DESC
     LIMIT ${limit}`;
 }

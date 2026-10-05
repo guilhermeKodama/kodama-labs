@@ -2,7 +2,7 @@ import type { DbClient } from "@capital/server/lib/prisma";
 import type { CategorizationRule } from "@/generated/prisma";
 import { normalizeDescription } from "@capital/server/modules/bank-statements/utils";
 import { LedgerError } from "../lib/errors";
-import { snapshot, type MutationRecordInput } from "./mutations";
+import { inTransaction, recordMutation, snapshot, type MutationRecordInput } from "./mutations";
 
 export const RULE_MATCH_TYPES = ["equals", "contains", "regex"] as const;
 export type RuleMatchType = (typeof RULE_MATCH_TYPES)[number];
@@ -82,6 +82,7 @@ export interface RuleInput {
   entityId?: string | null;
 }
 
+/** Each write below is one undo batch (batchId). */
 export async function createRule(userId: string, input: RuleInput, db: DbClient) {
   await assertCategory(userId, input.categoryId, db);
   if (input.matchType === "regex") {
@@ -92,21 +93,39 @@ export async function createRule(userId: string, input: RuleInput, db: DbClient)
     }
   }
   const pattern = input.matchType === "equals" ? normalizeDescription(input.pattern) : input.pattern;
-  return db.categorizationRule.create({
-    data: { userId, matchType: input.matchType, pattern, categoryId: input.categoryId, entityId: input.entityId ?? null, source: "manual" },
+  return inTransaction(db, async (tx) => {
+    const rule = await tx.categorizationRule.create({
+      data: { userId, matchType: input.matchType, pattern, categoryId: input.categoryId, entityId: input.entityId ?? null, source: "manual" },
+    });
+    const batchId = await recordMutation(tx, userId, "create", rule.pattern, [{ model: "CategorizationRule", recordId: rule.id, before: null, after: snapshot(rule) }]);
+    return { ...rule, batchId };
   });
 }
 
 export async function updateRule(userId: string, ruleId: string, patch: Partial<RuleInput>, db: DbClient) {
-  const rule = await db.categorizationRule.findFirst({ where: { id: ruleId, userId } });
-  if (!rule) throw new LedgerError("Rule not found", 404, { code: "rule.not_found" });
-  if (patch.categoryId) await assertCategory(userId, patch.categoryId, db);
-  return db.categorizationRule.update({ where: { id: ruleId }, data: patch });
+  return inTransaction(db, async (tx) => {
+    const rule = await tx.categorizationRule.findFirst({ where: { id: ruleId, userId } });
+    if (!rule) throw new LedgerError("Rule not found", 404, { code: "rule.not_found" });
+    if (patch.categoryId) await assertCategory(userId, patch.categoryId, tx);
+    const updated = await tx.categorizationRule.update({ where: { id: ruleId }, data: patch });
+    const batchId = await recordMutation(tx, userId, "update", updated.pattern, [{ model: "CategorizationRule", recordId: rule.id, before: snapshot(rule), after: snapshot(updated) }]);
+    return { ...updated, batchId };
+  });
 }
 
+/**
+ * Deletes a rule outright; undo re-creates it under its id. The entries it
+ * categorized keep their category, but no longer name the rule (they are
+ * not part of the batch, so undoing older changes to them stays possible).
+ */
 export async function deleteRule(userId: string, ruleId: string, db: DbClient) {
-  const { count } = await db.categorizationRule.deleteMany({ where: { id: ruleId, userId } });
-  if (!count) throw new LedgerError("Rule not found", 404, { code: "rule.not_found" });
+  return inTransaction(db, async (tx) => {
+    const rule = await tx.categorizationRule.findFirst({ where: { id: ruleId, userId } });
+    if (!rule) throw new LedgerError("Rule not found", 404, { code: "rule.not_found" });
+    await tx.categorizationRule.delete({ where: { id: rule.id } });
+    const batchId = await recordMutation(tx, userId, "delete", rule.pattern, [{ model: "CategorizationRule", recordId: rule.id, before: snapshot(rule), after: null }]);
+    return { batchId };
+  });
 }
 
 async function assertCategory(userId: string, categoryId: string, db: DbClient) {

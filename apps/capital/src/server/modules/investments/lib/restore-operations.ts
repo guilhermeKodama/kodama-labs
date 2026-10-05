@@ -1,7 +1,7 @@
 import type { DbClient } from "@capital/server/lib/prisma";
 import type { LedgerEntry } from "@/generated/prisma";
 import { LedgerError } from "@capital/server/modules/ledger/lib/errors";
-import { lastDeletedSnapshot, recreateRecord, snapshot, type MutationRecordInput } from "@capital/server/modules/ledger/services/mutations";
+import { lastRecordOf, recreateRecord, snapshot, type MutationRecordInput } from "@capital/server/modules/ledger/services/mutations";
 import { recalculateHolding } from "./holding-position";
 
 /**
@@ -10,8 +10,10 @@ import { recalculateHolding } from "./holding-position";
  * restored on its own would move broker cash with no operation behind it,
  * so the operation is re-created from the snapshot its delete recorded and
  * the holding recalculated. Re-created operations are appended to `records`
- * (undoing the restore removes them again). A leg whose operation still
- * exists, or left no snapshot, comes back alone.
+ * (undoing the restore removes them again). A leg trashed by an edit that
+ * made its operation stop moving cash is refused: the operation is still
+ * there and would not count it. A leg whose operation still owns it, or
+ * that no recorded change explains, comes back alone.
  */
 export async function restoreLegOperations(tx: DbClient, userId: string, legs: LedgerEntry[], records: MutationRecordInput[]) {
   const cashLegs = legs.filter((l) => l.kind === "investment");
@@ -22,12 +24,22 @@ export async function restoreLegOperations(tx: DbClient, userId: string, legs: L
   const holdings = new Set<string>();
   let restored = 0;
   for (const leg of cashLegs.filter((l) => !linked.has(l.id))) {
-    const deleted = await lastDeletedSnapshot(tx, userId, "InvestmentOperation", "cashEntryId", leg.id);
-    if (!deleted) continue;
-    const snap = deleted.before;
+    const last = await lastRecordOf(tx, userId, "InvestmentOperation", "cashEntryId", leg.id);
+    if (!last) continue;
+    const exists = !!(await tx.investmentOperation.count({ where: { id: last.recordId } }));
+    if (last.after !== null) {
+      if (exists && last.after.cashEntryId !== leg.id) {
+        throw new LedgerError(`"${leg.description}" is the cash of an investment operation that was edited since to move no cash; edit the operation instead`, 409, {
+          code: "trash.operation_edited",
+          params: { description: leg.description },
+        });
+      }
+      continue;
+    }
+    const snap = last.before;
     const holdingId = snap.holdingId as string;
     if (!(await tx.investmentHolding.count({ where: { id: holdingId, account: { userId } } }))) continue;
-    if (await tx.investmentOperation.count({ where: { id: deleted.recordId } })) continue;
+    if (exists) continue;
     // The same broker note imported again after the revert: its operation already counts this cash.
     if (snap.externalId && (await tx.investmentOperation.count({ where: { holdingId, externalId: snap.externalId as string } }))) {
       throw new LedgerError(`"${leg.description}" is the cash of an investment operation that was recorded again; restoring it would count it twice`, 409, {
@@ -42,8 +54,8 @@ export async function restoreLegOperations(tx: DbClient, userId: string, legs: L
       !!(await tx.transferGroup.count({ where: { id: fundingGroupId, userId } })) &&
       !(await tx.investmentOperation.count({ where: { fundingGroupId } }));
 
-    await recreateRecord(tx, userId, "InvestmentOperation", deleted.recordId, { ...snap, fundingGroupId: fundingFree ? fundingGroupId : null });
-    const op = await tx.investmentOperation.findUniqueOrThrow({ where: { id: deleted.recordId } });
+    await recreateRecord(tx, userId, "InvestmentOperation", last.recordId, { ...snap, fundingGroupId: fundingFree ? fundingGroupId : null });
+    const op = await tx.investmentOperation.findUniqueOrThrow({ where: { id: last.recordId } });
     records.push({ model: "InvestmentOperation", recordId: op.id, before: null, after: snapshot(op) });
     holdings.add(holdingId);
     restored++;

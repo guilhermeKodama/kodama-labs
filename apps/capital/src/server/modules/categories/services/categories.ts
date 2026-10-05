@@ -1,7 +1,7 @@
 import { Prisma, type Category, type TransactionType } from "@/generated/prisma";
 import type { DbClient } from "@capital/server/lib/prisma";
 import { LedgerError } from "@capital/server/modules/ledger/lib/errors";
-import { inTransaction } from "@capital/server/modules/ledger/services/mutations";
+import { inTransaction, recordMutation, snapshot, type MutationRecordInput } from "@capital/server/modules/ledger/services/mutations";
 
 export interface CategoryInput {
   name: string;
@@ -58,37 +58,41 @@ export async function categoryUsage(userId: string, categoryId: string, db: DbCl
 /**
  * Rename, recolor, archive or retype. Names are a label only (records point
  * at the id), so a rename touches one row. A system category keeps its type;
- * any category keeps its type while entries use it.
+ * any category keeps its type while entries use it. One undo batch.
  */
 export async function updateCategory(userId: string, id: string, patch: CategoryPatch & { systemKey?: unknown }, db: DbClient) {
-  const existing = await getOwnedCategory(userId, id, db);
-  if ("systemKey" in patch) throw new LedgerError("Cannot modify systemKey - it's a stable identifier", 422, { code: "category.system_key_immutable" });
-  const name = patch.name?.trim();
-  if (name && name !== existing.name) {
-    const type = patch.type ?? existing.type;
-    const clash = await db.category.findFirst({ where: { userId, name, type, NOT: { id } } });
-    if (clash) {
-      throw new LedgerError(`A category named '${name}' already exists for type ${type}. Use merge_categories to merge '${existing.name}' into '${name}' instead.`, 409, { code: "category.name_taken", params: { name, type } });
+  return inTransaction(db, async (tx) => {
+    const existing = await getOwnedCategory(userId, id, tx);
+    if ("systemKey" in patch) throw new LedgerError("Cannot modify systemKey - it's a stable identifier", 422, { code: "category.system_key_immutable" });
+    const name = patch.name?.trim();
+    if (name && name !== existing.name) {
+      const type = patch.type ?? existing.type;
+      const clash = await tx.category.findFirst({ where: { userId, name, type, NOT: { id } } });
+      if (clash) {
+        throw new LedgerError(`A category named '${name}' already exists for type ${type}. Use merge_categories to merge '${existing.name}' into '${name}' instead.`, 409, { code: "category.name_taken", params: { name, type } });
+      }
     }
-  }
-  if (patch.type && patch.type !== existing.type) {
-    if (existing.systemKey) {
-      throw new LedgerError(`Cannot change type of system category '${existing.name}' (systemKey: ${existing.systemKey})`, 422, { code: "category.system_type_locked", params: { name: existing.name } });
+    if (patch.type && patch.type !== existing.type) {
+      if (existing.systemKey) {
+        throw new LedgerError(`Cannot change type of system category '${existing.name}' (systemKey: ${existing.systemKey})`, 422, { code: "category.system_type_locked", params: { name: existing.name } });
+      }
+      const used = await tx.ledgerEntry.count({ where: { userId, categoryId: id, deletedAt: null } });
+      if (used > 0) {
+        throw new LedgerError(`Cannot change category type when ${used} transaction(s) use it. Transactions must all be consistent with the new type.`, 422, { code: "category.type_in_use", params: { count: used } });
+      }
     }
-    const used = await db.ledgerEntry.count({ where: { userId, categoryId: id, deletedAt: null } });
-    if (used > 0) {
-      throw new LedgerError(`Cannot change category type when ${used} transaction(s) use it. Transactions must all be consistent with the new type.`, 422, { code: "category.type_in_use", params: { count: used } });
-    }
-  }
-  return db.category.update({
-    where: { id },
-    data: {
-      ...(name && { name }),
-      ...(patch.type && { type: patch.type }),
-      ...(patch.color !== undefined && { color: patch.color }),
-      ...(patch.icon !== undefined && { icon: patch.icon }),
-      ...(patch.isArchived !== undefined && { isArchived: patch.isArchived }),
-    },
+    const updated = await tx.category.update({
+      where: { id },
+      data: {
+        ...(name && { name }),
+        ...(patch.type && { type: patch.type }),
+        ...(patch.color !== undefined && { color: patch.color }),
+        ...(patch.icon !== undefined && { icon: patch.icon }),
+        ...(patch.isArchived !== undefined && { isArchived: patch.isArchived }),
+      },
+    });
+    const batchId = await recordMutation(tx, userId, "update", existing.name, [{ model: "Category", recordId: id, before: snapshot(existing), after: snapshot(updated) }]);
+    return { ...updated, batchId };
   });
 }
 
@@ -110,9 +114,13 @@ function assertRemovable(c: Category, verb: "delete" | "merge from") {
   }
 }
 
-/** Point everything at `from` to `to`. Budgets clash on (entity, category, effectiveFrom). */
-async function reassign(userId: string, from: Category, to: Category, db: DbClient) {
-  const budgets = await db.budget.findMany({ where: { userId, categoryId: from.id }, select: { entityId: true, effectiveFrom: true } });
+/**
+ * Point everything at `from` to `to`, recording each row it moves (and the
+ * duplicate rules it drops) so undo points them back. Budgets clash on
+ * (entity, category, effectiveFrom).
+ */
+async function reassign(userId: string, from: Category, to: Category, db: DbClient, records: MutationRecordInput[]) {
+  const budgets = await db.budget.findMany({ where: { userId, categoryId: from.id } });
   const conflicts: string[] = [];
   for (const b of budgets) {
     const clash = await db.budget.findFirst({ where: { userId, categoryId: to.id, entityId: b.entityId, effectiveFrom: b.effectiveFrom } });
@@ -121,37 +129,49 @@ async function reassign(userId: string, from: Category, to: Category, db: DbClie
   if (conflicts.length) {
     throw new LedgerError(`Cannot reassign budgets: target category already has budgets for: ${conflicts.join(", ")}. Delete or merge those budgets first.`, 409, { code: "category.reassign_budget_clash", params: { count: conflicts.length } });
   }
-  const [entries, recurring, budgetsMoved] = await Promise.all([
-    db.ledgerEntry.updateMany({ where: { userId, categoryId: from.id }, data: { categoryId: to.id } }),
-    db.recurringRule.updateMany({ where: { userId, categoryId: from.id }, data: { categoryId: to.id } }),
-    db.budget.updateMany({ where: { userId, categoryId: from.id }, data: { categoryId: to.id } }),
+  const [entries, recurring] = await Promise.all([
+    db.ledgerEntry.findMany({ where: { userId, categoryId: from.id } }),
+    db.recurringRule.findMany({ where: { userId, categoryId: from.id } }),
   ]);
+  await Promise.all([
+    db.ledgerEntry.updateMany({ where: { id: { in: entries.map((e) => e.id) } }, data: { categoryId: to.id } }),
+    db.recurringRule.updateMany({ where: { id: { in: recurring.map((r) => r.id) } }, data: { categoryId: to.id } }),
+    db.budget.updateMany({ where: { id: { in: budgets.map((b) => b.id) } }, data: { categoryId: to.id } }),
+  ]);
+  for (const e of entries) records.push({ model: "LedgerEntry", recordId: e.id, before: snapshot(e), after: snapshot({ ...e, categoryId: to.id }) });
+  for (const r of recurring) records.push({ model: "RecurringRule", recordId: r.id, before: snapshot(r), after: snapshot({ ...r, categoryId: to.id }) });
+  for (const b of budgets) records.push({ model: "Budget", recordId: b.id, before: snapshot(b), after: snapshot({ ...b, categoryId: to.id }) });
   // A rule for the same pattern may already exist on the target; keep that one.
   const rules = await db.categorizationRule.findMany({ where: { userId, categoryId: from.id } });
   let rulesMoved = 0;
   for (const rule of rules) {
     const dupe = await db.categorizationRule.findFirst({ where: { userId, matchType: rule.matchType, pattern: rule.pattern, NOT: { id: rule.id } } });
-    if (dupe) await db.categorizationRule.delete({ where: { id: rule.id } });
-    else {
-      await db.categorizationRule.update({ where: { id: rule.id }, data: { categoryId: to.id } });
+    if (dupe) {
+      await db.categorizationRule.delete({ where: { id: rule.id } });
+      records.push({ model: "CategorizationRule", recordId: rule.id, before: snapshot(rule), after: null });
+    } else {
+      const moved = await db.categorizationRule.update({ where: { id: rule.id }, data: { categoryId: to.id } });
+      records.push({ model: "CategorizationRule", recordId: rule.id, before: snapshot(rule), after: snapshot(moved) });
       rulesMoved++;
     }
   }
-  return { entries: entries.count, recurring: recurring.count, budgets: budgetsMoved.count, rules: rulesMoved };
+  return { entries: entries.length, recurring: recurring.length, budgets: budgets.length, rules: rulesMoved };
 }
 
+/** Deletes a category (optionally moving everything to `reassignTo` first) in one undo batch that re-creates it. */
 export async function deleteCategory(userId: string, id: string, reassignTo: string | undefined, db: DbClient) {
   return inTransaction(db, async (tx) => {
     const existing = await getOwnedCategory(userId, id, tx);
     assertRemovable(existing, "delete");
     if (reassignTo === id) throw new LedgerError("Cannot reassign a category to itself", 422, { code: "category.reassign_self" });
+    const records: MutationRecordInput[] = [];
     if (reassignTo) {
       const target = await tx.category.findFirst({ where: { id: reassignTo, userId } });
       if (!target) throw new LedgerError("Target category not found for reassignment", 404, { code: "category.target_not_found" });
       if (target.type !== existing.type) {
         throw new LedgerError(`Cannot reassign to category of different type: ${existing.type} -> ${target.type}`, 422, { code: "category.type_mismatch", params: { from: existing.type, to: target.type } });
       }
-      await reassign(userId, existing, target, tx);
+      await reassign(userId, existing, target, tx, records);
     } else {
       const usage = await categoryUsage(userId, id, tx);
       if (usage.total > 0) {
@@ -163,12 +183,17 @@ export async function deleteCategory(userId: string, id: string, reassignTo: str
       }
     }
     // Trashed entries keep pointing nowhere rather than blocking the delete.
-    await tx.ledgerEntry.updateMany({ where: { userId, categoryId: id }, data: { categoryId: null } });
+    const trashed = await tx.ledgerEntry.findMany({ where: { userId, categoryId: id } });
+    await tx.ledgerEntry.updateMany({ where: { id: { in: trashed.map((e) => e.id) } }, data: { categoryId: null } });
+    for (const e of trashed) records.push({ model: "LedgerEntry", recordId: e.id, before: snapshot(e), after: snapshot({ ...e, categoryId: null }) });
     await tx.category.delete({ where: { id } });
-    return { success: true, id };
+    records.push({ model: "Category", recordId: id, before: snapshot(existing), after: null });
+    const batchId = await recordMutation(tx, userId, "delete", existing.name, records);
+    return { success: true, id, batchId };
   });
 }
 
+/** Moves everything from one category into another and deletes the source, in one undo batch that re-creates it. */
 export async function mergeCategories(userId: string, fromId: string, toId: string, db: DbClient) {
   return inTransaction(db, async (tx) => {
     const from = await tx.category.findFirst({ where: { id: fromId, userId } });
@@ -181,8 +206,11 @@ export async function mergeCategories(userId: string, fromId: string, toId: stri
       throw new LedgerError(`Cannot merge categories of different types: ${from.type} -> ${to.type}`, 422, { code: "category.type_mismatch", params: { from: from.type, to: to.type } });
     }
     assertRemovable(from, "merge from");
-    const moved = await reassign(userId, from, to, tx);
+    const records: MutationRecordInput[] = [];
+    const moved = await reassign(userId, from, to, tx, records);
     await tx.category.delete({ where: { id: fromId } });
+    records.push({ model: "Category", recordId: fromId, before: snapshot(from), after: null });
+    const batchId = await recordMutation(tx, userId, "merge", `${from.name} → ${to.name}`, records);
     return {
       success: true,
       fromCategory: from.name,
@@ -191,6 +219,7 @@ export async function mergeCategories(userId: string, fromId: string, toId: stri
       recurringTransactionsMoved: moved.recurring,
       budgetsMoved: moved.budgets,
       rulesMoved: moved.rules,
+      batchId,
     };
   });
 }

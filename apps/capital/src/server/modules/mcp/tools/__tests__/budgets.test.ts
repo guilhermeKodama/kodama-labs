@@ -146,7 +146,7 @@ describe("get_budget_status", () => {
 
     const r = await getBudgetStatus(USER, { month: "2026-10" }, prisma);
     expect(r.categories.find((c) => c.category === "Shopping")?.actual).toBe(6400);
-    const overview = await monthOverview(USER, 2026, 10, prisma, { entityId: f.pfId });
+    const overview = await monthOverview(USER, 2026, 10, prisma, { entityIds: [f.pfId] });
     expect(overview.budgets.find((b) => b.category === "Shopping")?.committed).toBe(6400);
   });
 

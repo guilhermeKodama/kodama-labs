@@ -20,8 +20,8 @@ export const ledgerRuleRoutes = createRouter()
   .openapi(
     deleteRuleRoute,
     v2Handler(deleteRuleRoute, async (c, userId) => {
-      await deleteRule(userId, c.req.valid("param").id, prisma);
-      return { ok: true };
+      const { batchId } = await deleteRule(userId, c.req.valid("param").id, prisma);
+      return { ok: true, batchId };
     })
   )
   .openapi(testRuleRoute, v2Handler(testRuleRoute, (c, userId) => testRules(userId, c.req.valid("json").description, prisma)));

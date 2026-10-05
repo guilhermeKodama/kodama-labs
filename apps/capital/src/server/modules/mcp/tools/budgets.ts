@@ -101,7 +101,7 @@ export async function getBudgetStatus(userId: string, params: GetBudgetStatusPar
   if (!year || !monthNum || monthNum < 1 || monthNum > 12) throw new Error("Invalid month format. Expected YYYY-MM");
   const entity = await resolveEntity(userId, params.accountId, db);
   const user = await db.user.findUniqueOrThrow({ where: { id: userId }, select: { baseCurrency: true } });
-  const overview = await monthOverview(userId, year, monthNum, db, { entityId: entity.id });
+  const overview = await monthOverview(userId, year, monthNum, db, { entityIds: [entity.id] });
   const categories = overview.budgets
     .map((b) => ({
       category: b.category,

@@ -2,6 +2,7 @@ import type { DbClient } from "@capital/server/lib/prisma";
 import { Prisma } from "@/generated/prisma";
 import type { AllocationClass, AssetClass, FixedIncomeSubType, InvestmentHolding, InvestmentOperation, InvestmentTransactionType } from "@/generated/prisma";
 import { formatDateOnly, parseLocalDate } from "@capital/server/lib/date-utils";
+import { entityScopeSql, entityScopeWhere } from "@capital/server/lib/entity-scope";
 import { ALLOCATION_CLASSES, dominantEtfCurrency, holdingAllocationClass, toAllocationTargets, type TargetInput } from "@capital/server/modules/investments/lib/allocation-class";
 import { recalculateHolding } from "@capital/server/modules/investments/lib/holding-position";
 import { LedgerError, notFound } from "@capital/server/modules/ledger/lib/errors";
@@ -42,9 +43,10 @@ export async function getOwnedHolding(userId: string, holdingId: string, db: DbC
   return holding;
 }
 
-export async function createHolding(userId: string, input: HoldingInput, db: DbClient) {
+/** Creates a holding; with `collect` it joins the caller's undo batch (undo removes it once its operations are gone). */
+export async function createHolding(userId: string, input: HoldingInput, db: DbClient, opts: { collect?: MutationRecordInput[] } = {}) {
   const account = await brokerage(userId, input.accountId, db);
-  return db.investmentHolding.create({
+  const holding = await db.investmentHolding.create({
     data: {
       accountId: account.id,
       assetClass: input.assetClass,
@@ -57,6 +59,8 @@ export async function createHolding(userId: string, input: HoldingInput, db: DbC
       lastPriceUpdate: input.currentPrice ? new Date() : null,
     },
   });
+  opts.collect?.push({ model: "InvestmentHolding", recordId: holding.id, before: null, after: snapshot(holding) });
+  return holding;
 }
 
 export async function updateHolding(userId: string, holdingId: string, patch: Partial<Omit<HoldingInput, "accountId">> & { isActive?: boolean }, db: DbClient) {
@@ -76,10 +80,15 @@ export async function updateHolding(userId: string, holdingId: string, patch: Pa
   });
 }
 
-export async function listHoldings(userId: string, db: DbClient, opts: { accountId?: string; entityId?: string; includeInactive?: boolean } = {}) {
+/** Entities a portfolio read covers (resolveEntityScope); null or absent = all. */
+export interface PortfolioScope {
+  entityIds?: string[] | null;
+}
+
+export async function listHoldings(userId: string, db: DbClient, opts: PortfolioScope & { accountId?: string; includeInactive?: boolean } = {}) {
   return db.investmentHolding.findMany({
     where: {
-      account: { userId, ...(opts.entityId && { entityId: opts.entityId }) },
+      account: { userId, ...entityScopeWhere(opts.entityIds ?? null) },
       ...(opts.accountId && { accountId: opts.accountId }),
       ...(opts.includeInactive ? {} : { isActive: true }),
     },
@@ -471,10 +480,11 @@ export async function moveBrokerageCash(
 // Portfolio views
 // ---------------------------------------------------------------------------
 
-export async function portfolioSummary(userId: string, db: DbClient, opts: { entityId?: string } = {}) {
+export async function portfolioSummary(userId: string, db: DbClient, opts: PortfolioScope = {}) {
   const fx = await loadFx(userId, db);
-  const holdings = await listHoldings(userId, db, { entityId: opts.entityId });
-  const brokers = await db.account.findMany({ where: { userId, type: "brokerage", archivedAt: null, ...(opts.entityId && { entityId: opts.entityId }) } });
+  const scope = entityScopeWhere(opts.entityIds ?? null);
+  const holdings = await listHoldings(userId, db, { entityIds: opts.entityIds });
+  const brokers = await db.account.findMany({ where: { userId, type: "brokerage", archivedAt: null, ...scope } });
   const balances = await accountBalances(userId, db, brokers.map((b) => b.id));
 
   const byClass = new Map<AllocationClass, { marketValue: number; invested: number; count: number }>();
@@ -498,7 +508,7 @@ export async function portfolioSummary(userId: string, db: DbClient, opts: { ent
   const targets = await db.portfolioTarget.findMany({ where: { userId } });
   const yearAgo = new Date(Date.now() - 365 * 86400_000);
   const income = await db.investmentOperation.findMany({
-    where: { holding: { account: { userId, ...(opts.entityId && { entityId: opts.entityId }) } }, type: { in: ["dividend", "yield_payment"] }, date: { gte: yearAgo } },
+    where: { holding: { account: { userId, ...scope } }, type: { in: ["dividend", "yield_payment"] }, date: { gte: yearAgo } },
     include: { holding: { select: { currency: true } } },
   });
   const net = marketTotal + cashTotal;
@@ -552,9 +562,9 @@ export async function setTargets(userId: string, input: TargetInput[], db: DbCli
  * never suggests selling. In "asset" mode each class amount is split over
  * its holdings in proportion to their current value.
  */
-export async function rebalanceSuggestion(userId: string, amount: number, mode: "class" | "asset", db: DbClient) {
+export async function rebalanceSuggestion(userId: string, amount: number, mode: "class" | "asset", db: DbClient, opts: PortfolioScope = {}) {
   if (!(amount > 0)) throw new LedgerError("Amount must be positive", 422, { code: "rebalance.invalid_amount" });
-  const summary = await portfolioSummary(userId, db);
+  const summary = await portfolioSummary(userId, db, opts);
   const targets = await getTargets(userId, db);
   if (!targets.length) throw new LedgerError("Set allocation targets first", 422, { code: "rebalance.no_targets" });
   const total = summary.marketValue;
@@ -568,7 +578,7 @@ export async function rebalanceSuggestion(userId: string, amount: number, mode: 
     return { allocationClass: n.allocationClass, currentShare: total > 0 ? round(n.value / total, 4) : 0, target: n.target, amount: round(put, 2), afterShare: round((n.value + put) / after, 4) };
   });
   if (mode === "class") return { amount, classes };
-  const holdings = await listHoldings(userId, db);
+  const holdings = await listHoldings(userId, db, { entityIds: opts.entityIds });
   const fx = await loadFx(userId, db);
   const assets = classes.flatMap((c) => {
     const inClass = holdings.filter((h) => holdingAllocationClass(h) === c.allocationClass);
@@ -595,7 +605,8 @@ export async function rebalanceSuggestion(userId: string, amount: number, mode: 
  * buys in the base currency, by asset class (current screens) and by
  * allocation class (the six classes of the new screens).
  */
-export async function contributions(userId: string, year: number, db: DbClient, opts: { entityId?: string } = {}) {
+export async function contributions(userId: string, year: number, db: DbClient, opts: PortfolioScope = {}) {
+  const entityIds = opts.entityIds ?? null;
   const fx = await loadFx(userId, db);
   const from = new Date(Date.UTC(year, 0, 1));
   const to = new Date(Date.UTC(year, 11, 31, 23, 59, 59, 999));
@@ -608,7 +619,7 @@ export async function contributions(userId: string, year: number, db: DbClient, 
     JOIN accounts a ON a.id = le."accountId" AND a.type = 'brokerage'
     JOIN transfer_groups tg ON tg.id = le."transferGroupId"
     WHERE le."userId" = ${userId} AND le."deletedAt" IS NULL AND le.date BETWEEN ${from} AND ${to}
-      ${opts.entityId ? Prisma.sql`AND le."entityId" = ${opts.entityId}` : Prisma.empty}
+      AND ${entityScopeSql(Prisma.sql`le."entityId"`, entityIds)}
     GROUP BY 1`;
   // totalAmount is in the holding's currency, so buys are grouped by it too.
   const buys = await db.$queryRaw<{ m: number; asset_class: AssetClass; allocation_class: AllocationClass | null; currency: string; total: number }[]>`
@@ -618,7 +629,7 @@ export async function contributions(userId: string, year: number, db: DbClient, 
     JOIN investment_holdings h ON h.id = o."holdingId"
     JOIN accounts a ON a.id = h."accountId"
     WHERE a."userId" = ${userId} AND o.type IN ('buy', 'deposit') AND o.date BETWEEN ${from} AND ${to}
-      ${opts.entityId ? Prisma.sql`AND a."entityId" = ${opts.entityId}` : Prisma.empty}
+      AND ${entityScopeSql(Prisma.sql`a."entityId"`, entityIds)}
     GROUP BY 1, 2, 3, 4`;
   const months = Array.from({ length: 12 }, (_, i) => {
     const f = flows.find((x) => x.m === i + 1);

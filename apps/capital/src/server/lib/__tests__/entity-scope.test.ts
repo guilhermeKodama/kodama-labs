@@ -1,7 +1,8 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { prisma } from "@capital/server/lib/prisma";
 import { createLedgerFixture, deleteLedgerFixture, type LedgerFixture } from "@/test/ledger-fixtures";
-import { entityScopeWhere, resolveEntityScope } from "../entity-scope";
+import { Prisma } from "@/generated/prisma";
+import { entityScopeSql, entityScopeWhere, inEntityScope, resolveEntityScope, resolveScopeQuery } from "../entity-scope";
 
 const USER = "test-user-entity-scope-001";
 const OTHER = "test-user-entity-scope-002";
@@ -41,6 +42,30 @@ describe("resolveEntityScope", () => {
   it("is an empty list for pj when the user has no business", async () => {
     await prisma.entity.deleteMany({ where: { userId: OTHER, kind: "business" } });
     expect(await resolveEntityScope(OTHER, "pj", prisma)).toEqual([]);
+  });
+});
+
+describe("resolveScopeQuery", () => {
+  it("takes scope over the older entityId", async () => {
+    expect(await resolveScopeQuery(USER, { scope: "pf", entityId: f.pjId }, prisma)).toEqual([f.pfId]);
+    expect(await resolveScopeQuery(USER, { entityId: f.pjId }, prisma)).toEqual([f.pjId]);
+    expect(await resolveScopeQuery(USER, {}, prisma)).toBeNull();
+  });
+});
+
+describe("inEntityScope and entityScopeSql", () => {
+  it("match everything for no scope and nothing for an empty one", async () => {
+    expect(inEntityScope(null, "x")).toBe(true);
+    expect(inEntityScope(["a"], "a")).toBe(true);
+    expect(inEntityScope(["a"], "b")).toBe(false);
+    expect(inEntityScope(["a"], null)).toBe(false);
+    expect(inEntityScope([], "a")).toBe(false);
+
+    const count = async (ids: string[] | null) =>
+      (await prisma.$queryRaw<{ n: number }[]>`SELECT count(*)::int AS n FROM entities e WHERE e."userId" = ${USER} AND ${entityScopeSql(Prisma.sql`e.id`, ids)}`)[0].n;
+    expect(await count(null)).toBe(3);
+    expect(await count([])).toBe(0);
+    expect(await count([f.pfId, f.pjId])).toBe(2);
   });
 });
 

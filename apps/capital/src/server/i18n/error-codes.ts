@@ -102,6 +102,7 @@ export const ERROR_CODES = {
 
   // Trash
   "trash.operation_recorded_again": "{description} is the cash of an investment operation that was recorded again; restoring it would count it twice",
+  "trash.operation_edited": "{description} is the cash of an investment operation that was edited since to move no cash; edit the operation instead",
 
   // Budgets
   "budget.not_found": "Budget not found",

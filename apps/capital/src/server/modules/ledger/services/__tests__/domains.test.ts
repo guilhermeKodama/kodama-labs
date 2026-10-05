@@ -52,7 +52,7 @@ describe("budgets", () => {
     await createBudget(USER, { entityId: f.pfId, categoryId: f.categories.Groceries, amount: 400, effectiveFrom: "2026-07", rollover: true }, prisma);
     await expense(f.pfChecking, 100, "2026-07-10");
     await expense(f.pjChecking, 700, "2026-08-10");
-    const o = await monthOverview(USER, 2026, 8, prisma, { entityId: f.pfId });
+    const o = await monthOverview(USER, 2026, 8, prisma, { entityIds: [f.pfId] });
     expect(o.budgets[0]).toMatchObject({ carry: 300, available: 700, spent: 0 });
     expect(o.unbudgeted).toEqual([]);
   });
@@ -88,13 +88,13 @@ describe("recurring rules", () => {
       { kind: "expense", accountId: f.pfChecking, amount: 900, description: "Aluguel", frequency: "monthly", startDate: "2026-08-01", autoGenerate: false },
       prisma
     );
-    await processDueRules(prisma, new Date("2026-09-15T12:00:00Z"));
+    await processDueRules(prisma, new Date("2026-09-15T12:00:00Z"), { userId: USER });
     const booked = await prisma.ledgerEntry.findMany({ where: { recurringRuleId: auto.id }, orderBy: { date: "asc" } });
     expect(booked.map((e) => e.date.toISOString().slice(0, 10))).toEqual(["2026-07-10", "2026-08-10", "2026-09-10"]);
     expect(booked.every((e) => toNumber(e.amount) === -50 && e.categoryId === f.categories.Software)).toBe(true);
     expect(await prisma.ledgerEntry.count({ where: { recurringRuleId: reminder.id } })).toBe(0);
 
-    await processDueRules(prisma, new Date("2026-09-15T12:00:00Z"));
+    await processDueRules(prisma, new Date("2026-09-15T12:00:00Z"), { userId: USER });
     expect(await prisma.ledgerEntry.count({ where: { recurringRuleId: auto.id } })).toBe(3);
 
     const paid = await markRulePaid(USER, reminder.id, prisma, { amount: 950 });
@@ -111,7 +111,7 @@ describe("recurring rules", () => {
       { kind: "transfer", accountId: f.pjChecking, toAccountId: f.pfChecking, transferDirection: "profit_distribution", amount: 2000, description: "Pró-labore", frequency: "monthly", startDate: "2026-09-05", autoGenerate: true },
       prisma
     );
-    await processDueRules(prisma, new Date("2026-09-06T12:00:00Z"));
+    await processDueRules(prisma, new Date("2026-09-06T12:00:00Z"), { userId: USER });
     const groups = await prisma.transferGroup.findMany({ where: { userId: USER }, include: { legs: true } });
     expect(groups).toHaveLength(1);
     expect(groups[0].direction).toBe("profit_distribution");

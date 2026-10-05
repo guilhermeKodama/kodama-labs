@@ -44,6 +44,8 @@ describe("model registry", () => {
     expect(before("RecurringRule", "CategorizationRule")).toBe(true);
     expect(before("CategorizationRule", "Budget")).toBe(true);
     expect(before("InvestmentOperation", "InvestmentHolding")).toBe(true);
+    // Attachments hang off entries, transfers and recurring rules.
+    expect(["LedgerEntry", "TransferGroup", "RecurringRule"].every((parent) => before("Attachment", parent))).toBe(true);
     // Accounts and categories are parents of nearly everything: re-created first, removed last.
     expect(RESTORE_ORDER.slice(0, 2)).toEqual(["Account", "Category"]);
   });
@@ -296,7 +298,8 @@ describe("registry models beyond the ledger", () => {
   it("re-creates a merged category and points its rows back at it", async () => {
     const from = await prisma.category.create({ data: { userId: USER, name: "Delivery", type: "expense", color: "pink" } });
     const e = await createEntry(USER, { kind: "expense", accountId: f.pfChecking, amount: 40, description: "iFood", date: "2026-09-04", categoryId: from.id }, prisma);
-    const rule = await createRule(USER, { matchType: "contains", pattern: "ifood", categoryId: from.id }, prisma);
+    const created = await createRule(USER, { matchType: "contains", pattern: "ifood", categoryId: from.id }, prisma);
+    const rule = await prisma.categorizationRule.findUniqueOrThrow({ where: { id: created.id } });
     // What a recorded merge into Groceries writes: the rows moved, then the category deleted outright.
     const records: MutationRecordInput[] = [];
     await updateEntry(USER, e.entryIds[0], { categoryId: f.categories.Groceries }, prisma, { collect: records });
