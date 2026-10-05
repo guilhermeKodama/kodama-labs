@@ -8,6 +8,7 @@ import {
   type ToolContext,
 } from "../registry";
 import { AGENT_TOOLS } from "../index";
+import { currentMutationSource } from "@capital/server/modules/ledger/services/mutations";
 
 function fakeCtx(db: unknown = {}): ToolContext {
   return {
@@ -88,6 +89,19 @@ describe("executeTool", () => {
     expect(result.isError).toBe(false);
     expect(result.output).toEqual({ text: "hi" });
     expect(db.agentAction.create).not.toHaveBeenCalled();
+  });
+
+  it("runs the handler with undo batches attributed to the assistant", async () => {
+    const sourceTool = defineTool({
+      name: "source_read",
+      description: "Reports the mutation source its writes would be recorded with.",
+      inputSchema: z.object({}),
+      access: "read",
+      handler: async () => ({ source: currentMutationSource() ?? null }),
+    });
+    const result = await executeTool([sourceTool], fakeCtx(), "call_1", "source_read", {});
+    expect(result.output).toEqual({ source: "assistant" });
+    expect(currentMutationSource()).toBeUndefined();
   });
 
   it("audits a successful write tool with its createdRecords", async () => {

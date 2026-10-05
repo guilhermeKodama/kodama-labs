@@ -1,7 +1,7 @@
 import { createRoute, z } from "@hono/zod-openapi";
 import { createRouter } from "@capital/server/lib/router";
 import { prisma } from "@capital/server/lib/prisma";
-import { idParams, jsonBody, v2Handler, v2Responses } from "@capital/server/lib/v2";
+import { idParams, jsonBody, queryFlag, v2Handler, v2Responses } from "@capital/server/lib/v2";
 import { accountTypeSchema } from "../../contracts";
 import { createAccount, listAccounts, serializeAccount, updateAccount } from "../../services/accounts";
 
@@ -26,7 +26,7 @@ const listAccountsRoute = createRoute({
   path: "/v2/accounts",
   tags,
   summary: "Accounts with balances",
-  request: { query: z.object({ type: accountTypeSchema.optional(), entityId: z.string().optional(), includeArchived: z.coerce.boolean().optional() }) },
+  request: { query: z.object({ type: accountTypeSchema.optional(), entityId: z.string().optional(), includeArchived: queryFlag.optional() }) },
   responses: v2Responses,
 });
 const createAccountRoute = createRoute({ method: "post", path: "/v2/accounts", tags, summary: "Create a checking account, card, broker or cash account", request: jsonBody(accountBody), responses: v2Responses });

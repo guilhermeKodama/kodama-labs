@@ -316,7 +316,8 @@ export async function executeImport(
       const { operation } = await recordOperation(
         userId,
         { holdingId, type: it.type, quantity: it.quantity, pricePerUnit: it.pricePerUnit, totalAmount: it.totalAmount, fees: it.fees, date: it.date, externalId: it.externalId, importId: imp.id },
-        tx
+        tx,
+        { record: false }
       );
       createdRecords.push({ model: "InvestmentOperation", id: operation.id });
       investmentTransactionsCreated++;

@@ -159,5 +159,46 @@ describe("executeImport / executeRevert", () => {
 
     await undoBatch(USER, reverted.batchId!, prisma);
     expect(await live({})).toHaveLength(6);
+    expect((await prisma.import.findUniqueOrThrow({ where: { id: result.statementImportId } })).revertedAt).toBeNull();
+  });
+
+  it("revert removes the import's investment operations and undo brings them back with the position", async () => {
+    const result = await executeImport(
+      USER,
+      plan({
+        transactions: [],
+        transfers: [],
+        investmentTransfers: [],
+        investmentTransactions: [
+          { externalId: "op-1", accountId: f.broker, newHolding: { assetClass: "stocks", ticker: "PETR4", name: "Petrobras", currency: "BRL" }, type: "buy", quantity: 10, pricePerUnit: 30, totalAmount: 300, date: "2026-09-05" },
+        ],
+      } as Partial<ImportPlanPayload>),
+      prisma
+    );
+    const op = await prisma.investmentOperation.findFirstOrThrow({ where: { externalId: "op-1", holding: { account: { userId: USER } } } });
+    const position = () => prisma.investmentHolding.findUniqueOrThrow({ where: { id: op.holdingId } }).then((h) => h.currentQuantity);
+    expect(await position()).toBe(10);
+
+    const reverted = await executeRevert(USER, { statementImportId: result.statementImportId, createdRecords: result.createdRecords }, prisma);
+    expect(reverted.investmentTransactionsDeleted).toBe(1);
+    expect(await prisma.investmentOperation.count({ where: { id: op.id } })).toBe(0);
+    expect((await prisma.ledgerEntry.findUniqueOrThrow({ where: { id: op.cashEntryId! } })).deletedAt).not.toBeNull();
+    expect(await position()).toBe(0);
+
+    await undoBatch(USER, reverted.batchId!, prisma);
+    expect(await prisma.investmentOperation.findUniqueOrThrow({ where: { id: op.id } })).toMatchObject({ cashEntryId: op.cashEntryId, quantity: 10 });
+    expect((await prisma.ledgerEntry.findUniqueOrThrow({ where: { id: op.cashEntryId! } })).deletedAt).toBeNull();
+    expect(await position()).toBe(10);
+    expect((await prisma.import.findUniqueOrThrow({ where: { id: result.statementImportId } })).revertedAt).toBeNull();
+  });
+
+  it("reopens the import when undoing a revert batch recorded without its Import row", async () => {
+    const result = await executeImport(USER, plan(), prisma);
+    const reverted = await executeRevert(USER, { statementImportId: result.statementImportId, createdRecords: result.createdRecords }, prisma);
+    // Revert batches written before the Import row was part of them.
+    await prisma.mutationRecord.deleteMany({ where: { batchId: reverted.batchId!, model: "Import" } });
+
+    await undoBatch(USER, reverted.batchId!, prisma);
+    expect((await prisma.import.findUniqueOrThrow({ where: { id: result.statementImportId } })).revertedAt).toBeNull();
   });
 });

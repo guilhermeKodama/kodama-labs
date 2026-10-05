@@ -162,8 +162,10 @@ describe("investments", () => {
     const c = await contributions(USER, 2026, prisma);
     expect(c.months[7]).toMatchObject({ deposits: 3010, net: 3010 });
 
+    // The cash leg goes to the trash, so it no longer counts in the broker's balance.
     await deleteOperation(USER, buy.operation.id, prisma);
-    expect(await prisma.ledgerEntry.count({ where: { id: buy.cashEntryId! } })).toBe(0);
+    expect(await prisma.ledgerEntry.count({ where: { id: buy.cashEntryId!, deletedAt: null } })).toBe(0);
+    expect((await accountBalances(USER, prisma, [f.broker])).get(f.broker)).toBeCloseTo(4760, 2);
   });
 
   it("suggests where to put new money without selling", async () => {

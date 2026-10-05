@@ -98,6 +98,7 @@ export const ERROR_CODES = {
   "undo.not_found": "Change not found",
   "undo.already_undone": "This change was already undone",
   "undo.newer_change": "A newer change touched these rows; undo it first",
+  "undo.unsupported": "Changes to {model} records cannot be undone",
 
   // Budgets
   "budget.not_found": "Budget not found",

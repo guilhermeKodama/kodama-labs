@@ -3,13 +3,16 @@ import { Prisma } from "@/generated/prisma";
 import type { AllocationClass, AssetClass, FixedIncomeSubType, InvestmentHolding, InvestmentOperation, InvestmentTransactionType } from "@/generated/prisma";
 import { formatDateOnly, parseLocalDate } from "@capital/server/lib/date-utils";
 import { ALLOCATION_CLASSES, dominantEtfCurrency, holdingAllocationClass, toAllocationTargets, type TargetInput } from "@capital/server/modules/investments/lib/allocation-class";
+import { recalculateHolding } from "@capital/server/modules/investments/lib/holding-position";
 import { LedgerError, notFound } from "@capital/server/modules/ledger/lib/errors";
 import { loadFx } from "@capital/server/modules/ledger/lib/fx";
 import { round, toNumber } from "@capital/server/modules/ledger/lib/money";
 import { accountBalances, getOwnedAccount } from "@capital/server/modules/ledger/services/accounts";
-import { createEntry } from "@capital/server/modules/ledger/services/entries";
+import { createEntry, softDeleteEntries } from "@capital/server/modules/ledger/services/entries";
 import { getDefaultAccount } from "@capital/server/modules/ledger/services/entities";
-import { inTransaction } from "@capital/server/modules/ledger/services/mutations";
+import { inTransaction, recordMutation, snapshot, type MutationRecordInput } from "@capital/server/modules/ledger/services/mutations";
+
+export { recalculateHolding };
 
 // ---------------------------------------------------------------------------
 // Holdings
@@ -121,57 +124,6 @@ export function serializeHolding(h: Awaited<ReturnType<typeof listHoldings>>[num
 // Operations
 // ---------------------------------------------------------------------------
 
-/** Weighted-average position from all operations, oldest first (unchanged rules). */
-export async function recalculateHolding(holdingId: string, db: DbClient) {
-  const ops = await db.investmentOperation.findMany({ where: { holdingId }, orderBy: [{ date: "asc" }, { createdAt: "asc" }] });
-  let qty = 0;
-  let cost = 0;
-  let invested = 0;
-  for (const op of ops) {
-    const q = op.quantity ?? 0;
-    const p = op.pricePerUnit ?? 0;
-    switch (op.type) {
-      case "buy":
-      case "deposit":
-        qty += q;
-        cost += q * p || op.totalAmount;
-        invested += op.totalAmount;
-        break;
-      case "sell":
-      case "withdrawal":
-        if (q > 0) {
-          const prev = qty;
-          qty -= q;
-          cost = qty > 0 && prev > 0 ? cost * (qty / prev) : 0;
-        } else {
-          invested -= op.totalAmount;
-          cost = Math.max(0, cost - op.totalAmount);
-        }
-        break;
-      case "split":
-        qty += q;
-        break;
-      case "adjustment":
-        if (q > 0 && p > 0) {
-          // An adjustment carrying quantity and price resets the position.
-          qty = q;
-          cost = q * p;
-          invested = op.totalAmount;
-        } else {
-          invested += op.totalAmount;
-          cost = Math.max(0, cost + op.totalAmount);
-        }
-        break;
-      default:
-        break;
-    }
-  }
-  return db.investmentHolding.update({
-    where: { id: holdingId },
-    data: { currentQuantity: Math.max(0, qty), averageCost: qty > 0 ? cost / qty : 0, totalInvested: Math.max(0, invested) },
-  });
-}
-
 /** Cash moved by an operation on the brokerage account (negative = cash leaves). */
 export function cashImpact(type: InvestmentTransactionType, totalAmount: number, fees: number): number {
   switch (type) {
@@ -200,6 +152,8 @@ const OP_LABEL: Record<InvestmentTransactionType, string> = {
   adjustment: "Ajuste",
 };
 
+const opLabel = (type: InvestmentTransactionType, holding: { ticker: string | null; name: string }) => `${OP_LABEL[type]} ${holding.ticker ?? holding.name}`;
+
 export interface OperationInput {
   holdingId: string;
   type: InvestmentTransactionType;
@@ -215,8 +169,61 @@ export interface OperationInput {
   importId?: string | null;
 }
 
-export async function recordOperation(userId: string, input: OperationInput, db: DbClient) {
+export interface OperationWriteOptions {
+  /** Record an undo batch (default true). */
+  record?: boolean;
+  /** Mutation records are appended here instead of a new batch when given. */
+  collect?: MutationRecordInput[];
+}
+
+type HoldingWithAccount = Awaited<ReturnType<typeof getOwnedHolding>>;
+
+/** The operation's cash leg on the brokerage account, converted at today's rate. */
+async function createCashLeg(
+  tx: DbClient,
+  userId: string,
+  holding: HoldingWithAccount,
+  type: InvestmentTransactionType,
+  impact: number,
+  date: Date,
+  importId: string | null,
+  records: MutationRecordInput[]
+) {
+  const fx = await loadFx(userId, tx);
+  const rate = fx.rateFor(holding.account.currency);
+  const leg = await tx.ledgerEntry.create({
+    data: {
+      userId,
+      entityId: holding.account.entityId,
+      accountId: holding.accountId,
+      kind: "investment",
+      amount: round(impact, 4),
+      currency: holding.account.currency,
+      exchangeRate: rate,
+      amountBase: round(impact * rate, 4),
+      date,
+      effectiveDate: date,
+      description: opLabel(type, holding),
+      importId,
+      metadata: { holdingId: holding.id },
+    },
+  });
+  records.push({ model: "LedgerEntry", recordId: leg.id, before: null, after: snapshot(leg) });
+  return leg;
+}
+
+/** Sends an operation's cash leg to the trash (undo and the trash both bring it back). */
+async function trashCashLeg(tx: DbClient, userId: string, entryId: string, records: MutationRecordInput[]) {
+  const leg = await tx.ledgerEntry.findFirst({ where: { id: entryId, userId, deletedAt: null } });
+  if (!leg) return;
+  const trashed = await tx.ledgerEntry.update({ where: { id: leg.id }, data: { deletedAt: new Date() } });
+  records.push({ model: "LedgerEntry", recordId: leg.id, before: snapshot(leg), after: snapshot(trashed) });
+}
+
+/** Records the operation with its cash leg (and funding transfer), all in one undo batch. */
+export async function recordOperation(userId: string, input: OperationInput, db: DbClient, opts: OperationWriteOptions = {}) {
   return inTransaction(db, async (tx) => {
+    const records: MutationRecordInput[] = opts.collect ?? [];
     const holding = await getOwnedHolding(userId, input.holdingId, tx);
     const fees = input.fees ?? 0;
     const date = parseLocalDate(input.date);
@@ -228,34 +235,12 @@ export async function recordOperation(userId: string, input: OperationInput, db:
         userId,
         { kind: "transfer", fromAccountId: input.fundFromAccountId, toAccountId: holding.accountId, amount: -impact, date: input.date, direction: "investment_deposit" },
         tx,
-        { importId: input.importId ?? null }
+        { importId: input.importId ?? null, collect: records }
       );
       fundingGroupId = funded.transferGroupId;
     }
 
-    let cashEntryId: string | null = null;
-    if (impact !== 0) {
-      const fx = await loadFx(userId, tx);
-      const rate = fx.rateFor(holding.account.currency);
-      const leg = await tx.ledgerEntry.create({
-        data: {
-          userId,
-          entityId: holding.account.entityId,
-          accountId: holding.accountId,
-          kind: "investment",
-          amount: round(impact, 4),
-          currency: holding.account.currency,
-          exchangeRate: rate,
-          amountBase: round(impact * rate, 4),
-          date,
-          effectiveDate: date,
-          description: `${OP_LABEL[input.type]} ${holding.ticker ?? holding.name}`,
-          importId: input.importId ?? null,
-          metadata: { holdingId: holding.id },
-        },
-      });
-      cashEntryId = leg.id;
-    }
+    const cashEntryId = impact !== 0 ? (await createCashLeg(tx, userId, holding, input.type, impact, date, input.importId ?? null, records)).id : null;
 
     const op = await tx.investmentOperation.create({
       data: {
@@ -272,62 +257,117 @@ export async function recordOperation(userId: string, input: OperationInput, db:
         fundingGroupId,
       },
     });
+    records.push({ model: "InvestmentOperation", recordId: op.id, before: null, after: snapshot(op) });
     const updated = await recalculateHolding(holding.id, tx);
-    return { operation: op, holding: updated, cashEntryId, fundingGroupId };
+    const batchId = opts.record === false || opts.collect ? null : await recordMutation(tx, userId, "create", opLabel(input.type, holding), records);
+    return { operation: op, holding: updated, cashEntryId, fundingGroupId, batchId };
   });
 }
 
-export async function updateOperation(userId: string, operationId: string, patch: Partial<Omit<OperationInput, "holdingId" | "fundFromAccountId">>, db: DbClient) {
+/** Updates an operation and keeps its cash leg in step: moved, created, or trashed when it no longer moves cash. */
+export async function updateOperation(
+  userId: string,
+  operationId: string,
+  patch: Partial<Omit<OperationInput, "holdingId" | "fundFromAccountId" | "importId">>,
+  db: DbClient,
+  opts: OperationWriteOptions = {}
+) {
   return inTransaction(db, async (tx) => {
-    const op = await tx.investmentOperation.findFirst({ where: { id: operationId, holding: { account: { userId } } }, include: { holding: { include: { account: true } } } });
-    if (!op) throw notFound("Investment operation", "operation.not_found");
+    const records: MutationRecordInput[] = opts.collect ?? [];
+    const before = await tx.investmentOperation.findFirst({ where: { id: operationId, holding: { account: { userId } } } });
+    if (!before) throw notFound("Investment operation", "operation.not_found");
+    const holding = await getOwnedHolding(userId, before.holdingId, tx);
     const merged = {
-      type: patch.type ?? op.type,
-      totalAmount: patch.totalAmount ?? op.totalAmount,
-      fees: patch.fees ?? op.fees,
-      date: patch.date ? parseLocalDate(patch.date) : op.date,
+      type: patch.type ?? before.type,
+      totalAmount: patch.totalAmount ?? before.totalAmount,
+      fees: patch.fees ?? before.fees,
+      date: patch.date ? parseLocalDate(patch.date) : before.date,
     };
+    const impact = cashImpact(merged.type, merged.totalAmount, merged.fees);
+
+    let cashEntryId = before.cashEntryId;
+    if (cashEntryId && impact === 0) {
+      await trashCashLeg(tx, userId, cashEntryId, records);
+      cashEntryId = null;
+    } else if (cashEntryId) {
+      const leg = await tx.ledgerEntry.findUniqueOrThrow({ where: { id: cashEntryId } });
+      const moved = await tx.ledgerEntry.update({
+        where: { id: leg.id },
+        data: {
+          amount: round(impact, 4),
+          amountBase: round(impact * toNumber(leg.exchangeRate), 4),
+          date: merged.date,
+          effectiveDate: merged.date,
+          ...(merged.type !== before.type && { description: opLabel(merged.type, holding) }),
+        },
+      });
+      records.push({ model: "LedgerEntry", recordId: leg.id, before: snapshot(leg), after: snapshot(moved) });
+    } else if (impact !== 0 && cashImpact(before.type, before.totalAmount, before.fees) === 0) {
+      // Only an operation that starts moving cash gets a leg; one recorded without a leg stays without.
+      cashEntryId = (await createCashLeg(tx, userId, holding, merged.type, impact, merged.date, null, records)).id;
+    }
+
     const updated = await tx.investmentOperation.update({
-      where: { id: op.id },
+      where: { id: before.id },
       data: {
         type: merged.type,
         totalAmount: merged.totalAmount,
         fees: merged.fees,
         date: merged.date,
+        cashEntryId,
         ...(patch.quantity !== undefined && { quantity: patch.quantity }),
         ...(patch.pricePerUnit !== undefined && { pricePerUnit: patch.pricePerUnit }),
         ...(patch.notes !== undefined && { notes: patch.notes }),
         ...(patch.externalId !== undefined && { externalId: patch.externalId }),
       },
     });
-    const impact = cashImpact(merged.type, merged.totalAmount, merged.fees);
-    if (op.cashEntryId) {
-      if (impact === 0) {
-        await tx.investmentOperation.update({ where: { id: op.id }, data: { cashEntryId: null } });
-        await tx.ledgerEntry.delete({ where: { id: op.cashEntryId } });
-      } else {
-        const leg = await tx.ledgerEntry.findUniqueOrThrow({ where: { id: op.cashEntryId } });
-        await tx.ledgerEntry.update({
-          where: { id: leg.id },
-          data: { amount: round(impact, 4), amountBase: round(impact * toNumber(leg.exchangeRate), 4), date: merged.date, effectiveDate: merged.date },
-        });
-      }
-    }
-    await recalculateHolding(op.holdingId, tx);
-    return updated;
+    records.push({ model: "InvestmentOperation", recordId: before.id, before: snapshot(before), after: snapshot(updated) });
+    await recalculateHolding(before.holdingId, tx);
+    const batchId = opts.record === false || opts.collect ? null : await recordMutation(tx, userId, "update", opLabel(merged.type, holding), records);
+    return { operation: updated, batchId };
   });
 }
 
-export async function deleteOperation(userId: string, operationId: string, db: DbClient) {
+export interface DeleteOperationOptions extends OperationWriteOptions {
+  /** Also send the investment_deposit transfer that paid for the operation to the trash. */
+  withFunding?: boolean;
+}
+
+/**
+ * Deletes an operation in one undo batch: the row is removed (undo
+ * re-creates it from its snapshot), its cash leg goes to the trash, and so
+ * does its funding transfer with `withFunding`. The holding is recalculated.
+ */
+export async function deleteOperation(userId: string, operationId: string, db: DbClient, opts: DeleteOperationOptions = {}) {
   return inTransaction(db, async (tx) => {
+    const records: MutationRecordInput[] = opts.collect ?? [];
     const op = await tx.investmentOperation.findFirst({ where: { id: operationId, holding: { account: { userId } } } });
     if (!op) throw notFound("Investment operation", "operation.not_found");
+    const holding = await tx.investmentHolding.findUniqueOrThrow({ where: { id: op.holdingId }, select: { ticker: true, name: true } });
+
     await tx.investmentOperation.delete({ where: { id: op.id } });
-    if (op.cashEntryId) await tx.ledgerEntry.deleteMany({ where: { id: op.cashEntryId } });
+    records.push({ model: "InvestmentOperation", recordId: op.id, before: snapshot(op), after: null });
+    if (op.cashEntryId) await trashCashLeg(tx, userId, op.cashEntryId, records);
+
+    let fundingGroupId: string | null = null;
+    if (opts.withFunding && op.fundingGroupId) {
+      const leg = await tx.ledgerEntry.findFirst({ where: { transferGroupId: op.fundingGroupId, userId, deletedAt: null }, select: { id: true } });
+      if (leg) {
+        await softDeleteEntries(userId, [leg.id], tx, { collect: records });
+        fundingGroupId = op.fundingGroupId;
+      }
+    }
+
     await recalculateHolding(op.holdingId, tx);
-    return { deleted: op.id };
+    const batchId = opts.record === false || opts.collect ? null : await recordMutation(tx, userId, "delete", opLabel(op.type, holding), records);
+    return { deleted: op.id, batchId, cashEntryId: op.cashEntryId, fundingGroupId };
   });
 }
+
+/** What serializeOperation reads from the holding. */
+export const OPERATION_INCLUDE = {
+  holding: { select: { ticker: true, name: true, assetClass: true, allocationClass: true, currency: true, accountId: true } },
+} as const satisfies Prisma.InvestmentOperationInclude;
 
 export async function listOperations(userId: string, db: DbClient, opts: { holdingId?: string; accountId?: string; from?: Date; to?: Date } = {}) {
   return db.investmentOperation.findMany({
@@ -336,7 +376,7 @@ export async function listOperations(userId: string, db: DbClient, opts: { holdi
       ...(opts.holdingId && { holdingId: opts.holdingId }),
       ...((opts.from || opts.to) && { date: { ...(opts.from && { gte: opts.from }), ...(opts.to && { lte: opts.to }) } }),
     },
-    include: { holding: { select: { ticker: true, name: true, assetClass: true, allocationClass: true, currency: true, accountId: true } } },
+    include: OPERATION_INCLUDE,
     orderBy: { date: "desc" },
   });
 }
@@ -360,15 +400,16 @@ export function serializeOperation(
     notes: op.notes,
     externalId: op.externalId,
     cashEntryId: op.cashEntryId,
+    fundingGroupId: op.fundingGroupId,
   };
 }
 
 /** Set a position to the broker's numbers, recording an adjustment operation (MCP adjust_position). */
 export async function adjustPosition(userId: string, input: { holdingId: string; currentQuantity: number; averageCost: number; notes?: string }, db: DbClient) {
   return inTransaction(db, async (tx) => {
-    await getOwnedHolding(userId, input.holdingId, tx);
+    const owned = await getOwnedHolding(userId, input.holdingId, tx);
     const totalInvested = input.currentQuantity * input.averageCost;
-    await tx.investmentOperation.create({
+    const op = await tx.investmentOperation.create({
       data: {
         holdingId: input.holdingId,
         type: "adjustment",
@@ -384,7 +425,11 @@ export async function adjustPosition(userId: string, input: { holdingId: string;
       where: { id: input.holdingId },
       data: { currentQuantity: input.currentQuantity, averageCost: input.averageCost, totalInvested },
     });
-    return holding;
+    // Undo removes the adjustment and recalculates the position from the operations left.
+    const batchId = await recordMutation(tx, userId, "create", opLabel("adjustment", owned), [
+      { model: "InvestmentOperation", recordId: op.id, before: null, after: snapshot(op) },
+    ]);
+    return { ...holding, batchId };
   });
 }
 

@@ -1,5 +1,6 @@
 import type { User } from "@/generated/prisma";
 import type { DbClient } from "@capital/server/lib/prisma";
+import type { Locale } from "@capital/server/i18n";
 import { LedgerError } from "@capital/server/modules/ledger/lib/errors";
 import { getPersonalEntity, listEntities } from "@capital/server/modules/ledger/services/entities";
 
@@ -10,6 +11,10 @@ export interface PreferencesPatch {
   dateFormat?: string;
   numberFormat?: string;
   timezone?: string;
+  /** UI language; names the server writes from now on follow it too. */
+  locale?: Locale;
+  /** Let the daily cron refresh the currencies' rates. */
+  fxAutoUpdate?: boolean;
 }
 
 export function serializeUser(user: User) {
@@ -23,6 +28,7 @@ export function serializeUser(user: User) {
     numberFormat: user.numberFormat,
     timezone: user.timezone,
     locale: user.locale,
+    fxAutoUpdate: user.fxAutoUpdate,
     createdAt: user.createdAt.toISOString(),
     updatedAt: user.updatedAt.toISOString(),
   };
@@ -75,6 +81,8 @@ export async function updatePreferences(userId: string, patch: PreferencesPatch,
       ...(patch.dateFormat !== undefined && { dateFormat: patch.dateFormat }),
       ...(patch.numberFormat !== undefined && { numberFormat: patch.numberFormat }),
       ...(patch.timezone !== undefined && { timezone: patch.timezone }),
+      ...(patch.locale !== undefined && { locale: patch.locale }),
+      ...(patch.fxAutoUpdate !== undefined && { fxAutoUpdate: patch.fxAutoUpdate }),
     },
   });
   return serializeUser(updated);

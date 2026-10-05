@@ -1,7 +1,7 @@
 import { createRoute, z } from "@hono/zod-openapi";
 import { createRouter } from "@capital/server/lib/router";
 import { prisma } from "@capital/server/lib/prisma";
-import { idParams, jsonBody, v2Handler, v2Responses } from "@capital/server/lib/v2";
+import { idParams, jsonBody, queryFlag, v2Handler, v2Responses } from "@capital/server/lib/v2";
 import {
   adjustPosition,
   contributions,
@@ -12,6 +12,7 @@ import {
   listHoldings,
   listOperations,
   moveBrokerageCash,
+  OPERATION_INCLUDE,
   portfolioSummary,
   rebalanceSuggestion,
   recordOperation,
@@ -93,7 +94,14 @@ const createOpRoute = createRoute({
   responses: v2Responses,
 });
 const patchOpRoute = createRoute({ method: "patch", path: "/v2/investment-operations/{id}", tags, summary: "Update an operation", request: { params: idParams, ...jsonBody(z.object(operationFields).partial()) }, responses: v2Responses });
-const deleteOpRoute = createRoute({ method: "delete", path: "/v2/investment-operations/{id}", tags, summary: "Delete an operation and its cash leg", request: { params: idParams }, responses: v2Responses });
+const deleteOpRoute = createRoute({
+  method: "delete",
+  path: "/v2/investment-operations/{id}",
+  tags,
+  summary: "Delete an operation; its cash leg (and with withFunding=true the transfer that paid for it) goes to the trash. Undoable (batchId).",
+  request: { params: idParams, query: z.object({ withFunding: queryFlag.optional() }) },
+  responses: v2Responses,
+});
 const cashRoute = createRoute({
   method: "post",
   path: "/v2/brokerage-cash",
@@ -183,8 +191,13 @@ export const v2Investments = createRouter()
     const result = await recordOperation(userId, c.req.valid("json"), prisma);
     return { ...result, operation: serializeOperation(result.operation) };
   }))
-  .openapi(patchOpRoute, v2Handler(patchOpRoute, async (c, userId) => updateOperation(userId, c.req.valid("param").id, c.req.valid("json"), prisma)))
-  .openapi(deleteOpRoute, v2Handler(deleteOpRoute, async (c, userId) => deleteOperation(userId, c.req.valid("param").id, prisma)))
+  .openapi(patchOpRoute, v2Handler(patchOpRoute, async (c, userId) => {
+    const { id } = c.req.valid("param");
+    const { batchId } = await updateOperation(userId, id, c.req.valid("json"), prisma);
+    const operation = await prisma.investmentOperation.findUniqueOrThrow({ where: { id }, include: OPERATION_INCLUDE });
+    return { operation: serializeOperation(operation), batchId };
+  }))
+  .openapi(deleteOpRoute, v2Handler(deleteOpRoute, async (c, userId) => deleteOperation(userId, c.req.valid("param").id, prisma, { withFunding: c.req.valid("query").withFunding })))
   .openapi(cashRoute, v2Handler(cashRoute, async (c, userId) => moveBrokerageCash(userId, c.req.valid("json"), prisma)))
   .openapi(refreshPricesRoute, v2Handler(refreshPricesRoute, async (_c, userId) => updateAllPrices(prisma, { userId })))
   .openapi(summaryRoute, v2Handler(summaryRoute, async (c, userId) => portfolioSummary(userId, prisma, c.req.valid("query"))))

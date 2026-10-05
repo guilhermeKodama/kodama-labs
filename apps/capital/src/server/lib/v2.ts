@@ -20,6 +20,9 @@ export function jsonBody<T extends z.ZodTypeAny>(schema: T) {
 
 export const idParams = z.object({ id: z.string().min(1) });
 
+/** A "true"/"false" query flag. z.coerce.boolean() reads any non-empty string, "false" included, as true. */
+export const queryFlag = z.enum(["true", "false"]).transform((v) => v === "true");
+
 /** Maps domain errors to HTTP errors that keep their code and params for the envelope (see toHttpError). */
 export const toHttp = toHttpError;
 

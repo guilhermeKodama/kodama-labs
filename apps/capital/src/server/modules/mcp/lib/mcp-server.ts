@@ -2,6 +2,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 
 import type { DbClient } from "@capital/server/lib/prisma";
+import { withMutationSource } from "@capital/server/modules/ledger/services/mutations";
 import { bulkCreateTransactions } from "../tools/bulk-create-transactions";
 import { listTransactions } from "../tools/list-transactions";
 import {
@@ -275,6 +276,11 @@ export function createCapitalMcpServer(userId: string, db: DbClient) {
       },
     }
   );
+
+  // Undo batches recorded by any tool are attributed to the MCP client.
+  const registerTool = server.registerTool.bind(server);
+  server.registerTool = ((name: string, config: never, cb: (...args: unknown[]) => unknown) =>
+    registerTool(name, config, ((...args: unknown[]) => withMutationSource("mcp", () => cb(...args))) as never)) as typeof server.registerTool;
 
   // Register tool: bulk_create_transactions
   server.registerTool(

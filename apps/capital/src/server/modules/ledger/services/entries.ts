@@ -132,6 +132,7 @@ async function createSimpleIn(
       },
     });
     planId = plan.id;
+    records.push({ model: "InstallmentPlan", recordId: plan.id, before: null, after: snapshot(plan) });
   }
 
   const baseMonth = account.type === "credit_card" ? opts.statementMonth ?? statementMonthFor(date, account.closingDay ?? 1) : undefined;
@@ -278,8 +279,8 @@ async function createTransferIn(
       orderBy: { month: "desc" },
     });
     if (open) {
-      records.push({ model: "CardStatement", recordId: open.id, before: snapshot(open), after: null });
-      await tx.cardStatement.update({ where: { id: open.id }, data: { paymentGroupId: group.id } });
+      const paid = await tx.cardStatement.update({ where: { id: open.id }, data: { paymentGroupId: group.id } });
+      records.push({ model: "CardStatement", recordId: open.id, before: snapshot(open), after: snapshot(paid) });
     }
   }
   return { entryIds: [fromLeg.id, toLeg.id], transferGroupId: group.id };
@@ -432,19 +433,25 @@ async function expandSelection(userId: string, ids: string[], tx: DbClient, incl
   return { entryIds: [...new Set([...entries.map((e) => e.id), ...legs.map((l) => l.id)])], groupIds };
 }
 
-export async function softDeleteEntries(userId: string, ids: string[], db: DbClient, opts: { summary?: string; record?: boolean } = {}) {
+export async function softDeleteEntries(
+  userId: string,
+  ids: string[],
+  db: DbClient,
+  opts: { summary?: string; record?: boolean; collect?: MutationRecordInput[] } = {}
+) {
   return inTransaction(db, async (tx) => {
     const { entryIds, groupIds } = await expandSelection(userId, ids, tx);
     if (!entryIds.length) throw notFound("Transaction", "entry.not_found");
     const now = new Date();
-    const records: MutationRecordInput[] = [];
+    const records: MutationRecordInput[] = opts.collect ?? [];
     const before = await tx.ledgerEntry.findMany({ where: { id: { in: entryIds } } });
     const groupsBefore = await tx.transferGroup.findMany({ where: { id: { in: groupIds } } });
     await tx.ledgerEntry.updateMany({ where: { id: { in: entryIds } }, data: { deletedAt: now } });
     await tx.transferGroup.updateMany({ where: { id: { in: groupIds } }, data: { deletedAt: now } });
     for (const g of groupsBefore) records.push({ model: "TransferGroup", recordId: g.id, before: snapshot(g), after: snapshot({ ...g, deletedAt: now }) });
     for (const e of before) records.push({ model: "LedgerEntry", recordId: e.id, before: snapshot(e), after: snapshot({ ...e, deletedAt: now }) });
-    const batchId = opts.record === false ? null : await recordMutation(tx, userId, "delete", opts.summary ?? `${entryIds.length} entries`, records);
+    const batchId =
+      opts.record === false || opts.collect ? null : await recordMutation(tx, userId, "delete", opts.summary ?? `${entryIds.length} entries`, records);
     return { batchId, deleted: entryIds.length, entryIds };
   });
 }
