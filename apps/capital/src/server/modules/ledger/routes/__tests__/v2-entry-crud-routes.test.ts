@@ -106,4 +106,17 @@ describe("entry CRUD routes", () => {
     expect(suggestion.json).toMatchObject({ source: "rule", categoryId: f.categories.Software, rule: { pattern: "aws", hitCount: 0 } });
     expect((await call("POST", "/v2/rules/suggest", { description: "Nada parecido" })).json).toMatchObject({ source: null, categoryId: null });
   });
+
+  it("lists the trash with rowsCount counting a transfer once, and restores from it", async () => {
+    const transfer = await call("POST", "/v2/ledger/entries", { kind: "transfer", fromAccountId: f.pjChecking, toAccountId: f.pfChecking, amount: 300, date: "2026-09-03" });
+    expect((await call("POST", `/v2/ledger/entries/${transfer.json.entryIds[0]}/delete`, { scope: "one" })).status).toBe(200);
+    const trash = await call("GET", "/v2/trash?limit=1");
+    expect(trash.status).toBe(200);
+    expect(trash.json.rowsCount).toBeGreaterThanOrEqual(1);
+    expect(trash.json.rows).toHaveLength(1);
+    const before = trash.json.rowsCount;
+    const restored = await call("POST", "/v2/trash/restore", { ids: [transfer.json.entryIds[1]] });
+    expect(restored.json).toMatchObject({ restored: 2, batchId: expect.any(String) });
+    expect((await call("GET", "/v2/trash?limit=1")).json.rowsCount).toBe(before - 1);
+  });
 });

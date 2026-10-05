@@ -583,13 +583,49 @@ export async function restoreEntries(userId: string, ids: string[], db: DbClient
   });
 }
 
-/** Permanently removes entries that sat in the trash longer than `days`. */
+/** Rows in the trash as the table shows them: a transfer once, whatever number of legs it has. */
+export async function trashRowCount(userId: string, db: DbClient): Promise<number> {
+  const [row] = await db.$queryRaw<{ n: number }[]>`
+    SELECT count(DISTINCT coalesce("transferGroupId", id))::int AS n
+    FROM ledger_entries WHERE "userId" = ${userId} AND "deletedAt" IS NOT NULL`;
+  return row?.n ?? 0;
+}
+
+/**
+ * Permanently removes entries that sat in the trash longer than `days`.
+ *
+ * Older undo batches may still point at those rows (the create, the edits,
+ * the delete itself, an operation whose cash leg it was). Undoing one
+ * would try to bring back or link to a row that no longer exists, so each
+ * purge is recorded as a system batch that names the purged rows: the
+ * older batches then count as touched by a newer change, ⌘Z skips them and
+ * an explicit undo answers undo.newer_change. Their history stays readable.
+ */
 export async function purgeTrash(db: DbClient, days = 30, userId?: string) {
   const cutoff = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
   const where = { deletedAt: { lt: cutoff }, ...(userId && { userId }) };
-  const groups = await db.transferGroup.deleteMany({ where });
-  const entries = await db.ledgerEntry.deleteMany({ where });
-  return { groups: groups.count, entries: entries.count };
+  return inTransaction(db, async (tx) => {
+    const [entries, groups] = await Promise.all([
+      tx.ledgerEntry.findMany({ where, select: { id: true, userId: true } }),
+      tx.transferGroup.findMany({ where, select: { id: true, userId: true } }),
+    ]);
+    const purged = [...entries.map((e) => ({ ...e, model: "LedgerEntry" as const })), ...groups.map((g) => ({ ...g, model: "TransferGroup" as const }))];
+    const referenced = purged.length
+      ? new Set((await tx.mutationRecord.findMany({ where: { recordId: { in: purged.map((p) => p.id) } }, select: { recordId: true }, distinct: ["recordId"] })).map((r) => r.recordId))
+      : new Set<string>();
+    const byUser = new Map<string, MutationRecordInput[]>();
+    for (const row of purged) {
+      if (!referenced.has(row.id)) continue;
+      const list = byUser.get(row.userId) ?? [];
+      list.push({ model: row.model, recordId: row.id, before: null, after: null });
+      byUser.set(row.userId, list);
+    }
+    for (const [owner, records] of byUser) await recordMutation(tx, owner, "purge", `${records.length} rows`, records, { source: "system" });
+
+    const deletedGroups = await tx.transferGroup.deleteMany({ where });
+    const deletedEntries = await tx.ledgerEntry.deleteMany({ where });
+    return { groups: deletedGroups.count, entries: deletedEntries.count };
+  });
 }
 
 /** Copies entries (whole transfers when a leg is selected); each copy's description gets the localized "(cópia)" suffix. */

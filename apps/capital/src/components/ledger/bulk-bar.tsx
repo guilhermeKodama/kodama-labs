@@ -3,11 +3,15 @@
 import { useState } from "react";
 import { useTranslations } from "next-intl";
 import type { LedgerSelectionQuery } from "@capital/server/modules/ledger/contracts";
-import { apiPost } from "@/lib/api/client";
+import { Menu, MenuItem, MenuLabel } from "@/components/cap";
+import { api, apiPost } from "@/lib/api/client";
 import type { Names } from "@/lib/api/catalog";
 import { useAppMutation } from "@/lib/api/use-app-mutation";
-import { money } from "@/lib/money";
-import { Check, MenuItem, MenuLabel, Popover } from "@/components/shell/chrome";
+import { useFmt } from "@/lib/format/provider";
+import { useShortcut } from "@/lib/shortcuts/provider";
+import { cn } from "@/lib/utils";
+import { BulkEditDialog } from "./bulk-edit-dialog";
+import type { DisplayRow } from "./rows";
 
 export interface BulkStats {
   count: number;
@@ -27,12 +31,16 @@ export interface BulkBarProps {
   names: Names;
   /** The whole view is selected ("Selecionar todas as N"). */
   allInView: boolean;
-  /** Offer "Selecionar todas as N": every loaded row is picked and the view has more. */
+  /** Offer "Selecionar todas as N": every loaded row is picked and the view has more. (The table's banner offers it.) */
   canSelectAll: boolean;
   totalInView: number;
   onSelectAll: () => void;
   /** Clears the selection; also called after a change went through. */
   onClear: () => void;
+  /** The picked rows as listed, for the before/after preview of "Editar…". */
+  rows?: readonly DisplayRow[];
+  /** Σ of the whole view, shown when it is all selected. */
+  totalSumInView?: number;
 }
 
 interface BulkRequest {
@@ -42,111 +50,126 @@ interface BulkRequest {
 }
 
 /**
- * The floating bar over a table selection: count, Σ/média/mín/máx and the
- * bulk changes (POST /v2/ledger/bulk, one undoable batch each).
- *
- * OWNER: S2. Target (mockup 5541-5545): "Editar…" (BulkEditDialog),
- * "Exportar" (POST /v2/ledger/export {ids}), the scope question when the
- * selection holds repeating rows, ⌫ and ⌘D on the selection, "Esc limpa".
- * Now: category (with "criar regra"), entity, IR flag, duplicate and
- * delete, as before 0c-3, owned here instead of in TransactionsScreen.
+ * The floating bar over a table selection (mockup BulkBar 4347-4465):
+ * "N selecionadas ✕", Σ / média / mín / máx (Σ of the view when it is all
+ * selected), Editar… (BulkEditDialog), Categoria ▾, Entidade ▾, Marcar IR,
+ * Duplicar, Exportar and Excluir. Each change is one undoable POST
+ * /v2/ledger/bulk; Esc clears, ⌫ deletes and ⌘D duplicates the selection.
  */
-export function BulkBar({ selection, stats, names, allInView, canSelectAll, totalInView, onSelectAll, onClear }: BulkBarProps) {
+export function BulkBar({ selection, stats, names, allInView, totalInView, onClear, rows, totalSumInView }: BulkBarProps) {
   const t = useTranslations("entry.bulk");
-  const [pop, setPop] = useState<"cat" | "ent" | null>(null);
-  const [rule, setRule] = useState(false);
+  const fmt = useFmt();
+  const [editing, setEditing] = useState(false);
+  const count = allInView ? totalInView : stats.count;
   const bulk = useAppMutation({
     event: "ledger.write",
     mutationFn: ({ body }: BulkRequest) => apiPost<{ batchId: string | null; affected: number }>("/api/v2/ledger/bulk", { ...body, selection }),
     undo: (result, request) => request.message(result.affected),
     onSuccess: () => onClear(),
   });
-  const run = (body: Record<string, unknown>, message: BulkRequest["message"]) => bulk.mutate({ body, message });
-  const selected = allInView ? totalInView : stats.count;
+  const exportCsv = useAppMutation({
+    event: null,
+    mutationFn: async () => {
+      const body = "ids" in selection ? { ids: selection.ids } : { query: selection.query };
+      const csv = await api<string>("/api/v2/ledger/export", { method: "POST", body: JSON.stringify(body) });
+      const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = "capital-export.csv";
+      link.click();
+      URL.revokeObjectURL(url);
+    },
+    undo: () => t("toast.export", { count }),
+  });
+  const run = (body: Record<string, unknown>, message: BulkRequest["message"]) => !bulk.isPending && bulk.mutate({ body, message });
+  const remove = () => run({ op: "delete" }, () => t("toast.delete", { count }));
+  const duplicate = () => run({ op: "duplicate" }, () => t("toast.duplicate", { count }));
+
+  useShortcut("escape", () => onClear());
+  useShortcut(["backspace", "delete"], () => remove());
+  useShortcut("mod+d", () => duplicate());
+
   const cur = names.currency;
+  const stat = (label: string, value: number) => (
+    <span className="whitespace-nowrap text-fg-3">
+      {label} <span className="font-mono text-fg-1 tabular-nums">{fmt.money(value, cur)}</span>
+    </span>
+  );
+  const btnClass = (danger?: boolean) =>
+    cn(
+      "inline-flex h-7 cursor-pointer items-center gap-1 rounded-[7px] px-2.5 text-[12px] font-medium whitespace-nowrap outline-none hover:bg-fill-3 focus-visible:bg-fill-3 disabled:opacity-40 data-[state=open]:bg-fill-2",
+      danger ? "text-neg" : "text-fg-1",
+    );
   const btn = (label: string, onClick: () => void, danger?: boolean) => (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={bulk.isPending}
-      className={`inline-flex h-7 items-center rounded-[7px] px-2.5 text-[12px] font-medium whitespace-nowrap hover:bg-fill-2/70 disabled:opacity-40 ${danger ? "text-neg" : ""}`}
-    >
+    <button type="button" onClick={onClick} disabled={bulk.isPending} className={btnClass(danger)}>
       {label}
     </button>
   );
+  const categories = names.categories
+    .filter((category) => !category.isArchived && category.type !== "investment")
+    .sort((a, b) => (a.type === b.type ? a.name.localeCompare(b.name) : a.type === "expense" ? -1 : 1));
+
   return (
-    <div className="pointer-events-none sticky bottom-2 z-20 flex justify-center">
-      <div className="pointer-events-auto relative flex flex-wrap items-center justify-center gap-1 rounded-xl border border-stroke-1 bg-chrome p-1.5 text-[12px] shadow-lg">
-        <span className="inline-flex h-7 items-center gap-2 rounded-[7px] border border-dashed border-fg-3 px-2.5 font-semibold whitespace-nowrap">
-          {allInView ? `${totalInView} selecionadas (toda a view)` : `${stats.count} selecionadas`}
-          <button type="button" title="Limpar seleção" className="font-normal text-fg-3 hover:text-fg-strong" onClick={onClear}>✕</button>
+    <div className="pointer-events-none sticky bottom-4 z-[35] mt-2 flex flex-col items-center gap-2">
+      <div className="pointer-events-auto relative flex flex-wrap items-center justify-center gap-1 rounded-[12px] border border-stroke-1 bg-chrome p-[5px] text-[12px]">
+        <span className="inline-flex h-7 items-center gap-2 rounded-[7px] border border-dashed border-stroke-1 pr-1.5 pl-2.5 font-semibold whitespace-nowrap">
+          {allInView ? t("selectedAll", { count }) : t("selected", { count })}
+          <button type="button" title={t("clear")} aria-label={t("clear")} className="cursor-pointer font-normal text-fg-3 outline-none hover:text-fg-1" onClick={onClear}>
+            ✕
+          </button>
         </span>
-        {canSelectAll && !allInView ? btn(`Selecionar todas as ${totalInView}`, onSelectAll) : null}
-        {!allInView ? (
-          <span className="inline-flex gap-3 px-2.5 whitespace-nowrap text-fg-3">
-            <span>Σ <span className="font-mono text-fg-1 tabular-nums">{money(stats.sum, cur)}</span></span>
-            {stats.count > 1 ? <span>média <span className="font-mono text-fg-1 tabular-nums">{money(stats.avg, cur)}</span></span> : null}
-            {stats.count > 1 ? <span>mín <span className="font-mono text-fg-1 tabular-nums">{money(stats.min, cur)}</span></span> : null}
-            {stats.count > 1 ? <span>máx <span className="font-mono text-fg-1 tabular-nums">{money(stats.max, cur)}</span></span> : null}
-          </span>
-        ) : null}
-        <span className="h-5 w-px bg-stroke-1" />
-        <span className="relative">
-          {btn("Categoria ▾", () => setPop(pop === "cat" ? null : "cat"))}
-          <Popover open={pop === "cat"} onClose={() => setPop(null)} up width={240}>
-            <MenuLabel>Mudar categoria</MenuLabel>
-            <div className="px-2 pb-1"><Check checked={rule} onChange={setRule} label="Criar regra pelas descrições" /></div>
-            <MenuItem
-              label="Sem categoria"
-              onClick={() => {
-                run({ op: "update", patch: { categoryId: null } }, (count) => t("category", { count }));
-                setPop(null);
-              }}
-            />
-            {names.categories
-              .filter((c) => !c.isArchived)
-              .sort((a, b) => a.name.localeCompare(b.name))
-              .map((c) => (
-                <MenuItem
-                  key={c.id}
-                  label={c.name}
-                  hint={c.type === "income" ? "entrada" : c.type === "investment" ? "invest." : undefined}
-                  onClick={() => {
-                    run({ op: "update", patch: { categoryId: c.id }, createRule: rule }, (count) => t("category", { count }));
-                    setPop(null);
-                  }}
-                />
-              ))}
-          </Popover>
+        <span className="inline-flex gap-3 px-2.5">
+          {allInView ? (
+            totalSumInView !== undefined ? stat(t("sum"), totalSumInView) : null
+          ) : (
+            <>
+              {stat(t("sum"), stats.sum)}
+              {stats.count > 1 ? stat(t("avg"), stats.avg) : null}
+              {stats.count > 1 ? stat(t("min"), stats.min) : null}
+              {stats.count > 1 ? stat(t("max"), stats.max) : null}
+            </>
+          )}
         </span>
-        <span className="relative">
-          {btn("Entidade ▾", () => setPop(pop === "ent" ? null : "ent"))}
-          <Popover open={pop === "ent"} onClose={() => setPop(null)} up width={220}>
-            <MenuLabel>Mover para a conta principal de</MenuLabel>
-            {names.entities.map((e) => (
+        <span className="h-5 w-px bg-stroke-2" />
+        {btn(t("edit"), () => setEditing(true))}
+        <Menu side="top" align="center" width={220} trigger={<button type="button" className={btnClass()}>{t("category")}</button>}>
+          <MenuLabel>{t("categoryTitle", { count })}</MenuLabel>
+          <div className="max-h-[220px] overflow-y-auto">
+            {categories.map((category) => (
               <MenuItem
-                key={e.id}
-                label={names.entity.get(e.id)}
-                onClick={() => {
-                  run({ op: "update", patch: { entityId: e.id } }, (count) => t("entity", { entity: names.entity.get(e.id) ?? "", count }));
-                  setPop(null);
-                }}
+                key={category.id}
+                label={category.name}
+                onSelect={() => run({ op: "update", patch: { categoryId: category.id } }, (affected) => t("toast.category", { count: affected, category: category.name }))}
               />
             ))}
-          </Popover>
-        </span>
-        {btn("Marcar IR", () => run({ op: "update", patch: { toggleTaxDeductible: true } }, (count) => t("tax", { count })))}
-        {btn("Duplicar", () => run({ op: "duplicate" }, (count) => t("duplicate", { count })))}
-        <span className="h-5 w-px bg-stroke-1" />
-        {btn(
-          "Excluir",
-          () => {
-            if (selected > 20 && !window.confirm(t("confirmDelete", { count: selected }))) return;
-            run({ op: "delete" }, (count) => t("delete", { count }));
-          },
-          true,
-        )}
+          </div>
+        </Menu>
+        <Menu side="top" align="center" width={220} trigger={<button type="button" className={btnClass()}>{t("entity")}</button>}>
+          <MenuLabel>{t("entityTitle", { count })}</MenuLabel>
+          {names.entities.map((entity) => (
+            <MenuItem
+              key={entity.id}
+              label={names.entity.get(entity.id)}
+              onSelect={() => run({ op: "update", patch: { entityId: entity.id } }, (affected) => t("toast.entity", { count: affected, entity: names.entity.get(entity.id) ?? "" }))}
+            />
+          ))}
+        </Menu>
+        {btn(t("tax"), () => run({ op: "update", patch: { toggleTaxDeductible: true } }, (affected) => t("toast.tax", { count: affected })))}
+        {btn(t("duplicate"), duplicate)}
+        {btn(t("export"), () => exportCsv.mutate())}
+        <span className="h-5 w-px bg-stroke-2" />
+        {btn(t("delete"), remove, true)}
       </div>
+      <BulkEditDialog
+        open={editing}
+        onOpenChange={setEditing}
+        selection={selection}
+        count={count}
+        names={names}
+        rows={rows}
+        sum={allInView ? totalSumInView : stats.sum}
+        onApplied={onClear}
+      />
     </div>
   );
 }
