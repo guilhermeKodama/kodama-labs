@@ -1,18 +1,8 @@
-"use client";
+import { redirect } from 'next/navigation';
 
-import { useEffect } from "react";
-import { useRouter } from "@/i18n/navigation";
-import { isUnauthenticated, useSession } from "@/lib/api/session";
-
+// The middleware already sends "/" to /transactions or /login; this only
+// covers a request that reaches the page anyway. Without a session the
+// middleware sends /transactions on to /login.
 export default function HomePage() {
-  const session = useSession();
-  const router = useRouter();
-
-  useEffect(() => {
-    if (session.isPending) return;
-    const loggedOut = session.isError && isUnauthenticated(session.error);
-    router.replace(session.data && !loggedOut ? "/transactions" : "/login");
-  }, [session.isPending, session.data, session.isError, session.error, router]);
-
-  return null;
+  redirect('/transactions');
 }

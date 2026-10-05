@@ -1,15 +1,15 @@
 import { describe, expect, it } from "vitest";
-import en from "@/messages/en.json";
-import ptBR from "@/messages/pt-BR.json";
+import en from "@/messages/en/errors.json";
+import ptBR from "@/messages/pt-BR/errors.json";
 import { ApiError, parseApiError } from "@/lib/api/client";
 import { errorMessage, invalidFields, resolveErrorMessage, type ErrorTranslator } from "@/lib/api/errors";
 
 type Tree = { [key: string]: string | Tree };
 
 /** A next-intl-like translator over the real "errors" namespace (simple {name} interpolation). */
-function translator(messages: { errors: Tree }): ErrorTranslator {
+function translator(errors: Tree): ErrorTranslator {
   const lookup = (key: string) =>
-    key.split(".").reduce<string | Tree | undefined>((node, part) => (node && typeof node === "object" ? node[part] : undefined), messages.errors);
+    key.split(".").reduce<string | Tree | undefined>((node, part) => (node && typeof node === "object" ? node[part] : undefined), errors);
   const t = (key: string, values?: Record<string, string | number | Date>) => {
     const message = lookup(key);
     if (typeof message !== "string") throw new Error(`missing errors.${key}`);
@@ -33,7 +33,7 @@ describe("errorMessage", () => {
   });
 
   it("falls back to the status when the code has no message", () => {
-    expect(errorMessage(pt, parseApiError(404, { message: "Entry not found", code: "entry.not_found" }))).toBe("Não encontrado. Pode ter sido excluído.");
+    expect(errorMessage(pt, parseApiError(404, { message: "Entry not found", code: "entry.gone_elsewhere" }))).toBe("Não encontrado. Pode ter sido excluído.");
     expect(errorMessage(pt, parseApiError(404, { error: { code: "NOT_FOUND", message: "Conversation not found" } }))).toBe(
       "Não encontrado. Pode ter sido excluído.",
     );
@@ -86,7 +86,7 @@ describe("errors messages", () => {
   });
 
   it("has the same keys in pt-BR and en", () => {
-    expect(leafKeys(en.errors as Tree).sort()).toEqual(leafKeys(ptBR.errors as Tree).sort());
+    expect(leafKeys(en as Tree).sort()).toEqual(leafKeys(ptBR as Tree).sort());
   });
 });
 

@@ -10,7 +10,8 @@ import { useNames, type Names } from "@/lib/api/catalog";
 import { dayLabel, monthKey, monthLabel, monthName, monthRange, money0, parseAmount, shiftMonth } from "@/lib/money";
 import { cn } from "@/lib/utils";
 import { CHART, CHART_AXIS } from "@/lib/theme/chart-colors";
-import { AppFrame, Badge, Btn, EmptyRow, Field, Kpi, KpiStrip, Modal, Panel, Segmented, SelectInput, TextInput } from "@/components/shell/chrome";
+import { Badge, Btn, EmptyRow, Field, Kpi, KpiStrip, Modal, Panel, Segmented, SelectInput, TextInput } from "@/components/shell/chrome";
+import { Page } from "@/components/shell/page";
 
 interface BudgetRow {
   id: string;
@@ -105,7 +106,7 @@ export function BudgetsScreen() {
   const entityOptions = [{ v: "all", l: "Todas" }, ...names.entities.map((e) => ({ v: e.id, l: names.entity.get(e.id) ?? e.name }))];
 
   return (
-    <AppFrame
+    <Page
       crumbs={["Transações", "Orçamentos"]}
       actions={
         <>
@@ -286,7 +287,7 @@ export function BudgetsScreen() {
         <p className="text-[12.5px] text-fg-3">{yearly.isError ? (yearly.error as Error).message : "Carregando…"}</p>
       )}
       {creating ? <BudgetDialog names={names} month={month} initial={creating} entity={entity} onClose={() => setCreating(null)} /> : null}
-    </AppFrame>
+    </Page>
   );
 }
 

@@ -5,18 +5,12 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { api, apiPost } from "@/lib/api/client";
 import type { Names } from "@/lib/api/catalog";
+import type { QuickAddDraft } from "@/lib/ledger/quick-add";
 import { money, parseAmount, todayIso } from "@/lib/money";
 import { Btn, Check, Field, Modal, Segmented, SelectInput, TextInput } from "@/components/shell/chrome";
 import { CategorySelect } from "./categories";
 
 type Kind = "expense" | "income" | "transfer" | "invest";
-
-export interface QuickDraft {
-  description?: string;
-  amount?: number;
-  date?: string;
-  kind?: "expense" | "income";
-}
 
 interface FormState {
   kind: Kind;
@@ -84,7 +78,28 @@ export function parseQuick(input: string, names: Names): Partial<FormState> {
   return out;
 }
 
-export function EntryDialog({ names, draft, onClose }: { names: Names; draft: QuickDraft | null; onClose: () => void }) {
+export interface EntryDialogProps {
+  names: Names;
+  /** Prefilled fields (quick add in ⌘K, ?create={…}); null or {} for a blank form. */
+  draft: QuickAddDraft | null;
+  onClose: () => void;
+}
+
+/**
+ * "Nova transação", opened by ?create= (overlays.tsx mounts it only while
+ * open) from "+ Nova transação", N or ⌘K.
+ *
+ * OWNER: S2. Target (mockup 4790-5040): a 600px cap Dialog; quick add at
+ * the top through parseQuickAdd (lib/ledger/quick-add.ts) with its chips;
+ * Saída / Entrada / Transferência / Aporte with entity, "= R$ X" exchange,
+ * the detected transfer type and the aporte blocks (cross-entity callout,
+ * "Já registrar a compra"); "+ Criar" in the category and account
+ * comboboxes, the rule suggestion ("usada N×"), a receipt dropzone and
+ * ⌘V; "Criar outra em seguida"; ⌘↵ saves.
+ * Now: the form from before 0c-3, which also takes the draft's account,
+ * currency and category.
+ */
+export function EntryDialog({ names, draft, onClose }: EntryDialogProps) {
   const queryClient = useQueryClient();
   const liveAccounts = names.accounts.filter((a) => !a.archivedAt);
   const cashAccounts = liveAccounts.filter((a) => a.type !== "brokerage");
@@ -92,15 +107,15 @@ export function EntryDialog({ names, draft, onClose }: { names: Names; draft: Qu
   const initial = (): FormState => ({
     kind: draft?.kind ?? "expense",
     amount: draft?.amount ? String(draft.amount).replace(".", ",") : "",
-    currency: "",
+    currency: draft?.currency ?? "",
     rate: "",
     date: draft?.date ?? todayIso(),
     description: draft?.description ?? "",
-    accountId: cashAccounts.find((a) => a.isDefault)?.id ?? cashAccounts[0]?.id ?? "",
+    accountId: cashAccounts.find((a) => a.id === draft?.accountId)?.id ?? cashAccounts.find((a) => a.isDefault)?.id ?? cashAccounts[0]?.id ?? "",
     toAccountId: "",
     brokerId: brokers[0]?.id ?? "",
     investDir: "deposit",
-    categoryId: "",
+    categoryId: draft?.categoryId ?? "",
     recurring: false,
     frequency: "monthly",
     autoGenerate: true,
@@ -306,7 +321,7 @@ export function EntryDialog({ names, draft, onClose }: { names: Names; draft: Qu
       ) : null}
       <div className="grid grid-cols-[minmax(0,1.4fr)_90px_minmax(0,1fr)] items-end gap-2.5">
         <Field label={`Valor (${currency})`} hint={f.installments && amount > 0 ? `${f.nInstallments}× de ${money(amount / Math.max(1, Number(f.nInstallments) || 1), currency)}` : undefined}>
-          <TextInput value={f.amount} onChange={(v) => up({ amount: v })} placeholder="0,00" mono className="text-[15px]" autoFocus={!draft} />
+          <TextInput value={f.amount} onChange={(v) => up({ amount: v })} placeholder="0,00" mono className="text-[15px]" autoFocus={!draft?.amount} />
         </Field>
         <Field label="Moeda">
           <SelectInput value={currency} onChange={(v) => up({ currency: v === accountCurrency ? "" : v })} options={(currencies.data?.currencies ?? [{ code: accountCurrency }]).map((c) => ({ value: c.code, label: c.code }))} />

@@ -10,6 +10,7 @@ import { api, apiDelete, apiPatch, apiPost } from "@/lib/api/client";
 import { useNames, type AccountRecord, type Names } from "@/lib/api/catalog";
 import { ACCOUNT_TYPE_LABEL, money, parseAmount } from "@/lib/money";
 import { useSession } from "@/lib/api/session";
+import { useLastAppUrl } from "@/lib/shell/use-last-app-url";
 import { cn } from "@/lib/utils";
 import { Badge, Btn, EmptyRow, Field, Segmented, SelectInput, TextInput } from "@/components/shell/chrome";
 import { ImportsPage } from "./imports";
@@ -43,19 +44,20 @@ export function SettingsScreen() {
   const [page, setPage] = useQueryState("page", parseAsString.withDefault("prefs"));
   const item = NAV.flatMap((s) => s.items).find((i) => i.k === page) ?? NAV[0].items[0];
   const names = useNames();
+  const backHref = useLastAppUrl();
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape" && !document.querySelector("[data-modal]")) router.push("/transactions");
+      if (event.key === "Escape" && !document.querySelector("[data-modal]")) router.push(backHref);
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [router]);
+  }, [router, backHref]);
 
   return (
     <div className="grid h-dvh grid-cols-[220px_minmax(0,1fr)] bg-editor text-fg-1">
       <nav className="flex flex-col gap-0.5 overflow-y-auto border-r border-stroke-3 bg-chrome p-2.5">
-        <Link href="/transactions" className="flex h-[30px] items-center gap-1.5 px-2 text-[12.5px] text-fg-3 hover:text-fg-strong">
+        <Link href={backHref} className="flex h-[30px] items-center gap-1.5 px-2 text-[12.5px] text-fg-3 hover:text-fg-strong">
           ← Voltar ao app <kbd className="ml-auto rounded border border-stroke-3 px-1 font-mono text-[10px]">Esc</kbd>
         </Link>
         <span className="px-2 pt-1.5 pb-1 text-[14px] font-semibold">Ajustes</span>

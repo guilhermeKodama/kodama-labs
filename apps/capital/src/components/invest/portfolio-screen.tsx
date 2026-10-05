@@ -9,7 +9,8 @@ import { useNames } from "@/lib/api/catalog";
 import { ASSET_CLASS_LABEL, money, money0, monthName, pct } from "@/lib/money";
 import { cn } from "@/lib/utils";
 import { CHART, CHART_AXIS } from "@/lib/theme/chart-colors";
-import { AppFrame, Badge, Btn, EmptyRow, Kpi, KpiStrip, MenuLabel, Panel, Popover, Segmented } from "@/components/shell/chrome";
+import { Badge, Btn, EmptyRow, Kpi, KpiStrip, MenuLabel, Panel, Popover, Segmented } from "@/components/shell/chrome";
+import { Page } from "@/components/shell/page";
 import { HoldingSheet, OperationDialog, TargetsDialog } from "./dialogs";
 import { OP_LABEL, type Allocation, type Holding, type Operation, type PortfolioSummary } from "./types";
 
@@ -155,7 +156,7 @@ export function PortfolioScreen() {
   const brokers = names.accounts.filter((a) => a.type === "brokerage");
 
   return (
-    <AppFrame
+    <Page
       crumbs={["Investimentos", "Carteira"]}
       actions={
         <>
@@ -344,6 +345,6 @@ export function PortfolioScreen() {
       )}
       {opDialog !== null ? <OperationDialog names={names} holdings={holdingsQuery.data ?? []} initialHoldingId={opDialog || undefined} onClose={() => setOpDialog(null)} /> : null}
       {targets ? <TargetsDialog onClose={() => setTargets(false)} /> : null}
-    </AppFrame>
+    </Page>
   );
 }

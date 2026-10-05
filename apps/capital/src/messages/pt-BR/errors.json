@@ -1,0 +1,178 @@
+{
+  "network": "Sem conexão com o servidor. Confira a internet e tente de novo.",
+  "unknown": "Algo deu errado. Tente de novo.",
+  "status": {
+    "400": "Não deu para concluir. Confira os dados e tente de novo.",
+    "401": "Sua sessão expirou. Entre de novo.",
+    "403": "Você não tem acesso a isso.",
+    "404": "Não encontrado. Pode ter sido excluído.",
+    "409": "Isso mudou enquanto você editava. Atualize e tente de novo.",
+    "413": "Arquivo grande demais.",
+    "422": "Confira os campos destacados.",
+    "429": "Muitas tentativas seguidas. Espere um pouco e tente de novo.",
+    "500": "Erro no servidor. Tente de novo em instantes."
+  },
+  "validation": "Confira os campos destacados.",
+  "bad_request": "Não deu para ler o pedido. Atualize a página e tente de novo.",
+  "not_found": "Não encontrado. Pode ter sido excluído.",
+  "duplicate": "Já existe um registro igual.",
+  "reference_conflict": "Isso conflita com outro registro: ele não existe mais ou ainda está em uso.",
+  "auth": {
+    "required": "Entre para continuar.",
+    "session_invalid": "Sua sessão expirou. Entre de novo.",
+    "invalid_credentials": "E-mail ou senha incorretos.",
+    "email_taken": "Já existe uma conta com esse e-mail."
+  },
+  "user": {
+    "not_found": "Usuário não encontrado.",
+    "invalid_timezone": "Fuso horário desconhecido: {timezone}.",
+    "base_currency_locked": "A moeda base não pode mudar com {count, plural, one {# lançamento feito} other {# lançamentos feitos}}: os valores convertidos misturariam duas moedas."
+  },
+  "entity": {
+    "not_found": "Entidade não encontrada.",
+    "personal_exists": "Você já tem uma PF.",
+    "personal_rename": "A PF não pode ser renomeada.",
+    "personal_archive": "A PF não pode ser arquivada.",
+    "kind_mismatch": "Essa entidade não é do tipo esperado.",
+    "business_required": "Lançamentos de empresa precisam de uma empresa."
+  },
+  "account": {
+    "not_found": "Conta não encontrada.",
+    "archived": "A conta {name} está arquivada.",
+    "invalid_day": "Use um dia entre 1 e 31.",
+    "invalid_credit_limit": "O limite precisa ser positivo.",
+    "not_credit_card": "Essa conta não é um cartão de crédito."
+  },
+  "entry": {
+    "not_found": "Transação não encontrada. Pode ter sido excluída."
+  },
+  "transfer": {
+    "same_account": "Uma transferência precisa de duas contas diferentes.",
+    "from_account_not_found": "Conta de origem não encontrada.",
+    "to_account_not_found": "Conta de destino não encontrada.",
+    "kind_change": "Uma transferência não muda de tipo. Exclua e crie de novo."
+  },
+  "statement": {
+    "not_found": "Fatura não encontrada.",
+    "payment_conflict": "Essa fatura já tem outro pagamento vinculado.",
+    "entry_linked_elsewhere": "Essa transação já paga outra fatura.",
+    "transfer_not_settlement": "Uma transferência não pode quitar a fatura do cartão.",
+    "settlement_requires_expense": "Só uma saída pode ser marcada como pagamento da fatura.",
+    "not_settlement": "Essa transação não está vinculada como pagamento de fatura."
+  },
+  "category": {
+    "not_found": "Categoria não encontrada.",
+    "target_not_found": "Categoria de destino não encontrada.",
+    "archived": "A categoria {name} está arquivada.",
+    "name_required": "Dê um nome à categoria.",
+    "name_taken": "Já existe uma categoria chamada {name}.",
+    "system_key_immutable": "A chave de sistema de uma categoria não muda.",
+    "system_type_locked": "O tipo da categoria de sistema {name} não muda.",
+    "type_in_use": "O tipo não pode mudar: {count, plural, one {# transação usa} other {# transações usam}} a categoria.",
+    "system_protected": "A categoria de sistema {name} não pode ser excluída nem mesclada.",
+    "default_protected": "A categoria padrão {name} não pode ser excluída nem mesclada.",
+    "reassign_self": "Escolha outra categoria para receber os lançamentos.",
+    "type_mismatch": "Categorias de tipos diferentes não podem ser combinadas.",
+    "reassign_budget_clash": "A categoria de destino já tem {count, plural, one {# orçamento começando} other {# orçamentos começando}} nos mesmos meses.",
+    "in_use": "A categoria está em uso ({entries} transações, {recurring} contas fixas, {budgets} orçamentos, {rules} regras). Escolha para qual categoria movê-los.",
+    "merge_self": "Uma categoria não pode ser mesclada nela mesma.",
+    "merge_into_archived": "{name} está arquivada. Desarquive antes de mesclar."
+  },
+  "rule": {
+    "not_found": "Regra não encontrada.",
+    "invalid_regex": "Expressão regular inválida."
+  },
+  "view": {
+    "not_found": "View não encontrada.",
+    "builtin_rename": "A view fixa não pode ser renomeada.",
+    "builtin_delete": "A view fixa não pode ser excluída."
+  },
+  "query": {
+    "unknown_aggregation_field": "Esse cálculo não está disponível para essa coluna.",
+    "aggregation_needs_numeric": "Esse cálculo só funciona em colunas numéricas.",
+    "invalid_cursor": "A lista mudou. Atualize a página.",
+    "selection_too_large": "A seleção passa de {cap} linhas. Restrinja os filtros."
+  },
+  "undo": {
+    "not_found": "Alteração não encontrada.",
+    "already_undone": "Essa alteração já foi desfeita.",
+    "newer_change": "Uma alteração mais recente mexeu nessas linhas. Desfaça ela primeiro.",
+    "unsupported": "Essa alteração não pode ser desfeita."
+  },
+  "trash": {
+    "operation_recorded_again": "“{description}” é o caixa de uma operação de investimento que foi registrada de novo. Restaurar contaria duas vezes."
+  },
+  "budget": {
+    "not_found": "Orçamento não encontrado.",
+    "negative_amount": "O orçamento não pode ser negativo.",
+    "clash": "Já existe um orçamento para essa categoria começando nesse mês.",
+    "overview_period_required": "Escolha um mês ou um ano."
+  },
+  "recurring": {
+    "not_found": "Conta fixa não encontrada.",
+    "invalid_amount": "O valor precisa ser positivo.",
+    "transfer_needs_destination": "Uma transferência recorrente precisa de uma conta de destino."
+  },
+  "holding": {
+    "not_found": "Posição não encontrada.",
+    "requires_brokerage": "Posições ficam em contas de corretora.",
+    "oversell": "A venda é maior que a posição."
+  },
+  "operation": {
+    "not_found": "Operação não encontrada."
+  },
+  "brokerage": {
+    "insufficient_cash": "Saldo em caixa insuficiente na corretora."
+  },
+  "portfolio": {
+    "targets_sum": "Os alvos precisam somar 100%."
+  },
+  "rebalance": {
+    "invalid_amount": "O valor precisa ser positivo.",
+    "no_targets": "Defina os alvos da carteira primeiro."
+  },
+  "attachment": {
+    "not_found": "Anexo não encontrado.",
+    "file_required": "Escolha um arquivo.",
+    "fields_required": "Faltam dados do anexo.",
+    "owner_not_found": "O registro do anexo não foi encontrado.",
+    "kind_not_allowed": "Esse tipo de anexo não é aceito aqui.",
+    "too_large": "Arquivo grande demais.",
+    "mime_not_allowed": "Arquivos do tipo {mimeType} não são aceitos."
+  },
+  "currency": {
+    "not_found": "Moeda não encontrada.",
+    "base_protected": "A moeda base não pode ser removida.",
+    "in_use": "{code} está em uso em {accounts} contas e {entries} lançamentos."
+  },
+  "import": {
+    "not_found": "Importação não encontrada.",
+    "already_reverted": "Essa importação já foi desfeita.",
+    "invalid_file": "Não deu para ler o arquivo como extrato ou fatura.",
+    "no_transactions": "Nenhuma transação válida no arquivo.",
+    "bill_without_card": "A fatura não corresponde a nenhum cartão.",
+    "file_not_found": "Arquivo não encontrado. Envie de novo.",
+    "file_unreadable": "Não deu para ler o conteúdo do arquivo.",
+    "transfer_inconsistent": "A transferência {externalId} está inconsistente: a direção ou a contraparte está errada.",
+    "transfer_entity_not_owned": "A transferência {externalId} aponta para uma entidade que não é sua.",
+    "investment_account_not_found": "Conta de investimento não encontrada.",
+    "reconcile_target_not_found": "A transferência a conciliar não foi encontrada.",
+    "reconcile_direction_change": "A conciliação não muda a direção de uma transferência. Exclua e crie de novo.",
+    "holding_unresolved": "A transação de investimento {externalId} não corresponde a nenhuma posição."
+  },
+  "assistant": {
+    "conversation_not_found": "Conversa não encontrada.",
+    "plan_not_found": "Plano não encontrado.",
+    "plan_not_proposed": "Esse plano já foi respondido.",
+    "plan_changed": "O plano mudou desde que apareceu. Revise antes de confirmar.",
+    "message_required": "Escreva uma mensagem, responda o cartão ou anexe um arquivo.",
+    "turn_running": "O assistente ainda está respondendo.",
+    "file_required": "Escolha um arquivo.",
+    "file_too_large": "Arquivo grande demais.",
+    "image_too_large": "Imagem grande demais.",
+    "file_type_unsupported": "Só arquivos OFX, CSV, PDF e imagens."
+  },
+  "fire": {
+    "no_plan": "Configure o plano FIRE primeiro."
+  }
+}

@@ -8,7 +8,8 @@ import { money, monthKey } from "@/lib/money";
 import { useCategories } from "@/lib/api/catalog";
 import { useSession } from "@/lib/api/session";
 import { HEAT_OVER, heatColor } from "@/lib/theme/chart-colors";
-import { AppFrame, Btn, Kpi, KpiStrip, Segmented } from "@/components/shell/chrome";
+import { Btn, Kpi, KpiStrip, Segmented } from "@/components/shell/chrome";
+import { Page } from "@/components/shell/page";
 
 interface MonthOverview {
   summary: { totalBudget: number; totalSpent: number; totalRoom: number; projectedTotal: number };
@@ -41,7 +42,7 @@ export function BudgetsScreen() {
   });
 
   return (
-    <AppFrame crumbs={["Transações", "Orçamentos"]} actions={<Btn primary onClick={() => create.mutate()}>+ Orçamento</Btn>}>
+    <Page crumbs={["Transações", "Orçamentos"]} actions={<Btn primary onClick={() => create.mutate()}>+ Orçamento</Btn>}>
       <div className="flex items-center gap-2">
         <Segmented value={mode} options={[{ v: "month", l: "Mês" }, { v: "year", l: "Ano" }]} onChange={setMode} />
         <input type="month" value={month} onChange={(event) => setMonth(event.target.value)} className="h-[26px] rounded-[6px] border border-stroke-1 px-2 text-[12px]" />
@@ -96,7 +97,7 @@ export function BudgetsScreen() {
         <input value={amount} onChange={(event) => setAmount(event.target.value)} placeholder="Valor" className="h-[26px] w-28 rounded-[6px] border border-stroke-1 px-2 text-[12px]" required />
         <Btn primary type="submit">Salvar</Btn>
       </form>
-    </AppFrame>
+    </Page>
   );
 }
 

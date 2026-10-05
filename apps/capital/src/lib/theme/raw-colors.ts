@@ -168,6 +168,11 @@ export const ALLOWED_COLOR_LITERALS: { file: string; line: string; reason: strin
     line: "const COLORS = [",
     reason: "category color picker: the hex is stored on the category (Category.color), not a theme color",
   },
+  {
+    file: "app/[locale]/layout.tsx",
+    line: "themeColor: '#ffffff'",
+    reason: "the browser's toolbar color in the viewport metadata, where CSS variables do not apply",
+  },
 ];
 
 export function isAllowedColorLiteral(file: string, lineText: string): boolean {

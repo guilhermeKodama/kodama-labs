@@ -1,8 +1,10 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { api, apiPost } from "./client";
+import { createContext, useCallback, useContext } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { api } from "./client";
 import { keys } from "./keys";
+import type { SessionExpiry } from "./session-expiry";
 
 export { isUnauthenticated } from "./client";
 
@@ -40,12 +42,15 @@ export function useSession() {
   });
 }
 
-export function useLogout() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: () => apiPost<unknown>("/api/v2/auth/logout"),
-    onSettled: async () => {
-      queryClient.clear();
-    },
-  });
+/** The QueryClient's session-expiry handler (session-expiry.ts), provided by QueryProvider. */
+export const SessionExpiryContext = createContext<SessionExpiry | null>(null);
+
+export function useSessionExpiry(): SessionExpiry | null {
+  return useContext(SessionExpiryContext);
+}
+
+/** "Sair": ends the session, drops every cached answer and goes to /login. */
+export function useSignOut(): () => void {
+  const expiry = useSessionExpiry();
+  return useCallback(() => expiry?.signOut(), [expiry]);
 }

@@ -1,0 +1,16 @@
+{
+  "header": {
+    "create": "+ New transaction"
+  },
+  "toast": {
+    "trashed": "“{description}” moved to the trash"
+  },
+  "bulk": {
+    "category": "Category changed · {count}",
+    "entity": "Moved to {entity} · {count}",
+    "tax": "Tax-deductible flag toggled · {count}",
+    "duplicate": "Duplicated · {count}",
+    "delete": "In the trash · {count}",
+    "confirmDelete": "Move {count} transactions to the trash?"
+  }
+}

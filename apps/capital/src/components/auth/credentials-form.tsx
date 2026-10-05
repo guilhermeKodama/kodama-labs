@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Link, useRouter } from "@/i18n/navigation";
 import { apiPost } from "@/lib/api/client";
+import { safeRedirect } from "@/lib/middleware-helpers";
 import { Btn } from "@/components/shell/chrome";
 
 export function CredentialsForm({ mode }: { mode: "login" | "signup" }) {
@@ -25,7 +26,8 @@ export function CredentialsForm({ mode }: { mode: "login" | "signup" }) {
             : apiPost("/api/v2/auth/signup", { name, email, password });
           void request.then(async () => {
             await queryClient.invalidateQueries({ queryKey: ["me"] });
-            router.replace("/transactions");
+            // Back to where the session ended or the visitor started (?redirect=, set by the middleware and the session gate).
+            router.replace(safeRedirect(new URLSearchParams(window.location.search).get("redirect")));
           }).catch((err: Error) => setError(err.message));
         }}
       >

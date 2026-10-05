@@ -1,0 +1,46 @@
+{
+  "createNamed": "+ Criar “{name}”",
+  "search": "Buscar…",
+  "noResults": "Nenhum resultado",
+  "close": "Fechar",
+  "undo": "Desfazer",
+  "select": "Selecionar…",
+  "undone": "Desfeito",
+  "nothingToUndo": "Nada para desfazer",
+  "cancel": "Cancelar",
+  "save": "Salvar",
+  "delete": "Excluir",
+  "edit": "Editar",
+  "create": "Criar",
+  "back": "Voltar",
+  "loading": "Carregando…",
+  "retry": "Tentar de novo",
+  "pickers": {
+    "categoryPlaceholder": "Buscar ou criar categoria…",
+    "categorySearch": "Buscar categoria…",
+    "accountSearch": "Buscar conta…",
+    "createAccount": "+ Criar conta…",
+    "archived": "arquivada",
+    "categoryType": {
+      "expense": "Despesa",
+      "income": "Receita",
+      "investment": "Investimento"
+    },
+    "accountType": {
+      "checking": "Conta corrente",
+      "credit_card": "Cartão de crédito",
+      "brokerage": "Corretora",
+      "cash": "Dinheiro"
+    },
+    "newAccount": {
+      "title": "Nova conta",
+      "name": "Nome",
+      "type": "Tipo",
+      "entity": "Entidade",
+      "currency": "Moeda",
+      "closingDay": "Fecha no dia",
+      "dueDay": "Vence no dia",
+      "submit": "Criar conta"
+    }
+  }
+}

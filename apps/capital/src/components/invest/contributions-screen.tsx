@@ -11,7 +11,8 @@ import { useNames, type Names } from "@/lib/api/catalog";
 import { ASSET_CLASS_LABEL, dayLabel, money0, monthName, parseAmount, pct, todayIso } from "@/lib/money";
 import { cn } from "@/lib/utils";
 import { CHART, CHART_AXIS, CHART_SERIES } from "@/lib/theme/chart-colors";
-import { AppFrame, Btn, EmptyRow, Field, Kpi, KpiStrip, Modal, Panel, Segmented, SelectInput, TextInput } from "@/components/shell/chrome";
+import { Btn, EmptyRow, Field, Kpi, KpiStrip, Modal, Panel, Segmented, SelectInput, TextInput } from "@/components/shell/chrome";
+import { Page } from "@/components/shell/page";
 import { TargetsDialog } from "./dialogs";
 
 interface Contributions {
@@ -103,7 +104,7 @@ export function ContributionsScreen() {
   const total12 = months12.reduce((s, m) => s + m.net, 0);
 
   return (
-    <AppFrame
+    <Page
       crumbs={["Investimentos", "Aportes"]}
       actions={
         <>
@@ -273,7 +274,7 @@ export function ContributionsScreen() {
           }}
         />
       ) : null}
-    </AppFrame>
+    </Page>
   );
 }
 

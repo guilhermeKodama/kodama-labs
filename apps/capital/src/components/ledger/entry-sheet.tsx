@@ -6,12 +6,60 @@ import { toast } from "sonner";
 import type { LedgerRow } from "@capital/server/modules/ledger/contracts";
 import { api, apiDelete, apiPatch, apiPost, apiUpload } from "@/lib/api/client";
 import type { Names } from "@/lib/api/catalog";
+import { keys } from "@/lib/api/keys";
 import { money, parseAmount } from "@/lib/money";
 import { cn } from "@/lib/utils";
 import { Btn, Check, Field, SelectInput, TextInput } from "@/components/shell/chrome";
 import { CategorySelect } from "./categories";
 import { KIND_LABEL } from "./fields";
-import type { DisplayRow } from "./rows";
+import { useRowActions } from "./row-actions";
+import { toDisplayRows, type DisplayRow } from "./rows";
+
+export interface EntrySheetProps {
+  /** The entry to show (any leg of a transfer). */
+  entryId: string;
+  /** The row as listed on screen; without it (a link, a ⌘K result) the sheet fetches the entry. */
+  row: DisplayRow | null;
+  names: Names;
+  onClose: () => void;
+}
+
+/**
+ * "Editar transação", the detail of one entry, opened by ?entry=<id>
+ * (mounted by overlays.tsx while that param is set).
+ *
+ * OWNER: S2. Target (mockup 5088): a 440px cap Sheet with every field
+ * editable, Histórico (GET /v2/ledger/entries/{id}/history), Duplicar,
+ * anexos, "Criar regra" and Excluir through the delete-scope question,
+ * ⌘↵ to save and Esc to close.
+ * Now: the panel from before 0c-3 (340px, over the main column); Excluir
+ * moves the row and its transfer legs to the trash, with Desfazer.
+ */
+export function EntrySheet({ entryId, row, names, onClose }: EntrySheetProps) {
+  const actions = useRowActions();
+  const fetched = useQuery({
+    queryKey: keys.entry(entryId),
+    queryFn: () => api<LedgerRow>(`/api/v2/ledger/entries/${entryId}`),
+    enabled: !row,
+  });
+  const shown = row ?? (fetched.data ? toDisplayRows([fetched.data], "group")[0] : null);
+  return (
+    <>
+      {shown ? (
+        <EntryPanel
+          row={shown}
+          names={names}
+          onClose={onClose}
+          onDelete={(target) => {
+            actions.remove(target);
+            onClose();
+          }}
+        />
+      ) : null}
+      {actions.dialogs}
+    </>
+  );
+}
 
 interface Attachment {
   id: string;
@@ -19,7 +67,7 @@ interface Attachment {
   blobUrl: string;
 }
 
-export function EntrySheet({ row, names, onClose, onDelete }: { row: DisplayRow; names: Names; onClose: () => void; onDelete: (row: DisplayRow) => void }) {
+function EntryPanel({ row, names, onClose, onDelete }: { row: DisplayRow; names: Names; onClose: () => void; onDelete: (row: DisplayRow) => void }) {
   const queryClient = useQueryClient();
   const isTransfer = row.transferGroupId !== null;
   const display = Math.abs(row.amount);

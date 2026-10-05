@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "@/i18n/navigation";
 import { apiPost } from "@/lib/api/client";
 import { todayIso } from "@/lib/money";
+import { useAssistantBridge } from "@/lib/shell/assistant-bridge";
 import { OverlayScope, useOverlay } from "@/lib/shortcuts/provider";
 
 export function CommandMenu() {
@@ -17,6 +18,13 @@ export function CommandMenu() {
   const [busy, setBusy] = useState(false);
   // While open, app shortcuts pause and Esc closes the palette.
   const overlayId = useOverlay(open, { onEscape: () => setOpen(false) });
+  // openAssistant() from anywhere (and ?assistant=1) opens the assistant here.
+  // TODO(S7): attach request.files to the next message.
+  useAssistantBridge((request) => {
+    setOpen(true);
+    setAssistant(true);
+    if (request.prompt) setDraft(request.prompt);
+  });
 
   useEffect(() => {
     const openMenu = () => setOpen(true);
