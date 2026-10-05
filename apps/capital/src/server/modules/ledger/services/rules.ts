@@ -1,7 +1,7 @@
 import type { DbClient } from "@capital/server/lib/prisma";
 import type { CategorizationRule } from "@/generated/prisma";
 import { normalizeDescription } from "@capital/server/modules/bank-statements/utils";
-import { LedgerError } from "../lib/errors";
+import { LedgerError, notFound } from "../lib/errors";
 import { inTransaction, recordMutation, snapshot, type MutationRecordInput } from "./mutations";
 
 export const RULE_MATCH_TYPES = ["equals", "contains", "regex"] as const;
@@ -82,17 +82,23 @@ export interface RuleInput {
   entityId?: string | null;
 }
 
-/** Each write below is one undo batch (batchId). */
-export async function createRule(userId: string, input: RuleInput, db: DbClient) {
-  await assertCategory(userId, input.categoryId, db);
-  if (input.matchType === "regex") {
+/** The pattern as stored: "equals" patterns normalized like the descriptions they are compared with, regexes checked. */
+function rulePattern(matchType: string, pattern: string) {
+  if (matchType === "regex") {
     try {
-      new RegExp(input.pattern);
+      new RegExp(pattern);
     } catch {
       throw new LedgerError("Invalid regular expression", 422, { code: "rule.invalid_regex" });
     }
   }
-  const pattern = input.matchType === "equals" ? normalizeDescription(input.pattern) : input.pattern;
+  return matchType === "equals" ? normalizeDescription(pattern) : pattern;
+}
+
+/** Each write below is one undo batch (batchId). */
+export async function createRule(userId: string, input: RuleInput, db: DbClient) {
+  await assertCategory(userId, input.categoryId, db);
+  if (input.entityId) await assertEntity(userId, input.entityId, db);
+  const pattern = rulePattern(input.matchType, input.pattern);
   return inTransaction(db, async (tx) => {
     const rule = await tx.categorizationRule.create({
       data: { userId, matchType: input.matchType, pattern, categoryId: input.categoryId, entityId: input.entityId ?? null, source: "manual" },
@@ -107,7 +113,10 @@ export async function updateRule(userId: string, ruleId: string, patch: Partial<
     const rule = await tx.categorizationRule.findFirst({ where: { id: ruleId, userId } });
     if (!rule) throw new LedgerError("Rule not found", 404, { code: "rule.not_found" });
     if (patch.categoryId) await assertCategory(userId, patch.categoryId, tx);
-    const updated = await tx.categorizationRule.update({ where: { id: ruleId }, data: patch });
+    if (patch.entityId) await assertEntity(userId, patch.entityId, tx);
+    const matchType = patch.matchType ?? rule.matchType;
+    const pattern = patch.pattern !== undefined || patch.matchType !== undefined ? rulePattern(matchType, patch.pattern ?? rule.pattern) : undefined;
+    const updated = await tx.categorizationRule.update({ where: { id: ruleId }, data: { ...patch, ...(pattern !== undefined && { pattern }) } });
     const batchId = await recordMutation(tx, userId, "update", updated.pattern, [{ model: "CategorizationRule", recordId: rule.id, before: snapshot(rule), after: snapshot(updated) }]);
     return { ...updated, batchId };
   });
@@ -133,6 +142,11 @@ async function assertCategory(userId: string, categoryId: string, db: DbClient) 
   if (!category) throw new LedgerError("Category not found", 404, { code: "category.not_found" });
   if (category.isArchived) throw new LedgerError(`Category "${category.name}" is archived`, 422, { code: "category.archived", params: { name: category.name } });
   return category;
+}
+
+/** A rule may be limited to one of the user's own entities only. */
+async function assertEntity(userId: string, entityId: string, db: DbClient) {
+  if (!(await db.entity.count({ where: { id: entityId, userId } }))) throw notFound("Entity", "entity.not_found");
 }
 
 /** Which rule (if any) would categorize `description`. */

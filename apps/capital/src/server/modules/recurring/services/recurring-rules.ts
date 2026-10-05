@@ -146,22 +146,25 @@ export async function updateRecurringRule(
 }
 
 /**
- * Deletes a rule outright. Its booked occurrences stay (unlinked) and the
- * bills still attached to it go with it; undo re-creates the rule and its
- * bills under their ids and links the occurrences back.
+ * Deletes a rule outright. Its booked occurrences (entries and transfer
+ * groups) stay, unlinked, and the bills still attached to it go with it;
+ * undo re-creates the rule and its bills under their ids and links the
+ * occurrences back.
  */
 export async function deleteRecurringRule(userId: string, ruleId: string, db: DbClient, opts: RuleWriteOptions = {}) {
   return inTransaction(db, async (tx) => {
     const rule = await tx.recurringRule.findFirst({ where: { id: ruleId, userId } });
     if (!rule) throw notFound("Recurring rule", "recurring.not_found");
-    const [entries, attachments] = await Promise.all([
+    const [entries, groups, attachments] = await Promise.all([
       tx.ledgerEntry.findMany({ where: { recurringRuleId: rule.id } }),
+      tx.transferGroup.findMany({ where: { recurringRuleId: rule.id } }),
       tx.attachment.findMany({ where: { recurringRuleId: rule.id } }),
     ]);
     await tx.recurringRule.delete({ where: { id: rule.id } });
     const records: MutationRecordInput[] = opts.collect ?? [];
     records.push({ model: "RecurringRule", recordId: rule.id, before: snapshot(rule), after: null });
     for (const a of attachments) records.push({ model: "Attachment", recordId: a.id, before: snapshot(a), after: null });
+    for (const g of groups) records.push({ model: "TransferGroup", recordId: g.id, before: snapshot(g), after: snapshot({ ...g, recurringRuleId: null }) });
     for (const e of entries) records.push({ model: "LedgerEntry", recordId: e.id, before: snapshot(e), after: snapshot({ ...e, recurringRuleId: null }) });
     const batchId = opts.collect ? null : await recordMutation(tx, userId, "delete", rule.description, records);
     return { batchId };

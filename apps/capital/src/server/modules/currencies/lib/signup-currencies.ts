@@ -36,15 +36,20 @@ export function currencySymbol(code: string, locale: Locale): string {
  * currency (how loadFx reads it: 1 USD = 5.41 BRL is manualRate 0.184843 on
  * a BRL base). A base outside that list has no rate to derive the others
  * from, so only the base is seeded. Names and symbols follow the locale.
+ * The starting rates are placeholders, so they carry the source the daily FX
+ * update fills them from (PTAX on a BRL base, else ECB), not "manual", which
+ * the update leaves alone.
  */
 export function signupCurrencies(baseCurrency: string, locale: Locale) {
   const base = baseCurrency.toUpperCase();
   const brlPerBase = BRL_PER_UNIT[base];
   const codes = brlPerBase === undefined ? [base] : [...new Set([base, ...SIGNUP_CURRENCY_CODES])];
+  const source = base === "BRL" ? "ptax" : "ecb";
   return codes.map((code) => ({
     code,
     name: currencyName(code, locale),
     symbol: currencySymbol(code, locale),
     manualRate: code === base ? 1 : round(brlPerBase / BRL_PER_UNIT[code], 6),
+    source,
   }));
 }

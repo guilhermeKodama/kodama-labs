@@ -102,6 +102,20 @@ describe("recurring rules", () => {
     expect((await prisma.ledgerEntry.findUniqueOrThrow({ where: { id: paid.entryIds[0] } })).recurringRuleId).toBe(r.id);
   });
 
+  it("links the transfers a deleted rule booked back to it on undo", async () => {
+    const r = await createRecurringRule(USER, monthly({ kind: "transfer", toAccountId: f.pjChecking, categoryId: null, description: "Pró-labore" }), prisma);
+    const paid = await markRulePaid(USER, r.id, prisma);
+    const groupId = paid.transferGroupId!;
+    expect((await prisma.transferGroup.findUniqueOrThrow({ where: { id: groupId } })).recurringRuleId).toBe(r.id);
+
+    const deleted = await deleteRecurringRule(USER, r.id, prisma);
+    expect((await prisma.transferGroup.findUniqueOrThrow({ where: { id: groupId } })).recurringRuleId).toBeNull();
+
+    await undoBatch(USER, deleted.batchId!, prisma);
+    expect((await prisma.transferGroup.findUniqueOrThrow({ where: { id: groupId } })).recurringRuleId).toBe(r.id);
+    expect(await prisma.ledgerEntry.count({ where: { transferGroupId: groupId, recurringRuleId: r.id } })).toBe(2);
+  });
+
   it("undoes a payment: the occurrence goes, its bill returns to the rule and the due date rewinds", async () => {
     const r = await createRecurringRule(USER, monthly(), prisma);
     const pending = await bill({ recurringRuleId: r.id });

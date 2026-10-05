@@ -45,29 +45,3 @@ export function requireUserId(c: Context<AppBindings>): string {
 
   return userId;
 }
-
-/**
- * Custom error class for authorization failures (user doesn't own the resource).
- */
-export class ForbiddenError extends Error {
-  constructor(message = "You do not have permission to access this resource") {
-    super(message);
-    this.name = "ForbiddenError";
-  }
-}
-
-/**
- * Verify that the authenticated user owns the resource.
- * Throws ForbiddenError if ownership check fails.
- */
-export function requireOwnership(
-  authenticatedUserId: string,
-  resourceUserId: string,
-  resourceName = "resource"
-): void {
-  if (authenticatedUserId !== resourceUserId) {
-    throw new ForbiddenError(
-      `You do not have permission to access this ${resourceName}`
-    );
-  }
-}

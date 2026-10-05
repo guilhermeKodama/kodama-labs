@@ -44,9 +44,11 @@ export async function createBudget(userId: string, input: BudgetInput, db: DbCli
   return inTransaction(db, async (tx) => {
     await assertBudgetTargets(userId, input, tx);
     const effectiveFrom = effectiveDate(input.effectiveFrom);
+    const period = input.period ?? "monthly";
     const records: MutationRecordInput[] = opts.collect ?? [];
+    // Same key as the unique index: a monthly and a yearly budget may start in the same month.
     const clash = await tx.budget.findFirst({
-      where: { userId, entityId: input.entityId ?? null, categoryId: input.categoryId, effectiveFrom },
+      where: { userId, entityId: input.entityId ?? null, categoryId: input.categoryId, period, effectiveFrom },
     });
     if (clash?.isActive) throw new LedgerError("A budget for this category already starts in that month; update it instead", 409, { code: "budget.clash" });
     let budget;
@@ -59,7 +61,6 @@ export async function createBudget(userId: string, input: BudgetInput, db: DbCli
       records.push({ model: "Budget", recordId: clash.id, before: snapshot(clash), after: snapshot(withoutCategory(budget)) });
     } else {
       const user = await tx.user.findUniqueOrThrow({ where: { id: userId }, select: { baseCurrency: true } });
-      const period = input.period ?? "monthly";
       budget = await tx.budget.create({
         data: {
           userId,
@@ -94,9 +95,12 @@ export async function updateBudget(
     if (!budget) throw notFound("Budget", "budget.not_found");
     if (patch.amount !== undefined && patch.amount < 0) throw new LedgerError("Budget amount must be non-negative", 422, { code: "budget.negative_amount" });
     const effectiveFrom = patch.effectiveFrom ? effectiveDate(patch.effectiveFrom) : undefined;
-    if (effectiveFrom) {
+    const period = patch.period ?? budget.period;
+    const start = effectiveFrom ?? budget.effectiveFrom;
+    // Moving the start month or switching the period changes the unique key (entity, category, period, effectiveFrom).
+    if (effectiveFrom || period !== budget.period) {
       const clash = await tx.budget.findFirst({
-        where: { userId, entityId: budget.entityId, categoryId: budget.categoryId, effectiveFrom, id: { not: budgetId } },
+        where: { userId, entityId: budget.entityId, categoryId: budget.categoryId, period, effectiveFrom: start, id: { not: budgetId } },
       });
       if (clash) throw new LedgerError("Another budget for this category already starts in that month", 409, { code: "budget.clash" });
     }
@@ -108,10 +112,10 @@ export async function updateBudget(
         ...(patch.period !== undefined && { period: patch.period }),
         ...(patch.rollover !== undefined && { rollover: patch.rollover }),
         ...(patch.isActive !== undefined && { isActive: patch.isActive }),
-        ...(effectiveFrom && {
-          effectiveFrom,
-          year: effectiveFrom.getUTCFullYear(),
-          month: (patch.period ?? budget.period) === "monthly" ? effectiveFrom.getUTCMonth() + 1 : null,
+        ...((effectiveFrom || period !== budget.period) && {
+          effectiveFrom: start,
+          year: start.getUTCFullYear(),
+          month: period === "monthly" ? start.getUTCMonth() + 1 : null,
         }),
       },
       include: { category: true },

@@ -117,14 +117,14 @@ function assertRemovable(c: Category, verb: "delete" | "merge from") {
 /**
  * Point everything at `from` to `to`, recording each row it moves (and the
  * duplicate rules it drops) so undo points them back. Budgets clash on
- * (entity, category, effectiveFrom).
+ * (entity, category, period, effectiveFrom), the budgets' unique key.
  */
 async function reassign(userId: string, from: Category, to: Category, db: DbClient, records: MutationRecordInput[]) {
   const budgets = await db.budget.findMany({ where: { userId, categoryId: from.id } });
   const conflicts: string[] = [];
   for (const b of budgets) {
-    const clash = await db.budget.findFirst({ where: { userId, categoryId: to.id, entityId: b.entityId, effectiveFrom: b.effectiveFrom } });
-    if (clash) conflicts.push(`${b.entityId ?? "all"}/effectiveFrom:${b.effectiveFrom.toISOString().slice(0, 10)}`);
+    const clash = await db.budget.findFirst({ where: { userId, categoryId: to.id, entityId: b.entityId, period: b.period, effectiveFrom: b.effectiveFrom } });
+    if (clash) conflicts.push(`${b.entityId ?? "all"}/${b.period}/effectiveFrom:${b.effectiveFrom.toISOString().slice(0, 10)}`);
   }
   if (conflicts.length) {
     throw new LedgerError(`Cannot reassign budgets: target category already has budgets for: ${conflicts.join(", ")}. Delete or merge those budgets first.`, 409, { code: "category.reassign_budget_clash", params: { count: conflicts.length } });

@@ -1,7 +1,7 @@
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { prisma } from "@capital/server/lib/prisma";
 import { createLedgerFixture, deleteLedgerFixture, type LedgerFixture } from "@/test/ledger-fixtures";
-import { createBudget } from "@capital/server/modules/budgets/services/budget-crud";
+import { createBudget, updateBudget } from "@capital/server/modules/budgets/services/budget-crud";
 import { monthOverview, yearOverview } from "@capital/server/modules/budgets/services/budget-overview";
 import { createRecurringRule, markRulePaid, processDueRules, skipRuleOccurrence } from "@capital/server/modules/recurring/services/recurring-rules";
 import {
@@ -16,7 +16,7 @@ import {
 import { deleteCategory, mergeCategories, updateCategory } from "@capital/server/modules/categories/services/categories";
 import { accountBalances } from "../accounts";
 import { createEntry } from "../entries";
-import { createRule } from "../rules";
+import { createRule, updateRule } from "../rules";
 import { toNumber } from "../../lib/money";
 
 const USER = "test-user-ledger-domains-001";
@@ -60,6 +60,22 @@ describe("budgets", () => {
   it("rejects a second budget for the same category and month", async () => {
     await createBudget(USER, { categoryId: f.categories.Groceries, amount: 100, effectiveFrom: "2026-08" }, prisma);
     await expect(createBudget(USER, { categoryId: f.categories.Groceries, amount: 200, effectiveFrom: "2026-08-15" }, prisma)).rejects.toThrow();
+  });
+
+  it("keys budgets by period too: a yearly and a monthly budget may start in the same month", async () => {
+    const yearly = await createBudget(USER, { categoryId: f.categories.Groceries, amount: 6000, effectiveFrom: "2026-01", period: "yearly" }, prisma);
+    await updateBudget(USER, yearly.id, { isActive: false }, prisma);
+    // An inactive yearly budget is not reactivated as the monthly one.
+    const monthly = await createBudget(USER, { categoryId: f.categories.Groceries, amount: 500, effectiveFrom: "2026-01" }, prisma);
+    expect(monthly.id).not.toBe(yearly.id);
+    expect(monthly).toMatchObject({ period: "monthly", month: 1, isActive: true });
+    expect(await prisma.budget.findUniqueOrThrow({ where: { id: yearly.id } })).toMatchObject({ period: "yearly", isActive: false });
+
+    await createBudget(USER, { categoryId: f.categories.Groceries, amount: 6000, effectiveFrom: "2026-01", period: "yearly" }, prisma);
+    // Switching the monthly one to yearly would collide with the reactivated yearly budget.
+    await expect(updateBudget(USER, monthly.id, { period: "yearly" }, prisma)).rejects.toMatchObject({ status: 409, code: "budget.clash" });
+    const moved = await updateBudget(USER, monthly.id, { period: "yearly", effectiveFrom: "2026-02" }, prisma);
+    expect(moved).toMatchObject({ period: "yearly", month: null, year: 2026 });
   });
 
   it("builds the category x month matrix with budgets per month", async () => {
@@ -247,6 +263,34 @@ describe("categories", () => {
     expect(await prisma.ledgerEntry.count({ where: { userId: USER, categoryId: f.categories.Groceries } })).toBe(1);
     const rules = await prisma.categorizationRule.findMany({ where: { userId: USER } });
     expect(rules.every((x) => x.categoryId === f.categories.Groceries)).toBe(true);
+  });
+
+  it("moves budgets that share a start month with the target's when their periods differ, and refuses same-period ones", async () => {
+    const extra = await prisma.category.create({ data: { userId: USER, name: "Feira", type: "expense" } });
+    await createBudget(USER, { categoryId: f.categories.Groceries, amount: 6000, effectiveFrom: "2026-01", period: "yearly" }, prisma);
+    await createBudget(USER, { categoryId: extra.id, amount: 500, effectiveFrom: "2026-01" }, prisma);
+    expect(await mergeCategories(USER, extra.id, f.categories.Groceries, prisma)).toMatchObject({ budgetsMoved: 1 });
+
+    const other = await prisma.category.create({ data: { userId: USER, name: "Hortifruti", type: "expense" } });
+    await createBudget(USER, { categoryId: other.id, amount: 300, effectiveFrom: "2026-01" }, prisma);
+    await expect(mergeCategories(USER, other.id, f.categories.Groceries, prisma)).rejects.toMatchObject({ status: 409, code: "category.reassign_budget_clash" });
+  });
+
+  it("limits rules to the user's own entities and stores equals patterns normalized on update too", async () => {
+    const OTHER = "test-user-ledger-domains-002";
+    const other = await createLedgerFixture(prisma, OTHER);
+    try {
+      await expect(createRule(USER, { matchType: "contains", pattern: "uber", categoryId: f.categories.Software, entityId: other.pjId }, prisma)).rejects.toMatchObject({
+        status: 404,
+        code: "entity.not_found",
+      });
+      const rule = await createRule(USER, { matchType: "contains", pattern: "Uber", categoryId: f.categories.Software, entityId: f.pjId }, prisma);
+      await expect(updateRule(USER, rule.id, { entityId: other.pjId }, prisma)).rejects.toMatchObject({ status: 404, code: "entity.not_found" });
+      expect(await updateRule(USER, rule.id, { matchType: "equals", pattern: "  UBER Trip " }, prisma)).toMatchObject({ matchType: "equals", pattern: "uber trip" });
+      await expect(updateRule(USER, rule.id, { matchType: "regex", pattern: "(" }, prisma)).rejects.toMatchObject({ status: 422, code: "rule.invalid_regex" });
+    } finally {
+      await deleteLedgerFixture(prisma, OTHER);
+    }
   });
 
   it("protects categories in use and system categories", async () => {
