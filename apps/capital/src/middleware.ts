@@ -38,10 +38,13 @@ export default async function middleware(request: NextRequest) {
   // URLs carry no locale. A prefixed one (an old bookmark, or the language
   // switch, which navigates to /en/…) is redirected by next-intl to the
   // same path without the prefix, with the cookie set to that locale; the
-  // next request goes through the checks below.
+  // next request goes through the checks below. (Given the real
+  // Accept-Language, next-intl would skip the cookie when the browser
+  // already asks for that locale: /en/… in an English browser would then
+  // land in pt-BR.)
   const { locale, path } = stripLocalePrefix(pathname, routing.locales);
   if (locale) {
-    return intlMiddleware(request);
+    return intlMiddleware(withDefaultLanguage(request));
   }
 
   const hasSession = !!request.cookies.get(SESSION_COOKIE_NAME)?.value;

@@ -170,10 +170,12 @@ describe("Middleware", () => {
     });
 
     it("lets next-intl unprefix a localized URL before any session check", async () => {
-      const res = await run("/en/settings?page=prefs");
+      const res = await run("/en/settings?page=prefs", { language: "en-US" });
       expect(location(res)).toBeNull();
       expect(toIntl(res)).toBe(true);
       expect(intl.requests[0].url).toBe("http://localhost:3000/en/settings?page=prefs");
+      // With the browser's own "en-US", next-intl would not write NEXT_LOCALE=en and the redirect would land in pt-BR.
+      expect(intl.requests[0].headers.get("accept-language")).toBe("pt-BR");
     });
 
     it("leaves API routes, MCP and files alone", async () => {
