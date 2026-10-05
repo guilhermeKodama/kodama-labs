@@ -76,13 +76,33 @@ describe("monitors", () => {
 
   it("gives every scheduled cron a push monitor that requires two misses", () => {
     const crons = cronPushMonitors(schedules);
-    expect(crons.length).toBeGreaterThan(0);
+    expect(crons).toHaveLength(23);
     for (const monitor of crons) {
       expect(monitor.type).toBe("push");
       expect(monitor.maxretries).toBe(1);
       expect(monitor.interval).toBeGreaterThan(monitor.retryInterval);
     }
-    expect(crons.some((monitor) => monitor.name === "kodama/cron-capital-api-cron-send-reminders")).toBe(true);
+    const byName = new Map(crons.map((monitor) => [monitor.name, monitor]));
+    expect(byName.get("kodama/cron-capital-api-cron-categorize-bills")).toMatchObject({
+      interval: 180,
+      retryInterval: 120,
+    });
+    expect(byName.get("kodama/cron-capital-api-cron-send-reminders")).toMatchObject({
+      interval: 360,
+      retryInterval: 300,
+    });
+    expect(byName.get("kodama/cron-sentinel-api-cron-ingest-pncp-documents")).toMatchObject({
+      interval: 1860,
+      retryInterval: 1800,
+    });
+    expect(byName.get("kodama/cron-capital-api-cron-process-recurring")).toMatchObject({
+      interval: 26 * 3600 + 60,
+      retryInterval: 26 * 3600,
+    });
+    expect(byName.get("kodama/cron-capital-api-cron-fire-snapshot")).toMatchObject({
+      interval: 32 * 24 * 3600 + 60,
+      retryInterval: 32 * 24 * 3600,
+    });
   });
 
   it("parses the schedule dialects we ship", () => {

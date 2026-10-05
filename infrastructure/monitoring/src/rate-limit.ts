@@ -22,11 +22,19 @@ interface Bucket {
  */
 export class RateLimiter {
   private readonly buckets = new Map<string, Bucket>();
+  private expired: string[] = [];
 
   constructor(
     private readonly quietMs: number,
     private readonly suppressMs: number,
   ) {}
+
+  /** Keys whose suppress window ended with nothing left to send. One drain per tick. */
+  drainExpired(): string[] {
+    const keys = this.expired;
+    this.expired = [];
+    return keys;
+  }
 
   observe(key: string, now: number, excerpt: string): void {
     const existing = this.buckets.get(key);
@@ -52,6 +60,7 @@ export class RateLimiter {
       if (!readyToOpen && !readyToFlush) {
         if (bucket.suppressUntil !== 0 && now >= bucket.suppressUntil && bucket.count === 0) {
           this.buckets.delete(key);
+          this.expired.push(key);
         }
         continue;
       }

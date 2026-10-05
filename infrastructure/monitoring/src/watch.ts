@@ -3,6 +3,12 @@ import { createDocker, toListed, type ListedContainer } from "./docker.js";
 import { demuxDockerFrames } from "./docker-frames.js";
 import { detectKinds, type Kind } from "./detect.js";
 import { compileIgnore, ignoreSourcesFromEnv, isIgnored } from "./ignore.js";
+import {
+  attachLogFollow,
+  containersToFollow,
+  forgetMeta,
+  pruneContainerMaps,
+} from "./log-follow.js";
 import { RateLimiter } from "./rate-limit.js";
 import { redact } from "./redact.js";
 import { signatureOf } from "./signature.js";
@@ -10,7 +16,6 @@ import { postJson, webhookFromProcess } from "./webhook.js";
 
 const QUIET_MS = 15_000;
 const SUPPRESS_MS = 30 * 60_000;
-const SKIP_TAIL = new Set(["log-watcher", "uptime-kuma", "docker-socket-proxy", "uptime-kuma-provision"]);
 
 interface Meta {
   service: string;
@@ -72,12 +77,14 @@ async function main(): Promise<void> {
       filters: { label: [`com.docker.compose.project=${project}`] },
     })).map((item) => toListed(item));
 
-    const alive = new Set(listed.map((item) => item.Id));
+    const known = new Set(listed.map((item) => item.Id));
     for (const [id, stream] of following) {
-      if (alive.has(id)) continue;
+      if (known.has(id)) continue;
       stream.destroy();
       following.delete(id);
     }
+    pruneContainerMaps(known, restartCounts, migrateSeen);
+    const toFollow = new Set(containersToFollow(listed, following, starting).map((item) => item.Id));
 
     for (const container of listed) {
       if (container.service === "uptime-kuma" && primed && container.State !== "running") {
@@ -95,18 +102,11 @@ async function main(): Promise<void> {
         );
       }
 
-      if (
-        container.State === "running" &&
-        !SKIP_TAIL.has(container.service) &&
-        !container.service.endsWith("-migrate") &&
-        !following.has(container.Id) &&
-        !starting.has(container.Id)
-      ) {
+      if (toFollow.has(container.Id)) {
         starting.add(container.Id);
-        void follow(docker, container, onChunk).then(
-          (stream) => {
+        void follow(docker, container, following, onChunk).then(
+          () => {
             starting.delete(container.Id);
-            if (stream) following.set(container.Id, stream);
           },
           (error: unknown) => {
             starting.delete(container.Id);
@@ -129,7 +129,8 @@ async function main(): Promise<void> {
       primed = true;
     }
 
-    for (const due of limiter.collect(Date.now())) {
+    const now = Date.now();
+    for (const due of limiter.collect(now)) {
       const info = meta.get(due.key);
       if (!info) continue;
       await postJson(webhook, {
@@ -149,6 +150,7 @@ async function main(): Promise<void> {
         host,
       });
     }
+    forgetMeta(meta, limiter.drainExpired());
   };
 
   for (;;) {
@@ -164,8 +166,9 @@ async function main(): Promise<void> {
 async function follow(
   docker: ReturnType<typeof createDocker>,
   container: ListedContainer,
+  following: Map<string, Readable>,
   onChunk: (container: ListedContainer, text: string) => void,
-): Promise<Readable | null> {
+): Promise<void> {
   const since = Math.floor(Date.now() / 1000);
   const stream: unknown = await docker.getContainer(container.Id).logs({
     follow: true,
@@ -174,34 +177,8 @@ async function follow(
     tail: 0,
     since,
   });
-  if (!isReadable(stream)) return null;
-  let buf = Buffer.alloc(0);
-  let pending = "";
-  let timer: ReturnType<typeof setTimeout> | null = null;
-  const flush = (): void => {
-    timer = null;
-    const text = pending;
-    pending = "";
-    if (text.trim()) onChunk(container, text);
-  };
-  stream.on("data", (chunk: Buffer) => {
-    buf = Buffer.concat([buf, chunk]);
-    const demuxed = demuxDockerFrames(buf);
-    buf = Buffer.from(demuxed.rest);
-    if (demuxed.frames.length === 0) return;
-    pending += demuxed.frames.map((frame) => frame.text).join("");
-    if (timer) clearTimeout(timer);
-    timer = setTimeout(flush, 500);
-  });
-  stream.on("error", () => {
-    if (timer) clearTimeout(timer);
-    flush();
-  });
-  stream.on("end", () => {
-    if (timer) clearTimeout(timer);
-    flush();
-  });
-  return stream;
+  if (!isReadable(stream)) return;
+  attachLogFollow({ stream, container, following, onChunk });
 }
 
 async function rememberBaseline(
