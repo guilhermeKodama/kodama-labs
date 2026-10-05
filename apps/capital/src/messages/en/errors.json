@@ -120,7 +120,15 @@
     "oversell": "The sale is larger than the position."
   },
   "operation": {
-    "not_found": "Operation not found."
+    "not_found": "Operation not found.",
+    "income_only": "Only income can have an income type, tax withheld or a credit account.",
+    "tax_exceeds_amount": "The tax withheld can't exceed the gross amount.",
+    "credit_account_invalid": "Income can only be credited to a checking or cash account."
+  },
+  "aporte": {
+    "broker_required": "A contribution has to go to a brokerage account.",
+    "source_invalid": "The money for a contribution has to come from a checking or cash account.",
+    "holding_mismatch": "The asset bought isn't at the contribution's broker."
   },
   "brokerage": {
     "insufficient_cash": "Not enough cash in the brokerage account."

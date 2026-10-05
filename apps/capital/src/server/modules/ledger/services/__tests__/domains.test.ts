@@ -166,7 +166,9 @@ describe("investments", () => {
 
     const holding = await prisma.investmentHolding.findUniqueOrThrow({ where: { id: h.id } });
     expect(holding.currentQuantity).toBe(50);
-    expect(holding.averageCost).toBeCloseTo(30, 5);
+    // Fees are part of the cost; the sale takes half of the cost basis out.
+    expect(holding.averageCost).toBeCloseTo(30.1, 5);
+    expect(holding.totalInvested).toBeCloseTo(1505, 5);
 
     const balances = await accountBalances(USER, prisma, [f.broker, f.pfChecking]);
     expect(balances.get(f.broker)).toBeCloseTo(1750, 2);
@@ -204,7 +206,7 @@ describe("investments", () => {
     const bdr = await createHolding(USER, { accountId: f.broker, assetClass: "bdr", ticker: "AAPL34", name: "Apple", currentPrice: 1 }, prisma);
     const fund = await createHolding(USER, { accountId: f.broker, assetClass: "savings", name: "Caixinha", allocationClass: "cash", currentPrice: 1 }, prisma);
     for (const [h, qty] of [[usEtf, 100], [brEtf, 200], [bdr, 300], [fund, 400]] as const) {
-      await recordOperation(USER, { holdingId: h.id, type: "buy", quantity: qty, pricePerUnit: 1, totalAmount: qty, date: "2026-08-01" }, prisma);
+      await recordOperation(USER, { holdingId: h.id, type: "buy", quantity: qty, pricePerUnit: 1, totalAmount: qty, date: "2026-08-01", fundFromAccountId: f.pfChecking }, prisma);
     }
     const summary = await portfolioSummary(USER, prisma);
     // No USD rate in the fixture, so USD converts at 1.

@@ -3,9 +3,11 @@ import { createRouter } from "@capital/server/lib/router";
 import { entityScopeQuery, entityScopeSchema, resolveScopeQuery } from "@capital/server/lib/entity-scope";
 import { prisma } from "@capital/server/lib/prisma";
 import { idParams, jsonBody, queryFlag, v2Handler, v2Responses } from "@capital/server/lib/v2";
+import { loadFx } from "@capital/server/modules/ledger/lib/fx";
 import {
   adjustPosition,
   contributions,
+  countOperations,
   createHolding,
   deleteOperation,
   getOwnedHolding,
@@ -31,7 +33,9 @@ const day = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 const assetClass = z.enum(ASSET_CLASSES);
 const allocationClass = z.enum(ALLOCATION_CLASSES);
 const subType = z.enum(["cdb", "rdb", "lci", "lca", "cdi", "tesouro_selic", "tesouro_ipca", "tesouro_prefixado", "debenture"]);
-const opType = z.enum(["buy", "sell", "dividend", "yield_payment", "split", "deposit", "withdrawal", "adjustment"]);
+const OP_TYPES = ["buy", "sell", "dividend", "yield_payment", "split", "deposit", "withdrawal", "adjustment"] as const;
+const opType = z.enum(OP_TYPES);
+const incomeType = z.enum(["dividend", "jcp", "fii_income", "interest"]);
 
 const holdingFields = {
   assetClass,
@@ -51,6 +55,12 @@ const operationFields = {
   date: day,
   notes: z.string().nullish(),
   externalId: z.string().nullish(),
+  /** Income only: dividend | jcp | fii_income | interest. */
+  incomeType: incomeType.nullish(),
+  /** Income only: tax withheld at source (cash credited = totalAmount - taxWithheld). */
+  taxWithheld: z.number().nonnegative().optional(),
+  /** Income only: credit the cash to this checking/cash account instead of the broker (null = broker). */
+  creditToAccountId: z.string().nullish(),
 };
 
 const holdingsRoute = createRoute({
@@ -82,19 +92,42 @@ const opsRoute = createRoute({
   method: "get",
   path: "/v2/investment-operations",
   tags,
-  summary: "Investment operations",
-  request: { query: z.object({ holdingId: z.string().optional(), accountId: z.string().optional(), from: day.optional(), to: day.optional() }) },
+  summary: "Investment operations, newest first; scope = all | pf | pj | <entityId>; type = comma list; limit/offset page them",
+  request: {
+    query: z.object({
+      holdingId: z.string().optional(),
+      accountId: z.string().optional(),
+      ...entityScopeQuery,
+      type: z
+        .string()
+        .regex(new RegExp(`^(${OP_TYPES.join("|")})(,(${OP_TYPES.join("|")}))*$`))
+        .optional()
+        .describe("Comma-separated operation types, e.g. dividend,yield_payment"),
+      from: day.optional(),
+      to: day.optional(),
+      limit: z.coerce.number().int().min(1).max(500).optional(),
+      offset: z.coerce.number().int().min(0).optional(),
+    }),
+  },
   responses: v2Responses,
 });
 const createOpRoute = createRoute({
   method: "post",
   path: "/v2/investment-operations",
   tags,
-  summary: "Record a buy/sell/income with its cash leg; fundFromAccountId first moves the cash from a checking account",
-  request: jsonBody(z.object({ holdingId: z.string(), ...operationFields, fundFromAccountId: z.string().nullish() })),
+  summary:
+    "Record a buy/sell/income with its cash leg, in one undo batch (batchId). fundFromAccountId first moves the cash from a checking account (fundAmount = amount debited when its currency differs). A sale above the position is 422 holding.oversell.",
+  request: jsonBody(z.object({ holdingId: z.string(), ...operationFields, fundFromAccountId: z.string().nullish(), fundAmount: z.number().positive().nullish() })),
   responses: v2Responses,
 });
-const patchOpRoute = createRoute({ method: "patch", path: "/v2/investment-operations/{id}", tags, summary: "Update an operation", request: { params: idParams, ...jsonBody(z.object(operationFields).partial()) }, responses: v2Responses });
+const patchOpRoute = createRoute({
+  method: "patch",
+  path: "/v2/investment-operations/{id}",
+  tags,
+  summary: "Update an operation and its cash leg, in one undo batch (batchId)",
+  request: { params: idParams, ...jsonBody(z.object(operationFields).partial()) },
+  responses: v2Responses,
+});
 const deleteOpRoute = createRoute({
   method: "delete",
   path: "/v2/investment-operations/{id}",
@@ -166,39 +199,50 @@ const contributionsRoute = createRoute({
   responses: v2Responses,
 });
 
+/** One holding as GET /v2/holdings serializes it (inactive ones included). */
+async function serializedHolding(userId: string, id: string) {
+  const holding = await getOwnedHolding(userId, id, prisma);
+  const [[h], fx] = await Promise.all([listHoldings(userId, prisma, { accountId: holding.accountId, includeInactive: true }).then((hs) => hs.filter((x) => x.id === id)), loadFx(userId, prisma)]);
+  return serializeHolding(h, fx);
+}
+
 export const v2Investments = createRouter()
   .openapi(holdingsRoute, v2Handler(holdingsRoute, async (c, userId) => {
     const q = c.req.valid("query");
     const entityIds = await resolveScopeQuery(userId, q, prisma);
-    const holdings = await listHoldings(userId, prisma, { accountId: q.accountId, entityIds, includeInactive: q.includeInactive === "true" });
-    return { holdings: holdings.map(serializeHolding) };
+    const [holdings, fx] = await Promise.all([listHoldings(userId, prisma, { accountId: q.accountId, entityIds, includeInactive: q.includeInactive === "true" }), loadFx(userId, prisma)]);
+    return { holdings: holdings.map((h) => serializeHolding(h, fx)) };
   }))
   .openapi(createHoldingRoute, v2Handler(createHoldingRoute, async (c, userId) => {
     const created = await createHolding(userId, c.req.valid("json"), prisma);
-    const [holding] = await listHoldings(userId, prisma, { accountId: created.accountId, includeInactive: true }).then((hs) => hs.filter((h) => h.id === created.id));
-    return serializeHolding(holding);
+    return serializedHolding(userId, created.id);
   }))
   .openapi(patchHoldingRoute, v2Handler(patchHoldingRoute, async (c, userId) => {
     const { id } = c.req.valid("param");
     await updateHolding(userId, id, c.req.valid("json"), prisma);
-    const holding = await getOwnedHolding(userId, id, prisma);
-    const [h] = (await listHoldings(userId, prisma, { accountId: holding.accountId, includeInactive: true })).filter((x) => x.id === id);
-    return serializeHolding(h);
+    return serializedHolding(userId, id);
   }))
   .openapi(adjustRoute, v2Handler(adjustRoute, async (c, userId) => adjustPosition(userId, { holdingId: c.req.valid("param").id, ...c.req.valid("json") }, prisma)))
   .openapi(opsRoute, v2Handler(opsRoute, async (c, userId) => {
     const q = c.req.valid("query");
-    const ops = await listOperations(userId, prisma, {
+    const filters = {
       holdingId: q.holdingId,
       accountId: q.accountId,
+      entityIds: await resolveScopeQuery(userId, q, prisma),
+      types: q.type ? (q.type.split(",") as (typeof OP_TYPES)[number][]) : undefined,
       from: q.from ? new Date(`${q.from}T00:00:00Z`) : undefined,
       to: q.to ? new Date(`${q.to}T23:59:59Z`) : undefined,
-    });
-    return { operations: ops.map(serializeOperation) };
+    };
+    const ops = await listOperations(userId, prisma, { ...filters, limit: q.limit, offset: q.offset });
+    if (q.limit === undefined) return { operations: ops.map(serializeOperation), total: ops.length, nextOffset: null };
+    const total = await countOperations(userId, prisma, filters);
+    const end = (q.offset ?? 0) + ops.length;
+    return { operations: ops.map(serializeOperation), total, nextOffset: end < total ? end : null };
   }))
   .openapi(createOpRoute, v2Handler(createOpRoute, async (c, userId) => {
     const result = await recordOperation(userId, c.req.valid("json"), prisma);
-    return { ...result, operation: serializeOperation(result.operation) };
+    const operation = await prisma.investmentOperation.findUniqueOrThrow({ where: { id: result.operation.id }, include: OPERATION_INCLUDE });
+    return { ...result, operation: serializeOperation(operation) };
   }))
   .openapi(patchOpRoute, v2Handler(patchOpRoute, async (c, userId) => {
     const { id } = c.req.valid("param");

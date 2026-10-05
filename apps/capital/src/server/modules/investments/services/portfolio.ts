@@ -1,17 +1,18 @@
 import type { DbClient } from "@capital/server/lib/prisma";
 import { Prisma } from "@/generated/prisma";
-import type { AllocationClass, AssetClass, FixedIncomeSubType, InvestmentHolding, InvestmentOperation, InvestmentTransactionType } from "@/generated/prisma";
+import type { Account, AllocationClass, AssetClass, FixedIncomeSubType, IncomeType, InvestmentHolding, InvestmentOperation, InvestmentTransactionType } from "@/generated/prisma";
 import { formatDateOnly, parseLocalDate } from "@capital/server/lib/date-utils";
 import { entityScopeSql, entityScopeWhere } from "@capital/server/lib/entity-scope";
 import { ALLOCATION_CLASSES, dominantEtfCurrency, holdingAllocationClass, toAllocationTargets, type TargetInput } from "@capital/server/modules/investments/lib/allocation-class";
-import { recalculateHolding } from "@capital/server/modules/investments/lib/holding-position";
+import { oversoldOperations, recalculateHolding, recalculateHoldingDetailed } from "@capital/server/modules/investments/lib/holding-position";
 import { LedgerError, notFound } from "@capital/server/modules/ledger/lib/errors";
-import { loadFx } from "@capital/server/modules/ledger/lib/fx";
+import { loadFx, type FxContext } from "@capital/server/modules/ledger/lib/fx";
 import { round, toNumber } from "@capital/server/modules/ledger/lib/money";
 import { accountBalances, getOwnedAccount } from "@capital/server/modules/ledger/services/accounts";
 import { createEntry, softDeleteEntries } from "@capital/server/modules/ledger/services/entries";
 import { getDefaultAccount } from "@capital/server/modules/ledger/services/entities";
 import { inTransaction, recordMutation, snapshot, type MutationRecordInput } from "@capital/server/modules/ledger/services/mutations";
+import { convertAmount, fundBroker } from "./funding";
 
 export { recalculateHolding };
 
@@ -97,14 +98,24 @@ export async function listHoldings(userId: string, db: DbClient, opts: Portfolio
   });
 }
 
+/** Fixed income and savings are tracked by amount: with no quantity, the position is the cost basis. */
+const AMOUNT_BASED: readonly AssetClass[] = ["fixed_income", "savings"];
+
+/**
+ * Market value in the holding's currency: quantity x price, or the cost
+ * basis while there is no price yet. With no quantity an amount-based asset
+ * (fixed income, savings) is worth its cost basis; anything else is worth 0
+ * (a sold-out position never falls back to what was invested).
+ */
 export function marketValue(h: Pick<InvestmentHolding, "currentQuantity" | "currentPrice" | "totalInvested" | "assetClass">) {
-  // Fixed income and savings are amount-based: the position is the invested amount.
-  if (h.currentPrice !== null && h.currentQuantity > 0) return h.currentQuantity * h.currentPrice;
-  return h.totalInvested;
+  if (h.currentQuantity > 0) return h.currentPrice !== null ? h.currentQuantity * h.currentPrice : h.totalInvested;
+  return AMOUNT_BASED.includes(h.assetClass) ? h.totalInvested : 0;
 }
 
-export function serializeHolding(h: Awaited<ReturnType<typeof listHoldings>>[number]) {
+/** A holding for the API, with value and cost basis also in the base currency (fxRate = base units per unit of its currency). */
+export function serializeHolding(h: Awaited<ReturnType<typeof listHoldings>>[number], fx: FxContext) {
   const value = marketValue(h);
+  const fxRate = fx.rateFor(h.currency);
   return {
     id: h.id,
     accountId: h.accountId,
@@ -125,6 +136,10 @@ export function serializeHolding(h: Awaited<ReturnType<typeof listHoldings>>[num
     marketValue: round(value, 2),
     unrealizedGain: round(value - h.totalInvested, 2),
     unrealizedGainPercent: h.totalInvested > 0 ? round((value - h.totalInvested) / h.totalInvested, 4) : null,
+    fxRate,
+    marketValueBase: round(value * fxRate, 2),
+    investedBase: round(h.totalInvested * fxRate, 2),
+    unrealizedGainBase: round((value - h.totalInvested) * fxRate, 2),
     isActive: h.isActive,
   };
 }
@@ -133,8 +148,24 @@ export function serializeHolding(h: Awaited<ReturnType<typeof listHoldings>>[num
 // Operations
 // ---------------------------------------------------------------------------
 
-/** Cash moved by an operation on the brokerage account (negative = cash leaves). */
-export function cashImpact(type: InvestmentTransactionType, totalAmount: number, fees: number): number {
+const INCOME_OPERATION_TYPES = ["dividend", "yield_payment"] as const satisfies readonly InvestmentTransactionType[];
+
+/** Dividends and yields: the operations that can carry an income type, tax withheld and a credit account. */
+export function isIncomeOperation(type: InvestmentTransactionType): boolean {
+  return (INCOME_OPERATION_TYPES as readonly string[]).includes(type);
+}
+
+/** The operation type an income type is recorded as (interest is a yield, the rest dividends). */
+export function incomeOperationType(incomeType: IncomeType): InvestmentTransactionType {
+  return incomeType === "interest" ? "yield_payment" : "dividend";
+}
+
+/**
+ * Cash moved by an operation, in the holding's currency (negative = cash
+ * leaves). Buys cost the amount plus fees, sales bring the amount minus
+ * fees, income brings the gross amount minus the tax withheld at source.
+ */
+export function cashImpact(type: InvestmentTransactionType, totalAmount: number, fees: number, taxWithheld = 0): number {
   switch (type) {
     case "buy":
     case "deposit":
@@ -144,7 +175,7 @@ export function cashImpact(type: InvestmentTransactionType, totalAmount: number,
       return totalAmount - fees;
     case "dividend":
     case "yield_payment":
-      return totalAmount;
+      return totalAmount - taxWithheld;
     default:
       return 0;
   }
@@ -161,20 +192,37 @@ const OP_LABEL: Record<InvestmentTransactionType, string> = {
   adjustment: "Ajuste",
 };
 
-const opLabel = (type: InvestmentTransactionType, holding: { ticker: string | null; name: string }) => `${OP_LABEL[type]} ${holding.ticker ?? holding.name}`;
+const INCOME_LABEL: Record<IncomeType, string> = {
+  dividend: "Dividendo",
+  jcp: "JCP",
+  fii_income: "Rendimento FII",
+  interest: "Juros",
+};
+
+const opLabel = (type: InvestmentTransactionType, holding: { ticker: string | null; name: string }, incomeType?: IncomeType | null) =>
+  `${incomeType && isIncomeOperation(type) ? INCOME_LABEL[incomeType] : OP_LABEL[type]} ${holding.ticker ?? holding.name}`;
 
 export interface OperationInput {
   holdingId: string;
   type: InvestmentTransactionType;
   quantity?: number | null;
   pricePerUnit?: number | null;
+  /** Gross amount in the holding's currency (fees and tax withheld apart). */
   totalAmount: number;
   fees?: number;
   date: string;
   notes?: string | null;
   externalId?: string | null;
-  /** Pay a buy from a checking account: books an investment_deposit transfer first. */
+  /** Income only: dividend, JCP, FII income or interest. */
+  incomeType?: IncomeType | null;
+  /** Income only: tax withheld at source; the cash credited is totalAmount - taxWithheld. */
+  taxWithheld?: number;
+  /** Income only: credit the cash to this checking or cash account (an entry in Transações) instead of the broker. */
+  creditToAccountId?: string | null;
+  /** Pay a buy from a checking account: books an investment_deposit transfer first (across entities, through the broker entity's main checking; see fundBroker). */
   fundFromAccountId?: string | null;
+  /** With fundFromAccountId in another currency: the amount debited from it (default: converted at today's rate). */
+  fundAmount?: number | null;
   importId?: string | null;
 }
 
@@ -187,32 +235,59 @@ export interface OperationWriteOptions {
 
 type HoldingWithAccount = Awaited<ReturnType<typeof getOwnedHolding>>;
 
-/** The operation's cash leg on the brokerage account, converted at today's rate. */
+/** The checking or cash account an income operation is credited to. */
+async function creditAccount(userId: string, accountId: string, db: DbClient) {
+  const account = await getOwnedAccount(userId, accountId, db);
+  if (account.type !== "checking" && account.type !== "cash") {
+    throw new LedgerError("Income can only be credited to a checking or cash account", 422, { code: "operation.credit_account_invalid" });
+  }
+  if (account.archivedAt) throw new LedgerError(`Account "${account.name}" is archived`, 422, { code: "account.archived", params: { name: account.name } });
+  return account;
+}
+
+/** Income type, tax withheld and credit account are for income operations only, and the tax cannot exceed the gross amount. */
+function assertIncomeFields(type: InvestmentTransactionType, fields: { incomeType?: IncomeType | null; taxWithheld?: number; creditToAccountId?: string | null; totalAmount: number }) {
+  if (!isIncomeOperation(type) && (fields.incomeType || (fields.taxWithheld ?? 0) > 0 || fields.creditToAccountId)) {
+    throw new LedgerError("Only income operations can have an income type, tax withheld or a credit account", 422, { code: "operation.income_only" });
+  }
+  if ((fields.taxWithheld ?? 0) > fields.totalAmount + 1e-9) {
+    throw new LedgerError("The tax withheld cannot exceed the gross amount", 422, { code: "operation.tax_exceeds_amount" });
+  }
+}
+
+/** A write may not make an operation sell more than the position held at that point. */
+function assertNoNewOversell(before: Set<string>, after: readonly string[]) {
+  if (after.some((id) => !before.has(id))) throw new LedgerError("The sale is larger than the position", 422, { code: "holding.oversell" });
+}
+
+/** The operation's cash leg on `account` (the broker, or the bank an income is credited to), converted at today's rate. */
 async function createCashLeg(
   tx: DbClient,
   userId: string,
   holding: HoldingWithAccount,
-  type: InvestmentTransactionType,
+  account: Account,
+  label: string,
   impact: number,
   date: Date,
   importId: string | null,
+  fx: FxContext,
   records: MutationRecordInput[]
 ) {
-  const fx = await loadFx(userId, tx);
-  const rate = fx.rateFor(holding.account.currency);
+  const rate = fx.rateFor(account.currency);
+  const amount = round(convertAmount(impact, holding.currency, account.currency, fx), 4);
   const leg = await tx.ledgerEntry.create({
     data: {
       userId,
-      entityId: holding.account.entityId,
-      accountId: holding.accountId,
+      entityId: account.entityId,
+      accountId: account.id,
       kind: "investment",
-      amount: round(impact, 4),
-      currency: holding.account.currency,
+      amount,
+      currency: account.currency,
       exchangeRate: rate,
-      amountBase: round(impact * rate, 4),
+      amountBase: round(amount * rate, 4),
       date,
       effectiveDate: date,
-      description: opLabel(type, holding),
+      description: label,
       importId,
       metadata: { holdingId: holding.id },
     },
@@ -229,27 +304,52 @@ async function trashCashLeg(tx: DbClient, userId: string, entryId: string, recor
   records.push({ model: "LedgerEntry", recordId: leg.id, before: snapshot(leg), after: snapshot(trashed) });
 }
 
-/** Records the operation with its cash leg (and funding transfer), all in one undo batch. */
-export async function recordOperation(userId: string, input: OperationInput, db: DbClient, opts: OperationWriteOptions = {}) {
+export interface RecordOperationOptions extends OperationWriteOptions {
+  /** An investment_deposit the caller already booked for this buy (POST /v2/investments/aporte). */
+  fundingGroupId?: string | null;
+}
+
+/**
+ * Records the operation with its cash leg (and funding transfer), all in one
+ * undo batch. A sale above the position held at its date is refused (422
+ * holding.oversell), except for statement imports (importId), whose history
+ * may start after the buys.
+ */
+export async function recordOperation(userId: string, input: OperationInput, db: DbClient, opts: RecordOperationOptions = {}) {
   return inTransaction(db, async (tx) => {
     const records: MutationRecordInput[] = opts.collect ?? [];
     const holding = await getOwnedHolding(userId, input.holdingId, tx);
     const fees = input.fees ?? 0;
+    const taxWithheld = input.taxWithheld ?? 0;
+    assertIncomeFields(input.type, { ...input, taxWithheld });
+    const incomeType = isIncomeOperation(input.type) ? input.incomeType ?? null : null;
+    const fx = await loadFx(userId, tx);
     const date = parseLocalDate(input.date);
-    const impact = cashImpact(input.type, input.totalAmount, fees);
-    let fundingGroupId: string | null = null;
+    const impact = cashImpact(input.type, input.totalAmount, fees, taxWithheld);
+    const legAccount = input.creditToAccountId ? await creditAccount(userId, input.creditToAccountId, tx) : holding.account;
+    const label = opLabel(input.type, holding, incomeType);
+    const oversoldBefore = input.importId ? null : await oversoldOperations(holding.id, tx);
 
+    let fundingGroupId: string | null = opts.fundingGroupId ?? null;
     if (input.fundFromAccountId && impact < 0) {
-      const funded = await createEntry(
-        userId,
-        { kind: "transfer", fromAccountId: input.fundFromAccountId, toAccountId: holding.accountId, amount: -impact, date: input.date, direction: "investment_deposit" },
+      const funded = await fundBroker(
         tx,
-        { importId: input.importId ?? null, collect: records }
+        userId,
+        {
+          fromAccountId: input.fundFromAccountId,
+          broker: holding.account,
+          brokerAmount: -convertAmount(impact, holding.currency, holding.account.currency, fx),
+          fundAmount: input.fundAmount,
+          date: input.date,
+          importId: input.importId,
+        },
+        fx,
+        records
       );
-      fundingGroupId = funded.transferGroupId;
+      fundingGroupId = funded.depositGroupId;
     }
 
-    const cashEntryId = impact !== 0 ? (await createCashLeg(tx, userId, holding, input.type, impact, date, input.importId ?? null, records)).id : null;
+    const cashEntryId = impact !== 0 ? (await createCashLeg(tx, userId, holding, legAccount, label, impact, date, input.importId ?? null, fx, records)).id : null;
 
     const op = await tx.investmentOperation.create({
       data: {
@@ -259,6 +359,8 @@ export async function recordOperation(userId: string, input: OperationInput, db:
         pricePerUnit: input.pricePerUnit ?? null,
         totalAmount: input.totalAmount,
         fees,
+        incomeType,
+        taxWithheld,
         date,
         notes: input.notes ?? null,
         externalId: input.externalId ?? null,
@@ -267,53 +369,82 @@ export async function recordOperation(userId: string, input: OperationInput, db:
       },
     });
     records.push({ model: "InvestmentOperation", recordId: op.id, before: null, after: snapshot(op) });
-    const updated = await recalculateHolding(holding.id, tx);
-    const batchId = opts.record === false || opts.collect ? null : await recordMutation(tx, userId, "create", opLabel(input.type, holding), records);
+    const { holding: updated, position } = await recalculateHoldingDetailed(holding.id, tx);
+    if (oversoldBefore) assertNoNewOversell(oversoldBefore, position.oversold);
+    const batchId = opts.record === false || opts.collect ? null : await recordMutation(tx, userId, "create", label, records);
     return { operation: op, holding: updated, cashEntryId, fundingGroupId, batchId };
   });
 }
 
-/** Updates an operation and keeps its cash leg in step: moved, created, or trashed when it no longer moves cash. */
-export async function updateOperation(
-  userId: string,
-  operationId: string,
-  patch: Partial<Omit<OperationInput, "holdingId" | "fundFromAccountId" | "importId">>,
-  db: DbClient,
-  opts: OperationWriteOptions = {}
-) {
+export type OperationPatch = Partial<Omit<OperationInput, "holdingId" | "fundFromAccountId" | "fundAmount" | "importId">>;
+
+/**
+ * Updates an operation and keeps its cash leg in step: moved (to another
+ * amount, date, or account for an income credited elsewhere), created, or
+ * trashed when it no longer moves cash. An edit that makes a sale exceed
+ * the position is refused (422 holding.oversell).
+ */
+export async function updateOperation(userId: string, operationId: string, patch: OperationPatch, db: DbClient, opts: OperationWriteOptions = {}) {
   return inTransaction(db, async (tx) => {
     const records: MutationRecordInput[] = opts.collect ?? [];
     const before = await tx.investmentOperation.findFirst({ where: { id: operationId, holding: { account: { userId } } } });
     if (!before) throw notFound("Investment operation", "operation.not_found");
     const holding = await getOwnedHolding(userId, before.holdingId, tx);
+    const type = patch.type ?? before.type;
+    const income = isIncomeOperation(type);
+    const totalAmount = patch.totalAmount ?? before.totalAmount;
+    // Leaving income drops the income fields; sending them for a non-income type is an error.
+    assertIncomeFields(type, { incomeType: patch.incomeType, taxWithheld: patch.taxWithheld, creditToAccountId: patch.creditToAccountId, totalAmount });
     const merged = {
-      type: patch.type ?? before.type,
-      totalAmount: patch.totalAmount ?? before.totalAmount,
+      type,
+      totalAmount,
       fees: patch.fees ?? before.fees,
+      incomeType: income ? (patch.incomeType !== undefined ? patch.incomeType : before.incomeType) : null,
+      taxWithheld: income ? patch.taxWithheld ?? before.taxWithheld : 0,
       date: patch.date ? parseLocalDate(patch.date) : before.date,
     };
-    const impact = cashImpact(merged.type, merged.totalAmount, merged.fees);
+    assertIncomeFields(type, { taxWithheld: merged.taxWithheld, totalAmount });
+    const fx = await loadFx(userId, tx);
+    const impact = cashImpact(merged.type, merged.totalAmount, merged.fees, merged.taxWithheld);
+    const label = opLabel(merged.type, holding, merged.incomeType);
+    const oversoldBefore = await oversoldOperations(holding.id, tx);
+
+    const leg = before.cashEntryId ? await tx.ledgerEntry.findUnique({ where: { id: before.cashEntryId } }) : null;
+    // Where the cash lands: the account asked for, else where it is now; non-income always on the broker.
+    const target = !income
+      ? holding.account
+      : patch.creditToAccountId !== undefined
+        ? patch.creditToAccountId
+          ? await creditAccount(userId, patch.creditToAccountId, tx)
+          : holding.account
+        : leg && leg.accountId !== holding.accountId
+          ? await getOwnedAccount(userId, leg.accountId, tx)
+          : holding.account;
 
     let cashEntryId = before.cashEntryId;
     if (cashEntryId && impact === 0) {
       await trashCashLeg(tx, userId, cashEntryId, records);
       cashEntryId = null;
-    } else if (cashEntryId) {
-      const leg = await tx.ledgerEntry.findUniqueOrThrow({ where: { id: cashEntryId } });
+    } else if (leg) {
+      const moving = target.id !== leg.accountId;
+      const currency = moving ? target.currency : leg.currency;
+      const rate = moving ? fx.rateFor(target.currency) : toNumber(leg.exchangeRate);
+      const amount = round(convertAmount(impact, holding.currency, currency, fx), 4);
       const moved = await tx.ledgerEntry.update({
         where: { id: leg.id },
         data: {
-          amount: round(impact, 4),
-          amountBase: round(impact * toNumber(leg.exchangeRate), 4),
+          amount,
+          amountBase: round(amount * rate, 4),
           date: merged.date,
           effectiveDate: merged.date,
-          ...(merged.type !== before.type && { description: opLabel(merged.type, holding) }),
+          description: label,
+          ...(moving && { accountId: target.id, entityId: target.entityId, currency, exchangeRate: rate }),
         },
       });
       records.push({ model: "LedgerEntry", recordId: leg.id, before: snapshot(leg), after: snapshot(moved) });
-    } else if (impact !== 0 && cashImpact(before.type, before.totalAmount, before.fees) === 0) {
+    } else if (impact !== 0 && cashImpact(before.type, before.totalAmount, before.fees, before.taxWithheld) === 0) {
       // Only an operation that starts moving cash gets a leg; one recorded without a leg stays without.
-      cashEntryId = (await createCashLeg(tx, userId, holding, merged.type, impact, merged.date, null, records)).id;
+      cashEntryId = (await createCashLeg(tx, userId, holding, target, label, impact, merged.date, null, fx, records)).id;
     }
 
     const updated = await tx.investmentOperation.update({
@@ -322,6 +453,8 @@ export async function updateOperation(
         type: merged.type,
         totalAmount: merged.totalAmount,
         fees: merged.fees,
+        incomeType: merged.incomeType,
+        taxWithheld: merged.taxWithheld,
         date: merged.date,
         cashEntryId,
         ...(patch.quantity !== undefined && { quantity: patch.quantity }),
@@ -331,8 +464,9 @@ export async function updateOperation(
       },
     });
     records.push({ model: "InvestmentOperation", recordId: before.id, before: snapshot(before), after: snapshot(updated) });
-    await recalculateHolding(before.holdingId, tx);
-    const batchId = opts.record === false || opts.collect ? null : await recordMutation(tx, userId, "update", opLabel(merged.type, holding), records);
+    const { position } = await recalculateHoldingDetailed(before.holdingId, tx);
+    assertNoNewOversell(oversoldBefore, position.oversold);
+    const batchId = opts.record === false || opts.collect ? null : await recordMutation(tx, userId, "update", label, records);
     return { operation: updated, batchId };
   });
 }
@@ -368,31 +502,67 @@ export async function deleteOperation(userId: string, operationId: string, db: D
     }
 
     await recalculateHolding(op.holdingId, tx);
-    const batchId = opts.record === false || opts.collect ? null : await recordMutation(tx, userId, "delete", opLabel(op.type, holding), records);
+    const batchId = opts.record === false || opts.collect ? null : await recordMutation(tx, userId, "delete", opLabel(op.type, holding, op.incomeType), records);
     return { deleted: op.id, batchId, cashEntryId: op.cashEntryId, fundingGroupId };
   });
 }
 
-/** What serializeOperation reads from the holding. */
+/** What serializeOperation reads from the holding and the cash leg. */
 export const OPERATION_INCLUDE = {
-  holding: { select: { ticker: true, name: true, assetClass: true, allocationClass: true, currency: true, accountId: true } },
+  holding: {
+    select: { ticker: true, name: true, assetClass: true, allocationClass: true, currency: true, accountId: true, account: { select: { entityId: true, name: true } } },
+  },
+  cashEntry: { select: { accountId: true } },
 } as const satisfies Prisma.InvestmentOperationInclude;
 
-export async function listOperations(userId: string, db: DbClient, opts: { holdingId?: string; accountId?: string; from?: Date; to?: Date } = {}) {
+export interface OperationFilters extends PortfolioScope {
+  holdingId?: string;
+  accountId?: string;
+  types?: InvestmentTransactionType[];
+  from?: Date;
+  to?: Date;
+}
+
+function operationsWhere(userId: string, opts: OperationFilters): Prisma.InvestmentOperationWhereInput {
+  return {
+    holding: { account: { userId, ...entityScopeWhere(opts.entityIds ?? null) }, ...(opts.accountId && { accountId: opts.accountId }) },
+    ...(opts.holdingId && { holdingId: opts.holdingId }),
+    ...(opts.types?.length && { type: { in: opts.types } }),
+    ...((opts.from || opts.to) && { date: { ...(opts.from && { gte: opts.from }), ...(opts.to && { lte: opts.to }) } }),
+  };
+}
+
+/** Operations newest first; `limit`/`offset` page them (no limit = all). */
+export async function listOperations(userId: string, db: DbClient, opts: OperationFilters & { limit?: number; offset?: number } = {}) {
   return db.investmentOperation.findMany({
-    where: {
-      holding: { account: { userId }, ...(opts.accountId && { accountId: opts.accountId }) },
-      ...(opts.holdingId && { holdingId: opts.holdingId }),
-      ...((opts.from || opts.to) && { date: { ...(opts.from && { gte: opts.from }), ...(opts.to && { lte: opts.to }) } }),
-    },
+    where: operationsWhere(userId, opts),
     include: OPERATION_INCLUDE,
-    orderBy: { date: "desc" },
+    orderBy: [{ date: "desc" }, { createdAt: "desc" }],
+    ...(opts.limit !== undefined && { take: opts.limit }),
+    ...(opts.offset && { skip: opts.offset }),
   });
 }
 
-export function serializeOperation(
-  op: InvestmentOperation & { holding?: { ticker: string | null; name: string; assetClass: AssetClass; allocationClass?: AllocationClass | null; currency?: string; accountId: string } }
-) {
+export function countOperations(userId: string, db: DbClient, opts: OperationFilters = {}) {
+  return db.investmentOperation.count({ where: operationsWhere(userId, opts) });
+}
+
+type SerializableOperation = InvestmentOperation & {
+  holding?: {
+    ticker: string | null;
+    name: string;
+    assetClass: AssetClass;
+    allocationClass?: AllocationClass | null;
+    currency?: string;
+    accountId: string;
+    account?: { entityId: string; name: string };
+  };
+  cashEntry?: { accountId: string } | null;
+};
+
+export function serializeOperation(op: SerializableOperation) {
+  const accountId = op.holding?.accountId ?? null;
+  const cashAccountId = op.cashEntry?.accountId ?? null;
   return {
     id: op.id,
     holdingId: op.holdingId,
@@ -400,15 +570,25 @@ export function serializeOperation(
     name: op.holding?.name ?? null,
     assetClass: op.holding?.assetClass ?? null,
     allocationClass: op.holding ? holdingAllocationClass(op.holding) : null,
+    accountId,
+    accountName: op.holding?.account?.name ?? null,
+    entityId: op.holding?.account?.entityId ?? null,
+    currency: op.holding?.currency ?? null,
     type: op.type,
+    incomeType: op.incomeType,
     quantity: op.quantity,
     pricePerUnit: op.pricePerUnit,
     totalAmount: op.totalAmount,
     fees: op.fees,
+    taxWithheld: op.taxWithheld,
+    /** Cash the operation moved, in the holding's currency (negative = out). */
+    cashAmount: round(cashImpact(op.type, op.totalAmount, op.fees, op.taxWithheld), 4),
     date: formatDateOnly(op.date),
     notes: op.notes,
     externalId: op.externalId,
     cashEntryId: op.cashEntryId,
+    /** The checking or cash account an income was credited to; null when the cash is on the broker. */
+    creditToAccountId: cashAccountId && accountId && cashAccountId !== accountId ? cashAccountId : null,
     fundingGroupId: op.fundingGroupId,
   };
 }
@@ -417,23 +597,20 @@ export function serializeOperation(
 export async function adjustPosition(userId: string, input: { holdingId: string; currentQuantity: number; averageCost: number; notes?: string }, db: DbClient) {
   return inTransaction(db, async (tx) => {
     const owned = await getOwnedHolding(userId, input.holdingId, tx);
-    const totalInvested = input.currentQuantity * input.averageCost;
     const op = await tx.investmentOperation.create({
       data: {
         holdingId: input.holdingId,
         type: "adjustment",
         quantity: input.currentQuantity,
         pricePerUnit: input.averageCost,
-        totalAmount: totalInvested,
+        totalAmount: input.currentQuantity * input.averageCost,
         fees: 0,
         date: parseLocalDate(new Date().toISOString().slice(0, 10)),
         notes: input.notes ?? "Manual adjustment",
       },
     });
-    const holding = await tx.investmentHolding.update({
-      where: { id: input.holdingId },
-      data: { currentQuantity: input.currentQuantity, averageCost: input.averageCost, totalInvested },
-    });
+    // The adjustment resets the position; an adjustment to zero closes it.
+    const holding = await recalculateHolding(input.holdingId, tx);
     // Undo removes the adjustment and recalculates the position from the operations left.
     const batchId = await recordMutation(tx, userId, "create", opLabel("adjustment", owned), [
       { model: "InvestmentOperation", recordId: op.id, before: null, after: snapshot(op) },
@@ -480,36 +657,48 @@ export async function moveBrokerageCash(
 // Portfolio views
 // ---------------------------------------------------------------------------
 
+/**
+ * Portfolio value in the base currency for a scope. `allocation` lists the
+ * six classes in display order (fixed income, BR stocks, FIIs,
+ * international, crypto, cash): every class with money in it or a target,
+ * even an empty targeted one. Cash is the brokers' cash plus holdings
+ * overridden to cash; shares are of netWorth (holdings + broker cash).
+ */
 export async function portfolioSummary(userId: string, db: DbClient, opts: PortfolioScope = {}) {
   const fx = await loadFx(userId, db);
   const scope = entityScopeWhere(opts.entityIds ?? null);
   const holdings = await listHoldings(userId, db, { entityIds: opts.entityIds });
-  const brokers = await db.account.findMany({ where: { userId, type: "brokerage", archivedAt: null, ...scope } });
+  const brokers = await db.account.findMany({ where: { userId, type: "brokerage", archivedAt: null, ...scope }, orderBy: { createdAt: "asc" } });
   const balances = await accountBalances(userId, db, brokers.map((b) => b.id));
 
-  const byClass = new Map<AllocationClass, { marketValue: number; invested: number; count: number }>();
+  const byClass = new Map<AllocationClass, { marketValue: number; invested: number; count: number }>(ALLOCATION_CLASSES.map((c) => [c, { marketValue: 0, invested: 0, count: 0 }]));
   let marketTotal = 0;
   let investedTotal = 0;
+  let pricesUpdatedAt: Date | null = null;
   for (const h of holdings) {
     const rate = fx.rateFor(h.currency);
     const value = marketValue(h) * rate;
     const invested = h.totalInvested * rate;
     marketTotal += value;
     investedTotal += invested;
-    const cls = holdingAllocationClass(h);
-    const c = byClass.get(cls) ?? { marketValue: 0, invested: 0, count: 0 };
-    byClass.set(cls, c);
+    const c = byClass.get(holdingAllocationClass(h))!;
     c.marketValue += value;
     c.invested += invested;
     c.count++;
+    if (h.lastPriceUpdate && (!pricesUpdatedAt || h.lastPriceUpdate > pricesUpdatedAt)) pricesUpdatedAt = h.lastPriceUpdate;
   }
-  const cash = brokers.map((b) => ({ accountId: b.id, name: b.name, currency: b.currency, cash: round(balances.get(b.id) ?? 0, 2), cashBase: round((balances.get(b.id) ?? 0) * fx.rateFor(b.currency), 2) }));
+  const cash = brokers.map((b) => ({ accountId: b.id, name: b.name, entityId: b.entityId, currency: b.currency, cash: round(balances.get(b.id) ?? 0, 2), cashBase: round((balances.get(b.id) ?? 0) * fx.rateFor(b.currency), 2) }));
   const cashTotal = cash.reduce((s, c) => s + c.cashBase, 0);
+  const cashClass = byClass.get("cash")!;
+  cashClass.marketValue += cashTotal;
+  cashClass.invested += cashTotal;
+
   const targets = await db.portfolioTarget.findMany({ where: { userId } });
+  const targetOf = new Map(targets.map((t) => [t.allocationClass, t.targetPercent]));
   const yearAgo = new Date(Date.now() - 365 * 86400_000);
   const income = await db.investmentOperation.findMany({
     where: { holding: { account: { userId, ...scope } }, type: { in: ["dividend", "yield_payment"] }, date: { gte: yearAgo } },
-    include: { holding: { select: { currency: true } } },
+    select: { totalAmount: true, taxWithheld: true, holding: { select: { currency: true } } },
   });
   const net = marketTotal + cashTotal;
   return {
@@ -519,19 +708,26 @@ export async function portfolioSummary(userId: string, db: DbClient, opts: Portf
     unrealizedGain: round(marketTotal - investedTotal, 2),
     cash: round(cashTotal, 2),
     netWorth: round(net, 2),
-    income12m: round(income.reduce((s, op) => s + op.totalAmount * fx.rateFor(op.holding.currency), 0), 2),
+    /** Income of the last 12 months, net of tax withheld. */
+    income12m: round(income.reduce((s, op) => s + (op.totalAmount - op.taxWithheld) * fx.rateFor(op.holding.currency), 0), 2),
     holdingsCount: holdings.length,
     accountsCount: brokers.length,
-    allocation: [...byClass]
-      .map(([allocationClass, v]) => ({
+    /** Latest price refresh among the holdings. */
+    pricesUpdatedAt: pricesUpdatedAt?.toISOString() ?? null,
+    allocation: ALLOCATION_CLASSES.filter((cls) => {
+      const c = byClass.get(cls)!;
+      return c.count > 0 || Math.abs(c.marketValue) >= 0.005 || targetOf.has(cls);
+    }).map((allocationClass) => {
+      const c = byClass.get(allocationClass)!;
+      return {
         allocationClass,
-        marketValue: round(v.marketValue, 2),
-        invested: round(v.invested, 2),
-        count: v.count,
-        share: net > 0 ? round(v.marketValue / net, 4) : 0,
-        target: targets.find((t) => t.allocationClass === allocationClass)?.targetPercent ?? null,
-      }))
-      .sort((a, b) => b.marketValue - a.marketValue),
+        marketValue: round(c.marketValue, 2),
+        invested: round(c.invested, 2),
+        count: c.count,
+        share: net > 0 ? round(c.marketValue / net, 4) : 0,
+        target: targetOf.get(allocationClass) ?? null,
+      };
+    }),
     brokers: cash,
   };
 }
@@ -557,47 +753,107 @@ export async function setTargets(userId: string, input: TargetInput[], db: DbCli
   });
 }
 
+/** One line of the "Por ativo" suggestion: a holding, a new asset for an empty targeted class, or cash to keep. */
+export interface RebalanceAsset {
+  kind: "holding" | "new" | "cash";
+  holdingId: string | null;
+  ticker: string | null;
+  name: string | null;
+  assetClass: AssetClass | null;
+  allocationClass: AllocationClass;
+  accountId: string | null;
+  accountName: string | null;
+  entityId: string | null;
+  currency: string;
+  price: number | null;
+  amount: number;
+  approxQuantity: number | null;
+}
+
 /**
  * Where to put new money: brings the classes furthest below target closer,
- * never suggests selling. In "asset" mode each class amount is split over
- * its holdings in proportion to their current value.
+ * never suggests selling. Covers every class with a target or with money in
+ * it, broker cash included (as "cash"; a negative cash balance counts as
+ * zero). The amounts add up to `amount`. In "asset" mode each class amount
+ * is split over its holdings in proportion to their value (with their
+ * broker); a targeted class with no holdings becomes one "new" row, and
+ * cash a "cash" row.
  */
 export async function rebalanceSuggestion(userId: string, amount: number, mode: "class" | "asset", db: DbClient, opts: PortfolioScope = {}) {
   if (!(amount > 0)) throw new LedgerError("Amount must be positive", 422, { code: "rebalance.invalid_amount" });
   const summary = await portfolioSummary(userId, db, opts);
   const targets = await getTargets(userId, db);
   if (!targets.length) throw new LedgerError("Set allocation targets first", 422, { code: "rebalance.no_targets" });
-  const total = summary.marketValue;
+  const targetOf = new Map(targets.map((t) => [t.allocationClass, t.targetPercent]));
+  const valueOf = new Map(summary.allocation.map((a) => [a.allocationClass, Math.max(0, a.marketValue)]));
+  const total = [...valueOf.values()].reduce((s, v) => s + v, 0);
   const after = total + amount;
-  const current = new Map(summary.allocation.map((a) => [a.allocationClass, a.marketValue]));
-  const needs = targets.map((t) => ({ allocationClass: t.allocationClass, target: t.targetPercent, value: current.get(t.allocationClass) ?? 0 }))
-    .map((t) => ({ ...t, need: Math.max(0, t.target * after - t.value) }));
+  const needs = ALLOCATION_CLASSES.filter((cls) => (targetOf.get(cls) ?? 0) > 0 || (valueOf.get(cls) ?? 0) > 0).map((allocationClass) => {
+    const target = targetOf.get(allocationClass) ?? 0;
+    const value = valueOf.get(allocationClass) ?? 0;
+    return { allocationClass, target, value, need: Math.max(0, target * after - value) };
+  });
   const needSum = needs.reduce((s, n) => s + n.need, 0);
   const classes = needs.map((n) => {
     const put = needSum > amount ? (n.need / needSum) * amount : n.need + (amount - needSum) * n.target;
-    return { allocationClass: n.allocationClass, currentShare: total > 0 ? round(n.value / total, 4) : 0, target: n.target, amount: round(put, 2), afterShare: round((n.value + put) / after, 4) };
+    return {
+      allocationClass: n.allocationClass,
+      value: round(n.value, 2),
+      currentShare: total > 0 ? round(n.value / total, 4) : 0,
+      target: n.target,
+      amount: round(put, 2),
+      afterShare: round((n.value + put) / after, 4),
+    };
   });
-  if (mode === "class") return { amount, classes };
+  if (mode === "class") return { amount, total: round(total, 2), classes };
+
   const holdings = await listHoldings(userId, db, { entityIds: opts.entityIds });
   const fx = await loadFx(userId, db);
-  const assets = classes.flatMap((c) => {
-    const inClass = holdings.filter((h) => holdingAllocationClass(h) === c.allocationClass);
-    const sum = inClass.reduce((s, h) => s + marketValue(h) * fx.rateFor(h.currency), 0);
-    return inClass.map((h) => {
-      const put = sum > 0 ? (marketValue(h) * fx.rateFor(h.currency) * c.amount) / sum : c.amount / inClass.length;
-      const priceBase = h.currentPrice ? h.currentPrice * fx.rateFor(h.currency) : null;
-      return {
-        holdingId: h.id,
-        ticker: h.ticker,
-        name: h.name,
-        assetClass: h.assetClass,
-        allocationClass: c.allocationClass,
-        amount: round(put, 2),
-        approxQuantity: priceBase ? round(put / priceBase, 6) : null,
-      };
+  const assets = classes
+    .filter((c) => c.amount > 0)
+    .flatMap((c): RebalanceAsset[] => {
+      const inClass = holdings.filter((h) => holdingAllocationClass(h) === c.allocationClass);
+      if (!inClass.length) {
+        return [
+          {
+            kind: c.allocationClass === "cash" ? "cash" : "new",
+            holdingId: null,
+            ticker: null,
+            name: null,
+            assetClass: null,
+            allocationClass: c.allocationClass,
+            accountId: null,
+            accountName: null,
+            entityId: null,
+            currency: fx.baseCurrency,
+            price: null,
+            amount: c.amount,
+            approxQuantity: null,
+          },
+        ];
+      }
+      const sum = inClass.reduce((s, h) => s + marketValue(h) * fx.rateFor(h.currency), 0);
+      return inClass.map((h) => {
+        const put = sum > 0 ? (marketValue(h) * fx.rateFor(h.currency) * c.amount) / sum : c.amount / inClass.length;
+        const priceBase = h.currentPrice ? h.currentPrice * fx.rateFor(h.currency) : null;
+        return {
+          kind: "holding",
+          holdingId: h.id,
+          ticker: h.ticker,
+          name: h.name,
+          assetClass: h.assetClass,
+          allocationClass: c.allocationClass,
+          accountId: h.accountId,
+          accountName: h.account.name,
+          entityId: h.account.entityId,
+          currency: h.currency,
+          price: h.currentPrice,
+          amount: round(put, 2),
+          approxQuantity: priceBase ? round(put / priceBase, 6) : null,
+        };
+      });
     });
-  });
-  return { amount, classes, assets: assets.filter((a) => a.amount > 0) };
+  return { amount, total: round(total, 2), classes, assets: assets.filter((a) => a.amount > 0) };
 }
 
 /**

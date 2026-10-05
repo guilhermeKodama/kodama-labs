@@ -120,7 +120,15 @@
     "oversell": "A venda é maior que a posição."
   },
   "operation": {
-    "not_found": "Operação não encontrada."
+    "not_found": "Operação não encontrada.",
+    "income_only": "Só proventos têm tipo de provento, IR retido ou conta de crédito.",
+    "tax_exceeds_amount": "O IR retido não pode passar do valor bruto.",
+    "credit_account_invalid": "Proventos só podem ser creditados numa conta corrente ou em dinheiro."
+  },
+  "aporte": {
+    "broker_required": "O aporte precisa ir para uma corretora.",
+    "source_invalid": "O dinheiro do aporte precisa sair de uma conta corrente ou em dinheiro.",
+    "holding_mismatch": "O ativo comprado não está na corretora do aporte."
   },
   "brokerage": {
     "insufficient_cash": "Saldo em caixa insuficiente na corretora."

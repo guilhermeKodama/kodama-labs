@@ -69,7 +69,9 @@ export async function fetchFireInputs(
       where: {
         ...live,
         account: { type: { not: "brokerage" } },
-        OR: [{ kind: "investment" }, { transferGroup: { direction: "investment_deposit" }, amount: { lt: 0 } }],
+        // Money leaving a bank account into investments. Income credited to a bank
+        // account (an "investment" leg with a positive amount) is not a contribution.
+        OR: [{ kind: "investment", amount: { lt: 0 } }, { transferGroup: { direction: "investment_deposit" }, amount: { lt: 0 } }],
       },
       select,
     }),
