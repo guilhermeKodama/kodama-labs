@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { ZodError } from "zod";
 import { Prisma } from "@/generated/prisma";
 import { createTestApp } from "@capital/server/lib/create-app";
+import { readFormBody } from "@capital/server/lib/http-error";
 import { createRouter } from "@capital/server/lib/router";
 import { jsonBody, v2Handler, v2Responses } from "@capital/server/lib/v2";
 import { LedgerError, notFound } from "@capital/server/modules/ledger/lib/errors";
@@ -40,6 +41,8 @@ router.openapi(
         throw new Prisma.PrismaClientKnownRequestError("No record was found for a query. (at /src/server/x.ts:1)", { code: "P2025", clientVersion: Prisma.prismaVersion.client });
       case "prisma-unique":
         throw new Prisma.PrismaClientKnownRequestError("Unique constraint failed on the fields: (`userId`,`name`)", { code: "P2002", clientVersion: Prisma.prismaVersion.client });
+      case "prisma-foreign-key":
+        throw new Prisma.PrismaClientKnownRequestError("Foreign key constraint violated on the constraint: `ledger_entries_categoryId_fkey`", { code: "P2003", clientVersion: Prisma.prismaVersion.client });
       case "boom":
         throw new Error("boom");
       default:
@@ -47,6 +50,9 @@ router.openapi(
     }
   })
 );
+
+// A multipart route, like attachment and assistant file uploads.
+router.post("/test-envelope-form", async (c) => c.json(Object.keys(await readFormBody(c))));
 
 // A route that throws instead of answering, like the v1 routes: the app's onError maps it.
 router.get("/test-envelope-plain/:kind", (c) => {
@@ -107,6 +113,23 @@ describe("v2 error envelope", () => {
   it("maps Prisma's record-not-found and unique violations without leaking their message", async () => {
     expect(await post("prisma-missing", { amount: 1 })).toEqual({ status: 404, body: { message: "Record not found", code: "not_found" } });
     expect(await post("prisma-unique", { amount: 1 })).toEqual({ status: 409, body: { message: "A record with the same values already exists", code: "duplicate" } });
+  });
+
+  it("maps Prisma's foreign-key violations to 409 reference_conflict", async () => {
+    expect(await post("prisma-foreign-key", { amount: 1 })).toEqual({ status: 409, body: { message: "The change conflicts with a related record", code: "reference_conflict" } });
+  });
+
+  it("answers a body that is not valid JSON or form data with 400 bad_request", async () => {
+    const json = await app.request("/api/test-envelope/ok", { method: "POST", headers: { "content-type": "application/json" }, body: "{ amount: 1" });
+    expect(json.status).toBe(400);
+    expect(await json.json()).toEqual({ message: "Malformed JSON in request body", code: "bad_request" });
+
+    const form = await app.request("/api/test-envelope-form", { method: "POST", headers: { "content-type": "multipart/form-data; boundary=x" }, body: "not a multipart body" });
+    expect(form.status).toBe(400);
+    expect(await form.json()).toMatchObject({ code: "bad_request" });
+    const ok = new FormData();
+    ok.set("kind", "receipt");
+    expect(await (await app.request("/api/test-envelope-form", { method: "POST", body: ok })).json()).toEqual(["kind"]);
   });
 
   it("maps errors thrown outside v2Handler the same way", async () => {

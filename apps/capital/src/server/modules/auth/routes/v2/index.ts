@@ -4,6 +4,7 @@ import type { Context } from "hono";
 import { createRouter } from "@capital/server/lib/router";
 import { prisma } from "@capital/server/lib/prisma";
 import { HttpError } from "@capital/server/lib/http-error";
+import { DEFAULT_LOCALE, LOCALE_COOKIE_NAME, LOCALES, matchLocale, negotiateLocale, type Locale } from "@capital/server/i18n";
 import { jsonBody, toHttp, v2Handler, v2Responses } from "@capital/server/lib/v2";
 import { getMe, serializeUser, updatePreferences } from "@capital/server/modules/users/services/me";
 import { SESSION_COOKIE_NAME, SESSION_EXPIRY_DAYS } from "../../constants";
@@ -23,6 +24,11 @@ function setSessionCookie(c: Context, sessionId: string) {
   });
 }
 
+/** A new account's locale: the one the signup form sends, else the UI's locale cookie, else Accept-Language, else pt-BR. */
+function signupLocale(c: Context, requested: Locale | undefined): Locale {
+  return requested ?? matchLocale(getCookie(c, LOCALE_COOKIE_NAME)) ?? negotiateLocale(c.req.header("accept-language")) ?? DEFAULT_LOCALE;
+}
+
 const loginRoute = createRoute({
   method: "post",
   path: "/v2/auth/login",
@@ -36,7 +42,16 @@ const signupRoute = createRoute({
   path: "/v2/auth/signup",
   tags,
   summary: "Create an account (PF entity, main account, categories, currencies, built-in view)",
-  request: jsonBody(z.object({ email: z.string().email(), password: z.string().min(8), name: z.string().min(1), baseCurrency: z.string().length(3).optional() })),
+  request: jsonBody(
+    z.object({
+      email: z.string().email(),
+      password: z.string().min(8),
+      name: z.string().min(1),
+      baseCurrency: z.string().regex(/^[A-Za-z]{3}$/).optional(),
+      /** UI language; without it the locale cookie or Accept-Language decides. Names the server writes (categories, views) follow it. */
+      locale: z.enum(LOCALES).optional(),
+    })
+  ),
   responses: v2Responses,
 });
 const logoutRoute = createRoute({ method: "post", path: "/v2/auth/logout", tags, summary: "End the session", responses: v2Responses });
@@ -73,7 +88,8 @@ export const v2Auth = createRouter()
   })
   .openapi(signupRoute, async (c) => {
     try {
-      const user = await signup(c.req.valid("json"), prisma);
+      const body = c.req.valid("json");
+      const user = await signup({ ...body, locale: signupLocale(c, body.locale) }, prisma);
       setSessionCookie(c, await createSession(user.id, prisma));
       return c.json(serializeUser(user) as never, 200);
     } catch (err) {

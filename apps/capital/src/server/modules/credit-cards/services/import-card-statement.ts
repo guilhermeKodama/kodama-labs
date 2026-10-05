@@ -242,11 +242,29 @@ export function calculateBillTotal(parsed: ParsedTransaction[], closingDate: Dat
   }, 0);
 }
 
+/** The parsers' own message (English, for MCP and the assistant) under the import.invalid_file code. */
+function invalidBillFile(err: unknown) {
+  return new LedgerError(err instanceof Error ? err.message : "Invalid bill file", 400, { code: "import.invalid_file" });
+}
+
 /** Parse a card bill file (CSV or card OFX) into statement rows. */
 export function parseCardFile(content: string): ParsedTransaction[] {
-  const parsed = /<CCSTMTRS>/i.test(content.slice(0, 4096)) ? parseOfxCreditCardContent(content).transactions : parseCsvContent(content);
+  let parsed: ParsedTransaction[];
+  try {
+    parsed = /<CCSTMTRS>/i.test(content.slice(0, 4096)) ? parseOfxCreditCardContent(content).transactions : parseCsvContent(content);
+  } catch (err) {
+    throw invalidBillFile(err);
+  }
   if (!parsed.length) throw new LedgerError("No valid transactions found in the bill file", 422, { code: "import.no_transactions" });
   return parsed;
+}
+
+function billRowDate(date: string): string {
+  try {
+    return parseDate(date).toISOString().slice(0, 10);
+  } catch (err) {
+    throw invalidBillFile(err);
+  }
 }
 
 /** Import a bill file for a statement closing on `closingDate` (manual upload and import plans). */
@@ -261,7 +279,7 @@ export async function importCardFile(
   const rows: StatementRowInput[] = parsed
     .filter((t) => !t.isPayment)
     .map((t) => ({
-      date: parseDate(t.date).toISOString().slice(0, 10),
+      date: billRowDate(t.date),
       description: t.description,
       amount: t.amount,
       installment: t.installmentNumber && t.totalInstallments ? { number: t.installmentNumber, total: t.totalInstallments } : undefined,

@@ -15,8 +15,10 @@
 export const ERROR_CODES = {
   // Generic
   validation: "The request is invalid; issues lists each problem",
+  bad_request: "The request could not be read (its body is not valid JSON or form data)",
   not_found: "The record was not found",
   duplicate: "A record with the same values already exists",
+  reference_conflict: "The change conflicts with a related record: it points to one that does not exist, or other records still use this one",
 
   // Session and login
   "auth.required": "You need to log in",
@@ -134,7 +136,7 @@ export const ERROR_CODES = {
   // Imports
   "import.not_found": "Import not found",
   "import.already_reverted": "This import was already reverted",
-  "import.invalid_file": "The file could not be read as a bank statement",
+  "import.invalid_file": "The file could not be read as a bank statement or card bill",
   "import.no_transactions": "No valid transactions were found in the file",
   "import.bill_without_card": "Bill file {fileId} resolved to no credit card",
   "import.file_not_found": "File {fileId} not found",

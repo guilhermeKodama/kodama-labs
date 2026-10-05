@@ -69,6 +69,8 @@ describe("v2 error codes", () => {
     expect((await call("DELETE", "/v2/currencies/BRL")).body).toMatchObject({ code: "currency.base_protected" });
     expect((await call("PUT", "/v2/portfolio/targets", { targets: [{ allocationClass: "br_stocks", targetPercent: 40 }] })).body).toMatchObject({ code: "portfolio.targets_sum" });
     expect((await call("POST", "/v2/holdings", { accountId: f.pfChecking, assetClass: "etf", name: "X" })).body).toMatchObject({ code: "holding.requires_brokerage" });
+    const bill = await call("POST", `/v2/accounts/${f.card}/statements/import-file`, { closingDate: "2026-09-05", dueDate: "2026-09-12", content: "data,descrição,valor" });
+    expect(bill).toEqual({ status: 400, body: { message: "CSV must have at least a header and one data row", code: "import.invalid_file" } });
 
     await call("POST", "/v2/ledger/entries", { kind: "expense", accountId: f.pfChecking, amount: 10, date: "2026-09-03", description: "Mercado", categoryId: f.categories.Groceries });
     const inUse = await call("DELETE", `/v2/categories/${f.categories.Groceries}`);

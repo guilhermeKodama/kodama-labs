@@ -1,5 +1,5 @@
 import { z, type Hook } from "@hono/zod-openapi";
-import type { ErrorHandler, NotFoundHandler } from "hono";
+import type { Context, ErrorHandler, NotFoundHandler } from "hono";
 import { HTTPException } from "hono/http-exception";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { ZodError } from "zod";
@@ -51,22 +51,37 @@ export function validationError(error: ZodError) {
 /**
  * Maps a thrown value to an HTTP error that keeps its code and params for
  * the envelope: a LedgerError keeps its status, a ZodError is a 422
- * validation error, Prisma's record-not-found and unique-violation errors are
- * 404 not_found and 409 duplicate (without Prisma's message, which names
- * source files), and a plain error whose message says "not found" or
- * "access denied" is a 404. Anything else comes back as it is (a 500 without
- * a code).
+ * validation error, Hono's own 400 (a body that is not valid JSON or form
+ * data) is bad_request, Prisma's record-not-found, unique-violation and
+ * foreign-key errors are 404 not_found, 409 duplicate and 409
+ * reference_conflict (without Prisma's message, which names source files),
+ * and a plain error whose message says "not found" or "access denied" is a
+ * 404. Anything else comes back as it is (a 500 without a code).
  */
 export function toHttpError(err: unknown): unknown {
-  if (err instanceof HTTPException) return err;
+  if (err instanceof HTTPException) {
+    if (!(err instanceof HttpError) && err.status === 400) return new HttpError(400, err.message, { code: "bad_request" });
+    return err;
+  }
   if (err instanceof LedgerError) return HttpError.fromLedgerError(err);
   if (err instanceof ZodError) return validationError(err);
   if (err instanceof Prisma.PrismaClientKnownRequestError) {
     if (err.code === "P2025") return new HttpError(404, "Record not found", { code: "not_found" });
     if (err.code === "P2002") return new HttpError(409, "A record with the same values already exists", { code: "duplicate" });
+    // P2003: a foreign key points nowhere or a restricted row is still referenced; P2014: a required relation would break.
+    if (err.code === "P2003" || err.code === "P2014") return new HttpError(409, "The change conflicts with a related record", { code: "reference_conflict" });
   }
   if (err instanceof Error && /not found|access denied/i.test(err.message)) return new HttpError(404, err.message, { code: "not_found" });
   return err;
+}
+
+/** The request's form data; a body that cannot be read as form data is 400 bad_request, like Hono's own JSON check. */
+export async function readFormBody(c: Context) {
+  try {
+    return await c.req.parseBody();
+  } catch (err) {
+    throw new HttpError(400, err instanceof Error ? err.message : "Malformed form data", { code: "bad_request" });
+  }
 }
 
 function envelope(err: HttpError): ApiErrorBody {

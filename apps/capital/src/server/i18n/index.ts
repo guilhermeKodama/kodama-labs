@@ -21,13 +21,45 @@ type Dictionaries = typeof DICTIONARIES;
 export type MessageKey = { [D in keyof Dictionaries & string]: LeafPaths<Dictionaries[D]["pt-BR"], `${D}.`> }[keyof Dictionaries & string];
 export type MessageParams = Record<string, string | number>;
 
-/** A supported locale for any input: exact match, then language ("en-US" -> "en"), else pt-BR. */
-export function resolveLocale(value: string | null | undefined): Locale {
-  if (!value) return DEFAULT_LOCALE;
-  const exact = LOCALES.find((l) => l.toLowerCase() === value.toLowerCase());
+/** Cookie the UI (next-intl) keeps its locale in. */
+export const LOCALE_COOKIE_NAME = "NEXT_LOCALE";
+
+/** The supported locale a tag names: exact match, then language ("en-US" -> "en"); undefined when none. */
+export function matchLocale(value: string | null | undefined): Locale | undefined {
+  const tag = value?.trim().toLowerCase();
+  if (!tag) return undefined;
+  const exact = LOCALES.find((l) => l.toLowerCase() === tag);
   if (exact) return exact;
-  const language = value.split(/[-_]/)[0].toLowerCase();
-  return LOCALES.find((l) => l.split("-")[0].toLowerCase() === language) ?? DEFAULT_LOCALE;
+  const language = tag.split(/[-_]/)[0];
+  return LOCALES.find((l) => l.split("-")[0].toLowerCase() === language);
+}
+
+/** A supported locale for any input: matchLocale, else pt-BR. */
+export function resolveLocale(value: string | null | undefined): Locale {
+  return matchLocale(value) ?? DEFAULT_LOCALE;
+}
+
+/**
+ * The first supported locale of an Accept-Language header, by weight then
+ * order ("fr-CA, en;q=0.8, pt;q=0.5" -> "en"); undefined when none matches.
+ */
+export function negotiateLocale(acceptLanguage: string | null | undefined): Locale | undefined {
+  if (!acceptLanguage) return undefined;
+  const ranges = acceptLanguage
+    .split(",")
+    .map((part, index) => {
+      const [tag, ...attributes] = part.split(";").map((s) => s.trim());
+      const q = attributes.find((a) => a.startsWith("q="));
+      const weight = q === undefined ? 1 : Number(q.slice(2));
+      return { tag, weight: Number.isFinite(weight) ? weight : 0, index };
+    })
+    .filter((r) => r.tag && r.tag !== "*" && r.weight > 0)
+    .sort((a, b) => b.weight - a.weight || a.index - b.index);
+  for (const range of ranges) {
+    const locale = matchLocale(range.tag);
+    if (locale) return locale;
+  }
+  return undefined;
 }
 
 function lookup(locale: Locale, key: string): string | undefined {

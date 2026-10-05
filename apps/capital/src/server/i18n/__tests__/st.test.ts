@@ -3,7 +3,7 @@ import { SYSTEM_CATEGORY_DEFINITIONS } from "@capital/server/modules/categories/
 import { categories } from "../categories";
 import { common } from "../common";
 import type { MessageTree } from "../define";
-import { DEFAULT_LOCALE, LOCALES, resolveLocale, st } from "../index";
+import { DEFAULT_LOCALE, LOCALES, matchLocale, negotiateLocale, resolveLocale, st } from "../index";
 import { ledger } from "../ledger";
 import { views } from "../views";
 
@@ -34,6 +34,20 @@ describe("server i18n", () => {
     expect(resolveLocale("pt_br")).toBe("pt-BR");
     expect(resolveLocale("de-DE")).toBe(DEFAULT_LOCALE);
     expect(resolveLocale(undefined)).toBe(DEFAULT_LOCALE);
+    expect(matchLocale(" EN-gb ")).toBe("en");
+    expect(matchLocale("de-DE")).toBeUndefined();
+    expect(matchLocale("")).toBeUndefined();
+  });
+
+  it("negotiates Accept-Language by weight, then order, skipping unsupported languages", () => {
+    expect(negotiateLocale("en-US,en;q=0.9,pt-BR;q=0.8")).toBe("en");
+    expect(negotiateLocale("fr-CA, en;q=0.8, pt;q=0.5")).toBe("en");
+    expect(negotiateLocale("en;q=0.4, pt-BR;q=0.9")).toBe("pt-BR");
+    expect(negotiateLocale("pt, en")).toBe("pt-BR");
+    expect(negotiateLocale("en;q=0, pt;q=0.1")).toBe("pt-BR");
+    expect(negotiateLocale("de-DE, *;q=0.5")).toBeUndefined();
+    expect(negotiateLocale("")).toBeUndefined();
+    expect(negotiateLocale(null)).toBeUndefined();
   });
 
   it("has the same keys and placeholders in every locale", () => {

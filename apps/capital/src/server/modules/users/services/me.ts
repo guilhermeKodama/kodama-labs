@@ -22,6 +22,7 @@ export function serializeUser(user: User) {
     dateFormat: user.dateFormat,
     numberFormat: user.numberFormat,
     timezone: user.timezone,
+    locale: user.locale,
     createdAt: user.createdAt.toISOString(),
     updatedAt: user.updatedAt.toISOString(),
   };

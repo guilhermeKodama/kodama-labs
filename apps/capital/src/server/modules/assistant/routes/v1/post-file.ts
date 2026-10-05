@@ -5,7 +5,7 @@ import { jsonContent } from "stoker/openapi/helpers";
 import type { AppRouteHandler } from "@capital/server/types";
 import { prisma } from "@capital/server/lib/prisma";
 import { requireUserId } from "@capital/server/lib/auth-middleware";
-import { ApiErrorSchema } from "@capital/server/lib/http-error";
+import { ApiErrorSchema, readFormBody } from "@capital/server/lib/http-error";
 import { LedgerError } from "@capital/server/modules/ledger/lib/errors";
 import { uploadConversationFile } from "../../services/upload-conversation-file";
 import { routeConfig } from "../../constants";
@@ -53,7 +53,7 @@ export const route = createRoute({
 export const handler: AppRouteHandler<typeof route> = async (c) => {
   const userId = requireUserId(c);
   const { id: conversationId } = c.req.valid("param");
-  const body = await c.req.parseBody();
+  const body = await readFormBody(c);
 
   const file = body["file"];
   if (!(file instanceof File)) {
