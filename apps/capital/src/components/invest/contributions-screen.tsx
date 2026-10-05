@@ -128,7 +128,7 @@ export function ContributionsScreen() {
       </KpiStrip>
       <div className="grid items-start gap-3 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)]">
         <Panel title={classes.length ? "Aportes por mês e classe" : "Aportes por mês"}>
-          {chart.some((d) => d.aportes !== 0 || classes.some((c) => (d as Record<string, number>)[c])) ? (
+          {(flows.data?.months ?? []).some((m) => m.net !== 0 || classes.some((c) => m.byAssetClass[c])) ? (
             <div className="h-[200px]">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={chart}>

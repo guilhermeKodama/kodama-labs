@@ -80,7 +80,11 @@ export function PortfolioScreen() {
   });
   const summary = combine(summaries.map((q) => q.data).filter(Boolean) as PortfolioSummary[]);
   const holdingsQuery = useQuery({ queryKey: ["holdings", "all"], queryFn: async () => (await api<{ holdings: Holding[] }>("/api/v2/holdings")).holdings });
-  const yearAgo = new Date(Date.now() - 365 * 86400_000).toISOString().slice(0, 10);
+  const yearAgo = useMemo(() => {
+    const date = new Date();
+    date.setUTCDate(date.getUTCDate() - 365);
+    return date.toISOString().slice(0, 10);
+  }, []);
   const opsQuery = useQuery({
     queryKey: ["operations", "all"],
     enabled: tab === "income" || tab === "ops",
@@ -119,24 +123,21 @@ export function PortfolioScreen() {
   const cur = summary?.baseCurrency ?? names.currency;
   const total = summary?.netWorth ?? 0;
 
-  const series = useMemo(() => {
-    const snaps = snapshots.data ?? [];
-    if (!snaps.length || !summary) return [];
-    const flows = new Map<number, number>();
-    contributions.forEach((q, i) => q.data?.months.forEach((m) => flows.set((thisYear - 1 + i) * 100 + m.month, m.net)));
-    const points = [...snaps].sort((a, b) => a.period - b.period).slice(-12);
-    let later = 0;
-    const out = points
-      .slice()
-      .reverse()
-      .map((s) => {
-        const value = { period: s.period, patrimonio: s.currentInvested, aportado: Math.max(0, summary.invested - later) };
-        later += flows.get(s.period) ?? 0;
-        return value;
-      })
-      .reverse();
-    return out.map((p) => ({ ...p, name: `${monthName(p.period % 100)}/${String(Math.floor(p.period / 100)).slice(2)}` }));
-  }, [snapshots.data, contributions, summary, thisYear]);
+  const snaps = snapshots.data ?? [];
+  const points = [...snaps].sort((a, b) => a.period - b.period).slice(-12);
+  const flowByPeriod = new Map<number, number>();
+  contributions.forEach((q, i) => q.data?.months.forEach((m) => flowByPeriod.set((thisYear - 1 + i) * 100 + m.month, m.net)));
+  const series = !points.length || !summary
+    ? []
+    : points.map((s, index) => {
+        const later = points.slice(index + 1).reduce((sum, next) => sum + (flowByPeriod.get(next.period) ?? 0), 0);
+        return {
+          period: s.period,
+          patrimonio: s.currentInvested,
+          aportado: Math.max(0, summary.invested - later),
+          name: `${monthName(s.period % 100)}/${String(Math.floor(s.period / 100)).slice(2)}`,
+        };
+      });
 
   const groups = useMemo(() => {
     if (tab === "income" || tab === "ops") return [];

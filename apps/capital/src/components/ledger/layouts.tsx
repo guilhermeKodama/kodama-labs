@@ -102,12 +102,17 @@ export function ChartView({
     const flip = metric !== "count" && raw.every((d) => d.raw <= 0);
     const isDate = key && "bucket" in key;
     const ordered = isDate ? [...raw].sort((a, b) => String(a.key).localeCompare(String(b.key))) : raw;
-    let acc = 0;
-    return ordered.map((d) => {
-      const value = flip ? -d.raw : d.raw;
-      acc += value;
-      return { ...d, value: Math.round((cumulative ? acc : value) * 100) / 100 };
-    });
+    return ordered.reduce<{ points: { key: (typeof ordered)[number]["key"]; name: string; raw: number; value: number }[]; acc: number }>(
+      (state, d) => {
+        const value = flip ? -d.raw : d.raw;
+        const acc = state.acc + value;
+        return {
+          acc,
+          points: [...state.points, { ...d, value: Math.round((cumulative ? acc : value) * 100) / 100 }],
+        };
+      },
+      { points: [], acc: 0 },
+    ).points;
   }, [groups, key, metric, cumulative, names]);
 
   if (!data.length) return <div className="rounded-lg border border-neutral-200"><EmptyRow>Sem dados para o gráfico neste recorte.</EmptyRow></div>;
