@@ -1,136 +1,87 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { prisma } from "@capital/server/lib/prisma";
-import { internalCategoryName } from "@capital/server/modules/categories/lib/internal-category";
-import { categorizeClaimedBillChunk } from "../categorize-bills/categorize-bill-chunk";
-import { categorizeClaimedStatementImport } from "../categorize-statements/categorize-statement-import";
+import { createLedgerFixture, deleteLedgerFixture, type LedgerFixture } from "@/test/ledger-fixtures";
+import { getSystemCategory } from "@capital/server/modules/categories/lib/system-categories";
+import { categorizePendingEntries } from "@capital/server/modules/categories/services/ai-categorize";
+import { importCardStatement } from "@capital/server/modules/credit-cards/services/import-card-statement";
+import { executeImport } from "@capital/server/modules/bank-statements/services/execute-import";
+import { createEntry } from "@capital/server/modules/ledger/services/entries";
+import { createRule } from "@capital/server/modules/ledger/services/rules";
 
-const db = prisma;
 const USER = "test-user-cron-archive";
+let f: LedgerFixture;
 
-describe("cron categorizers assign an archived system category", () => {
-  let personalAccountId: string;
+beforeEach(async () => {
+  f = await createLedgerFixture(prisma, USER);
+});
 
-  beforeEach(async () => {
-    await db.user.deleteMany({ where: { id: USER } });
-    await db.user.create({
-      data: {
-        id: USER,
-        email: "cron-archive@example.com",
-        passwordHash: "hash",
-        name: "Cron",
-        baseCurrency: "BRL",
+afterAll(async () => {
+  await deleteLedgerFixture(prisma, USER);
+});
+
+describe("categorize cron", () => {
+  it("assigns the archived system Other to card and bank rows and skips manual blanks", async () => {
+    const other = await getSystemCategory(USER, "other_system", prisma);
+    await prisma.category.update({ where: { id: other.id }, data: { isArchived: true } });
+    await importCardStatement(USER, { accountId: f.card, month: "2026-09", rows: [{ date: "2026-08-10", description: "cafe", amount: 12 }], fallback: "none" }, prisma);
+    const imp = await executeImport(
+      USER,
+      {
+        entityType: "personal",
+        entityId: f.pfId,
+        currency: "BRL",
+        transactions: [{ externalId: "e1", date: "2026-09-02", description: "pix", amount: 5, type: "expense" }],
+        transfers: [],
+        investmentTransfers: [],
+        creditCards: [],
+        bills: [],
+        reconciliations: [],
+        transferReconciliations: [],
+        duplicateDecisions: [],
+        investmentTransactions: [],
       },
-    });
-    personalAccountId = (await db.personalAccount.create({
-      data: { userId: USER, defaultCurrency: "BRL" },
-    })).id;
+      prisma
+    );
+    const manual = (await createEntry(USER, { kind: "expense", accountId: f.pfChecking, amount: 1, date: "2026-09-03", description: "manual" }, prisma, { skipRules: true })).entryIds[0];
+
+    const bill = vi.fn(async (rows: { index: number }[], _c: string[], fb: string) => rows.map((r) => ({ index: r.index, category: fb })));
+    const statement = vi.fn(async (rows: { index: number }[], _c: string[], _t: string, fb: string) => rows.map((r) => ({ index: r.index, category: fb })));
+    const r = await categorizePendingEntries(prisma, { bill, statement });
+    expect(r).toMatchObject({ userId: USER, processed: 2, remaining: 0 });
+    expect(bill).toHaveBeenCalledTimes(1);
+    expect(statement).toHaveBeenCalledTimes(1);
+    expect(await prisma.ledgerEntry.count({ where: { userId: USER, categoryId: other.id, isAutoCategorized: true } })).toBe(2);
+    expect((await prisma.ledgerEntry.findUniqueOrThrow({ where: { id: manual } })).categoryId).toBeNull();
+    expect((await prisma.import.findUniqueOrThrow({ where: { id: imp.statementImportId } })).categorizationStatus).toBe("completed");
   });
 
-  it("writes archived other_system onto a bill row", async () => {
-    const otherName = await internalCategoryName(USER, "other_system", db);
-    await db.category.updateMany({
-      where: { userId: USER, systemKey: "other_system" },
-      data: { isArchived: true },
-    });
-
-    const card = await db.creditCard.create({
-      data: {
-        entityType: "personal",
-        bankName: "Nubank",
-        lastFourDigits: "3308",
-        creditLimit: 1000,
-        closingDay: 1,
-        dueDay: 8,
-        currency: "BRL",
-        personalAccountId,
+  it("learns ai rules for real answers but never overwrites a manual rule", async () => {
+    await createRule(USER, { matchType: "equals", pattern: "padaria", categoryId: f.categories.Groceries }, prisma);
+    await importCardStatement(
+      USER,
+      {
+        accountId: f.card,
+        month: "2026-09",
+        rows: [
+          { date: "2026-08-10", description: "Figma", amount: 50 },
+          { date: "2026-08-11", description: "Zaffari", amount: 80 },
+          { date: "2026-08-12", description: "Padaria", amount: 9 },
+        ],
+        fallback: "none",
       },
-    });
-    const bill = await db.creditCardBill.create({
-      data: {
-        creditCardId: card.id,
-        closingDate: new Date("2026-10-01T12:00:00.000Z"),
-        dueDate: new Date("2026-10-08T12:00:00.000Z"),
-        totalAmount: 15,
-        categorizationStatus: "processing",
-      },
-    });
-    await db.billTransaction.create({
-      data: {
-        billId: bill.id,
-        category: "Uncategorized",
-        transactionDate: new Date("2026-10-02T12:00:00.000Z"),
-        description: "store",
-        amount: 15,
-        currency: "BRL",
-      },
-    });
-
-    const result = await categorizeClaimedBillChunk(db, {
-      billId: bill.id,
-      userId: USER,
-      categorize: async () => [{ index: 0, category: otherName }],
-    });
-
-    expect(result).toMatchObject({
-      kind: "chunk",
-      status: "completed",
-      processedInThisRun: 1,
-      remaining: 0,
-    });
-    const saved = await db.billTransaction.findFirst({ where: { billId: bill.id } });
-    expect(saved?.category).toBe(otherName);
-    expect(saved?.isAutoCategorized).toBe(true);
-    const stillArchived = await db.category.findFirst({
-      where: { userId: USER, systemKey: "other_system" },
-    });
-    expect(stillArchived?.isArchived).toBe(true);
-  });
-
-  it("writes archived other_system onto a statement transaction", async () => {
-    const otherName = await internalCategoryName(USER, "other_system", db);
-    await db.category.updateMany({
-      where: { userId: USER, systemKey: "other_system" },
-      data: { isArchived: true },
-    });
-
-    const statementImport = await db.statementImport.create({
-      data: {
-        userId: USER,
-        entityType: "personal",
-        personalAccountId,
-        transactionCount: 1,
-        categorizationStatus: "processing",
-      },
-    });
-    await db.transaction.create({
-      data: {
-        entityType: "personal",
-        type: "expense",
-        amount: 22,
-        currency: "BRL",
-        exchangeRate: 1,
-        description: "pix",
-        category: "Uncategorized",
-        date: new Date("2026-10-04T12:00:00.000Z"),
-        personalAccountId,
-        statementImportId: statementImport.id,
-      },
-    });
-
-    const result = await categorizeClaimedStatementImport(db, {
-      importId: statementImport.id,
-      userId: USER,
-      categorize: async () => [{ index: 0, category: otherName }],
-    });
-
-    expect(result.transactionCount).toBe(1);
-    const saved = await db.transaction.findFirst({
-      where: { statementImportId: statementImport.id },
-    });
-    expect(saved?.category).toBe(otherName);
-    const stillArchived = await db.category.findFirst({
-      where: { userId: USER, systemKey: "other_system" },
-    });
-    expect(stillArchived?.isArchived).toBe(true);
+      prisma
+    );
+    // The rule existing at import time already categorized "Padaria".
+    // A manual rule added afterwards must survive the AI's answer.
+    await createRule(USER, { matchType: "equals", pattern: "zaffari", categoryId: f.categories.Groceries }, prisma);
+    const bill = vi.fn(async (rows: { index: number }[]) => rows.map((r) => ({ index: r.index, category: "Software" })));
+    await categorizePendingEntries(prisma, { bill });
+    expect(bill.mock.calls[0][0]).toHaveLength(2);
+    const rules = await prisma.categorizationRule.findMany({ where: { userId: USER }, orderBy: { pattern: "asc" } });
+    expect(rules.map((x) => [x.pattern, x.source, x.categoryId])).toEqual([
+      ["figma", "ai", f.categories.Software],
+      ["padaria", "manual", f.categories.Groceries],
+      ["zaffari", "manual", f.categories.Groceries],
+    ]);
   });
 });

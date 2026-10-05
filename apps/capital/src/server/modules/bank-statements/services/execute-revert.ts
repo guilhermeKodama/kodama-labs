@@ -1,5 +1,7 @@
 import type { PrismaClient } from "@/generated/prisma";
-import { recalculateHolding } from "@capital/server/modules/investments/services/recalculate-holding";
+import { recalculateHolding } from "@capital/server/modules/investments/services/portfolio";
+import { LedgerError } from "@capital/server/modules/ledger/lib/errors";
+import { inTransaction, recordMutation, snapshot, type MutationRecordInput } from "@capital/server/modules/ledger/services/mutations";
 import type { CreatedRecordRef } from "./execute-import";
 
 export interface RevertPlanPayload {
@@ -13,140 +15,65 @@ export interface ExecuteRevertResult {
   creditCardsDeleted: number;
   billsDeleted: number;
   investmentTransactionsDeleted: number;
+  batchId: string | null;
 }
 
 /**
- * Undo an agent-driven import batch. Deliberately conservative: never
- * deletes an InvestmentHolding even if this batch created it (the user
- * may have added other data to it since) - only the InvestmentTransaction
- * rows the batch created are removed, then the holding's aggregates are
- * recalculated. Everything else this batch created (Transaction, Transfer,
- * CreditCard, CreditCardBill) is deleted outright - deleting a
- * CreditCardBill cascades its BillTransaction/Installment rows, so those
- * never need their own createdRecords entries. The StatementImport row
- * itself is kept as history and stamped with revertedAt rather than
- * deleted.
- *
- * Referential integrity is the second line of defense: if something this
- * batch created has since been referenced elsewhere (e.g. a credit card
- * that now has bills), the delete fails with a foreign-key error and the
- * whole transaction rolls back - a safe failure, never a partial revert.
+ * Undo an import. Every ledger row the import created carries its id, so
+ * they all go to the trash in one undoable batch (restorable from the
+ * trash). Investment operations it created are removed and their holdings
+ * recalculated; holdings themselves are kept (the user may have added data
+ * since). Cards it created are archived when nothing else uses them.
+ * The Import row stays as history, stamped with revertedAt.
  */
-export async function executeRevert(
-  userId: string,
-  payload: RevertPlanPayload,
-  db: PrismaClient
-): Promise<ExecuteRevertResult> {
-  return db.$transaction(async (tx) => {
-    const statementImport = await tx.statementImport.findFirst({
-      where: { id: payload.statementImportId, userId },
+export async function executeRevert(userId: string, payload: RevertPlanPayload, db: PrismaClient): Promise<ExecuteRevertResult> {
+  return inTransaction(db, async (tx) => {
+    const imp = await tx.import.findFirst({ where: { id: payload.statementImportId, userId } });
+    if (!imp) throw new LedgerError("Statement import not found or access denied", 404);
+    if (imp.revertedAt) throw new LedgerError("This import was already reverted", 409);
+    const ids = (...models: string[]) => payload.createdRecords.filter((r) => models.includes(r.model)).map((r) => r.id);
+
+    const opIds = ids("InvestmentOperation", "InvestmentTransaction");
+    const ops = await tx.investmentOperation.findMany({
+      where: { holding: { account: { userId } }, OR: [{ id: { in: opIds } }, { cashEntry: { importId: imp.id } }] },
     });
-    if (!statementImport) {
-      throw new Error("Statement import not found or access denied");
+    for (const op of ops) {
+      await tx.investmentOperation.delete({ where: { id: op.id } });
+      if (op.cashEntryId) await tx.ledgerEntry.deleteMany({ where: { id: op.cashEntryId } });
     }
-    if (statementImport.revertedAt) {
-      throw new Error("This import was already reverted");
-    }
+    for (const holdingId of new Set(ops.map((o) => o.holdingId))) await recalculateHolding(holdingId, tx);
 
-    const idsFor = (model: string) =>
-      payload.createdRecords.filter((r) => r.model === model).map((r) => r.id);
+    const now = new Date();
+    const records: MutationRecordInput[] = [];
+    const entries = await tx.ledgerEntry.findMany({ where: { userId, importId: imp.id, deletedAt: null } });
+    const groupIds = [...new Set(entries.map((e) => e.transferGroupId).filter((g): g is string => !!g))];
+    const legs = groupIds.length ? await tx.ledgerEntry.findMany({ where: { transferGroupId: { in: groupIds }, deletedAt: null, importId: { not: imp.id } } }) : [];
+    const groups = groupIds.length ? await tx.transferGroup.findMany({ where: { id: { in: groupIds } } }) : [];
+    const all = [...entries, ...legs];
+    await tx.ledgerEntry.updateMany({ where: { id: { in: all.map((e) => e.id) } }, data: { deletedAt: now } });
+    await tx.transferGroup.updateMany({ where: { id: { in: groupIds } }, data: { deletedAt: now } });
+    for (const g of groups) records.push({ model: "TransferGroup", recordId: g.id, before: snapshot(g), after: snapshot({ ...g, deletedAt: now }) });
+    for (const e of all) records.push({ model: "LedgerEntry", recordId: e.id, before: snapshot(e), after: snapshot({ ...e, deletedAt: now }) });
+    const batchId = records.length ? await recordMutation(tx, userId, "revert", `Import ${imp.fileName ?? imp.id}`, records) : null;
 
-    const investmentTransactionIds = idsFor("InvestmentTransaction");
-    const affectedHoldingIds =
-      investmentTransactionIds.length > 0
-        ? (
-            await tx.investmentTransaction.findMany({
-              where: { id: { in: investmentTransactionIds } },
-              select: { holdingId: true },
-            })
-          ).map((t) => t.holdingId)
-        : [];
-
-    const investmentTransactionsDeleted =
-      investmentTransactionIds.length > 0
-        ? (
-            await tx.investmentTransaction.deleteMany({
-              where: { id: { in: investmentTransactionIds }, holding: { account: { userId } } },
-            })
-          ).count
-        : 0;
-
-    for (const holdingId of new Set(affectedHoldingIds)) {
-      await recalculateHolding(userId, holdingId, tx);
+    // Archived rather than deleted: deleting would cascade into the trashed
+    // entries and make the batch above impossible to undo.
+    let creditCardsDeleted = 0;
+    for (const accountId of ids("Account", "CreditCard")) {
+      const live = await tx.ledgerEntry.count({ where: { accountId, deletedAt: null } });
+      if (live) continue;
+      const { count } = await tx.account.updateMany({ where: { id: accountId, userId, type: "credit_card", archivedAt: null }, data: { archivedAt: now } });
+      creditCardsDeleted += count;
     }
 
-    const transferIds = idsFor("Transfer");
-    const transfersDeleted =
-      transferIds.length > 0
-        ? (
-            await tx.transfer.deleteMany({
-              where: {
-                id: { in: transferIds },
-                OR: [
-                  { fromBusiness: { userId } },
-                  { fromPersonalAccount: { userId } },
-                  { toBusiness: { userId } },
-                  { toPersonalAccount: { userId } },
-                ],
-              },
-            })
-          ).count
-        : 0;
-
-    // Deleted before CreditCard: if this batch also created the owning
-    // card, deleting the card would cascade this away anyway, but a bill
-    // on a pre-existing card needs this explicit delete - either way the
-    // cascade below takes BillTransaction/Installment with it.
-    const billIds = idsFor("CreditCardBill");
-    const billsDeleted =
-      billIds.length > 0
-        ? (
-            await tx.creditCardBill.deleteMany({
-              where: {
-                id: { in: billIds },
-                creditCard: { OR: [{ business: { userId } }, { personalAccount: { userId } }] },
-              },
-            })
-          ).count
-        : 0;
-
-    const creditCardIds = idsFor("CreditCard");
-    const creditCardsDeleted =
-      creditCardIds.length > 0
-        ? (
-            await tx.creditCard.deleteMany({
-              where: {
-                id: { in: creditCardIds },
-                OR: [{ business: { userId } }, { personalAccount: { userId } }],
-              },
-            })
-          ).count
-        : 0;
-
-    const transactionIds = idsFor("Transaction");
-    const transactionsDeleted =
-      transactionIds.length > 0
-        ? (
-            await tx.transaction.deleteMany({
-              where: {
-                id: { in: transactionIds },
-                OR: [{ business: { userId } }, { personalAccount: { userId } }],
-              },
-            })
-          ).count
-        : 0;
-
-    await tx.statementImport.update({
-      where: { id: payload.statementImportId },
-      data: { revertedAt: new Date() },
-    });
-
+    await tx.import.update({ where: { id: imp.id }, data: { revertedAt: now } });
     return {
-      transactionsDeleted,
-      transfersDeleted,
+      transactionsDeleted: entries.filter((e) => !e.transferGroupId && !e.cardStatementId).length,
+      transfersDeleted: groupIds.length,
       creditCardsDeleted,
-      billsDeleted,
-      investmentTransactionsDeleted,
+      billsDeleted: new Set(entries.filter((e) => e.cardStatementId).map((e) => e.cardStatementId)).size,
+      investmentTransactionsDeleted: ops.length,
+      batchId,
     };
   });
 }

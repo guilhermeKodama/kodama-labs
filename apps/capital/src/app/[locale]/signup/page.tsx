@@ -15,7 +15,6 @@ import {
   CardTitle,
 } from '@/components/ui/card';
 import { Link } from '@/i18n/navigation';
-import { client } from '@/lib/api-client';
 import { useUser } from '@/lib/user-context';
 
 export default function SignupPage() {
@@ -35,8 +34,10 @@ export default function SignupPage() {
     setIsLoading(true);
 
     try {
-      const res = await client.v1.auth.signup.$post({
-        json: { name, email, password },
+      const res = await fetch("/api/v2/auth/signup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, email, password }),
       });
 
       if (res.ok) {
@@ -46,7 +47,7 @@ export default function SignupPage() {
         router.push('/dashboard');
       } else {
         const data = await res.json();
-        setError(data.error?.message ?? 'Signup failed');
+        setError(data.message ?? 'Signup failed');
       }
     } catch {
       setError('An unexpected error occurred');

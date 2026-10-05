@@ -367,7 +367,7 @@ export function createCapitalMcpServer(userId: string, db: DbClient) {
     "delete_transaction",
     {
       description:
-        "Delete a transaction by ID. Use with caution - this action cannot be undone.",
+        "Move a transaction to the trash by ID (a transfer leg takes its other leg with it). It can be restored from the trash for 30 days.",
       inputSchema: DeleteTransactionInputSchema,
     },
     async ({ id }) => {
@@ -620,14 +620,14 @@ export function createCapitalMcpServer(userId: string, db: DbClient) {
     "update_category",
     {
       description:
-        "Update an existing category's name, type, color, or icon. NAME CHANGES CASCADE atomically " +
-        "to all tables (transactions, recurring transactions, budgets, bill transactions, mappings). " +
+        "Update an existing category's name, type, color, or icon. Transactions, budgets, recurring " +
+        "rules and categorization rules reference the category by id, so a rename applies everywhere at once. " +
         "Renaming to an existing category name for the same type is rejected (use merge_categories instead). " +
         "TYPE CHANGES are only allowed when no transactions use the category. LOCALIZATION: System and " +
-        "default categories CAN be renamed (e.g., 'Credit Card' → 'Cartão de Crédito'). The system uses " +
-        "skipDuplicates when seeding, so renamed categories won't be duplicated on next login. " +
+        "default categories CAN be renamed (e.g., 'Credit Card' → 'Cartão de Crédito'); their systemKey " +
+        "keeps them identifiable, so they are not re-created. " +
         "Set isArchived to hide a category from pickers without deleting it, including " +
-        "system and default categories. Existing transactions keep the name. " +
+        "system and default categories. Existing transactions keep it. " +
         "Assigning an archived category to a new transaction is rejected. " +
         "Unarchive by setting isArchived to false.",
       inputSchema: UpdateCategoryInputSchema,
@@ -650,10 +650,10 @@ export function createCapitalMcpServer(userId: string, db: DbClient) {
     "delete_category",
     {
       description:
-        "Delete a category. Requires 'reassignTo' (category ID) if any transactions, recurring " +
-        "transactions, budgets, bill transactions, or mappings use this category. Reassignment is " +
+        "Delete a category. Requires 'reassignTo' (category ID) if any transactions (including card " +
+        "purchases), recurring rules, budgets, or categorization rules use this category. Reassignment is " +
         "ATOMIC - all records are moved in a single transaction. Validates that reassignTo has the " +
-        "same type, is not the category itself, and checks budget unique key (account, category, effectiveFrom) " +
+        "same type, is not the category itself, and checks budget unique key (entity, category, effectiveFrom) " +
         "inside that transaction. Cannot delete isDefault, isSystem, or systemKey categories. " +
         "Renaming those categories is still allowed via update_category.",
       inputSchema: DeleteCategoryInputSchema,
@@ -676,13 +676,13 @@ export function createCapitalMcpServer(userId: string, db: DbClient) {
     "merge_categories",
     {
       description:
-        "Merge two categories ATOMICALLY by moving all transactions, recurring transactions, " +
-        "budgets, bill transactions, and mappings from 'fromId' to 'toId', then deleting 'fromId'. " +
+        "Merge two categories ATOMICALLY by moving all transactions (including card purchases), recurring rules, " +
+        "budgets, and categorization rules from 'fromId' to 'toId', then deleting 'fromId'. " +
         "Categories must have the same type and must not be the same id. The FROM category is refused " +
         "when it is isDefault, isSystem, or has a systemKey — the same protection as delete_category. " +
         "Merging into a default or system category is allowed. Budget collisions use unique key " +
-        "(account, category, effectiveFrom) and are checked inside the same transaction. " +
-        "Returns counts of records moved for each table.",
+        "(entity, category, effectiveFrom) and are checked inside the same transaction. " +
+        "Returns counts of records moved (mappingsMoved counts categorization rules).",
       inputSchema: MergeCategoriesInputSchema,
     },
     async (params) => {
@@ -703,9 +703,9 @@ export function createCapitalMcpServer(userId: string, db: DbClient) {
     "find_orphan_transactions",
     {
       description:
-        "Find transactions whose category doesn't match any existing category. Returns " +
-        "counts grouped by category name and full transaction details. Useful for data " +
-        "cleanup after imports or category changes.",
+        "Find income/expense transactions that still need a category: none set, or an archived one. " +
+        "Returns counts grouped by current category name ('(none)' for uncategorized) and the " +
+        "latest 100 transactions. Useful for cleanup after imports or category changes.",
       inputSchema: z.object({}),
     },
     async () => {
@@ -776,7 +776,7 @@ export function createCapitalMcpServer(userId: string, db: DbClient) {
       description:
         "Update user-level settings: baseCurrency, theme, dateFormat, numberFormat, timezone. " +
         "Changing baseCurrency when the user has any transactions requires force: true. " +
-        "exchangeRate is relative to baseCurrency, so that change makes historical totals wrong.",
+        "Base amounts are stored in the current base currency and are not converted, so that change makes historical totals wrong.",
       inputSchema: UpdateUserSettingsInputSchema,
     },
     async (params) => {
@@ -798,14 +798,10 @@ export function createCapitalMcpServer(userId: string, db: DbClient) {
     {
       description:
         "Update account (personal or business) settings: name, description, defaultCurrency, " +
-        "color, taxRate, initialBalance. CURRENCY BEHAVIOR: PersonalAccount.defaultCurrency and " +
-        "Business.defaultCurrency only affect the default currency in UI forms for new transactions. " +
-        "They DO NOT affect existing transactions. Transaction.exchangeRate stores '1 transaction.currency " +
-        "= exchangeRate * user.baseCurrency', and all totals sum amount*exchangeRate. Changing defaultCurrency " +
-        "on an account with existing transactions requires 'force: true' to confirm understanding. " +
-        "See apps/capital/src/lib/utils/calculations.ts:20-21,186,396 and " +
-        "apps/capital/src/server/modules/reports/services/get-summary.ts:104,162 for usage. " +
-        "SAFE: Yes, existing totals remain correct since they reference baseCurrency.",
+        "color, taxRate, initialBalance (opening balance of the entity's main account). CURRENCY BEHAVIOR: " +
+        "defaultCurrency is only the default for new transactions. Every stored transaction keeps its own " +
+        "currency, exchangeRate and base-currency amount, so existing totals do not change. Changing " +
+        "defaultCurrency on an account with existing transactions requires 'force: true' to confirm understanding.",
       inputSchema: UpdateAccountInputSchema,
     },
     async (params) => {
@@ -950,9 +946,11 @@ export function createCapitalMcpServer(userId: string, db: DbClient) {
     {
       description:
         "Import a monthly credit card statement CSV (already parsed into rows by the client). " +
-        "Creates or updates a CreditCardStatement and inserts BillTransactions (purchases). " +
-        "Identical rows are kept up to the count in the file. Re-importing the same " +
-        "file inserts nothing new. Unknown category names fall back to the system Other expense. " +
+        "Creates or updates the card's statement for that month and books each row as a purchase on the card, " +
+        "counted on the statement's closing date. Identical rows are kept up to the count in the file; " +
+        "re-importing the same file inserts nothing new. Installment rows join an installment plan and the " +
+        "remaining installments are booked as committed entries on the next statements. " +
+        "Unknown category names fall back to the system Other expense. " +
         "Use this to bulk-import June–September credit card purchases. " +
         "Amounts are BRL for Nubank cards. Currency per transaction can be overridden in the row.",
       inputSchema: z.object({
@@ -1000,8 +998,8 @@ export function createCapitalMcpServer(userId: string, db: DbClient) {
     {
       description:
         "Mark an existing transaction as a credit card bill settlement/payment. " +
-        "Links the transaction to the statement via billPaymentTransactionId. " +
-        "That link excludes the payment from expense totals; the category is left unchanged. " +
+        "It becomes a card_payment transfer from its bank account to the card, linked to the statement, " +
+        "so it no longer counts as an expense (the purchases do); the category is left unchanged. " +
         "Use this to convert historical June–September bill payment transactions into " +
         "settlements after importing the statement purchases.",
       inputSchema: z.object({
@@ -1027,8 +1025,8 @@ export function createCapitalMcpServer(userId: string, db: DbClient) {
     "unmark_transaction_as_card_settlement",
     {
       description:
-        "Remove the credit card settlement link from a transaction. " +
-        "The payment counts as an expense again. The category is left unchanged.",
+        "Remove the credit card settlement link from a transaction: it stops being a card_payment " +
+        "transfer and counts as an expense again. The category is left unchanged.",
       inputSchema: z.object({
         transactionId: z.string().uuid(),
       }),
@@ -1052,7 +1050,7 @@ export function createCapitalMcpServer(userId: string, db: DbClient) {
     {
       description:
         "Get a credit card statement with purchases and reconciliation. " +
-        "Returns statement metadata, list of purchases (BillTransactions), " +
+        "Returns statement metadata, list of purchases (committed future installments excluded), " +
         "bill payment transaction details (if linked), and reconciliation " +
         "(sum of purchases vs. payment amount). " +
         "Use to verify imports and check statement balances.",

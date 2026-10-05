@@ -1,13 +1,6 @@
 "use client";
 
-import {
-  createContext,
-  useContext,
-  useState,
-  useEffect,
-  type ReactNode,
-} from "react";
-import { client } from "@/lib/api-client";
+import { createContext, useContext, useState, useEffect, type ReactNode } from "react";
 
 interface User {
   id: string;
@@ -17,6 +10,7 @@ interface User {
   theme: string;
   dateFormat: string;
   numberFormat: string;
+  timezone: string;
   personalAccountId: string | null;
 }
 
@@ -41,24 +35,23 @@ export function UserProvider({ children }: { children: ReactNode }) {
   const fetchCurrentUser = async () => {
     setIsLoading(true);
     setError(null);
-
     try {
-      const res = await client.v1.auth.me.$get();
-
+      const res = await fetch("/api/v2/me", { credentials: "include" });
       if (res.ok) {
-        const userData = await res.json();
+        const me = await res.json();
         setUser({
-          id: userData.id,
-          email: userData.email,
-          name: userData.name,
-          baseCurrency: userData.baseCurrency,
-          theme: userData.theme,
-          dateFormat: userData.dateFormat,
-          numberFormat: userData.numberFormat,
-          personalAccountId: userData.personalAccount?.id ?? null,
+          id: me.id,
+          email: me.email,
+          name: me.name,
+          baseCurrency: me.baseCurrency,
+          theme: me.theme,
+          dateFormat: me.dateFormat,
+          numberFormat: me.numberFormat,
+          timezone: me.timezone,
+          personalAccountId: me.personalEntityId ?? null,
         });
       } else {
-        // Not authenticated - this is expected for public routes
+        // Not authenticated - expected on public routes.
         setUser(null);
       }
     } catch (err) {
@@ -72,7 +65,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
 
   const logout = async () => {
     try {
-      await client.v1.auth.logout.$post();
+      await fetch("/api/v2/auth/logout", { method: "POST", credentials: "include" });
       setUser(null);
     } catch (err) {
       console.error("Logout error:", err);
@@ -103,18 +96,14 @@ export function UserProvider({ children }: { children: ReactNode }) {
 
 export function useUser() {
   const context = useContext(UserContext);
-  if (!context) {
-    throw new Error("useUser must be used within a UserProvider");
-  }
+  if (!context) throw new Error("useUser must be used within a UserProvider");
   return context;
 }
 
 export function useUserId() {
-  const { userId } = useUser();
-  return userId;
+  return useUser().userId;
 }
 
 export function usePersonalAccountId() {
-  const { personalAccountId } = useUser();
-  return personalAccountId;
+  return useUser().personalAccountId;
 }

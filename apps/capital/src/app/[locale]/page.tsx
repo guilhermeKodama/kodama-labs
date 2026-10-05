@@ -4,7 +4,7 @@ import {
   Building2,
   User,
   ArrowLeftRight,
-  Settings,
+  Sparkles,
   TrendingUp,
   Wallet,
   PiggyBank,
@@ -14,7 +14,6 @@ import { useTranslations } from 'next-intl';
 import { Button } from '@/components/ui/button';
 import {
   Card,
-  CardContent,
   CardDescription,
   CardHeader,
   CardTitle,
@@ -93,9 +92,9 @@ export default function HomePage() {
                 size="lg"
                 className="border border-slate-700 bg-slate-800/50 text-slate-300 hover:bg-slate-800 hover:text-white"
               >
-                <Link href="/settings">
-                  <Settings className="mr-2 h-4 w-4" />
-                  {t('home.hero.settings')}
+                <Link href="/assistant">
+                  <Sparkles className="mr-2 h-4 w-4" />
+                  {t('nav.assistant')}
                 </Link>
               </Button>
             </div>
@@ -136,52 +135,6 @@ export default function HomePage() {
               </Card>
             );
           })}
-        </div>
-      </div>
-
-      {/* Quick Links */}
-      <div className="mx-auto max-w-7xl px-6 pb-24 lg:px-8">
-        <div className="mx-auto max-w-5xl">
-          <Card className="border-slate-800 bg-slate-900/50 backdrop-blur-sm">
-            <CardHeader>
-              <CardTitle className="text-white">{t('home.quickNav.title')}</CardTitle>
-              <CardDescription className="text-slate-400">
-                {t('home.quickNav.subtitle')}
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-                <Link
-                  href="/dashboard"
-                  className="flex h-auto flex-col items-center gap-2 rounded-lg border border-slate-700 bg-slate-800/50 py-4 text-slate-300 transition-colors hover:border-slate-600 hover:bg-slate-800 hover:text-white"
-                >
-                  <BarChart3 className="h-5 w-5" />
-                  {t('home.quickNav.dashboard')}
-                </Link>
-                <Link
-                  href="/businesses"
-                  className="flex h-auto flex-col items-center gap-2 rounded-lg border border-slate-700 bg-slate-800/50 py-4 text-slate-300 transition-colors hover:border-slate-600 hover:bg-slate-800 hover:text-white"
-                >
-                  <Building2 className="h-5 w-5" />
-                  {t('home.quickNav.businesses')}
-                </Link>
-                <Link
-                  href="/personal"
-                  className="flex h-auto flex-col items-center gap-2 rounded-lg border border-slate-700 bg-slate-800/50 py-4 text-slate-300 transition-colors hover:border-slate-600 hover:bg-slate-800 hover:text-white"
-                >
-                  <User className="h-5 w-5" />
-                  {t('home.quickNav.personal')}
-                </Link>
-                <Link
-                  href="/transfers"
-                  className="flex h-auto flex-col items-center gap-2 rounded-lg border border-slate-700 bg-slate-800/50 py-4 text-slate-300 transition-colors hover:border-slate-600 hover:bg-slate-800 hover:text-white"
-                >
-                  <ArrowLeftRight className="h-5 w-5" />
-                  {t('home.quickNav.transfers')}
-                </Link>
-              </div>
-            </CardContent>
-          </Card>
         </div>
       </div>
 

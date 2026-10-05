@@ -1,5 +1,8 @@
 import type { PrismaClient } from "@/generated/prisma";
-import { SYSTEM_CATEGORY_DEFINITIONS } from "@capital/server/modules/categories/lib/system-categories";
+import { ensureSystemCategories } from "@capital/server/modules/categories/lib/system-categories";
+import { LedgerError } from "@capital/server/modules/ledger/lib/errors";
+import { getPersonalEntity } from "@capital/server/modules/ledger/services/entities";
+import { ensureBuiltinViews } from "@capital/server/modules/ledger/services/views";
 import { hashPassword } from "./password";
 
 interface SignupInput {
@@ -17,66 +20,20 @@ const DEFAULT_CURRENCIES = [
   { code: "JPY", name: "Japanese Yen", symbol: "¥", manualRate: 149.5 },
 ];
 
-async function seedDefaultCategoriesForUser(userId: string, prisma: PrismaClient) {
-  await prisma.category.createMany({
-    data: SYSTEM_CATEGORY_DEFINITIONS.map((cat) => ({
-      userId,
-      name: cat.name,
-      systemKey: cat.systemKey,
-      type: cat.type,
-      isDefault: cat.isDefault,
-      isSystem: cat.isSystem,
-    })),
-    skipDuplicates: true,
-  });
-}
-
-async function seedDefaultCurrenciesForUser(userId: string, prisma: PrismaClient) {
-  const currencies = DEFAULT_CURRENCIES.map((currency) => ({
-    userId,
-    ...currency,
-  }));
-
-  await prisma.currency.createMany({
-    data: currencies,
-    skipDuplicates: true,
-  });
-}
-
+/** A new user starts with the PF entity and its main account, the system categories, currencies and the "Todas" view. */
 export async function signup(input: SignupInput, prisma: PrismaClient) {
-  // Check if user already exists
-  const existingUser = await prisma.user.findUnique({
-    where: { email: input.email },
-  });
-
-  if (existingUser) {
-    throw new Error("User with this email already exists");
-  }
-
-  // Hash the password
+  const existingUser = await prisma.user.findUnique({ where: { email: input.email } });
+  if (existingUser) throw new LedgerError("User with this email already exists", 409);
   const passwordHash = await hashPassword(input.password);
 
-  // Create user with personal account
-  const user = await prisma.user.create({
-    data: {
-      email: input.email,
-      passwordHash,
-      name: input.name,
-      baseCurrency: input.baseCurrency || "USD",
-      personalAccount: {
-        create: {
-          defaultCurrency: input.baseCurrency || "USD",
-        },
-      },
-    },
-    include: {
-      personalAccount: true,
-    },
+  return prisma.$transaction(async (tx) => {
+    const user = await tx.user.create({
+      data: { email: input.email, passwordHash, name: input.name, baseCurrency: input.baseCurrency || "USD" },
+    });
+    await getPersonalEntity(user.id, tx);
+    await tx.currency.createMany({ data: DEFAULT_CURRENCIES.map((c) => ({ userId: user.id, ...c })), skipDuplicates: true });
+    await ensureSystemCategories(user.id, tx);
+    await ensureBuiltinViews(user.id, tx);
+    return user;
   });
-
-  // Seed default currencies and categories for the new user
-  await seedDefaultCurrenciesForUser(user.id, prisma);
-  await seedDefaultCategoriesForUser(user.id, prisma);
-
-  return user;
 }

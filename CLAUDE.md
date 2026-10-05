@@ -77,6 +77,35 @@ sentinel, attention, and careers) or, in production, the compose
 `*-migrate` services. Create new migrations with `pnpm --filter <app>
 db:migrate:dev`.
 
+## Capital data model (ledger)
+
+Capital's data lives in a single ledger (`apps/capital/prisma/schema.prisma`):
+
+- `Entity` (personal, one per user, or business) → `Account` (checking,
+  credit_card, brokerage, cash; each entity has an `isDefault` "Conta
+  principal") → `LedgerEntry`, with a signed `amount` (outflows negative)
+  and an `amountBase` fixed at write time.
+- Transfers are a `TransferGroup` with two legs. A card bill payment is a
+  `card_payment` transfer; card purchases are expenses on the card, counted
+  on the statement's closing date (`effectiveDate`).
+- Deletes go to the trash (`deletedAt`, purged after 30 days by the
+  `process-recurring` cron); writes are recorded in `MutationBatch` for undo.
+
+The API is `/api/v2/*` (`src/server/modules/*/routes/v2`). The MCP tools and
+the assistant keep their old contract (`businessId`/`personalAccountId`,
+positive `amount` plus `type`) through `src/server/modules/mcp/lib/ledger-adapter.ts`.
+Only `assistant`, `fire`, `push` and `health` still have v1 routes. Write
+through the services in `src/server/modules/ledger/services`, never with raw
+`prisma.ledgerEntry.create`: they keep the transfer legs balanced, the base
+amount, the card statement and the undo batch consistent.
+
+The pre-ledger tables were moved to the Postgres schema `legacy`, with
+`legacy.id_map` (old → new ids). They are read-only history.
+`pnpm --filter @wallex/capital db:reconcile-ledger <baseline.json>` compares
+the ledger with the pre-migration snapshot, and `db:drop-legacy` removes the
+schema for good (it requires `CONFIRM_DROP_LEGACY=<database name>`; take a
+`pg_dump` first).
+
 ## Postgres
 
 Shared Postgres 17 in Docker (port 5433), one DB per app — see

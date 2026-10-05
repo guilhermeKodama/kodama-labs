@@ -1,7 +1,6 @@
 import { z } from "zod";
 import { defineTool, TOOL_MEDIA_KEY, type ToolMediaRef } from "../registry";
-import { verifyOwnerAccess } from "@capital/server/modules/attachments/services/verify-owner";
-import { fetchAttachmentsByOwner } from "@capital/server/modules/attachments/data/queries/fetch-attachments";
+import { fromLegacyOwnerType, LEGACY_OWNER_TYPES, listAttachments } from "@capital/server/modules/attachments/services/attachments";
 import { MAX_IMAGES_PER_TURN, isAllowedImageMediaType } from "../../../constants";
 
 /** Types the Messages API can actually read; anything else is listed but not loaded. */
@@ -14,7 +13,7 @@ export const readAttachment = defineTool({
   description:
     "Abre os comprovantes anexados a uma transação, transferência ou recorrência existente (recibo, boleto, comprovante de Pix) para que você possa VER o conteúdo. Aceita imagens (JPEG/PNG/WebP/GIF) e PDFs. Use quando o usuário perguntar sobre o comprovante de um lançamento que já está na base - o resultado inclui o próprio arquivo.",
   inputSchema: z.object({
-    ownerType: z.enum(["transaction", "transfer", "recurringTransaction", "recurringTransfer"]),
+    ownerType: z.enum(LEGACY_OWNER_TYPES),
     ownerId: z.string().min(1),
     attachmentId: z
       .string()
@@ -25,9 +24,7 @@ export const readAttachment = defineTool({
   handler: async (ctx, input) => {
     // Ownership is enforced here, from the session's userId - never from
     // anything the model passed in.
-    await verifyOwnerAccess(ctx.userId, input.ownerType, input.ownerId, ctx.db);
-
-    const all = await fetchAttachmentsByOwner(input.ownerType, input.ownerId, ctx.db);
+    const all = await listAttachments(ctx.userId, fromLegacyOwnerType(input.ownerType), input.ownerId, ctx.db);
     const scoped = input.attachmentId
       ? all.filter((a) => a.id === input.attachmentId)
       : all;

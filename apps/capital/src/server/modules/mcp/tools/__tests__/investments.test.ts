@@ -1,173 +1,53 @@
-import { describe, it, expect, beforeEach } from "vitest";
-import { adjustPosition, listInvestmentPositions } from "../investments";
+import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { prisma } from "@capital/server/lib/prisma";
+import { createLedgerFixture, deleteLedgerFixture, type LedgerFixture } from "@/test/ledger-fixtures";
+import { addInvestmentAsset, adjustPosition, listInvestmentPositions } from "../investments";
 
-const db = prisma;
+const USER = "test-user-mcp-investments-001";
+const OTHER = "test-user-mcp-investments-002";
+let f: LedgerFixture;
+let holdingId: string;
 
-const TEST_USER_ID = "test-user-mcp-inv-002";
+beforeEach(async () => {
+  f = await createLedgerFixture(prisma, USER);
+  await createLedgerFixture(prisma, OTHER);
+  const h = await prisma.investmentHolding.create({
+    data: { accountId: f.broker, ticker: "PMLL11", name: "Maxi Renda FII", assetClass: "fii", currency: "BRL", currentQuantity: 164, averageCost: 102.5, totalInvested: 16810, currentPrice: 105.2 },
+  });
+  holdingId = h.id;
+});
 
-describe("MCP Investment Tools", () => {
-  let accountId: string;
-  let holdingId: string;
+afterAll(async () => {
+  await deleteLedgerFixture(prisma, USER);
+  await deleteLedgerFixture(prisma, OTHER);
+});
 
-  beforeEach(async () => {
-    // Clean up test data
-    await db.investmentTransaction.deleteMany({
-      where: { holding: { account: { userId: TEST_USER_ID } } },
-    });
-    await db.investmentHolding.deleteMany({
-      where: { account: { userId: TEST_USER_ID } },
-    });
-    await db.investmentAccount.deleteMany({
-      where: { userId: TEST_USER_ID },
-    });
-    await db.personalAccount.deleteMany({ where: { userId: TEST_USER_ID } });
-    await db.user.deleteMany({ where: { id: TEST_USER_ID } });
-
-    // Create test user and personal account
-    await db.user.create({
-      data: {
-        id: TEST_USER_ID,
-        email: "mcp-inv-test@example.com",
-        passwordHash: "test-hash",
-        name: "MCP Investment Test User",
-        baseCurrency: "BRL",
-      },
-    });
-
-    await db.personalAccount.create({
-      data: {
-        userId: TEST_USER_ID,
-        defaultCurrency: "BRL",
-      },
-    });
-
-    // Create investment account
-    const account = await db.investmentAccount.create({
-      data: {
-        userId: TEST_USER_ID,
-        name: "XP Investimentos",
-        entityType: "personal",
-        currency: "BRL",
-      },
-    });
-    accountId = account.id;
-
-    // Create a holding (PMLL11 with 164 cotas at R$ 102.50)
-    const holding = await db.investmentHolding.create({
-      data: {
-        accountId,
-        ticker: "PMLL11",
-        name: "Maxi Renda FII",
-        assetClass: "fii",
-        currency: "BRL",
-        currentQuantity: 164,
-        averageCost: 102.5,
-        totalInvested: 16810,
-        currentPrice: 105.2,
-      },
-    });
-    holdingId = holding.id;
+describe("MCP investment tools", () => {
+  it("lists positions with value and unrealized gain", async () => {
+    const { positions } = await listInvestmentPositions(USER, prisma);
+    expect(positions).toHaveLength(1);
+    expect(positions[0]).toMatchObject({ ticker: "PMLL11", currentQuantity: 164, accountName: "XP" });
+    expect(positions[0].currentValue).toBeCloseTo(17252.8, 2);
+    expect(positions[0].unrealizedGain).toBeCloseTo(442.8, 2);
   });
 
-  describe("listInvestmentPositions", () => {
-    it("should list positions with calculated values", async () => {
-      const result = await listInvestmentPositions(TEST_USER_ID, db);
-
-      expect(result.positions).toHaveLength(1);
-      const position = result.positions[0];
-
-      expect(position.ticker).toBe("PMLL11");
-      expect(position.name).toBe("Maxi Renda FII");
-      expect(position.assetClass).toBe("fii");
-      expect(position.currentQuantity).toBe(164);
-      expect(position.averageCost).toBe(102.5);
-      expect(position.totalInvested).toBe(16810);
-      expect(position.currentPrice).toBe(105.2);
-      expect(position.currentValue).toBeCloseTo(17252.8, 1);
-      expect(position.unrealizedGain).toBeCloseTo(442.8, 1);
-      expect(position.accountName).toBe("XP Investimentos");
-    });
+  it("adjusts a position and records an adjustment operation", async () => {
+    const r = await adjustPosition(USER, { holdingId, currentQuantity: 174, averageCost: 102 }, prisma);
+    expect(r).toEqual({ success: true, holdingId, newQuantity: 174, newAverageCost: 102, newTotalInvested: 17748 });
+    const ops = await prisma.investmentOperation.findMany({ where: { holdingId } });
+    expect(ops).toHaveLength(1);
+    expect(ops[0]).toMatchObject({ type: "adjustment", quantity: 174, notes: "Manual adjustment via MCP" });
   });
 
-  describe("adjustPosition", () => {
-    it("should adjust position quantity and average cost", async () => {
-      const result = await adjustPosition(
-        TEST_USER_ID,
-        {
-          holdingId,
-          currentQuantity: 174,
-          averageCost: 102.5,
-          notes: "Correcting to match broker statement",
-        },
-        db
-      );
+  it("rejects unknown and foreign holdings", async () => {
+    await expect(adjustPosition(USER, { holdingId: "00000000-0000-0000-0000-000000000000", currentQuantity: 1, averageCost: 1 }, prisma)).rejects.toThrow(/not found/);
+    await expect(adjustPosition(OTHER, { holdingId, currentQuantity: 1, averageCost: 1 }, prisma)).rejects.toThrow(/not found/);
+  });
 
-      expect(result.success).toBe(true);
-      expect(result.newQuantity).toBe(174);
-      expect(result.newAverageCost).toBe(102.5);
-      expect(result.newTotalInvested).toBe(17835);
-
-      // Verify the holding was updated
-      const holding = await db.investmentHolding.findUnique({
-        where: { id: holdingId },
-      });
-      expect(holding?.currentQuantity).toBe(174);
-      expect(holding?.averageCost).toBe(102.5);
-      expect(holding?.totalInvested).toBe(17835);
-
-      // Verify audit trail transaction was created
-      const adjustmentTxn = await db.investmentTransaction.findFirst({
-        where: {
-          holdingId,
-          type: "adjustment",
-        },
-      });
-      expect(adjustmentTxn).not.toBeNull();
-      expect(adjustmentTxn?.quantity).toBe(174);
-      expect(adjustmentTxn?.pricePerUnit).toBe(102.5);
-      expect(adjustmentTxn?.totalAmount).toBe(17835);
-      expect(adjustmentTxn?.notes).toBe("Correcting to match broker statement");
-    });
-
-    it("should throw error when holding does not exist", async () => {
-      await expect(
-        adjustPosition(
-          TEST_USER_ID,
-          {
-            holdingId: "non-existent-id",
-            currentQuantity: 174,
-            averageCost: 102.5,
-          },
-          db
-        )
-      ).rejects.toThrow("Holding not found or access denied");
-    });
-
-    it("should throw error when user does not own the holding", async () => {
-      const otherUserId = "other-user-001";
-      await db.user.upsert({
-        where: { id: otherUserId },
-        update: {},
-        create: {
-          id: otherUserId,
-          email: "other@example.com",
-          passwordHash: "test-hash",
-          name: "Other User",
-        },
-      });
-
-      await expect(
-        adjustPosition(
-          otherUserId,
-          {
-            holdingId,
-            currentQuantity: 174,
-            averageCost: 102.5,
-          },
-          db
-        )
-      ).rejects.toThrow("Holding not found or access denied");
-    });
+  it("adds assets only to the user's brokerage accounts", async () => {
+    const r = await addInvestmentAsset(USER, { accountId: f.broker, ticker: "PVBI11", name: "VBI Prime", assetClass: "fii" }, prisma);
+    expect(r).toMatchObject({ ticker: "PVBI11", assetClass: "fii", currency: "BRL" });
+    await expect(addInvestmentAsset(USER, { accountId: f.pfChecking, name: "X", assetClass: "fii" }, prisma)).rejects.toThrow(/Investment account not found/);
+    await expect(addInvestmentAsset(OTHER, { accountId: f.broker, name: "X", assetClass: "fii" }, prisma)).rejects.toThrow(/Investment account not found/);
   });
 });

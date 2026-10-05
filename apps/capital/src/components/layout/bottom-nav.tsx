@@ -13,9 +13,9 @@ interface BottomNavProps {
 }
 
 /**
- * Phone/tablet nav (<md): 4 primary destinations plus a "Mais" trigger that
- * opens a bottom sheet with the remaining 9 — see nav-items.ts for which
- * items land where and why. Replaces the old 5-item + dropdown "More" bar.
+ * Phone/tablet nav (<md): the primary destinations plus a "Mais" trigger
+ * that opens a bottom sheet with the remaining items and the account
+ * controls — see nav-items.ts for which items land where.
  */
 export function BottomNav({ buildVersion }: BottomNavProps) {
   const t = useTranslations('nav');
@@ -27,7 +27,7 @@ export function BottomNav({ buildVersion }: BottomNavProps) {
   return (
     <>
       <nav className="pb-safe fixed inset-x-0 bottom-0 z-40 border-t border-border bg-background/95 backdrop-blur-sm md:hidden">
-        <div className="grid h-16 grid-cols-5">
+        <div className="grid h-16" style={{ gridTemplateColumns: `repeat(${MOBILE_PRIMARY_ITEMS.length + 1}, minmax(0, 1fr))` }}>
           {MOBILE_PRIMARY_ITEMS.map((item) => {
             const isActive = isNavItemActive(pathname, item.href);
             return (

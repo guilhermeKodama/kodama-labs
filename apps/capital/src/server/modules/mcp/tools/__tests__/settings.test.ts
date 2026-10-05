@@ -1,369 +1,66 @@
-import { describe, it, expect, beforeEach } from "vitest";
-import {
-  getUserSettings,
-  updateUserSettings,
-  getAccountSettings,
-  updateAccountSettings,
-} from "../settings";
+import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { prisma } from "@capital/server/lib/prisma";
+import { createLedgerFixture, deleteLedgerFixture, type LedgerFixture } from "@/test/ledger-fixtures";
+import { createEntry } from "@capital/server/modules/ledger/services/entries";
+import { getAccountSettings, getUserSettings, updateAccountSettings, updateUserSettings } from "../settings";
 
-const db = prisma;
+const USER = "test-user-mcp-settings-001";
+const MISSING = "00000000-0000-0000-0000-000000000000";
+let f: LedgerFixture;
 
-const TEST_USER_ID = "test-user-mcp-settings-001";
+beforeEach(async () => {
+  f = await createLedgerFixture(prisma, USER);
+});
 
-describe("MCP settings tools", () => {
-  let personalAccountId: string;
-  let businessId: string;
+afterAll(async () => {
+  await deleteLedgerFixture(prisma, USER);
+});
 
-  beforeEach(async () => {
-    await db.business.deleteMany({ where: { userId: TEST_USER_ID } });
-    await db.personalAccount.deleteMany({ where: { userId: TEST_USER_ID } });
-    await db.user.deleteMany({ where: { id: TEST_USER_ID } });
+const addEntry = (accountId: string) => createEntry(USER, { kind: "expense", accountId, amount: 10, date: "2026-09-01", description: "x" }, prisma);
 
-    await db.user.create({
-      data: {
-        id: TEST_USER_ID,
-        email: "mcp-settings-test@example.com",
-        passwordHash: "test-hash",
-        name: "MCP Settings Test User",
-        baseCurrency: "USD",
-        theme: "dark",
-        dateFormat: "yyyy-MM-dd",
-        numberFormat: "en-US",
-        timezone: "America/Sao_Paulo",
-      },
-    });
-
-    const personalAccount = await db.personalAccount.create({
-      data: {
-        userId: TEST_USER_ID,
-        defaultCurrency: "USD",
-        taxRate: 0.15,
-        initialBalance: 1000,
-      },
-    });
-    personalAccountId = personalAccount.id;
-
-    const business = await db.business.create({
-      data: {
-        userId: TEST_USER_ID,
-        name: "Test Business",
-        description: "A test business",
-        defaultCurrency: "USD",
-        color: "#3B82F6",
-        taxRate: 0.25,
-        initialBalance: 5000,
-      },
-    });
-    businessId = business.id;
+describe("user settings", () => {
+  it("reads settings and rejects an unknown user", async () => {
+    expect(await getUserSettings(USER, prisma)).toEqual({ baseCurrency: "BRL", theme: "system", dateFormat: "yyyy-MM-dd", numberFormat: "en-US", timezone: "America/Sao_Paulo" });
+    await expect(getUserSettings("nobody", prisma)).rejects.toThrow(/User not found/);
   });
 
-  describe("getUserSettings", () => {
-    it("should get user settings", async () => {
-      const result = await getUserSettings(TEST_USER_ID, db);
-
-      expect(result.baseCurrency).toBe("USD");
-      expect(result.theme).toBe("dark");
-      expect(result.dateFormat).toBe("yyyy-MM-dd");
-      expect(result.numberFormat).toBe("en-US");
-      expect(result.timezone).toBe("America/Sao_Paulo");
-    });
-
-    it("should throw error for non-existent user", async () => {
-      await expect(
-        getUserSettings("00000000-0000-0000-0000-000000000000", db)
-      ).rejects.toThrow("User not found");
-    });
+  it("requires force to change the base currency once there are entries", async () => {
+    await addEntry(f.pfChecking);
+    await expect(updateUserSettings(USER, { baseCurrency: "USD" }, prisma)).rejects.toThrow(/force: true/);
+    expect((await updateUserSettings(USER, { baseCurrency: "USD", force: true }, prisma)).baseCurrency).toBe("USD");
   });
 
-  describe("updateUserSettings", () => {
-    it("should reject a baseCurrency change when the user has transactions unless force is set", async () => {
-      await db.transaction.create({
-        data: {
-          entityType: "personal",
-          type: "expense",
-          amount: 10,
-          currency: "USD",
-          exchangeRate: 1,
-          description: "historical",
-          category: "Other",
-          date: new Date("2026-09-15"),
-          personalAccountId,
-        },
-      });
+  it("updates only the given fields", async () => {
+    const r = await updateUserSettings(USER, { theme: "dark", numberFormat: "pt-BR" }, prisma);
+    expect(r).toMatchObject({ theme: "dark", numberFormat: "pt-BR", baseCurrency: "BRL", dateFormat: "yyyy-MM-dd" });
+  });
+});
 
-      await expect(
-        updateUserSettings(TEST_USER_ID, { baseCurrency: "BRL" }, db)
-      ).rejects.toThrow(/historical totals wrong/);
-
-      const unchanged = await db.user.findUnique({ where: { id: TEST_USER_ID } });
-      expect(unchanged?.baseCurrency).toBe("USD");
-
-      const forced = await updateUserSettings(
-        TEST_USER_ID,
-        { baseCurrency: "BRL", force: true },
-        db
-      );
-      expect(forced.baseCurrency).toBe("BRL");
-    });
-
-    it("should update base currency", async () => {
-      const result = await updateUserSettings(
-        TEST_USER_ID,
-        { baseCurrency: "BRL" },
-        db
-      );
-
-      expect(result.baseCurrency).toBe("BRL");
-      expect(result.theme).toBe("dark");
-    });
-
-    it("should update multiple settings at once", async () => {
-      const result = await updateUserSettings(
-        TEST_USER_ID,
-        {
-          baseCurrency: "EUR",
-          theme: "light",
-          timezone: "Europe/London",
-        },
-        db
-      );
-
-      expect(result.baseCurrency).toBe("EUR");
-      expect(result.theme).toBe("light");
-      expect(result.timezone).toBe("Europe/London");
-    });
-
-    it("should update only specified fields", async () => {
-      const result = await updateUserSettings(
-        TEST_USER_ID,
-        { theme: "system" },
-        db
-      );
-
-      expect(result.theme).toBe("system");
-      expect(result.baseCurrency).toBe("USD");
-    });
+describe("account (entity) settings", () => {
+  it("reads personal and business settings, with the main account's opening balance", async () => {
+    await prisma.account.update({ where: { id: f.pjChecking }, data: { initialBalance: 1500 } });
+    expect(await getAccountSettings(USER, f.pfId, "personal", prisma)).toMatchObject({ id: f.pfId, name: "Personal", entityType: "personal", initialBalance: 0 });
+    expect(await getAccountSettings(USER, f.pjId, "business", prisma)).toMatchObject({ id: f.pjId, name: "Kodama LTDA", entityType: "business", initialBalance: 1500 });
+    await expect(getAccountSettings(USER, MISSING, "personal", prisma)).rejects.toThrow(/Personal account not found/);
+    await expect(getAccountSettings(USER, f.pfId, "business", prisma)).rejects.toThrow(/Business account not found/);
   });
 
-  describe("getAccountSettings", () => {
-    it("should get personal account settings", async () => {
-      const result = await getAccountSettings(
-        TEST_USER_ID,
-        personalAccountId,
-        "personal",
-        db
-      );
-
-      expect(result.name).toBe("Personal");
-      expect(result.entityType).toBe("personal");
-      expect(result.defaultCurrency).toBe("USD");
-      expect(result.taxRate).toBe(0.15);
-      expect(result.initialBalance).toBe(1000);
-    });
-
-    it("should get business account settings", async () => {
-      const result = await getAccountSettings(
-        TEST_USER_ID,
-        businessId,
-        "business",
-        db
-      );
-
-      if (result.entityType !== "business") {
-        throw new Error("Expected business entity type");
-      }
-
-      expect(result.name).toBe("Test Business");
-      expect(result.entityType).toBe("business");
-      expect(result.description).toBe("A test business");
-      expect(result.defaultCurrency).toBe("USD");
-      expect(result.color).toBe("#3B82F6");
-      expect(result.taxRate).toBe(0.25);
-      expect(result.initialBalance).toBe(5000);
-    });
-
-    it("should throw error for non-existent personal account", async () => {
-      await expect(
-        getAccountSettings(
-          TEST_USER_ID,
-          "00000000-0000-0000-0000-000000000000",
-          "personal",
-          db
-        )
-      ).rejects.toThrow("Personal account not found");
-    });
-
-    it("should throw error for non-existent business account", async () => {
-      await expect(
-        getAccountSettings(
-          TEST_USER_ID,
-          "00000000-0000-0000-0000-000000000000",
-          "business",
-          db
-        )
-      ).rejects.toThrow("Business account not found");
-    });
+  it("updates business name, description, color, tax rate and opening balance", async () => {
+    const r = await updateAccountSettings(USER, f.pjId, "business", { name: "Kodama Labs", description: "Dev", color: "#000", taxRate: 0.06, initialBalance: 200 }, prisma);
+    expect(r).toMatchObject({ name: "Kodama Labs", description: "Dev", color: "#000", taxRate: 0.06, initialBalance: 200 });
   });
 
-  describe("updateAccountSettings", () => {
-    it("should update personal account default currency with force", async () => {
-      // First create a transaction so force is needed
-      await db.transaction.create({
-        data: {
-          entityType: "personal",
-          type: "expense",
-          amount: 50,
-          currency: "USD",
-          exchangeRate: 1,
-          description: "Existing transaction",
-          category: "Test",
-          date: new Date("2026-09-15"),
-          personalAccountId,
-        },
-      });
+  it("requires force to change the default currency of an entity with entries, and leaves the entries alone", async () => {
+    await addEntry(f.pjChecking);
+    await expect(updateAccountSettings(USER, f.pjId, "business", { defaultCurrency: "USD" }, prisma)).rejects.toThrow(/force:true/);
+    const r = await updateAccountSettings(USER, f.pjId, "business", { defaultCurrency: "USD", force: true }, prisma);
+    expect(r.defaultCurrency).toBe("USD");
+    const [e] = await prisma.ledgerEntry.findMany({ where: { accountId: f.pjChecking } });
+    expect([e.currency, Number(e.amountBase)]).toEqual(["BRL", -10]);
+    expect((await updateAccountSettings(USER, f.pfId, "personal", { defaultCurrency: "EUR" }, prisma)).defaultCurrency).toBe("EUR");
+  });
 
-      const result = await updateAccountSettings(
-        TEST_USER_ID,
-        personalAccountId,
-        "personal",
-        { defaultCurrency: "BRL", force: true },
-        db
-      );
-
-      expect(result.defaultCurrency).toBe("BRL");
-      expect(result.name).toBe("Personal");
-    });
-
-    it("should update business account name and currency with force", async () => {
-      // First create a transaction so force is needed
-      await db.transaction.create({
-        data: {
-          entityType: "business",
-          type: "income",
-          amount: 100,
-          currency: "USD",
-          exchangeRate: 1,
-          description: "Existing transaction",
-          category: "Test",
-          date: new Date("2026-09-15"),
-          businessId,
-        },
-      });
-
-      const result = await updateAccountSettings(
-        TEST_USER_ID,
-        businessId,
-        "business",
-        {
-          name: "Updated Business",
-          defaultCurrency: "EUR",
-          force: true,
-        },
-        db
-      );
-
-      expect(result.name).toBe("Updated Business");
-      expect(result.defaultCurrency).toBe("EUR");
-    });
-
-    it("should update business account description and color", async () => {
-      const result = await updateAccountSettings(
-        TEST_USER_ID,
-        businessId,
-        "business",
-        {
-          description: "New description",
-          color: "#FF5733",
-        },
-        db
-      );
-
-      if (!("description" in result)) {
-        throw new Error("Expected business result with description");
-      }
-
-      expect(result.description).toBe("New description");
-      expect(result.color).toBe("#FF5733");
-    });
-
-    it("should not affect existing transactions when changing currency with force", async () => {
-      await db.transaction.create({
-        data: {
-          entityType: "personal",
-          type: "expense",
-          amount: 100,
-          currency: "USD",
-          exchangeRate: 1,
-          description: "Old transaction in USD",
-          category: "Test",
-          date: new Date("2026-09-15"),
-          personalAccountId,
-        },
-      });
-
-      await updateAccountSettings(
-        TEST_USER_ID,
-        personalAccountId,
-        "personal",
-        { defaultCurrency: "BRL", force: true },
-        db
-      );
-
-      const transaction = await db.transaction.findFirst({
-        where: { personalAccountId },
-      });
-      expect(transaction?.currency).toBe("USD");
-    });
-
-    it("should require force when changing currency on account with transactions", async () => {
-      await db.transaction.create({
-        data: {
-          entityType: "personal",
-          type: "expense",
-          amount: 100,
-          currency: "USD",
-          exchangeRate: 1,
-          description: "Transaction",
-          category: "Test",
-          date: new Date("2026-09-15"),
-          personalAccountId,
-        },
-      });
-
-      await expect(
-        updateAccountSettings(
-          TEST_USER_ID,
-          personalAccountId,
-          "personal",
-          { defaultCurrency: "BRL" }, // Missing force: true
-          db
-        )
-      ).rejects.toThrow(/requires force:true/);
-    });
-
-    it("should throw error for non-existent personal account", async () => {
-      await expect(
-        updateAccountSettings(
-          TEST_USER_ID,
-          "00000000-0000-0000-0000-000000000000",
-          "personal",
-          { defaultCurrency: "BRL" },
-          db
-        )
-      ).rejects.toThrow("Personal account not found");
-    });
-
-    it("should throw error for non-existent business account", async () => {
-      await expect(
-        updateAccountSettings(
-          TEST_USER_ID,
-          "00000000-0000-0000-0000-000000000000",
-          "business",
-          { name: "New Name" },
-          db
-        )
-      ).rejects.toThrow("Business account not found");
-    });
+  it("rejects unknown entities", async () => {
+    await expect(updateAccountSettings(USER, MISSING, "business", { name: "x" }, prisma)).rejects.toThrow(/Business account not found/);
   });
 });

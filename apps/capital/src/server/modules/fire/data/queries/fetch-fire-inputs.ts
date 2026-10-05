@@ -47,9 +47,12 @@ export async function fetchFireInputs(
   const start = new Date(now);
   start.setMonth(start.getMonth() - opts.trailingMonths);
 
-  const ownership = { OR: [{ business: { userId } }, { personalAccount: { userId } }] };
+  const live = { userId, deletedAt: null, effectiveDate: { gte: start } };
+  const select = { amountBase: true, effectiveDate: true, category: { select: { name: true } } } as const;
 
-  const [holdings, currencies, expenses, contributions, income] = await Promise.all([
+  // Contributions are money leaving everyday accounts for investments:
+  // deposit transfers into a brokerage, plus direct investment outflows.
+  const [holdings, currencies, expenseRows, contributionRows, incomeRows] = await Promise.all([
     db.investmentHolding.findMany({
       where: { account: { userId }, isActive: true },
       select: {
@@ -57,23 +60,30 @@ export async function fetchFireInputs(
         currentPrice: true,
         totalInvested: true,
         currency: true,
-        account: { select: { entityType: true } },
+        account: { select: { entity: { select: { kind: true } } } },
       },
     }),
     db.currency.findMany({ where: { userId }, select: { code: true, manualRate: true } }),
-    db.transaction.findMany({
-      where: { type: "expense", date: { gte: start }, ...ownership },
-      select: { amount: true, exchangeRate: true, category: true, date: true },
+    db.ledgerEntry.findMany({ where: { ...live, kind: "expense", transferGroupId: null }, select }),
+    db.ledgerEntry.findMany({
+      where: {
+        ...live,
+        account: { type: { not: "brokerage" } },
+        OR: [{ kind: "investment" }, { transferGroup: { direction: "investment_deposit" }, amount: { lt: 0 } }],
+      },
+      select,
     }),
-    db.transaction.findMany({
-      where: { type: "investment", date: { gte: start }, ...ownership },
-      select: { amount: true, exchangeRate: true, category: true, date: true },
-    }),
-    db.transaction.findMany({
-      where: { type: "income", date: { gte: start }, ...ownership },
-      select: { amount: true, exchangeRate: true, category: true, date: true },
-    }),
+    db.ledgerEntry.findMany({ where: { ...live, kind: "income", transferGroupId: null }, select }),
   ]);
+  const spend = (sign: 1 | -1) => (r: (typeof expenseRows)[number]): FireInputSpend => ({
+    amount: sign * Number(r.amountBase),
+    exchangeRate: 1,
+    category: r.category?.name ?? null,
+    date: r.effectiveDate,
+  });
+  const expenses = expenseRows.map(spend(-1));
+  const contributions = contributionRows.map(spend(-1));
+  const income = incomeRows.map(spend(1));
 
   // manualRate means "1 base = X this currency", so base-per-unit = 1 / manualRate.
   // The base currency is ALWAYS 1 — never let a stray base-currency row (e.g. a
@@ -90,7 +100,7 @@ export async function fetchFireInputs(
     currentPrice: h.currentPrice,
     totalInvested: h.totalInvested,
     currency: h.currency,
-    entityType: h.account.entityType,
+    entityType: h.account.entity.kind,
   }));
 
   return {

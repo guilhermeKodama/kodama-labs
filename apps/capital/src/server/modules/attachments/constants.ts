@@ -19,9 +19,3 @@ export const ALLOWED_MIME_TYPES = new Set([
   "image/png",
   "image/webp",
 ]);
-
-export type AttachmentOwnerType =
-  | "transaction"
-  | "transfer"
-  | "recurringTransaction"
-  | "recurringTransfer";

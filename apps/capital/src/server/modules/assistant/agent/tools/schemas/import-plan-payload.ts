@@ -46,10 +46,10 @@ export const ImportPlanCreditCardSchema = z.object({
   currency: z.string().length(3),
 });
 
-// Carries intent, not the parsed rows - the real bill/lineitem data is
-// recomputed from the CSV at commit time via processBillCsv (shared with
-// the manual wizard), so replace-on-reupload, installment continuity and
-// the manual-categorization-preservation logic only exist in one place.
+// Carries intent, not the parsed rows - the real statement rows are
+// recomputed from the file at commit time via importCardFile (shared with
+// the manual upload), so re-upload dedupe and installment continuity only
+// exist in one place.
 // previewTotalAmount/previewTransactionCount are only for the plan card;
 // they are not written anywhere.
 export const ImportPlanBillSchema = z.object({

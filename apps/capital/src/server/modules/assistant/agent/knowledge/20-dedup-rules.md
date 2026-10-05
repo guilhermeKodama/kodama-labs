@@ -29,7 +29,7 @@ Mesma lógica da Fase 0 acima: se o FITID já apareceu numa `Transfer`, é dupli
 
 ## Investimentos (PDF de corretora)
 
-`InvestmentTransaction` não tem identificador nativo de corretora na maioria dos extratos. A chave de deduplicação é um hash determinístico, calculado assim:
+Uma operação de investimento não tem identificador nativo de corretora na maioria dos extratos. A chave de deduplicação é um hash determinístico, calculado assim:
 
 ```
 externalId = "inv:" + accountId + ":" + sha256(date + "|" + ticker + "|" + type + "|" + totalAmount + "|" + quantity)

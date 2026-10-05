@@ -61,7 +61,7 @@ function buildPayload(
 
 /**
  * Runs every 5 minutes (see /api/cron/send-reminders). For every active
- * reminder-mode recurring transaction with a configured `reminders` JSON,
+ * reminder-mode recurring rule with a configured `reminders` JSON,
  * computes which pre-due/day-of/overdue instances are due right now and
  * pushes them — at most once each, via the ReminderDispatch idempotency
  * ledger (claim-then-send: the dispatch row is inserted before sending, so
@@ -90,25 +90,28 @@ export async function sendDueReminders(
     notificationsFailed: 0,
   };
 
-  const rows = await db.recurringTransaction.findMany({
+  const rules = await db.recurringRule.findMany({
     where: {
       isActive: true,
-      autoGenerateTransaction: false,
+      autoGenerate: false,
       reminders: { not: Prisma.DbNull },
     },
     include: {
-      business: { select: { user: { select: { id: true, timezone: true } } } },
-      personalAccount: { select: { user: { select: { id: true, timezone: true } } } },
+      user: { select: { id: true, timezone: true } },
+      category: { select: { name: true } },
     },
   });
+  const rows = rules.map((r) => ({
+    ...r,
+    amount: Number(r.amount),
+    category: r.category?.name ?? "Sem categoria",
+    owner: r.user,
+  }));
   result.rowsScanned = rows.length;
   if (rows.length === 0) return result;
 
   const ownerIds = new Set<string>();
-  for (const row of rows) {
-    const owner = row.business?.user ?? row.personalAccount?.user;
-    if (owner) ownerIds.add(owner.id);
-  }
+  for (const row of rows) ownerIds.add(row.owner.id);
 
   const subscriptions = await db.pushSubscription.findMany({
     where: { userId: { in: [...ownerIds] }, deadAt: null },
@@ -121,8 +124,7 @@ export async function sendDueReminders(
   }
 
   for (const row of rows) {
-    const owner = row.business?.user ?? row.personalAccount?.user;
-    if (!owner) continue;
+    const owner = row.owner;
 
     const subs = subsByUser.get(owner.id) ?? [];
     if (subs.length === 0) {
@@ -142,7 +144,7 @@ export async function sendDueReminders(
       try {
         const dispatch = await db.reminderDispatch.create({
           data: {
-            recurringTransactionId: row.id,
+            recurringRuleId: row.id,
             occurrenceDate: toNoonUTC(row.nextDueDate),
             daysBefore: instance.daysBefore,
           },

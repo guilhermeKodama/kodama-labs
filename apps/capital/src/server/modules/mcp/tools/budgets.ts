@@ -1,21 +1,15 @@
 import type { DbClient } from "@capital/server/lib/prisma";
-import { rejectArchivedAssignment } from "../lib/category-validation";
-import { parseLocalDate } from "@capital/server/lib/date-utils";
-import {
-  getEffectiveBudgetsForMonth,
-  shouldCountAsExpenseForBudget,
-  normalizeToMonthStart,
-} from "../../budgets/lib/budget-helpers";
-import { buildSettlementSet } from "@/lib/utils/expense-classification";
-import { buildExpenseLedger, sumLedgerExpensesByCategory } from "@/lib/utils/expense-ledger";
-import { amountInUserBase } from "@/lib/utils/currency";
-import { statementInWindow } from "../../credit-cards/lib/statement-window";
-import type { Currency, Transaction } from "@/types";
+import type { Budget, Category } from "@/generated/prisma";
+import { createBudget as createBudgetService, deactivateBudget, listBudgets as listBudgetsService, updateBudget as updateBudgetService } from "../../budgets/services/budget-crud";
+import { monthOverview } from "../../budgets/services/budget-overview";
+import { getPersonalEntity } from "../../ledger/services/entities";
+import { toNumber } from "../../ledger/lib/money";
+import { categoryResolver } from "../lib/ledger-adapter";
 
 export interface ListBudgetsParams {
   accountId?: string;
   category?: string;
-  effectiveDate?: string; // YYYY-MM-DD or YYYY-MM format
+  effectiveDate?: string; // YYYY-MM-DD or YYYY-MM
 }
 
 export interface CreateBudgetParams {
@@ -23,14 +17,14 @@ export interface CreateBudgetParams {
   category: string;
   amount: number;
   currency: string;
-  effectiveFrom: string; // YYYY-MM-DD format
+  effectiveFrom: string; // YYYY-MM-DD
 }
 
 export interface UpdateBudgetParams {
   budgetId: string;
   amount?: number;
   currency?: string;
-  effectiveFrom?: string; // YYYY-MM-DD format
+  effectiveFrom?: string; // YYYY-MM-DD
   isActive?: boolean;
 }
 
@@ -39,606 +33,97 @@ export interface DeleteBudgetParams {
 }
 
 export interface GetBudgetStatusParams {
-  month: string; // YYYY-MM format
+  month: string; // YYYY-MM
   accountId?: string;
 }
 
-/**
- * List budgets for an account, optionally filtered by category.
- * If effectiveDate is provided, returns only budgets effective at that date
- * using the shared getEffectiveBudgetsForMonth helper (same logic as UI).
- * Otherwise, returns all active budgets.
- */
-export async function listBudgets(
-  userId: string,
-  params: ListBudgetsParams,
-  db: DbClient
-) {
-  const { category, effectiveDate } = params;
-
-  // Verify account ownership and get account ID
-  let resolvedAccountId: string;
-  if (params.accountId) {
-    const account = await db.personalAccount.findFirst({
-      where: { id: params.accountId, userId },
-    });
-    if (!account) {
-      throw new Error("Account not found or access denied");
-    }
-    resolvedAccountId = params.accountId;
-  } else {
-    // Default to user's personal account
-    const account = await db.personalAccount.findFirst({
-      where: { userId },
-    });
-    if (!account) {
-      throw new Error("No personal account found");
-    }
-    resolvedAccountId = account.id;
-  }
-
-  if (effectiveDate) {
-    // Parse date (YYYY-MM or YYYY-MM-DD)
-    const targetDate = effectiveDate.length === 7
-      ? parseLocalDate(`${effectiveDate}-01`)
-      : parseLocalDate(effectiveDate);
-
-    // Use shared helper for consistent resolution
-    const budgets = await getEffectiveBudgetsForMonth(
-      db,
-      userId,
-      targetDate,
-      { personalAccountId: resolvedAccountId }
-    );
-
-    // Filter by category if provided
-    const filtered = category
-      ? budgets.filter((b) => b.category === category)
-      : budgets;
-
-    return filtered.map((budget) => ({
-      id: budget.id,
-      category: budget.category,
-      amount: budget.amount,
-      currency: budget.currency,
-      effectiveFrom: budget.effectiveFrom.toISOString().split("T")[0],
-      period: budget.period,
-      year: budget.year,
-      month: budget.month,
-      isActive: budget.isActive,
-    }));
-  }
-
-  // No effectiveDate: return all active budgets
-  interface BudgetWhereClause {
-    personalAccountId: string;
-    isActive: boolean;
-    category?: string;
-  }
-
-  const where: BudgetWhereClause = {
-    personalAccountId: resolvedAccountId,
-    isActive: true,
-  };
-
-  if (category) {
-    where.category = category;
-  }
-
-  const budgets = await db.budget.findMany({
-    where,
-    orderBy: [{ category: "asc" }, { effectiveFrom: "desc" }],
-  });
-
-  return budgets.map((budget) => ({
-    id: budget.id,
-    category: budget.category,
-    amount: budget.amount,
-    currency: budget.currency,
-    effectiveFrom: budget.effectiveFrom.toISOString().split("T")[0],
-    period: budget.period,
-    year: budget.year,
-    month: budget.month,
-    isActive: budget.isActive,
-  }));
+/** accountId is the personal entity (the MCP's "personal account"); defaults to it. */
+async function resolveEntity(userId: string, accountId: string | undefined, db: DbClient) {
+  if (!accountId) return getPersonalEntity(userId, db);
+  const entity = await db.entity.findFirst({ where: { id: accountId, userId } });
+  if (!entity) throw new Error("Account not found or access denied");
+  return entity;
 }
 
-/**
- * Create a new budget for a category, effective from a specific date.
- * If an inactive budget exists for the same account/category/effectiveFrom,
- * reactivate and update it instead of failing.
- */
-export async function createBudget(
-  userId: string,
-  params: CreateBudgetParams,
-  db: DbClient
-) {
-  const { accountId, category, amount, currency, effectiveFrom } = params;
-
-  // Verify account ownership
-  const account = await db.personalAccount.findFirst({
-    where: { id: accountId, userId },
-  });
-
-  if (!account) {
-    throw new Error("Account not found or access denied");
-  }
-
-  // Validate amount
-  if (amount < 0) {
-    throw new Error("Budget amount must be non-negative");
-  }
-
-  await rejectArchivedAssignment(userId, category, "expense", db);
-
-  // Parse effective date (always normalize to first day at noon UTC)
-  const effectiveDate = normalizeToMonthStart(parseLocalDate(effectiveFrom));
-  const year = effectiveDate.getUTCFullYear();
-  const month = effectiveDate.getUTCMonth() + 1;
-
-  // Check for existing budget (active or inactive) by comparing normalized dates
-  const existing = await db.budget.findFirst({
-    where: {
-      personalAccountId: accountId,
-      category,
-      effectiveFrom: effectiveDate,
-    },
-  });
-
-  if (existing) {
-    if (existing.isActive) {
-      throw new Error(
-        `Active budget for category "${category}" already exists with effective date ${effectiveFrom}`
-      );
-    }
-    
-    // Reactivate and update the inactive budget
-    const updated = await db.budget.update({
-      where: { id: existing.id },
-      data: {
-        amount,
-        currency,
-        isActive: true,
-      },
-    });
-
-    return {
-      id: updated.id,
-      category: updated.category,
-      amount: updated.amount,
-      currency: updated.currency,
-      effectiveFrom: updated.effectiveFrom.toISOString().split("T")[0],
-      period: updated.period,
-      year: updated.year,
-      month: updated.month,
-    };
-  }
-
-  // Create new budget
-  const budget = await db.budget.create({
-    data: {
-      entityType: "personal",
-      personalAccountId: accountId,
-      category,
-      amount,
-      currency,
-      effectiveFrom: effectiveDate,
-      period: "monthly",
-      year,
-      month,
-      isActive: true,
-    },
-  });
-
+function toMcpBudget(b: Budget & { category: Category }) {
   return {
-    id: budget.id,
-    category: budget.category,
-    amount: budget.amount,
-    currency: budget.currency,
-    effectiveFrom: budget.effectiveFrom.toISOString().split("T")[0],
-    period: budget.period,
-    year: budget.year,
-    month: budget.month,
+    id: b.id,
+    category: b.category.name,
+    amount: toNumber(b.amount),
+    currency: b.currency,
+    effectiveFrom: b.effectiveFrom.toISOString().split("T")[0],
+    period: b.period,
+    year: b.year,
+    month: b.month,
+    isActive: b.isActive,
   };
+}
+
+export async function listBudgets(userId: string, params: ListBudgetsParams, db: DbClient) {
+  const entity = await resolveEntity(userId, params.accountId, db);
+  const categoryId = params.category ? (await db.category.findFirst({ where: { userId, name: params.category } }))?.id : undefined;
+  if (params.category && !categoryId) return [];
+  const budgets = await listBudgetsService(userId, db, { entityId: entity.id, categoryId, effectiveAt: params.effectiveDate });
+  return budgets.map(toMcpBudget);
+}
+
+/** A matching inactive budget is reactivated instead of rejected. */
+export async function createBudget(userId: string, params: CreateBudgetParams, db: DbClient) {
+  const entity = await resolveEntity(userId, params.accountId, db);
+  const category = (await categoryResolver(userId, db)).resolve(params.category, "expense");
+  const budget = await createBudgetService(userId, { entityId: entity.id, categoryId: category.id, amount: params.amount, currency: params.currency, effectiveFrom: params.effectiveFrom }, db);
+  const { isActive: _isActive, ...rest } = toMcpBudget(budget);
+  void _isActive;
+  return rest;
+}
+
+export async function updateBudget(userId: string, params: UpdateBudgetParams, db: DbClient) {
+  const { budgetId, ...patch } = params;
+  const owned = await db.budget.findFirst({ where: { id: budgetId, userId } });
+  if (!owned) throw new Error("Budget not found or access denied");
+  return toMcpBudget(await updateBudgetService(userId, budgetId, patch, db));
+}
+
+export async function deleteBudget(userId: string, params: DeleteBudgetParams, db: DbClient) {
+  const owned = await db.budget.findFirst({ where: { id: params.budgetId, userId } });
+  if (!owned) throw new Error("Budget not found or access denied");
+  await deactivateBudget(userId, params.budgetId, db);
+  return { success: true, budgetId: params.budgetId };
 }
 
 /**
- * Update an existing budget.
+ * Budgeted vs actual for a month, from the same overview the app uses:
+ * expenses only (no transfers or card bill payments), card purchases on
+ * their statement's closing date, in the base currency.
  */
-export async function updateBudget(
-  userId: string,
-  params: UpdateBudgetParams,
-  db: DbClient
-) {
-  const { budgetId, amount, currency, effectiveFrom, isActive } = params;
-
-  // Fetch and verify ownership
-  const budget = await db.budget.findFirst({
-    where: { id: budgetId },
-    include: { personalAccount: true },
-  });
-
-  if (!budget || budget.personalAccount?.userId !== userId) {
-    throw new Error("Budget not found or access denied");
-  }
-
-  // Validate amount if provided
-  if (amount !== undefined && amount < 0) {
-    throw new Error("Budget amount must be non-negative");
-  }
-
-  interface BudgetUpdateData {
-    amount?: number;
-    currency?: string;
-    effectiveFrom?: Date;
-    year?: number;
-    month?: number;
-    isActive?: boolean;
-  }
-
-  const updateData: BudgetUpdateData = {};
-  if (amount !== undefined) updateData.amount = amount;
-  if (currency !== undefined) updateData.currency = currency;
-  if (isActive !== undefined) updateData.isActive = isActive;
-
-  if (effectiveFrom !== undefined) {
-    const effectiveDate = normalizeToMonthStart(parseLocalDate(effectiveFrom));
-    updateData.effectiveFrom = effectiveDate;
-    updateData.year = effectiveDate.getUTCFullYear();
-    updateData.month = effectiveDate.getUTCMonth() + 1;
-
-    // Check for duplicate with new effectiveFrom
-    if (effectiveDate.getTime() !== budget.effectiveFrom.getTime()) {
-      const existing = await db.budget.findFirst({
-        where: {
-          personalAccountId: budget.personalAccountId,
-          category: budget.category,
-          effectiveFrom: effectiveDate,
-          id: { not: budgetId },
-        },
-      });
-
-      if (existing) {
-        throw new Error(
-          `Budget for category "${budget.category}" already exists with effective date ${effectiveFrom}`
-        );
-      }
-    }
-  }
-
-  const updated = await db.budget.update({
-    where: { id: budgetId },
-    data: updateData,
-  });
-
+export async function getBudgetStatus(userId: string, params: GetBudgetStatusParams, db: DbClient) {
+  const [year, monthNum] = params.month.split("-").map(Number);
+  if (!year || !monthNum || monthNum < 1 || monthNum > 12) throw new Error("Invalid month format. Expected YYYY-MM");
+  const entity = await resolveEntity(userId, params.accountId, db);
+  const user = await db.user.findUniqueOrThrow({ where: { id: userId }, select: { baseCurrency: true } });
+  const overview = await monthOverview(userId, year, monthNum, db, { entityId: entity.id });
+  const categories = overview.budgets
+    .map((b) => ({
+      category: b.category,
+      budgeted: b.amount,
+      actual: b.committed,
+      remaining: Math.round((b.amount - b.committed) * 100) / 100,
+      percentUsed: b.amount > 0 ? Math.round((b.committed / b.amount) * 10000) / 100 : 0,
+      isOverBudget: b.committed > b.amount,
+    }))
+    .sort((a, b) => b.percentUsed - a.percentUsed);
+  const totalBudgeted = categories.reduce((s, c) => s + c.budgeted, 0);
+  const totalActual = categories.reduce((s, c) => s + c.actual, 0);
   return {
-    id: updated.id,
-    category: updated.category,
-    amount: updated.amount,
-    currency: updated.currency,
-    effectiveFrom: updated.effectiveFrom.toISOString().split("T")[0],
-    period: updated.period,
-    year: updated.year,
-    month: updated.month,
-    isActive: updated.isActive,
-  };
-}
-
-/**
- * Delete a budget (soft delete by setting isActive=false).
- */
-export async function deleteBudget(
-  userId: string,
-  params: DeleteBudgetParams,
-  db: DbClient
-) {
-  const { budgetId } = params;
-
-  // Fetch and verify ownership
-  const budget = await db.budget.findFirst({
-    where: { id: budgetId },
-    include: { personalAccount: true },
-  });
-
-  if (!budget || budget.personalAccount?.userId !== userId) {
-    throw new Error("Budget not found or access denied");
-  }
-
-  await db.budget.update({
-    where: { id: budgetId },
-    data: { isActive: false },
-  });
-
-  return {
-    success: true,
-    budgetId,
-  };
-}
-
-interface CategoryBudgetStatus {
-  category: string;
-  budgeted: number;
-  actual: number;
-  remaining: number;
-  percentUsed: number;
-  isOverBudget: boolean;
-}
-
-interface BudgetStatusResponse {
-  month: string;
-  accountId: string;
-  accountCurrency: string;
-  budgetCurrency: string; // BRL as requested
-  summary: {
-    totalBudgeted: number;
-    totalActual: number;
-    totalRemaining: number;
-  };
-  categories: CategoryBudgetStatus[];
-}
-
-/**
- * Get budget status for a specific month, comparing budgeted vs actual spending.
- * 
- * Currency handling:
- * - Budgets: stored in budget.currency (user can set, typically BRL)
- * - Transactions: amount in original currency, exchangeRate converts to user.baseCurrency
- * - Calculation: actualSpending = sum(tx.amount * tx.exchangeRate) in user.baseCurrency
- * - Comparison: budget.amount (assumed to be in user.baseCurrency for direct comparison)
- * 
- * This matches the existing UI behavior in get-budget-dashboard.ts which does:
- *   spent = sum(tx.amount * tx.exchangeRate)
- *   compare directly with budget.amount
- * 
- * The assumption is budget.amount is stored in user.baseCurrency, not budget.currency.
- * Or budget.currency === user.baseCurrency for proper comparison.
- */
-export async function getBudgetStatus(
-  userId: string,
-  params: GetBudgetStatusParams,
-  db: DbClient
-): Promise<BudgetStatusResponse> {
-  const { month, accountId } = params;
-
-  // Parse month (YYYY-MM)
-  const [year, monthNum] = month.split("-").map(Number);
-  if (!year || !monthNum || monthNum < 1 || monthNum > 12) {
-    throw new Error("Invalid month format. Expected YYYY-MM");
-  }
-
-  // Get or default to user's personal account
-  let account;
-  if (accountId) {
-    account = await db.personalAccount.findFirst({
-      where: { id: accountId, userId },
-    });
-    if (!account) {
-      throw new Error("Account not found or access denied");
-    }
-  } else {
-    account = await db.personalAccount.findFirst({
-      where: { userId },
-    });
-    if (!account) {
-      throw new Error("No personal account found");
-    }
-  }
-
-  // Get user's base currency
-  const user = await db.user.findUnique({
-    where: { id: userId },
-    select: { baseCurrency: true },
-  });
-
-  if (!user) {
-    throw new Error("User not found");
-  }
-
-  // Get the first day of the target month (noon UTC)
-  const targetDate = parseLocalDate(`${year}-${String(monthNum).padStart(2, "0")}-01`);
-
-  // Get effective budgets for this month using shared helper
-  const budgets = await getEffectiveBudgetsForMonth(
-    db,
-    userId,
-    targetDate,
-    { personalAccountId: account.id }
-  );
-
-  // Get month date range (inclusive)
-  const monthStart = targetDate; // First day at noon UTC
-  const lastDay = new Date(year, monthNum, 0).getDate();
-  const monthEnd = parseLocalDate(
-    `${year}-${String(monthNum).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`
-  );
-
-  const currencyRows = await db.currency.findMany({
-    where: { userId },
-    select: { code: true, name: true, symbol: true, manualRate: true, updatedAt: true },
-  });
-  const currencies: Currency[] = currencyRows.map((row) => ({
-    code: row.code,
-    name: row.name,
-    symbol: row.symbol,
-    manualRate: row.manualRate,
-    updatedAt: row.updatedAt,
-  }));
-
-  // Settlement links are not month-scoped: a November payment of an October
-  // statement must still be excluded when the requested month is October.
-  const settlementRows = await db.creditCardStatement.findMany({
-    where: { creditCard: { personalAccountId: account.id } },
-    select: { billPaymentTransactionId: true },
-  });
-  const settlementIds = buildSettlementSet(settlementRows);
-
-  const statements = await db.creditCardStatement.findMany({
-    where: {
-      creditCard: { personalAccountId: account.id },
-      ...statementInWindow(monthStart, monthEnd),
-    },
-    select: {
-      id: true,
-      month: true,
-      closingDate: true,
-      billPaymentTransactionId: true,
-      creditCard: {
-        select: {
-          entityType: true,
-          businessId: true,
-          personalAccountId: true,
-          currency: true,
-        },
-      },
-      purchases: {
-        select: {
-          id: true,
-          amount: true,
-          currency: true,
-          category: true,
-          description: true,
-          transactionDate: true,
-        },
-      },
-    },
-  });
-
-  const transactions = await db.transaction.findMany({
-    where: {
-      personalAccountId: account.id,
-      date: {
-        gte: monthStart,
-        lte: monthEnd,
-      },
-    },
-    select: {
-      id: true,
-      entityType: true,
-      type: true,
-      amount: true,
-      currency: true,
-      exchangeRate: true,
-      description: true,
-      category: true,
-      date: true,
-      createdAt: true,
-      updatedAt: true,
-    },
-  });
-
-  const ledgerInputs: Transaction[] = transactions.map((tx) => ({
-    id: tx.id,
-    entityId: account.id,
-    entityType: tx.entityType,
-    type: tx.type,
-    amount: tx.amount,
-    currency: tx.currency,
-    exchangeRate: tx.exchangeRate,
-    description: tx.description,
-    category: tx.category,
-    date: tx.date,
-    isCardSettlement: settlementIds.has(tx.id),
-    createdAt: tx.createdAt,
-    updatedAt: tx.updatedAt,
-  }));
-
-  // Same P&L view as the budgets page: drop linked payments, add statement
-  // purchases converted to base currency. Month filtering happens below.
-  const ledger = buildExpenseLedger(
-    ledgerInputs,
-    statements.map((statement) => ({
-      id: statement.id,
-      month: statement.month,
-      closingDate: statement.closingDate,
-      billPaymentTransactionId: statement.billPaymentTransactionId,
-      creditCard: {
-        entityId:
-          statement.creditCard.personalAccountId ??
-          statement.creditCard.businessId ??
-          account.id,
-        entityType: statement.creditCard.entityType,
-        currency: statement.creditCard.currency,
-      },
-      purchases: statement.purchases,
-    })),
-    user.baseCurrency,
-    currencies
-  );
-
-  const counting = ledger.filter((tx) =>
-    shouldCountAsExpenseForBudget(tx, settlementIds)
-  );
-  const actualByCategory = sumLedgerExpensesByCategory(
-    counting,
-    year,
-    monthNum,
-    account.id
-  );
-
-  // Legacy bills only. Statement purchases are already on the ledger.
-  const billTransactions = await db.billTransaction.findMany({
-    where: {
-      statementId: null,
-      transactionDate: {
-        gte: monthStart,
-        lte: monthEnd,
-      },
-      bill: {
-        creditCard: {
-          personalAccountId: account.id,
-        },
-      },
-    },
-    select: {
-      category: true,
-      amount: true,
-      currency: true,
-      bill: { select: { creditCard: { select: { currency: true } } } },
-    },
-  });
-
-  for (const bt of billTransactions) {
-    const currencyCode = bt.currency || bt.bill?.creditCard.currency || user.baseCurrency;
-    const amountInBase = amountInUserBase({
-      amount: bt.amount,
-      currency: currencyCode,
-      currencies,
-      baseCurrency: user.baseCurrency,
-    });
-    actualByCategory[bt.category] = (actualByCategory[bt.category] || 0) + amountInBase;
-  }
-
-  // Build category status
-  const categoryStatuses: CategoryBudgetStatus[] = budgets.map((budget) => {
-    const actual = actualByCategory[budget.category] || 0;
-    const remaining = budget.amount - actual;
-    const percentUsed = budget.amount > 0 ? (actual / budget.amount) * 100 : 0;
-
-    return {
-      category: budget.category,
-      budgeted: budget.amount,
-      actual: Math.round(actual * 100) / 100,
-      remaining: Math.round(remaining * 100) / 100,
-      percentUsed: Math.round(percentUsed * 100) / 100,
-      isOverBudget: actual > budget.amount,
-    };
-  });
-
-  // Calculate summary
-  const totalBudgeted = budgets.reduce((sum, b) => sum + b.amount, 0);
-  const totalActual = categoryStatuses.reduce((sum, c) => sum + c.actual, 0);
-  const totalRemaining = totalBudgeted - totalActual;
-
-  return {
-    month,
-    accountId: account.id,
-    accountCurrency: account.defaultCurrency,
-    budgetCurrency: user.baseCurrency, // Budgets compared in user's base currency
+    month: params.month,
+    accountId: entity.id,
+    accountCurrency: entity.defaultCurrency,
+    budgetCurrency: user.baseCurrency,
     summary: {
       totalBudgeted: Math.round(totalBudgeted * 100) / 100,
       totalActual: Math.round(totalActual * 100) / 100,
-      totalRemaining: Math.round(totalRemaining * 100) / 100,
+      totalRemaining: Math.round((totalBudgeted - totalActual) * 100) / 100,
     },
-    categories: categoryStatuses.sort((a, b) => b.percentUsed - a.percentUsed),
+    categories,
   };
 }

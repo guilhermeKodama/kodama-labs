@@ -1,7 +1,6 @@
 import { z } from "zod";
 import { defineTool } from "../registry";
-import { createInvestmentAccount } from "../../../../investments/services/create-investment-account";
-import { updateInvestmentAccountService } from "../../../../investments/services/update-investment-account";
+import { createAccount, updateAccount } from "@capital/server/modules/ledger/services/accounts";
 import { fetchEntityForAgent } from "../../../data/queries/fetch-entity-for-agent";
 
 export const manageInvestmentAccount = defineTool({
@@ -24,66 +23,34 @@ export const manageInvestmentAccount = defineTool({
     if (input.action === "create") {
       if (!input.name) throw new Error("name is required to create an investment account");
       if (!input.entityType) throw new Error("entityType is required to create an investment account");
-      if (!input.currency || input.currency.length !== 3) {
-        throw new Error("currency must be a 3-letter ISO code");
-      }
+      if (!input.currency || input.currency.length !== 3) throw new Error("currency must be a 3-letter ISO code");
       const entityId = input.entityType === "business" ? input.businessId : input.personalAccountId;
       if (!entityId) {
-        throw new Error(
-          input.entityType === "business"
-            ? "businessId is required when entityType is business"
-            : "personalAccountId is required when entityType is personal"
-        );
+        throw new Error(input.entityType === "business" ? "businessId is required when entityType is business" : "personalAccountId is required when entityType is personal");
       }
-      // createInvestmentAccount/insertInvestmentAccount does not itself verify
-      // that businessId/personalAccountId belongs to this user - unlike the
-      // manual UI (which only ever offers the user's own entities in a
-      // dropdown), the model's input is untrusted, so that ownership check
-      // has to happen here.
+      // The model's input is untrusted: the entity must be the user's.
       const entity = await fetchEntityForAgent(ctx.userId, input.entityType, entityId, ctx.db);
-      if (!entity) {
-        throw new Error(`${input.entityType} entity ${entityId} not found or access denied`);
-      }
-
-      const account = await createInvestmentAccount(
-        ctx.userId,
-        {
-          name: input.name,
-          broker: input.broker,
-          entityType: input.entityType,
-          currency: input.currency,
-          businessId: input.businessId,
-          personalAccountId: input.personalAccountId,
-        },
-        ctx.db
-      );
-
-      return {
-        account,
-        createdRecords: [{ model: "InvestmentAccount", id: account.id }],
-      };
+      if (!entity) throw new Error(`${input.entityType} entity ${entityId} not found or access denied`);
+      const account = await createAccount(ctx.userId, { entityId, type: "brokerage", name: input.name, institution: input.broker ?? null, currency: input.currency }, ctx.db);
+      return { account, createdRecords: [{ model: "Account", id: account.id }] };
     }
 
     if (!input.accountId) throw new Error(`accountId is required for action "${input.action}"`);
+    const existing = await ctx.db.account.findFirst({ where: { id: input.accountId, userId: ctx.userId, type: "brokerage" } });
+    if (!existing) throw new Error("Investment account not found or access denied");
 
     if (input.action === "set_active") {
       if (input.isActive === undefined) throw new Error("isActive is required for action \"set_active\"");
-      const account = await updateInvestmentAccountService(
-        ctx.userId,
-        input.accountId,
-        { isActive: input.isActive },
-        ctx.db
-      );
-      return { account, createdRecords: [{ model: "InvestmentAccount", id: account.id }] };
+      const account = await updateAccount(ctx.userId, input.accountId, { archived: !input.isActive }, ctx.db);
+      return { account, createdRecords: [{ model: "Account", id: account.id }] };
     }
 
-    // action === "update"
-    const account = await updateInvestmentAccountService(
+    const account = await updateAccount(
       ctx.userId,
       input.accountId,
-      { name: input.name, broker: input.broker, currency: input.currency },
+      { ...(input.name && { name: input.name }), ...(input.broker !== undefined && { institution: input.broker }), ...(input.currency && { currency: input.currency }) },
       ctx.db
     );
-    return { account, createdRecords: [{ model: "InvestmentAccount", id: account.id }] };
+    return { account, createdRecords: [{ model: "Account", id: account.id }] };
   },
 });

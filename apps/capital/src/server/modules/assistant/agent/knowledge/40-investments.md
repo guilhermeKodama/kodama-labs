@@ -2,27 +2,27 @@
 
 ## Hierarquia
 
-`InvestmentAccount` (uma corretora/conta, ex. "NuInvest", "Interactive Brokers") → tem várias `InvestmentHolding` (uma posição por ativo, ex. "PETR4", "CDB Nubank 120% CDI") → cada holding tem várias `InvestmentTransaction` (compra, venda, dividendo, rendimento, ...).
+Conta de investimento (uma conta `brokerage`, ex. "NuInvest", "Interactive Brokers") → tem várias `InvestmentHolding` (uma posição por ativo, ex. "PETR4", "CDB Nubank 120% CDI") → cada holding tem várias operações (compra, venda, dividendo, rendimento, ...). Nas ferramentas a conta aparece como "investment account" e as operações como "investment transactions".
 
-`InvestmentAccount.cashBalance` é o caixa disponível na conta, não investido. Aportes (`investment_deposit`) aumentam esse saldo; resgates (`investment_withdrawal`) diminuem.
+O caixa da corretora (`cashBalance`) é o saldo dos lançamentos da conta: aportes (`investment_deposit`) entram, resgates (`investment_withdrawal`) saem, e cada operação lança sua perna de caixa - uma compra tira dinheiro do caixa, uma venda ou um dividendo coloca.
 
 ## InvestmentHolding
 
 Identifica o ativo: `assetClass` (`stocks`, `fii`, `etf`, `bdr`, `fixed_income`, `crypto`, `savings`, `international_stocks`, `international_etf`), `subType` só para renda fixa (`cdb`, `rdb`, `lci`, `lca`, `cdi`, `tesouro_selic`, `tesouro_ipca`, `tesouro_prefixado`, `debenture`), `ticker` (quando existe), `name`.
 
-`currentQuantity`, `averageCost` e `totalInvested` são recalculados a partir do histórico de `InvestmentTransaction` - não os edite diretamente ao propor um plano; eles são derivados pelo mesmo service que já cuida disso hoje (`recalculate-holding`), acionado depois que as transações são criadas.
+`currentQuantity`, `averageCost` e `totalInvested` são recalculados a partir do histórico de operações (preço médio ponderado, taxas fora do custo) - não os edite diretamente ao propor um plano; o recálculo roda depois de cada operação.
 
 Se o PDF menciona um ativo que ainda não existe como `InvestmentHolding`, o plano pode incluir a criação da holding junto com a primeira transação (branch `newHolding` do payload) - não crie uma holding "solta" sem transação associada.
 
-## InvestmentTransaction
+## Operações
 
 `type`: `buy`, `sell`, `dividend`, `yield_payment`, `split`, `deposit`, `withdrawal`, `adjustment`. `quantity`/`pricePerUnit` fazem sentido para ativos com unidades (ações, FIIs, cripto); para renda fixa muitas vezes só `totalAmount` é relevante.
 
-`linkedTransactionId` liga opcionalmente a movimentação de investimento a uma `Transaction` comum (ex.: o débito na conta corrente que financiou a compra) - normalmente não é algo que o assistente precisa preencher a partir de um PDF de corretora isolado.
+Cada operação que move dinheiro tem uma perna de caixa na própria corretora. Quando a compra foi paga direto da conta corrente, o aporte correspondente é uma transferência `investment_deposit` separada - normalmente não é algo que o assistente precisa criar a partir de um PDF de corretora isolado.
 
-## Funding: Transfer ↔ InvestmentAccount
+## Funding: transferência ↔ corretora
 
-Quando dinheiro sai da conta pessoal/empresa para uma corretora (ou volta), isso é sempre um `Transfer` com `direction: investment_deposit|investment_withdrawal` e `fromInvestmentAccountId`/`toInvestmentAccountId` apontando para a conta - nunca uma `InvestmentTransaction` do tipo `deposit`/`withdrawal` sozinha sem o `Transfer` correspondente, exceto quando o PDF só mostra o lado da corretora (aporte que já foi registrado do lado da conta bancária em outro extrato) - nesse caso registre só a `InvestmentTransaction` e não duplique o `Transfer`.
+Quando dinheiro sai da conta pessoal/empresa para uma corretora (ou volta), isso é sempre uma transferência com `direction: investment_deposit|investment_withdrawal` entre a conta corrente e a corretora - nunca uma operação do tipo `deposit`/`withdrawal` sozinha sem a transferência, exceto quando o PDF só mostra o lado da corretora (aporte que já foi registrado do lado da conta bancária em outro extrato) - nesse caso registre só a operação e não duplique a transferência.
 
 ## Extraindo de um PDF
 
@@ -36,12 +36,12 @@ Pontos importantes:
 
 - **Não existe delete nessas tools, só desativar** (`isActive: false`). Conta e posição arrastam histórico de transações; apagar de verdade só pela tela manual, se o usuário realmente quiser. Se pedirem para "remover" uma conta/posição pelo chat, desative.
 - `manage_investment_holding` nunca aceita `currentQuantity`/`averageCost`/`totalInvested` diretamente - esses três só se movem através de `record_investment_transaction`, que aciona o recálculo (`recalculate-holding`) depois de cada movimento. Isso vale tanto para uma transação avulta quanto para uma vinda de um plano de import.
-- `fund_investment_account` cria uma `Transaction` (expense no deposit, income no withdraw) na conta/empresa dona, e ajusta `cashBalance` da conta de investimento - é o mesmo mecanismo que o botão "Aportar/Resgatar" da tela manual usa. Isso é **diferente** do `Transfer` com `direction: investment_deposit|investment_withdrawal` descrito acima: aquele é para quando o PDF/OFX já mostra o aporte como fato consumado (dá para reconciliar automaticamente); `fund_investment_account` é para quando é o próprio usuário pedindo a movimentação, sem arquivo nenhum por trás. Não confunda os dois - não crie um `Transfer` de investimento a partir de um pedido feito só em texto no chat.
+- `fund_investment_account` cria a transferência `investment_deposit`/`investment_withdrawal` entre a conta principal da entidade dona e a corretora - o mesmo resultado que um aporte reconciliado de extrato, só que pedido pelo usuário no chat. Quando o extrato que você está importando já mostra o aporte, use o branch `investmentTransfers` do plano em vez desta ferramenta, para não duplicar.
 - Ao criar uma conta nova (`manage_investment_account` com `action: "create"`), `businessId`/`personalAccountId` precisa ser de uma entidade que já existe e pertence ao usuário - confirme com `get_context_snapshot` antes se não tiver certeza do id.
 
 ## Investimento identificado sem conta/posição cadastrada
 
-Se uma linha do extrato é um movimento de investimento (aplicação, resgate, dividendo, rendimento, ou uma contraparte que é claramente corretora/banco de investimento) e a `InvestmentAccount`/`InvestmentHolding` correspondente não existe, **resolva isso como parte da importação** - não registre como transação comum com uma nota pedindo para o usuário criar a conta depois. Deixar assim polui os relatórios (vira receita/despesa comum) e o trabalho volta pro usuário.
+Se uma linha do extrato é um movimento de investimento (aplicação, resgate, dividendo, rendimento, ou uma contraparte que é claramente corretora/banco de investimento) e a conta de investimento/`InvestmentHolding` correspondente não existe, **resolva isso como parte da importação** - não registre como transação comum com uma nota pedindo para o usuário criar a conta depois. Deixar assim polui os relatórios (vira receita/despesa comum) e o trabalho volta pro usuário.
 
 O caminho:
 

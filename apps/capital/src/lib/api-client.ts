@@ -24,22 +24,19 @@ const getBaseUrl = () => {
  * ```ts
  * import { client } from '@/lib/api-client';
  *
- * // Get businesses (for the authenticated user)
- * const res = await client.v1.businesses.$get();
- * const businesses = await res.json();
- *
- * // Create transaction
- * const res = await client.v1.transactions.$post({
+ * // This month's expenses grouped by category
+ * const res = await client.v2.ledger.query.$post({
  *   json: {
- *     entityType: 'business',
- *     type: 'income',
- *     amount: 1000,
- *     currency: 'USD',
- *     description: 'Client payment',
- *     category: 'Client Payment',
- *     date: new Date().toISOString(),
- *     businessId: 'business-123',
- *   }
+ *     period: { preset: 'this_month', offset: 0 },
+ *     filters: [{ field: 'kind', op: 'in', values: ['expense'] }],
+ *     groupBy: [{ field: 'categoryId' }],
+ *     aggregations: [{ fn: 'sum', field: 'amountBase' }],
+ *   },
+ * });
+ *
+ * // Create an entry on an account
+ * const res = await client.v2.ledger.entries.$post({
+ *   json: { kind: 'income', accountId, amount: 1000, date: '2026-10-01', description: 'Client payment' },
  * });
  * ```
  */

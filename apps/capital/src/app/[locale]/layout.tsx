@@ -4,7 +4,7 @@ import { notFound } from 'next/navigation';
 import { NuqsAdapter } from 'nuqs/adapters/next/app';
 import { Toaster } from '@/components/ui/sonner';
 import { ThemeProvider } from '@/components/theme-provider';
-import { DataInitializer } from '@/components/providers/data-initializer';
+import { AuthGate } from '@/components/providers/auth-gate';
 import { PwaRegister } from '@/components/pwa-register';
 import { routing } from '@/i18n/routing';
 
@@ -43,9 +43,9 @@ export default async function LocaleLayout({
           enableSystem
           disableTransitionOnChange
         >
-          <DataInitializer>
+          <AuthGate>
             {children}
-          </DataInitializer>
+          </AuthGate>
           <Toaster />
           <PwaRegister />
         </ThemeProvider>

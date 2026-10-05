@@ -1,39 +1,43 @@
 import { z } from "zod";
 import { defineTool } from "../registry";
-import { fetchBills } from "../../../../credit-cards/data/queries/fetch-bills";
+import { toNumber } from "@capital/server/modules/ledger/lib/money";
 
 export const listCreditCardBills = defineTool({
   name: "list_credit_card_bills",
   description:
-    "List the user's credit card bills, optionally filtered by card or status. Each bill shows its period (closing/due date), total, line-item count, categorization status, and whether it's already linked to a ledger expense. Call this to see what bills already exist before proposing a new one, or to find the bill to link/recategorize.",
+    "List the user's credit card bills (monthly statements), optionally filtered by card or status. Each bill shows its month, closing/due date, total, purchase count, how many purchases still lack a category, and whether a payment is already linked. Status is \"paid\" when a payment is linked, \"overdue\" when the due date passed without one, otherwise \"pending\". Call this to see what statements exist before importing one, or to find the bill to link/recategorize.",
   inputSchema: z.object({
     creditCardId: z.string().optional(),
     status: z.enum(["pending", "paid", "overdue"]).optional(),
   }),
   access: "read",
   handler: async (ctx, input) => {
-    const bills = await fetchBills(
-      ctx.userId,
-      { creditCardId: input.creditCardId, status: input.status },
-      ctx.db
-    );
-    return {
-      bills: bills.map((b) => ({
-        id: b.id,
-        creditCard: {
-          id: b.creditCard.id,
-          bankName: b.creditCard.bankName,
-          lastFourDigits: b.creditCard.lastFourDigits,
-          nickname: b.creditCard.nickname,
-        },
-        closingDate: b.closingDate.toISOString().split("T")[0],
-        dueDate: b.dueDate.toISOString().split("T")[0],
-        totalAmount: b.totalAmount,
-        status: b.status,
-        categorizationStatus: b.categorizationStatus,
-        transactionCount: b._count.billTransactions,
-        transactionId: b.transactionId,
-      })),
-    };
+    const statements = await ctx.db.cardStatement.findMany({
+      where: { account: { userId: ctx.userId, type: "credit_card", ...(input.creditCardId && { id: input.creditCardId }) } },
+      include: {
+        account: { select: { id: true, institution: true, name: true, externalId: true } },
+        entries: { where: { deletedAt: null, transferGroupId: null }, select: { amount: true, categoryId: true, metadata: true } },
+        paymentGroup: { include: { legs: { select: { id: true, accountId: true } } } },
+      },
+      orderBy: [{ month: "desc" }],
+    });
+    const now = new Date();
+    const bills = statements.map((s) => {
+      const purchases = s.entries.filter((e) => !(e.metadata as { projected?: boolean } | null)?.projected);
+      const status = s.paymentGroupId ? "paid" : s.dueDate && s.dueDate < now ? "overdue" : "pending";
+      return {
+        id: s.id,
+        month: s.month,
+        creditCard: { id: s.account.id, bankName: s.account.institution ?? s.account.name, lastFourDigits: s.account.externalId, nickname: s.account.name },
+        closingDate: s.closingDate?.toISOString().split("T")[0] ?? null,
+        dueDate: s.dueDate?.toISOString().split("T")[0] ?? null,
+        totalAmount: s.totalAmount !== null ? toNumber(s.totalAmount) : -purchases.reduce((sum, e) => sum + toNumber(e.amount), 0),
+        status,
+        transactionCount: purchases.length,
+        uncategorizedCount: purchases.filter((e) => !e.categoryId).length,
+        transactionId: s.paymentGroup?.legs.find((l) => l.accountId !== s.accountId)?.id ?? null,
+      };
+    });
+    return { bills: input.status ? bills.filter((b) => b.status === input.status) : bills };
   },
 });

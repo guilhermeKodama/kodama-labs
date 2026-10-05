@@ -1,0 +1,92 @@
+import { createRoute, z } from "@hono/zod-openapi";
+import { deleteCookie, getCookie, setCookie } from "hono/cookie";
+import { HTTPException } from "hono/http-exception";
+import type { Context } from "hono";
+import { createRouter } from "@capital/server/lib/router";
+import { prisma } from "@capital/server/lib/prisma";
+import { jsonBody, v2Handler, v2Responses } from "@capital/server/lib/v2";
+import { LedgerError } from "@capital/server/modules/ledger/lib/errors";
+import { getMe, serializeUser, updatePreferences } from "@capital/server/modules/users/services/me";
+import { SESSION_COOKIE_NAME, SESSION_EXPIRY_DAYS } from "../../constants";
+import { login } from "../../services/login";
+import { createSession, deleteSession } from "../../services/session";
+import { signup } from "../../services/signup";
+
+const tags = ["Auth v2"];
+
+function setSessionCookie(c: Context, sessionId: string) {
+  setCookie(c, SESSION_COOKIE_NAME, sessionId, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax",
+    path: "/",
+    maxAge: 60 * 60 * 24 * SESSION_EXPIRY_DAYS,
+  });
+}
+
+const loginRoute = createRoute({
+  method: "post",
+  path: "/v2/auth/login",
+  tags,
+  summary: "Log in with email and password",
+  request: jsonBody(z.object({ email: z.string().email(), password: z.string().min(1) })),
+  responses: v2Responses,
+});
+const signupRoute = createRoute({
+  method: "post",
+  path: "/v2/auth/signup",
+  tags,
+  summary: "Create an account (PF entity, main account, categories, currencies, built-in view)",
+  request: jsonBody(z.object({ email: z.string().email(), password: z.string().min(8), name: z.string().min(1), baseCurrency: z.string().length(3).optional() })),
+  responses: v2Responses,
+});
+const logoutRoute = createRoute({ method: "post", path: "/v2/auth/logout", tags, summary: "End the session", responses: v2Responses });
+const meRoute = createRoute({ method: "get", path: "/v2/me", tags, summary: "Current user, preferences and entities", responses: v2Responses });
+const patchMeRoute = createRoute({
+  method: "patch",
+  path: "/v2/me",
+  tags,
+  summary: "Update preferences",
+  request: jsonBody(
+    z
+      .object({
+        name: z.string().min(1).optional(),
+        baseCurrency: z.string().length(3).optional(),
+        theme: z.enum(["light", "dark", "system"]).optional(),
+        dateFormat: z.string().min(1).optional(),
+        numberFormat: z.string().min(1).optional(),
+        timezone: z.string().min(1).optional(),
+      })
+      .strict()
+  ),
+  responses: v2Responses,
+});
+
+export const v2Auth = createRouter()
+  .openapi(loginRoute, async (c) => {
+    try {
+      const user = await login(c.req.valid("json"), prisma);
+      setSessionCookie(c, await createSession(user.id, prisma));
+      return c.json(serializeUser(user) as never, 200);
+    } catch {
+      throw new HTTPException(401, { message: "Invalid email or password" });
+    }
+  })
+  .openapi(signupRoute, async (c) => {
+    try {
+      const user = await signup(c.req.valid("json"), prisma);
+      setSessionCookie(c, await createSession(user.id, prisma));
+      return c.json(serializeUser(user) as never, 200);
+    } catch (err) {
+      if (err instanceof LedgerError) throw new HTTPException(err.status, { message: err.message });
+      throw err;
+    }
+  })
+  .openapi(logoutRoute, async (c) => {
+    const sessionId = getCookie(c, SESSION_COOKIE_NAME);
+    if (sessionId) await deleteSession(sessionId, prisma);
+    deleteCookie(c, SESSION_COOKIE_NAME, { path: "/" });
+    return c.json({ success: true } as never, 200);
+  })
+  .openapi(meRoute, v2Handler(meRoute, async (_c, userId) => getMe(userId, prisma)))
+  .openapi(patchMeRoute, v2Handler(patchMeRoute, async (c, userId) => updatePreferences(userId, c.req.valid("json"), prisma)));

@@ -13,7 +13,7 @@ import {
 export const commitPlan = defineTool({
   name: "commit_plan",
   description:
-    "Execute a plan that the user has already confirmed in the UI. This is the ONLY tool that writes domain data (transactions, transfers, investment records). It refuses to run unless the plan's status is \"confirmed\" - which only the authenticated confirm endpoint can set, never this conversation. Calling it on a plan that is still \"proposed\" is expected to fail; that is not a bug to work around, it means the user has not confirmed yet.",
+    "Execute a plan that the user has already confirmed in the UI. This is the ONLY tool that writes statement-derived data in bulk (entries, transfers, card statements, investment operations). It refuses to run unless the plan's status is \"confirmed\" - which only the authenticated confirm endpoint can set, never this conversation. Calling it on a plan that is still \"proposed\" is expected to fail; that is not a bug to work around, it means the user has not confirmed yet.",
   inputSchema: z.object({ planId: z.string() }),
   access: "write_domain",
   requiresConfirmedPlan: true,
@@ -68,7 +68,7 @@ export const commitPlan = defineTool({
     const result = await executeRevert(ctx.userId, payload, ctx.db);
     await updateImportPlanStatus(ctx.userId, plan.id, "committed", { committedAt: new Date() }, ctx.db);
 
-    const revertedImport = await ctx.db.statementImport.findUnique({
+    const revertedImport = await ctx.db.import.findUnique({
       where: { id: payload.statementImportId },
       select: { importPlanId: true },
     });

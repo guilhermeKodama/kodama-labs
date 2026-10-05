@@ -15,7 +15,6 @@ import {
   CardTitle,
 } from '@/components/ui/card';
 import { Link } from '@/i18n/navigation';
-import { client } from '@/lib/api-client';
 import { useUser } from '@/lib/user-context';
 
 function LoginForm() {
@@ -37,22 +36,21 @@ function LoginForm() {
     setIsLoading(true);
 
     try {
-      const res = await client.v1.auth.login.$post({
-        json: { email, password },
+      const res = await fetch("/api/v2/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password }),
       });
 
       if (res.ok) {
-        // UserProvider only fetches on its own mount (once, near the root) —
-        // a client-side router.push to /dashboard doesn't remount it, so
-        // isAuthenticated stayed false after a successful login until a full
-        // reload. DataInitializer's redirect-when-unauthenticated guard then
-        // bounced straight back to /login. Refetch here so the provider's
-        // state is correct before navigating.
+        // UserProvider only fetches on its own mount; a client-side push
+        // doesn't remount it, and AuthGate would bounce back to /login.
+        // Refetch so the provider's state is correct before navigating.
         await refetchUser();
         router.push(redirectTo);
       } else {
         const data = await res.json();
-        setError(data.error?.message ?? 'Login failed');
+        setError(data.message ?? 'Login failed');
       }
     } catch {
       setError('An unexpected error occurred');

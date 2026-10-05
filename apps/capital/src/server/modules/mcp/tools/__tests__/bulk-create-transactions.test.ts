@@ -1,428 +1,87 @@
-import { describe, it, expect, beforeEach } from "vitest";
-import { bulkCreateTransactions } from "../bulk-create-transactions";
+import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { prisma } from "@capital/server/lib/prisma";
+import { createLedgerFixture, deleteLedgerFixture, type LedgerFixture } from "@/test/ledger-fixtures";
+import { bulkCreateTransactions } from "../bulk-create-transactions";
 
-const db = prisma;
+const USER = "test-user-mcp-bulk-001";
+let f: LedgerFixture;
 
-// Test user ID - unique per test file to avoid conflicts
-const TEST_USER_ID = "test-user-mcp-bulk-001";
+beforeEach(async () => {
+  f = await createLedgerFixture(prisma, USER, { categories: [{ name: "Dividends", type: "income" }, { name: "Software", type: "expense" }] });
+});
+
+afterAll(async () => {
+  await deleteLedgerFixture(prisma, USER);
+});
+
+const dividend = (overrides: Record<string, unknown> = {}) => ({
+  entityType: "personal" as const,
+  type: "income" as const,
+  amount: 50.75,
+  currency: "BRL",
+  description: "PMLL11 - Dividends September 2026",
+  category: "Dividends",
+  date: "2026-09-15",
+  personalAccountId: f.pfId,
+  ...overrides,
+});
+
+const entries = () => prisma.ledgerEntry.findMany({ where: { userId: USER }, orderBy: { date: "asc" } });
 
 describe("MCP bulk create transactions", () => {
-  let personalAccountId: string;
-
-  beforeEach(async () => {
-    // Clean up any existing test data first
-    await db.transaction.deleteMany({
-      where: {
-        OR: [
-          { business: { userId: TEST_USER_ID } },
-          { personalAccount: { userId: TEST_USER_ID } },
-        ],
-      },
-    });
-    await db.personalAccount.deleteMany({ where: { userId: TEST_USER_ID } });
-    await db.category.deleteMany({ where: { userId: TEST_USER_ID } });
-    await db.user.deleteMany({ where: { id: TEST_USER_ID } });
-
-    // Create test user
-    await db.user.create({
-      data: {
-        id: TEST_USER_ID,
-        email: "mcp-bulk-test@example.com",
-        passwordHash: "test-hash",
-        name: "MCP Bulk Test User",
-        baseCurrency: "BRL",
-      },
-    });
-
-    // Create personal account
-    const personalAccount = await db.personalAccount.create({
-      data: {
-        userId: TEST_USER_ID,
-        defaultCurrency: "BRL",
-      },
-    });
-    personalAccountId = personalAccount.id;
-
-    // Create test category
-    await db.category.create({
-      data: {
-        userId: TEST_USER_ID,
-        name: "Dividends",
-        type: "income",
-        isSystem: true,
-      },
-    });
+  it("previews in dry-run mode without writing", async () => {
+    const r = await bulkCreateTransactions(USER, [dividend(), dividend({ description: "PVBI11 - Dividends", amount: 35.2, date: "2026-09-20" })], true, prisma);
+    expect(r.created.map((c) => c.id)).toEqual(["dry-run", "dry-run"]);
+    expect(r.duplicates).toEqual([]);
+    expect(await entries()).toHaveLength(0);
   });
 
-  it("should create transactions successfully in dry-run mode", async () => {
-    const items = [
-      {
-        entityType: "personal" as const,
-        type: "income" as const,
-        amount: 50.75,
-        currency: "BRL",
-        description: "PMLL11 - Dividends September 2026",
-        category: "Dividends",
-        date: "2026-09-15",
-        personalAccountId,
-      },
-      {
-        entityType: "personal" as const,
-        type: "income" as const,
-        amount: 35.20,
-        currency: "BRL",
-        description: "PVBI11 - Dividends September 2026",
-        category: "Dividends",
-        date: "2026-09-20",
-        personalAccountId,
-      },
-    ];
-
-    const result = await bulkCreateTransactions(
-      TEST_USER_ID,
-      items,
-      true, // dry-run
-      db
-    );
-
-    expect(result.created).toHaveLength(2);
-    expect(result.duplicates).toHaveLength(0);
-    expect(result.errors).toHaveLength(0);
-
-    // Verify nothing was actually created
-    const count = await db.transaction.count({
-      where: { personalAccountId },
-    });
-    expect(count).toBe(0);
+  it("creates entries on the entity's main account as one undoable batch", async () => {
+    const r = await bulkCreateTransactions(USER, [dividend(), dividend({ entityType: "business", personalAccountId: undefined, businessId: f.pjId, type: "expense", category: "Software", description: "Figma", amount: 80 })], false, prisma);
+    expect(r.created).toHaveLength(2);
+    expect(r.errors).toEqual([]);
+    const rows = await entries();
+    expect(rows.map((e) => [e.accountId, Number(e.amount), e.kind])).toEqual([
+      [f.pfChecking, 50.75, "income"],
+      [f.pjChecking, -80, "expense"],
+    ]);
+    expect(await prisma.mutationBatch.count({ where: { userId: USER } })).toBe(1);
   });
 
-  it("should create transactions successfully without dry-run", async () => {
-    const items = [
-      {
-        entityType: "personal" as const,
-        type: "income" as const,
-        amount: 50.75,
-        currency: "BRL",
-        description: "PMLL11 - Dividends September 2026",
-        category: "Dividends",
-        date: "2026-09-15",
-        personalAccountId,
-      },
-    ];
-
-    const result = await bulkCreateTransactions(
-      TEST_USER_ID,
-      items,
-      false, // not dry-run
-      db
-    );
-
-    expect(result.created).toHaveLength(1);
-    expect(result.created[0].id).not.toBe("dry-run");
-    expect(result.created[0].description).toBe("PMLL11 - Dividends September 2026");
-    expect(result.duplicates).toHaveLength(0);
-    expect(result.errors).toHaveLength(0);
-
-    // Verify it was actually created
-    const count = await db.transaction.count({
-      where: { personalAccountId },
-    });
-    expect(count).toBe(1);
-  });
-
-  it("should detect duplicates by date + amount + description", async () => {
-    // Create an existing transaction first
-    await db.transaction.create({
-      data: {
-        entityType: "personal",
-        type: "income",
-        amount: 50.75,
-        currency: "BRL",
-        exchangeRate: 1,
-        description: "PMLL11 - Dividends September 2026",
-        category: "Dividends",
-        date: new Date("2026-09-15"),
-        personalAccountId,
-      },
-    });
-
-    // Try to create the same transaction again
-    const items = [
-      {
-        entityType: "personal" as const,
-        type: "income" as const,
-        amount: 50.75,
-        currency: "BRL",
-        description: "PMLL11 - Dividends September 2026",
-        category: "Dividends",
-        date: "2026-09-15",
-        personalAccountId,
-      },
-    ];
-
-    const result = await bulkCreateTransactions(
-      TEST_USER_ID,
-      items,
+  it("detects duplicates against existing entries and within the batch (case-insensitive, trimmed)", async () => {
+    await bulkCreateTransactions(USER, [dividend()], false, prisma);
+    const r = await bulkCreateTransactions(
+      USER,
+      [dividend({ description: "  pmll11 - DIVIDENDS september 2026 " }), dividend({ description: "New", amount: 1 }), dividend({ description: "New", amount: 1 })],
       false,
-      db
+      prisma
     );
-
-    expect(result.created).toHaveLength(0);
-    expect(result.duplicates).toHaveLength(1);
-    expect(result.duplicates[0].description).toBe("PMLL11 - Dividends September 2026");
-    expect(result.duplicates[0].existingId).not.toBe("within-batch");
-    expect(result.errors).toHaveLength(0);
-
-    // Verify no duplicate was created
-    const count = await db.transaction.count({
-      where: { personalAccountId },
-    });
-    expect(count).toBe(1);
+    expect(r.created.map((c) => c.description)).toEqual(["New"]);
+    expect(r.duplicates.map((d) => d.existingId === "within-batch")).toEqual([false, true]);
   });
 
-  it("should detect duplicates within the same batch", async () => {
-    const items = [
-      {
-        entityType: "personal" as const,
-        type: "income" as const,
-        amount: 50.75,
-        currency: "BRL",
-        description: "PMLL11 - Dividends September 2026",
-        category: "Dividends",
-        date: "2026-09-15",
-        personalAccountId,
-      },
-      {
-        entityType: "personal" as const,
-        type: "income" as const,
-        amount: 50.75,
-        currency: "BRL",
-        description: "PMLL11 - Dividends September 2026", // Same as above
-        category: "Dividends",
-        date: "2026-09-15",
-        personalAccountId,
-      },
-    ];
-
-    const result = await bulkCreateTransactions(
-      TEST_USER_ID,
-      items,
-      false,
-      db
-    );
-
-    expect(result.created).toHaveLength(1);
-    expect(result.duplicates).toHaveLength(1);
-    expect(result.duplicates[0].existingId).toBe("within-batch");
-    expect(result.errors).toHaveLength(0);
-
-    // Verify only one was created
-    const count = await db.transaction.count({
-      where: { personalAccountId },
-    });
-    expect(count).toBe(1);
+  it("stores dates at noon UTC", async () => {
+    await bulkCreateTransactions(USER, [dividend({ date: "2026-09-15T03:00:00.000Z" })], false, prisma);
+    expect((await entries())[0].date.toISOString()).toBe("2026-09-15T12:00:00.000Z");
   });
 
-  it("should normalize description for duplicate detection (case-insensitive, trimmed)", async () => {
-    // Create with lowercase and extra spaces
-    await db.transaction.create({
-      data: {
-        entityType: "personal",
-        type: "income",
-        amount: 50.75,
-        currency: "BRL",
-        exchangeRate: 1,
-        description: "  pmll11 - dividends september 2026  ",
-        category: "Dividends",
-        date: new Date("2026-09-15"),
-        personalAccountId,
-      },
-    });
-
-    // Try to create with different casing
-    const items = [
-      {
-        entityType: "personal" as const,
-        type: "income" as const,
-        amount: 50.75,
-        currency: "BRL",
-        description: "PMLL11 - Dividends September 2026",
-        category: "Dividends",
-        date: "2026-09-15",
-        personalAccountId,
-      },
-    ];
-
-    const result = await bulkCreateTransactions(
-      TEST_USER_ID,
-      items,
-      false,
-      db
-    );
-
-    expect(result.created).toHaveLength(0);
-    expect(result.duplicates).toHaveLength(1);
+  it("canonicalizes category names and rejects unknown ones with suggestions", async () => {
+    const r = await bulkCreateTransactions(USER, [dividend({ category: "dividends" })], false, prisma);
+    expect(r.created).toHaveLength(1);
+    expect((await entries())[0].categoryId).toBe(f.categories.Dividends);
+    await expect(bulkCreateTransactions(USER, [dividend({ category: "Dividendz" })], false, prisma)).rejects.toThrow(/Did you mean: Dividends/);
   });
 
-  it("should handle errors gracefully and continue processing", async () => {
-    // This test now validates that categories must exist
-    const items = [
-      {
-        entityType: "personal" as const,
-        type: "income" as const,
-        amount: 50.75,
-        currency: "BRL",
-        description: "PMLL11 - Dividends September 2026",
-        category: "Dividends",
-        date: "2026-09-15",
-        personalAccountId,
-      },
-      {
-        entityType: "personal" as const,
-        type: "income" as const,
-        amount: 35.20,
-        currency: "BRL",
-        description: "Invalid category test",
-        category: "NonExistentCategory",
-        date: "2026-09-20",
-        personalAccountId,
-      },
-    ];
-
-    await expect(
-      bulkCreateTransactions(
-        TEST_USER_ID,
-        items,
-        false,
-        db
-      )
-    ).rejects.toThrow(/Category 'NonExistentCategory'/);
+  it("reports per-item errors and keeps going", async () => {
+    const r = await bulkCreateTransactions(USER, [dividend({ personalAccountId: "00000000-0000-0000-0000-000000000000" }), dividend({ description: "ok" })], false, prisma);
+    expect(r.errors).toHaveLength(1);
+    expect(r.created.map((c) => c.description)).toEqual(["ok"]);
   });
 
-  it("should create 15 dividend payments without duplicates (real-world scenario)", async () => {
-    const dividends = Array.from({ length: 15 }, (_, i) => ({
-      entityType: "personal" as const,
-      type: "income" as const,
-      amount: 50.75 + i * 0.5,
-      currency: "BRL",
-      description: `Dividend Payment ${i + 1} - PMLL11`,
-      category: "Dividends",
-      date: `2026-09-${String(i + 1).padStart(2, "0")}`,
-      personalAccountId,
-    }));
-
-    const result = await bulkCreateTransactions(
-      TEST_USER_ID,
-      dividends,
-      false,
-      db
-    );
-
-    expect(result.created).toHaveLength(15);
-    expect(result.duplicates).toHaveLength(0);
-    expect(result.errors).toHaveLength(0);
-
-    const count = await db.transaction.count({
-      where: { personalAccountId },
-    });
-    expect(count).toBe(15);
-  });
-
-  it("should normalize dates to noon UTC (12:00:00.000Z) like the UI does", async () => {
-    const items = [
-      {
-        entityType: "personal" as const,
-        type: "income" as const,
-        amount: 100.0,
-        currency: "BRL",
-        description: "Test transaction with YYYY-MM-DD date",
-        category: "Dividends",
-        date: "2026-07-01",
-        personalAccountId,
-      },
-      {
-        entityType: "personal" as const,
-        type: "income" as const,
-        amount: 200.0,
-        currency: "BRL",
-        description: "Test transaction with ISO datetime",
-        category: "Dividends",
-        date: "2026-07-02T08:30:00.000Z",
-        personalAccountId,
-      },
-    ];
-
-    const result = await bulkCreateTransactions(
-      TEST_USER_ID,
-      items,
-      false,
-      db
-    );
-
-    expect(result.created).toHaveLength(2);
-    expect(result.errors).toHaveLength(0);
-
-    // Fetch the created transactions to verify dates
-    const created = await db.transaction.findMany({
-      where: {
-        personalAccountId,
-        description: {
-          startsWith: "Test transaction",
-        },
-      },
-      orderBy: { date: "asc" },
-    });
-
-    expect(created).toHaveLength(2);
-    
-    // Both should be normalized to noon UTC (12:00:00.000Z)
-    expect(created[0].date.toISOString()).toBe("2026-07-01T12:00:00.000Z");
-    expect(created[1].date.toISOString()).toBe("2026-07-02T12:00:00.000Z");
-  });
-
-  it("should normalize a case-insensitive category to the canonical name and reject unknown ones", async () => {
-    const created = await bulkCreateTransactions(
-      TEST_USER_ID,
-      [
-        {
-          entityType: "personal",
-          type: "income",
-          amount: 12,
-          currency: "BRL",
-          description: "case fold",
-          category: "dividends",
-          date: "2026-09-01",
-          personalAccountId,
-        },
-      ],
-      false,
-      db
-    );
-    expect(created.errors).toHaveLength(0);
-    const row = await db.transaction.findFirst({
-      where: { personalAccountId, description: "case fold" },
-    });
-    expect(row?.category).toBe("Dividends");
-
-    await expect(
-      bulkCreateTransactions(
-        TEST_USER_ID,
-        [
-          {
-            entityType: "personal",
-            type: "income",
-            amount: 12,
-            currency: "BRL",
-            description: "unknown",
-            category: "Not A Real Category",
-            date: "2026-09-02",
-            personalAccountId,
-          },
-        ],
-        false,
-        db
-      )
-    ).rejects.toThrow(/Valid categories: Dividends/);
+  it("books investment-type rows as investment outflows", async () => {
+    await prisma.category.create({ data: { userId: USER, name: "Stocks", type: "investment" } });
+    await bulkCreateTransactions(USER, [dividend({ type: "investment", category: "Stocks", description: "Aporte", amount: 1000 })], false, prisma);
+    const [e] = await entries();
+    expect([e.kind, Number(e.amount)]).toEqual(["investment", -1000]);
   });
 });

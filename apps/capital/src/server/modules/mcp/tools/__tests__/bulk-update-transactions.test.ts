@@ -1,420 +1,116 @@
-import { describe, it, expect, beforeEach } from "vitest";
-import { bulkUpdateTransactions } from "../bulk-update-transactions";
-import { validateCategory, findOrphanTransactions } from "../../lib/category-validation";
+import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { prisma } from "@capital/server/lib/prisma";
+import { createLedgerFixture, deleteLedgerFixture, type LedgerFixture } from "@/test/ledger-fixtures";
+import { createEntry } from "@capital/server/modules/ledger/services/entries";
+import { undoBatch } from "@capital/server/modules/ledger/services/mutations";
+import { findOrphanTransactions, validateCategory } from "../../lib/category-validation";
+import { bulkUpdateTransactions } from "../bulk-update-transactions";
+import { deleteTransactionTool, updateTransactionTool } from "../manage-transactions";
 
-const db = prisma;
+const USER = "test-user-mcp-bulk-update-001";
+let f: LedgerFixture;
 
-const TEST_USER_ID = "test-user-mcp-bulk-update-001";
+beforeEach(async () => {
+  f = await createLedgerFixture(prisma, USER, {
+    categories: [
+      { name: "Groceries", type: "expense" },
+      { name: "Restaurants", type: "expense" },
+      { name: "Salary", type: "income" },
+    ],
+  });
+});
 
-describe("MCP bulk update and validation", () => {
-  let personalAccountId: string;
+afterAll(async () => {
+  await deleteLedgerFixture(prisma, USER);
+});
 
-  beforeEach(async () => {
-    await db.transaction.deleteMany({
-      where: {
-        OR: [
-          { business: { userId: TEST_USER_ID } },
-          { personalAccount: { userId: TEST_USER_ID } },
-        ],
-      },
-    });
-    await db.personalAccount.deleteMany({ where: { userId: TEST_USER_ID } });
-    await db.category.deleteMany({ where: { userId: TEST_USER_ID } });
-    await db.user.deleteMany({ where: { id: TEST_USER_ID } });
+const expense = async (description: string, categoryId: string | null = f.categories.Groceries) =>
+  (await createEntry(USER, { kind: "expense", accountId: f.pfChecking, amount: 10, date: "2026-09-10", description, categoryId }, prisma, { skipRules: true })).entryIds[0];
 
-    await db.user.create({
-      data: {
-        id: TEST_USER_ID,
-        email: "mcp-bulk-update-test@example.com",
-        passwordHash: "test-hash",
-        name: "MCP Bulk Update Test User",
-        baseCurrency: "BRL",
-      },
-    });
+describe("validateCategory", () => {
+  it("accepts existing names and suggests close matches for unknown ones", async () => {
+    expect((await validateCategory(USER, "Groceries", "expense", prisma)).valid).toBe(true);
+    const typo = await validateCategory(USER, "Grocerys", "expense", prisma);
+    expect(typo.valid).toBe(false);
+    expect(typo.suggestions[0]).toBe("Groceries");
+    expect((await validateCategory(USER, "Zzzz", "expense", prisma)).validNames).toEqual(expect.arrayContaining(["Groceries", "Restaurants"]));
+  });
+});
 
-    const personalAccount = await db.personalAccount.create({
-      data: {
-        userId: TEST_USER_ID,
-        defaultCurrency: "BRL",
-      },
-    });
-    personalAccountId = personalAccount.id;
+describe("findOrphanTransactions", () => {
+  it("lists entries with no category or an archived one", async () => {
+    await expense("ok");
+    const none = await expense("none", null);
+    const archived = await prisma.category.create({ data: { userId: USER, name: "Old", type: "expense" } });
+    const old = await expense("old", archived.id);
+    await prisma.category.update({ where: { id: archived.id }, data: { isArchived: true } });
+    const r = await findOrphanTransactions(USER, prisma);
+    expect(r.total).toBe(2);
+    expect(r.transactions.map((t) => t.id).sort()).toEqual([none, old].sort());
+    expect(r.categories.map((c) => c.name).sort()).toEqual(["(none)", "Old"]);
+  });
+});
 
-    const category = await db.category.create({
-      data: {
-        userId: TEST_USER_ID,
-        name: "Groceries",
-        type: "expense",
-      },
-    });
-    // Store category ID for future use if needed
-    void category.id;
-
-    await db.category.create({
-      data: {
-        userId: TEST_USER_ID,
-        name: "Entertainment",
-        type: "expense",
-      },
-    });
-
-    await db.category.create({
-      data: {
-        userId: TEST_USER_ID,
-        name: "Salary",
-        type: "income",
-      },
-    });
+describe("bulkUpdateTransactions", () => {
+  it("updates several entries in one undoable batch", async () => {
+    const a = await expense("a");
+    const b = await expense("b");
+    const r = await bulkUpdateTransactions(USER, [{ id: a, category: "Restaurants" }, { id: b, amount: 25, description: "B!" }], false, prisma);
+    expect(r.errors).toEqual([]);
+    expect(r.updated).toEqual([
+      { id: a, description: "a", category: "Restaurants", amount: 10 },
+      { id: b, description: "B!", category: "Groceries", amount: 25 },
+    ]);
+    await undoBatch(USER, r.batchId!, prisma);
+    const back = await prisma.ledgerEntry.findUniqueOrThrow({ where: { id: b } });
+    expect([back.description, Number(back.amount)]).toEqual(["b", -10]);
   });
 
-  describe("validateCategory", () => {
-    it("should validate existing category", async () => {
-      const result = await validateCategory(TEST_USER_ID, "Groceries", "expense", db);
-      expect(result.valid).toBe(true);
-      expect(result.suggestions).toHaveLength(0);
-    });
-
-    it("should reject unknown category with suggestions", async () => {
-      const result = await validateCategory(TEST_USER_ID, "Grocery", "expense", db);
-      expect(result.valid).toBe(false);
-      expect(result.suggestions).toContain("Groceries");
-    });
-
-    it("should suggest close matches", async () => {
-      const result = await validateCategory(TEST_USER_ID, "Enterainment", "expense", db);
-      expect(result.valid).toBe(false);
-      expect(result.suggestions).toContain("Entertainment");
-    });
-
-    it("should handle completely unknown categories", async () => {
-      const result = await validateCategory(TEST_USER_ID, "XYZ123", "expense", db);
-      expect(result.valid).toBe(false);
-      expect(result.suggestions.length).toBeGreaterThan(0);
-    });
+  it("dry-run writes nothing", async () => {
+    const a = await expense("a");
+    const r = await bulkUpdateTransactions(USER, [{ id: a, category: "restaurants" }], true, prisma);
+    expect(r.updated[0].category).toBe("Restaurants");
+    expect((await prisma.ledgerEntry.findUniqueOrThrow({ where: { id: a } })).categoryId).toBe(f.categories.Groceries);
   });
 
-  describe("findOrphanTransactions", () => {
-    it("should find transactions with non-existent categories", async () => {
-      await db.transaction.createMany({
-        data: [
-          {
-            entityType: "personal",
-            type: "expense",
-            amount: 100,
-            currency: "BRL",
-            exchangeRate: 1,
-            description: "Valid transaction",
-            category: "Groceries",
-            date: new Date("2026-09-15"),
-            personalAccountId,
-          },
-          {
-            entityType: "personal",
-            type: "expense",
-            amount: 200,
-            currency: "BRL",
-            exchangeRate: 1,
-            description: "Orphan transaction 1",
-            category: "House",
-            date: new Date("2026-09-16"),
-            personalAccountId,
-          },
-          {
-            entityType: "personal",
-            type: "expense",
-            amount: 300,
-            currency: "BRL",
-            exchangeRate: 1,
-            description: "Orphan transaction 2",
-            category: "House",
-            date: new Date("2026-09-17"),
-            personalAccountId,
-          },
-          {
-            entityType: "personal",
-            type: "expense",
-            amount: 400,
-            currency: "BRL",
-            exchangeRate: 1,
-            description: "Another orphan",
-            category: "Unknown",
-            date: new Date("2026-09-18"),
-            personalAccountId,
-          },
-        ],
-      });
-
-      const result = await findOrphanTransactions(TEST_USER_ID, db);
-
-      expect(result.total).toBe(3);
-      expect(result.categories).toHaveLength(2);
-      expect(result.categories.find((c) => c.name === "House")?.count).toBe(2);
-      expect(result.categories.find((c) => c.name === "Unknown")?.count).toBe(1);
-      expect(result.transactions).toHaveLength(3);
-    });
-
-    it("should return empty when all transactions have valid categories", async () => {
-      await db.transaction.create({
-        data: {
-          entityType: "personal",
-          type: "expense",
-          amount: 100,
-          currency: "BRL",
-          exchangeRate: 1,
-          description: "Valid transaction",
-          category: "Groceries",
-          date: new Date("2026-09-15"),
-          personalAccountId,
-        },
-      });
-
-      const result = await findOrphanTransactions(TEST_USER_ID, db);
-
-      expect(result.total).toBe(0);
-      expect(result.categories).toHaveLength(0);
-      expect(result.transactions).toHaveLength(0);
-    });
+  it("is all-or-nothing on validation", async () => {
+    const a = await expense("a");
+    await expect(
+      bulkUpdateTransactions(USER, [{ id: a, description: "changed" }, { id: "00000000-0000-0000-0000-000000000000", amount: 1 }, { id: a, category: "Nope" }], false, prisma)
+    ).rejects.toThrow(/Validation failed for 2 transaction/);
+    expect((await prisma.ledgerEntry.findUniqueOrThrow({ where: { id: a } })).description).toBe("a");
   });
 
-  describe("bulkUpdateTransactions", () => {
-    it("should update multiple transactions in a single call", async () => {
-      const txn1 = await db.transaction.create({
-        data: {
-          entityType: "personal",
-          type: "expense",
-          amount: 100,
-          currency: "BRL",
-          exchangeRate: 1,
-          description: "Transaction 1",
-          category: "Groceries",
-          date: new Date("2026-09-15"),
-          personalAccountId,
-        },
-      });
+  it("handles 200 updates", async () => {
+    const ids = await Promise.all(Array.from({ length: 200 }, (_, i) => expense(`t${i}`)));
+    const r = await bulkUpdateTransactions(USER, ids.map((id) => ({ id, category: "Restaurants" })), false, prisma);
+    expect(r.updated).toHaveLength(200);
+    expect(await prisma.ledgerEntry.count({ where: { userId: USER, categoryId: f.categories.Restaurants } })).toBe(200);
+  }, 60_000);
 
-      const txn2 = await db.transaction.create({
-        data: {
-          entityType: "personal",
-          type: "expense",
-          amount: 200,
-          currency: "BRL",
-          exchangeRate: 1,
-          description: "Transaction 2",
-          category: "Groceries",
-          date: new Date("2026-09-16"),
-          personalAccountId,
-        },
-      });
+  it("normalizes dates to noon UTC", async () => {
+    const a = await expense("a");
+    await bulkUpdateTransactions(USER, [{ id: a, date: "2026-10-01" }], false, prisma);
+    expect((await prisma.ledgerEntry.findUniqueOrThrow({ where: { id: a } })).date.toISOString()).toBe("2026-10-01T12:00:00.000Z");
+  });
+});
 
-      const result = await bulkUpdateTransactions(
-        TEST_USER_ID,
-        [
-          {
-            id: txn1.id,
-            category: "Entertainment",
-          },
-          {
-            id: txn2.id,
-            category: "Entertainment",
-            amount: 250,
-          },
-        ],
-        false,
-        db
-      );
+describe("update_transaction / delete_transaction", () => {
+  it("returns the legacy shape, keeps an archived category already set, and rejects assigning one", async () => {
+    const a = await expense("a");
+    const t = await updateTransactionTool(USER, { id: a, type: "income", category: "Salary", amount: 99 }, prisma);
+    expect(t).toMatchObject({ id: a, type: "income", amount: 99, category: "Salary", personalAccountId: f.pfId, businessId: null });
 
-      expect(result.updated).toHaveLength(2);
-      expect(result.errors).toHaveLength(0);
+    await prisma.category.update({ where: { id: f.categories.Salary }, data: { isArchived: true } });
+    await expect(updateTransactionTool(USER, { id: a, category: "Salary", description: "kept" }, prisma)).resolves.toMatchObject({ description: "kept" });
+    const b = await expense("b");
+    await expect(updateTransactionTool(USER, { id: b, type: "income", category: "Salary" }, prisma)).rejects.toThrow(/archived/);
+  });
 
-      const updated1 = await db.transaction.findUnique({ where: { id: txn1.id } });
-      expect(updated1?.category).toBe("Entertainment");
-      expect(updated1?.amount).toBe(100);
-
-      const updated2 = await db.transaction.findUnique({ where: { id: txn2.id } });
-      expect(updated2?.category).toBe("Entertainment");
-      expect(updated2?.amount).toBe(250);
-    });
-
-    it("should work in dry-run mode", async () => {
-      const txn = await db.transaction.create({
-        data: {
-          entityType: "personal",
-          type: "expense",
-          amount: 100,
-          currency: "BRL",
-          exchangeRate: 1,
-          description: "Transaction",
-          category: "Groceries",
-          date: new Date("2026-09-15"),
-          personalAccountId,
-        },
-      });
-
-      const result = await bulkUpdateTransactions(
-        TEST_USER_ID,
-        [
-          {
-            id: txn.id,
-            category: "Entertainment",
-          },
-        ],
-        true,
-        db
-      );
-
-      expect(result.updated).toHaveLength(1);
-      expect(result.errors).toHaveLength(0);
-
-      const unchanged = await db.transaction.findUnique({ where: { id: txn.id } });
-      expect(unchanged?.category).toBe("Groceries");
-    });
-
-    it("should validate categories before updating", async () => {
-      const txn = await db.transaction.create({
-        data: {
-          entityType: "personal",
-          type: "expense",
-          amount: 100,
-          currency: "BRL",
-          exchangeRate: 1,
-          description: "Transaction",
-          category: "Groceries",
-          date: new Date("2026-09-15"),
-          personalAccountId,
-        },
-      });
-
-      await expect(
-        bulkUpdateTransactions(
-          TEST_USER_ID,
-          [
-            {
-              id: txn.id,
-              category: "InvalidCategory",
-            },
-          ],
-          false,
-          db
-        )
-      ).rejects.toThrow(/Category 'InvalidCategory' not found/);
-    });
-
-    it("should fail all-or-nothing if one validation fails", async () => {
-      const txn1 = await db.transaction.create({
-        data: {
-          entityType: "personal",
-          type: "expense",
-          amount: 100,
-          currency: "BRL",
-          exchangeRate: 1,
-          description: "Transaction 1",
-          category: "Groceries",
-          date: new Date("2026-09-15"),
-          personalAccountId,
-        },
-      });
-
-      const txn2 = await db.transaction.create({
-        data: {
-          entityType: "personal",
-          type: "expense",
-          amount: 200,
-          currency: "BRL",
-          exchangeRate: 1,
-          description: "Transaction 2",
-          category: "Groceries",
-          date: new Date("2026-09-16"),
-          personalAccountId,
-        },
-      });
-
-      await expect(
-        bulkUpdateTransactions(
-          TEST_USER_ID,
-          [
-            {
-              id: txn1.id,
-              category: "Entertainment",
-            },
-            {
-              id: txn2.id,
-              category: "InvalidCategory",
-            },
-          ],
-          false,
-          db
-        )
-      ).rejects.toThrow();
-
-      const unchanged1 = await db.transaction.findUnique({ where: { id: txn1.id } });
-      expect(unchanged1?.category).toBe("Groceries");
-    });
-
-    it("should handle 200 updates efficiently", async () => {
-      const transactions = [];
-      for (let i = 0; i < 200; i++) {
-        const txn = await db.transaction.create({
-          data: {
-            entityType: "personal",
-            type: "expense",
-            amount: 100 + i,
-            currency: "BRL",
-            exchangeRate: 1,
-            description: `Transaction ${i}`,
-            category: "Groceries",
-            date: new Date(`2026-09-${String((i % 30) + 1).padStart(2, "0")}`),
-            personalAccountId,
-          },
-        });
-        transactions.push(txn);
-      }
-
-      const updates = transactions.map((txn) => ({
-        id: txn.id,
-        category: "Entertainment",
-      }));
-
-      const result = await bulkUpdateTransactions(TEST_USER_ID, updates, false, db);
-
-      expect(result.updated).toHaveLength(200);
-      expect(result.errors).toHaveLength(0);
-
-      const updated = await db.transaction.findMany({
-        where: { category: "Entertainment" },
-      });
-      expect(updated).toHaveLength(200);
-    });
-
-    it("should update dates with parseLocalDate normalization", async () => {
-      const txn = await db.transaction.create({
-        data: {
-          entityType: "personal",
-          type: "expense",
-          amount: 100,
-          currency: "BRL",
-          exchangeRate: 1,
-          description: "Transaction",
-          category: "Groceries",
-          date: new Date("2026-09-15"),
-          personalAccountId,
-        },
-      });
-
-      await bulkUpdateTransactions(
-        TEST_USER_ID,
-        [
-          {
-            id: txn.id,
-            date: "2026-10-01",
-          },
-        ],
-        false,
-        db
-      );
-
-      const updated = await db.transaction.findUnique({ where: { id: txn.id } });
-      expect(updated?.date.toISOString()).toBe("2026-10-01T12:00:00.000Z");
-    });
+  it("delete moves the entry to the trash", async () => {
+    const a = await expense("a");
+    await deleteTransactionTool(USER, a, prisma);
+    expect((await prisma.ledgerEntry.findUniqueOrThrow({ where: { id: a } })).deletedAt).not.toBeNull();
+    await expect(deleteTransactionTool(USER, a, prisma)).rejects.toThrow(/not found/);
   });
 });
