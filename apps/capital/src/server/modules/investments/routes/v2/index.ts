@@ -22,15 +22,18 @@ import {
   updateOperation,
 } from "../../services/portfolio";
 import { updateAllPrices } from "../../services/update-prices";
+import { ALLOCATION_CLASSES, ASSET_CLASSES } from "../../lib/allocation-class";
 
 const tags = ["Investments v2"];
 const day = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
-const assetClass = z.enum(["stocks", "fii", "etf", "bdr", "fixed_income", "crypto", "savings", "international_stocks", "international_etf"]);
+const assetClass = z.enum(ASSET_CLASSES);
+const allocationClass = z.enum(ALLOCATION_CLASSES);
 const subType = z.enum(["cdb", "rdb", "lci", "lca", "cdi", "tesouro_selic", "tesouro_ipca", "tesouro_prefixado", "debenture"]);
 const opType = z.enum(["buy", "sell", "dividend", "yield_payment", "split", "deposit", "withdrawal", "adjustment"]);
 
 const holdingFields = {
   assetClass,
+  allocationClass: allocationClass.nullish(),
   subType: subType.nullish(),
   ticker: z.string().nullish(),
   name: z.string().min(1),
@@ -112,13 +115,22 @@ const cashRoute = createRoute({
 });
 const refreshPricesRoute = createRoute({ method: "post", path: "/v2/holdings/refresh-prices", tags, summary: "Fetch current market prices for the user's ticker holdings", responses: v2Responses });
 const summaryRoute = createRoute({ method: "get", path: "/v2/portfolio/summary", tags, summary: "Portfolio value, allocation and cash", request: { query: z.object({ entityId: z.string().optional() }) }, responses: v2Responses });
-const getTargetsRoute = createRoute({ method: "get", path: "/v2/portfolio/targets", tags, summary: "Target allocation by asset class", responses: v2Responses });
+const getTargetsRoute = createRoute({ method: "get", path: "/v2/portfolio/targets", tags, summary: "Target allocation by allocation class", responses: v2Responses });
 const putTargetsRoute = createRoute({
   method: "put",
   path: "/v2/portfolio/targets",
   tags,
-  summary: "Replace the target allocation (must sum to 100%)",
-  request: jsonBody(z.object({ targets: z.array(z.object({ assetClass, targetPercent: z.number().min(0).max(100) })) })),
+  summary: "Replace the target allocation (must sum to 100%); assetClass targets are mapped to allocation classes and summed",
+  request: jsonBody(
+    z.object({
+      targets: z.array(
+        z.union([
+          z.object({ allocationClass, targetPercent: z.number().min(0).max(100) }),
+          z.object({ assetClass, targetPercent: z.number().min(0).max(100) }),
+        ])
+      ),
+    })
+  ),
   responses: v2Responses,
 });
 const rebalanceRoute = createRoute({

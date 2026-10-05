@@ -20,7 +20,7 @@ const addEntry = (accountId: string) => createEntry(USER, { kind: "expense", acc
 
 describe("user settings", () => {
   it("reads settings and rejects an unknown user", async () => {
-    expect(await getUserSettings(USER, prisma)).toEqual({ baseCurrency: "BRL", theme: "system", dateFormat: "yyyy-MM-dd", numberFormat: "en-US", timezone: "America/Sao_Paulo" });
+    expect(await getUserSettings(USER, prisma)).toEqual({ baseCurrency: "BRL", theme: "light", dateFormat: "dd/MM/yyyy", numberFormat: "pt-BR", timezone: "America/Sao_Paulo" });
     await expect(getUserSettings("nobody", prisma)).rejects.toThrow(/User not found/);
   });
 
@@ -31,8 +31,8 @@ describe("user settings", () => {
   });
 
   it("updates only the given fields", async () => {
-    const r = await updateUserSettings(USER, { theme: "dark", numberFormat: "pt-BR" }, prisma);
-    expect(r).toMatchObject({ theme: "dark", numberFormat: "pt-BR", baseCurrency: "BRL", dateFormat: "yyyy-MM-dd" });
+    const r = await updateUserSettings(USER, { theme: "dark", numberFormat: "en-US" }, prisma);
+    expect(r).toMatchObject({ theme: "dark", numberFormat: "en-US", baseCurrency: "BRL", dateFormat: "dd/MM/yyyy" });
   });
 });
 

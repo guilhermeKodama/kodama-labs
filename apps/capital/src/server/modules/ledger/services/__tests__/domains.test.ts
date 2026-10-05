@@ -118,6 +118,26 @@ describe("recurring rules", () => {
     expect(groups[0].legs.map((l) => toNumber(l.amount)).sort((a, b) => a - b)).toEqual([-2000, 2000]);
     expect(groups[0].legs.every((l) => l.recurringRuleId === rule.id)).toBe(true);
   });
+
+  it("books a foreign-currency rule at the rate in force unless it has an explicit one", async () => {
+    await prisma.currency.create({ data: { userId: USER, code: "USD", name: "US Dollar", symbol: "$", manualRate: 0.2 } });
+    const floating = await createRecurringRule(
+      USER,
+      { kind: "expense", accountId: f.pfChecking, amount: 10, currency: "USD", description: "GitHub", frequency: "monthly", startDate: "2026-09-01" },
+      prisma
+    );
+    const fixed = await createRecurringRule(
+      USER,
+      { kind: "expense", accountId: f.pfChecking, amount: 10, currency: "USD", exchangeRate: 4, description: "Figma", frequency: "monthly", startDate: "2026-09-01" },
+      prisma
+    );
+    expect(floating.exchangeRate).toBeNull();
+    const a = await markRulePaid(USER, floating.id, prisma);
+    const b = await markRulePaid(USER, fixed.id, prisma);
+    const [entryA, entryB] = await Promise.all([a, b].map((r) => prisma.ledgerEntry.findUniqueOrThrow({ where: { id: r.entryIds[0] } })));
+    expect(toNumber(entryA.amountBase)).toBe(-50);
+    expect(toNumber(entryB.amountBase)).toBe(-40);
+  });
 });
 
 describe("investments", () => {
@@ -125,6 +145,7 @@ describe("investments", () => {
     const h = await createHolding(USER, { accountId: f.broker, assetClass: "stocks", ticker: "PETR4", name: "Petrobras", currentPrice: 40 }, prisma);
     const buy = await recordOperation(USER, { holdingId: h.id, type: "buy", quantity: 100, pricePerUnit: 30, totalAmount: 3000, fees: 10, date: "2026-08-10", fundFromAccountId: f.pfChecking }, prisma);
     expect(buy.fundingGroupId).not.toBeNull();
+    expect(buy.operation.fundingGroupId).toBe(buy.fundingGroupId);
     await recordOperation(USER, { holdingId: h.id, type: "sell", quantity: 50, pricePerUnit: 35, totalAmount: 1750, date: "2026-08-20" }, prisma);
 
     const holding = await prisma.investmentHolding.findUniqueOrThrow({ where: { id: h.id } });
@@ -150,11 +171,47 @@ describe("investments", () => {
     const fixed = await createHolding(USER, { accountId: f.broker, assetClass: "fixed_income", name: "CDB", currentPrice: 1 }, prisma);
     await recordOperation(USER, { holdingId: stocks.id, type: "buy", quantity: 8000, pricePerUnit: 1, totalAmount: 8000, date: "2026-08-01" }, prisma);
     await recordOperation(USER, { holdingId: fixed.id, type: "buy", quantity: 2000, pricePerUnit: 1, totalAmount: 2000, date: "2026-08-01" }, prisma);
-    await setTargets(USER, [{ assetClass: "stocks", targetPercent: 50 }, { assetClass: "fixed_income", targetPercent: 50 }], prisma);
+    await setTargets(USER, [{ allocationClass: "br_stocks", targetPercent: 50 }, { allocationClass: "fixed_income", targetPercent: 50 }], prisma);
     const s = await rebalanceSuggestion(USER, 2000, "class", prisma);
-    const by = Object.fromEntries(s.classes.map((c) => [c.assetClass, c.amount]));
-    expect(by).toEqual({ stocks: 0, fixed_income: 2000 });
-    await expect(setTargets(USER, [{ assetClass: "stocks", targetPercent: 60 }], prisma)).rejects.toThrow(/100%/);
+    const by = Object.fromEntries(s.classes.map((c) => [c.allocationClass, c.amount]));
+    expect(by).toEqual({ br_stocks: 0, fixed_income: 2000 });
+    const assets = await rebalanceSuggestion(USER, 2000, "asset", prisma);
+    expect(assets.assets).toEqual([expect.objectContaining({ holdingId: fixed.id, assetClass: "fixed_income", allocationClass: "fixed_income", amount: 2000 })]);
+    await expect(setTargets(USER, [{ allocationClass: "br_stocks", targetPercent: 60 }], prisma)).rejects.toThrow(/100%/);
+  });
+
+  it("groups the allocation by the six classes, with the holding override winning", async () => {
+    const usEtf = await createHolding(USER, { accountId: f.broker, assetClass: "etf", ticker: "VOO", name: "VOO", currency: "USD", currentPrice: 1 }, prisma);
+    const brEtf = await createHolding(USER, { accountId: f.broker, assetClass: "etf", ticker: "BOVA11", name: "BOVA11", currentPrice: 1 }, prisma);
+    const bdr = await createHolding(USER, { accountId: f.broker, assetClass: "bdr", ticker: "AAPL34", name: "Apple", currentPrice: 1 }, prisma);
+    const fund = await createHolding(USER, { accountId: f.broker, assetClass: "savings", name: "Caixinha", allocationClass: "cash", currentPrice: 1 }, prisma);
+    for (const [h, qty] of [[usEtf, 100], [brEtf, 200], [bdr, 300], [fund, 400]] as const) {
+      await recordOperation(USER, { holdingId: h.id, type: "buy", quantity: qty, pricePerUnit: 1, totalAmount: qty, date: "2026-08-01" }, prisma);
+    }
+    const summary = await portfolioSummary(USER, prisma);
+    // No USD rate in the fixture, so USD converts at 1.
+    expect(Object.fromEntries(summary.allocation.map((a) => [a.allocationClass, a.marketValue]))).toEqual({ international: 400, br_stocks: 200, cash: 400 });
+  });
+
+  it("maps asset-class targets onto allocation classes, summing collapsed classes", async () => {
+    await createHolding(USER, { accountId: f.broker, assetClass: "etf", ticker: "VOO", name: "VOO", currency: "USD" }, prisma);
+    const targets = await setTargets(
+      USER,
+      [
+        { assetClass: "stocks", targetPercent: 30 },
+        { assetClass: "fixed_income", targetPercent: 30 },
+        { assetClass: "savings", targetPercent: 10 },
+        // The user's ETFs trade in USD, so an ETF target is international.
+        { assetClass: "etf", targetPercent: 20 },
+        { assetClass: "bdr", targetPercent: 10 },
+      ],
+      prisma
+    );
+    expect(targets.map((t) => [t.allocationClass, t.targetPercent])).toEqual([
+      ["fixed_income", 0.4],
+      ["br_stocks", 0.3],
+      ["international", 0.3],
+    ]);
   });
 });
 

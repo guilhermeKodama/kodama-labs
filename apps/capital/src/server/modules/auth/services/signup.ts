@@ -28,7 +28,8 @@ export async function signup(input: SignupInput, prisma: PrismaClient) {
 
   return prisma.$transaction(async (tx) => {
     const user = await tx.user.create({
-      data: { email: input.email, passwordHash, name: input.name, baseCurrency: input.baseCurrency || "USD" },
+      // Unset preferences take the schema defaults (BRL, pt-BR, light).
+      data: { email: input.email, passwordHash, name: input.name, ...(input.baseCurrency && { baseCurrency: input.baseCurrency }) },
     });
     await getPersonalEntity(user.id, tx);
     await tx.currency.createMany({ data: DEFAULT_CURRENCIES.map((c) => ({ userId: user.id, ...c })), skipDuplicates: true });

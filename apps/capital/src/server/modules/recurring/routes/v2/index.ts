@@ -24,7 +24,8 @@ const ruleFields = {
   transferDirection: z.enum(TRANSFER_DIRECTIONS).nullish(),
   amount: z.number().positive(),
   currency: z.string().length(3).optional(),
-  exchangeRate: z.number().positive().optional(),
+  // null = convert each occurrence at the rate in force when it is booked.
+  exchangeRate: z.number().positive().nullish(),
   description: z.string().min(1),
   categoryId: z.string().nullish(),
   frequency: z.enum(["daily", "weekly", "monthly", "yearly"]),

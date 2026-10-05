@@ -1,7 +1,8 @@
 import type { DbClient } from "@capital/server/lib/prisma";
 import { Prisma } from "@/generated/prisma";
-import type { AssetClass, FixedIncomeSubType, InvestmentHolding, InvestmentOperation, InvestmentTransactionType } from "@/generated/prisma";
+import type { AllocationClass, AssetClass, FixedIncomeSubType, InvestmentHolding, InvestmentOperation, InvestmentTransactionType } from "@/generated/prisma";
 import { formatDateOnly, parseLocalDate } from "@capital/server/lib/date-utils";
+import { ALLOCATION_CLASSES, dominantEtfCurrency, holdingAllocationClass, toAllocationTargets, type TargetInput } from "@capital/server/modules/investments/lib/allocation-class";
 import { LedgerError, notFound } from "@capital/server/modules/ledger/lib/errors";
 import { loadFx } from "@capital/server/modules/ledger/lib/fx";
 import { round, toNumber } from "@capital/server/modules/ledger/lib/money";
@@ -17,6 +18,8 @@ import { inTransaction } from "@capital/server/modules/ledger/services/mutations
 export interface HoldingInput {
   accountId: string;
   assetClass: AssetClass;
+  /** Overrides the allocation class derived from assetClass and currency. */
+  allocationClass?: AllocationClass | null;
   subType?: FixedIncomeSubType | null;
   ticker?: string | null;
   name: string;
@@ -42,6 +45,7 @@ export async function createHolding(userId: string, input: HoldingInput, db: DbC
     data: {
       accountId: account.id,
       assetClass: input.assetClass,
+      allocationClass: input.allocationClass ?? null,
       subType: input.assetClass === "fixed_income" ? input.subType ?? null : null,
       ticker: input.ticker ? input.ticker.toUpperCase() : null,
       name: input.name,
@@ -58,6 +62,7 @@ export async function updateHolding(userId: string, holdingId: string, patch: Pa
     where: { id: holdingId },
     data: {
       ...(patch.assetClass !== undefined && { assetClass: patch.assetClass }),
+      ...(patch.allocationClass !== undefined && { allocationClass: patch.allocationClass }),
       ...(patch.subType !== undefined && { subType: patch.subType }),
       ...(patch.ticker !== undefined && { ticker: patch.ticker ? patch.ticker.toUpperCase() : null }),
       ...(patch.name !== undefined && { name: patch.name }),
@@ -94,6 +99,8 @@ export function serializeHolding(h: Awaited<ReturnType<typeof listHoldings>>[num
     accountName: h.account.name,
     entityId: h.account.entityId,
     assetClass: h.assetClass,
+    allocationClass: holdingAllocationClass(h),
+    allocationClassOverride: h.allocationClass,
     subType: h.subType,
     ticker: h.ticker,
     name: h.name,
@@ -262,6 +269,7 @@ export async function recordOperation(userId: string, input: OperationInput, db:
         notes: input.notes ?? null,
         externalId: input.externalId ?? null,
         cashEntryId,
+        fundingGroupId,
       },
     });
     const updated = await recalculateHolding(holding.id, tx);
@@ -328,18 +336,21 @@ export async function listOperations(userId: string, db: DbClient, opts: { holdi
       ...(opts.holdingId && { holdingId: opts.holdingId }),
       ...((opts.from || opts.to) && { date: { ...(opts.from && { gte: opts.from }), ...(opts.to && { lte: opts.to }) } }),
     },
-    include: { holding: { select: { ticker: true, name: true, assetClass: true, accountId: true } } },
+    include: { holding: { select: { ticker: true, name: true, assetClass: true, allocationClass: true, currency: true, accountId: true } } },
     orderBy: { date: "desc" },
   });
 }
 
-export function serializeOperation(op: InvestmentOperation & { holding?: { ticker: string | null; name: string; assetClass: AssetClass; accountId: string } }) {
+export function serializeOperation(
+  op: InvestmentOperation & { holding?: { ticker: string | null; name: string; assetClass: AssetClass; allocationClass?: AllocationClass | null; currency?: string; accountId: string } }
+) {
   return {
     id: op.id,
     holdingId: op.holdingId,
     ticker: op.holding?.ticker ?? null,
     name: op.holding?.name ?? null,
     assetClass: op.holding?.assetClass ?? null,
+    allocationClass: op.holding ? holdingAllocationClass(op.holding) : null,
     type: op.type,
     quantity: op.quantity,
     pricePerUnit: op.pricePerUnit,
@@ -421,7 +432,7 @@ export async function portfolioSummary(userId: string, db: DbClient, opts: { ent
   const brokers = await db.account.findMany({ where: { userId, type: "brokerage", archivedAt: null, ...(opts.entityId && { entityId: opts.entityId }) } });
   const balances = await accountBalances(userId, db, brokers.map((b) => b.id));
 
-  const byClass: Record<string, { marketValue: number; invested: number; count: number }> = {};
+  const byClass = new Map<AllocationClass, { marketValue: number; invested: number; count: number }>();
   let marketTotal = 0;
   let investedTotal = 0;
   for (const h of holdings) {
@@ -430,7 +441,9 @@ export async function portfolioSummary(userId: string, db: DbClient, opts: { ent
     const invested = h.totalInvested * rate;
     marketTotal += value;
     investedTotal += invested;
-    const c = (byClass[h.assetClass] ??= { marketValue: 0, invested: 0, count: 0 });
+    const cls = holdingAllocationClass(h);
+    const c = byClass.get(cls) ?? { marketValue: 0, invested: 0, count: 0 };
+    byClass.set(cls, c);
     c.marketValue += value;
     c.invested += invested;
     c.count++;
@@ -454,14 +467,14 @@ export async function portfolioSummary(userId: string, db: DbClient, opts: { ent
     income12m: round(income.reduce((s, op) => s + op.totalAmount * fx.rateFor(op.holding.currency), 0), 2),
     holdingsCount: holdings.length,
     accountsCount: brokers.length,
-    allocation: Object.entries(byClass)
-      .map(([assetClass, v]) => ({
-        assetClass,
+    allocation: [...byClass]
+      .map(([allocationClass, v]) => ({
+        allocationClass,
         marketValue: round(v.marketValue, 2),
         invested: round(v.invested, 2),
         count: v.count,
         share: net > 0 ? round(v.marketValue / net, 4) : 0,
-        target: targets.find((t) => t.assetClass === assetClass)?.targetPercent ?? null,
+        target: targets.find((t) => t.allocationClass === allocationClass)?.targetPercent ?? null,
       }))
       .sort((a, b) => b.marketValue - a.marketValue),
     brokers: cash,
@@ -469,16 +482,22 @@ export async function portfolioSummary(userId: string, db: DbClient, opts: { ent
 }
 
 export async function getTargets(userId: string, db: DbClient) {
-  return db.portfolioTarget.findMany({ where: { userId }, orderBy: { assetClass: "asc" } });
+  const rows = await db.portfolioTarget.findMany({ where: { userId } });
+  return rows.sort((a, b) => ALLOCATION_CLASSES.indexOf(a.allocationClass) - ALLOCATION_CLASSES.indexOf(b.allocationClass));
 }
 
-export async function setTargets(userId: string, targets: { assetClass: AssetClass; targetPercent: number }[], db: DbClient) {
+/** Replaces the targets. Asset-class targets are mapped to allocation classes and summed. */
+export async function setTargets(userId: string, input: TargetInput[], db: DbClient) {
+  const etfCurrency = input.some((t) => "assetClass" in t && t.assetClass === "etf")
+    ? dominantEtfCurrency(await db.investmentHolding.findMany({ where: { account: { userId }, assetClass: "etf" }, select: { assetClass: true, currency: true, totalInvested: true } }))
+    : null;
+  const targets = toAllocationTargets(input, etfCurrency);
   const total = targets.reduce((s, t) => s + t.targetPercent, 0);
   if (Math.abs(total - 1) > 0.0001 && Math.abs(total - 100) > 0.01) throw new LedgerError("Targets must add up to 100%", 422);
   const scale = total > 1.5 ? 100 : 1;
   return inTransaction(db, async (tx) => {
     await tx.portfolioTarget.deleteMany({ where: { userId } });
-    await tx.portfolioTarget.createMany({ data: targets.map((t) => ({ userId, assetClass: t.assetClass, targetPercent: t.targetPercent / scale })) });
+    await tx.portfolioTarget.createMany({ data: targets.map((t) => ({ userId, allocationClass: t.allocationClass, targetPercent: t.targetPercent / scale })) });
     return getTargets(userId, tx);
   });
 }
@@ -495,24 +514,32 @@ export async function rebalanceSuggestion(userId: string, amount: number, mode: 
   if (!targets.length) throw new LedgerError("Set allocation targets first", 422);
   const total = summary.marketValue;
   const after = total + amount;
-  const current = new Map(summary.allocation.map((a) => [a.assetClass, a.marketValue]));
-  const needs = targets.map((t) => ({ assetClass: t.assetClass, target: t.targetPercent, value: current.get(t.assetClass) ?? 0 }))
+  const current = new Map(summary.allocation.map((a) => [a.allocationClass, a.marketValue]));
+  const needs = targets.map((t) => ({ allocationClass: t.allocationClass, target: t.targetPercent, value: current.get(t.allocationClass) ?? 0 }))
     .map((t) => ({ ...t, need: Math.max(0, t.target * after - t.value) }));
   const needSum = needs.reduce((s, n) => s + n.need, 0);
   const classes = needs.map((n) => {
     const put = needSum > amount ? (n.need / needSum) * amount : n.need + (amount - needSum) * n.target;
-    return { assetClass: n.assetClass, currentShare: total > 0 ? round(n.value / total, 4) : 0, target: n.target, amount: round(put, 2), afterShare: round((n.value + put) / after, 4) };
+    return { allocationClass: n.allocationClass, currentShare: total > 0 ? round(n.value / total, 4) : 0, target: n.target, amount: round(put, 2), afterShare: round((n.value + put) / after, 4) };
   });
   if (mode === "class") return { amount, classes };
   const holdings = await listHoldings(userId, db);
   const fx = await loadFx(userId, db);
   const assets = classes.flatMap((c) => {
-    const inClass = holdings.filter((h) => h.assetClass === c.assetClass);
+    const inClass = holdings.filter((h) => holdingAllocationClass(h) === c.allocationClass);
     const sum = inClass.reduce((s, h) => s + marketValue(h) * fx.rateFor(h.currency), 0);
     return inClass.map((h) => {
       const put = sum > 0 ? (marketValue(h) * fx.rateFor(h.currency) * c.amount) / sum : c.amount / inClass.length;
       const priceBase = h.currentPrice ? h.currentPrice * fx.rateFor(h.currency) : null;
-      return { holdingId: h.id, ticker: h.ticker, name: h.name, assetClass: h.assetClass, amount: round(put, 2), approxQuantity: priceBase ? round(put / priceBase, 6) : null };
+      return {
+        holdingId: h.id,
+        ticker: h.ticker,
+        name: h.name,
+        assetClass: h.assetClass,
+        allocationClass: c.allocationClass,
+        amount: round(put, 2),
+        approxQuantity: priceBase ? round(put / priceBase, 6) : null,
+      };
     });
   });
   return { amount, classes, assets: assets.filter((a) => a.amount > 0) };

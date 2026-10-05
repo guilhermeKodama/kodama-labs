@@ -1,6 +1,7 @@
 import type { DbClient } from "@capital/server/lib/prisma";
 import type { AssetClass } from "@/generated/prisma";
 import type { InvestmentPosition, AdjustPositionParams } from "../lib/types";
+import { holdingAllocationClass } from "../../investments/lib/allocation-class";
 import { adjustPosition as adjustHoldingPosition, createHolding, listHoldings } from "../../investments/services/portfolio";
 
 /** Active positions with current value and unrealized gain. */
@@ -14,6 +15,7 @@ export async function listInvestmentPositions(userId: string, db: DbClient): Pro
         ticker: h.ticker,
         name: h.name,
         assetClass: h.assetClass,
+        allocationClass: holdingAllocationClass(h),
         currentQuantity: h.currentQuantity,
         averageCost: h.averageCost,
         totalInvested: h.totalInvested,
@@ -48,5 +50,12 @@ export async function addInvestmentAsset(
   const broker = await db.account.findFirst({ where: { id: params.accountId, userId, type: "brokerage" } });
   if (!broker) throw new Error("Investment account not found or access denied");
   const holding = await createHolding(userId, { ...params, currency: params.currency ?? broker.currency }, db);
-  return { id: holding.id, ticker: holding.ticker, name: holding.name, assetClass: holding.assetClass, currency: holding.currency };
+  return {
+    id: holding.id,
+    ticker: holding.ticker,
+    name: holding.name,
+    assetClass: holding.assetClass,
+    allocationClass: holdingAllocationClass(holding),
+    currency: holding.currency,
+  };
 }

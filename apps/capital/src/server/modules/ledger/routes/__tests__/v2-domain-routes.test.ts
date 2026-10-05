@@ -30,13 +30,14 @@ const call = (method: string, path: string, body?: unknown, headers: Record<stri
 describe("v2 domain routes", () => {
   it("signs up a user with the PF entity, its account, system categories and the built-in view", async () => {
     await prisma.user.deleteMany({ where: { email: SIGNUP_EMAIL } });
-    const res = await call("POST", "/v2/auth/signup", { email: SIGNUP_EMAIL, password: "secret-123", name: "New", baseCurrency: "BRL" }, {});
+    const res = await call("POST", "/v2/auth/signup", { email: SIGNUP_EMAIL, password: "secret-123", name: "New" }, {});
     expect(res.status).toBe(200);
     const setCookie = res.headers.get("set-cookie")!;
     expect(setCookie).toMatch(/capital_session=/);
     const me = await (await call("GET", "/v2/me", undefined, { cookie: setCookie.split(";")[0] })).json();
     expect(me.entities).toEqual([expect.objectContaining({ kind: "personal" })]);
     const user = await prisma.user.findUniqueOrThrow({ where: { email: SIGNUP_EMAIL } });
+    expect(user).toMatchObject({ baseCurrency: "BRL", locale: "pt-BR", theme: "light", dateFormat: "dd/MM/yyyy", numberFormat: "pt-BR" });
     expect(await prisma.account.count({ where: { userId: user.id, isDefault: true } })).toBe(1);
     expect(await prisma.category.count({ where: { userId: user.id, systemKey: "other_system" } })).toBe(1);
     expect(await prisma.savedView.count({ where: { userId: user.id, builtinKey: "all" } })).toBe(1);
@@ -79,6 +80,13 @@ describe("v2 domain routes", () => {
     expect(op.status).toBe(200);
     const summary = await (await call("GET", "/v2/portfolio/summary")).json();
     expect(summary.marketValue).toBe(1000);
+    expect(summary.allocation).toEqual([expect.objectContaining({ allocationClass: "br_stocks", marketValue: 1000 })]);
+    const targets = await call("PUT", "/v2/portfolio/targets", { targets: [{ allocationClass: "br_stocks", targetPercent: 60 }, { assetClass: "savings", targetPercent: 40 }] });
+    expect((await targets.json()).targets.map((t: { allocationClass: string; targetPercent: number }) => [t.allocationClass, t.targetPercent])).toEqual([
+      ["fixed_income", 0.4],
+      ["br_stocks", 0.6],
+    ]);
+    expect((await call("PUT", "/v2/portfolio/targets", { targets: [{ allocationClass: "stocks", targetPercent: 100 }] })).status).toBe(422);
     expect((await call("POST", "/v2/holdings", { accountId: f.pfChecking, assetClass: "etf", name: "X" })).status).toBe(422);
 
     const imports = await (await call("GET", "/v2/imports")).json();

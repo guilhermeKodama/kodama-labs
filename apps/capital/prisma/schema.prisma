@@ -77,6 +77,26 @@ enum AssetClass {
   international_etf
 }
 
+// The six classes the portfolio screen and the allocation targets use. Each
+// holding maps its AssetClass onto one of these (investments/lib/allocation-class.ts)
+// unless InvestmentHolding.allocationClass overrides it. `cash` is broker cash.
+enum AllocationClass {
+  fixed_income
+  br_stocks
+  fii
+  international
+  crypto
+  cash
+}
+
+// Kind of an income operation (dividend / yield_payment).
+enum IncomeType {
+  dividend
+  jcp
+  fii_income
+  interest
+}
+
 enum FixedIncomeSubType {
   cdb
   rdb
@@ -144,35 +164,44 @@ enum StatementFileType {
 // ============================================
 
 model User {
-  id           String   @id @default(uuid())
-  email        String   @unique
-  passwordHash String
-  name         String
-  baseCurrency String   @default("USD")
-  theme        String   @default("system") // light, dark, system
-  dateFormat   String   @default("yyyy-MM-dd")
-  numberFormat String   @default("en-US") // en-US, pt-BR, de-DE
-  timezone     String   @default("America/Sao_Paulo")
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id               String   @id @default(uuid())
+  email            String   @unique
+  passwordHash     String
+  name             String
+  baseCurrency     String   @default("BRL")
+  theme            String   @default("light") // light, dark, system
+  dateFormat       String   @default("dd/MM/yyyy")
+  numberFormat     String   @default("pt-BR") // en-US, pt-BR, de-DE
+  timezone         String   @default("America/Sao_Paulo")
+  locale           String   @default("pt-BR") // pt-BR, en
+  // Daily cron refreshes the currencies' rates (PTAX / ECB) unless false.
+  fxAutoUpdate     Boolean  @default(true)
+  // Default saved views seeded so far (ensureDefaultViews claims the bump).
+  viewsSeedVersion Int      @default(0)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
 
-  categories          Category[]
-  currencies          Currency[]
-  sessions            Session[]
-  fireGoal            FireGoal?
-  agentConversations  AgentConversation[]
-  pushSubscriptions   PushSubscription[]
-  entities            Entity[]
-  accounts            Account[]
-  ledgerEntries       LedgerEntry[]
-  transferGroups      TransferGroup[]
-  installmentPlans    InstallmentPlan[]
-  recurringRules      RecurringRule[]
-  categorizationRules CategorizationRule[]
-  savedViews          SavedView[]
-  mutationBatches     MutationBatch[]
-  portfolioTargets    PortfolioTarget[]
-  budgets             Budget[]
+  categories             Category[]
+  currencies             Currency[]
+  sessions               Session[]
+  fireGoal               FireGoal?
+  agentConversations     AgentConversation[]
+  pushSubscriptions      PushSubscription[]
+  entities               Entity[]
+  accounts               Account[]
+  ledgerEntries          LedgerEntry[]
+  transferGroups         TransferGroup[]
+  installmentPlans       InstallmentPlan[]
+  recurringRules         RecurringRule[]
+  categorizationRules    CategorizationRule[]
+  savedViews             SavedView[]
+  mutationBatches        MutationBatch[]
+  portfolioTargets       PortfolioTarget[]
+  portfolioSnapshots     PortfolioSnapshot[]
+  budgets                Budget[]
+  notificationSettings   NotificationSettings?
+  notificationDispatches NotificationDispatch[]
+  apiTokens              ApiToken[]
 
   @@map("users")
 }
@@ -218,6 +247,84 @@ model ReminderDispatch {
 
   @@unique([recurringRuleId, occurrenceDate, daysBefore])
   @@map("reminder_dispatches")
+}
+
+// Per-user push preferences. A missing row means the defaults below.
+model NotificationSettings {
+  userId            String   @id
+  dueEnabled        Boolean  @default(true)
+  dueDaysBefore     Int      @default(1)
+  dueHour           Int      @default(9) // local hour (User.timezone)
+  overdueEnabled    Boolean  @default(true)
+  billClosedEnabled Boolean  @default(true)
+  budgetEnabled     Boolean  @default(true)
+  budgetThreshold   Float    @default(0.9) // share of the budget spent
+  weeklyEnabled     Boolean  @default(false)
+  weeklyDow         Int      @default(1) // 0 = Sunday
+  weeklyHour        Int      @default(8)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("notification_settings")
+}
+
+// Idempotency ledger for the bill_closed / budget_threshold / weekly_summary
+// pushes. dedupeKey: statementId, budgetId:YYYY-MM or the ISO week.
+model NotificationDispatch {
+  id        String   @id @default(uuid())
+  userId    String
+  kind      String // bill_closed | budget_threshold | weekly_summary
+  dedupeKey String
+  sentAt    DateTime @default(now())
+  sentCount Int      @default(0)
+  failCount Int      @default(0)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, kind, dedupeKey])
+  @@map("notification_dispatches")
+}
+
+// ============================================
+// API TOKENS (MCP / REST clients)
+// ============================================
+
+// Personal access token (cap_live_<base62>). Only the sha256 hash is stored;
+// prefix and last4 identify it in the UI.
+model ApiToken {
+  id         String    @id @default(uuid())
+  userId     String
+  name       String
+  prefix     String
+  last4      String
+  tokenHash  String    @unique
+  scopes     String[]  @default([]) // empty = full access; ["read"] = read-only
+  lastUsedAt DateTime?
+  revokedAt  DateTime?
+  createdAt  DateTime  @default(now())
+
+  user    User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  clients ApiClient[]
+
+  @@index([userId])
+  @@map("api_tokens")
+}
+
+// An MCP client seen on a token (clientInfo from initialize).
+model ApiClient {
+  id            String   @id @default(uuid())
+  tokenId       String
+  clientName    String
+  clientVersion String?
+  firstSeenAt   DateTime @default(now())
+  lastUsedAt    DateTime @default(now())
+
+  token ApiToken @relation(fields: [tokenId], references: [id], onDelete: Cascade)
+
+  @@unique([tokenId, clientName])
+  @@map("api_clients")
 }
 
 // ============================================
@@ -337,6 +444,7 @@ model Entity {
   recurringRules      RecurringRule[]
   categorizationRules CategorizationRule[]
   imports             Import[]
+  portfolioSnapshots  PortfolioSnapshot[]
 
   @@index([userId])
   @@map("entities")
@@ -384,38 +492,40 @@ model Account {
 }
 
 model LedgerEntry {
-  id                String     @id @default(uuid())
-  userId            String
-  entityId          String
-  accountId         String
-  kind              LedgerKind
-  amount            Decimal    @db.Decimal(18, 4)
-  currency          String
+  id                  String     @id @default(uuid())
+  userId              String
+  entityId            String
+  accountId           String
+  kind                LedgerKind
+  amount              Decimal    @db.Decimal(18, 4)
+  currency            String
   // Base-currency units per 1 unit of `currency`.
-  exchangeRate      Decimal    @default(1) @db.Decimal(18, 8)
-  amountBase        Decimal    @db.Decimal(18, 4)
+  exchangeRate        Decimal    @default(1) @db.Decimal(18, 8)
+  amountBase          Decimal    @db.Decimal(18, 4)
   // When the movement happened (shown in the UI).
-  date              DateTime
+  date                DateTime
   // When it counts for P&L and budgets. Card purchases count on their
   // statement's closing date; everything else equals `date`.
-  effectiveDate     DateTime
-  description       String
-  notes             String?
-  merchantName      String?
-  categoryId        String?
-  isTaxDeductible   Boolean    @default(false)
-  isAutoCategorized Boolean    @default(false)
-  transferGroupId   String?
-  cardStatementId   String?
-  installmentPlanId String?
-  installmentNumber Int?
-  recurringRuleId   String?
-  importId          String?
-  externalId        String?
-  metadata          Json?
-  deletedAt         DateTime?
-  createdAt         DateTime   @default(now())
-  updatedAt         DateTime   @updatedAt
+  effectiveDate       DateTime
+  description         String
+  notes               String?
+  merchantName        String?
+  categoryId          String?
+  isTaxDeductible     Boolean    @default(false)
+  isAutoCategorized   Boolean    @default(false)
+  // The categorization rule that assigned categoryId, when one did.
+  categorizedByRuleId String?
+  transferGroupId     String?
+  cardStatementId     String?
+  installmentPlanId   String?
+  installmentNumber   Int?
+  recurringRuleId     String?
+  importId            String?
+  externalId          String?
+  metadata            Json?
+  deletedAt           DateTime?
+  createdAt           DateTime   @default(now())
+  updatedAt           DateTime   @updatedAt
 
   user                User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
   entity              Entity               @relation(fields: [entityId], references: [id], onDelete: Cascade)
@@ -426,6 +536,7 @@ model LedgerEntry {
   installmentPlan     InstallmentPlan?     @relation(fields: [installmentPlanId], references: [id], onDelete: SetNull)
   recurringRule       RecurringRule?       @relation(fields: [recurringRuleId], references: [id], onDelete: SetNull)
   import              Import?              @relation(fields: [importId], references: [id], onDelete: SetNull)
+  categorizedByRule   CategorizationRule?  @relation(fields: [categorizedByRuleId], references: [id], onDelete: SetNull)
   investmentOperation InvestmentOperation?
   attachments         Attachment[]
 
@@ -440,6 +551,7 @@ model LedgerEntry {
   @@index([installmentPlanId])
   @@index([recurringRuleId])
   @@index([importId])
+  @@index([categorizedByRuleId])
   @@index([deletedAt])
   @@map("ledger_entries")
 }
@@ -457,12 +569,14 @@ model TransferGroup {
   createdAt       DateTime          @default(now())
   updatedAt       DateTime          @updatedAt
 
-  user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
-  recurringRule RecurringRule? @relation(fields: [recurringRuleId], references: [id], onDelete: SetNull)
-  import        Import?        @relation(fields: [importId], references: [id], onDelete: SetNull)
-  legs          LedgerEntry[]
-  cardStatement CardStatement?
-  attachments   Attachment[]
+  user            User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  recurringRule   RecurringRule?       @relation(fields: [recurringRuleId], references: [id], onDelete: SetNull)
+  import          Import?              @relation(fields: [importId], references: [id], onDelete: SetNull)
+  legs            LedgerEntry[]
+  cardStatement   CardStatement?
+  attachments     Attachment[]
+  // The investment operation this investment_deposit paid for.
+  fundedOperation InvestmentOperation?
 
   @@index([userId, date])
   @@index([recurringRuleId])
@@ -524,9 +638,11 @@ model RecurringRule {
   // Positive; the sign comes from `kind` (expense/investment are outflows).
   amount            Decimal             @db.Decimal(18, 4)
   currency          String
-  exchangeRate      Decimal             @default(1) @db.Decimal(18, 8)
+  // Explicit rate for every occurrence; null = the rate in force at booking.
+  exchangeRate      Decimal?            @db.Decimal(18, 8)
   description       String
   categoryId        String?
+  isTaxDeductible   Boolean             @default(false)
   transferDirection TransferDirection?
   toAccountId       String?
   frequency         RecurrenceFrequency
@@ -574,6 +690,9 @@ model Budget {
   effectiveFrom DateTime // Effective-dated budgets: when this budget takes effect
   rollover      Boolean      @default(false)
   isActive      Boolean      @default(true)
+  // A version that ends the chain from effectiveFrom on ("delete from month").
+  isTombstone   Boolean      @default(false)
+  notes         String?
   createdAt     DateTime     @default(now())
   updatedAt     DateTime     @updatedAt
 
@@ -581,7 +700,7 @@ model Budget {
   entity   Entity?  @relation(fields: [entityId], references: [id], onDelete: Cascade)
   category Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
 
-  @@unique([entityId, categoryId, effectiveFrom])
+  @@unique([userId, entityId, categoryId, period, effectiveFrom])
   @@index([userId])
   @@index([entityId])
   @@index([year, month])
@@ -635,9 +754,10 @@ model CategorizationRule {
   createdAt  DateTime  @default(now())
   updatedAt  DateTime  @updatedAt
 
-  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  entity   Entity?  @relation(fields: [entityId], references: [id], onDelete: Cascade)
-  category Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  user               User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  entity             Entity?       @relation(fields: [entityId], references: [id], onDelete: Cascade)
+  category           Category      @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  categorizedEntries LedgerEntry[]
 
   @@unique([userId, matchType, pattern])
   @@index([userId])
@@ -653,6 +773,8 @@ model InvestmentHolding {
   // Brokerage Account.
   accountId       String
   assetClass      AssetClass
+  // Overrides the class derived from assetClass/currency on the portfolio screen.
+  allocationClass AllocationClass?
   subType         FixedIncomeSubType? // Only for fixed_income assets
   ticker          String? // For stocks, FIIs, crypto, ETFs (e.g., PETR4, HGLG11, BTC)
   name            String // Descriptive name (e.g., "CDB Nubank 120% CDI")
@@ -677,27 +799,34 @@ model InvestmentHolding {
 }
 
 model InvestmentOperation {
-  id           String                    @id @default(uuid())
-  holdingId    String
-  type         InvestmentTransactionType
-  quantity     Float? // Number of units (for stocks, crypto, FIIs)
-  pricePerUnit Float? // Price paid per unit (for stocks, crypto, FIIs)
-  totalAmount  Float // Total cash value of the transaction
-  fees         Float                     @default(0) // Brokerage fees, taxes
-  date         DateTime
-  notes        String?
+  id             String                    @id @default(uuid())
+  holdingId      String
+  type           InvestmentTransactionType
+  quantity       Float? // Number of units (for stocks, crypto, FIIs)
+  pricePerUnit   Float? // Price paid per unit (for stocks, crypto, FIIs)
+  totalAmount    Float // Total cash value of the transaction
+  fees           Float                     @default(0) // Brokerage fees, taxes
+  // Income operations: what kind of income, and the tax withheld at source
+  // (the cash leg is totalAmount - taxWithheld).
+  incomeType     IncomeType?
+  taxWithheld    Float                     @default(0)
+  date           DateTime
+  notes          String?
   // Dedup key for statement imports. Native broker id when available;
   // otherwise a deterministic hash (see agent knowledge base
   // 20-dedup-rules.md) so re-uploading the same statement reconciles
   // cleanly instead of duplicating positions.
-  externalId   String?
+  externalId     String?
   // Cash leg of the operation on the brokerage account (buy/sell/income).
-  cashEntryId  String?                   @unique
-  createdAt    DateTime                  @default(now())
-  updatedAt    DateTime                  @updatedAt
+  cashEntryId    String?                   @unique
+  // investment_deposit transfer that brought the cash for this operation.
+  fundingGroupId String?                   @unique
+  createdAt      DateTime                  @default(now())
+  updatedAt      DateTime                  @updatedAt
 
-  holding   InvestmentHolding @relation(fields: [holdingId], references: [id], onDelete: Cascade)
-  cashEntry LedgerEntry?      @relation(fields: [cashEntryId], references: [id], onDelete: SetNull)
+  holding      InvestmentHolding @relation(fields: [holdingId], references: [id], onDelete: Cascade)
+  cashEntry    LedgerEntry?      @relation(fields: [cashEntryId], references: [id], onDelete: SetNull)
+  fundingGroup TransferGroup?    @relation(fields: [fundingGroupId], references: [id], onDelete: SetNull)
 
   @@unique([holdingId, externalId])
   @@index([holdingId])
@@ -708,15 +837,57 @@ model InvestmentOperation {
 }
 
 model PortfolioTarget {
-  id            String     @id @default(uuid())
-  userId        String
-  assetClass    AssetClass
-  targetPercent Float
+  id              String          @id @default(uuid())
+  userId          String
+  allocationClass AllocationClass
+  targetPercent   Float // fraction of the portfolio, 0-1
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@unique([userId, assetClass])
+  @@unique([userId, allocationClass])
   @@map("portfolio_targets")
+}
+
+// Month-end portfolio position per entity, in base currency. The live month
+// is upserted by a daily cron and closed when the month turns; months before
+// the feature existed are backfilled from cost basis (estimated = true).
+model PortfolioSnapshot {
+  id              String   @id @default(uuid())
+  userId          String
+  entityId        String
+  period          Int // year*100 + month (e.g. 202609)
+  asOf            DateTime
+  marketValueBase Decimal  @db.Decimal(18, 4)
+  cashBase        Decimal  @db.Decimal(18, 4)
+  costBasisBase   Decimal  @db.Decimal(18, 4)
+  // Cumulative money moved into brokers up to asOf.
+  contributedBase Decimal  @db.Decimal(18, 4)
+  // Money moved into brokers minus money taken out, within the month.
+  netFlowBase     Decimal  @db.Decimal(18, 4)
+  byClass         Json // { [AllocationClass]: marketValueBase }
+  estimated       Boolean  @default(false)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  entity Entity @relation(fields: [entityId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, entityId, period])
+  @@index([entityId])
+  @@map("portfolio_snapshots")
+}
+
+// Benchmark series cached by a daily cron: CDI (BCB SGS 12, daily rate in %)
+// and IPCA (BCB SGS 433, monthly variation in %). `date` is noon UTC.
+model MarketIndexValue {
+  id        String   @id @default(uuid())
+  series    String // cdi | ipca
+  date      DateTime
+  value     Decimal  @db.Decimal(18, 8)
+  createdAt DateTime @default(now())
+
+  @@unique([series, date])
+  @@map("market_index_values")
 }
 
 // ============================================
@@ -724,14 +895,17 @@ model PortfolioTarget {
 // ============================================
 
 model Currency {
-  id         String   @id @default(uuid())
-  userId     String
-  code       String // ISO 4217 code (e.g., USD, EUR, BRL)
-  name       String
-  symbol     String
-  manualRate Float    @default(1) // Rate relative to user's base currency
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  id            String    @id @default(uuid())
+  userId        String
+  code          String // ISO 4217 code (e.g., USD, EUR, BRL)
+  name          String
+  symbol        String
+  manualRate    Float     @default(1) // Rate relative to user's base currency
+  // Where manualRate came from: ptax | ecb (daily cron) | manual (the user).
+  source        String    @default("manual")
+  rateUpdatedAt DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -791,6 +965,8 @@ model SavedView {
   position   Int      @default(0)
   isBuiltin  Boolean  @default(false)
   builtinKey String?
+  // Key of the default view this row was seeded from (deleted ones never return).
+  seedKey    String?
   isFavorite Boolean  @default(true)
   // viewConfigSchema (modules/ledger/contracts.ts)
   config     Json
@@ -800,6 +976,7 @@ model SavedView {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, builtinKey])
+  @@unique([userId, seedKey])
   @@index([userId, dataset])
   @@map("saved_views")
 }
@@ -810,6 +987,7 @@ model MutationBatch {
   id        String    @id @default(uuid())
   userId    String
   op        String // create | update | delete | duplicate | restore | import | revert
+  source    String    @default("user") // user | import | assistant | mcp | system
   summary   String?
   undoneAt  DateTime?
   createdAt DateTime  @default(now())

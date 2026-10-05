@@ -19,7 +19,8 @@ export interface RecurringRuleInput {
   transferDirection?: TransferDirection | null;
   amount: number;
   currency?: string;
-  exchangeRate?: number;
+  /** Explicit rate for every occurrence; null/omitted = the rate in force at booking. */
+  exchangeRate?: number | null;
   description: string;
   categoryId?: string | null;
   frequency: RecurrenceFrequency;
@@ -40,7 +41,7 @@ export function serializeRule(r: RecurringRule) {
     transferDirection: r.transferDirection,
     amount: toNumber(r.amount),
     currency: r.currency,
-    exchangeRate: toNumber(r.exchangeRate),
+    exchangeRate: r.exchangeRate === null ? null : toNumber(r.exchangeRate),
     description: r.description,
     categoryId: r.categoryId,
     frequency: r.frequency,
@@ -78,7 +79,7 @@ export async function createRecurringRule(userId: string, input: RecurringRuleIn
       kind: input.kind,
       amount: input.amount,
       currency: input.currency ?? account.currency,
-      exchangeRate: input.exchangeRate ?? 1,
+      exchangeRate: input.exchangeRate ?? null,
       description: input.description,
       categoryId: input.categoryId ?? null,
       transferDirection: input.toAccountId ? input.transferDirection ?? null : null,
@@ -139,6 +140,8 @@ export async function listRecurringRules(userId: string, db: DbClient, opts: { i
  */
 export async function materializeRule(rule: RecurringRule, date: Date, db: DbClient, override: { amount?: number } = {}) {
   const amount = override.amount ?? toNumber(rule.amount);
+  // No explicit rate: createEntry converts at the rate in force today.
+  const exchangeRate = rule.exchangeRate === null ? undefined : toNumber(rule.exchangeRate);
   const day = formatDateOnly(date);
   const result =
     rule.kind === "transfer" || (rule.toAccountId && rule.transferDirection)
@@ -150,7 +153,7 @@ export async function materializeRule(rule: RecurringRule, date: Date, db: DbCli
             toAccountId: rule.toAccountId!,
             amount,
             currency: rule.currency,
-            exchangeRate: toNumber(rule.exchangeRate),
+            exchangeRate,
             direction: rule.transferDirection ?? undefined,
             description: rule.description,
             date: day,
@@ -165,7 +168,7 @@ export async function materializeRule(rule: RecurringRule, date: Date, db: DbCli
             accountId: rule.accountId,
             amount,
             currency: rule.currency,
-            exchangeRate: toNumber(rule.exchangeRate),
+            exchangeRate,
             description: rule.description,
             categoryId: rule.categoryId,
             date: day,
