@@ -545,8 +545,13 @@ export async function rebalanceSuggestion(userId: string, amount: number, mode: 
   return { amount, classes, assets: assets.filter((a) => a.amount > 0) };
 }
 
-/** Monthly net contributions (deposits minus withdrawals into brokers) and buys by asset class. */
+/**
+ * Monthly net contributions (deposits minus withdrawals into brokers) and
+ * buys in the base currency, by asset class (current screens) and by
+ * allocation class (the six classes of the new screens).
+ */
 export async function contributions(userId: string, year: number, db: DbClient, opts: { entityId?: string } = {}) {
+  const fx = await loadFx(userId, db);
   const from = new Date(Date.UTC(year, 0, 1));
   const to = new Date(Date.UTC(year, 11, 31, 23, 59, 59, 999));
   const flows = await db.$queryRaw<{ m: number; deposits: Prisma.Decimal; withdrawals: Prisma.Decimal; n: number }[]>`
@@ -560,26 +565,42 @@ export async function contributions(userId: string, year: number, db: DbClient, 
     WHERE le."userId" = ${userId} AND le."deletedAt" IS NULL AND le.date BETWEEN ${from} AND ${to}
       ${opts.entityId ? Prisma.sql`AND le."entityId" = ${opts.entityId}` : Prisma.empty}
     GROUP BY 1`;
-  const buys = await db.$queryRaw<{ m: number; asset_class: string; total: number }[]>`
-    SELECT extract(month FROM o.date)::int AS m, h."assetClass"::text AS asset_class, sum(o."totalAmount") AS total
+  // totalAmount is in the holding's currency, so buys are grouped by it too.
+  const buys = await db.$queryRaw<{ m: number; asset_class: AssetClass; allocation_class: AllocationClass | null; currency: string; total: number }[]>`
+    SELECT extract(month FROM o.date)::int AS m, h."assetClass"::text AS asset_class, h."allocationClass"::text AS allocation_class,
+           h.currency, sum(o."totalAmount") AS total
     FROM investment_operations o
     JOIN investment_holdings h ON h.id = o."holdingId"
     JOIN accounts a ON a.id = h."accountId"
     WHERE a."userId" = ${userId} AND o.type IN ('buy', 'deposit') AND o.date BETWEEN ${from} AND ${to}
       ${opts.entityId ? Prisma.sql`AND a."entityId" = ${opts.entityId}` : Prisma.empty}
-    GROUP BY 1, 2`;
+    GROUP BY 1, 2, 3, 4`;
   const months = Array.from({ length: 12 }, (_, i) => {
     const f = flows.find((x) => x.m === i + 1);
     const deposits = toNumber(f?.deposits ?? 0);
     const withdrawals = toNumber(f?.withdrawals ?? 0);
+    const byAssetClass: Partial<Record<AssetClass, number>> = {};
+    const byAllocationClass: Partial<Record<AllocationClass, number>> = {};
+    for (const b of buys) {
+      if (b.m !== i + 1) continue;
+      const base = Number(b.total) * fx.rateFor(b.currency);
+      const cls = holdingAllocationClass({ assetClass: b.asset_class, currency: b.currency, allocationClass: b.allocation_class });
+      byAssetClass[b.asset_class] = (byAssetClass[b.asset_class] ?? 0) + base;
+      byAllocationClass[cls] = (byAllocationClass[cls] ?? 0) + base;
+    }
     return {
       month: i + 1,
       deposits: round(deposits, 2),
       withdrawals: round(withdrawals, 2),
       net: round(deposits - withdrawals, 2),
-      byAssetClass: Object.fromEntries(buys.filter((b) => b.m === i + 1).map((b) => [b.asset_class, round(Number(b.total), 2)])),
+      byAssetClass: roundValues(byAssetClass),
+      byAllocationClass: roundValues(byAllocationClass),
     };
   });
   const net = months.reduce((s, m) => s + m.net, 0);
   return { year, months, totalNet: round(net, 2), averageMonthly: round(net / 12, 2) };
+}
+
+function roundValues<K extends string>(sums: Partial<Record<K, number>>): Partial<Record<K, number>> {
+  return Object.fromEntries(Object.entries<number | undefined>(sums).map(([k, v]) => [k, round(v ?? 0, 2)])) as Partial<Record<K, number>>;
 }

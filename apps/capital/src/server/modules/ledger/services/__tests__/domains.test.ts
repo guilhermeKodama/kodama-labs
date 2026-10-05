@@ -193,6 +193,21 @@ describe("investments", () => {
     expect(Object.fromEntries(summary.allocation.map((a) => [a.allocationClass, a.marketValue]))).toEqual({ international: 400, br_stocks: 200, cash: 400 });
   });
 
+  it("reports monthly buys in the base currency by asset class and by allocation class", async () => {
+    await prisma.currency.create({ data: { userId: USER, code: "USD", name: "US Dollar", symbol: "$", manualRate: 0.2 } });
+    const voo = await createHolding(USER, { accountId: f.broker, assetClass: "etf", ticker: "VOO", name: "VOO", currency: "USD" }, prisma);
+    const bova = await createHolding(USER, { accountId: f.broker, assetClass: "etf", ticker: "BOVA11", name: "BOVA11" }, prisma);
+    const petr = await createHolding(USER, { accountId: f.broker, assetClass: "stocks", ticker: "PETR4", name: "Petrobras" }, prisma);
+    await recordOperation(USER, { holdingId: voo.id, type: "buy", quantity: 1, pricePerUnit: 100, totalAmount: 100, date: "2026-08-03" }, prisma);
+    await recordOperation(USER, { holdingId: bova.id, type: "buy", quantity: 10, pricePerUnit: 30, totalAmount: 300, date: "2026-08-04" }, prisma);
+    await recordOperation(USER, { holdingId: petr.id, type: "buy", quantity: 10, pricePerUnit: 40, totalAmount: 400, date: "2026-08-05" }, prisma);
+    const c = await contributions(USER, 2026, prisma);
+    // 1 BRL = 0.2 USD, so the USD 100 buy counts as BRL 500.
+    expect(c.months[7].byAssetClass).toEqual({ etf: 800, stocks: 400 });
+    expect(c.months[7].byAllocationClass).toEqual({ international: 500, br_stocks: 700 });
+    expect(c.months[6].byAllocationClass).toEqual({});
+  });
+
   it("maps asset-class targets onto allocation classes, summing collapsed classes", async () => {
     await createHolding(USER, { accountId: f.broker, assetClass: "etf", ticker: "VOO", name: "VOO", currency: "USD" }, prisma);
     const targets = await setTargets(
