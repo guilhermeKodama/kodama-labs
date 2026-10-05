@@ -13,16 +13,37 @@ const OverlayContext = createContext<string | null>(null);
  * on window dispatches to the registered shortcut with the highest scope
  * (store.ts, resolve.ts). Mount once, above everything that uses
  * useShortcut or useOverlay.
+ *
+ * An Esc pressed while an overlay is open belongs to the overlay stack: it
+ * closes the top overlay and stops on <html>, after Radix's own document
+ * listeners. Page-level keydown listeners (a screen's "Esc leaves the
+ * page") never see it, even though Radix has already unmounted the layer
+ * by the time they would run. Nor do React onKeyDown handlers inside the
+ * overlay (React listens on the document): to act on Esc in a Radix
+ * overlay, use its content's onEscapeKeyDown.
  */
 export function ShortcutProvider({ children }: { children: ReactNode }) {
   const [store] = useState(createShortcutStore);
   useEffect(() => {
     const isMac = isMacPlatform(navigator);
+    const root = document.documentElement;
+    const onCapture = (event: KeyboardEvent) => {
+      store.claimEscape(event);
+    };
+    const onRootCapture = (event: KeyboardEvent) => {
+      if (store.handleOverlayEscape(event, isMac)) event.stopPropagation();
+    };
     const onKeyDown = (event: KeyboardEvent) => {
       store.handleKeyDown(event, isMac);
     };
+    window.addEventListener("keydown", onCapture, true);
+    root.addEventListener("keydown", onRootCapture, true);
     window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
+    return () => {
+      window.removeEventListener("keydown", onCapture, true);
+      root.removeEventListener("keydown", onRootCapture, true);
+      window.removeEventListener("keydown", onKeyDown);
+    };
   }, [store]);
   return <StoreContext.Provider value={store}>{children}</StoreContext.Provider>;
 }

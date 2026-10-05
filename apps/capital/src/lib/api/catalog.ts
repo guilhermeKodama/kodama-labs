@@ -2,6 +2,7 @@
 
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { entityLabel } from "@/lib/pickers/options";
 import { api, apiGet, apiPost } from "./client";
 import { keys } from "./keys";
 import { useSession, type SessionEntity } from "./session";
@@ -81,10 +82,7 @@ export function useCurrencies() {
   });
 }
 
-/** Short label per entity ("PF" for the personal one), used in badges and pickers. */
-export function entityLabel(entity: { kind: string; name: string }): string {
-  return entity.kind === "personal" ? "PF" : entity.name;
-}
+export { entityLabel };
 
 /** Id → label maps for entities, accounts and categories (archived included, for old rows). */
 export function useNames() {

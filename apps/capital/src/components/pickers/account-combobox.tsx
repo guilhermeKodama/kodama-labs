@@ -4,8 +4,9 @@ import { useMemo, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import { Combobox, type ComboboxOption } from "@/components/cap";
 import { MENU_ROW } from "@/components/cap/styles";
-import { entityLabel, useAccounts, type AccountType } from "@/lib/api/catalog";
+import { useAccounts, type AccountType } from "@/lib/api/catalog";
 import { useSession } from "@/lib/api/session";
+import { accountOptions } from "@/lib/pickers/options";
 import { cn } from "@/lib/utils";
 import { NewAccountDialog } from "./new-account-dialog";
 
@@ -50,28 +51,18 @@ export function AccountCombobox({
   const entityKey = entityId ? (typeof entityId === "string" ? entityId : entityId.join(",")) : "";
   const typesKey = types?.join(",") ?? "";
 
-  const options = useMemo<ComboboxOption[]>(() => {
-    const entities = entityKey ? entityKey.split(",") : null;
-    const allowedTypes = typesKey ? typesKey.split(",") : null;
-    const labels = new Map((me?.entities ?? []).map((entity) => [entity.id, entityLabel(entity)]));
-    return (accounts.data ?? [])
-      .filter(
-        (account) =>
-          (!entities || entities.includes(account.entityId)) &&
-          (!allowedTypes || allowedTypes.includes(account.type)) &&
-          (!account.archivedAt || account.id === value),
-      )
-      .map((account) => {
-        const entity = labels.get(account.entityId) ?? "";
-        return {
-          value: account.id,
-          label: account.name,
-          // With one entity the hint would repeat on every row.
-          hint: account.archivedAt ? t("pickers.archived") : entities?.length === 1 ? undefined : entity,
-          keywords: [entity, account.institution ?? "", t(`pickers.accountType.${account.type}`)],
-        };
-      });
-  }, [accounts.data, me?.entities, entityKey, typesKey, value, t]);
+  const options = useMemo<ComboboxOption[]>(
+    () =>
+      accountOptions(accounts.data ?? [], {
+        entityIds: entityKey ? entityKey.split(",") : null,
+        types: typesKey ? (typesKey.split(",") as AccountType[]) : null,
+        value,
+        entities: me?.entities ?? [],
+        archivedLabel: t("pickers.archived"),
+        typeLabel: (accountType) => t(`pickers.accountType.${accountType}`),
+      }),
+    [accounts.data, me?.entities, entityKey, typesKey, value, t],
+  );
 
   const singleEntity = entityKey && !entityKey.includes(",") ? entityKey : null;
   return (

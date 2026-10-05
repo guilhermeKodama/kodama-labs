@@ -4,6 +4,7 @@ import { useMemo } from "react";
 import { useTranslations } from "next-intl";
 import { Combobox, type ComboboxOption } from "@/components/cap";
 import { useCategories, useCreateCategory, type CategoryType } from "@/lib/api/catalog";
+import { categoryOptions } from "@/lib/pickers/options";
 
 /**
  * Category field: searchable, archived categories hidden (the current
@@ -40,20 +41,16 @@ export function CategoryCombobox({
   const types: readonly CategoryType[] | null = type === undefined ? null : typeof type === "string" ? [type] : type;
   const typesKey = types?.join(",") ?? "";
 
-  const options = useMemo<ComboboxOption[]>(() => {
-    const allowed = typesKey ? typesKey.split(",") : null;
-    return (categories.data ?? [])
-      .filter((category) => (!allowed || allowed.includes(category.type)) && (!category.isArchived || category.id === value))
-      .map((category) => ({
-        value: category.id,
-        label: category.name,
-        hint: category.isArchived
-          ? t("pickers.archived")
-          : !allowed || allowed.length > 1
-            ? t(`pickers.categoryType.${category.type}`)
-            : undefined,
-      }));
-  }, [categories.data, typesKey, value, t]);
+  const options = useMemo<ComboboxOption[]>(
+    () =>
+      categoryOptions(categories.data ?? [], {
+        types: typesKey ? (typesKey.split(",") as CategoryType[]) : null,
+        value,
+        archivedLabel: t("pickers.archived"),
+        typeLabel: (categoryType) => t(`pickers.categoryType.${categoryType}`),
+      }),
+    [categories.data, typesKey, value, t],
+  );
 
   const onCreate = allowCreate
     ? (name: string) => create.mutate({ name, type: types?.[0] ?? "expense" }, { onSuccess: (category) => onChange(category.id) })

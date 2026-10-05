@@ -33,6 +33,20 @@ export interface ShortcutStore {
   subscribe(listener: () => void): () => void;
   /** Runs the shortcut for this key press, if any; true when one handled it. */
   handleKeyDown(event: KeyDownLike, isMac: boolean): boolean;
+  /**
+   * Window capture phase, before any other listener: notes an Esc pressed
+   * while an overlay is open. Radix may close that overlay in its own
+   * listener before handleOverlayEscape runs.
+   */
+  claimEscape(event: KeyDownLike): void;
+  /**
+   * Capture phase on <html>, after Radix's document listeners: an Esc that
+   * claimEscape noted belongs to the overlay stack. Runs it (the top
+   * overlay's onEscape, unless Radix already closed its layer) and returns
+   * true, so the caller stops it there and no page-level keydown listener
+   * sees an Esc that closed an overlay.
+   */
+  handleOverlayEscape(event: KeyDownLike, isMac: boolean): boolean;
 }
 
 export function createShortcutStore(): ShortcutStore {
@@ -42,8 +56,9 @@ export function createShortcutStore(): ShortcutStore {
   const listeners = new Set<() => void>();
   const emit = () => listeners.forEach((listener) => listener());
   const top = () => topOverlay([...overlays.values()]);
+  let claimedEscape: KeyDownLike | null = null;
 
-  return {
+  const store: ShortcutStore = {
     register(input) {
       const id = ++seq;
       shortcuts.set(id, { ...input, id });
@@ -94,5 +109,15 @@ export function createShortcutStore(): ShortcutStore {
       }
       return false;
     },
+    claimEscape(event) {
+      claimedEscape = event.key === "Escape" && !event.isComposing && overlays.size > 0 ? event : null;
+    },
+    handleOverlayEscape(event, isMac) {
+      if (event !== claimedEscape) return false;
+      claimedEscape = null;
+      store.handleKeyDown(event, isMac);
+      return true;
+    },
   };
+  return store;
 }

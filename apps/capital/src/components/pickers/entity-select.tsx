@@ -2,8 +2,8 @@
 
 import { useMemo } from "react";
 import { Select, type SelectOption } from "@/components/cap";
-import { entityLabel } from "@/lib/api/catalog";
-import { useSession } from "@/lib/api/session";
+import { useSession, type SessionEntity } from "@/lib/api/session";
+import { entityOptions } from "@/lib/pickers/options";
 
 /**
  * Entity field ("PF", "Kodama LTDA", "Kodama LLC"), from the session's
@@ -33,16 +33,14 @@ export function EntitySelect({
 }) {
   const me = useSession().data;
   const kindsKey = kinds?.join(",") ?? "";
-  const options = useMemo<SelectOption[]>(() => {
-    const allowed = kindsKey ? kindsKey.split(",") : null;
-    return (me?.entities ?? [])
-      .filter((entity) => !allowed || allowed.includes(entity.kind))
-      .map((entity) => ({
-        value: entity.id,
-        label: entityLabel(entity),
-        hint: entity.defaultCurrency !== me?.baseCurrency ? entity.defaultCurrency : undefined,
-      }));
-  }, [me, kindsKey]);
+  const options = useMemo<SelectOption[]>(
+    () =>
+      entityOptions(me?.entities ?? [], {
+        kinds: kindsKey ? (kindsKey.split(",") as SessionEntity["kind"][]) : null,
+        baseCurrency: me?.baseCurrency,
+      }),
+    [me, kindsKey],
+  );
 
   return (
     <Select

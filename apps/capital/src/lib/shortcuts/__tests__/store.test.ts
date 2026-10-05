@@ -119,6 +119,59 @@ describe("createShortcutStore", () => {
     expect(closeDialog).not.toHaveBeenCalled();
   });
 
+  it("keeps an Esc that closed a Radix layer for the overlay stack", () => {
+    const store = createShortcutStore();
+    const leavePage = vi.fn();
+    store.register(shortcut("escape", leavePage));
+    const close = store.openOverlay({ id: "select", parentId: null });
+    const event = press("Escape");
+    store.claimEscape(event); // window, capture phase
+    // Radix, capture phase on document: closes its top layer, which unmounts
+    // before the next listener runs.
+    event.defaultPrevented = true;
+    close();
+    expect(store.handleOverlayEscape(event, true)).toBe(true); // <html>: stop it here
+    expect(leavePage).not.toHaveBeenCalled();
+  });
+
+  it("runs a claimed Esc on the top overlay that closes itself", () => {
+    const store = createShortcutStore();
+    const closePalette = vi.fn();
+    store.openOverlay({ id: "palette", parentId: null, onEscape: closePalette });
+    const event = press("Escape");
+    store.claimEscape(event);
+    expect(store.handleOverlayEscape(event, true)).toBe(true);
+    expect(closePalette).toHaveBeenCalledOnce();
+    expect(event.prevented).toBe(true);
+    // Claimed once: the same event does not run again.
+    expect(store.handleOverlayEscape(event, true)).toBe(false);
+    expect(closePalette).toHaveBeenCalledOnce();
+  });
+
+  it("leaves Esc to the page when no overlay is open", () => {
+    const store = createShortcutStore();
+    const clearSelection = vi.fn();
+    store.register(shortcut("escape", clearSelection));
+    const event = press("Escape");
+    store.claimEscape(event);
+    expect(store.handleOverlayEscape(event, true)).toBe(false);
+    expect(store.handleKeyDown(event, true)).toBe(true); // window, bubble phase
+    expect(clearSelection).toHaveBeenCalledOnce();
+  });
+
+  it("claims only Esc, and not while an IME is composing", () => {
+    const store = createShortcutStore();
+    store.openOverlay({ id: "dialog", parentId: null });
+    const enter = press("Enter");
+    store.claimEscape(enter);
+    expect(store.handleOverlayEscape(enter, true)).toBe(false);
+    const composing = press("Escape", { isComposing: true });
+    store.claimEscape(composing);
+    expect(store.handleOverlayEscape(composing, true)).toBe(false);
+    // An event that was never claimed (e.g. dispatched past the window listener).
+    expect(store.handleOverlayEscape(press("Escape"), true)).toBe(false);
+  });
+
   it("passes the key on when a handler returns false", () => {
     const store = createShortcutStore();
     const global = vi.fn();
