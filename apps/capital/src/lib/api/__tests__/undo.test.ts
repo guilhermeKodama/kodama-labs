@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { QueryClient } from "@tanstack/react-query";
-import { configureUndo, pushUndo, rememberUndo, undoBatch, undoLast, undoStack } from "@/lib/api/undo";
+import { announceWrite, configureUndo, pushUndo, rememberUndo, undoBatch, undoLast, undoStack } from "@/lib/api/undo";
 import { createUndoStack, latestUndoable, readBatchId } from "@/lib/api/undo-stack";
 
 // vi.mock is hoisted above the imports.
@@ -94,6 +94,23 @@ describe("undo", () => {
     expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ["ledger"] });
     // A click on the pill needs no confirmation toast.
     expect(toastMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("announces a write: undo pill with a batch, silent ⌘Z entry without a message, plain toast without a batch", () => {
+    announceWrite("b1", "Na lixeira · 2");
+    expect(undoStack.peek()).toEqual({ batchId: "b1", message: "Na lixeira · 2" });
+    expect(toastMock.mock.calls[0][1]).toMatchObject({ id: "undo:b1" });
+
+    announceWrite("b2", null);
+    expect(undoStack.peek()?.batchId).toBe("b2");
+    expect(toastMock).toHaveBeenCalledTimes(1);
+
+    announceWrite(null, "Na lixeira · 0");
+    expect(toastMock).toHaveBeenLastCalledWith("Na lixeira · 0");
+    expect(undoStack.size()).toBe(2);
+
+    announceWrite(null, undefined);
+    expect(toastMock).toHaveBeenCalledTimes(2);
   });
 
   it("⌘Z undoes the newest batch of the tab and confirms", async () => {

@@ -77,7 +77,7 @@ describe("last app URL", () => {
   it("accepts app screens only", () => {
     expect(isAppUrl("/transactions?view=v1&entry=e1")).toBe(true);
     expect(isAppUrl("/investments/contributions")).toBe(true);
-    for (const url of ["/settings", "/settings?page=fx", "/login?redirect=%2F", "/signup", "/", "//evil.example", "/\\evil", "https://x", null, ""]) {
+    for (const url of ["/settings", "/settings?page=fx", "/login?redirect=%2F", "/signup", "/", "//evil.example", "/\\evil", "/\t/evil.example", "/\n/evil.example", "https://x", null, ""]) {
       expect(isAppUrl(url), String(url)).toBe(false);
     }
     expect(isAppUrl("/settingsx")).toBe(true);

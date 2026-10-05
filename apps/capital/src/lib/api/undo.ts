@@ -55,6 +55,17 @@ export function rememberUndo(batchId: string, message = ""): void {
 }
 
 /**
+ * After a successful write (useAppMutation): the undo pill when the server
+ * recorded a batch, the batch alone on the ⌘Z stack when there is no
+ * message, and a plain toast when nothing was recorded (e.g. 0 rows changed).
+ */
+export function announceWrite(batchId: string | null, message: string | null | undefined): void {
+  if (batchId && message) pushUndo(batchId, message);
+  else if (batchId) rememberUndo(batchId);
+  else if (message) toast(message);
+}
+
+/**
  * Before the server sent error codes, a 409 from the undo route meant a
  * newer change touched the same rows; give it that code so the message is
  * the specific one.

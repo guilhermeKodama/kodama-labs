@@ -7,7 +7,7 @@ import { toast } from "sonner";
 import { ApiError } from "./client";
 import { errorMessage } from "./errors";
 import { invalidateEvent, type MutationEvent } from "./invalidation";
-import { pushUndo, rememberUndo } from "./undo";
+import { announceWrite } from "./undo";
 import { readBatchId } from "./undo-stack";
 
 /** Localized text for an error from the API (see errors.ts). */
@@ -22,10 +22,11 @@ export interface AppMutationOptions<TData, TVariables, TOnMutateResult>
   event: MutationEvent | readonly MutationEvent[] | null;
   mutationFn: (variables: TVariables) => Promise<TData>;
   /**
-   * Toast for an undoable write ("“iFood” excluída"). When the response has
-   * a `batchId`, the toast gets "Desfazer" and the batch goes on the ⌘Z
-   * stack. Without a message (or when it returns null) the batch still
-   * goes on the stack, silently.
+   * Toast for the write ("“iFood” excluída"). When the response has a
+   * `batchId`, the toast gets "Desfazer" and the batch goes on the ⌘Z
+   * stack; without one (nothing was recorded) it is a plain toast.
+   * Without a message (or when it returns null) a batch still goes on the
+   * stack, silently.
    */
   undo?: string | ((data: TData, variables: TVariables) => string | null | undefined);
   /** Return true when the error was handled here (e.g. shown inline), to skip the toast. */
@@ -50,12 +51,7 @@ export function useAppMutation<TData = unknown, TVariables = void, TOnMutateResu
     ...options,
     onSuccess: (data, variables, onMutateResult, context) => {
       if (event) void invalidateEvent(queryClient, event);
-      const batchId = readBatchId(data);
-      if (batchId) {
-        const message = typeof undo === "function" ? undo(data, variables) : undo;
-        if (message) pushUndo(batchId, message);
-        else rememberUndo(batchId);
-      }
+      announceWrite(readBatchId(data), typeof undo === "function" ? undo(data, variables) : undo);
       return onSuccess?.(data, variables, onMutateResult, context);
     },
     onError: (error, variables, onMutateResult, context) => {

@@ -22,13 +22,31 @@ export function stripLocalePrefix(pathname: string, locales: readonly string[]):
   return { locale, path: locale ? pathname.slice(locale.length + 1) || "/" : pathname };
 }
 
+const LOCAL_ORIGIN = "http://local.invalid";
+
+/**
+ * Whether `url` is a path on this origin. The browser drops tabs and
+ * newlines from a URL and reads "\" as "/", so "/\t/evil.example" and
+ * "/\\evil.example" lead to another site although they start with one
+ * "/": those characters are refused, and the URL must also resolve to
+ * this origin.
+ */
+export function isLocalPath(url: string | null | undefined): url is string {
+  if (!url || !url.startsWith("/") || /[\u0000-\u001f\u007f\\]/.test(url)) return false;
+  try {
+    return new URL(url, LOCAL_ORIGIN).origin === LOCAL_ORIGIN;
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Where the app goes back to after logging in: `redirect` when it is a
  * path of this app (never another origin, never the login pages
  * themselves), else /transactions.
  */
 export function safeRedirect(redirect: string | null | undefined): string {
-  if (!redirect || !redirect.startsWith("/") || redirect.startsWith("//") || redirect.startsWith("/\\")) return "/transactions";
+  if (!isLocalPath(redirect)) return "/transactions";
   const path = redirect.split(/[?#]/)[0];
   if (path === "/" || path === "/login" || path === "/signup") return "/transactions";
   return redirect;

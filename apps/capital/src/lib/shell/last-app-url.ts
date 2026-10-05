@@ -4,6 +4,8 @@
  * and open sheet), remembered per tab in sessionStorage by the app layout.
  */
 
+import { isLocalPath } from "@/lib/middleware-helpers";
+
 export const LAST_APP_URL_KEY = "capital:last-app-url";
 export const APP_HOME = "/transactions";
 
@@ -11,7 +13,7 @@ type KeyValueStorage = Pick<Storage, "getItem" | "setItem">;
 
 /** Paths that are app screens: not settings, not the login pages, not another origin. */
 export function isAppUrl(url: string | null | undefined): url is string {
-  if (!url || !url.startsWith("/") || url.startsWith("//") || url.startsWith("/\\")) return false;
+  if (!isLocalPath(url)) return false;
   const path = url.split(/[?#]/)[0];
   return path !== "/" && !["/settings", "/login", "/signup"].some((prefix) => path === prefix || path.startsWith(`${prefix}/`));
 }

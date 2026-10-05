@@ -101,6 +101,17 @@ describe("Middleware", () => {
       }
     });
 
+    it("refuses paths the browser would resolve to another origin", () => {
+      // URL parsing drops tabs and newlines and reads "\" as "/": each of these is https://evil.example/.
+      for (const value of ["/\t/evil.example", "/\n/evil.example", "/\r\n/evil.example", "/\t\\evil.example"]) {
+        expect(new URL(value, "https://capital.example").host, JSON.stringify(value)).toBe("evil.example");
+        expect(safeRedirect(value), JSON.stringify(value)).toBe("/transactions");
+        expect(loginPath(value), JSON.stringify(value)).toBe("/login");
+      }
+      // Encoded, they stay a path here.
+      expect(safeRedirect("/%09/transactions")).toBe("/%09/transactions");
+    });
+
     it("builds the login URL with the way back", () => {
       expect(loginPath("/transactions?view=a b")).toBe("/login?redirect=%2Ftransactions%3Fview%3Da%20b");
       expect(loginPath("/transactions")).toBe("/login?redirect=%2Ftransactions");
