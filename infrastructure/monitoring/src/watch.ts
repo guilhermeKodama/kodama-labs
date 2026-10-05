@@ -12,6 +12,7 @@ import {
 import { RateLimiter } from "./rate-limit.js";
 import { redact } from "./redact.js";
 import { signatureOf } from "./signature.js";
+import { idleForever } from "./idle.js";
 import { postJson, webhookFromProcess } from "./webhook.js";
 
 const QUIET_MS = 15_000;
@@ -30,7 +31,7 @@ async function main(): Promise<void> {
   const webhook = webhookFromProcess();
   if (!webhook) {
     console.log("[log-watcher] ALERT_WEBHOOK_URL unset; idling");
-    await new Promise(() => {});
+    await idleForever();
     return;
   }
 

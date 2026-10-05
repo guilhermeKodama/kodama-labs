@@ -7,7 +7,7 @@ WORKDIR /repo
 COPY . .
 RUN pnpm install --frozen-lockfile --filter @infrastructure/monitoring... --ignore-scripts \
  && pnpm --filter @infrastructure/monitoring run build \
- && pnpm --filter @infrastructure/monitoring deploy --prod /out
+ && pnpm --filter @infrastructure/monitoring deploy --prod --ignore-scripts /out
 
 FROM node:24-slim
 WORKDIR /app
