@@ -318,7 +318,7 @@ export type BulkOperation = z.infer<typeof bulkOperationSchema>;
 // ---------------------------------------------------------------------------
 
 export const VIEW_LAYOUTS = ["table", "pivot", "chart", "board", "calendar"] as const;
-export const CHART_TYPES = ["bar", "hbar", "bar100", "line", "area", "pie", "donut", "treemap", "waterfall"] as const;
+export const CHART_TYPES = ["bar", "hbar", "bar100", "line", "area", "pie", "donut", "treemap", "waterfall", "sankey"] as const;
 export const VIEW_DATASETS = ["ledger", "holdings", "investment_ops"] as const;
 
 export const viewConfigSchema = z.object({

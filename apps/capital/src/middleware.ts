@@ -4,7 +4,7 @@ import { routing } from "./i18n/routing";
 import { isExcludedPath } from "./lib/middleware-helpers";
 
 // Public routes that don't require authentication
-const publicRoutes = ["/", "/login", "/signup"];
+const publicRoutes = ["/login", "/signup"];
 
 // Cookie name must match the one used in auth routes
 const SESSION_COOKIE_NAME = "capital_session";
@@ -39,13 +39,15 @@ export default async function middleware(request: NextRequest) {
   const sessionCookie = request.cookies.get(SESSION_COOKIE_NAME);
   const hasSession = !!sessionCookie?.value;
 
-  // If authenticated user tries to access login/signup, redirect to dashboard
+  if (pathWithoutLocale === "/") {
+    const dest = hasSession ? "/transactions" : "/login";
+    return NextResponse.redirect(new URL(locale ? `/${locale}${dest}` : dest, request.url));
+  }
+
+  // If authenticated user tries to access login/signup, redirect into the app
   if (hasSession && (pathWithoutLocale === "/login" || pathWithoutLocale === "/signup")) {
-    const dashboardUrl = new URL(
-      locale ? `/${locale}/dashboard` : "/dashboard",
-      request.url
-    );
-    return NextResponse.redirect(dashboardUrl);
+    const nextUrl = new URL(locale ? `/${locale}/transactions` : "/transactions", request.url);
+    return NextResponse.redirect(nextUrl);
   }
 
   // If not authenticated and trying to access protected route, redirect to login
