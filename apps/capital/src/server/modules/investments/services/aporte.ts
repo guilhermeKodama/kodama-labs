@@ -50,9 +50,6 @@ export async function recordAporte(userId: string, input: AporteInput, db: DbCli
     const records: MutationRecordInput[] = [];
     const [from, broker] = await Promise.all([getOwnedAccount(userId, input.fromAccountId, tx), getOwnedAccount(userId, input.brokerAccountId, tx)]);
     if (broker.type !== "brokerage") throw new LedgerError("An aporte goes to a brokerage account", 422, { code: "aporte.broker_required" });
-    if (from.type !== "checking" && from.type !== "cash") {
-      throw new LedgerError("The money of an aporte comes from a checking or cash account", 422, { code: "aporte.source_invalid" });
-    }
     const fx = await loadFx(userId, tx);
     const { depositGroupId, transferGroupIds } = await fundBroker(
       tx,
@@ -60,7 +57,8 @@ export async function recordAporte(userId: string, input: AporteInput, db: DbCli
       {
         fromAccountId: from.id,
         broker,
-        brokerAmount: input.toAmount ?? convertAmount(input.amount, from.currency, broker.currency, fx),
+        // toAmount only matters across currencies; within one currency the broker gets `amount`.
+        brokerAmount: from.currency === broker.currency ? input.amount : input.toAmount ?? convertAmount(input.amount, from.currency, broker.currency, fx),
         fundAmount: input.amount,
         date: input.date,
         description: input.description,

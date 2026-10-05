@@ -1,5 +1,6 @@
 import type { DbClient } from "@capital/server/lib/prisma";
 import type { Account } from "@/generated/prisma";
+import { LedgerError } from "@capital/server/modules/ledger/lib/errors";
 import type { FxContext } from "@capital/server/modules/ledger/lib/fx";
 import { round } from "@capital/server/modules/ledger/lib/money";
 import { getOwnedAccount } from "@capital/server/modules/ledger/services/accounts";
@@ -36,7 +37,8 @@ export interface FundBrokerInput {
 }
 
 /**
- * Moves money from a checking or cash account into a broker, recording into
+ * Moves money from a checking or cash account (anything else is 422
+ * aporte.source_invalid) into a broker, recording into
  * the caller's `records`. Within one entity it is one investment_deposit
  * transfer. Across entities the money first goes to the broker entity's
  * main checking account (a capital injection PF → PJ, a profit distribution
@@ -46,6 +48,9 @@ export interface FundBrokerInput {
  */
 export async function fundBroker(tx: DbClient, userId: string, input: FundBrokerInput, fx: FxContext, records: MutationRecordInput[]) {
   const from = await getOwnedAccount(userId, input.fromAccountId, tx);
+  if (from.type !== "checking" && from.type !== "cash") {
+    throw new LedgerError("The money of a contribution comes from a checking or cash account", 422, { code: "aporte.source_invalid" });
+  }
   const { broker, brokerAmount } = input;
   const fromAmount = from.currency === broker.currency ? brokerAmount : input.fundAmount ?? convertAmount(brokerAmount, broker.currency, from.currency, fx);
   const transferGroupIds: string[] = [];

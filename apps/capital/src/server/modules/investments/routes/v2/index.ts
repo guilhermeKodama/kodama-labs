@@ -71,12 +71,12 @@ const holdingsRoute = createRoute({
   request: { query: z.object({ accountId: z.string().optional(), ...entityScopeQuery, includeInactive: z.enum(["true", "false"]).optional() }) },
   responses: v2Responses,
 });
-const createHoldingRoute = createRoute({ method: "post", path: "/v2/holdings", tags, summary: "Create a holding on a brokerage account", request: jsonBody(z.object({ accountId: z.string(), ...holdingFields })), responses: v2Responses });
+const createHoldingRoute = createRoute({ method: "post", path: "/v2/holdings", tags, summary: "Create a holding on a brokerage account, in an undo batch (batchId)", request: jsonBody(z.object({ accountId: z.string(), ...holdingFields })), responses: v2Responses });
 const patchHoldingRoute = createRoute({
   method: "patch",
   path: "/v2/holdings/{id}",
   tags,
-  summary: "Update a holding (price, name, deactivate)",
+  summary: "Update a holding (price, name, deactivate), in an undo batch (batchId)",
   request: { params: idParams, ...jsonBody(z.object(holdingFields).partial().extend({ isActive: z.boolean().optional() })) },
   responses: v2Responses,
 });
@@ -214,13 +214,13 @@ export const v2Investments = createRouter()
     return { holdings: holdings.map((h) => serializeHolding(h, fx)) };
   }))
   .openapi(createHoldingRoute, v2Handler(createHoldingRoute, async (c, userId) => {
-    const created = await createHolding(userId, c.req.valid("json"), prisma);
-    return serializedHolding(userId, created.id);
+    const created = await createHolding(userId, c.req.valid("json"), prisma, { record: true });
+    return { ...(await serializedHolding(userId, created.id)), batchId: created.batchId };
   }))
   .openapi(patchHoldingRoute, v2Handler(patchHoldingRoute, async (c, userId) => {
     const { id } = c.req.valid("param");
-    await updateHolding(userId, id, c.req.valid("json"), prisma);
-    return serializedHolding(userId, id);
+    const { batchId } = await updateHolding(userId, id, c.req.valid("json"), prisma);
+    return { ...(await serializedHolding(userId, id)), batchId };
   }))
   .openapi(adjustRoute, v2Handler(adjustRoute, async (c, userId) => adjustPosition(userId, { holdingId: c.req.valid("param").id, ...c.req.valid("json") }, prisma)))
   .openapi(opsRoute, v2Handler(opsRoute, async (c, userId) => {

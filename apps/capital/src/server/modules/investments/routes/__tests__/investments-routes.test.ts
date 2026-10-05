@@ -128,7 +128,18 @@ describe("POST /v2/investments/aporte", () => {
     const holding = await json("POST", "/v2/holdings", { accountId: pjBroker, assetClass: "stocks", ticker: "WEGE3", name: "WEG" });
     await bad({ fromAccountId: f.pfChecking, brokerAccountId: f.broker, buy: { holdingId: holding.id, quantity: 1, price: 50 } }, "aporte.holding_mismatch");
     await bad({ fromAccountId: f.pfChecking, brokerAccountId: f.broker, buy: { quantity: 1, price: 50 } }, "validation");
+    // A buy paid from a card is refused the same way.
+    const fromCard = await call("POST", "/v2/investment-operations", { holdingId: holding.id, type: "buy", quantity: 1, pricePerUnit: 50, totalAmount: 50, date: "2026-09-10", fundFromAccountId: f.card });
+    expect(fromCard.status).toBe(422);
+    expect(await fromCard.json()).toMatchObject({ code: "aporte.source_invalid" });
     expect(await prisma.transferGroup.count({ where: { userId: USER } })).toBe(0);
+    expect(await prisma.investmentOperation.count({ where: { holdingId: holding.id } })).toBe(0);
+  });
+
+  it("ignores toAmount when the source and the broker share a currency", async () => {
+    await json("POST", "/v2/investments/aporte", { fromAccountId: f.pfChecking, brokerAccountId: f.broker, amount: 300, toAmount: 999, date: "2026-09-10" });
+    expect(await balance(f.pfChecking)).toBe(-300);
+    expect(await balance(f.broker)).toBe(300);
   });
 });
 
@@ -206,6 +217,18 @@ describe("investment operation routes", () => {
 
     const holdings = await json("GET", "/v2/holdings?scope=pf");
     expect(holdings.holdings).toEqual([expect.objectContaining({ ticker: "PETR4", marketValueBase: 300, investedBase: 300, fxRate: 1 })]);
+  });
+
+  it("records creating and editing a holding in undo batches", async () => {
+    const created = await json("POST", "/v2/holdings", { accountId: f.broker, assetClass: "stocks", ticker: "vale3", name: "Vale" });
+    expect(created).toMatchObject({ ticker: "VALE3", batchId: expect.any(String) });
+    const patched = await json("PATCH", `/v2/holdings/${created.id}`, { name: "Vale ON", currentPrice: 61.5, isActive: false });
+    expect(patched).toMatchObject({ name: "Vale ON", currentPrice: 61.5, isActive: false, batchId: expect.any(String) });
+
+    await undo(patched.batchId);
+    expect(await prisma.investmentHolding.findUniqueOrThrow({ where: { id: created.id } })).toMatchObject({ name: "Vale", currentPrice: null, isActive: true });
+    await undo(created.batchId);
+    expect(await prisma.investmentHolding.count({ where: { id: created.id } })).toBe(0);
   });
 });
 

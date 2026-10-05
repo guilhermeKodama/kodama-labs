@@ -44,40 +44,64 @@ export async function getOwnedHolding(userId: string, holdingId: string, db: DbC
   return holding;
 }
 
-/** Creates a holding; with `collect` it joins the caller's undo batch (undo removes it once its operations are gone). */
-export async function createHolding(userId: string, input: HoldingInput, db: DbClient, opts: { collect?: MutationRecordInput[] } = {}) {
-  const account = await brokerage(userId, input.accountId, db);
-  const holding = await db.investmentHolding.create({
-    data: {
-      accountId: account.id,
-      assetClass: input.assetClass,
-      allocationClass: input.allocationClass ?? null,
-      subType: input.assetClass === "fixed_income" ? input.subType ?? null : null,
-      ticker: input.ticker ? input.ticker.toUpperCase() : null,
-      name: input.name,
-      currency: input.currency ?? account.currency,
-      currentPrice: input.currentPrice ?? null,
-      lastPriceUpdate: input.currentPrice ? new Date() : null,
-    },
-  });
-  opts.collect?.push({ model: "InvestmentHolding", recordId: holding.id, before: null, after: snapshot(holding) });
-  return holding;
+/**
+ * Creates a holding. With `collect` it joins the caller's undo batch (undo
+ * removes it once its operations are gone); with `record` it gets a batch
+ * of its own (batchId); otherwise nothing is recorded (statement imports,
+ * MCP).
+ */
+export async function createHolding(userId: string, input: HoldingInput, db: DbClient, opts: { collect?: MutationRecordInput[]; record?: boolean } = {}) {
+  const run = async (tx: DbClient) => {
+    const account = await brokerage(userId, input.accountId, tx);
+    const holding = await tx.investmentHolding.create({
+      data: {
+        accountId: account.id,
+        assetClass: input.assetClass,
+        allocationClass: input.allocationClass ?? null,
+        subType: input.assetClass === "fixed_income" ? input.subType ?? null : null,
+        ticker: input.ticker ? input.ticker.toUpperCase() : null,
+        name: input.name,
+        currency: input.currency ?? account.currency,
+        currentPrice: input.currentPrice ?? null,
+        lastPriceUpdate: input.currentPrice ? new Date() : null,
+      },
+    });
+    const records = opts.collect ?? [];
+    records.push({ model: "InvestmentHolding", recordId: holding.id, before: null, after: snapshot(holding) });
+    const batchId = opts.record && !opts.collect ? await recordMutation(tx, userId, "create", holding.ticker ?? holding.name, records) : null;
+    return Object.assign(holding, { batchId });
+  };
+  return opts.record && !opts.collect ? inTransaction(db, run) : run(db);
 }
 
-export async function updateHolding(userId: string, holdingId: string, patch: Partial<Omit<HoldingInput, "accountId">> & { isActive?: boolean }, db: DbClient) {
-  await getOwnedHolding(userId, holdingId, db);
-  return db.investmentHolding.update({
-    where: { id: holdingId },
-    data: {
-      ...(patch.assetClass !== undefined && { assetClass: patch.assetClass }),
-      ...(patch.allocationClass !== undefined && { allocationClass: patch.allocationClass }),
-      ...(patch.subType !== undefined && { subType: patch.subType }),
-      ...(patch.ticker !== undefined && { ticker: patch.ticker ? patch.ticker.toUpperCase() : null }),
-      ...(patch.name !== undefined && { name: patch.name }),
-      ...(patch.currency !== undefined && { currency: patch.currency }),
-      ...(patch.currentPrice !== undefined && { currentPrice: patch.currentPrice, lastPriceUpdate: new Date() }),
-      ...(patch.isActive !== undefined && { isActive: patch.isActive }),
-    },
+/** Updates a holding (name, price, class, deactivation) in an undo batch of its own unless `collect` or `record: false`; returns it with the batchId. */
+export async function updateHolding(
+  userId: string,
+  holdingId: string,
+  patch: Partial<Omit<HoldingInput, "accountId">> & { isActive?: boolean },
+  db: DbClient,
+  opts: OperationWriteOptions = {}
+) {
+  return inTransaction(db, async (tx) => {
+    const before = await tx.investmentHolding.findFirst({ where: { id: holdingId, account: { userId } } });
+    if (!before) throw new LedgerError("Holding not found or access denied", 404, { code: "holding.not_found" });
+    const updated = await tx.investmentHolding.update({
+      where: { id: holdingId },
+      data: {
+        ...(patch.assetClass !== undefined && { assetClass: patch.assetClass }),
+        ...(patch.allocationClass !== undefined && { allocationClass: patch.allocationClass }),
+        ...(patch.subType !== undefined && { subType: patch.subType }),
+        ...(patch.ticker !== undefined && { ticker: patch.ticker ? patch.ticker.toUpperCase() : null }),
+        ...(patch.name !== undefined && { name: patch.name }),
+        ...(patch.currency !== undefined && { currency: patch.currency }),
+        ...(patch.currentPrice !== undefined && { currentPrice: patch.currentPrice, lastPriceUpdate: new Date() }),
+        ...(patch.isActive !== undefined && { isActive: patch.isActive }),
+      },
+    });
+    const records = opts.collect ?? [];
+    records.push({ model: "InvestmentHolding", recordId: holdingId, before: snapshot(before), after: snapshot(updated) });
+    const batchId = opts.record === false || opts.collect ? null : await recordMutation(tx, userId, "update", updated.ticker ?? updated.name, records);
+    return Object.assign(updated, { batchId });
   });
 }
 
