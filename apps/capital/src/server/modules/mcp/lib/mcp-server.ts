@@ -881,6 +881,8 @@ export function createCapitalMcpServer(userId: string, db: DbClient) {
     {
       description:
         "Update an existing budget. Can change amount, currency, effectiveFrom date, or isActive status. " +
+        "The change is made in place: it applies to every month this budget version covers, past months included. " +
+        "To change the amount only from a later month on, create a new budget with that effectiveFrom instead. " +
         "Changing effectiveFrom will update when the budget takes effect. Setting isActive=false soft-deletes " +
         "the budget. Amount must be non-negative if provided.",
       inputSchema: UpdateBudgetInputSchema,

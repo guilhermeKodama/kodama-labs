@@ -107,7 +107,8 @@
     "not_found": "Orçamento não encontrado.",
     "negative_amount": "O orçamento não pode ser negativo.",
     "clash": "Já existe um orçamento para essa categoria começando nesse mês.",
-    "overview_period_required": "Escolha um mês ou um ano."
+    "overview_period_required": "Escolha um mês ou um ano.",
+    "apply_before_start": "A mudança só pode valer a partir do mês em que o orçamento começa."
   },
   "recurring": {
     "not_found": "Conta fixa não encontrada.",
