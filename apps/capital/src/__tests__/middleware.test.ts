@@ -160,10 +160,13 @@ describe("Middleware", () => {
       expect(intl.routing).toMatchObject({ localePrefix: "never", defaultLocale: "pt-BR", localeCookie: { name: "NEXT_LOCALE" } });
     });
 
-    it("hides Accept-Language from next-intl, so pt-BR stays the default", async () => {
+    it("shows next-intl a browser asking for pt-BR, so pt-BR stays the default and no cookie is guessed", async () => {
       expect(toIntl(await run("/transactions", { session: true, language: "en-US,en;q=0.9" }))).toBe(true);
-      expect(intl.requests[0].headers.has("accept-language")).toBe(false);
+      expect(intl.requests[0].headers.get("accept-language")).toBe("pt-BR");
       expect(intl.requests[0].headers.get("cookie")).toContain("capital_session=abc");
+      // Without the header next-intl would write NEXT_LOCALE=pt-BR on the first visit (it compares the locale with Accept-Language).
+      expect(toIntl(await run("/login"))).toBe(true);
+      expect(intl.requests[0].headers.get("accept-language")).toBe("pt-BR");
     });
 
     it("lets next-intl unprefix a localized URL before any session check", async () => {

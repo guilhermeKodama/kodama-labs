@@ -14,12 +14,16 @@ const intlMiddleware = createIntlMiddleware(routing);
 /**
  * next-intl picks the locale from the NEXT_LOCALE cookie, then from
  * Accept-Language. The UI language is the user's choice, pt-BR until they
- * make one, so the header never reaches it.
+ * make one, so next-intl sees the browser asking for pt-BR. Removing the
+ * header is not enough: without a cookie next-intl writes one whenever the
+ * locale differs from what Accept-Language asks for, and with no header
+ * that is every first visit. That cookie (pt-BR, chosen by nobody) would
+ * keep LocaleSync from applying the user's saved language.
  */
-function withoutAcceptLanguage(request: NextRequest): NextRequest {
-  if (!request.headers.has("accept-language")) return request;
+function withDefaultLanguage(request: NextRequest): NextRequest {
+  if (request.headers.get("accept-language") === routing.defaultLocale) return request;
   const headers = new Headers(request.headers);
-  headers.delete("accept-language");
+  headers.set("accept-language", routing.defaultLocale);
   return new NextRequest(request, { headers });
 }
 
@@ -57,7 +61,7 @@ export default async function middleware(request: NextRequest) {
   }
 
   // Rewrites /transactions to /<locale>/transactions
-  return intlMiddleware(withoutAcceptLanguage(request));
+  return intlMiddleware(withDefaultLanguage(request));
 }
 
 export const config = {

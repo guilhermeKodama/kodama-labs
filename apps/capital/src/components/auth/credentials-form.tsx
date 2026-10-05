@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
+import { useLocale } from "next-intl";
 import { Link, useRouter } from "@/i18n/navigation";
 import { apiPost } from "@/lib/api/client";
 import { safeRedirect } from "@/lib/middleware-helpers";
@@ -9,6 +10,7 @@ import { Btn } from "@/components/shell/chrome";
 
 export function CredentialsForm({ mode }: { mode: "login" | "signup" }) {
   const router = useRouter();
+  const locale = useLocale();
   const queryClient = useQueryClient();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -21,9 +23,10 @@ export function CredentialsForm({ mode }: { mode: "login" | "signup" }) {
         className="w-full max-w-sm space-y-3 px-4"
         onSubmit={(event) => {
           event.preventDefault();
+          // A new account keeps the language the form was shown in (pt-BR unless one was picked); the server would otherwise guess from Accept-Language.
           const request = mode === "login"
             ? apiPost("/api/v2/auth/login", { email, password })
-            : apiPost("/api/v2/auth/signup", { name, email, password });
+            : apiPost("/api/v2/auth/signup", { name, email, password, locale });
           void request.then(async () => {
             await queryClient.invalidateQueries({ queryKey: ["me"] });
             // Back to where the session ended or the visitor started (?redirect=, set by the middleware and the session gate).
