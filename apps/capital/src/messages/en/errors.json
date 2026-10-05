@@ -100,7 +100,8 @@
     "unsupported": "This change can't be undone."
   },
   "trash": {
-    "operation_recorded_again": "“{description}” is the cash of an investment operation that was recorded again. Restoring it would count it twice."
+    "operation_recorded_again": "“{description}” is the cash of an investment operation that was recorded again. Restoring it would count it twice.",
+    "operation_edited": "“{description}” is the cash of an investment operation that has since been edited to move no cash. Edit the operation instead."
   },
   "budget": {
     "not_found": "Budget not found.",

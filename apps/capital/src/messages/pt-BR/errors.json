@@ -100,7 +100,8 @@
     "unsupported": "Essa alteração não pode ser desfeita."
   },
   "trash": {
-    "operation_recorded_again": "“{description}” é o caixa de uma operação de investimento que foi registrada de novo. Restaurar contaria duas vezes."
+    "operation_recorded_again": "“{description}” é o caixa de uma operação de investimento que foi registrada de novo. Restaurar contaria duas vezes.",
+    "operation_edited": "“{description}” é o caixa de uma operação de investimento que foi editada depois e não movimenta mais caixa. Edite a operação."
   },
   "budget": {
     "not_found": "Orçamento não encontrado.",

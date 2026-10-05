@@ -14,7 +14,7 @@ import { icuArguments } from "@/lib/i18n/icu";
  * is written on the backend branch (ui/0b-backend). This test is skipped
  * until that file is in the tree, then fails for each code without a
  * message. The errors.json files were filled from the catalog at
- * ui/0b-backend 4f35deba4 (112 codes); add a pt-BR and an en message for
+ * ui/0b-backend bbfdec78b (113 codes); add a pt-BR and an en message for
  * every code added after that, using only the {params} its English
  * meaning names.
  */
