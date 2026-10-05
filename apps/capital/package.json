@@ -14,6 +14,7 @@
     "db:migrate:dev": "node scripts/assert-dev-db.mjs 'prisma migrate dev' && prisma migrate dev",
     "db:push": "node scripts/assert-dev-db.mjs 'prisma db push' && prisma db push",
     "db:seed": "node scripts/assert-dev-db.mjs 'prisma db seed' && tsx prisma/seed.ts",
+    "db:seed:demo": "node scripts/assert-dev-db.mjs 'seed-demo' && tsx prisma/seed-demo.ts",
     "db:reset": "node scripts/assert-dev-db.mjs 'prisma migrate reset' && prisma migrate reset --force",
     "db:drop-legacy": "node scripts/drop-legacy.mjs",
     "db:reconcile-ledger": "tsx scripts/ledger-reconcile.ts",
