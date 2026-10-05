@@ -13,6 +13,7 @@ import {
   PENDING_CAP,
   pruneContainerMaps,
 } from "../log-follow.js";
+import { idleForever } from "../idle.js";
 import { RateLimiter } from "../rate-limit.js";
 import { redact } from "../redact.js";
 import { signatureOf } from "../signature.js";
@@ -297,5 +298,60 @@ describe("log follow", () => {
     pruneContainerMaps(new Set(["alive"]), restartCounts, migrateSeen);
     expect([...restartCounts.keys()]).toEqual(["alive"]);
     expect([...migrateSeen]).toEqual(["alive:2026-10-05T00:00:00.000Z"]);
+  });
+});
+
+describe("idleForever", () => {
+  const timers: Array<ReturnType<typeof setInterval>> = [];
+
+  afterEach(() => {
+    for (const timer of timers) clearInterval(timer);
+    timers.length = 0;
+    vi.restoreAllMocks();
+  });
+
+  it("registers a keep-alive and does not resolve or exit", async () => {
+    const exit = vi.spyOn(process, "exit").mockImplementation((() => undefined) as typeof process.exit);
+    const interval = vi.spyOn(globalThis, "setInterval");
+    const before = {
+      SIGTERM: new Set(process.listeners("SIGTERM")),
+      SIGINT: new Set(process.listeners("SIGINT")),
+    };
+
+    const pending = idleForever();
+    const timer = interval.mock.results.at(-1)?.value as ReturnType<typeof setInterval>;
+    timers.push(timer);
+    const added = {
+      SIGTERM: process.listeners("SIGTERM").filter((listener) => !before.SIGTERM.has(listener)),
+      SIGINT: process.listeners("SIGINT").filter((listener) => !before.SIGINT.has(listener)),
+    };
+
+    try {
+      expect(interval).toHaveBeenCalledWith(expect.any(Function), 1 << 30);
+      expect(timer.hasRef()).toBe(true);
+      expect(added.SIGTERM).toHaveLength(1);
+      expect(added.SIGINT).toHaveLength(1);
+
+      let settled = false;
+      void pending.then(
+        () => {
+          settled = true;
+        },
+        () => {
+          settled = true;
+        },
+      );
+      await new Promise((resolve) => setTimeout(resolve, 30));
+      expect(settled).toBe(false);
+      expect(exit).not.toHaveBeenCalled();
+
+      (added.SIGTERM[0] as () => void)();
+      expect(exit).toHaveBeenCalledWith(0);
+      (added.SIGINT[0] as () => void)();
+      expect(exit).toHaveBeenCalledTimes(2);
+    } finally {
+      for (const listener of added.SIGTERM) process.removeListener("SIGTERM", listener);
+      for (const listener of added.SIGINT) process.removeListener("SIGINT", listener);
+    }
   });
 });
