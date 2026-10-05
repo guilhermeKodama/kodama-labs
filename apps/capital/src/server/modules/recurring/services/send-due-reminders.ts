@@ -2,6 +2,7 @@ import type { PrismaClient } from "@/generated/prisma";
 import { Prisma } from "@/generated/prisma";
 import { toNoonUTC } from "@capital/server/lib/date-utils";
 import { sendToSubscriptions, type PushPayload } from "@capital/server/lib/web-push";
+import { REMINDER_PUSH_URL } from "@capital/server/modules/push/constants";
 import { remindersConfigSchema } from "@/lib/validations/reminders";
 import {
   computeDueReminderInstances,
@@ -26,13 +27,14 @@ function formatAmount(amount: number, currency: string): string {
   }
 }
 
-function buildPayload(
+/** The push for one reminder instance; it opens Orçamentos, where Contas fixas lives. */
+export function buildPayload(
   row: { id: string; description: string; category: string; amount: number; currency: string; nextDueDate: Date },
   instance: ReminderInstance
 ): PushPayload {
   const amountText = `~${formatAmount(row.amount, row.currency)}`;
   const tag = `reminder-${row.id}-${getDueYmd(row.nextDueDate)}`;
-  const url = "/recurring";
+  const url = REMINDER_PUSH_URL;
 
   if (instance.kind === "overdue") {
     const n = -instance.daysBefore;

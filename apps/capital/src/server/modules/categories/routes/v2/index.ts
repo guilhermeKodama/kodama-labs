@@ -1,8 +1,9 @@
 import { createRoute, z } from "@hono/zod-openapi";
 import { createRouter } from "@capital/server/lib/router";
 import { prisma } from "@capital/server/lib/prisma";
-import { idParams, jsonBody, v2Handler, v2Responses } from "@capital/server/lib/v2";
+import { idParams, jsonBody, queryFlag, v2Handler, v2Responses } from "@capital/server/lib/v2";
 import {
+  categoryCounts,
   categoryUsage,
   createCategory,
   deleteCategory,
@@ -21,8 +22,8 @@ const listRoute = createRoute({
   method: "get",
   path: "/v2/categories",
   tags,
-  summary: "List categories",
-  request: { query: z.object({ type: typeSchema.optional(), includeArchived: z.enum(["true", "false"]).optional() }) },
+  summary: "List categories; withCounts=true adds counts {entries, budgets} to each",
+  request: { query: z.object({ type: typeSchema.optional(), includeArchived: queryFlag.optional(), withCounts: queryFlag.optional() }) },
   responses: v2Responses,
 });
 const createRouteDef = createRoute({
@@ -75,7 +76,16 @@ export const v2Categories = createRouter()
     listRoute,
     v2Handler(listRoute, async (c, userId) => {
       const q = c.req.valid("query");
-      return { categories: (await listCategories(userId, prisma, { type: q.type, includeArchived: q.includeArchived === "true" })).map(serializeCategory) };
+      const [categories, counts] = await Promise.all([
+        listCategories(userId, prisma, { type: q.type, includeArchived: q.includeArchived }),
+        q.withCounts ? categoryCounts(userId, prisma) : null,
+      ]);
+      return {
+        categories: categories.map((cat) => ({
+          ...serializeCategory(cat),
+          ...(counts && { counts: counts.get(cat.id) ?? { entries: 0, budgets: 0 } }),
+        })),
+      };
     })
   )
   .openapi(uncategorizedRoute, v2Handler(uncategorizedRoute, async (c, userId) => {

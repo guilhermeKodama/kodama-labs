@@ -55,6 +55,32 @@ export async function categoryUsage(userId: string, categoryId: string, db: DbCl
   return { entries, recurring, budgets, rules, total: entries + recurring + budgets + rules };
 }
 
+export interface CategoryCounts {
+  /** Live entries (not in the trash) that use the category. */
+  entries: number;
+  /** Budgets that use it: one per chain (entity and period), not per version; deleted chains and tombstones do not count. */
+  budgets: number;
+}
+
+/** Usage counts of every category of the user, in one query (the Categorias list shows them). */
+export async function categoryCounts(userId: string, db: DbClient): Promise<Map<string, CategoryCounts>> {
+  const rows = await db.$queryRaw<{ id: string; entries: number; budgets: number }[]>`
+    SELECT c.id, coalesce(e.n, 0)::int AS entries, coalesce(b.n, 0)::int AS budgets
+    FROM categories c
+    LEFT JOIN (
+      SELECT "categoryId", count(*) AS n FROM ledger_entries
+      WHERE "userId" = ${userId} AND "deletedAt" IS NULL AND "categoryId" IS NOT NULL
+      GROUP BY "categoryId"
+    ) e ON e."categoryId" = c.id
+    LEFT JOIN (
+      SELECT "categoryId", count(DISTINCT coalesce("entityId", '') || ':' || period::text) AS n FROM budgets
+      WHERE "userId" = ${userId} AND "isActive" AND NOT "isTombstone"
+      GROUP BY "categoryId"
+    ) b ON b."categoryId" = c.id
+    WHERE c."userId" = ${userId}`;
+  return new Map(rows.map((r) => [r.id, { entries: Number(r.entries), budgets: Number(r.budgets) }]));
+}
+
 /**
  * Rename, recolor, archive or retype. Names are a label only (records point
  * at the id), so a rename touches one row. A system category keeps its type;

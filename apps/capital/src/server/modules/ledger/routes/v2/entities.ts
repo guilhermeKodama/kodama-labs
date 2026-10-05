@@ -2,7 +2,7 @@ import { createRoute, z } from "@hono/zod-openapi";
 import { createRouter } from "@capital/server/lib/router";
 import { prisma } from "@capital/server/lib/prisma";
 import { idParams, jsonBody, queryFlag, v2Handler, v2Responses } from "@capital/server/lib/v2";
-import { archiveEntity, createEntity, listEntities, updateEntity } from "../../services/entities";
+import { archiveEntity, createEntity, listEntitiesWithAccountCounts, updateEntity } from "../../services/entities";
 
 const tags = ["Ledger v2"];
 
@@ -14,7 +14,7 @@ const entityBody = z.object({
   color: z.string().nullish(),
   initialBalance: z.number().optional(),
 });
-const listEntitiesRoute = createRoute({ method: "get", path: "/v2/entities", tags, summary: "PF and businesses", request: { query: z.object({ includeArchived: queryFlag.optional() }) }, responses: v2Responses });
+const listEntitiesRoute = createRoute({ method: "get", path: "/v2/entities", tags, summary: "PF and businesses, each with accountsCount (its unarchived accounts and cards)", request: { query: z.object({ includeArchived: queryFlag.optional() }) }, responses: v2Responses });
 const createEntityRoute = createRoute({ method: "post", path: "/v2/entities", tags, summary: "Create a business", request: jsonBody(entityBody), responses: v2Responses });
 const patchEntityRoute = createRoute({
   method: "patch",
@@ -26,7 +26,7 @@ const patchEntityRoute = createRoute({
 });
 
 export const ledgerEntityRoutes = createRouter()
-  .openapi(listEntitiesRoute, v2Handler(listEntitiesRoute, (c, userId) => listEntities(userId, prisma, { includeArchived: c.req.valid("query").includeArchived })))
+  .openapi(listEntitiesRoute, v2Handler(listEntitiesRoute, (c, userId) => listEntitiesWithAccountCounts(userId, prisma, { includeArchived: c.req.valid("query").includeArchived })))
   .openapi(createEntityRoute, v2Handler(createEntityRoute, (c, userId) => createEntity(userId, { ...c.req.valid("json"), kind: "business" }, prisma)))
   .openapi(
     patchEntityRoute,

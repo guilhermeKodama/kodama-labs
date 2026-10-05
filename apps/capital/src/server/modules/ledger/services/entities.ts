@@ -19,6 +19,16 @@ export async function listEntities(userId: string, db: DbClient, opts: { include
   });
 }
 
+/** Entities with the number of accounts and cards linked to each (archived accounts left out), for the Negócios e PF list. */
+export async function listEntitiesWithAccountCounts(userId: string, db: DbClient, opts: { includeArchived?: boolean } = {}) {
+  const [entities, counts] = await Promise.all([
+    listEntities(userId, db, opts),
+    db.account.groupBy({ by: ["entityId"], where: { userId, archivedAt: null }, _count: { _all: true } }),
+  ]);
+  const byEntity = new Map(counts.map((c) => [c.entityId, c._count._all]));
+  return entities.map((e) => ({ ...e, accountsCount: byEntity.get(e.id) ?? 0 }));
+}
+
 export async function getOwnedEntity(userId: string, entityId: string, db: DbClient): Promise<Entity> {
   const entity = await db.entity.findFirst({ where: { id: entityId, userId } });
   if (!entity) throw notFound("Entity", "entity.not_found");

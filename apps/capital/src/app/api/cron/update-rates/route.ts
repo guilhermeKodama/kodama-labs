@@ -4,9 +4,9 @@ import { env } from "@/env";
 import { updateAllCurrencyRates } from "@capital/server/modules/currencies/services/update-rates-from-api";
 
 /**
- * Cron endpoint that fetches latest exchange rates from Frankfurter API
- * and updates all users' currency rates.
- * Runs hourly.
+ * Hourly: refreshes the automatic currency rates (PTAX on a BRL base, the
+ * ECB otherwise) of users with fxAutoUpdate on. Rates a user typed are
+ * left alone (see updateAllCurrencyRates).
  */
 export async function GET(request: NextRequest) {
   const authHeader = request.headers.get("authorization");

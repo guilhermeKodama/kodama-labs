@@ -1,6 +1,6 @@
 import type { DbClient } from "@capital/server/lib/prisma";
 import type { Account, CardStatement } from "@/generated/prisma";
-import { parseLocalDate } from "@capital/server/lib/date-utils";
+import { formatDateOnly, parseLocalDate } from "@capital/server/lib/date-utils";
 import { inTransaction } from "./mutations";
 import { LedgerError } from "../lib/errors";
 
@@ -51,6 +51,92 @@ export function statementEffectiveDate(
   statement: Pick<CardStatement, "month" | "closingDate">,
 ): Date {
   return statement.closingDate ?? parseLocalDate(`${statement.month}-01`);
+}
+
+/** The user's calendar day at `now`, as noon UTC (how the ledger stores dates). */
+export function userCalendarDay(timezone: string, now: Date = new Date()): Date {
+  let ymd: string;
+  try {
+    ymd = new Intl.DateTimeFormat("en-CA", { timeZone: timezone, year: "numeric", month: "2-digit", day: "2-digit" }).format(now);
+  } catch {
+    ymd = formatDateOnly(now);
+  }
+  return parseLocalDate(ymd);
+}
+
+function nextMonth(month: string): string {
+  const [y, m] = month.split("-").map(Number);
+  return ym(y, m);
+}
+
+/** The statement a card is accumulating purchases on today, for the card's usage bar. */
+export interface OpenStatement {
+  /** Null while the month has no purchase yet (no statement row). */
+  statementId: string | null;
+  month: string;
+  /** Purchases net of refunds, in the card's currency (positive = owed). */
+  total: number;
+  count: number;
+  /** YYYY-MM-DD */
+  closingDate: string;
+  /** YYYY-MM-DD; null when the card has no due day. */
+  dueDate: string | null;
+}
+
+/**
+ * Open statement of each card on `today` (a noon-UTC calendar day): the
+ * month whose closing date has not passed yet. A statement row whose own
+ * closing date (imported from a bill) is already behind `today` is closed,
+ * so the next month is the open one. Months with no row yet get the dates
+ * the card's closing and due days give and a zero total.
+ */
+export async function openStatements(
+  cards: Pick<Account, "id" | "closingDay" | "dueDay">[],
+  db: DbClient,
+  today: Date,
+): Promise<Map<string, OpenStatement>> {
+  const result = new Map<string, OpenStatement>();
+  if (!cards.length) return result;
+  const todayYmd = formatDateOnly(today);
+  const candidates = cards.map((card) => {
+    const month = statementMonthFor(today, card.closingDay ?? 1);
+    return { card, months: [month, nextMonth(month)] };
+  });
+  const rows = await db.cardStatement.findMany({
+    where: { OR: candidates.map((c) => ({ accountId: c.card.id, month: { in: c.months } })) },
+  });
+  const rowOf = (accountId: string, month: string) => rows.find((r) => r.accountId === accountId && r.month === month) ?? null;
+  const chosen = candidates.map(({ card, months }) => {
+    const first = rowOf(card.id, months[0]);
+    const closed = first?.closingDate != null && formatDateOnly(first.closingDate) < todayYmd;
+    const month = closed ? months[1] : months[0];
+    return { card, month, row: closed ? rowOf(card.id, months[1]) : first };
+  });
+  const statementIds = chosen.flatMap((c) => (c.row ? [c.row.id] : []));
+  const totals = statementIds.length
+    ? await db.ledgerEntry.groupBy({
+        by: ["cardStatementId"],
+        where: { cardStatementId: { in: statementIds }, deletedAt: null },
+        _sum: { amount: true },
+        _count: { _all: true },
+      })
+    : [];
+  const totalOf = new Map(totals.map((t) => [t.cardStatementId, t]));
+  for (const { card, month, row } of chosen) {
+    const closingDay = card.closingDay ?? 1;
+    const sum = row ? totalOf.get(row.id) : undefined;
+    const closingDate = row?.closingDate ?? closingDateFor(month, closingDay);
+    const dueDate = row?.dueDate ?? (card.dueDay ? dueDateFor(month, closingDay, card.dueDay) : null);
+    result.set(card.id, {
+      statementId: row?.id ?? null,
+      month,
+      total: sum?._sum.amount ? -Number(sum._sum.amount) : 0,
+      count: sum?._count._all ?? 0,
+      closingDate: formatDateOnly(closingDate),
+      dueDate: dueDate ? formatDateOnly(dueDate) : null,
+    });
+  }
+  return result;
 }
 
 export async function ensureStatement(

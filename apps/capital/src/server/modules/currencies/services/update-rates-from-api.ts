@@ -1,134 +1,102 @@
 import type { DbClient } from "@capital/server/lib/prisma";
+import { fetchEcbQuotes, fetchPtaxQuote, type FetchLike, type FxQuote } from "../lib/fx-providers";
+import { autoSourceFor } from "../lib/fx-source";
 
-const FRANKFURTER_API = "https://api.frankfurter.dev/v1/latest";
-
-interface FrankfurterResponse {
-  base: string;
-  date: string;
-  rates: Record<string, number>;
-}
-
-interface UpdateRatesResult {
+export interface UpdateRatesResult {
   usersProcessed: number;
+  /** Rows whose rate, source or quote time changed. */
   ratesUpdated: number;
+  /** Rows already holding the latest quote. */
+  ratesUnchanged: number;
+  /** Rows the user set by hand (source "manual"), which the refresh leaves alone. */
+  manualSkipped: number;
+  /** Provider calls that failed (one per PTAX currency or ECB base). */
   errors: number;
 }
 
-/**
- * Fetch latest exchange rates from Frankfurter API and update all users' currency rates.
- * Frankfurter is free, no API key, backed by ECB data.
- *
- * For each user, we fetch rates relative to their baseCurrency,
- * then update all their Currency records with the latest manualRate.
- */
-export async function updateAllCurrencyRates(
-  db: DbClient
-): Promise<UpdateRatesResult> {
-  const result: UpdateRatesResult = {
-    usersProcessed: 0,
-    ratesUpdated: 0,
-    errors: 0,
-  };
+export interface UpdateRatesOptions {
+  now?: Date;
+  fetch?: FetchLike;
+  /** Refresh only these users' currencies. */
+  userIds?: string[];
+}
 
-  // Get all users with their base currency and their currency records
+/** Same rate as far as a Float column can tell. */
+const sameRate = (a: number, b: number) => Math.abs(a - b) <= Math.abs(b) * 1e-12;
+
+/**
+ * Refreshes the automatic currency rates of every user with fxAutoUpdate
+ * on (or of the given users): PTAX (BCB) for the currencies it quotes on a BRL
+ * base, the ECB's reference rates (Frankfurter) for everything else. Rates
+ * the user typed (source "manual") and the base currency itself are never
+ * touched. A row is written only when its quote changed, so `rateUpdatedAt`
+ * is when the rate in force was published, and the hourly cron is a no-op
+ * between publications.
+ */
+export async function updateAllCurrencyRates(db: DbClient, opts: UpdateRatesOptions = {}): Promise<UpdateRatesResult> {
+  const now = opts.now ?? new Date();
+  const fetcher: FetchLike = opts.fetch ?? ((url, init) => fetch(url, init));
+  const result: UpdateRatesResult = { usersProcessed: 0, ratesUpdated: 0, ratesUnchanged: 0, manualSkipped: 0, errors: 0 };
+
   const users = await db.user.findMany({
+    where: { fxAutoUpdate: true, ...(opts.userIds && { id: { in: opts.userIds } }) },
     select: {
       id: true,
       baseCurrency: true,
-      currencies: {
-        select: {
-          id: true,
-          code: true,
-        },
-      },
+      currencies: { select: { id: true, code: true, manualRate: true, source: true, rateUpdatedAt: true } },
     },
   });
 
-  // Group users by base currency to minimize API calls
-  const usersByBaseCurrency: Record<
-    string,
-    Array<{ id: string; currencies: Array<{ id: string; code: string }> }>
-  > = {};
-
+  // What to fetch: PTAX per currency (it is quoted against BRL only), ECB per base currency.
+  const ptaxCodes = new Set<string>();
+  const ecbCodesByBase = new Map<string, Set<string>>();
   for (const user of users) {
-    if (!usersByBaseCurrency[user.baseCurrency]) {
-      usersByBaseCurrency[user.baseCurrency] = [];
-    }
-    usersByBaseCurrency[user.baseCurrency].push({
-      id: user.id,
-      currencies: user.currencies,
-    });
-  }
-
-  // Fetch rates for each unique base currency
-  for (const [baseCurrency, usersForBase] of Object.entries(
-    usersByBaseCurrency
-  )) {
-    // Collect all unique target currencies needed
-    const targetCodes = new Set<string>();
-    for (const user of usersForBase) {
-      for (const curr of user.currencies) {
-        if (curr.code !== baseCurrency) {
-          targetCodes.add(curr.code);
-        }
-      }
-    }
-
-    if (targetCodes.size === 0) {
-      result.usersProcessed += usersForBase.length;
-      continue;
-    }
-
-    // Fetch rates from Frankfurter
-    const to = Array.from(targetCodes).join(",");
-    const url = `${FRANKFURTER_API}?base=${baseCurrency}&symbols=${to}`;
-
-    try {
-      const res = await fetch(url);
-      if (!res.ok) {
-        console.error(
-          `[RateUpdate] Frankfurter error for base ${baseCurrency}: ${res.status}`
-        );
-        result.errors++;
+    for (const c of user.currencies) {
+      if (c.code === user.baseCurrency) continue;
+      if (c.source === "manual") {
+        result.manualSkipped++;
         continue;
       }
+      if (autoSourceFor(user.baseCurrency, c.code) === "ptax") ptaxCodes.add(c.code);
+      else ecbCodesByBase.set(user.baseCurrency, (ecbCodesByBase.get(user.baseCurrency) ?? new Set<string>()).add(c.code));
+    }
+  }
 
-      const data = (await res.json()) as FrankfurterResponse;
-
-      // Update each user's currency records
-      for (const user of usersForBase) {
-        for (const curr of user.currencies) {
-          if (curr.code === baseCurrency) {
-            // Base currency rate is always 1
-            continue;
-          }
-
-          const rate = data.rates[curr.code];
-          if (rate !== undefined) {
-            try {
-              await db.currency.update({
-                where: { id: curr.id },
-                data: { manualRate: rate },
-              });
-              result.ratesUpdated++;
-            } catch (err) {
-              console.error(
-                `[RateUpdate] Failed to update ${curr.code} for user ${user.id}:`,
-                err
-              );
-              result.errors++;
-            }
-          }
-        }
-        result.usersProcessed++;
-      }
+  const quotes = new Map<string, FxQuote>(); // `${base}:${code}`
+  for (const code of ptaxCodes) {
+    try {
+      quotes.set(`BRL:${code}`, await fetchPtaxQuote(code, now, fetcher));
     } catch (error) {
-      console.error(
-        `[RateUpdate] Frankfurter fetch failed for base ${baseCurrency}:`,
-        error
-      );
+      console.error(`[RateUpdate] ${error instanceof Error ? error.message : String(error)}`);
       result.errors++;
     }
+  }
+  for (const [base, codes] of ecbCodesByBase) {
+    try {
+      for (const quote of await fetchEcbQuotes(base, [...codes], fetcher)) quotes.set(`${base}:${quote.code}`, quote);
+    } catch (error) {
+      console.error(`[RateUpdate] ${error instanceof Error ? error.message : String(error)}`);
+      result.errors++;
+    }
+  }
+
+  for (const user of users) {
+    for (const c of user.currencies) {
+      if (c.code === user.baseCurrency || c.source === "manual") continue;
+      const quote = quotes.get(`${user.baseCurrency}:${c.code}`);
+      if (!quote) continue;
+      if (c.source === quote.source && sameRate(c.manualRate, quote.manualRate) && c.rateUpdatedAt?.getTime() === quote.quotedAt.getTime()) {
+        result.ratesUnchanged++;
+        continue;
+      }
+      // Guarded on source, so a rate the user typed since the read above is kept.
+      const { count } = await db.currency.updateMany({
+        where: { id: c.id, source: { not: "manual" } },
+        data: { manualRate: quote.manualRate, source: quote.source, rateUpdatedAt: quote.quotedAt },
+      });
+      result.ratesUpdated += count;
+    }
+    result.usersProcessed++;
   }
 
   return result;

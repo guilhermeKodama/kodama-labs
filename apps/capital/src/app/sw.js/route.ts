@@ -1,4 +1,5 @@
 import { getBuildId } from "@/lib/build-id";
+import { REMINDER_PUSH_URL } from "@capital/server/modules/push/constants";
 
 // Route handler, not public/sw.js: a static file is byte-identical across
 // every deploy, so the browser's periodic SW update check never finds a
@@ -29,7 +30,7 @@ self.addEventListener("push", (event) => {
 });
 
 async function handlePush(event) {
-  let payload = { title: "Capital", body: "Nova notificação", tag: null, url: "/recurring" };
+  let payload = { title: "Capital", body: "Nova notificação", tag: null, url: ${JSON.stringify(REMINDER_PUSH_URL)} };
   if (event.data) {
     try {
       payload = { ...payload, ...event.data.json() };
@@ -43,14 +44,14 @@ async function handlePush(event) {
     tag: payload.tag ?? undefined,
     icon: "/icon-192.png",
     badge: "/icon-192.png",
-    data: { url: payload.url ?? "/recurring" },
+    data: { url: payload.url ?? ${JSON.stringify(REMINDER_PUSH_URL)} },
   });
 }
 
 self.addEventListener("notificationclick", (event) => {
   const { url } = event.notification.data || {};
   event.notification.close();
-  event.waitUntil(focusOrOpen(url || "/recurring"));
+  event.waitUntil(focusOrOpen(url || ${JSON.stringify(REMINDER_PUSH_URL)}));
 });
 
 async function focusOrOpen(target) {

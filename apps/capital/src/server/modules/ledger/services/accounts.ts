@@ -2,8 +2,9 @@ import type { DbClient } from "@capital/server/lib/prisma";
 import { Prisma } from "@/generated/prisma";
 import type { Account, AccountType } from "@/generated/prisma";
 import { LedgerError, notFound } from "../lib/errors";
-import { toNumber } from "../lib/money";
+import { round, toNumber } from "../lib/money";
 import { getOwnedEntity } from "./entities";
+import { inTransaction, recordMutation, snapshot, type MutationRecordInput } from "./mutations";
 
 export interface AccountInput {
   entityId: string;
@@ -59,34 +60,101 @@ export async function createAccount(userId: string, input: AccountInput, db: DbC
   });
 }
 
-export async function updateAccount(userId: string, accountId: string, patch: Partial<Omit<AccountInput, "entityId" | "type">> & { archived?: boolean }, db: DbClient) {
-  const account = await getOwnedAccount(userId, accountId, db);
-  if (account.type === "credit_card") {
-    validateCard(
-      {
-        closingDay: patch.closingDay ?? account.closingDay,
-        dueDay: patch.dueDay ?? account.dueDay,
-        creditLimit: patch.creditLimit ?? toNumber(account.creditLimit),
+export type AccountPatch = Partial<Omit<AccountInput, "type">> & { archived?: boolean };
+
+/**
+ * Edit an account. Stored entries keep the account's currency and entity,
+ * so both are locked once it has entries (trash included, since a restore
+ * brings them back): a currency change is 422 account.currency_locked, a
+ * move to another entity 422 account.entity_locked (recurring rules carry
+ * the entity too). An entity's main account never moves. Recorded as one
+ * undoable batch, except a currency or entity change: undoing one after
+ * entries were added would leave them in another currency or entity.
+ */
+export async function updateAccount(
+  userId: string,
+  accountId: string,
+  patch: AccountPatch,
+  outer: DbClient,
+  opts: { record?: boolean; collect?: MutationRecordInput[] } = {}
+): Promise<Account & { batchId: string | null }> {
+  return inTransaction(outer, async (db) => {
+    const account = await getOwnedAccount(userId, accountId, db);
+    if (account.type === "credit_card") {
+      validateCard(
+        {
+          closingDay: patch.closingDay ?? account.closingDay,
+          dueDay: patch.dueDay ?? account.dueDay,
+          creditLimit: patch.creditLimit ?? toNumber(account.creditLimit),
+        },
+        "credit_card"
+      );
+    }
+    if (patch.payFromAccountId) await getOwnedAccount(userId, patch.payFromAccountId, db);
+    const currency = patch.currency?.toUpperCase();
+    const currencyChanges = currency !== undefined && currency !== account.currency;
+    const entityChanges = patch.entityId !== undefined && patch.entityId !== account.entityId;
+    if (currencyChanges || entityChanges) {
+      const entries = await db.ledgerEntry.count({ where: { accountId } });
+      if (currencyChanges && entries > 0) {
+        throw new LedgerError(`The account's currency cannot change: ${entries} transaction(s) are in ${account.currency}`, 422, {
+          code: "account.currency_locked",
+          params: { count: entries, currency: account.currency },
+        });
+      }
+      if (entityChanges) {
+        await getOwnedEntity(userId, patch.entityId!, db);
+        if (account.isDefault) throw new LedgerError("An entity's main account cannot move to another entity", 422, { code: "account.default_entity_locked" });
+        const recurring = await db.recurringRule.count({ where: { accountId } });
+        if (entries > 0 || recurring > 0) {
+          throw new LedgerError(`The account cannot move to another entity: it has ${entries} transaction(s) and ${recurring} recurring rule(s)`, 422, {
+            code: "account.entity_locked",
+            params: { entries, recurring },
+          });
+        }
+      }
+    }
+    const updated = await db.account.update({
+      where: { id: accountId },
+      data: {
+        ...(patch.name !== undefined && { name: patch.name }),
+        ...(patch.institution !== undefined && { institution: patch.institution }),
+        ...(currency !== undefined && { currency }),
+        ...(patch.entityId !== undefined && { entityId: patch.entityId }),
+        ...(patch.externalId !== undefined && { externalId: patch.externalId }),
+        ...(patch.initialBalance !== undefined && { initialBalance: patch.initialBalance }),
+        ...(patch.color !== undefined && { color: patch.color }),
+        ...(patch.creditLimit !== undefined && { creditLimit: patch.creditLimit }),
+        ...(patch.closingDay !== undefined && { closingDay: patch.closingDay }),
+        ...(patch.dueDay !== undefined && { dueDay: patch.dueDay }),
+        ...(patch.payFromAccountId !== undefined && { payFromAccountId: patch.payFromAccountId }),
+        ...(patch.archived !== undefined && { archivedAt: patch.archived ? (account.archivedAt ?? new Date()) : null }),
       },
-      "credit_card"
-    );
-  }
-  if (patch.payFromAccountId) await getOwnedAccount(userId, patch.payFromAccountId, db);
-  return db.account.update({
-    where: { id: accountId },
-    data: {
-      ...(patch.name !== undefined && { name: patch.name }),
-      ...(patch.institution !== undefined && { institution: patch.institution }),
-      ...(patch.currency !== undefined && { currency: patch.currency }),
-      ...(patch.externalId !== undefined && { externalId: patch.externalId }),
-      ...(patch.initialBalance !== undefined && { initialBalance: patch.initialBalance }),
-      ...(patch.color !== undefined && { color: patch.color }),
-      ...(patch.creditLimit !== undefined && { creditLimit: patch.creditLimit }),
-      ...(patch.closingDay !== undefined && { closingDay: patch.closingDay }),
-      ...(patch.dueDay !== undefined && { dueDay: patch.dueDay }),
-      ...(patch.payFromAccountId !== undefined && { payFromAccountId: patch.payFromAccountId }),
-      ...(patch.archived !== undefined && { archivedAt: patch.archived ? new Date() : null }),
-    },
+    });
+    const records: MutationRecordInput[] = [{ model: "Account", recordId: accountId, before: snapshot(account), after: snapshot(updated) }];
+    // A currency or entity change is not undoable (see above).
+    const undoable = !currencyChanges && !entityChanges;
+    if (undoable && opts.collect) opts.collect.push(...records);
+    const batchId = undoable && !opts.collect && opts.record !== false ? await recordMutation(db, userId, "update", updated.name, records) : null;
+    return { ...updated, batchId };
+  });
+}
+
+/**
+ * Set what the account holds now (a broker's "Caixa disponível", a bank
+ * balance) by moving its initial balance by the difference, so no entry is
+ * written and the history stays as it is. One undoable batch; none when the
+ * balance already matches.
+ */
+export async function setAccountBalance(userId: string, accountId: string, balance: number, outer: DbClient) {
+  return inTransaction(outer, async (db) => {
+    const account = await getOwnedAccount(userId, accountId, db);
+    const current = (await accountBalances(userId, db, [accountId])).get(accountId) ?? toNumber(account.initialBalance);
+    const delta = round(balance - current, 4);
+    if (delta === 0) return { account: { ...account, balance: current }, batchId: null };
+    const updated = await db.account.update({ where: { id: accountId }, data: { initialBalance: { increment: delta } } });
+    const batchId = await recordMutation(db, userId, "update", updated.name, [{ model: "Account", recordId: accountId, before: snapshot(account), after: snapshot(updated) }]);
+    return { account: { ...updated, balance: round(current + delta, 4) }, batchId };
   });
 }
 
