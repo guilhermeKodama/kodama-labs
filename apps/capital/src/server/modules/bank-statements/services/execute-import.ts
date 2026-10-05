@@ -1,15 +1,23 @@
-import type { PrismaClient, TransferDirection } from "@/generated/prisma";
+import type { Account, Entity, PrismaClient, TransferDirection } from "@/generated/prisma";
 import { parseLocalDate } from "@capital/server/lib/date-utils";
+import type { DbClient } from "@capital/server/lib/prisma";
 import { getObjectBuffer } from "@/lib/storage";
+import { st } from "@capital/server/i18n";
+import { loadUserLocale } from "@capital/server/i18n/user-locale";
 import type { ImportPlanPayload } from "@capital/server/modules/assistant/agent/tools/schemas/import-plan-payload";
 import { ensureSystemCategories } from "@capital/server/modules/categories/lib/system-categories";
-import { importCardFile } from "@capital/server/modules/credit-cards/services/import-card-statement";
+import { importCardFile, importCardStatement } from "@capital/server/modules/credit-cards/services/import-card-statement";
 import { createHolding, recordOperation } from "@capital/server/modules/investments/services/portfolio";
-import { LedgerError } from "@capital/server/modules/ledger/lib/errors";
+import { savedViewInputSchema } from "@capital/server/modules/ledger/contracts";
+import { LedgerError, notFound } from "@capital/server/modules/ledger/lib/errors";
+import { round, toNumber } from "@capital/server/modules/ledger/lib/money";
 import { createEntry, updateEntry } from "@capital/server/modules/ledger/services/entries";
 import { getDefaultAccount } from "@capital/server/modules/ledger/services/entities";
 import { inTransaction, recordMutation, snapshot, type MutationRecordInput } from "@capital/server/modules/ledger/services/mutations";
-import { loadRuleMatcher, recordRuleHits } from "@capital/server/modules/ledger/services/rules";
+import { learnRule, loadRuleMatcher, recordRuleHits } from "@capital/server/modules/ledger/services/rules";
+import { createView } from "@capital/server/modules/ledger/services/views";
+import { bookCardPayment, findStatementPaymentEntry, linkStatementPayment, patchCreatedRecord } from "./card-payments";
+import { externalIdHolder, freeExternalId } from "./external-ids";
 import { resolveTransferSides, checkTransferDirection } from "./transfer-flow";
 
 export interface CreatedRecordRef {
@@ -18,6 +26,7 @@ export interface CreatedRecordRef {
 }
 
 export interface ExecuteImportResult {
+  /** Statement rows booked as entries: bank rows (transactions), card bill rows and bill payments. */
   imported: number;
   duplicatesSkipped: number;
   reconciled: number;
@@ -33,6 +42,27 @@ export interface ExecuteImportResult {
   createdRecords: CreatedRecordRef[];
   /** The import's undo batch (source "import"): undoing it removes everything the import wrote. */
   batchId: string;
+  /** Same as statementImportId. */
+  importId: string;
+  /** Account the statement was imported into, and its name for the done message. */
+  accountId: string;
+  accountName: string;
+  /** Rules learned from categories picked in the review (createRule), new or moved. */
+  rulesCreated: number;
+  /** Bank rows booked as card bill payments (card_payment transfers). */
+  cardPaymentsCreated: number;
+  /** Card bill rows booked, and those skipped as already on the statement. */
+  cardRowsCreated: number;
+  cardRowsSkipped: number;
+  /** Card statement the rows went to, and whether its payment got linked (linkPayment). */
+  cardStatementId: string | null;
+  paymentLinked: boolean;
+  /** Every statement row written to the ledger: `imported` plus the transfers. */
+  rowsImported: number;
+  /** Rows left out as already imported (duplicates, card rows already on the statement). */
+  skipped: number;
+  /** The "Importação · <arquivo>" view filtered on this import (createView), else null. */
+  viewId: string | null;
 }
 
 export interface ExecuteImportOptions {
@@ -40,6 +70,51 @@ export interface ExecuteImportOptions {
   source?: "manual" | "agent";
   conversationId?: string;
   importPlanId?: string;
+  /** Create the "Importação · <arquivo>" saved view for this import (the import dialog). */
+  createView?: boolean;
+}
+
+const VIEW_NAME: Record<"pt-BR" | "en", string> = { "pt-BR": "Importação · {file}", en: "Import · {file}" };
+
+/** "nubank-fatura-2026-09.ofx" → "nubank-fatura-2026-09". */
+function fileLabel(fileName: string | null | undefined, fallback: string): string {
+  const base = (fileName ?? "").replace(/\.[a-z0-9]{1,5}$/i, "").trim();
+  return base || fallback;
+}
+
+/** Saved view showing exactly this import's rows, whatever their dates. */
+async function createImportView(userId: string, importId: string, label: string, tx: DbClient): Promise<string> {
+  const locale = await loadUserLocale(userId, tx);
+  const name = VIEW_NAME[locale].replace("{file}", label).slice(0, 120);
+  const view = await createView(
+    userId,
+    savedViewInputSchema.parse({
+      name,
+      dataset: "ledger",
+      isFavorite: false,
+      config: { period: { preset: "all", offset: 0 }, filters: [{ field: "importId", op: "in", values: [importId] }] },
+    }),
+    tx
+  );
+  return view.id;
+}
+
+/**
+ * The account the plan books into: `accountId` when given (a bank account
+ * or card of the plan's entity), else the entity's default checking.
+ */
+async function targetAccount(userId: string, entity: Entity, accountId: string | undefined, tx: DbClient): Promise<Account> {
+  if (!accountId) return getDefaultAccount(entity, tx);
+  const account = await tx.account.findFirst({ where: { id: accountId, userId } });
+  if (!account) throw notFound("Account", "account.not_found");
+  if (account.archivedAt) throw new LedgerError(`Account "${account.name}" is archived`, 422, { code: "account.archived", params: { name: account.name } });
+  if (account.entityId !== entity.id) {
+    throw new LedgerError(`Account "${account.name}" belongs to another entity than the import`, 422, { code: "import.account_entity_mismatch", params: { name: account.name } });
+  }
+  if (account.type === "brokerage") {
+    throw new LedgerError(`Account "${account.name}" cannot receive a statement import`, 422, { code: "import.account_kind_mismatch", params: { name: account.name } });
+  }
+  return account;
 }
 
 /** Direction relabels a reconciliation may apply: same from/to entity kinds only. */
@@ -66,6 +141,14 @@ function directionMatchesSides(direction: TransferDirection, fromKind: string, t
  * Import id, which is what reverting relies on. Everything it writes is
  * also one undo batch with source "import" (system categories it seeds and
  * rule hit counts aside).
+ *
+ * Bank rows book into `accountId` (default: the entity's main checking).
+ * A plan for a credit card books `cardStatement` rows on one statement;
+ * `cardPayments` become card_payment transfers that settle a statement.
+ * An exact duplicate the plan imports anyway (duplicateDecisions
+ * "import_anyway") is booked under `<externalId>~dup<n>`, since an account
+ * holds each external id once. A row whose external id only a trashed row
+ * of the account holds is restored from the trash with the file's values.
  */
 export async function executeImport(
   userId: string,
@@ -80,15 +163,20 @@ export async function executeImport(
     if (!entity || entity.kind !== input.entityType) {
       throw new LedgerError(input.entityType === "personal" ? "Personal account not found or access denied" : "Business not found or access denied", 404, { code: "entity.not_found" });
     }
-    const checking = await getDefaultAccount(entity, tx);
-
-    if (input.ledgerBalance != null) {
-      const prior = await tx.import.count({ where: { entityId: entity.id } });
-      if (prior === 0) {
-        const updated = await tx.account.update({ where: { id: checking.id }, data: { initialBalance: input.ledgerBalance } });
-        records.push({ model: "Account", recordId: checking.id, before: snapshot(checking), after: snapshot(updated) });
-      }
+    const target = await targetAccount(userId, entity, input.accountId, tx);
+    const isCard = target.type === "credit_card";
+    const bankOnly = input.transfers.length || input.investmentTransfers.length || input.reconciliations.length || input.transferReconciliations.length || input.cardPayments?.length;
+    if ((isCard && bankOnly) || (!isCard && input.cardStatement)) {
+      throw new LedgerError(`Account "${target.name}" cannot receive this import`, 422, { code: "import.account_kind_mismatch", params: { name: target.name } });
     }
+    // Bank side of the import: the target, or for a card the account that pays it.
+    const checking = isCard
+      ? ((target.payFromAccountId && (await tx.account.findFirst({ where: { id: target.payFromAccountId, userId } }))) || (await getDefaultAccount(entity, tx)))
+      : target;
+    const locale = await loadUserLocale(userId, tx);
+
+    // The account's first import sets its opening balance (once its rows are booked, below).
+    const setsOpeningBalance = input.ledgerBalance != null && !isCard && (await tx.import.count({ where: { accountId: target.id } })) === 0;
 
     await ensureSystemCategories(userId, tx);
     const matcher = await loadRuleMatcher(userId, tx);
@@ -96,36 +184,44 @@ export async function executeImport(
     const ruleHits: string[] = [];
 
     // Server-side dedup safety net (the plan may be minutes old by commit).
-    const incomingIds = input.transactions.map((t) => t.externalId);
+    const cardPayments = input.cardPayments ?? [];
+    const incomingIds = [...input.transactions.map((t) => t.externalId), ...cardPayments.map((p) => p.externalId)];
     const existing = incomingIds.length
       ? await tx.ledgerEntry.findMany({ where: { userId, externalId: { in: incomingIds }, deletedAt: null }, select: { externalId: true } })
       : [];
     const existingExternalIds = new Set(existing.map((e) => e.externalId));
+    const importAnyway = new Set(input.duplicateDecisions.filter((d) => d.resolution === "import_anyway").map((d) => d.externalId));
 
     let fuzzyDuplicatesLinked = 0;
     const fuzzyLinked = new Set<string>();
     for (const decision of input.duplicateDecisions) {
       if (decision.resolution !== "link_fuzzy" || !decision.existingTransactionId) continue;
-      const target = await tx.ledgerEntry.findFirst({ where: { id: decision.existingTransactionId, userId } });
-      if (!target) throw new LedgerError(`Transaction ${decision.existingTransactionId} not found`, 404, { code: "entry.not_found" });
-      const linked = await tx.ledgerEntry.update({ where: { id: target.id }, data: { externalId: decision.externalId } });
-      records.push({ model: "LedgerEntry", recordId: target.id, before: snapshot(target), after: snapshot(linked) });
+      const entry = await tx.ledgerEntry.findFirst({ where: { id: decision.existingTransactionId, userId } });
+      if (!entry) throw new LedgerError(`Transaction ${decision.existingTransactionId} not found`, 404, { code: "entry.not_found" });
+      const linked = await tx.ledgerEntry.update({ where: { id: entry.id }, data: { externalId: decision.externalId } });
+      records.push({ model: "LedgerEntry", recordId: entry.id, before: snapshot(entry), after: snapshot(linked) });
       fuzzyLinked.add(decision.externalId);
       fuzzyDuplicatesLinked++;
     }
 
-    const newTransactions = input.transactions.filter((t) => !existingExternalIds.has(t.externalId) && !fuzzyLinked.has(t.externalId));
-    const duplicatesSkipped = input.transactions.length - newTransactions.length - fuzzyDuplicatesLinked;
+    const newTransactions = input.transactions.filter((t) => !fuzzyLinked.has(t.externalId) && (!existingExternalIds.has(t.externalId) || importAnyway.has(t.externalId)));
+    const newCardPayments = cardPayments.filter((p) => !existingExternalIds.has(p.externalId));
+    // Rows left out as duplicates: found by the safety net, or skipped in the review (skip_duplicate).
+    const skippedIds = new Set([
+      ...input.transactions.filter((t) => !fuzzyLinked.has(t.externalId) && existingExternalIds.has(t.externalId) && !importAnyway.has(t.externalId)).map((t) => t.externalId),
+      ...input.duplicateDecisions.filter((d) => d.resolution === "skip_duplicate").map((d) => d.externalId),
+    ]);
+    const duplicatesSkipped = skippedIds.size;
 
     const imp = await tx.import.create({
       data: {
         userId,
         entityId: entity.id,
-        accountId: checking.id,
+        accountId: target.id,
         bankName: input.bankName,
         fileName: input.fileName,
-        transactionCount: newTransactions.length,
-        ledgerBalance: input.ledgerBalance,
+        transactionCount: newTransactions.length + newCardPayments.length + (input.cardStatement?.rows.length ?? 0),
+        ledgerBalance: isCard ? null : input.ledgerBalance,
         ledgerCurrency: input.currency,
         categorizationStatus: "pending",
         source: options.source ?? "manual",
@@ -181,12 +277,15 @@ export async function executeImport(
       billTransactionsCreated += result.created;
     }
 
-    const transferIds = [...input.transfers.map((t) => t.externalId), ...input.investmentTransfers.map((t) => t.externalId)];
+    const transferIds = [...input.transfers.map((t) => t.externalId), ...input.investmentTransfers.map((t) => t.externalId), ...newCardPayments.map((p) => p.externalId)];
     const existingTransfers = new Set(
       transferIds.length
         ? (await tx.transferGroup.findMany({ where: { userId, externalId: { in: transferIds }, deletedAt: null }, select: { externalId: true } })).map((g) => g.externalId)
         : []
     );
+
+    // The imported entity's side of a transfer is the account being imported; the counterpart's is its main account.
+    const sideAccount = (side: Entity) => (side.id === entity.id ? Promise.resolve(checking) : getDefaultAccount(side, tx));
 
     let transfersCreated = 0;
     for (const tr of input.transfers) {
@@ -211,14 +310,15 @@ export async function executeImport(
         tx.entity.findFirst({ where: { id: sides.toEntityId, userId } }),
       ]);
       if (!fromEntity || !toEntity) throw new LedgerError(`Transfer ${tr.externalId} references an entity the user does not own`, 404, { code: "import.transfer_entity_not_owned", params: { externalId: tr.externalId } });
-      const [from, to] = await Promise.all([getDefaultAccount(fromEntity, tx), getDefaultAccount(toEntity, tx)]);
+      const [from, to] = await Promise.all([sideAccount(fromEntity), sideAccount(toEntity)]);
       const created = await createEntry(
         userId,
         { kind: "transfer", fromAccountId: from.id, toAccountId: to.id, amount: tr.amount, currency: input.currency, exchangeRate: 1, description: tr.description, date: tr.date, direction: tr.direction },
         tx,
         { importId: imp.id, collect: records }
       );
-      await tx.transferGroup.update({ where: { id: created.transferGroupId! }, data: { externalId: tr.externalId } });
+      const group = await tx.transferGroup.update({ where: { id: created.transferGroupId! }, data: { externalId: tr.externalId } });
+      patchCreatedRecord(records, "TransferGroup", group.id, group);
       createdRecords.push({ model: "TransferGroup", id: created.transferGroupId! });
       transfersCreated++;
     }
@@ -245,9 +345,26 @@ export async function executeImport(
         tx,
         { importId: imp.id, collect: records }
       );
-      await tx.transferGroup.update({ where: { id: created.transferGroupId! }, data: { externalId: it.externalId } });
+      const group = await tx.transferGroup.update({ where: { id: created.transferGroupId! }, data: { externalId: it.externalId } });
+      patchCreatedRecord(records, "TransferGroup", group.id, group);
       createdRecords.push({ model: "TransferGroup", id: created.transferGroupId! });
       investmentTransfersCreated++;
+    }
+
+    let cardPaymentsCreated = 0;
+    for (const payment of newCardPayments) {
+      if (existingTransfers.has(payment.externalId)) continue;
+      const card = await tx.account.findFirst({ where: { id: payment.cardAccountId, userId } });
+      if (!card || card.type !== "credit_card") {
+        throw new LedgerError(`Card payment ${payment.externalId} needs a credit card account`, 422, { code: "import.card_payment_target", params: { externalId: payment.externalId } });
+      }
+      const booked = await bookCardPayment(userId, checking, card, { ...payment, currency: input.currency }, tx, {
+        importId: imp.id,
+        collect: records,
+        defaultDescription: st(locale, "ledger.direction.card_payment"),
+      });
+      createdRecords.push({ model: "TransferGroup", id: booked.groupId });
+      cardPaymentsCreated++;
     }
 
     let reconciled = 0;
@@ -288,12 +405,26 @@ export async function executeImport(
       if (Object.keys(patch).length || rec.updates.direction !== undefined) transferReconciled++;
     }
 
+    let rulesCreated = 0;
+    const learn = async (description: string, categoryId: string) => {
+      const before = records.length;
+      await learnRule(userId, description, categoryId, "manual", tx, { collect: records });
+      if (records.length > before) rulesCreated++;
+    };
+
     let imported = 0;
     let uncategorized = 0;
     for (const t of newTransactions) {
       let categoryId: string | null = null;
+      let ruleId: string | null = null;
       let auto = false;
-      if (t.category) {
+      const rule = matcher.match(t.description, entity.id);
+      if (t.categoryId) {
+        const c = categories.find((x) => x.id === t.categoryId);
+        if (!c) throw new LedgerError(`Category ${t.categoryId} not found or access denied`, 404, { code: "category.not_found" });
+        if (c.isArchived) throw new LedgerError(`Category '${c.name}' is archived and cannot be assigned. Row: ${t.description}`, 422, { code: "category.archived", params: { name: c.name } });
+        categoryId = c.id;
+      } else if (t.category) {
         const type = t.type === "income" ? "income" : "expense";
         const c = categories.find((x) => x.name.toLowerCase() === t.category!.toLowerCase() && x.type === type) ?? categories.find((x) => x.name.toLowerCase() === t.category!.toLowerCase());
         if (c?.isArchived) {
@@ -301,26 +432,88 @@ export async function executeImport(
         }
         categoryId = c?.id ?? null;
       }
-      if (!categoryId) {
-        const rule = matcher.match(t.description, entity.id);
-        if (rule) {
-          categoryId = rule.categoryId;
-          auto = true;
-          ruleHits.push(rule.id);
-        }
+      // No category chosen, or the one the matching rule gives (the review prefilled it): the rule's doing.
+      if (rule && (!categoryId || categoryId === rule.categoryId)) {
+        categoryId = rule.categoryId;
+        ruleId = rule.id;
+        auto = true;
+        ruleHits.push(rule.id);
       }
       if (!categoryId) uncategorized++;
-      const created = await createEntry(
-        userId,
-        { kind: t.type, accountId: checking.id, amount: t.amount, currency: input.currency, description: t.description, date: t.date, categoryId, externalId: t.externalId },
-        tx,
-        { importId: imp.id, collect: records, skipRules: true, isAutoCategorized: auto }
-      );
-      createdRecords.push({ model: "LedgerEntry", id: created.entryIds[0] });
+
+      // An external id held only by a trashed entry of the account (an import reverted before): that entry comes back.
+      const exactDuplicate = existingExternalIds.has(t.externalId);
+      const holder = await externalIdHolder(target.id, t.externalId, tx);
+      const trashed = !exactDuplicate && holder?.deletedAt && !holder.transferGroupId ? holder : null;
+      let entryId: string;
+      if (trashed) {
+        const untrashed = await tx.ledgerEntry.update({ where: { id: trashed.id }, data: { deletedAt: null, importId: imp.id } });
+        records.push({ model: "LedgerEntry", recordId: trashed.id, before: snapshot(trashed), after: snapshot(untrashed) });
+        await updateEntry(userId, trashed.id, { kind: t.type, amount: t.amount, currency: input.currency, date: t.date, description: t.description, categoryId }, tx, { collect: records });
+        const before = await tx.ledgerEntry.findUniqueOrThrow({ where: { id: trashed.id } });
+        const stamped = await tx.ledgerEntry.update({ where: { id: trashed.id }, data: { isAutoCategorized: auto, categorizedByRuleId: ruleId } });
+        records.push({ model: "LedgerEntry", recordId: trashed.id, before: snapshot(before), after: snapshot(stamped) });
+        entryId = trashed.id;
+      } else {
+        const externalId = holder ? await freeExternalId(target.id, t.externalId, tx) : t.externalId;
+        const created = await createEntry(
+          userId,
+          { kind: t.type, accountId: target.id, amount: t.amount, currency: input.currency, description: t.description, date: t.date, categoryId, externalId },
+          tx,
+          { importId: imp.id, collect: records, skipRules: true, isAutoCategorized: auto }
+        );
+        entryId = created.entryIds[0];
+        if (ruleId) patchCreatedRecord(records, "LedgerEntry", entryId, await tx.ledgerEntry.update({ where: { id: entryId }, data: { categorizedByRuleId: ruleId } }));
+      }
+      if (t.createRule && t.categoryId && !ruleId) await learn(t.description, t.categoryId);
+      createdRecords.push({ model: "LedgerEntry", id: entryId });
       imported++;
     }
+
+    let cardRowsCreated = 0;
+    let cardRowsSkipped = 0;
+    let cardStatementId: string | null = null;
+    let paymentLinked = false;
+    if (input.cardStatement) {
+      const bill = input.cardStatement;
+      const result = await importCardStatement(
+        userId,
+        {
+          accountId: target.id,
+          month: bill.month,
+          closingDate: bill.closingDate,
+          dueDate: bill.dueDate,
+          total: bill.total,
+          rows: bill.rows.map((r) => ({ date: r.date, description: r.description, amount: r.amount, categoryId: r.categoryId, installment: r.installment, allowDuplicate: r.allowDuplicate })),
+          importId: imp.id,
+          fallback: "none",
+        },
+        tx,
+        { collect: records }
+      );
+      cardStatementId = result.statementId;
+      cardRowsCreated = result.created;
+      cardRowsSkipped = result.skipped;
+      createdRecords.push({ model: "CardStatement", id: result.statementId });
+      for (const id of result.createdIds) createdRecords.push({ model: "LedgerEntry", id });
+      for (const r of bill.rows) {
+        if (!r.createRule || !r.categoryId) continue;
+        const rule = matcher.match(r.description, entity.id);
+        if (rule?.categoryId !== r.categoryId) await learn(r.description, r.categoryId);
+      }
+      if (await tx.ledgerEntry.count({ where: { importId: imp.id, categoryId: null, deletedAt: null, transferGroupId: null } })) uncategorized++;
+
+      if (bill.linkPayment) {
+        const statement = await tx.cardStatement.findUniqueOrThrow({ where: { id: result.statementId } });
+        const total = statement.totalAmount != null ? Number(statement.totalAmount) : bill.rows.reduce((sum, r) => sum + r.amount, 0);
+        const payment = await findStatementPaymentEntry(userId, target, statement, Math.round(total * 100) / 100, tx);
+        if (payment) {
+          await linkStatementPayment(userId, payment.id, statement, tx, records);
+          paymentLinked = true;
+        }
+      }
+    }
     if (ruleHits.length) await recordRuleHits(ruleHits, tx);
-    if (uncategorized === 0) await tx.import.update({ where: { id: imp.id }, data: { categorizationStatus: "completed" } });
 
     let investmentTransactionsCreated = 0;
     for (const it of input.investmentTransactions) {
@@ -341,7 +534,30 @@ export async function executeImport(
       investmentTransactionsCreated++;
     }
 
+    // Opening balance such that the account ends the statement at its ledger balance: the
+    // statement's closing balance minus everything the account holds up to its last row.
+    if (setsOpeningBalance) {
+      const dates = [...input.transactions, ...input.transfers, ...input.investmentTransfers, ...cardPayments].map((r) => r.date).sort();
+      const last = dates[dates.length - 1];
+      const held = await tx.ledgerEntry.aggregate({
+        where: { accountId: target.id, deletedAt: null, ...(last && { date: { lte: parseLocalDate(last) } }) },
+        _sum: { amount: true },
+      });
+      const updated = await tx.account.update({ where: { id: target.id }, data: { initialBalance: round(input.ledgerBalance! - toNumber(held._sum.amount), 4) } });
+      records.push({ model: "Account", recordId: target.id, before: snapshot(target), after: snapshot(updated) });
+    }
+
+    // Statement rows booked as entries (the assistant's plans only ever have the first kind).
+    imported += cardRowsCreated + cardPaymentsCreated;
+    const rowsImported = imported + transfersCreated + investmentTransfersCreated;
+    const finished = await tx.import.update({
+      where: { id: imp.id },
+      data: { transactionCount: rowsImported + billTransactionsCreated, ...(uncategorized === 0 && { categorizationStatus: "completed" }) },
+    });
+    patchCreatedRecord(records, "Import", imp.id, finished);
+
     const batchId = await recordMutation(tx, userId, "import", `Import ${imp.fileName ?? imp.bankName ?? imp.id}`, records, { source: "import" });
+    const viewId = options.createView ? await createImportView(userId, imp.id, fileLabel(input.fileName, input.bankName ?? target.name), tx) : null;
     return {
       imported,
       duplicatesSkipped,
@@ -357,6 +573,18 @@ export async function executeImport(
       statementImportId: imp.id,
       createdRecords,
       batchId,
+      importId: imp.id,
+      accountId: target.id,
+      accountName: target.name,
+      rulesCreated,
+      cardPaymentsCreated,
+      cardRowsCreated,
+      cardRowsSkipped,
+      cardStatementId,
+      paymentLinked,
+      rowsImported,
+      skipped: duplicatesSkipped + cardRowsSkipped,
+      viewId,
     };
   });
 }

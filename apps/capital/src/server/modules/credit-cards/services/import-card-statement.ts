@@ -22,6 +22,8 @@ export interface StatementRowInput {
   category?: string;
   merchantName?: string | null;
   installment?: { number: number; total: number };
+  /** Book the row even when an identical one is already on the statement (the user chose "import anyway"). */
+  allowDuplicate?: boolean;
 }
 
 export interface ImportCardStatementInput {
@@ -43,7 +45,12 @@ export interface CardImportOptions {
 
 const normalize = (s: string) => s.toLowerCase().trim().replace(/\s+/g, " ");
 const baseDescription = (s: string) => normalize(s.replace(/\s*\(?\d{1,2}\s*\/\s*\d{1,2}\)?\s*$/, ""));
-const dedupeKey = (date: Date, amount: number, description: string, n?: number | null) =>
+/**
+ * Identity of a statement row (charge > 0): two rows with the same key are
+ * the same purchase, which is how re-importing a file stays a no-op. The
+ * import analysis uses it too, to flag rows already on the statement.
+ */
+export const dedupeKey = (date: Date, amount: number, description: string, n?: number | null) =>
   `${date.toISOString().slice(0, 10)}|${amount.toFixed(2)}|${normalize(description)}${n ? `|${n}` : ""}`;
 
 export const isProjected = (metadata: unknown) =>
@@ -66,7 +73,7 @@ function shiftMonth(month: string, by: number) {
 }
 
 /** ensureStatement, recording whether it created the month's statement or changed it. */
-async function ensureRecordedStatement(
+export async function ensureRecordedStatement(
   account: Account,
   month: string,
   tx: DbClient,
@@ -111,14 +118,27 @@ export async function importCardStatement(userId: string, input: ImportCardState
     const fallbackId = input.fallback === "none" ? null : (await getSystemCategory(userId, "other_system", tx)).id;
     const ruleHits: string[] = [];
 
-    const resolve = (row: StatementRowInput): { categoryId: string | null; auto: boolean } => {
+    /**
+     * Category of a row: the one the caller chose (by id or name), else the
+     * first matching rule, else the fallback. A chosen category equal to the
+     * rule's (the review prefilled it) still counts as the rule's doing.
+     */
+    const resolve = (row: StatementRowInput): { categoryId: string | null; auto: boolean; ruleId: string | null } => {
+      const rule = matcher.match(row.description, account.entityId);
+      const chosen = (categoryId: string) => {
+        if (rule && rule.categoryId === categoryId) {
+          ruleHits.push(rule.id);
+          return { categoryId, auto: true, ruleId: rule.id };
+        }
+        return { categoryId, auto: false, ruleId: null };
+      };
       if (row.categoryId) {
         const c = categories.find((x) => x.id === row.categoryId);
         if (!c) throw new LedgerError(`Category ${row.categoryId} not found or access denied`, 404, { code: "category.not_found" });
         if (c.isArchived) {
           throw new LedgerError(`Category '${c.name}' is archived and cannot be assigned. Unarchive it or choose a visible category.`, 422, { code: "category.archived", params: { name: c.name } });
         }
-        return { categoryId: c.id, auto: false };
+        return chosen(c.id);
       }
       if (row.category) {
         const matched = matchCategoryName(row.category, expense, "expense");
@@ -126,14 +146,13 @@ export async function importCardStatement(userId: string, input: ImportCardState
           const name = matched.canonicalName ?? row.category;
           throw new LedgerError(`Category '${name}' is archived and cannot be assigned. Unarchive it or choose a visible category.`, 422, { code: "category.archived", params: { name } });
         }
-        if (matched.canonicalName) return { categoryId: expense.find((c) => c.name === matched.canonicalName)!.id, auto: false };
+        if (matched.canonicalName) return chosen(expense.find((c) => c.name === matched.canonicalName)!.id);
       }
-      const rule = matcher.match(row.description, account.entityId);
       if (rule) {
         ruleHits.push(rule.id);
-        return { categoryId: rule.categoryId, auto: true };
+        return { categoryId: rule.categoryId, auto: true, ruleId: rule.id };
       }
-      return { categoryId: fallbackId, auto: false };
+      return { categoryId: fallbackId, auto: false, ruleId: null };
     };
 
     const existing = await tx.ledgerEntry.findMany({
@@ -153,7 +172,7 @@ export async function importCardStatement(userId: string, input: ImportCardState
       const date = parseLocalDate(row.date);
       const key = dedupeKey(date, row.amount, row.description, row.installment?.number);
       const seen = counts.get(key) ?? 0;
-      if (seen > 0) {
+      if (seen > 0 && !row.allowDuplicate) {
         counts.set(key, seen - 1);
         skipped++;
         continue;
@@ -161,7 +180,7 @@ export async function importCardStatement(userId: string, input: ImportCardState
       const currency = row.currency ?? account.currency;
       const rate = fx.rateFor(currency);
       const amount = round(-row.amount, 4);
-      const { categoryId, auto } = resolve(row);
+      const { categoryId, auto, ruleId } = resolve(row);
 
       let planId: string | null = null;
       if (row.installment && row.installment.total > 1) {
@@ -209,6 +228,7 @@ export async function importCardStatement(userId: string, input: ImportCardState
               description: `${plan.description} (${n}/${row.installment.total})`,
               categoryId,
               isAutoCategorized: auto,
+              categorizedByRuleId: ruleId,
               cardStatementId: future.id,
               installmentPlanId: plan.id,
               installmentNumber: n,
@@ -236,6 +256,7 @@ export async function importCardStatement(userId: string, input: ImportCardState
           merchantName: row.merchantName ?? null,
           categoryId,
           isAutoCategorized: auto,
+          categorizedByRuleId: ruleId,
           cardStatementId: statement.id,
           installmentPlanId: planId,
           installmentNumber: row.installment?.number ?? null,

@@ -92,7 +92,7 @@ function OfxImport({ names }: { names: Names }) {
     setBusy(true);
     try {
       const payload = await Promise.all([...files].map(async (f) => ({ name: f.name, content: await f.text() })));
-      const result = await apiPost<Analysis>("/api/v2/imports/analyze", { files: payload });
+      const result = await apiPost<Analysis>("/api/v2/imports/analyze", { files: payload, legacy: true });
       setFileName([...files].map((f) => f.name).join(", "));
       setAnalysis(result);
       setDecisions(Object.fromEntries(result.transactions.map((row) => [row.fitId, defaultDecision(row)])));

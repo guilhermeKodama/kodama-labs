@@ -1,6 +1,9 @@
 import { z } from "zod";
 import { createHash } from "node:crypto";
 
+// Fields added for the import dialog (categoryId, createRule, and below
+// accountId, cardPayments, cardStatement) are optional without defaults:
+// a plan stored before them parses to the same object, so its hash holds.
 export const ImportPlanTransactionSchema = z.object({
   externalId: z.string().min(1),
   date: z.string().min(1),
@@ -8,6 +11,10 @@ export const ImportPlanTransactionSchema = z.object({
   amount: z.number().positive(),
   type: z.enum(["income", "expense"]),
   category: z.string().optional(),
+  /** Category by id (the dialog's picker); wins over `category`. */
+  categoryId: z.string().min(1).optional(),
+  /** Learn an "equals" rule from this row's description to its category. */
+  createRule: z.boolean().optional(),
 });
 
 // `flow` and `direction` answer different questions and both are
@@ -145,6 +152,42 @@ export const ImportPlanInvestmentTransactionSchema = z.object({
   date: z.string().min(1),
 });
 
+// A bank row that paid a card bill ("Pagamento de fatura"): booked as a
+// card_payment transfer from the import's account to the card, settling the
+// statement of `statementMonth` (by default the one due nearest the date).
+export const ImportPlanCardPaymentSchema = z.object({
+  externalId: z.string().min(1),
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  amount: z.number().positive(),
+  description: z.string().min(1).optional(),
+  cardAccountId: z.string().min(1),
+  statementMonth: z.string().regex(/^\d{4}-\d{2}$/).optional(),
+});
+
+// The rows of a card bill reviewed in the dialog, booked on the statement
+// of `month` of the plan's accountId (a credit card). amount follows the
+// statement convention: a charge is positive, a refund negative.
+export const ImportPlanCardStatementRowSchema = z.object({
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  description: z.string().min(1),
+  amount: z.number().refine((n) => n !== 0, "amount must not be zero"),
+  categoryId: z.string().min(1).optional(),
+  createRule: z.boolean().optional(),
+  installment: z.object({ number: z.number().int().min(1), total: z.number().int().min(1) }).optional(),
+  /** Book it even when an identical row is already on the statement. */
+  allowDuplicate: z.boolean().optional(),
+});
+
+export const ImportPlanCardStatementSchema = z.object({
+  month: z.string().regex(/^\d{4}-\d{2}$/),
+  closingDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  dueDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  total: z.number().optional(),
+  rows: z.array(ImportPlanCardStatementRowSchema).max(2000),
+  /** Turn the bank expense that paid this bill into the statement's card_payment transfer. */
+  linkPayment: z.boolean().optional(),
+});
+
 export const ImportPlanPayloadSchema = z.object({
   entityType: z.enum(["personal", "business"]),
   entityId: z.string().min(1),
@@ -166,6 +209,14 @@ export const ImportPlanPayloadSchema = z.object({
   transferReconciliations: z.array(ImportPlanTransferReconciliationSchema).default([]),
   duplicateDecisions: z.array(ImportPlanDuplicateDecisionSchema).default([]),
   investmentTransactions: z.array(ImportPlanInvestmentTransactionSchema).default([]),
+  /**
+   * Account the statement is imported into: a checking or cash account of
+   * the entity for bank rows, a credit card for `cardStatement`. Without
+   * it, the entity's default checking account.
+   */
+  accountId: z.string().min(1).optional(),
+  cardPayments: z.array(ImportPlanCardPaymentSchema).optional(),
+  cardStatement: ImportPlanCardStatementSchema.optional(),
 });
 
 export type ImportPlanPayload = z.infer<typeof ImportPlanPayloadSchema>;
@@ -207,6 +258,7 @@ export function computePlanSummary(payload: ImportPlanPayload) {
     ...payload.investmentTransfers.filter((t) => t.direction === "investment_withdrawal"),
   ].reduce((sum, t) => sum + t.amount, 0);
 
+  const cardRows = payload.cardStatement?.rows ?? [];
   return {
     newTransactionCount: payload.transactions.length,
     skipDuplicateCount: payload.duplicateDecisions.filter((d) => d.resolution === "skip_duplicate").length,
@@ -222,6 +274,10 @@ export function computePlanSummary(payload: ImportPlanPayload) {
     billTotalPreviewAmount:
       Math.round(payload.bills.reduce((sum, b) => sum + b.previewTotalAmount, 0) * 100) / 100,
     investmentTransactionCount: payload.investmentTransactions.length,
+    cardPaymentCount: payload.cardPayments?.length ?? 0,
+    cardRowCount: cardRows.length,
+    cardRowTotal: Math.round(cardRows.reduce((sum, r) => sum + r.amount, 0) * 100) / 100,
+    rulesToCreate: [...payload.transactions, ...cardRows].filter((r) => r.createRule && r.categoryId).length,
     totalIncome: Math.round(income * 100) / 100,
     totalExpense: Math.round(expense * 100) / 100,
     currency: payload.currency,

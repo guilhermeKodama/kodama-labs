@@ -159,7 +159,11 @@
     "investment_account_not_found": "Conta de investimento não encontrada.",
     "reconcile_target_not_found": "A transferência a conciliar não foi encontrada.",
     "reconcile_direction_change": "A conciliação não muda a direção de uma transferência. Exclua e crie de novo.",
-    "holding_unresolved": "A transação de investimento {externalId} não corresponde a nenhuma posição."
+    "holding_unresolved": "A transação de investimento {externalId} não corresponde a nenhuma posição.",
+    "account_kind_mismatch": "A conta {name} não recebe este arquivo: extrato vai para conta corrente ou dinheiro, fatura vai para cartão.",
+    "account_entity_mismatch": "A conta {name} é de outra entidade.",
+    "mixed_files": "Extrato bancário e fatura de cartão não podem ser importados juntos.",
+    "card_payment_target": "O pagamento de fatura {externalId} precisa de um cartão de crédito."
   },
   "assistant": {
     "conversation_not_found": "Conversa não encontrada.",
