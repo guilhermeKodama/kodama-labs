@@ -1,0 +1,14 @@
+# systemd USER timer. User timers only fire for a lingering user.
+# Check: loginctl show-user kodama -p Linger
+# Enable: sudo loginctl enable-linger kodama
+[Unit]
+Description=Push host disk usage to Uptime Kuma every 5 minutes
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=5min
+AccuracySec=1min
+Persistent=true
+
+[Install]
+WantedBy=timers.target

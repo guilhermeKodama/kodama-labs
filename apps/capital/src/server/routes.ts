@@ -1,5 +1,6 @@
 import type { AppOpenAPI } from "./types";
 
+import dbHealth from "./modules/health/routes/db";
 import v1Health from "./modules/health/routes/v1";
 import v1Auth from "./modules/auth/routes/v1";
 import v1Users from "./modules/users/routes/v1";
@@ -22,6 +23,7 @@ import v1Push from "./modules/push/routes/v1";
 
 export function registerRoutes<T extends AppOpenAPI>(app: T) {
   return app
+    .route("/", dbHealth)
     .route("/", v1Health)
     .route("/", v1Auth)
     .route("/", v1Users)

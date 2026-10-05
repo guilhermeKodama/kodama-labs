@@ -75,6 +75,20 @@ docker --context desktop-linux compose up -d cronjobs
 
 A variável `CRON_APPS` (default `capital,sentinel`, no environment do serviço) escolhe quais apps o runner dispara.
 
+Depois de um cron bem-sucedido o runner manda um heartbeat pro Uptime Kuma. Falha não manda `status=down` de propósito: o monitor de push trata a ausência como erro, e com `maxretries` 1 só a segunda falha seguida vira Down. O segredo `KUMA_PUSH_TOKEN_SECRET` tem que ser o mesmo do `infrastructure/monitoring/.env.production`.
+
+## Janela de manutenção (Uptime Kuma)
+
+Antes de um `compose up -d` que recria containers, abre uma janela pra não paginar no meio do deploy. O comando roda no servidor, sem pnpm/Node local. As credenciais ficam no `env_file` do serviço, não na linha de comando:
+
+```bash
+docker --context desktop-linux compose -p kodama-prod run --rm uptime-kuma-provision node dist/maintenance.js start 30
+# build e up -d
+docker --context desktop-linux compose -p kodama-prod run --rm uptime-kuma-provision node dist/maintenance.js clear
+```
+
+`start 30` cobre 30 minutos em todo monitor `kodama/`. O contexto `desktop-linux` é obrigatório nesta máquina. O runbook completo está em [Monitoramento](/docs/infrastructure/monitoring).
+
 ## Se algo der errado
 
 Os serviços systemd antigos (`careers-*`, `attention-*`) continuam instalados no servidor, só desabilitados — não foram removidos. Rollback de emergência:

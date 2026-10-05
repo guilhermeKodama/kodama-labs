@@ -183,7 +183,91 @@ services:
       CAPITAL_BASE_URL: http://capital-web:3000
       SENTINEL_BASE_URL: http://sentinel-web:3002
       CRON_APPS: "${CRON_APPS:-capital,sentinel}"
+      KUMA_PUSH_BASE_URL: http://uptime-kuma:3001
+      KUMA_PUSH_TOKEN_FILE: /var/kodama-monitoring/push-tokens.json
     volumes:
       - ${HOME}/.local/share/capital/blob:/home/kodama/.local/share/capital/blob
       - ./infrastructure/cronjobs/schedules:/repo/infrastructure/cronjobs/schedules:ro
+      - /home/kodama/.local/share/kodama-monitoring:/var/kodama-monitoring:ro
+    networks: [kodama]
+
+  # ── monitoring ──────────────────────────────────────────────────────────
+  # Kuma is bound to loopback only and is not in the cloudflared ingress.
+  # The one-shot provisioner intentionally has no restart policy: it exits 0,
+  # and `restart: always` would run it forever. Migrate services are the same.
+  docker-socket-proxy:
+    <<: *restart
+    # Docker Hub publishes v0.4.2, not 0.4.2.
+    image: tecnativa/docker-socket-proxy:v0.4.2
+    environment:
+      CONTAINERS: "1"
+      EVENTS: "1"
+      INFO: "1"
+      PING: "1"
+      VERSION: "1"
+      POST: "0"
+    volumes:
+      - /home/kodama/.docker/desktop/docker.sock:/var/run/docker.sock:ro
+    mem_limit: 64m
+    networks: [kodama]
+
+  uptime-kuma:
+    <<: *restart
+    image: louislam/uptime-kuma:2.5.3-slim
+    depends_on:
+      docker-socket-proxy:
+        condition: service_started
+    # Slim has no embedded MariaDB. Without this, a fresh data dir stays on
+    # the setup-database page and never opens the socket the provisioner uses.
+    environment:
+      UPTIME_KUMA_DB_TYPE: sqlite
+    ports:
+      - "127.0.0.1:${UPTIME_KUMA_PORT:-13020}:3001"
+    volumes:
+      - /home/kodama/.local/share/uptime-kuma:/app/data
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    mem_limit: 384m
+    networks: [kodama]
+
+  uptime-kuma-provision:
+    image: kodama-monitoring:latest
+    build:
+      context: .
+      dockerfile: infrastructure/monitoring/Dockerfile
+    command: ["node", "dist/provision.js"]
+    depends_on:
+      uptime-kuma:
+        condition: service_healthy
+    env_file:
+      - path: infrastructure/monitoring/.env.production
+        required: false
+    environment:
+      KUMA_URL: http://uptime-kuma:3001
+      DOCKER_DAEMON: tcp://docker-socket-proxy:2375
+      DOCKER_TYPE: tcp
+      COMPOSE_PROJECT_NAME: kodama-prod
+      CRON_SCHEDULES_DIR: /app/schedules
+      PUSH_TOKEN_FILE: /var/kodama-monitoring/push-tokens.json
+    volumes:
+      - /home/kodama/.local/share/kodama-monitoring:/var/kodama-monitoring
+    mem_limit: 256m
+    networks: [kodama]
+    restart: "no"
+
+  log-watcher:
+    <<: *restart
+    image: kodama-monitoring:latest
+    command: ["node", "dist/watch.js"]
+    depends_on:
+      docker-socket-proxy:
+        condition: service_started
+    env_file:
+      - path: infrastructure/monitoring/.env.production
+        required: false
+    environment:
+      DOCKER_HOST: tcp://docker-socket-proxy:2375
+      COMPOSE_PROJECT_NAME: kodama-prod
+      WATCH_HOST: kodama-ai
+    mem_limit: 128m
     networks: [kodama]
