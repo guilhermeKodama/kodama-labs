@@ -25,7 +25,7 @@ export interface ExecuteRevertResult {
  * trashed) and their holdings recalculated; holdings themselves are kept
  * (the user may have added data since). Cards it created are archived when
  * nothing else uses them. The Import row stays as history, stamped with
- * revertedAt; undoing the batch restores all of it except the card archive.
+ * revertedAt; undoing the batch restores all of it, archived cards included.
  */
 export async function executeRevert(userId: string, payload: RevertPlanPayload, db: PrismaClient): Promise<ExecuteRevertResult> {
   return inTransaction(db, async (tx) => {
@@ -54,13 +54,15 @@ export async function executeRevert(userId: string, payload: RevertPlanPayload, 
     for (const e of all) records.push({ model: "LedgerEntry", recordId: e.id, before: snapshot(e), after: snapshot({ ...e, deletedAt: now }) });
 
     // Archived rather than deleted: deleting would cascade into the trashed
-    // entries and make the batch below impossible to undo.
+    // entries and make the batch below impossible to undo. The archive is
+    // part of the batch, so undoing it brings the card back too.
     let creditCardsDeleted = 0;
     for (const accountId of ids("Account", "CreditCard")) {
-      const live = await tx.ledgerEntry.count({ where: { accountId, deletedAt: null } });
-      if (live) continue;
-      const { count } = await tx.account.updateMany({ where: { id: accountId, userId, type: "credit_card", archivedAt: null }, data: { archivedAt: now } });
-      creditCardsDeleted += count;
+      const card = await tx.account.findFirst({ where: { id: accountId, userId, type: "credit_card", archivedAt: null } });
+      if (!card || (await tx.ledgerEntry.count({ where: { accountId, deletedAt: null } }))) continue;
+      const archived = await tx.account.update({ where: { id: card.id }, data: { archivedAt: now } });
+      records.push({ model: "Account", recordId: card.id, before: snapshot(card), after: snapshot(archived) });
+      creditCardsDeleted++;
     }
 
     // The Import row is part of the batch: undoing it clears revertedAt again.

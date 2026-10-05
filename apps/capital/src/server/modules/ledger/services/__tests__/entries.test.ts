@@ -150,6 +150,18 @@ describe("updates, trash and undo", () => {
     await undoBatch(USER, res.batchId!, prisma);
     const reverted = await prisma.ledgerEntry.findMany({ where: { id: { in: [a.entryIds[0], b.entryIds[0]] } } });
     expect(reverted.every((r) => r.categoryId === null && !r.isTaxDeductible)).toBe(true);
+    expect(await prisma.categorizationRule.count({ where: { userId: USER, pattern: "figma" } })).toBe(0);
+  });
+
+  it("undoing a bulk edit puts back the rule it moved, even when no entry changed", async () => {
+    const rule = (await learnRule(USER, "Uber", f.categories.Groceries, "manual", prisma))!;
+    const e = await createEntry(USER, { kind: "expense", accountId: f.pfChecking, amount: 30, description: "Uber", date: "2026-09-12", categoryId: f.categories.Software }, prisma);
+    const res = await bulkUpdateEntries(USER, e.entryIds, { categoryId: f.categories.Software }, prisma, { createRule: true });
+    expect(res).toMatchObject({ changed: 0, matched: 1 });
+    expect(await prisma.categorizationRule.findUniqueOrThrow({ where: { id: rule.id } })).toMatchObject({ categoryId: f.categories.Software, source: "bulk" });
+
+    await undoBatch(USER, res.batchId!, prisma);
+    expect(await prisma.categorizationRule.findUniqueOrThrow({ where: { id: rule.id } })).toMatchObject({ categoryId: f.categories.Groceries, source: "manual" });
   });
 
   it("duplicates entries and transfers with fresh ids", async () => {

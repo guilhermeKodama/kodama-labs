@@ -2,6 +2,7 @@ import type { DbClient } from "@capital/server/lib/prisma";
 import type { CategorizationRule } from "@/generated/prisma";
 import { normalizeDescription } from "@capital/server/modules/bank-statements/utils";
 import { LedgerError } from "../lib/errors";
+import { snapshot, type MutationRecordInput } from "./mutations";
 
 export const RULE_MATCH_TYPES = ["equals", "contains", "regex"] as const;
 export type RuleMatchType = (typeof RULE_MATCH_TYPES)[number];
@@ -50,21 +51,28 @@ export async function recordRuleHits(ruleIds: string[], db: DbClient) {
   }
 }
 
-/** Learn (or move) an exact-description rule. Used by manual recategorization and bulk edits. */
+/**
+ * Learn (or move) an exact-description rule. Used by manual recategorization
+ * and bulk edits; with `collect`, a rule created or moved joins the caller's
+ * undo batch.
+ */
 export async function learnRule(
   userId: string,
   description: string,
   categoryId: string,
   source: "manual" | "ai" | "bulk",
-  db: DbClient
+  db: DbClient,
+  opts: { collect?: MutationRecordInput[] } = {}
 ) {
   const pattern = normalizeDescription(description);
   if (!pattern) return null;
-  return db.categorizationRule.upsert({
-    where: { userId_matchType_pattern: { userId, matchType: "equals", pattern } },
-    create: { userId, matchType: "equals", pattern, categoryId, source },
-    update: { categoryId, source },
-  });
+  const where = { userId_matchType_pattern: { userId, matchType: "equals", pattern } };
+  const before = opts.collect ? await db.categorizationRule.findUnique({ where }) : null;
+  const rule = await db.categorizationRule.upsert({ where, create: { userId, matchType: "equals", pattern, categoryId, source }, update: { categoryId, source } });
+  if (opts.collect && (before?.categoryId !== rule.categoryId || before?.source !== rule.source)) {
+    opts.collect.push({ model: "CategorizationRule", recordId: rule.id, before: snapshot(before), after: snapshot(rule) });
+  }
+  return rule;
 }
 
 export interface RuleInput {

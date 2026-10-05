@@ -1002,7 +1002,7 @@ model MutationBatch {
 model MutationRecord {
   id       String @id @default(uuid())
   batchId  String
-  model    String // LedgerEntry | TransferGroup
+  model    String // A MutationModel of the undo registry (src/server/modules/ledger/services/mutations.ts)
   recordId String
   before   Json?
   after    Json?

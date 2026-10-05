@@ -100,6 +100,9 @@ export const ERROR_CODES = {
   "undo.newer_change": "A newer change touched these rows; undo it first",
   "undo.unsupported": "Changes to {model} records cannot be undone",
 
+  // Trash
+  "trash.operation_recorded_again": "{description} is the cash of an investment operation that was recorded again; restoring it would count it twice",
+
   // Budgets
   "budget.not_found": "Budget not found",
   "budget.negative_amount": "The budget amount cannot be negative",

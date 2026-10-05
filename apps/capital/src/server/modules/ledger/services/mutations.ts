@@ -18,11 +18,14 @@ interface RecordDelegate {
 }
 
 type DelegateName =
+  | "account"
+  | "category"
   | "ledgerEntry"
   | "transferGroup"
   | "cardStatement"
   | "installmentPlan"
   | "recurringRule"
+  | "investmentHolding"
   | "investmentOperation"
   | "categorizationRule"
   | "budget"
@@ -61,16 +64,43 @@ async function recalculateTouchedHoldings(tx: DbClient, records: MutationRecord[
 /**
  * Every model a batch can record. Writers snapshot plain rows (no
  * relations) of these models; undo removes the rows a batch created,
- * restores the `before` of rows it changed, and re-creates with the same id
- * the rows it deleted outright.
+ * writes back the columns it changed on rows it updated, and re-creates
+ * with the same id the rows it deleted outright.
  */
 const MODELS = {
+  // Accounts and categories cascade into the rows that use them: one the batch created stays while anything still does.
+  Account: {
+    delegate: "account",
+    owned: byUser,
+    userScoped: true,
+    removable: {
+      ledgerEntries: { none: {} },
+      cardStatements: { none: {} },
+      installmentPlans: { none: {} },
+      recurringRules: { none: {} },
+      recurringTargets: { none: {} },
+      holdings: { none: {} },
+    },
+  },
+  Category: {
+    delegate: "category",
+    owned: byUser,
+    userScoped: true,
+    removable: { ledgerEntries: { none: {} }, budgets: { none: {} }, categorizationRules: { none: {} }, recurringRules: { none: {} } },
+  },
   LedgerEntry: { delegate: "ledgerEntry", owned: byUser, userScoped: true, json: ["metadata"] },
   TransferGroup: { delegate: "transferGroup", owned: byUser, userScoped: true },
   // Statements are shared by every purchase of the month: one the batch created stays while entries still use it.
   CardStatement: { delegate: "cardStatement", owned: (id, userId) => ({ id, account: { userId } }), userScoped: false, removable: { entries: { none: {} } } },
   InstallmentPlan: { delegate: "installmentPlan", owned: byUser, userScoped: true },
   RecurringRule: { delegate: "recurringRule", owned: byUser, userScoped: true, json: ["reminders"] },
+  // A holding the batch created (a buy of a new asset) goes once its operations are gone.
+  InvestmentHolding: {
+    delegate: "investmentHolding",
+    owned: (id, userId) => ({ id, account: { userId } }),
+    userScoped: false,
+    removable: { operations: { none: {} } },
+  },
   InvestmentOperation: {
     delegate: "investmentOperation",
     owned: (id, userId) => ({ id, holding: { account: { userId } } }),
@@ -87,11 +117,13 @@ export const MUTATION_MODELS = Object.keys(MODELS) as MutationModel[];
 
 /**
  * Parents first: restored and re-created rows must find the rows they point
- * to (an entry its group, statement and plan; an operation its cash leg and
- * funding transfer). Rows a batch created are removed in the reverse order,
- * children first.
+ * to (anything its account and category; an entry its group, statement and
+ * plan; an operation its holding, cash leg and funding transfer). Rows a
+ * batch created are removed in the reverse order, children first.
  */
 export const RESTORE_ORDER: readonly MutationModel[] = [
+  "Account",
+  "Category",
   "Import",
   "Budget",
   "CategorizationRule",
@@ -100,6 +132,7 @@ export const RESTORE_ORDER: readonly MutationModel[] = [
   "TransferGroup",
   "CardStatement",
   "LedgerEntry",
+  "InvestmentHolding",
   "InvestmentOperation",
 ];
 export const REMOVE_ORDER: readonly MutationModel[] = [...RESTORE_ORDER].reverse();
@@ -205,6 +238,19 @@ function restoreData(model: MutationModel, snap: Record<string, unknown>): Recor
   return data;
 }
 
+/**
+ * The `before` of the columns an update changed. Undo writes back only
+ * these, so columns kept up outside the log since (a holding's price, a
+ * rule's hit count, a card's statement dates) are left as they are now.
+ */
+function changedColumns(before: Record<string, unknown>, after: Record<string, unknown>): Record<string, unknown> {
+  const changed: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(before)) {
+    if (JSON.stringify(v) !== JSON.stringify(after[k])) changed[k] = v;
+  }
+  return changed;
+}
+
 /** The row back under its old id and creation date, owned by the batch's user. */
 function recreateData(model: MutationModel, id: string, userId: string, snap: Record<string, unknown>): Record<string, unknown> {
   return {
@@ -226,6 +272,29 @@ async function recreateRow(tx: DbClient, model: MutationModel, id: string, userI
   await delegate.create({ data: recreateData(model, id, userId, before) });
 }
 
+async function restoreRow(tx: DbClient, model: MutationModel, id: string, userId: string, before: Record<string, unknown>, after: Record<string, unknown>) {
+  const data = restoreData(model, changedColumns(before, after));
+  if (Object.keys(data).length) await delegateOf(tx, model).updateMany({ where: spec(model).owned(id, userId), data });
+}
+
+/**
+ * The newest snapshot of a `model` row that a live (not undone) batch of
+ * the user deleted outright, among those whose `field` held `value`; e.g.
+ * the operation a trashed cash leg belonged to.
+ */
+export async function lastDeletedSnapshot(db: DbClient, userId: string, model: MutationModel, field: string, value: string) {
+  const record = await db.mutationRecord.findFirst({
+    where: { model, after: { equals: Prisma.DbNull }, before: { path: [field], equals: value }, batch: { userId, undoneAt: null } },
+    orderBy: { batch: { createdAt: "desc" } },
+  });
+  return record ? { recordId: record.recordId, before: record.before as Record<string, unknown> } : null;
+}
+
+/** Re-creates a row deleted outright from its snapshot, under its old id (and the user's, on user-scoped models). */
+export async function recreateRecord(db: DbClient, userId: string, model: MutationModel, id: string, snap: Record<string, unknown>) {
+  await delegateOf(db, model).create({ data: recreateData(model, id, userId, snap) });
+}
+
 /**
  * Revert batches now record the Import row, so undoing one restores its
  * revertedAt like any other field. Older revert batches did not: their
@@ -242,11 +311,11 @@ async function reopenRevertedImports(tx: DbClient, userId: string, records: Muta
 
 /**
  * Reverts one batch: rows the batch created are removed (children first),
- * then changed or soft-deleted rows get their `before` snapshot back and
- * rows it deleted outright are re-created with their ids (parents first).
- * Holdings whose operations moved are recalculated. Batches are undone
- * newest-first per row, so undoing an older batch after a newer one that
- * touched the same row is rejected.
+ * then changed or soft-deleted rows get back the `before` of the columns
+ * the batch changed, and rows it deleted outright are re-created with
+ * their ids (parents first). Holdings whose operations moved are
+ * recalculated. Batches are undone newest-first per row, so undoing an
+ * older batch after a newer one that touched the same row is rejected.
  */
 export async function undoBatch(userId: string, batchId: string, db: DbClient) {
   return inTransaction(db, async (tx) => {
@@ -277,7 +346,7 @@ export async function undoBatch(userId: string, batchId: string, db: DbClient) {
       for (const rec of recordsOf(model).filter((r) => r.before !== null)) {
         const before = rec.before as Record<string, unknown>;
         if (rec.after === null) await recreateRow(tx, model, rec.recordId, userId, before);
-        else await delegateOf(tx, model).updateMany({ where: spec(model).owned(rec.recordId, userId), data: restoreData(model, before) });
+        else await restoreRow(tx, model, rec.recordId, userId, before, rec.after as Record<string, unknown>);
       }
     }
     for (const model of RESTORE_ORDER) {

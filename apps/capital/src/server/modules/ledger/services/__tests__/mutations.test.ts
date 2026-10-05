@@ -3,7 +3,7 @@ import { prisma } from "@capital/server/lib/prisma";
 import { createLedgerFixture, deleteLedgerFixture, type LedgerFixture } from "@/test/ledger-fixtures";
 import { createHolding, deleteOperation, recordOperation, updateOperation } from "@capital/server/modules/investments/services/portfolio";
 import { toNumber } from "../../lib/money";
-import { createEntry, softDeleteEntries, updateEntry } from "../entries";
+import { createEntry, restoreEntries, softDeleteEntries, updateEntry } from "../entries";
 import {
   MUTATION_MODELS,
   REMOVE_ORDER,
@@ -43,6 +43,9 @@ describe("model registry", () => {
     expect(before("InstallmentPlan", "RecurringRule")).toBe(true);
     expect(before("RecurringRule", "CategorizationRule")).toBe(true);
     expect(before("CategorizationRule", "Budget")).toBe(true);
+    expect(before("InvestmentOperation", "InvestmentHolding")).toBe(true);
+    // Accounts and categories are parents of nearly everything: re-created first, removed last.
+    expect(RESTORE_ORDER.slice(0, 2)).toEqual(["Account", "Category"]);
   });
 
   it("refuses batches with records of an unregistered model", async () => {
@@ -199,6 +202,166 @@ describe("deleteOperation", () => {
     const del = await deleteOperation(USER, buy.operation.id, prisma);
     expect(del.fundingGroupId).toBeNull();
     expect((await prisma.transferGroup.findUniqueOrThrow({ where: { id: buy.fundingGroupId! } })).deletedAt).toBeNull();
+  });
+});
+
+describe("restoring an operation's cash leg from the trash", () => {
+  const position = (holdingId: string) => prisma.investmentHolding.findUniqueOrThrow({ where: { id: holdingId } }).then((h) => h.currentQuantity);
+
+  it("brings back the deleted operation and its position; undoing the restore takes them away again", async () => {
+    const h = await createHolding(USER, { accountId: f.broker, assetClass: "stocks", ticker: "EGIE3", name: "Engie" }, prisma);
+    const buy = await recordOperation(USER, { holdingId: h.id, type: "buy", quantity: 10, pricePerUnit: 40, totalAmount: 400, date: "2026-09-01", fundFromAccountId: f.pfChecking }, prisma);
+    await deleteOperation(USER, buy.operation.id, prisma);
+    expect(await position(h.id)).toBe(0);
+
+    const restored = await restoreEntries(USER, [buy.cashEntryId!], prisma);
+    expect(restored).toMatchObject({ restored: 1, operationsRestored: 1 });
+    const op = await prisma.investmentOperation.findUniqueOrThrow({ where: { id: buy.operation.id } });
+    expect(op).toMatchObject({ cashEntryId: buy.cashEntryId, fundingGroupId: buy.fundingGroupId, quantity: 10, totalAmount: 400 });
+    expect(op.date).toEqual(buy.operation.date);
+    expect(await position(h.id)).toBe(10);
+
+    await undoBatch(USER, restored.batchId, prisma);
+    expect(await prisma.investmentOperation.count({ where: { id: buy.operation.id } })).toBe(0);
+    expect((await prisma.ledgerEntry.findUniqueOrThrow({ where: { id: buy.cashEntryId! } })).deletedAt).not.toBeNull();
+    expect(await position(h.id)).toBe(0);
+  });
+
+  it("leaves an operation that still exists alone", async () => {
+    const h = await createHolding(USER, { accountId: f.broker, assetClass: "stocks", ticker: "SAPR11", name: "Sanepar" }, prisma);
+    const buy = await recordOperation(USER, { holdingId: h.id, type: "buy", quantity: 5, pricePerUnit: 30, totalAmount: 150, date: "2026-09-01" }, prisma);
+    await softDeleteEntries(USER, [buy.cashEntryId!], prisma);
+
+    expect(await restoreEntries(USER, [buy.cashEntryId!], prisma)).toMatchObject({ restored: 1, operationsRestored: 0 });
+    expect((await prisma.investmentOperation.findUniqueOrThrow({ where: { id: buy.operation.id } })).cashEntryId).toBe(buy.cashEntryId);
+  });
+
+  it("refuses when the operation was recorded again since, and restores nothing", async () => {
+    const h = await createHolding(USER, { accountId: f.broker, assetClass: "stocks", ticker: "CPLE6", name: "Copel" }, prisma);
+    const input = { holdingId: h.id, type: "buy" as const, quantity: 20, pricePerUnit: 10, totalAmount: 200, date: "2026-09-01", externalId: "nota-77" };
+    const buy = await recordOperation(USER, input, prisma);
+    await deleteOperation(USER, buy.operation.id, prisma);
+    await recordOperation(USER, input, prisma);
+
+    await expect(restoreEntries(USER, [buy.cashEntryId!], prisma)).rejects.toMatchObject({ status: 409, code: "trash.operation_recorded_again" });
+    expect((await prisma.ledgerEntry.findUniqueOrThrow({ where: { id: buy.cashEntryId! } })).deletedAt).not.toBeNull();
+    expect(await position(h.id)).toBe(20);
+  });
+});
+
+describe("registry models beyond the ledger", () => {
+  it("writes back only the columns the batch changed", async () => {
+    const created = await createEntry(USER, { kind: "expense", accountId: f.pfChecking, amount: 10, description: "Café", date: "2026-09-10" }, prisma);
+    const id = created.entryIds[0];
+    const edit = await updateEntry(USER, id, { amount: 12 }, prisma);
+    // Written outside the log after the batch: undo leaves it.
+    await prisma.ledgerEntry.update({ where: { id }, data: { notes: "conferido" } });
+
+    await undoBatch(USER, edit.batchId!, prisma);
+    const row = await prisma.ledgerEntry.findUniqueOrThrow({ where: { id } });
+    expect(toNumber(row.amount)).toBe(-10);
+    expect(row.notes).toBe("conferido");
+  });
+
+  it("keeps a holding's price fetched after the edit it undoes", async () => {
+    const h = await createHolding(USER, { accountId: f.broker, assetClass: "stocks", ticker: "ITSA4", name: "Itaúsa", currentPrice: 10 }, prisma);
+    const before = await prisma.investmentHolding.findUniqueOrThrow({ where: { id: h.id } });
+    const renamed = await prisma.investmentHolding.update({ where: { id: h.id }, data: { name: "Itaúsa PN", allocationClass: "br_stocks" } });
+    const batchId = await recordMutation(prisma, USER, "update", null, [{ model: "InvestmentHolding", recordId: h.id, before: snapshot(before), after: snapshot(renamed) }]);
+    await prisma.investmentHolding.update({ where: { id: h.id }, data: { currentPrice: 11.5, lastPriceUpdate: new Date() } });
+
+    await undoBatch(USER, batchId, prisma);
+    expect(await prisma.investmentHolding.findUniqueOrThrow({ where: { id: h.id } })).toMatchObject({ name: "Itaúsa", allocationClass: null, currentPrice: 11.5 });
+  });
+
+  it("removes a holding the batch created once its operations are gone, and keeps one still in use", async () => {
+    const records: MutationRecordInput[] = [];
+    const fresh = await createHolding(USER, { accountId: f.broker, assetClass: "fii", ticker: "HGLG11", name: "CSHG Logística" }, prisma);
+    records.push({ model: "InvestmentHolding", recordId: fresh.id, before: null, after: snapshot(fresh) });
+    const buy = await recordOperation(USER, { holdingId: fresh.id, type: "buy", quantity: 10, pricePerUnit: 160, totalAmount: 1600, date: "2026-09-03" }, prisma, { collect: records });
+    const shared = await createHolding(USER, { accountId: f.broker, assetClass: "stocks", ticker: "TAEE11", name: "Taesa" }, prisma);
+    records.push({ model: "InvestmentHolding", recordId: shared.id, before: null, after: snapshot(shared) });
+    await recordOperation(USER, { holdingId: shared.id, type: "buy", quantity: 4, pricePerUnit: 35, totalAmount: 140, date: "2026-09-03" }, prisma, { collect: records });
+    const batchId = await recordMutation(prisma, USER, "create", "Aporte", records);
+    // A later buy of the same asset, in a batch of its own.
+    await recordOperation(USER, { holdingId: shared.id, type: "buy", quantity: 6, pricePerUnit: 36, totalAmount: 216, date: "2026-09-10" }, prisma);
+
+    await undoBatch(USER, batchId, prisma);
+    expect(await prisma.investmentHolding.count({ where: { id: fresh.id } })).toBe(0);
+    expect(await prisma.investmentOperation.count({ where: { id: buy.operation.id } })).toBe(0);
+    expect(await prisma.ledgerEntry.count({ where: { id: buy.cashEntryId! } })).toBe(0);
+    expect(await prisma.investmentHolding.findUniqueOrThrow({ where: { id: shared.id } })).toMatchObject({ currentQuantity: 6, totalInvested: 216 });
+  });
+
+  it("re-creates a merged category and points its rows back at it", async () => {
+    const from = await prisma.category.create({ data: { userId: USER, name: "Delivery", type: "expense", color: "pink" } });
+    const e = await createEntry(USER, { kind: "expense", accountId: f.pfChecking, amount: 40, description: "iFood", date: "2026-09-04", categoryId: from.id }, prisma);
+    const rule = await createRule(USER, { matchType: "contains", pattern: "ifood", categoryId: from.id }, prisma);
+    // What a recorded merge into Groceries writes: the rows moved, then the category deleted outright.
+    const records: MutationRecordInput[] = [];
+    await updateEntry(USER, e.entryIds[0], { categoryId: f.categories.Groceries }, prisma, { collect: records });
+    const moved = await prisma.categorizationRule.update({ where: { id: rule.id }, data: { categoryId: f.categories.Groceries } });
+    records.push({ model: "CategorizationRule", recordId: rule.id, before: snapshot(rule), after: snapshot(moved) });
+    await prisma.category.delete({ where: { id: from.id } });
+    records.push({ model: "Category", recordId: from.id, before: snapshot(from), after: null });
+    const batchId = await recordMutation(prisma, USER, "merge", null, records);
+
+    await undoBatch(USER, batchId, prisma);
+    expect(await prisma.category.findUniqueOrThrow({ where: { id: from.id } })).toMatchObject({ userId: USER, name: "Delivery", color: "pink", createdAt: from.createdAt });
+    expect((await prisma.ledgerEntry.findUniqueOrThrow({ where: { id: e.entryIds[0] } })).categoryId).toBe(from.id);
+    expect((await prisma.categorizationRule.findUniqueOrThrow({ where: { id: rule.id } })).categoryId).toBe(from.id);
+  });
+
+  it("removes accounts and categories the batch created unless other rows use them", async () => {
+    const [usedCat, freeCat] = await Promise.all(["Pets", "Hobbies"].map((name) => prisma.category.create({ data: { userId: USER, name, type: "expense" } })));
+    const [usedAcc, freeAcc] = await Promise.all(["Inter", "C6"].map((name) => prisma.account.create({ data: { userId: USER, entityId: f.pfId, type: "checking", name, currency: "BRL" } })));
+    const records: MutationRecordInput[] = [
+      ...[usedCat, freeCat].map((c) => ({ model: "Category" as const, recordId: c.id, before: null, after: snapshot(c) })),
+      ...[usedAcc, freeAcc].map((a) => ({ model: "Account" as const, recordId: a.id, before: null, after: snapshot(a) })),
+    ];
+    const batchId = await recordMutation(prisma, USER, "create", null, records);
+    const used = await createEntry(USER, { kind: "expense", accountId: usedAcc.id, categoryId: usedCat.id, amount: 80, description: "Ração", date: "2026-09-06" }, prisma);
+
+    await undoBatch(USER, batchId, prisma);
+    expect(await prisma.category.count({ where: { id: { in: [usedCat.id, freeCat.id] } } })).toBe(1);
+    expect(await prisma.account.count({ where: { id: { in: [usedAcc.id, freeAcc.id] } } })).toBe(1);
+    expect(await prisma.ledgerEntry.findUniqueOrThrow({ where: { id: used.entryIds[0] } })).toMatchObject({ accountId: usedAcc.id, categoryId: usedCat.id });
+  });
+
+  it("restores and re-creates recurring rules and budgets (decimals, dates, null json)", async () => {
+    const rule = await prisma.recurringRule.create({
+      data: {
+        userId: USER,
+        entityId: f.pfId,
+        accountId: f.pfChecking,
+        kind: "expense",
+        amount: 59.9,
+        currency: "BRL",
+        description: "Spotify",
+        categoryId: f.categories.Software,
+        frequency: "monthly",
+        startDate: new Date("2026-01-05"),
+        nextDueDate: new Date("2026-10-05"),
+      },
+    });
+    const budget = await prisma.budget.create({
+      data: { userId: USER, categoryId: f.categories.Groceries, amount: 1200, currency: "BRL", period: "monthly", year: 2026, month: 9, effectiveFrom: new Date("2026-09-01") },
+    });
+    const edited = await prisma.recurringRule.update({ where: { id: rule.id }, data: { amount: 64.9, reminders: { daysBefore: 1 } } });
+    await prisma.budget.delete({ where: { id: budget.id } });
+    const batchId = await recordMutation(prisma, USER, "update", null, [
+      { model: "RecurringRule", recordId: rule.id, before: snapshot(rule), after: snapshot(edited) },
+      { model: "Budget", recordId: budget.id, before: snapshot(budget), after: null },
+    ]);
+
+    await undoBatch(USER, batchId, prisma);
+    const back = await prisma.recurringRule.findUniqueOrThrow({ where: { id: rule.id } });
+    expect(toNumber(back.amount)).toBe(59.9);
+    expect(back.reminders).toBeNull();
+    expect(back.nextDueDate).toEqual(rule.nextDueDate);
+    const recreated = await prisma.budget.findUniqueOrThrow({ where: { id: budget.id } });
+    expect(recreated).toMatchObject({ userId: USER, entityId: null, month: 9, isTombstone: false, effectiveFrom: budget.effectiveFrom });
+    expect(toNumber(recreated.amount)).toBe(1200);
   });
 });
 

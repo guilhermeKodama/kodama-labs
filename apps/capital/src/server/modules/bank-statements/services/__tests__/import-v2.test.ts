@@ -192,6 +192,22 @@ describe("executeImport / executeRevert", () => {
     expect((await prisma.import.findUniqueOrThrow({ where: { id: result.statementImportId } })).revertedAt).toBeNull();
   });
 
+  it("revert archives the cards the import created, and undo brings them back", async () => {
+    const result = await executeImport(
+      USER,
+      plan({ creditCards: [{ bankName: "Inter", lastFourDigits: "4321", closingDay: 3, dueDay: 10, currency: "BRL" }] } as Partial<ImportPlanPayload>),
+      prisma
+    );
+    const cardId = result.createdRecords.find((r) => r.model === "Account")!.id;
+    const reverted = await executeRevert(USER, { statementImportId: result.statementImportId, createdRecords: result.createdRecords }, prisma);
+    expect(reverted.creditCardsDeleted).toBe(1);
+    expect((await prisma.account.findUniqueOrThrow({ where: { id: cardId } })).archivedAt).not.toBeNull();
+
+    await undoBatch(USER, reverted.batchId!, prisma);
+    expect((await prisma.account.findUniqueOrThrow({ where: { id: cardId } })).archivedAt).toBeNull();
+    expect(await live({})).toHaveLength(6);
+  });
+
   it("reopens the import when undoing a revert batch recorded without its Import row", async () => {
     const result = await executeImport(USER, plan(), prisma);
     const reverted = await executeRevert(USER, { statementImportId: result.statementImportId, createdRecords: result.createdRecords }, prisma);

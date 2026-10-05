@@ -5,6 +5,7 @@ import type { Account, Entity, LedgerEntry, LedgerKind, TransferDirection } from
 import { parseLocalDate } from "@capital/server/lib/date-utils";
 import { st, type Locale } from "@capital/server/i18n";
 import { loadUserLocale } from "@capital/server/i18n/user-locale";
+import { restoreLegOperations } from "@capital/server/modules/investments/lib/restore-operations";
 import type { CreateEntryInput, EntryPatch } from "../contracts";
 import { LedgerError, notFound } from "../lib/errors";
 import { loadFx, type FxContext } from "../lib/fx";
@@ -456,6 +457,7 @@ export async function softDeleteEntries(
   });
 }
 
+/** Takes entries (whole transfers) out of the trash; an investment cash leg brings back the operation deleted with it. */
 export async function restoreEntries(userId: string, ids: string[], db: DbClient) {
   return inTransaction(db, async (tx) => {
     const { entryIds, groupIds } = await expandSelection(userId, ids, tx, true);
@@ -467,8 +469,9 @@ export async function restoreEntries(userId: string, ids: string[], db: DbClient
       ...groupsBefore.map((g) => ({ model: "TransferGroup" as const, recordId: g.id, before: snapshot(g), after: snapshot({ ...g, deletedAt: null }) })),
       ...before.map((e) => ({ model: "LedgerEntry" as const, recordId: e.id, before: snapshot(e), after: snapshot({ ...e, deletedAt: null }) })),
     ];
+    const operationsRestored = await restoreLegOperations(tx, userId, before, records);
     const batchId = await recordMutation(tx, userId, "restore", `${before.length} entries`, records);
-    return { batchId, restored: before.length };
+    return { batchId, restored: before.length, operationsRestored };
   });
 }
 
@@ -554,10 +557,11 @@ export async function bulkUpdateEntries(userId: string, ids: string[], patch: Bu
       await updateEntry(userId, e.id, p, tx, { collect: records });
       changed++;
     }
+    // Rules it learns or moves are part of the batch: undo puts them back too.
     if (opts.createRule && patch.categoryId) {
-      for (const desc of new Set(entries.map((e) => e.description))) await learnRule(userId, desc, patch.categoryId, "bulk", tx);
+      for (const desc of new Set(entries.map((e) => e.description))) await learnRule(userId, desc, patch.categoryId, "bulk", tx, { collect: records });
     }
-    const batchId = changed ? await recordMutation(tx, userId, "update", `${changed} entries`, records) : null;
+    const batchId = records.length ? await recordMutation(tx, userId, "update", `${changed} entries`, records) : null;
     return { batchId, changed, matched: entries.length };
   });
 }
