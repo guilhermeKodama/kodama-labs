@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { createAssistantBridge } from "@/lib/shell/assistant-bridge";
 import { APP_HOME, isAppUrl, lastAppUrl, LAST_APP_URL_KEY, rememberAppUrl } from "@/lib/shell/last-app-url";
 import { readCookie, savedLocaleAction } from "@/lib/shell/locale";
-import { createSidebarStore, parseSidebarMode, SIDEBAR_STORAGE_KEY } from "@/lib/shell/sidebar";
+import { activeViewId, createSidebarStore, favoriteViews, parseSidebarMode, SIDEBAR_STORAGE_KEY } from "@/lib/shell/sidebar";
 
 function memoryStorage(initial: Record<string, string> = {}) {
   const data = new Map(Object.entries(initial));
@@ -70,6 +70,36 @@ describe("sidebar store", () => {
     expect(store.get().mode).toBe("expanded");
     store.toggle(false);
     expect(store.get().mode).toBe("rail");
+  });
+});
+
+describe("sidebar views", () => {
+  const views = [
+    { id: "all", isFavorite: true, seedKey: null },
+    { id: "v-ir", isFavorite: true, seedKey: "ir" },
+    { id: "v-taxpj", isFavorite: false, seedKey: "taxpj" },
+    { id: "v-mine", isFavorite: true },
+  ];
+
+  it("lists the favorites in order", () => {
+    expect(favoriteViews(views).map((view) => view.id)).toEqual(["all", "v-ir", "v-mine"]);
+    expect(favoriteViews([])).toEqual([]);
+  });
+
+  it("marks the view Transações shows", () => {
+    expect(activeViewId(views, "v-mine")).toBe("v-mine");
+    expect(activeViewId(views, "seed:ir")).toBe("v-ir");
+    // Not a favorite: active, though the sidebar does not list it.
+    expect(activeViewId(views, "seed:taxpj")).toBe("v-taxpj");
+  });
+
+  it("falls back to the first view, like the screen", () => {
+    expect(activeViewId(views, null)).toBe("all");
+    expect(activeViewId(views, "")).toBe("all");
+    expect(activeViewId(views, "deleted-id")).toBe("all");
+    expect(activeViewId(views, "seed:gone")).toBe("all");
+    expect(activeViewId(views, "seed:")).toBe("all");
+    expect(activeViewId([], "v-mine")).toBeNull();
   });
 });
 

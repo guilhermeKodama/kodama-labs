@@ -12,7 +12,8 @@
     "portfolio": "Carteira",
     "contributions": "Aportes",
     "settings": "Ajustes",
-    "signOut": "Sair"
+    "accountHint": "Ajustes · Tema",
+    "railSearch": "Buscar ou executar ({shortcut})"
   },
   "sidebar": {
     "collapse": "Recolher a barra lateral",
@@ -30,5 +31,21 @@
   "pwa": {
     "updateAvailable": "Nova versão disponível",
     "reload": "Atualizar"
+  },
+  "userMenu": {
+    "label": "Conta de {name}",
+    "settings": "Ajustes",
+    "theme": "Tema",
+    "themes": {
+      "system": "Sistema",
+      "light": "Claro",
+      "dark": "Escuro"
+    },
+    "language": "Idioma",
+    "languages": {
+      "ptBR": "Português",
+      "en": "English"
+    },
+    "signOut": "Sair"
   }
 }

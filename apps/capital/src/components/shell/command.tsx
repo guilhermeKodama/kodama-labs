@@ -5,7 +5,9 @@ import { useRouter } from "@/i18n/navigation";
 import { apiPost } from "@/lib/api/client";
 import { todayIso } from "@/lib/money";
 import { useAssistantBridge } from "@/lib/shell/assistant-bridge";
-import { OverlayScope, useOverlay } from "@/lib/shortcuts/provider";
+import { COMMAND_MENU_EVENT } from "@/lib/shell/command-menu";
+import { SHELL_SHORTCUTS } from "@/lib/shell/shortcuts";
+import { OverlayScope, useOverlay, useShortcut } from "@/lib/shortcuts/provider";
 
 export function CommandMenu() {
   const router = useRouter();
@@ -26,20 +28,12 @@ export function CommandMenu() {
     if (request.prompt) setDraft(request.prompt);
   });
 
+  // ⌘K opens it from anywhere (also from a text field); inside, ⌘K closes it (CloseOnCommandKey).
+  useShortcut(SHELL_SHORTCUTS.command.combo, () => setOpen(true), { scope: "global", allowInInputs: SHELL_SHORTCUTS.command.allowInInputs });
   useEffect(() => {
     const openMenu = () => setOpen(true);
-    const onKey = (event: KeyboardEvent) => {
-      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
-        event.preventDefault();
-        setOpen((value) => !value);
-      }
-    };
-    window.addEventListener("capital:command", openMenu);
-    window.addEventListener("keydown", onKey);
-    return () => {
-      window.removeEventListener("capital:command", openMenu);
-      window.removeEventListener("keydown", onKey);
-    };
+    window.addEventListener(COMMAND_MENU_EVENT, openMenu);
+    return () => window.removeEventListener(COMMAND_MENU_EVENT, openMenu);
   }, []);
 
   const match = query.trim().match(/^(.*?)(-?\d+(?:[.,]\d{1,2})?)\s*$/);
@@ -102,6 +96,7 @@ export function CommandMenu() {
     <div className="fixed inset-0 z-50 flex items-start justify-center bg-scrim/30 pt-[12vh]" onClick={() => setOpen(false)}>
       <div className="w-[560px] overflow-hidden rounded-[10px] border border-stroke-3 bg-editor shadow-lg" onClick={(event) => event.stopPropagation()}>
         <OverlayScope id={overlayId}>
+          <CloseOnCommandKey onClose={() => setOpen(false)} />
           {assistant ? (
             <div className="flex h-80 flex-col">
               <div className="flex h-9 items-center gap-2 border-b border-stroke-3 px-3 text-[12.5px]">
@@ -144,4 +139,10 @@ export function CommandMenu() {
       </div>
     </div>
   );
+}
+
+/** ⌘K again, from inside the open palette (an overlay, where global keys are off), closes it. */
+function CloseOnCommandKey({ onClose }: { onClose: () => void }) {
+  useShortcut(SHELL_SHORTCUTS.command.combo, onClose, { allowInInputs: true });
+  return null;
 }

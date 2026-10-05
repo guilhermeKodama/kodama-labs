@@ -1,61 +1,150 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useSyncExternalStore, type FormEvent } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { useLocale } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
+import { Btn, Field, TextInput } from "@/components/cap";
 import { Link, useRouter } from "@/i18n/navigation";
-import { apiPost } from "@/lib/api/client";
-import { safeRedirect } from "@/lib/middleware-helpers";
-import { Btn } from "@/components/shell/chrome";
+import { ApiError, apiPost } from "@/lib/api/client";
+import { useAppMutation, useErrorMessage } from "@/lib/api/use-app-mutation";
+import {
+  authRedirectTarget,
+  authSwitchHref,
+  credentialsBody,
+  invalidCredentialFields,
+  MIN_PASSWORD_LENGTH,
+  validateCredentials,
+  type AuthMode,
+  type CredentialsField,
+  type CredentialsInput,
+  type CredentialsProblems,
+} from "@/lib/shell/auth";
 
-export function CredentialsForm({ mode }: { mode: "login" | "signup" }) {
-  const router = useRouter();
+const noSubscribe = () => () => {};
+
+/**
+ * Login and signup, in the mockup's visual language (a dialog-like card on
+ * the chrome background, Field labels, 26px inputs and buttons). After
+ * signing in the app returns to `?redirect` when it is a path of this app;
+ * the link to the other page keeps it. Errors come from the server's code
+ * (errors.<code>), never its English message.
+ */
+export function CredentialsForm({ mode }: { mode: AuthMode }) {
+  const t = useTranslations("auth");
+  const errorText = useErrorMessage();
   const locale = useLocale();
+  const router = useRouter();
   const queryClient = useQueryClient();
-  const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [error, setError] = useState<string | null>(null);
+  // Read after hydration: the page is prerendered without a query.
+  const search = useSyncExternalStore(noSubscribe, () => window.location.search, () => "");
+  const [values, setValues] = useState<CredentialsInput>({ name: "", email: "", password: "" });
+  const [problems, setProblems] = useState<CredentialsProblems>({});
+  const [serverFields, setServerFields] = useState<Set<CredentialsField>>(new Set());
+  const [leaving, setLeaving] = useState(false);
+
+  const submit = useAppMutation({
+    event: null,
+    mutationFn: (input: CredentialsInput) => apiPost(`/api/v2/auth/${mode}`, credentialsBody(mode, input, locale)),
+    onSuccess: () => {
+      // A new session: nothing cached from before may show.
+      queryClient.clear();
+      setLeaving(true);
+      router.replace(authRedirectTarget(window.location.search));
+    },
+    // Shown in the form (below), not as a toast.
+    onError: (error) => {
+      setServerFields(error instanceof ApiError ? invalidCredentialFields(error) : new Set());
+      return true;
+    },
+  });
+  const pending = submit.isPending || leaving;
+
+  const change = (field: CredentialsField) => (value: string) => {
+    setValues((current) => ({ ...current, [field]: value }));
+    setProblems((current) => (current[field] ? { ...current, [field]: undefined } : current));
+    setServerFields((current) => (current.has(field) ? new Set([...current].filter((item) => item !== field)) : current));
+  };
+
+  const onSubmit = (event: FormEvent) => {
+    event.preventDefault();
+    if (pending) return;
+    const found = validateCredentials(mode, values);
+    setProblems(found);
+    const first = (["name", "email", "password"] as const).find((field) => found[field]);
+    if (first) {
+      document.getElementById(`auth-${first}`)?.focus();
+      return;
+    }
+    submit.reset();
+    setServerFields(new Set());
+    submit.mutate(values);
+  };
+
+  const problemText = (field: CredentialsField) => {
+    const problem = problems[field];
+    if (!problem) return null;
+    return (
+      <span id={`auth-${field}-problem`} className="text-neg">
+        {t(`problems.${problem}`, { min: MIN_PASSWORD_LENGTH })}
+      </span>
+    );
+  };
+  const inputProps = (field: CredentialsField) => {
+    const invalid = Boolean(problems[field]) || serverFields.has(field);
+    return {
+      id: `auth-${field}`,
+      value: values[field],
+      onChange: change(field),
+      invalid,
+      disabled: pending,
+      "aria-describedby": problems[field] ? `auth-${field}-problem` : undefined,
+      className: "w-full",
+    };
+  };
 
   return (
-    <div className="flex min-h-dvh items-center justify-center bg-editor text-fg-1">
-      <form
-        className="w-full max-w-sm space-y-3 px-4"
-        onSubmit={(event) => {
-          event.preventDefault();
-          // A new account keeps the language the form was shown in (pt-BR unless one was picked); the server would otherwise guess from Accept-Language.
-          const request = mode === "login"
-            ? apiPost("/api/v2/auth/login", { email, password })
-            : apiPost("/api/v2/auth/signup", { name, email, password, locale });
-          void request.then(async () => {
-            await queryClient.invalidateQueries({ queryKey: ["me"] });
-            // Back to where the session ended or the visitor started (?redirect=, set by the middleware and the session gate).
-            router.replace(safeRedirect(new URLSearchParams(window.location.search).get("redirect")));
-          }).catch((err: Error) => setError(err.message));
-        }}
-      >
-        <div className="mb-6 flex items-center gap-2">
-          <span className="inline-flex size-6 items-center justify-center rounded-[6px] bg-fg-1 text-[12px] font-bold text-editor">C</span>
-          <span className="text-[14px] font-semibold">{mode === "login" ? "Entrar" : "Criar conta"}</span>
+    <main className="flex min-h-dvh items-start justify-center bg-chrome px-4 pt-[12vh] pb-10 text-fg-1">
+      <form noValidate onSubmit={onSubmit} aria-busy={pending} className="flex w-full max-w-[360px] flex-col gap-3.5 rounded-[12px] border border-stroke-1 bg-editor p-[18px]">
+        <div className="flex items-center gap-2">
+          <span aria-hidden className="inline-flex size-6 shrink-0 items-center justify-center rounded-[6px] bg-fg-1 text-[12px] font-bold text-editor">
+            C
+          </span>
+          <span className="text-[12.5px] font-semibold">Capital</span>
         </div>
-        {mode === "signup" ? <Field label="Nome" value={name} onChange={setName} /> : null}
-        <Field label="E-mail" value={email} onChange={setEmail} type="email" />
-        <Field label="Senha" value={password} onChange={setPassword} type="password" />
-        {error ? <p className="text-[12px] text-neg">{error}</p> : null}
-        <Btn primary type="submit">{mode === "login" ? "Entrar" : "Criar conta"}</Btn>
-        <p className="text-[12px] text-fg-muted">
-          {mode === "login" ? <Link href="/signup">Criar uma conta</Link> : <Link href="/login">Já tenho conta</Link>}
+        <div className="flex flex-col gap-[3px]">
+          <h1 className="text-[15px] font-semibold">{t(`${mode}.title`)}</h1>
+          <p className="text-[12px] text-fg-3">{t(`${mode}.description`)}</p>
+        </div>
+        {mode === "signup" ? (
+          <Field label={t("fields.name")} htmlFor="auth-name" hint={problemText("name")}>
+            <TextInput {...inputProps("name")} autoComplete="name" autoFocus />
+          </Field>
+        ) : null}
+        <Field label={t("fields.email")} htmlFor="auth-email" hint={problemText("email")}>
+          <TextInput {...inputProps("email")} type="email" inputMode="email" autoComplete="email" autoCapitalize="none" spellCheck={false} autoFocus={mode === "login"} />
+        </Field>
+        <Field
+          label={t("fields.password")}
+          htmlFor="auth-password"
+          hint={problemText("password") ?? (mode === "signup" ? t("fields.passwordHint", { min: MIN_PASSWORD_LENGTH }) : null)}
+        >
+          <TextInput {...inputProps("password")} type="password" autoComplete={mode === "login" ? "current-password" : "new-password"} />
+        </Field>
+        {submit.isError ? (
+          <p role="alert" className="text-[12px] text-neg">
+            {errorText(submit.error)}
+          </p>
+        ) : null}
+        <Btn primary type="submit" disabled={pending} className="w-full">
+          {pending ? t(`${mode}.pending`) : t(`${mode}.submit`)}
+        </Btn>
+        <p className="text-[12px] text-fg-3">
+          {t(`${mode}.switchPrompt`)}{" "}
+          <Link href={authSwitchHref(mode === "login" ? "signup" : "login", search)} className="font-medium text-fg-1 underline-offset-2 hover:underline">
+            {t(`${mode}.switch`)}
+          </Link>
         </p>
       </form>
-    </div>
-  );
-}
-
-function Field({ label, value, onChange, type = "text" }: { label: string; value: string; onChange: (value: string) => void; type?: string }) {
-  return (
-    <label className="block">
-      <span className="mb-1 block text-[11px] text-fg-3">{label}</span>
-      <input type={type} value={value} onChange={(event) => onChange(event.target.value)} required className="h-[26px] w-full rounded-[6px] border border-stroke-1 px-2 text-[12.5px] outline-none" />
-    </label>
+    </main>
   );
 }
