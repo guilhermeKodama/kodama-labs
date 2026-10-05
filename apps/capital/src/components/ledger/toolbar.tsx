@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import type { LedgerFilter, ViewConfig } from "@capital/server/modules/ledger/contracts";
-import type { Names } from "@/lib/catalog";
+import type { Names } from "@/lib/api/catalog";
 import { monthLabel } from "@/lib/money";
 import { Btn, Check, Field, MenuItem, MenuLabel, Popover, SelectInput, TextInput } from "@/components/shell/chrome";
 import {

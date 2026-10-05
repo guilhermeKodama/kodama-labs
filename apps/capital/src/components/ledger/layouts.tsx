@@ -4,7 +4,7 @@ import { useMemo } from "react";
 import { sankey, sankeyLinkHorizontal, type SankeyLink, type SankeyNode } from "d3-sankey";
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, Line, LineChart, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import type { GroupKey, LedgerFilter, LedgerGroup, LedgerQueryResult, ViewConfig } from "@capital/server/modules/ledger/contracts";
-import type { Names } from "@/lib/catalog";
+import type { Names } from "@/lib/api/catalog";
 import { dayLabel, money, money0 } from "@/lib/money";
 import { cn } from "@/lib/utils";
 import { EmptyRow } from "@/components/shell/chrome";

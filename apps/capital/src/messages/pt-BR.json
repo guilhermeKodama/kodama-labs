@@ -24,7 +24,69 @@
     "noResults": "Nenhum resultado",
     "close": "Fechar",
     "undo": "Desfazer",
-    "select": "Selecionar…"
+    "select": "Selecionar…",
+    "undone": "Desfeito",
+    "nothingToUndo": "Nada para desfazer",
+    "pickers": {
+      "categoryPlaceholder": "Buscar ou criar categoria…",
+      "categorySearch": "Buscar categoria…",
+      "accountSearch": "Buscar conta…",
+      "createAccount": "+ Criar conta…",
+      "archived": "arquivada",
+      "categoryType": {
+        "expense": "Despesa",
+        "income": "Receita",
+        "investment": "Investimento"
+      },
+      "accountType": {
+        "checking": "Conta corrente",
+        "credit_card": "Cartão de crédito",
+        "brokerage": "Corretora",
+        "cash": "Dinheiro"
+      },
+      "newAccount": {
+        "title": "Nova conta",
+        "name": "Nome",
+        "type": "Tipo",
+        "entity": "Entidade",
+        "currency": "Moeda",
+        "closingDay": "Fecha no dia",
+        "dueDay": "Vence no dia",
+        "submit": "Criar conta"
+      }
+    }
+  },
+  "errors": {
+    "network": "Sem conexão com o servidor. Confira a internet e tente de novo.",
+    "unknown": "Algo deu errado. Tente de novo.",
+    "validation": "Confira os campos destacados.",
+    "status": {
+      "400": "Não deu para concluir. Confira os dados e tente de novo.",
+      "401": "Sua sessão expirou. Entre de novo.",
+      "403": "Você não tem acesso a isso.",
+      "404": "Não encontrado. Pode ter sido excluído.",
+      "409": "Isso mudou enquanto você editava. Atualize e tente de novo.",
+      "413": "Arquivo grande demais.",
+      "422": "Confira os campos destacados.",
+      "429": "Muitas tentativas seguidas. Espere um pouco e tente de novo.",
+      "500": "Erro no servidor. Tente de novo em instantes."
+    },
+    "auth": {
+      "invalid_credentials": "E-mail ou senha incorretos."
+    },
+    "undo": {
+      "newer_change": "Uma alteração mais recente mexeu nessas linhas. Desfaça ela primeiro.",
+      "already_undone": "Essa alteração já foi desfeita."
+    },
+    "category": {
+      "archived": "Essa categoria está arquivada."
+    },
+    "budget": {
+      "clash": "Já existe um orçamento para essa categoria nesse período."
+    },
+    "holding": {
+      "oversell": "A venda é maior que a posição."
+    }
   },
   "filters": {
     "allEntities": "Todas as Entidades",

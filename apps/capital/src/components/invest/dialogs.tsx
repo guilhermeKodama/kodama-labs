@@ -3,8 +3,8 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { api, apiPost, apiPut } from "@/lib/api";
-import type { Names } from "@/lib/catalog";
+import { api, apiPost, apiPut } from "@/lib/api/client";
+import type { Names } from "@/lib/api/catalog";
 import { ASSET_CLASS_LABEL, money, parseAmount, todayIso } from "@/lib/money";
 import { Btn, Field, Modal, Segmented, SelectInput, TextInput } from "@/components/shell/chrome";
 import { ASSET_CLASSES, OP_LABEL, type Holding } from "./types";

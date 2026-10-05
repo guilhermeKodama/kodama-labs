@@ -1,15 +1,17 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { DropdownMenu } from "radix-ui";
 import { CheckIcon } from "lucide-react";
+import { OverlayScope, useOverlay } from "@/lib/shortcuts/provider";
 import { cn } from "@/lib/utils";
 import { FLOATING, MENU_ROW } from "./styles";
 
 /**
  * Dropdown menu (Radix): row menus (⋯), "Mais ações", view options.
  * `trigger` is rendered as the Radix trigger, so it must accept a ref and
- * props (a <button> or Btn).
+ * props (a <button> or Btn). An overlay while open, so single-key app
+ * shortcuts do not fire while typing ahead in it.
  */
 export function Menu({
   trigger,
@@ -32,8 +34,15 @@ export function Menu({
   modal?: boolean;
   className?: string;
 }) {
+  const [innerOpen, setInnerOpen] = useState(false);
+  const isOpen = open ?? innerOpen;
+  const overlayId = useOverlay(isOpen);
+  const changeOpen = (next: boolean) => {
+    if (open === undefined) setInnerOpen(next);
+    onOpenChange?.(next);
+  };
   return (
-    <DropdownMenu.Root open={open} onOpenChange={onOpenChange} modal={modal}>
+    <DropdownMenu.Root open={isOpen} onOpenChange={changeOpen} modal={modal}>
       <DropdownMenu.Trigger asChild>{trigger}</DropdownMenu.Trigger>
       <DropdownMenu.Portal>
         <DropdownMenu.Content
@@ -44,7 +53,7 @@ export function Menu({
           style={{ width }}
           className={cn(FLOATING, "max-h-[var(--radix-dropdown-menu-content-available-height)] overflow-y-auto rounded-[8px] p-1", className)}
         >
-          {children}
+          <OverlayScope id={overlayId}>{children}</OverlayScope>
         </DropdownMenu.Content>
       </DropdownMenu.Portal>
     </DropdownMenu.Root>

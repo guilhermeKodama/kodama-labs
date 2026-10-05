@@ -8,6 +8,8 @@ import { SessionGate } from '@/components/providers/session-gate';
 import { ThemeSync } from '@/components/providers/theme-sync';
 import { PwaRegister } from '@/components/pwa-register';
 import { routing } from '@/i18n/routing';
+import { FormatProvider } from '@/lib/format/provider';
+import { ShortcutProvider } from '@/lib/shortcuts/provider';
 
 export function generateStaticParams() {
   return routing.locales.map((locale) => ({ locale }));
@@ -45,9 +47,13 @@ export default async function LocaleLayout({
           disableTransitionOnChange
         >
           <ThemeSync />
-          <SessionGate>
-            {children}
-          </SessionGate>
+          <ShortcutProvider>
+            <FormatProvider>
+              <SessionGate>
+                {children}
+              </SessionGate>
+            </FormatProvider>
+          </ShortcutProvider>
           <Toaster />
           <PwaRegister />
         </ThemeProvider>

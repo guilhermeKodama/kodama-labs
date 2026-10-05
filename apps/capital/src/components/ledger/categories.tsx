@@ -2,8 +2,8 @@
 
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { apiPost } from "@/lib/api";
-import type { CategoryRecord } from "@/lib/catalog";
+import { apiPost } from "@/lib/api/client";
+import type { CategoryRecord } from "@/lib/api/catalog";
 import { cn } from "@/lib/utils";
 
 const NEW = "__new";

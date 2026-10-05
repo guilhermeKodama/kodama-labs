@@ -1,14 +1,16 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { Popover as PopoverPrimitive } from "radix-ui";
+import { OverlayScope, useOverlay } from "@/lib/shortcuts/provider";
 import { cn } from "@/lib/utils";
 import { FLOATING } from "./styles";
 
 /**
  * Anchored panel (filter editors, period picker, view options): radius 10,
  * padding 10, 8px gap, 260px wide by default. Closes on outside click and
- * Esc. `trigger` becomes the Radix trigger (a <button> or Btn).
+ * Esc. `trigger` becomes the Radix trigger (a <button> or Btn). Open or
+ * closed by itself unless `open` is passed; an overlay while open.
  */
 export function Popover({
   trigger,
@@ -29,8 +31,15 @@ export function Popover({
   onOpenChange?: (open: boolean) => void;
   className?: string;
 }) {
+  const [innerOpen, setInnerOpen] = useState(false);
+  const isOpen = open ?? innerOpen;
+  const overlayId = useOverlay(isOpen);
+  const changeOpen = (next: boolean) => {
+    if (open === undefined) setInnerOpen(next);
+    onOpenChange?.(next);
+  };
   return (
-    <PopoverPrimitive.Root open={open} onOpenChange={onOpenChange}>
+    <PopoverPrimitive.Root open={isOpen} onOpenChange={changeOpen}>
       <PopoverPrimitive.Trigger asChild>{trigger}</PopoverPrimitive.Trigger>
       <PopoverPrimitive.Portal>
         <PopoverPrimitive.Content
@@ -45,7 +54,7 @@ export function Popover({
             className,
           )}
         >
-          {children}
+          <OverlayScope id={overlayId}>{children}</OverlayScope>
         </PopoverPrimitive.Content>
       </PopoverPrimitive.Portal>
     </PopoverPrimitive.Root>

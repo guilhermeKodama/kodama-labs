@@ -2,7 +2,7 @@
 
 import { useState, type ReactNode } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { ApiError } from "@/lib/api";
+import { ApiError } from "@/lib/api/client";
 
 export function QueryProvider({ children }: { children: ReactNode }) {
   const [client] = useState(
@@ -11,7 +11,8 @@ export function QueryProvider({ children }: { children: ReactNode }) {
         defaultOptions: {
           queries: {
             staleTime: 15_000,
-            retry: (count, error) => !(error instanceof ApiError && error.status < 500) && count < 1,
+            // One retry for server and network errors; a 4xx will not change on its own.
+            retry: (count, error) => !(error instanceof ApiError && error.status >= 400 && error.status < 500) && count < 1,
           },
         },
       }),

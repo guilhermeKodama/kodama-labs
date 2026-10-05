@@ -2,7 +2,7 @@
 
 import { Fragment, useRef, useState } from "react";
 import type { LedgerGroup, ViewConfig } from "@capital/server/modules/ledger/contracts";
-import type { Names } from "@/lib/catalog";
+import type { Names } from "@/lib/api/catalog";
 import { dayLabel, money } from "@/lib/money";
 import { cn } from "@/lib/utils";
 import { Badge, EmptyRow } from "@/components/shell/chrome";

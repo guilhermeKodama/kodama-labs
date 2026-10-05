@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "@/i18n/navigation";
-import { apiPost } from "@/lib/api";
+import { apiPost } from "@/lib/api/client";
 import { todayIso } from "@/lib/money";
 
 export function CommandMenu() {

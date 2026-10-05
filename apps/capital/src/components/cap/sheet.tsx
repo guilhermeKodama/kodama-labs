@@ -2,13 +2,15 @@
 
 import type { ReactNode } from "react";
 import { Dialog as DialogPrimitive } from "radix-ui";
+import { OverlayScope, useOverlay } from "@/lib/shortcuts/provider";
 import { cn } from "@/lib/utils";
 import { BACKDROP } from "./styles";
 
 /**
  * Right-side panel over the page (Editar transação, holding detail): full
  * height, 440px (320 for narrow details), padding 18, 14px gap, same
- * backdrop as Dialog. Start it with <DialogHead>.
+ * backdrop as Dialog. Start it with <DialogHead>. An overlay while open,
+ * like Dialog.
  */
 export function Sheet({
   open,
@@ -23,6 +25,7 @@ export function Sheet({
   children: ReactNode;
   className?: string;
 }) {
+  const overlayId = useOverlay(open);
   return (
     <DialogPrimitive.Root open={open} onOpenChange={onOpenChange}>
       <DialogPrimitive.Portal>
@@ -35,7 +38,7 @@ export function Sheet({
             className,
           )}
         >
-          {children}
+          <OverlayScope id={overlayId}>{children}</OverlayScope>
         </DialogPrimitive.Content>
       </DialogPrimitive.Portal>
     </DialogPrimitive.Root>

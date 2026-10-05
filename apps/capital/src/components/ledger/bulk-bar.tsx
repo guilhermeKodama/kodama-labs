@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import type { Names } from "@/lib/catalog";
+import type { Names } from "@/lib/api/catalog";
 import { money } from "@/lib/money";
 import { Check, MenuItem, MenuLabel, Popover } from "@/components/shell/chrome";
 

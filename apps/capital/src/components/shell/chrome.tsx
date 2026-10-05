@@ -4,8 +4,8 @@ import { useEffect, useRef, type ReactNode } from "react";
 import { useSearchParams } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, usePathname, useRouter } from "@/i18n/navigation";
-import { api, apiPost } from "@/lib/api";
-import { useLogout, useSession } from "@/lib/session";
+import { api, apiPost } from "@/lib/api/client";
+import { useLogout, useSession } from "@/lib/api/session";
 import { cn } from "@/lib/utils";
 
 // Same look and API as before the cap primitives existed; screens may import either path.

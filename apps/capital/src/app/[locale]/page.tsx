@@ -2,7 +2,7 @@
 
 import { useEffect } from "react";
 import { useRouter } from "@/i18n/navigation";
-import { isUnauthenticated, useSession } from "@/lib/session";
+import { isUnauthenticated, useSession } from "@/lib/api/session";
 
 export default function HomePage() {
   const session = useSession();

@@ -3,6 +3,7 @@
 import type { ReactNode } from "react";
 import { Dialog as DialogPrimitive } from "radix-ui";
 import { useTranslations } from "next-intl";
+import { OverlayScope, useOverlay } from "@/lib/shortcuts/provider";
 import { cn } from "@/lib/utils";
 import { BACKDROP } from "./styles";
 
@@ -13,7 +14,8 @@ export type DialogWidth = 460 | 480 | 560 | 600 | 640 | 720;
  * Centered dialog: chrome backdrop at 72%, 28px from the top, radius 12,
  * padding 18, 14px between blocks. Esc and the backdrop close it through
  * `onOpenChange(false)`. Start the body with <DialogHead>, which also
- * provides the accessible title.
+ * provides the accessible title. While open it is an overlay: app
+ * shortcuts pause, and useShortcut inside it (⌘↵) is scoped to it.
  */
 export function Dialog({
   open,
@@ -28,6 +30,7 @@ export function Dialog({
   children: ReactNode;
   className?: string;
 }) {
+  const overlayId = useOverlay(open);
   return (
     <DialogPrimitive.Root open={open} onOpenChange={onOpenChange}>
       <DialogPrimitive.Portal>
@@ -40,7 +43,7 @@ export function Dialog({
             className,
           )}
         >
-          {children}
+          <OverlayScope id={overlayId}>{children}</OverlayScope>
         </DialogPrimitive.Content>
       </DialogPrimitive.Portal>
     </DialogPrimitive.Root>

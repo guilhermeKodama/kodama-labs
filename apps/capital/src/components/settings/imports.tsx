@@ -3,8 +3,8 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { api, apiPost } from "@/lib/api";
-import type { Names } from "@/lib/catalog";
+import { api, apiPost } from "@/lib/api/client";
+import type { Names } from "@/lib/api/catalog";
 import { money, todayIso } from "@/lib/money";
 import { cn } from "@/lib/utils";
 import { Badge, Btn, EmptyRow, Field, Segmented, SelectInput, TextInput } from "@/components/shell/chrome";

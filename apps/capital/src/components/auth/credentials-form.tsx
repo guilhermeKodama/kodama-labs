@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Link, useRouter } from "@/i18n/navigation";
-import { apiPost } from "@/lib/api";
+import { apiPost } from "@/lib/api/client";
 import { Btn } from "@/components/shell/chrome";
 
 export function CredentialsForm({ mode }: { mode: "login" | "signup" }) {

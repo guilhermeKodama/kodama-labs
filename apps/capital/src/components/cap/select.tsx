@@ -1,9 +1,10 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { Select as SelectPrimitive } from "radix-ui";
 import { CheckIcon, ChevronDownIcon } from "lucide-react";
 import { useTranslations } from "next-intl";
+import { useOverlay } from "@/lib/shortcuts/provider";
 import { cn } from "@/lib/utils";
 import { CONTROL, FLOATING, MENU_ROW } from "./styles";
 
@@ -20,7 +21,7 @@ const EMPTY = "__cap_empty__";
 const encode = (value: string) => (value === "" ? EMPTY : value);
 const decode = (value: string) => (value === EMPTY ? "" : value);
 
-/** Single-choice dropdown (Radix Select) styled as the 26px control. */
+/** Single-choice dropdown (Radix Select) styled as the 26px control; an overlay while its list is open. */
 export function Select({
   value,
   onChange,
@@ -45,9 +46,17 @@ export function Select({
   "aria-label"?: string;
 }) {
   const t = useTranslations("common");
+  const [open, setOpen] = useState(false);
+  useOverlay(open);
   const known = value !== null && options.some((option) => option.value === value);
   return (
-    <SelectPrimitive.Root value={known ? encode(value) : ""} onValueChange={(next) => onChange(decode(next))} disabled={disabled}>
+    <SelectPrimitive.Root
+      value={known ? encode(value) : ""}
+      onValueChange={(next) => onChange(decode(next))}
+      open={open}
+      onOpenChange={setOpen}
+      disabled={disabled}
+    >
       <SelectPrimitive.Trigger
         id={id}
         aria-label={ariaLabel}

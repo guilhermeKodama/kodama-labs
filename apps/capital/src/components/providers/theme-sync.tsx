@@ -2,7 +2,7 @@
 
 import { useEffect } from "react";
 import { useTheme } from "next-themes";
-import { useSession } from "@/lib/session";
+import { useSession } from "@/lib/api/session";
 import { parseThemePreference } from "@/lib/theme/preference";
 
 /**

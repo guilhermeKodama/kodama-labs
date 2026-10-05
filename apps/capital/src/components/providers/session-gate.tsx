@@ -2,7 +2,7 @@
 
 import { useEffect, type ReactNode } from "react";
 import { usePathname, useRouter } from "@/i18n/navigation";
-import { isUnauthenticated, useLogout, useSession } from "@/lib/session";
+import { isUnauthenticated, useLogout, useSession } from "@/lib/api/session";
 
 const PUBLIC = ["/login", "/signup"];
 

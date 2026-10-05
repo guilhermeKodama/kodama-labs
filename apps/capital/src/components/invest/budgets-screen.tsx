@@ -3,10 +3,10 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "@/i18n/navigation";
-import { api, apiPost } from "@/lib/api";
+import { api, apiPost } from "@/lib/api/client";
 import { money, monthKey } from "@/lib/money";
-import { useCategories } from "@/lib/catalog";
-import { useSession } from "@/lib/session";
+import { useCategories } from "@/lib/api/catalog";
+import { useSession } from "@/lib/api/session";
 import { HEAT_OVER, heatColor } from "@/lib/theme/chart-colors";
 import { AppFrame, Btn, Kpi, KpiStrip, Segmented } from "@/components/shell/chrome";
 

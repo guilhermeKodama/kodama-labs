@@ -5,6 +5,7 @@ import { Popover as PopoverPrimitive } from "radix-ui";
 import { CheckIcon, ChevronDownIcon } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { canCreateOption, filterOptions, moveActive, type ComboboxOption } from "@/lib/combobox";
+import { OverlayScope, useOverlay } from "@/lib/shortcuts/provider";
 import { cn } from "@/lib/utils";
 import { CONTROL, FLOATING } from "./styles";
 
@@ -17,7 +18,7 @@ const MOVES: Record<string, number> = { ArrowDown: 1, ArrowUp: -1, PageDown: Inf
 /**
  * Searchable single choice. Typing filters (accents and case ignored),
  * ↑/↓ move, ↵ picks, Esc closes. With `onCreate`, a query that matches no
- * option offers "+ Criar “X”" as the last row.
+ * option offers "+ Criar “X”" as the last row. An overlay while open.
  */
 export function Combobox({
   value,
@@ -45,8 +46,11 @@ export function Combobox({
   /** Called with the trimmed query when the create row is picked. */
   onCreate?: (name: string) => void;
   createLabel?: (name: string) => ReactNode;
-  /** Pinned below the list (e.g. a "+ Criar conta" mini form). */
-  footer?: ReactNode;
+  /**
+   * Pinned below the list (e.g. "+ Criar conta…"). A function gets the
+   * current query and `close`, to open a form prefilled with what was typed.
+   */
+  footer?: ReactNode | ((api: { query: string; close: () => void }) => ReactNode);
   disabled?: boolean;
   invalid?: boolean;
   id?: string;
@@ -61,6 +65,7 @@ export function Combobox({
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [cursor, setCursor] = useState<{ query: string; index: number } | null>(null);
+  const overlayId = useOverlay(open);
 
   const rows = useMemo<Row[]>(() => {
     const matches: Row[] = filterOptions(options, query).map((option) => ({ kind: "option", option, disabled: option.disabled }));
@@ -138,6 +143,12 @@ export function Combobox({
         <PopoverPrimitive.Content
           align="start"
           sideOffset={4}
+          onCloseAutoFocus={(event) => {
+            // Focus normally falls back to <body> when the list unmounts and
+            // returns to the trigger. If something else took it meanwhile
+            // (a form dialog opened from the footer), leave it there.
+            if (document.activeElement && document.activeElement !== document.body) event.preventDefault();
+          }}
           onOpenAutoFocus={(event) => {
             event.preventDefault();
             inputRef.current?.focus();
@@ -193,7 +204,11 @@ export function Combobox({
             })}
             {rows.length === 0 ? <li className="px-2 py-1.5 text-[12px] text-fg-3">{emptyText ?? t("noResults")}</li> : null}
           </ul>
-          {footer ? <div className="border-t border-stroke-3 p-1">{footer}</div> : null}
+          {footer ? (
+            <div className="border-t border-stroke-3 p-1">
+              <OverlayScope id={overlayId}>{typeof footer === "function" ? footer({ query: query.trim(), close: () => changeOpen(false) }) : footer}</OverlayScope>
+            </div>
+          ) : null}
         </PopoverPrimitive.Content>
       </PopoverPrimitive.Portal>
     </PopoverPrimitive.Root>
