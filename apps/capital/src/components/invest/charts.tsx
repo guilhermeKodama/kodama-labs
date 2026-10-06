@@ -45,21 +45,40 @@ export function ContributionsChart({ rows, classes, goal, height = 200 }: { rows
   const fmt = useFmt();
   const data = rows.map((r) => ({ label: r.label, ...Object.fromEntries(classes.map((c) => [c, fmt.thousands(r.values[c] ?? 0)])) }));
   return (
-    <div style={{ height }}>
-      <ResponsiveContainer width="100%" height="100%">
-        <BarChart data={data} margin={{ top: 10, right: 4, left: 0, bottom: 0 }}>
-          <CartesianGrid stroke={CHART.grid} vertical={false} />
-          <XAxis dataKey="label" tick={CHART_AXIS.tick} stroke={CHART_AXIS.stroke} tickLine={false} />
-          <YAxis tick={CHART_AXIS.tick} stroke={CHART_AXIS.stroke} tickLine={false} axisLine={false} width={40} tickFormatter={(v) => `${fmt.number(Number(v), 0)}k`} />
-          <Tooltip contentStyle={TOOLTIP_STYLE} formatter={(v, name) => [`${fmt.number(Number(v), { min: 0, max: 1 })}k`, ti(`allocationClass.${name as AllocationClass}`)]} />
-          {classes.map((c) => (
-            <Bar key={c} dataKey={c} stackId="a" fill={CLASS_COLOR[c]} isAnimationActive={false} />
-          ))}
-          {goal !== null && goal > 0 ? (
-            <ReferenceLine y={fmt.thousands(goal)} stroke={CHART.warn} strokeDasharray="4 3" label={{ value: ti("contrib.chart.goal"), position: "right", fontSize: 11, fill: "var(--cap-chart-warn)" }} />
-          ) : null}
-        </BarChart>
-      </ResponsiveContainer>
+    <div className="flex flex-col gap-1.5">
+      <div style={{ height }}>
+        <ResponsiveContainer width="100%" height="100%">
+          <BarChart data={data} margin={{ top: 10, right: 4, left: 0, bottom: 0 }}>
+            <CartesianGrid stroke={CHART.grid} vertical={false} />
+            <XAxis dataKey="label" tick={CHART_AXIS.tick} stroke={CHART_AXIS.stroke} tickLine={false} />
+            <YAxis tick={CHART_AXIS.tick} stroke={CHART_AXIS.stroke} tickLine={false} axisLine={false} width={40} tickFormatter={(v) => `${fmt.number(Number(v), 0)}k`} />
+            <Tooltip contentStyle={TOOLTIP_STYLE} formatter={(v, name) => [`${fmt.number(Number(v), { min: 0, max: 1 })}k`, ti(`allocationClass.${name as AllocationClass}`)]} />
+            {classes.map((c) => (
+              <Bar key={c} dataKey={c} stackId="a" fill={CLASS_COLOR[c]} isAnimationActive={false} />
+            ))}
+            {goal !== null && goal > 0 ? (
+              <ReferenceLine y={fmt.thousands(goal)} stroke={CHART.warn} strokeDasharray="4 3" label={{ value: ti("contrib.chart.goal"), position: "right", fontSize: 11, fill: "var(--cap-chart-warn)" }} />
+            ) : null}
+          </BarChart>
+        </ResponsiveContainer>
+      </div>
+      <ClassLegend classes={classes} />
+    </div>
+  );
+}
+
+/** Swatch + name of each stacked class, under the plot. */
+function ClassLegend({ classes }: { classes: AllocationClass[] }) {
+  const ti = useTranslations("invest");
+  if (classes.length < 2) return null;
+  return (
+    <div className="flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-fg-3">
+      {classes.map((c) => (
+        <span key={c} className="inline-flex items-center gap-1.5">
+          <span aria-hidden className="size-2 rounded-[2px]" style={{ background: CLASS_COLOR[c] }} />
+          {ti(`allocationClass.${c}`)}
+        </span>
+      ))}
     </div>
   );
 }

@@ -32,7 +32,7 @@ export function ContributionsScreen() {
   const ti = useTranslations("invest");
   const fmt = useFmt();
   const me = useSession().data;
-  const [scope] = useScopeParam();
+  const [scope, setScope] = useScopeParam();
   const [endParam, setEndParam] = useQueryState("end", parseAsString);
   const thisMonth = currentMonth(me?.timezone ?? "America/Sao_Paulo");
   const end = clampEnd(endParam, thisMonth);
@@ -70,6 +70,7 @@ export function ContributionsScreen() {
       crumbs={[ti("crumbs.investments"), ti("crumbs.contributions")]}
       actions={
         <>
+          <Segmented value={scope} options={(["all", "pf", "pj"] as const).map((v) => ({ v, l: ti(`scope.${v}`) }))} onChange={setScope} />
           <span className="inline-flex h-[26px] items-center rounded-[6px] border border-stroke-1 bg-editor text-[12px]">
             <button type="button" aria-label={t("prev")} className="h-full border-r border-stroke-3 px-1.5 hover:bg-fill-4" onClick={() => void setEndParam(shiftMonth(end, -12))}>
               ‹
@@ -270,7 +271,7 @@ function SuggestionTable({
   return (
     <Table
       headers={[t("headers.asset"), t("headers.class"), t("headers.broker"), t("headers.put"), t("headers.qty")]}
-      columnAlign={["left", "left", "left", "right", "right"]}
+      columnAlign={["left", "right", "right", "right", "right"]}
       rows={assets.map((a) => [
         <span key="tk" className={cn(MONO, "font-semibold")}>
           {a.kind === "holding" ? (a.ticker ?? a.name) : a.kind === "new" ? t("newAsset") : t("cashKeep")}

@@ -269,5 +269,15 @@ describe("contributions view", () => {
     expect(compactAmount(4_200_000, fmt)).toEqual({ value: "4,2", unit: "mi" });
     expect(compactAmount(38_400, fmt)).toEqual({ value: "38", unit: "mil" });
     expect(compactAmount(950, fmt)).toEqual({ value: "950", unit: null });
+    expect(compactAmount(1_250_000_000, fmt)).toEqual({ value: "1,3", unit: "bi" });
+    expect(compactAmount(-4_200_000, fmt)).toEqual({ value: "-4,2", unit: "mi" });
+  });
+
+  it("keeps the goal band edges inside 'na meta' and ignores a zero goal", () => {
+    expect(goalStatus(15300, 15000)).toBe("ok");
+    expect(goalStatus(14700, 15000)).toBe("ok");
+    expect(goalStatus(15301, 15000)).toBe("above");
+    expect(goalStatus(14699, 15000)).toBe("below");
+    expect(goalStatus(500, 0)).toBeNull();
   });
 });
