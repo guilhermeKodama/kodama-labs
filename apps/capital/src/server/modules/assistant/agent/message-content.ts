@@ -226,5 +226,37 @@ export async function buildApiMessages(
     messages.push({ role: row.role === "assistant" ? "assistant" : "user", content: hydrated });
   }
 
-  return messages;
+  return withoutBrokenTurnTail(messages);
+}
+
+/**
+ * A failed turn can leave rows the API refuses on replay (by the next
+ * message or by "Tentar de novo"): the empty assistant placeholder of an
+ * iteration whose stream errored, tool_use blocks whose results were never
+ * saved (and what is left of their message when that is only thinking),
+ * and an assistant message last in the history. These are dropped;
+ * everything that did complete (text, tools that ran and their results)
+ * is kept, so the model sees what the failed turn already did.
+ */
+export function withoutBrokenTurnTail(messages: Anthropic.MessageParam[]): Anthropic.MessageParam[] {
+  const resultIds = (message: Anthropic.MessageParam | undefined): Set<string> => {
+    const ids = new Set<string>();
+    if (message?.role !== "user" || !Array.isArray(message.content)) return ids;
+    for (const block of message.content) if (block.type === "tool_result") ids.add(block.tool_use_id);
+    return ids;
+  };
+
+  const kept: Anthropic.MessageParam[] = [];
+  messages.forEach((message, index) => {
+    let content = message.content;
+    if (message.role === "assistant" && Array.isArray(content)) {
+      const answered = resultIds(messages[index + 1]);
+      content = content.filter((block) => block.type !== "tool_use" || answered.has(block.id));
+    }
+    // Thinking alone is not an answer the API can replay.
+    const empty = Array.isArray(content) ? !content.some((block) => block.type !== "thinking" && block.type !== "redacted_thinking") : !content;
+    if (!empty) kept.push(content === message.content ? message : { ...message, content });
+  });
+  while (kept.at(-1)?.role === "assistant") kept.pop();
+  return kept;
 }

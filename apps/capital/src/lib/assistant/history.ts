@@ -1,6 +1,6 @@
 import type { ChatMessage, ConversationSummary, MessageBlock, PlanStatus } from "@/types/assistant";
 import { parseHistoryToMessages, type RawAgentMessage } from "./parse-history";
-import type { AssistantError, AssistantInput } from "./reducer";
+import { TURN_LIMIT_CODE, type AssistantError } from "./reducer";
 
 /**
  * Resuming a conversation: GET /api/v1/assistant/conversations/{id}
@@ -71,18 +71,18 @@ export function messagesFromConversation(detail: Pick<ConversationDetail, "messa
 }
 
 /**
- * When the conversation's last turn failed, its error comes back with
- * "Tentar de novo" for the last thing the user wrote.
+ * The notice a reopened conversation comes back with: a failed last turn
+ * offers "Tentar de novo" (re-run on the server against the message it
+ * saved), and a turn stopped at its budget or iteration cap (completed,
+ * with an error) asks for another message to continue.
  */
-export function resumeError(detail: Pick<ConversationDetail, "turns">, messages: ChatMessage[]): { error: AssistantError | null; lastInput: AssistantInput | null } {
+export function resumeError(detail: Pick<ConversationDetail, "turns">, messages: ChatMessage[]): AssistantError | null {
   const last = [...detail.turns].sort((a, b) => a.createdAt.localeCompare(b.createdAt)).at(-1);
-  if (!last || last.status !== "failed") return { error: null, lastInput: null };
-  const lastUser = [...messages].reverse().find((message) => message.role === "user");
-  const text = lastUser?.blocks.find((block) => block.kind === "text");
-  return {
-    error: { kind: "turn", code: "TURN_FAILED", message: last.error ?? "", retryable: Boolean(text) },
-    lastInput: text && text.kind === "text" ? { text: text.text } : null,
-  };
+  if (last?.status === "failed") {
+    return { kind: "turn", code: "TURN_FAILED", message: last.error ?? "", retryable: messages.some((message) => message.role === "user") };
+  }
+  if (last?.status === "completed" && last.error) return { kind: "turn", code: TURN_LIMIT_CODE, message: last.error, retryable: false };
+  return null;
 }
 
 // ---------------------------------------------------------------------------

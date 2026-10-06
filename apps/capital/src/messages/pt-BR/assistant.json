@@ -27,6 +27,7 @@
   },
   "errors": {
     "turnFailed": "O assistente não conseguiu responder.",
+    "turnLimit": "O assistente parou no limite desta resposta. Envie outra mensagem para continuar.",
     "loadFailed": "Não deu para abrir a conversa.",
     "listFailed": "Não deu para carregar as conversas.",
     "retry": "Tentar de novo"

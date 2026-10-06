@@ -8,7 +8,7 @@ import { validationError } from "@capital/server/lib/http-error";
 import { LedgerError } from "@capital/server/modules/ledger/lib/errors";
 import { fetchConversationById } from "../../data/queries/fetch-conversations";
 import { fetchRunningTurn } from "../../data/queries/fetch-message-history";
-import { runAgentTurn } from "../../agent/loop";
+import { runAgentTurn, type RunAgentTurnInput } from "../../agent/loop";
 import type { AgentEvent } from "../../agent/events";
 
 const MessageInputSchema = z.object({
@@ -54,11 +54,20 @@ export async function postMessageHandler(c: Context<AppBindings>) {
     throw new LedgerError("A turn is already running for this conversation", 409, { code: "assistant.turn_running" });
   }
 
+  return streamTurn(c, { userId, conversationId, text: body.text, cardResponse: body.cardResponse, fileIds: body.fileIds });
+}
+
+/** Runs a turn and writes its events to the response as SSE frames (shared by …/messages and …/retry). */
+export function streamTurn(c: Context<AppBindings>, input: RunAgentTurnInput) {
   return streamSSE(c, async (stream) => {
     let ended = false;
+    // writeSSE is async: chained so frames keep their order, and awaited
+    // before the callback returns, because Hono closes the stream then and
+    // a frame still in flight (turn_completed, the last one) would be lost.
+    let writes: Promise<unknown> = Promise.resolve();
     const emit = (event: AgentEvent) => {
       if (ended) return;
-      void stream.writeSSE({ event: event.type, data: JSON.stringify(event) });
+      writes = writes.then(() => stream.writeSSE({ event: event.type, data: JSON.stringify(event) })).catch(() => undefined);
     };
 
     stream.onAbort(() => {
@@ -66,14 +75,12 @@ export async function postMessageHandler(c: Context<AppBindings>) {
     });
 
     try {
-      await runAgentTurn(
-        { userId, conversationId, text: body.text, cardResponse: body.cardResponse, fileIds: body.fileIds },
-        emit
-      );
+      await runAgentTurn(input, emit);
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unknown error";
       emit({ type: "error", code: "STREAM_FAILED", message, retryable: true });
     } finally {
+      await writes;
       ended = true;
     }
   });

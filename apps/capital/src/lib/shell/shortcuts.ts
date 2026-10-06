@@ -12,7 +12,10 @@ import { buildTransactionsHref } from "@/lib/ledger/view-draft";
  * - ⌘,: Ajustes, coming back later to the screen it was opened from.
  * - ⌘B: the sidebar rail (the drawer below md).
  * - ⌘Z: undo the latest change; bound by UndoBridge (lib/api/undo-bridge.tsx),
- *   which also serves Ajustes, using this same entry.
+ *   which also serves Ajustes.
+ *
+ * Each is bound exactly once, through useShellShortcut (use-shell-shortcut.ts),
+ * which reads this table; shortcuts.test.ts checks no other code binds them.
  */
 export const SHELL_SHORTCUTS = {
   create: { combo: "n", allowInInputs: false },

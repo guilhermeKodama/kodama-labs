@@ -32,6 +32,7 @@ import {
   type QuickAddChipField,
 } from "@/lib/shell/command-targets";
 import { SHELL_SHORTCUTS } from "@/lib/shell/shortcuts";
+import { useShellShortcut } from "@/lib/shell/use-shell-shortcut";
 import { formatCombo } from "@/lib/shortcuts/combo";
 import { OverlayScope, useIsMac, useOverlay, useShortcut } from "@/lib/shortcuts/provider";
 import { THEME_PREFERENCES, type ThemePreference } from "@/lib/theme/preference";
@@ -73,7 +74,7 @@ export function CommandMenu() {
   });
 
   // ⌘K opens it from anywhere (also from a text field); inside, ⌘K closes it (CloseOnCommandKey).
-  useShortcut(SHELL_SHORTCUTS.command.combo, () => setOpen(true), { scope: "global", allowInInputs: SHELL_SHORTCUTS.command.allowInInputs });
+  useShellShortcut("command", () => setOpen(true));
   useEffect(() => {
     const openMenu = () => setOpen(true);
     window.addEventListener(COMMAND_MENU_EVENT, openMenu);

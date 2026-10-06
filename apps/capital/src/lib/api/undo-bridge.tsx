@@ -3,7 +3,7 @@
 import { useEffect } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useTranslations } from "next-intl";
-import { useShortcut } from "@/lib/shortcuts/provider";
+import { useShellShortcut } from "@/lib/shell/use-shell-shortcut";
 import { configureUndo, undoLast } from "./undo";
 import { useErrorMessage } from "./use-app-mutation";
 
@@ -22,6 +22,6 @@ export function UndoBridge() {
     return () => configureUndo(null);
   }, [queryClient, t, errorText]);
 
-  useShortcut("mod+z", () => void undoLast(), { scope: "global" });
+  useShellShortcut("undo", () => void undoLast());
   return null;
 }

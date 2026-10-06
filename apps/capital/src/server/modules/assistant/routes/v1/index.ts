@@ -8,6 +8,7 @@ import * as postFile from "./post-file";
 import * as postCancel from "./post-cancel";
 import { confirmRoute, confirmHandler, rejectRoute, rejectHandler } from "./post-plan-confirm";
 import { postMessageHandler } from "./post-message";
+import { postRetryHandler } from "./post-retry";
 
 const router = createRouter()
   .openapi(postConversation.route, postConversation.handler)
@@ -19,6 +20,7 @@ const router = createRouter()
   .openapi(confirmRoute, confirmHandler)
   .openapi(rejectRoute, rejectHandler)
   // Not OpenAPI-typed: SSE response, documented in agent/events.ts instead.
-  .post("/v1/assistant/conversations/:id/messages", postMessageHandler);
+  .post("/v1/assistant/conversations/:id/messages", postMessageHandler)
+  .post("/v1/assistant/conversations/:id/retry", postRetryHandler);
 
 export default router;

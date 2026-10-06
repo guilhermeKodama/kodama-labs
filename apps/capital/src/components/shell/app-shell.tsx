@@ -5,8 +5,7 @@ import { useSearchParams } from "next/navigation";
 import { CommandMenu } from "@/components/shell/command";
 import { usePathname } from "@/i18n/navigation";
 import { rememberAppUrl, sessionStore } from "@/lib/shell/last-app-url";
-import { SHELL_SHORTCUTS } from "@/lib/shell/shortcuts";
-import { useShortcut } from "@/lib/shortcuts/provider";
+import { useShellShortcut } from "@/lib/shell/use-shell-shortcut";
 import { GlobalOverlays } from "./global-overlays";
 import { Sidebar, SidebarDrawer, toggleSidebar } from "./sidebar";
 
@@ -35,8 +34,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
 /** ⌘B (lib/shell/shortcuts.ts); N and ⌘, are bound by GlobalKeys (also in Ajustes). */
 function useShellShortcuts() {
-  const { sidebar } = SHELL_SHORTCUTS;
-  useShortcut(sidebar.combo, toggleSidebar, { scope: "global", allowInInputs: sidebar.allowInInputs });
+  useShellShortcut("sidebar", toggleSidebar);
 }
 
 /** Keeps the current app URL for Ajustes' "← Voltar ao app" (lib/shell/last-app-url.ts). */

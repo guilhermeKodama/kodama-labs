@@ -58,7 +58,7 @@ describe("cardResponseLabels", () => {
 
 describe("resumeError", () => {
   const messages = messagesFromConversation({ messages: ROWS.slice(0, 1), plans: [] });
-  it("brings back the error of a failed last turn, retrying the last text", () => {
+  it("brings back the error of a failed last turn, to re-run it", () => {
     const result = resumeError(
       {
         turns: [
@@ -68,10 +68,14 @@ describe("resumeError", () => {
       },
       messages,
     );
-    expect(result).toEqual({ error: { kind: "turn", code: "TURN_FAILED", message: "sem chave", retryable: true }, lastInput: { text: "importe" } });
+    expect(result).toEqual({ kind: "turn", code: "TURN_FAILED", message: "sem chave", retryable: true });
+  });
+  it("brings back the limit notice of a turn stopped at its budget, with no retry", () => {
+    const result = resumeError({ turns: [{ id: "t", status: "completed", createdAt: "x", error: "Orçamento do turno atingido" }] }, messages);
+    expect(result).toEqual({ kind: "turn", code: "TURN_LIMIT", message: "Orçamento do turno atingido", retryable: false });
   });
   it("is empty after a good turn", () => {
-    expect(resumeError({ turns: [{ id: "t", status: "completed", createdAt: "x", error: null }] }, messages)).toEqual({ error: null, lastInput: null });
+    expect(resumeError({ turns: [{ id: "t", status: "completed", createdAt: "x", error: null }] }, messages)).toBeNull();
   });
 });
 

@@ -31,7 +31,7 @@
     "to": "To",
     "transferType": "Type:",
     "detected": "detected from the accounts",
-    "reimbursement": "It is a reimbursement",
+    "reimbursement": "This is a reimbursement",
     "direction": {
       "profit_distribution": "Profit distribution",
       "capital_injection": "Capital injection",
@@ -79,7 +79,7 @@
     "dropzone": "Drag the receipt here, paste an image (⌘V) or click to attach",
     "uploadFailed": "Could not attach {count, plural, one {# receipt} other {# receipts}}; the transaction was created.",
     "removeFile": "remove",
-    "another": "Create another one next",
+    "another": "Create another",
     "invest": {
       "deposit": "Contribution: account → investment",
       "withdraw": "Withdrawal: investment → account",
@@ -101,8 +101,8 @@
       "total": "Total",
       "leftover": "{value} left in cash",
       "perUnit": "{value} per unit",
-      "defaultDeposit": "Contribution {broker}",
-      "defaultWithdraw": "Withdrawal {broker}"
+      "defaultDeposit": "Contribution to {broker}",
+      "defaultWithdraw": "Withdrawal from {broker}"
     }
   },
   "errors": {
@@ -129,13 +129,13 @@
     "restored": "“{description}” restored",
     "description": "Description changed to “{description}”",
     "entity": "“{description}” moved to {entity}",
-    "account": "Account of “{description}” → {account}",
-    "category": "Category of “{description}” → {category} ·",
+    "account": "Account for “{description}” → {account}",
+    "category": "Category for “{description}” → {category} ·",
     "createRule": "create a rule?",
     "ruleCreated": "Rule “{pattern}” → {category} created",
-    "amount": "Amount of “{description}” → {amount}",
-    "date": "Date of “{description}” → {date}",
-    "notes": "Notes of “{description}” changed"
+    "amount": "Amount for “{description}” → {amount}",
+    "date": "Date for “{description}” → {date}",
+    "notes": "Notes for “{description}” changed"
   },
   "sheet": {
     "history": "History",
@@ -147,7 +147,7 @@
   "history": {
     "imported": "Imported from {label}",
     "importedPlain": "Imported",
-    "fromRecurrence": "Booked by the recurring “{description}”",
+    "fromRecurrence": "Booked by the recurring rule “{description}”",
     "installment": "Installment {n}/{total} of a purchase in installments",
     "duplicated": "Duplicated from another transaction",
     "created": "Created {by}",
@@ -188,7 +188,7 @@
       "oneDesc": "{date} · {amount}",
       "future": "This and the following ones",
       "futureDesc": "Ends the recurrence from here on; the history stays.",
-      "all": "Every occurrence and the recurrence",
+      "all": "All occurrences and the recurring rule",
       "allDesc": "{count, plural, one {# transaction} other {# transactions}} in {year} · {sum}",
       "allDescRange": "{count, plural, one {# transaction} other {# transactions}} from {from} to {to} · {sum}"
     },
@@ -201,7 +201,7 @@
     },
     "linked": {
       "funding": "This contribution created an investment operation: {type, select, buy {a purchase} sell {a sale} other {an operation}} of {quantity} units of {asset} at {broker} on {date}.",
-      "cash": "This transaction is the cash of an investment operation: {type, select, buy {a purchase} sell {a sale} other {an operation}} of {quantity} units of {asset} at {broker} on {date}.",
+      "cash": "This transaction is the cash side of an investment operation: {type, select, buy {a purchase} sell {a sale} other {an operation}} of {quantity} units of {asset} at {broker} on {date}.",
       "also": "Also delete the linked operation (the position and the average price are recalculated)",
       "warnFunding": "The purchase is left without a cash source: {broker} will show {amount} more cash.",
       "warnCash": "The operation is left without its cash: the {broker} balance changes by {amount}."
@@ -231,7 +231,7 @@
     "edit": "Edit…",
     "category": "Category ▾",
     "entity": "Entity ▾",
-    "tax": "Mark tax",
+    "tax": "Mark deductible",
     "duplicate": "Duplicate",
     "export": "Export",
     "delete": "Delete",

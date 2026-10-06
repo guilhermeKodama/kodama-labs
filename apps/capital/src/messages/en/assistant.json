@@ -7,7 +7,7 @@
   "untitled": "Untitled conversation",
   "empty": {
     "title": "Ask about your finances",
-    "hint": "E.g. “how much did I spend on groceries in September?”. You can also attach statements (OFX, CSV, PDF) and screenshots."
+    "hint": "E.g. “How much did I spend on groceries in September?” You can also attach statements (OFX, CSV, PDF) and screenshots."
   },
   "composer": {
     "placeholder": "Ask something…",
@@ -27,15 +27,16 @@
   },
   "errors": {
     "turnFailed": "The assistant could not answer.",
-    "loadFailed": "The conversation could not be opened.",
-    "listFailed": "Conversations could not be loaded.",
+    "turnLimit": "The assistant stopped at the limit for this answer. Send another message to continue.",
+    "loadFailed": "Couldn't open the conversation.",
+    "listFailed": "Couldn't load the conversations.",
     "retry": "Try again"
   },
   "tools": {
     "get_context_snapshot": "Checking accounts and categories",
-    "list_statement_files": "Checking the conversation's files",
+    "list_statement_files": "Checking files in the conversation",
     "read_attachment": "Opening the attached receipt",
-    "get_parsed_rows": "Reading the statement's rows",
+    "get_parsed_rows": "Reading the statement rows",
     "reconcile_statement": "Comparing with your history",
     "search_transactions": "Searching transactions",
     "search_transfers": "Searching transfers",
@@ -52,11 +53,11 @@
     "manage_investment_account": "Managing an investment account",
     "manage_investment_holding": "Managing an investment holding",
     "record_investment_transaction": "Recording an investment movement",
-    "fund_investment_account": "Moving the investment account's cash",
+    "fund_investment_account": "Moving cash in the investment account",
     "manage_credit_card": "Managing a credit card",
     "update_bill_transactions": "Updating bill items",
     "link_bill_to_transaction": "Linking the bill to the transaction",
-    "update_bill": "Fixing the bill's dates",
+    "update_bill": "Fixing the bill dates",
     "present_card": "Preparing a decision card",
     "web_search": "Searching the web"
   },
@@ -101,8 +102,8 @@
   },
   "result": {
     "title": {
-      "import": "Import done",
-      "revert": "Revert done"
+      "import": "Import complete",
+      "revert": "Revert complete"
     },
     "counts": {
       "imported": "{count, plural, one {# transaction imported} other {# transactions imported}}",
@@ -117,7 +118,7 @@
   },
   "card": {
     "title": "Possible duplicates",
-    "description": "{count, plural, one {This statement line looks already recorded.} other {These # statement lines look already recorded.}}",
+    "description": "{count, plural, one {This statement line seems to be recorded already.} other {These # statement lines seem to be recorded already.}}",
     "fromStatement": "In the statement",
     "existing": "Already recorded",
     "decisions": {

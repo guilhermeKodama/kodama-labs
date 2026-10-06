@@ -51,8 +51,8 @@
       "only": "The only account of this type",
       "bank": "Detected from the file's bank",
       "default": "The entity's main account",
-      "chooseCard": "Choose the card of this bill",
-      "chooseAccount": "Choose the account of this statement"
+      "chooseCard": "Choose the card for this bill",
+      "chooseAccount": "Choose the account for this statement"
     }
   },
   "monthShort": "{abbr} ’{yy}",
@@ -99,16 +99,16 @@
     "ignoredSomeDuplicates": "{count, plural, one {# duplicate} other {# duplicates}}",
     "total": "Total",
     "rules": "New rules",
-    "card": "The {month} {bank} bill ends up with {count, plural, one {# purchase} other {# purchases}} and {total}.",
+    "card": "The {bank} bill for {month} will have {count, plural, one {# purchase} other {# purchases}} totaling {total}.",
     "cardPayment": "The {due} payment comes out of {account} and does not count as spending.",
     "cardPaymentNoAccount": "The {due} payment does not count as spending.",
     "transfers": "{count, plural, one {# row is booked as a transfer (bill payment, contribution or between entities) and does not count as spending.} other {# rows are booked as transfers (bill payments, contributions or between entities) and do not count as spending.}}"
   },
   "done": {
     "title": "{count, plural, one {# transaction imported} other {# transactions imported}} into {account}",
-    "body": "All reviewed. The view “{view}” was created for you to check.",
+    "body": "All reviewed. The view “{view}” was created so you can check it.",
     "bodyNoView": "All reviewed.",
-    "openView": "Open the import's view",
+    "openView": "Open the import view",
     "undo": "Undo import",
     "undone": "Import undone"
   },

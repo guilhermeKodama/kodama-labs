@@ -1,3 +1,5 @@
+import { readdirSync, readFileSync, statSync } from "node:fs";
+import path from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import { decodeCreateParam } from "@/lib/ledger/quick-add";
 import { createEntryTarget, isSettingsPath, SHELL_SHORTCUTS, settingsShortcutTarget, type ShellShortcut } from "@/lib/shell/shortcuts";
@@ -159,5 +161,44 @@ describe("N and ⌘, from Ajustes", () => {
     expect(isSettingsPath("/settings/profile")).toBe(true);
     expect(isSettingsPath("/settingsx")).toBe(false);
     expect(isSettingsPath("/transactions")).toBe(false);
+  });
+});
+
+/** Every .ts/.tsx source under src (no tests, no generated code). */
+function sources(dir = path.resolve(__dirname, "../../..")): { file: string; text: string }[] {
+  return readdirSync(dir).flatMap((name) => {
+    const full = path.join(dir, name);
+    if (statSync(full).isDirectory()) return name === "__tests__" || name === "generated" ? [] : sources(full);
+    return /\.tsx?$/.test(name) ? [{ file: path.relative(path.resolve(__dirname, "../../.."), full), text: readFileSync(full, "utf8") }] : [];
+  });
+}
+
+describe("each shell key is bound once, from SHELL_SHORTCUTS", () => {
+  const files = sources();
+  const shellCombos = new Map(Object.entries(SHELL_SHORTCUTS).map(([name, binding]) => [JSON.stringify(parseCombo(binding.combo)), name]));
+
+  it("no screen or component binds a shell combo by its own literal (e.g. N on Transações, mod+z in UndoBridge)", () => {
+    const offenders: string[] = [];
+    for (const { file, text } of files) {
+      for (const call of text.matchAll(/useShortcut\(\s*(\[[^\]]*\]|"[^"]*"|'[^']*')/g)) {
+        for (const literal of call[1].matchAll(/["']([^"']+)["']/g)) {
+          const name = shellCombos.get(JSON.stringify(parseCombo(literal[1])));
+          if (name) offenders.push(`${file}: "${literal[1]}" is SHELL_SHORTCUTS.${name}`);
+        }
+      }
+    }
+    expect(offenders).toEqual([]);
+  });
+
+  it("useShellShortcut binds every entry exactly once (N in GlobalKeys, ⌘Z in UndoBridge …)", () => {
+    const bound = files.flatMap(({ file, text }) => [...text.matchAll(/useShellShortcut\(\s*"(\w+)"/g)].map((match) => [match[1], file] as const));
+    const count = (name: string) => bound.filter(([bound]) => bound === name).length;
+    expect(Object.fromEntries(Object.keys(SHELL_SHORTCUTS).map((name) => [name, count(name)]))).toEqual(
+      Object.fromEntries(Object.keys(SHELL_SHORTCUTS).map((name) => [name, 1])),
+    );
+    expect(Object.fromEntries(bound.filter(([name]) => name === "create" || name === "undo"))).toEqual({
+      create: "components/shell/global-keys.tsx",
+      undo: "lib/api/undo-bridge.tsx",
+    });
   });
 });

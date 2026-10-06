@@ -69,11 +69,11 @@
       "day": "{month} {day}"
     },
     "upcoming": {
-      "title": "Fixed bills · next 14 days",
+      "title": "Recurring bills · next 14 days",
       "seeAll": "See all",
       "bill": "{account} bill",
       "overdue": "Overdue",
-      "empty": "No fixed bills in the next 14 days.",
+      "empty": "No recurring bills in the next 14 days.",
       "mode": {
         "auto": "auto",
         "reminder": "reminder",
@@ -144,7 +144,7 @@
     "category": "Category",
     "entity": "Entity",
     "allEntities": "All",
-    "allEntitiesHint": "“All” adds up PF and PJ spending in this category",
+    "allEntitiesHint": "“All” adds up personal and business spending in this category",
     "amount": "Amount",
     "period": "Period",
     "monthly": "Monthly",
@@ -168,13 +168,13 @@
     "done": "{category} budget deleted"
   },
   "rule": {
-    "fallbackTitle": "Fixed bill",
-    "notFound": "This fixed bill no longer exists.",
+    "fallbackTitle": "Recurring bill",
+    "notFound": "This recurring bill no longer exists.",
     "kind": {
       "expense": "Expense",
       "income": "Income",
       "transfer": "Transfer",
-      "investment": "Investment"
+      "investment": "Contribution"
     },
     "pausedTag": "paused",
     "next": "Next: {date} · {amount}",
@@ -205,10 +205,10 @@
     "deleted": "“{description}” deleted"
   },
   "rules": {
-    "title": "Fixed bills",
-    "desc": "Every recurrence, paused ones included",
+    "title": "Recurring bills",
+    "desc": "All recurring transactions, including paused ones",
     "active": "Active",
     "paused": "Paused",
-    "empty": "No recurrences. Tick “Recurring” when creating a transaction."
+    "empty": "No recurring transactions. Tick “Recurring” when creating a transaction."
   }
 }

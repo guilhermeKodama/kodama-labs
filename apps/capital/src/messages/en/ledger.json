@@ -2,7 +2,7 @@
   "crumb": "Transactions",
   "viewsError": "Could not load the views.",
   "tabs": {
-    "fixed": "fixed",
+    "fixed": "built-in",
     "newView": "New view",
     "modified": "Modified"
   },
@@ -36,7 +36,7 @@
     "notIn": "{prop} is not {values}",
     "notInCount": "{prop} is not {count} values",
     "isNull": "{prop}: empty",
-    "isNotNull": "{prop}: filled in",
+    "isNotNull": "{prop}: not empty",
     "other": "{prop}: custom filter",
     "done": "Done",
     "remove": "Remove filter",
@@ -65,7 +65,7 @@
   "display": {
     "button": "Display",
     "name": "Name",
-    "builtinHint": "Fixed view. Filters here are temporary; columns, sorting, calculations and layout are remembered.",
+    "builtinHint": "Built-in view. Filters here are temporary; columns, sorting, calculations and layout are remembered.",
     "layout": "Layout",
     "period": "Period",
     "group": {
@@ -124,7 +124,7 @@
     "in": "Income",
     "out": "Expense",
     "transfer": "Transfer",
-    "invest": "Investment"
+    "invest": "Contribution"
   },
   "categoryFlow": {
     "invest": "Investments",
@@ -136,14 +136,14 @@
   "kpi": {
     "income": "Income",
     "expense": "Expenses",
-    "investment": "Investments",
+    "investment": "Contributions",
     "net": "Net",
     "rows": "Rows"
   },
   "table": {
     "empty": "No transactions in {period} with these filters.",
     "visibleSelected": "{count, plural, one {The # visible row is selected.} other {The # visible rows are selected.}}",
-    "selectAll": "{count, plural, one {Select the # in the view} other {Select all # in the view}}",
+    "selectAll": "{count, plural, one {Select the # transaction in the view} other {Select all # in the view}}",
     "allSelected": "{count, plural, one {The # transaction in the view is selected.} other {All # transactions in the view are selected.}}",
     "clearSelection": "Clear selection",
     "loadMore": "Load more",

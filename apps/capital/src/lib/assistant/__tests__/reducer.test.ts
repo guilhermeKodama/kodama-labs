@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { assistantReducer, canRetry, initialAssistantState, isBusy, type AssistantAction, type AssistantState } from "../reducer";
+import { assistantReducer, canRetry, initialAssistantState, isBusy, isTurnLimit, retryKind, type AssistantAction, type AssistantState } from "../reducer";
 import { createSseParser, parseAgentEvent, type AgentEvent } from "../sse";
 
 function run(actions: AssistantAction[], state: AssistantState = initialAssistantState): AssistantState {
@@ -53,7 +53,7 @@ describe("assistantReducer: a recorded turn", () => {
       { type: "error", code: "TURN_FAILED", message: "Orçamento do turno atingido", retryable: true },
       { type: "turn_completed", turnId: "t1", status: "failed", inputTokens: 10, outputTokens: 20, costUsd: 0.01 },
     ]);
-    const state = run([send("importe o extrato"), ...events.map(ev), { type: "ended" }]);
+    const state = run([{ type: "conversation", conversationId: "c1", title: null }, send("importe o extrato"), ...events.map(ev), { type: "ended" }]);
 
     expect(state.phase).toBe("idle");
     expect(state.lastTurn).toBe("failed");
@@ -78,7 +78,84 @@ describe("assistantReducer: a recorded turn", () => {
     ]);
     expect(state.error).toEqual({ kind: "turn", code: "TURN_FAILED", message: "Orçamento do turno atingido", retryable: true });
     expect(canRetry(state)).toBe(true);
-    expect(state.lastInput).toEqual({ text: "importe o extrato" });
+    // The server saved the message: "Tentar de novo" re-runs the turn instead of sending the text again.
+    expect(retryKind(state)).toBe("rerun");
+  });
+});
+
+describe("assistantReducer: Tentar de novo after a server-side turn error", () => {
+  const conversation: AssistantAction = { type: "conversation", conversationId: "c1", title: null };
+  const failedTurn = [
+    conversation,
+    send("importe o extrato"),
+    ev({ type: "turn_started", turnId: "t1" }),
+    ev(created("u1", "user")),
+    ev(created("a1", "assistant")),
+    ev({ type: "error", code: "TURN_FAILED", message: "credit balance is too low", retryable: true }),
+    ev({ type: "turn_completed", turnId: "t1", status: "failed", inputTokens: 0, outputTokens: 0, costUsd: 0 }),
+    { type: "ended" } as AssistantAction,
+  ];
+  const userBubbles = (state: AssistantState) => state.messages.filter((message) => message.role === "user").map((message) => [message.id, message.blocks]);
+
+  it("re-runs the turn: the user message stays once, no new bubble is added", () => {
+    let state = run(failedTurn);
+    expect(retryKind(state)).toBe("rerun");
+    state = run([{ type: "rerun" }], state);
+    expect(state).toMatchObject({ phase: "sending", error: null, lastRequest: "rerun" });
+    expect(userBubbles(state)).toEqual([["u1", [{ kind: "text", text: "importe o extrato" }]]]);
+
+    // The re-run turn saves no user message: only the assistant's answer arrives.
+    state = run(
+      [
+        ev({ type: "turn_started", turnId: "t2" }),
+        ev(created("a2", "assistant")),
+        ev({ type: "token", messageId: "a2", delta: "Pronto." }),
+        ev({ type: "message_complete", messageId: "a2" }),
+        ev({ type: "turn_completed", turnId: "t2", status: "completed", inputTokens: 0, outputTokens: 0, costUsd: 0 }),
+        { type: "ended" },
+      ],
+      state,
+    );
+    expect(userBubbles(state)).toEqual([["u1", [{ kind: "text", text: "importe o extrato" }]]]);
+    expect(state.messages.map((message) => message.id)).toEqual(["u1", "a2"]);
+    expect(state.error).toBeNull();
+    expect(retryKind(state)).toBeNull();
+  });
+
+  it("a re-run whose request fails is offered again as a re-run, never as a resend", () => {
+    const state = run([...failedTurn, { type: "rerun" }, { type: "failed", error: { kind: "request", status: 0, code: "network", params: {} } }]);
+    expect(retryKind(state)).toBe("rerun");
+    expect(userBubbles(state)).toHaveLength(1);
+  });
+
+  it("a request that never reached the server is resent", () => {
+    const state = run([conversation, send("oi"), { type: "failed", error: { kind: "request", status: 0, code: "network", params: {} } }]);
+    expect(retryKind(state)).toBe("resend");
+    expect(state.lastInput).toEqual({ text: "oi" });
+  });
+
+  it("a reopened conversation whose last turn failed re-runs it", () => {
+    const state = run([{ type: "loaded", conversationId: "c1", title: null, messages: [], error: { kind: "turn", code: "TURN_FAILED", message: "", retryable: true } }]);
+    expect(retryKind(state)).toBe("rerun");
+  });
+});
+
+describe("assistantReducer: a turn stopped at its budget or iteration cap", () => {
+  it("keeps the notice after the turn completes, with no retry", () => {
+    const state = run([
+      { type: "conversation", conversationId: "c1", title: null },
+      send("importe tudo"),
+      ev(created("u1", "user")),
+      ev(created("a1", "assistant")),
+      ev({ type: "token", messageId: "a1", delta: "Importando…" }),
+      ev({ type: "error", code: "TURN_LIMIT", message: "Orçamento do turno atingido - envie outra mensagem para continuar.", retryable: false }),
+      ev({ type: "turn_completed", turnId: "t1", status: "completed", inputTokens: 0, outputTokens: 0, costUsd: 0 }),
+      { type: "ended" },
+    ]);
+    expect(state.lastTurn).toBe("completed");
+    expect(isTurnLimit(state.error)).toBe(true);
+    expect(canRetry(state)).toBe(false);
+    expect(isTurnLimit(run([send("continue")], state).error)).toBe(false);
   });
 });
 

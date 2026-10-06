@@ -1,4 +1,5 @@
 import type { ChatMessage, DuplicateReviewCard, ImportPlan, MessageAttachment, MessageBlock, PlanStatus } from "@/types/assistant";
+import type { TurnLimitCode } from "@capital/server/modules/assistant/agent/events";
 import type { AgentEvent } from "./sse";
 
 /**
@@ -24,14 +25,31 @@ export type AssistantError =
 
 export type AssistantPhase = "idle" | "sending" | "streaming";
 
+/**
+ * The `error` code of a turn stopped by its budget or iteration cap
+ * (agent/events.ts; typed against the server's constant so they cannot
+ * drift): its work is kept and the user is asked to send another message.
+ */
+export const TURN_LIMIT_CODE: TurnLimitCode = "TURN_LIMIT";
+
+
+/**
+ * What "Tentar de novo" does: `rerun` runs the failed turn again on the
+ * server against the message it already saved (POST …/retry); `resend`
+ * sends the last input again, for a request that never reached the server.
+ */
+export type RetryKind = "rerun" | "resend";
+
 export interface AssistantState {
   conversationId: string | null;
   title: string | null;
   messages: ChatMessage[];
   phase: AssistantPhase;
   error: AssistantError | null;
-  /** The last thing sent, for "Tentar de novo". */
+  /** The last thing sent, for "Tentar de novo" when its request failed. */
   lastInput: AssistantInput | null;
+  /** What the last request was: a new message, or a re-run of a failed turn. */
+  lastRequest: "send" | "rerun" | null;
   /** How the last turn ended (cancelled shows "Interrompido"). */
   lastTurn: "completed" | "failed" | "cancelled" | null;
 }
@@ -43,6 +61,7 @@ export const initialAssistantState: AssistantState = {
   phase: "idle",
   error: null,
   lastInput: null,
+  lastRequest: null,
   lastTurn: null,
 };
 
@@ -50,11 +69,13 @@ export type AssistantAction =
   /** "Nova conversa". */
   | { type: "reset" }
   /** A conversation from the server (resume): its rebuilt messages. */
-  | { type: "loaded"; conversationId: string; title: string | null; messages: ChatMessage[]; error?: AssistantError | null; lastInput?: AssistantInput | null }
+  | { type: "loaded"; conversationId: string; title: string | null; messages: ChatMessage[]; error?: AssistantError | null }
   /** The conversation was created for the first message. */
   | { type: "conversation"; conversationId: string; title: string | null }
   /** The user sent something: shown at once as a pending bubble. */
   | { type: "send"; input: AssistantInput; optimisticId: string; createdAt: string }
+  /** "Tentar de novo" after a failed turn: the server runs it again; no new bubble. */
+  | { type: "rerun" }
   | { type: "event"; event: AgentEvent }
   /** The request failed before streaming (HTTP error, offline). */
   | { type: "failed"; error: AssistantError }
@@ -229,7 +250,6 @@ export function assistantReducer(state: AssistantState, action: AssistantAction)
         title: action.title,
         messages: action.messages,
         error: action.error ?? null,
-        lastInput: action.lastInput ?? null,
       };
 
     case "conversation":
@@ -242,8 +262,12 @@ export function assistantReducer(state: AssistantState, action: AssistantAction)
         error: null,
         lastTurn: null,
         lastInput: action.input,
+        lastRequest: "send",
         messages: [...state.messages, { id: action.optimisticId, role: "user", status: "sending", createdAt: action.createdAt, blocks: inputBlocks(action.input) }],
       };
+
+    case "rerun":
+      return { ...state, phase: "sending", error: null, lastTurn: null, lastRequest: "rerun" };
 
     case "event":
       return onEvent(state, action.event);
@@ -283,8 +307,24 @@ export function isBusy(state: AssistantState): boolean {
   return state.phase !== "idle";
 }
 
-/** "Tentar de novo" resends the last input. */
+/**
+ * What "Tentar de novo" would do, or null when it is not offered. A turn
+ * that failed on the server already saved the user's message, so it is
+ * re-run there (sending the text again would show it twice); a request
+ * that failed before reaching the server is repeated as it was.
+ */
+export function retryKind(state: AssistantState): RetryKind | null {
+  if (!state.error || isBusy(state)) return null;
+  if (state.error.kind === "turn") return state.error.retryable && state.conversationId ? "rerun" : null;
+  if (state.lastRequest === "rerun") return state.conversationId ? "rerun" : null;
+  return state.lastInput ? "resend" : null;
+}
+
 export function canRetry(state: AssistantState): boolean {
-  if (!state.error || !state.lastInput || isBusy(state)) return false;
-  return state.error.kind === "request" || state.error.retryable;
+  return retryKind(state) !== null;
+}
+
+/** The turn stopped at its budget or iteration cap: "send another message to continue". */
+export function isTurnLimit(error: AssistantError | null): boolean {
+  return error?.kind === "turn" && error.code === TURN_LIMIT_CODE;
 }

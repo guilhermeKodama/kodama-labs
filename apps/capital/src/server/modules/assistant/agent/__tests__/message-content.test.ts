@@ -166,3 +166,28 @@ describe("hydrateMediaRef", () => {
     ).toBeNull();
   });
 });
+
+describe("buildApiMessages - what a failed turn left behind", () => {
+  const user = (text: string) => ({ role: "user", content: [{ type: "text", text }] });
+
+  it("drops the empty assistant placeholder of a stream that failed", async () => {
+    const messages = await buildApiMessages([user("importe"), { role: "assistant", content: [] }]);
+    expect(messages).toEqual([user("importe")]);
+  });
+
+  it("drops tool calls whose results were never saved, keeping the ones that ran", async () => {
+    const messages = await buildApiMessages([
+      user("importe"),
+      { role: "assistant", content: [{ type: "text", text: "Vou ler." }, { type: "tool_use", id: "ran", name: "get_parsed_rows", input: {} }] },
+      { role: "user", content: [{ type: "tool_result", tool_use_id: "ran", content: "{}" }] },
+      { role: "assistant", content: [{ type: "thinking", thinking: "…", signature: "s" }, { type: "tool_use", id: "lost", name: "commit_plan", input: {} }] },
+      user("e agora?"),
+    ]);
+    expect(messages.map((m) => [m.role, (m.content as { type: string }[]).map((b) => b.type)])).toEqual([
+      ["user", ["text"]],
+      ["assistant", ["text", "tool_use"]],
+      ["user", ["tool_result"]],
+      ["user", ["text"]],
+    ]);
+  });
+});
