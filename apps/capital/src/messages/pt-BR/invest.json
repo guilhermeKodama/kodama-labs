@@ -76,7 +76,7 @@
       "income12m": "Proventos 12m",
       "incomeSub": "dividendos + juros",
       "return12m": "Rentab. 12m",
-      "benchmarks": "CDI {cdi} · IPCA+6% {ipca}",
+      "benchmarks": "CDI {cdi} · IPCA+ 6% {ipca}",
       "returnPending": "sem meses fechados ainda"
     },
     "history": {
@@ -88,6 +88,7 @@
     },
     "allocation": {
       "title": "Alocação atual vs alvo",
+      "edit": "Editar alvos",
       "legend": "Barra = atual · traço = alvo · pp = diferença para o alvo",
       "empty": "Sem posições. Registre uma operação para começar."
     },

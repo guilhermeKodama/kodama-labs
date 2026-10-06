@@ -76,7 +76,7 @@
       "income12m": "Income 12m",
       "incomeSub": "dividends + interest",
       "return12m": "Return 12m",
-      "benchmarks": "CDI {cdi} · IPCA+6% {ipca}",
+      "benchmarks": "CDI {cdi} · IPCA+ 6% {ipca}",
       "returnPending": "no closed months yet"
     },
     "history": {
@@ -88,6 +88,7 @@
     },
     "allocation": {
       "title": "Current allocation vs target",
+      "edit": "Edit targets",
       "legend": "Bar = current · tick = target · pp = difference from target",
       "empty": "No positions. Record an operation to start."
     },

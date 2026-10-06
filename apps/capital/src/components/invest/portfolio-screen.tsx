@@ -19,7 +19,7 @@ import { openAssistant } from "@/lib/shell/assistant-bridge";
 import { cn } from "@/lib/utils";
 import { IncomeChart, NetWorthChart } from "./charts";
 import { MONO, todayIn, useMonthRange, useScopeParam, useSignedPct } from "./common";
-import { EditOperationDialog, HoldingSheet, useOpLabel } from "./dialogs";
+import { EditOperationDialog, HoldingSheet, TargetsDialog, useOpLabel } from "./dialogs";
 import { OperationDialog } from "./operation-dialog";
 import { pickView, useInvestViews, useInvestViewWrites, type InvestView } from "./use-invest-views";
 import { DisplayPopover, FilterChips, FilterMenu } from "./view-controls";
@@ -55,6 +55,7 @@ export function PortfolioScreen() {
   const fx = useFxRates();
   const [opOpen, setOpOpen] = useState<{ holdingId: string | null } | null>(null);
   const [detail, setDetail] = useState<Holding | null>(null);
+  const [targetsOpen, setTargetsOpen] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
   const range = useMonthRange();
   const signedPct = useSignedPct();
@@ -150,7 +151,14 @@ export function PortfolioScreen() {
             <span className="text-[11px] text-fg-4">{t("history.caption", { unit: fmt.kUnit(cur), range: historyRange, scope: ti(`scopeCaption.${scope}`) })}</span>
           </div>
         </Panel>
-        <Panel title={t("allocation.title")}>
+        <Panel
+          title={t("allocation.title")}
+          trailing={
+            <Btn ghost onClick={() => setTargetsOpen(true)}>
+              {t("allocation.edit")}
+            </Btn>
+          }
+        >
           <AllocationPanel summary={s} />
         </Panel>
       </div>
@@ -171,6 +179,7 @@ export function PortfolioScreen() {
           }}
         />
       ) : null}
+      {targetsOpen ? <TargetsDialog onClose={() => setTargetsOpen(false)} /> : null}
       {opOpen ? <OperationDialog holdings={holdings.data ?? []} initialHoldingId={opOpen.holdingId} onClose={() => setOpOpen(null)} /> : null}
     </Page>
   );
