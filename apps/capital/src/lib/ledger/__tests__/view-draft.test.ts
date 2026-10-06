@@ -3,12 +3,14 @@ import type { ViewConfig } from "@capital/server/modules/ledger/contracts";
 import {
   applyViewDraft,
   buildTransactionsHref,
+  canonicalViewParam,
   cleanViewDraft,
   decodeViewDraft,
   diffViewConfig,
   encodeViewDraft,
   isDirty,
   parseViewParam,
+  resolveActiveView,
   saveAsNewView,
   type ViewDraft,
 } from "@/lib/ledger/view-draft";
@@ -122,5 +124,35 @@ describe("view param and links", () => {
     const params = new URL(href, "http://x").searchParams;
     expect(decodeViewDraft(params.get("draft"))).toEqual(drill);
     expect(JSON.parse(params.get("create")!)).toEqual({ description: "iFood", amount: 86.9 });
+  });
+});
+
+describe("resolving ?view", () => {
+  const views = [
+    { id: "v-subs", seedKey: "subs", isBuiltin: false },
+    { id: "v-all", seedKey: null, isBuiltin: true },
+    { id: "v-mine", seedKey: null, isBuiltin: false },
+  ];
+
+  it("picks the view by id or seed key, else Todas, else the first", () => {
+    expect(resolveActiveView(views, "v-mine")?.id).toBe("v-mine");
+    expect(resolveActiveView(views, "seed:subs")?.id).toBe("v-subs");
+    expect(resolveActiveView(views, null)?.id).toBe("v-all");
+    expect(resolveActiveView(views, "gone")?.id).toBe("v-all");
+    expect(resolveActiveView(views, "seed:pj")?.id).toBe("v-all");
+    expect(resolveActiveView([views[2]!], "seed:pj")?.id).toBe("v-mine");
+    expect(resolveActiveView([], "seed:ir")).toBeNull();
+  });
+
+  it("rewrites a seed key to the view id, or drops it when that view does not exist", () => {
+    expect(canonicalViewParam(views, "seed:subs", true)).toBe("v-subs");
+    expect(canonicalViewParam(views, "seed:pj", true)).toBeNull();
+  });
+
+  it("leaves the param alone while loading, for plain ids and without a param", () => {
+    expect(canonicalViewParam([], "seed:subs", false)).toBeUndefined();
+    expect(canonicalViewParam(views, "just-created", true)).toBeUndefined();
+    expect(canonicalViewParam(views, null, true)).toBeUndefined();
+    expect(canonicalViewParam(views, "seed:", true)).toBeUndefined();
   });
 });

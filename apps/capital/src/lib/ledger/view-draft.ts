@@ -158,6 +158,38 @@ export function parseViewParam(value: string | null | undefined): { viewId: stri
   return { viewId: value };
 }
 
+/** The fields of a saved view that `?view` is matched against. */
+export interface ViewRef {
+  id: string;
+  seedKey?: string | null;
+  isBuiltin?: boolean;
+}
+
+/** The view `?view` names, else Todas (the built-in one), else the first; null while there are no views. */
+export function resolveActiveView<V extends ViewRef>(views: readonly V[], param: string | null | undefined): V | null {
+  const wanted = parseViewParam(param);
+  const match = wanted
+    ? views.find((view) => ("viewId" in wanted ? view.id === wanted.viewId : view.seedKey === wanted.seedKey))
+    : undefined;
+  return match ?? views.find((view) => view.isBuiltin) ?? views[0] ?? null;
+}
+
+/**
+ * What `?view=seed:<key>` becomes once the views are loaded: the seeded view's own id, or null (Todas) when
+ * the user deleted that view or it does not exist yet (PJ before a business entity). `undefined` = leave the
+ * param alone (no seed key, or the views are still loading). A plain id is never rewritten: a view created
+ * a moment ago may not be in the list yet.
+ */
+export function canonicalViewParam(
+  views: readonly ViewRef[],
+  param: string | null | undefined,
+  loaded: boolean,
+): string | null | undefined {
+  const wanted = parseViewParam(param);
+  if (!wanted || !("seedKey" in wanted) || !loaded) return undefined;
+  return views.find((view) => view.seedKey === wanted.seedKey)?.id ?? null;
+}
+
 export interface TransactionsHrefOptions {
   /** A saved view by id… */
   viewId?: string | null;

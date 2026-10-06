@@ -18,7 +18,7 @@ import { dayDraft, drillDraft, drillFiltersDraft, type DrillCell } from "@/lib/l
 import { currentMonth, periodDays, todayIso } from "@/lib/ledger/period";
 import { selectionStats } from "@/lib/ledger/selection";
 import { useLedgerViews, useViewSaver, type LedgerView } from "@/lib/ledger/use-views";
-import { applyViewDraft, decodeViewDraft, encodeViewDraft, isDirty, parseViewParam, type ViewDraft } from "@/lib/ledger/view-draft";
+import { applyViewDraft, decodeViewDraft, encodeViewDraft, canonicalViewParam, isDirty, resolveActiveView, type ViewDraft } from "@/lib/ledger/view-draft";
 import { boardKey, isPagedLayout, layoutQuery, pivotKeys, viewSelection } from "@/lib/ledger/view-query";
 import { planViewUpdate } from "@/lib/ledger/view-update";
 import { BulkBar } from "./bulk-bar";
@@ -57,21 +57,14 @@ export function TransactionsScreen() {
   const overlays = useLedgerOverlays();
   const [params, setParams] = useQueryStates(URL_STATE);
   const list = useMemo(() => views.data ?? [], [views.data]);
-  const wanted = parseViewParam(params.view);
-  const active =
-    (wanted ? list.find((view) => ("viewId" in wanted ? view.id === wanted.viewId : view.seedKey === wanted.seedKey)) : undefined) ??
-    list.find((view) => view.isBuiltin) ??
-    list[0] ??
-    null;
+  const active = resolveActiveView(list, params.view);
 
   // ?view=seed:ir (e.g. the old /tax link) becomes the view's own id.
   // A seeded view the user deleted (or one not seeded yet, like PJ before a business entity) falls back to Todas.
-  const seedKey = wanted && "seedKey" in wanted ? wanted.seedKey : null;
-  const loaded = views.isSuccess;
+  const canonical = canonicalViewParam(list, params.view, views.isSuccess);
   useEffect(() => {
-    if (!seedKey || !loaded) return;
-    void setParams({ view: active?.seedKey === seedKey ? active.id : null }, { history: "replace" });
-  }, [seedKey, loaded, active, setParams]);
+    if (canonical !== undefined) void setParams({ view: canonical }, { history: "replace" });
+  }, [canonical, setParams]);
 
   const open = (id: string | null) => void setParams({ view: id, draft: null, q: null });
   const create = useAppMutation({
