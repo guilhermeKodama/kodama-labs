@@ -1,11 +1,13 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { prisma } from "@capital/server/lib/prisma";
 import { createApp } from "@capital/server/lib/create-app";
-import { createLedgerFixture, deleteLedgerFixture } from "@/test/ledger-fixtures";
+import { moveBrokerageCash } from "@capital/server/modules/investments/services/portfolio";
+import { createLedgerFixture, deleteLedgerFixture, type LedgerFixture } from "@/test/ledger-fixtures";
 
 const USER = "test-user-fire-goal-001";
 const app = createApp();
 let cookie: string;
+let f: LedgerFixture;
 
 const call = async (method: string, path: string, body?: unknown) => {
   const res = await app.request(`/api${path}`, {
@@ -34,7 +36,7 @@ const PLAN = {
 };
 
 beforeAll(async () => {
-  await createLedgerFixture(prisma, USER);
+  f = await createLedgerFixture(prisma, USER);
   const session = await prisma.session.create({ data: { userId: USER, expiresAt: new Date(Date.now() + 3600_000) } });
   cookie = `capital_session=${session.id}`;
 });
@@ -117,5 +119,20 @@ describe("GET /v1/fire/summary", () => {
     expect(byDate.requiredContribution.phases[0].monthlyContribution).toBeCloseTo(byDate.currentMonthContribution, 6);
 
     expect((await call("GET", "/v1/fire/summary?altContribution=-1")).status).toBe(422);
+  });
+});
+
+describe("FIRE base", () => {
+  it("counts the brokers' cash as invested, like the Carteira's Patrimônio", async () => {
+    await call("PUT", "/v1/fire/goal", { ...PLAN, planningMode: "by_contribution", targetYear: null });
+    const before = (await call("GET", "/v1/fire/summary")).data.result.currentInvested;
+    const deposit = await moveBrokerageCash(USER, { accountId: f.broker, amount: 2500, date: "2026-09-10", direction: "deposit" }, prisma);
+    try {
+      const after = (await call("GET", "/v1/fire/summary")).data.result.currentInvested;
+      expect(after - before).toBeCloseTo(2500, 6);
+    } finally {
+      await prisma.ledgerEntry.deleteMany({ where: { transferGroupId: deposit.transferGroupId! } });
+      await prisma.transferGroup.deleteMany({ where: { id: deposit.transferGroupId! } });
+    }
   });
 });

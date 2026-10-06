@@ -2,7 +2,7 @@ import type { DbClient } from "@capital/server/lib/prisma";
 import { env } from "@/env";
 import { fetchQuotes, quoteSourceFor, type Quote, type QuoteRequest } from "../lib/quotes";
 
-interface PriceUpdateResult {
+export interface PriceUpdateResult {
   totalHoldings: number;
   updated: number;
   /** Holdings whose price could not be written. */

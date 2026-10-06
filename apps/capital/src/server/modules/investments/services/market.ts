@@ -102,3 +102,7 @@ export async function searchAssetsFor(userId: string, q: string, db: DbClient, o
     }));
   return { results: [...own, ...market].slice(0, limit) };
 }
+
+/** GET /v2/quotes and GET /v2/assets/search (for the client, import type only). */
+export type QuotesResponse = Awaited<ReturnType<typeof quotesFor>>;
+export type AssetSearchResponse = Awaited<ReturnType<typeof searchAssetsFor>>;

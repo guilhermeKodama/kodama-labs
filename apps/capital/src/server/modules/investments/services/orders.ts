@@ -35,7 +35,13 @@ export async function recordOrders(userId: string, input: OrdersInput, db: DbCli
     for (const order of input.orders) {
       const holding = order.holdingId
         ? await getOwnedHolding(userId, order.holdingId, tx)
-        : await createHolding(userId, { ...order.newHolding!, accountId: order.newHolding!.accountId }, tx, { collect: records });
+        : await createHolding(
+            userId,
+            // A new asset bought by quantity starts priced at the buy price (until the next price refresh).
+            { ...order.newHolding!, accountId: order.newHolding!.accountId, currentPrice: order.quantity && order.price ? order.price : null },
+            tx,
+            { collect: records }
+          );
       const totalAmount = order.amount ?? round((order.quantity ?? 0) * (order.price ?? 0), 4);
       const r = await recordOperation(
         userId,
@@ -59,3 +65,6 @@ export async function recordOrders(userId: string, input: OrdersInput, db: DbCli
     return { batchId, operations };
   });
 }
+
+/** POST /v2/investments/orders (for the client, import type only). */
+export type OrdersResponse = Awaited<ReturnType<typeof recordOrders>>;

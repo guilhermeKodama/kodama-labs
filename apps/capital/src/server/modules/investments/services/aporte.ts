@@ -75,7 +75,7 @@ export async function recordAporte(userId: string, input: AporteInput, db: DbCli
         if (holding.accountId !== broker.id) throw new LedgerError("The asset bought is not on the aporte's broker", 422, { code: "aporte.holding_mismatch" });
         holdingId = holding.id;
       } else if (input.buy.newHolding) {
-        holdingId = (await createHolding(userId, { accountId: broker.id, ...input.buy.newHolding }, tx, { collect: records })).id;
+        holdingId = (await createHolding(userId, { accountId: broker.id, ...input.buy.newHolding, currentPrice: input.buy.price > 0 ? input.buy.price : null }, tx, { collect: records })).id;
       } else {
         throw new LedgerError("Holding not found or access denied", 404, { code: "holding.not_found" });
       }
@@ -102,3 +102,6 @@ export async function recordAporte(userId: string, input: AporteInput, db: DbCli
     return { batchId, transferGroupIds, ...(operationId && { operationId, holdingId }) };
   });
 }
+
+/** POST /v2/investments/aporte (for the client, import type only). */
+export type AporteResponse = Awaited<ReturnType<typeof recordAporte>>;

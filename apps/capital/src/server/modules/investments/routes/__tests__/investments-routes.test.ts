@@ -168,7 +168,10 @@ describe("POST /v2/investments/orders", () => {
     expect(hglgFunding.direction).toBe("investment_deposit");
     expect(await prisma.transferGroup.count({ where: { userId: USER, direction: "capital_injection" } })).toBe(1);
     const cdb = await prisma.investmentHolding.findUniqueOrThrow({ where: { id: r.operations[2].holdingId } });
-    expect(cdb).toMatchObject({ currentQuantity: 0, totalInvested: 1000 });
+    expect(cdb).toMatchObject({ currentQuantity: 0, totalInvested: 1000, currentPrice: null });
+    // A new asset bought by quantity starts priced at the buy price.
+    const hglg = await prisma.investmentHolding.findUniqueOrThrow({ where: { id: r.operations[1].holdingId } });
+    expect(hglg.currentPrice).toBe(158.2);
 
     await undo(r.batchId);
     expect(await prisma.investmentOperation.count({ where: { id: { in: r.operations.map((o: { operationId: string }) => o.operationId) } } })).toBe(0);

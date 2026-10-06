@@ -1,1 +1,423 @@
-{}
+{
+  "crumbs": {
+    "investments": "Investments",
+    "portfolio": "Portfolio",
+    "contributions": "Contributions"
+  },
+  "loading": "Loading…",
+  "monthShort": "{month} ’{year}",
+  "compact": {
+    "bi": "{symbol}{value}B",
+    "mi": "{symbol}{value}M",
+    "mil": "{symbol}{value}K",
+    "none": "{symbol}{value}"
+  },
+  "allocationClass": {
+    "fixed_income": "Fixed income",
+    "br_stocks": "BR stocks",
+    "fii": "REITs (FIIs)",
+    "international": "International",
+    "crypto": "Crypto",
+    "cash": "Cash"
+  },
+  "assetClass": {
+    "stocks": "Stocks",
+    "fii": "REITs (FIIs)",
+    "etf": "ETFs",
+    "bdr": "BDRs",
+    "fixed_income": "Fixed income",
+    "crypto": "Crypto",
+    "savings": "Savings",
+    "international_stocks": "International stocks",
+    "international_etf": "International ETFs"
+  },
+  "opType": {
+    "buy": "Buy",
+    "sell": "Sale",
+    "dividend": "Dividend",
+    "yield_payment": "Yield",
+    "split": "Split",
+    "deposit": "Investment",
+    "withdrawal": "Redemption",
+    "adjustment": "Adjustment"
+  },
+  "incomeType": {
+    "dividend": "Dividend",
+    "jcp": "Interest on equity (JCP)",
+    "fii_income": "REIT income",
+    "interest": "Interest (fixed income)"
+  },
+  "scope": {
+    "all": "Consolidated",
+    "pf": "Personal",
+    "pj": "Business"
+  },
+  "scopeCaption": {
+    "all": "consolidated",
+    "pf": "personal",
+    "pj": "business"
+  },
+  "portfolio": {
+    "refreshPrices": "Update quotes",
+    "refreshing": "Updating…",
+    "refreshed": "{updated} of {total} quotes updated",
+    "refreshedMissing": "{updated} of {total} quotes updated · no quote: {tickers}",
+    "importNote": "Import broker note",
+    "importNotePrompt": "Import this brokerage note into my portfolio.",
+    "newOperation": "+ Operation",
+    "quotesToday": "Quotes from today {time}",
+    "quotesOn": "Quotes from {date} {time}",
+    "noQuotes": "No automatic quotes yet",
+    "fxRate": "{currency} {rate}",
+    "kpi": {
+      "netWorth": "Net worth",
+      "contributed": "Total contributed",
+      "result": "Result",
+      "income12m": "Income 12m",
+      "incomeSub": "dividends + interest",
+      "return12m": "Return 12m",
+      "benchmarks": "CDI {cdi} · IPCA+6% {ipca}",
+      "returnPending": "no closed months yet"
+    },
+    "history": {
+      "title": "Net worth vs total contributed",
+      "netWorth": "Net worth",
+      "contributed": "Contributed",
+      "caption": "Month × {unit} · {range} · {scope}",
+      "empty": "The history starts from the second month with positions."
+    },
+    "allocation": {
+      "title": "Current allocation vs target",
+      "legend": "Bar = current · tick = target · pp = difference from target",
+      "empty": "No positions. Record an operation to start."
+    },
+    "tabs": {
+      "byClass": "By class",
+      "byBroker": "By broker",
+      "byEntity": "By entity",
+      "list": "List",
+      "income12m": "Income 12m",
+      "operations": "Operations",
+      "addView": "New view",
+      "newHoldingsView": "New positions view",
+      "newOpsView": "New operations view",
+      "newViewName": "New view",
+      "filter": "+ Filter",
+      "display": "Display"
+    },
+    "filter": {
+      "field": {
+        "allocationClass": "Class",
+        "accountId": "Broker",
+        "entityId": "Entity",
+        "type": "Type"
+      },
+      "chip": "{field}: {values}",
+      "chipNot": "{field} is not {values}",
+      "remove": "Remove filter",
+      "clear": "Clear filters"
+    },
+    "display": {
+      "name": "View name",
+      "groupBy": "Group by",
+      "group": {
+        "allocationClass": "Class",
+        "accountId": "Broker",
+        "entityId": "Entity",
+        "none": "None"
+      },
+      "sortBy": "Sort by",
+      "direction": "Direction",
+      "sort": {
+        "marketValue": "Value",
+        "invested": "Contributed",
+        "result": "Result",
+        "share": "% portf.",
+        "ticker": "Asset"
+      },
+      "columns": "Columns",
+      "layout": "Layout",
+      "layoutTable": "Table",
+      "layoutChart": "Chart",
+      "period": "Period",
+      "periods": {
+        "last_12m": "Last 12 months",
+        "ytd": "This year",
+        "last_3m": "Last 3 months",
+        "this_month": "This month",
+        "last_month": "Last month",
+        "all": "All time"
+      },
+      "series": "Series",
+      "seriesTotal": "Total",
+      "seriesClass": "By class",
+      "delete": "Delete view",
+      "deleted": "View “{name}” deleted"
+    },
+    "columns": {
+      "ticker": "Asset",
+      "allocationClass": "Class",
+      "accountId": "Broker",
+      "entityId": "Entity",
+      "marketValue": "Value",
+      "share": "% portf.",
+      "result": "Result"
+    },
+    "target": "target {pct}",
+    "cashTicker": "CASH",
+    "cashName": "Broker balances",
+    "severalBrokers": "Several",
+    "severalEntities": "Several",
+    "emptyHoldings": "No positions in this selection.",
+    "ops": {
+      "columns": {
+        "date": "Date",
+        "asset": "Asset",
+        "type": "Type",
+        "quantity": "Qty",
+        "amount": "Amount"
+      },
+      "actions": "Actions",
+      "edit": "Edit",
+      "delete": "Delete",
+      "deleted": "{label} deleted",
+      "empty": "No operations recorded.",
+      "emptyIncome": "No income in this period.",
+      "total": "Total",
+      "totalValue": "Total {amount}",
+      "chartCaption": "Month × {unit} · {range}"
+    }
+  },
+  "sheet": {
+    "class": "Class",
+    "broker": "Broker",
+    "entity": "Entity",
+    "quantity": "Quantity",
+    "avgCost": "Average price",
+    "invested": "Invested",
+    "result": "Result",
+    "priceAt": "Quoted on",
+    "price": "Current quote",
+    "update": "Update",
+    "adjust": "Adjust",
+    "adjustNote": "Manual adjustment",
+    "operations": "Operations",
+    "noOps": "No operations.",
+    "newOp": "+ Operation",
+    "deactivate": "Deactivate",
+    "deactivated": "“{name}” deactivated",
+    "priceSaved": "Quote of {name} updated",
+    "adjusted": "Position of {name} adjusted"
+  },
+  "targets": {
+    "title": "Target allocation",
+    "desc": "Share of each class in the portfolio. Must add up to 100%.",
+    "sum": "Total {sum}%",
+    "saved": "Targets saved"
+  },
+  "op": {
+    "title": "New operation",
+    "desc": "Buy, sale, income or a broker cash movement.",
+    "kind": {
+      "buy": "Buy",
+      "sell": "Sale",
+      "income": "Income",
+      "deposit": "Deposit",
+      "withdraw": "Withdrawal"
+    },
+    "submit": {
+      "buy": "Record buy",
+      "sell": "Record sale",
+      "income": "Record income",
+      "deposit": "Record deposit",
+      "withdraw": "Record withdrawal"
+    },
+    "done": {
+      "buy": "Buy recorded",
+      "sell": "Sale recorded",
+      "income": "Income recorded",
+      "deposit": "Deposit recorded",
+      "withdraw": "Withdrawal recorded"
+    },
+    "doneFunded": "{label} · transfer created in Transactions",
+    "asset": "Asset",
+    "assetPlaceholder": "Ticker or name",
+    "searching": "Searching…",
+    "noAssets": "No asset found",
+    "newAsset": "+ New asset “{name}”",
+    "newAssetClass": "Class of the new asset",
+    "notHeld": "This asset is not held at this broker.",
+    "quantity": "Quantity",
+    "price": "Price",
+    "priceHint": "quote {time}",
+    "fees": "Fees",
+    "date": "Date",
+    "broker": "Broker",
+    "noBrokers": "No brokers",
+    "source": "Money comes from",
+    "sourceCash": "Broker balance ({amount})",
+    "sourceAccount": "{account} (creates the transfer in Transactions)",
+    "oversell": "more than the position ({quantity})",
+    "kpi": {
+      "buyTotal": "Buy total",
+      "sellTotal": "Sale total",
+      "position": "Position",
+      "units": "units",
+      "avg": "Average price",
+      "gain": "Estimated result",
+      "avgSub": "Avg {avg}",
+      "ir": "Estimated tax",
+      "irExempt": "Exempt"
+    },
+    "ir": {
+      "loss": "loss can offset future gains",
+      "stocksExempt": "stock sales under R$ 20k this month",
+      "stocks": "15% · stock sales over R$ 20k this month",
+      "etf": "15% · ETFs have no exemption",
+      "fii": "20% · REITs have no exemption",
+      "cryptoExempt": "crypto sales under R$ 35k this month",
+      "crypto": "15% · crypto sales over R$ 35k this month",
+      "foreign": "15% · foreign asset",
+      "withheld": "withheld at source"
+    },
+    "income": {
+      "type": "Type",
+      "gross": "Gross amount",
+      "tax": "Tax withheld",
+      "taxJcp": "15% withheld at source",
+      "taxExempt": "exempt",
+      "creditTo": "Credit to",
+      "creditCash": "Broker balance",
+      "creditAccount": "{account} (creates an entry in Transactions)"
+    },
+    "cash": {
+      "amount": "Amount",
+      "from": "From",
+      "to": "To",
+      "depositNote": "Creates an “Investment contribution” transfer that shows in Transactions and in Contributions.",
+      "withdrawNote": "Creates an “Investment redemption” transfer."
+    }
+  },
+  "editOp": {
+    "title": "Edit operation",
+    "total": "Amount",
+    "notes": "Notes",
+    "saved": "Operation updated"
+  },
+  "contrib": {
+    "prev": "Previous period",
+    "next": "Next period",
+    "register": "+ Record contribution",
+    "kpi": {
+      "month": "Contributed in {month}",
+      "goalFire": "Goal (FIRE plan): {amount}",
+      "noGoal": "No goal: set up the FIRE plan",
+      "avg": "Average 12m",
+      "total": "Total 12m",
+      "savings": "Savings rate",
+      "savingsSub": "contributions / personal net income"
+    },
+    "chart": {
+      "title": "Contributions by month and class",
+      "goal": "Goal",
+      "caption": "Month × {unit} contributed · {range}",
+      "empty": "No contributions in this period."
+    },
+    "where": {
+      "title": "Where to invest this month",
+      "amount": "I will invest {symbol}",
+      "byClass": "By class",
+      "byAsset": "By asset",
+      "headers": {
+        "class": "Class",
+        "current": "Current",
+        "target": "Target",
+        "put": "Invest",
+        "after": "After",
+        "asset": "Asset",
+        "broker": "Broker",
+        "qty": "≈ Qty"
+      },
+      "units": "{count, plural, one {# unit} other {# units}}",
+      "newAsset": "new asset",
+      "cashKeep": "cash",
+      "caption": "New money only: never suggests selling. Favors the classes furthest below target.",
+      "generate": "Generate orders",
+      "editTargets": "Edit targets",
+      "noTargets": "Set the allocation targets to see the suggestion.",
+      "typeAmount": "Type how much you will invest."
+    },
+    "history": {
+      "title": "Contribution history",
+      "link": "· see in Transactions ↗",
+      "status": {
+        "ok": "on target",
+        "above": "above target",
+        "below": "below target"
+      },
+      "empty": "No contributions in this period."
+    },
+    "fire": {
+      "title": "Financial independence",
+      "number": "FIRE number",
+      "numberSub": "{income}/month · SWR {swr}",
+      "progress": "Progress",
+      "projection": "Projection: {date} keeping {amount}/month.",
+      "alt": " With {amount}/month: {date}.",
+      "altUnreachable": " With {amount}/month: not reached.",
+      "reached": "Goal reached.",
+      "unreachable": "At the current contribution the goal is not reached.",
+      "noPlan": "No FIRE plan. Today: {invested} invested and {expenses}/month of expenses.",
+      "edit": "Edit goal",
+      "define": "Set goal"
+    }
+  },
+  "aporte": {
+    "title": "Record contribution",
+    "desc": "Becomes a transfer in Transactions: it leaves the account and enters the broker’s cash.",
+    "from": "From (account)",
+    "broker": "Broker",
+    "noBrokers": "No brokers",
+    "amount": "Amount",
+    "amountIn": "Amount ({currency})",
+    "toAmount": "Amount at the broker ({currency})",
+    "toAmountHint": "Empty: converted at today’s rate",
+    "date": "Date",
+    "description": "Description (optional)",
+    "descriptionPlaceholder": "Monthly contribution",
+    "crossEntity": "The account belongs to {from} and the broker to {to}. The contribution also records the transfer between the entities.",
+    "done": "Contribution recorded · transfer created in Transactions"
+  },
+  "orders": {
+    "title": "Generate orders",
+    "desc": "Records the suggested buys at once, at the current quote. It can be undone.",
+    "asset": "Asset",
+    "broker": "Broker",
+    "quantity": "Qty",
+    "price": "Price",
+    "amount": "Total",
+    "total": "Total",
+    "sourceCash": "Broker balance",
+    "skipped": "{count, plural, one {# suggestion was left out (new asset, cash or an asset with no quote).} other {# suggestions were left out (new asset, cash or assets with no quote).}}",
+    "empty": "No orders to generate: the suggested classes have no quoted assets.",
+    "submit": "{count, plural, one {Record # order} other {Record # orders}}",
+    "done": "{count, plural, one {# order recorded} other {# orders recorded}}"
+  },
+  "fireGoal": {
+    "title": "Financial independence goal",
+    "desc": "How much you want to receive each month from your investments and how much you contribute to get there.",
+    "income": "Desired monthly income",
+    "contribution": "Monthly contribution",
+    "contributionHint": "Suggested from history: {amount}",
+    "contributionPhased": "The plan sets the contribution by phase; the phases stay as they are.",
+    "ret": "Nominal annual return (%)",
+    "inflation": "Annual inflation (%)",
+    "swr": "Withdrawal rate (%)",
+    "swrHint": "3.5% is conservative",
+    "monthlyIncome": "Monthly net income (optional)",
+    "monthlyIncomeHint": "Used in the plan’s projections",
+    "age": "Current age (optional)",
+    "save": "Save goal",
+    "saved": "Goal saved"
+  }
+}

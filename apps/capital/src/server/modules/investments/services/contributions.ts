@@ -236,3 +236,6 @@ export async function savingsRate(userId: string, db: DbClient, pfIds: string[],
 function roundValues<K extends string>(sums: Partial<Record<K, number>>): Partial<Record<K, number>> {
   return Object.fromEntries(Object.entries<number | undefined>(sums).map(([k, v]) => [k, round(v ?? 0, 2)])) as Partial<Record<K, number>>;
 }
+
+/** GET /v2/contributions (for the client, import type only). */
+export type ContributionsResponse = Awaited<ReturnType<typeof contributions>>;

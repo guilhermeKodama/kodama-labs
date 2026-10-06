@@ -909,3 +909,10 @@ export function settleRounding(parts: number[], total: number): number[] {
   }
   return rounded;
 }
+
+// Response types for the client (import type only).
+export type SerializedHolding = ReturnType<typeof serializeHolding>;
+export type SerializedOperation = ReturnType<typeof serializeOperation>;
+export type PortfolioSummary = Awaited<ReturnType<typeof portfolioSummary>>;
+export type PortfolioTargetRow = Awaited<ReturnType<typeof getTargets>>[number];
+export type RebalanceSuggestion = Awaited<ReturnType<typeof rebalanceSuggestion>>;
