@@ -39,13 +39,26 @@ const toastId = (batchId: string) => `undo:${batchId}`;
 const label = (key: "undo" | "undone" | "nothingToUndo") => deps?.label(key) ?? FALLBACK[key];
 const errorText = (error: unknown) => deps?.errorText(error) ?? FALLBACK.failed;
 
+export interface PushUndoOptions {
+  /**
+   * Runs before the batch is undone from the pill (e.g. removing receipts
+   * uploaded after the write, which the batch did not record).
+   */
+  beforeUndo?: () => Promise<unknown>;
+  /** false keeps the batch off the ⌘Z stack (only the pill can undo it, e.g. because of beforeUndo). */
+  stack?: boolean;
+}
+
 /** Shows the undo pill for a batch and puts it on the ⌘Z stack. */
-export function pushUndo(batchId: string, message: string): void {
-  undoStack.push({ batchId, message });
+export function pushUndo(batchId: string, message: string, { beforeUndo, stack = true }: PushUndoOptions = {}): void {
+  if (stack) undoStack.push({ batchId, message });
   toast(message, {
     id: toastId(batchId),
     duration: 6000,
-    action: { label: label("undo"), onClick: () => void undoBatch(batchId) },
+    action: {
+      label: label("undo"),
+      onClick: () => void (beforeUndo ? beforeUndo().catch(() => undefined) : Promise.resolve()).then(() => undoBatch(batchId)),
+    },
   });
 }
 

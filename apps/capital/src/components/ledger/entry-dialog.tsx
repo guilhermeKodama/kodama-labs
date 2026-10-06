@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import { Btn, Check, Dialog, DialogHead, Kbd } from "@/components/cap";
 import { apiDelete, apiPost } from "@/lib/api/client";
 import { useCategories, type CategoryRecord, type Names } from "@/lib/api/catalog";
-import { rememberUndo, undoBatch } from "@/lib/api/undo";
+import { pushUndo } from "@/lib/api/undo";
 import { useAppMutation } from "@/lib/api/use-app-mutation";
 import { useFmt } from "@/lib/format/provider";
 import {
@@ -146,18 +146,14 @@ function CreateForm({ draft, onClose }: { draft: QuickAddDraft; onClose: () => v
       const message = variables.toastText(result.description);
       const batchId = result.createdBatchId;
       if (result.failedUploads) toast(t("form.uploadFailed", { count: result.failedUploads }));
+      // The same pill as every other undoable write (lib/api/undo.ts): “{desc}” criada · R$ X · Desfazer.
       if (batchId) {
-        // ⌘Z undoes the bare batch, which keeps a row that has receipts; with receipts only the toast's Desfazer (which drops them first) undoes it.
-        if (!result.uploaded.length) rememberUndo(batchId, message);
-        // Undo keeps rows that carry receipts the batch did not record, so Desfazer removes the receipts first.
-        toast(message, {
-          id: `undo:${batchId}`,
-          duration: 6000,
-          action: {
-            label: tCommon("undo"),
-            onClick: () =>
-              void Promise.all(result.uploaded.map((file) => apiDelete(`/api/v2/attachments/${encodeURIComponent(file.id)}`).catch(() => undefined))).then(() => undoBatch(batchId)),
-          },
+        const receipts = result.uploaded;
+        pushUndo(batchId, message, {
+          // Undo keeps rows that carry receipts the batch did not record, so Desfazer removes the receipts first…
+          beforeUndo: receipts.length ? () => Promise.all(receipts.map((file) => apiDelete(`/api/v2/attachments/${encodeURIComponent(file.id)}`).catch(() => undefined))) : undefined,
+          // …and ⌘Z, which undoes the bare batch, is left out when there are receipts.
+          stack: !receipts.length,
         });
       } else toast(message);
       if (another) {

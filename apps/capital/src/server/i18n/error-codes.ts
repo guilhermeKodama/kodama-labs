@@ -186,6 +186,7 @@ export const ERROR_CODES = {
   "assistant.plan_changed": "The plan changed since it was shown; review it again before confirming",
   "assistant.message_required": "Send a message, answer the card or attach a file",
   "assistant.turn_running": "The assistant is still answering in this conversation",
+  "assistant.nothing_to_retry": "The last answer did not fail; send a new message instead",
   "assistant.file_required": "A file is required",
   "assistant.file_too_large": "The file exceeds the maximum size of {maxBytes} bytes",
   "assistant.image_too_large": "The image exceeds the maximum size of {maxBytes} bytes",

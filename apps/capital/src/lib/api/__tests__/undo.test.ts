@@ -96,6 +96,24 @@ describe("undo", () => {
     expect(toastMock).toHaveBeenCalledTimes(1);
   });
 
+  it("a create with receipts: the pill removes them before undoing, and stays off the ⌘Z stack", async () => {
+    const order: string[] = [];
+    fetchMock.mockImplementation(async (url) => {
+      order.push(String(url));
+      return json({ batchId: "b9" });
+    });
+    const beforeUndo = vi.fn(async () => {
+      order.push("receipts removed");
+    });
+    pushUndo("b9", "“Farmácia” criada · R$ 42,00", { beforeUndo, stack: false });
+    expect(undoStack.size()).toBe(0);
+    const [message, options] = toastMock.mock.calls[0] as [string, { id: string; duration: number; action: { label: string; onClick: () => void } }];
+    expect(message).toBe("“Farmácia” criada · R$ 42,00");
+    expect(options).toMatchObject({ id: "undo:b9", duration: 6000, action: { label: "label:undo" } });
+    options.action.onClick();
+    await vi.waitFor(() => expect(order).toEqual(["receipts removed", "/api/v2/mutations/b9/undo"]));
+  });
+
   it("announces a write: undo pill with a batch, silent ⌘Z entry without a message, plain toast without a batch", () => {
     announceWrite("b1", "Na lixeira · 2");
     expect(undoStack.peek()).toEqual({ batchId: "b1", message: "Na lixeira · 2" });

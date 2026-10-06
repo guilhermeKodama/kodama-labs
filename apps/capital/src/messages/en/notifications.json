@@ -2,7 +2,7 @@
   "due": "Recurring bills: {days, plural, =0 {on the due date} one {# day before} other {# days before}}, at {time}",
   "overdue": "Recurring bill overdue",
   "bill": "Card statement closed",
-  "budget": "Budget passed {threshold}",
+  "budget": "Budget went over {threshold}",
   "weekly": "Weekly summary ({day}, {time})",
   "weekday": {
     "0": "Sunday",
@@ -17,7 +17,7 @@
     "device": "Device",
     "lastUsed": "Last used",
     "remove": "Remove",
-    "empty": "No device gets alerts yet.",
+    "empty": "No devices receive alerts yet.",
     "label": "{device} · {browser}",
     "labelPwa": "{device} · installed app (PWA)"
   },
@@ -44,10 +44,10 @@
     "unsupported": "This browser cannot receive push notifications.",
     "iosInstall": "On iPhone, add Capital to the Home Screen to get alerts.",
     "denied": "Notifications are blocked in this browser; allow them in the site's permissions.",
-    "off": "This device does not get alerts yet.",
-    "error": "Could not turn them on for this device: {message}",
+    "off": "This device isn't receiving alerts yet.",
+    "error": "Couldn't turn on alerts for this device: {message}",
     "enable": "Turn on for this device",
     "enabling": "Turning on…"
   },
-  "toastRemoved": "“{device}” no longer gets alerts"
+  "toastRemoved": "“{device}” will no longer receive alerts"
 }

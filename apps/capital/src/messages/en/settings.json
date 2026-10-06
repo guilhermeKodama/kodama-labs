@@ -13,15 +13,15 @@
     },
     "notif": {
       "title": "Notifications",
-      "desc": "Devices with push and which alerts you get."
+      "desc": "Push-enabled devices and which alerts you receive."
     },
     "ent": {
-      "title": "Businesses and personal",
+      "title": "Personal and business entities",
       "desc": "Entities: your personal finances and each company, with default currency and tax rate."
     },
     "bank": {
       "title": "Bank accounts",
-      "desc": "Checking accounts of each entity."
+      "desc": "Each entity's checking accounts."
     },
     "card": {
       "title": "Credit cards",
@@ -29,7 +29,7 @@
     },
     "broker": {
       "title": "Brokers",
-      "desc": "Investment accounts. They are the only ones that show up as contribution destinations."
+      "desc": "Investment accounts. Only these show up as contribution destinations."
     },
     "cat": {
       "title": "Categories",
@@ -186,7 +186,7 @@
       "expense": "Expense",
       "income": "Income"
     },
-    "typeLocked": "The type cannot change while transactions use this category, nor on a system category.",
+    "typeLocked": "The type can't change while transactions use this category, or for a system category.",
     "color": "Color",
     "rules": "Automatic rules",
     "rulesHint": "Descriptions that fall into this category when importing or creating",
@@ -195,7 +195,7 @@
     "usage": "Used in {entries, plural, =0 {no transactions} one {# transaction} other {# transactions}} and {budgets, plural, =0 {no budgets} one {# budget} other {# budgets}}.",
     "archive": "Archive",
     "unarchive": "Reactivate",
-    "archiveHint": "Leaves the pickers; the history stays the same.",
+    "archiveHint": "Hidden from the pickers; the history stays the same.",
     "empty": "No categories yet.",
     "toastCreated": "“{name}” created",
     "toastArchived": "“{name}” archived: gone from the pickers{count, plural, =0 {} one {, still on # transaction} other {, still on # transactions}}",
@@ -213,7 +213,7 @@
       "category": "Category",
       "source": "Source",
       "hits": "Applied",
-      "lastHit": "Last time"
+      "lastHit": "Last applied"
     },
     "source": {
       "manual": "You",
@@ -221,7 +221,7 @@
       "bulk": "Bulk edit"
     },
     "hits": "{count}×",
-    "empty": "No rules yet. They are also created when you fix the category of a transaction.",
+    "empty": "No rules yet. They are also created when you correct a transaction's category.",
     "archivedCategory": "archived",
     "dialog": {
       "newTitle": "New rule",
@@ -260,7 +260,7 @@
       "ecb": "ECB",
       "manual": "Manual"
     },
-    "editRate": "Edit the rate of {code} in {base}",
+    "editRate": "Edit the {code} rate in {base}",
     "empty": "Only the base currency for now.",
     "footnote": "Each transaction keeps the rate used on its day; changing a rate here only affects new entries."
   },

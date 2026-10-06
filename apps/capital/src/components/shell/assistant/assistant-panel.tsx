@@ -11,7 +11,7 @@ import { keys } from "@/lib/api/keys";
 import { useErrorMessage } from "@/lib/api/use-app-mutation";
 import { listConversations } from "@/lib/assistant/api";
 import { ASSISTANT_FILE_ACCEPT } from "@/lib/assistant/constants";
-import type { AssistantError } from "@/lib/assistant/reducer";
+import { isTurnLimit, type AssistantError } from "@/lib/assistant/reducer";
 import { useFmt } from "@/lib/format/provider";
 import { cn } from "@/lib/utils";
 import { Thread } from "./thread";
@@ -112,10 +112,13 @@ function Status({ text }: { text: string }) {
 function ErrorNotice({ error, canRetry, onRetry }: { error: AssistantError; canRetry: boolean; onRetry: () => void }) {
   const t = useTranslations("assistant");
   const errorText = useErrorMessage();
+  const limit = isTurnLimit(error);
   const text =
-    error.kind === "request" ? errorText(new ApiError({ status: error.status, code: error.code, params: error.params, message: "" })) : t("errors.turnFailed");
+    error.kind === "request"
+      ? errorText(new ApiError({ status: error.status, code: error.code, params: error.params, message: "" }))
+      : t(limit ? "errors.turnLimit" : "errors.turnFailed");
   return (
-    <Callout tone="danger">
+    <Callout tone={limit ? "warning" : "danger"}>
       <div className="flex items-center gap-2">
         <span className="min-w-0 flex-1">{text}</span>
         {canRetry ? (

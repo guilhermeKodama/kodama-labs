@@ -51,7 +51,7 @@
   "entry": {
     "not_found": "Transaction not found. It may have been deleted.",
     "scope_unavailable": "This transaction isn't part of a recurrence or an installment plan, so only it can be deleted.",
-    "kind_locked": "The type of an investment operation's cash can't change. Edit the operation in Investments.",
+    "kind_locked": "The cash side of an investment operation can't change type. Edit the operation in Investments.",
     "not_transfer": "Only a transfer has a source and a destination account."
   },
   "transfer": {
@@ -109,8 +109,8 @@
     "unsupported": "This change can't be undone."
   },
   "trash": {
-    "operation_recorded_again": "“{description}” is the cash of an investment operation that was recorded again. Restoring it would count it twice.",
-    "operation_edited": "“{description}” is the cash of an investment operation that has since been edited to move no cash. Edit the operation instead."
+    "operation_recorded_again": "“{description}” is the cash side of an investment operation that was recorded again. Restoring it would count it twice.",
+    "operation_edited": "“{description}” is the cash side of an investment operation that was later edited to move no cash. Edit the operation instead."
   },
   "budget": {
     "not_found": "Budget not found.",
@@ -163,7 +163,7 @@
   "currency": {
     "not_found": "Currency not found.",
     "base_protected": "The base currency can't be removed.",
-    "in_use": "{code} is used by {accounts} accounts and {entries} entries."
+    "in_use": "{code} is used by {accounts} accounts and {entries} transactions."
   },
   "import": {
     "not_found": "Import not found.",
@@ -191,6 +191,7 @@
     "plan_changed": "The plan changed since it was shown. Review it before confirming.",
     "message_required": "Write a message, answer the card or attach a file.",
     "turn_running": "The assistant is still answering.",
+    "nothing_to_retry": "There is no failed answer to retry. Send a new message.",
     "file_required": "Choose a file.",
     "file_too_large": "The file is too large.",
     "image_too_large": "The image is too large.",

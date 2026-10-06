@@ -16,12 +16,13 @@ import {
   rejectPlan as postRejectPlan,
   requestError,
   streamMessage,
+  streamRetry,
   uploadConversationFile,
 } from "@/lib/assistant/api";
 import { planResultView, type DuplicateDecision } from "@/lib/assistant/cards";
 import { namePastedImage, validateAssistantFile } from "@/lib/assistant/constants";
 import { messagesFromConversation, readLastConversation, resumeError, writeLastConversation } from "@/lib/assistant/history";
-import { assistantReducer, canRetry, initialAssistantState, isBusy, type AssistantInput, type AssistantState } from "@/lib/assistant/reducer";
+import { assistantReducer, canRetry, initialAssistantState, isBusy, retryKind, type AssistantInput, type AssistantState } from "@/lib/assistant/reducer";
 import type { AgentEvent } from "@/lib/assistant/sse";
 import { isWriteTool, turnInvalidation } from "@/lib/assistant/tools";
 import type { MessageAttachment } from "@/types/assistant";
@@ -92,9 +93,11 @@ export function useAssistant(): AssistantController {
   // A stream left open when the shell unmounts (sign out) is dropped.
   useEffect(() => () => abortRef.current?.abort(), []);
 
+  /** Streams a turn: a new message (`input`), or the failed last turn run again (`"rerun"`). */
   const run = useCallback(
-    async (conversationId: string, input: AssistantInput) => {
-      dispatch({ type: "send", input, optimisticId: clientId(), createdAt: new Date().toISOString() });
+    async (conversationId: string, request: AssistantInput | "rerun") => {
+      if (request === "rerun") dispatch({ type: "rerun" });
+      else dispatch({ type: "send", input: request, optimisticId: clientId(), createdAt: new Date().toISOString() });
       const controller = new AbortController();
       abortRef.current = controller;
       let wrote = false;
@@ -109,7 +112,8 @@ export function useAssistant(): AssistantController {
         dispatch({ type: "event", event });
       };
       try {
-        await streamMessage(conversationId, messageBody(input, clientId()), onEvent, controller.signal);
+        if (request === "rerun") await streamRetry(conversationId, onEvent, controller.signal);
+        else await streamMessage(conversationId, messageBody(request, clientId()), onEvent, controller.signal);
         dispatch({ type: "ended" });
       } catch (error) {
         if (error instanceof DOMException && error.name === "AbortError") dispatch({ type: "cancelled" });
@@ -188,8 +192,11 @@ export function useAssistant(): AssistantController {
 
   const retry = useCallback(() => {
     const current = stateRef.current;
-    if (!canRetry(current) || !current.lastInput || !current.conversationId) return;
-    void run(current.conversationId, current.lastInput);
+    const kind = retryKind(current);
+    if (!kind || !current.conversationId) return;
+    // A turn that failed on the server saved the message already: it runs again there, nothing is resent.
+    if (kind === "rerun") void run(current.conversationId, "rerun");
+    else if (current.lastInput) void run(current.conversationId, current.lastInput);
   }, [run]);
 
   const newConversation = useCallback(() => {
@@ -210,8 +217,7 @@ export function useAssistant(): AssistantController {
       void getConversation(conversationId)
         .then((detail) => {
           const messages = messagesFromConversation(detail);
-          const { error, lastInput } = resumeError(detail, messages);
-          dispatch({ type: "loaded", conversationId: detail.id, title: detail.title, messages, error, lastInput });
+          dispatch({ type: "loaded", conversationId: detail.id, title: detail.title, messages, error: resumeError(detail, messages) });
           writeLastConversation(localStore(), detail.id);
         })
         .catch((error: unknown) => {

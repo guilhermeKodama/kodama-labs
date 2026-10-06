@@ -57,15 +57,29 @@ export function messageBody(input: AssistantInput, clientMessageId: string) {
  * the stream. An answer that is not a stream (409 turn_running, 404, 422)
  * throws an ApiError before any event; an abort rethrows the AbortError.
  */
-export async function streamMessage(
+export function streamMessage(
   conversationId: string,
   body: ReturnType<typeof messageBody>,
   onEvent: (event: AgentEvent) => void,
   signal?: AbortSignal,
 ): Promise<void> {
+  return streamTurn(`${BASE}/${encodeURIComponent(conversationId)}/messages`, body, onEvent, signal);
+}
+
+/**
+ * "Tentar de novo" after a turn failed on the server: runs it again
+ * against the message it already saved (nothing is sent twice) and
+ * streams it like streamMessage. 409 assistant.nothing_to_retry when the
+ * last turn did not fail.
+ */
+export function streamRetry(conversationId: string, onEvent: (event: AgentEvent) => void, signal?: AbortSignal): Promise<void> {
+  return streamTurn(`${BASE}/${encodeURIComponent(conversationId)}/retry`, {}, onEvent, signal);
+}
+
+async function streamTurn(url: string, body: unknown, onEvent: (event: AgentEvent) => void, signal?: AbortSignal): Promise<void> {
   let res: Response;
   try {
-    res = await fetch(`${BASE}/${encodeURIComponent(conversationId)}/messages`, {
+    res = await fetch(url, {
       method: "POST",
       credentials: "include",
       cache: "no-store",

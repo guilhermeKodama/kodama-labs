@@ -24,7 +24,7 @@
   "settingsPages": {
     "prefs": "Profile and preferences",
     "notif": "Notifications",
-    "ent": "Businesses and personal",
+    "ent": "Personal and business entities",
     "bank": "Bank accounts",
     "card": "Credit cards",
     "broker": "Brokers",
@@ -66,7 +66,7 @@
   "entries": {
     "searching": "Searching…",
     "none": "No transactions match “{query}”",
-    "failed": "Transactions could not be searched.",
+    "failed": "Couldn't search transactions.",
     "seeAll": "See all matching “{query}” in Transactions"
   },
   "assistant": {

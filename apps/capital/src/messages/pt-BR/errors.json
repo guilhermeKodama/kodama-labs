@@ -191,6 +191,7 @@
     "plan_changed": "O plano mudou desde que apareceu. Revise antes de confirmar.",
     "message_required": "Escreva uma mensagem, responda o cartão ou anexe um arquivo.",
     "turn_running": "O assistente ainda está respondendo.",
+    "nothing_to_retry": "Não há resposta com erro para tentar de novo. Envie uma nova mensagem.",
     "file_required": "Escolha um arquivo.",
     "file_too_large": "Arquivo grande demais.",
     "image_too_large": "Imagem grande demais.",

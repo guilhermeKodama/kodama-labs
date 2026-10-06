@@ -33,12 +33,12 @@
   },
   "opType": {
     "buy": "Buy",
-    "sell": "Sale",
+    "sell": "Sell",
     "dividend": "Dividend",
     "yield_payment": "Yield",
     "split": "Split",
-    "deposit": "Investment",
-    "withdrawal": "Redemption",
+    "deposit": "Deposit",
+    "withdrawal": "Withdrawal",
     "adjustment": "Adjustment"
   },
   "incomeType": {
@@ -62,10 +62,10 @@
     "refreshing": "Updating…",
     "refreshed": "{updated} of {total} quotes updated",
     "refreshedMissing": "{updated} of {total} quotes updated · no quote: {tickers}",
-    "importNote": "Import broker note",
+    "importNote": "Import brokerage note",
     "importNotePrompt": "Import this brokerage note into my portfolio.",
     "newOperation": "+ Operation",
-    "quotesToday": "Quotes from today {time}",
+    "quotesToday": "Today's quotes {time}",
     "quotesOn": "Quotes from {date} {time}",
     "noQuotes": "No automatic quotes yet",
     "fxRate": "{currency} {rate}",
@@ -73,9 +73,9 @@
       "netWorth": "Net worth",
       "contributed": "Total contributed",
       "result": "Result",
-      "income12m": "Income 12m",
+      "income12m": "Income (12m)",
       "incomeSub": "dividends + interest",
-      "return12m": "Return 12m",
+      "return12m": "Return (12m)",
       "benchmarks": "CDI {cdi} · IPCA+ 6% {ipca}",
       "returnPending": "no closed months yet",
       "returnEstimated": "estimated history",
@@ -87,7 +87,7 @@
       "netWorth": "Net worth",
       "contributed": "Contributed",
       "caption": "Month × {unit} · {range} · {scope}",
-      "empty": "The history starts from the second month with positions."
+      "empty": "History appears from the second month with positions."
     },
     "allocation": {
       "title": "Current allocation vs target",
@@ -99,7 +99,7 @@
       "byBroker": "By broker",
       "byEntity": "By entity",
       "list": "List",
-      "income12m": "Income 12m",
+      "income12m": "Income (12m)",
       "operations": "Operations",
       "addView": "New view",
       "newHoldingsView": "New positions view",
@@ -209,8 +209,8 @@
     "newOp": "+ Operation",
     "deactivate": "Deactivate",
     "deactivated": "“{name}” deactivated",
-    "priceSaved": "Quote of {name} updated",
-    "adjusted": "Position of {name} adjusted"
+    "priceSaved": "{name} quote updated",
+    "adjusted": "{name} position adjusted"
   },
   "targets": {
     "title": "Target allocation",
@@ -220,10 +220,10 @@
   },
   "op": {
     "title": "New operation",
-    "desc": "Buy, sale, income or a broker cash movement.",
+    "desc": "Buy, sell, income or a broker cash movement.",
     "kind": {
       "buy": "Buy",
-      "sell": "Sale",
+      "sell": "Sell",
       "income": "Income",
       "deposit": "Deposit",
       "withdraw": "Withdrawal"
@@ -299,7 +299,7 @@
       "from": "From",
       "to": "To",
       "depositNote": "Creates an “Investment contribution” transfer that shows in Transactions and in Contributions.",
-      "withdrawNote": "Creates an “Investment redemption” transfer."
+      "withdrawNote": "Creates an “Investment withdrawal” transfer."
     }
   },
   "editOp": {
@@ -316,7 +316,7 @@
       "month": "Contributed in {month}",
       "goalFire": "Goal (FIRE plan): {amount}",
       "noGoal": "No goal: set up the FIRE plan",
-      "avg": "Average 12m",
+      "avg": "12m average",
       "total": "Total 12m",
       "savings": "Savings rate",
       "savingsSub": "contributions / personal net income",
@@ -351,7 +351,7 @@
       "generate": "Generate orders",
       "editTargets": "Edit targets",
       "noTargets": "Set the allocation targets to see the suggestion.",
-      "typeAmount": "Type how much you will invest."
+      "typeAmount": "Enter how much you will invest."
     },
     "history": {
       "title": "Contribution history",
@@ -368,26 +368,26 @@
       "number": "FIRE number",
       "numberSub": "{income}/month · SWR {swr}",
       "progress": "Progress",
-      "projection": "Projection: {date} keeping {amount}/month.",
+      "projection": "Projection: {date} at {amount}/month.",
       "alt": " With {amount}/month: {date}.",
-      "altUnreachable": " With {amount}/month: not reached.",
+      "altUnreachable": " With {amount}/month: out of reach.",
       "reached": "Goal reached.",
-      "unreachable": "At the current contribution the goal is not reached.",
-      "noPlan": "No FIRE plan. Today: {invested} invested and {expenses}/month of expenses.",
+      "unreachable": "At the current contribution, the goal is out of reach.",
+      "noPlan": "No FIRE plan. Today: {invested} invested and {expenses}/month in expenses.",
       "edit": "Edit goal",
       "define": "Set goal"
     }
   },
   "aporte": {
     "title": "Record contribution",
-    "desc": "Becomes a transfer in Transactions: it leaves the account and enters the broker’s cash.",
+    "desc": "Becomes a transfer in Transactions: the money leaves the account and goes into the broker’s cash.",
     "from": "From (account)",
     "broker": "Broker",
     "noBrokers": "No brokers",
     "amount": "Amount",
     "amountIn": "Amount ({currency})",
     "toAmount": "Amount at the broker ({currency})",
-    "toAmountHint": "Empty: converted at today’s rate",
+    "toAmountHint": "Leave blank to convert at today’s rate",
     "date": "Date",
     "description": "Description (optional)",
     "descriptionPlaceholder": "Monthly contribution",

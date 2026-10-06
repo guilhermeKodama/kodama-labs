@@ -41,3 +41,11 @@ export type AgentEvent =
   | { type: "error"; code: string; message: string; retryable: boolean };
 
 export type EmitFn = (event: AgentEvent) => void;
+
+/**
+ * The `error` event code for a turn stopped by its cost budget or its
+ * iteration cap (loop.ts). The turn still completes, so what it did is
+ * kept; the UI asks for another message to continue instead of a retry.
+ */
+export const TURN_LIMIT_CODE = "TURN_LIMIT";
+export type TurnLimitCode = typeof TURN_LIMIT_CODE;

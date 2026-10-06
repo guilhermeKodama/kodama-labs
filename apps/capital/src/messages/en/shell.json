@@ -30,7 +30,7 @@
   },
   "pwa": {
     "updateAvailable": "New version available",
-    "reload": "Update"
+    "reload": "Reload"
   },
   "userMenu": {
     "label": "{name}’s account",
