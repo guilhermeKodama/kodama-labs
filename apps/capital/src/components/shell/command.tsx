@@ -294,7 +294,7 @@ function Palette({ assistant, onClose, onAssistant }: { assistant: AssistantCont
           placeholder={t("placeholder")}
           className="h-full min-w-0 flex-1 bg-transparent text-[13px] outline-none placeholder:text-fg-3"
         />
-        <Kbd>esc</Kbd>
+        <Kbd>Esc</Kbd>
       </div>
       <Command.List className="max-h-[min(400px,calc(100dvh-160px))] overflow-y-auto p-1 [&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:pt-2 [&_[cmdk-group-heading]]:pb-1 [&_[cmdk-group-heading]]:text-[11px] [&_[cmdk-group-heading]]:font-medium [&_[cmdk-group-heading]]:text-fg-3">
         {noMatches ? <div className="px-2 pt-4 pb-3 text-center text-[12.5px] text-fg-3">{t("empty")}</div> : null}
@@ -305,7 +305,7 @@ function Palette({ assistant, onClose, onAssistant }: { assistant: AssistantCont
       <div className="flex h-8 shrink-0 items-center gap-3 border-t border-stroke-3 px-3 text-[11px] text-fg-3">
         <FooterHint keys="↑↓" label={t("footer.navigate")} />
         <FooterHint keys="↵" label={t("footer.open")} />
-        <FooterHint keys="esc" label={t("footer.close")} />
+        <FooterHint keys="Esc" label={t("footer.close")} />
       </div>
     </Command>
   );
@@ -466,7 +466,9 @@ function useTransactionSearch(query: string) {
   const enabled = normalizeSearch(text).length >= SEARCH_MIN_LENGTH;
   const result = useQuery({
     queryKey: keys.ledgerQuery(input),
-    queryFn: async () => (await apiPost<{ rows: SearchRow[] }>("/api/v2/ledger/query", input)).rows,
+    // The whole answer under the shared ledger key (another reader of the same input gets what it expects); the palette keeps the rows.
+    queryFn: () => apiPost<{ rows: SearchRow[] }>("/api/v2/ledger/query", input),
+    select: (answer) => answer.rows,
     enabled,
     staleTime: 30_000,
   });
@@ -482,10 +484,14 @@ function useTransactionSearch(query: string) {
 function EntryRow({ row }: { row: SearchRow }) {
   const fmt = useFmt();
   const names = useNames();
+  const session = useSession();
   const amount = row.displayAmount ?? row.amount;
+  // The search covers every date: rows of another year carry it ("22/09/2025").
+  const thisYear = todayIn(session.data?.timezone ?? "UTC").slice(0, 4);
+  const date = row.date.slice(0, 4) === thisYear ? fmt.date(row.date) : fmt.dateFull(row.date);
   return (
     <>
-      <span className="w-11 shrink-0 font-mono text-[11px] text-fg-3 tabular-nums">{fmt.date(row.date)}</span>
+      <span className="min-w-11 shrink-0 font-mono text-[11px] text-fg-3 tabular-nums">{date}</span>
       <span className="min-w-0 flex-1 truncate">{row.description}</span>
       <span className="max-w-[140px] shrink-0 truncate text-[11.5px] text-fg-3">{names.account.get(row.accountId) ?? ""}</span>
       <span className={cn("shrink-0 text-right font-mono text-[12px] tabular-nums", amount > 0 && "text-pos")}>{fmt.money(amount, row.currency)}</span>
