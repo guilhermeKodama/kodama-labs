@@ -2,6 +2,7 @@ import { categories } from "./categories";
 import { common } from "./common";
 import type { LeafPaths } from "./define";
 import { ledger } from "./ledger";
+import { notifications } from "./notifications";
 import { views } from "./views";
 
 /**
@@ -14,7 +15,7 @@ export const LOCALES = ["pt-BR", "en"] as const;
 export type Locale = (typeof LOCALES)[number];
 export const DEFAULT_LOCALE: Locale = "pt-BR";
 
-const DICTIONARIES = { common, ledger, views, categories };
+const DICTIONARIES = { common, ledger, views, categories, notifications };
 type Dictionaries = typeof DICTIONARIES;
 
 /** "<domain>.<path>", e.g. "ledger.direction.reimbursement". */

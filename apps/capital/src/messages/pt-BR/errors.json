@@ -26,7 +26,8 @@
   "user": {
     "not_found": "Usuário não encontrado.",
     "invalid_timezone": "Fuso horário desconhecido: {timezone}.",
-    "base_currency_locked": "A moeda base não pode mudar com {count, plural, one {# lançamento feito} other {# lançamentos feitos}}: os valores convertidos misturariam duas moedas."
+    "base_currency_locked": "A moeda base não pode mudar com {count, plural, one {# lançamento feito} other {# lançamentos feitos}}: os valores convertidos misturariam duas moedas.",
+    "invalid_preference": "“{value}” não é um valor válido para {field}."
   },
   "entity": {
     "not_found": "Entidade não encontrada.",
@@ -41,7 +42,10 @@
     "archived": "A conta {name} está arquivada.",
     "invalid_day": "Use um dia entre 1 e 31.",
     "invalid_credit_limit": "O limite precisa ser positivo.",
-    "not_credit_card": "Essa conta não é um cartão de crédito."
+    "not_credit_card": "Essa conta não é um cartão de crédito.",
+    "currency_locked": "A moeda da conta não pode mudar: {count, plural, one {# lançamento está} other {# lançamentos estão}} em {currency}.",
+    "entity_locked": "A conta não pode mudar de entidade: ela tem {entries, plural, one {# lançamento} other {# lançamentos}} e {recurring, plural, one {# conta fixa} other {# contas fixas}}.",
+    "default_entity_locked": "A conta principal de uma entidade não pode mudar de entidade."
   },
   "entry": {
     "not_found": "Transação não encontrada. Pode ter sido excluída.",
@@ -193,5 +197,11 @@
   "fire": {
     "no_plan": "Configure o plano FIRE primeiro.",
     "goal_incomplete": "Para criar o plano FIRE, informe a renda desejada, a taxa de retirada, o retorno esperado, a inflação, o modo de planejamento e as fases de aporte."
+  },
+  "notifications": {
+    "device_not_found": "Dispositivo não encontrado"
+  },
+  "tokens": {
+    "not_found": "Token de API não encontrado"
   }
 }

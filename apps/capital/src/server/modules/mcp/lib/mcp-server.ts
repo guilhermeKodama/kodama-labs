@@ -3,6 +3,7 @@ import { z } from "zod";
 
 import type { DbClient } from "@capital/server/lib/prisma";
 import { withMutationSource } from "@capital/server/modules/ledger/services/mutations";
+import { isReadOnlyTool } from "./auth";
 import { bulkCreateTransactions } from "../tools/bulk-create-transactions";
 import { listTransactions } from "../tools/list-transactions";
 import {
@@ -262,9 +263,11 @@ const GetBudgetStatusInputSchema = z.object({
  * Create an MCP server for Capital accounting operations.
  *
  * This server follows the MCP specification and is designed to work with
- * Streamable HTTP transport in stateless mode.
+ * Streamable HTTP transport in stateless mode. `readOnly` (a read-only API
+ * token) registers only the read tools (isReadOnlyTool), so the client
+ * never sees the write ones in tools/list and cannot call them.
  */
-export function createCapitalMcpServer(userId: string, db: DbClient) {
+export function createCapitalMcpServer(userId: string, db: DbClient, opts: { readOnly?: boolean } = {}) {
   const server = new McpServer(
     {
       name: "capital-accounting",
@@ -279,8 +282,10 @@ export function createCapitalMcpServer(userId: string, db: DbClient) {
 
   // Undo batches recorded by any tool are attributed to the MCP client.
   const registerTool = server.registerTool.bind(server);
-  server.registerTool = ((name: string, config: never, cb: (...args: unknown[]) => unknown) =>
-    registerTool(name, config, ((...args: unknown[]) => withMutationSource("mcp", () => cb(...args))) as never)) as typeof server.registerTool;
+  server.registerTool = ((name: string, config: never, cb: (...args: unknown[]) => unknown) => {
+    if (opts.readOnly && !isReadOnlyTool(name, config)) return undefined;
+    return registerTool(name, config, ((...args: unknown[]) => withMutationSource("mcp", () => cb(...args))) as never);
+  }) as typeof server.registerTool;
 
   // Register tool: bulk_create_transactions
   server.registerTool(

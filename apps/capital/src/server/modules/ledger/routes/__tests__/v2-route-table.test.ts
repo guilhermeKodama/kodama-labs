@@ -31,6 +31,7 @@ const EXPECTED = [
   "GET /v2/accounts",
   "POST /v2/accounts",
   "PATCH /v2/accounts/{id}",
+  "POST /v2/accounts/{id}/set-balance",
   "GET /v2/accounts/{id}/statements",
   "POST /v2/card-statements/{id}/payment",
   "DELETE /v2/card-statements/payment/{id}",

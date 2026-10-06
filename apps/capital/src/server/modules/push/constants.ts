@@ -10,3 +10,10 @@ export const routeConfig = {
     defaultTags: [OPENAPI_TAGS.v1.name],
   },
 } as const;
+
+/**
+ * Where a recurring-bill reminder opens: Orçamentos, which holds Contas
+ * fixas since /recurring was retired (next.config.ts redirects it here).
+ * Also the service worker's fallback for a push without a url.
+ */
+export const REMINDER_PUSH_URL = "/transactions/budgets";

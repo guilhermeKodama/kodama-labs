@@ -26,7 +26,8 @@
   "user": {
     "not_found": "User not found.",
     "invalid_timezone": "Unknown time zone: {timezone}.",
-    "base_currency_locked": "The base currency can't change while there {count, plural, one {is # entry} other {are # entries}}: converted amounts would mix two currencies."
+    "base_currency_locked": "The base currency can't change while there {count, plural, one {is # entry} other {are # entries}}: converted amounts would mix two currencies.",
+    "invalid_preference": "“{value}” isn't a valid {field}."
   },
   "entity": {
     "not_found": "Entity not found.",
@@ -41,7 +42,10 @@
     "archived": "The account {name} is archived.",
     "invalid_day": "Use a day between 1 and 31.",
     "invalid_credit_limit": "The credit limit must be positive.",
-    "not_credit_card": "This account is not a credit card."
+    "not_credit_card": "This account is not a credit card.",
+    "currency_locked": "The account's currency can't change: {count, plural, one {# transaction is} other {# transactions are}} in {currency}.",
+    "entity_locked": "The account can't move to another entity: it has {entries, plural, one {# transaction} other {# transactions}} and {recurring, plural, one {# recurring bill} other {# recurring bills}}.",
+    "default_entity_locked": "An entity's main account can't move to another entity."
   },
   "entry": {
     "not_found": "Transaction not found. It may have been deleted.",
@@ -193,5 +197,11 @@
   "fire": {
     "no_plan": "Set up the FIRE plan first.",
     "goal_incomplete": "To create the FIRE plan, give the target income, withdrawal rate, expected return, inflation, planning mode and contribution phases."
+  },
+  "notifications": {
+    "device_not_found": "Device not found"
+  },
+  "tokens": {
+    "not_found": "API token not found"
   }
 }

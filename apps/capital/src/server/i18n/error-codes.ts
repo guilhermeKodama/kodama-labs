@@ -30,6 +30,7 @@ export const ERROR_CODES = {
   "user.not_found": "User not found",
   "user.invalid_timezone": "Unknown timezone {timezone}",
   "user.base_currency_locked": "The base currency cannot change while there are {count} entries, because their base amounts would mix two currencies",
+  "user.invalid_preference": "{value} is not a valid {field}",
 
   // Entities
   "entity.not_found": "Entity not found",
@@ -45,6 +46,9 @@ export const ERROR_CODES = {
   "account.invalid_day": "{field} must be a day between 1 and 31",
   "account.invalid_credit_limit": "The credit limit must be positive",
   "account.not_credit_card": "The account is not a credit card",
+  "account.currency_locked": "The account's currency cannot change while it has {count} transactions in {currency}",
+  "account.entity_locked": "The account cannot move to another entity while it has {entries} transactions and {recurring} recurring rules",
+  "account.default_entity_locked": "An entity's main account cannot move to another entity",
 
   // Entries and transfers
   "entry.not_found": "Transaction not found",
@@ -149,6 +153,10 @@ export const ERROR_CODES = {
   "currency.not_found": "Currency not found",
   "currency.base_protected": "The base currency cannot be removed",
   "currency.in_use": "{code} is used by {accounts} accounts and {entries} entries",
+
+  // Notifications and API tokens
+  "notifications.device_not_found": "Device not found",
+  "tokens.not_found": "API token not found",
 
   // Imports
   "import.not_found": "Import not found",
