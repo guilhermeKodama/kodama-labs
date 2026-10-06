@@ -1,10 +1,11 @@
 import type { DbClient } from "@capital/server/lib/prisma";
 import { Prisma } from "@/generated/prisma";
-import type { Account, AllocationClass, AssetClass, FixedIncomeSubType, IncomeType, InvestmentHolding, InvestmentOperation, InvestmentTransactionType } from "@/generated/prisma";
+import type { Account, AllocationClass, AssetClass, FixedIncomeSubType, IncomeType, InvestmentOperation, InvestmentTransactionType } from "@/generated/prisma";
 import { formatDateOnly, parseLocalDate } from "@capital/server/lib/date-utils";
-import { entityScopeSql, entityScopeWhere } from "@capital/server/lib/entity-scope";
+import { entityScopeWhere } from "@capital/server/lib/entity-scope";
 import { ALLOCATION_CLASSES, dominantEtfCurrency, holdingAllocationClass, toAllocationTargets, type TargetInput } from "@capital/server/modules/investments/lib/allocation-class";
 import { oversoldOperations, recalculateHolding, recalculateHoldingDetailed } from "@capital/server/modules/investments/lib/holding-position";
+import { marketValue } from "@capital/server/modules/investments/lib/holding-value";
 import { LedgerError, notFound } from "@capital/server/modules/ledger/lib/errors";
 import { loadFx, type FxContext } from "@capital/server/modules/ledger/lib/fx";
 import { round, toNumber } from "@capital/server/modules/ledger/lib/money";
@@ -12,9 +13,11 @@ import { accountBalances, getOwnedAccount } from "@capital/server/modules/ledger
 import { createEntry, softDeleteEntries } from "@capital/server/modules/ledger/services/entries";
 import { getDefaultAccount } from "@capital/server/modules/ledger/services/entities";
 import { inTransaction, recordMutation, snapshot, type MutationRecordInput } from "@capital/server/modules/ledger/services/mutations";
+import { benchmarks12m } from "./benchmarks";
 import { convertAmount, fundBroker } from "./funding";
+import { portfolioHistory } from "./portfolio-history";
 
-export { recalculateHolding };
+export { recalculateHolding, marketValue };
 
 // ---------------------------------------------------------------------------
 // Holdings
@@ -120,20 +123,6 @@ export async function listHoldings(userId: string, db: DbClient, opts: Portfolio
     include: { account: { select: { id: true, name: true, entityId: true, currency: true, institution: true } } },
     orderBy: [{ assetClass: "asc" }, { ticker: "asc" }, { name: "asc" }],
   });
-}
-
-/** Fixed income and savings are tracked by amount: with no quantity, the position is the cost basis. */
-const AMOUNT_BASED: readonly AssetClass[] = ["fixed_income", "savings"];
-
-/**
- * Market value in the holding's currency: quantity x price, or the cost
- * basis while there is no price yet. With no quantity an amount-based asset
- * (fixed income, savings) is worth its cost basis; anything else is worth 0
- * (a sold-out position never falls back to what was invested).
- */
-export function marketValue(h: Pick<InvestmentHolding, "currentQuantity" | "currentPrice" | "totalInvested" | "assetClass">) {
-  if (h.currentQuantity > 0) return h.currentPrice !== null ? h.currentQuantity * h.currentPrice : h.totalInvested;
-  return AMOUNT_BASED.includes(h.assetClass) ? h.totalInvested : 0;
 }
 
 /** A holding for the API, with value and cost basis also in the base currency (fxRate = base units per unit of its currency). */
@@ -725,13 +714,32 @@ export async function portfolioSummary(userId: string, db: DbClient, opts: Portf
     select: { totalAmount: true, taxWithheld: true, holding: { select: { currency: true } } },
   });
   const net = marketTotal + cashTotal;
+  const [history, benchmarks] = await Promise.all([portfolioHistory(userId, db, { months: 12, entityIds: opts.entityIds ?? null }), benchmarks12m(db)]);
+  const contributed = history.months.at(-1)?.contributed ?? 0;
   return {
     baseCurrency: fx.baseCurrency,
     marketValue: round(marketTotal, 2),
+    /** Cost basis of the positions held. */
     invested: round(investedTotal, 2),
     unrealizedGain: round(marketTotal - investedTotal, 2),
     cash: round(cashTotal, 2),
     netWorth: round(net, 2),
+    /**
+     * "Total aportado": money that went into the brokers (opening balances +
+     * net aportes + positions registered without cash), see
+     * lib/portfolio-timeline.ts.
+     */
+    contributed,
+    /** "Resultado": netWorth − contributed (what the money earned, realized or not). */
+    result: round(net - contributed, 2),
+    resultPercent: contributed > 0 ? round((net - contributed) / contributed, 4) : null,
+    /**
+     * "Rentab. 12m": chain-linked Modified Dietz over the last 12 months
+     * (months valued at cost, before snapshots existed, are left out:
+     * `months` says how many entered the chain), with the CDI and IPCA + 6%
+     * of the same 12 months (fractions; null without cached data).
+     */
+    return12m: { ...history.return, cdi: benchmarks.cdi, ipca: benchmarks.ipca, ipcaPlus6: benchmarks.ipcaPlus6 },
     /** Income of the last 12 months, net of tax withheld. */
     income12m: round(income.reduce((s, op) => s + (op.totalAmount - op.taxWithheld) * fx.rateFor(op.holding.currency), 0), 2),
     holdingsCount: holdings.length,
@@ -818,17 +826,19 @@ export async function rebalanceSuggestion(userId: string, amount: number, mode: 
     return { allocationClass, target, value, need: Math.max(0, target * after - value) };
   });
   const needSum = needs.reduce((s, n) => s + n.need, 0);
-  const classes = needs.map((n) => {
-    const put = needSum > amount ? (n.need / needSum) * amount : n.need + (amount - needSum) * n.target;
-    return {
-      allocationClass: n.allocationClass,
-      value: round(n.value, 2),
-      currentShare: total > 0 ? round(n.value / total, 4) : 0,
-      target: n.target,
-      amount: round(put, 2),
-      afterShare: round((n.value + put) / after, 4),
-    };
-  });
+  // Targets add up to 1, so the puts add up to `amount`; rounding is settled on the largest.
+  const puts = settleRounding(
+    needs.map((n) => Math.max(0, needSum > amount ? (n.need / needSum) * amount : n.need + (amount - needSum) * n.target)),
+    amount
+  );
+  const classes = needs.map((n, i) => ({
+    allocationClass: n.allocationClass,
+    value: round(n.value, 2),
+    currentShare: total > 0 ? round(n.value / total, 4) : 0,
+    target: n.target,
+    amount: puts[i],
+    afterShare: round((n.value + puts[i]) / after, 4),
+  }));
   if (mode === "class") return { amount, total: round(total, 2), classes };
 
   const holdings = await listHoldings(userId, db, { entityIds: opts.entityIds });
@@ -857,8 +867,12 @@ export async function rebalanceSuggestion(userId: string, amount: number, mode: 
         ];
       }
       const sum = inClass.reduce((s, h) => s + marketValue(h) * fx.rateFor(h.currency), 0);
-      return inClass.map((h) => {
-        const put = sum > 0 ? (marketValue(h) * fx.rateFor(h.currency) * c.amount) / sum : c.amount / inClass.length;
+      const shares = settleRounding(
+        inClass.map((h) => (sum > 0 ? (marketValue(h) * fx.rateFor(h.currency) * c.amount) / sum : c.amount / inClass.length)),
+        c.amount
+      );
+      return inClass.map((h, i) => {
+        const put = shares[i];
         const priceBase = h.currentPrice ? h.currentPrice * fx.rateFor(h.currency) : null;
         return {
           kind: "holding",
@@ -872,7 +886,7 @@ export async function rebalanceSuggestion(userId: string, amount: number, mode: 
           entityId: h.account.entityId,
           currency: h.currency,
           price: h.currentPrice,
-          amount: round(put, 2),
+          amount: put,
           approxQuantity: priceBase ? round(put / priceBase, 6) : null,
         };
       });
@@ -881,62 +895,17 @@ export async function rebalanceSuggestion(userId: string, amount: number, mode: 
 }
 
 /**
- * Monthly net contributions (deposits minus withdrawals into brokers) and
- * buys in the base currency, by asset class (current screens) and by
- * allocation class (the six classes of the new screens).
+ * Rounds non-negative parts to cents so that they add up exactly to
+ * `total` (rounded): the difference goes to the largest part (the first
+ * one on a tie).
  */
-export async function contributions(userId: string, year: number, db: DbClient, opts: PortfolioScope = {}) {
-  const entityIds = opts.entityIds ?? null;
-  const fx = await loadFx(userId, db);
-  const from = new Date(Date.UTC(year, 0, 1));
-  const to = new Date(Date.UTC(year, 11, 31, 23, 59, 59, 999));
-  const flows = await db.$queryRaw<{ m: number; deposits: Prisma.Decimal; withdrawals: Prisma.Decimal; n: number }[]>`
-    SELECT extract(month FROM le.date)::int AS m,
-           coalesce(sum(le."amountBase") FILTER (WHERE tg.direction = 'investment_deposit'), 0) AS deposits,
-           coalesce(-sum(le."amountBase") FILTER (WHERE tg.direction = 'investment_withdrawal'), 0) AS withdrawals,
-           count(*)::int AS n
-    FROM ledger_entries le
-    JOIN accounts a ON a.id = le."accountId" AND a.type = 'brokerage'
-    JOIN transfer_groups tg ON tg.id = le."transferGroupId"
-    WHERE le."userId" = ${userId} AND le."deletedAt" IS NULL AND le.date BETWEEN ${from} AND ${to}
-      AND ${entityScopeSql(Prisma.sql`le."entityId"`, entityIds)}
-    GROUP BY 1`;
-  // totalAmount is in the holding's currency, so buys are grouped by it too.
-  const buys = await db.$queryRaw<{ m: number; asset_class: AssetClass; allocation_class: AllocationClass | null; currency: string; total: number }[]>`
-    SELECT extract(month FROM o.date)::int AS m, h."assetClass"::text AS asset_class, h."allocationClass"::text AS allocation_class,
-           h.currency, sum(o."totalAmount") AS total
-    FROM investment_operations o
-    JOIN investment_holdings h ON h.id = o."holdingId"
-    JOIN accounts a ON a.id = h."accountId"
-    WHERE a."userId" = ${userId} AND o.type IN ('buy', 'deposit') AND o.date BETWEEN ${from} AND ${to}
-      AND ${entityScopeSql(Prisma.sql`a."entityId"`, entityIds)}
-    GROUP BY 1, 2, 3, 4`;
-  const months = Array.from({ length: 12 }, (_, i) => {
-    const f = flows.find((x) => x.m === i + 1);
-    const deposits = toNumber(f?.deposits ?? 0);
-    const withdrawals = toNumber(f?.withdrawals ?? 0);
-    const byAssetClass: Partial<Record<AssetClass, number>> = {};
-    const byAllocationClass: Partial<Record<AllocationClass, number>> = {};
-    for (const b of buys) {
-      if (b.m !== i + 1) continue;
-      const base = Number(b.total) * fx.rateFor(b.currency);
-      const cls = holdingAllocationClass({ assetClass: b.asset_class, currency: b.currency, allocationClass: b.allocation_class });
-      byAssetClass[b.asset_class] = (byAssetClass[b.asset_class] ?? 0) + base;
-      byAllocationClass[cls] = (byAllocationClass[cls] ?? 0) + base;
-    }
-    return {
-      month: i + 1,
-      deposits: round(deposits, 2),
-      withdrawals: round(withdrawals, 2),
-      net: round(deposits - withdrawals, 2),
-      byAssetClass: roundValues(byAssetClass),
-      byAllocationClass: roundValues(byAllocationClass),
-    };
-  });
-  const net = months.reduce((s, m) => s + m.net, 0);
-  return { year, months, totalNet: round(net, 2), averageMonthly: round(net / 12, 2) };
-}
-
-function roundValues<K extends string>(sums: Partial<Record<K, number>>): Partial<Record<K, number>> {
-  return Object.fromEntries(Object.entries<number | undefined>(sums).map(([k, v]) => [k, round(v ?? 0, 2)])) as Partial<Record<K, number>>;
+export function settleRounding(parts: number[], total: number): number[] {
+  const rounded = parts.map((p) => round(Math.max(0, p), 2));
+  if (!rounded.length) return rounded;
+  const diff = round(round(total, 2) - rounded.reduce((s, p) => s + p, 0), 2);
+  if (diff !== 0) {
+    const largest = parts.indexOf(Math.max(...parts));
+    rounded[largest] = round(Math.max(0, rounded[largest] + diff), 2);
+  }
+  return rounded;
 }

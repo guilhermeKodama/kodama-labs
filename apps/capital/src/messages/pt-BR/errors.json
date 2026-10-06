@@ -182,6 +182,7 @@
     "file_type_unsupported": "Só arquivos OFX, CSV, PDF e imagens."
   },
   "fire": {
-    "no_plan": "Configure o plano FIRE primeiro."
+    "no_plan": "Configure o plano FIRE primeiro.",
+    "goal_incomplete": "Para criar o plano FIRE, informe a renda desejada, a taxa de retirada, o retorno esperado, a inflação, o modo de planejamento e as fases de aporte."
   }
 }

@@ -182,6 +182,7 @@
     "file_type_unsupported": "Only OFX, CSV, PDF and image files."
   },
   "fire": {
-    "no_plan": "Set up the FIRE plan first."
+    "no_plan": "Set up the FIRE plan first.",
+    "goal_incomplete": "To create the FIRE plan, give the target income, withdrawal rate, expected return, inflation, planning mode and contribution phases."
   }
 }

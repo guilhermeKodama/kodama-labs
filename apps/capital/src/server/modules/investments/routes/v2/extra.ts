@@ -1,16 +1,18 @@
 import { createRoute, z } from "@hono/zod-openapi";
 import { createRouter } from "@capital/server/lib/router";
+import { entityScopeQuery, resolveScopeQuery } from "@capital/server/lib/entity-scope";
 import { prisma } from "@capital/server/lib/prisma";
 import { jsonBody, queryFlag, v2Handler, v2Responses } from "@capital/server/lib/v2";
 import { ALLOCATION_CLASSES, ASSET_CLASSES } from "../../lib/allocation-class";
 import { recordAporte } from "../../services/aporte";
 import { quotesFor, searchAssetsFor } from "../../services/market";
 import { recordOrders } from "../../services/orders";
+import { portfolioHistory } from "../../services/portfolio-history";
 
 /**
  * The new investment endpoints: POST /v2/investments/aporte, POST
- * /v2/investments/orders, GET /v2/quotes and GET /v2/assets/search (GET
- * /v2/portfolio/history lands here too). Mounted in src/server/routes.ts.
+ * /v2/investments/orders, GET /v2/quotes, GET /v2/assets/search and GET
+ * /v2/portfolio/history. Mounted in src/server/routes.ts.
  */
 
 const tags = ["Investments v2"];
@@ -117,6 +119,16 @@ const searchRoute = createRoute({
   responses: v2Responses,
 });
 
+const historyRoute = createRoute({
+  method: "get",
+  path: "/v2/portfolio/history",
+  tags,
+  summary:
+    "Month-end portfolio of the last `months` months (the current one live): netWorth (holdings + broker cash), contributed (\"Total aportado\"), netFlow, byClass, estimated (holdings at cost: no snapshot), Modified Dietz return per month and chained; scope = all | pf | pj | <entityId>",
+  request: { query: z.object({ months: z.coerce.number().int().min(1).max(120).optional(), ...entityScopeQuery }) },
+  responses: v2Responses,
+});
+
 export const v2InvestmentsExtra = createRouter()
   .openapi(aporteRoute, v2Handler(aporteRoute, async (c, userId) => recordAporte(userId, c.req.valid("json"), prisma)))
   .openapi(ordersRoute, v2Handler(ordersRoute, async (c, userId) => recordOrders(userId, c.req.valid("json"), prisma)))
@@ -124,4 +136,8 @@ export const v2InvestmentsExtra = createRouter()
   .openapi(searchRoute, v2Handler(searchRoute, async (c, userId) => {
     const q = c.req.valid("query");
     return searchAssetsFor(userId, q.q, prisma, { limit: q.limit, remote: q.remote });
+  }))
+  .openapi(historyRoute, v2Handler(historyRoute, async (c, userId) => {
+    const q = c.req.valid("query");
+    return portfolioHistory(userId, prisma, { months: q.months, entityIds: await resolveScopeQuery(userId, q, prisma) });
   }));

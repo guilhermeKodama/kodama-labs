@@ -4,8 +4,8 @@ import { createLedgerFixture, deleteLedgerFixture, type LedgerFixture } from "@/
 import { createBudget, updateBudget } from "@capital/server/modules/budgets/services/budget-crud";
 import { monthOverview, yearOverview } from "@capital/server/modules/budgets/services/budget-overview";
 import { createRecurringRule, markRulePaid, processDueRules, skipRuleOccurrence } from "@capital/server/modules/recurring/services/recurring-rules";
+import { contributions } from "@capital/server/modules/investments/services/contributions";
 import {
-  contributions,
   createHolding,
   deleteOperation,
   portfolioSummary,
@@ -177,7 +177,7 @@ describe("investments", () => {
     const summary = await portfolioSummary(USER, prisma);
     expect(summary).toMatchObject({ marketValue: 2000, cash: 1750, netWorth: 3750 });
 
-    const c = await contributions(USER, 2026, prisma);
+    const c = await contributions(USER, prisma, { year: 2026 });
     expect(c.months[7]).toMatchObject({ deposits: 3010, net: 3010 });
 
     // The cash leg goes to the trash, so it no longer counts in the broker's balance.
@@ -221,7 +221,7 @@ describe("investments", () => {
     await recordOperation(USER, { holdingId: voo.id, type: "buy", quantity: 1, pricePerUnit: 100, totalAmount: 100, date: "2026-08-03" }, prisma);
     await recordOperation(USER, { holdingId: bova.id, type: "buy", quantity: 10, pricePerUnit: 30, totalAmount: 300, date: "2026-08-04" }, prisma);
     await recordOperation(USER, { holdingId: petr.id, type: "buy", quantity: 10, pricePerUnit: 40, totalAmount: 400, date: "2026-08-05" }, prisma);
-    const c = await contributions(USER, 2026, prisma);
+    const c = await contributions(USER, prisma, { year: 2026 });
     // 1 BRL = 0.2 USD, so the USD 100 buy counts as BRL 500.
     expect(c.months[7].byAssetClass).toEqual({ etf: 800, stocks: 400 });
     expect(c.months[7].byAllocationClass).toEqual({ international: 500, br_stocks: 700 });

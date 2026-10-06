@@ -6,7 +6,6 @@ import { idParams, jsonBody, queryFlag, v2Handler, v2Responses } from "@capital/
 import { loadFx } from "@capital/server/modules/ledger/lib/fx";
 import {
   adjustPosition,
-  contributions,
   countOperations,
   createHolding,
   deleteOperation,
@@ -25,6 +24,7 @@ import {
   updateHolding,
   updateOperation,
 } from "../../services/portfolio";
+import { contributions } from "../../services/contributions";
 import { updateAllPrices } from "../../services/update-prices";
 import { ALLOCATION_CLASSES, ASSET_CLASSES } from "../../lib/allocation-class";
 
@@ -194,8 +194,16 @@ const contributionsRoute = createRoute({
   method: "get",
   path: "/v2/contributions",
   tags,
-  summary: "Monthly contributions for a year; scope = all | pf | pj | <entityId>",
-  request: { query: z.object({ year: z.coerce.number().int().min(2000).max(2100), ...entityScopeQuery }) },
+  summary:
+    "Monthly aportes into the brokers (deposits, withdrawals, buys by class, origin of each transfer) and the PF savings rate: the trailing `months` (default 12) ending in `end` (YYYY-MM, default the current month), or a calendar `year`; scope = all | pf | pj | <entityId>",
+  request: {
+    query: z.object({
+      year: z.coerce.number().int().min(2000).max(2100).optional(),
+      months: z.coerce.number().int().min(1).max(60).optional(),
+      end: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/).optional(),
+      ...entityScopeQuery,
+    }),
+  },
   responses: v2Responses,
 });
 
@@ -262,5 +270,5 @@ export const v2Investments = createRouter()
   }))
   .openapi(contributionsRoute, v2Handler(contributionsRoute, async (c, userId) => {
     const q = c.req.valid("query");
-    return contributions(userId, q.year, prisma, { entityIds: await resolveScopeQuery(userId, q, prisma) });
+    return contributions(userId, prisma, { year: q.year, months: q.months, end: q.end, entityIds: await resolveScopeQuery(userId, q, prisma) });
   }));

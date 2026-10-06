@@ -10,12 +10,17 @@
  * holding) match what the app computes now. Holdings without operations
  * are left alone: their position was entered directly.
  *
- * Step 2 (pending, next S4 step): PortfolioSnapshot rows per entity and
- * month from cost basis and the exact broker cash at each month end,
- * flagged `estimated`.
+ * Step 2: PortfolioSnapshot rows per entity and month, from the entity's
+ * first activity to the previous month: broker cash, cost basis and "Total
+ * aportado" exactly at each month end from the ledger, the holdings valued
+ * at cost (no historical prices), flagged `estimated` when that is a guess.
+ * Real snapshots (written by the daily cron) are never overwritten; earlier
+ * estimated rows are rewritten. Then the live month is stored at today's
+ * prices, as the cron does. See services/portfolio-history.ts.
  */
 import { prisma } from "../src/server/lib/prisma";
 import { recalculateAllHoldings } from "../src/server/modules/investments/lib/holding-position";
+import { backfillSnapshots } from "../src/server/modules/investments/services/portfolio-history";
 
 async function main() {
   const args = process.argv.slice(2);
@@ -35,6 +40,12 @@ async function main() {
     console.log(`${verb} ${c.userId} ${c.id} ${c.label}: ${parts.join(", ")}`);
   }
   console.log(`holdings: ${result.checked} checked, ${result.skipped} without operations skipped, ${result.changed.length} ${dryRun ? "to recalculate" : "recalculated"}`);
+
+  const snapshots = await backfillSnapshots(prisma, { userId, dryRun });
+  for (const s of snapshots) {
+    console.log(`snapshots ${s.userId}: ${s.created} ${dryRun ? "to create" : "created"}, ${s.updated} estimated ${dryRun ? "to rewrite" : "rewritten"}, ${s.kept} real kept`);
+  }
+  console.log(`snapshots: ${snapshots.length} users${dryRun ? " (dry run, nothing written)" : ", live month stored"}`);
 }
 
 main()

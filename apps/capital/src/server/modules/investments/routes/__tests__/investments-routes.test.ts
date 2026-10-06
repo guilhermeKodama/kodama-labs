@@ -311,3 +311,30 @@ describe("targets and broker cash", () => {
     expect(await balance(f.broker)).toBe(0);
   });
 });
+
+describe("history and contributions", () => {
+  it("GET /v2/portfolio/history and /v2/contributions follow the scope and the window", async () => {
+    await json("POST", "/v2/brokerage-cash", { accountId: f.broker, direction: "deposit", amount: 1000, date: "2026-08-03", counterpartAccountId: f.pfChecking });
+    await json("POST", "/v2/brokerage-cash", { accountId: pjBroker, direction: "deposit", amount: 400, date: "2026-09-03", counterpartAccountId: f.pjChecking });
+
+    // A long window, so the fixed dates stay inside it.
+    const all = await json("GET", "/v2/portfolio/history?months=120");
+    expect(all.months).toHaveLength(120);
+    const aug = all.months.find((m: { period: string }) => m.period === "2026-08");
+    const sep = all.months.find((m: { period: string }) => m.period === "2026-09");
+    expect(aug).toMatchObject({ netWorth: 1000, contributed: 1000, netFlow: 1000, estimated: false });
+    expect(sep).toMatchObject({ netWorth: 1400, contributed: 1400, netFlow: 400 });
+    expect(all.return).toHaveProperty("months");
+    const pf = await json("GET", "/v2/portfolio/history?months=120&scope=pf");
+    expect(pf.months.find((m: { period: string }) => m.period === "2026-09")).toMatchObject({ netWorth: 1000, netFlow: 0 });
+
+    const c = await json("GET", "/v2/contributions?months=2&end=2026-09&scope=pj");
+    expect(c).toMatchObject({ from: "2026-08", to: "2026-09", totalNet: 400 });
+    expect(c.months.map((m: { net: number }) => m.net)).toEqual([0, 400]);
+    expect(c.savingsRate).toMatchObject({ aportes: 1000 });
+
+    const bad = await call("GET", "/v2/contributions?end=2026-13");
+    expect(bad.status).toBe(422);
+    expect((await call("GET", "/v2/portfolio/history?scope=nope")).status).toBe(404);
+  });
+});

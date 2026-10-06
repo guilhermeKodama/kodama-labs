@@ -19,6 +19,7 @@ import {
   serializeHolding,
   serializeOperation,
   setTargets,
+  settleRounding,
   updateOperation,
 } from "../portfolio";
 
@@ -236,6 +237,44 @@ describe("summary and rebalance", () => {
       expect.objectContaining({ kind: "new", holdingId: null, allocationClass: "crypto", amount: 9000 }),
       expect.objectContaining({ kind: "cash", holdingId: null, allocationClass: "cash", amount: 1000 }),
     ]);
+  });
+
+  it("never goes negative, adds up to the amount to the cent, lists held classes without a target, and follows the scope", async () => {
+    // PF: 9000 in BR stocks (no target) and 1000 in fixed income. PJ: 3000 in FIIs on its own broker.
+    const stocks = await petr4(1);
+    await recordOperation(USER, { holdingId: stocks.id, type: "buy", quantity: 9000, pricePerUnit: 1, totalAmount: 9000, date: "2026-08-01", fundFromAccountId: f.pfChecking }, prisma);
+    const cdb = await createHolding(USER, { accountId: f.broker, assetClass: "fixed_income", name: "CDB" }, prisma);
+    await recordOperation(USER, { holdingId: cdb.id, type: "buy", totalAmount: 1000, date: "2026-08-01", fundFromAccountId: f.pfChecking }, prisma);
+    const pjBroker = await prisma.account.create({ data: { userId: USER, entityId: f.pjId, type: "brokerage", name: "BTG", currency: "BRL" } });
+    const fii = await createHolding(USER, { accountId: pjBroker.id, assetClass: "fii", ticker: "HGLG11", name: "CSHG", currentPrice: 1 }, prisma);
+    await recordOperation(USER, { holdingId: fii.id, type: "buy", quantity: 3000, pricePerUnit: 1, totalAmount: 3000, date: "2026-08-01", fundFromAccountId: f.pjChecking }, prisma);
+    await setTargets(USER, [{ allocationClass: "fixed_income", targetPercent: 33.33 }, { allocationClass: "fii", targetPercent: 33.33 }, { allocationClass: "crypto", targetPercent: 33.34 }], prisma);
+
+    const all = await rebalanceSuggestion(USER, 1000.01, "class", prisma);
+    expect(all.total).toBe(13000);
+    expect(all.classes.map((c) => c.allocationClass)).toEqual(["fixed_income", "br_stocks", "fii", "crypto"]);
+    expect(all.classes.every((c) => c.amount >= 0)).toBe(true);
+    expect(all.classes.find((c) => c.allocationClass === "br_stocks")!.amount).toBe(0);
+    expect(Math.round(all.classes.reduce((s, c) => s + c.amount, 0) * 100)).toBe(100001);
+
+    const assets = await rebalanceSuggestion(USER, 1000.01, "asset", prisma);
+    expect(Math.round(assets.assets!.reduce((s, a) => s + a.amount, 0) * 100)).toBe(100001);
+    expect(assets.assets!.every((a) => a.amount > 0)).toBe(true);
+    expect(assets.assets!.find((a) => a.holdingId === fii.id)).toMatchObject({ accountId: pjBroker.id, accountName: "BTG", entityId: f.pjId, currency: "BRL" });
+
+    // PF only: the PJ FIIs are out, so FIIs is an empty targeted class (a new asset).
+    const pf = await rebalanceSuggestion(USER, 500, "asset", prisma, { entityIds: [f.pfId] });
+    expect(pf.total).toBe(10000);
+    expect(pf.assets!.some((a) => a.holdingId === fii.id)).toBe(false);
+    expect(pf.assets!.find((a) => a.allocationClass === "fii")).toMatchObject({ kind: "new", holdingId: null });
+    expect(pf.assets!.reduce((s, a) => s + a.amount, 0)).toBeCloseTo(500, 2);
+  });
+
+  it("settles rounding on the largest part", () => {
+    expect(settleRounding([333.333, 333.333, 333.334], 1000)).toEqual([333.33, 333.33, 333.34]);
+    expect(settleRounding([0.004, 0.004, 0.004], 0.01)).toEqual([0.01, 0, 0]);
+    expect(settleRounding([-5, 10], 10)).toEqual([0, 10]);
+    expect(settleRounding([], 0)).toEqual([]);
   });
 });
 

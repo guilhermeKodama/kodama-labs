@@ -174,6 +174,7 @@ export const ERROR_CODES = {
 
   // FIRE (v1)
   "fire.no_plan": "Set up the FIRE plan first",
+  "fire.goal_incomplete": "A new FIRE plan needs the income target, withdrawal rate, expected return, inflation, planning mode and contribution phases",
 } as const;
 
 export type ErrorCode = keyof typeof ERROR_CODES;
