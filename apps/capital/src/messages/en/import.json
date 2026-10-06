@@ -83,6 +83,13 @@
       "transfer": "entity",
       "invest": "broker",
       "card": "card"
+    },
+    "createCategory": "+ Create category…",
+    "newCategory": {
+      "title": "New category",
+      "name": "Name",
+      "type": "Type",
+      "submit": "Create category"
     }
   },
   "confirm": {

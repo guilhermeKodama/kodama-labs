@@ -1,8 +1,9 @@
 "use client";
 
-import { memo, useCallback, useMemo } from "react";
+import { memo, useCallback, useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
 import { Check, Combobox, Pill, type ComboboxOption } from "@/components/cap";
+import { MENU_ROW } from "@/components/cap/styles";
 import { useAccounts, useCategories, useCreateCategory, type CategoryType } from "@/lib/api/catalog";
 import { useSession } from "@/lib/api/session";
 import { useFmt } from "@/lib/format/provider";
@@ -23,6 +24,7 @@ import {
   type RowDecision,
 } from "@/lib/import/review";
 import { cn } from "@/lib/utils";
+import { NewCategoryDialog } from "./new-category-dialog";
 
 /** Which option list a row's picker shows. */
 type Variant = "bankExpense" | "bankIncome" | "cardCharge" | "cardRefund";
@@ -32,6 +34,10 @@ const variantOf = (card: boolean, row: AnalyzedImportRow): Variant =>
 
 /** Category a row creates from "+ Criar “X”": an income category only for bank income. */
 const createdType = (variant: Variant): CategoryType => (variant === "bankIncome" ? "income" : "expense");
+
+/** Types "+ Criar categoria…" offers: the ones the row's picker lists (a card refund may go either way). */
+const formTypes = (variant: Variant): readonly CategoryType[] =>
+  variant === "cardRefund" ? ["expense", "income"] : [createdType(variant)];
 
 /**
  * Revisar (mockup 5715-5753): status pills, then one row per transaction
@@ -113,6 +119,9 @@ export function ReviewStep({
       createMutate({ name, type: createdType(variantOf(card, row)) }, { onSuccess: (category) => pick(row, encodeUse({ as: "category", categoryId: category.id })!) }),
     [createMutate, card, pick],
   );
+  // "+ Criar categoria…": the row it was opened from and what had been typed in its picker.
+  const [creatingFor, setCreatingFor] = useState<{ row: AnalyzedImportRow; name: string } | null>(null);
+  const openCreate = useCallback((row: AnalyzedImportRow, name: string) => setCreatingFor({ row, name }), []);
 
   return (
     <>
@@ -138,11 +147,19 @@ export function ReviewStep({
             onPick={pick}
             onInclude={include}
             onCreate={create}
+            onCreateForm={openCreate}
           />
         ))}
         {shown.length === 0 ? <div className="px-2.5 py-6 text-center text-[12px] text-fg-3">{t("empty")}</div> : null}
       </div>
       <span className="text-[11.5px] text-fg-3">{t("footer", { shown: shown.length, total: analysis.rows.length })}</span>
+      <NewCategoryDialog
+        open={creatingFor !== null}
+        onOpenChange={(open) => !open && setCreatingFor(null)}
+        initialName={creatingFor?.name ?? ""}
+        types={creatingFor ? formTypes(variantOf(card, creatingFor.row)) : ["expense"]}
+        onCreated={(category) => creatingFor && pick(creatingFor.row, encodeUse({ as: "category", categoryId: category.id })!)}
+      />
     </>
   );
 }
@@ -156,6 +173,7 @@ const ReviewRow = memo(function ReviewRow({
   onPick,
   onInclude,
   onCreate,
+  onCreateForm,
 }: {
   row: AnalyzedImportRow;
   decision: RowDecision | undefined;
@@ -165,6 +183,8 @@ const ReviewRow = memo(function ReviewRow({
   onPick: (row: AnalyzedImportRow, value: string) => void;
   onInclude: (row: AnalyzedImportRow, include: boolean) => void;
   onCreate: (row: AnalyzedImportRow, name: string) => void;
+  /** Pinned "+ Criar categoria…": opens the form, prefilled with the query. */
+  onCreateForm: (row: AnalyzedImportRow, name: string) => void;
 }) {
   const t = useTranslations("import.review");
   const fmt = useFmt();
@@ -194,6 +214,18 @@ const ReviewRow = memo(function ReviewRow({
         placeholder={t("placeholder")}
         searchPlaceholder={t("search")}
         onCreate={(name) => onCreate(row, name)}
+        footer={({ query, close }) => (
+          <button
+            type="button"
+            className={cn(MENU_ROW, "text-fg-2")}
+            onClick={() => {
+              close();
+              onCreateForm(row, query);
+            }}
+          >
+            {t("createCategory")}
+          </button>
+        )}
         disabled={creating}
         aria-label={t("placeholder")}
         className="w-full"

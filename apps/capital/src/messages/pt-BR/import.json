@@ -83,6 +83,13 @@
       "transfer": "entidade",
       "invest": "corretora",
       "card": "cartão"
+    },
+    "createCategory": "+ Criar categoria…",
+    "newCategory": {
+      "title": "Nova categoria",
+      "name": "Nome",
+      "type": "Tipo",
+      "submit": "Criar categoria"
     }
   },
   "confirm": {
