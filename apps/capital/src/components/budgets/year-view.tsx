@@ -5,7 +5,7 @@ import { Bar, CartesianGrid, ComposedChart, Line, ReferenceLine, ResponsiveConta
 import { EmptyRow, Kpi, KpiStrip, Panel } from "@/components/cap";
 import { apiPatch } from "@/lib/api/client";
 import { useAppMutation, useErrorMessage } from "@/lib/api/use-app-mutation";
-import { budgetDrill } from "@/lib/budgets/drill";
+import { budgetDrill, budgetsDrill, monthPeriod } from "@/lib/budgets/drill";
 import { columnTense, flatMonthlyBudget, heatLevel, heatPercent, isClickable, monthlyBars, totalTone, trendOf, type HeatLevel } from "@/lib/budgets/heatmap";
 import { heatmapLegend, insightCopy, yearHeader, yearToDateMonth } from "@/lib/budgets/labels";
 import { percent, projectionVsBudget, usage, yearlyTone } from "@/lib/budgets/pace";
@@ -16,7 +16,7 @@ import type { ViewDraft } from "@/lib/ledger/view-draft";
 import { CHART, CHART_AXIS } from "@/lib/theme/chart-colors";
 import { cn } from "@/lib/utils";
 import type { EditableBudget } from "./budget-dialog";
-import { ChartCaption, ChartLegend, DrillLink, EntityBadge, PaceBar, RowMenu, ScopeBar, TOOLTIP_STYLE, useEntityNames, ViewState, type BudgetActions } from "./parts";
+import { BudgetEntityBadge, ChartCaption, ChartLegend, DrillLink, PaceBar, RowMenu, ScopeBar, TOOLTIP_STYLE, useEntityNames, ViewState, type BudgetActions } from "./parts";
 import { useYearOverview, type YearOverview } from "./use-budgets";
 
 /** Mockup AnnualBudget heatmap: Categoria | jan…dez | Ano (proj.) | Tendência. */
@@ -71,7 +71,7 @@ export function YearView({
 function YearBody({ data, today, onOpenMonth, actions }: { data: YearOverview; today: YearMonth; onOpenMonth: (month: number) => void; actions: BudgetActions }) {
   const t = useTranslations("budgets");
   const fmt = useFmt();
-  const { names } = useEntityNames();
+  const { kinds } = useEntityNames();
   const { period, summary } = data;
   const ytd = yearToDateMonth(period);
   const ytdAbbr = ytd ? fmt.monthAbbr(ytd) : null;
@@ -82,22 +82,34 @@ function YearBody({ data, today, onOpenMonth, actions }: { data: YearOverview; t
   const ytdRange = ytd ? { from: `${data.year}-01-01`, to: period.isPast ? `${data.year}-12-31` : period.today } : null;
   const drill = (row: { entityId: string | null; categoryId: string | null; excludeEntityIds?: readonly string[] }, category: string): ViewDraft | null =>
     ytdRange ? { label: t("drillLabel", { category, period: String(data.year) }), ...budgetDrill(row, data.scope.entityIds, ytdRange) } : null;
+  // KPIs and the Total row: every row of the heatmap at once, over the actual months only (projected months have no entries yet).
+  const totals = (label: string, range: { from: string; to: string } | null, periodLabel = String(data.year)): ViewDraft | null => {
+    const found = range ? budgetsDrill(data.categories, data.scope.entityIds, range) : null;
+    return found ? { label: t("drillLabel", { category: label, period: periodLabel }), ...found } : null;
+  };
+  // A month of the Total row: complete months whole, the current one through today.
+  const monthRange = (month: number) => {
+    const tensed = tense(month);
+    if (tensed === "projected") return null;
+    return tensed === "current" ? monthPeriod(data.year, month, Number(period.today.slice(8, 10))) : monthPeriod(data.year, month);
+  };
+  const totalLabel = t("year.heatmap.total");
 
   return (
     <>
       <KpiStrip>
         <Kpi
           label={ytdAbbr ? t("year.kpi.spent", { year: data.year, month: ytdAbbr }) : t("year.kpi.spentNoMonth", { year: data.year })}
-          value={fmt.money0(summary.spentToDate)}
+          value={<DrillLink draft={totals(totalLabel, ytdRange)}>{fmt.money0(summary.spentToDate)}</DrillLink>}
           sub={ytdAbbr && summary.budgetToDate > 0 ? t("year.kpi.spentSub", { pct: percent(summary.spentToDate / summary.budgetToDate), month: ytdAbbr }) : undefined}
         />
         <Kpi
           label={ytdAbbr ? t("year.kpi.budget", { month: ytdAbbr }) : t("year.kpi.budgetYear", { year: data.year })}
-          value={fmt.money0(ytdAbbr ? summary.budgetToDate : summary.budgetYear)}
+          value={<DrillLink draft={totals(totalLabel, ytdRange)}>{fmt.money0(ytdAbbr ? summary.budgetToDate : summary.budgetYear)}</DrillLink>}
         />
         <Kpi
           label={t("year.kpi.projection")}
-          value={fmt.money0(summary.projectedYear)}
+          value={<DrillLink draft={totals(totalLabel, ytdRange)}>{fmt.money0(summary.projectedYear)}</DrillLink>}
           sub={
             projection
               ? projection.kind === "over"
@@ -107,7 +119,7 @@ function YearBody({ data, today, onOpenMonth, actions }: { data: YearOverview; t
           }
           tone={projection?.kind === "over" ? "warn" : undefined}
         />
-        <Kpi label={t("year.kpi.overMonths")} value={String(summary.overBudgetMonths)} sub={t("year.kpi.overMonthsSub", { count: summary.budgetedCells })} />
+        <Kpi label={t("year.kpi.overMonths")} value={<DrillLink draft={totals(totalLabel, ytdRange)}>{String(summary.overBudgetMonths)}</DrillLink>} sub={t("year.kpi.overMonthsSub", { count: summary.budgetedCells })} />
       </KpiStrip>
 
       <div className="overflow-x-auto rounded-[8px] border border-stroke-3">
@@ -129,10 +141,10 @@ function YearBody({ data, today, onOpenMonth, actions }: { data: YearOverview; t
             return (
               <div key={`${row.entityId}:${row.categoryId}`} className={cn(HEAT_COLS, "h-[34px] border-t border-stroke-3 text-[12.5px]")}>
                 <span className="flex min-w-0 items-center gap-1.5">
-                  <DrillLink draft={drill(row, category)} className="min-w-0 truncate">
+                  <DrillLink draft={drill(row, category)} title={category} className="min-w-0 truncate">
                     {category}
                   </DrillLink>
-                  <EntityBadge entityId={row.entityId} names={names} />
+                  <BudgetEntityBadge entityId={row.entityId} kinds={kinds} />
                 </span>
                 {row.months.map((cell) => {
                   const level = heatLevel(cell);
@@ -152,7 +164,9 @@ function YearBody({ data, today, onOpenMonth, actions }: { data: YearOverview; t
                     </button>
                   );
                 })}
-                <span className="text-right font-mono text-[12px] tabular-nums">{fmt.money0(row.yearTotal)}</span>
+                <DrillLink draft={drill(row, category)} className="text-right font-mono text-[12px] tabular-nums">
+                  {fmt.money0(row.yearTotal)}
+                </DrillLink>
                 <span
                   className={cn(
                     "text-right font-mono text-[11.5px]",
@@ -170,12 +184,18 @@ function YearBody({ data, today, onOpenMonth, actions }: { data: YearOverview; t
               {data.monthTotals.map((total, i) => {
                 const tone = totalTone(total, data.monthBudgets[i] ?? 0, tense(i + 1) === "projected");
                 return (
-                  <span key={i} className={cn("text-center font-mono text-[10.5px] tabular-nums", tone === "projected" ? "text-fg-4" : tone === "over" ? "text-cat-red" : "text-fg-1")}>
+                  <DrillLink
+                    key={i}
+                    draft={totals(totalLabel, monthRange(i + 1), fmt.monthLabel({ year: data.year, month: i + 1 }))}
+                    className={cn("text-center font-mono text-[10.5px] tabular-nums", tone === "projected" ? "text-fg-4" : tone === "over" ? "text-cat-red" : "text-fg-1")}
+                  >
                     {fmt.k(total, { minDigits: 1 })}
-                  </span>
+                  </DrillLink>
                 );
               })}
-              <span className="text-right font-mono tabular-nums">{fmt.money0(summary.projectedYear)}</span>
+              <DrillLink draft={totals(totalLabel, ytdRange)} className="text-right font-mono tabular-nums">
+                {fmt.money0(summary.projectedYear)}
+              </DrillLink>
               <span />
             </div>
           ) : (
@@ -199,7 +219,7 @@ function YearBody({ data, today, onOpenMonth, actions }: { data: YearOverview; t
               <div key={b.id} className="group grid h-10 grid-cols-[minmax(0,1.2fr)_minmax(0,2fr)_96px_96px] items-center gap-3 border-t border-stroke-3 px-3 text-[12.5px] first:border-t-0">
                 <span className="flex min-w-0 items-center gap-1.5">
                   <span className="shrink-0">{b.category}</span>
-                  <EntityBadge entityId={b.entityId} names={names} />
+                  <BudgetEntityBadge entityId={b.entityId} kinds={kinds} />
                   {b.notes ? <span className="min-w-0 truncate text-[11px] text-fg-4">{b.notes}</span> : null}
                   <RowMenu category={b.category} onEdit={() => actions.onEdit(editable)} onDelete={() => actions.onDelete(editable)} />
                 </span>
@@ -272,12 +292,12 @@ function MonthlyChart({ data, isProjected }: { data: YearOverview; isProjected: 
 function Insights({ data, today }: { data: YearOverview; today: YearMonth }) {
   const t = useTranslations("budgets");
   const fmt = useFmt();
-  const { names } = useEntityNames();
+  const { kinds } = useEntityNames();
   const from = monthKey(today);
   const adjust = useAppMutation({
     event: "budgets.write",
     mutationFn: ({ budgetId, amount }: { budgetId: string; amount: number; category: string }) =>
-      apiPatch<{ batchId: string | null }>(`/api/v2/budgets/${budgetId}`, { amount, applyFrom: from }),
+      apiPatch<{ batchId: string | null }>(`/api/v2/budgets/${budgetId}`, { amount, currency: fmt.prefs.baseCurrency, applyFrom: from }),
     undo: (_result, { amount, category }) => t("year.insights.adjusted", { category, amount: fmt.money0(amount), month: fmt.monthLabel(today) }),
   });
   return (
@@ -289,7 +309,7 @@ function Insights({ data, today }: { data: YearOverview; today: YearMonth }) {
           <div key={`${insight.budgetId}:${insight.kind}`} className="flex flex-col gap-0.5 border-t border-stroke-3 px-3 py-2.5 first:border-t-0">
             <span className="flex min-w-0 items-center gap-1.5 text-[12.5px] font-medium">
               <span className="min-w-0">{t(copy.title.key, copy.title.values)}</span>
-              <EntityBadge entityId={insight.entityId} names={names} />
+              <BudgetEntityBadge entityId={insight.entityId} kinds={kinds} />
             </span>
             <span className="text-[12px] text-fg-3">
               {t(copy.body.key, copy.body.values)}

@@ -212,7 +212,8 @@ function EditForm({ budget, month, onDone, onDelete }: { budget: EditableBudget;
       setShowErrors(true);
       return;
     }
-    if (!update.isPending) update.mutate({ amount: value, notes: notes.trim() || null, applyFrom: from });
+    // The amount shown and typed is in the base currency (the overview converts a budget in another currency), so it is saved in base.
+    if (!update.isPending) update.mutate({ amount: value, currency: fmt.prefs.baseCurrency, notes: notes.trim() || null, applyFrom: from });
   };
   useShortcut("mod+enter", submit, { allowInInputs: true });
 

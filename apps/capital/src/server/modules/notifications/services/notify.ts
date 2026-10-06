@@ -7,6 +7,7 @@ import { formatDateOnly, parseLocalDate } from "@capital/server/lib/date-utils";
 import { isPushConfigured, sendToSubscriptions, type PushPayload, type PushSubscriptionTarget } from "@capital/server/lib/web-push";
 import { resolveLocale, st, type Locale } from "@capital/server/i18n";
 import { getEffectiveBudgetsForMonth } from "@capital/server/modules/budgets/lib/effective-budgets";
+import { loadFx } from "@capital/server/modules/ledger/lib/fx";
 import { closingDateFor, dueDateFor, statementMonthFor } from "@capital/server/modules/ledger/services/statements";
 import { REMINDER_PUSH_URL } from "@capital/server/modules/push/constants";
 import { addDays, BILL_CLOSED_GRACE_DAYS, billJustClosed, inAlertHours, localNow, weeklySummaryWindow, type LocalNow } from "../lib/schedule";
@@ -125,7 +126,10 @@ async function sendBillClosed(db: PrismaClient, ctx: UserContext, result: Notify
  * "Orçamento passou de 90%": this month's monthly budgets whose spending to
  * date (expenses by effective date, as Orçamentos counts them) reached the
  * user's threshold. Once per budget chain (entity and category) and month,
- * so editing the amount mid-month does not send it again.
+ * so editing the amount mid-month does not send it again. Spending is in
+ * the base currency (amountBase), so a budget in another currency is
+ * converted to base before the comparison, and the push shows both in the
+ * budget's currency.
  */
 async function sendBudgetThreshold(db: PrismaClient, ctx: UserContext, result: NotifyResult) {
   if (!inAlertHours(ctx.local)) return;
@@ -145,12 +149,15 @@ async function sendBudgetThreshold(db: PrismaClient, ctx: UserContext, result: N
     GROUP BY 1, 2`;
   const categories = await db.category.findMany({ where: { id: { in: budgets.map((b) => b.categoryId) } }, select: { id: true, name: true } });
   const monthKey = `${year}-${String(month).padStart(2, "0")}`;
+  const fx = await loadFx(ctx.userId, db);
   for (const budget of budgets) {
     const amount = Number(budget.amount);
-    const spent = spend
+    const rate = fx.rateFor(budget.currency);
+    const spentBase = spend
       .filter((r) => r.category_id === budget.categoryId && (!budget.entityId || r.entity_id === budget.entityId))
       .reduce((s, r) => s + Number(r.spent), 0);
-    if (spent < amount * ctx.prefs.budgetThreshold) continue;
+    if (spentBase < amount * rate * ctx.prefs.budgetThreshold) continue;
+    const spent = spentBase / rate;
     const dispatchId = await claim(db, ctx.userId, "budget_threshold", `${budget.entityId ?? "*"}:${budget.categoryId}:${monthKey}`, result);
     if (!dispatchId) continue;
     await deliver(db, dispatchId, ctx, {

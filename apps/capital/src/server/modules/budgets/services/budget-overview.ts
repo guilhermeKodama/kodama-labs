@@ -3,6 +3,7 @@ import { Prisma } from "@/generated/prisma";
 import type { Budget } from "@/generated/prisma";
 import { formatDateOnly } from "@capital/server/lib/date-utils";
 import { entityScopeSql, entityScopeWhere, inEntityScope } from "@capital/server/lib/entity-scope";
+import { loadFx, type FxContext } from "@capital/server/modules/ledger/lib/fx";
 import { round, toNumber } from "@capital/server/modules/ledger/lib/money";
 import { budgetFor, excludedEntities, mean, slotKey, suggestedBudget } from "../lib/assign";
 import { getEffectiveBudgetsByMonth, getEffectiveBudgetsForMonth } from "../lib/effective-budgets";
@@ -20,7 +21,15 @@ import { DAY_MS, todayIn, type UserToday } from "../lib/today";
  * [expense], transferDirection isNull, categoryId, the row's entity (or, for
  * a budget for every entity, the scope's entities minus excludeEntityIds),
  * dateField effectiveDate and the month's bounds (src/lib/budgets/drill.ts).
+ *
+ * Spend is in the base currency (amountBase), so every budget amount is
+ * converted to base (the user's manual rates, as the ledger's amountBase)
+ * before it is compared, summed or shown: `amount` is in base, while
+ * `budgetAmount` and `currency` keep the budget as stored.
  */
+
+/** A budget's amount in the base currency. */
+const baseAmount = (fx: FxContext, b: Pick<Budget, "amount" | "currency">) => round(toNumber(b.amount) * fx.rateFor(b.currency), 2);
 
 interface SpendSqlRow {
   entity_id: string;
@@ -102,9 +111,9 @@ function yearPaceOf(year: number, today: UserToday) {
 }
 
 /** Yearly budgets with what they spent this year (to date and committed), from spend of the whole year. */
-function yearlyRows(yearly: readonly Budget[], yearSpend: readonly Spend[], name: (id: string | null) => string | null, yearPace: number, entityIds: string[] | null) {
+function yearlyRows(yearly: readonly Budget[], yearSpend: readonly Spend[], name: (id: string | null) => string | null, yearPace: number, entityIds: string[] | null, fx: FxContext) {
   return yearly.map((b) => {
-    const amount = toNumber(b.amount);
+    const amount = baseAmount(fx, b);
     const spent = assigned(yearSpend, yearly, b, "spentToDate");
     const committed = assigned(yearSpend, yearly, b, "spent");
     return {
@@ -113,6 +122,8 @@ function yearlyRows(yearly: readonly Budget[], yearSpend: readonly Spend[], name
       categoryId: b.categoryId,
       category: name(b.categoryId) ?? "?",
       amount,
+      budgetAmount: toNumber(b.amount),
+      currency: b.currency,
       spent: round(spent, 2),
       committed: round(committed, 2),
       percentUsed: round(amount > 0 ? (spent / amount) * 100 : 0, 2),
@@ -239,6 +250,7 @@ export async function monthOverview(userId: string, year: number, month: number,
   const entityIds = opts.entityIds ?? null;
   const user = await db.user.findUniqueOrThrow({ where: { id: userId }, select: { timezone: true } });
   const today = todayIn(user.timezone);
+  const fx = await loadFx(userId, db);
   const bounds = monthBounds(year, month);
   const daysInMonth = new Date(Date.UTC(year, month, 0)).getUTCDate();
   const isCurrent = today.y === year && today.m === month;
@@ -266,11 +278,11 @@ export async function monthOverview(userId: string, year: number, month: number,
 
   const rows = budgets
     .map((b) => {
-      const amount = toNumber(b.amount);
+      const amount = baseAmount(fx, b);
       let carry = 0;
       if (b.rollover) {
         const prev = prevBudgets.find((p) => p.categoryId === b.categoryId && p.entityId === b.entityId);
-        if (prev) carry = Math.max(0, toNumber(prev.amount) - assigned(prevSpend, prevBudgets, prev, "spent"));
+        if (prev) carry = Math.max(0, baseAmount(fx, prev) - assigned(prevSpend, prevBudgets, prev, "spent"));
       }
       const available = amount + carry;
       const committed = assigned(spend, budgets, b, "spent");
@@ -291,6 +303,7 @@ export async function monthOverview(userId: string, year: number, month: number,
         categoryId: b.categoryId,
         category: name(b.categoryId) ?? "?",
         amount,
+        budgetAmount: toNumber(b.amount),
         currency: b.currency,
         effectiveFrom: formatDateOnly(b.effectiveFrom),
         rollover: b.rollover,
@@ -380,7 +393,7 @@ export async function monthOverview(userId: string, year: number, month: number,
 
   const yearBounds = { from: new Date(Date.UTC(year, 0, 1)), to: new Date(Date.UTC(year, 11, 31, 23, 59, 59, 999)) };
   const yearSpend = yearly.length ? await spendBySlot(db, userId, yearBounds, new Date(Math.min(today.end.getTime(), yearBounds.to.getTime())), entityIds) : [];
-  const yearlyBudgets = yearlyRows(yearly, yearSpend, name, yearPaceOf(year, today), entityIds).sort(order);
+  const yearlyBudgets = yearlyRows(yearly, yearSpend, name, yearPaceOf(year, today), entityIds, fx).sort(order);
 
   const totalSpent = rows.reduce((s, r) => s + r.spent, 0);
   return {
@@ -429,6 +442,7 @@ export async function yearOverview(userId: string, year: number, db: DbClient, o
   const onlyBudgeted = opts.onlyBudgeted ?? true;
   const user = await db.user.findUniqueOrThrow({ where: { id: userId }, select: { timezone: true } });
   const today = todayIn(user.timezone);
+  const fx = await loadFx(userId, db);
   const yearBounds = { from: new Date(Date.UTC(year, 0, 1)), to: new Date(Date.UTC(year, 11, 31, 23, 59, 59, 999)) };
   // 1-12 in the current year, 13 for a past year (every month complete), 0 for a future one.
   const currentMonth = today.y === year ? today.m : today.y > year ? 13 : 0;
@@ -501,7 +515,7 @@ export async function yearOverview(userId: string, year: number, db: DbClient, o
       const budget = budgetAt(i);
       const isProjected = m > currentMonth;
       const value = isProjected ? Math.max(projectionBase, committed[i]) : actual[i];
-      const budgetAmount = budget ? toNumber(budget.amount) : null;
+      const budgetAmount = budget ? baseAmount(fx, budget) : null;
       return {
         month: m,
         spent: round(value, 2),
@@ -524,7 +538,7 @@ export async function yearOverview(userId: string, year: number, db: DbClient, o
       const values = elapsed.map((x) => x.spent);
       // The monthly average leaves out the month in progress (a few days of it would drag it down), unless no month is complete yet.
       const avg = mean(complete.length ? complete : values);
-      const budget = toNumber(ref.amount);
+      const budget = baseAmount(fx, ref);
       const peakValue = Math.max(...values);
       const growth = trend;
       const kind: YearInsightKind | null =
@@ -562,7 +576,7 @@ export async function yearOverview(userId: string, year: number, db: DbClient, o
       category: name(slot.categoryId),
       isBudgeted: slot.budgeted,
       budgetId: ref?.id ?? null,
-      budget: ref ? toNumber(ref.amount) : null,
+      budget: ref ? baseAmount(fx, ref) : null,
       excludeEntityIds: ref && refIndex !== undefined ? excludedEntities(monthly[refIndex], ref) : [],
       months,
       yearTotal: round(months.reduce((s, x) => s + x.spent, 0), 2),
@@ -577,9 +591,9 @@ export async function yearOverview(userId: string, year: number, db: DbClient, o
   const insights = INSIGHT_KINDS.flatMap((kind) => rowInsights.filter((i) => i.kind === kind));
 
   const monthTotals = Array.from({ length: 12 }, (_, i) => round(matrix.reduce((s, r) => s + r.months[i].spent, 0), 2));
-  const monthBudgets = monthly.map((bs) => round(bs.reduce((s, b) => s + toNumber(b.amount), 0), 2));
+  const monthBudgets = monthly.map((bs) => round(bs.reduce((s, b) => s + baseAmount(fx, b), 0), 2));
   const yearPace = yearPaceOf(year, today);
-  const yearlyBudgets = yearlyRows(yearly, spend, name, yearPace, entityIds).sort(order);
+  const yearlyBudgets = yearlyRows(yearly, spend, name, yearPace, entityIds, fx).sort(order);
 
   return {
     year,

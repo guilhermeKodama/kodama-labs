@@ -35,8 +35,53 @@ export function isoDate(m0: YearMonth, k: number, day: number): string {
   return `${year}-${String(month).padStart(2, "0")}-${String(Math.min(day, last)).padStart(2, "0")}`;
 }
 
-/** The mockup's "today" (22/09, PACE = 22/30): the seed books everything up to this day of M0. */
+/** The mockup's "today" (22/09, PACE = 22/30, MOCK_MONTH = 9). */
 export const ANCHOR_DAY = 22;
+
+/**
+ * The real today plays the mockup's "today": M0 is today's month, and the
+ * mockup's month so far (days 1..22 of its September) is laid over the real
+ * month so far (days 1..today), so nothing in M0 is dated after today and
+ * the month's spend keeps the mockup's order and proportions. On or after
+ * the 22nd the days are the mockup's own. A day of M0 after the mockup's
+ * today never happens before the real one either (clamped to today). Other
+ * months keep their days; recurring rules keep their day of the month, so
+ * the ones due after today are Contas fixas' next 14 days.
+ */
+export function alignedDay(day: number, todayDay: number): number {
+  if (day > ANCHOR_DAY) return Math.min(day, todayDay);
+  if (todayDay >= ANCHOR_DAY) return day;
+  return Math.max(1, Math.ceil((day * todayDay) / ANCHOR_DAY));
+}
+
+export interface DemoCalendar {
+  /** The month playing the mockup's September (today's month). */
+  m0: YearMonth;
+  /** YYYY-MM-DD: the real today, which plays 22/09. */
+  today: string;
+  /** YYYY-MM-DD of a mockup day in month offset `k` from M0, aligned to today in M0. */
+  date(k: number, day: number): string;
+  /**
+   * YYYY-MM-DD of a purchase in installments made in month `k`: its parcels
+   * fall on the same day of each month, so the day is aligned like M0's and
+   * M0's parcel is not after today (later parcels are future by nature).
+   */
+  installmentDate(k: number, day: number): string;
+}
+
+/** The seed's calendar for a real today (YYYY-MM-DD in the demo user's timezone). */
+export function demoCalendar(today: string): DemoCalendar {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(today);
+  if (!match) throw new Error(`today must be YYYY-MM-DD, got "${today}"`);
+  const m0 = { year: Number(match[1]), month: Number(match[2]) };
+  const todayDay = Number(match[3]);
+  return {
+    m0,
+    today,
+    date: (k, day) => isoDate(m0, k, k === 0 ? alignedDay(day, todayDay) : day),
+    installmentDate: (k, day) => isoDate(m0, k, alignedDay(day, todayDay)),
+  };
+}
 
 export const round = (v: number, digits = 2) => {
   const f = 10 ** digits;
@@ -249,11 +294,14 @@ export const LLC_DISTRIBUTION = {
 /** t10: bought in July (M-2) in 10x of R$ 1.099,90, so September shows 3/10. */
 export const NOTEBOOK = { id: "t10", k: -2, day: 15, description: "Notebook Dell", account: "xpCard" as AccountKey, amount: 10999, installments: 10, category: "eletronicos" as CategoryKey };
 
+/** First month of the expense history (rent, subscriptions, DAS and the day-to-day spend): the twelve months up to M0, as the aportes. */
+export const HISTORY_FROM = -11;
+
 export interface DemoRecurring {
   id: string;
   description: string;
   day: number;
-  /** First occurrence: M-2 (the mockup's July) for the expenses, M-11 for the monthly aporte. */
+  /** First occurrence: M-11 (HISTORY_FROM), so the year's heatmap has rent, DAS and the subscriptions every month, as the mockup's MONTHLY. */
   startK: number;
   account: AccountKey;
   toAccount?: AccountKey;
@@ -265,15 +313,15 @@ export interface DemoRecurring {
 
 /** TXS rows flagged recurring: rent, subscriptions, DAS and the monthly aporte (t8). */
 export const DEMO_RECURRING: DemoRecurring[] = [
-  { id: "t15", description: "Aluguel", day: 5, startK: -2, account: "nubank", kind: "expense", amount: 4200, category: "moradia" },
-  { id: "t16", description: "Plano de saúde", day: 3, startK: -2, account: "nubank", kind: "expense", amount: 980, category: "saude", deductible: true },
-  { id: "t11", description: "SmartFit", day: 12, startK: -2, account: "nubankCard", kind: "expense", amount: 149.9, category: "saude" },
-  { id: "t2", description: "AWS", day: 22, startK: -2, account: "mercuryCard", kind: "expense", amount: 222.6, category: "software" },
-  { id: "t12", description: "Cursor Pro", day: 10, startK: -2, account: "mercuryCard", kind: "expense", amount: 20, category: "software" },
-  { id: "t6", description: "Figma", day: 19, startK: -2, account: "interCard", kind: "expense", amount: 245, category: "software" },
-  { id: "t13", description: "Contabilizei", day: 8, startK: -2, account: "inter", kind: "expense", amount: 289, category: "contabilidade" },
-  { id: "t4", description: "DAS Simples Nacional", day: 20, startK: -2, account: "inter", kind: "expense", amount: 3120.55, category: "impostos" },
-  { id: "t8", description: "Aporte mensal", day: 16, startK: -11, account: "nubank", toAccount: "xp", kind: "transfer", amount: 8000 },
+  { id: "t15", description: "Aluguel", day: 5, startK: HISTORY_FROM, account: "nubank", kind: "expense", amount: 4200, category: "moradia" },
+  { id: "t16", description: "Plano de saúde", day: 3, startK: HISTORY_FROM, account: "nubank", kind: "expense", amount: 980, category: "saude", deductible: true },
+  { id: "t11", description: "SmartFit", day: 12, startK: HISTORY_FROM, account: "nubankCard", kind: "expense", amount: 149.9, category: "saude" },
+  { id: "t2", description: "AWS", day: 22, startK: HISTORY_FROM, account: "mercuryCard", kind: "expense", amount: 222.6, category: "software" },
+  { id: "t12", description: "Cursor Pro", day: 10, startK: HISTORY_FROM, account: "mercuryCard", kind: "expense", amount: 20, category: "software" },
+  { id: "t6", description: "Figma", day: 19, startK: HISTORY_FROM, account: "interCard", kind: "expense", amount: 245, category: "software" },
+  { id: "t13", description: "Contabilizei", day: 8, startK: HISTORY_FROM, account: "inter", kind: "expense", amount: 289, category: "contabilidade" },
+  { id: "t4", description: "DAS Simples Nacional", day: 20, startK: HISTORY_FROM, account: "inter", kind: "expense", amount: 3120.55, category: "impostos" },
+  { id: "t8", description: "Aporte mensal", day: 16, startK: HISTORY_FROM, account: "nubank", toAccount: "xp", kind: "transfer", amount: 8000 },
 ];
 
 /**
@@ -295,6 +343,101 @@ export const YEARLY_HISTORY: { month: number; day: number; description: (year: n
   { month: 2, day: 18, description: () => 'Monitor LG UltraFine 32"', account: "interCard", amount: 4299, category: "equipamentos" },
   { month: 4, day: 9, description: () => "MacBook Air M3", account: "interCard", amount: 6700, category: "equipamentos" },
 ];
+
+// ---------------------------------------------------------------------------
+// Day-to-day spend (mockup MONTHLY 3222-3232)
+// ---------------------------------------------------------------------------
+
+/**
+ * Mockup MONTHLY (3222-3232): what each budget category spent, jan..set, the
+ * last one up to its 22/set. As everywhere in the seed, M0 plays September,
+ * so M-8..M-1 play January to August; the three months before (M-11..M-9)
+ * repeat June to August.
+ */
+export const MOCK_MONTHLY: Record<"moradia" | "mercado" | "restaurantes" | "saude" | "lazer" | "transporte" | "impostos" | "software" | "contabilidade", readonly number[]> = {
+  moradia: [4200, 4200, 4200, 4200, 4200, 4200, 4200, 4200, 4200],
+  mercado: [1850, 1920, 2100, 1780, 1990, 2240, 2080, 2310, 1640],
+  restaurantes: [640, 910, 720, 980, 860, 1040, 770, 990, 912],
+  saude: [1640, 1700, 2350, 1690, 1720, 1710, 1980, 1700, 1792],
+  lazer: [420, 1350, 600, 780, 520, 1900, 640, 710, 380],
+  transporte: [310, 280, 350, 420, 300, 260, 330, 240, 210],
+  impostos: [2980, 3010, 3150, 2890, 3240, 3010, 2980, 3010, 3120],
+  software: [1180, 1220, 1260, 1310, 1350, 1402, 1420, 1488, 1557],
+  contabilidade: [289, 289, 289, 289, 289, 289, 289, 289, 289],
+};
+
+/** Index into MOCK_MONTHLY of month offset `k` (M0 = 8, the mockup's September). */
+export function mockMonthIndex(k: number): number {
+  if (k > 0 || k < HISTORY_FROM) throw new Error(`month ${k} is outside the demo history`);
+  return k >= -8 ? k + 8 : k + 16;
+}
+
+/**
+ * The PF categories whose spend is day-to-day (groceries, restaurants,
+ * pharmacy, leisure, transport): on top of the mockup's rows and the
+ * recurring rules, the seed books what is still missing for each month to
+ * reach MOCK_MONTHLY, as debit/Pix purchases on Nubank (so they count on
+ * their own day, not on a card's closing date). Rent, DAS, Contabilizei and
+ * the software subscriptions are recurring rules, already at the mockup's
+ * figures. `parts` is how many purchases a whole month splits into.
+ */
+export const DAY_TO_DAY: { category: "mercado" | "restaurantes" | "saude" | "lazer" | "transporte"; parts: number; merchants: readonly string[] }[] = [
+  { category: "mercado", parts: 5, merchants: ["Hortifruti", "Carrefour", "St Marche", "Feira livre", "Pão de Açúcar"] },
+  { category: "restaurantes", parts: 4, merchants: ["Coco Bambu", "Padaria Real", "Madero", "Outback"] },
+  { category: "saude", parts: 2, merchants: ["Drogasil", "Droga Raia"] },
+  { category: "lazer", parts: 3, merchants: ["Cinemark", "Ingresso.com", "Livraria da Vila"] },
+  { category: "transporte", parts: 3, merchants: ["Posto Shell", "99", "Estapar"] },
+];
+export const DAY_TO_DAY_ACCOUNT: AccountKey = "nubank";
+
+/**
+ * How far into the mockup's month the real today is: the real share of the
+ * month over the mockup's 22/30, capped at 1. M0's day-to-day spend is the
+ * mockup's September times this, so on the 6th of a 31-day month a
+ * category that had spent 82% of its budget by 22/set has spent 22% of it.
+ */
+export function mockPace(today: string): number {
+  const [y, m, d] = today.split("-").map(Number);
+  const days = new Date(Date.UTC(y, m, 0)).getUTCDate();
+  return Math.min(1, d / days / (ANCHOR_DAY / 30));
+}
+
+/** What a day-to-day category spends in month `k` (M0: up to today, at mockPace). */
+export function dayToDayTarget(category: keyof typeof MOCK_MONTHLY, k: number, today: string): number {
+  const full = MOCK_MONTHLY[category][mockMonthIndex(k)];
+  return round(k === 0 ? full * mockPace(today) : full, 2);
+}
+
+export interface PlannedPurchase {
+  date: string;
+  description: string;
+  amount: number;
+}
+
+/**
+ * The purchases that take a day-to-day category from what it already spent
+ * in month `k` (`existing`, by effective date) to its target: none when it
+ * is already there. A whole month splits into `parts` purchases spread over
+ * days 1-28; M0's split in proportion and lands on days 1..today. Amounts
+ * are uneven but deterministic, so reruns build the same history.
+ */
+export function dayToDayPurchases(spec: (typeof DAY_TO_DAY)[number], k: number, existing: number, today: string): PlannedPurchase[] {
+  const total = round(dayToDayTarget(spec.category, k, today) - existing, 2);
+  if (total < 1) return [];
+  const { m0 } = demoCalendar(today);
+  const todayDay = Number(today.slice(8, 10));
+  const lastDay = k === 0 ? todayDay : 28;
+  const parts = Math.max(1, Math.min(lastDay, k === 0 ? Math.round(spec.parts * mockPace(today)) : spec.parts));
+  const salt = DAY_TO_DAY.indexOf(spec);
+  const weights = Array.from({ length: parts }, (_, i) => 1 + 0.4 * Math.sin(i * 2.1 + k * 0.7 + salt));
+  const sum = weights.reduce((a, w) => a + w, 0);
+  const amounts = weights.map((w) => round((total * w) / sum, 2));
+  amounts[parts - 1] = round(total - amounts.slice(0, -1).reduce((a, v) => a + v, 0), 2);
+  return amounts.map((amount, i) => {
+    const day = Math.min(lastDay, Math.max(1, Math.round(((i + 0.5) * lastDay) / parts) + (k === 0 ? 0 : ((k + i + 12) % 3) - 1)));
+    return { date: isoDate(m0, k, day), description: spec.merchants[(i + Math.abs(k)) % spec.merchants.length], amount };
+  });
+}
 
 // ---------------------------------------------------------------------------
 // Budgets (mockup BUDGETS 3207-3216, YEARLY_BUDGETS 3233-3237)

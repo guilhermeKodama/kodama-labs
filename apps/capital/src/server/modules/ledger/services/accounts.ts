@@ -107,7 +107,8 @@ export async function updateAccount(
         });
       }
       if (entityChanges) {
-        await getOwnedEntity(userId, patch.entityId!, db);
+        const target = await getOwnedEntity(userId, patch.entityId!, db);
+        if (target.archivedAt) throw new LedgerError(`The entity ${target.name} is archived`, 422, { code: "entity.archived", params: { name: target.name } });
         if (account.isDefault) throw new LedgerError("An entity's main account cannot move to another entity", 422, { code: "account.default_entity_locked" });
         const recurring = await db.recurringRule.count({ where: { accountId } });
         if (entries > 0 || recurring > 0) {

@@ -71,8 +71,8 @@ const EVENT_ROOTS: Record<MutationEvent, readonly QueryRoot[]> = {
   "notifications.write": ["notifications"],
   "tokens.write": ["tokens"],
   "assistant.write": ["assistant"],
-  // An undone batch can hold any model of the undo registry (saved views and entities included).
-  undo: ["views", "entities", ...LEDGER_DERIVED],
+  // An undone batch can hold any model of the undo registry: saved views and entities included (Negócios e PF's Desfazer refreshes the session too).
+  undo: ["views", "me", "entities", ...LEDGER_DERIVED],
 };
 
 /** Query-key prefixes to invalidate after `event`, without duplicates. */

@@ -35,7 +35,8 @@
     "personal_rename": "The personal entity can't be renamed.",
     "personal_archive": "The personal entity can't be archived.",
     "kind_mismatch": "This entity is not of the expected type.",
-    "business_required": "Business entries need a business."
+    "business_required": "Business entries need a business.",
+    "archived": "The entity {name} is archived."
   },
   "account": {
     "not_found": "Account not found.",

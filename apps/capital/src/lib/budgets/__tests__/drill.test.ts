@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { budgetDrill, budgetDrillFilters, monthPeriod, monthsPeriod, ruleEntriesDraft } from "../drill";
+import { budgetDrill, budgetDrillFilters, budgetsDrill, budgetsDrillFilters, monthPeriod, monthsPeriod, ruleEntriesDraft } from "../drill";
 
 const base = [
   { field: "kind", op: "in", values: ["expense"] },
@@ -29,6 +29,42 @@ describe("budgetDrillFilters", () => {
 
   it("drills to uncategorized spend with isNull", () => {
     expect(budgetDrillFilters({ entityId: "pf", categoryId: null }, null)).toContainEqual({ field: "categoryId", op: "isNull" });
+  });
+});
+
+describe("budgetsDrillFilters (KPIs and Total rows)", () => {
+  it("selects the budgeted categories of entity budgets, by their entities", () => {
+    const rows = [
+      { entityId: "pf", categoryId: "mercado" },
+      { entityId: "pf", categoryId: "moradia" },
+      { entityId: "ltda", categoryId: "impostos" },
+    ];
+    expect(budgetsDrillFilters(rows, null)).toEqual([
+      ...base,
+      { field: "categoryId", op: "in", values: ["mercado", "moradia", "impostos"] },
+      { field: "entityId", op: "in", values: ["pf", "ltda"] },
+    ]);
+  });
+
+  it("covers every scoped entity when a category has a budget for every entity", () => {
+    const rows = [
+      { entityId: null, categoryId: "software", excludeEntityIds: [] },
+      { entityId: "pf", categoryId: "mercado" },
+    ];
+    expect(budgetsDrillFilters(rows, null)).toEqual([...base, { field: "categoryId", op: "in", values: ["software", "mercado"] }]);
+    expect(budgetsDrillFilters(rows, ["ltda", "llc"])).toContainEqual({ field: "entityId", op: "in", values: ["ltda", "llc"] });
+  });
+
+  it("has no drill without rows", () => {
+    expect(budgetsDrillFilters([], null)).toBeNull();
+    expect(budgetsDrill([], null, monthPeriod(2026, 9))).toBeNull();
+  });
+
+  it("drills on the effective date over the period", () => {
+    expect(budgetsDrill([{ entityId: "pf", categoryId: "c" }], ["pf"], monthPeriod(2026, 9, 22))).toMatchObject({
+      dateField: "effectiveDate",
+      period: { from: "2026-09-01", to: "2026-09-22" },
+    });
   });
 });
 

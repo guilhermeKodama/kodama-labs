@@ -1,9 +1,13 @@
 /**
  * Demo user with the dataset of the new-UI mockup (capital-nova-ui-mockups):
  * PF, Kodama LTDA and Kodama LLC with their banks, cards and brokers, the
- * mockup's transactions with the current month playing its September,
- * recurring rules, budgets, categorization rules, a year of aportes and
- * proventos, positions close to its Carteira, allocation targets and the
+ * mockup's transactions with the current month playing its September and
+ * today playing its "today" (22/set: see alignedDay and mockPace in
+ * seed-demo-data.ts, so nothing is booked after today, the month so far
+ * keeps the mockup's pace and the recurring rules due in the next days fill
+ * Contas fixas), a year of rent, bills and day-to-day spend at its MONTHLY
+ * figures, recurring rules, budgets, categorization rules, a year of aportes
+ * and proventos, positions close to its Carteira, allocation targets and the
  * FIRE goal.
  *
  * Everything is written through the app's services (entries, transfers,
@@ -14,8 +18,8 @@
  *
  * Idempotent: an existing demo user is deleted (cascade) and rebuilt.
  *
- *   pnpm --filter @wallex/capital db:seed:demo               # current month = the mockup's September
- *   pnpm --filter @wallex/capital db:seed:demo -- --month=2026-09
+ *   pnpm --filter @wallex/capital db:seed:demo                    # today = the mockup's 22/set
+ *   pnpm --filter @wallex/capital db:seed:demo -- --today=2026-09-22
  *   pnpm --filter @wallex/capital db:seed:demo -- --dry-run  # print the plan, write nothing
  *
  * Login: DEMO_USER_EMAIL / DEMO_USER_PASSWORD (.env.example), defaulting to
@@ -52,13 +56,18 @@ import { createRecurringRule, processDueRules, type RecurringRuleInput } from ".
 import {
   addMonths,
   ANCHOR_DAY,
+  demoCalendar,
   DEMO_ACCOUNTS,
   DEMO_CATEGORIES,
   DEMO_ENTITIES,
   DEMO_RECURRING,
   DEMO_RULES,
+  DAY_TO_DAY,
+  DAY_TO_DAY_ACCOUNT,
+  dayToDayPurchases,
+  dayToDayTarget,
   FIRE_GOAL,
-  isoDate,
+  HISTORY_FROM,
   LLC_DISTRIBUTION,
   MOCK_ENTRIES,
   MOCK_MONTHS,
@@ -95,7 +104,10 @@ interface Ctx {
   db: Db;
   userId: string;
   m0: YearMonth;
+  /** YYYY-MM-DD: the real today, playing the mockup's 22/set. */
+  today: string;
   date: (k: number, day: number) => string;
+  installmentDate: (k: number, day: number) => string;
   entities: Record<EntityKey, string>;
   accounts: Record<AccountKey, Account>;
   categories: Record<CategoryKey, string>;
@@ -109,19 +121,14 @@ function log(message: string) {
 
 function parseArgs(argv: string[]) {
   const dryRun = argv.includes("--dry-run");
-  const monthArg = argv.find((a) => a.startsWith("--month="))?.slice("--month=".length);
-  let month: YearMonth | null = null;
-  if (monthArg) {
-    const match = /^(\d{4})-(\d{2})$/.exec(monthArg);
-    if (!match || Number(match[2]) < 1 || Number(match[2]) > 12) throw new Error(`--month must be YYYY-MM, got "${monthArg}"`);
-    month = { year: Number(match[1]), month: Number(match[2]) };
-  }
-  return { dryRun, month };
+  const today = argv.find((a) => a.startsWith("--today="))?.slice("--today=".length) ?? null;
+  if (today && !/^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/.test(today)) throw new Error(`--today must be YYYY-MM-DD, got "${today}"`);
+  return { dryRun, today };
 }
 
-function currentMonth(): YearMonth {
-  const [year, month] = new Intl.DateTimeFormat("en-CA", { timeZone: TIMEZONE, year: "numeric", month: "2-digit" }).format(new Date()).split("-").map(Number);
-  return { year, month };
+/** Today in the demo user's timezone, YYYY-MM-DD. */
+function realToday(): string {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: TIMEZONE, year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
 }
 
 const label = (ym: YearMonth) => `${ym.year}-${String(ym.month).padStart(2, "0")}`;
@@ -238,8 +245,8 @@ async function seedRecurring(ctx: Ctx) {
     const rule = await createRecurringRule(userId, input, db);
     if (r.deductible) deductibleRuleIds.push(rule.id);
   }
-  // Book every occurrence up to the mockup's "today" (22/M0), as the process-recurring cron would have.
-  const anchor = parseLocalDate(ctx.date(0, ANCHOR_DAY));
+  // Book every occurrence up to today (the mockup's 22/set), as the process-recurring cron would have; later ones are upcoming.
+  const anchor = parseLocalDate(ctx.today);
   const booked = await processDueRules(db, anchor, { userId });
   log(`recurring: ${DEMO_RECURRING.length} rules, ${booked.generated} occurrences booked up to ${formatDateOnly(anchor)}`);
   return deductibleRuleIds;
@@ -298,7 +305,7 @@ async function seedEntries(ctx: Ctx) {
       amount: NOTEBOOK.amount,
       installments: NOTEBOOK.installments,
       description: NOTEBOOK.description,
-      date: ctx.date(NOTEBOOK.k, NOTEBOOK.day),
+      date: ctx.installmentDate(NOTEBOOK.k, NOTEBOOK.day),
       categoryId: ctx.categories[NOTEBOOK.category],
     },
     db
@@ -318,6 +325,47 @@ async function seedEntries(ctx: Ctx) {
     counts.entries++;
   }
 }
+
+/**
+ * Day-to-day spend (DAY_TO_DAY): for each month of the history and each of
+ * those PF categories, books what the mockup's MONTHLY still has over what
+ * the entries above already count that month (by effective date, as
+ * Orçamentos counts them: card purchases on their statement's closing day).
+ * M0 gets the mockup's September at the real today's pace (mockPace), so the
+ * month so far, its pace and the projection from the last three months look
+ * like the mockup's.
+ */
+async function seedDayToDay(ctx: Ctx) {
+  const { db, userId } = ctx;
+  const from = parseLocalDate(isoDateOf(addMonths(ctx.m0, HISTORY_FROM)));
+  const to = parseLocalDate(ctx.today);
+  to.setUTCHours(23, 59, 59, 999);
+  const categoryIds = DAY_TO_DAY.map((d) => ctx.categories[d.category]);
+  const rows = await db.$queryRaw<{ category_id: string; ym: string; spent: number }[]>`
+    SELECT le."categoryId" AS category_id, to_char(le."effectiveDate", 'YYYY-MM') AS ym, coalesce(-sum(le."amountBase"), 0)::float8 AS spent
+    FROM ledger_entries le
+    WHERE le."userId" = ${userId} AND le."deletedAt" IS NULL AND le.kind = 'expense' AND le."transferGroupId" IS NULL
+      AND le."entityId" = ${ctx.entities.pf} AND le."categoryId" = ANY(${categoryIds}::text[])
+      AND le."effectiveDate" BETWEEN ${from} AND ${to}
+    GROUP BY 1, 2`;
+  const existing = new Map(rows.map((r) => [`${r.category_id}:${r.ym}`, Number(r.spent)]));
+  const account = ctx.accounts[DAY_TO_DAY_ACCOUNT];
+  const totals: string[] = [];
+  for (let k = HISTORY_FROM; k <= 0; k++) {
+    const ym = label(addMonths(ctx.m0, k));
+    for (const spec of DAY_TO_DAY) {
+      const categoryId = ctx.categories[spec.category];
+      for (const p of dayToDayPurchases(spec, k, existing.get(`${categoryId}:${ym}`) ?? 0, ctx.today)) {
+        await createEntry(userId, { kind: "expense", accountId: account.id, amount: p.amount, description: p.description, date: p.date, categoryId }, db, { skipRules: true });
+        counts.entries++;
+      }
+    }
+    if (k >= -3) totals.push(`${ym} ${DAY_TO_DAY.map((d) => `${d.category} ${dayToDayTarget(d.category, k, ctx.today)}`).join(" ")}`);
+  }
+  log(`day-to-day spend (mockup MONTHLY, M0 at today's pace): ${totals.join(" · ")}`);
+}
+
+const isoDateOf = (ym: YearMonth) => `${label(ym)}-01`;
 
 // ---------------------------------------------------------------------------
 // Investments
@@ -388,10 +436,10 @@ async function seedInvestments(ctx: Ctx, plan: InvestmentPlan) {
 // Card bills, balances, FIRE
 // ---------------------------------------------------------------------------
 
-/** Pays every statement due by the anchor from the card's paying account, as a card_payment transfer linked to it. */
+/** Pays every statement due by today from the card's paying account, as a card_payment transfer linked to it. */
 async function payCardBills(ctx: Ctx) {
   const { db, userId } = ctx;
-  const anchor = parseLocalDate(ctx.date(0, ANCHOR_DAY));
+  const anchor = parseLocalDate(ctx.today);
   const statements = await db.cardStatement.findMany({
     where: { account: { userId }, paymentGroupId: null, dueDate: { lte: anchor } },
     include: { account: true, entries: { where: { deletedAt: null }, select: { amount: true } } },
@@ -510,9 +558,21 @@ async function report(ctx: Ctx) {
   // Read loosely: this is a printout, not a contract on the services' response shapes.
   const summary = (await portfolioSummary(userId, db)) as unknown as Record<string, unknown>;
   log(`portfolio: ${["marketValue", "invested", "cash", "netWorth"].map((k) => `${k} ${summary[k]}`).join(", ")}`);
-  const overview = (await monthOverview(userId, m0.year, m0.month, db)) as unknown as { budgets?: { category: string; committed?: number; spent?: number; amount: number }[] };
-  const spent = (overview.budgets ?? []).map((b) => `${b.category} ${b.committed ?? b.spent}/${b.amount}`).join(", ");
-  log(`budgets ${label(m0)} (committed/amount): ${spent}`);
+  const overview = await monthOverview(userId, m0.year, m0.month, db);
+  const spent = overview.budgets.map((b) => `${b.category} ${b.spent}/${b.amount} ${b.status}`).join(", ");
+  log(`budgets ${label(m0)} (spent to date/amount, status): ${spent}`);
+  const { summary: month, period } = overview;
+  log(
+    `month ${label(m0)}: day ${period.daysElapsed}/${period.daysInMonth} (${Math.round((period.daysElapsed / period.daysInMonth) * 100)}%), budget ${month.totalBudget}, spent ${month.totalSpent} (${month.totalBudget ? Math.round((month.totalSpent / month.totalBudget) * 100) : 0}%), projection ${month.projectedTotal}`
+  );
+  log(`contas fixas · próximos 14 dias: ${overview.upcoming.map((u) => `${u.dueDate} ${u.description} ${u.mode} ${u.amount}`).join(" · ") || "none"}`);
+  const after = parseLocalDate(ctx.today);
+  after.setUTCHours(23, 59, 59, 999);
+  const [future, futureParcels] = await Promise.all([
+    db.ledgerEntry.count({ where: { userId, deletedAt: null, date: { gt: after } } }),
+    db.ledgerEntry.count({ where: { userId, deletedAt: null, date: { gt: after }, installmentPlanId: { not: null } } }),
+  ]);
+  log(`entries dated after today (${ctx.today}): ${future}, of which ${futureParcels} future installments of a purchase`);
   const balances = await accountBalances(userId, db);
   for (const a of Object.values(ctx.accounts)) {
     if (a.type === "credit_card") continue;
@@ -523,8 +583,9 @@ async function report(ctx: Ctx) {
   log(`balances: ${Object.values(ctx.accounts).map((a) => `${a.name} ${round(balances.get(a.id) ?? 0, 2)} ${a.currency}`).join(" · ")}`);
 }
 
-function printPlan(m0: YearMonth, plan: InvestmentPlan, usdRate: number) {
-  log(`dry run: M0 = ${label(m0)} (the mockup's September), anchor ${isoDate(m0, 0, ANCHOR_DAY)}, opening positions ${isoDate(m0, -12, 5)}`);
+function printPlan(today: string, plan: InvestmentPlan, usdRate: number) {
+  const { m0, date } = demoCalendar(today);
+  log(`dry run: M0 = ${label(m0)} (the mockup's September), today ${today} plays day ${ANCHOR_DAY}, opening positions ${date(-12, 5)}`);
   for (const h of plan.holdings) {
     const rate = h.spec.currency === "USD" ? usdRate : 1;
     log(`${h.spec.ticker.padEnd(7)} ${String(h.quantity).padStart(12)} @ ${h.finalPrice} ${h.spec.currency} = R$ ${(h.value * rate).toFixed(0)} (mock ${h.spec.valueBrl}), cost R$ ${(h.cost * rate).toFixed(0)}, ${h.buys.length} buys`);
@@ -535,7 +596,8 @@ function printPlan(m0: YearMonth, plan: InvestmentPlan, usdRate: number) {
   log(`proventos: ${plan.income.length} payments`);
 }
 
-async function seed(db: Db, m0: YearMonth, email: string, password: string) {
+async function seed(db: Db, today: string, email: string, password: string) {
+  const { m0, date, installmentDate } = demoCalendar(today);
   const started = Date.now();
   const existing = await db.user.findUnique({ where: { email }, select: { id: true } });
   if (existing) {
@@ -550,13 +612,14 @@ async function seed(db: Db, m0: YearMonth, email: string, password: string) {
   const entities = await seedEntities(db, userId);
   const accounts = await seedAccounts(db, userId, entities);
   const categories = await seedCategories(db, userId);
-  const ctx: Ctx = { db, userId, m0, date: (k, day) => isoDate(m0, k, day), entities, accounts, categories };
-  log(`user ${email} (${userId}), M0 = ${label(m0)}, entities and ${Object.keys(accounts).length} accounts, ${Object.keys(categories).length} categories, ${DEMO_RULES.length} rules`);
+  const ctx: Ctx = { db, userId, m0, today, date, installmentDate, entities, accounts, categories };
+  log(`user ${email} (${userId}), M0 = ${label(m0)}, today ${today}, entities and ${Object.keys(accounts).length} accounts, ${Object.keys(categories).length} categories, ${DEMO_RULES.length} rules`);
 
   await seedBudgets(ctx);
   const deductibleRules = await seedRecurring(ctx);
   await seedEntries(ctx);
   await markDeductibleOccurrences(ctx, deductibleRules);
+  await seedDayToDay(ctx);
 
   const fx = await loadFx(userId, db);
   await seedInvestments(ctx, planInvestments(fx.rateFor("USD")));
@@ -572,14 +635,14 @@ async function seed(db: Db, m0: YearMonth, email: string, password: string) {
 
 async function main() {
   const args = parseArgs(process.argv.slice(2));
-  const m0 = args.month ?? currentMonth();
+  const today = args.today ?? realToday();
   const email = (process.env.DEMO_USER_EMAIL || DEFAULT_DEMO_EMAIL).trim().toLowerCase();
   const password = process.env.DEMO_USER_PASSWORD || DEFAULT_DEMO_PASSWORD;
   if (!email.endsWith(DEMO_EMAIL_DOMAIN)) {
     throw new Error(`DEMO_USER_EMAIL must end in ${DEMO_EMAIL_DOMAIN}: the seed deletes and recreates that user`);
   }
   if (args.dryRun) {
-    printPlan(m0, planInvestments(5.41), 5.41);
+    printPlan(today, planInvestments(5.41), 5.41);
     return;
   }
 
@@ -588,7 +651,7 @@ async function main() {
   assertNonProductionDatabase(url, "seed-demo");
   const db = new PrismaClient({ datasources: { db: { url } } });
   try {
-    await withMutationSource("system", () => seed(db, m0, email, password));
+    await withMutationSource("system", () => seed(db, today, email, password));
   } finally {
     await db.$disconnect();
   }
