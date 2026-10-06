@@ -1,5 +1,6 @@
 import type { AppOpenAPI } from "./types";
 
+import dbHealth from "./modules/health/routes/db";
 import v1Health from "./modules/health/routes/v1";
 import v1Fire from "./modules/fire/routes/v1";
 import v1Assistant from "./modules/assistant/routes/v1";
@@ -20,6 +21,7 @@ import { v2Recurring } from "./modules/recurring/routes/v2";
 
 export function registerRoutes<T extends AppOpenAPI>(app: T) {
   return app
+    .route("/", dbHealth)
     .route("/", v1Health)
     .route("/", v1Fire)
     .route("/", v1Assistant)

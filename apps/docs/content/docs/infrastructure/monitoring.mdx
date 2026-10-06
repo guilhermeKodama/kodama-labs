@@ -1,0 +1,43 @@
+---
+title: Monitoramento
+description: Uptime Kuma, heartbeats de cron e o watcher de logs do stack kodama-prod
+---
+
+# Monitoramento
+
+O stack de produção é observado por um Uptime Kuma local e por um watcher de logs. Os dois mandam um único POST JSON pra fora. O Kuma escuta só em `127.0.0.1:13020` (ou `UPTIME_KUMA_PORT`) e **não** entra no túnel do `cloudflared`.
+
+O runbook em inglês, com o checklist de rollout, está em `infrastructure/monitoring/README.md`.
+
+## O que é checado
+
+- `GET /api/health` em cada web, na rede `kodama`. Capital e sentinel continuam com `/api/v1/health` (sem banco).
+- Os hosts públicos `capital.kodamalabs.ai/login`, `careers.kodamalabs.ai` e `attentio.dev`, sem seguir redirect (status 200–399). O Access responde 302; falha de origem aparece como 5xx ou 530.
+- `sentinel.kodamalabs.ai` e `kodamalabs.ai` só entram se estiverem em `EXTRA_PUBLIC_HOSTS`.
+- `SELECT 1` nos bancos `capital`, `sentinel`, `attention` e `careers`.
+- Containers de longa duração via proxy de socket só de leitura. `*-migrate` fica de fora.
+- Um monitor de push por cron. O runner só manda `status=up` quando o job passa. Uma falha é heartbeat perdido; com `maxretries` 1, só a segunda seguida vira Down. O override por job fica em `CRON_PUSH_OVERRIDES` em `infrastructure/monitoring/src/spec.ts`.
+- Disco do host, via timer systemd, acima de `DISK_ALERT_PERCENT` (85).
+- Ollama e Whisper só com `OLLAMA_HEALTH_URL` / `WHISPER_HEALTH_URL`.
+
+## Janela de manutenção
+
+Roda no servidor, sem pnpm e sem Node na máquina. As credenciais ficam no `env_file` do serviço:
+
+```bash
+docker --context desktop-linux compose -p kodama-prod run --rm uptime-kuma-provision node dist/maintenance.js start 30
+# build e up -d
+docker --context desktop-linux compose -p kodama-prod run --rm uptime-kuma-provision node dist/maintenance.js clear
+```
+
+## Timer de disco e linger
+
+Timer de usuário só dispara com linger ligado:
+
+```bash
+loginctl show-user kodama -p Linger
+# esperado: Linger=yes
+# se não: sudo loginctl enable-linger kodama
+```
+
+A instalação do unit está em `infrastructure/systemd/README.md`.

@@ -1,0 +1,8 @@
+# systemd USER unit. Copy to ~/.config/systemd/user/ — see README.md.
+# The script must run on the host so df sees the Ubuntu filesystem.
+[Unit]
+Description=Push host disk usage to Uptime Kuma
+
+[Service]
+Type=oneshot
+ExecStart=/home/kodama/Documents/Github/kodama-labs/infrastructure/monitoring/disk-heartbeat.sh
