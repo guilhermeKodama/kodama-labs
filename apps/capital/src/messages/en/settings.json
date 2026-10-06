@@ -1,1 +1,299 @@
-{}
+{
+  "title": "Settings",
+  "back": "← Back to the app",
+  "sections": {
+    "account": "Account",
+    "finance": "Finances",
+    "data": "Data"
+  },
+  "nav": {
+    "prefs": {
+      "title": "Profile and preferences",
+      "desc": "Name, base currency, date and number formats, time zone, theme and language."
+    },
+    "notif": {
+      "title": "Notifications",
+      "desc": "Devices with push and which alerts you get."
+    },
+    "ent": {
+      "title": "Businesses and personal",
+      "desc": "Entities: your personal finances and each company, with default currency and tax rate."
+    },
+    "bank": {
+      "title": "Bank accounts",
+      "desc": "Checking accounts of each entity."
+    },
+    "card": {
+      "title": "Credit cards",
+      "desc": "Limit, closing day, due day and the account that pays the bill."
+    },
+    "broker": {
+      "title": "Brokers",
+      "desc": "Investment accounts. They are the only ones that show up as contribution destinations."
+    },
+    "cat": {
+      "title": "Categories",
+      "desc": "Expense and income categories, colors and automatic rules."
+    },
+    "rules": {
+      "title": "Categorization rules",
+      "desc": "Descriptions that become a category automatically."
+    },
+    "fx": {
+      "title": "Currencies and FX",
+      "desc": "Base currency and the rates used to convert USD and EUR."
+    },
+    "imports": {
+      "title": "Imports",
+      "desc": "History of imported statements; each one can be undone."
+    },
+    "api": {
+      "title": "Integrations and API",
+      "desc": "MCP server, tokens and API documentation."
+    }
+  },
+  "save": "Save",
+  "prefs": {
+    "name": "Name",
+    "email": "Email",
+    "baseCurrency": "Base currency",
+    "baseCurrencyHint": "Every total and view is converted to it",
+    "timezone": "Time zone",
+    "dateFormat": "Date format",
+    "numberFormat": "Number format",
+    "numberFormats": {
+      "pt-BR": "1.234,56",
+      "en-US": "1,234.56"
+    },
+    "theme": "Theme",
+    "themes": {
+      "system": "System",
+      "light": "Light",
+      "dark": "Dark"
+    },
+    "language": "Language",
+    "languages": {
+      "pt-BR": "Português",
+      "en": "English"
+    },
+    "baseConfirm": {
+      "title": "Change the base currency to {currency}?",
+      "desc": "You already have {count, plural, one {# transaction} other {# transactions}}. Their amounts stay in {current}, so older totals will mix two currencies.",
+      "confirm": "Change anyway"
+    }
+  },
+  "ent": {
+    "kind": {
+      "personal": "Personal",
+      "businessBR": "Company (Brazil)",
+      "businessUS": "Company (US)",
+      "business": "Company ({currency})"
+    },
+    "new": "+ New business",
+    "archivedBadge": "archived",
+    "name": "Name",
+    "currency": "Default currency",
+    "description": "Description",
+    "taxRate": "Tax rate (%)",
+    "taxRateHint": "Used to estimate the DAS tax and distributable profit",
+    "initialBalance": "Opening balance",
+    "color": "Color",
+    "colorName": {
+      "gray": "Gray",
+      "purple": "Purple",
+      "green": "Green",
+      "yellow": "Yellow",
+      "cyan": "Cyan",
+      "pink": "Pink",
+      "blue": "Blue",
+      "orange": "Orange",
+      "red": "Red"
+    },
+    "linked": "{count, plural, =0 {No linked accounts or cards.} one {# linked account or card.} other {# linked accounts and cards.}}",
+    "archive": "Archive business",
+    "unarchive": "Reactivate business",
+    "toastCreated": "“{name}” created",
+    "toastSaved": "“{name}” saved",
+    "toastArchived": "“{name}” archived",
+    "toastUnarchived": "“{name}” reactivated"
+  },
+  "acc": {
+    "new": {
+      "bank": "+ New account",
+      "card": "+ New card",
+      "broker": "+ New broker"
+    },
+    "empty": {
+      "bank": "No bank accounts yet.",
+      "card": "No cards yet.",
+      "broker": "No brokers yet."
+    },
+    "archivedBadge": {
+      "bank": "archived",
+      "card": "archived",
+      "broker": "archived"
+    },
+    "name": "Name",
+    "bank": "Bank",
+    "institution": "Institution",
+    "institutionPlaceholder": "Choose…",
+    "entity": "Entity",
+    "currency": "Currency",
+    "limit": "Limit",
+    "last4": "Card last digits",
+    "closingDay": "Closes on day",
+    "dueDay": "Due on day",
+    "payFrom": "Bill paid from",
+    "payFromDefault": "The entity's main account",
+    "cash": "Available cash",
+    "cashHint": "Money sitting at the broker, outside the assets",
+    "brokerNumber": "Account number",
+    "brokerNumberHint": "Used to recognize imported trade notes and statements",
+    "brokerSummary": "{positions, plural, =0 {No positions} one {# position} other {# positions}} · {cash} in cash. Shows up as a destination in Contributions and in investment operations.",
+    "agency": "Branch / account",
+    "initialBalance": "Opening balance",
+    "balanceHint": "balance {amount}",
+    "usage": "Current bill {amount} · closes on {date}",
+    "usageShare": "{share} of the limit",
+    "archive": {
+      "bank": "Archive account",
+      "card": "Archive card",
+      "broker": "Archive account"
+    },
+    "unarchive": {
+      "bank": "Reactivate account",
+      "card": "Reactivate card",
+      "broker": "Reactivate account"
+    },
+    "toastCreated": "“{name}” created",
+    "toastSaved": "“{name}” saved",
+    "toastArchived": "“{name}” archived",
+    "toastUnarchived": "“{name}” reactivated",
+    "toastCash": "“{name}” cash: {amount}"
+  },
+  "cat": {
+    "hint": "You can also create them without coming here: in any category field, type a new name and pick “+ Create”.",
+    "groups": {
+      "expense": "Expenses",
+      "income": "Income"
+    },
+    "new": "+ New category",
+    "newPlaceholder": "Category name",
+    "archivedBadge": "archived",
+    "name": "Name",
+    "type": "Type",
+    "types": {
+      "expense": "Expense",
+      "income": "Income"
+    },
+    "typeLocked": "The type cannot change while transactions use this category, nor on a system category.",
+    "color": "Color",
+    "rules": "Automatic rules",
+    "rulesHint": "Descriptions that fall into this category when importing or creating",
+    "addRule": "+ rule",
+    "rulePlaceholder": "contains…",
+    "usage": "Used in {entries, plural, =0 {no transactions} one {# transaction} other {# transactions}} and {budgets, plural, =0 {no budgets} one {# budget} other {# budgets}}.",
+    "archive": "Archive",
+    "unarchive": "Reactivate",
+    "archiveHint": "Leaves the pickers; the history stays the same.",
+    "empty": "No categories yet.",
+    "toastCreated": "“{name}” created",
+    "toastArchived": "“{name}” archived: gone from the pickers{count, plural, =0 {} one {, still on # transaction} other {, still on # transactions}}",
+    "toastUnarchived": "“{name}” reactivated",
+    "toastRule": "Rule “{pattern}” created"
+  },
+  "rules": {
+    "test": "Test a description",
+    "testSample": "IFOOD *RESTAURANTE",
+    "match": "→ {category} (rule “{pattern}”)",
+    "noMatch": "no rule; the AI suggests one when importing",
+    "new": "+ New rule",
+    "headers": {
+      "pattern": "Description contains",
+      "category": "Category",
+      "source": "Source",
+      "hits": "Applied",
+      "lastHit": "Last time"
+    },
+    "source": {
+      "manual": "You",
+      "ai": "AI, confirmed",
+      "bulk": "Bulk edit"
+    },
+    "hits": "{count}×",
+    "empty": "No rules yet. They are also created when you fix the category of a transaction.",
+    "archivedCategory": "archived",
+    "dialog": {
+      "newTitle": "New rule",
+      "editTitle": "Edit rule",
+      "desc": "Matching descriptions get this category when transactions are imported or created.",
+      "matchType": "Match",
+      "matchTypes": {
+        "contains": "contains",
+        "equals": "equals",
+        "regex": "regex"
+      },
+      "pattern": "Description",
+      "category": "Category",
+      "entity": "Entity",
+      "allEntities": "All entities",
+      "create": "Create rule",
+      "delete": "Delete rule"
+    },
+    "toastCreated": "Rule “{pattern}” created",
+    "toastSaved": "Rule “{pattern}” saved",
+    "toastDeleted": "Rule “{pattern}” deleted"
+  },
+  "fx": {
+    "base": "Base currency",
+    "auto": "{base, select, BRL {Update FX rates automatically (daily PTAX)} other {Update FX rates automatically (ECB, daily)}}",
+    "headers": {
+      "currency": "Currency",
+      "symbol": "Symbol",
+      "rate": "Rate (in {base})",
+      "source": "Source",
+      "updated": "Updated"
+    },
+    "currencyName": "{name} ({code})",
+    "source": {
+      "ptax": "PTAX",
+      "ecb": "ECB",
+      "manual": "Manual"
+    },
+    "editRate": "Edit the rate of {code} in {base}",
+    "empty": "Only the base currency for now.",
+    "footnote": "Each transaction keeps the rate used on its day; changing a rate here only affects new entries."
+  },
+  "api": {
+    "server": "MCP server",
+    "serverHint": "Use it in Cursor, Claude and other MCP clients",
+    "token": "Token",
+    "tokenHint": "Shown in full only once",
+    "noToken": "No token yet",
+    "generate": "Generate new token",
+    "copy": "Copy",
+    "copied": "Copied",
+    "docs": "API documentation",
+    "headers": {
+      "client": "Connected client",
+      "lastUsed": "Last used",
+      "permissions": "Permissions"
+    },
+    "permissions": {
+      "readWrite": "read + write",
+      "read": "read"
+    },
+    "noClient": "No client yet",
+    "tokenSuffix": "…{last4}",
+    "never": "—",
+    "revoke": "Revoke",
+    "empty": "No connected clients. Generate a token and use it as the Bearer token in the MCP client.",
+    "revokeDialog": {
+      "title": "Revoke token …{last4}?",
+      "desc": "{count, plural, =0 {No client uses this token yet.} one {# client loses access to Capital right away.} other {# clients lose access to Capital right away.}}",
+      "confirm": "Revoke token"
+    },
+    "toastGenerated": "Token generated. Copy it now: it is not shown in full again.",
+    "toastRevoked": "Token …{last4} revoked"
+  }
+}

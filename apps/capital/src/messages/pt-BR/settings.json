@@ -1,1 +1,299 @@
-{}
+{
+  "title": "Ajustes",
+  "back": "← Voltar ao app",
+  "sections": {
+    "account": "Conta",
+    "finance": "Finanças",
+    "data": "Dados"
+  },
+  "nav": {
+    "prefs": {
+      "title": "Perfil e preferências",
+      "desc": "Nome, moeda base, formatos de data e número, fuso, tema e idioma."
+    },
+    "notif": {
+      "title": "Notificações",
+      "desc": "Dispositivos com push e quais avisos você recebe."
+    },
+    "ent": {
+      "title": "Negócios e PF",
+      "desc": "Entidades: sua PF e cada empresa, com moeda padrão e alíquota."
+    },
+    "bank": {
+      "title": "Contas bancárias",
+      "desc": "Contas correntes de cada entidade."
+    },
+    "card": {
+      "title": "Cartões de crédito",
+      "desc": "Limite, fechamento, vencimento e conta que paga a fatura."
+    },
+    "broker": {
+      "title": "Corretoras",
+      "desc": "Contas de investimento. São as únicas que aparecem como destino de aporte."
+    },
+    "cat": {
+      "title": "Categorias",
+      "desc": "Categorias de despesa e receita, cores e regras automáticas."
+    },
+    "rules": {
+      "title": "Regras de categorização",
+      "desc": "Descrições que viram categoria automaticamente."
+    },
+    "fx": {
+      "title": "Moedas e câmbio",
+      "desc": "Moeda base e taxas usadas para converter USD e EUR."
+    },
+    "imports": {
+      "title": "Importações",
+      "desc": "Histórico de extratos importados; cada um pode ser desfeito."
+    },
+    "api": {
+      "title": "Integrações e API",
+      "desc": "Servidor MCP, tokens e documentação da API."
+    }
+  },
+  "save": "Salvar",
+  "prefs": {
+    "name": "Nome",
+    "email": "E-mail",
+    "baseCurrency": "Moeda base",
+    "baseCurrencyHint": "Todos os totais e views são convertidos para ela",
+    "timezone": "Fuso horário",
+    "dateFormat": "Formato de data",
+    "numberFormat": "Formato de número",
+    "numberFormats": {
+      "pt-BR": "1.234,56",
+      "en-US": "1,234.56"
+    },
+    "theme": "Tema",
+    "themes": {
+      "system": "Sistema",
+      "light": "Claro",
+      "dark": "Escuro"
+    },
+    "language": "Idioma",
+    "languages": {
+      "pt-BR": "Português",
+      "en": "English"
+    },
+    "baseConfirm": {
+      "title": "Trocar a moeda base para {currency}?",
+      "desc": "Você já tem {count, plural, one {# transação} other {# transações}}. Os valores delas continuam em {current}, então os totais antigos passam a misturar duas moedas.",
+      "confirm": "Trocar mesmo assim"
+    }
+  },
+  "ent": {
+    "kind": {
+      "personal": "Pessoa física",
+      "businessBR": "Empresa (Brasil)",
+      "businessUS": "Empresa (EUA)",
+      "business": "Empresa ({currency})"
+    },
+    "new": "+ Novo negócio",
+    "archivedBadge": "arquivado",
+    "name": "Nome",
+    "currency": "Moeda padrão",
+    "description": "Descrição",
+    "taxRate": "Alíquota de imposto (%)",
+    "taxRateHint": "Usada para estimar o DAS e o lucro distribuível",
+    "initialBalance": "Saldo inicial",
+    "color": "Cor",
+    "colorName": {
+      "gray": "Cinza",
+      "purple": "Roxo",
+      "green": "Verde",
+      "yellow": "Amarelo",
+      "cyan": "Ciano",
+      "pink": "Rosa",
+      "blue": "Azul",
+      "orange": "Laranja",
+      "red": "Vermelho"
+    },
+    "linked": "{count, plural, =0 {Nenhuma conta ou cartão vinculado.} one {# conta ou cartão vinculado.} other {# contas e cartões vinculados.}}",
+    "archive": "Arquivar negócio",
+    "unarchive": "Reativar negócio",
+    "toastCreated": "“{name}” criado",
+    "toastSaved": "“{name}” salvo",
+    "toastArchived": "“{name}” arquivado",
+    "toastUnarchived": "“{name}” reativado"
+  },
+  "acc": {
+    "new": {
+      "bank": "+ Nova conta",
+      "card": "+ Novo cartão",
+      "broker": "+ Nova corretora"
+    },
+    "empty": {
+      "bank": "Nenhuma conta bancária ainda.",
+      "card": "Nenhum cartão ainda.",
+      "broker": "Nenhuma corretora ainda."
+    },
+    "archivedBadge": {
+      "bank": "arquivada",
+      "card": "arquivado",
+      "broker": "arquivada"
+    },
+    "name": "Nome",
+    "bank": "Banco",
+    "institution": "Instituição",
+    "institutionPlaceholder": "Escolher…",
+    "entity": "Entidade",
+    "currency": "Moeda",
+    "limit": "Limite",
+    "last4": "Final do cartão",
+    "closingDay": "Fecha no dia",
+    "dueDay": "Vence no dia",
+    "payFrom": "Fatura paga por",
+    "payFromDefault": "Conta principal da entidade",
+    "cash": "Caixa disponível",
+    "cashHint": "Dinheiro parado na corretora, fora dos ativos",
+    "brokerNumber": "Nº da conta",
+    "brokerNumberHint": "Usado para reconhecer notas e extratos importados",
+    "brokerSummary": "{positions, plural, =0 {Nenhuma posição} one {# posição} other {# posições}} · {cash} em caixa. Aparece como destino em Aportes e em operações de investimento.",
+    "agency": "Agência / conta",
+    "initialBalance": "Saldo inicial",
+    "balanceHint": "saldo {amount}",
+    "usage": "Fatura atual {amount} · fecha em {date}",
+    "usageShare": "{share} do limite",
+    "archive": {
+      "bank": "Arquivar conta",
+      "card": "Arquivar cartão",
+      "broker": "Arquivar conta"
+    },
+    "unarchive": {
+      "bank": "Reativar conta",
+      "card": "Reativar cartão",
+      "broker": "Reativar conta"
+    },
+    "toastCreated": "“{name}” criada",
+    "toastSaved": "“{name}” salva",
+    "toastArchived": "“{name}” arquivada",
+    "toastUnarchived": "“{name}” reativada",
+    "toastCash": "Caixa de “{name}”: {amount}"
+  },
+  "cat": {
+    "hint": "Também dá para criar sem vir aqui: em qualquer campo de categoria, digite um nome novo e escolha “+ Criar”.",
+    "groups": {
+      "expense": "Despesas",
+      "income": "Receitas"
+    },
+    "new": "+ Nova categoria",
+    "newPlaceholder": "Nome da categoria",
+    "archivedBadge": "arquivada",
+    "name": "Nome",
+    "type": "Tipo",
+    "types": {
+      "expense": "Despesa",
+      "income": "Receita"
+    },
+    "typeLocked": "O tipo não muda enquanto houver transações nesta categoria, nem numa categoria do sistema.",
+    "color": "Cor",
+    "rules": "Regras automáticas",
+    "rulesHint": "Descrições que caem nesta categoria ao importar ou criar",
+    "addRule": "+ regra",
+    "rulePlaceholder": "contém…",
+    "usage": "Usada em {entries, plural, =0 {nenhuma transação} one {# transação} other {# transações}} e {budgets, plural, =0 {nenhum orçamento} one {# orçamento} other {# orçamentos}}.",
+    "archive": "Arquivar",
+    "unarchive": "Reativar",
+    "archiveHint": "Some dos seletores; o histórico continua igual.",
+    "empty": "Nenhuma categoria ainda.",
+    "toastCreated": "“{name}” criada",
+    "toastArchived": "“{name}” arquivada: some dos seletores{count, plural, =0 {} one {, continua em # transação} other {, continua nas # transações}}",
+    "toastUnarchived": "“{name}” reativada",
+    "toastRule": "Regra “{pattern}” criada"
+  },
+  "rules": {
+    "test": "Testar uma descrição",
+    "testSample": "IFOOD *RESTAURANTE",
+    "match": "→ {category} (regra “{pattern}”)",
+    "noMatch": "nenhuma regra; a IA sugere ao importar",
+    "new": "+ Nova regra",
+    "headers": {
+      "pattern": "Descrição contém",
+      "category": "Categoria",
+      "source": "Origem",
+      "hits": "Aplicada",
+      "lastHit": "Última vez"
+    },
+    "source": {
+      "manual": "Você",
+      "ai": "IA, confirmada",
+      "bulk": "Edição em massa"
+    },
+    "hits": "{count}×",
+    "empty": "Nenhuma regra ainda. Elas também nascem quando você corrige a categoria de uma transação.",
+    "archivedCategory": "arquivada",
+    "dialog": {
+      "newTitle": "Nova regra",
+      "editTitle": "Editar regra",
+      "desc": "Descrições que combinam recebem esta categoria ao importar ou criar transações.",
+      "matchType": "Comparação",
+      "matchTypes": {
+        "contains": "contém",
+        "equals": "é igual a",
+        "regex": "regex"
+      },
+      "pattern": "Descrição",
+      "category": "Categoria",
+      "entity": "Entidade",
+      "allEntities": "Todas as entidades",
+      "create": "Criar regra",
+      "delete": "Excluir regra"
+    },
+    "toastCreated": "Regra “{pattern}” criada",
+    "toastSaved": "Regra “{pattern}” salva",
+    "toastDeleted": "Regra “{pattern}” excluída"
+  },
+  "fx": {
+    "base": "Moeda base",
+    "auto": "{base, select, BRL {Atualizar câmbio automaticamente (PTAX diária)} other {Atualizar câmbio automaticamente (BCE, diária)}}",
+    "headers": {
+      "currency": "Moeda",
+      "symbol": "Símbolo",
+      "rate": "Taxa (em {base})",
+      "source": "Fonte",
+      "updated": "Atualizada"
+    },
+    "currencyName": "{name} ({code})",
+    "source": {
+      "ptax": "PTAX",
+      "ecb": "BCE",
+      "manual": "Manual"
+    },
+    "editRate": "Editar a taxa de {code} em {base}",
+    "empty": "Só a moeda base por enquanto.",
+    "footnote": "Cada transação guarda a taxa usada no dia; mudar a taxa aqui só afeta lançamentos novos."
+  },
+  "api": {
+    "server": "Servidor MCP",
+    "serverHint": "Use no Cursor, Claude e outros clientes MCP",
+    "token": "Token",
+    "tokenHint": "Só aparece inteiro uma vez",
+    "noToken": "Nenhum token ainda",
+    "generate": "Gerar novo token",
+    "copy": "Copiar",
+    "copied": "Copiado",
+    "docs": "Documentação da API",
+    "headers": {
+      "client": "Cliente conectado",
+      "lastUsed": "Último uso",
+      "permissions": "Permissões"
+    },
+    "permissions": {
+      "readWrite": "leitura + escrita",
+      "read": "leitura"
+    },
+    "noClient": "Nenhum cliente ainda",
+    "tokenSuffix": "…{last4}",
+    "never": "—",
+    "revoke": "Revogar",
+    "empty": "Nenhum cliente conectado. Gere um token e use-o como Bearer no cliente MCP.",
+    "revokeDialog": {
+      "title": "Revogar o token …{last4}?",
+      "desc": "{count, plural, =0 {Nenhum cliente usa este token ainda.} one {# cliente para de acessar o Capital na hora.} other {# clientes param de acessar o Capital na hora.}}",
+      "confirm": "Revogar token"
+    },
+    "toastGenerated": "Token gerado. Copie agora: ele não aparece inteiro de novo.",
+    "toastRevoked": "Token …{last4} revogado"
+  }
+}

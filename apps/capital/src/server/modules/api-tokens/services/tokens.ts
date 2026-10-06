@@ -88,6 +88,24 @@ export async function createApiToken(userId: string, input: { name?: string | nu
   return { token, apiToken: serializeToken(row) };
 }
 
+/**
+ * Rename a token or change what it may do (read-only or read + write). The
+ * MCP server is built per request, so the next request already sees it.
+ */
+export async function updateApiToken(userId: string, id: string, patch: { name?: string; readOnly?: boolean }, db: DbClient) {
+  const token = await db.apiToken.findFirst({ where: { id, userId, revokedAt: null } });
+  if (!token) throw notFound("API token", "tokens.not_found");
+  const updated = await db.apiToken.update({
+    where: { id },
+    data: {
+      ...(patch.name !== undefined && { name: patch.name.trim() || token.name }),
+      ...(patch.readOnly !== undefined && { scopes: patch.readOnly ? [READ_SCOPE] : [] }),
+    },
+    include: { clients: { orderBy: { lastUsedAt: "desc" } } },
+  });
+  return serializeToken(updated);
+}
+
 /** Revoked tokens stop authenticating at once (the MCP route answers 401). */
 export async function revokeApiToken(userId: string, id: string, db: DbClient) {
   const { count } = await db.apiToken.updateMany({ where: { id, userId, revokedAt: null }, data: { revokedAt: new Date() } });

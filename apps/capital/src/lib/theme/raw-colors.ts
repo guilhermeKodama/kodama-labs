@@ -164,11 +164,6 @@ export function findColorLiterals(source: string): RawColorMatch[] {
  */
 export const ALLOWED_COLOR_LITERALS: { file: string; line: string; reason: string }[] = [
   {
-    file: "components/settings/settings-screen.tsx",
-    line: "const COLORS = [",
-    reason: "category color picker: the hex is stored on the category (Category.color), not a theme color",
-  },
-  {
     file: "app/[locale]/layout.tsx",
     line: "themeColor: '#ffffff'",
     reason: "the browser's toolbar color in the viewport metadata, where CSS variables do not apply",

@@ -77,6 +77,8 @@ export const keys = {
 
   // Investments
   holdings: (scope: EntityScope = "all") => ["holdings", scope] as const,
+  /** GET /v2/holdings?accountId= (a broker's positions, Ajustes › Corretoras). */
+  holdingsByAccount: (accountId: string) => ["holdings", "account", accountId] as const,
   operations: (params: Params = {}) => ["operations", params] as const,
   portfolioSummary: (scope: EntityScope = "all") => ["portfolio", "summary", scope] as const,
   portfolioHistory: (params: { months?: number; scope?: EntityScope } = {}) => ["portfolio", "history", params] as const,

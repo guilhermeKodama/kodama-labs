@@ -98,6 +98,13 @@ describe("/v2/api-tokens", () => {
     expect((await call("/v2/api-tokens")).body.tokens).toEqual([]);
     expect((await call(`/v2/api-tokens/${apiToken.id}`, { method: "DELETE" })).body.code).toBe("tokens.not_found");
   });
+
+  it("switches a token between read-only and read + write", async () => {
+    const { apiToken } = (await call("/v2/api-tokens", { method: "POST", body: {} })).body;
+    expect((await call(`/v2/api-tokens/${apiToken.id}`, { method: "PATCH", body: { readOnly: true } })).body.readOnly).toBe(true);
+    expect((await prisma.apiToken.findUniqueOrThrow({ where: { id: apiToken.id } })).scopes).toEqual(["read"]);
+    expect((await call(`/v2/api-tokens/${apiToken.id}`, { method: "PATCH", body: { readOnly: false, name: "Cursor" } })).body).toMatchObject({ readOnly: false, name: "Cursor" });
+  });
 });
 
 describe("MCP authentication with API tokens", () => {
