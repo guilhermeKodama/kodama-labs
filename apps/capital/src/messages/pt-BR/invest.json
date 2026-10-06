@@ -88,7 +88,6 @@
     },
     "allocation": {
       "title": "Alocação atual vs alvo",
-      "edit": "Editar alvos",
       "legend": "Barra = atual · traço = alvo · pp = diferença para o alvo",
       "empty": "Sem posições. Registre uma operação para começar."
     },
@@ -293,6 +292,7 @@
     },
     "cash": {
       "amount": "Valor",
+      "amountIn": "Valor ({currency})",
       "from": "De",
       "to": "Para",
       "depositNote": "Cria uma transferência do tipo “Aporte em investimento” que aparece em Transações e em Aportes.",

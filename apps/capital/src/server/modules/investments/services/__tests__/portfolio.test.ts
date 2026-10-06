@@ -142,6 +142,32 @@ describe("funding", () => {
     expect(await balance(f.pfChecking)).toBe(0);
     expect(await holdingRow(h.id)).toMatchObject({ currentQuantity: 0, totalInvested: 0 });
   });
+
+  it("deleting a buy with its funding trashes a deposit made for it, but keeps a larger aporte", async () => {
+    const h = await petr4();
+    const funded = await recordOperation(USER, { holdingId: h.id, type: "buy", quantity: 10, pricePerUnit: 30, totalAmount: 300, fees: 2, date: "2026-09-01", fundFromAccountId: f.pfChecking }, prisma);
+    const own = await deleteOperation(USER, funded.operation.id, prisma, { withFunding: true });
+    expect(own.fundingGroupId).toBe(funded.fundingGroupId);
+    expect(await balance(f.pfChecking)).toBe(0);
+
+    // An aporte of 1000 that also bought 300: deleting the buy leaves the 1000 in the broker.
+    const aporte = await createEntry(USER, { kind: "transfer", fromAccountId: f.pfChecking, toAccountId: f.broker, amount: 1000, date: "2026-09-02", direction: "investment_deposit" }, prisma);
+    const buy = await recordOperation(USER, { holdingId: h.id, type: "buy", quantity: 10, pricePerUnit: 30, totalAmount: 300, date: "2026-09-02" }, prisma, { fundingGroupId: aporte.transferGroupId! });
+    expect(await balance(f.broker)).toBeCloseTo(700, 4);
+    const del = await deleteOperation(USER, buy.operation.id, prisma, { withFunding: true });
+    expect(del.fundingGroupId).toBeNull();
+    expect(await balance(f.broker)).toBeCloseTo(1000, 4);
+    expect(await balance(f.pfChecking)).toBeCloseTo(-1000, 4);
+  });
+
+  it("refuses to delete a buy a later sale depends on", async () => {
+    const h = await petr4();
+    const buy = await recordOperation(USER, { holdingId: h.id, type: "buy", quantity: 10, pricePerUnit: 30, totalAmount: 300, date: "2026-08-10" }, prisma);
+    await recordOperation(USER, { holdingId: h.id, type: "sell", quantity: 8, pricePerUnit: 30, totalAmount: 240, date: "2026-08-11" }, prisma);
+    await expect(deleteOperation(USER, buy.operation.id, prisma)).rejects.toMatchObject({ status: 422, code: "holding.oversell" });
+    expect(await prisma.investmentOperation.count({ where: { holdingId: h.id } })).toBe(2);
+    expect(await holdingRow(h.id)).toMatchObject({ currentQuantity: 2 });
+  });
 });
 
 describe("income", () => {

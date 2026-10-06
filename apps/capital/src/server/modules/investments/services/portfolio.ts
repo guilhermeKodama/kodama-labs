@@ -492,14 +492,21 @@ export interface DeleteOperationOptions extends OperationWriteOptions {
 /**
  * Deletes an operation in one undo batch: the row is removed (undo
  * re-creates it from its snapshot), its cash leg goes to the trash, and so
- * does its funding transfer with `withFunding`. The holding is recalculated.
+ * does its funding transfer with `withFunding` unless that deposit brought
+ * more than the operation spends (a larger aporte stays). The holding is
+ * recalculated; a standalone delete that would leave a later sale above the
+ * position is refused (422 holding.oversell).
  */
 export async function deleteOperation(userId: string, operationId: string, db: DbClient, opts: DeleteOperationOptions = {}) {
   return inTransaction(db, async (tx) => {
     const records: MutationRecordInput[] = opts.collect ?? [];
     const op = await tx.investmentOperation.findFirst({ where: { id: operationId, holding: { account: { userId } } } });
     if (!op) throw notFound("Investment operation", "operation.not_found");
-    const holding = await tx.investmentHolding.findUniqueOrThrow({ where: { id: op.holdingId }, select: { ticker: true, name: true } });
+    const holding = await tx.investmentHolding.findUniqueOrThrow({ where: { id: op.holdingId }, select: { ticker: true, name: true, accountId: true } });
+    // A standalone delete must not leave a later sale larger than the position (a buy deleted before its
+    // sale). Batch callers (an import revert removes every operation of its file) keep their own consistency.
+    const oversoldBefore = opts.collect ? null : await oversoldOperations(op.holdingId, tx);
+    const cashLeg = op.cashEntryId ? await tx.ledgerEntry.findUnique({ where: { id: op.cashEntryId }, select: { accountId: true, amount: true } }) : null;
 
     await tx.investmentOperation.delete({ where: { id: op.id } });
     records.push({ model: "InvestmentOperation", recordId: op.id, before: snapshot(op), after: null });
@@ -507,14 +514,21 @@ export async function deleteOperation(userId: string, operationId: string, db: D
 
     let fundingGroupId: string | null = null;
     if (opts.withFunding && op.fundingGroupId) {
-      const leg = await tx.ledgerEntry.findFirst({ where: { transferGroupId: op.fundingGroupId, userId, deletedAt: null }, select: { id: true } });
-      if (leg) {
-        await softDeleteEntries(userId, [leg.id], tx, { collect: records });
+      // The deposit goes with the operation unless it brought more than the operation spends: an aporte
+      // larger than the buy it also recorded (POST /v2/investments/aporte) stays, as that money did reach the broker.
+      const brokerLeg = await tx.ledgerEntry.findFirst({
+        where: { transferGroupId: op.fundingGroupId, userId, deletedAt: null, accountId: holding.accountId },
+        select: { id: true, amount: true },
+      });
+      const paidOnlyThis = !!brokerLeg && !!cashLeg && cashLeg.accountId === holding.accountId && toNumber(brokerLeg.amount) <= -toNumber(cashLeg.amount) + 0.01;
+      if (brokerLeg && paidOnlyThis) {
+        await softDeleteEntries(userId, [brokerLeg.id], tx, { collect: records });
         fundingGroupId = op.fundingGroupId;
       }
     }
 
-    await recalculateHolding(op.holdingId, tx);
+    const { position } = await recalculateHoldingDetailed(op.holdingId, tx);
+    if (oversoldBefore) assertNoNewOversell(oversoldBefore, position.oversold);
     const batchId = opts.record === false || opts.collect ? null : await recordMutation(tx, userId, "delete", opLabel(op.type, holding, op.incomeType), records);
     return { deleted: op.id, batchId, cashEntryId: op.cashEntryId, fundingGroupId };
   });

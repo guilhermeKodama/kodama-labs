@@ -162,7 +162,7 @@ describe("investments", () => {
     const buy = await recordOperation(USER, { holdingId: h.id, type: "buy", quantity: 100, pricePerUnit: 30, totalAmount: 3000, fees: 10, date: "2026-08-10", fundFromAccountId: f.pfChecking }, prisma);
     expect(buy.fundingGroupId).not.toBeNull();
     expect(buy.operation.fundingGroupId).toBe(buy.fundingGroupId);
-    await recordOperation(USER, { holdingId: h.id, type: "sell", quantity: 50, pricePerUnit: 35, totalAmount: 1750, date: "2026-08-20" }, prisma);
+    const sale = await recordOperation(USER, { holdingId: h.id, type: "sell", quantity: 50, pricePerUnit: 35, totalAmount: 1750, date: "2026-08-20" }, prisma);
 
     const holding = await prisma.investmentHolding.findUniqueOrThrow({ where: { id: h.id } });
     expect(holding.currentQuantity).toBe(50);
@@ -180,10 +180,13 @@ describe("investments", () => {
     const c = await contributions(USER, prisma, { year: 2026 });
     expect(c.months[7]).toMatchObject({ deposits: 3010, net: 3010 });
 
-    // The cash leg goes to the trash, so it no longer counts in the broker's balance.
+    // The buy cannot go while the sale depends on it; once the sale is gone, its cash leg goes to the trash
+    // and no longer counts in the broker's balance.
+    await expect(deleteOperation(USER, buy.operation.id, prisma)).rejects.toMatchObject({ status: 422, code: "holding.oversell" });
+    await deleteOperation(USER, sale.operation.id, prisma);
     await deleteOperation(USER, buy.operation.id, prisma);
     expect(await prisma.ledgerEntry.count({ where: { id: buy.cashEntryId!, deletedAt: null } })).toBe(0);
-    expect((await accountBalances(USER, prisma, [f.broker])).get(f.broker)).toBeCloseTo(4760, 2);
+    expect((await accountBalances(USER, prisma, [f.broker])).get(f.broker)).toBeCloseTo(3010, 2);
   });
 
   it("suggests where to put new money without selling", async () => {

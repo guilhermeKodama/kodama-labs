@@ -88,7 +88,6 @@
     },
     "allocation": {
       "title": "Current allocation vs target",
-      "edit": "Edit targets",
       "legend": "Bar = current · tick = target · pp = difference from target",
       "empty": "No positions. Record an operation to start."
     },
@@ -293,6 +292,7 @@
     },
     "cash": {
       "amount": "Amount",
+      "amountIn": "Amount ({currency})",
       "from": "From",
       "to": "To",
       "depositNote": "Creates an “Investment contribution” transfer that shows in Transactions and in Contributions.",

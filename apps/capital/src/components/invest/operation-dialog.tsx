@@ -224,6 +224,9 @@ function OperationForm({ holdings, initialHoldingId, onClose }: { holdings: read
   const cashLabel = broker && broker.balance !== null ? fmt.money0(broker.balance, broker.currency) : "—";
   const money = (v: number) => fmt.money(v, assetCurrency);
   const qtyText = (v: number) => fmt.number(v, { min: 0, max: 8 });
+  // Across currencies the amount is the bank's on a deposit (the aporte debit) and the broker's on a redemption.
+  const cashAccount = cashAccounts.find((a) => a.id === cashAccountId);
+  const cashCurrencyLabel = cashAccount && broker && cashAccount.currency !== broker.currency ? (kind === "deposit" ? cashAccount.currency : broker.currency) : null;
 
   return (
     <form
@@ -378,7 +381,7 @@ function OperationForm({ holdings, initialHoldingId, onClose }: { holdings: read
 
       {kind === "deposit" || kind === "withdraw" ? (
         <div className="grid grid-cols-3 gap-2.5">
-          <Field label={t("cash.amount")}>
+          <Field label={cashCurrencyLabel ? t("cash.amountIn", { currency: cashCurrencyLabel }) : t("cash.amount")}>
             <TextInput value={cashAmount} onChange={setCashAmount} mono inputMode="decimal" autoFocus />
           </Field>
           <Field label={kind === "deposit" ? t("cash.from") : t("cash.to")}>
