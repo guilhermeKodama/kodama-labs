@@ -290,3 +290,31 @@ export function buildCashflowSankey(facts: FlowFact[], entities: FlowEntity[], o
     },
   };
 }
+
+/**
+ * "Outros" opened in place: its categories become nodes of their own, and
+ * each link into Outros is split across them in proportion to their totals
+ * (clicking Outros on the chart). Unchanged when there is no Outros.
+ */
+export function expandOthers(graph: Pick<CashflowSankey, "nodes" | "links">): Pick<CashflowSankey, "nodes" | "links"> {
+  const othersIndex = graph.nodes.findIndex((n) => n.kind === "others");
+  const others = graph.nodes[othersIndex];
+  const subItems = others?.subItems ?? [];
+  const subTotal = subItems.reduce((s, item) => s + item.value, 0);
+  if (othersIndex < 0 || !subItems.length || subTotal <= 0) return graph;
+  const reindex = (i: number) => (i > othersIndex ? i - 1 : i);
+  const nodes: SankeyNode[] = graph.nodes.filter((_, i) => i !== othersIndex);
+  const start = nodes.length;
+  for (const item of subItems) {
+    nodes.push({ id: `expense::${catKey(item.categoryId)}`, kind: "expense", layer: "output", entityId: null, categoryId: item.categoryId });
+  }
+  const links: SankeyLink[] = [];
+  for (const l of graph.links) {
+    if (l.target === othersIndex) {
+      subItems.forEach((item, k) => links.push({ source: reindex(l.source), target: start + k, value: (l.value * item.value) / subTotal }));
+    } else if (l.source !== othersIndex) {
+      links.push({ source: reindex(l.source), target: reindex(l.target), value: l.value });
+    }
+  }
+  return { nodes, links };
+}
