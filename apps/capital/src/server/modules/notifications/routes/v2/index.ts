@@ -39,6 +39,15 @@ const patchSettingsRoute = createRoute({
   request: jsonBody(settingsPatch),
   responses: v2Responses,
 });
+/** Same partial body as PATCH; kept for clients that follow the original contract (PUT /v2/notifications/settings). */
+const putSettingsRoute = createRoute({
+  method: "put",
+  path: "/v2/notifications/settings",
+  tags,
+  summary: "Alias of PATCH: fields left out keep their current value (or the default)",
+  request: jsonBody(settingsPatch),
+  responses: v2Responses,
+});
 const listDevicesRoute = createRoute({
   method: "get",
   path: "/v2/notifications/devices",
@@ -60,5 +69,6 @@ const deleteDeviceRoute = createRoute({
 export const v2Notifications = createRouter()
   .openapi(getSettingsRoute, v2Handler(getSettingsRoute, async (_c, userId) => ({ ...(await getNotificationSettings(userId, prisma)), pushConfigured: isPushConfigured() })))
   .openapi(patchSettingsRoute, v2Handler(patchSettingsRoute, async (c, userId) => ({ ...(await updateNotificationSettings(userId, c.req.valid("json"), prisma)), pushConfigured: isPushConfigured() })))
+  .openapi(putSettingsRoute, v2Handler(putSettingsRoute, async (c, userId) => ({ ...(await updateNotificationSettings(userId, c.req.valid("json"), prisma)), pushConfigured: isPushConfigured() })))
   .openapi(listDevicesRoute, v2Handler(listDevicesRoute, async (c, userId) => ({ pushConfigured: isPushConfigured(), devices: await listDevices(userId, prisma, c.req.valid("query").endpoint) })))
   .openapi(deleteDeviceRoute, v2Handler(deleteDeviceRoute, (c, userId) => removeDevice(userId, c.req.valid("param").id, prisma)));

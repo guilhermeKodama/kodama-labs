@@ -3,7 +3,7 @@ import { prisma } from "@capital/server/lib/prisma";
 import { createApp } from "@capital/server/lib/create-app";
 import { createLedgerFixture, deleteLedgerFixture } from "@/test/ledger-fixtures";
 
-/** GET/PATCH /v2/notifications/settings and the push device list. */
+/** GET/PATCH/PUT /v2/notifications/settings and the push device list. */
 const USER = "test-user-s6-notif-routes-001";
 const OTHER = "test-user-s6-notif-routes-002";
 const app = createApp();
@@ -47,6 +47,13 @@ describe("notification settings", () => {
     expect((await call("/v2/notifications/settings", { method: "PATCH", body: { weeklyEnabled: true } })).body.weeklyEnabled).toBe(true);
     expect((await call("/v2/notifications/settings", { method: "PATCH", body: { budgetEnabled: false } })).body).toMatchObject({ weeklyEnabled: true, budgetEnabled: false, dueEnabled: true });
     expect((await call("/v2/notifications/settings")).body).toMatchObject({ weeklyEnabled: true, budgetEnabled: false });
+  });
+
+  it("accepts PUT as an alias of PATCH", async () => {
+    const { status, body } = await call("/v2/notifications/settings", { method: "PUT", body: { dueHour: 7 } });
+    expect(status).toBe(200);
+    expect(body).toMatchObject({ dueHour: 7, dueEnabled: true });
+    expect((await call("/v2/notifications/settings", { method: "PUT", body: { weeklyHour: 24 } })).status).toBe(422);
   });
 
   it("rejects unknown fields and out-of-range values", async () => {
