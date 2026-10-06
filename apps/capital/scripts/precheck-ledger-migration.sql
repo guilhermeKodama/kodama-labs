@@ -11,7 +11,8 @@
 --     < apps/capital/scripts/precheck-ledger-migration.sql
 --
 -- Every row_count in section 1 must be 0 or the migration will abort.
--- Sections 2, 3 and 3b are informational (rows that will be mapped, or kept at rate 1).
+-- Sections 2, 3, 3b and 3c are informational (rows that will be mapped, kept at
+-- rate 1, or skipped because a statement settlement already covers them).
 --
 -- Editing 20261004200000_ledger_v2_schema, 20261004200100_ledger_v2_backfill,
 -- or 20261004200200_ledger_v2_retire_legacy changes their Prisma checksums.
@@ -597,6 +598,29 @@ WHERE tr.currency <> u."baseCurrency"
 -- END flat-rates
 ;
 
+\echo '== 3c. Bill purchases whose bill payment is also a statement settlement (informational)'
+\echo 'A non-zero count does not block. The backfill does not insert these as expenses.'
+\echo 'verify section 3b skipped_n and skipped_abs_sum must match row_count and amount_abs_sum.'
+-- BEGIN shadowed
+SELECT 'bill purchases whose bill payment is also a statement settlement'::text AS category,
+       count(*)::int AS row_count,
+       coalesce((array_agg(id ORDER BY id))[1:10], ARRAY[]::text[]) AS sample_ids,
+       round(coalesce(sum(abs(amount)), 0)::numeric, 2) AS amount_abs_sum
+FROM (
+-- BEGIN shadow-rows
+SELECT bt.id, bt.amount
+FROM bill_transactions bt
+JOIN credit_card_bills b ON b.id = bt."billId"
+WHERE bt."statementId" IS NULL
+  AND EXISTS (
+    SELECT 1 FROM credit_card_statements s
+    WHERE s."billPaymentTransactionId" = b."transactionId"
+  )
+-- END shadow-rows
+) shadowed
+-- END shadowed
+;
+
 \echo '== 4. Pre-migration totals (record these and compare with verify-ledger-migration.sql)'
 \echo '-- 4a. Row counts. After migration, verify section 1 legacy counts must match.'
 SELECT 'transactions'::text AS source, count(*) FROM transactions
@@ -604,10 +628,26 @@ UNION ALL SELECT 'bill_transactions', count(*) FROM bill_transactions
 UNION ALL SELECT 'transfers', count(*) FROM transfers
 UNION ALL SELECT 'investment_transactions', count(*) FROM investment_transactions;
 
-\echo '-- 4b. Card purchases. verify section 3 legacy_n and legacy_sum must match.'
+\echo '-- 4b. Card purchases that become ledger expenses (section 3c excluded).'
+\echo '--     verify section 3 legacy_n and legacy_sum must match.'
 SELECT count(*) AS purchase_n,
-       round(coalesce(sum(abs(amount)), 0)::numeric, 2) AS purchase_abs_sum
-FROM bill_transactions;
+       round(coalesce(sum(abs(bt.amount)), 0)::numeric, 2) AS purchase_abs_sum
+FROM bill_transactions bt
+WHERE NOT EXISTS (
+  SELECT 1 FROM (
+-- BEGIN shadow-rows
+SELECT bt.id, bt.amount
+FROM bill_transactions bt
+JOIN credit_card_bills b ON b.id = bt."billId"
+WHERE bt."statementId" IS NULL
+  AND EXISTS (
+    SELECT 1 FROM credit_card_statements s
+    WHERE s."billPaymentTransactionId" = b."transactionId"
+  )
+-- END shadow-rows
+  ) skipped
+  WHERE skipped.id = bt.id
+);
 
 \echo '-- 4c. Income/expense/investment per user, excluding bill payments that become card_payment transfers.'
 \echo '--     verify section 4 legacy_sum must match amount, per user and type.'

@@ -31,6 +31,9 @@ describe("ledger v2 check SQL", () => {
       expect(precheckSql).toContain(text);
     }
     expect(precheckSql).toContain(block("flat-rates"));
+    expect(precheckSql).toContain(block("shadowed"));
+    expect(precheckSql).toContain(block("shadow-rows"));
+    expect(backfillSql).toContain(block("shadow-rows"));
   });
 
   it("is a read-only script", () => {
@@ -644,5 +647,156 @@ describe("ledger v2 migration", () => {
     expect(scalar(CASE, `SELECT count(*) FROM legacy.attachment_links`)).toBe(scalar(CASE, `SELECT count(*) FROM attachments`));
     expect(scalar(CASE, `SELECT count(*) FROM legacy.budget_links`)).toBe(scalar(CASE, `SELECT count(*) FROM budgets`));
     expect(scalar(CASE, `SELECT count(*) FROM legacy.reminder_dispatch_links`)).toBe(scalar(CASE, `SELECT count(*) FROM reminder_dispatches`));
+  });
+
+  it("skips bill purchases whose payment is already a statement settlement", () => {
+    resetCase();
+    seed(baseUser + `
+      INSERT INTO credit_cards (id, "entityType", "bankName", "lastFourDigits", "creditLimit", "closingDay", "dueDay", currency, "personalAccountId", "updatedAt")
+      VALUES
+        ('card-3308', 'personal', 'Bank', '3308', 5000, 20, 27, 'BRL', 'pf-1', now()),
+        ('card-2361', 'personal', 'Bank', '2361', 5000, 20, 27, 'BRL', 'pf-1', now()),
+        ('card-legacy', 'personal', 'Bank', '0001', 5000, 20, 27, 'BRL', 'pf-1', now()),
+        ('card-open', 'personal', 'Bank', '0002', 5000, 20, 27, 'BRL', 'pf-1', now()),
+        ('card-stmt', 'personal', 'Bank', '0003', 5000, 20, 27, 'BRL', 'pf-1', now());
+
+      INSERT INTO transactions (id, "entityType", type, amount, currency, description, category, date, "personalAccountId", "updatedAt")
+      VALUES
+        ('tx-lunch', 'personal', 'expense', 5, 'BRL', 'lunch', 'Food', '2026-06-02 12:00:00+00', 'pf-1', now()),
+        ('pay-3308-06', 'personal', 'expense', 55, 'BRL', 'card payment', 'Credit Card', '2026-06-21 12:00:00+00', 'pf-1', now()),
+        ('pay-3308-07', 'personal', 'expense', 60, 'BRL', 'card payment', 'Credit Card', '2026-07-21 12:00:00+00', 'pf-1', now()),
+        ('pay-3308-08', 'personal', 'expense', 70, 'BRL', 'card payment', 'Credit Card', '2026-08-21 12:00:00+00', 'pf-1', now()),
+        ('pay-3308-09', 'personal', 'expense', 80, 'BRL', 'card payment', 'Credit Card', '2026-09-21 12:00:00+00', 'pf-1', now()),
+        ('pay-2361-06', 'personal', 'expense', 680, 'BRL', 'legacy bill', 'Credit Card', '2026-06-12 12:00:00+00', 'pf-1', now()),
+        ('pay-2361-07', 'personal', 'expense', 680, 'BRL', 'legacy bill', 'Credit Card', '2026-07-12 12:00:00+00', 'pf-1', now()),
+        ('pay-legacy', 'personal', 'expense', 100, 'BRL', 'legacy bill', 'Credit Card', '2026-03-10 12:00:00+00', 'pf-1', now());
+
+      INSERT INTO credit_card_statements (id, "creditCardId", month, "closingDate", "dueDate", "billPaymentTransactionId", "updatedAt")
+      VALUES
+        ('stmt-3308-06', 'card-3308', '2026-06', '2026-06-20 12:00:00+00', '2026-06-27 12:00:00+00', 'pay-3308-06', now()),
+        ('stmt-3308-07', 'card-3308', '2026-07', '2026-07-20 12:00:00+00', '2026-07-27 12:00:00+00', 'pay-3308-07', now()),
+        ('stmt-3308-08', 'card-3308', '2026-08', '2026-08-20 12:00:00+00', '2026-08-27 12:00:00+00', 'pay-3308-08', now()),
+        ('stmt-3308-09', 'card-3308', '2026-09', '2026-09-20 12:00:00+00', '2026-09-27 12:00:00+00', 'pay-3308-09', now()),
+        ('stmt-2361-06', 'card-2361', '2026-06', '2026-06-18 12:00:00+00', '2026-06-25 12:00:00+00', NULL, now()),
+        ('stmt-2361-07', 'card-2361', '2026-07', '2026-07-18 12:00:00+00', '2026-07-25 12:00:00+00', NULL, now()),
+        ('stmt-05', 'card-stmt', '2026-05', '2026-05-20 12:00:00+00', '2026-05-27 12:00:00+00', NULL, now());
+
+      INSERT INTO credit_card_bills (id, "creditCardId", "transactionId", "closingDate", "dueDate", "totalAmount", "updatedAt")
+      VALUES
+        ('bill-3308-06', 'card-3308', 'pay-3308-06', '2026-06-20 12:00:00+00', '2026-06-27 12:00:00+00', 55, now()),
+        ('bill-3308-07', 'card-3308', 'pay-3308-07', '2026-07-20 12:00:00+00', '2026-07-27 12:00:00+00', 60, now()),
+        ('bill-3308-08', 'card-3308', 'pay-3308-08', '2026-08-20 12:00:00+00', '2026-08-27 12:00:00+00', 70, now()),
+        ('bill-3308-09', 'card-3308', 'pay-3308-09', '2026-09-20 12:00:00+00', '2026-09-27 12:00:00+00', 80, now()),
+        ('bill-2361-06', 'card-2361', 'pay-2361-06', '2026-06-20 12:00:00+00', '2026-06-27 12:00:00+00', 680, now()),
+        ('bill-2361-07', 'card-2361', 'pay-2361-07', '2026-07-20 12:00:00+00', '2026-07-27 12:00:00+00', 680, now()),
+        ('bill-legacy', 'card-legacy', 'pay-legacy', '2026-03-20 12:00:00+00', '2026-03-27 12:00:00+00', 100, now()),
+        ('bill-open', 'card-open', NULL, '2026-04-20 12:00:00+00', '2026-04-27 12:00:00+00', 25, now());
+
+      INSERT INTO bill_transactions (id, "statementId", "billId", category, "transactionDate", description, amount, currency, "updatedAt")
+      VALUES
+        ('bt-3308-06-stmt-1', 'stmt-3308-06', NULL, 'Food', '2026-06-05 12:00:00+00', 'market', 10, 'BRL', now()),
+        ('bt-3308-06-stmt-2', 'stmt-3308-06', NULL, 'Food', '2026-06-06 12:00:00+00', 'market', 20, 'BRL', now()),
+        ('bt-3308-06-bill-1', NULL, 'bill-3308-06', 'Food', '2026-06-03 12:00:00+00', 'old import', 22, 'BRL', now()),
+        ('bt-3308-06-bill-2', NULL, 'bill-3308-06', 'Food', '2026-06-04 12:00:00+00', 'old import', 28, 'BRL', now()),
+        ('bt-3308-07-stmt', 'stmt-3308-07', NULL, 'Food', '2026-07-05 12:00:00+00', 'market', 40, 'BRL', now()),
+        ('bt-3308-07-bill-1', NULL, 'bill-3308-07', 'Food', '2026-07-03 12:00:00+00', 'old import', 25, 'BRL', now()),
+        ('bt-3308-07-bill-2', NULL, 'bill-3308-07', 'Food', '2026-07-04 12:00:00+00', 'old import', 35, 'BRL', now()),
+        ('bt-3308-08-stmt', 'stmt-3308-08', NULL, 'Food', '2026-08-05 12:00:00+00', 'market', 15, 'BRL', now()),
+        ('bt-3308-08-bill', NULL, 'bill-3308-08', 'Food', '2026-08-03 12:00:00+00', 'old import', 70, 'BRL', now()),
+        ('bt-3308-09-stmt', 'stmt-3308-09', NULL, 'Food', '2026-09-05 12:00:00+00', 'market', 25, 'BRL', now()),
+        ('bt-3308-09-bill-1', NULL, 'bill-3308-09', 'Food', '2026-09-03 12:00:00+00', 'old import', 40, 'BRL', now()),
+        ('bt-3308-09-bill-2', NULL, 'bill-3308-09', 'Food', '2026-09-04 12:00:00+00', 'old import', 40, 'BRL', now()),
+        ('bt-2361-06-stmt', 'stmt-2361-06', NULL, 'Food', '2026-06-08 12:00:00+00', 'coffee', 12, 'BRL', now()),
+        ('bt-2361-06', NULL, 'bill-2361-06', 'Food', '2026-06-04 12:00:00+00', 'legacy purchase', 680, 'BRL', now()),
+        ('bt-2361-07-stmt', 'stmt-2361-07', NULL, 'Food', '2026-07-08 12:00:00+00', 'coffee', 8, 'BRL', now()),
+        ('bt-2361-07', NULL, 'bill-2361-07', 'Food', '2026-07-04 12:00:00+00', 'legacy purchase', 680, 'BRL', now()),
+        ('bt-legacy', NULL, 'bill-legacy', 'Food', '2026-03-05 12:00:00+00', 'legacy purchase', 80, 'BRL', now()),
+        ('bt-open', NULL, 'bill-open', 'Food', '2026-04-02 12:00:00+00', 'unlinked', 25, 'BRL', now()),
+        ('bt-stmt-05', 'stmt-05', NULL, 'Food', '2026-05-03 12:00:00+00', 'statement only', 15, 'BRL', now());
+    `);
+
+    const shadow = query(
+      CASE,
+      `SELECT row_count::text, amount_abs_sum::text, coalesce(array_to_string(sample_ids, ', '), '') FROM (\n${block("shadowed")}\n) s`,
+    );
+    expect(shadow[0]?.[0]).toBe("7");
+    expect(shadow[0]?.[1]).toBe("260.00");
+    expect(shadow[0]?.[2].split(", ")).toEqual(
+      expect.arrayContaining(["bt-3308-06-bill-1", "bt-3308-06-bill-2"]),
+    );
+    expect(shadow[0]?.[2]).not.toContain("bt-2361-06");
+
+    const backfill = runBackfill();
+    expect(backfill.status, backfill.stderr).toBe(0);
+
+    expect(scalar(CASE, `SELECT count(*) FROM ledger_entries WHERE id LIKE 'bt-3308-%-bill%'`)).toBe("0");
+    expect(scalar(CASE, `SELECT new_model FROM legacy.id_map WHERE old_model = 'BillTransaction' AND old_id = 'bt-3308-06-bill-1'`)).toBe(
+      "SupersededBillPurchase",
+    );
+    expect(scalar(CASE, `SELECT count(*) FROM legacy.id_map WHERE new_model = 'SupersededBillPurchase'`)).toBe("7");
+    expect(scalar(CASE, `SELECT kind FROM ledger_entries WHERE id = 'pay-3308-06'`)).toBe("transfer");
+    expect(scalar(CASE, `SELECT count(*) FROM ledger_entries WHERE metadata->>'billId' LIKE 'bill-3308-%'`)).toBe("0");
+
+    expect(query(CASE, `SELECT kind, "amountBase"::text FROM ledger_entries WHERE id = 'bt-2361-06'`)).toEqual([["expense", "-680.0000"]]);
+    expect(query(CASE, `SELECT kind, "amountBase"::text FROM ledger_entries WHERE id = 'bt-2361-07'`)).toEqual([["expense", "-680.0000"]]);
+    expect(scalar(CASE, `SELECT count(*) FROM ledger_entries WHERE metadata->>'billId' LIKE 'bill-2361-%'`)).toBe("0");
+    expect(scalar(CASE, `SELECT "amountBase"::text FROM ledger_entries WHERE metadata->>'billId' = 'bill-legacy'`)).toBe("-20.0000");
+    expect(scalar(CASE, `SELECT kind FROM ledger_entries WHERE id = 'bt-open'`)).toBe("expense");
+    expect(scalar(CASE, `SELECT kind FROM ledger_entries WHERE id = 'bt-stmt-05'`)).toBe("expense");
+
+    expect(
+      query(
+        CASE,
+        `SELECT to_char(date_trunc('month', "effectiveDate"), 'YYYY-MM'),
+                round((-sum("amountBase"))::numeric, 2)::text
+         FROM ledger_entries
+         WHERE "entityId" = 'pf-1' AND kind = 'expense'
+         GROUP BY 1 ORDER BY 1`,
+      ),
+    ).toEqual([
+      ["2026-03", "100.00"],
+      ["2026-04", "25.00"],
+      ["2026-05", "15.00"],
+      ["2026-06", "727.00"],
+      ["2026-07", "728.00"],
+      ["2026-08", "15.00"],
+      ["2026-09", "25.00"],
+    ]);
+
+    const retired = psql(CASE, ["-q", "-f", retirePath]);
+    expect(retired.status, retired.stderr).toBe(0);
+    const verify = psql(CASE, ["-f", verifyPath]);
+    expect(verify.status, verify.stderr).toBe(0);
+    expect(verify.stdout).toContain("skipped_n");
+    expect(scalar(CASE, `SELECT count(*)::text FROM legacy.id_map WHERE old_model = 'BillTransaction' AND new_model = 'SupersededBillPurchase'`)).toBe("7");
+    expect(
+      scalar(
+        CASE,
+        `SELECT round(coalesce(sum(abs(bt.amount)), 0)::numeric, 2)::text
+         FROM legacy.bill_transactions bt
+         JOIN legacy.id_map m ON m.old_id = bt.id AND m.old_model = 'BillTransaction' AND m.new_model = 'SupersededBillPurchase'`,
+      ),
+    ).toBe("260.00");
+    expect(
+      scalar(
+        CASE,
+        `SELECT count(*) FROM legacy.id_map m
+         JOIN ledger_entries e ON e.id = m.old_id AND e.kind = 'expense'
+         WHERE m.new_model = 'SupersededBillPurchase'`,
+      ),
+    ).toBe("0");
+    const purchaseCounts = query(
+      CASE,
+      `SELECT
+         (SELECT count(*) FROM legacy.bill_transactions bt
+           WHERE NOT EXISTS (
+             SELECT 1 FROM legacy.id_map m
+             WHERE m.old_id = bt.id AND m.old_model = 'BillTransaction' AND m.new_model = 'SupersededBillPurchase'
+           ))::text,
+         (SELECT count(*) FROM ledger_entries e
+           JOIN legacy.id_map m ON m.new_id = e.id AND m.old_model = 'BillTransaction' AND m.new_model = 'LedgerEntry')::text`,
+    );
+    expect(purchaseCounts[0]?.[0]).toBe(purchaseCounts[0]?.[1]);
+    expect(purchaseCounts[0]?.[0]).not.toBe("0");
   });
 });

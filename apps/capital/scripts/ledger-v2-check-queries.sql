@@ -567,3 +567,26 @@ WHERE tr.currency <> u."baseCurrency"
   AND tr."exchangeRate" = 1
 -- END flat-rates
 ;
+
+\echo '== 3c. Bill purchases whose bill payment is also a statement settlement (informational)'
+\echo 'A non-zero count does not block. The backfill does not insert these as expenses.'
+\echo 'verify section 3b skipped_n and skipped_abs_sum must match row_count and amount_abs_sum.'
+-- BEGIN shadowed
+SELECT 'bill purchases whose bill payment is also a statement settlement'::text AS category,
+       count(*)::int AS row_count,
+       coalesce((array_agg(id ORDER BY id))[1:10], ARRAY[]::text[]) AS sample_ids,
+       round(coalesce(sum(abs(amount)), 0)::numeric, 2) AS amount_abs_sum
+FROM (
+-- BEGIN shadow-rows
+SELECT bt.id, bt.amount
+FROM bill_transactions bt
+JOIN credit_card_bills b ON b.id = bt."billId"
+WHERE bt."statementId" IS NULL
+  AND EXISTS (
+    SELECT 1 FROM credit_card_statements s
+    WHERE s."billPaymentTransactionId" = b."transactionId"
+  )
+-- END shadow-rows
+) shadowed
+-- END shadowed
+;
