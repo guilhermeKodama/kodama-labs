@@ -148,6 +148,22 @@ describe("display rows", () => {
     await expect(display({ period: all, aggregations: [{ fn: "sum", field: "description" }] })).rejects.toMatchObject({ code: "query.aggregation_needs_numeric" });
   });
 
+  it("counts distinct values the way the table groups them (Únicos)", async () => {
+    // September: Salary, Groceries, Software, the neutral transfer (Transferência), the aporte and the buy
+    // leg (Investimentos) and the uncategorized dividend (Sem categoria); entities PJ, PF and PJ→PF.
+    const r = await display({
+      period: sept,
+      includeRows: false,
+      aggregations: [
+        { fn: "countDistinct", field: "categoryId" },
+        { fn: "countDistinct", field: "entityId" },
+      ],
+    });
+    expect(r.totals?.values).toEqual({ "countDistinct:categoryId": 6, "countDistinct:entityId": 3 });
+    const grouped = await display({ period: sept, includeRows: false, groupBy: [{ field: "categoryId" }] });
+    expect(grouped.groups).toHaveLength(6);
+  });
+
   it("filters by date buckets: month, quarter and week of the month", async () => {
     const august = await display({ period: all, filters: [{ field: "date", op: "inBuckets", bucket: "month", values: ["2026-08"] }] });
     expect(august.rows.map((x) => x.amountBase)).toEqual([-999]);
@@ -278,6 +294,8 @@ describe("export by ids", () => {
     const lines = csv.split("\n");
     expect(lines).toHaveLength(4);
     expect(lines.filter((l) => l.includes("Transferência"))).toHaveLength(2);
+    // Categoria of an uncategorized transfer reads like the table (Transferência), then Tipo.
+    expect(lines.filter((l) => l.includes(",Transferência,Transferência,"))).toHaveLength(2);
     expect(lines.some((l) => l.includes("Mercado,PF,Conta principal,Groceries,Saída,-300"))).toBe(true);
   });
 });

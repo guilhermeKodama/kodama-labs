@@ -213,6 +213,10 @@ describe("default views", () => {
         period: { preset: "ytd", offset: 0 },
       });
       expect(views.filter((v) => v.seedKey)).toHaveLength(17);
+      // PJ arrives later but takes the tab right after Todas (mockup order); taxpj goes last.
+      const ledgerTabs = views.filter((v) => v.dataset === "ledger").map((v) => v.seedKey ?? v.builtinKey);
+      expect(ledgerTabs.slice(0, 3)).toEqual(["all", "pj", "subs"]);
+      expect(ledgerTabs.at(-1)).toBe("taxpj");
       await deleteView(NEW, bySeed(views, "pj")!.id, prisma);
       await prisma.entity.create({ data: { userId: NEW, kind: "business", name: "Kodama LLC" } });
       expect(bySeed(await listViews(NEW, prisma), "pj")).toBeUndefined();

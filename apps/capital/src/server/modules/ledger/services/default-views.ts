@@ -176,6 +176,23 @@ async function claim(db: DbClient, userId: string, version: number): Promise<boo
   return count === 1;
 }
 
+/** Moves a seeded ledger view right after the built-in one, keeping the others' order. */
+async function placeAfterBuiltin(db: DbClient, userId: string, seedKey: string) {
+  const views = await db.savedView.findMany({
+    where: { userId },
+    orderBy: [{ position: "asc" }, { createdAt: "asc" }],
+    select: { id: true, seedKey: true, isBuiltin: true, dataset: true, position: true },
+  });
+  const moved = views.find((v) => v.seedKey === seedKey && v.dataset === "ledger");
+  const rest = views.filter((v) => v !== moved);
+  const anchor = rest.findIndex((v) => v.isBuiltin && v.dataset === "ledger");
+  if (!moved || anchor < 0) return;
+  rest.splice(anchor + 1, 0, moved);
+  for (const [position, view] of rest.entries()) {
+    if (view.position !== position) await db.savedView.update({ where: { id: view.id }, data: { position } });
+  }
+}
+
 /** Creates the default views the user has not had yet (see VIEWS_SEED_VERSION). Returns the seeded keys. */
 export async function ensureDefaultViews(userId: string, db: DbClient): Promise<string[]> {
   const user = await db.user.findUnique({ where: { id: userId }, select: { viewsSeedVersion: true } });
@@ -207,6 +224,8 @@ export async function ensureDefaultViews(userId: string, db: DbClient): Promise<
       })),
       skipDuplicates: true,
     });
+    // "PJ" is the tab right after Todas (mockup DEFAULT_VIEWS), also when it arrives later with the first business.
+    if (business && !base) await placeAfterBuiltin(tx, userId, "pj");
     return seeds.map((s) => s.seedKey);
   });
 }

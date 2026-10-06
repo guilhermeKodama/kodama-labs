@@ -38,6 +38,8 @@ export const VIEW_SAVE_DELAY = 250;
 export function useViewSaver() {
   const queryClient = useQueryClient();
   const pending = useRef(new Map<string, ViewPatch>());
+  /** Edits per view so far: a saved answer is written back only when no newer edit of that view came after it. */
+  const edits = useRef(new Map<string, number>());
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const chain = useRef<Promise<void>>(Promise.resolve());
   const patch = useAppMutation({
@@ -51,25 +53,30 @@ export function useViewSaver() {
 
   const flush = useCallback(() => {
     timer.current = null;
-    const batch = [...pending.current.entries()];
+    const batch = [...pending.current.entries()].map(([id, body]) => ({ id, body, edit: edits.current.get(id) ?? 0 }));
     pending.current.clear();
     if (!batch.length) return;
     chain.current = chain.current.then(async () => {
-      for (const [id, body] of batch) {
+      for (const { id, body, edit } of batch) {
         try {
-          await mutateAsync({ id, body });
+          const saved = await mutateAsync({ id, body });
+          // A read of the views that landed between the edit and this save showed the old view: put the saved one back.
+          if ((edits.current.get(id) ?? 0) === edit) {
+            queryClient.setQueryData<LedgerView[]>(keys.views("ledger"), (list) => list?.map((view) => (view.id === id ? saved : view)));
+          }
         } catch {
           // Toasted by useAppMutation; the views are refetched.
         }
       }
     });
-  }, [mutateAsync]);
+  }, [mutateAsync, queryClient]);
 
   const save = useCallback(
     (id: string, body: ViewPatch) => {
       void queryClient.cancelQueries({ queryKey: keys.views("ledger") });
       queryClient.setQueryData<LedgerView[]>(keys.views("ledger"), (list) => list?.map((view) => (view.id === id ? { ...view, ...body, config: body.config ?? view.config } : view)));
       pending.current.set(id, { ...pending.current.get(id), ...body });
+      edits.current.set(id, (edits.current.get(id) ?? 0) + 1);
       if (timer.current) clearTimeout(timer.current);
       timer.current = setTimeout(flush, VIEW_SAVE_DELAY);
     },
@@ -86,6 +93,21 @@ export function useViewSaver() {
     },
     [flush],
   );
+
+  // A reload or a closed tab inside the delay still saves: keepalive requests outlive the page.
+  useEffect(() => {
+    const onPageHide = () => {
+      if (!timer.current) return;
+      clearTimeout(timer.current);
+      timer.current = null;
+      for (const [id, body] of pending.current) {
+        void api(`/api/v2/views/${id}`, { method: "PATCH", body: JSON.stringify(body), keepalive: true }).catch(() => undefined);
+      }
+      pending.current.clear();
+    };
+    window.addEventListener("pagehide", onPageHide);
+    return () => window.removeEventListener("pagehide", onPageHide);
+  }, []);
 
   return save;
 }

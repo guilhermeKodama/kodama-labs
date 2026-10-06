@@ -342,7 +342,7 @@ const NUMERIC_ONLY = new Set(["sum", "avg", "median", "min", "max"]);
 const isNumericField = (field: string): field is NumericField => field === "amount" || field === "amountBase";
 const isDateField = (field: string): field is DateField => field === "date" || field === "effectiveDate";
 
-function aggSql(agg: Aggregation, alias = "src"): Prisma.Sql {
+function aggSql(agg: Aggregation, display: boolean, alias = "src"): Prisma.Sql {
   if (NUMERIC_ONLY.has(agg.fn) && !isNumericField(agg.field)) {
     throw new LedgerError(`${agg.fn} needs a numeric field, got ${agg.field}`, 422, { code: "query.aggregation_needs_numeric", params: { fn: agg.fn, field: agg.field } });
   }
@@ -368,13 +368,16 @@ function aggSql(agg: Aggregation, alias = "src"): Prisma.Sql {
     case "countDistinct":
       if (isNumericField(field)) return Prisma.sql`count(DISTINCT ${numericExpr(field, alias)})`;
       if (isDateField(field)) return Prisma.sql`count(DISTINCT ${agg.bucket ? bucketSql(agg.bucket, ident(alias, field)) : ident(alias, field)})`;
+      // Display mode counts what the table shows (mockup unique): every group value, "Sem categoria" and
+      // "from→to" transfers included, the same keys as the groups.
+      if (display && field !== "description") return Prisma.sql`count(DISTINCT coalesce((${groupKeyExpr({ field }, alias)})::text, ''))`;
       return Prisma.sql`count(DISTINCT ${ident(alias, field)})`;
   }
 }
 
-function aggSelect(aggs: Aggregation[]): Prisma.Sql {
+function aggSelect(aggs: Aggregation[], display: boolean): Prisma.Sql {
   if (!aggs.length) return Prisma.sql`NULL AS "a_none"`;
-  return Prisma.join(aggs.map((a, i) => Prisma.sql`${aggSql(a)} AS ${Prisma.raw(`"a${i}"`)}`), ", ");
+  return Prisma.join(aggs.map((a, i) => Prisma.sql`${aggSql(a, display)} AS ${Prisma.raw(`"a${i}"`)}`), ", ");
 }
 
 function readAggs(row: Record<string, unknown>, aggs: Aggregation[]): Record<string, number | null> {
@@ -416,12 +419,12 @@ interface RawGroup {
   weight: number;
 }
 
-async function groupQuery(db: DbClient, cte: Prisma.Sql, keys: GroupKey[], aggs: Aggregation[]): Promise<RawGroup[]> {
+async function groupQuery(db: DbClient, cte: Prisma.Sql, keys: GroupKey[], aggs: Aggregation[], display: boolean): Promise<RawGroup[]> {
   const keySql = keys.map((k, i) => Prisma.sql`${groupKeyExpr(k, "src")} AS ${Prisma.raw(`"k${i}"`)}`);
   const groupBy = Prisma.join(keys.map((_, i) => Prisma.raw(`"k${i}"`)), ", ");
   const rows = await db.$queryRaw<Record<string, unknown>[]>`
     ${cte}
-    SELECT ${Prisma.join(keySql, ", ")}, count(*)::int AS n, ${aggSelect(aggs)}, ${COUNTED_SUM} AS weight
+    SELECT ${Prisma.join(keySql, ", ")}, count(*)::int AS n, ${aggSelect(aggs, display)}, ${COUNTED_SUM} AS weight
     FROM src
     GROUP BY ${groupBy}`;
   return rows.map((r) => ({
@@ -432,13 +435,13 @@ async function groupQuery(db: DbClient, cte: Prisma.Sql, keys: GroupKey[], aggs:
   }));
 }
 
-async function buildGroups(db: DbClient, cte: Prisma.Sql, groupBy: GroupKey[], aggs: Aggregation[]): Promise<LedgerGroup[]> {
-  const top = (await groupQuery(db, cte, [groupBy[0]], aggs))
+async function buildGroups(db: DbClient, cte: Prisma.Sql, groupBy: GroupKey[], aggs: Aggregation[], display: boolean): Promise<LedgerGroup[]> {
+  const top = (await groupQuery(db, cte, [groupBy[0]], aggs, display))
     .map((g) => ({ key: g.keys[0], count: g.count, values: g.values, weight: g.weight }))
     .sort((a, b) => compareGroups(groupBy[0], a, b));
   const groups: LedgerGroup[] = top.map((g) => ({ key: g.key, count: g.count, values: g.values }));
   if (groupBy.length === 2) {
-    const nested = await groupQuery(db, cte, groupBy, aggs);
+    const nested = await groupQuery(db, cte, groupBy, aggs, display);
     for (const g of groups) {
       g.children = nested
         .filter((n) => n.keys[0] === g.key)
@@ -658,12 +661,12 @@ export async function queryLedger(userId: string, input: LedgerQueryInput, db: D
   if (!(display && q.skipTotals)) {
     const [row] = await db.$queryRaw<Record<string, unknown>[]>`
       ${cte}
-      SELECT count(*)::int AS n, ${aggSelect(aggs)}${display ? Prisma.sql`, ${SUMMARY_SELECT}` : Prisma.empty} FROM src`;
+      SELECT count(*)::int AS n, ${aggSelect(aggs, display)}${display ? Prisma.sql`, ${SUMMARY_SELECT}` : Prisma.empty} FROM src`;
     totals = { count: Number(row.n), values: readAggs(row, aggs) };
     if (display) summary = readSummary(row);
   }
 
-  const groups = q.groupBy.length ? await buildGroups(db, cte, q.groupBy, aggs) : [];
+  const groups = q.groupBy.length ? await buildGroups(db, cte, q.groupBy, aggs, display) : [];
 
   let pivot: LedgerQueryResult["pivot"];
   if (q.pivot) {
@@ -671,10 +674,10 @@ export async function queryLedger(userId: string, input: LedgerQueryInput, db: D
     const measure = [q.pivot.measure];
     const mk = aggregationKey(q.pivot.measure);
     const [cells, rowsAgg, colsAgg, [grand]] = await Promise.all([
-      groupQuery(db, cte, [rowKey, colKey], measure),
-      groupQuery(db, cte, [rowKey], measure),
-      groupQuery(db, cte, [colKey], measure),
-      db.$queryRaw<Record<string, unknown>[]>`${cte} SELECT ${aggSelect(measure)} FROM src`,
+      groupQuery(db, cte, [rowKey, colKey], measure, display),
+      groupQuery(db, cte, [rowKey], measure, display),
+      groupQuery(db, cte, [colKey], measure, display),
+      db.$queryRaw<Record<string, unknown>[]>`${cte} SELECT ${aggSelect(measure, display)} FROM src`,
     ]);
     const order = (key: GroupKey) => (a: RawGroup, b: RawGroup) => compareGroups(key, { key: a.keys[0], weight: a.weight }, { key: b.keys[0], weight: b.weight });
     rowsAgg.sort(order(rowKey));
@@ -764,9 +767,11 @@ export async function exportLedgerCsv(userId: string, target: ExportTarget, db: 
     const s = v == null ? "" : String(v);
     return /[",\n;]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
   };
+  // An uncategorized aporte or transfer reads Investimentos / Transferência, as in the table's Categoria.
+  const csvFlowCategory = (flowKind: FlowKind) => (flowKind === "invest" || flowKind === "transfer" ? st(locale, `views.categoryFlow.${flowKind}`) : null);
   const header = CSV_COLUMNS.map((column) => esc(st(locale, `ledger.csv.${column}`)));
   const lines = rows.map((r) =>
-    [formatDateOnly(r.date), r.description, r.entity, r.account, r.category, st(locale, `views.flowKind.${r.flowKind}`), toNumber(r.amount), r.currency, toNumber(r.amountBase), r.notes]
+    [formatDateOnly(r.date), r.description, r.entity, r.account, r.category ?? csvFlowCategory(r.flowKind), st(locale, `views.flowKind.${r.flowKind}`), toNumber(r.amount), r.currency, toNumber(r.amountBase), r.notes]
       .map(esc)
       .join(",")
   );

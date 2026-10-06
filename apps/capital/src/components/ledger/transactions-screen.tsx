@@ -19,7 +19,7 @@ import { currentMonth, periodDays, todayIso } from "@/lib/ledger/period";
 import { selectionStats } from "@/lib/ledger/selection";
 import { useLedgerViews, useViewSaver, type LedgerView } from "@/lib/ledger/use-views";
 import { applyViewDraft, decodeViewDraft, draftPatch, encodeViewDraft, canonicalViewParam, isDirty, resolveActiveView, type ViewDraft } from "@/lib/ledger/view-draft";
-import { boardColumnQuery, boardKey, calendarQuery, calendarRowsQuery, isPagedLayout, layoutQuery, pivotKeys, viewSelection } from "@/lib/ledger/view-query";
+import { boardColumnQuery, boardKey, calendarQuery, calendarRowsQuery, isPagedLayout, layoutQuery, pivotKeys, selectionScope, viewSelection } from "@/lib/ledger/view-query";
 import { planViewUpdate } from "@/lib/ledger/view-update";
 import { BulkBar } from "./bulk-bar";
 import { useLedgerLabels } from "./fields";
@@ -29,6 +29,8 @@ import { LedgerOverlays, useLedgerOverlays } from "./overlays";
 import type { DisplayRow } from "./rows";
 import { KpiSummary, LedgerTable } from "./table";
 import { DisplayMenu, FilterChips, PeriodControl, ViewTabs } from "./toolbar";
+
+const EMPTY_SELECTION: ReadonlySet<string> = new Set();
 
 /** Pages of the calendar month's rows read at most (500 each). */
 const CALENDAR_MAX_PAGES = 4;
@@ -145,12 +147,22 @@ function ViewScreen({
 
   const [searchText, setSearchText] = useState(search);
   const q = useDebounced(searchText.trim(), 250);
-  const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
-  const [allInView, setAllInView] = useState(false);
-  const clearSelection = useCallback(() => {
-    setSelected(new Set());
-    setAllInView(false);
-  }, []);
+  // A selection belongs to the rows it was made on: whatever changes them (a filter, the period, the search,
+  // "Limpar", "voltar à view", the browser's Back over a drill) drops it, so "all in view" never widens.
+  const selectionKey = selectionScope(config, q);
+  const [selection, setSelection] = useState<{ key: string; ids: ReadonlySet<string>; all: boolean }>(() => ({ key: selectionKey, ids: new Set(), all: false }));
+  const current = selection.key === selectionKey;
+  const selected = current ? selection.ids : EMPTY_SELECTION;
+  const allInView = current && selection.all;
+  const setSelected = useCallback(
+    (ids: ReadonlySet<string>) => setSelection((s) => ({ key: selectionKey, ids, all: s.key === selectionKey && s.all })),
+    [selectionKey],
+  );
+  const setAllInView = useCallback(
+    (all: boolean) => setSelection((s) => ({ key: selectionKey, ids: s.key === selectionKey ? s.ids : EMPTY_SELECTION, all })),
+    [selectionKey],
+  );
+  const clearSelection = useCallback(() => setSelection({ key: selectionKey, ids: EMPTY_SELECTION, all: false }), [selectionKey]);
 
   const setDraft = (next: ViewDraft | null, history: "push" | "replace" = "replace") => void setParams({ draft: encodeViewDraft(next) }, { history });
   /** Every change on screen: saved at once, or kept in the draft (see planViewUpdate). */
@@ -158,13 +170,9 @@ function ViewScreen({
     const plan = planViewUpdate({ saved, draft, isBuiltin: view.isBuiltin, patch });
     if (plan.save) saveView(view.id, { config: plan.save });
     if (encodeViewDraft(plan.draft) !== draftParam) setDraft(plan.draft);
-    if ("filters" in patch || "period" in patch || "layout" in patch || "dateField" in patch) clearSelection();
   };
   /** A drill opens the table with that slice as a draft, with its banner; the browser's Back also returns. */
-  const openDrill = (next: ViewDraft, label: string) => {
-    clearSelection();
-    setDraft(withDrillBanner(next, label, draft), "push");
-  };
+  const openDrill = (next: ViewDraft, label: string) => setDraft(withDrillBanner(next, label, draft), "push");
   const drill = (cells: DrillCell[]) =>
     openDrill(drillDraft(saved, config, cells), cells.length ? cells.map((cell) => labels.groupValue(cell.key, cell.value)).join(" · ") : t("pivot.total"));
   const drillFilters = (groupKeys: GroupKey[], filters: LedgerFilter[]) => openDrill(drillFiltersDraft(saved, config, groupKeys, filters), t("charts.others"));
@@ -237,7 +245,6 @@ function ViewScreen({
         className="w-[170px]"
         onChange={(text) => {
           setSearchText(text);
-          clearSelection();
           void setParams({ q: text || null });
         }}
       />
@@ -373,7 +380,8 @@ function ViewScreen({
       ) : null}
       {result.isError ? <p className="text-[12.5px] text-neg">{errorText(result.error)}</p> : null}
       {calendar && calendarDays.isError ? <p className="text-[12.5px] text-neg">{errorText(calendarDays.error)}</p> : null}
-      {layout}
+      {/* A failed first load shows the error, not an empty table that reads "Nenhum lançamento…". */}
+      {result.isError && !first && !sankey ? null : layout}
     </Page>
   );
 }

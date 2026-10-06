@@ -30,6 +30,15 @@ export function viewSelection(config: ViewConfig, search?: string | null): Ledge
 }
 
 /**
+ * What a row selection is made on: the layout and the rows' selection (period, date field, filters,
+ * search). Any change to it drops the selection, so "all in view" never reaches rows the user did not
+ * see; display changes (sort, columns, calcs, grouping) keep it.
+ */
+export function selectionScope(config: ViewConfig, search?: string | null): string {
+  return JSON.stringify([config.layout, viewSelection(config, search)]);
+}
+
+/**
  * A group key on the view's date field: the selects store date buckets as
  * "date" (Data (mês)…), and a view set to "Data de competência"
  * (effectiveDate) buckets on that date instead, like its period. Card

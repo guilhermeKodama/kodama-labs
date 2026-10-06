@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { boardColumnQuery, boardQuery, bucketOptionsQuery, calendarQuery, calendarRowsQuery, chartKeys, chartQuery, flowsQuery, isPagedLayout, layoutQuery, pivotQuery, tableQuery, viewSelection } from "@/lib/ledger/view-query";
+import { boardColumnQuery, boardQuery, bucketOptionsQuery, calendarQuery, calendarRowsQuery, chartKeys, chartQuery, flowsQuery, isPagedLayout, layoutQuery, pivotQuery, selectionScope, tableQuery, viewSelection } from "@/lib/ledger/view-query";
 import { viewConfig } from "./fixtures";
 
 const chart = (type: "bar" | "line" | "area" | "pie" | "waterfall" | "bar100", patch = {}) =>
@@ -77,6 +77,16 @@ describe("view queries", () => {
     expect(isPagedLayout(viewConfig())).toBe(true);
     expect(isPagedLayout(viewConfig({ layout: "chart" }))).toBe(false);
     expect(flowsQuery(viewConfig(), "x")).toMatchObject({ search: "x", deleted: "exclude" });
+  });
+
+  it("drops a selection when its rows change (filters, period, search, Limpar), not on display changes", () => {
+    const base = viewConfig();
+    const key = selectionScope(base, "");
+    expect(selectionScope(viewConfig({ filters: [{ field: "flowKind", op: "in", values: ["out"] }] }), "")).not.toBe(key);
+    expect(selectionScope(viewConfig({ period: { preset: "this_month", offset: -1 } }), "")).not.toBe(key);
+    expect(selectionScope(base, "uber")).not.toBe(key);
+    expect(selectionScope(viewConfig({ layout: "board" }), "")).not.toBe(key);
+    expect(selectionScope(viewConfig({ sort: [{ field: "absAmountBase", dir: "desc" }], columns: ["date", "amountBase"], groupBy: [{ field: "entityId" }] }), " ")).toBe(key);
   });
 
   it("lists the buckets of the period for the bucket filters, without totals", () => {
