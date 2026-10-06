@@ -27,10 +27,11 @@ export interface AiCategorizers {
  * prompt (split by income/expense). The fallback is the system Other
  * category even when it is archived, so every processed row leaves the
  * queue. Each answer other than the fallback also learns an "ai" rule,
- * never overwriting a manual one.
+ * never overwriting a manual one. `onlyUserId` pins the pick to one user
+ * (tests share a database, so the oldest pending row may be someone else's).
  */
-export async function categorizePendingEntries(db: PrismaClient, categorizers: AiCategorizers = {}) {
-  const next = await db.ledgerEntry.findFirst({ where: pendingWhere(), orderBy: { createdAt: "asc" }, select: { userId: true } });
+export async function categorizePendingEntries(db: PrismaClient, categorizers: AiCategorizers = {}, onlyUserId?: string) {
+  const next = await db.ledgerEntry.findFirst({ where: pendingWhere(onlyUserId), orderBy: { createdAt: "asc" }, select: { userId: true } });
   if (!next) return { userId: null, processed: 0, remaining: 0 };
   const userId = next.userId;
 

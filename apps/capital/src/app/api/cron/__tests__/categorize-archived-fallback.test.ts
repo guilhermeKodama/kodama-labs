@@ -46,7 +46,7 @@ describe("categorize cron", () => {
 
     const bill = vi.fn(async (rows: { index: number }[], _c: string[], fb: string) => rows.map((r) => ({ index: r.index, category: fb })));
     const statement = vi.fn(async (rows: { index: number }[], _c: string[], _t: string, fb: string) => rows.map((r) => ({ index: r.index, category: fb })));
-    const r = await categorizePendingEntries(prisma, { bill, statement });
+    const r = await categorizePendingEntries(prisma, { bill, statement }, USER);
     expect(r).toMatchObject({ userId: USER, processed: 2, remaining: 0 });
     expect(bill).toHaveBeenCalledTimes(1);
     expect(statement).toHaveBeenCalledTimes(1);
@@ -75,7 +75,7 @@ describe("categorize cron", () => {
     // A manual rule added afterwards must survive the AI's answer.
     await createRule(USER, { matchType: "equals", pattern: "zaffari", categoryId: f.categories.Groceries }, prisma);
     const bill = vi.fn(async (rows: { index: number }[]) => rows.map((r) => ({ index: r.index, category: "Software" })));
-    await categorizePendingEntries(prisma, { bill });
+    await categorizePendingEntries(prisma, { bill }, USER);
     expect(bill.mock.calls[0][0]).toHaveLength(2);
     const rules = await prisma.categorizationRule.findMany({ where: { userId: USER }, orderBy: { pattern: "asc" } });
     expect(rules.map((x) => [x.pattern, x.source, x.categoryId])).toEqual([
