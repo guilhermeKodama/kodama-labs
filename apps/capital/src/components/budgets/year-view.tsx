@@ -297,7 +297,7 @@ function Insights({ data, today }: { data: YearOverview; today: YearMonth }) {
   const adjust = useAppMutation({
     event: "budgets.write",
     mutationFn: ({ budgetId, amount }: { budgetId: string; amount: number; category: string }) =>
-      apiPatch<{ batchId: string | null }>(`/api/v2/budgets/${budgetId}`, { amount, applyFrom: from }),
+      apiPatch<{ batchId: string | null }>(`/api/v2/budgets/${budgetId}`, { amount, currency: fmt.prefs.baseCurrency, applyFrom: from }),
     undo: (_result, { amount, category }) => t("year.insights.adjusted", { category, amount: fmt.money0(amount), month: fmt.monthLabel(today) }),
   });
   return (

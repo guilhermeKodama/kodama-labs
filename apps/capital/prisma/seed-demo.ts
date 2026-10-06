@@ -2,11 +2,12 @@
  * Demo user with the dataset of the new-UI mockup (capital-nova-ui-mockups):
  * PF, Kodama LTDA and Kodama LLC with their banks, cards and brokers, the
  * mockup's transactions with the current month playing its September and
- * today playing its "today" (22/set: see alignedDay in seed-demo-data.ts,
- * so nothing is booked after today and the recurring rules due in the next
- * days fill Contas fixas),
- * recurring rules, budgets, categorization rules, a year of aportes and
- * proventos, positions close to its Carteira, allocation targets and the
+ * today playing its "today" (22/set: see alignedDay and mockPace in
+ * seed-demo-data.ts, so nothing is booked after today, the month so far
+ * keeps the mockup's pace and the recurring rules due in the next days fill
+ * Contas fixas), a year of rent, bills and day-to-day spend at its MONTHLY
+ * figures, recurring rules, budgets, categorization rules, a year of aportes
+ * and proventos, positions close to its Carteira, allocation targets and the
  * FIRE goal.
  *
  * Everything is written through the app's services (entries, transfers,
@@ -61,7 +62,12 @@ import {
   DEMO_ENTITIES,
   DEMO_RECURRING,
   DEMO_RULES,
+  DAY_TO_DAY,
+  DAY_TO_DAY_ACCOUNT,
+  dayToDayPurchases,
+  dayToDayTarget,
   FIRE_GOAL,
+  HISTORY_FROM,
   LLC_DISTRIBUTION,
   MOCK_ENTRIES,
   MOCK_MONTHS,
@@ -320,6 +326,47 @@ async function seedEntries(ctx: Ctx) {
   }
 }
 
+/**
+ * Day-to-day spend (DAY_TO_DAY): for each month of the history and each of
+ * those PF categories, books what the mockup's MONTHLY still has over what
+ * the entries above already count that month (by effective date, as
+ * Orçamentos counts them: card purchases on their statement's closing day).
+ * M0 gets the mockup's September at the real today's pace (mockPace), so the
+ * month so far, its pace and the projection from the last three months look
+ * like the mockup's.
+ */
+async function seedDayToDay(ctx: Ctx) {
+  const { db, userId } = ctx;
+  const from = parseLocalDate(isoDateOf(addMonths(ctx.m0, HISTORY_FROM)));
+  const to = parseLocalDate(ctx.today);
+  to.setUTCHours(23, 59, 59, 999);
+  const categoryIds = DAY_TO_DAY.map((d) => ctx.categories[d.category]);
+  const rows = await db.$queryRaw<{ category_id: string; ym: string; spent: number }[]>`
+    SELECT le."categoryId" AS category_id, to_char(le."effectiveDate", 'YYYY-MM') AS ym, coalesce(-sum(le."amountBase"), 0)::float8 AS spent
+    FROM ledger_entries le
+    WHERE le."userId" = ${userId} AND le."deletedAt" IS NULL AND le.kind = 'expense' AND le."transferGroupId" IS NULL
+      AND le."entityId" = ${ctx.entities.pf} AND le."categoryId" = ANY(${categoryIds}::text[])
+      AND le."effectiveDate" BETWEEN ${from} AND ${to}
+    GROUP BY 1, 2`;
+  const existing = new Map(rows.map((r) => [`${r.category_id}:${r.ym}`, Number(r.spent)]));
+  const account = ctx.accounts[DAY_TO_DAY_ACCOUNT];
+  const totals: string[] = [];
+  for (let k = HISTORY_FROM; k <= 0; k++) {
+    const ym = label(addMonths(ctx.m0, k));
+    for (const spec of DAY_TO_DAY) {
+      const categoryId = ctx.categories[spec.category];
+      for (const p of dayToDayPurchases(spec, k, existing.get(`${categoryId}:${ym}`) ?? 0, ctx.today)) {
+        await createEntry(userId, { kind: "expense", accountId: account.id, amount: p.amount, description: p.description, date: p.date, categoryId }, db, { skipRules: true });
+        counts.entries++;
+      }
+    }
+    if (k >= -3) totals.push(`${ym} ${DAY_TO_DAY.map((d) => `${d.category} ${dayToDayTarget(d.category, k, ctx.today)}`).join(" ")}`);
+  }
+  log(`day-to-day spend (mockup MONTHLY, M0 at today's pace): ${totals.join(" · ")}`);
+}
+
+const isoDateOf = (ym: YearMonth) => `${label(ym)}-01`;
+
 // ---------------------------------------------------------------------------
 // Investments
 // ---------------------------------------------------------------------------
@@ -572,6 +619,7 @@ async function seed(db: Db, today: string, email: string, password: string) {
   const deductibleRules = await seedRecurring(ctx);
   await seedEntries(ctx);
   await markDeductibleOccurrences(ctx, deductibleRules);
+  await seedDayToDay(ctx);
 
   const fx = await loadFx(userId, db);
   await seedInvestments(ctx, planInvestments(fx.rateFor("USD")));

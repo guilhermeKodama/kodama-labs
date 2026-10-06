@@ -194,6 +194,33 @@ describe("year matrix", () => {
   });
 });
 
+describe("currency", () => {
+  it("converts a budget in another currency to base before comparing it with spend (amountBase)", async () => {
+    // 1 BRL = 0,2 USD: a USD 100 budget is R$ 500.
+    await prisma.currency.upsert({
+      where: { userId_code: { userId: USER, code: "USD" } },
+      create: { userId: USER, code: "USD", name: "US Dollar", symbol: "$", manualRate: 0.2 },
+      update: { manualRate: 0.2 },
+    });
+    await createBudget(USER, { entityId: f.pfId, categoryId: c.Lazer, amount: 100, currency: "USD", effectiveFrom: "2026-01" }, prisma);
+    await createBudget(USER, { entityId: f.pfId, categoryId: c.Viagens, amount: 1000, currency: "USD", period: "yearly", effectiveFrom: "2026-01" }, prisma);
+    await spend(f.pfChecking, c.Lazer, 300, "2026-08-10");
+    await spend(f.pfChecking, c.Lazer, 300, "2026-09-10");
+    await spend(f.pfChecking, c.Viagens, 2000, "2026-03-10");
+
+    const o = await monthOverview(USER, 2026, 9, prisma);
+    // Compared raw, R$ 300 against "100" would be over budget.
+    expect(o.budgets[0]).toMatchObject({ amount: 500, budgetAmount: 100, currency: "USD", available: 500, spent: 300, remaining: 200, percentUsed: 60, isOverBudget: false, status: "on_track" });
+    expect(o.summary).toMatchObject({ totalBudget: 500, totalSpent: 300, totalRoom: 200 });
+    expect(o.yearlyBudgets[0]).toMatchObject({ amount: 5000, budgetAmount: 1000, currency: "USD", spent: 2000, percentUsed: 40 });
+
+    const y = await yearOverview(USER, 2026, prisma);
+    expect(y.monthBudgets[8]).toBe(500);
+    expect(y.categories[0]).toMatchObject({ budget: 500, overMonths: 0 });
+    expect(y.categories[0].months[7]).toMatchObject({ spent: 300, budget: 500, percentUsed: 60 });
+  });
+});
+
 describe("Contas fixas", () => {
   it("lists 14 days of non-income bills, overdue reminders and unpaid card statements as faturas", async () => {
     vi.setSystemTime(new Date("2026-10-01T15:00:00Z"));
