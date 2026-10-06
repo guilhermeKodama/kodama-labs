@@ -5,12 +5,13 @@ import { useTranslations } from "next-intl";
 import { Btn, Dialog, DialogFooter, DialogHead, EmptyRow, Field, Kbd, Select, Sheet, TextInput, Toggle } from "@/components/cap";
 import { apiDelete, apiPatch, apiPost } from "@/lib/api/client";
 import { useAppMutation } from "@/lib/api/use-app-mutation";
+import { ruleEntriesDraft } from "@/lib/budgets/drill";
 import { frequencyOptions, groupRules, ruleForm, rulePatch, type RuleField, type RuleFormState, type RuleFrequency, type RulePatch } from "@/lib/budgets/rule-form";
 import type { BudgetsScope } from "@/lib/budgets/url";
 import { useFmt } from "@/lib/format/provider";
 import { useShortcut, useShortcutLabel } from "@/lib/shortcuts/provider";
 import { cn } from "@/lib/utils";
-import { EntityBadge, useEntityNames } from "./parts";
+import { DrillLink, EntityBadge, useEntityNames } from "./parts";
 import { useRecurringRules, type RecurringRule } from "./use-budgets";
 
 interface RuleWrite {
@@ -151,9 +152,14 @@ function RuleForm({ rule, onDone }: { rule: RecurringRule; onDone: () => void })
         </label>
       </div>
       <DialogFooter justify="between">
-        <Btn ghost danger disabled={busy} onClick={() => remove.mutate()}>
-          {tc("delete")}
-        </Btn>
+        <span className="flex items-center gap-3">
+          <Btn ghost danger disabled={busy} onClick={() => remove.mutate()}>
+            {tc("delete")}
+          </Btn>
+          <DrillLink draft={ruleEntriesDraft(rule)} className="text-[12px] text-fg-3">
+            {t("rule.entries")}
+          </DrillLink>
+        </span>
         <span className="flex items-center gap-1.5">
           <Btn ghost onClick={onDone}>
             {tc("cancel")}

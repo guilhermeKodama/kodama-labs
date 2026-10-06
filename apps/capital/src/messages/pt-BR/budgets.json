@@ -180,6 +180,7 @@
     "next": "Próxima: {date} · {amount}",
     "pay": "Lançar agora",
     "skip": "Pular",
+    "entries": "Ver lançamentos →",
     "amount": "Valor",
     "frequency": "Frequência",
     "freq": {

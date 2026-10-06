@@ -1,4 +1,5 @@
 import type { LedgerFilter, Period } from "@capital/server/modules/ledger/contracts";
+import type { ViewDraft } from "@/lib/ledger/view-draft";
 
 /**
  * Drills from a budget number to Transações. A budget counts expenses
@@ -71,4 +72,15 @@ export interface BudgetDrill {
 /** The draft of a drill from a budget row over a period (a month, or the months of a year so far). */
 export function budgetDrill(row: BudgetDrillRow, scopeEntityIds: readonly string[] | null, period: Extract<Period, { from: string }>): BudgetDrill {
   return { filters: budgetDrillFilters(row, scopeEntityIds), dateField: "effectiveDate", period };
+}
+
+/**
+ * The entries a conta fixa (recurring rule) has booked, every date: the
+ * draft of "Ver lançamentos" in its editor. It filters on the categorical
+ * field recurringRuleId of contract C3 (S1's query engine).
+ */
+export function ruleEntriesDraft(rule: { id: string; description: string }): ViewDraft {
+  // Cast until S1's CategoricalField (contract C3) lists recurringRuleId in this branch; redundant after the merge.
+  const filter = { field: "recurringRuleId", op: "in", values: [rule.id] } as unknown as LedgerFilter;
+  return { label: rule.description, filters: [filter], period: { preset: "all", offset: 0 } };
 }

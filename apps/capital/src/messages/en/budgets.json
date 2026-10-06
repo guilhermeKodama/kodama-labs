@@ -180,6 +180,7 @@
     "next": "Next: {date} · {amount}",
     "pay": "Book now",
     "skip": "Skip",
+    "entries": "See entries →",
     "amount": "Amount",
     "frequency": "Frequency",
     "freq": {

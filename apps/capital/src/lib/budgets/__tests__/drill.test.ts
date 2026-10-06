@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { budgetDrill, budgetDrillFilters, monthPeriod, monthsPeriod } from "../drill";
+import { budgetDrill, budgetDrillFilters, monthPeriod, monthsPeriod, ruleEntriesDraft } from "../drill";
 
 const base = [
   { field: "kind", op: "in", values: ["expense"] },
@@ -43,5 +43,17 @@ describe("periods", () => {
 
   it("drills on the effective date", () => {
     expect(budgetDrill({ entityId: "pf", categoryId: "c" }, null, monthPeriod(2026, 9))).toMatchObject({ dateField: "effectiveDate", period: { from: "2026-09-01" } });
+  });
+});
+
+describe("ruleEntriesDraft", () => {
+  const rule = { id: "rule-1", description: "Aluguel" };
+
+  it("drills to every entry the rule booked, labelled with its description", () => {
+    expect(ruleEntriesDraft(rule)).toEqual({
+      label: "Aluguel",
+      filters: [{ field: "recurringRuleId", op: "in", values: ["rule-1"] }],
+      period: { preset: "all", offset: 0 },
+    });
   });
 });
