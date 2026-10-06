@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { barHeader, heatmapLegend, insightCopy, monthHeader, monthSpan, resetsLabel, yearHeader, yearToDateMonth, type YearInsight } from "../labels";
+import { barHeader, entityBadgeKey, heatmapLegend, insightCopy, monthHeader, monthSpan, resetsLabel, yearHeader, yearToDateMonth, type YearInsight } from "../labels";
 
 const ABBR = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
 const abbr = (m: number) => ABBR[m - 1];
@@ -80,5 +80,24 @@ describe("insightCopy", () => {
     const copy = insightCopy({ ...base, kind: "seasonal", peakMonth: 6, peakValue: 1900 }, "Lazer", abbr, money, [6, 8]);
     expect(copy.title).toEqual({ key: "year.insights.seasonalTitle", values: { category: "Lazer" } });
     expect(copy.body).toEqual({ key: "year.insights.seasonalBody", values: { month: "jun", value: "R$ 1.900" } });
+  });
+});
+
+describe("entityBadgeKey", () => {
+  const kinds = new Map([
+    ["pf", "personal"],
+    ["ltda", "business"],
+    ["llc", "business"],
+  ]);
+
+  it("shows the mockup's short PF / PJ, never the company name", () => {
+    expect(entityBadgeKey("pf", kinds)).toBe("scope.pf");
+    expect(entityBadgeKey("ltda", kinds)).toBe("scope.pj");
+    expect(entityBadgeKey("llc", kinds)).toBe("scope.pj");
+  });
+
+  it("shows Todas for a budget for every entity, nothing for an unknown entity", () => {
+    expect(entityBadgeKey(null, kinds)).toBe("scope.all");
+    expect(entityBadgeKey("gone", kinds)).toBeNull();
   });
 });

@@ -35,7 +35,8 @@
     "personal_rename": "A PF não pode ser renomeada.",
     "personal_archive": "A PF não pode ser arquivada.",
     "kind_mismatch": "Essa entidade não é do tipo esperado.",
-    "business_required": "Lançamentos de empresa precisam de uma empresa."
+    "business_required": "Lançamentos de empresa precisam de uma empresa.",
+    "archived": "A entidade {name} está arquivada."
   },
   "account": {
     "not_found": "Conta não encontrada.",

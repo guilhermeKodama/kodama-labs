@@ -11,6 +11,7 @@ import { useSession } from "@/lib/api/session";
 import { useAppMutation } from "@/lib/api/use-app-mutation";
 import { useFmt } from "@/lib/format/provider";
 import { entityKindLabel } from "@/lib/settings/entity-kind";
+import { readEntityWrite } from "@/lib/settings/entity-write";
 import { entityBody, entityForm, type EntityForm } from "@/lib/settings/forms";
 import { swatchColor } from "@/lib/settings/palette";
 import { useShortcut } from "@/lib/shortcuts/provider";
@@ -19,6 +20,8 @@ import { AddRow, DetailFooter, Dot, ListDetail, ListItem, Swatches } from "./mas
 /** GET /v2/entities?includeArchived=true rows. */
 export type EntityRow = EntityRecord & { description: string | null; taxRate: number; accountsCount: number; archivedAt: string | null };
 type AccountRow = AccountRecord & { initialBalance?: number };
+/** POST / PATCH /v2/entities: the entity, with the batchId of the recorded write when there is one (flat or as { entity, batchId }). */
+type EntityWrite = (EntityRow & { batchId?: string | null }) | { entity: EntityRow; batchId?: string | null };
 
 const NEW = "new";
 
@@ -89,12 +92,16 @@ function EntityDetail({ entity, initialBalance, onCreated }: { entity: EntityRow
   const set = (patch: Partial<EntityForm>) => setForm((f) => ({ ...f, ...patch }));
   const isPersonal = entity?.kind === "personal";
 
+  // The routes answer with the entity and, once they record the write, its batchId: the toast then offers "Desfazer" (useAppMutation).
   const save = useAppMutation({
     event: "catalog.write",
-    mutationFn: (body: Record<string, unknown>) => (entity ? apiPatch<EntityRow>(`/api/v2/entities/${entity.id}`, body) : apiPost<EntityRow>("/api/v2/entities", body)),
-    undo: (saved) => (entity ? t("toastSaved", { name: saved.name }) : t("toastCreated", { name: saved.name })),
-    onSuccess: (saved) => {
-      if (!entity) onCreated(saved.id);
+    mutationFn: (body: Record<string, unknown>) => (entity ? apiPatch<EntityWrite>(`/api/v2/entities/${entity.id}`, body) : apiPost<EntityWrite>("/api/v2/entities", body)),
+    undo: (data) => {
+      const saved = readEntityWrite<EntityRow>(data).entity;
+      return entity ? t("toastSaved", { name: saved.name }) : t("toastCreated", { name: saved.name });
+    },
+    onSuccess: (data) => {
+      if (!entity) onCreated(readEntityWrite<EntityRow>(data).entity.id);
     },
     onError: (error) => {
       const fields = invalidFields(error);
@@ -106,8 +113,8 @@ function EntityDetail({ entity, initialBalance, onCreated }: { entity: EntityRow
   });
   const archive = useAppMutation({
     event: "catalog.write",
-    mutationFn: (archived: boolean) => apiPatch<EntityRow>(`/api/v2/entities/${entity!.id}`, { archived }),
-    undo: (saved, archived) => t(archived ? "toastArchived" : "toastUnarchived", { name: saved.name }),
+    mutationFn: (archived: boolean) => apiPatch<EntityWrite>(`/api/v2/entities/${entity!.id}`, { archived }),
+    undo: (data, archived) => t(archived ? "toastArchived" : "toastUnarchived", { name: readEntityWrite<EntityRow>(data).entity.name }),
   });
 
   const submit = () => {

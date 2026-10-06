@@ -5,6 +5,7 @@ import { useTranslations } from "next-intl";
 import { Badge, Menu, MenuItem, MenuSep, Segmented } from "@/components/cap";
 import { Link } from "@/i18n/navigation";
 import { useSession } from "@/lib/api/session";
+import { entityBadgeKey } from "@/lib/budgets/labels";
 import type { PaceTone } from "@/lib/budgets/pace";
 import type { BudgetsScope } from "@/lib/budgets/url";
 import { buildTransactionsHref, type ViewDraft } from "@/lib/ledger/view-draft";
@@ -40,17 +41,25 @@ export function DrillLink({ draft, className, children, title }: { draft: ViewDr
   );
 }
 
-/** Entity of a budget or bill (PF, the company's name); "Todas" for a budget for every entity. */
+/** Entity of a bill (PF, the company's name); "Todas" for every entity. */
 export function EntityBadge({ entityId, names }: { entityId: string | null; names: ReadonlyMap<string, string> }) {
   const t = useTranslations("budgets");
   return <Badge className="shrink-0">{entityId ? (names.get(entityId) ?? "—") : t("dialog.allEntities")}</Badge>;
 }
 
-/** Id → label (PF or the company's name) of the session's entities. */
-export function useEntityNames(): { names: Map<string, string>; hasBusiness: boolean; personalId: string | null; businessIds: string[] } {
+/** Entity of a budget, short as in the mockup's table: "PF", "PJ" (any business), "Todas" for every entity. */
+export function BudgetEntityBadge({ entityId, kinds }: { entityId: string | null; kinds: ReadonlyMap<string, string> }) {
+  const t = useTranslations("budgets");
+  const key = entityBadgeKey(entityId, kinds);
+  return <Badge className="shrink-0">{key ? t(key) : "—"}</Badge>;
+}
+
+/** Id → label (PF or the company's name) and id → kind of the session's entities. */
+export function useEntityNames(): { names: Map<string, string>; kinds: Map<string, string>; hasBusiness: boolean; personalId: string | null; businessIds: string[] } {
   const entities = useSession().data?.entities ?? [];
   return {
     names: new Map(entities.map((entity) => [entity.id, entityLabel(entity)])),
+    kinds: new Map(entities.map((entity) => [entity.id, entity.kind])),
     hasBusiness: entities.some((entity) => entity.kind === "business"),
     personalId: entities.find((entity) => entity.kind === "personal")?.id ?? null,
     businessIds: entities.filter((entity) => entity.kind === "business").map((entity) => entity.id),

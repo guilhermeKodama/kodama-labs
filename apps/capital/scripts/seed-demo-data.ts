@@ -35,8 +35,53 @@ export function isoDate(m0: YearMonth, k: number, day: number): string {
   return `${year}-${String(month).padStart(2, "0")}-${String(Math.min(day, last)).padStart(2, "0")}`;
 }
 
-/** The mockup's "today" (22/09, PACE = 22/30): the seed books everything up to this day of M0. */
+/** The mockup's "today" (22/09, PACE = 22/30, MOCK_MONTH = 9). */
 export const ANCHOR_DAY = 22;
+
+/**
+ * The real today plays the mockup's "today": M0 is today's month, and the
+ * mockup's month so far (days 1..22 of its September) is laid over the real
+ * month so far (days 1..today), so nothing in M0 is dated after today and
+ * the month's spend keeps the mockup's order and proportions. On or after
+ * the 22nd the days are the mockup's own. A day of M0 after the mockup's
+ * today never happens before the real one either (clamped to today). Other
+ * months keep their days; recurring rules keep their day of the month, so
+ * the ones due after today are Contas fixas' next 14 days.
+ */
+export function alignedDay(day: number, todayDay: number): number {
+  if (day > ANCHOR_DAY) return Math.min(day, todayDay);
+  if (todayDay >= ANCHOR_DAY) return day;
+  return Math.max(1, Math.ceil((day * todayDay) / ANCHOR_DAY));
+}
+
+export interface DemoCalendar {
+  /** The month playing the mockup's September (today's month). */
+  m0: YearMonth;
+  /** YYYY-MM-DD: the real today, which plays 22/09. */
+  today: string;
+  /** YYYY-MM-DD of a mockup day in month offset `k` from M0, aligned to today in M0. */
+  date(k: number, day: number): string;
+  /**
+   * YYYY-MM-DD of a purchase in installments made in month `k`: its parcels
+   * fall on the same day of each month, so the day is aligned like M0's and
+   * M0's parcel is not after today (later parcels are future by nature).
+   */
+  installmentDate(k: number, day: number): string;
+}
+
+/** The seed's calendar for a real today (YYYY-MM-DD in the demo user's timezone). */
+export function demoCalendar(today: string): DemoCalendar {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(today);
+  if (!match) throw new Error(`today must be YYYY-MM-DD, got "${today}"`);
+  const m0 = { year: Number(match[1]), month: Number(match[2]) };
+  const todayDay = Number(match[3]);
+  return {
+    m0,
+    today,
+    date: (k, day) => isoDate(m0, k, k === 0 ? alignedDay(day, todayDay) : day),
+    installmentDate: (k, day) => isoDate(m0, k, alignedDay(day, todayDay)),
+  };
+}
 
 export const round = (v: number, digits = 2) => {
   const f = 10 ** digits;

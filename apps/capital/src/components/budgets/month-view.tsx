@@ -4,7 +4,7 @@ import { useTranslations } from "next-intl";
 import { CartesianGrid, Line, LineChart, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { EmptyRow, Kpi, KpiStrip, Panel } from "@/components/cap";
 import { useErrorMessage } from "@/lib/api/use-app-mutation";
-import { budgetDrill, monthPeriod } from "@/lib/budgets/drill";
+import { budgetDrill, budgetsDrill, monthPeriod } from "@/lib/budgets/drill";
 import { barHeader, monthHeader, resetsLabel } from "@/lib/budgets/labels";
 import { monthPace, paceTone, percent, projectionVsBudget, STATUS_KEY, usage } from "@/lib/budgets/pace";
 import type { BudgetsScope, BudgetsView } from "@/lib/budgets/url";
@@ -13,7 +13,7 @@ import type { ViewDraft } from "@/lib/ledger/view-draft";
 import { CHART, CHART_AXIS } from "@/lib/theme/chart-colors";
 import { cn } from "@/lib/utils";
 import type { EditableBudget } from "./budget-dialog";
-import { ChartCaption, ChartLegend, DrillLink, EntityBadge, PaceBar, RowMenu, ScopeBar, TONE_TEXT, TOOLTIP_STYLE, useEntityNames, ViewState, type BudgetActions } from "./parts";
+import { BudgetEntityBadge, ChartCaption, ChartLegend, DrillLink, EntityBadge, PaceBar, RowMenu, ScopeBar, TONE_TEXT, TOOLTIP_STYLE, useEntityNames, ViewState, type BudgetActions } from "./parts";
 import { useMonthOverview, type BudgetRow, type MonthOverview, type UpcomingItem } from "./use-budgets";
 
 /** Mockup BudgetsScreen table: Categoria | bar | Gasto | Restante | Status. */
@@ -58,7 +58,7 @@ export function MonthView({
 function MonthBody({ data, actions, onOpenRule, onAllRules }: { data: MonthOverview; actions: BudgetActions; onOpenRule: (id: string) => void; onAllRules: () => void }) {
   const t = useTranslations("budgets");
   const fmt = useFmt();
-  const { names } = useEntityNames();
+  const { names, kinds } = useEntityNames();
   const { period, summary, budgets } = data;
   const pace = monthPace(period);
   const monthLabel = fmt.monthLabel({ year: period.year, month: period.month });
@@ -67,22 +67,28 @@ function MonthBody({ data, actions, onOpenRule, onAllRules }: { data: MonthOverv
   const resets = resetsLabel(period.month, fmt.monthAbbr);
   // "Gasto" counts what is dated up to today in the current month; the whole month is the committed spend.
   const spentPeriod = period.isCurrent ? monthPeriod(period.year, period.month, period.daysElapsed) : period.isPast ? monthPeriod(period.year, period.month) : null;
+  const wholeMonth = monthPeriod(period.year, period.month);
   const drill = (row: BudgetRow, range: ReturnType<typeof monthPeriod> | null): ViewDraft | null =>
     range ? { label: t("drillLabel", { category: row.category, period: monthLabel }), ...budgetDrill(row, data.scope.entityIds, range) } : null;
+  // KPIs and the Total row: every budgeted category at once ("todo número leva à tabela filtrada").
+  const totals = (label: string, range: ReturnType<typeof monthPeriod> | null): ViewDraft | null => {
+    const found = range ? budgetsDrill(budgets, data.scope.entityIds, range) : null;
+    return found ? { label: t("drillLabel", { category: label, period: monthLabel }), ...found } : null;
+  };
 
   return (
     <>
       <KpiStrip>
-        <Kpi label={t("month.kpi.budget")} value={fmt.money0(summary.totalBudget)} />
+        <Kpi label={t("month.kpi.budget")} value={<DrillLink draft={totals(t("month.kpi.budget"), wholeMonth)}>{fmt.money0(summary.totalBudget)}</DrillLink>} />
         <Kpi
           label={t("month.kpi.spent")}
-          value={fmt.money0(summary.totalSpent)}
+          value={<DrillLink draft={totals(t("month.kpi.spent"), spentPeriod)}>{fmt.money0(summary.totalSpent)}</DrillLink>}
           sub={summary.totalBudget > 0 ? t("month.kpi.spentSub", { pct: percent(summary.totalSpent / summary.totalBudget) }) : undefined}
         />
-        <Kpi label={t("month.kpi.remaining")} value={fmt.money0(summary.totalRoom)} />
+        <Kpi label={t("month.kpi.remaining")} value={<DrillLink draft={totals(t("month.kpi.remaining"), spentPeriod)}>{fmt.money0(summary.totalRoom)}</DrillLink>} />
         <Kpi
           label={t("month.kpi.projection")}
-          value={fmt.money0(summary.projectedTotal)}
+          value={<DrillLink draft={totals(t("month.kpi.projection"), wholeMonth)}>{fmt.money0(summary.projectedTotal)}</DrillLink>}
           sub={projection ? t(`month.kpi.${projection.kind}`, { amount: fmt.money0(projection.amount) }) : undefined}
           tone={projection?.kind === "over" ? "warn" : undefined}
         />
@@ -112,10 +118,10 @@ function MonthBody({ data, actions, onOpenRule, onAllRules }: { data: MonthOverv
             return (
               <div key={row.id} className={cn(COLS, "group h-10 border-t border-stroke-3 text-[12.5px]")}>
                 <span className="flex min-w-0 items-center gap-1.5">
-                  <DrillLink draft={drill(row, monthPeriod(period.year, period.month))} className="min-w-0 truncate">
+                  <DrillLink draft={drill(row, wholeMonth)} title={row.category} className="min-w-0 truncate">
                     {row.category}
                   </DrillLink>
-                  <EntityBadge entityId={row.entityId} names={names} />
+                  <BudgetEntityBadge entityId={row.entityId} kinds={kinds} />
                   <RowMenu category={row.category} onEdit={() => actions.onEdit(editable)} onDelete={() => actions.onDelete(editable)} />
                 </span>
                 <span className="flex min-w-0 items-center gap-2">
@@ -136,8 +142,12 @@ function MonthBody({ data, actions, onOpenRule, onAllRules }: { data: MonthOverv
             <div className={cn(COLS, "h-9 border-t border-stroke-2 bg-fill-4 text-[12.5px] font-semibold")}>
               <span>{t("month.table.total")}</span>
               <span className="truncate text-[11.5px] font-normal text-fg-3">{t(resets.key, resets.values)}</span>
-              <span className="text-right font-mono tabular-nums">{fmt.money0(summary.totalSpent)}</span>
-              <span className="text-right font-mono tabular-nums">{fmt.money0(summary.totalRoom)}</span>
+              <DrillLink draft={totals(t("month.table.total"), spentPeriod)} className="text-right font-mono tabular-nums">
+                {fmt.money0(summary.totalSpent)}
+              </DrillLink>
+              <DrillLink draft={totals(t("month.table.total"), spentPeriod)} className="text-right font-mono tabular-nums">
+                {fmt.money0(summary.totalRoom)}
+              </DrillLink>
               <span />
             </div>
           ) : (

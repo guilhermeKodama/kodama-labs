@@ -45,6 +45,41 @@ export function budgetDrillFilters(row: BudgetDrillRow, scopeEntityIds: readonly
   return filters;
 }
 
+/**
+ * The expense rows behind several budget rows at once (a KPI, a Total
+ * row): kind expense outside transfers, the budgeted categories, and the
+ * entities those budgets cover. Ledger filters are AND-only, so the drill
+ * is exact when every category covers the same entities (all of them in
+ * the scope when a category has a budget for every entity, else the
+ * entities with their own budget); otherwise it takes the union of the
+ * covered entities, which can add another entity's spend in a category
+ * that only has a budget for some entities. Null when there are no rows.
+ */
+export function budgetsDrillFilters(rows: readonly BudgetDrillRow[], scopeEntityIds: readonly string[] | null): LedgerFilter[] | null {
+  if (!rows.length) return null;
+  const covered = new Map<string | null, Set<string> | "all">();
+  for (const row of rows) {
+    const current = covered.get(row.categoryId);
+    if (current === "all") continue;
+    if (!row.entityId) covered.set(row.categoryId, "all");
+    else covered.set(row.categoryId, new Set([...(current ?? []), row.entityId]));
+  }
+  const categoryIds = [...covered.keys()].filter((id): id is string => id !== null);
+  const filters: LedgerFilter[] = [
+    { field: "kind", op: "in", values: ["expense"] },
+    { field: "transferDirection", op: "isNull" },
+    categoryIds.length ? { field: "categoryId", op: "in", values: categoryIds } : { field: "categoryId", op: "isNull" },
+  ];
+  const sets = [...covered.values()];
+  if (sets.includes("all")) {
+    if (scopeEntityIds) filters.push({ field: "entityId", op: "in", values: scopeEntityIds.length ? [...scopeEntityIds] : [NO_ENTITY] });
+    return filters;
+  }
+  const entities = new Set(sets.flatMap((set) => [...(set as Set<string>)]));
+  filters.push({ field: "entityId", op: "in", values: [...entities] });
+  return filters;
+}
+
 const pad = (n: number) => String(n).padStart(2, "0");
 
 /**
@@ -72,6 +107,12 @@ export interface BudgetDrill {
 /** The draft of a drill from a budget row over a period (a month, or the months of a year so far). */
 export function budgetDrill(row: BudgetDrillRow, scopeEntityIds: readonly string[] | null, period: Extract<Period, { from: string }>): BudgetDrill {
   return { filters: budgetDrillFilters(row, scopeEntityIds), dateField: "effectiveDate", period };
+}
+
+/** The draft of a drill from several budget rows (a KPI, a Total row) over a period; null when there are no rows. */
+export function budgetsDrill(rows: readonly BudgetDrillRow[], scopeEntityIds: readonly string[] | null, period: Extract<Period, { from: string }>): BudgetDrill | null {
+  const filters = budgetsDrillFilters(rows, scopeEntityIds);
+  return filters ? { filters, dateField: "effectiveDate", period } : null;
 }
 
 /**

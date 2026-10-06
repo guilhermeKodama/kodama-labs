@@ -39,6 +39,7 @@ export const ERROR_CODES = {
   "entity.personal_archive": "The personal entity cannot be archived",
   "entity.kind_mismatch": "Entity {id} is not a {kind} entity",
   "entity.business_required": "Business entries need a business",
+  "entity.archived": "The entity {name} is archived",
 
   // Accounts
   "account.not_found": "Account not found",

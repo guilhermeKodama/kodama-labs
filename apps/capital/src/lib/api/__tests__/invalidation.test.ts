@@ -81,8 +81,8 @@ describe("invalidationPrefixes", () => {
     expect(roots("me.write")).toEqual(["me"]);
   });
 
-  it("refreshes the same data after an undo as after a ledger write", () => {
-    expect(new Set(roots("undo"))).toEqual(new Set(roots("ledger.write")));
+  it("refreshes after an undo what a ledger write refreshes, plus the entities and the session (an undone entity write)", () => {
+    expect(new Set(roots("undo"))).toEqual(new Set([...roots("ledger.write"), "me", "entities"]));
   });
 
   it("keeps domain writes scoped", () => {

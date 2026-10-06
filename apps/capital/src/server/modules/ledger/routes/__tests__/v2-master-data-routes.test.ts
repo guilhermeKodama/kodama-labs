@@ -174,6 +174,15 @@ describe("PATCH /v2/accounts/{id}", () => {
     expect((await prisma.account.findUniqueOrThrow({ where: { id: f.card } })).entityId).toBe(f.pfId);
   });
 
+  it("refuses to move an account to an archived entity", async () => {
+    await prisma.entity.update({ where: { id: f.pjId }, data: { archivedAt: new Date() } });
+    expect(await call("PATCH", `/v2/accounts/${f.broker}`, { entityId: f.pjId })).toEqual({
+      status: 422,
+      body: expect.objectContaining({ code: "entity.archived", params: { name: "Kodama LTDA" } }),
+    });
+    expect((await prisma.account.findUniqueOrThrow({ where: { id: f.broker } })).entityId).toBe(f.pfId);
+  });
+
   it("refuses to move an account a recurring rule books on", async () => {
     await prisma.recurringRule.create({
       data: { userId: USER, entityId: f.pfId, accountId: f.broker, kind: "expense", description: "Custódia", amount: 10, currency: "BRL", frequency: "monthly", startDate: new Date("2027-09-01T12:00:00Z"), nextDueDate: new Date("2027-09-01T12:00:00Z"), autoGenerate: false },

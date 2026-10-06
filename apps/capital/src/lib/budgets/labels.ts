@@ -132,3 +132,15 @@ export function insightCopy(insight: YearInsight, category: string, abbr: Abbr, 
     adjust: null,
   };
 }
+
+/**
+ * The badge next to a budget (mockup BUDGETS: "PF" / "PJ"): the scope
+ * key whose label it shows. Any business entity is "PJ"; a budget for every
+ * entity is "Todas"; an entity the session does not know shows no label.
+ */
+export function entityBadgeKey(entityId: string | null, kinds: ReadonlyMap<string, string>): "scope.pf" | "scope.pj" | "scope.all" | null {
+  if (!entityId) return "scope.all";
+  const kind = kinds.get(entityId);
+  if (!kind) return null;
+  return kind === "personal" ? "scope.pf" : "scope.pj";
+}

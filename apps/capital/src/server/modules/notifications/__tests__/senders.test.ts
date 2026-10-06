@@ -65,6 +65,25 @@ describe("runNotifications", () => {
     expect(dispatches.map((d) => [d.kind, d.sentCount])).toEqual([["bill_closed", 1], ["budget_threshold", 1]]);
   });
 
+  it("compares a budget in another currency in the base currency", async () => {
+    // 1 BRL = 0,2 USD: the USD 100 budget is R$ 500, so R$ 460 spent is 92% of it.
+    await prisma.currency.upsert({
+      where: { userId_code: { userId: USER, code: "USD" } },
+      create: { userId: USER, code: "USD", name: "US Dollar", symbol: "$", manualRate: 0.2 },
+      update: { manualRate: 0.2 },
+    });
+    await updateNotificationSettings(USER, { billClosedEnabled: false }, prisma);
+    await prisma.budget.updateMany({ where: { userId: USER }, data: { currency: "USD", amount: 120 } });
+    // USD 120 = R$ 600: R$ 460 is 77%, below 90% (compared raw, 460 ≥ 108 would alert).
+    expect((await run()).claimed.budget_threshold).toBe(0);
+
+    await prisma.budget.updateMany({ where: { userId: USER }, data: { amount: 100 } });
+    expect((await run()).claimed.budget_threshold).toBe(1);
+    const budget = pushes.find((p) => p.payload.tag.startsWith("budget-"))!.payload;
+    expect(budget.body).toMatch(/92,00 de .*100,00 em out\/2026/);
+    expect(budget.body).toContain("US$");
+  });
+
   it("waits for the daytime window and respects the toggles", async () => {
     expect((await run(new Date("2026-10-06T05:00:00Z"))).claimed).toEqual({ bill_closed: 0, budget_threshold: 0, weekly_summary: 0 });
     await updateNotificationSettings(USER, { billClosedEnabled: false, budgetEnabled: false }, prisma);
