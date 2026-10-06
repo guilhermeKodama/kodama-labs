@@ -458,7 +458,7 @@ export async function executeImport(
       if (trashed) {
         const untrashed = await tx.ledgerEntry.update({ where: { id: trashed.id }, data: { deletedAt: null, importId: imp.id } });
         records.push({ model: "LedgerEntry", recordId: trashed.id, before: snapshot(trashed), after: snapshot(untrashed) });
-        await updateEntry(userId, trashed.id, { kind: t.type, amount: t.amount, currency: input.currency, date: t.date, description: t.description, categoryId }, tx, { collect: records });
+        await updateEntry(userId, trashed.id, { kind: t.type, amount: t.amount, currency: input.currency, date: t.date, description: t.description, categoryId }, tx, { collect: records, checkCategoryType: false });
         const before = await tx.ledgerEntry.findUniqueOrThrow({ where: { id: trashed.id } });
         const stamped = await tx.ledgerEntry.update({ where: { id: trashed.id }, data: { isAutoCategorized: auto, categorizedByRuleId: ruleId } });
         records.push({ model: "LedgerEntry", recordId: trashed.id, before: snapshot(before), after: snapshot(stamped) });

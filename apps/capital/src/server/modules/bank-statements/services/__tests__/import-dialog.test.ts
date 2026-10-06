@@ -294,6 +294,18 @@ describe("POST /v2/imports (bank statement)", () => {
     expect(toNumber((await prisma.account.findUniqueOrThrow({ where: { id: bank2 } })).initialBalance)).toBe(-128.9);
   });
 
+  it("brings a trashed row back with the category the plan gives it, whatever its type (as new rows are booked)", async () => {
+    const { ifood } = await seedBankDuplicates();
+    const first = (await call("POST", "/v2/imports", bankPlan(ifood))).body;
+    await call("POST", `/v2/imports/${first.importId}/revert`);
+    // The second time the user files the income under an expense category (a refund, say).
+    const plan = bankPlan(ifood);
+    plan.transactions = plan.transactions.map((t) => (t.externalId === BANK_FITIDS.SALARY ? { ...t, categoryId: f.categories.Groceries } : t));
+    const again = await call("POST", "/v2/imports", plan);
+    expect(again.status).toBe(200);
+    expect(await prisma.ledgerEntry.findFirstOrThrow({ where: { userId: USER, externalId: BANK_FITIDS.SALARY, deletedAt: null } })).toMatchObject({ kind: "income", categoryId: f.categories.Groceries });
+  });
+
   it("imports an exact duplicate anyway under a suffixed external id", async () => {
     await seedBankDuplicates();
     const r = await call("POST", "/v2/imports", {

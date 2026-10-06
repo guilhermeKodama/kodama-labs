@@ -332,14 +332,25 @@ export interface InternalPatch extends Partial<Omit<EntryPatch, "kind">> {
   kind?: "income" | "expense" | "investment";
 }
 
-export async function updateEntry(userId: string, entryId: string, patch: InternalPatch, db: DbClient, opts: { collect?: MutationRecordInput[]; record?: boolean } = {}) {
+export interface UpdateEntryOptions {
+  collect?: MutationRecordInput[];
+  record?: boolean;
+  /**
+   * false skips the category type check (category.type_mismatch): an
+   * import brings rows back from the trash with the category its plan or
+   * a rule gives, as createEntry books new rows, whatever its type.
+   */
+  checkCategoryType?: boolean;
+}
+
+export async function updateEntry(userId: string, entryId: string, patch: InternalPatch, db: DbClient, opts: UpdateEntryOptions = {}) {
   return inTransaction(db, async (tx) => {
     const records: MutationRecordInput[] = opts.collect ?? [];
     const fx = await loadFx(userId, tx);
     const entry = await tx.ledgerEntry.findFirst({ where: { id: entryId, userId, deletedAt: null } });
     if (!entry) throw notFound("Transaction", "entry.not_found");
     if (entry.transferGroupId) await updateTransferIn(tx, userId, entry, patch, fx, records);
-    else await updateSimpleIn(tx, userId, entry, patch, fx, records);
+    else await updateSimpleIn(tx, userId, entry, patch, fx, records, opts.checkCategoryType ?? true);
     const batchId =
       opts.record === false || opts.collect ? null : await recordMutation(tx, userId, "update", entry.description, records);
     const updated = await tx.ledgerEntry.findUniqueOrThrow({ where: { id: entryId }, include: ENTRY_CONTEXT_INCLUDE });
@@ -358,7 +369,8 @@ async function updateSimpleIn(
   entry: LedgerEntry,
   patch: InternalPatch,
   fx: FxContext,
-  records: MutationRecordInput[]
+  records: MutationRecordInput[],
+  checkCategoryType: boolean
 ) {
   if (TRANSFER_ONLY_FIELDS.some((f) => patch[f] !== undefined)) {
     throw new LedgerError("Only a transfer has a source and a destination account", 422, { code: "entry.not_transfer" });
@@ -377,7 +389,12 @@ async function updateSimpleIn(
     account = await getDefaultAccount(entity, tx);
   }
   const kind: LedgerKind = patch.kind ?? entry.kind;
-  if (patch.categoryId) assertCategoryFitsKind(await assertAssignableCategory(userId, patch.categoryId, tx), kind);
+  if (patch.categoryId) {
+    const category = await assertAssignableCategory(userId, patch.categoryId, tx);
+    // Only a category (or kind) the patch changes is checked: a row that already has a category of the other type
+    // (booked by a rule or an import, or from before the check) can still be edited.
+    if (checkCategoryType && (patch.categoryId !== entry.categoryId || kindChanges)) assertCategoryFitsKind(category, kind);
+  }
   // income <-> expense keeps the magnitude the user sees and flips the stored sign.
   const magnitude = patch.amount ?? displayAmount(entry.kind, entry.amount);
   const currency = patch.currency ?? entry.currency;

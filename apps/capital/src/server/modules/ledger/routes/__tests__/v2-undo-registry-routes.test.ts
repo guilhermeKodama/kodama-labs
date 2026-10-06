@@ -132,6 +132,18 @@ describe("category type on PATCH and bulk", () => {
     expect((await call("PATCH", `/v2/ledger/entries/${id}`, { kind: "income", categoryId: f.categories.Salary })).status).toBe(200);
   });
 
+  it("still edits a row that already has a category of the other type (a rule's or an import's), as long as the category is left alone", async () => {
+    const e = await call("POST", "/v2/ledger/entries", { kind: "income", accountId: f.pfChecking, amount: 30, description: "Estorno mercado", date: "2026-09-06" });
+    const id = e.body.entryIds[0] as string;
+    // An income refund booked under the expense category by a rule or an import.
+    await prisma.ledgerEntry.update({ where: { id }, data: { categoryId: f.categories.Groceries } });
+    expect((await call("PATCH", `/v2/ledger/entries/${id}`, { description: "Estorno do mercado" })).status).toBe(200);
+    expect((await call("PATCH", `/v2/ledger/entries/${id}`, { description: "Estorno", categoryId: f.categories.Groceries })).status).toBe(200);
+    expect((await prisma.ledgerEntry.findUniqueOrThrow({ where: { id } })).categoryId).toBe(f.categories.Groceries);
+    // Bulk leaves it alone too when it already has the category.
+    expect(await call("POST", "/v2/ledger/bulk", { op: "update", selection: { ids: [id] }, patch: { categoryId: f.categories.Groceries }, dryRun: true })).toMatchObject({ status: 200 });
+  });
+
   it("rejects the whole bulk change (and its dry run) when a selected entry has the other type; transfers are left out", async () => {
     const expense = (await call("POST", "/v2/ledger/entries", { kind: "expense", accountId: f.pfChecking, amount: 80, description: "Padaria", date: "2026-09-03" })).body.entryIds[0];
     const income = (await call("POST", "/v2/ledger/entries", { kind: "income", accountId: f.pfChecking, amount: 900, description: "Freela", date: "2026-09-04" })).body.entryIds[0];
