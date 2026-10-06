@@ -42,7 +42,8 @@ Read the saved output:
 - Section 1, every `row_count` is 0. A positive count aborts the backfill. Each row includes up to 10 sample ids. Fix those rows (or decide an `externalId collision`) and rerun. Do not rehearse with a failing section 1.
 - Sections 2 and 3 are informational. Section 2 lists rows the unambiguous-owner rules will fill in. Section 3 lists business brokerages that fall back onto the personal entity.
 - Section 3b lists non-base-currency transactions and transfers whose stored `exchangeRate` is 1, with up to 10 ids. A non-zero count does not block. Those rows stay 1:1, which is the rate already stored.
-- Section 4 is the baseline. Record 4a through 4e. `verify-ledger-migration.sql` is checked against these numbers.
+- Section 3c lists bill purchases whose bill payment is also a statement settlement. A non-zero count does not block: the backfill does not insert them as expenses. Record `row_count` and `amount_abs_sum`.
+- Section 4 is the baseline. Record 4a through 4e. `verify-ledger-migration.sql` is checked against these numbers. 4b excludes the section 3c purchases.
 
 Precheck on production, 2026-10-06: section 1 blockers 0, section 2 remaps 0, section 3 brokerage fallbacks 0. Section 4a: 519 transactions, 2257 bill_transactions, 132 transfers, 75 investment_transactions. The final pre-deploy precheck in the maintenance window must match this unless something has written since; if it has, the new section 4 is the baseline and this one is the earlier record.
 
@@ -135,6 +136,7 @@ docker --context desktop-linux exec -i capital-rehearsal-pg \
 - Section 1 legacy counts equal precheck 4a.
 - Section 2 unmapped counts are all 0.
 - Section 3 `legacy_n` and `legacy_sum` equal precheck 4b.
+- Section 3b `skipped_n` and `skipped_abs_sum` equal precheck section 3c `row_count` and `amount_abs_sum`. `inserted_as_expense` is 0.
 - Section 4 legacy sums equal precheck 4c, per user and type.
 - Section 5 matches precheck 4d.
 - Section 6 `ledger_legs` is twice precheck 4e, and section 7 is 0.

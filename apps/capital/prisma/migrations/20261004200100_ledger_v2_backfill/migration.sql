@@ -9,6 +9,8 @@
 -- abort the migration if any legacy row would be left out of the ledger, if a
 -- bill purchase or investment cash leg has no usable rate, or if two rows
 -- would share (accountId, externalId). Up to 10 ids are listed per category.
+-- Bill-only purchases whose bill payment is already a statement settlement are
+-- the exception: they are mapped and not inserted.
 --
 -- Ids are preserved wherever a legacy row maps 1:1 (entities keep the
 -- business / personal account id, accounts keep the card / broker id, entries
@@ -35,6 +37,10 @@
 --     entry keeps the month's total identical. Purchases of a legacy bill that
 --     was never linked to a payment were not counted before; they now count on
 --     the bill's closing date (reported as a known adjustment, not an error).
+--     A bill-only purchase (statementId null) whose bill payment is already a
+--     statement settlement is not inserted: the statement's purchases are the
+--     expense. legacy.id_map records it as SupersededBillPurchase, and that
+--     bill gets no adjustment entry.
 --   * Investment operations that move cash get a cash leg (kind investment) on
 --     the brokerage account; the account's initialBalance is set so the derived
 --     cash equals the old cashBalance.
@@ -1055,6 +1061,22 @@ ON CONFLICT (id) DO NOTHING;
 -- Card purchases
 -- ---------------------------------------------------------------------------
 
+-- Bill-only lines whose payment already settles a statement. The statement
+-- purchases are the expense; these rows must not be inserted. Predicate is
+-- copied verbatim from scripts/ledger-v2-check-queries.sql (shadow-rows).
+CREATE TEMP TABLE _shadowed_purchase ON COMMIT DROP AS
+-- BEGIN shadow-rows
+SELECT bt.id, bt.amount
+FROM bill_transactions bt
+JOIN credit_card_bills b ON b.id = bt."billId"
+WHERE bt."statementId" IS NULL
+  AND EXISTS (
+    SELECT 1 FROM credit_card_statements s
+    WHERE s."billPaymentTransactionId" = b."transactionId"
+  )
+-- END shadow-rows
+;
+
 CREATE TEMP TABLE _purchase ON COMMIT DROP AS
 SELECT bt.*,
        coalesce(bt."statementId", bs.stmt_id) AS stmt_id,
@@ -1082,6 +1104,7 @@ SELECT p.id, p.user_id, p.entity_id, p.card_id, 'expense', -p.amount, p.currency
        p."createdAt", p."updatedAt"
 FROM _purchase p
 LEFT JOIN categories c ON c."userId" = p.user_id AND c.name = p.category AND c.type = 'expense'
+WHERE NOT EXISTS (SELECT 1 FROM _shadowed_purchase sp WHERE sp.id = p.id)
 ON CONFLICT (id) DO NOTHING;
 
 -- Legacy bills whose total differs from their purchases: keep the paid total.
@@ -1101,6 +1124,10 @@ JOIN LATERAL (
   SELECT ((lt.amount * lt."exchangeRate")::numeric - coalesce((SELECT sum((p.amount * p.rate)::numeric) FROM _purchase p WHERE p."billId" = b.id), 0))::numeric AS diff
 ) x ON true
 WHERE abs(x.diff) >= 0.005
+  AND NOT EXISTS (
+    SELECT 1 FROM credit_card_statements s
+    WHERE s."billPaymentTransactionId" = b."transactionId"
+  )
 ON CONFLICT (id) DO NOTHING;
 
 -- ---------------------------------------------------------------------------
@@ -1235,6 +1262,7 @@ UNION ALL SELECT 'Transfer', id, 'TransferGroup', id FROM transfers WHERE id IN 
 UNION ALL SELECT 'Transfer', id, 'LedgerEntry', id FROM transfers WHERE id IN (SELECT id FROM ledger_entries)
 UNION ALL SELECT 'Transfer', id, 'LedgerEntry', md5('transfer-to:' || id)::uuid::text FROM transfers WHERE id IN (SELECT id FROM transfer_groups)
 UNION ALL SELECT 'BillTransaction', id, 'LedgerEntry', id FROM bill_transactions WHERE id IN (SELECT id FROM ledger_entries)
+UNION ALL SELECT 'BillTransaction', id, 'SupersededBillPurchase', id FROM _shadowed_purchase
 UNION ALL SELECT 'CreditCardStatement', id, 'CardStatement', id FROM credit_card_statements WHERE id IN (SELECT id FROM card_statements)
 UNION ALL SELECT 'CreditCardBill', bill_id, 'CardStatement', stmt_id FROM _bill_stmt
 UNION ALL SELECT 'Installment', id, 'InstallmentPlan', id FROM installments WHERE id IN (SELECT id FROM installment_plans)
@@ -1257,12 +1285,14 @@ DECLARE
   missing_tr int;
   unbalanced int;
   divergent int;
+  shadowed_expenses int;
   report text;
 BEGIN
   SELECT count(*) INTO missing_tx FROM transactions t
     WHERE NOT EXISTS (SELECT 1 FROM ledger_entries le WHERE le.id = t.id);
   SELECT count(*) INTO missing_bt FROM bill_transactions bt
-    WHERE NOT EXISTS (SELECT 1 FROM ledger_entries le WHERE le.id = bt.id);
+    WHERE NOT EXISTS (SELECT 1 FROM ledger_entries le WHERE le.id = bt.id)
+      AND NOT EXISTS (SELECT 1 FROM _shadowed_purchase sp WHERE sp.id = bt.id);
   SELECT count(*) INTO missing_tr FROM transfers tr
     WHERE (SELECT count(*) FROM ledger_entries le WHERE le."transferGroupId" = tr.id) <> 2;
   SELECT count(*) INTO unbalanced FROM transfer_groups tg
@@ -1271,6 +1301,13 @@ BEGIN
   IF missing_tx + missing_bt + missing_tr + unbalanced > 0 THEN
     RAISE EXCEPTION 'ledger backfill incomplete: % transactions, % bill transactions, % transfers missing; % unbalanced transfer groups',
       missing_tx, missing_bt, missing_tr, unbalanced;
+  END IF;
+
+  SELECT count(*) INTO shadowed_expenses FROM _shadowed_purchase sp
+    JOIN ledger_entries le ON le.id = sp.id
+    WHERE le.kind = 'expense';
+  IF shadowed_expenses > 0 THEN
+    RAISE EXCEPTION 'shadowed bill purchases were inserted as expenses: %', shadowed_expenses;
   END IF;
 
   -- P&L per entity and month, computed independently from the legacy tables

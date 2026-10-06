@@ -10,7 +10,9 @@
 -- and "unbalanced transfer groups" is 0. Legacy expenses that were credit
 -- card bill payments become card_payment transfers (the purchases already
 -- live on the card), so section 5 reports them separately and section 4
--- compares only the rest.
+-- compares only the rest. Bill-only purchases whose bill payment is already
+-- a statement settlement are not ledger expenses (section 3b); section 3
+-- compares the purchases that were inserted.
 
 \echo '== 1. Row counts'
 select 'legacy.transactions' as source, count(*) from legacy.transactions
@@ -31,16 +33,37 @@ union all select 'transfers', count(*) from legacy.transfers t
 union all select 'investment_transactions', count(*) from legacy.investment_transactions t
   where not exists (select 1 from legacy.id_map m where m.old_id = t.id);
 
-\echo '== 3. Card purchases: count and absolute sum (legacy = ledger)'
+\echo '== 3. Card purchases that became ledger expenses (legacy = ledger)'
+\echo 'Section 3c of the precheck is excluded. See section 3b.'
 select
-  (select count(*) from legacy.bill_transactions) as legacy_n,
-  (select round(sum(abs(amount))::numeric, 2) from legacy.bill_transactions) as legacy_sum,
+  (select count(*) from legacy.bill_transactions bt
+    where not exists (
+      select 1 from legacy.id_map m
+      where m.old_id = bt.id and m.old_model = 'BillTransaction' and m.new_model = 'SupersededBillPurchase'
+    )) as legacy_n,
+  (select round(sum(abs(bt.amount))::numeric, 2) from legacy.bill_transactions bt
+    where not exists (
+      select 1 from legacy.id_map m
+      where m.old_id = bt.id and m.old_model = 'BillTransaction' and m.new_model = 'SupersededBillPurchase'
+    )) as legacy_sum,
   (select count(*) from ledger_entries e
      join legacy.id_map m on m.new_id = e.id and m.old_model = 'BillTransaction'
      and m.new_model = 'LedgerEntry') as ledger_n,
   (select round(sum(abs(e.amount))::numeric, 2) from ledger_entries e
      join legacy.id_map m on m.new_id = e.id and m.old_model = 'BillTransaction'
      and m.new_model = 'LedgerEntry') as ledger_sum;
+
+\echo '== 3b. Bill purchases skipped because the bill payment is also a statement settlement'
+\echo 'skipped_n and skipped_abs_sum must match precheck section 3c. inserted_as_expense must be 0.'
+select
+  (select count(*) from legacy.id_map m
+    where m.old_model = 'BillTransaction' and m.new_model = 'SupersededBillPurchase') as skipped_n,
+  (select round(coalesce(sum(abs(bt.amount)), 0)::numeric, 2)
+    from legacy.bill_transactions bt
+    join legacy.id_map m on m.old_id = bt.id and m.old_model = 'BillTransaction' and m.new_model = 'SupersededBillPurchase') as skipped_abs_sum,
+  (select count(*) from legacy.id_map m
+    join ledger_entries e on e.id = m.old_id and e.kind = 'expense'
+    where m.old_model = 'BillTransaction' and m.new_model = 'SupersededBillPurchase') as inserted_as_expense;
 
 \echo '== 4. Income/expense per user, excluding bill payments (legacy = ledger)'
 with legacy_tx as (
