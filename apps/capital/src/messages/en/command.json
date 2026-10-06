@@ -1,1 +1,86 @@
-{}
+{
+  "title": "Search or run",
+  "placeholder": "Search or run…",
+  "empty": "Nothing found",
+  "groups": {
+    "quickAdd": "Quick add",
+    "goTo": "Go to",
+    "views": "Views",
+    "create": "Create",
+    "entries": "Transactions",
+    "assistant": "Assistant",
+    "account": "Account"
+  },
+  "goTo": {
+    "transactions": "Transactions",
+    "budgets": "Budgets",
+    "portfolio": "Portfolio",
+    "contributions": "Contributions",
+    "trash": "Trash",
+    "settings": "Settings",
+    "settingsPage": "Settings › {page}"
+  },
+  "settingsPages": {
+    "prefs": "Profile and preferences",
+    "notif": "Notifications",
+    "ent": "Businesses and personal",
+    "bank": "Bank accounts",
+    "card": "Credit cards",
+    "broker": "Brokers",
+    "cat": "Categories",
+    "rules": "Categorization rules",
+    "fx": "Currencies and exchange",
+    "imports": "Imports",
+    "api": "Integrations and API"
+  },
+  "views": {
+    "favorite": "favorite"
+  },
+  "create": {
+    "entry": "New transaction",
+    "import": "Import statement",
+    "view": "New view"
+  },
+  "quickAdd": {
+    "label": "New transaction",
+    "fill": "Fill in ↵",
+    "fields": {
+      "description": "Description",
+      "amount": "Amount",
+      "kind": "Type",
+      "account": "Account",
+      "entity": "Entity",
+      "date": "Date",
+      "category": "Category",
+      "currency": "Currency"
+    },
+    "kinds": {
+      "expense": "Expense",
+      "income": "Income",
+      "transfer": "Transfer",
+      "invest": "Contribution"
+    },
+    "newCategory": "{name} (new)"
+  },
+  "entries": {
+    "searching": "Searching…",
+    "none": "No transactions match “{query}”",
+    "failed": "Transactions could not be searched.",
+    "seeAll": "See all matching “{query}” in Transactions"
+  },
+  "assistant": {
+    "open": "Open the assistant",
+    "continue": "Continue the conversation",
+    "ask": "Ask the assistant: “{query}”"
+  },
+  "account": {
+    "theme": "Theme: {theme}",
+    "language": "Language: {language}",
+    "signOut": "Sign out"
+  },
+  "footer": {
+    "navigate": "navigate",
+    "open": "open",
+    "close": "close"
+  }
+}

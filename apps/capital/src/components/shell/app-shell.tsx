@@ -55,7 +55,7 @@ function useShellShortcuts() {
     },
     { scope: "global", allowInInputs: create.allowInInputs },
   );
-  useShortcut(settings.combo, openSettings, { scope: "global", allowInInputs: settings.allowInInputs });
+  useShortcut(settings.combo, () => openSettings(), { scope: "global", allowInInputs: settings.allowInInputs });
   useShortcut(sidebar.combo, toggleSidebar, { scope: "global", allowInInputs: sidebar.allowInInputs });
 }
 

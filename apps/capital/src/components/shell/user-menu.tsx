@@ -12,26 +12,73 @@ import { apiPatch } from "@/lib/api/client";
 import { useSession, useSignOut } from "@/lib/api/session";
 import { useAppMutation } from "@/lib/api/use-app-mutation";
 import { rememberAppUrl, sessionStore } from "@/lib/shell/last-app-url";
+import { settingsHref, type SettingsPage } from "@/lib/shell/command-targets";
 import { SETTINGS_PATH, SHELL_SHORTCUTS } from "@/lib/shell/shortcuts";
 import { firstName } from "@/lib/shell/user";
 import { parseThemePreference, THEME_PREFERENCES, type ThemePreference } from "@/lib/theme/preference";
 import { OverlayScope, useOverlayRoot, useShortcutLabel } from "@/lib/shortcuts/provider";
 import { cn } from "@/lib/utils";
 
-const LANGUAGE_KEY: Record<Locale, "ptBR" | "en"> = { "pt-BR": "ptBR", en: "en" };
-
 /**
  * Ajustes from the app: remembers the current URL for "← Voltar ao app"
  * (the shell also does it on every navigation; nuqs may have changed the
  * query since) and opens the settings page. Used by ⌘, and the user menu.
  */
-export function useOpenSettings(): () => void {
+export function useOpenSettings(): (page?: SettingsPage) => void {
   const router = useRouter();
-  return () => {
+  return (page) => {
     rememberAppUrl(sessionStore(), `${window.location.pathname}${window.location.search}`);
-    router.push(SETTINGS_PATH);
+    router.push(page ? settingsHref(page) : SETTINGS_PATH);
   };
 }
+
+/**
+ * Tema (Sistema / Claro / Escuro), from the user menu and ⌘K: applied at
+ * once by next-themes and saved on the user (PATCH /v2/me), back to the
+ * previous theme when saving fails.
+ */
+export function useThemeChoice(): { theme: ThemePreference; pick: (value: string) => void } {
+  const session = useSession();
+  const { theme: activeTheme, setTheme } = useTheme();
+  const theme = parseThemePreference(activeTheme) ?? parseThemePreference(session.data?.theme) ?? "light";
+  const saveTheme = useAppMutation({
+    event: "me.write",
+    mutationFn: (next: { theme: ThemePreference; previous: ThemePreference }) => apiPatch("/api/v2/me", { theme: next.theme }),
+    // Applied before the request; back to the previous theme when it fails.
+    onError: (_error, next) => setTheme(next.previous),
+  });
+  const pick = (value: string) => {
+    const next = parseThemePreference(value);
+    if (!next || next === theme) return;
+    setTheme(next);
+    saveTheme.mutate({ theme: next, previous: theme });
+  };
+  return { theme, pick };
+}
+
+/**
+ * Idioma, from the user menu and ⌘K: saved on the user first (PATCH
+ * /v2/me), so the language sticks, then next-intl's router switches the
+ * page and its cookie.
+ */
+export function useLocaleChoice(): { locale: string; pick: (value: string) => void; pending: boolean } {
+  const locale = useLocale();
+  const router = useRouter();
+  const pathname = usePathname();
+  const saveLocale = useAppMutation({
+    event: "me.write",
+    mutationFn: (next: Locale) => apiPatch("/api/v2/me", { locale: next }),
+    onSuccess: (_data, next) => router.replace(`${pathname}${window.location.search}`, { locale: next }),
+  });
+  const pick = (value: string) => {
+    if (!isLocale(value) || value === locale || saveLocale.isPending) return;
+    saveLocale.mutate(value);
+  };
+  return { locale, pick, pending: saveLocale.isPending };
+}
+
+/** Each language's key under `shell.userMenu.languages` (its name in itself). */
+export const LANGUAGE_KEY: Record<Locale, "ptBR" | "en"> = { "pt-BR": "ptBR", en: "en" };
 
 /**
  * The account menu on the sidebar footer (the mockup's "Ajustes · Tema"
@@ -47,35 +94,8 @@ export function UserMenu({ trigger, side = "top", onNavigate }: { trigger: React
   const signOut = useSignOut();
   const openSettings = useOpenSettings();
   const settingsLabel = useShortcutLabel(SHELL_SHORTCUTS.settings.combo);
-  const { theme: activeTheme, setTheme } = useTheme();
-  const locale = useLocale();
-  const router = useRouter();
-  const pathname = usePathname();
-
-  const theme = parseThemePreference(activeTheme) ?? parseThemePreference(session.data?.theme) ?? "light";
-  const saveTheme = useAppMutation({
-    event: "me.write",
-    mutationFn: (next: { theme: ThemePreference; previous: ThemePreference }) => apiPatch("/api/v2/me", { theme: next.theme }),
-    // Applied before the request; back to the previous theme when it fails.
-    onError: (_error, next) => setTheme(next.previous),
-  });
-  const saveLocale = useAppMutation({
-    event: "me.write",
-    mutationFn: (next: Locale) => apiPatch("/api/v2/me", { locale: next }),
-    // Saved first, so the language sticks; next-intl's router then switches the page (and its cookie).
-    onSuccess: (_data, next) => router.replace(`${pathname}${window.location.search}`, { locale: next }),
-  });
-
-  const pickTheme = (value: string) => {
-    const next = parseThemePreference(value);
-    if (!next || next === theme) return;
-    setTheme(next);
-    saveTheme.mutate({ theme: next, previous: theme });
-  };
-  const pickLocale = (value: string) => {
-    if (!isLocale(value) || value === locale) return;
-    saveLocale.mutate(value);
-  };
+  const { theme, pick: pickTheme } = useThemeChoice();
+  const { locale, pick: pickLocale, pending: localePending } = useLocaleChoice();
 
   return (
     <DropdownMenu.Root open={root.open} onOpenChange={root.onOpenChange} modal={false}>
@@ -111,7 +131,7 @@ export function UserMenu({ trigger, side = "top", onNavigate }: { trigger: React
             <SubMenu label={t("language")} value={isLocale(locale) ? t(`languages.${LANGUAGE_KEY[locale]}`) : locale}>
               <DropdownMenu.RadioGroup value={locale} onValueChange={pickLocale}>
                 {routing.locales.map((option) => (
-                  <Choice key={option} value={option} label={t(`languages.${LANGUAGE_KEY[option]}`)} lang={option} disabled={saveLocale.isPending} />
+                  <Choice key={option} value={option} label={t(`languages.${LANGUAGE_KEY[option]}`)} lang={option} disabled={localePending} />
                 ))}
               </DropdownMenu.RadioGroup>
             </SubMenu>
