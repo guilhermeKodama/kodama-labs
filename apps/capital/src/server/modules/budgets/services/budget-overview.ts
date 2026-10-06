@@ -124,6 +124,30 @@ function yearlyRows(yearly: readonly Budget[], yearSpend: readonly Spend[], name
   });
 }
 
+/** Complete months before the current one whose spend shapes the rest-of-month projection. */
+const HISTORY_MONTHS = 3;
+
+/**
+ * What each (entity, category) usually spends after day `day` of a month,
+ * from the HISTORY_MONTHS complete months before `year`/`month`: the
+ * average over the months it had spend in. Rent paid on the 5th leaves
+ * nothing for the rest of the month; groceries leave most of it.
+ */
+async function restOfMonthHistory(db: DbClient, userId: string, year: number, month: number, day: number, entityIds: string[] | null) {
+  const from = new Date(Date.UTC(year, month - 1 - HISTORY_MONTHS, 1));
+  const to = new Date(Date.UTC(year, month - 1, 1) - 1);
+  const rows = await db.$queryRaw<{ entity_id: string; category_id: string | null; months: number; rest: Prisma.Decimal }[]>`
+    SELECT le."entityId" AS entity_id, le."categoryId" AS category_id,
+           count(DISTINCT date_trunc('month', le."effectiveDate"))::int AS months,
+           coalesce(-sum(le."amountBase") FILTER (WHERE extract(day FROM le."effectiveDate") > ${day}), 0) AS rest
+    FROM ledger_entries le
+    WHERE le."userId" = ${userId} AND le."deletedAt" IS NULL AND le.kind = 'expense' AND le."transferGroupId" IS NULL
+      AND le."effectiveDate" BETWEEN ${from} AND ${to}
+      AND ${entityScopeSql(Prisma.sql`le."entityId"`, entityIds)}
+    GROUP BY 1, 2`;
+  return rows.map((r) => ({ entityId: r.entity_id, categoryId: r.category_id, months: r.months, rest: toNumber(r.rest) }));
+}
+
 /** Days a past-due unpaid card statement still shows in Contas fixas. */
 const OVERDUE_STATEMENT_DAYS = 31;
 const UPCOMING_DAYS = 14;
@@ -237,6 +261,9 @@ export async function monthOverview(userId: string, year: number, month: number,
     .filter(budgetInScope(entityIds))
     .filter((b) => b.period === "monthly");
 
+  // The rest of a running month is projected from what each budget's spend usually does after today (else at today's daily rate).
+  const history = isCurrent && daysElapsed < daysInMonth ? await restOfMonthHistory(db, userId, year, month, daysElapsed, entityIds) : [];
+
   const rows = budgets
     .map((b) => {
       const amount = toNumber(b.amount);
@@ -250,7 +277,11 @@ export async function monthOverview(userId: string, year: number, month: number,
       const spent = assigned(spend, budgets, b, "spentToDate");
       const dailySpendRate = daysElapsed > 0 ? spent / daysElapsed : 0;
       const allowedDailyRate = available / daysInMonth;
-      const projectedTotal = daysElapsed > 0 ? Math.max(committed, spent + dailySpendRate * (daysInMonth - daysElapsed)) : committed;
+      const past = history.filter((h) => budgetFor(budgets, h.entityId, h.categoryId)?.id === b.id);
+      const restOfMonth = past.length
+        ? past.reduce((sum, h) => sum + h.rest / Math.max(1, h.months), 0)
+        : dailySpendRate * (daysInMonth - daysElapsed);
+      const projectedTotal = daysElapsed > 0 ? Math.max(committed, spent + restOfMonth) : committed;
       const percentUsed = available > 0 ? (spent / available) * 100 : 0;
       const pacePercent = (daysElapsed / daysInMonth) * 100;
       const status = spent > available ? "over" : percentUsed > pacePercent + 12 ? "ahead_of_pace" : "on_track";
@@ -491,7 +522,8 @@ export async function yearOverview(userId: string, year: number, db: DbClient, o
 
     if (ref && nElapsed > 0) {
       const values = elapsed.map((x) => x.spent);
-      const avg = mean(values);
+      // The monthly average leaves out the month in progress (a few days of it would drag it down), unless no month is complete yet.
+      const avg = mean(complete.length ? complete : values);
       const budget = toNumber(ref.amount);
       const peakValue = Math.max(...values);
       const growth = trend;

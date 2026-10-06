@@ -65,6 +65,10 @@ describe("insightCopy", () => {
     expect(insightCopy(base, "Mercado", abbr, money, [6, 8]).adjust).toBeNull();
   });
 
+  it("never suggests lowering a budget that spending runs over", () => {
+    expect(insightCopy({ ...base, avg: 1884, suggested: 1900 }, "Mercado", abbr, money, [6, 8]).adjust).toBeNull();
+  });
+
   it("growth: first three months against the last three complete ones", () => {
     const copy = insightCopy({ ...base, kind: "growth", growth: 0.178, first3: 1220, last3: 1437 }, "Software", abbr, money, [6, 8]);
     expect(copy.title).toEqual({ key: "year.insights.growthTitle", values: { category: "Software", pct: 18 } });

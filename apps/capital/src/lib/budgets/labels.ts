@@ -111,7 +111,8 @@ export function insightCopy(insight: YearInsight, category: string, abbr: Abbr, 
     return {
       title: { key: "year.insights.overrunTitle", values: { category, count: insight.overMonths, total: insight.nElapsed } },
       body: { key: "year.insights.overrunBody", values: { avg: money(insight.avg), budget: money(insight.budget) } },
-      adjust: insight.suggested > 0 && Math.abs(insight.suggested - insight.budget) >= 0.005 ? { amount: insight.suggested, label: { key: "year.insights.adjust", values: { amount: money(insight.suggested) } } } : null,
+      // Spending runs over the budget: only a higher amount makes sense to offer.
+      adjust: insight.suggested - insight.budget >= 0.005 ? { amount: insight.suggested, label: { key: "year.insights.adjust", values: { amount: money(insight.suggested) } } } : null,
     };
   }
   if (insight.kind === "growth") {

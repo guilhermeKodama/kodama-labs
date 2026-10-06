@@ -86,6 +86,30 @@ describe("scope", () => {
   });
 });
 
+describe("month-end projection", () => {
+  it("projects the rest of the month from what each budget usually spends after today, else at today's rate", async () => {
+    for (const name of ["Moradia", "Mercado", "Lazer"]) await createBudget(USER, { entityId: f.pfId, categoryId: c[name], amount: 5000, effectiveFrom: "2026-06" }, prisma);
+    for (const m of ["06", "07", "08"]) {
+      await spend(f.pfChecking, c.Moradia, 4200, `2026-${m}-05`); // rent: nothing left after the 22nd
+      await spend(f.pfChecking, c.Mercado, 600, `2026-${m}-10`);
+      await spend(f.pfChecking, c.Mercado, 600, `2026-${m}-25`); // groceries: 600 after the 22nd
+    }
+    await spend(f.pfChecking, c.Moradia, 4200, "2026-09-05");
+    await spend(f.pfChecking, c.Mercado, 600, "2026-09-10");
+    await spend(f.pfChecking, c.Lazer, 220, "2026-09-12"); // no history: 10/day for the 8 days left
+
+    const o = await monthOverview(USER, 2026, 9, prisma);
+    const projected = Object.fromEntries(o.budgets.map((b) => [b.categoryId, b.pace.projectedTotal]));
+    // At 4200 in 22 days, a straight line would say 5727 for the rent.
+    expect(projected).toEqual({ [c.Moradia]: 4200, [c.Mercado]: 1200, [c.Lazer]: 300 });
+    expect(o.summary.projectedTotal).toBe(5700);
+
+    // A closed month projects what it spent.
+    const aug = await monthOverview(USER, 2026, 8, prisma);
+    expect(aug.summary.projectedTotal).toBe(5400);
+  });
+});
+
 describe("year matrix", () => {
   it("has a row per (entity, category) budget, and spend goes to the entity's own budget before the one for every entity", async () => {
     await createBudget(USER, { entityId: f.pfId, categoryId: c.Mercado, amount: 500, effectiveFrom: "2026-01" }, prisma);
@@ -156,10 +180,11 @@ describe("year matrix", () => {
       ["seasonal", c["Saúde"]],
     ]);
     const [mercado, lazer, software, saude] = y.insights;
-    expect(mercado).toMatchObject({ overMonths: 4, nElapsed: 9, avg: 1990, budget: 2000, suggested: 2000, entityId: f.pfId });
+    // The average covers January to August: September is still running (its 1.640 would pull it down).
+    expect(mercado).toMatchObject({ overMonths: 4, nElapsed: 9, avg: 2033.75, budget: 2000, suggested: 2050, entityId: f.pfId });
     expect(mercado.budgetId).toBe(y.categories.find((r) => r.categoryId === c.Mercado)!.budgetId);
     expect(lazer).toMatchObject({ first3: 790, last3: 1083.33, growth: 0.3713 });
-    expect(software).toMatchObject({ first3: 1220, last3: 1436.67, growth: 0.1776, avg: 1354.11, suggested: 1400 });
+    expect(software).toMatchObject({ first3: 1220, last3: 1436.67, growth: 0.1776, avg: 1328.75, suggested: 1350 });
     expect(saude).toMatchObject({ peakMonth: 3, peakValue: 2600, budget: 1800 });
 
     const mercadoRow = y.categories.find((r) => r.categoryId === c.Mercado)!;
