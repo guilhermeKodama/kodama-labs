@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { decodeCreateParam } from "@/lib/ledger/quick-add";
-import { createEntryTarget, SHELL_SHORTCUTS, type ShellShortcut } from "@/lib/shell/shortcuts";
+import { createEntryTarget, isSettingsPath, SHELL_SHORTCUTS, settingsShortcutTarget, type ShellShortcut } from "@/lib/shell/shortcuts";
 import { parseCombo } from "@/lib/shortcuts/combo";
 import { createShortcutStore, type KeyDownLike, type ShortcutStore } from "@/lib/shortcuts/store";
 
@@ -132,5 +132,32 @@ describe("N: Nova transação", () => {
       expect(decodeCreateParam(url.searchParams.get("create"))).toEqual({});
       expect([...url.searchParams.keys()]).toEqual(["create"]);
     }
+  });
+});
+
+describe("N and ⌘, from Ajustes", () => {
+  it("N goes to Transações with the create dialog from Ajustes too", () => {
+    for (const path of ["/settings", "/settings/categories"]) {
+      const target = createEntryTarget(path);
+      expect(target.kind).toBe("navigate");
+      if (target.kind !== "navigate") continue;
+      const url = new URL(target.href, "http://local.invalid");
+      expect(url.pathname).toBe("/transactions");
+      expect(decodeCreateParam(url.searchParams.get("create"))).toEqual({});
+    }
+  });
+
+  it("⌘, opens Ajustes from app screens and stays put inside Ajustes", () => {
+    expect(settingsShortcutTarget("/transactions")).toBe("open");
+    expect(settingsShortcutTarget("/investments/contributions")).toBe("open");
+    expect(settingsShortcutTarget("/settings")).toBe("stay");
+    expect(settingsShortcutTarget("/settings/imports")).toBe("stay");
+  });
+
+  it("recognizes only Ajustes paths, not lookalikes", () => {
+    expect(isSettingsPath("/settings")).toBe(true);
+    expect(isSettingsPath("/settings/profile")).toBe(true);
+    expect(isSettingsPath("/settingsx")).toBe(false);
+    expect(isSettingsPath("/transactions")).toBe(false);
   });
 });

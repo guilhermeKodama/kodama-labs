@@ -2,15 +2,13 @@
 
 import { useEffect, type ReactNode } from "react";
 import { useSearchParams } from "next/navigation";
-import { useLedgerOverlays } from "@/components/ledger/overlay-state";
 import { CommandMenu } from "@/components/shell/command";
-import { usePathname, useRouter } from "@/i18n/navigation";
+import { usePathname } from "@/i18n/navigation";
 import { rememberAppUrl, sessionStore } from "@/lib/shell/last-app-url";
-import { createEntryTarget, SHELL_SHORTCUTS } from "@/lib/shell/shortcuts";
+import { SHELL_SHORTCUTS } from "@/lib/shell/shortcuts";
 import { useShortcut } from "@/lib/shortcuts/provider";
 import { GlobalOverlays } from "./global-overlays";
 import { Sidebar, SidebarDrawer, toggleSidebar } from "./sidebar";
-import { useOpenSettings } from "./user-menu";
 
 /**
  * The signed-in app around every screen of the (app) layout. It stays
@@ -35,27 +33,9 @@ export function AppShell({ children }: { children: ReactNode }) {
   );
 }
 
-/**
- * N, ⌘, and ⌘B (lib/shell/shortcuts.ts). ⌘K belongs to the palette
- * (mounted in Ajustes too) and ⌘Z to UndoBridge.
- */
+/** ⌘B (lib/shell/shortcuts.ts); N and ⌘, are bound by GlobalKeys (also in Ajustes). */
 function useShellShortcuts() {
-  const pathname = usePathname();
-  const router = useRouter();
-  const ledger = useLedgerOverlays();
-  const openSettings = useOpenSettings();
-  const { create, settings, sidebar } = SHELL_SHORTCUTS;
-
-  useShortcut(
-    create.combo,
-    () => {
-      const target = createEntryTarget(pathname);
-      if (target.kind === "param") ledger.openCreate();
-      else router.push(target.href);
-    },
-    { scope: "global", allowInInputs: create.allowInInputs },
-  );
-  useShortcut(settings.combo, () => openSettings(), { scope: "global", allowInInputs: settings.allowInInputs });
+  const { sidebar } = SHELL_SHORTCUTS;
   useShortcut(sidebar.combo, toggleSidebar, { scope: "global", allowInInputs: sidebar.allowInInputs });
 }
 

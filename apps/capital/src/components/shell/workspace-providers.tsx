@@ -7,11 +7,12 @@ import { ThemeSync } from "@/components/providers/theme-sync";
 import { UndoBridge } from "@/lib/api/undo-bridge";
 import { FormatProvider } from "@/lib/format/provider";
 import { ShortcutProvider } from "@/lib/shortcuts/provider";
+import { GlobalKeys } from "./global-keys";
 
 /**
  * Everything a signed-in page needs, shared by the (app) and (settings)
  * layouts: keyboard shortcuts and the overlay stack, the user's number and
- * date formats, theme and language, ⌘Z, and the session gate.
+ * date formats, theme and language, N, ⌘, and ⌘Z, and the session gate.
  */
 export function WorkspaceProviders({ children }: { children: ReactNode }) {
   return (
@@ -20,7 +21,10 @@ export function WorkspaceProviders({ children }: { children: ReactNode }) {
         <ThemeSync />
         <LocaleSync />
         <UndoBridge />
-        <SessionGate>{children}</SessionGate>
+        <SessionGate>
+          <GlobalKeys />
+          {children}
+        </SessionGate>
       </FormatProvider>
     </ShortcutProvider>
   );
