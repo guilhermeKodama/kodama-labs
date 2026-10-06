@@ -44,7 +44,10 @@
     "not_credit_card": "This account is not a credit card."
   },
   "entry": {
-    "not_found": "Transaction not found. It may have been deleted."
+    "not_found": "Transaction not found. It may have been deleted.",
+    "scope_unavailable": "This transaction isn't part of a recurrence or an installment plan, so only it can be deleted.",
+    "kind_locked": "The type of an investment operation's cash can't change. Edit the operation in Investments.",
+    "not_transfer": "Only a transfer has a source and a destination account."
   },
   "transfer": {
     "same_account": "A transfer needs two different accounts.",

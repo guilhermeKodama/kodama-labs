@@ -1,19 +1,25 @@
 "use client";
 
 import { useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
+import { useLocale, useTranslations } from "next-intl";
 import { toast } from "sonner";
 import type { LedgerRow } from "@capital/server/modules/ledger/contracts";
-import { api, apiDelete, apiPatch, apiPost, apiUpload } from "@/lib/api/client";
+import type { EntryHistory } from "@capital/server/modules/ledger/services/history";
+import { Btn, DialogHead, Sheet } from "@/components/cap";
+import { apiGet } from "@/lib/api/client";
 import type { Names } from "@/lib/api/catalog";
 import { keys } from "@/lib/api/keys";
-import { money, parseAmount } from "@/lib/money";
-import { cn } from "@/lib/utils";
-import { Btn, Check, Field, SelectInput, TextInput } from "@/components/shell/chrome";
-import { CategorySelect } from "./categories";
-import { KIND_LABEL } from "./fields";
-import { useRowActions } from "./row-actions";
-import { toDisplayRows, type DisplayRow } from "./rows";
+import { useFmt } from "@/lib/format/provider";
+import { buildEditPatch, formFromEntry, type EditableEntry, type EntryFormState, type FormField, type FormKind } from "@/lib/ledger/entry-form";
+import { fieldGender, historyLines, type HistoryLine } from "@/lib/ledger/entry-history";
+import { useShortcut } from "@/lib/shortcuts/provider";
+import { Dropzone, pastedFiles, useOwnerAttachments } from "./entry/attachments";
+import { TxFormBody } from "./entry/tx-form-body";
+import { useFormContext } from "./entry/use-form-context";
+import { useEntryPatch } from "./inline-edit";
+import { useRowActions, type RowActions } from "./row-actions";
+import type { DisplayRow } from "./rows";
 
 export interface EntrySheetProps {
   /** The entry to show (any leg of a transfer). */
@@ -25,188 +31,185 @@ export interface EntrySheetProps {
 }
 
 /**
- * "Editar transação", the detail of one entry, opened by ?entry=<id>
- * (mounted by overlays.tsx while that param is set).
- *
- * OWNER: S2. Target (mockup 5088): a 440px cap Sheet with every field
- * editable, Histórico (GET /v2/ledger/entries/{id}/history), Duplicar,
- * anexos, "Criar regra" and Excluir through the delete-scope question,
- * ⌘↵ to save and Esc to close.
- * Now: the panel from before 0c-3 (340px, over the main column); Excluir
- * moves the row and its transfer legs to the trash, with Desfazer.
+ * "Editar transação" (mockup TxSheet 5088-5126), opened by ?entry=<id>
+ * (mounted by overlays.tsx while that param is set): a 440px sheet with
+ * the shared form, the receipts, "Histórico" (GET /v2/ledger/entries/{id}/
+ * history) and Salvar / Duplicar / Excluir. ⌘↵ saves, ⌘D duplicates, Esc
+ * closes. Salvar sends only what changed, as one undoable PATCH.
  */
-export function EntrySheet({ entryId, row, names, onClose }: EntrySheetProps) {
-  const actions = useRowActions();
-  const fetched = useQuery({
+export function EntrySheet({ entryId, row, onClose }: EntrySheetProps) {
+  const t = useTranslations("entry");
+  const fmt = useFmt();
+  const entry = useQuery({
     queryKey: keys.entry(entryId),
-    queryFn: () => api<LedgerRow>(`/api/v2/ledger/entries/${entryId}`),
-    enabled: !row,
+    queryFn: () => apiGet<LedgerRow>(`/api/v2/ledger/entries/${encodeURIComponent(entryId)}`),
   });
-  const shown = row ?? (fetched.data ? toDisplayRows([fetched.data], "group")[0] : null);
+  const { ready } = useFormContext();
+  const actions = useRowActions({ onDeleted: onClose });
+  const description = entry.data?.description ?? row?.description ?? "";
+  const date = entry.data?.date ?? row?.date;
   return (
-    <>
-      {shown ? (
-        <EntryPanel
-          row={shown}
-          names={names}
-          onClose={onClose}
-          onDelete={(target) => {
-            actions.remove(target);
+    <Sheet open onOpenChange={(open) => !open && onClose()} width={440}>
+      <DialogHead title={t("form.editTitle")} desc={description ? t("form.editDesc", { description, date: fmt.dateFull(date) }) : undefined} />
+      {entry.data && ready ? (
+        <EditForm key={entry.data.id} entry={entry.data} actions={actions} onClose={onClose} />
+      ) : (
+        <p className="text-[12.5px] text-fg-3">{entry.isError ? null : t("sheet.loading")}</p>
+      )}
+      {actions.dialogs}
+    </Sheet>
+  );
+}
+
+const ALL_KINDS: FormKind[] = ["expense", "income", "transfer", "invest"];
+
+/** Kinds an existing entry cannot become: income ↔ expense only; a transfer or aporte stays one. */
+function lockedKinds(entry: LedgerRow, form: EntryFormState): FormKind[] {
+  if (entry.transferGroupId || entry.kind === "investment") return ALL_KINDS.filter((kind) => kind !== form.kind);
+  return ["transfer", "invest"];
+}
+
+function EditForm({ entry, actions, onClose }: { entry: LedgerRow; actions: RowActions; onClose: () => void }) {
+  const t = useTranslations("entry");
+  const tCommon = useTranslations("common");
+  const fmt = useFmt();
+  const { ctx, accounts } = useFormContext();
+  const editable: EditableEntry = entry;
+  const [initial] = useState(() => formFromEntry(editable, ctx, (value) => fmt.number(value), (value) => fmt.number(value, { min: 2, max: 6 })));
+  const [form, setForm] = useState(initial);
+  const [invalid, setInvalid] = useState<FormField | null>(null);
+  const save = useEntryPatch(() => onClose());
+  const owner = entry.transferGroupId ? { ownerType: "transfer" as const, ownerId: entry.transferGroupId } : { ownerType: "entry" as const, ownerId: entry.id };
+  const attachments = useOwnerAttachments(owner);
+  const locked = lockedKinds(entry, initial);
+
+  const up = (patch: Partial<EntryFormState>) => {
+    setForm((current) => ({ ...current, ...patch }));
+    setInvalid(null);
+  };
+
+  const submit = () => {
+    if (save.isPending) return;
+    const built = buildEditPatch(editable, initial, form, ctx);
+    if (!built.ok) {
+      setInvalid(built.field);
+      toast(t(`errors.${built.error}`));
+      return;
+    }
+    if (!Object.keys(built.patch).length) return onClose();
+    save.mutate({ row: entry, patch: built.patch, message: t("toast.saved", { description: form.description.trim() || entry.description }) });
+  };
+
+  useShortcut("mod+enter", () => submit(), { allowInInputs: true });
+  useShortcut("mod+d", () => {
+    actions.duplicate(entry);
+    onClose();
+  });
+
+  return (
+    <div
+      className="flex flex-col gap-3.5"
+      onPaste={(event) => {
+        const pasted = pastedFiles(event);
+        if (pasted.length) attachments.add(pasted);
+      }}
+    >
+      <TxFormBody
+        form={form}
+        up={up}
+        ctx={ctx}
+        accounts={accounts}
+        mode="edit"
+        lockedKinds={locked}
+        invalid={invalid}
+        suggestion={null}
+        dropzone={<Dropzone onFiles={attachments.add} items={attachments.items} disabled={attachments.busy} />}
+      />
+      <History entryId={entry.id} />
+      <div className="flex gap-1.5">
+        <Btn primary onClick={submit} disabled={save.isPending}>
+          {t("sheet.save")}
+        </Btn>
+        <Btn
+          onClick={() => {
+            actions.duplicate(entry);
             onClose();
           }}
-        />
-      ) : null}
-      {actions.dialogs}
-    </>
+        >
+          {t("sheet.duplicate")}
+        </Btn>
+        <span className="flex-1" />
+        <Btn ghost onClick={() => actions.remove(entry)}>
+          {tCommon("delete")}
+        </Btn>
+      </div>
+    </div>
   );
 }
 
-interface Attachment {
-  id: string;
-  originalName: string;
-  blobUrl: string;
-}
-
-function EntryPanel({ row, names, onClose, onDelete }: { row: DisplayRow; names: Names; onClose: () => void; onDelete: (row: DisplayRow) => void }) {
-  const queryClient = useQueryClient();
-  const isTransfer = row.transferGroupId !== null;
-  const display = Math.abs(row.amount);
-  const [description, setDescription] = useState(row.description);
-  const [amount, setAmount] = useState(display.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
-  const [date, setDate] = useState(row.date);
-  const [accountId, setAccountId] = useState(row.accountId);
-  const [categoryId, setCategoryId] = useState(row.categoryId ?? "");
-  const [deductible, setDeductible] = useState(row.isTaxDeductible);
-  const [notes, setNotes] = useState(row.notes ?? "");
-  const ownerType = isTransfer ? "transfer" : "entry";
-  const ownerId = isTransfer ? row.transferGroupId! : row.id;
-  const attachments = useQuery({
-    queryKey: ["attachments", ownerType, ownerId],
-    queryFn: async () => (await api<{ attachments: Attachment[] }>(`/api/v2/attachments?ownerType=${ownerType}&ownerId=${ownerId}`)).attachments,
+/** "Histórico" (mockup 5106-5113): one "· line" per event, oldest first. */
+function History({ entryId }: { entryId: string }) {
+  const t = useTranslations("entry");
+  const fmt = useFmt();
+  const locale = useLocale();
+  const history = useQuery({
+    queryKey: keys.entryHistory(entryId),
+    queryFn: () => apiGet<EntryHistory>(`/api/v2/ledger/entries/${encodeURIComponent(entryId)}/history`),
   });
+  const lines = historyLines(history.data?.events ?? []);
+  if (!lines.length) return null;
 
-  const save = useMutation({
-    mutationFn: () => {
-      const patch: Record<string, unknown> = {};
-      const value = parseAmount(amount);
-      if (description.trim() && description.trim() !== row.description) patch.description = description.trim();
-      if (Number.isFinite(value) && Math.abs(value - display) > 0.004) patch.amount = value;
-      if (date !== row.date) patch.date = date;
-      if (!isTransfer) {
-        if (accountId !== row.accountId) patch.accountId = accountId;
-        if ((categoryId || null) !== row.categoryId) patch.categoryId = categoryId || null;
-        if (deductible !== row.isTaxDeductible) patch.isTaxDeductible = deductible;
-      }
-      if ((notes || null) !== row.notes) patch.notes = notes || null;
-      if (!Object.keys(patch).length) return Promise.resolve(null);
-      return apiPatch<{ batchId: string | null; entry: LedgerRow }>(`/api/v2/ledger/entries/${row.id}`, patch);
-    },
-    onSuccess: async (result) => {
-      if (!result) return onClose();
-      await queryClient.invalidateQueries({ queryKey: ["ledger"] });
-      toast("Alterações salvas", {
-        action: result.batchId
-          ? { label: "Desfazer", onClick: () => void apiPost(`/api/v2/mutations/${result.batchId}/undo`, {}).then(() => queryClient.invalidateQueries({ queryKey: ["ledger"] })) }
-          : undefined,
-      });
-      onClose();
-    },
-    onError: (error: Error) => toast.error(error.message),
-  });
-
-  const createRule = useMutation({
-    mutationFn: () => apiPost("/api/v2/rules", { matchType: "contains", pattern: row.description, categoryId, entityId: null }),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ["rules"] });
-      toast.success(`Regra criada: “${row.description}” → ${names.category.get(categoryId) ?? ""}`);
-    },
-    onError: (error: Error) => toast.error(error.message),
-  });
-
-  async function upload(file: File) {
-    const form = new FormData();
-    form.set("file", file);
-    form.set("kind", isTransfer ? "TRANSFER_RECEIPT" : "RECEIPT");
-    form.set("ownerType", ownerType);
-    form.set("ownerId", ownerId);
+  const list = (items: string[]) => {
+    const [first, ...rest] = items;
+    const words = [first, ...rest.map((item) => item.charAt(0).toLocaleLowerCase(locale) + item.slice(1))];
     try {
-      await apiUpload("/api/v2/attachments", form);
-      await queryClient.invalidateQueries({ queryKey: ["attachments", ownerType, ownerId] });
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Falha no upload");
+      return new Intl.ListFormat(locale, { type: "conjunction" }).format(words);
+    } catch {
+      return words.join(", ");
     }
-  }
-
-  const liveAccounts = names.accounts.filter((a) => (!a.archivedAt || a.id === row.accountId) && a.type !== "brokerage");
-  const counterpart = row.toAccountId ?? row.counterpartAccountId;
+  };
+  const text = (line: HistoryLine): string => {
+    switch (line.key) {
+      case "imported":
+        return line.label ? t("history.imported", { label: line.label }) : t("history.importedPlain");
+      case "fromRecurrence":
+        return t("history.fromRecurrence", { description: line.description });
+      case "installment":
+        return t("history.installment", { n: line.n, total: line.total });
+      case "duplicated":
+        return t("history.duplicated");
+      case "created":
+        return t("history.created", { by: t(`history.by.${line.actor}`) });
+      case "categorizedByRule":
+        return t("history.categorizedByRule", { pattern: line.pattern });
+      case "categorizedAuto":
+        return t("history.categorizedAuto");
+      case "updated":
+        return line.fields.length === 1
+          ? t("history.updatedOne", { field: t(`history.field.${line.fields[0]}`), gender: fieldGender(line.fields[0]), by: t(`history.by.${line.actor}`) })
+          : t("history.updatedMany", { fields: list(line.fields.map((field) => t(`history.field.${field}`))), by: t(`history.by.${line.actor}`) });
+      case "deleted":
+      case "restored":
+        return t(`history.${line.key}`, { by: t(`history.by.${line.actor}`) });
+    }
+  };
+  const when = (line: HistoryLine) => {
+    if (!line.at) return "";
+    return line.time === "dateTime" ? fmt.dateTime(line.at) : line.time === "date" ? fmt.date(line.at) : fmt.relative(line.at);
+  };
 
   return (
-    <aside className="absolute top-0 right-0 bottom-0 z-30 flex w-[340px] flex-col gap-3.5 overflow-y-auto border-l border-stroke-1 bg-editor p-4 shadow-[-8px_0_24px_-12px_rgba(0,0,0,0.12)]">
-      <div className="flex items-center gap-2">
-        <span className="truncate text-[14px] font-semibold">{row.description}</span>
-        <button type="button" className="ml-auto text-fg-3 hover:text-fg-strong" onClick={onClose}>✕</button>
-      </div>
-      <span className={cn("font-mono text-[22px] font-medium tabular-nums", row.neutral ? "text-fg-muted" : row.amountBase > 0 && "text-pos")}>
-        {row.neutral ? `⇄ ${money(Math.abs(row.amountBase), names.currency)}` : money(row.amountBase, names.currency)}
-      </span>
-      <div className="grid grid-cols-2 gap-x-3 gap-y-2.5 text-[12.5px]">
-        <Info k="Tipo" v={isTransfer ? "Transferência" : KIND_LABEL[row.kind]} />
-        <Info k="Entidade" v={names.entity.get(row.entityId) ?? "—"} />
-        {isTransfer ? <Info k="De → Para" v={`${names.account.get(row.accountId) ?? ""} → ${counterpart ? names.account.get(counterpart) ?? "" : "—"}`} /> : null}
-        {row.currency !== names.currency ? <Info k="Moeda original" v={`${money(row.amount, row.currency)} · câmbio ${row.exchangeRate}`} /> : null}
-        {row.effectiveDate !== row.date ? <Info k="Conta na fatura de" v={row.effectiveDate.split("-").reverse().join("/")} /> : null}
-        {row.installmentNumber ? <Info k="Parcela" v={String(row.installmentNumber)} /> : null}
-        {row.isRecurring ? <Info k="Recorrente" v="Sim" /> : null}
-        {row.importId ? <Info k="Origem" v="Importação" /> : null}
-      </div>
-      <div className="flex flex-col gap-2.5 border-t border-stroke-3 pt-3">
-        <Field label="Descrição"><TextInput value={description} onChange={setDescription} /></Field>
-        <div className="grid grid-cols-2 gap-2">
-          <Field label={`Valor (${row.currency})`}><TextInput value={amount} onChange={setAmount} mono /></Field>
-          <Field label="Data"><TextInput type="date" value={date} onChange={setDate} /></Field>
-        </div>
-        {!isTransfer ? (
-          <>
-            <Field label="Conta">
-              <SelectInput value={accountId} onChange={setAccountId} options={liveAccounts.map((a) => ({ value: a.id, label: `${a.name} · ${names.entity.get(a.entityId) ?? ""}` }))} />
-            </Field>
-            <Field label="Categoria">
-              <CategorySelect value={categoryId} onChange={setCategoryId} categories={names.categories} kind={row.kind === "income" ? "income" : row.kind === "investment" ? "investment" : "expense"} className="w-full" />
-            </Field>
-            <Check checked={deductible} onChange={setDeductible} label="Dedutível no IR" />
-          </>
-        ) : null}
-        <Field label="Notas">
-          <textarea value={notes} onChange={(event) => setNotes(event.target.value)} rows={2} className="rounded-[6px] border border-stroke-1 px-2 py-1 text-[12.5px] outline-none focus:border-fg-muted" />
-        </Field>
-      </div>
-      <div className="flex flex-col gap-1.5 border-t border-stroke-3 pt-3">
-        <span className="text-[11px] text-fg-3">Anexos</span>
-        {(attachments.data ?? []).map((a) => (
-          <span key={a.id} className="flex items-center gap-2 text-[12.5px]">
-            <a href={a.blobUrl} target="_blank" rel="noreferrer" className="truncate underline">{a.originalName}</a>
-            <button type="button" className="ml-auto text-[11px] text-fg-3 hover:text-neg" onClick={() => void apiDelete(`/api/v2/attachments/${a.id}`).then(() => queryClient.invalidateQueries({ queryKey: ["attachments", ownerType, ownerId] }))}>remover</button>
+    <div className="flex flex-col gap-1 border-t border-stroke-3 pt-2.5">
+      <span className="text-[11px] text-fg-3">{t("sheet.history")}</span>
+      {lines.map((line, index) => {
+        const at = when(line);
+        return (
+          <span key={index} className="text-[11.5px] text-fg-2">
+            · {text(line)}
+            {at ? ` · ${at}` : ""}
           </span>
-        ))}
-        <label className="flex h-9 cursor-pointer items-center justify-center rounded-lg border border-dashed border-stroke-1 text-[12px] text-fg-3 hover:border-fg-3">
-          Anexar comprovante
-          <input type="file" className="hidden" onChange={(event) => { const file = event.target.files?.[0]; if (file) void upload(file); event.target.value = ""; }} />
-        </label>
-      </div>
-      <div className="mt-auto flex flex-wrap gap-1.5 border-t border-stroke-3 pt-3">
-        <Btn primary disabled={save.isPending} onClick={() => save.mutate()}>Salvar</Btn>
-        {!isTransfer ? <Btn disabled={!categoryId || createRule.isPending} onClick={() => createRule.mutate()}>Criar regra de categoria</Btn> : null}
-        <Btn ghost danger onClick={() => onDelete(row)}>Excluir</Btn>
-      </div>
-    </aside>
-  );
-}
-
-function Info({ k, v }: { k: string; v: string }) {
-  return (
-    <div className="flex min-w-0 flex-col gap-0.5">
-      <span className="text-[11px] text-fg-3">{k}</span>
-      <span className="truncate">{v}</span>
+        );
+      })}
     </div>
   );
 }

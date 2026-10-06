@@ -1,6 +1,10 @@
 import type { DbClient } from "@capital/server/lib/prisma";
+import { Prisma } from "@/generated/prisma";
 import type { CategorizationRule } from "@/generated/prisma";
+import { categorizeStatementTransactions } from "@capital/server/lib/claude";
+import { STATEMENT_LABEL_KEYS } from "@capital/server/lib/category-prompt";
 import { normalizeDescription } from "@capital/server/modules/bank-statements/utils";
+import { getSystemCategory, getSystemCategoryNames } from "@capital/server/modules/categories/lib/system-categories";
 import { LedgerError, notFound } from "../lib/errors";
 import { inTransaction, recordMutation, snapshot, type MutationRecordInput } from "./mutations";
 
@@ -149,11 +153,127 @@ async function assertEntity(userId: string, entityId: string, db: DbClient) {
   if (!(await db.entity.count({ where: { id: entityId, userId } }))) throw notFound("Entity", "entity.not_found");
 }
 
-/** Which rule (if any) would categorize `description`. */
-export async function testRules(userId: string, description: string, db: DbClient) {
+/**
+ * Which rule (if any) would categorize `description`, matched the way
+ * createEntry matches it: with `entityId`, rules limited to another entity
+ * are skipped. `hitCount` is how often the rule was used ("usada 23×").
+ */
+export async function testRules(userId: string, description: string, db: DbClient, opts: { entityId?: string | null } = {}) {
   const matcher = await loadRuleMatcher(userId, db);
-  const rule = matcher.match(description);
-  if (!rule) return { rule: null, category: null };
+  const rule = matcher.match(description, opts.entityId ?? null);
+  if (!rule) return { rule: null, category: null, hitCount: 0 };
   const category = await db.category.findUnique({ where: { id: rule.categoryId } });
-  return { rule, category };
+  return { rule, category, hitCount: rule.hitCount };
+}
+
+// ---------------------------------------------------------------------------
+// Category suggestion
+// ---------------------------------------------------------------------------
+
+export interface SuggestInput {
+  description: string;
+  entityId?: string | null;
+  /** The entry's kind: history and AI only suggest categories of this type. Default expense. */
+  kind?: "income" | "expense";
+  /** Ask Claude when neither a rule nor the history knows the description. Off by default (it costs a call). */
+  ai?: boolean;
+}
+
+/** One-row categorizer (the statement prompt's signature); tests inject a stub. */
+export type SuggestCategorizer = (
+  rows: { index: number; description: string; amount: number }[],
+  categories: string[],
+  type: "income" | "expense",
+  fallback: string,
+  labels: Record<string, string>
+) => Promise<{ index: number; category: string }[]>;
+
+type SuggestedCategory = { id: string; name: string; type: string };
+
+export interface CategorySuggestion {
+  /** rule: a categorization rule matches; history: past entries with this description; ai: Claude; null: nothing to suggest. */
+  source: "rule" | "history" | "ai" | null;
+  categoryId: string | null;
+  category: SuggestedCategory | null;
+  rule: { id: string; pattern: string; matchType: string; hitCount: number } | null;
+  /** history: how many past entries with this description used the category. */
+  count: number;
+}
+
+const NONE: CategorySuggestion = { source: null, categoryId: null, category: null, rule: null, count: 0 };
+
+/** "Uber (3/10)" and "uber" are the same purchase for the history. */
+const INSTALLMENT_SUFFIX = String.raw`\s*\(\d+/\d+\)\s*$`;
+const historyKey = (description: string) => normalizeDescription(description.replace(new RegExp(INSTALLMENT_SUFFIX), ""));
+
+/**
+ * The most used live category of past entries with the same normalized
+ * description (installment suffix ignored): the entity's own entries first,
+ * then any entity's. Archived categories never come back.
+ */
+async function suggestFromHistory(userId: string, description: string, kind: "income" | "expense", entityId: string | null, db: DbClient) {
+  const key = historyKey(description);
+  if (!key) return null;
+  const top = async (entity: string | null) => {
+    const rows = await db.$queryRaw<{ categoryId: string; n: number }[]>`
+      SELECT le."categoryId", count(*)::int AS n
+      FROM ledger_entries le JOIN categories c ON c.id = le."categoryId"
+      WHERE le."userId" = ${userId} AND le."deletedAt" IS NULL AND le.kind::text = ${kind}
+        AND c."isArchived" = false AND c.type::text = ${kind}
+        AND lower(btrim(regexp_replace(le.description, ${INSTALLMENT_SUFFIX}, ''))) = ${key}
+        ${entity ? Prisma.sql`AND le."entityId" = ${entity}` : Prisma.empty}
+      GROUP BY le."categoryId"
+      ORDER BY n DESC, max(le.date) DESC
+      LIMIT 1`;
+    return rows[0] ?? null;
+  };
+  return (entityId ? await top(entityId) : null) ?? (await top(null));
+}
+
+async function suggestFromAi(userId: string, description: string, kind: "income" | "expense", db: DbClient, categorize?: SuggestCategorizer) {
+  if (!categorize && !process.env.ANTHROPIC_API_KEY) return null;
+  const run = categorize ?? categorizeStatementTransactions;
+  const fallback = await getSystemCategory(userId, kind === "income" ? "other_income" : "other_system", db);
+  const categories = await db.category.findMany({ where: { userId, type: kind, isArchived: false }, select: { id: true, name: true, type: true } });
+  const labels = await getSystemCategoryNames(userId, STATEMENT_LABEL_KEYS, db);
+  const names = [...new Set([...categories.map((c) => c.name), fallback.name])];
+  const [answer] = await run([{ index: 0, description, amount: 0 }], names, kind, fallback.name, labels);
+  const category = answer && answer.category !== fallback.name ? categories.find((c) => c.name === answer.category) : undefined;
+  return category ?? null;
+}
+
+/**
+ * The category to suggest while the user types a description: a matching
+ * rule, else what past entries with this description used, else (only with
+ * `ai`, and an API key) Claude's pick among the user's categories.
+ */
+export async function suggestCategory(userId: string, input: SuggestInput, db: DbClient, deps: { categorize?: SuggestCategorizer } = {}): Promise<CategorySuggestion> {
+  const description = input.description.trim();
+  if (!description) return NONE;
+  const kind = input.kind ?? "expense";
+  if (input.entityId) await assertEntity(userId, input.entityId, db);
+
+  const tested = await testRules(userId, description, db, { entityId: input.entityId });
+  if (tested.rule && tested.category && !tested.category.isArchived) {
+    const { rule, category } = tested;
+    return {
+      source: "rule",
+      categoryId: category.id,
+      category: { id: category.id, name: category.name, type: category.type },
+      rule: { id: rule.id, pattern: rule.pattern, matchType: rule.matchType, hitCount: rule.hitCount },
+      count: 0,
+    };
+  }
+
+  const past = await suggestFromHistory(userId, description, kind, input.entityId ?? null, db);
+  if (past) {
+    const category = await db.category.findUniqueOrThrow({ where: { id: past.categoryId }, select: { id: true, name: true, type: true } });
+    return { source: "history", categoryId: category.id, category, rule: null, count: past.n };
+  }
+
+  if (input.ai) {
+    const category = await suggestFromAi(userId, description, kind, db, deps.categorize);
+    if (category) return { source: "ai", categoryId: category.id, category, rule: null, count: 0 };
+  }
+  return NONE;
 }

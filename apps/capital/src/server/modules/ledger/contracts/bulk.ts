@@ -26,6 +26,8 @@ export const bulkOperationSchema = z.discriminatedUnion("op", [
       .partial(),
     /** Learn a categorization rule from the descriptions of the selected rows. */
     createRule: z.boolean().optional(),
+    /** Count what would change ({matched, changed, byField, rulesLearned}) without writing. */
+    dryRun: z.boolean().optional(),
   }),
   z.object({ op: z.literal("delete"), selection: bulkSelectionSchema }),
   z.object({ op: z.literal("duplicate"), selection: bulkSelectionSchema }),

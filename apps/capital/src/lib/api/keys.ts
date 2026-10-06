@@ -56,6 +56,8 @@ export const keys = {
   currencies: () => ["currencies"] as const,
   rules: () => ["rules"] as const,
   ruleTest: (description: string, entityId?: string | null) => ["rules", "test", { description, entityId: entityId ?? null }] as const,
+  /** POST /v2/rules/suggest: the category to suggest while typing a description. */
+  ruleSuggest: (input: { description: string; entityId?: string | null; kind?: string; ai?: boolean }) => ["rules", "suggest", input] as const,
 
   // Views and the ledger
   views: (dataset = "ledger") => ["views", dataset] as const,
@@ -70,6 +72,8 @@ export const keys = {
   /** Undo history; `{ undoable: true, limit: 1 }` is the ⌘Z fallback. */
   mutations: (params: { undoable?: boolean; limit?: number } = {}) => ["mutations", params] as const,
   trash: (params: { cursor?: string; limit?: number } = {}) => ["trash", params] as const,
+  /** POST /v2/ledger/bulk with dryRun: what a bulk edit would change. */
+  bulkPreview: (input: object) => ["ledger", "bulk-preview", input] as const,
 
   // Budgets and recurring
   /** GET /v2/budgets/overview (mode, month or year, scope). */
