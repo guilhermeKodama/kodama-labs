@@ -163,7 +163,11 @@
     "investment_account_not_found": "Investment account not found.",
     "reconcile_target_not_found": "The transfer to reconcile was not found.",
     "reconcile_direction_change": "Reconciliation can't change a transfer's direction. Delete it and create it again.",
-    "holding_unresolved": "Investment transaction {externalId} matches no holding."
+    "holding_unresolved": "Investment transaction {externalId} matches no holding.",
+    "account_kind_mismatch": "Account {name} can't receive this file: bank statements go into a checking or cash account, card bills into a credit card.",
+    "account_entity_mismatch": "Account {name} belongs to another entity.",
+    "mixed_files": "Bank statements and card bills can't be imported together.",
+    "card_payment_target": "Card bill payment {externalId} needs a credit card."
   },
   "assistant": {
     "conversation_not_found": "Conversation not found.",

@@ -3,11 +3,12 @@ import { createRouter } from "@capital/server/lib/router";
 import { prisma } from "@capital/server/lib/prisma";
 import { idParams, jsonBody, v2Handler, v2Responses } from "@capital/server/lib/v2";
 import { ImportPlanPayloadSchema } from "@capital/server/modules/assistant/agent/tools/schemas/import-plan-payload";
-import { importCardFile, importCardStatement } from "@capital/server/modules/credit-cards/services/import-card-statement";
+import { importCardStatement } from "@capital/server/modules/credit-cards/services/import-card-statement";
 import { LedgerError } from "@capital/server/modules/ledger/lib/errors";
-import { analyzeStatement } from "../../services/analyze-statement";
+import { analyzeImport } from "../../services/analyze-import";
 import { executeImport, type CreatedRecordRef } from "../../services/execute-import";
 import { executeRevert } from "../../services/execute-revert";
+import { importCardBill } from "../../services/import-card-bill";
 
 const tags = ["Imports v2"];
 const dateString = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
@@ -18,8 +19,16 @@ const analyzeRoute = createRoute({
   method: "post",
   path: "/v2/imports/analyze",
   tags,
-  summary: "Parse OFX files and compare them with the ledger (writes nothing)",
-  request: jsonBody(z.object({ files: z.array(z.object({ name: z.string().optional(), content: z.string().min(1) })).min(1) })),
+  summary: "Read statement files (bank OFX, card OFX or CSV) and compare them with the ledger; writes nothing",
+  description:
+    "Detects the kind of file, the bank, the period and the account it belongs to (accountId overrides), the card statement it fills, and per row whether it is a duplicate (dup), categorized by a rule (rule) or by the AI (ai, only with ai: true and an Anthropic key), or still needs a category (need). A PDF or an image comes back as { kind, viaAssistant: true }. Content is text or base64.",
+  request: jsonBody(
+    z.object({
+      files: z.array(z.object({ name: z.string().optional(), content: z.string().min(1), encoding: z.enum(["base64", "text"]).optional() })).min(1).max(10),
+      accountId: z.string().min(1).nullish(),
+      ai: z.boolean().optional(),
+    })
+  ),
   responses: v2Responses,
 });
 
@@ -28,6 +37,8 @@ const commitRoute = createRoute({
   path: "/v2/imports",
   tags,
   summary: "Commit a reviewed import plan",
+  description:
+    "One transaction and one undo batch (source import). The response has importId, batchId, accountName, imported, skipped, rulesCreated, and viewId and viewName, the saved view “Importação · <arquivo>” that shows exactly this import.",
   request: jsonBody(ImportPlanPayloadSchema),
   responses: v2Responses,
 });
@@ -45,7 +56,7 @@ const cardFileRoute = createRoute({
   method: "post",
   path: "/v2/accounts/{id}/statements/import-file",
   tags,
-  summary: "Import a card bill file (CSV or card OFX) into the statement closing on closingDate",
+  summary: "Import a card bill file (CSV or card OFX) into the statement closing on closingDate, as an import (history, revert, one undo batch)",
   request: { params: idParams, ...jsonBody(z.object({ closingDate: dateString, dueDate: dateString, content: z.string().min(1), fileName: z.string().optional() })) },
   responses: v2Responses,
 });
@@ -99,13 +110,20 @@ export const v2Imports = createRouter()
         where: { userId },
         orderBy: { createdAt: "desc" },
         take: 200,
-        include: { entity: { select: { id: true, name: true, kind: true } }, _count: { select: { ledgerEntries: true, transferGroups: true } } },
+        include: {
+          entity: { select: { id: true, name: true, kind: true } },
+          account: { select: { id: true, name: true, type: true } },
+          _count: { select: { ledgerEntries: true, transferGroups: true } },
+        },
       });
       return {
         imports: imports.map((i) => ({
           id: i.id,
           entity: i.entity,
           accountId: i.accountId,
+          account: i.account,
+          /** A card bill (imported into a card) or a bank statement. */
+          kind: i.account?.type === "credit_card" ? ("card" as const) : ("bank" as const),
           bankName: i.bankName,
           fileName: i.fileName,
           source: i.source,
@@ -120,8 +138,14 @@ export const v2Imports = createRouter()
       };
     })
   )
-  .openapi(analyzeRoute, v2Handler(analyzeRoute, async (c, userId) => analyzeStatement(userId, c.req.valid("json").files, prisma)))
-  .openapi(commitRoute, v2Handler(commitRoute, async (c, userId) => executeImport(userId, c.req.valid("json"), prisma, { source: "manual" })))
+  .openapi(
+    analyzeRoute,
+    v2Handler(analyzeRoute, async (c, userId) => {
+      const body = c.req.valid("json");
+      return analyzeImport(userId, { files: body.files, accountId: body.accountId, ai: body.ai }, prisma);
+    })
+  )
+  .openapi(commitRoute, v2Handler(commitRoute, async (c, userId) => executeImport(userId, c.req.valid("json"), prisma, { source: "manual", createView: true })))
   .openapi(
     revertRoute,
     v2Handler(revertRoute, async (c, userId) => {
@@ -136,7 +160,7 @@ export const v2Imports = createRouter()
     v2Handler(cardFileRoute, async (c, userId) => {
       const { id } = c.req.valid("param");
       const body = c.req.valid("json");
-      return importCardFile(userId, { accountId: id, closingDate: body.closingDate, dueDate: body.dueDate, content: body.content }, prisma);
+      return importCardBill(userId, { accountId: id, closingDate: body.closingDate, dueDate: body.dueDate, content: body.content, fileName: body.fileName }, prisma);
     })
   )
   .openapi(

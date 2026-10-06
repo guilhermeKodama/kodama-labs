@@ -156,6 +156,10 @@ export const ERROR_CODES = {
   "import.reconcile_target_not_found": "Transfer {transferId} to reconcile was not found",
   "import.reconcile_direction_change": "Transfer {transferId} cannot change to direction {direction} through reconciliation; delete and recreate it",
   "import.holding_unresolved": "Investment transaction {externalId} resolved to no holding",
+  "import.account_kind_mismatch": "Account {name} cannot receive this import: bank statements go into a checking or cash account, card bills into a credit card",
+  "import.account_entity_mismatch": "Account {name} belongs to another entity than the import",
+  "import.mixed_files": "Bank statements and card bills cannot be imported together",
+  "import.card_payment_target": "Card payment {externalId} needs a credit card account",
 
   // Assistant (v1)
   "assistant.conversation_not_found": "Conversation not found",
