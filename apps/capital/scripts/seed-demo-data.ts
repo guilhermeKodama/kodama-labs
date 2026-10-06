@@ -221,6 +221,17 @@ export function scaledAmount(amount: number, k: number): number {
 /** t5: Inter PJ → Nubank every month of the twelve, the aportes' origin ("Distribuição LTDA → PF"). */
 export const PROFIT_DISTRIBUTION = { id: "t5", day: 20, description: "Distribuição de lucros", from: "inter" as AccountKey, to: "nubank" as AccountKey, amount: 15000 };
 
+/**
+ * Kodama LLC → PF: the LLC's surplus over the mockup's Mercury balance
+ * (US$ 18.240), rounded up to `roundTo`, goes to the PF's USD broker in
+ * August (M-1), after two months of invoices. The seed sizes it at run time.
+ * It lands in Avenue rather than Nubank because Avenue's opening cash has
+ * room for it in any month, while Nubank's depends on how many of the
+ * yearly-budget rows the current month books. Booked as profit_distribution,
+ * so it is not an aporte (contributions count investment_deposit only).
+ */
+export const LLC_DISTRIBUTION = { k: -1, day: 25, description: "Distribuição de lucros", from: "mercury" as AccountKey, to: "avenue" as AccountKey, roundTo: 100 };
+
 /** t10: bought in July (M-2) in 10x of R$ 1.099,90, so September shows 3/10. */
 export const NOTEBOOK = { id: "t10", k: -2, day: 15, description: "Notebook Dell", account: "xpCard" as AccountKey, amount: 10999, installments: 10, category: "eletronicos" as CategoryKey };
 

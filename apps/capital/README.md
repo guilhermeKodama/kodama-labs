@@ -424,9 +424,16 @@ source `system`, so ⌘Z never undoes the seed):
   on the mockup's values; the 40/20/10/25/5/0 targets; the FIRE goal
   (R$ 12.250/mês, by contribution at R$ 15.000/mês).
 
-Opening balances are set so Nubank, Inter PJ and XP end at the mockup's
-balances. Mercury ends near US$ 22 mil instead of US$ 18.240, because a
-lower figure would need a negative opening balance.
+Opening balances are set so Nubank, Inter PJ, Mercury and XP end at the
+mockup's balances. Mercury's invoices leave it above US$ 18.240, so in
+August the LLC distributes the surplus (US$ 3.800) to Avenue, as a
+profit distribution rather than an aporte.
+
+Known differences from the mockup: Transações has more rows than t1–t18 a
+month (broker deposits, the cash legs of buys and proventos, card bill
+payments), which the year of aportes and proventos needs; FIRE progress
+counts holdings only, so it reads about 29,7% instead of 30,6%; and the
+LLC's Mercury runs negative before its first invoices (July).
 
 ---
 

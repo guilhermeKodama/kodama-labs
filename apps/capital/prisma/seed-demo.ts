@@ -59,6 +59,7 @@ import {
   DEMO_RULES,
   FIRE_GOAL,
   isoDate,
+  LLC_DISTRIBUTION,
   MOCK_ENTRIES,
   MOCK_MONTHS,
   monthIndex,
@@ -408,6 +409,42 @@ async function payCardBills(ctx: Ctx) {
   }
 }
 
+/**
+ * Mercury's three months of invoices leave it above the mockup's US$ 18.240;
+ * the LLC distributes the surplus (LLC_DISTRIBUTION) so its opening balance
+ * stays at or above zero and it still lands on the mockup's figure.
+ */
+async function distributeLlcSurplus(ctx: Ctx) {
+  const { from, to, roundTo } = LLC_DISTRIBUTION;
+  const target = DEMO_ACCOUNTS[from].balance ?? 0;
+  const balances = await accountBalances(ctx.userId, ctx.db);
+  const flows = (key: AccountKey) => (balances.get(ctx.accounts[key].id) ?? 0) - Number(ctx.accounts[key].initialBalance);
+  const surplus = round(flows(from) - target, 2);
+  if (surplus <= 0) return;
+  const amount = Math.ceil(surplus / roundTo) * roundTo;
+  // The destination ends at its own mockup balance, so its opening balance absorbs the amount.
+  const headroom = round((DEMO_ACCOUNTS[to].balance ?? 0) - flows(to), 2);
+  if (amount > headroom) {
+    log(`note: ${DEMO_ACCOUNTS[to].name} has no room for a ${amount} distribution (${headroom}); ${DEMO_ACCOUNTS[from].name} keeps ${surplus} over the mockup`);
+    return;
+  }
+  await createEntry(
+    ctx.userId,
+    {
+      kind: "transfer",
+      fromAccountId: ctx.accounts[from].id,
+      toAccountId: ctx.accounts[to].id,
+      amount,
+      description: LLC_DISTRIBUTION.description,
+      date: ctx.date(LLC_DISTRIBUTION.k, LLC_DISTRIBUTION.day),
+      direction: "profit_distribution",
+    },
+    ctx.db
+  );
+  counts.transfers++;
+  log(`LLC distribution: ${amount} ${ctx.accounts[from].currency} ${DEMO_ACCOUNTS[from].name} → ${DEMO_ACCOUNTS[to].name} on ${ctx.date(LLC_DISTRIBUTION.k, LLC_DISTRIBUTION.day)}`);
+}
+
 /** Opening balances so each account ends at the mockup's balance (never below zero). */
 async function setOpeningBalances(ctx: Ctx) {
   const balances = await accountBalances(ctx.userId, ctx.db);
@@ -494,6 +531,7 @@ async function seed(db: Db, m0: YearMonth, email: string, password: string) {
   const fx = await loadFx(userId, db);
   await seedInvestments(ctx, planInvestments(fx.rateFor("USD")));
   await payCardBills(ctx);
+  await distributeLlcSurplus(ctx);
   await setOpeningBalances(ctx);
   await seedFire(ctx);
 
