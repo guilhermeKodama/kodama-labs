@@ -4,7 +4,7 @@ import { createLedgerFixture, deleteLedgerFixture, type LedgerFixture } from "@/
 import { createEntry } from "@capital/server/modules/ledger/services/entries";
 import { recordAporte } from "../aporte";
 import { contributions, isDefaultTransferDescription } from "../contributions";
-import { createHolding, recordOperation } from "../portfolio";
+import { createHolding, moveBrokerageCash, recordOperation } from "../portfolio";
 
 const USER = "test-user-investments-contributions-001";
 let f: LedgerFixture;
@@ -88,6 +88,15 @@ describe("contributions", () => {
     const pj = await contributions(USER, prisma, { months: 3, end: "2026-01", entityIds: [f.pjId] });
     expect(pj.months.map((m) => m.net)).toEqual([0, 0, 0]);
     expect(pj.savingsRate.rate).toBe(0.5);
+  });
+
+  it("names the entity a resgate across entities went on to, not the broker's own", async () => {
+    const btg = (await prisma.account.create({ data: { userId: USER, entityId: f.pjId, type: "brokerage", name: "BTG", currency: "BRL" } })).id;
+    await moveBrokerageCash(USER, { accountId: btg, direction: "deposit", amount: 1000, date: "2026-04-01", counterpartAccountId: f.pjChecking }, prisma);
+    const resgate = await moveBrokerageCash(USER, { accountId: btg, direction: "withdraw", amount: 400, date: "2026-04-02", counterpartAccountId: f.pfChecking }, prisma);
+    const c = await contributions(USER, prisma, { months: 1, end: "2026-04", entityIds: [f.pjId] });
+    const out = c.months[0].origins.find((o) => o.amount < 0)!;
+    expect(out).toMatchObject({ amount: -400, brokerEntityName: "Kodama LTDA", sourceEntityName: "PF", sourceTransferGroupId: resgate.transferGroupIds[1] });
   });
 
   it("has no savings rate without PF income", async () => {

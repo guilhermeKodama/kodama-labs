@@ -70,14 +70,15 @@ type OriginFields = Pick<
  * One transfer's origin (mockup "Distribuição LTDA → PF", "Salário PF"): the
  * description typed on it; else the one typed on the transfer that fed it
  * from another entity; else "entidade de origem → entidade da corretora"
- * across entities; else "conta de origem → corretora". The text a transfer
- * gets when none is typed ("Aporte em investimento: …") is never shown.
+ * across entities ("entidade da corretora → entidade de destino" for a
+ * resgate); else "conta de origem → corretora". The text a transfer gets
+ * when none is typed ("Aporte em investimento: …") is never shown.
  */
 export function originOf(o: OriginFields): string {
   const typed = !o.defaultDescription ? o.description?.trim() : null;
   if (typed) return typed;
   if (o.sourceDescription?.trim()) return o.sourceDescription.trim();
-  if (o.sourceEntityName) return `${o.sourceEntityName} → ${o.brokerEntityName}`;
+  if (o.sourceEntityName) return o.amount < 0 ? `${o.brokerEntityName} → ${o.sourceEntityName}` : `${o.sourceEntityName} → ${o.brokerEntityName}`;
   if (!o.counterpartAccountName) return o.brokerAccountName;
   return o.amount < 0 ? `${o.brokerAccountName} → ${o.counterpartAccountName}` : `${o.counterpartAccountName} → ${o.brokerAccountName}`;
 }

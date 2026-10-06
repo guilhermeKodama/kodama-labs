@@ -47,7 +47,11 @@ export interface ContributionOrigin {
   /** The other side of the transfer. */
   counterpartAccountName: string | null;
   counterpartEntityName: string | null;
-  /** When the money came from another entity in the same batch (aporte across entities): that entity. */
+  /**
+   * Across entities, the other entity of the same batch: the one the money
+   * came from (aporte), or the one it went on to (resgate from a PJ broker
+   * into a PF account).
+   */
   sourceEntityName: string | null;
   sourceTransferGroupId: string | null;
   /** The description typed on that transfer; null when it has the default one. */
@@ -127,7 +131,7 @@ export async function contributions(userId: string, db: DbClient, opts: Contribu
       AND ${entityScopeSql(Prisma.sql`le."entityId"`, entityIds)}
     ORDER BY le.date DESC, le.id`;
 
-  // The capital injection / profit distribution booked in the same batch as an aporte across entities.
+  // The capital injection / profit distribution booked in the same batch as an aporte or resgate across entities.
   const groupIds = [...new Set(legs.map((l) => l.transferGroupId))];
   const sources = groupIds.length
     ? await db.$queryRaw<{ deposit_group: string; source_group: string; source_entity: string; source_description: string | null; source_direction: TransferDirection }[]>`
@@ -137,8 +141,11 @@ export async function contributions(userId: string, db: DbClient, opts: Contribu
         JOIN mutation_records mr ON mr."batchId" = dep."batchId" AND mr.model = 'TransferGroup' AND mr."recordId" <> dep."recordId" AND mr.before IS NULL
         JOIN transfer_groups src ON src.id = mr."recordId" AND src."deletedAt" IS NULL
           AND src.direction IN ('capital_injection', 'profit_distribution', 'between_accounts')
-        JOIN ledger_entries src_out ON src_out."transferGroupId" = src.id AND src_out.amount < 0
-        JOIN entities se ON se.id = src_out."entityId"
+        JOIN transfer_groups depg ON depg.id = dep."recordId"
+        -- An aporte names the entity the money came from; a resgate the one it went on to.
+        JOIN ledger_entries src_leg ON src_leg."transferGroupId" = src.id
+          AND (CASE WHEN depg.direction = 'investment_withdrawal' THEN src_leg.amount > 0 ELSE src_leg.amount < 0 END)
+        JOIN entities se ON se.id = src_leg."entityId"
         WHERE dep.model = 'TransferGroup' AND dep.before IS NULL AND dep."recordId" IN (${Prisma.join(groupIds)})
         ORDER BY dep."recordId", src."createdAt"`
     : [];

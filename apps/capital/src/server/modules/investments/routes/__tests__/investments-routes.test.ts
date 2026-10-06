@@ -316,6 +316,17 @@ describe("undo and delete keep positions consistent", () => {
     expect(await prisma.investmentOperation.count({ where: { holdingId: holding.id } })).toBe(1);
   });
 
+  it("brings back an imported sale above the position when its deletion is undone (as undoing an import revert does)", async () => {
+    const holding = await json("POST", "/v2/holdings", { accountId: f.broker, assetClass: "stocks", ticker: "BBAS3", name: "Banco do Brasil" });
+    const sale = await prisma.investmentOperation.create({
+      data: { holdingId: holding.id, type: "sell", quantity: 5, pricePerUnit: 10, totalAmount: 50, fees: 0, date: new Date("2026-09-01"), externalId: "stmt-bbas3-1" },
+    });
+    const deleted = await json("DELETE", `/v2/investment-operations/${sale.id}`);
+    expect(await prisma.investmentOperation.count({ where: { id: sale.id } })).toBe(0);
+    await undo(deleted.batchId);
+    expect(await prisma.investmentOperation.count({ where: { id: sale.id } })).toBe(1);
+  });
+
   it("deactivates a holding whose only buy is deleted or undone (no R$ 0 row, not offered in the rebalance)", async () => {
     const aporte = await json("POST", "/v2/investments/aporte", {
       fromAccountId: f.pfChecking,

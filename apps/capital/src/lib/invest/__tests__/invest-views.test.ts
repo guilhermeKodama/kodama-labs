@@ -252,6 +252,10 @@ describe("contributions view", () => {
     expect(originLabel([origin(auto)])).toBe("Nubank → XP");
     expect(originLabel([origin({ ...auto, sourceEntityName: "LTDA", sourceDescription: "Distribuição LTDA → PF" })])).toBe("Distribuição LTDA → PF");
     expect(originLabel([origin({ ...auto, sourceEntityName: "LTDA" })])).toBe("LTDA → PF");
+    // A resgate from a PJ broker into a PF account goes from the broker's entity to the other one.
+    expect(
+      originLabel([origin({ description: "Resgate de investimento: BTG → Conta principal", defaultDescription: true, amount: -400, brokerEntityName: "LTDA", sourceEntityName: "PF" })])
+    ).toBe("LTDA → PF");
     expect(originLabel([origin({ description: "Resgate de investimento: XP → Nubank", defaultDescription: true, amount: -500 })])).toBe("XP → Nubank");
     expect(originLabel([origin({ ...auto, counterpartAccountName: null })])).toBe("XP");
   });

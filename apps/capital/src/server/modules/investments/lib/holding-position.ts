@@ -221,20 +221,25 @@ export function operationsBeforeUndo<T extends PositionOperation & { date: Date;
  * Refuses (409 holding.undo_oversell) an undo that leaves one of the
  * holding's sales larger than the position held at that point, e.g. undoing
  * an older aporte + buy after a later sale of that asset. Sales that were
- * already above the position before the undo (statement imports whose
- * history starts after the buys) do not count. Runs inside the undo's
- * transaction, before it commits, so a refused undo changes nothing.
+ * already above the position before the undo, and sales from statement
+ * imports (externalId; their history may start after the buys, as
+ * recordOperation allows), do not count: undoing the revert of such an
+ * import brings them back. Runs inside the undo's transaction, before it
+ * commits, so a refused undo changes nothing.
  */
 export function assertUndoKeepsPosition(input: {
   holdingId: string;
   label: string;
-  ops: readonly (PositionOperation & { date: Date; createdAt: Date })[];
+  ops: readonly (PositionOperation & { date: Date; createdAt: Date; externalId?: string | null })[];
   position: Position;
   undone: readonly UndoneRecord[];
 }) {
   if (!input.position.oversold.length) return;
+  const imported = new Set(input.ops.filter((op) => op.externalId).map((op) => op.id));
+  const fresh = input.position.oversold.filter((id) => !imported.has(id));
+  if (!fresh.length) return;
   const before = new Set(replayPosition(operationsBeforeUndo(input.holdingId, input.ops, input.undone)).oversold);
-  if (input.position.oversold.some((id) => !before.has(id))) {
+  if (fresh.some((id) => !before.has(id))) {
     throw new LedgerError(`Undoing this would leave a sale of ${input.label} larger than the position; undo or delete that sale first`, 409, {
       code: "holding.undo_oversell",
       params: { holding: input.label },
