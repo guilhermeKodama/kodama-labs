@@ -90,6 +90,7 @@
       "arrives": "chega {value}",
       "balance": "saldo {value}",
       "brokerCash": "{value} em caixa",
+      "invested": "{value} investidos",
       "crossTitle": "Entidades diferentes",
       "crossBody": "A conta é de {cash} e a corretora é de {broker}. Além do aporte, isso é {flow, select, capital_injection {um aporte de capital na empresa} other {uma distribuição de lucros}}; as duas pernas serão registradas.",
       "buyAlso": "Já registrar a compra em {broker} com esse dinheiro",

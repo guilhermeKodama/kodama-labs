@@ -14,6 +14,7 @@ import {
   detectDirection,
   formCurrency,
   investSides,
+  investedIn,
   isBroker,
   isCashAccount,
   isCashOrCard,
@@ -325,8 +326,14 @@ function InvestBlock({
     return cash && balance != null ? t("balance", { value: fmt.money0(balance, cash.currency) }) : undefined;
   })();
   const brokerHint = (() => {
-    const balance = record(broker?.id)?.balance;
-    return broker && balance != null ? t("brokerCash", { value: fmt.money0(balance, broker.currency) }) : undefined;
+    if (!broker) return undefined;
+    const balance = record(broker.id)?.balance;
+    const invested = investedIn(ctx, broker);
+    const parts = [
+      balance ? t("brokerCash", { value: fmt.money0(balance, broker.currency) }) : null,
+      invested ? t("invested", { value: fmt.money0(invested, broker.currency) }) : null,
+    ].filter(Boolean);
+    return parts.length ? parts.join(" · ") : balance != null ? t("brokerCash", { value: fmt.money0(balance, broker.currency) }) : undefined;
   })();
   const cashSelect = <Select value={form.cashAccountId} onChange={(cashAccountId) => up({ cashAccountId, rate: "" })} options={cashOptions} invalid={invalid === "cash"} />;
   const brokerSelect = (

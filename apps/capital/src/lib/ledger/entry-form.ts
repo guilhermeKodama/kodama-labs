@@ -69,6 +69,9 @@ export interface FormHolding {
   currentPrice: number | null;
   averageCost: number;
   isActive?: boolean;
+  /** Current value of the position, in `currency` (GET /v2/holdings). */
+  marketValue?: number | null;
+  currency?: string;
 }
 
 export interface FormContext {
@@ -271,6 +274,29 @@ export function buyHolding(form: EntryFormState, ctx: FormContext): { holding: F
   const holding = holdings.find((candidate) => candidate.id === form.buyHoldingId) ?? holdings[0];
   if (!holding) return null;
   return { holding, price: holding.currentPrice ?? holding.averageCost };
+}
+
+/**
+ * What a broker account holds in positions ("R$ 312.400 investidos"), in
+ * the account's currency: the active holdings' market value, converted
+ * through the base-currency rates when a holding is quoted in another one.
+ * Null when it holds nothing (or a rate is missing).
+ */
+export function investedIn(ctx: FormContext, account: Pick<FormAccount, "id" | "currency">): number | null {
+  const rateOf = (code: string) => (code === ctx.baseCurrency ? 1 : ctx.rates[code]);
+  let total = 0;
+  for (const holding of ctx.holdings ?? []) {
+    if (holding.accountId !== account.id || holding.isActive === false || !holding.marketValue) continue;
+    const code = holding.currency ?? account.currency;
+    if (code === account.currency) total += holding.marketValue;
+    else {
+      const from = rateOf(code);
+      const to = rateOf(account.currency);
+      if (!from || !to) return null;
+      total += (holding.marketValue * from) / to;
+    }
+  }
+  return total > 0 ? round2(total) : null;
 }
 
 export type FormError =

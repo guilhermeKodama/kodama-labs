@@ -9,6 +9,7 @@ import {
   formFromEntry,
   fxPair,
   investSides,
+  investedIn,
   nextAfterSave,
   parseDateText,
   todayIn,
@@ -273,5 +274,26 @@ describe("parseDateText", () => {
     expect(parseDateText("2026-09-21", "dd/MM/yyyy", "2026-10-01")).toBe("2026-09-21");
     expect(parseDateText("31/02/2026", "dd/MM/yyyy", "2026-10-01")).toBeNull();
     expect(parseDateText("ontem", "dd/MM/yyyy", "2026-10-01")).toBeNull();
+  });
+});
+
+describe("investedIn", () => {
+  const withHoldings = (holdings: FormContext["holdings"]): FormContext => ({ ...ctx, holdings });
+
+  it("sums the broker's active positions in its currency, converting other quotes", () => {
+    const here = withHoldings([
+      { id: "a", accountId: "xp", ticker: "BOVA11", name: "a", currentPrice: 130, averageCost: 120, marketValue: 7800, currency: "BRL" },
+      { id: "b", accountId: "xp", ticker: "IVVB11", name: "b", currentPrice: null, averageCost: 300, marketValue: 100, currency: "USD" },
+      { id: "c", accountId: "xp", ticker: "OLD", name: "c", currentPrice: 1, averageCost: 1, marketValue: 999, isActive: false },
+      { id: "d", accountId: "avenue", ticker: "VOO", name: "d", currentPrice: 1, averageCost: 1, marketValue: 541, currency: "BRL" },
+    ]);
+    expect(investedIn(here, { id: "xp", currency: "BRL" })).toBe(8341);
+    expect(investedIn(here, { id: "avenue", currency: "USD" })).toBe(100);
+  });
+
+  it("is null for an empty broker or a missing rate", () => {
+    expect(investedIn(withHoldings([]), { id: "xp", currency: "BRL" })).toBeNull();
+    const gbp = withHoldings([{ id: "a", accountId: "xp", ticker: null, name: "a", currentPrice: 1, averageCost: 1, marketValue: 10, currency: "GBP" }]);
+    expect(investedIn(gbp, { id: "xp", currency: "BRL" })).toBeNull();
   });
 });

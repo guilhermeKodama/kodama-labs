@@ -90,6 +90,7 @@
       "arrives": "{value} arrives",
       "balance": "balance {value}",
       "brokerCash": "{value} in cash",
+      "invested": "{value} invested",
       "crossTitle": "Different entities",
       "crossBody": "The account belongs to {cash} and the broker to {broker}. Besides the contribution, this is {flow, select, capital_injection {a capital injection into the company} other {a profit distribution}}; both legs will be recorded.",
       "buyAlso": "Also record the purchase at {broker} with this money",
