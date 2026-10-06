@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { buildChartData } from "@/lib/ledger/chart-data";
 import { dayDraft, drillConfig, drillDraft, drillFiltersDraft, groupValueFilters, othersFilters, withDrillBanner } from "@/lib/ledger/drill";
 import { applyViewDraft, decodeViewDraft, draftPatch, encodeViewDraft, isDirty } from "@/lib/ledger/view-draft";
 import { viewConfig } from "./fixtures";
@@ -114,11 +115,29 @@ describe("drill-down", () => {
     ]);
   });
 
-  it("drills 'Outros' as every value but the ones shown; not on a time axis", () => {
-    expect(othersFilters({ field: "categoryId" }, ["a", null])).toEqual([{ field: "categoryId", op: "nin", values: ["a", null] }]);
-    expect(othersFilters({ field: "date", bucket: "month" }, ["2026-09"])).toBeNull();
+  it("drills 'Outros' as every value but the ones shown", () => {
+    expect(othersFilters({ field: "categoryId" }, ["a", null], ["b", "c"])).toEqual([{ field: "categoryId", op: "nin", values: ["a", null] }]);
+    expect(othersFilters({ field: "isRecurring" }, ["true"], ["false"])).toEqual([{ field: "isRecurring", op: "nin", values: [true] }]);
     const saved = viewConfig({ layout: "chart" });
-    expect(drillFiltersDraft(saved, saved, [{ field: "categoryId" }], othersFilters({ field: "categoryId" }, ["a"])!).filters).toEqual([{ field: "categoryId", op: "nin", values: ["a"] }]);
+    expect(drillFiltersDraft(saved, saved, [{ field: "categoryId" }], othersFilters({ field: "categoryId" }, ["a"], ["b"])!).filters).toEqual([{ field: "categoryId", op: "nin", values: ["a"] }]);
+  });
+
+  it("drills 'Outros' of a time axis (Top N on Mês) as inBuckets of the folded months", () => {
+    const month = { field: "date", bucket: "month" } as const;
+    const groups = [
+      { key: "2026-07", count: 2, values: { "sum:amountBase": -50 } },
+      { key: "2026-08", count: 3, values: { "sum:amountBase": -900 } },
+      { key: "2026-09", count: 1, values: { "sum:amountBase": -10 } },
+    ];
+    const data = buildChartData(groups as never, { type: "bar", metric: "sum", cumulative: false, top: 1, hasSeries: false });
+    const others = data.categories.find((c) => c.others)!;
+    const kept = data.categories.filter((c) => !c.others).map((c) => c.key);
+    expect(kept).toEqual(["2026-08"]);
+    const filters = othersFilters(month, kept, others.others!);
+    expect(filters).toEqual([{ field: "date", op: "inBuckets", bucket: "month", values: ["2026-07", "2026-09"] }]);
+    const saved = viewConfig({ layout: "chart", groupBy: [month], filters: [{ field: "date", op: "inBuckets", bucket: "month", values: ["2026-07", "2026-08", "2026-09"] }] });
+    expect(drillFiltersDraft(saved, saved, [month], filters!).filters).toEqual([{ field: "date", op: "inBuckets", bucket: "month", values: ["2026-07", "2026-09"] }]);
+    expect(othersFilters(month, kept, [null])).toBeNull();
   });
 
   it("opens a calendar day in the table", () => {

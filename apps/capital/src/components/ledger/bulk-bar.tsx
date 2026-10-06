@@ -1,12 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { Fragment, useState } from "react";
 import { useTranslations } from "next-intl";
 import type { LedgerSelectionQuery } from "@capital/server/modules/ledger/contracts";
 import { Menu, MenuItem, MenuLabel } from "@/components/cap";
 import { api, apiPost } from "@/lib/api/client";
 import type { Names } from "@/lib/api/catalog";
 import { useAppMutation } from "@/lib/api/use-app-mutation";
+import { bulkCategoryGroups } from "@/lib/ledger/bulk-edit";
 import { useFmt } from "@/lib/format/provider";
 import { useShortcut } from "@/lib/shortcuts/provider";
 import { cn } from "@/lib/utils";
@@ -119,9 +120,7 @@ export function BulkBar({ selection, stats, names, allInView, totalInView, onCle
       {label}
     </button>
   );
-  const categories = names.categories
-    .filter((category) => !category.isArchived && category.type !== "investment")
-    .sort((a, b) => (a.type === b.type ? a.name.localeCompare(b.name) : a.type === "expense" ? -1 : 1));
+  const categoryGroups = bulkCategoryGroups(names.categories);
 
   return (
     <div className="pointer-events-none sticky bottom-4 z-[35] mt-2 flex flex-col items-center gap-2">
@@ -150,12 +149,17 @@ export function BulkBar({ selection, stats, names, allInView, totalInView, onCle
         <Menu side="top" align="center" width={220} trigger={<button type="button" className={btnClass()}>{t("category")}</button>}>
           <MenuLabel>{t("categoryTitle", { count })}</MenuLabel>
           <div className="max-h-[220px] overflow-y-auto">
-            {categories.map((category) => (
-              <MenuItem
-                key={category.id}
-                label={category.name}
-                onSelect={() => run({ op: "update", patch: { categoryId: category.id } }, (affected) => t("toast.category", { count: affected, category: category.name }))}
-              />
+            {categoryGroups.map((group) => (
+              <Fragment key={group.type}>
+                <MenuLabel>{t(`categoryGroup.${group.type}`)}</MenuLabel>
+                {group.categories.map((category) => (
+                  <MenuItem
+                    key={category.id}
+                    label={category.name}
+                    onSelect={() => run({ op: "update", patch: { categoryId: category.id } }, (affected) => t("toast.category", { count: affected, category: category.name }))}
+                  />
+                ))}
+              </Fragment>
             ))}
           </div>
         </Menu>

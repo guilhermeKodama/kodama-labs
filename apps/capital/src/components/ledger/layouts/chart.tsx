@@ -92,7 +92,8 @@ export function ChartView({
     const cat = data.categories[index];
     if (!cat) return;
     if (cat.others) {
-      const filters = othersFilters(axis, cat.others);
+      const kept = data.categories.filter((c) => !c.others).map((c) => c.key);
+      const filters = othersFilters(axis, kept, cat.others);
       if (filters) onDrillFilters([axis], filters);
       return;
     }

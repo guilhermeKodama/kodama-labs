@@ -684,3 +684,12 @@ export function parseDateText(text: string, dateFormat: string, today: string): 
   if (month < 1 || month > 12 || day < 1 || day > new Date(Date.UTC(year, month, 0)).getUTCDate()) return null;
   return `${year}-${pad(month)}-${pad(day)}`;
 }
+
+/**
+ * The form value of the Data field for its text: the date (YYYY-MM-DD), or
+ * "" while the text is empty or not a real date, so Salvar stops at the
+ * field ("Data inválida") instead of saving the last valid date.
+ */
+export function dateInputValue(text: string, dateFormat: string, today: string): string {
+  return parseDateText(text, dateFormat, today) ?? "";
+}

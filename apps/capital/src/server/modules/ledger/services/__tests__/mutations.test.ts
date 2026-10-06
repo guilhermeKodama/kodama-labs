@@ -46,8 +46,8 @@ describe("model registry", () => {
     expect(before("InvestmentOperation", "InvestmentHolding")).toBe(true);
     // Attachments hang off entries, transfers and recurring rules.
     expect(["LedgerEntry", "TransferGroup", "RecurringRule"].every((parent) => before("Attachment", parent))).toBe(true);
-    // Accounts and categories are parents of nearly everything: re-created first, removed last.
-    expect(RESTORE_ORDER.slice(0, 2)).toEqual(["Account", "Category"]);
+    // Entities own accounts; accounts and categories are parents of nearly everything: re-created first, removed last.
+    expect(RESTORE_ORDER.slice(0, 4)).toEqual(["Entity", "SavedView", "Account", "Category"]);
   });
 
   it("refuses batches with records of an unregistered model", async () => {

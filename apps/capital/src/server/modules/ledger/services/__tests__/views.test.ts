@@ -1,12 +1,11 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { prisma } from "@capital/server/lib/prisma";
-import { createLedgerFixture, deleteLedgerFixture, type LedgerFixture } from "@/test/ledger-fixtures";
+import { createLedgerFixture, deleteLedgerFixture } from "@/test/ledger-fixtures";
 import { viewConfigSchema, type ViewConfig } from "../../contracts";
-import { ensureDefaultViews, VIEWS_SEED_VERSION } from "../default-views";
+import { ensureDefaultViews, migrateBusinessViews, staleBusinessFilterIndex, VIEWS_SEED_VERSION } from "../default-views";
 import { createView, deleteView, duplicateView, listViews, reorderViews, updateView, viewSelection, type SerializedView } from "../views";
 
 const USER = "test-user-ledger-views-001";
-let f: LedgerFixture;
 
 /** The config of a ledger view (fails the test otherwise). */
 function ledgerConfig(view: SerializedView): ViewConfig {
@@ -24,7 +23,7 @@ async function freshUser(id: string, data: { locale?: string } = {}) {
 }
 
 beforeAll(async () => {
-  f = await createLedgerFixture(prisma, USER);
+  await createLedgerFixture(prisma, USER);
 });
 afterAll(async () => {
   await deleteLedgerFixture(prisma, USER);
@@ -127,7 +126,7 @@ describe("view datasets", () => {
 });
 
 describe("default views", () => {
-  it("seeds the mockup's views once, PJ filtered by the user's businesses", async () => {
+  it("seeds the mockup's views once, PJ filtered on every business (entityKind)", async () => {
     const views = await listViews(USER, prisma);
     const ledger = views.filter((v) => v.dataset === "ledger" && v.seedKey);
     // The fixture has no system "taxes" category, so no "Impostos PJ".
@@ -143,7 +142,7 @@ describe("default views", () => {
       ["flow", "Fluxo do mês", false],
       ["balance", "Saídas acumuladas", false],
     ]);
-    expect(ledgerConfig(bySeed(views, "pj")!)).toMatchObject({ filters: [{ field: "entityId", op: "in", values: [f.pjId] }], groupBy: [{ field: "entityId" }, { field: "categoryId" }] });
+    expect(ledgerConfig(bySeed(views, "pj")!)).toMatchObject({ filters: [{ field: "entityKind", op: "in", values: ["business"] }], groupBy: [{ field: "entityId" }, { field: "categoryId" }] });
     expect(ledgerConfig(bySeed(views, "subs")!)).toMatchObject({
       filters: [
         { field: "isRecurring", op: "in", values: [true] },
@@ -201,13 +200,13 @@ describe("default views", () => {
       expect(bySeed(views, "subs")?.name).toBe("Subscriptions");
       expect((await prisma.user.findUniqueOrThrow({ where: { id: NEW } })).viewsSeedVersion).toBe(1);
 
-      const pj = await prisma.entity.create({ data: { userId: NEW, kind: "business", name: "Kodama LTDA" } });
+      await prisma.entity.create({ data: { userId: NEW, kind: "business", name: "Kodama LTDA" } });
       views = await listViews(NEW, prisma);
-      expect(ledgerConfig(bySeed(views, "pj")!).filters).toEqual([{ field: "entityId", op: "in", values: [pj.id] }]);
+      expect(ledgerConfig(bySeed(views, "pj")!).filters).toEqual([{ field: "entityKind", op: "in", values: ["business"] }]);
       expect(bySeed(views, "taxpj")).toMatchObject({ name: "Business taxes", isFavorite: false });
       expect(ledgerConfig(bySeed(views, "taxpj")!)).toMatchObject({
         filters: [
-          { field: "entityId", op: "in", values: [pj.id] },
+          { field: "entityKind", op: "in", values: ["business"] },
           { field: "categoryId", op: "in", values: [taxes.id] },
         ],
         period: { preset: "ytd", offset: 0 },
@@ -223,5 +222,49 @@ describe("default views", () => {
     } finally {
       await prisma.user.deleteMany({ where: { id: NEW } });
     }
+  });
+
+  it("rewrites PJ views seeded with the business ids of the time to entityKind, leaving a PJ filter the user chose alone", async () => {
+    const OLD = "test-user-ledger-views-migrate-001";
+    await freshUser(OLD);
+    try {
+      const ltda = await prisma.entity.create({ data: { userId: OLD, kind: "business", name: "Kodama LTDA", createdAt: new Date("2026-01-01") } });
+      const taxes = await prisma.category.create({ data: { userId: OLD, name: "Impostos", type: "expense", systemKey: "taxes" } });
+      await ensureDefaultViews(OLD, prisma);
+      // As seeded before entityKind: the business ids that existed then.
+      const pj = await prisma.savedView.findFirstOrThrow({ where: { userId: OLD, seedKey: "pj" } });
+      const taxpj = await prisma.savedView.findFirstOrThrow({ where: { userId: OLD, seedKey: "taxpj" } });
+      const seededAt = new Date("2026-02-01");
+      const old = (extra: object[] = []) => ({ ...(pj.config as object), filters: [{ field: "entityId", op: "in", values: [ltda.id] }, ...extra] });
+      await prisma.savedView.update({ where: { id: pj.id }, data: { config: old(), createdAt: seededAt } });
+      await prisma.savedView.update({ where: { id: taxpj.id }, data: { config: old([{ field: "categoryId", op: "in", values: [taxes.id] }]), createdAt: seededAt } });
+      // A business created after the seed was left out of the old filter.
+      await prisma.entity.create({ data: { userId: OLD, kind: "business", name: "Kodama LLC", createdAt: new Date("2026-03-01") } });
+
+      expect((await listViews(OLD, prisma)).length).toBeGreaterThan(0);
+      const after = async (id: string) => ledgerConfig((await listViews(OLD, prisma)).find((v) => v.id === id)!).filters;
+      expect(await after(pj.id)).toEqual([{ field: "entityKind", op: "in", values: ["business"] }]);
+      expect(await after(taxpj.id)).toEqual([
+        { field: "entityKind", op: "in", values: ["business"] },
+        { field: "categoryId", op: "in", values: [taxes.id] },
+      ]);
+      expect(await migrateBusinessViews(OLD, prisma)).toEqual([]);
+    } finally {
+      await prisma.user.deleteMany({ where: { id: OLD } });
+    }
+  });
+
+  it("tells a stale seeded business filter from one the user narrowed", () => {
+    const seeded = new Date("2026-02-01");
+    const a = { id: "a", createdAt: new Date("2026-01-01") };
+    const b = { id: "b", createdAt: new Date("2026-01-15") };
+    const later = { id: "c", createdAt: new Date("2026-03-01") };
+    const filter = (values: string[]) => [{ field: "entityId" as const, op: "in" as const, values }];
+    expect(staleBusinessFilterIndex(filter(["a", "b"]), seeded, [a, b, later])).toBe(0);
+    // b existed when the view was seeded and is not in it: the user removed it.
+    expect(staleBusinessFilterIndex(filter(["a"]), seeded, [a, b])).toBe(-1);
+    // A PF id in the list is a choice too.
+    expect(staleBusinessFilterIndex(filter(["a", "pf"]), seeded, [a])).toBe(-1);
+    expect(staleBusinessFilterIndex([{ field: "flowKind", op: "in", values: ["out"] }], seeded, [a])).toBe(-1);
   });
 });

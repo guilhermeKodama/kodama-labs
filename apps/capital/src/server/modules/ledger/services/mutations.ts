@@ -18,6 +18,8 @@ interface RecordDelegate {
 }
 
 type DelegateName =
+  | "entity"
+  | "savedView"
   | "account"
   | "category"
   | "ledgerEntry"
@@ -69,6 +71,24 @@ async function recalculateTouchedHoldings(tx: DbClient, records: MutationRecord[
  * with the same id the rows it deleted outright.
  */
 const MODELS = {
+  // An entity the batch created (with its "Conta principal") stays while anything still uses it.
+  Entity: {
+    delegate: "entity",
+    owned: byUser,
+    userScoped: true,
+    removable: {
+      accounts: { none: {} },
+      ledgerEntries: { none: {} },
+      budgets: { none: {} },
+      recurringRules: { none: {} },
+      categorizationRules: { none: {} },
+      imports: { none: {} },
+      portfolioSnapshots: { none: {} },
+    },
+  },
+  // Saved views: create, rename/favorite, duplicate and delete (a deleted view comes back under its id, so links keep
+  // working). Auto-saved config edits are not recorded (views.ts).
+  SavedView: { delegate: "savedView", owned: byUser, userScoped: true },
   // Accounts and categories cascade into the rows that use them: one the batch created stays while anything still does.
   Account: {
     delegate: "account",
@@ -127,10 +147,13 @@ export const MUTATION_MODELS = Object.keys(MODELS) as MutationModel[];
 /**
  * Parents first: restored and re-created rows must find the rows they point
  * to (anything its account and category; an entry its group, statement and
- * plan; an operation its holding, cash leg and funding transfer). Rows a
+ * plan; an operation its holding, cash leg and funding transfer; an
+ * account its entity). Rows a
  * batch created are removed in the reverse order, children first.
  */
 export const RESTORE_ORDER: readonly MutationModel[] = [
+  "Entity",
+  "SavedView",
   "Account",
   "Category",
   "Import",

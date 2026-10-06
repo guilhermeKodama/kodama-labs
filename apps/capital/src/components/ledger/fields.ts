@@ -1,14 +1,17 @@
 "use client";
 
 import { useMemo } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { useTranslations } from "next-intl";
 import type { GroupKey, LedgerFilter, Period } from "@capital/server/modules/ledger/contracts";
+import { apiGet } from "@/lib/api/client";
 import type { Names } from "@/lib/api/catalog";
+import { keys } from "@/lib/api/keys";
 import { useFmt } from "@/lib/format/provider";
 import { bucketKeyOf, bucketOf, groupIdOf, groupLabelKey, isPropId, type PropId } from "@/lib/ledger/columns";
 import { COMPOSITE_SEPARATOR } from "@/lib/ledger/drill";
 import { FLOW_CATEGORY_KEYS, isFlowCategoryKey } from "@/lib/ledger/flow-category";
-import { chipText, filterProp, filterValues, NONE } from "@/lib/ledger/filters";
+import { chipText, filterProp, filterValues, hasImportFilter, importLabels, NONE, type ImportLabelSource } from "@/lib/ledger/filters";
 import { presetOf } from "@/lib/ledger/period";
 import type { DisplayRow } from "./rows";
 
@@ -19,8 +22,24 @@ import type { DisplayRow } from "./rows";
  */
 export const KIND_LABEL: Record<string, string> = { income: "Entrada", expense: "Saída", transfer: "Transferência", investment: "Aporte" };
 
-/** Labels of Transações (properties, values, filters, periods) in the user's language. */
-export function useLedgerLabels(names: Names) {
+const NO_IMPORTS: ReadonlyMap<string, string> = new Map();
+
+/**
+ * File labels of the user's imports by id, read (GET /v2/imports, the
+ * Ajustes › Importações cache) only while a filter selects by import.
+ */
+export function useImportLabels(filters: readonly LedgerFilter[]): ReadonlyMap<string, string> {
+  const enabled = hasImportFilter(filters);
+  const history = useQuery({
+    queryKey: keys.imports(),
+    queryFn: async () => (await apiGet<{ imports: ImportLabelSource[] }>("/api/v2/imports")).imports,
+    enabled,
+  });
+  return useMemo(() => (enabled && history.data ? importLabels(history.data) : NO_IMPORTS), [enabled, history.data]);
+}
+
+/** Labels of Transações (properties, values, filters, periods) in the user's language; `imports` names the importId chips. */
+export function useLedgerLabels(names: Names, imports: ReadonlyMap<string, string> = NO_IMPORTS) {
   const t = useTranslations("ledger");
   const fmt = useFmt();
   return useMemo(() => {
@@ -48,6 +67,10 @@ export function useLedgerLabels(names: Names) {
           return names.category.get(raw) ?? t("uncategorized");
         case "flowKind":
           return ["in", "out", "transfer", "invest"].includes(raw) ? t(`flowKind.${raw}`) : raw;
+        case "entityKind":
+          return raw === "personal" || raw === "business" ? t(`entityKind.${raw}`) : raw;
+        case "importId":
+          return imports.get(raw) ?? raw;
         case "isRecurring":
         case "isTaxDeductible":
           return yesNo(raw);
@@ -114,6 +137,11 @@ export function useLedgerLabels(names: Names) {
         return t("filters.values", { prop: name, values: text.values.join(", ") });
       }
       if (!filter) return "";
+      // The import's own view reads like its name: "Importação · nubank-fatura-2026-09".
+      if (filter.field === "importId" && filter.op === "in" && filter.values.length === 1) {
+        const file = imports.get(String(filter.values[0]));
+        return file ? t("filters.import", { file }) : fieldName(filter.field);
+      }
       const name = fieldName(filter.field);
       switch (filter.op) {
         case "in":
@@ -145,7 +173,7 @@ export function useLedgerLabels(names: Names) {
     };
 
     return { prop, value, groupValue, cell, rowEntity, rowAccount, rowCategory, filterLabel, rangeText, yesNo };
-  }, [t, fmt, names]);
+  }, [t, fmt, names, imports]);
 }
 
 export type LedgerLabels = ReturnType<typeof useLedgerLabels>;

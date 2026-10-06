@@ -3,6 +3,7 @@ import type { DbClient } from "@capital/server/lib/prisma";
 import { deleteOperation } from "@capital/server/modules/investments/services/portfolio";
 import { LedgerError } from "@capital/server/modules/ledger/lib/errors";
 import { inTransaction, recordMutation, recreateRecord, snapshot, type MutationRecordInput } from "@capital/server/modules/ledger/services/mutations";
+import { deleteView } from "@capital/server/modules/ledger/services/views";
 import type { CreatedRecordRef } from "./execute-import";
 
 export interface RevertPlanPayload {
@@ -56,6 +57,27 @@ async function importBatchRecords(userId: string, importId: string, tx: DbClient
 }
 
 /**
+ * The "Importação · <arquivo>" views of an import that still exist: the
+ * ones its batch created, or, for imports from before the view was
+ * recorded there, the unseeded non-favorite views whose only filter is
+ * this import (what createImportView writes).
+ */
+async function importViewIds(userId: string, importId: string, batch: MutationRecord[], tx: DbClient): Promise<string[]> {
+  const recorded = batch.filter((r) => r.model === "SavedView" && r.before === null).map((r) => r.recordId);
+  const where = recorded.length
+    ? { userId, id: { in: recorded } }
+    : {
+        userId,
+        isBuiltin: false,
+        isFavorite: false,
+        seedKey: null,
+        config: { path: ["filters"], equals: [{ field: "importId", op: "in", values: [importId] }] },
+      };
+  const views = await tx.savedView.findMany({ where, select: { id: true } });
+  return views.map((v) => v.id);
+}
+
+/**
  * Undo an import. Every ledger row it created goes to the trash in one
  * undoable batch: the rows carrying its id, plus any its batch created
  * without it (the card leg of a bill payment it linked). Rows it changed
@@ -67,8 +89,9 @@ async function importBatchRecords(userId: string, importId: string, tx: DbClient
  * legs trashed) and their holdings recalculated; holdings themselves are
  * kept. Cards it created are archived when nothing else uses them, and
  * installment plans it started are closed once empty. Rules it learned
- * stay. The Import row stays as history, stamped with revertedAt; undoing
- * the batch restores all of it.
+ * stay. The import's "Importação · <arquivo>" view is deleted (it would
+ * only list trashed rows). The Import row stays as history, stamped with
+ * revertedAt; undoing the batch restores all of it, the view under its id.
  */
 export async function executeRevert(userId: string, payload: RevertPlanPayload, db: PrismaClient): Promise<ExecuteRevertResult> {
   return inTransaction(db, async (tx) => {
@@ -159,6 +182,9 @@ export async function executeRevert(userId: string, payload: RevertPlanPayload, 
       const closed = await tx.installmentPlan.update({ where: { id: plan.id }, data: { isActive: false } });
       records.push({ model: "InstallmentPlan", recordId: plan.id, before: snapshot(plan), after: snapshot(closed) });
     }
+
+    // The import's own view goes with it; undoing the revert re-creates it under the same id.
+    for (const viewId of await importViewIds(userId, imp.id, batch, tx)) await deleteView(userId, viewId, tx, { collect: records });
 
     // The Import row is part of the batch: undoing it clears revertedAt again.
     const reverted = await tx.import.update({ where: { id: imp.id }, data: { revertedAt: now } });

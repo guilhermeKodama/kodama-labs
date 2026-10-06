@@ -5,6 +5,7 @@ import {
   blankForm,
   buildCreateRequest,
   buildEditPatch,
+  dateInputValue,
   detectDirection,
   formFromEntry,
   fxPair,
@@ -233,6 +234,15 @@ describe("editing", () => {
 
   it("opens an entry as the form", () => {
     expect(initial).toMatchObject({ kind: "expense", amount: "86,90", accountId: "nubank-card", categoryId: "rest", date: "2026-09-21" });
+  });
+
+  it("stops Salvar at the Data field when its text is empty or not a date, instead of keeping the old date", () => {
+    for (const text of ["", "31/02/2026", "ontem"]) {
+      const date = dateInputValue(text, "dd/MM/yyyy", ctx.today);
+      expect(buildEditPatch(entry, initial, { ...initial, description: "Outra", date }, ctx)).toEqual({ ok: false, error: "date", field: "date" });
+      expect(buildCreateRequest(form({ amount: "10", description: "x", date }), ctx, extras)).toEqual({ ok: false, error: "date", field: "date" });
+    }
+    expect(buildEditPatch(entry, initial, { ...initial, date: dateInputValue("20/09", "dd/MM/yyyy", ctx.today) }, ctx)).toEqual({ ok: true, patch: { date: "2026-09-20" } });
   });
 
   it("patches only what changed, including income ↔ expense", () => {

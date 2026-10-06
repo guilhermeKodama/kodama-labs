@@ -4,7 +4,6 @@ import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react
 import { keepPreviousData, useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { useTranslations } from "next-intl";
 import { parseAsString, useQueryStates } from "nuqs";
-import { toast } from "sonner";
 import type { GroupKey, LedgerDisplayQueryResult, LedgerFilter, ViewConfig } from "@capital/server/modules/ledger/contracts";
 import { Btn, TextInput } from "@/components/cap";
 import { Page } from "@/components/shell/page";
@@ -22,7 +21,7 @@ import { applyViewDraft, decodeViewDraft, draftPatch, encodeViewDraft, canonical
 import { boardColumnQuery, boardKey, calendarQuery, calendarRowsQuery, isPagedLayout, layoutQuery, pivotKeys, selectionScope, viewSelection } from "@/lib/ledger/view-query";
 import { planViewUpdate } from "@/lib/ledger/view-update";
 import { BulkBar } from "./bulk-bar";
-import { useLedgerLabels } from "./fields";
+import { useImportLabels, useLedgerLabels } from "./fields";
 import { TransactionsHeaderActions } from "./header-actions";
 import { BoardView, CalendarView, ChartView, PivotView, SankeyView } from "./layouts";
 import { LedgerOverlays, useLedgerOverlays } from "./overlays";
@@ -80,19 +79,14 @@ export function TransactionsScreen() {
       overlays.setDisplayOpen(true);
     },
   });
-  const recreate = useAppMutation({
-    event: "views.write",
-    mutationFn: (view: LedgerView) => apiPost<LedgerView>("/api/v2/views", { name: view.name, dataset: "ledger", isFavorite: view.isFavorite, config: view.config }),
-    onSuccess: (view) => open(view.id),
-  });
+  // The delete is in the undo log: "Desfazer" (or ⌘Z) brings the view back under the same id, so links to it keep working.
   const remove = useAppMutation({
     event: "views.write",
-    mutationFn: (view: LedgerView) => apiDelete(`/api/v2/views/${view.id}`),
-    onSuccess: (_, view) => {
+    mutationFn: (view: LedgerView) => apiDelete<{ ok: true; batchId: string | null }>(`/api/v2/views/${view.id}`),
+    undo: (_, view) => t("display.deleted", { name: view.name }),
+    onSuccess: () => {
       overlays.setDisplayOpen(false);
       open(null);
-      // Views are not in the undo log: "Desfazer" creates the view again from what it was.
-      toast(t("display.deleted", { name: view.name }), { action: { label: tc("undo"), onClick: () => recreate.mutate(view) } });
     },
   });
 
@@ -135,7 +129,6 @@ function ViewScreen({
   const t = useTranslations("ledger");
   const fmt = useFmt();
   const names = useNames();
-  const labels = useLedgerLabels(names);
   const overlays = useLedgerOverlays();
   const errorText = useErrorMessage();
   const saveView = useViewSaver();
@@ -143,6 +136,8 @@ function ViewScreen({
   const saved = useMemo(() => normalizeLedgerConfig(view.config), [view.config]);
   const draft = useMemo(() => decodeViewDraft(draftParam), [draftParam]);
   const config = useMemo(() => applyViewDraft(saved, draft), [saved, draft]);
+  const importNames = useImportLabels(config.filters);
+  const labels = useLedgerLabels(names, importNames);
   const dirty = isDirty(saved, draft);
 
   const [searchText, setSearchText] = useState(search);

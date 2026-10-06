@@ -85,3 +85,27 @@ export function changedRows(rows: readonly BulkEditRow[], list: readonly BulkEdi
 export function nextField(list: readonly BulkEditChange[]): BulkEditField | null {
   return BULK_EDIT_FIELDS.find((field) => !list.some((change) => change.field === field)) ?? null;
 }
+
+/** A category as the bulk "Categoria ▾" menu lists it. */
+export interface BulkCategoryOption {
+  id: string;
+  name: string;
+  type: string;
+  isArchived: boolean;
+}
+
+/**
+ * The bulk "Categoria ▾" menu: Despesas, then Receitas (the order and
+ * headings of Ajustes › Categorias), each by name, archived ones and
+ * investment categories left out, empty groups dropped. The server
+ * rejects a category whose type does not match a selected entry
+ * (category.type_mismatch).
+ */
+export function bulkCategoryGroups<C extends BulkCategoryOption>(categories: readonly C[]): { type: "expense" | "income"; categories: C[] }[] {
+  return (["expense", "income"] as const)
+    .map((type) => ({
+      type,
+      categories: categories.filter((c) => c.type === type && !c.isArchived).sort((a, b) => a.name.localeCompare(b.name)),
+    }))
+    .filter((group) => group.categories.length > 0);
+}

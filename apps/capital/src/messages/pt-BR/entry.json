@@ -236,6 +236,10 @@
     "export": "Exportar",
     "delete": "Excluir",
     "categoryTitle": "Mudar categoria de {count}",
+    "categoryGroup": {
+      "expense": "Despesas",
+      "income": "Receitas"
+    },
     "entityTitle": "Mover para {count}",
     "toast": {
       "updated": "{count, plural, one {# transação atualizada} other {# transações atualizadas}}{rules, plural, =0 {} one { · # regra criada} other { · # regras criadas}}",

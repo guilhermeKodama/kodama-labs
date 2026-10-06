@@ -244,6 +244,39 @@ describe("POST /v2/imports (bank statement)", () => {
     expect(toNumber((await prisma.account.findUniqueOrThrow({ where: { id: bank2 } })).initialBalance)).toBe(-128.9);
   });
 
+  it("removes the import's view with a revert and brings it back under its id on undo; undoing the import removes it", async () => {
+    const { ifood } = await seedBankDuplicates();
+    const r = (await call("POST", "/v2/imports", bankPlan(ifood))).body;
+    const importBatch = await prisma.mutationBatch.findUniqueOrThrow({ where: { id: r.batchId }, include: { records: true } });
+    expect(importBatch.records.find((rec) => rec.model === "SavedView")).toMatchObject({ recordId: r.viewId, before: null });
+
+    const reverted = (await call("POST", `/v2/imports/${r.importId}/revert`)).body;
+    expect(await prisma.savedView.count({ where: { id: r.viewId } })).toBe(0);
+    expect((await call("POST", `/v2/mutations/${reverted.batchId}/undo`)).status).toBe(200);
+    expect(await prisma.savedView.findUniqueOrThrow({ where: { id: r.viewId } })).toMatchObject({ name: "Importação · extrato-setembro", isFavorite: false });
+
+    // Reverting again finds the view again; undoing the import itself removes it too.
+    const again = (await call("POST", `/v2/imports/${r.importId}/revert`)).body;
+    expect(await prisma.savedView.count({ where: { id: r.viewId } })).toBe(0);
+    expect((await call("POST", `/v2/mutations/${again.batchId}/undo`)).status).toBe(200);
+    expect((await call("POST", `/v2/mutations/${r.batchId}/undo`)).status).toBe(200);
+    expect(await prisma.savedView.count({ where: { id: r.viewId } })).toBe(0);
+  });
+
+  it("also removes the view of an import from before views were in its batch (matched by its only filter)", async () => {
+    const { ifood } = await seedBankDuplicates();
+    const r = (await call("POST", "/v2/imports", bankPlan(ifood))).body;
+    await prisma.mutationRecord.deleteMany({ where: { batchId: r.batchId, model: "SavedView" } });
+    const mine = await call("POST", "/v2/views", { name: "Minha", isFavorite: true, config: { filters: [{ field: "importId", op: "in", values: [r.importId] }] } });
+
+    const reverted = (await call("POST", `/v2/imports/${r.importId}/revert`)).body;
+    expect(await prisma.savedView.count({ where: { id: r.viewId } })).toBe(0);
+    // A view the user made on the import is not its auto-created one: it stays.
+    expect(await prisma.savedView.count({ where: { id: mine.body.id } })).toBe(1);
+    expect((await call("POST", `/v2/mutations/${reverted.batchId}/undo`)).status).toBe(200);
+    expect(await prisma.savedView.count({ where: { id: r.viewId } })).toBe(1);
+  });
+
   it("imports the same file again after a revert, bringing the trashed rows back", async () => {
     const { ifood } = await seedBankDuplicates();
     const first = (await call("POST", "/v2/imports", bankPlan(ifood))).body;
@@ -259,6 +292,18 @@ describe("POST /v2/imports (bank statement)", () => {
     expect(await live({ externalId: BANK_FITIDS.UBER })).toHaveLength(1);
     // The revert put the opening balance back; the import that replaces it sets it again.
     expect(toNumber((await prisma.account.findUniqueOrThrow({ where: { id: bank2 } })).initialBalance)).toBe(-128.9);
+  });
+
+  it("brings a trashed row back with the category the plan gives it, whatever its type (as new rows are booked)", async () => {
+    const { ifood } = await seedBankDuplicates();
+    const first = (await call("POST", "/v2/imports", bankPlan(ifood))).body;
+    await call("POST", `/v2/imports/${first.importId}/revert`);
+    // The second time the user files the income under an expense category (a refund, say).
+    const plan = bankPlan(ifood);
+    plan.transactions = plan.transactions.map((t) => (t.externalId === BANK_FITIDS.SALARY ? { ...t, categoryId: f.categories.Groceries } : t));
+    const again = await call("POST", "/v2/imports", plan);
+    expect(again.status).toBe(200);
+    expect(await prisma.ledgerEntry.findFirstOrThrow({ where: { userId: USER, externalId: BANK_FITIDS.SALARY, deletedAt: null } })).toMatchObject({ kind: "income", categoryId: f.categories.Groceries });
   });
 
   it("imports an exact duplicate anyway under a suffixed external id", async () => {

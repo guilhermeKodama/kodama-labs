@@ -80,3 +80,36 @@ export function chipText(labels: readonly string[]): ChipText {
   if (labels.length <= 2) return { kind: "values", values: [...labels] };
   return { kind: "count", count: labels.length };
 }
+
+/** An import as GET /v2/imports lists it, the fields its chip needs. */
+export interface ImportLabelSource {
+  id: string;
+  fileName: string | null;
+  bankName: string | null;
+  account?: { name: string } | null;
+}
+
+/**
+ * The file part of an import's name, as its view is named on the server
+ * (execute-import.ts fileLabel): "nubank-fatura-2026-09.ofx" →
+ * "nubank-fatura-2026-09", else the bank or the account.
+ */
+export function importFileLabel(item: ImportLabelSource): string | null {
+  const base = (item.fileName ?? "").replace(/\.[a-z0-9]{1,5}$/i, "").trim();
+  return base || item.bankName || item.account?.name || null;
+}
+
+/** File labels by import id, for the chips of importId filters ("Importação · <arquivo>"). */
+export function importLabels(items: readonly ImportLabelSource[]): Map<string, string> {
+  const labels = new Map<string, string>();
+  for (const item of items) {
+    const label = importFileLabel(item);
+    if (label) labels.set(item.id, label);
+  }
+  return labels;
+}
+
+/** Whether any filter selects by import (the chips then need the import names). */
+export function hasImportFilter(filters: readonly LedgerFilter[]): boolean {
+  return filters.some((f) => f.field === "importId");
+}

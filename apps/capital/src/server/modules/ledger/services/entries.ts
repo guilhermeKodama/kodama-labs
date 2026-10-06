@@ -1,7 +1,7 @@
 import { addMonths } from "date-fns";
 import type { DbClient } from "@capital/server/lib/prisma";
 import { Prisma } from "@/generated/prisma";
-import type { Account, Entity, LedgerEntry, LedgerKind, TransferDirection } from "@/generated/prisma";
+import type { Account, Category, Entity, LedgerEntry, LedgerKind, TransferDirection } from "@/generated/prisma";
 import { parseLocalDate } from "@capital/server/lib/date-utils";
 import { st, type Locale } from "@capital/server/i18n";
 import { loadUserLocale } from "@capital/server/i18n/user-locale";
@@ -49,6 +49,20 @@ async function assertAssignableCategory(userId: string, categoryId: string, db: 
   if (!category) throw new LedgerError("Category not found", 404, { code: "category.not_found" });
   if (category.isArchived) throw new LedgerError(`Category "${category.name}" is archived and cannot be assigned`, 422, { code: "category.archived", params: { name: category.name } });
   return category;
+}
+
+/**
+ * An income or expense takes a category of its own type: an income
+ * category cannot go on an expense, nor the other way round (single PATCH
+ * and bulk). Transfers and investment cash legs are not checked.
+ */
+function assertCategoryFitsKind(category: Pick<Category, "name" | "type">, kind: LedgerKind) {
+  if ((kind === "income" || kind === "expense") && category.type !== kind) {
+    throw new LedgerError(`Category "${category.name}" is a ${category.type} category and cannot be assigned to ${kind === "income" ? "an income" : "an expense"}`, 422, {
+      code: "category.type_mismatch",
+      params: { from: category.type, to: kind },
+    });
+  }
 }
 
 function assertWritableAccount(account: Account) {
@@ -318,14 +332,25 @@ export interface InternalPatch extends Partial<Omit<EntryPatch, "kind">> {
   kind?: "income" | "expense" | "investment";
 }
 
-export async function updateEntry(userId: string, entryId: string, patch: InternalPatch, db: DbClient, opts: { collect?: MutationRecordInput[]; record?: boolean } = {}) {
+export interface UpdateEntryOptions {
+  collect?: MutationRecordInput[];
+  record?: boolean;
+  /**
+   * false skips the category type check (category.type_mismatch): an
+   * import brings rows back from the trash with the category its plan or
+   * a rule gives, as createEntry books new rows, whatever its type.
+   */
+  checkCategoryType?: boolean;
+}
+
+export async function updateEntry(userId: string, entryId: string, patch: InternalPatch, db: DbClient, opts: UpdateEntryOptions = {}) {
   return inTransaction(db, async (tx) => {
     const records: MutationRecordInput[] = opts.collect ?? [];
     const fx = await loadFx(userId, tx);
     const entry = await tx.ledgerEntry.findFirst({ where: { id: entryId, userId, deletedAt: null } });
     if (!entry) throw notFound("Transaction", "entry.not_found");
     if (entry.transferGroupId) await updateTransferIn(tx, userId, entry, patch, fx, records);
-    else await updateSimpleIn(tx, userId, entry, patch, fx, records);
+    else await updateSimpleIn(tx, userId, entry, patch, fx, records, opts.checkCategoryType ?? true);
     const batchId =
       opts.record === false || opts.collect ? null : await recordMutation(tx, userId, "update", entry.description, records);
     const updated = await tx.ledgerEntry.findUniqueOrThrow({ where: { id: entryId }, include: ENTRY_CONTEXT_INCLUDE });
@@ -344,7 +369,8 @@ async function updateSimpleIn(
   entry: LedgerEntry,
   patch: InternalPatch,
   fx: FxContext,
-  records: MutationRecordInput[]
+  records: MutationRecordInput[],
+  checkCategoryType: boolean
 ) {
   if (TRANSFER_ONLY_FIELDS.some((f) => patch[f] !== undefined)) {
     throw new LedgerError("Only a transfer has a source and a destination account", 422, { code: "entry.not_transfer" });
@@ -362,9 +388,13 @@ async function updateSimpleIn(
     const entity = await getOwnedEntity(userId, patch.entityId, tx);
     account = await getDefaultAccount(entity, tx);
   }
-  if (patch.categoryId) await assertAssignableCategory(userId, patch.categoryId, tx);
-
   const kind: LedgerKind = patch.kind ?? entry.kind;
+  if (patch.categoryId) {
+    const category = await assertAssignableCategory(userId, patch.categoryId, tx);
+    // Only a category (or kind) the patch changes is checked: a row that already has a category of the other type
+    // (booked by a rule or an import, or from before the check) can still be edited.
+    if (checkCategoryType && (patch.categoryId !== entry.categoryId || kindChanges)) assertCategoryFitsKind(category, kind);
+  }
   // income <-> expense keeps the magnitude the user sees and flips the stored sign.
   const magnitude = patch.amount ?? displayAmount(entry.kind, entry.amount);
   const currency = patch.currency ?? entry.currency;
@@ -747,6 +777,11 @@ export interface BulkPreview {
 /** Counts what bulkUpdateEntries would change, without writing (the "Aplicar a N" of the bulk edit dialog). */
 export async function previewBulkUpdate(userId: string, ids: string[], patch: BulkPatch, db: DbClient, opts: { createRule?: boolean } = {}): Promise<BulkPreview> {
   const entries = await db.ledgerEntry.findMany({ where: { id: { in: ids }, userId, deletedAt: null } });
+  // The same type check bulkUpdateEntries makes (through updateEntry), so the dry run fails like the write would.
+  if (patch.categoryId) {
+    const category = await assertAssignableCategory(userId, patch.categoryId, db);
+    for (const e of entries) if (!e.transferGroupId && bulkPatchFor(e, patch).categoryId !== undefined) assertCategoryFitsKind(category, e.kind);
+  }
   const fields = bulkFields(patch);
   const changedRows = new Set<string>();
   const changedByField = new Map<BulkField, Set<string>>(fields.map((f) => [f, new Set<string>()]));

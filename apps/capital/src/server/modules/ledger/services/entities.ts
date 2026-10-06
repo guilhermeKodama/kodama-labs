@@ -1,6 +1,7 @@
 import type { DbClient } from "@capital/server/lib/prisma";
 import type { Entity, EntityType } from "@/generated/prisma";
 import { LedgerError, notFound } from "../lib/errors";
+import { inTransaction, recordMutation, snapshot, type MutationRecordInput } from "./mutations";
 
 export interface EntityInput {
   kind?: EntityType;
@@ -64,38 +65,60 @@ export async function getPersonalEntity(userId: string, db: DbClient): Promise<E
   return entity;
 }
 
-export async function createEntity(userId: string, input: EntityInput, db: DbClient): Promise<Entity> {
-  const kind = input.kind ?? "business";
-  if (kind === "personal") {
-    const pf = await db.entity.findFirst({ where: { userId, kind: "personal" } });
-    if (pf) throw new LedgerError("The user already has a personal entity", 409, { code: "entity.personal_exists" });
-  }
-  const user = await db.user.findUnique({ where: { id: userId }, select: { baseCurrency: true } });
-  if (!user) throw notFound("User", "user.not_found");
-  const entity = await db.entity.create({
-    data: {
-      userId,
-      kind,
-      name: input.name,
-      description: input.description ?? null,
-      defaultCurrency: input.defaultCurrency ?? user.baseCurrency,
-      taxRate: input.taxRate ?? 0,
-      color: input.color ?? null,
-    },
-  });
-  const account = await getDefaultAccount(entity, db);
-  if (input.initialBalance) {
-    await db.account.update({ where: { id: account.id }, data: { initialBalance: input.initialBalance } });
-  }
-  return entity;
+/** Options of the entity writes: `collect` adds their records to the caller's batch instead of recording one. */
+export interface EntityWriteOptions {
+  collect?: MutationRecordInput[];
 }
 
-export async function updateEntity(userId: string, entityId: string, patch: Partial<EntityInput>, db: DbClient) {
-  const entity = await getOwnedEntity(userId, entityId, db);
+/** Records `records` as one batch, or hands them to the caller's (`collect`); null when there is nothing to record. */
+async function finishBatch(tx: DbClient, userId: string, op: string, summary: string, records: MutationRecordInput[], opts: EntityWriteOptions) {
+  if (opts.collect) {
+    opts.collect.push(...records);
+    return null;
+  }
+  return records.length ? recordMutation(tx, userId, op, summary, records) : null;
+}
+
+/** Creates a business (or the PF) with its "Conta principal", in one undoable batch: undo removes both while unused. */
+export async function createEntity(userId: string, input: EntityInput, db: DbClient, opts: EntityWriteOptions = {}): Promise<Entity & { batchId: string | null }> {
+  return inTransaction(db, async (tx) => {
+    const kind = input.kind ?? "business";
+    if (kind === "personal") {
+      const pf = await tx.entity.findFirst({ where: { userId, kind: "personal" } });
+      if (pf) throw new LedgerError("The user already has a personal entity", 409, { code: "entity.personal_exists" });
+    }
+    const user = await tx.user.findUnique({ where: { id: userId }, select: { baseCurrency: true } });
+    if (!user) throw notFound("User", "user.not_found");
+    const entity = await tx.entity.create({
+      data: {
+        userId,
+        kind,
+        name: input.name,
+        description: input.description ?? null,
+        defaultCurrency: input.defaultCurrency ?? user.baseCurrency,
+        taxRate: input.taxRate ?? 0,
+        color: input.color ?? null,
+      },
+    });
+    let account = await getDefaultAccount(entity, tx);
+    if (input.initialBalance) {
+      account = await tx.account.update({ where: { id: account.id }, data: { initialBalance: input.initialBalance } });
+    }
+    const records: MutationRecordInput[] = [
+      { model: "Entity", recordId: entity.id, before: null, after: snapshot(entity) },
+      { model: "Account", recordId: account.id, before: null, after: snapshot(account) },
+    ];
+    const batchId = await finishBatch(tx, userId, "entity.create", entity.name, records, opts);
+    return { ...entity, batchId };
+  });
+}
+
+async function updateEntityIn(tx: DbClient, userId: string, entityId: string, patch: Partial<EntityInput>, records: MutationRecordInput[]) {
+  const entity = await getOwnedEntity(userId, entityId, tx);
   if (entity.kind === "personal" && patch.name !== undefined && patch.name !== entity.name) {
     throw new LedgerError("The personal entity cannot be renamed", 422, { code: "entity.personal_rename" });
   }
-  const updated = await db.entity.update({
+  const updated = await tx.entity.update({
     where: { id: entityId },
     data: {
       ...(patch.name !== undefined && { name: patch.name }),
@@ -105,17 +128,52 @@ export async function updateEntity(userId: string, entityId: string, patch: Part
       ...(patch.color !== undefined && { color: patch.color }),
     },
   });
+  records.push({ model: "Entity", recordId: entity.id, before: snapshot(entity), after: snapshot(updated) });
   if (patch.initialBalance !== undefined) {
-    const account = await getDefaultAccount(updated, db);
-    await db.account.update({ where: { id: account.id }, data: { initialBalance: patch.initialBalance } });
+    const account = await getDefaultAccount(updated, tx);
+    const moved = await tx.account.update({ where: { id: account.id }, data: { initialBalance: patch.initialBalance } });
+    records.push({ model: "Account", recordId: account.id, before: snapshot(account), after: snapshot(moved) });
   }
   return updated;
 }
 
-export async function archiveEntity(userId: string, entityId: string, archived: boolean, db: DbClient) {
-  const entity = await getOwnedEntity(userId, entityId, db);
+async function archiveEntityIn(tx: DbClient, userId: string, entityId: string, archived: boolean, records: MutationRecordInput[]) {
+  const entity = await getOwnedEntity(userId, entityId, tx);
   if (entity.kind === "personal") throw new LedgerError("The personal entity cannot be archived", 422, { code: "entity.personal_archive" });
-  return db.entity.update({ where: { id: entityId }, data: { archivedAt: archived ? new Date() : null } });
+  const updated = await tx.entity.update({ where: { id: entityId }, data: { archivedAt: archived ? (entity.archivedAt ?? new Date()) : null } });
+  records.push({ model: "Entity", recordId: entity.id, before: snapshot(entity), after: snapshot(updated) });
+  return updated;
+}
+
+/** Edits an entity (and the opening balance of its main account), in one undoable batch. */
+export async function updateEntity(userId: string, entityId: string, patch: Partial<EntityInput>, db: DbClient, opts: EntityWriteOptions = {}) {
+  return inTransaction(db, async (tx) => {
+    const records: MutationRecordInput[] = [];
+    const updated = await updateEntityIn(tx, userId, entityId, patch, records);
+    return { ...updated, batchId: await finishBatch(tx, userId, "entity.update", updated.name, records, opts) };
+  });
+}
+
+/** Archives (or unarchives) a business, in one undoable batch. */
+export async function archiveEntity(userId: string, entityId: string, archived: boolean, db: DbClient, opts: EntityWriteOptions = {}) {
+  return inTransaction(db, async (tx) => {
+    const records: MutationRecordInput[] = [];
+    const updated = await archiveEntityIn(tx, userId, entityId, archived, records);
+    return { ...updated, batchId: await finishBatch(tx, userId, archived ? "entity.archive" : "entity.unarchive", updated.name, records, opts) };
+  });
+}
+
+/** PATCH /v2/entities/{id}: archive/unarchive and edit together, as one undoable batch. */
+export async function patchEntity(userId: string, entityId: string, patch: Partial<EntityInput> & { archived?: boolean }, db: DbClient) {
+  const { archived, ...fields } = patch;
+  return inTransaction(db, async (tx) => {
+    const records: MutationRecordInput[] = [];
+    let entity = await getOwnedEntity(userId, entityId, tx);
+    if (archived !== undefined) entity = await archiveEntityIn(tx, userId, entityId, archived, records);
+    if (Object.keys(fields).length) entity = await updateEntityIn(tx, userId, entityId, fields, records);
+    const op = archived === undefined ? "entity.update" : archived ? "entity.archive" : "entity.unarchive";
+    return { ...entity, batchId: await finishBatch(tx, userId, op, entity.name, records, {}) };
+  });
 }
 
 /**

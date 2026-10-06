@@ -58,6 +58,7 @@ import { toNumber } from "../lib/money";
 
 const RAW_CATEGORICAL: Record<CategoricalField, Prisma.Sql> = {
   entityId: Prisma.sql`le."entityId"`,
+  entityKind: Prisma.sql`e.kind::text`,
   accountId: Prisma.sql`le."accountId"`,
   accountType: Prisma.sql`a.type::text`,
   categoryId: Prisma.sql`le."categoryId"`,
@@ -250,7 +251,7 @@ export function buildWhere(
 const SEL_COLUMNS = Prisma.sql`
   le.id AS "id", le.date AS "date", le."effectiveDate" AS "effectiveDate", le.description AS "description", le.notes AS "notes",
   le.kind::text AS "kind", le.amount AS "amount", le.currency AS "currency", le."exchangeRate" AS "exchangeRate",
-  le."amountBase" AS "amountBase", le."entityId" AS "entityId", le."accountId" AS "accountId", a.type::text AS "accountType",
+  le."amountBase" AS "amountBase", le."entityId" AS "entityId", e.kind::text AS "entityKind", le."accountId" AS "accountId", a.type::text AS "accountType",
   le."categoryId" AS "categoryId", le."isTaxDeductible" AS "isTaxDeductible", (le."recurringRuleId" IS NOT NULL) AS "isRecurring",
   tg.direction::text AS "transferDirection", le."cardStatementId" AS "cardStatementId", le."importId" AS "importId",
   ${flowKindSql()} AS "flowKind", le."transferGroupId" AS "transferGroupId", le."recurringRuleId" AS "recurringRuleId",

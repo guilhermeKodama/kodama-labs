@@ -236,6 +236,10 @@
     "export": "Export",
     "delete": "Delete",
     "categoryTitle": "Change the category of {count}",
+    "categoryGroup": {
+      "expense": "Expenses",
+      "income": "Income"
+    },
     "entityTitle": "Move {count} to",
     "toast": {
       "updated": "{count, plural, one {# transaction updated} other {# transactions updated}}{rules, plural, =0 {} one { · # rule created} other { · # rules created}}",
