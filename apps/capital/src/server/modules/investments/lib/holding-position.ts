@@ -1,5 +1,6 @@
 import type { DbClient } from "@capital/server/lib/prisma";
 import type { InvestmentTransactionType } from "@/generated/prisma";
+import { LedgerError } from "@capital/server/modules/ledger/lib/errors";
 
 /** What replayPosition reads from an operation. */
 export interface PositionOperation {
@@ -114,14 +115,21 @@ export interface StoredPosition {
 
 /**
  * Whether a holding stays active after a replay: a position a sale emptied
- * goes inactive; one that was emptied and has a position again comes back;
+ * goes inactive, and so does one that had a position and has none left
+ * (its buys were deleted or undone, e.g. the buy of an aporte that also
+ * created the holding), so no R$ 0 row stays in Carteira or in the
+ * rebalance; one that was emptied and has a position again comes back;
  * otherwise the stored flag stays (a holding deactivated by hand while it
- * still had a position is left inactive).
+ * still had a position is left inactive, and one that never had a position
+ * stays as it is).
  */
 export function nextIsActive(current: StoredPosition, position: Position): boolean {
   if (position.closed) return false;
-  const wasEmptied = !current.isActive && current.currentQuantity <= EPS && current.totalInvested <= EPS;
-  return wasEmptied && (position.quantity > EPS || position.cost > EPS) ? true : current.isActive;
+  const hadPosition = current.currentQuantity > EPS || current.totalInvested > EPS;
+  const hasPosition = position.quantity > EPS || position.cost > EPS;
+  if (hadPosition && !hasPosition) return false;
+  const wasEmptied = !current.isActive && !hadPosition;
+  return wasEmptied && hasPosition ? true : current.isActive;
 }
 
 /**
@@ -133,12 +141,13 @@ export function nextIsActive(current: StoredPosition, position: Position): boole
  * the undo log (ledger/services/mutations.ts) can recalculate holdings
  * without importing the service that records into it.
  */
-export async function recalculateHoldingDetailed(holdingId: string, db: DbClient) {
+export async function recalculateHoldingDetailed(holdingId: string, db: DbClient, undone?: readonly UndoneRecord[]) {
   const [current, ops] = await Promise.all([
-    db.investmentHolding.findUniqueOrThrow({ where: { id: holdingId }, select: { isActive: true, currentQuantity: true, totalInvested: true } }),
+    db.investmentHolding.findUniqueOrThrow({ where: { id: holdingId }, select: { isActive: true, currentQuantity: true, totalInvested: true, ticker: true, name: true } }),
     db.investmentOperation.findMany({ where: { holdingId }, orderBy: [{ date: "asc" }, { createdAt: "asc" }] }),
   ]);
   const position = replayPosition(ops);
+  if (undone) assertUndoKeepsPosition({ holdingId, label: current.ticker || current.name, ops, position, undone });
   const isActive = nextIsActive(current, position);
   const holding = await db.investmentHolding.update({
     where: { id: holdingId },
@@ -147,9 +156,95 @@ export async function recalculateHoldingDetailed(holdingId: string, db: DbClient
   return { holding, position };
 }
 
-/** recalculateHoldingDetailed without the replay details. */
-export async function recalculateHolding(holdingId: string, db: DbClient) {
-  return (await recalculateHoldingDetailed(holdingId, db)).holding;
+/**
+ * recalculateHoldingDetailed without the replay details. The undo log's
+ * post-undo hook (recalculateTouchedHoldings in ledger/services/mutations.ts)
+ * passes the InvestmentOperation records of the batch it just undid as
+ * `undone`, which refuses an undo that leaves a sale larger than the
+ * position (see assertUndoKeepsPosition).
+ */
+export async function recalculateHolding(holdingId: string, db: DbClient, undone?: readonly UndoneRecord[]) {
+  return (await recalculateHoldingDetailed(holdingId, db, undone)).holding;
+}
+
+/** What the undo guard reads from a mutation record (a MutationRecord row). */
+export interface UndoneRecord {
+  model: string;
+  recordId: string;
+  before: unknown;
+  after: unknown;
+}
+
+/** A snapshot of an InvestmentOperation (JSON: dates as strings) back as what replayPosition reads, with its order keys. */
+function snapshotOperation(snap: unknown): (PositionOperation & { holdingId: string; date: Date; createdAt: Date }) | null {
+  if (!snap || typeof snap !== "object") return null;
+  const o = snap as Record<string, unknown>;
+  if (typeof o.id !== "string" || typeof o.holdingId !== "string" || typeof o.type !== "string") return null;
+  const num = (v: unknown) => (v === null || v === undefined ? null : Number(v));
+  return {
+    id: o.id,
+    holdingId: o.holdingId,
+    type: o.type as InvestmentTransactionType,
+    quantity: num(o.quantity),
+    pricePerUnit: num(o.pricePerUnit),
+    totalAmount: num(o.totalAmount) ?? 0,
+    fees: num(o.fees) ?? 0,
+    date: new Date(String(o.date)),
+    createdAt: new Date(String(o.createdAt ?? o.date)),
+  };
+}
+
+/**
+ * The holding's operations as they were before an undo, rebuilt from the
+ * ones left after it and the batch's records: an operation the batch
+ * created (undo removed it) or updated (undo wrote its old values back) is
+ * taken as the batch left it; one the batch deleted (undo re-created it)
+ * was not there.
+ */
+export function operationsBeforeUndo<T extends PositionOperation & { date: Date; createdAt: Date }>(
+  holdingId: string,
+  after: readonly T[],
+  undone: readonly UndoneRecord[]
+): PositionOperation[] {
+  const ops = undone.filter((r) => r.model === "InvestmentOperation");
+  const touched = new Set(ops.map((r) => r.recordId));
+  const list: (PositionOperation & { date: Date; createdAt: Date })[] = after.filter((op) => !touched.has(op.id));
+  for (const r of ops) {
+    if (r.after === null) continue;
+    const op = snapshotOperation(r.after);
+    if (op && op.holdingId === holdingId) list.push(op);
+  }
+  return list.sort((a, b) => a.date.getTime() - b.date.getTime() || a.createdAt.getTime() - b.createdAt.getTime());
+}
+
+/**
+ * Refuses (409 holding.undo_oversell) an undo that leaves one of the
+ * holding's sales larger than the position held at that point, e.g. undoing
+ * an older aporte + buy after a later sale of that asset. Sales that were
+ * already above the position before the undo, and sales from statement
+ * imports (externalId; their history may start after the buys, as
+ * recordOperation allows), do not count: undoing the revert of such an
+ * import brings them back. Runs inside the undo's transaction, before it
+ * commits, so a refused undo changes nothing.
+ */
+export function assertUndoKeepsPosition(input: {
+  holdingId: string;
+  label: string;
+  ops: readonly (PositionOperation & { date: Date; createdAt: Date; externalId?: string | null })[];
+  position: Position;
+  undone: readonly UndoneRecord[];
+}) {
+  if (!input.position.oversold.length) return;
+  const imported = new Set(input.ops.filter((op) => op.externalId).map((op) => op.id));
+  const fresh = input.position.oversold.filter((id) => !imported.has(id));
+  if (!fresh.length) return;
+  const before = new Set(replayPosition(operationsBeforeUndo(input.holdingId, input.ops, input.undone)).oversold);
+  if (fresh.some((id) => !before.has(id))) {
+    throw new LedgerError(`Undoing this would leave a sale of ${input.label} larger than the position; undo or delete that sale first`, 409, {
+      code: "holding.undo_oversell",
+      params: { holding: input.label },
+    });
+  }
 }
 
 /** Ids of the holding's operations that sell more than the position held at that point. */

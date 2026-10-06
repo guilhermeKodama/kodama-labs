@@ -127,7 +127,8 @@
   "holding": {
     "not_found": "Holding not found.",
     "requires_brokerage": "Holdings live in brokerage accounts.",
-    "oversell": "The sale is larger than the position."
+    "oversell": "The sale is larger than the position.",
+    "undo_oversell": "Undoing this would leave a sale of {holding} larger than the position. Undo or delete that sale first."
   },
   "operation": {
     "not_found": "Operation not found.",

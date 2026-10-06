@@ -3,8 +3,8 @@ import { prisma } from "@capital/server/lib/prisma";
 import { createLedgerFixture, deleteLedgerFixture, type LedgerFixture } from "@/test/ledger-fixtures";
 import { createEntry } from "@capital/server/modules/ledger/services/entries";
 import { recordAporte } from "../aporte";
-import { contributions } from "../contributions";
-import { createHolding, recordOperation } from "../portfolio";
+import { contributions, isDefaultTransferDescription } from "../contributions";
+import { createHolding, moveBrokerageCash, recordOperation } from "../portfolio";
 
 const USER = "test-user-investments-contributions-001";
 let f: LedgerFixture;
@@ -56,14 +56,21 @@ describe("contributions", () => {
     expect(c.months[1].byAssetClass).toEqual({ stocks: 2010 });
 
     expect(c.months[0].origins).toEqual([
-      expect.objectContaining({ amount: 3000, direction: "investment_deposit", description: "Aporte novembro", brokerAccountName: "XP", counterpartAccountName: "Conta principal", counterpartEntityName: "PF", sourceEntityName: null }),
+      expect.objectContaining({ amount: 3000, direction: "investment_deposit", description: "Aporte novembro", defaultDescription: false, brokerAccountName: "XP", counterpartAccountName: "Conta principal", counterpartEntityName: "PF", sourceEntityName: null }),
     ]);
+    // December's aporte has the text a transfer gets when none is typed: the screen shows its origin instead.
+    expect(c.months[1].origins[0]).toMatchObject({ description: "Aporte em investimento: Conta principal → XP", defaultDescription: true });
     // January, newest first: the cross-entity aporte names the PJ as the source, the resgate is negative.
     const [jan15, jan10] = c.months[2].origins;
     expect(jan15).toMatchObject({ date: "2026-01-15", amount: 2000, counterpartEntityName: "PF", sourceEntityName: "Kodama LTDA" });
     expect(aporte.transferGroupIds).toContain(jan15.transferGroupId);
     expect(aporte.transferGroupIds).toContain(jan15.sourceTransferGroupId);
-    expect(jan10).toMatchObject({ date: "2026-01-10", amount: -500, direction: "investment_withdrawal", sourceEntityName: null });
+    expect(jan10).toMatchObject({ date: "2026-01-10", amount: -500, direction: "investment_withdrawal", sourceEntityName: null, defaultDescription: true });
+    // The profit distribution that fed it kept its default text, so there is no source description to show.
+    expect(jan15).toMatchObject({ defaultDescription: true, sourceDescription: null });
+    await prisma.transferGroup.update({ where: { id: jan15.sourceTransferGroupId! }, data: { description: "Distribuição LTDA → PF" } });
+    const typed = await contributions(USER, prisma, { months: 1, end: "2026-01" });
+    expect(typed.months[0].origins[0]).toMatchObject({ sourceDescription: "Distribuição LTDA → PF" });
 
     // PF aportes 8.5k over PF Entradas: salary 10k + the two profit distributions (5k and 2k). Groceries,
     // the aportes themselves and the buy's cash leg are not income.
@@ -83,9 +90,31 @@ describe("contributions", () => {
     expect(pj.savingsRate.rate).toBe(0.5);
   });
 
+  it("names the entity a resgate across entities went on to, not the broker's own", async () => {
+    const btg = (await prisma.account.create({ data: { userId: USER, entityId: f.pjId, type: "brokerage", name: "BTG", currency: "BRL" } })).id;
+    await moveBrokerageCash(USER, { accountId: btg, direction: "deposit", amount: 1000, date: "2026-04-01", counterpartAccountId: f.pjChecking }, prisma);
+    const resgate = await moveBrokerageCash(USER, { accountId: btg, direction: "withdraw", amount: 400, date: "2026-04-02", counterpartAccountId: f.pfChecking }, prisma);
+    const c = await contributions(USER, prisma, { months: 1, end: "2026-04", entityIds: [f.pjId] });
+    const out = c.months[0].origins.find((o) => o.amount < 0)!;
+    expect(out).toMatchObject({ amount: -400, brokerEntityName: "Kodama LTDA", sourceEntityName: "PF", sourceTransferGroupId: resgate.transferGroupIds[1] });
+  });
+
   it("has no savings rate without PF income", async () => {
     await transfer(f.pfChecking, f.broker, 1000, "2026-03-02");
     const c = await contributions(USER, prisma, { months: 1, end: "2026-03" });
     expect(c.savingsRate).toEqual({ aportes: 1000, income: 0, rate: null });
+  });
+});
+
+describe("isDefaultTransferDescription", () => {
+  it("recognizes the default text in any language, whatever the account names, and nothing typed", () => {
+    expect(isDefaultTransferDescription("Aporte em investimento: Nubank → XP", "investment_deposit")).toBe(true);
+    expect(isDefaultTransferDescription("Investment deposit: Old name → XP", "investment_deposit")).toBe(true);
+    expect(isDefaultTransferDescription("Distribuição de lucros: Conta principal → Conta principal", "profit_distribution")).toBe(true);
+    expect(isDefaultTransferDescription(null, "investment_deposit")).toBe(true);
+    expect(isDefaultTransferDescription("Salário PF", "investment_deposit")).toBe(false);
+    expect(isDefaultTransferDescription("Distribuição LTDA → PF", "profit_distribution")).toBe(false);
+    // Another direction's text is something the user typed (or moved), not this transfer's default.
+    expect(isDefaultTransferDescription("Resgate de investimento: XP → Nubank", "investment_deposit")).toBe(false);
   });
 });

@@ -77,7 +77,10 @@
       "incomeSub": "dividendos + juros",
       "return12m": "Rentab. 12m",
       "benchmarks": "CDI {cdi} · IPCA+ 6% {ipca}",
-      "returnPending": "sem meses fechados ainda"
+      "returnPending": "sem meses fechados ainda",
+      "returnEstimated": "histórico estimado",
+      "benchmarksEstimated": "histórico estimado · CDI {cdi} · IPCA+ 6% {ipca}",
+      "returnEstimatedHint": "Os meses da janela foram estimados pelo custo, antes de existirem fotos mensais com cotações. A rentabilidade aparece a partir do primeiro mês fechado com cotações."
     },
     "history": {
       "title": "Patrimônio vs total aportado",
@@ -316,7 +319,9 @@
       "avg": "Média 12m",
       "total": "Total 12m",
       "savings": "Taxa de poupança",
-      "savingsSub": "aportes / renda líquida PF"
+      "savingsSub": "aportes / renda líquida PF",
+      "savingsCapped": "aportes acima da renda líquida PF",
+      "savingsCappedHint": "Aportes de {aportes} contra renda líquida PF de {income} no período: o excedente veio de saldo, vendas ou de outra entidade."
     },
     "chart": {
       "title": "Aportes por mês e classe",

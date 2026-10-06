@@ -66,6 +66,8 @@ export interface TrailingReturn {
   value: number | null;
   /** Months that entered the chain (at most `window`). */
   months: number;
+  /** Months of the window left out because their start or end value is an estimate. */
+  estimatedMonths: number;
   /** First and last month of the chain ("YYYY-MM"). */
   from: string | null;
   to: string | null;
@@ -86,17 +88,20 @@ export function trailingReturn(series: readonly MonthValue[], opts: { window?: n
   const start = Math.max(1, series.length - window);
   const monthly: TrailingReturn["monthly"] = [];
   const kept: number[] = [];
+  let estimatedMonths = 0;
   let from: string | null = null;
   let to: string | null = null;
   for (let i = start; i < series.length; i++) {
     const prev = series[i - 1];
     const cur = series[i];
-    const r = skipEstimated && (prev.estimated || cur.estimated) ? null : modifiedDietz({ startValue: prev.value, endValue: cur.value, netFlow: cur.netFlow });
+    const estimated = skipEstimated && !!(prev.estimated || cur.estimated);
+    if (estimated) estimatedMonths++;
+    const r = estimated ? null : modifiedDietz({ startValue: prev.value, endValue: cur.value, netFlow: cur.netFlow });
     monthly.push({ period: cur.period, return: r });
     if (r === null) continue;
     kept.push(r);
     from ??= cur.period;
     to = cur.period;
   }
-  return { value: kept.length ? chainLink(kept) : null, months: kept.length, from, to, monthly };
+  return { value: kept.length ? chainLink(kept) : null, months: kept.length, estimatedMonths, from, to, monthly };
 }

@@ -127,7 +127,8 @@
   "holding": {
     "not_found": "Posição não encontrada.",
     "requires_brokerage": "Posições ficam em contas de corretora.",
-    "oversell": "A venda é maior que a posição."
+    "oversell": "A venda é maior que a posição.",
+    "undo_oversell": "Desfazer deixaria uma venda de {holding} maior que a posição. Desfaça ou exclua essa venda primeiro."
   },
   "operation": {
     "not_found": "Operação não encontrada.",

@@ -57,7 +57,7 @@ describe("portfolio history and snapshots", () => {
     ]);
     expect(before.months[2]).toMatchObject({ marketValue: 8000, cash: 11000, costBasis: 6000, byClass: { br_stocks: 8000, cash: 11000, fixed_income: 0 } });
     // Every month touches an estimate: nothing to chain yet.
-    expect(before.return).toMatchObject({ value: null, months: 0 });
+    expect(before.return).toMatchObject({ value: null, months: 0, estimated: true });
 
     // Scope: PJ alone is only its cash, never estimated.
     const pj = await portfolioHistory(USER, prisma, { months: 3, now: OCT_6, entityIds: [f.pjId] });
@@ -66,6 +66,8 @@ describe("portfolio history and snapshots", () => {
       [5000, false],
       [5000, false],
     ]);
+    // Nothing estimated there: no closed month moved yet, so the KPI says "sem meses fechados", not "histórico estimado".
+    expect(pj.return.estimated).toBe(false);
 
     // The cron on 6/oct: live month for both entities; September closed at cost (too late for today's prices).
     expect(await snapshotUser(USER, prisma, { now: OCT_6 })).toMatchObject({ live: 2, closed: 2 });
@@ -99,7 +101,7 @@ describe("portfolio history and snapshots", () => {
     // October starts from an estimated September, so only November is measured.
     expect(after.months[0].return).toBeNull();
     expect(after.months[1].return).toBeCloseTo(800 / 19500, 10);
-    expect(after.return).toMatchObject({ months: 1, from: "2026-11", to: "2026-11" });
+    expect(after.return).toMatchObject({ months: 1, from: "2026-11", to: "2026-11", estimated: false });
     expect(after.return.value).toBeCloseTo(800 / 19500, 10);
   });
 

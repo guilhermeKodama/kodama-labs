@@ -2,6 +2,7 @@ import type { DbClient } from "@capital/server/lib/prisma";
 import { Prisma } from "@/generated/prisma";
 import type { AllocationClass, AssetClass, TransferDirection } from "@/generated/prisma";
 import { entityScopeSql } from "@capital/server/lib/entity-scope";
+import { LOCALES, st } from "@capital/server/i18n";
 import { LedgerError } from "@capital/server/modules/ledger/lib/errors";
 import { flowKindJoins, flowKindSql } from "@capital/server/modules/ledger/lib/flow-sql";
 import { loadFx } from "@capital/server/modules/ledger/lib/fx";
@@ -38,15 +39,23 @@ export interface ContributionOrigin {
   amount: number;
   direction: TransferDirection;
   description: string | null;
+  /** `description` is the text a transfer gets when none is typed ("Aporte em investimento: A → B"), in any language. */
+  defaultDescription: boolean;
   brokerAccountId: string;
   brokerAccountName: string;
   brokerEntityName: string;
   /** The other side of the transfer. */
   counterpartAccountName: string | null;
   counterpartEntityName: string | null;
-  /** When the money came from another entity in the same batch (aporte across entities): that entity. */
+  /**
+   * Across entities, the other entity of the same batch: the one the money
+   * came from (aporte), or the one it went on to (resgate from a PJ broker
+   * into a PF account).
+   */
   sourceEntityName: string | null;
   sourceTransferGroupId: string | null;
+  /** The description typed on that transfer; null when it has the default one. */
+  sourceDescription: string | null;
 }
 
 export interface ContributionMonth {
@@ -122,17 +131,21 @@ export async function contributions(userId: string, db: DbClient, opts: Contribu
       AND ${entityScopeSql(Prisma.sql`le."entityId"`, entityIds)}
     ORDER BY le.date DESC, le.id`;
 
-  // The capital injection / profit distribution booked in the same batch as an aporte across entities.
+  // The capital injection / profit distribution booked in the same batch as an aporte or resgate across entities.
   const groupIds = [...new Set(legs.map((l) => l.transferGroupId))];
   const sources = groupIds.length
-    ? await db.$queryRaw<{ deposit_group: string; source_group: string; source_entity: string }[]>`
-        SELECT DISTINCT ON (dep."recordId") dep."recordId" AS deposit_group, src.id AS source_group, se.name AS source_entity
+    ? await db.$queryRaw<{ deposit_group: string; source_group: string; source_entity: string; source_description: string | null; source_direction: TransferDirection }[]>`
+        SELECT DISTINCT ON (dep."recordId") dep."recordId" AS deposit_group, src.id AS source_group, se.name AS source_entity,
+               src.description AS source_description, src.direction AS source_direction
         FROM mutation_records dep
         JOIN mutation_records mr ON mr."batchId" = dep."batchId" AND mr.model = 'TransferGroup' AND mr."recordId" <> dep."recordId" AND mr.before IS NULL
         JOIN transfer_groups src ON src.id = mr."recordId" AND src."deletedAt" IS NULL
           AND src.direction IN ('capital_injection', 'profit_distribution', 'between_accounts')
-        JOIN ledger_entries src_out ON src_out."transferGroupId" = src.id AND src_out.amount < 0
-        JOIN entities se ON se.id = src_out."entityId"
+        JOIN transfer_groups depg ON depg.id = dep."recordId"
+        -- An aporte names the entity the money came from; a resgate the one it went on to.
+        JOIN ledger_entries src_leg ON src_leg."transferGroupId" = src.id
+          AND (CASE WHEN depg.direction = 'investment_withdrawal' THEN src_leg.amount > 0 ELSE src_leg.amount < 0 END)
+        JOIN entities se ON se.id = src_leg."entityId"
         WHERE dep.model = 'TransferGroup' AND dep.before IS NULL AND dep."recordId" IN (${Prisma.join(groupIds)})
         ORDER BY dep."recordId", src."createdAt"`
     : [];
@@ -178,13 +191,15 @@ export async function contributions(userId: string, db: DbClient, opts: Contribu
         byAssetClass: roundValues(byAssetClass),
         origins: inMonth.map((l) => {
           const source = sourceOf.get(l.transferGroupId);
+          const description = l.group_description ?? l.description;
           return {
             transferGroupId: l.transferGroupId,
             entryId: l.id,
             date: l.date.toISOString().slice(0, 10),
             amount: round(toNumber(l.amountBase), 2),
             direction: l.direction,
-            description: l.group_description ?? l.description,
+            description,
+            defaultDescription: isDefaultTransferDescription(description, l.direction),
             brokerAccountId: l.broker_id,
             brokerAccountName: l.broker_name,
             brokerEntityName: l.broker_entity,
@@ -192,6 +207,7 @@ export async function contributions(userId: string, db: DbClient, opts: Contribu
             counterpartEntityName: l.cp_entity,
             sourceEntityName: source?.source_entity ?? null,
             sourceTransferGroupId: source?.source_group ?? null,
+            sourceDescription: source && !isDefaultTransferDescription(source.source_description, source.source_direction) ? source.source_description?.trim() || null : null,
           };
         }),
       };
@@ -231,6 +247,24 @@ export async function savingsRate(userId: string, db: DbClient, pfIds: string[],
   const aportes = toNumber(row?.aportes ?? 0);
   const income = toNumber(row?.income ?? 0);
   return { aportes: round(aportes, 2), income: round(income, 2), rate: income > 0 ? round(aportes / income, 4) : null };
+}
+
+const escapeRegExp = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+/**
+ * Whether a transfer's description is the one createEntry writes when none
+ * is typed (ledger.transferDescription, "Aporte em investimento: A → B"), in
+ * any locale. Account names may have changed since, so they match anything.
+ * An empty description counts as default too.
+ */
+export function isDefaultTransferDescription(description: string | null | undefined, direction: TransferDirection): boolean {
+  const text = description?.trim();
+  if (!text) return true;
+  return LOCALES.some((locale) => {
+    const template = st(locale, "ledger.transferDescription", { direction: st(locale, `ledger.direction.${direction}`), from: "\u0001", to: "\u0001" });
+    const pattern = template.split("\u0001").map(escapeRegExp).join(".+");
+    return new RegExp(`^${pattern}$`, "s").test(text);
+  });
 }
 
 function roundValues<K extends string>(sums: Partial<Record<K, number>>): Partial<Record<K, number>> {

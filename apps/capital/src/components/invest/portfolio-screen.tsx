@@ -11,6 +11,7 @@ import { useSession } from "@/lib/api/session";
 import { useAppMutation } from "@/lib/api/use-app-mutation";
 import { useFmt } from "@/lib/format/provider";
 import { allocationBars } from "@/lib/invest/allocation";
+import { return12mState } from "@/lib/invest/kpis";
 import { useFxRates, useHoldings, useOperations, usePortfolioHistory, usePortfolioSummary } from "@/lib/invest/api";
 import { buildHoldingsTable, type HoldingRow, type HoldingsViewConfig } from "@/lib/invest/holdings-view";
 import { filterOps, isIncome, monthlyBars, type OpsViewConfig } from "@/lib/invest/ops-view";
@@ -85,6 +86,7 @@ export function PortfolioScreen() {
   const historyRows = (history.data?.months ?? []).map((m) => ({ label: fmt.monthAbbr(Number(m.period.slice(5, 7))), netWorth: m.netWorth, contributed: m.contributed }));
   const historyRange = history.data ? range(history.data.from, history.data.to) : "";
   const ret = s?.return12m;
+  const returnState = return12mState(ret);
 
   return (
     <Page
@@ -128,14 +130,25 @@ export function PortfolioScreen() {
         <Kpi label={t("kpi.income12m")} value={fmt.money0(s?.income12m ?? 0, cur)} sub={t("kpi.incomeSub")} />
         <Kpi
           label={t("kpi.return12m")}
-          value={ret?.value != null ? signedPct(ret.value) : "—"}
+          value={
+            ret?.value != null ? (
+              signedPct(ret.value)
+            ) : (
+              <span title={returnState === "estimated" ? t("kpi.returnEstimatedHint") : undefined}>—</span>
+            )
+          }
           tone={ret?.value != null ? (ret.value >= 0 ? "pos" : "neg") : undefined}
           sub={
             ret && (ret.cdi !== null || ret.ipcaPlus6 !== null)
-              ? t("kpi.benchmarks", { cdi: ret.cdi !== null ? fmt.pct(ret.cdi) : "—", ipca: ret.ipcaPlus6 !== null ? fmt.pct(ret.ipcaPlus6) : "—" })
-              : ret?.value == null
-                ? t("kpi.returnPending")
-                : undefined
+              ? t(returnState === "estimated" ? "kpi.benchmarksEstimated" : "kpi.benchmarks", {
+                  cdi: ret.cdi !== null ? fmt.pct(ret.cdi) : "—",
+                  ipca: ret.ipcaPlus6 !== null ? fmt.pct(ret.ipcaPlus6) : "—",
+                })
+              : returnState === "estimated"
+                ? t("kpi.returnEstimated")
+                : returnState === "pending"
+                  ? t("kpi.returnPending")
+                  : undefined
           }
         />
       </KpiStrip>

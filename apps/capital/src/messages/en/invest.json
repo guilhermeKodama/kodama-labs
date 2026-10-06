@@ -77,7 +77,10 @@
       "incomeSub": "dividends + interest",
       "return12m": "Return 12m",
       "benchmarks": "CDI {cdi} · IPCA+ 6% {ipca}",
-      "returnPending": "no closed months yet"
+      "returnPending": "no closed months yet",
+      "returnEstimated": "estimated history",
+      "benchmarksEstimated": "estimated history · CDI {cdi} · IPCA+ 6% {ipca}",
+      "returnEstimatedHint": "The months in the window were estimated at cost, before monthly snapshots with prices existed. The return shows from the first closed month with prices."
     },
     "history": {
       "title": "Net worth vs total contributed",
@@ -316,7 +319,9 @@
       "avg": "Average 12m",
       "total": "Total 12m",
       "savings": "Savings rate",
-      "savingsSub": "contributions / personal net income"
+      "savingsSub": "contributions / personal net income",
+      "savingsCapped": "contributions above personal net income",
+      "savingsCappedHint": "Contributions of {aportes} against personal net income of {income} in the period: the excess came from savings, sales or another entity."
     },
     "chart": {
       "title": "Contributions by month and class",
