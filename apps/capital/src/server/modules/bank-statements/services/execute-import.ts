@@ -84,8 +84,12 @@ function fileLabel(fileName: string | null | undefined, fallback: string): strin
   return base || fallback;
 }
 
-/** Saved view showing exactly this import's rows, whatever their dates. */
-async function createImportView(userId: string, importId: string, label: string, tx: DbClient): Promise<{ id: string; name: string }> {
+/**
+ * Saved view showing exactly this import's rows, whatever their dates. Its
+ * record joins the import's batch, so undoing the import removes it (and a
+ * revert deletes it, see execute-revert.ts).
+ */
+async function createImportView(userId: string, importId: string, label: string, tx: DbClient, records: MutationRecordInput[]): Promise<{ id: string; name: string }> {
   const locale = await loadUserLocale(userId, tx);
   const name = VIEW_NAME[locale].replace("{file}", label).slice(0, 120);
   const view = await createView(
@@ -96,7 +100,8 @@ async function createImportView(userId: string, importId: string, label: string,
       isFavorite: false,
       config: { period: { preset: "all", offset: 0 }, filters: [{ field: "importId", op: "in", values: [importId] }] },
     }),
-    tx
+    tx,
+    { collect: records }
   );
   return { id: view.id, name: view.name };
 }
@@ -560,8 +565,8 @@ export async function executeImport(
     });
     patchCreatedRecord(records, "Import", imp.id, finished);
 
+    const view = options.createView ? await createImportView(userId, imp.id, fileLabel(input.fileName, input.bankName ?? target.name), tx, records) : null;
     const batchId = await recordMutation(tx, userId, "import", `Import ${imp.fileName ?? imp.bankName ?? imp.id}`, records, { source: "import" });
-    const view = options.createView ? await createImportView(userId, imp.id, fileLabel(input.fileName, input.bankName ?? target.name), tx) : null;
     return {
       imported,
       duplicatesSkipped,

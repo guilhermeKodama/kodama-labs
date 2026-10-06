@@ -79,7 +79,7 @@
     "system_protected": "A categoria de sistema {name} não pode ser excluída nem mesclada.",
     "default_protected": "A categoria padrão {name} não pode ser excluída nem mesclada.",
     "reassign_self": "Escolha outra categoria para receber os lançamentos.",
-    "type_mismatch": "Categorias de tipos diferentes não podem ser combinadas.",
+    "type_mismatch": "Uma categoria de {from, select, income {receitas} expense {despesas} investment {investimentos} other {outro tipo}} não combina com {to, select, income {receitas} expense {despesas} investment {investimentos} other {este tipo}}.",
     "reassign_budget_clash": "A categoria de destino já tem {count, plural, one {# orçamento começando} other {# orçamentos começando}} nos mesmos meses.",
     "in_use": "A categoria está em uso ({entries} transações, {recurring} contas fixas, {budgets} orçamentos, {rules} regras). Escolha para qual categoria movê-los.",
     "merge_self": "Uma categoria não pode ser mesclada nela mesma.",

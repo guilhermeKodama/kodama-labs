@@ -36,6 +36,8 @@ export const transferDirectionSchema = z.enum(TRANSFER_DIRECTIONS);
  */
 export const CATEGORICAL_FIELDS = [
   "entityId",
+  /** The entity's kind, "personal" (PF) or "business" (PJ): "PJ" means every business, also ones added later. */
+  "entityKind",
   "accountId",
   "accountType",
   "categoryId",

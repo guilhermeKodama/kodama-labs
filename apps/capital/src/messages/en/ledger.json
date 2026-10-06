@@ -55,8 +55,10 @@
       "amountBase": "Amount",
       "description": "Description",
       "date": "Date",
-      "effectiveDate": "Bill date"
-    }
+      "effectiveDate": "Bill date",
+      "entityKind": "Entity"
+    },
+    "import": "Import · {file}"
   },
   "search": "Search this view…",
   "autosaved": "saved automatically",
@@ -253,5 +255,9 @@
   "drill": {
     "detail": "Detail: {label}",
     "back": "back to the view"
+  },
+  "entityKind": {
+    "personal": "Personal",
+    "business": "Business"
   }
 }

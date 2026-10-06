@@ -23,9 +23,11 @@ import { inTransaction } from "./mutations";
  * User.viewsSeedVersion records what was seeded, and each seeded row keeps
  * its SavedView.seedKey:
  * - version 1: every view that needs nothing of the user's data;
- * - version 2: the PJ views ("PJ", "Impostos PJ"), which filter by the
- *   user's business entities, so they wait for the first one (a new user
- *   only has PF).
+ * - version 2: the PJ views ("PJ", "Impostos PJ"), which wait for the
+ *   user's first business entity (a new user only has PF). They filter on
+ *   entityKind = business ("Entidade é PJ"), so businesses added later are
+ *   in them too; PJ views seeded before that, with the business ids of the
+ *   time, are rewritten once (migrateBusinessViews).
  * A version is claimed with one conditional UPDATE inside the transaction
  * that inserts its views, so concurrent requests seed once, and a default
  * the user deleted never comes back.
@@ -35,7 +37,7 @@ import { inTransaction } from "./mutations";
 export const VIEWS_SEED_VERSION = 2;
 
 interface SeedContext {
-  /** Every business entity, archived ones included ("PJ" = all businesses). */
+  /** Every business entity, archived ones included: the PJ views are seeded once there is one. */
   businessIds: string[];
   /** The system "taxes" category (Impostos), when the user has it. */
   taxesCategoryId: string | null;
@@ -48,6 +50,10 @@ export type ViewSeed =
   | SeedOf<"investment_ops", InvestmentOpsViewSeedKey, OpsViewConfig>;
 
 const outflows: LedgerFilter = { field: "flowKind", op: "in", values: ["out"] };
+/** "PJ" = every business entity, also ones created after the view (chip "Entidade é PJ"). */
+export const BUSINESS_FILTER: LedgerFilter = { field: "entityKind", op: "in", values: ["business"] };
+/** Seeded views that filter on the user's businesses. */
+const BUSINESS_SEED_KEYS = ["pj", "taxpj"] as const;
 const ledger = (seedKey: LedgerViewSeedKey, isFavorite: boolean, config: Partial<ViewConfig>): ViewSeed => ({
   dataset: "ledger",
   seedKey,
@@ -57,7 +63,7 @@ const ledger = (seedKey: LedgerViewSeedKey, isFavorite: boolean, config: Partial
 
 /** Ledger defaults in the mockup's order; "PJ" carries no month in its name. */
 export function ledgerSeeds(ctx: SeedContext): { seed: ViewSeed; needsBusiness: boolean }[] {
-  const pj: LedgerFilter = { field: "entityId", op: "in", values: ctx.businessIds };
+  const pj: LedgerFilter = BUSINESS_FILTER;
   const hasBusiness = ctx.businessIds.length > 0;
   const seeds: { seed: ViewSeed; needsBusiness: boolean }[] = [];
   const add = (seed: ViewSeed, needsBusiness = false) => seeds.push({ seed, needsBusiness });
@@ -193,8 +199,53 @@ async function placeAfterBuiltin(db: DbClient, userId: string, seedKey: string) 
   }
 }
 
+/**
+ * The PJ filter of a seeded view as it was seeded before entityKind: an
+ * entityId filter listing only business entities, and every business it
+ * leaves out was created after the view (so the list is the businesses of
+ * seed time, not a choice the user made). Its index, or -1.
+ */
+export function staleBusinessFilterIndex(
+  filters: readonly LedgerFilter[],
+  viewCreatedAt: Date,
+  businesses: readonly { id: string; createdAt: Date }[]
+): number {
+  const ids = new Set(businesses.map((b) => b.id));
+  return filters.findIndex((f) => {
+    if (f.field !== "entityId" || f.op !== "in" || !f.values.length) return false;
+    const values = new Set(f.values.map(String));
+    if (![...values].every((v) => ids.has(v))) return false;
+    return businesses.every((b) => values.has(b.id) || b.createdAt > viewCreatedAt);
+  });
+}
+
+/**
+ * Rewrites the PJ and Impostos PJ views seeded with fixed business ids to
+ * entityKind = business (see staleBusinessFilterIndex). A view whose PJ
+ * filter the user changed is left alone. Returns the rewritten seed keys.
+ */
+export async function migrateBusinessViews(userId: string, db: DbClient): Promise<string[]> {
+  const views = await db.savedView.findMany({ where: { userId, dataset: "ledger", seedKey: { in: [...BUSINESS_SEED_KEYS] } } });
+  const filtersOf = (config: unknown) => ((config as { filters?: unknown } | null)?.filters ?? []) as { field?: unknown }[];
+  const stale = views.filter((v) => Array.isArray(filtersOf(v.config)) && filtersOf(v.config).some((f) => f?.field === "entityId"));
+  if (!stale.length) return [];
+  const businesses = await db.entity.findMany({ where: { userId, kind: "business" }, select: { id: true, createdAt: true } });
+  const migrated: string[] = [];
+  for (const view of stale) {
+    const parsed = viewConfigSchema.safeParse(view.config);
+    if (!parsed.success) continue;
+    const index = staleBusinessFilterIndex(parsed.data.filters, view.createdAt, businesses);
+    if (index < 0) continue;
+    const filters = parsed.data.filters.map((f, i) => (i === index ? BUSINESS_FILTER : f));
+    await db.savedView.update({ where: { id: view.id }, data: { config: { ...parsed.data, filters } as Prisma.InputJsonValue } });
+    migrated.push(view.seedKey!);
+  }
+  return migrated;
+}
+
 /** Creates the default views the user has not had yet (see VIEWS_SEED_VERSION). Returns the seeded keys. */
 export async function ensureDefaultViews(userId: string, db: DbClient): Promise<string[]> {
+  await migrateBusinessViews(userId, db);
   const user = await db.user.findUnique({ where: { id: userId }, select: { viewsSeedVersion: true } });
   if (!user || user.viewsSeedVersion >= VIEWS_SEED_VERSION) return [];
   if (user.viewsSeedVersion >= 1 && !(await db.entity.count({ where: { userId, kind: "business" } }))) return [];

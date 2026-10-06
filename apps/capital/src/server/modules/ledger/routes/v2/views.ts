@@ -15,9 +15,9 @@ const listViewsRoute = createRoute({
   request: { query: z.object({ dataset: z.string().optional() }) },
   responses: v2Responses,
 });
-const createViewRoute = createRoute({ method: "post", path: "/v2/views", tags, summary: "Create a view", request: jsonBody(savedViewInputSchema), responses: v2Responses });
-const patchViewRoute = createRoute({ method: "patch", path: "/v2/views/{id}", tags, summary: "Update a view (auto-save)", request: { params: idParams, ...jsonBody(savedViewPatchSchema) }, responses: v2Responses });
-const deleteViewRoute = createRoute({ method: "delete", path: "/v2/views/{id}", tags, summary: "Delete a view", request: { params: idParams }, responses: v2Responses });
+const createViewRoute = createRoute({ method: "post", path: "/v2/views", tags, summary: "Create a view (undoable: returns batchId)", request: jsonBody(savedViewInputSchema), responses: v2Responses });
+const patchViewRoute = createRoute({ method: "patch", path: "/v2/views/{id}", tags, summary: "Update a view (auto-save; a rename or favorite toggle returns batchId, config edits are not recorded)", request: { params: idParams, ...jsonBody(savedViewPatchSchema) }, responses: v2Responses });
+const deleteViewRoute = createRoute({ method: "delete", path: "/v2/views/{id}", tags, summary: "Delete a view (undoable: undo restores it under the same id)", request: { params: idParams }, responses: v2Responses });
 const duplicateViewRoute = createRoute({
   method: "post",
   path: "/v2/views/{id}/duplicate",
@@ -35,8 +35,8 @@ export const ledgerViewRoutes = createRouter()
   .openapi(
     deleteViewRoute,
     v2Handler(deleteViewRoute, async (c, userId) => {
-      await deleteView(userId, c.req.valid("param").id, prisma);
-      return { ok: true };
+      const { batchId } = await deleteView(userId, c.req.valid("param").id, prisma);
+      return { ok: true, batchId };
     })
   )
   .openapi(duplicateViewRoute, v2Handler(duplicateViewRoute, (c, userId) => duplicateView(userId, c.req.valid("param").id, prisma, c.req.valid("json"))))

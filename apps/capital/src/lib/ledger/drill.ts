@@ -34,10 +34,20 @@ export function groupValueFilters(key: GroupKey, value: string | null): LedgerFi
   return [{ field: key.field, op: "in", values: [value] }];
 }
 
-/** The filters of "Outros" (every value but the shown ones); null when it cannot be expressed (a time axis). */
-export function othersFilters(key: GroupKey, shown: readonly (string | null)[]): LedgerFilter[] | null {
-  if ("bucket" in key || !shown.length) return null;
-  const values = shown.map((v) => (v !== null && (key.field === "isTaxDeductible" || key.field === "isRecurring") ? v === "true" : v));
+/**
+ * The filters of "Outros": the values folded into it. A categorical axis
+ * selects every value but the shown ones (`kept`), so nothing the chart
+ * did not list is lost; a time axis selects the folded buckets with
+ * inBuckets (an "every bucket but" filter does not exist). Null when there
+ * is nothing to select.
+ */
+export function othersFilters(key: GroupKey, kept: readonly (string | null)[], folded: readonly (string | null)[]): LedgerFilter[] | null {
+  if ("bucket" in key) {
+    const buckets = folded.filter((v): v is string => v !== null);
+    return buckets.length ? [{ field: key.field, op: "inBuckets", bucket: key.bucket, values: buckets }] : null;
+  }
+  if (!kept.length) return null;
+  const values = kept.map((v) => (v !== null && (key.field === "isTaxDeductible" || key.field === "isRecurring") ? v === "true" : v));
   return [{ field: key.field, op: "nin", values }];
 }
 

@@ -3,12 +3,14 @@
 import { useState } from "react";
 import { TextInput } from "@/components/cap";
 import { useFmt } from "@/lib/format/provider";
-import { parseDateText } from "@/lib/ledger/entry-form";
+import { dateInputValue, parseDateText } from "@/lib/ledger/entry-form";
 
 /**
  * The form's Data field: shows the date in the user's format
  * ("22/09/2026") and accepts it typed the same way, also without the year.
- * The value (YYYY-MM-DD) changes once the text reads as a real date.
+ * The value (YYYY-MM-DD) follows the text: a real date, or "" while the
+ * text is empty or not a date, so the form's validation blocks Salvar on
+ * this field instead of keeping the previous date unseen.
  */
 export function DateInput({
   value,
@@ -28,7 +30,7 @@ export function DateInput({
   className?: string;
 }) {
   const fmt = useFmt();
-  const shown = fmt.dateFull(value);
+  const shown = value ? fmt.dateFull(value) : "";
   const [text, setText] = useState(shown);
   const [synced, setSynced] = useState(value);
   // The value changed from outside (quick add, "Criar outra"): show it.
@@ -42,11 +44,11 @@ export function DateInput({
       id={id}
       value={text}
       disabled={disabled}
-      invalid={invalid || (!!text.trim() && !parsed)}
+      invalid={invalid || !parsed}
       onChange={(next) => {
         setText(next);
-        const iso = parseDateText(next, fmt.prefs.dateFormat, today);
-        if (iso && iso !== value) {
+        const iso = dateInputValue(next, fmt.prefs.dateFormat, today);
+        if (iso !== value) {
           setSynced(iso);
           onChange(iso);
         }

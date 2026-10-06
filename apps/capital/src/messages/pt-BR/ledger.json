@@ -55,8 +55,10 @@
       "amountBase": "Valor",
       "description": "Descrição",
       "date": "Data",
-      "effectiveDate": "Data na fatura"
-    }
+      "effectiveDate": "Data na fatura",
+      "entityKind": "Entidade"
+    },
+    "import": "Importação · {file}"
   },
   "search": "Buscar nesta view…",
   "autosaved": "salvo automaticamente",
@@ -253,5 +255,9 @@
   "drill": {
     "detail": "Detalhe: {label}",
     "back": "voltar à view"
+  },
+  "entityKind": {
+    "personal": "PF",
+    "business": "PJ"
   }
 }

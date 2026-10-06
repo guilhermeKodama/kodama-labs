@@ -79,7 +79,7 @@
     "system_protected": "System category {name} can't be deleted or merged.",
     "default_protected": "Default category {name} can't be deleted or merged.",
     "reassign_self": "Choose a different category to move them to.",
-    "type_mismatch": "Categories of different types can't be combined.",
+    "type_mismatch": "{from, select, income {Income} expense {Expense} investment {Investment} other {These}} categories don't go with {to, select, income {income} expense {expenses} investment {investments} other {this type}}.",
     "reassign_budget_clash": "The target category already has {count, plural, one {# budget} other {# budgets}} starting in the same months.",
     "in_use": "The category is in use ({entries} transactions, {recurring} recurring bills, {budgets} budgets, {rules} rules). Choose a category to move them to.",
     "merge_self": "A category can't be merged into itself.",

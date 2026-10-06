@@ -233,7 +233,8 @@ function CellEditor({ row, field, names, onDone }: { row: DisplayRow; field: Edi
   }
 
   if (field === "date") {
-    return <DateEditor row={row} invalid={invalid} onSave={(date, move) => (date === row.date.slice(0, 10) ? onDone(move) : commit({ date }, t("date", { description: row.description, date: fmt.date(date) }), move))} keys={keys} />;
+    // An empty or invalid date ("" from DateInput) saves nothing: the cell keeps the date it shows.
+    return <DateEditor row={row} invalid={invalid} onSave={(date, move) => (!date || date === row.date.slice(0, 10) ? onDone(move) : commit({ date }, t("date", { description: row.description, date: fmt.date(date) }), move))} keys={keys} />;
   }
 
   return (
