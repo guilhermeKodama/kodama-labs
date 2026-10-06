@@ -29,7 +29,12 @@ describe("commandItems", () => {
     expect(byId("go:budgets").action).toEqual({ type: "navigate", href: "/transactions/budgets" });
     expect(byId("go:trash").action).toEqual({ type: "navigate", href: "/transactions?trash=1" });
     expect(byId("go:settings")).toMatchObject({ shortcut: "mod+,", action: { type: "settings" } });
-    for (const page of SETTINGS_PAGES) expect(byId(`go:settings:${page}`)).toMatchObject({ label: `goTo.settingsPage(settingsPages.${page})`, action: { type: "settings", page } });
+    for (const page of SETTINGS_PAGES.filter((page) => page !== "imports")) {
+      expect(byId(`go:settings:${page}`)).toMatchObject({ label: `goTo.settingsPage(settingsPages.${page})`, searchOnly: true, action: { type: "settings", page } });
+    }
+    // Importações is listed on its own, without typing.
+    expect(byId("go:settings:imports")).toMatchObject({ label: "goTo.imports", action: { type: "settings", page: "imports" } });
+    expect(byId("go:settings:imports").searchOnly).toBeFalsy();
   });
 
   it("lists the views with their glyph, opening them on Transações", () => {
@@ -71,7 +76,7 @@ describe("search", () => {
   });
 
   it("filters by group order, best matches first", () => {
-    const labels: Record<string, string> = { "settingsPages.imports": "Importações", "create.import": "Importar extrato" };
+    const labels: Record<string, string> = { "goTo.imports": "Importações", "goTo.settings": "Ajustes", "create.import": "Importar extrato" };
     const real: Translate = (key, values) => (key === "goTo.settingsPage" ? `Ajustes › ${values?.page}` : (labels[key] ?? key));
     const sections = filterCommands(commandItems({ ...source, t: real }), "import");
     expect(sections.map((section) => section.group)).toEqual(["goTo", "create"]);
@@ -79,6 +84,8 @@ describe("search", () => {
     expect(sections[1].items.map((item) => item.id)).toEqual(["create:import"]);
     // "Importar extrato" starts with the text; "Ajustes › Importações" only has a word that does.
     expect(commandScore("Importar extrato", "import")).toBeGreaterThan(commandScore("Ajustes › Importações", "import"));
+    // "ajustes" still finds Importações, through its keyword.
+    expect(filterCommands(commandItems({ ...source, t: real }), "ajustes")[0].items.map((item) => item.id)).toContain("go:settings:imports");
   });
 
   it("keeps everything but the search-only items, in order, with no query", () => {

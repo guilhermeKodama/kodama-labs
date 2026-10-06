@@ -223,7 +223,7 @@ function Palette({ assistant, onClose, onAssistant }: { assistant: AssistantCont
         <Command.Item value="quick-add" onSelect={() => goLedger({ create: quick.draft })} className={ITEM_TALL}>
           <Glyph>+</Glyph>
           <span className="flex min-w-0 flex-1 flex-col gap-1">
-            <span className="truncate">{t("quickAdd.label")}</span>
+            <QuickAddLabel draft={quick.draft} />
             <QuickAddChips result={quick} />
           </span>
           <span className="shrink-0 text-[11px] text-fg-3">{t("quickAdd.fill")}</span>
@@ -388,18 +388,39 @@ function useQuickAdd(query: string): QuickAddResult | null {
   }, [query, catalog, timezone]);
 }
 
-/** The fields found, as in the create form's chips (mockup 4834-4840): "Valor: R$ 86,90". */
+/** The amount of the draft in its currency (the typed one, else the account's, else the base). */
+function useDraftMoney(draft: QuickAddDraft): string {
+  const fmt = useFmt();
+  const names = useNames();
+  return fmt.money(draft.amount ?? 0, draft.currency ?? currencyOf(draft, names.accounts) ?? names.currency);
+}
+
+/** "Criar “Ifood” · R$ 86,90". */
+function QuickAddLabel({ draft }: { draft: QuickAddDraft }) {
+  const t = useTranslations("command.quickAdd");
+  const amount = useDraftMoney(draft);
+  return (
+    <span className="truncate">
+      {t("label", { hasDescription: draft.description ? "yes" : "no", description: draft.description ?? "", amount })}
+    </span>
+  );
+}
+
+/** The other fields found, as in the create form's chips (mockup 4834-4840): "Conta: Nubank". The label already says the description and the amount. */
 function QuickAddChips({ result }: { result: QuickAddResult }) {
   const t = useTranslations("command.quickAdd");
   const fmt = useFmt();
   const names = useNames();
   const { draft } = result;
+  const amount = useDraftMoney(draft);
+  const fields = quickAddChipFields(draft).filter((field) => field !== "description" && field !== "amount");
+  if (!fields.length) return null;
   const value = (field: QuickAddChipField): string => {
     switch (field) {
       case "description":
         return draft.description ?? "";
       case "amount":
-        return fmt.money(draft.amount ?? 0, draft.currency ?? currencyOf(draft, names.accounts) ?? names.currency);
+        return amount;
       case "kind":
         return draft.kind ? t(`kinds.${draft.kind}`) : "";
       case "account":
@@ -416,7 +437,7 @@ function QuickAddChips({ result }: { result: QuickAddResult }) {
   };
   return (
     <span className="flex flex-wrap gap-1">
-      {quickAddChipFields(draft).map((field) => (
+      {fields.map((field) => (
         <span key={field} className="rounded-[4px] border border-stroke-2 px-1.5 py-px text-[11px]">
           <span className="text-fg-3">{t(`fields.${field}`)}: </span>
           {value(field)}

@@ -17,6 +17,7 @@
     "portfolio": "Carteira",
     "contributions": "Aportes",
     "trash": "Lixeira",
+    "imports": "Importações",
     "settings": "Ajustes",
     "settingsPage": "Ajustes › {page}"
   },
@@ -42,7 +43,7 @@
     "view": "Nova view"
   },
   "quickAdd": {
-    "label": "Nova transação",
+    "label": "{hasDescription, select, yes {Criar “{description}” · {amount}} other {Criar transação · {amount}}}",
     "fill": "Preencher ↵",
     "fields": {
       "description": "Descrição",

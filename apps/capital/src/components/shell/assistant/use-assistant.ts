@@ -23,7 +23,7 @@ import { namePastedImage, validateAssistantFile } from "@/lib/assistant/constant
 import { messagesFromConversation, readLastConversation, resumeError, writeLastConversation } from "@/lib/assistant/history";
 import { assistantReducer, canRetry, initialAssistantState, isBusy, type AssistantInput, type AssistantState } from "@/lib/assistant/reducer";
 import type { AgentEvent } from "@/lib/assistant/sse";
-import { isWriteTool } from "@/lib/assistant/tools";
+import { isWriteTool, turnInvalidation } from "@/lib/assistant/tools";
 import type { MessageAttachment } from "@/types/assistant";
 
 function localStore(): Storage | null {
@@ -116,7 +116,7 @@ export function useAssistant(): AssistantController {
         else dispatch({ type: "failed", error: requestError(error) });
       } finally {
         if (abortRef.current === controller) abortRef.current = null;
-        void invalidateEvent(queryClient, wrote ? ["ledger.write", "investments.write", "assistant.write"] : "assistant.write");
+        void invalidateEvent(queryClient, turnInvalidation(wrote));
       }
     },
     [queryClient],

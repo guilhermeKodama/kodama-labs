@@ -105,3 +105,12 @@ describe("isWriteTool", () => {
     expect(isWriteTool("propose_import_plan")).toBe(false);
   });
 });
+
+describe("turnInvalidation", () => {
+  it("refreshes every screen after a turn that wrote, only the conversations otherwise", async () => {
+    const { turnInvalidation } = await import("../tools");
+    const { MUTATION_EVENTS } = await import("@/lib/api/invalidation");
+    expect(turnInvalidation(true)).toEqual(MUTATION_EVENTS);
+    expect(turnInvalidation(false)).toEqual(["assistant.write"]);
+  });
+});

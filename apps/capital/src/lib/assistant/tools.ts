@@ -1,3 +1,5 @@
+import { MUTATION_EVENTS, type MutationEvent } from "@/lib/api/invalidation";
+
 /**
  * Status lines for the agent's tool calls ("Buscando transações…"). The
  * server sends a pt-BR label with each call, but a resumed conversation
@@ -65,4 +67,14 @@ const WRITE_TOOLS: ReadonlySet<string> = new Set([
 
 export function isWriteTool(tool: string): boolean {
   return WRITE_TOOLS.has(tool);
+}
+
+/**
+ * What a finished turn makes stale. A turn that wrote (a write tool, a
+ * committed plan) can have touched anything — entries, accounts, cards,
+ * holdings, categories, rules, imports — so every screen refreshes; a turn
+ * that only read refreshes the conversation list.
+ */
+export function turnInvalidation(wrote: boolean): readonly MutationEvent[] {
+  return wrote ? MUTATION_EVENTS : ["assistant.write"];
 }

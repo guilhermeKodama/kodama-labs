@@ -74,14 +74,17 @@ export function commandItems({ t, views, theme, themeLabels, locale, locales }: 
     { id: "go:contributions", group: "goTo", label: t("goTo.contributions"), action: { type: "navigate", href: "/investments/contributions" } },
     { id: "go:trash", group: "goTo", label: t("goTo.trash"), action: { type: "navigate", href: buildTransactionsHref({ trash: true }) } },
     { id: "go:settings", group: "goTo", label: t("goTo.settings"), shortcut: SHELL_SHORTCUTS.settings.combo, action: { type: "settings" } },
-    ...SETTINGS_PAGES.map(
-      (page): CommandItem => ({
-        id: `go:settings:${page}`,
-        group: "goTo",
-        label: t("goTo.settingsPage", { page: t(`settingsPages.${page}`) }),
-        searchOnly: true,
-        action: { type: "settings", page },
-      }),
+    ...SETTINGS_PAGES.map((page): CommandItem =>
+      // Importações is a destination of its own in Ir para (always listed); the other pages show once something is typed.
+      page === "imports"
+        ? { id: `go:settings:${page}`, group: "goTo", label: t("goTo.imports"), keywords: [t("goTo.settings")], action: { type: "settings", page } }
+        : {
+            id: `go:settings:${page}`,
+            group: "goTo",
+            label: t("goTo.settingsPage", { page: t(`settingsPages.${page}`) }),
+            searchOnly: true,
+            action: { type: "settings", page },
+          },
     ),
   ];
 

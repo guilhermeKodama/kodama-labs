@@ -17,6 +17,7 @@
     "portfolio": "Portfolio",
     "contributions": "Contributions",
     "trash": "Trash",
+    "imports": "Imports",
     "settings": "Settings",
     "settingsPage": "Settings › {page}"
   },
@@ -42,7 +43,7 @@
     "view": "New view"
   },
   "quickAdd": {
-    "label": "New transaction",
+    "label": "{hasDescription, select, yes {Create “{description}” · {amount}} other {Create transaction · {amount}}}",
     "fill": "Fill in ↵",
     "fields": {
       "description": "Description",
