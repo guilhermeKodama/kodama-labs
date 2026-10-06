@@ -101,6 +101,22 @@ describe("parseQuickAdd", () => {
     expect(parse("taxa 10 mercury llc").draft.accountId).toBe("mercury-card");
   });
 
+  it("keeps a generic word that only starts an account name in the description (every entity has a “Conta principal”)", () => {
+    const withMain: QuickAddCatalog = {
+      ...catalog,
+      accounts: [
+        ...catalog.accounts,
+        { id: "pf-main", name: "Conta principal", entityId: "pf", type: "checking", currency: "BRL" },
+        { id: "ltda-main", name: "Conta principal", entityId: "ltda", type: "checking", currency: "BRL" },
+      ],
+    };
+    const quick = (text: string) => parseQuickAdd(text, withMain, TODAY);
+    expect(quick("conta de luz 120").draft).toEqual({ amount: 120, kind: "expense", description: "Conta De Luz" });
+    expect(quick("conta de luz 120 nubank").draft).toMatchObject({ description: "Conta De Luz", accountId: "nubank-card" });
+    // The whole name still names the account (the typed entity picks which one).
+    expect(quick("aluguel 2500 conta principal pj").draft).toMatchObject({ accountId: "ltda-main", description: "Aluguel" });
+  });
+
   it("returns nothing for blank text", () => {
     expect(parse("   ")).toEqual({ draft: {}, tokens: [] });
   });

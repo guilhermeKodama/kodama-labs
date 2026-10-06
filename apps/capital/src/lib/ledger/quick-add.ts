@@ -129,7 +129,14 @@ export function parseQuickDate(word: string, today: string): string | null {
   return candidate > today ? validDate(thisYear - 1, month, day) : candidate;
 }
 
-const CURRENCY_SYMBOLS: Record<string, string> = { "us$": "USD", "r$": "BRL", "€": "EUR", "£": "GBP" };
+/**
+ * Words that start account names without naming one ("Conta principal",
+ * "Main account", "Cartão Inter"): typed alone they are part of the
+ * description ("conta de luz 120"); the whole name still picks the account.
+ */
+const GENERIC_ACCOUNT_WORDS = new Set(["conta", "contas", "cartao", "banco", "carteira", "principal", "main", "account", "card", "bank", "wallet", "checking"]);
+
+const CURRENCY_SYMBOLS:Record<string, string> = { "us$": "USD", "r$": "BRL", "€": "EUR", "£": "GBP" };
 
 function capitalise(word: string): string {
   return word.slice(0, 1).toUpperCase() + word.slice(1);
@@ -203,9 +210,11 @@ export function parseQuickAdd(text: string, catalog: QuickAddCatalog, today: str
           matches = [account];
         } else if (k === best) matches.push(account);
       }
+      // A run that spells a whole name picks that account only.
+      const whole = matches.filter((account) => nameWords(account.name).length === best);
+      // "conta de luz": a generic word that only starts a name ("Conta principal", every entity's main account) is description.
+      if (best === 1 && !whole.length && GENERIC_ACCOUNT_WORDS.has(word)) best = 0;
       if (best > 0) {
-        // A run that spells a whole name picks that account only.
-        const whole = matches.filter((account) => nameWords(account.name).length === best);
         accountCandidates = best > 1 && whole.length ? whole : matches;
         tokens.push({ field: "account", text: words.slice(i, i + best).join(" ") });
         i += best - 1;

@@ -278,6 +278,8 @@ function TextEditor({
   const [value, setValue] = useState(initial);
   // Esc already closed the editor: the blur that follows must not save.
   const cancelled = useRef(false);
+  // ↵ / Tab already saved this value: the blur of the closing editor must not send it again.
+  const submitted = useRef<string | null>(null);
   return (
     <TextInput
       autoFocus
@@ -292,9 +294,12 @@ function TextEditor({
           onCancel();
           return;
         }
-        keys((move) => onSave(value, move))(event);
+        keys((move) => {
+          submitted.current = value;
+          onSave(value, move);
+        })(event);
       }}
-      onBlur={() => !cancelled.current && onSave(value, null)}
+      onBlur={() => !cancelled.current && submitted.current !== value && onSave(value, null)}
       onFocus={(event) => event.currentTarget.select()}
       className={cn("h-6 w-full border-none px-0", mono && "text-right")}
     />
@@ -314,8 +319,21 @@ function DateEditor({
 }) {
   const fmt = useFmt();
   const [value, setValue] = useState(row.date.slice(0, 10));
+  // ↵ / Tab already saved this date (or Esc dropped it): the blur of the closing editor must not send it.
+  const submitted = useRef<string | null>(null);
   return (
-    <span className="flex w-full" onKeyDown={keys((move) => onSave(value, move))} onBlur={(event: FocusEvent) => !event.currentTarget.contains(event.relatedTarget) && onSave(value, null)}>
+    <span
+      className="flex w-full"
+      onKeyDown={(event) => {
+        // Esc cancels: the blur that follows must not save either.
+        if (event.key === "Escape") submitted.current = value;
+        keys((move) => {
+          submitted.current = value;
+          onSave(value, move);
+        })(event);
+      }}
+      onBlur={(event: FocusEvent) => !event.currentTarget.contains(event.relatedTarget) && submitted.current !== value && onSave(value, null)}
+    >
       <DateInput value={value} onChange={setValue} today={todayIn(fmt.prefs.timezone)} invalid={invalid} className="h-6 w-full border-none px-0" />
     </span>
   );

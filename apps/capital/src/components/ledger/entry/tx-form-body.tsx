@@ -378,12 +378,13 @@ function InvestBlock({
           <DateInput value={form.date} onChange={(date) => up({ date })} today={ctx.today} invalid={invalid === "date"} />
         </Field>
       </div>
-      {crossEntity && deposit && mode === "create" && cash && broker ? (
+      {/* A recurring aporte books one investment transfer per occurrence (POST /v2/recurring), not the two legs or the buy. */}
+      {crossEntity && deposit && mode === "create" && !form.recurring && cash && broker ? (
         <Callout tone="warning" title={t("crossTitle")}>
           {t("crossBody", { cash: entityName(cash.entityId), broker: entityName(broker.entityId), flow: entityFlow ?? "profit_distribution" })}
         </Callout>
       ) : null}
-      {deposit && mode === "create" && holdings.length > 0 && broker ? (
+      {deposit && mode === "create" && !form.recurring && holdings.length > 0 && broker ? (
         <div className="flex flex-col gap-2.5 rounded-[8px] border border-stroke-3 p-2.5">
           <Check checked={form.buyAlso} onChange={(buyAlso) => up({ buyAlso })} label={t("buyAlso", { broker: broker.name })} />
           {form.buyAlso && buy ? (

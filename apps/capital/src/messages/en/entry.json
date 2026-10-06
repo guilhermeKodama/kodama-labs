@@ -77,6 +77,7 @@
     "nInstallments": "Installments",
     "installmentsHint": "{n}× of {value} · creates {n} transactions, one per statement",
     "dropzone": "Drag the receipt here, paste an image (⌘V) or click to attach",
+    "uploadFailed": "Could not attach {count, plural, one {# receipt} other {# receipts}}; the transaction was created.",
     "removeFile": "remove",
     "another": "Create another one next",
     "invest": {

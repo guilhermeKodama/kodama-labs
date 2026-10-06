@@ -68,6 +68,8 @@ interface SaveResult {
   createdBatchId: string | null;
   description: string;
   uploaded: AttachmentRecord[];
+  /** Receipts that could not be uploaded (the entry was created anyway). */
+  failedUploads: number;
 }
 
 /** The entry or transfer a create answered with, to hang receipts on. */
@@ -115,20 +117,38 @@ function CreateForm({ draft, onClose }: { draft: QuickAddDraft; onClose: () => v
     event: ["ledger.write", "recurring.write", "investments.write"],
     mutationFn: async ({ request, files: queued, newCategory: create }) => {
       const body = { ...request.body };
-      if (create) body.categoryId = (await apiPost<CategoryRecord>("/api/v2/categories", create)).id;
+      if (create) {
+        const category = await apiPost<CategoryRecord>("/api/v2/categories", create);
+        body.categoryId = category.id;
+        // If the save below fails, a retry uses this category instead of creating the name again.
+        setForm((current) => ({ ...current, categoryId: category.id }));
+        setNewCategory(null);
+      }
       const result = await apiPost<Record<string, unknown>>(request.path, body);
       const owner = queued.length ? ownerOf(result) : null;
       const uploaded: AttachmentRecord[] = [];
-      if (owner) for (const file of queued) uploaded.push(await uploadReceipt(owner, file));
+      let failedUploads = 0;
+      // The entry exists now: a receipt that fails to upload must not fail the save (a retry would create it twice).
+      if (owner) {
+        for (const file of queued) {
+          try {
+            uploaded.push(await uploadReceipt(owner, file));
+          } catch {
+            failedUploads++;
+          }
+        }
+      }
       const entries = Array.isArray(result.entries) ? (result.entries as { description?: string }[]) : [];
       const description = (body.description as string | undefined) ?? entries[0]?.description ?? (typeof result.description === "string" ? result.description : "");
-      return { createdBatchId: typeof result.batchId === "string" ? result.batchId : null, description, uploaded };
+      return { createdBatchId: typeof result.batchId === "string" ? result.batchId : null, description, uploaded, failedUploads };
     },
     onSuccess: (result, variables) => {
       const message = variables.toastText(result.description);
       const batchId = result.createdBatchId;
+      if (result.failedUploads) toast(t("form.uploadFailed", { count: result.failedUploads }));
       if (batchId) {
-        rememberUndo(batchId, message);
+        // ⌘Z undoes the bare batch, which keeps a row that has receipts; with receipts only the toast's Desfazer (which drops them first) undoes it.
+        if (!result.uploaded.length) rememberUndo(batchId, message);
         // Undo keeps rows that carry receipts the batch did not record, so Desfazer removes the receipts first.
         toast(message, {
           id: `undo:${batchId}`,
