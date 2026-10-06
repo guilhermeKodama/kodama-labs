@@ -65,10 +65,13 @@ export function TransactionsScreen() {
     null;
 
   // ?view=seed:ir (e.g. the old /tax link) becomes the view's own id.
+  // A seeded view the user deleted (or one not seeded yet, like PJ before a business entity) falls back to Todas.
   const seedKey = wanted && "seedKey" in wanted ? wanted.seedKey : null;
+  const loaded = views.isSuccess;
   useEffect(() => {
-    if (seedKey && active?.seedKey === seedKey) void setParams({ view: active.id }, { history: "replace" });
-  }, [seedKey, active, setParams]);
+    if (!seedKey || !loaded) return;
+    void setParams({ view: active?.seedKey === seedKey ? active.id : null }, { history: "replace" });
+  }, [seedKey, loaded, active, setParams]);
 
   const open = (id: string | null) => void setParams({ view: id, draft: null, q: null });
   const create = useAppMutation({
