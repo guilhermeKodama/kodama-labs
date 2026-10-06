@@ -35,6 +35,19 @@ describe("view queries", () => {
     expect(chartQuery(chart("waterfall", { groupBy: [{ field: "categoryId" }, { field: "entityId" }] })).groupBy).toEqual([{ field: "categoryId" }]);
   });
 
+  it("buckets dates on the view's date field in the table, pivot, chart and board", () => {
+    const month = { field: "date" as const, bucket: "month" as const };
+    const onStatement = { field: "effectiveDate" as const, bucket: "month" as const };
+    expect(tableQuery(viewConfig({ dateField: "effectiveDate", groupBy: [month, { field: "categoryId" }] })).groupBy).toEqual([onStatement, { field: "categoryId" }]);
+    expect(pivotQuery(viewConfig({ layout: "pivot", dateField: "effectiveDate", groupBy: [{ field: "categoryId" }, month] })).pivot).toMatchObject({ rows: { field: "categoryId" }, cols: onStatement });
+    expect(chartQuery(chart("bar", { dateField: "effectiveDate", groupBy: [month, { field: "entityId" }] })).groupBy).toEqual([onStatement, { field: "entityId" }]);
+    expect(chartKeys(chart("line", { dateField: "effectiveDate" })).axis).toEqual({ field: "effectiveDate", bucket: "day" });
+    expect(boardQuery(viewConfig({ layout: "board", dateField: "effectiveDate", groupBy: [month] })).groupBy).toEqual([onStatement]);
+    // Non-date keys and views on Data stay as they are.
+    expect(chartQuery(chart("bar", { groupBy: [month] })).groupBy).toEqual([month]);
+    expect(pivotQuery(viewConfig({ layout: "pivot", dateField: "effectiveDate" })).pivot).toMatchObject({ rows: { field: "categoryId" }, cols: { field: "entityId" } });
+  });
+
   it("pages the board by its column key and the calendar by day over counted rows", () => {
     expect(boardQuery(viewConfig({ layout: "board" }))).toMatchObject({ groupBy: [{ field: "categoryId" }], includeRows: true });
     expect(boardQuery(viewConfig({ layout: "board", groupBy: [{ field: "accountId" }] })).groupBy).toEqual([{ field: "accountId" }]);
@@ -69,5 +82,6 @@ describe("view queries", () => {
   it("lists the buckets of the period for the bucket filters, without totals", () => {
     const q = bucketOptionsQuery(viewConfig({ filters: [{ field: "flowKind", op: "in", values: ["out"] }] }), "month");
     expect(q).toMatchObject({ filters: [], skipTotals: true, includeRows: false, groupBy: [{ field: "date", bucket: "month" }] });
+    expect(bucketOptionsQuery(viewConfig({ dateField: "effectiveDate" }), "quarter").groupBy).toEqual([{ field: "effectiveDate", bucket: "quarter" }]);
   });
 });

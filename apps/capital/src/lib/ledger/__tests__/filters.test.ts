@@ -53,4 +53,12 @@ describe("filter chips", () => {
     expect(chipText(["PF", "Kodama LTDA"])).toEqual({ kind: "values", values: ["PF", "Kodama LTDA"] });
     expect(chipText(["a", "b", "c"])).toEqual({ kind: "count", count: 3 });
   });
+
+  it("puts date-bucket chips on the view's date field and keeps the date of a drilled one", () => {
+    expect(buildFilter("date:month", ["2026-09"], "effectiveDate")).toEqual({ field: "effectiveDate", op: "inBuckets", bucket: "month", values: ["2026-09"] });
+    const drilled: LedgerFilter[] = [{ field: "effectiveDate", op: "inBuckets", bucket: "quarter", values: ["2026-Q3"] }];
+    expect(filterProp(drilled[0]!)).toBe("date:quarter");
+    expect(setChipValues(drilled, "date:quarter", ["2026-Q3", "2026-Q2"])).toEqual([{ field: "effectiveDate", op: "inBuckets", bucket: "quarter", values: ["2026-Q3", "2026-Q2"] }]);
+    expect(setChipValues([], "date:year", ["2026"], "effectiveDate")).toEqual([{ field: "effectiveDate", op: "inBuckets", bucket: "year", values: ["2026"] }]);
+  });
 });

@@ -29,22 +29,41 @@ export function viewSelection(config: ViewConfig, search?: string | null): Ledge
   return { period: config.period, dateField: config.dateField, filters: config.filters, ...(q ? { search: q } : {}), deleted: "exclude" };
 }
 
+/**
+ * A group key on the view's date field: the selects store date buckets as
+ * "date" (Data (mês)…), and a view set to "Data de competência"
+ * (effectiveDate) buckets on that date instead, like its period. Card
+ * purchases then land in the statement's month in a pivot or a chart,
+ * and a drill filters the same date.
+ */
+export function onDateField<K extends GroupKey | null | undefined>(key: K, dateField: ViewConfig["dateField"] | undefined): K {
+  if (!key || !("bucket" in key) || !dateField || key.field === dateField) return key;
+  return { ...key, field: dateField } as K;
+}
+
+/** The view's groupBy with date buckets on its date field (see onDateField). */
+export function viewGroupBy(config: Pick<ViewConfig, "groupBy"> & Partial<Pick<ViewConfig, "dateField">>): GroupKey[] {
+  return config.groupBy.map((key) => onDateField(key, config.dateField));
+}
+
 /** Pivot axes: Linhas (default Categoria) × Colunas (default Entidade). */
-export function pivotKeys(config: Pick<ViewConfig, "groupBy">): { rows: GroupKey; cols: GroupKey } {
-  return { rows: config.groupBy[0] ?? CATEGORY, cols: config.groupBy[1] ?? ENTITY };
+export function pivotKeys(config: Pick<ViewConfig, "groupBy"> & Partial<Pick<ViewConfig, "dateField">>): { rows: GroupKey; cols: GroupKey } {
+  const groupBy = viewGroupBy(config);
+  return { rows: groupBy[0] ?? CATEGORY, cols: groupBy[1] ?? ENTITY };
 }
 
 /** Chart axis (Eixo; Data (dia) for line/area, Categoria otherwise) and series (Séries, only for series types). */
-export function chartKeys(config: Pick<ViewConfig, "groupBy" | "chart">): { axis: GroupKey; series: GroupKey | null } {
+export function chartKeys(config: Pick<ViewConfig, "groupBy" | "chart"> & Partial<Pick<ViewConfig, "dateField">>): { axis: GroupKey; series: GroupKey | null } {
   const type = config.chart.type;
-  const axis = config.groupBy[0] ?? (type === "line" || type === "area" ? DAY : CATEGORY);
-  const series = SERIES_TYPES.includes(type) ? (config.groupBy[1] ?? null) : null;
+  const groupBy = viewGroupBy(config);
+  const axis = groupBy[0] ?? onDateField(type === "line" || type === "area" ? DAY : CATEGORY, config.dateField);
+  const series = SERIES_TYPES.includes(type) ? (groupBy[1] ?? null) : null;
   return { axis, series };
 }
 
 /** Board columns (Colunas; default Categoria). */
-export function boardKey(config: Pick<ViewConfig, "groupBy">): GroupKey {
-  return config.groupBy[0] ?? CATEGORY;
+export function boardKey(config: Pick<ViewConfig, "groupBy"> & Partial<Pick<ViewConfig, "dateField">>): GroupKey {
+  return viewGroupBy(config)[0] ?? CATEGORY;
 }
 
 /** Table query (paged by the caller's cursor): groups, calcs, KPI summary, rows in group order. */
@@ -52,7 +71,7 @@ export function tableQuery(config: ViewConfig, search?: string | null): LedgerQu
   return {
     ...viewSelection(config, search),
     semantics: "display",
-    groupBy: config.groupBy.slice(0, 2),
+    groupBy: viewGroupBy(config).slice(0, 2),
     aggregations: tableAggregations(config),
     sort: config.sort,
     includeRows: true,
@@ -160,7 +179,7 @@ export function bucketOptionsQuery(config: ViewConfig, bucket: "monthWeek" | "mo
     filters: [],
     deleted: "exclude",
     semantics: "display",
-    groupBy: [{ field: "date", bucket }],
+    groupBy: [{ field: config.dateField, bucket }],
     aggregations: [COUNT_AGG],
     includeRows: false,
     skipTotals: true,

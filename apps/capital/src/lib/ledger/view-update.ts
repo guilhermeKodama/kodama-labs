@@ -25,6 +25,17 @@ export interface ViewUpdatePlan {
 
 const orNull = (draft: ViewDraft): ViewDraft | null => (Object.keys(draft).length ? draft : null);
 
+/**
+ * A change made inside a drill keeps its banner: the next draft still
+ * says what was opened ("Detalhe: …") and "voltar à view" still returns
+ * to the draft before the drill. The banner goes once nothing is left
+ * in the draft (the change brought the view back to its saved config).
+ */
+function keepBanner(next: ViewDraft | null, previous: ViewDraft | null): ViewDraft | null {
+  if (!next || !previous?.label) return next;
+  return { ...next, label: previous.label, ...(previous.back ? { back: previous.back } : {}) };
+}
+
 export function planViewUpdate(input: { saved: ViewConfig; draft: ViewDraft | null; isBuiltin: boolean; patch: Partial<ViewConfig> }): ViewUpdatePlan {
   const { saved, draft, isBuiltin, patch } = input;
   const next: ViewConfig = { ...applyViewDraft(saved, draft), ...patch };
@@ -32,8 +43,8 @@ export function planViewUpdate(input: { saved: ViewConfig; draft: ViewDraft | nu
     const kept: Partial<ViewConfig> = {};
     for (const key of BUILTIN_SAVED_KEYS) if (key in patch) Object.assign(kept, { [key]: patch[key] });
     const savedNext: ViewConfig = { ...saved, ...kept };
-    return { save: Object.keys(kept).length ? savedNext : null, draft: orNull(diffViewConfig(savedNext, next)) };
+    return { save: Object.keys(kept).length ? savedNext : null, draft: keepBanner(orNull(diffViewConfig(savedNext, next)), draft) };
   }
-  if (isDirty(saved, draft)) return { save: null, draft: orNull(diffViewConfig(saved, next)) };
+  if (isDirty(saved, draft)) return { save: null, draft: keepBanner(orNull(diffViewConfig(saved, next)), draft) };
   return { save: next, draft: null };
 }

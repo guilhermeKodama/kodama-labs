@@ -27,6 +27,21 @@ describe("where a view change goes", () => {
     expect(planViewUpdate({ saved, draft: { filters: outflows }, isBuiltin: true, patch: { filters: [] } }).draft).toBeNull();
   });
 
+  it("keeps a drill's banner and its way back while the drilled table changes", () => {
+    const saved = viewConfig({ layout: "pivot" });
+    const back = { filters: [{ field: "entityId" as const, op: "in" as const, values: ["e1"] }] };
+    const draft = { layout: "table" as const, filters: outflows, label: "Saídas · set/2026", back };
+    const sorted = planViewUpdate({ saved, draft, isBuiltin: false, patch: { sort: [{ field: "absAmountBase", dir: "desc" }] } });
+    expect(sorted.draft).toMatchObject({ label: "Saídas · set/2026", back, sort: [{ field: "absAmountBase", dir: "desc" }] });
+    // On Todas too, while something is left in the draft.
+    const todas = planViewUpdate({ saved, draft, isBuiltin: true, patch: { filters: [...outflows, { field: "categoryId", op: "in", values: ["c1"] }] } });
+    expect(todas.draft).toMatchObject({ label: "Saídas · set/2026", back });
+    // Back to the saved config: no draft, no banner.
+    expect(planViewUpdate({ saved, draft, isBuiltin: false, patch: { layout: "pivot", filters: [] } }).draft).toBeNull();
+    // A draft that is not a drill gets no banner.
+    expect(planViewUpdate({ saved, draft: { layout: "table" }, isBuiltin: false, patch: { filters: outflows } }).draft).not.toHaveProperty("label");
+  });
+
   it("keeps changes in the draft while a view shows a drill, and saves nothing", () => {
     const saved = viewConfig({ layout: "pivot" });
     const draft = { layout: "table" as const, filters: outflows };

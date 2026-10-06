@@ -121,7 +121,7 @@ export function FilterChips({ config, names, labels, onChange }: { config: ViewC
       <span key={key} className={cn("inline-flex h-6 shrink-0 items-center overflow-hidden rounded-[6px] border border-stroke-2 text-[12px]", open ? "bg-fill-2" : "bg-fill-4")}>
         {prop ? (
           <Popover open={open} onOpenChange={(next) => (next ? setEditing(prop) : close())} width={260} trigger={label}>
-            <ChipEditor prop={prop} config={config} names={names} labels={labels} values={valuesOf(prop)} onValues={(values) => onChange(setChipValues(filters, prop, values))} />
+            <ChipEditor prop={prop} config={config} names={names} labels={labels} values={valuesOf(prop)} onValues={(values) => onChange(setChipValues(filters, prop, values, config.dateField))} />
             <div className="flex gap-1.5">
               <Btn primary onClick={close}>
                 {t("done")}
