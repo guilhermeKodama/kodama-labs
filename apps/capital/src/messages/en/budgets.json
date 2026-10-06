@@ -18,8 +18,8 @@
   "scope": {
     "label": "Scope",
     "all": "All",
-    "pf": "PF",
-    "pj": "PJ"
+    "pf": "Personal",
+    "pj": "Business"
   },
   "loadError": "Could not load.",
   "uncategorized": "Uncategorized",

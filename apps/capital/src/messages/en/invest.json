@@ -33,7 +33,7 @@
   },
   "opType": {
     "buy": "Buy",
-    "sell": "Sale",
+    "sell": "Sell",
     "dividend": "Dividend",
     "yield_payment": "Yield",
     "split": "Split",
@@ -217,10 +217,10 @@
   },
   "op": {
     "title": "New operation",
-    "desc": "Buy, sale, income or a broker cash movement.",
+    "desc": "Buy, sell, income or a broker cash movement.",
     "kind": {
       "buy": "Buy",
-      "sell": "Sale",
+      "sell": "Sell",
       "income": "Income",
       "deposit": "Deposit",
       "withdraw": "Withdrawal"

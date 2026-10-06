@@ -32,6 +32,8 @@ export type AssistantPhase = "idle" | "sending" | "streaming";
  */
 export const TURN_LIMIT_CODE: TurnLimitCode = "TURN_LIMIT";
 
+/** The 409 of POST …/retry when the conversation has no failed turn to run again. */
+const NOTHING_TO_RETRY_CODE = "assistant.nothing_to_retry";
 
 /**
  * What "Tentar de novo" does: `rerun` runs the failed turn again on the
@@ -316,6 +318,8 @@ export function isBusy(state: AssistantState): boolean {
 export function retryKind(state: AssistantState): RetryKind | null {
   if (!state.error || isBusy(state)) return null;
   if (state.error.kind === "turn") return state.error.retryable && state.conversationId ? "rerun" : null;
+  // No failed turn left on the server (answered since, or it failed before saving the message): another re-run would only repeat the 409.
+  if (state.error.code === NOTHING_TO_RETRY_CODE) return null;
   if (state.lastRequest === "rerun") return state.conversationId ? "rerun" : null;
   return state.lastInput ? "resend" : null;
 }

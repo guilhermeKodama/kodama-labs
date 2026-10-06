@@ -128,6 +128,17 @@ describe("assistantReducer: Tentar de novo after a server-side turn error", () =
     expect(userBubbles(state)).toHaveLength(1);
   });
 
+  it("a re-run the server refuses (nothing left to retry) is not offered again", () => {
+    const state = run([
+      ...failedTurn,
+      { type: "rerun" },
+      { type: "failed", error: { kind: "request", status: 409, code: "assistant.nothing_to_retry", params: {} } },
+    ]);
+    expect(state.error).toMatchObject({ code: "assistant.nothing_to_retry" });
+    expect(retryKind(state)).toBeNull();
+    expect(canRetry(state)).toBe(false);
+  });
+
   it("a request that never reached the server is resent", () => {
     const state = run([conversation, send("oi"), { type: "failed", error: { kind: "request", status: 0, code: "network", params: {} } }]);
     expect(retryKind(state)).toBe("resend");
