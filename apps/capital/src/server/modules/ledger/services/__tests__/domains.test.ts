@@ -4,8 +4,8 @@ import { createLedgerFixture, deleteLedgerFixture, type LedgerFixture } from "@/
 import { createBudget, updateBudget } from "@capital/server/modules/budgets/services/budget-crud";
 import { monthOverview, yearOverview } from "@capital/server/modules/budgets/services/budget-overview";
 import { createRecurringRule, markRulePaid, processDueRules, skipRuleOccurrence } from "@capital/server/modules/recurring/services/recurring-rules";
+import { contributions } from "@capital/server/modules/investments/services/contributions";
 import {
-  contributions,
   createHolding,
   deleteOperation,
   portfolioSummary,
@@ -162,11 +162,13 @@ describe("investments", () => {
     const buy = await recordOperation(USER, { holdingId: h.id, type: "buy", quantity: 100, pricePerUnit: 30, totalAmount: 3000, fees: 10, date: "2026-08-10", fundFromAccountId: f.pfChecking }, prisma);
     expect(buy.fundingGroupId).not.toBeNull();
     expect(buy.operation.fundingGroupId).toBe(buy.fundingGroupId);
-    await recordOperation(USER, { holdingId: h.id, type: "sell", quantity: 50, pricePerUnit: 35, totalAmount: 1750, date: "2026-08-20" }, prisma);
+    const sale = await recordOperation(USER, { holdingId: h.id, type: "sell", quantity: 50, pricePerUnit: 35, totalAmount: 1750, date: "2026-08-20" }, prisma);
 
     const holding = await prisma.investmentHolding.findUniqueOrThrow({ where: { id: h.id } });
     expect(holding.currentQuantity).toBe(50);
-    expect(holding.averageCost).toBeCloseTo(30, 5);
+    // Fees are part of the cost; the sale takes half of the cost basis out.
+    expect(holding.averageCost).toBeCloseTo(30.1, 5);
+    expect(holding.totalInvested).toBeCloseTo(1505, 5);
 
     const balances = await accountBalances(USER, prisma, [f.broker, f.pfChecking]);
     expect(balances.get(f.broker)).toBeCloseTo(1750, 2);
@@ -175,13 +177,16 @@ describe("investments", () => {
     const summary = await portfolioSummary(USER, prisma);
     expect(summary).toMatchObject({ marketValue: 2000, cash: 1750, netWorth: 3750 });
 
-    const c = await contributions(USER, 2026, prisma);
+    const c = await contributions(USER, prisma, { year: 2026 });
     expect(c.months[7]).toMatchObject({ deposits: 3010, net: 3010 });
 
-    // The cash leg goes to the trash, so it no longer counts in the broker's balance.
+    // The buy cannot go while the sale depends on it; once the sale is gone, its cash leg goes to the trash
+    // and no longer counts in the broker's balance.
+    await expect(deleteOperation(USER, buy.operation.id, prisma)).rejects.toMatchObject({ status: 422, code: "holding.oversell" });
+    await deleteOperation(USER, sale.operation.id, prisma);
     await deleteOperation(USER, buy.operation.id, prisma);
     expect(await prisma.ledgerEntry.count({ where: { id: buy.cashEntryId!, deletedAt: null } })).toBe(0);
-    expect((await accountBalances(USER, prisma, [f.broker])).get(f.broker)).toBeCloseTo(4760, 2);
+    expect((await accountBalances(USER, prisma, [f.broker])).get(f.broker)).toBeCloseTo(3010, 2);
   });
 
   it("suggests where to put new money without selling", async () => {
@@ -204,7 +209,7 @@ describe("investments", () => {
     const bdr = await createHolding(USER, { accountId: f.broker, assetClass: "bdr", ticker: "AAPL34", name: "Apple", currentPrice: 1 }, prisma);
     const fund = await createHolding(USER, { accountId: f.broker, assetClass: "savings", name: "Caixinha", allocationClass: "cash", currentPrice: 1 }, prisma);
     for (const [h, qty] of [[usEtf, 100], [brEtf, 200], [bdr, 300], [fund, 400]] as const) {
-      await recordOperation(USER, { holdingId: h.id, type: "buy", quantity: qty, pricePerUnit: 1, totalAmount: qty, date: "2026-08-01" }, prisma);
+      await recordOperation(USER, { holdingId: h.id, type: "buy", quantity: qty, pricePerUnit: 1, totalAmount: qty, date: "2026-08-01", fundFromAccountId: f.pfChecking }, prisma);
     }
     const summary = await portfolioSummary(USER, prisma);
     // No USD rate in the fixture, so USD converts at 1.
@@ -219,7 +224,7 @@ describe("investments", () => {
     await recordOperation(USER, { holdingId: voo.id, type: "buy", quantity: 1, pricePerUnit: 100, totalAmount: 100, date: "2026-08-03" }, prisma);
     await recordOperation(USER, { holdingId: bova.id, type: "buy", quantity: 10, pricePerUnit: 30, totalAmount: 300, date: "2026-08-04" }, prisma);
     await recordOperation(USER, { holdingId: petr.id, type: "buy", quantity: 10, pricePerUnit: 40, totalAmount: 400, date: "2026-08-05" }, prisma);
-    const c = await contributions(USER, 2026, prisma);
+    const c = await contributions(USER, prisma, { year: 2026 });
     // 1 BRL = 0.2 USD, so the USD 100 buy counts as BRL 500.
     expect(c.months[7].byAssetClass).toEqual({ etf: 800, stocks: 400 });
     expect(c.months[7].byAllocationClass).toEqual({ international: 500, br_stocks: 700 });

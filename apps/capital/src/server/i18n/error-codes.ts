@@ -123,7 +123,14 @@ export const ERROR_CODES = {
   // Investments
   "holding.not_found": "Holding not found",
   "holding.requires_brokerage": "Holdings live on brokerage accounts",
+  "holding.oversell": "The sale is larger than the position",
   "operation.not_found": "Investment operation not found",
+  "operation.income_only": "Only income operations can have an income type, tax withheld or a credit account",
+  "operation.tax_exceeds_amount": "The tax withheld cannot exceed the gross amount",
+  "operation.credit_account_invalid": "Income can only be credited to a checking or cash account",
+  "aporte.broker_required": "A contribution (aporte) goes to a brokerage account",
+  "aporte.source_invalid": "The money of a contribution comes from a checking or cash account",
+  "aporte.holding_mismatch": "The asset bought is not on the contribution's broker",
   "brokerage.insufficient_cash": "Insufficient cash balance in the investment account",
   "portfolio.targets_sum": "The targets must add up to 100%",
   "rebalance.invalid_amount": "The amount must be positive",
@@ -176,6 +183,7 @@ export const ERROR_CODES = {
 
   // FIRE (v1)
   "fire.no_plan": "Set up the FIRE plan first",
+  "fire.goal_incomplete": "A new FIRE plan needs the income target, withdrawal rate, expected return, inflation, planning mode and contribution phases",
 } as const;
 
 export type ErrorCode = keyof typeof ERROR_CODES;

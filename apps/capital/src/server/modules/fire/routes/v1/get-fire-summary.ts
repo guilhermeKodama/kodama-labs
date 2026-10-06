@@ -1,4 +1,4 @@
-import { createRoute } from "@hono/zod-openapi";
+import { createRoute, z } from "@hono/zod-openapi";
 import { OK, UNAUTHORIZED, INTERNAL_SERVER_ERROR } from "stoker/http-status-codes";
 import { jsonContent } from "stoker/openapi/helpers";
 
@@ -16,7 +16,8 @@ export const route = createRoute({
   tags: [...routeConfig.v1.fireTags],
   summary: "Get FIRE summary",
   description:
-    "Current FIRE state, the income-target vs. real-expenses gap, the prescribed plan, projection, scenarios, comparison tiers, coast status and history.",
+    "Current FIRE state, the income-target vs. real-expenses gap, the prescribed plan, this month's planned contribution, projection, scenarios, comparison tiers, coast status and history. altContribution adds the FIRE date at that monthly contribution (altProjection).",
+  request: { query: z.object({ altContribution: z.coerce.number().nonnegative().optional() }) },
   responses: {
     [OK]: jsonContent(FireSummaryResponseSchema, "FIRE summary"),
     [UNAUTHORIZED]: jsonContent(ApiErrorSchema, "Not authenticated"),
@@ -26,6 +27,7 @@ export const route = createRoute({
 
 export const handler: AppRouteHandler<typeof route> = async (c) => {
   const userId = requireUserId(c);
-  const summary = await getFireSummary(userId, prisma);
+  const { altContribution } = c.req.valid("query");
+  const summary = await getFireSummary(userId, prisma, { altContribution });
   return c.json(summary, OK);
 };

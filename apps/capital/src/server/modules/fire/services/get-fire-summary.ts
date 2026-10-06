@@ -8,6 +8,8 @@ import {
   computeFireResult,
   computeScenarios,
   computeTiers,
+  contributionAtMonth,
+  monthsToFirePhased,
   buildPhaseShape,
   phasesToShape,
   resolvePhases,
@@ -44,11 +46,16 @@ import { finite, serializeDate, serializeGoal, serializeSnapshot } from "./seria
  * scenarios, comparison tiers, coast status and historical snapshots.
  *
  * Also lazily records this month's snapshot (or refreshes it when `forceSnapshot`).
+ *
+ * `currentMonthContribution` is what the plan asks for this month (the
+ * phase active now; the prescribed one when planning by date).
+ * `altContribution` adds `altProjection`: when FIRE is reached contributing
+ * that amount every month instead ("Com R$ X/mês: data").
  */
 export async function getFireSummary(
   userId: string,
   db: DbClient,
-  opts: { forceSnapshot?: boolean } = {}
+  opts: { forceSnapshot?: boolean; altContribution?: number } = {}
 ): Promise<FireSummaryResponse> {
   const inputs = await fetchFireInputs(userId, db, { trailingMonths: TRAILING_MONTHS });
   const now = getUserToday(inputs.timezone);
@@ -104,6 +111,8 @@ export async function getFireSummary(
       tiers: [],
       coast: null,
       history: [],
+      currentMonthContribution: null,
+      altProjection: null,
     };
   }
 
@@ -246,6 +255,22 @@ export async function getFireSummary(
       ? computeCoastFire(assumptions, monthsUntilYear(coastYear, now))
       : null;
 
+  const currentMonthContribution = contributionAtMonth(effectivePhases, 0);
+  let altProjection: FireSummaryResponse["altProjection"] = null;
+  if (opts.altContribution !== undefined) {
+    const altMonths = monthsToFirePhased(
+      currentInvested,
+      [{ fromMonth: 0, toMonth: null, monthlyContribution: opts.altContribution }],
+      monthlyRealReturn,
+      fireNumber
+    );
+    altProjection = {
+      monthlyContribution: opts.altContribution,
+      monthsToFire: finite(altMonths),
+      projectedFireDate: serializeDate(projectFireDate(now, altMonths)),
+    };
+  }
+
   // Lazy (or forced) monthly snapshot.
   const period = now.getFullYear() * 100 + (now.getMonth() + 1);
   await recordFireSnapshot(
@@ -309,5 +334,7 @@ export async function getFireSummary(
     })),
     coast,
     history: snapshots.map(serializeSnapshot),
+    currentMonthContribution,
+    altProjection,
   };
 }

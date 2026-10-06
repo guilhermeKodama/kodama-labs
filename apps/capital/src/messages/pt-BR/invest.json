@@ -1,1 +1,424 @@
-{}
+{
+  "crumbs": {
+    "investments": "Investimentos",
+    "portfolio": "Carteira",
+    "contributions": "Aportes"
+  },
+  "loading": "Carregando…",
+  "monthShort": "{month}/{year}",
+  "compact": {
+    "bi": "{symbol} {value} bi",
+    "mi": "{symbol} {value} mi",
+    "mil": "{symbol} {value} mil",
+    "none": "{symbol} {value}"
+  },
+  "allocationClass": {
+    "fixed_income": "Renda fixa",
+    "br_stocks": "Ações BR",
+    "fii": "FIIs",
+    "international": "Internacional",
+    "crypto": "Cripto",
+    "cash": "Caixa"
+  },
+  "assetClass": {
+    "stocks": "Ações",
+    "fii": "FIIs",
+    "etf": "ETFs",
+    "bdr": "BDRs",
+    "fixed_income": "Renda fixa",
+    "crypto": "Cripto",
+    "savings": "Poupança",
+    "international_stocks": "Ações internacionais",
+    "international_etf": "ETFs internacionais"
+  },
+  "opType": {
+    "buy": "Compra",
+    "sell": "Venda",
+    "dividend": "Dividendo",
+    "yield_payment": "Rendimento",
+    "split": "Desdobramento",
+    "deposit": "Aplicação",
+    "withdrawal": "Resgate",
+    "adjustment": "Ajuste"
+  },
+  "incomeType": {
+    "dividend": "Dividendo",
+    "jcp": "JCP",
+    "fii_income": "Rendimento FII",
+    "interest": "Juros (renda fixa)"
+  },
+  "scope": {
+    "all": "Consolidado",
+    "pf": "PF",
+    "pj": "PJ"
+  },
+  "scopeCaption": {
+    "all": "consolidado",
+    "pf": "PF",
+    "pj": "PJ"
+  },
+  "portfolio": {
+    "refreshPrices": "Atualizar cotações",
+    "refreshing": "Atualizando…",
+    "refreshed": "{updated} de {total} cotações atualizadas",
+    "refreshedMissing": "{updated} de {total} cotações atualizadas · sem cotação: {tickers}",
+    "importNote": "Importar nota",
+    "importNotePrompt": "Importe esta nota de corretagem na minha carteira.",
+    "newOperation": "+ Operação",
+    "quotesToday": "Cotações de hoje {time}",
+    "quotesOn": "Cotações de {date} {time}",
+    "noQuotes": "Sem cotações automáticas ainda",
+    "fxRate": "{currency} {rate}",
+    "kpi": {
+      "netWorth": "Patrimônio",
+      "contributed": "Total aportado",
+      "result": "Resultado",
+      "income12m": "Proventos 12m",
+      "incomeSub": "dividendos + juros",
+      "return12m": "Rentab. 12m",
+      "benchmarks": "CDI {cdi} · IPCA+ 6% {ipca}",
+      "returnPending": "sem meses fechados ainda"
+    },
+    "history": {
+      "title": "Patrimônio vs total aportado",
+      "netWorth": "Patrimônio",
+      "contributed": "Aportado",
+      "caption": "Mês × {unit} · {range} · {scope}",
+      "empty": "O histórico aparece a partir do segundo mês com posições."
+    },
+    "allocation": {
+      "title": "Alocação atual vs alvo",
+      "legend": "Barra = atual · traço = alvo · pp = diferença para o alvo",
+      "empty": "Sem posições. Registre uma operação para começar."
+    },
+    "tabs": {
+      "byClass": "Por classe",
+      "byBroker": "Por corretora",
+      "byEntity": "Por entidade",
+      "list": "Lista",
+      "income12m": "Proventos 12m",
+      "operations": "Operações",
+      "addView": "Nova view",
+      "newHoldingsView": "Nova view de posições",
+      "newOpsView": "Nova view de operações",
+      "newViewName": "Nova view",
+      "filter": "+ Filtro",
+      "display": "Exibição"
+    },
+    "filter": {
+      "field": {
+        "allocationClass": "Classe",
+        "accountId": "Corretora",
+        "entityId": "Entidade",
+        "type": "Tipo"
+      },
+      "chip": "{field}: {values}",
+      "chipNot": "{field} não é {values}",
+      "remove": "Remover filtro",
+      "clear": "Limpar filtros"
+    },
+    "display": {
+      "name": "Nome da view",
+      "groupBy": "Agrupar por",
+      "group": {
+        "allocationClass": "Classe",
+        "accountId": "Corretora",
+        "entityId": "Entidade",
+        "none": "Nenhum"
+      },
+      "sortBy": "Ordenar por",
+      "direction": "Direção",
+      "sort": {
+        "marketValue": "Valor",
+        "invested": "Aportado",
+        "result": "Resultado",
+        "share": "% cart.",
+        "ticker": "Ativo"
+      },
+      "columns": "Colunas",
+      "layout": "Layout",
+      "layoutTable": "Tabela",
+      "layoutChart": "Gráfico",
+      "period": "Período",
+      "periods": {
+        "last_12m": "Últimos 12 meses",
+        "ytd": "Este ano",
+        "last_3m": "Últimos 3 meses",
+        "this_month": "Este mês",
+        "last_month": "Mês passado",
+        "all": "Tudo"
+      },
+      "series": "Séries",
+      "seriesTotal": "Total",
+      "seriesClass": "Por classe",
+      "delete": "Excluir view",
+      "deleted": "View “{name}” excluída"
+    },
+    "columns": {
+      "ticker": "Ativo",
+      "allocationClass": "Classe",
+      "accountId": "Corretora",
+      "entityId": "Entidade",
+      "marketValue": "Valor",
+      "share": "% cart.",
+      "result": "Result."
+    },
+    "target": "alvo {pct}",
+    "cashTicker": "CAIXA",
+    "cashName": "Saldo em corretoras",
+    "severalBrokers": "Várias",
+    "severalEntities": "Várias",
+    "emptyHoldings": "Nenhuma posição neste recorte.",
+    "ops": {
+      "columns": {
+        "date": "Data",
+        "asset": "Ativo",
+        "type": "Tipo",
+        "quantity": "Qtd.",
+        "amount": "Valor"
+      },
+      "actions": "Ações",
+      "edit": "Editar",
+      "delete": "Excluir",
+      "deleted": "{label} excluída",
+      "empty": "Nenhuma operação registrada.",
+      "emptyIncome": "Nenhum provento no período.",
+      "total": "Total",
+      "totalValue": "Total {amount}",
+      "chartCaption": "Mês × {unit} · {range}"
+    }
+  },
+  "sheet": {
+    "class": "Classe",
+    "broker": "Corretora",
+    "entity": "Entidade",
+    "quantity": "Quantidade",
+    "avgCost": "Preço médio",
+    "invested": "Investido",
+    "result": "Resultado",
+    "priceAt": "Cotação em",
+    "price": "Cotação atual",
+    "update": "Atualizar",
+    "adjust": "Ajustar",
+    "adjustNote": "Ajuste manual",
+    "operations": "Operações",
+    "noOps": "Nenhuma operação.",
+    "newOp": "+ Operação",
+    "deactivate": "Desativar",
+    "deactivated": "“{name}” desativado",
+    "priceSaved": "Cotação de {name} atualizada",
+    "adjusted": "Posição de {name} ajustada"
+  },
+  "targets": {
+    "title": "Alocação alvo",
+    "desc": "Percentual de cada classe na carteira. Precisa somar 100%.",
+    "sum": "Soma {sum}%",
+    "saved": "Alvos salvos"
+  },
+  "op": {
+    "title": "Nova operação",
+    "desc": "Compra, venda, provento ou movimentação de caixa da corretora.",
+    "kind": {
+      "buy": "Compra",
+      "sell": "Venda",
+      "income": "Provento",
+      "deposit": "Depósito",
+      "withdraw": "Resgate"
+    },
+    "submit": {
+      "buy": "Registrar compra",
+      "sell": "Registrar venda",
+      "income": "Registrar provento",
+      "deposit": "Registrar depósito",
+      "withdraw": "Registrar resgate"
+    },
+    "done": {
+      "buy": "Compra registrada",
+      "sell": "Venda registrada",
+      "income": "Provento registrado",
+      "deposit": "Depósito registrado",
+      "withdraw": "Resgate registrado"
+    },
+    "doneFunded": "{label} · transferência criada em Transações",
+    "asset": "Ativo",
+    "assetPlaceholder": "Ticker ou nome",
+    "searching": "Buscando…",
+    "noAssets": "Nenhum ativo encontrado",
+    "newAsset": "+ Novo ativo “{name}”",
+    "newAssetClass": "Classe do novo ativo",
+    "notHeld": "Este ativo não está na carteira desta corretora.",
+    "quantity": "Quantidade",
+    "price": "Preço",
+    "priceHint": "cotação {time}",
+    "fees": "Taxas",
+    "date": "Data",
+    "broker": "Corretora",
+    "noBrokers": "Nenhuma corretora",
+    "source": "Dinheiro sai de",
+    "sourceCash": "Saldo na corretora ({amount})",
+    "sourceAccount": "{account} (cria a transferência em Transações)",
+    "oversell": "mais que a posição ({quantity})",
+    "kpi": {
+      "buyTotal": "Total da compra",
+      "sellTotal": "Total da venda",
+      "position": "Posição",
+      "units": "cotas",
+      "avg": "Preço médio",
+      "gain": "Resultado estimado",
+      "avgSub": "PM {avg}",
+      "ir": "IR estimado",
+      "irExempt": "Isento"
+    },
+    "ir": {
+      "loss": "prejuízo compensável",
+      "stocksExempt": "vendas de ações < R$ 20 mil no mês",
+      "stocks": "15% · vendas de ações acima de R$ 20 mil no mês",
+      "etf": "15% · ETF não tem isenção",
+      "fii": "20% · FII não tem isenção",
+      "cryptoExempt": "vendas de cripto < R$ 35 mil no mês",
+      "crypto": "15% · vendas de cripto acima de R$ 35 mil no mês",
+      "foreign": "15% · ativo no exterior",
+      "withheld": "retido na fonte"
+    },
+    "income": {
+      "type": "Tipo",
+      "gross": "Valor bruto",
+      "tax": "IR retido",
+      "taxJcp": "15% retido na fonte",
+      "taxExempt": "isento",
+      "creditTo": "Creditar em",
+      "creditCash": "Saldo na corretora",
+      "creditAccount": "{account} (cria entrada em Transações)"
+    },
+    "cash": {
+      "amount": "Valor",
+      "amountIn": "Valor ({currency})",
+      "from": "De",
+      "to": "Para",
+      "depositNote": "Cria uma transferência do tipo “Aporte em investimento” que aparece em Transações e em Aportes.",
+      "withdrawNote": "Cria uma transferência do tipo “Resgate de investimento”."
+    }
+  },
+  "editOp": {
+    "title": "Editar operação",
+    "total": "Valor",
+    "notes": "Notas",
+    "saved": "Operação atualizada"
+  },
+  "contrib": {
+    "prev": "Período anterior",
+    "next": "Próximo período",
+    "register": "+ Registrar aporte",
+    "kpi": {
+      "month": "Aportado em {month}",
+      "goalFire": "Meta (plano FIRE): {amount}",
+      "noGoal": "Sem meta: defina o plano FIRE",
+      "avg": "Média 12m",
+      "total": "Total 12m",
+      "savings": "Taxa de poupança",
+      "savingsSub": "aportes / renda líquida PF"
+    },
+    "chart": {
+      "title": "Aportes por mês e classe",
+      "goal": "Meta",
+      "caption": "Mês × {unit} aportados · {range}",
+      "empty": "Nenhum aporte no período."
+    },
+    "where": {
+      "title": "Onde aportar este mês",
+      "amount": "Vou aportar {symbol}",
+      "byClass": "Por classe",
+      "byAsset": "Por ativo",
+      "headers": {
+        "class": "Classe",
+        "current": "Atual",
+        "target": "Alvo",
+        "put": "Aportar",
+        "after": "Depois",
+        "asset": "Ativo",
+        "broker": "Corretora",
+        "qty": "≈ Qtd"
+      },
+      "units": "{count, plural, one {# cota} other {# cotas}}",
+      "newAsset": "novo ativo",
+      "cashKeep": "caixa",
+      "caption": "Só dinheiro novo: nunca sugere vender. Prioriza as classes mais abaixo do alvo.",
+      "generate": "Gerar ordens",
+      "editTargets": "Editar alvos",
+      "noTargets": "Defina os alvos de alocação para ver a sugestão.",
+      "typeAmount": "Digite quanto vai aportar."
+    },
+    "history": {
+      "title": "Histórico de aportes",
+      "link": "· ver em Transações ↗",
+      "status": {
+        "ok": "na meta",
+        "above": "acima da meta",
+        "below": "abaixo da meta"
+      },
+      "empty": "Nenhum aporte no período."
+    },
+    "fire": {
+      "title": "Independência financeira",
+      "number": "Número FIRE",
+      "numberSub": "{income}/mês · SWR {swr}",
+      "progress": "Progresso",
+      "projection": "Projeção: {date} mantendo {amount}/mês.",
+      "alt": " Com {amount}/mês: {date}.",
+      "altUnreachable": " Com {amount}/mês: não atinge.",
+      "reached": "Meta atingida.",
+      "unreachable": "Com o aporte atual a meta não é atingida.",
+      "noPlan": "Sem plano FIRE. Hoje: {invested} investidos e {expenses}/mês de gastos.",
+      "edit": "Editar meta",
+      "define": "Definir meta"
+    }
+  },
+  "aporte": {
+    "title": "Registrar aporte",
+    "desc": "Vira uma transferência em Transações: sai da conta e entra no caixa da corretora.",
+    "from": "De (conta)",
+    "broker": "Corretora",
+    "noBrokers": "Nenhuma corretora",
+    "amount": "Valor",
+    "amountIn": "Valor ({currency})",
+    "toAmount": "Valor na corretora ({currency})",
+    "toAmountHint": "Vazio: convertido pela cotação de hoje",
+    "date": "Data",
+    "description": "Descrição (opcional)",
+    "descriptionPlaceholder": "Aporte mensal",
+    "crossEntity": "A conta é de {from} e a corretora é de {to}. O aporte também registra a transferência entre as entidades.",
+    "done": "Aporte registrado · transferência criada em Transações"
+  },
+  "orders": {
+    "title": "Gerar ordens",
+    "desc": "Registra de uma vez as compras sugeridas, pela cotação atual. Dá para desfazer.",
+    "asset": "Ativo",
+    "broker": "Corretora",
+    "quantity": "Qtd.",
+    "price": "Preço",
+    "amount": "Total",
+    "total": "Total",
+    "sourceCash": "Saldo na corretora",
+    "skipped": "{count, plural, one {# sugestão ficou de fora (novo ativo, caixa ou ativo sem cotação).} other {# sugestões ficaram de fora (novo ativo, caixa ou ativo sem cotação).}}",
+    "empty": "Nenhuma ordem para gerar: as classes sugeridas não têm ativos com cotação.",
+    "submit": "{count, plural, one {Registrar # ordem} other {Registrar # ordens}}",
+    "done": "{count, plural, one {# ordem registrada} other {# ordens registradas}}"
+  },
+  "fireGoal": {
+    "title": "Meta de independência financeira",
+    "desc": "Quanto você quer receber por mês dos investimentos e quanto aporta para chegar lá.",
+    "income": "Renda mensal desejada",
+    "contribution": "Aporte mensal",
+    "contributionHint": "Sugerido pelo histórico: {amount}",
+    "contributionPhased": "O plano define o aporte por fase; as fases ficam como estão.",
+    "ret": "Retorno nominal ao ano (%)",
+    "inflation": "Inflação ao ano (%)",
+    "swr": "Taxa de retirada (%)",
+    "swrHint": "3,5% é conservador",
+    "monthlyIncome": "Renda líquida mensal (opcional)",
+    "monthlyIncomeHint": "Usada nas projeções do plano",
+    "age": "Idade atual (opcional)",
+    "save": "Salvar meta",
+    "saved": "Meta salva"
+  }
+}

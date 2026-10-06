@@ -1,248 +1,627 @@
 "use client";
 
-import { useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { toast } from "sonner";
-import { api, apiPost, apiPut } from "@/lib/api/client";
-import type { Names } from "@/lib/api/catalog";
-import { ASSET_CLASS_LABEL, money, parseAmount, todayIso } from "@/lib/money";
-import { Btn, Field, Modal, Segmented, SelectInput, TextInput } from "@/components/shell/chrome";
-import { ASSET_CLASSES, OP_LABEL, type Holding } from "./types";
+import { useMemo, useState } from "react";
+import { useTranslations } from "next-intl";
+import { Btn, Callout, Dialog, DialogFooter, DialogHead, Field, Select, Sheet, Table, TextInput } from "@/components/cap";
+import { apiPatch, apiPost, apiPut } from "@/lib/api/client";
+import { useAccounts, useNames, type AccountRecord } from "@/lib/api/catalog";
+import { useSession } from "@/lib/api/session";
+import { useAppMutation } from "@/lib/api/use-app-mutation";
+import { useFmt } from "@/lib/format/provider";
+import { targetsPayload } from "@/lib/invest/allocation";
+import { useFxRates, useOperations, useTargets } from "@/lib/invest/api";
+import { ordersPayload, type OrderDraft } from "@/lib/invest/rebalance-view";
+import { ALLOCATION_CLASSES, type AllocationClass, type FireSummaryResponse, type Holding, type Operation } from "@/lib/invest/types";
+import { useShortcut } from "@/lib/shortcuts/provider";
+import { cn } from "@/lib/utils";
+import { MONO, todayIn } from "./common";
 
-function invalidatePortfolio(queryClient: ReturnType<typeof useQueryClient>) {
-  return Promise.all(
-    ["portfolio", "holdings", "operations", "ledger", "accounts", "contributions"].map((key) => queryClient.invalidateQueries({ queryKey: [key] })),
-  );
+const accountsOf = (accounts: readonly AccountRecord[], types: readonly AccountRecord["type"][]) => accounts.filter((a) => types.includes(a.type) && !a.archivedAt);
+
+/** Operation label for toasts and lists: "Dividendo ITUB4", "Compra BOVA11". */
+export function useOpLabel() {
+  const ti = useTranslations("invest");
+  return (op: Pick<Operation, "type" | "incomeType" | "ticker" | "name">) =>
+    `${op.incomeType && (op.type === "dividend" || op.type === "yield_payment") ? ti(`incomeType.${op.incomeType}`) : ti(`opType.${op.type}`)} ${op.ticker ?? op.name ?? ""}`.trim();
 }
 
-export function OperationDialog({ names, holdings, initialHoldingId, onClose }: { names: Names; holdings: Holding[]; initialHoldingId?: string; onClose: () => void }) {
-  const queryClient = useQueryClient();
-  const brokers = names.accounts.filter((a) => a.type === "brokerage" && !a.archivedAt);
-  const cashAccounts = names.accounts.filter((a) => a.type !== "brokerage" && a.type !== "credit_card" && !a.archivedAt);
-  const active = holdings.filter((h) => h.isActive);
-  const [mode, setMode] = useState<"existing" | "new">(active.length && initialHoldingId !== "new" ? "existing" : "new");
-  const [holdingId, setHoldingId] = useState(initialHoldingId && initialHoldingId !== "new" ? initialHoldingId : active[0]?.id ?? "");
-  const [brokerId, setBrokerId] = useState(brokers[0]?.id ?? "");
-  const [assetClass, setAssetClass] = useState<string>("stocks");
-  const [ticker, setTicker] = useState("");
-  const [name, setName] = useState("");
-  const [type, setType] = useState<"buy" | "sell" | "dividend" | "yield_payment">("buy");
-  const [date, setDate] = useState(todayIso());
-  const [quantity, setQuantity] = useState("");
-  const [price, setPrice] = useState("");
-  const [total, setTotal] = useState("");
-  const [fees, setFees] = useState("");
-  const [fundFrom, setFundFrom] = useState("");
-  const qty = parseAmount(quantity);
-  const unit = parseAmount(price);
-  const computed = Number.isFinite(qty) && Number.isFinite(unit) ? qty * unit : Number.NaN;
-  const totalValue = total ? parseAmount(total) : computed;
-  const holding = holdings.find((h) => h.id === holdingId);
-  const isIncome = type === "dividend" || type === "yield_payment";
+// ---------------------------------------------------------------------------
+// Holding detail
+// ---------------------------------------------------------------------------
 
-  const save = useMutation({
-    mutationFn: async () => {
-      if (!Number.isFinite(totalValue) || totalValue <= 0) throw new Error("Informe quantidade e preço, ou o total");
-      let id = holdingId;
-      if (mode === "new") {
-        if (!brokerId) throw new Error("Cadastre uma corretora em Ajustes › Contas");
-        if (!name.trim()) throw new Error("Dê um nome ao ativo");
-        const created = await apiPost<Holding>("/api/v2/holdings", { accountId: brokerId, assetClass, ticker: ticker.trim() || null, name: name.trim(), currentPrice: unit > 0 ? unit : null });
-        id = created.id;
-      }
-      if (!id) throw new Error("Escolha o ativo");
-      return apiPost("/api/v2/investment-operations", {
-        holdingId: id,
-        type,
-        date,
-        quantity: isIncome ? null : qty,
-        pricePerUnit: isIncome ? null : unit,
-        totalAmount: totalValue,
-        fees: fees ? parseAmount(fees) : undefined,
-        fundFromAccountId: type === "buy" && fundFrom ? fundFrom : null,
-      });
-    },
-    onSuccess: async () => {
-      await invalidatePortfolio(queryClient);
-      toast.success("Operação registrada");
-      onClose();
-    },
-    onError: (error: Error) => toast.error(error.message),
+export function HoldingSheet({ holding, onClose, onOperation }: { holding: Holding; onClose: () => void; onOperation: () => void }) {
+  const t = useTranslations("invest.sheet");
+  const ti = useTranslations("invest");
+  const fmt = useFmt();
+  const names = useNames();
+  const opLabel = useOpLabel();
+  const [price, setPrice] = useState(holding.currentPrice !== null ? fmt.number(holding.currentPrice, 2) : "");
+  const [qty, setQty] = useState(fmt.number(holding.currentQuantity, { min: 0, max: 8 }));
+  const [avg, setAvg] = useState(fmt.number(holding.averageCost, 2));
+  const ops = useOperations({ holdingId: holding.id });
+  const display = holding.ticker ?? holding.name;
+  const patch = useAppMutation({
+    event: "investments.write",
+    mutationFn: (body: Record<string, unknown>) => apiPatch<{ batchId?: string }>(`/api/v2/holdings/${holding.id}`, body),
+    undo: (_data, body) => ("isActive" in body ? t("deactivated", { name: display }) : t("priceSaved", { name: display })),
   });
-
+  const adjust = useAppMutation({
+    event: "investments.write",
+    mutationFn: () => apiPost<{ batchId?: string }>(`/api/v2/holdings/${holding.id}/adjust`, { currentQuantity: fmt.parseNumber(qty), averageCost: fmt.parseNumber(avg), notes: t("adjustNote") }),
+    undo: () => t("adjusted", { name: display }),
+  });
+  const money = (v: number) => fmt.money(v, holding.currency);
+  const details: [string, string][] = [
+    [t("class"), ti(`allocationClass.${holding.allocationClass}`)],
+    [t("broker"), holding.accountName],
+    [t("entity"), names.entity.get(holding.entityId) ?? "—"],
+    [t("quantity"), fmt.number(holding.currentQuantity, { min: 0, max: 8 })],
+    [t("avgCost"), money(holding.averageCost)],
+    [t("invested"), money(holding.totalInvested)],
+    [t("result"), `${money(holding.unrealizedGain)}${holding.unrealizedGainPercent !== null ? ` · ${fmt.pct(holding.unrealizedGainPercent)}` : ""}`],
+    [t("priceAt"), holding.lastPriceUpdate ? fmt.dateTime(holding.lastPriceUpdate) : "—"],
+  ];
   return (
-    <Modal
-      title="Nova operação"
-      description="Compra, venda ou provento. O caixa da corretora é atualizado junto."
-      onClose={onClose}
-      footer={
-        <>
-          <Btn ghost onClick={onClose}>Cancelar</Btn>
-          <Btn primary disabled={save.isPending} onClick={() => save.mutate()}>Registrar</Btn>
-        </>
-      }
-    >
-      <Segmented value={mode} options={[{ v: "existing", l: "Ativo da carteira" }, { v: "new", l: "Novo ativo" }]} onChange={setMode} />
-      {mode === "existing" ? (
-        <Field label="Ativo">
-          <SelectInput
-            value={holdingId}
-            onChange={setHoldingId}
-            options={active.map((h) => ({ value: h.id, label: `${h.ticker ? `${h.ticker} · ` : ""}${h.name} · ${h.accountName}` }))}
-          />
-        </Field>
-      ) : (
-        <div className="grid grid-cols-2 gap-2.5">
-          <Field label="Corretora">
-            <SelectInput value={brokerId} onChange={setBrokerId} placeholder={brokers.length ? undefined : "Nenhuma corretora"} options={brokers.map((b) => ({ value: b.id, label: `${b.name} · ${names.entity.get(b.entityId) ?? ""}` }))} />
-          </Field>
-          <Field label="Classe">
-            <SelectInput value={assetClass} onChange={setAssetClass} options={ASSET_CLASSES.map((c) => ({ value: c, label: ASSET_CLASS_LABEL[c] }))} />
-          </Field>
-          <Field label="Ticker (opcional)"><TextInput value={ticker} onChange={setTicker} placeholder="PETR4, BTC…" /></Field>
-          <Field label="Nome"><TextInput value={name} onChange={setName} placeholder="Petrobras PN" /></Field>
-        </div>
-      )}
-      <Segmented
-        value={type}
-        options={[{ v: "buy", l: "Compra" }, { v: "sell", l: "Venda" }, { v: "dividend", l: "Dividendo" }, { v: "yield_payment", l: "Rendimento" }]}
-        onChange={setType}
+    <Sheet open onOpenChange={(open) => !open && onClose()}>
+      <DialogHead
+        title={
+          <span className="flex min-w-0 items-baseline gap-2">
+            <span className={cn(MONO, "font-semibold")}>{holding.ticker ?? "—"}</span>
+            <span className="truncate font-normal">{holding.name}</span>
+          </span>
+        }
       />
-      <div className="grid grid-cols-3 gap-2.5">
-        <Field label="Data"><TextInput type="date" value={date} onChange={setDate} /></Field>
-        {!isIncome ? <Field label="Quantidade"><TextInput value={quantity} onChange={setQuantity} mono placeholder="10" /></Field> : null}
-        {!isIncome ? <Field label="Preço unitário"><TextInput value={price} onChange={setPrice} mono placeholder={holding?.currentPrice ? String(holding.currentPrice) : "0,00"} /></Field> : null}
-        <Field label="Total" hint={!isIncome && !total && Number.isFinite(computed) ? `= ${money(computed, holding?.currency ?? names.currency)}` : undefined}>
-          <TextInput value={total} onChange={setTotal} mono placeholder={Number.isFinite(computed) ? computed.toFixed(2) : "0,00"} />
-        </Field>
-        {!isIncome ? <Field label="Taxas"><TextInput value={fees} onChange={setFees} mono placeholder="0,00" /></Field> : null}
-      </div>
-      {type === "buy" ? (
-        <Field label="Pagar com (opcional)" hint="Transfere o valor da conta para a corretora antes da compra">
-          <SelectInput value={fundFrom} onChange={setFundFrom} placeholder="Caixa da corretora" options={cashAccounts.map((a) => ({ value: a.id, label: `${a.name} · ${names.entity.get(a.entityId) ?? ""}` }))} />
-        </Field>
-      ) : null}
-    </Modal>
-  );
-}
-
-export function TargetsDialog({ onClose }: { onClose: () => void }) {
-  const queryClient = useQueryClient();
-  const targets = useQuery({ queryKey: ["targets"], queryFn: async () => (await api<{ targets: { assetClass: string; targetPercent: number }[] }>("/api/v2/portfolio/targets")).targets });
-  const [values, setValues] = useState<Record<string, string> | null>(null);
-  const current = values ?? Object.fromEntries((targets.data ?? []).map((t) => [t.assetClass, String(Math.round(t.targetPercent * 1000) / 10)]));
-  const sum = ASSET_CLASSES.reduce((s, c) => s + (Number((current[c] ?? "").replace(",", ".")) || 0), 0);
-  const save = useMutation({
-    mutationFn: () =>
-      apiPut("/api/v2/portfolio/targets", {
-        targets: ASSET_CLASSES.map((c) => ({ assetClass: c, targetPercent: Number((current[c] ?? "").replace(",", ".")) || 0 })).filter((t) => t.targetPercent > 0),
-      }),
-    onSuccess: async () => {
-      await Promise.all([queryClient.invalidateQueries({ queryKey: ["targets"] }), queryClient.invalidateQueries({ queryKey: ["portfolio"] })]);
-      toast.success("Alvos salvos");
-      onClose();
-    },
-    onError: (error: Error) => toast.error(error.message),
-  });
-  return (
-    <Modal
-      title="Alocação alvo"
-      description="Percentual de cada classe na carteira. Precisa somar 100%."
-      onClose={onClose}
-      width={420}
-      footer={
-        <>
-          <span className={`mr-auto font-mono text-[12px] tabular-nums ${Math.abs(sum - 100) < 0.01 ? "text-pos" : "text-warn"}`}>Soma {sum.toLocaleString("pt-BR")}%</span>
-          <Btn ghost onClick={onClose}>Cancelar</Btn>
-          <Btn primary disabled={Math.abs(sum - 100) >= 0.01 || save.isPending} onClick={() => save.mutate()}>Salvar</Btn>
-        </>
-      }
-    >
-      {ASSET_CLASSES.map((c) => (
-        <div key={c} className="flex items-center gap-2 text-[12.5px]">
-          <span className="flex-1">{ASSET_CLASS_LABEL[c]}</span>
-          <TextInput value={current[c] ?? ""} onChange={(v) => setValues({ ...current, [c]: v })} mono className="w-20 text-right" placeholder="0" />
-          <span className="text-fg-3">%</span>
-        </div>
-      ))}
-    </Modal>
-  );
-}
-
-export function HoldingSheet({ holding, names, onClose, onOperation }: { holding: Holding; names: Names; onClose: () => void; onOperation: () => void }) {
-  const queryClient = useQueryClient();
-  const [price, setPrice] = useState(holding.currentPrice != null ? String(holding.currentPrice) : "");
-  const [qty, setQty] = useState(String(holding.currentQuantity));
-  const [avg, setAvg] = useState(String(holding.averageCost));
-  const ops = useQuery({
-    queryKey: ["operations", "holding", holding.id],
-    queryFn: async () => (await api<{ operations: { id: string; type: string; date: string; quantity: number | null; totalAmount: number }[] }>(`/api/v2/investment-operations?holdingId=${holding.id}`)).operations,
-  });
-  const patch = useMutation({
-    mutationFn: (body: Record<string, unknown>) => api(`/api/v2/holdings/${holding.id}`, { method: "PATCH", body: JSON.stringify(body) }),
-    onSuccess: async () => {
-      await invalidatePortfolio(queryClient);
-      toast.success("Ativo atualizado");
-    },
-    onError: (error: Error) => toast.error(error.message),
-  });
-  const adjust = useMutation({
-    mutationFn: () => apiPost(`/api/v2/holdings/${holding.id}/adjust`, { currentQuantity: parseAmount(qty), averageCost: parseAmount(avg), notes: "Ajuste manual" }),
-    onSuccess: async () => {
-      await invalidatePortfolio(queryClient);
-      toast.success("Posição ajustada");
-    },
-    onError: (error: Error) => toast.error(error.message),
-  });
-  return (
-    <aside className="absolute top-0 right-0 bottom-0 z-30 flex w-[340px] flex-col gap-3.5 overflow-y-auto border-l border-stroke-1 bg-editor p-4 shadow-[-8px_0_24px_-12px_rgba(0,0,0,0.12)]">
-      <div className="flex items-center gap-2">
-        <span className="font-mono text-[13px] font-semibold">{holding.ticker ?? "—"}</span>
-        <span className="truncate text-[13px]">{holding.name}</span>
-        <button type="button" className="ml-auto text-fg-3 hover:text-fg-strong" onClick={onClose}>✕</button>
-      </div>
-      <span className="font-mono text-[22px] font-medium tabular-nums">{money(holding.marketValue, holding.currency)}</span>
+      <span className={cn(MONO, "text-[22px] font-medium")}>{money(holding.marketValue)}</span>
       <div className="grid grid-cols-2 gap-x-3 gap-y-2.5 text-[12.5px]">
-        {[
-          ["Classe", ASSET_CLASS_LABEL[holding.assetClass] ?? holding.assetClass],
-          ["Corretora", holding.accountName],
-          ["Entidade", names.entity.get(holding.entityId) ?? "—"],
-          ["Quantidade", holding.currentQuantity.toLocaleString("pt-BR")],
-          ["Preço médio", money(holding.averageCost, holding.currency)],
-          ["Investido", money(holding.totalInvested, holding.currency)],
-          ["Resultado", `${money(holding.unrealizedGain, holding.currency)}${holding.unrealizedGainPercent != null ? ` · ${(holding.unrealizedGainPercent * 100).toFixed(1)}%` : ""}`],
-          ["Cotação em", holding.lastPriceUpdate ? holding.lastPriceUpdate.slice(0, 10).split("-").reverse().join("/") : "—"],
-        ].map(([k, v]) => (
+        {details.map(([k, v]) => (
           <div key={k} className="flex min-w-0 flex-col gap-0.5">
             <span className="text-[11px] text-fg-3">{k}</span>
             <span className="truncate">{v}</span>
           </div>
         ))}
       </div>
-      <form className="flex items-end gap-1.5 border-t border-stroke-3 pt-3" onSubmit={(event) => { event.preventDefault(); patch.mutate({ currentPrice: parseAmount(price) }); }}>
-        <Field label="Cotação atual" className="flex-1"><TextInput value={price} onChange={setPrice} mono /></Field>
-        <Btn type="submit">Atualizar</Btn>
+      <form
+        className="flex items-end gap-1.5 border-t border-stroke-3 pt-3"
+        onSubmit={(event) => {
+          event.preventDefault();
+          const value = fmt.parseNumber(price);
+          if (Number.isFinite(value) && value >= 0) patch.mutate({ currentPrice: value });
+        }}
+      >
+        <Field label={t("price")} className="flex-1">
+          <TextInput value={price} onChange={setPrice} mono inputMode="decimal" />
+        </Field>
+        <Btn type="submit" disabled={patch.isPending}>
+          {t("update")}
+        </Btn>
       </form>
-      <form className="flex items-end gap-1.5" onSubmit={(event) => { event.preventDefault(); adjust.mutate(); }}>
-        <Field label="Quantidade" className="flex-1"><TextInput value={qty} onChange={setQty} mono /></Field>
-        <Field label="Preço médio" className="flex-1"><TextInput value={avg} onChange={setAvg} mono /></Field>
-        <Btn type="submit">Ajustar</Btn>
+      <form
+        className="flex items-end gap-1.5"
+        onSubmit={(event) => {
+          event.preventDefault();
+          if (Number.isFinite(fmt.parseNumber(qty)) && Number.isFinite(fmt.parseNumber(avg))) adjust.mutate();
+        }}
+      >
+        <Field label={t("quantity")} className="flex-1">
+          <TextInput value={qty} onChange={setQty} mono inputMode="decimal" />
+        </Field>
+        <Field label={t("avgCost")} className="flex-1">
+          <TextInput value={avg} onChange={setAvg} mono inputMode="decimal" />
+        </Field>
+        <Btn type="submit" disabled={adjust.isPending}>
+          {t("adjust")}
+        </Btn>
       </form>
       <div className="flex flex-col border-t border-stroke-3 pt-3">
-        <span className="pb-1 text-[11px] text-fg-3">Operações</span>
+        <span className="pb-1 text-[11px] text-fg-3">{t("operations")}</span>
         {(ops.data ?? []).slice(0, 12).map((op) => (
           <span key={op.id} className="flex h-7 items-center gap-2 text-[12.5px]">
-            <span className="w-12 font-mono text-[11px] text-fg-3">{op.date.slice(5).split("-").reverse().join("/")}</span>
-            <span className="flex-1">{OP_LABEL[op.type as keyof typeof OP_LABEL] ?? op.type}{op.quantity ? ` · ${op.quantity}` : ""}</span>
-            <span className="font-mono tabular-nums">{money(op.totalAmount, holding.currency)}</span>
+            <span className={cn(MONO, "w-12 text-[11px] text-fg-3")}>{fmt.date(op.date)}</span>
+            <span className="min-w-0 flex-1 truncate">
+              {opLabel({ ...op, ticker: null, name: null })}
+              {op.quantity ? ` · ${fmt.number(op.quantity, { min: 0, max: 8 })}` : ""}
+            </span>
+            <span className={MONO}>{money(op.totalAmount)}</span>
           </span>
         ))}
-        {ops.data && !ops.data.length ? <span className="text-[12px] text-fg-3">Nenhuma operação.</span> : null}
+        {ops.data && !ops.data.length ? <span className="text-[12px] text-fg-3">{t("noOps")}</span> : null}
       </div>
       <div className="mt-auto flex flex-wrap gap-1.5 border-t border-stroke-3 pt-3">
-        <Btn primary onClick={onOperation}>+ Operação</Btn>
-        <Btn ghost danger onClick={() => { if (window.confirm("Desativar este ativo? Ele sai da carteira, o histórico fica.")) patch.mutate({ isActive: false }, { onSuccess: onClose }); }}>Desativar</Btn>
+        <Btn primary onClick={onOperation}>
+          {t("newOp")}
+        </Btn>
+        <Btn ghost danger disabled={patch.isPending} onClick={() => patch.mutate({ isActive: false }, { onSuccess: onClose })}>
+          {t("deactivate")}
+        </Btn>
       </div>
-    </aside>
+    </Sheet>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Targets
+// ---------------------------------------------------------------------------
+
+export function TargetsDialog({ onClose }: { onClose: () => void }) {
+  return (
+    <Dialog open onOpenChange={(open) => !open && onClose()} width={460}>
+      <TargetsForm onClose={onClose} />
+    </Dialog>
+  );
+}
+
+function TargetsForm({ onClose }: { onClose: () => void }) {
+  const t = useTranslations("invest.targets");
+  const ti = useTranslations("invest");
+  const tc = useTranslations("common");
+  const fmt = useFmt();
+  const targets = useTargets();
+  const [values, setValues] = useState<Partial<Record<AllocationClass, string>> | null>(null);
+  const current = useMemo(
+    () => values ?? Object.fromEntries((targets.data ?? []).map((row) => [row.allocationClass, fmt.number(row.targetPercent * 100, { min: 0, max: 2 })])),
+    [values, targets.data, fmt],
+  ) as Partial<Record<AllocationClass, string>>;
+  const payload = targetsPayload(current, (text) => fmt.parseNumber(text));
+  const save = useAppMutation({
+    event: "investments.write",
+    mutationFn: () => apiPut("/api/v2/portfolio/targets", { targets: payload.targets }),
+    undo: t("saved"),
+    onSuccess: onClose,
+  });
+  const submit = () => {
+    if (payload.valid && !save.isPending) save.mutate();
+  };
+  useShortcut("mod+enter", submit, { allowInInputs: true });
+  return (
+    <form
+      className="flex flex-col gap-3.5"
+      onSubmit={(event) => {
+        event.preventDefault();
+        submit();
+      }}
+    >
+      <DialogHead title={t("title")} desc={t("desc")} />
+      <div className="flex flex-col gap-2">
+        {ALLOCATION_CLASSES.map((cls) => (
+          <label key={cls} className="flex items-center gap-2 text-[12.5px]">
+            <span className="flex-1">{ti(`allocationClass.${cls}`)}</span>
+            <TextInput value={current[cls] ?? ""} onChange={(v) => setValues({ ...current, [cls]: v })} mono className="w-20 text-right" inputMode="decimal" placeholder="0" />
+            <span className="text-fg-3">%</span>
+          </label>
+        ))}
+      </div>
+      <DialogFooter justify="between">
+        <span className={cn(MONO, "text-[12px]", payload.valid ? "text-pos" : "text-warn")}>{t("sum", { sum: fmt.number(payload.sum, { min: 0, max: 2 }) })}</span>
+        <span className="flex gap-1.5">
+          <Btn ghost onClick={onClose}>
+            {tc("cancel")}
+          </Btn>
+          <Btn primary type="submit" disabled={!payload.valid || save.isPending}>
+            {tc("save")}
+          </Btn>
+        </span>
+      </DialogFooter>
+    </form>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Edit an operation (Operações tab)
+// ---------------------------------------------------------------------------
+
+export function EditOperationDialog({ operation, onClose }: { operation: Operation; onClose: () => void }) {
+  return (
+    <Dialog open onOpenChange={(open) => !open && onClose()} width={560}>
+      <EditOperationForm operation={operation} onClose={onClose} />
+    </Dialog>
+  );
+}
+
+function EditOperationForm({ operation, onClose }: { operation: Operation; onClose: () => void }) {
+  const t = useTranslations("invest.editOp");
+  const tc = useTranslations("common");
+  const top = useTranslations("invest.op");
+  const fmt = useFmt();
+  const opLabel = useOpLabel();
+  const income = operation.type === "dividend" || operation.type === "yield_payment";
+  const trade = operation.quantity !== null && (operation.type === "buy" || operation.type === "sell");
+  const num = (v: number | null, max = 2) => (v === null ? "" : fmt.number(v, { min: 0, max }));
+  const [date, setDate] = useState(operation.date);
+  const [qty, setQty] = useState(num(operation.quantity, 8));
+  const [price, setPrice] = useState(num(operation.pricePerUnit, 6));
+  const [total, setTotal] = useState(num(operation.totalAmount));
+  const [fees, setFees] = useState(num(operation.fees));
+  const [tax, setTax] = useState(num(operation.taxWithheld));
+  const [notes, setNotes] = useState(operation.notes ?? "");
+  const parse = (text: string) => (text.trim() ? fmt.parseNumber(text) : 0);
+  const quantity = parse(qty);
+  const unit = parse(price);
+  const totalAmount = trade ? Math.round(quantity * unit * 1e4) / 1e4 : parse(total);
+  const valid = /^\d{4}-\d{2}-\d{2}$/.test(date) && Number.isFinite(totalAmount) && totalAmount >= 0 && (!trade || (quantity > 0 && Number.isFinite(unit)));
+  const save = useAppMutation({
+    event: "investments.write",
+    mutationFn: () =>
+      apiPatch<{ batchId: string }>(`/api/v2/investment-operations/${operation.id}`, {
+        date,
+        notes: notes.trim() || null,
+        totalAmount,
+        ...(trade && { quantity, pricePerUnit: unit, fees: parse(fees) }),
+        ...(income && { taxWithheld: parse(tax) }),
+      }),
+    undo: t("saved"),
+    onSuccess: onClose,
+  });
+  const submit = () => {
+    if (valid && !save.isPending) save.mutate();
+  };
+  useShortcut("mod+enter", submit, { allowInInputs: true });
+  return (
+    <form
+      className="flex flex-col gap-3.5"
+      onSubmit={(event) => {
+        event.preventDefault();
+        submit();
+      }}
+    >
+      <DialogHead title={t("title")} desc={opLabel(operation)} />
+      <div className="grid grid-cols-4 gap-2.5">
+        <Field label={top("date")}>
+          <TextInput type="date" value={date} onChange={setDate} />
+        </Field>
+        {trade ? (
+          <>
+            <Field label={top("quantity")}>
+              <TextInput value={qty} onChange={setQty} mono inputMode="decimal" />
+            </Field>
+            <Field label={top("price")}>
+              <TextInput value={price} onChange={setPrice} mono inputMode="decimal" />
+            </Field>
+            <Field label={top("fees")}>
+              <TextInput value={fees} onChange={setFees} mono inputMode="decimal" />
+            </Field>
+          </>
+        ) : (
+          <>
+            <Field label={t("total")}>
+              <TextInput value={total} onChange={setTotal} mono inputMode="decimal" />
+            </Field>
+            {income ? (
+              <Field label={top("income.tax")}>
+                <TextInput value={tax} onChange={setTax} mono inputMode="decimal" />
+              </Field>
+            ) : null}
+          </>
+        )}
+        <Field label={t("notes")} span={4}>
+          <TextInput value={notes} onChange={setNotes} />
+        </Field>
+      </div>
+      <DialogFooter>
+        <Btn ghost onClick={onClose}>
+          {tc("cancel")}
+        </Btn>
+        <Btn primary type="submit" disabled={!valid || save.isPending}>
+          {tc("save")}
+        </Btn>
+      </DialogFooter>
+    </form>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// + Registrar aporte (POST /v2/investments/aporte)
+// ---------------------------------------------------------------------------
+
+export function AporteDialog({ initialAmount, onClose }: { initialAmount?: number; onClose: () => void }) {
+  return (
+    <Dialog open onOpenChange={(open) => !open && onClose()} width={480}>
+      <AporteForm initialAmount={initialAmount} onClose={onClose} />
+    </Dialog>
+  );
+}
+
+function AporteForm({ initialAmount, onClose }: { initialAmount?: number; onClose: () => void }) {
+  const t = useTranslations("invest.aporte");
+  const tc = useTranslations("common");
+  const fmt = useFmt();
+  const me = useSession().data;
+  const names = useNames();
+  const accounts = useAccounts().data ?? [];
+  const sources = accountsOf(accounts, ["checking", "cash"]);
+  const brokers = accountsOf(accounts, ["brokerage"]);
+  const [fromChoice, setFrom] = useState("");
+  const [brokerChoice, setBroker] = useState("");
+  // The accounts may arrive after the dialog opens: until chosen, PF's main account and the first broker.
+  const from = fromChoice || (sources.find((a) => a.isDefault && a.entityId === me?.personalEntityId) ?? sources[0])?.id || "";
+  const broker = brokerChoice || brokers[0]?.id || "";
+  const [amount, setAmount] = useState(initialAmount ? fmt.number(initialAmount, 2) : "");
+  const [toAmount, setToAmount] = useState("");
+  const [date, setDate] = useState(() => todayIn(me?.timezone ?? "America/Sao_Paulo"));
+  const [description, setDescription] = useState("");
+  const fromAccount = sources.find((a) => a.id === from);
+  const brokerAccount = brokers.find((a) => a.id === broker);
+  const crossCurrency = !!fromAccount && !!brokerAccount && fromAccount.currency !== brokerAccount.currency;
+  const value = fmt.parseNumber(amount);
+  const toValue = toAmount.trim() ? fmt.parseNumber(toAmount) : null;
+  const valid = !!fromAccount && !!brokerAccount && value > 0 && (toValue === null || toValue > 0);
+  const save = useAppMutation({
+    event: "investments.write",
+    mutationFn: () =>
+      apiPost<{ batchId: string }>("/api/v2/investments/aporte", {
+        fromAccountId: from,
+        brokerAccountId: broker,
+        amount: value,
+        toAmount: crossCurrency ? toValue : null,
+        date,
+        description: description.trim() || null,
+      }),
+    undo: t("done"),
+    onSuccess: onClose,
+  });
+  const submit = () => {
+    if (valid && !save.isPending) save.mutate();
+  };
+  useShortcut("mod+enter", submit, { allowInInputs: true });
+  const option = (a: AccountRecord) => ({ value: a.id, label: `${a.name} · ${names.entity.get(a.entityId) ?? ""}`, hint: a.currency });
+  return (
+    <form
+      className="flex flex-col gap-3.5"
+      onSubmit={(event) => {
+        event.preventDefault();
+        submit();
+      }}
+    >
+      <DialogHead title={t("title")} desc={t("desc")} />
+      <div className="grid grid-cols-[1fr_20px_1fr] items-end gap-2">
+        <Field label={t("from")}>
+          <Select value={from} onChange={setFrom} options={sources.map(option)} />
+        </Field>
+        <span className="pb-1 text-center text-fg-3">→</span>
+        <Field label={t("broker")}>
+          <Select value={broker} onChange={setBroker} options={brokers.map(option)} placeholder={t("noBrokers")} />
+        </Field>
+      </div>
+      {fromAccount && brokerAccount && fromAccount.entityId !== brokerAccount.entityId ? (
+        <Callout tone="warning">{t("crossEntity", { from: names.entity.get(fromAccount.entityId) ?? "", to: names.entity.get(brokerAccount.entityId) ?? "" })}</Callout>
+      ) : null}
+      <div className="grid grid-cols-2 gap-2.5">
+        <Field label={crossCurrency ? t("amountIn", { currency: fromAccount!.currency }) : t("amount")}>
+          <TextInput value={amount} onChange={setAmount} mono inputMode="decimal" autoFocus placeholder={fmt.number(0, 2)} />
+        </Field>
+        {crossCurrency ? (
+          <Field label={t("toAmount", { currency: brokerAccount!.currency })} hint={t("toAmountHint")}>
+            <TextInput value={toAmount} onChange={setToAmount} mono inputMode="decimal" />
+          </Field>
+        ) : null}
+        <Field label={t("date")}>
+          <TextInput type="date" value={date} onChange={setDate} />
+        </Field>
+      </div>
+      <Field label={t("description")}>
+        <TextInput value={description} onChange={setDescription} placeholder={t("descriptionPlaceholder")} />
+      </Field>
+      <DialogFooter>
+        <Btn ghost onClick={onClose}>
+          {tc("cancel")}
+        </Btn>
+        <Btn primary type="submit" disabled={!valid || save.isPending}>
+          {tc("save")}
+        </Btn>
+      </DialogFooter>
+    </form>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Gerar ordens (POST /v2/investments/orders)
+// ---------------------------------------------------------------------------
+
+export function OrdersDialog({ orders, skipped, onClose }: { orders: OrderDraft[]; skipped: number; onClose: () => void }) {
+  return (
+    <Dialog open onOpenChange={(open) => !open && onClose()} width={640}>
+      <OrdersForm orders={orders} skipped={skipped} onClose={onClose} />
+    </Dialog>
+  );
+}
+
+function OrdersForm({ orders, skipped, onClose }: { orders: OrderDraft[]; skipped: number; onClose: () => void }) {
+  const t = useTranslations("invest.orders");
+  const top = useTranslations("invest.op");
+  const tc = useTranslations("common");
+  const fmt = useFmt();
+  const me = useSession().data;
+  const names = useNames();
+  const fx = useFxRates();
+  const accounts = useAccounts().data ?? [];
+  const sources = accountsOf(accounts, ["checking", "cash"]);
+  const [sourceChoice, setSource] = useState("");
+  const source = sourceChoice || sources.find((a) => a.isDefault && a.entityId === me?.personalEntityId)?.id || "cash";
+  const [date, setDate] = useState(() => todayIn(me?.timezone ?? "America/Sao_Paulo"));
+  const total = orders.reduce((s, o) => s + o.amount * fx.rateFor(o.currency), 0);
+  const save = useAppMutation({
+    event: "investments.write",
+    mutationFn: () => apiPost<{ batchId: string }>("/api/v2/investments/orders", ordersPayload(orders, date, source === "cash" ? null : source)),
+    undo: t("done", { count: orders.length }),
+    onSuccess: onClose,
+  });
+  const submit = () => {
+    if (orders.length && !save.isPending) save.mutate();
+  };
+  useShortcut("mod+enter", submit, { allowInInputs: true });
+  return (
+    <form
+      className="flex flex-col gap-3.5"
+      onSubmit={(event) => {
+        event.preventDefault();
+        submit();
+      }}
+    >
+      <DialogHead title={t("title")} desc={t("desc")} />
+      {orders.length ? (
+        <Table
+          headers={[t("asset"), t("broker"), t("quantity"), t("price"), t("amount")]}
+          columnAlign={["left", "left", "right", "right", "right"]}
+          rows={orders.map((o) => [
+            <span key="a" className="flex min-w-0 items-baseline gap-2">
+              <span className={cn(MONO, "font-semibold")}>{o.ticker ?? "—"}</span>
+              <span className="truncate text-fg-3">{o.name}</span>
+            </span>,
+            o.accountName ?? "—",
+            <span key="q" className={MONO}>
+              {o.quantity !== null ? fmt.number(o.quantity, { min: 0, max: 6 }) : "—"}
+            </span>,
+            <span key="p" className={MONO}>
+              {o.price !== null ? fmt.money(o.price, o.currency) : "—"}
+            </span>,
+            <span key="v" className={cn(MONO, "font-semibold")}>
+              {fmt.money(o.amount, o.currency)}
+            </span>,
+          ])}
+          footer={[
+            t("total"),
+            "",
+            "",
+            "",
+            <span key="t" className={MONO}>
+              {fmt.money(total, fx.base)}
+            </span>,
+          ]}
+        />
+      ) : (
+        <Callout tone="neutral">{t("empty")}</Callout>
+      )}
+      {skipped ? <span className="text-[12px] text-fg-3">{t("skipped", { count: skipped })}</span> : null}
+      <div className="grid grid-cols-2 gap-2.5">
+        <Field label={top("source")}>
+          <Select
+            value={source}
+            onChange={setSource}
+            options={[
+              { value: "cash", label: t("sourceCash") },
+              ...sources.map((a) => ({ value: a.id, label: top("sourceAccount", { account: `${a.name} ${names.entity.get(a.entityId) ?? ""}`.trim() }) })),
+            ]}
+          />
+        </Field>
+        <Field label={top("date")}>
+          <TextInput type="date" value={date} onChange={setDate} />
+        </Field>
+      </div>
+      <DialogFooter>
+        <Btn ghost onClick={onClose}>
+          {tc("cancel")}
+        </Btn>
+        <Btn primary type="submit" disabled={!orders.length || save.isPending}>
+          {t("submit", { count: orders.length })}
+        </Btn>
+      </DialogFooter>
+    </form>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// FIRE goal (PUT /v1/fire/goal merges what it is sent)
+// ---------------------------------------------------------------------------
+
+export function FireGoalDialog({ summary, onClose }: { summary: FireSummaryResponse; onClose: () => void }) {
+  return (
+    <Dialog open onOpenChange={(open) => !open && onClose()} width={480}>
+      <FireGoalForm summary={summary} onClose={onClose} />
+    </Dialog>
+  );
+}
+
+function FireGoalForm({ summary, onClose }: { summary: FireSummaryResponse; onClose: () => void }) {
+  const t = useTranslations("invest.fireGoal");
+  const tc = useTranslations("common");
+  const fmt = useFmt();
+  const goal = summary.goal;
+  const cur = summary.baseCurrency;
+  // The monthly contribution is editable only on a single-phase contribution plan; other plans keep their phases.
+  const simplePlan = !goal || (goal.planningMode === "by_contribution" && goal.phases.length === 1);
+  const pctText = (v: number) => fmt.number(v * 100, { min: 0, max: 2 });
+  const [income, setIncome] = useState(fmt.number(goal?.targetMonthlyIncome ?? Math.round(summary.suggestedDefaults.currentMonthlyExpenses || 10000), { min: 0, max: 2 }));
+  const [contribution, setContribution] = useState(fmt.number(goal?.phases[0]?.monthlyContribution ?? summary.suggestedDefaults.suggestedMonthlyContribution, { min: 0, max: 2 }));
+  const [ret, setRet] = useState(pctText(goal?.nominalAnnualReturn ?? 0.1));
+  const [inflation, setInflation] = useState(pctText(goal?.annualInflation ?? 0.045));
+  const [swr, setSwr] = useState(pctText(goal?.safeWithdrawalRate ?? 0.035));
+  const [monthlyIncome, setMonthlyIncome] = useState(goal?.monthlyIncome != null ? fmt.number(goal.monthlyIncome, { min: 0, max: 2 }) : "");
+  const [age, setAge] = useState(goal?.currentAge ? String(goal.currentAge) : "");
+  const fraction = (text: string) => fmt.parseNumber(text) / 100;
+  const body = () => {
+    const fields: Record<string, unknown> = {
+      targetMonthlyIncome: fmt.parseNumber(income),
+      nominalAnnualReturn: fraction(ret),
+      annualInflation: fraction(inflation),
+      safeWithdrawalRate: fraction(swr),
+      monthlyIncome: monthlyIncome.trim() ? fmt.parseNumber(monthlyIncome) : null,
+      currentAge: age.trim() ? Number(age) : null,
+    };
+    if (!goal) {
+      return { ...fields, planningMode: "by_contribution", phaseProfile: "constant", currency: cur, phases: [{ fromMonth: 0, toMonth: null, monthlyContribution: fmt.parseNumber(contribution) }] };
+    }
+    if (simplePlan) return { ...fields, phases: [{ ...goal.phases[0], fromMonth: 0, toMonth: null, monthlyContribution: fmt.parseNumber(contribution) }] };
+    return fields;
+  };
+  const valid =
+    fmt.parseNumber(income) > 0 &&
+    fraction(swr) > 0 &&
+    fraction(swr) <= 1 &&
+    Number.isFinite(fraction(ret)) &&
+    Number.isFinite(fraction(inflation)) &&
+    (!simplePlan || fmt.parseNumber(contribution) >= 0);
+  const save = useAppMutation({
+    event: "investments.write",
+    mutationFn: () => apiPut("/api/v1/fire/goal", body()),
+    undo: t("saved"),
+    onSuccess: onClose,
+  });
+  const submit = () => {
+    if (valid && !save.isPending) save.mutate();
+  };
+  useShortcut("mod+enter", submit, { allowInInputs: true });
+  return (
+    <form
+      className="flex flex-col gap-3.5"
+      onSubmit={(event) => {
+        event.preventDefault();
+        submit();
+      }}
+    >
+      <DialogHead title={t("title")} desc={t("desc")} />
+      <div className="grid grid-cols-2 gap-2.5">
+        <Field label={t("income")}>
+          <TextInput value={income} onChange={setIncome} mono inputMode="decimal" autoFocus />
+        </Field>
+        <Field
+          label={t("contribution")}
+          hint={simplePlan ? t("contributionHint", { amount: fmt.money0(summary.suggestedDefaults.suggestedMonthlyContribution, cur) }) : t("contributionPhased")}
+        >
+          <TextInput value={contribution} onChange={setContribution} mono inputMode="decimal" disabled={!simplePlan} />
+        </Field>
+        <Field label={t("ret")}>
+          <TextInput value={ret} onChange={setRet} mono inputMode="decimal" />
+        </Field>
+        <Field label={t("inflation")}>
+          <TextInput value={inflation} onChange={setInflation} mono inputMode="decimal" />
+        </Field>
+        <Field label={t("swr")} hint={t("swrHint")}>
+          <TextInput value={swr} onChange={setSwr} mono inputMode="decimal" />
+        </Field>
+        <Field label={t("monthlyIncome")} hint={t("monthlyIncomeHint")}>
+          <TextInput value={monthlyIncome} onChange={setMonthlyIncome} mono inputMode="decimal" />
+        </Field>
+        <Field label={t("age")}>
+          <TextInput value={age} onChange={setAge} mono inputMode="numeric" />
+        </Field>
+      </div>
+      <DialogFooter>
+        <Btn ghost onClick={onClose}>
+          {tc("cancel")}
+        </Btn>
+        <Btn primary type="submit" disabled={!valid || save.isPending}>
+          {t("save")}
+        </Btn>
+      </DialogFooter>
+    </form>
   );
 }
