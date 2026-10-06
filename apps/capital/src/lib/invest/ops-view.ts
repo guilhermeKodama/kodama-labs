@@ -95,7 +95,8 @@ export function opsPeriodRange(period: OpsPeriod, today: string): { from: string
     case "last_3m":
       return { from: monthStartIso(y, m0 - 2 + off * 3), to: monthEndIso(y, m0 + off * 3) };
     case "ytd":
-      return { from: monthStartIso(y + off, 0), to: monthEndIso(y + off, 11) };
+      // "Este ano" runs from January to the current month; a past year is the whole year (as the ledger engine).
+      return off === 0 ? { from: monthStartIso(y, 0), to: monthEndIso(y, m0) } : { from: monthStartIso(y + off, 0), to: monthEndIso(y + off, 11) };
     case "last_12m":
       return { from: monthStartIso(y, m0 - 11 + off * 12), to: monthEndIso(y, m0 + off * 12) };
   }

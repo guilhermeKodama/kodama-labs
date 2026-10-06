@@ -115,6 +115,9 @@ describe("ops views", () => {
   it("resolves periods like the ledger engine", () => {
     expect(opsPeriodRange({ preset: "last_12m", offset: 0 }, "2026-09-22")).toEqual({ from: "2025-10-01", to: "2026-09-30" });
     expect(opsPeriodRange({ preset: "all" }, "2026-09-22")).toBeNull();
+    // Same rule as the ledger engine: this year stops at the current month, a past year is whole.
+    expect(opsPeriodRange({ preset: "ytd", offset: 0 }, "2026-09-22")).toEqual({ from: "2026-01-01", to: "2026-09-30" });
+    expect(opsPeriodRange({ preset: "ytd", offset: -1 }, "2026-09-22")).toEqual({ from: "2025-01-01", to: "2025-12-31" });
     expect(monthsBetween("2025-11-01", "2026-02-28")).toEqual(["2025-11", "2025-12", "2026-01", "2026-02"]);
   });
 
