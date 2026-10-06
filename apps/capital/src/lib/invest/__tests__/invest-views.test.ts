@@ -207,6 +207,7 @@ function origin(over: Partial<ContributionOrigin>): ContributionOrigin {
     amount: 15000,
     direction: "investment_deposit",
     description: null,
+    defaultDescription: false,
     brokerAccountId: "xp",
     brokerAccountName: "XP",
     brokerEntityName: "PF",
@@ -214,6 +215,7 @@ function origin(over: Partial<ContributionOrigin>): ContributionOrigin {
     counterpartEntityName: "PF",
     sourceEntityName: null,
     sourceTransferGroupId: null,
+    sourceDescription: null,
     ...over,
   } as ContributionOrigin;
 }
@@ -243,6 +245,15 @@ describe("contributions view", () => {
     expect(originLabel([origin({ description: "Distribuição LTDA → PF" })])).toBe("Distribuição LTDA → PF");
     expect(originLabel([origin({ sourceEntityName: "LTDA" })])).toBe("LTDA → PF");
     expect(originLabel([origin({ description: "Salário PF" }), origin({ description: "Bônus", amount: 20000 })])).toBe("Bônus + Salário PF");
+  });
+
+  it("never shows the default transfer text: the source transfer's description, else entity → entity, else origin account → broker", () => {
+    const auto = { description: "Aporte em investimento: Nubank → XP", defaultDescription: true };
+    expect(originLabel([origin(auto)])).toBe("Nubank → XP");
+    expect(originLabel([origin({ ...auto, sourceEntityName: "LTDA", sourceDescription: "Distribuição LTDA → PF" })])).toBe("Distribuição LTDA → PF");
+    expect(originLabel([origin({ ...auto, sourceEntityName: "LTDA" })])).toBe("LTDA → PF");
+    expect(originLabel([origin({ description: "Resgate de investimento: XP → Nubank", defaultDescription: true, amount: -500 })])).toBe("XP → Nubank");
+    expect(originLabel([origin({ ...auto, counterpartAccountName: null })])).toBe("XP");
   });
 
   it("lists months with aportes newest first, with every transfer for the drill", () => {

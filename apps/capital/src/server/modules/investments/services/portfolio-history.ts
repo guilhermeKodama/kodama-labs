@@ -327,8 +327,8 @@ export interface PortfolioHistory {
   from: string;
   to: string;
   months: HistoryMonth[];
-  /** Chain-linked Modified Dietz over the months (estimated months left out). */
-  return: Omit<TrailingReturn, "monthly">;
+  /** Chain-linked Modified Dietz over the months (estimated months left out); `estimated` when every month was left out for being an estimate. */
+  return: Omit<TrailingReturn, "monthly" | "estimatedMonths"> & { estimated: boolean };
 }
 
 /**
@@ -396,6 +396,13 @@ export async function portfolioHistory(userId: string, db: DbClient, opts: { mon
     from: months[0]?.period ?? periodLabel(current),
     to: periodLabel(current),
     months,
-    return: { value: chain.value, months: chain.months, from: chain.from, to: chain.to },
+    return: {
+      value: chain.value,
+      months: chain.months,
+      from: chain.from,
+      to: chain.to,
+      // No month could be measured because the window's months are estimates (valued at cost, backfilled before snapshots existed).
+      estimated: chain.value === null && chain.estimatedMonths > 0,
+    },
   };
 }

@@ -283,6 +283,101 @@ describe("market data", () => {
   });
 });
 
+describe("undo and delete keep positions consistent", () => {
+  const holdingOf = (id: string) => prisma.investmentHolding.findUniqueOrThrow({ where: { id } });
+
+  it("refuses with 409 holding.undo_oversell to undo an aporte + buy a later sale depends on, and changes nothing", async () => {
+    const aporte = await json("POST", "/v2/investments/aporte", {
+      fromAccountId: f.pfChecking,
+      brokerAccountId: f.broker,
+      amount: 6000,
+      date: "2026-09-10",
+      buy: { newHolding: { ticker: "BOVA11", name: "iShares Ibovespa", assetClass: "etf" }, quantity: 40, price: 128 },
+    });
+    await json("POST", "/v2/investment-operations", { holdingId: aporte.holdingId, type: "sell", quantity: 40, pricePerUnit: 130, totalAmount: 5200, date: "2026-09-20" });
+    const entries = await prisma.ledgerEntry.count({ where: { userId: USER, deletedAt: null } });
+
+    const res = await call("POST", `/v2/mutations/${aporte.batchId}/undo`, {});
+    expect(res.status).toBe(409);
+    expect(await res.json()).toMatchObject({ code: "holding.undo_oversell", params: { holding: "BOVA11" } });
+    // Refused before committing: the buy, the deposit and the batch are all still there.
+    expect(await prisma.investmentOperation.count({ where: { id: aporte.operationId } })).toBe(1);
+    expect(await prisma.ledgerEntry.count({ where: { userId: USER, deletedAt: null } })).toBe(entries);
+    expect(await prisma.mutationBatch.findUniqueOrThrow({ where: { id: aporte.batchId } })).toMatchObject({ undoneAt: null });
+    expect(await holdingOf(aporte.holdingId)).toMatchObject({ currentQuantity: 0, isActive: false });
+  });
+
+  it("still undoes a batch when the sales above the position were already there (statement imports)", async () => {
+    const holding = await json("POST", "/v2/holdings", { accountId: f.broker, assetClass: "stocks", ticker: "ITSA4", name: "Itaúsa" });
+    // A sale with no buy before it, as a statement import keeps it (its history starts after the buys).
+    await prisma.investmentOperation.create({ data: { holdingId: holding.id, type: "sell", quantity: 5, pricePerUnit: 10, totalAmount: 50, fees: 0, date: new Date("2026-09-01") } });
+    const buy = await json("POST", "/v2/investment-operations", { holdingId: holding.id, type: "buy", quantity: 3, pricePerUnit: 10, totalAmount: 30, date: "2026-09-15" });
+    await undo(buy.batchId);
+    expect(await prisma.investmentOperation.count({ where: { holdingId: holding.id } })).toBe(1);
+  });
+
+  it("deactivates a holding whose only buy is deleted or undone (no R$ 0 row, not offered in the rebalance)", async () => {
+    const aporte = await json("POST", "/v2/investments/aporte", {
+      fromAccountId: f.pfChecking,
+      brokerAccountId: f.broker,
+      amount: 1000,
+      date: "2026-09-10",
+      buy: { newHolding: { ticker: "IVVB11", name: "iShares S&P 500", assetClass: "etf" }, quantity: 2, price: 300 },
+    });
+    await json("DELETE", `/v2/investment-operations/${aporte.operationId}?withFunding=true`);
+    expect(await holdingOf(aporte.holdingId)).toMatchObject({ currentQuantity: 0, totalInvested: 0, isActive: false });
+    const listed = await json("GET", "/v2/holdings");
+    expect(JSON.stringify(listed)).not.toContain(aporte.holdingId);
+    await json("PUT", "/v2/portfolio/targets", { targets: [{ allocationClass: "international", targetPercent: 100 }] });
+    const suggestion = await json("POST", "/v2/portfolio/rebalance-suggestion", { amount: 1000, mode: "asset" });
+    expect(JSON.stringify(suggestion)).not.toContain(aporte.holdingId);
+    await prisma.portfolioTarget.deleteMany({ where: { userId: USER } });
+
+    // A holding registered on its own, bought in an aporte that is then undone, goes inactive the same way.
+    const holding = await json("POST", "/v2/holdings", { accountId: f.broker, assetClass: "stocks", ticker: "WEGE3", name: "WEG" });
+    const second = await json("POST", "/v2/investments/aporte", { fromAccountId: f.pfChecking, brokerAccountId: f.broker, amount: 500, date: "2026-09-11", buy: { holdingId: holding.id, quantity: 10, price: 40 } });
+    expect(await holdingOf(holding.id)).toMatchObject({ currentQuantity: 10, isActive: true });
+    await undo(second.batchId);
+    expect(await holdingOf(holding.id)).toMatchObject({ currentQuantity: 0, isActive: false });
+    // Buying it again brings it back.
+    await json("POST", "/v2/investment-operations", { holdingId: holding.id, type: "buy", quantity: 1, pricePerUnit: 40, totalAmount: 40, date: "2026-09-12" });
+    expect(await holdingOf(holding.id)).toMatchObject({ currentQuantity: 1, isActive: true });
+  });
+});
+
+describe("resgate across entities", () => {
+  it("books a resgate from a PJ broker into a PF account as a withdrawal plus a profit distribution, in one batch", async () => {
+    await json("POST", "/v2/brokerage-cash", { accountId: pjBroker, direction: "deposit", amount: 1000, date: "2026-09-01", counterpartAccountId: f.pjChecking });
+    const r = await json("POST", "/v2/brokerage-cash", { accountId: pjBroker, direction: "withdraw", amount: 400, date: "2026-09-02", counterpartAccountId: f.pfChecking });
+    expect(r.batchId).toBeTruthy();
+    const groups = await prisma.transferGroup.findMany({ where: { id: { in: r.transferGroupIds } }, select: { id: true, direction: true } });
+    expect(r.transferGroupIds.map((id: string) => groups.find((g) => g.id === id)!.direction)).toEqual(["investment_withdrawal", "profit_distribution"]);
+    expect(await balance(pjBroker)).toBe(600);
+    expect(await balance(f.pjChecking)).toBe(-1000);
+    expect(await balance(f.pfChecking)).toBe(400);
+    expect(await prisma.mutationRecord.count({ where: { batchId: r.batchId, model: "TransferGroup" } })).toBe(2);
+
+    await undo(r.batchId);
+    expect(await prisma.transferGroup.count({ where: { id: { in: r.transferGroupIds } } })).toBe(0);
+    expect(await balance(pjBroker)).toBe(1000);
+    expect(await balance(f.pfChecking)).toBe(0);
+  });
+
+  it("books a resgate from a PF broker into a PJ account as a withdrawal plus a capital injection, and a deposit from another entity like an aporte", async () => {
+    const deposit = await json("POST", "/v2/brokerage-cash", { accountId: f.broker, direction: "deposit", amount: 800, date: "2026-09-01", counterpartAccountId: f.pjChecking });
+    const depGroups = await prisma.transferGroup.findMany({ where: { id: { in: deposit.transferGroupIds } }, select: { id: true, direction: true } });
+    expect(deposit.transferGroupIds.map((id: string) => depGroups.find((g) => g.id === id)!.direction)).toEqual(["profit_distribution", "investment_deposit"]);
+    expect(await balance(f.broker)).toBe(800);
+
+    const r = await json("POST", "/v2/brokerage-cash", { accountId: f.broker, direction: "withdraw", amount: 300, date: "2026-09-02", counterpartAccountId: f.pjChecking });
+    const groups = await prisma.transferGroup.findMany({ where: { id: { in: r.transferGroupIds } }, select: { id: true, direction: true } });
+    expect(r.transferGroupIds.map((id: string) => groups.find((g) => g.id === id)!.direction)).toEqual(["investment_withdrawal", "capital_injection"]);
+    expect(await balance(f.broker)).toBe(500);
+    expect(await balance(f.pfChecking)).toBe(0);
+    expect(await balance(f.pjChecking)).toBe(-500);
+  });
+});
+
 describe("targets and broker cash", () => {
   afterAll(async () => {
     await prisma.portfolioTarget.deleteMany({ where: { userId: USER } });

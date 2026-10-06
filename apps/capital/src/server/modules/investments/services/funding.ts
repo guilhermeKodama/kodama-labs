@@ -97,3 +97,59 @@ export async function fundBroker(tx: DbClient, userId: string, input: FundBroker
   transferGroupIds.push(deposit.transferGroupId!);
   return { depositGroupId: deposit.transferGroupId!, transferGroupIds };
 }
+
+export interface WithdrawFromBrokerInput {
+  broker: Account;
+  /** The account the money goes to, in another entity than the broker's. */
+  to: Account;
+  /** What leaves the broker, in its currency. */
+  amount: number;
+  date: string;
+  /** Description of the investment withdrawal (default: the localized transfer description). */
+  description?: string | null;
+}
+
+/**
+ * A resgate into another entity's account, mirroring fundBroker: the money
+ * first leaves the broker as an investment_withdrawal to the broker
+ * entity's main checking account, then goes on to `to` as a profit
+ * distribution (PJ → PF), a capital injection (PF → PJ) or a transfer
+ * between businesses, so each entity's books stay right. Both transfers are
+ * recorded into the caller's `records` (one undo batch). Across currencies
+ * each leg is in its account's currency, converted at today's rates.
+ */
+export async function withdrawFromBroker(tx: DbClient, userId: string, input: WithdrawFromBrokerInput, fx: FxContext, records: MutationRecordInput[]) {
+  const { broker, to } = input;
+  const checking = await entityChecking(broker.entityId, tx, records);
+  const checkingAmount = convertAmount(input.amount, broker.currency, checking.currency, fx);
+  const withdrawal = await createEntry(
+    userId,
+    {
+      kind: "transfer",
+      fromAccountId: broker.id,
+      toAccountId: checking.id,
+      amount: round(input.amount, 4),
+      ...(checking.currency !== broker.currency && { currency: broker.currency, toAmount: round(checkingAmount, 2) }),
+      date: input.date,
+      direction: "investment_withdrawal",
+      ...(input.description && { description: input.description }),
+    },
+    tx,
+    { collect: records }
+  );
+  const toAmount = convertAmount(checkingAmount, checking.currency, to.currency, fx);
+  const onward = await createEntry(
+    userId,
+    {
+      kind: "transfer",
+      fromAccountId: checking.id,
+      toAccountId: to.id,
+      amount: round(checkingAmount, checking.currency === broker.currency ? 4 : 2),
+      ...(to.currency !== checking.currency && { currency: checking.currency, toAmount: round(toAmount, 2) }),
+      date: input.date,
+    },
+    tx,
+    { collect: records }
+  );
+  return { withdrawalGroupId: withdrawal.transferGroupId!, transferGroupIds: [withdrawal.transferGroupId!, onward.transferGroupId!] };
+}

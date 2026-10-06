@@ -128,6 +128,7 @@ export const ERROR_CODES = {
   "holding.not_found": "Holding not found",
   "holding.requires_brokerage": "Holdings live on brokerage accounts",
   "holding.oversell": "The sale is larger than the position",
+  "holding.undo_oversell": "Undoing this would leave a sale of {holding} larger than the position; undo or delete that sale first",
   "operation.not_found": "Investment operation not found",
   "operation.income_only": "Only income operations can have an income type, tax withheld or a credit account",
   "operation.tax_exceeds_amount": "The tax withheld cannot exceed the gross amount",

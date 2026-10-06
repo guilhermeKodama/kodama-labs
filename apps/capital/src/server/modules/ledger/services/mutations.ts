@@ -58,7 +58,7 @@ async function recalculateTouchedHoldings(tx: DbClient, records: MutationRecord[
     }
   }
   for (const id of holdingIds) {
-    if (await tx.investmentHolding.count({ where: { id } })) await recalculateHolding(id, tx);
+    if (await tx.investmentHolding.count({ where: { id } })) await recalculateHolding(id, tx, records); // `records` refuses an undo leaving a sale above the position (409 holding.undo_oversell)
   }
 }
 

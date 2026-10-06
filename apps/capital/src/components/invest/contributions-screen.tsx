@@ -11,6 +11,7 @@ import { useSession } from "@/lib/api/session";
 import { useFmt } from "@/lib/format/provider";
 import { useContributions, useDebounced, useFireSummary, useFxRates, useRebalance } from "@/lib/invest/api";
 import { alternativeContribution, clampEnd, contributionSeries, currentMonth, historyRows, parseMonth, shiftMonth } from "@/lib/invest/contributions-view";
+import { savingsRateKpi } from "@/lib/invest/kpis";
 import { approxQuantityLabel, ordersFromSuggestion, parseAporteAmount } from "@/lib/invest/rebalance-view";
 import type { RebalanceAsset, RebalanceSuggestion } from "@/lib/invest/types";
 import type { ViewDraft } from "@/lib/ledger/view-draft";
@@ -61,6 +62,7 @@ export function ContributionsScreen() {
   const cur = data?.baseCurrency ?? fx.base;
   const months = data?.months ?? [];
   const last = months.at(-1);
+  const savings = savingsRateKpi(data?.savingsRate.rate);
   const series = contributionSeries(months);
   const history = historyRows(months, goal);
   const year = parseMonth(end).year;
@@ -104,7 +106,19 @@ export function ContributionsScreen() {
         />
         <Kpi label={t("kpi.avg")} value={fmt.money0(data?.averageMonthly ?? 0, cur)} />
         <Kpi label={t("kpi.total")} value={fmt.money0(data?.totalNet ?? 0, cur)} />
-        <Kpi label={t("kpi.savings")} value={data?.savingsRate.rate != null ? fmt.pct(data.savingsRate.rate, 0) : "—"} sub={t("kpi.savingsSub")} />
+        <Kpi
+          label={t("kpi.savings")}
+          value={
+            savings.value === null ? (
+              "—"
+            ) : (
+              <span title={savings.capped && data ? t("kpi.savingsCappedHint", { aportes: fmt.money0(data.savingsRate.aportes, cur), income: fmt.money0(data.savingsRate.income, cur) }) : undefined}>
+                {fmt.pct(savings.value, 0)}
+              </span>
+            )
+          }
+          sub={savings.capped ? t("kpi.savingsCapped") : t("kpi.savingsSub")}
+        />
       </KpiStrip>
       <div className="grid items-start gap-3 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)]">
         <Panel title={t("chart.title")}>

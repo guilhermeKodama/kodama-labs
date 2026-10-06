@@ -61,12 +61,31 @@ export function goalStatus(net: number, goal: number | null): GoalStatus | null 
   return "ok";
 }
 
-/** Where the money of the month came from: the transfers' descriptions, or "origem → corretora". */
-export function originLabel(origins: readonly ContributionOrigin[]): string {
+type OriginFields = Pick<
+  ContributionOrigin,
+  "amount" | "description" | "defaultDescription" | "sourceDescription" | "sourceEntityName" | "brokerEntityName" | "brokerAccountName" | "counterpartAccountName"
+>;
+
+/**
+ * One transfer's origin (mockup "Distribuição LTDA → PF", "Salário PF"): the
+ * description typed on it; else the one typed on the transfer that fed it
+ * from another entity; else "entidade de origem → entidade da corretora"
+ * across entities; else "conta de origem → corretora". The text a transfer
+ * gets when none is typed ("Aporte em investimento: …") is never shown.
+ */
+export function originOf(o: OriginFields): string {
+  const typed = !o.defaultDescription ? o.description?.trim() : null;
+  if (typed) return typed;
+  if (o.sourceDescription?.trim()) return o.sourceDescription.trim();
+  if (o.sourceEntityName) return `${o.sourceEntityName} → ${o.brokerEntityName}`;
+  if (!o.counterpartAccountName) return o.brokerAccountName;
+  return o.amount < 0 ? `${o.brokerAccountName} → ${o.counterpartAccountName}` : `${o.counterpartAccountName} → ${o.brokerAccountName}`;
+}
+
+/** Where the money of the month came from: the largest inflows first (see originOf), each label once. */
+export function originLabel(origins: readonly OriginFields[]): string {
   const inflows = origins.filter((o) => o.amount > 0).sort((a, b) => b.amount - a.amount);
-  const list = (inflows.length ? inflows : origins).map(
-    (o) => o.description?.trim() || `${o.sourceEntityName ?? o.counterpartEntityName ?? o.counterpartAccountName ?? "?"} → ${o.brokerEntityName}`,
-  );
+  const list = (inflows.length ? inflows : origins).map(originOf);
   return [...new Set(list)].join(" + ");
 }
 

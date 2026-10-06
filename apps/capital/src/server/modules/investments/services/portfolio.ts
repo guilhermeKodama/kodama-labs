@@ -14,7 +14,7 @@ import { createEntry, softDeleteEntries } from "@capital/server/modules/ledger/s
 import { getDefaultAccount } from "@capital/server/modules/ledger/services/entities";
 import { inTransaction, recordMutation, snapshot, type MutationRecordInput } from "@capital/server/modules/ledger/services/mutations";
 import { benchmarks12m } from "./benchmarks";
-import { convertAmount, fundBroker } from "./funding";
+import { convertAmount, fundBroker, withdrawFromBroker } from "./funding";
 import { portfolioHistory } from "./portfolio-history";
 
 export { recalculateHolding, marketValue };
@@ -646,7 +646,17 @@ export async function adjustPosition(userId: string, input: { holdingId: string;
   });
 }
 
-/** Deposit to / withdraw from a broker as an investment transfer from/to the entity's default checking. */
+/**
+ * Deposit to / withdraw from a broker as an investment transfer from/to the
+ * entity's default checking, or the counterpart account given. A
+ * counterpart checking or cash account in another entity goes through the
+ * broker entity's main checking, like an aporte (POST
+ * /v2/investments/aporte): a resgate from a PJ broker into a PF account is
+ * an investment_withdrawal plus a profit distribution (PJ → PF), one from a
+ * PF broker into a PJ account a capital injection, and a deposit from
+ * another entity's account a capital injection or profit distribution plus
+ * the investment_deposit; all in one undo batch (batchId, transferGroupIds).
+ */
 export async function moveBrokerageCash(
   userId: string,
   input: { accountId: string; amount: number; date: string; direction: "deposit" | "withdraw"; currency?: string; exchangeRate?: number; description?: string; counterpartAccountId?: string },
@@ -660,9 +670,23 @@ export async function moveBrokerageCash(
       const balances = await accountBalances(userId, tx, [broker.id]);
       if ((balances.get(broker.id) ?? 0) + 1e-9 < input.amount) throw new LedgerError("Insufficient cash balance in investment account", 422, { code: "brokerage.insufficient_cash" });
     }
+    const crossEntity = checking.entityId !== broker.entityId && (checking.type === "checking" || checking.type === "cash") && !input.currency && !input.exchangeRate;
+    if (crossEntity) {
+      const fx = await loadFx(userId, tx);
+      const records: MutationRecordInput[] = [];
+      const moved =
+        input.direction === "withdraw"
+          ? await withdrawFromBroker(tx, userId, { broker, to: checking, amount: input.amount, date: input.date, description: input.description }, fx, records)
+          : await fundBroker(tx, userId, { fromAccountId: checking.id, broker, brokerAmount: input.amount, date: input.date, description: input.description }, fx, records);
+      const groupId = "withdrawalGroupId" in moved ? moved.withdrawalGroupId : moved.depositGroupId;
+      const group = await tx.transferGroup.findUniqueOrThrow({ where: { id: groupId }, select: { description: true } });
+      const entryIds = records.filter((r) => r.model === "LedgerEntry" && r.before === null).map((r) => r.recordId);
+      const batchId = await recordMutation(tx, userId, "create", group.description, records);
+      return { batchId, entryIds, transferGroupId: groupId, transferGroupIds: moved.transferGroupIds };
+    }
     const from = input.direction === "deposit" ? checking.id : broker.id;
     const to = input.direction === "deposit" ? broker.id : checking.id;
-    return createEntry(
+    const result = await createEntry(
       userId,
       {
         kind: "transfer",
@@ -677,6 +701,7 @@ export async function moveBrokerageCash(
       },
       tx
     );
+    return { ...result, transferGroupIds: result.transferGroupId ? [result.transferGroupId] : [] };
   });
 }
 
