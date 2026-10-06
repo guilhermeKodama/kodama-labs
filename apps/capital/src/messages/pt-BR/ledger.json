@@ -1,1 +1,257 @@
-{}
+{
+  "crumb": "Transações",
+  "viewsError": "Não foi possível carregar as views.",
+  "tabs": {
+    "fixed": "fixa",
+    "newView": "Nova view",
+    "modified": "Modificada"
+  },
+  "period": {
+    "title": "Período da view",
+    "prev": "Período anterior",
+    "next": "Próximo período",
+    "backToCurrent": "voltar para o atual",
+    "custom": "Intervalo personalizado…",
+    "customLabel": "Intervalo",
+    "from": "De",
+    "to": "Até",
+    "apply": "Aplicar",
+    "whole": "todo o período",
+    "presets": {
+      "this_month": "Este mês",
+      "last_month": "Mês anterior",
+      "last_3m": "Últimos 3 meses",
+      "ytd": "Este ano",
+      "last_12m": "Últimos 12 meses",
+      "all": "Todo o período"
+    }
+  },
+  "filters": {
+    "add": "+ Filtro",
+    "filterBy": "Filtrar por…",
+    "is": "{prop} é…",
+    "choose": "{prop}: escolha…",
+    "values": "{prop} é {values}",
+    "count": "{prop} é {count} valores",
+    "notIn": "{prop} não é {values}",
+    "notInCount": "{prop} não é {count} valores",
+    "isNull": "{prop}: vazio",
+    "isNotNull": "{prop}: preenchido",
+    "other": "{prop}: filtro personalizado",
+    "done": "Pronto",
+    "remove": "Remover filtro",
+    "noOptions": "Nenhum valor neste período.",
+    "fields": {
+      "importId": "Importação",
+      "id": "Lançamento",
+      "transferGroupId": "Transferência",
+      "recurringRuleId": "Conta fixa",
+      "installmentPlanId": "Parcelamento",
+      "accountType": "Tipo de conta",
+      "kind": "Tipo",
+      "transferDirection": "Direção",
+      "cardStatementId": "Fatura",
+      "amount": "Valor original",
+      "amountBase": "Valor",
+      "description": "Descrição",
+      "date": "Data",
+      "effectiveDate": "Data na fatura"
+    }
+  },
+  "search": "Buscar nesta view…",
+  "autosaved": "salvo automaticamente",
+  "clear": "Limpar",
+  "saveAsNew": "Salvar como nova",
+  "display": {
+    "button": "Exibição",
+    "name": "Nome",
+    "builtinHint": "View fixa. Filtros aqui são temporários; colunas, ordenação, cálculos e layout ficam lembrados.",
+    "layout": "Layout",
+    "period": "Período",
+    "group": {
+      "group": "Agrupar por",
+      "rows": "Linhas",
+      "axis": "Eixo",
+      "columns": "Colunas",
+      "sub": "Sub-agrupar",
+      "series": "Séries"
+    },
+    "groupHint": "Semana, Mês, Trimestre e Ano também servem para agrupar; combine com um período longo para ver tendência.",
+    "chartType": "Tipo de gráfico",
+    "metric": "Valor",
+    "top": "Limitar",
+    "cumulative": "Acumulado (soma corrida ao longo do eixo)",
+    "sort": "Ordenar",
+    "props": "Propriedades visíveis",
+    "favorite": "Favorita (aparece na sidebar)",
+    "duplicate": "Duplicar",
+    "close": "Fechar",
+    "delete": "Excluir view",
+    "deleted": "View “{name}” excluída",
+    "custom": "Personalizado"
+  },
+  "layouts": {
+    "table": "Tabela",
+    "pivot": "Pivot",
+    "chart": "Gráfico",
+    "board": "Board",
+    "calendar": "Calendário"
+  },
+  "props": {
+    "none": "Nenhum",
+    "date": "Data",
+    "desc": "Descrição",
+    "entity": "Entidade",
+    "account": "Conta",
+    "category": "Categoria",
+    "kind": "Tipo",
+    "currency": "Moeda",
+    "recurring": "Recorrente",
+    "deductible": "Dedutível IR",
+    "week": "Semana",
+    "month": "Mês",
+    "quarter": "Trimestre",
+    "year": "Ano",
+    "amount": "Valor",
+    "day": "Data (dia)"
+  },
+  "sorts": {
+    "date_desc": "Data, mais recente",
+    "date_asc": "Data, mais antiga",
+    "abs_desc": "Valor, maior primeiro"
+  },
+  "flowKind": {
+    "in": "Entrada",
+    "out": "Saída",
+    "transfer": "Transferência",
+    "invest": "Aporte"
+  },
+  "categoryFlow": {
+    "invest": "Investimentos",
+    "transfer": "Transferência"
+  },
+  "yes": "Sim",
+  "no": "Não",
+  "uncategorized": "Sem categoria",
+  "kpi": {
+    "income": "Entradas",
+    "expense": "Saídas",
+    "investment": "Aportes",
+    "net": "Resultado",
+    "rows": "Linhas"
+  },
+  "table": {
+    "empty": "Nenhum lançamento em {period} com esses filtros.",
+    "visibleSelected": "{count, plural, one {A # visível está selecionada.} other {As # visíveis estão selecionadas.}}",
+    "selectAll": "{count, plural, one {Selecionar a # da view} other {Selecionar todas as # da view}}",
+    "allSelected": "{count, plural, one {A # transação da view está selecionada.} other {Todas as # transações da view estão selecionadas.}}",
+    "clearSelection": "Limpar seleção",
+    "loadMore": "Carregar mais",
+    "loading": "Carregando…",
+    "recurring": "Recorrente",
+    "installment": "{n}/{total}",
+    "taxBadge": "IR",
+    "selectRow": "Selecionar linha",
+    "selectVisible": "Selecionar as linhas visíveis",
+    "calc": {
+      "none": "Calcular",
+      "sum": "Soma",
+      "avg": "Média",
+      "median": "Mediana",
+      "min": "Mín",
+      "max": "Máx",
+      "count": "Contagem",
+      "countDistinct": "Únicos"
+    }
+  },
+  "pivot": {
+    "caption": "Linhas: {rows} · Colunas: {cols} · Valor: soma. Clique num número para abrir a tabela com esse recorte (vira um rascunho de view).",
+    "corner": "{rows} \\ {cols}",
+    "total": "Total",
+    "empty": "Nada para cruzar neste recorte."
+  },
+  "charts": {
+    "types": {
+      "bar": "Barras",
+      "hbar": "Horizontal",
+      "bar100": "100%",
+      "line": "Linha",
+      "area": "Área",
+      "pie": "Pizza",
+      "donut": "Donut",
+      "treemap": "Treemap",
+      "waterfall": "Cascata",
+      "sankey": "Sankey"
+    },
+    "hints": {
+      "bar": "Comparar grupos. Com séries, empilha.",
+      "hbar": "Rankings e nomes longos (categorias, contas).",
+      "bar100": "Composição: quanto cada série pesa em cada grupo.",
+      "line": "Evolução no tempo. Use eixo Data, Semana ou Mês.",
+      "area": "Evolução com volume. Combina com Acumulado.",
+      "pie": "Participação de poucos grupos (use Top N).",
+      "donut": "Participação com o total no centro.",
+      "treemap": "Para onde vai o dinheiro, por área. Bom com muitos grupos.",
+      "waterfall": "Entradas menos cada saída até o resultado do período.",
+      "sankey": "Receita → PJ → PF → categorias: o caminho do dinheiro no período."
+    },
+    "metrics": {
+      "sum": "Soma (valor absoluto)",
+      "count": "Contagem de lançamentos",
+      "avg": "Ticket médio"
+    },
+    "signed": "{currency} (com sinal)",
+    "tops": {
+      "all": "Todos os grupos",
+      "top5": "Top 5 + Outros",
+      "top8": "Top 8 + Outros"
+    },
+    "title": "{view} · {type}",
+    "cumulative": "acumulado",
+    "topSuffix": "top {n} + Outros",
+    "others": "Outros",
+    "result": "Resultado",
+    "total": "Total",
+    "bar100Title": "Barras 100% precisam de séries",
+    "bar100Body": "Escolha uma propriedade em “Séries” na Exibição (ex.: Entidade) para ver a composição de cada grupo.",
+    "empty": "Sem dados para o gráfico neste recorte."
+  },
+  "sankey": {
+    "investments": "Investimentos",
+    "surplus": "{entity} · Sobra",
+    "others": "Outros",
+    "reserves": "Das reservas",
+    "priorBalance": "Saldo anterior",
+    "transferIn": "Transferência de {entity}",
+    "transferOut": "Transferência para {entity}",
+    "uncategorized": "Sem categoria",
+    "empty": "Sem entradas ou saídas neste recorte.",
+    "caption": "Receita {income} · Gastos {expenses} · Investimentos {investments} · Sobra {surplus} · {period}",
+    "expandOthers": "Clique em Outros para ver as categorias pequenas.",
+    "collapseOthers": "Clique numa categoria pequena para juntar de novo em Outros."
+  },
+  "board": {
+    "more": "Carregar mais",
+    "shown": "{shown} de {total}",
+    "loading": "Carregando…"
+  },
+  "calendar": {
+    "weekdays": {
+      "mon": "seg",
+      "tue": "ter",
+      "wed": "qua",
+      "thu": "qui",
+      "fri": "sex",
+      "sat": "sáb",
+      "sun": "dom"
+    },
+    "caption": "{month} · fundo mais forte = dia com mais movimento",
+    "outside": "{count, plural, one {# lançamento} other {# lançamentos}} de outros meses do período",
+    "more": "+{count}",
+    "openDay": "Abrir {day} na tabela"
+  },
+  "drill": {
+    "detail": "Detalhe: {label}",
+    "back": "voltar à view"
+  }
+}

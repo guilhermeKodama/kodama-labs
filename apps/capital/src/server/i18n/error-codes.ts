@@ -87,6 +87,7 @@ export const ERROR_CODES = {
   "view.not_found": "View not found",
   "view.builtin_rename": "The built-in view cannot be renamed",
   "view.builtin_delete": "The built-in view cannot be deleted",
+  "view.not_exportable": "Only transaction views can be exported",
 
   // Ledger query and selection
   "query.unknown_aggregation_field": "Unknown aggregation field {field}",

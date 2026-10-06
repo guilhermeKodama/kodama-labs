@@ -1,15 +1,12 @@
 import { z } from "zod";
 import { dateFieldSchema, periodSchema } from "./common";
-import { viewDatasetSchema } from "./datasets";
+import { CHART_TYPES, holdingsViewConfigSchema, opsViewConfigSchema, VIEW_LAYOUTS, type ViewDataset } from "./datasets";
 import { ledgerFilterSchema } from "./filters";
 import { AGG_FNS, groupKeySchema, sortSchema } from "./query";
 
 // ---------------------------------------------------------------------------
 // Saved views
 // ---------------------------------------------------------------------------
-
-export const VIEW_LAYOUTS = ["table", "pivot", "chart", "board", "calendar"] as const;
-export const CHART_TYPES = ["bar", "hbar", "bar100", "line", "area", "pie", "donut", "treemap", "waterfall", "sankey"] as const;
 
 export const viewConfigSchema = z.object({
   layout: z.enum(VIEW_LAYOUTS).default("table"),
@@ -35,23 +32,44 @@ export const viewConfigSchema = z.object({
 });
 export type ViewConfig = z.infer<typeof viewConfigSchema>;
 
-export const savedViewInputSchema = z.object({
-  name: z.string().min(1).max(120),
-  dataset: viewDatasetSchema.default("ledger"),
-  isFavorite: z.boolean().default(true),
-  config: viewConfigSchema,
-});
+/** The config schema of each dataset. */
+export const VIEW_CONFIG_SCHEMAS = {
+  ledger: viewConfigSchema,
+  holdings: holdingsViewConfigSchema,
+  investment_ops: opsViewConfigSchema,
+} as const satisfies Record<ViewDataset, z.ZodTypeAny>;
+
+export type AnyViewConfig = z.infer<(typeof VIEW_CONFIG_SCHEMAS)[ViewDataset]>;
+
+const viewName = z.string().min(1).max(120);
+
+/** A new view; the config schema follows the dataset (ledger when omitted). */
+export const savedViewInputSchema = z.union([
+  z.object({ name: viewName, dataset: z.literal("ledger").default("ledger"), isFavorite: z.boolean().default(true), config: viewConfigSchema }),
+  z.object({ name: viewName, dataset: z.literal("holdings"), isFavorite: z.boolean().default(true), config: holdingsViewConfigSchema }),
+  z.object({ name: viewName, dataset: z.literal("investment_ops"), isFavorite: z.boolean().default(true), config: opsViewConfigSchema }),
+]);
 export type SavedViewInput = z.infer<typeof savedViewInputSchema>;
+
+/** A raw config object: validated against the view's dataset schema by the service. */
+const rawConfig = z.record(z.string(), z.unknown());
 
 export const savedViewPatchSchema = z
   .object({
-    name: z.string().min(1).max(120),
+    name: viewName,
     isFavorite: z.boolean(),
     position: z.number().int().min(0),
-    config: viewConfigSchema,
+    config: rawConfig,
   })
   .partial();
 export type SavedViewPatch = z.infer<typeof savedViewPatchSchema>;
+
+/** POST /v2/views/{id}/duplicate: the copy takes `config` (the one on screen, drafts included) over the stored one. */
+export const duplicateViewSchema = z.object({
+  name: viewName.optional(),
+  config: rawConfig.optional(),
+});
+export type DuplicateViewInput = z.infer<typeof duplicateViewSchema>;
 
 /** Display preferences the built-in "Todas" view keeps; filters never persist on it. */
 export const BUILTIN_ALL_VIEW_KEY = "all";

@@ -3,6 +3,7 @@ import { resolveLocale, type Locale } from "@capital/server/i18n";
 import { ensureSystemCategories } from "@capital/server/modules/categories/lib/system-categories";
 import { signupCurrencies } from "@capital/server/modules/currencies/lib/signup-currencies";
 import { LedgerError } from "@capital/server/modules/ledger/lib/errors";
+import { ensureDefaultViews } from "@capital/server/modules/ledger/services/default-views";
 import { getPersonalEntity } from "@capital/server/modules/ledger/services/entities";
 import { ensureBuiltinViews } from "@capital/server/modules/ledger/services/views";
 import { hashPassword } from "./password";
@@ -18,7 +19,7 @@ interface SignupInput {
 
 /**
  * A new user starts with the PF entity and its main account, the system
- * categories and the "Todas" view, both named in the user's locale, and
+ * categories, "Todas" and the default views, all named in the user's locale, and
  * BRL, USD and EUR with rates relative to the base currency.
  */
 export async function signup(input: SignupInput, prisma: PrismaClient) {
@@ -42,6 +43,7 @@ export async function signup(input: SignupInput, prisma: PrismaClient) {
     await tx.currency.createMany({ data: currencies.map((c) => ({ userId: user.id, ...c })), skipDuplicates: true });
     await ensureSystemCategories(user.id, tx);
     await ensureBuiltinViews(user.id, tx);
+    await ensureDefaultViews(user.id, tx);
     return user;
   });
 }

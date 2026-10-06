@@ -1,1 +1,257 @@
-{}
+{
+  "crumb": "Transactions",
+  "viewsError": "Could not load the views.",
+  "tabs": {
+    "fixed": "fixed",
+    "newView": "New view",
+    "modified": "Modified"
+  },
+  "period": {
+    "title": "View period",
+    "prev": "Previous period",
+    "next": "Next period",
+    "backToCurrent": "back to current",
+    "custom": "Custom range…",
+    "customLabel": "Range",
+    "from": "From",
+    "to": "To",
+    "apply": "Apply",
+    "whole": "all time",
+    "presets": {
+      "this_month": "This month",
+      "last_month": "Last month",
+      "last_3m": "Last 3 months",
+      "ytd": "This year",
+      "last_12m": "Last 12 months",
+      "all": "All time"
+    }
+  },
+  "filters": {
+    "add": "+ Filter",
+    "filterBy": "Filter by…",
+    "is": "{prop} is…",
+    "choose": "{prop}: choose…",
+    "values": "{prop} is {values}",
+    "count": "{prop} is {count} values",
+    "notIn": "{prop} is not {values}",
+    "notInCount": "{prop} is not {count} values",
+    "isNull": "{prop}: empty",
+    "isNotNull": "{prop}: filled in",
+    "other": "{prop}: custom filter",
+    "done": "Done",
+    "remove": "Remove filter",
+    "noOptions": "No values in this period.",
+    "fields": {
+      "importId": "Import",
+      "id": "Transaction",
+      "transferGroupId": "Transfer",
+      "recurringRuleId": "Recurring bill",
+      "installmentPlanId": "Installment plan",
+      "accountType": "Account type",
+      "kind": "Type",
+      "transferDirection": "Direction",
+      "cardStatementId": "Card bill",
+      "amount": "Original amount",
+      "amountBase": "Amount",
+      "description": "Description",
+      "date": "Date",
+      "effectiveDate": "Bill date"
+    }
+  },
+  "search": "Search this view…",
+  "autosaved": "saved automatically",
+  "clear": "Clear",
+  "saveAsNew": "Save as new",
+  "display": {
+    "button": "Display",
+    "name": "Name",
+    "builtinHint": "Fixed view. Filters here are temporary; columns, sorting, calculations and layout are remembered.",
+    "layout": "Layout",
+    "period": "Period",
+    "group": {
+      "group": "Group by",
+      "rows": "Rows",
+      "axis": "Axis",
+      "columns": "Columns",
+      "sub": "Subgroup",
+      "series": "Series"
+    },
+    "groupHint": "Week, Month, Quarter and Year also work for grouping; pair them with a long period to see the trend.",
+    "chartType": "Chart type",
+    "metric": "Value",
+    "top": "Limit",
+    "cumulative": "Cumulative (running total along the axis)",
+    "sort": "Sort",
+    "props": "Visible properties",
+    "favorite": "Favorite (shows in the sidebar)",
+    "duplicate": "Duplicate",
+    "close": "Close",
+    "delete": "Delete view",
+    "deleted": "View “{name}” deleted",
+    "custom": "Custom"
+  },
+  "layouts": {
+    "table": "Table",
+    "pivot": "Pivot",
+    "chart": "Chart",
+    "board": "Board",
+    "calendar": "Calendar"
+  },
+  "props": {
+    "none": "None",
+    "date": "Date",
+    "desc": "Description",
+    "entity": "Entity",
+    "account": "Account",
+    "category": "Category",
+    "kind": "Type",
+    "currency": "Currency",
+    "recurring": "Recurring",
+    "deductible": "Tax deductible",
+    "week": "Week",
+    "month": "Month",
+    "quarter": "Quarter",
+    "year": "Year",
+    "amount": "Amount",
+    "day": "Date (day)"
+  },
+  "sorts": {
+    "date_desc": "Date, newest first",
+    "date_asc": "Date, oldest first",
+    "abs_desc": "Amount, largest first"
+  },
+  "flowKind": {
+    "in": "Income",
+    "out": "Expense",
+    "transfer": "Transfer",
+    "invest": "Investment"
+  },
+  "categoryFlow": {
+    "invest": "Investments",
+    "transfer": "Transfer"
+  },
+  "yes": "Yes",
+  "no": "No",
+  "uncategorized": "Uncategorized",
+  "kpi": {
+    "income": "Income",
+    "expense": "Expenses",
+    "investment": "Investments",
+    "net": "Net",
+    "rows": "Rows"
+  },
+  "table": {
+    "empty": "No transactions in {period} with these filters.",
+    "visibleSelected": "{count, plural, one {The # visible row is selected.} other {The # visible rows are selected.}}",
+    "selectAll": "{count, plural, one {Select the # in the view} other {Select all # in the view}}",
+    "allSelected": "{count, plural, one {The # transaction in the view is selected.} other {All # transactions in the view are selected.}}",
+    "clearSelection": "Clear selection",
+    "loadMore": "Load more",
+    "loading": "Loading…",
+    "recurring": "Recurring",
+    "installment": "{n}/{total}",
+    "taxBadge": "Tax",
+    "selectRow": "Select row",
+    "selectVisible": "Select the visible rows",
+    "calc": {
+      "none": "Calculate",
+      "sum": "Sum",
+      "avg": "Average",
+      "median": "Median",
+      "min": "Min",
+      "max": "Max",
+      "count": "Count",
+      "countDistinct": "Unique"
+    }
+  },
+  "pivot": {
+    "caption": "Rows: {rows} · Columns: {cols} · Value: sum. Click a number to open the table with that slice (it becomes a view draft).",
+    "corner": "{rows} \\ {cols}",
+    "total": "Total",
+    "empty": "Nothing to cross-tabulate in this slice."
+  },
+  "charts": {
+    "types": {
+      "bar": "Bars",
+      "hbar": "Horizontal",
+      "bar100": "100%",
+      "line": "Line",
+      "area": "Area",
+      "pie": "Pie",
+      "donut": "Donut",
+      "treemap": "Treemap",
+      "waterfall": "Waterfall",
+      "sankey": "Sankey"
+    },
+    "hints": {
+      "bar": "Compare groups. With series, they stack.",
+      "hbar": "Rankings and long names (categories, accounts).",
+      "bar100": "Composition: how much each series weighs in each group.",
+      "line": "Change over time. Use a Date, Week or Month axis.",
+      "area": "Change over time with volume. Pairs well with Cumulative.",
+      "pie": "Share of a few groups (use Top N).",
+      "donut": "Share with the total in the middle.",
+      "treemap": "Where the money goes, by area. Good with many groups.",
+      "waterfall": "Income minus each expense down to the period’s net.",
+      "sankey": "Revenue → business → personal → categories: how money moved in the period."
+    },
+    "metrics": {
+      "sum": "Sum (absolute value)",
+      "count": "Number of transactions",
+      "avg": "Average ticket"
+    },
+    "signed": "{currency} (signed)",
+    "tops": {
+      "all": "All groups",
+      "top5": "Top 5 + Others",
+      "top8": "Top 8 + Others"
+    },
+    "title": "{view} · {type}",
+    "cumulative": "cumulative",
+    "topSuffix": "top {n} + Others",
+    "others": "Others",
+    "result": "Net",
+    "total": "Total",
+    "bar100Title": "100% bars need series",
+    "bar100Body": "Pick a property under “Series” in Display (e.g. Entity) to see what each group is made of.",
+    "empty": "No data for the chart in this slice."
+  },
+  "sankey": {
+    "investments": "Investments",
+    "surplus": "{entity} · Surplus",
+    "others": "Others",
+    "reserves": "From reserves",
+    "priorBalance": "Previous balance",
+    "transferIn": "Transfer from {entity}",
+    "transferOut": "Transfer to {entity}",
+    "uncategorized": "Uncategorized",
+    "empty": "No income or expenses in this slice.",
+    "caption": "Revenue {income} · Spending {expenses} · Investments {investments} · Surplus {surplus} · {period}",
+    "expandOthers": "Click Others to see the small categories.",
+    "collapseOthers": "Click a small category to fold them back into Others."
+  },
+  "board": {
+    "more": "Load more",
+    "shown": "{shown} of {total}",
+    "loading": "Loading…"
+  },
+  "calendar": {
+    "weekdays": {
+      "mon": "Mon",
+      "tue": "Tue",
+      "wed": "Wed",
+      "thu": "Thu",
+      "fri": "Fri",
+      "sat": "Sat",
+      "sun": "Sun"
+    },
+    "caption": "{month} · darker background = busier day",
+    "outside": "{count, plural, one {# transaction} other {# transactions}} from other months in the period",
+    "more": "+{count}",
+    "openDay": "Open {day} in the table"
+  },
+  "drill": {
+    "detail": "Detail: {label}",
+    "back": "back to the view"
+  }
+}

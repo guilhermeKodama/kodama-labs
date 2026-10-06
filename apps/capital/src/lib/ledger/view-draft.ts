@@ -31,6 +31,8 @@ export const VIEW_CONFIG_KEYS = [
 export type ViewDraft = Partial<ViewConfig> & {
   /** What the drill came from ("Saídas · set/2026"), for the banner; not part of the config. */
   label?: string;
+  /** The draft before the drill ("voltar à view" goes back to it); not part of the config. */
+  back?: Partial<ViewConfig>;
 };
 
 type ConfigKey = (typeof VIEW_CONFIG_KEYS)[number];
@@ -57,24 +59,41 @@ function shapeOf(value: unknown): "string" | "object" | "array" | "other" {
   return "other";
 }
 
+/** Known config keys with the right shape, undefined values dropped. */
+function cleanPatch(raw: Record<string, unknown>): Partial<ViewConfig> {
+  const patch: Record<string, unknown> = {};
+  for (const key of VIEW_CONFIG_KEYS) {
+    if (raw[key] !== undefined && shapeOf(raw[key]) === SHAPE[key]) patch[key] = raw[key];
+  }
+  return patch as Partial<ViewConfig>;
+}
+
 /** Known keys with the right shape, undefined values dropped. */
 export function cleanViewDraft(value: unknown): ViewDraft {
   if (shapeOf(value) !== "object") return {};
   const raw = value as Record<string, unknown>;
-  const draft: Record<string, unknown> = {};
-  for (const key of VIEW_CONFIG_KEYS) {
-    if (raw[key] !== undefined && shapeOf(raw[key]) === SHAPE[key]) draft[key] = raw[key];
+  const draft: ViewDraft = cleanPatch(raw);
+  if (typeof raw.label === "string" && raw.label) {
+    draft.label = raw.label;
+    // The way back only makes sense with the banner that offers it.
+    if (shapeOf(raw.back) === "object") draft.back = cleanPatch(raw.back as Record<string, unknown>);
   }
-  if (typeof raw.label === "string" && raw.label) draft.label = raw.label;
-  return draft as ViewDraft;
+  return draft;
 }
 
-/** The config part of a draft (the label left out). */
+/** The config part of a draft (the label and the way back left out). */
 function patchOf(draft: ViewDraft | null | undefined): Partial<ViewConfig> {
   if (!draft) return {};
-  const { label, ...patch } = cleanViewDraft(draft);
+  const { label, back, ...patch } = cleanViewDraft(draft);
   void label;
+  void back;
   return patch;
+}
+
+/** The config part of a draft, as a draft of its own (what "voltar à view" restores from `back`). */
+export function draftPatch(draft: ViewDraft | null | undefined): ViewDraft | null {
+  const patch = patchOf(draft);
+  return Object.keys(patch).length ? patch : null;
 }
 
 function toBase64Url(text: string): string {
@@ -156,6 +175,38 @@ export function parseViewParam(value: string | null | undefined): { viewId: stri
     return seedKey ? { seedKey } : null;
   }
   return { viewId: value };
+}
+
+/** The fields of a saved view that `?view` is matched against. */
+export interface ViewRef {
+  id: string;
+  seedKey?: string | null;
+  isBuiltin?: boolean;
+}
+
+/** The view `?view` names, else Todas (the built-in one), else the first; null while there are no views. */
+export function resolveActiveView<V extends ViewRef>(views: readonly V[], param: string | null | undefined): V | null {
+  const wanted = parseViewParam(param);
+  const match = wanted
+    ? views.find((view) => ("viewId" in wanted ? view.id === wanted.viewId : view.seedKey === wanted.seedKey))
+    : undefined;
+  return match ?? views.find((view) => view.isBuiltin) ?? views[0] ?? null;
+}
+
+/**
+ * What `?view=seed:<key>` becomes once the views are loaded: the seeded view's own id, or null (Todas) when
+ * the user deleted that view or it does not exist yet (PJ before a business entity). `undefined` = leave the
+ * param alone (no seed key, or the views are still loading). A plain id is never rewritten: a view created
+ * a moment ago may not be in the list yet.
+ */
+export function canonicalViewParam(
+  views: readonly ViewRef[],
+  param: string | null | undefined,
+  loaded: boolean,
+): string | null | undefined {
+  const wanted = parseViewParam(param);
+  if (!wanted || !("seedKey" in wanted) || !loaded) return undefined;
+  return views.find((view) => view.seedKey === wanted.seedKey)?.id ?? null;
 }
 
 export interface TransactionsHrefOptions {

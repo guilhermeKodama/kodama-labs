@@ -1,302 +1,387 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
-import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { parseAsString, useQueryState } from "nuqs";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { keepPreviousData, useInfiniteQuery, useQuery } from "@tanstack/react-query";
+import { useTranslations } from "next-intl";
+import { parseAsString, useQueryStates } from "nuqs";
 import { toast } from "sonner";
-import type { LedgerFilter, LedgerQueryInput, LedgerQueryResult, LedgerSelectionQuery, ViewConfig } from "@capital/server/modules/ledger/contracts";
-import { api, apiDelete, apiPatch, apiPost } from "@/lib/api/client";
-import { useNames } from "@/lib/api/catalog";
-import { LAYOUT_GLYPH } from "@/lib/ledger/view-glyphs";
-import { Btn, TextInput } from "@/components/shell/chrome";
+import type { GroupKey, LedgerDisplayQueryResult, LedgerFilter, ViewConfig } from "@capital/server/modules/ledger/contracts";
+import { Btn, TextInput } from "@/components/cap";
 import { Page } from "@/components/shell/page";
+import { apiDelete, apiPost } from "@/lib/api/client";
+import { useNames } from "@/lib/api/catalog";
+import { keys } from "@/lib/api/keys";
+import { useAppMutation, useErrorMessage } from "@/lib/api/use-app-mutation";
+import { useFmt } from "@/lib/format/provider";
+import { normalizeLedgerConfig } from "@/lib/ledger/columns";
+import { dayDraft, drillDraft, drillFiltersDraft, withDrillBanner, type DrillCell } from "@/lib/ledger/drill";
+import { currentMonth, periodDays, todayIso } from "@/lib/ledger/period";
+import { selectionStats } from "@/lib/ledger/selection";
+import { useLedgerViews, useViewSaver, type LedgerView } from "@/lib/ledger/use-views";
+import { applyViewDraft, decodeViewDraft, draftPatch, encodeViewDraft, canonicalViewParam, isDirty, resolveActiveView, type ViewDraft } from "@/lib/ledger/view-draft";
+import { boardColumnQuery, boardKey, calendarQuery, calendarRowsQuery, isPagedLayout, layoutQuery, pivotKeys, selectionScope, viewSelection } from "@/lib/ledger/view-query";
+import { planViewUpdate } from "@/lib/ledger/view-update";
 import { BulkBar } from "./bulk-bar";
-import { filterLabel } from "./fields";
+import { useLedgerLabels } from "./fields";
 import { TransactionsHeaderActions } from "./header-actions";
 import { BoardView, CalendarView, ChartView, PivotView, SankeyView } from "./layouts";
 import { LedgerOverlays, useLedgerOverlays } from "./overlays";
-import { selectionStats, toDisplayRows, type DisplayRow } from "./rows";
-import { LedgerTable } from "./table";
-import { DisplayMenu, FilterChips, PeriodControl, rangeLabel } from "./toolbar";
+import type { DisplayRow } from "./rows";
+import { KpiSummary, LedgerTable } from "./table";
+import { DisplayMenu, FilterChips, PeriodControl, ViewTabs } from "./toolbar";
 
-interface SavedView {
-  id: string;
-  name: string;
-  isBuiltin: boolean;
-  isFavorite: boolean;
-  config: ViewConfig;
+const EMPTY_SELECTION: ReadonlySet<string> = new Set();
+
+/** Pages of the calendar month's rows read at most (500 each). */
+const CALENDAR_MAX_PAGES = 4;
+
+const URL_STATE = { view: parseAsString, draft: parseAsString, q: parseAsString };
+type SetParams = ReturnType<typeof useQueryStates<typeof URL_STATE>>[1];
+
+/** The value after it has stopped changing for `delay` ms. */
+function useDebounced<T>(value: T, delay: number): T {
+  const [settled, setSettled] = useState(value);
+  useEffect(() => {
+    const id = setTimeout(() => setSettled(value), delay);
+    return () => clearTimeout(id);
+  }, [value, delay]);
+  return settled;
 }
 
-/** A temporary narrowing (click-through from a total), never saved into the view. */
-interface Drill {
-  label?: string;
-  filters: LedgerFilter[];
-  period?: ViewConfig["period"];
-}
-
-function selectionOf(config: ViewConfig): LedgerSelectionQuery {
-  return { period: config.period, dateField: config.dateField, filters: config.filters, search: config.search || undefined, deleted: "exclude" };
-}
-
-function queryOf(config: ViewConfig, cursor?: string): LedgerQueryInput {
-  const base = { ...selectionOf(config), aggregations: [{ fn: "sum" as const, field: "amountBase" as const }, { fn: "count" as const, field: "amountBase" as const }], sort: config.sort };
-  switch (config.layout) {
-    case "pivot": {
-      const [rows, cols] = config.groupBy;
-      return { ...base, includeRows: false, groupBy: rows ? [rows] : [], ...(rows && cols ? { pivot: { rows, cols, measure: { fn: "sum", field: "amountBase" } } } : {}) };
-    }
-    case "chart":
-      if (config.chart.type === "sankey") return { ...base, includeRows: false, groupBy: [{ field: "kind" }, { field: "categoryId" }] };
-      return { ...base, includeRows: false, groupBy: [config.groupBy[0] ?? { field: "date", bucket: "month" }] };
-    case "calendar":
-      return { ...base, includeRows: true, groupBy: [], page: { limit: 500, cursor } };
-    case "board":
-      return { ...base, includeRows: true, groupBy: config.groupBy.slice(0, 1), page: { limit: 300, cursor } };
-    default:
-      return { ...base, includeRows: true, groupBy: config.groupBy, page: { limit: 200, cursor } };
-  }
-}
-
+/**
+ * Transações › Lançamentos: the saved views as tabs (mockup ViewsScreen
+ * 2047–3125). The view comes from ?view (an id, or seed:<key> for a
+ * seeded one), the changes on screen that are not saved from ?draft and
+ * the transient search from ?q. Each view mounts its own screen, so
+ * switching views (tabs, sidebar, links) starts with a clean selection.
+ */
 export function TransactionsScreen() {
-  const names = useNames();
+  const t = useTranslations("ledger");
+  const tc = useTranslations("common");
+  const views = useLedgerViews();
   const overlays = useLedgerOverlays();
-  const queryClient = useQueryClient();
-  const views = useQuery({ queryKey: ["views", "ledger"], queryFn: () => api<SavedView[]>("/api/v2/views?dataset=ledger") });
-  const [viewId, setViewId] = useQueryState("view", parseAsString);
-  const [drillParam, setDrillParam] = useQueryState("drill", parseAsString);
-  const active = views.data?.find((view) => view.id === viewId) ?? views.data?.[0];
-  const [overrides, setOverrides] = useState<Record<string, ViewConfig>>({});
-  const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [allInView, setAllInView] = useState(false);
-  const [displayOpen, setDisplayOpen] = useState(false);
-  const [search, setSearch] = useState<string | null>(null);
-  const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [params, setParams] = useQueryStates(URL_STATE);
+  const list = useMemo(() => views.data ?? [], [views.data]);
+  const active = resolveActiveView(list, params.view);
 
-  const saved = active ? overrides[active.id] ?? active.config : null;
-  const drill = useMemo<Drill | null>(() => {
-    if (!drillParam) return null;
-    try {
-      return JSON.parse(drillParam) as Drill;
-    } catch {
-      return null;
-    }
-  }, [drillParam]);
-  const config: ViewConfig | null = saved
-    ? drill
-      ? { ...saved, filters: [...saved.filters, ...drill.filters], period: drill.period ?? saved.period, layout: "table" }
-      : saved
-    : null;
+  // ?view=seed:ir (e.g. the old /tax link) becomes the view's own id.
+  // A seeded view the user deleted (or one not seeded yet, like PJ before a business entity) falls back to Todas.
+  const canonical = canonicalViewParam(list, params.view, views.isSuccess);
+  useEffect(() => {
+    if (canonical !== undefined) void setParams({ view: canonical }, { history: "replace" });
+  }, [canonical, setParams]);
 
-  const patchView = useMutation({
-    mutationFn: (body: { id: string; patch: Record<string, unknown> }) => apiPatch<SavedView>(`/api/v2/views/${body.id}`, body.patch),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["views", "ledger"] }),
-    onError: (error: Error) => toast.error(error.message),
+  const open = (id: string | null) => void setParams({ view: id, draft: null, q: null });
+  const create = useAppMutation({
+    event: "views.write",
+    mutationFn: () => apiPost<LedgerView>("/api/v2/views", { name: t("tabs.newView"), dataset: "ledger", isFavorite: true, config: {} }),
+    onSuccess: (view) => {
+      open(view.id);
+      overlays.setDisplayOpen(true);
+    },
   });
-
-  function resetSelection() {
-    setSelected(new Set());
-    setAllInView(false);
-  }
-
-  /** Every display change auto-saves into the view; "Todas" keeps only display preferences server-side. */
-  function update(patch: Partial<ViewConfig>) {
-    if (!active || !saved) return;
-    const next = { ...saved, ...patch };
-    setOverrides((current) => ({ ...current, [active.id]: next }));
-    patchView.mutate({ id: active.id, patch: { config: next } });
-    resetSelection();
-  }
-
-  function onSearch(text: string) {
-    setSearch(text);
-    if (searchTimer.current) clearTimeout(searchTimer.current);
-    searchTimer.current = setTimeout(() => update({ search: text.trim() || undefined }), 350);
-  }
-
-  const result = useInfiniteQuery({
-    queryKey: ["ledger", "view", active?.id, config],
-    enabled: !!config,
-    initialPageParam: undefined as string | undefined,
-    queryFn: ({ pageParam }) => apiPost<LedgerQueryResult>("/api/v2/ledger/query", queryOf(config!, pageParam)),
-    getNextPageParam: (last) => (last.pageInfo.hasMore ? last.pageInfo.nextCursor ?? undefined : undefined),
+  const recreate = useAppMutation({
+    event: "views.write",
+    mutationFn: (view: LedgerView) => apiPost<LedgerView>("/api/v2/views", { name: view.name, dataset: "ledger", isFavorite: view.isFavorite, config: view.config }),
+    onSuccess: (view) => open(view.id),
   });
-  const first = result.data?.pages[0];
-  const rawRows = useMemo(() => result.data?.pages.flatMap((p) => p.rows) ?? [], [result.data]);
-  const rows = useMemo(() => toDisplayRows(rawRows, config?.transferDisplay ?? "group"), [rawRows, config?.transferDisplay]);
-  const selectedRows = rows.filter((row) => selected.has(row.id));
-  const totals = { count: first?.totals.count ?? 0, sum: first?.totals.values["sum:amountBase"] ?? 0 };
-
-  async function setCategory(row: DisplayRow, categoryId: string | null) {
-    try {
-      const res = await apiPatch<{ batchId: string | null }>(`/api/v2/ledger/entries/${row.id}`, { categoryId });
-      await queryClient.invalidateQueries({ queryKey: ["ledger"] });
-      toast(`Categoria de “${row.description}” alterada`, {
-        action: res.batchId ? { label: "Desfazer", onClick: () => void apiPost(`/api/v2/mutations/${res.batchId}/undo`, {}).then(() => queryClient.invalidateQueries({ queryKey: ["ledger"] })) } : undefined,
-      });
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Falhou");
-    }
-  }
-
-  async function newView() {
-    const view = await apiPost<SavedView>("/api/v2/views", { name: "Nova view", dataset: "ledger", isFavorite: true, config: {} });
-    await queryClient.invalidateQueries({ queryKey: ["views", "ledger"] });
-    void setViewId(view.id);
-    setDisplayOpen(true);
-  }
-
-  async function exportCsv() {
-    if (!config) return;
-    try {
-      const csv = await api<string>("/api/v2/ledger/export", { method: "POST", body: JSON.stringify({ query: selectionOf(config) }) });
-      const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = `capital-${active?.name ?? "lancamentos"}.csv`;
-      link.click();
-      URL.revokeObjectURL(url);
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Falha ao exportar");
-    }
-  }
-
-  function drillInto(filters: LedgerFilter[], period?: ViewConfig["period"]) {
-    resetSelection();
-    void setDrillParam(JSON.stringify({ filters, period }));
-  }
+  const remove = useAppMutation({
+    event: "views.write",
+    mutationFn: (view: LedgerView) => apiDelete(`/api/v2/views/${view.id}`),
+    onSuccess: (_, view) => {
+      overlays.setDisplayOpen(false);
+      open(null);
+      // Views are not in the undo log: "Desfazer" creates the view again from what it was.
+      toast(t("display.deleted", { name: view.name }), { action: { label: tc("undo"), onClick: () => recreate.mutate(view) } });
+    },
+  });
 
   const tabs = (
-    <div className="flex h-[38px] shrink-0 items-center gap-0.5 overflow-x-auto border-b border-stroke-3 px-2.5">
-      {(views.data ?? []).map((view) => {
-        const on = view.id === active?.id;
-        return (
-          <button
-            key={view.id}
-            type="button"
-            onClick={() => {
-              void setViewId(view.id);
-              void setDrillParam(null);
-              resetSelection();
-              setSearch(null);
-            }}
-            className={`inline-flex h-full items-center gap-1.5 border-b-2 px-2 text-[12.5px] whitespace-nowrap ${on ? "border-fg-1 font-medium text-fg-1" : "border-transparent text-fg-3 hover:text-fg-strong"}`}
-          >
-            <span className="text-[11px] text-fg-3">{LAYOUT_GLYPH[view.config.layout] ?? "▦"}</span>
-            {view.name}
-            {view.isBuiltin ? <span className="text-[10px] text-fg-4">fixa</span> : null}
-          </button>
-        );
-      })}
-      <button type="button" title="Nova view" onClick={() => void newView()} className="px-2 text-[14px] text-fg-3 hover:text-fg-strong">
-        +
-      </button>
-    </div>
+    <ViewTabs
+      views={list}
+      activeId={active?.id ?? null}
+      dirty={!!active && isDirty(normalizeLedgerConfig(active.config), decodeViewDraft(params.draft))}
+      onPick={(view) => open(view.id)}
+      onNew={() => create.mutate()}
+      creating={create.isPending}
+    />
   );
 
-  if (!active || !config || !saved) {
+  if (!active) {
     return (
-      <Page crumbs={["Transações", "Lançamentos"]} subheader={tabs}>
-        <p className="text-[12.5px] text-fg-3">{views.isError ? "Não foi possível carregar as views." : "Carregando…"}</p>
+      <Page crumbs={[t("crumb")]} subheader={tabs}>
+        <p className="text-[12.5px] text-fg-3">{views.isError ? t("viewsError") : tc("loading")}</p>
       </Page>
     );
   }
+  return <ViewScreen key={active.id} view={active} tabs={tabs} draftParam={params.draft} search={params.q ?? ""} setParams={setParams} onDelete={() => remove.mutate(active)} />;
+}
 
-  const searchValue = search ?? saved.search ?? "";
+function ViewScreen({
+  view,
+  tabs,
+  draftParam,
+  search,
+  setParams,
+  onDelete,
+}: {
+  view: LedgerView;
+  tabs: ReactNode;
+  draftParam: string | null;
+  search: string;
+  setParams: SetParams;
+  onDelete: () => void;
+}) {
+  const t = useTranslations("ledger");
+  const fmt = useFmt();
+  const names = useNames();
+  const labels = useLedgerLabels(names);
+  const overlays = useLedgerOverlays();
+  const errorText = useErrorMessage();
+  const saveView = useViewSaver();
 
-  return (
-    <Page crumbs={["Transações", active.name]} subheader={tabs} actions={<TransactionsHeaderActions />} overlay={<LedgerOverlays names={names} rows={rows} />}>
-      <div className="relative flex flex-wrap items-center gap-1.5">
-        <PeriodControl config={saved} label={rangeLabel(first?.range, "preset" in saved.period ? saved.period.preset : "")} onChange={(period) => update({ period })} />
-        <FilterChips filters={saved.filters} names={names} onChange={(filters) => update({ filters })} />
-        <span className="flex-1" />
-        <TextInput value={searchValue} onChange={onSearch} placeholder="Buscar nesta view…" className="w-[180px]" />
-        <span className="relative">
-          <Btn onClick={() => setDisplayOpen((v) => !v)}>Exibição</Btn>
-          <DisplayMenu
-            key={`${active.id}:${active.name}`}
-            open={displayOpen}
-            onClose={() => setDisplayOpen(false)}
-            name={active.name}
-            isBuiltin={active.isBuiltin}
-            isFavorite={active.isFavorite}
-            config={saved}
-            onRename={(name) => patchView.mutate({ id: active.id, patch: { name } })}
-            onFavorite={(isFavorite) => patchView.mutate({ id: active.id, patch: { isFavorite } })}
-            onConfig={update}
-            onDuplicate={() =>
-              void apiPost<SavedView>(`/api/v2/views/${active.id}/duplicate`, { name: `${active.name} (cópia)` }).then(async (view) => {
-                await queryClient.invalidateQueries({ queryKey: ["views", "ledger"] });
-                void setViewId(view.id);
-                setDisplayOpen(false);
-              })
-            }
-            onDelete={() => {
-              if (!window.confirm(`Excluir a view “${active.name}”? Os lançamentos não são afetados.`)) return;
-              void apiDelete(`/api/v2/views/${active.id}`).then(async () => {
-                await queryClient.invalidateQueries({ queryKey: ["views", "ledger"] });
-                void setViewId(null);
-                setDisplayOpen(false);
-              });
-            }}
-            onExport={() => void exportCsv()}
-          />
-        </span>
-      </div>
-      {drill ? (
-        <div className="flex items-center gap-2 rounded-lg border border-stroke-3 bg-fill-4 px-3 py-1.5 text-[12px]">
-          <span className="text-fg-3">Detalhe:</span>
-          <span className="truncate">{drill.label ?? drill.filters.map((f) => filterLabel(f, names)).join(" · ")}</span>
-          <button type="button" className="ml-auto text-fg-muted underline" onClick={() => void setDrillParam(null)}>voltar à view</button>
-        </div>
+  const saved = useMemo(() => normalizeLedgerConfig(view.config), [view.config]);
+  const draft = useMemo(() => decodeViewDraft(draftParam), [draftParam]);
+  const config = useMemo(() => applyViewDraft(saved, draft), [saved, draft]);
+  const dirty = isDirty(saved, draft);
+
+  const [searchText, setSearchText] = useState(search);
+  const q = useDebounced(searchText.trim(), 250);
+  // A selection belongs to the rows it was made on: whatever changes them (a filter, the period, the search,
+  // "Limpar", "voltar à view", the browser's Back over a drill) drops it, so "all in view" never widens.
+  const selectionKey = selectionScope(config, q);
+  const [selection, setSelection] = useState<{ key: string; ids: ReadonlySet<string>; all: boolean }>(() => ({ key: selectionKey, ids: new Set(), all: false }));
+  const current = selection.key === selectionKey;
+  const selected = current ? selection.ids : EMPTY_SELECTION;
+  const allInView = current && selection.all;
+  const setSelected = useCallback(
+    (ids: ReadonlySet<string>) => setSelection((s) => ({ key: selectionKey, ids, all: s.key === selectionKey && s.all })),
+    [selectionKey],
+  );
+  const setAllInView = useCallback(
+    (all: boolean) => setSelection((s) => ({ key: selectionKey, ids: s.key === selectionKey ? s.ids : EMPTY_SELECTION, all })),
+    [selectionKey],
+  );
+  const clearSelection = useCallback(() => setSelection({ key: selectionKey, ids: EMPTY_SELECTION, all: false }), [selectionKey]);
+
+  const setDraft = (next: ViewDraft | null, history: "push" | "replace" = "replace") => void setParams({ draft: encodeViewDraft(next) }, { history });
+  /** Every change on screen: saved at once, or kept in the draft (see planViewUpdate). */
+  const update = (patch: Partial<ViewConfig>) => {
+    const plan = planViewUpdate({ saved, draft, isBuiltin: view.isBuiltin, patch });
+    if (plan.save) saveView(view.id, { config: plan.save });
+    if (encodeViewDraft(plan.draft) !== draftParam) setDraft(plan.draft);
+  };
+  /** A drill opens the table with that slice as a draft, with its banner; the browser's Back also returns. */
+  const openDrill = (next: ViewDraft, label: string) => setDraft(withDrillBanner(next, label, draft), "push");
+  const drill = (cells: DrillCell[]) =>
+    openDrill(drillDraft(saved, config, cells), cells.length ? cells.map((cell) => labels.groupValue(cell.key, cell.value)).join(" · ") : t("pivot.total"));
+  const drillFilters = (groupKeys: GroupKey[], filters: LedgerFilter[]) => openDrill(drillFiltersDraft(saved, config, groupKeys, filters), t("charts.others"));
+
+  // ---- period ----
+  const timezone = fmt.prefs.timezone;
+  const days = periodDays(config.period, currentMonth(timezone));
+  const rangeLabel = days ? fmt.periodRangeLabel(days.from, days.to) : t("period.whole");
+  const today = todayIso(timezone);
+  /** The calendar shows the last month of the period (this month for "Todo o período"). */
+  const calendarMonth = (days?.to ?? today).slice(0, 7);
+
+  // ---- data ----
+  const calendar = config.layout === "calendar";
+  const body = useMemo(() => (calendar ? calendarRowsQuery(config, q, calendarMonth) : layoutQuery(config, q)), [calendar, config, q, calendarMonth]);
+  const paged = isPagedLayout(config);
+  const sankey = config.layout === "chart" && config.chart.type === "sankey";
+  const pages = useInfiniteQuery({
+    queryKey: keys.ledgerQuery({ ...body, paged: true }),
+    enabled: paged,
+    initialPageParam: undefined as string | undefined,
+    queryFn: ({ pageParam }) => apiPost<LedgerDisplayQueryResult>("/api/v2/ledger/query", { ...body, page: { ...body.page, cursor: pageParam } }),
+    getNextPageParam: (last) => (last.pageInfo.hasMore ? (last.pageInfo.nextCursor ?? undefined) : undefined),
+    placeholderData: keepPreviousData,
+  });
+  const single = useQuery({
+    queryKey: keys.ledgerQuery(body),
+    enabled: !paged && !sankey,
+    queryFn: () => apiPost<LedgerDisplayQueryResult>("/api/v2/ledger/query", body),
+    placeholderData: keepPreviousData,
+  });
+  const calendarBody = useMemo(() => calendarQuery(config, q), [config, q]);
+  const calendarDays = useQuery({
+    queryKey: keys.ledgerQuery(calendarBody),
+    enabled: calendar,
+    queryFn: () => apiPost<LedgerDisplayQueryResult>("/api/v2/ledger/query", calendarBody),
+    placeholderData: keepPreviousData,
+  });
+  const result = paged ? pages : single;
+  const first = paged ? pages.data?.pages[0] : single.data;
+  const rows = useMemo<DisplayRow[]>(() => (paged ? (pages.data?.pages.flatMap((page) => page.rows) ?? []) : []), [paged, pages.data]);
+  const { fetchNextPage, hasNextPage, isFetchingNextPage } = pages;
+  const loadMore = useCallback(() => void fetchNextPage(), [fetchNextPage]);
+  // The calendar reads every row of its month (for the descriptions), a few pages at most.
+  const calendarPages = pages.data?.pages.length ?? 0;
+  useEffect(() => {
+    if (calendar && hasNextPage && !isFetchingNextPage && calendarPages < CALENDAR_MAX_PAGES) void fetchNextPage();
+  }, [calendar, hasNextPage, isFetchingNextPage, calendarPages, fetchNextPage]);
+  const totalCount = first?.summary?.count ?? first?.totals?.count ?? 0;
+
+  const duplicate = useAppMutation({
+    event: "views.write",
+    mutationFn: () => apiPost<LedgerView>(`/api/v2/views/${view.id}/duplicate`, { config: applyViewDraft(saved, draft) }),
+    onSuccess: (copy) => void setParams({ view: copy.id, draft: null, q: null }),
+  });
+
+  const selectedRows = rows.filter((row) => selected.has(row.id));
+  const summary = first?.summary ?? null;
+  const everyLoaded = rows.length > 0 && rows.every((row) => selected.has(row.id));
+
+  const filterBar = (
+    <div className="relative flex flex-wrap items-center gap-1.5">
+      <PeriodControl period={config.period} rangeLabel={rangeLabel} onChange={(period) => update({ period })} />
+      <FilterChips config={config} names={names} labels={labels} onChange={(filters) => update({ filters })} />
+      <span className="flex-1" />
+      <TextInput
+        value={searchText}
+        placeholder={t("search")}
+        aria-label={t("search")}
+        className="w-[170px]"
+        onChange={(text) => {
+          setSearchText(text);
+          void setParams({ q: text || null });
+        }}
+      />
+      <DisplayMenu
+        open={overlays.displayOpen}
+        onOpenChange={overlays.setDisplayOpen}
+        name={view.name}
+        isBuiltin={view.isBuiltin}
+        isFavorite={view.isFavorite}
+        config={config}
+        labels={labels}
+        onRename={(name) => saveView(view.id, { name })}
+        onFavorite={(isFavorite) => saveView(view.id, { isFavorite })}
+        onConfig={update}
+        onDuplicate={() => duplicate.mutate()}
+        onDelete={onDelete}
+      />
+      {dirty ? (
+        <>
+          <Btn ghost onClick={() => setDraft(null)}>
+            {t("clear")}
+          </Btn>
+          <Btn onClick={() => duplicate.mutate()} disabled={duplicate.isPending}>
+            {t("saveAsNew")}
+          </Btn>
+        </>
+      ) : !view.isBuiltin ? (
+        <span className="text-[11px] text-fg-4">{t("autosaved")}</span>
       ) : null}
-      {result.isError ? <p className="text-[12.5px] text-neg">{(result.error as Error).message}</p> : null}
-      {config.layout === "table" ? (
-        <LedgerTable
-          rows={rows}
+    </div>
+  );
+
+  let layout: ReactNode = null;
+  switch (config.layout) {
+    case "table":
+      layout = (
+        <>
+          <KpiSummary summary={summary} />
+          <LedgerTable
+            rows={rows}
+            groups={first?.groups ?? []}
+            config={config}
+            totals={first?.totals?.values ?? {}}
+            totalCount={totalCount}
+            names={names}
+            labels={labels}
+            periodLabel={rangeLabel}
+            loading={result.isFetching}
+            hasMore={!!pages.hasNextPage}
+            onLoadMore={loadMore}
+            selected={selected}
+            onSelected={setSelected}
+            allInView={allInView}
+            onAllInView={setAllInView}
+            onConfig={update}
+          />
+          {selected.size > 0 || allInView ? (
+            <BulkBar
+              selection={allInView ? { query: viewSelection(config, q) } : { ids: selectedRows.flatMap((row) => row.legIds) }}
+              stats={allInView ? { count: totalCount, sum: summary?.net ?? 0, avg: 0, min: 0, max: 0 } : selectionStats(selectedRows)}
+              names={names}
+              allInView={allInView}
+              canSelectAll={everyLoaded && totalCount > rows.length}
+              totalInView={totalCount}
+              onSelectAll={() => setAllInView(true)}
+              onClear={clearSelection}
+            />
+          ) : null}
+        </>
+      );
+      break;
+    case "pivot": {
+      const { rows: rowsKey, cols: colsKey } = pivotKeys(config);
+      layout = <PivotView pivot={first?.pivot} rowsKey={rowsKey} colsKey={colsKey} labels={labels} onDrill={drill} />;
+      break;
+    }
+    case "chart":
+      layout = (
+        <ChartView
           groups={first?.groups ?? []}
           config={config}
-          names={names}
-          selected={selected}
-          onSelect={(ids, on) => {
-            setAllInView(false);
-            setSelected((current) => {
-              const next = new Set(current);
-              for (const id of ids) {
-                if (on) next.add(id);
-                else next.delete(id);
-              }
-              return next;
-            });
-          }}
-          onOpen={(row) => overlays.openEntry(row.id)}
-          onCategory={(row, categoryId) => void setCategory(row, categoryId)}
-          totals={totals}
-          hasMore={!!result.hasNextPage}
-          onMore={() => void result.fetchNextPage()}
+          viewName={view.name}
+          rangeLabel={rangeLabel}
+          labels={labels}
+          onType={(type) => update({ chart: { ...config.chart, type } })}
+          onDrill={drill}
+          onDrillFilters={drillFilters}
+          sankey={sankey ? <SankeyView config={config} search={q} names={names} rangeLabel={rangeLabel} onDrill={drill} /> : null}
+        />
+      );
+      break;
+    case "board":
+      layout = (
+        <BoardView
+          rows={rows}
+          groups={first?.groups ?? []}
+          groupKey={boardKey(config)}
+          config={config}
+          labels={labels}
           loading={result.isFetching}
+          columnQuery={(value, limit) => boardColumnQuery(config, q, value, limit)}
+          onOpen={(row) => overlays.openEntry(row.id)}
         />
-      ) : null}
-      {config.layout === "pivot" ? (
-        first?.pivot ? <PivotView pivot={first.pivot} config={config} names={names} onDrill={(filters) => drillInto(filters)} /> : <p className="text-[12.5px] text-fg-3">Escolha Linhas e Colunas em Exibição.</p>
-      ) : null}
-      {config.layout === "chart" && config.chart.type !== "sankey" ? <ChartView groups={first?.groups ?? []} config={config} names={names} onDrill={(filters) => drillInto(filters)} /> : null}
-      {config.layout === "chart" && config.chart.type === "sankey" ? <SankeyView groups={first?.groups ?? []} names={names} /> : null}
-      {config.layout === "board" ? <BoardView rows={rows} groups={first?.groups ?? []} config={config} names={names} onOpen={(row) => overlays.openEntry(row.id)} /> : null}
-      {config.layout === "calendar" ? (
-        <CalendarView rows={rows} range={first?.range ?? { from: null, to: null }} names={names} onDay={(day) => drillInto([], { from: day, to: day })} />
-      ) : null}
-      {selected.size > 0 || allInView ? (
-        <BulkBar
-          selection={allInView ? { query: selectionOf(config) } : { ids: selectedRows.flatMap((row) => row.legIds) }}
-          stats={selectionStats(selectedRows)}
-          names={names}
-          allInView={allInView}
-          canSelectAll={selected.size === rows.length && totals.count > rows.length}
-          totalInView={totals.count}
-          onSelectAll={() => setAllInView(true)}
-          onClear={resetSelection}
+      );
+      break;
+    case "calendar": {
+      layout = (
+        <CalendarView
+          month={calendarMonth}
+          today={today}
+          dateField={config.dateField}
+          rows={rows}
+          groups={calendarDays.data?.groups ?? []}
+          periodCount={calendarDays.data?.totals?.count ?? 0}
+          onOpen={(row) => overlays.openEntry(row.id)}
+          onDay={(day) => openDrill(dayDraft(saved, config, day), fmt.date(day))}
         />
+      );
+      break;
+    }
+  }
+
+  return (
+    <Page crumbs={[t("crumb"), view.name]} subheader={tabs} actions={<TransactionsHeaderActions />} overlay={<LedgerOverlays names={names} rows={rows} />}>
+      {filterBar}
+      {draft?.label ? (
+        <p className="text-[12px] text-fg-3">
+          {t("drill.detail", { label: draft.label })} ·{" "}
+          <button type="button" onClick={() => setDraft(draftPatch(draft.back))} className="underline underline-offset-[3px] hover:text-fg-1">
+            {t("drill.back")}
+          </button>
+        </p>
       ) : null}
+      {result.isError ? <p className="text-[12.5px] text-neg">{errorText(result.error)}</p> : null}
+      {calendar && calendarDays.isError ? <p className="text-[12.5px] text-neg">{errorText(calendarDays.error)}</p> : null}
+      {/* A failed first load shows the error, not an empty table that reads "Nenhum lançamento…". */}
+      {result.isError && !first && !sankey ? null : layout}
     </Page>
   );
 }

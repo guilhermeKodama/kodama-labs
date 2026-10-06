@@ -1,52 +1,50 @@
-import type { LedgerRow } from "@capital/server/modules/ledger/contracts";
+import type { LedgerDisplayRow, LedgerRow } from "@capital/server/modules/ledger/contracts";
+import { selectionStats as statsOf } from "@/lib/ledger/selection";
 
 /**
- * A display row. With transfers as one line, both legs collapse into the
- * outflow leg, carrying the destination account and the absolute amount.
+ * A row as Transações shows it: a display row from POST /v2/ledger/query
+ * with semantics "display" (one row per entry, one per transfer; the
+ * server merges the legs, counts and signs them). `toAccountId` is kept
+ * for older readers: the destination of a neutral transfer, which the
+ * server sends as counterpartAccountId.
  */
-export interface DisplayRow extends LedgerRow {
-  legIds: string[];
-  toAccountId: string | null;
-  neutral: boolean;
-}
+export type DisplayRow = LedgerDisplayRow & {
+  /** @deprecated read counterpartAccountId. */
+  toAccountId?: string | null;
+};
 
-export function toDisplayRows(rows: LedgerRow[], mode: "group" | "legs"): DisplayRow[] {
-  const plain = (row: LedgerRow): DisplayRow => ({ ...row, legIds: [row.id], toAccountId: null, neutral: false });
-  if (mode === "legs") return rows.map(plain);
-  const byGroup = new Map<string, LedgerRow[]>();
-  for (const row of rows) {
-    if (row.transferGroupId) byGroup.set(row.transferGroupId, [...(byGroup.get(row.transferGroupId) ?? []), row]);
-  }
-  const out: DisplayRow[] = [];
-  const done = new Set<string>();
-  for (const row of rows) {
-    if (!row.transferGroupId) {
-      out.push(plain(row));
-      continue;
-    }
-    if (done.has(row.transferGroupId)) continue;
-    const legs = byGroup.get(row.transferGroupId) ?? [row];
-    if (legs.length < 2) {
-      // Only one leg is in view (e.g. filtered by entity): it is a real in/out flow here.
-      out.push(plain(row));
-      continue;
-    }
-    done.add(row.transferGroupId);
-    const from = legs.find((leg) => leg.amount < 0) ?? legs[0];
-    const to = legs.find((leg) => leg.id !== from.id) ?? legs[1];
-    out.push({ ...from, legIds: legs.map((leg) => leg.id), toAccountId: to.accountId, neutral: true, amountBase: Math.abs(from.amountBase) });
-  }
-  return out;
-}
+const FLOW_OF_KIND: Record<LedgerRow["kind"], LedgerDisplayRow["flowKind"]> = { income: "in", expense: "out", transfer: "transfer", investment: "invest" };
 
-export function selectionStats(rows: DisplayRow[]) {
-  const values = rows.filter((row) => !row.neutral).map((row) => row.amountBase);
-  const sum = values.reduce((s, v) => s + v, 0);
+/**
+ * One entry fetched on its own (GET /v2/ledger/entries/{id}, legs) as a
+ * display row of just that leg. Nothing is merged here any more: rows on
+ * screen come merged from the server.
+ */
+export function toDisplayRow(row: LedgerRow): DisplayRow {
+  const invest = row.transferDirection === "investment_deposit" || row.transferDirection === "investment_withdrawal";
   return {
-    count: rows.length,
-    sum,
-    avg: values.length ? sum / values.length : 0,
-    min: values.length ? Math.min(...values) : 0,
-    max: values.length ? Math.max(...values) : 0,
+    ...row,
+    legIds: [row.id],
+    flowKind: invest ? "invest" : FLOW_OF_KIND[row.kind],
+    counts: true,
+    displayAmount: row.amountBase,
+    neutral: false,
+    counterpartEntityId: null,
+    installmentTotal: null,
+    linkedOperationId: null,
+    operationType: null,
+    attachmentCount: 0,
+    toAccountId: null,
   };
+}
+
+/** @deprecated rows come merged from the server; kept for readers of single entries. */
+export function toDisplayRows(rows: LedgerRow[], mode?: "group" | "legs"): DisplayRow[] {
+  void mode;
+  return rows.map(toDisplayRow);
+}
+
+/** Σ, média, mín, máx of picked rows (the bulk bar), over counted rows. */
+export function selectionStats(rows: readonly DisplayRow[]) {
+  return statsOf(rows);
 }

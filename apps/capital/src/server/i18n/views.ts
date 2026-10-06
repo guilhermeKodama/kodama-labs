@@ -3,6 +3,8 @@ import { defineDictionary } from "./define";
 /**
  * Names of the views the server creates, by dataset and seed key. The pt-BR
  * names are the mockup's (canvas DEFAULT_VIEWS); "PJ" carries no month.
+ * flowKind holds the "Tipo" labels (mockup KIND_LABEL) the CSV export writes;
+ * categoryFlow the Categoria of an uncategorized aporte or transfer (as the table shows it).
  */
 export const views = defineDictionary(
   {
@@ -32,6 +34,16 @@ export const views = defineDictionary(
       income12m: "Proventos 12m",
       operations: "Operações",
     },
+    flowKind: {
+      in: "Entrada",
+      out: "Saída",
+      transfer: "Transferência",
+      invest: "Aporte",
+    },
+    categoryFlow: {
+      invest: "Investimentos",
+      transfer: "Transferência",
+    },
   },
   {
     builtin: {
@@ -59,6 +71,16 @@ export const views = defineDictionary(
     investment_ops: {
       income12m: "Income 12m",
       operations: "Operations",
+    },
+    flowKind: {
+      in: "Income",
+      out: "Expense",
+      transfer: "Transfer",
+      invest: "Investment",
+    },
+    categoryFlow: {
+      invest: "Investments",
+      transfer: "Transfer",
     },
   }
 );
