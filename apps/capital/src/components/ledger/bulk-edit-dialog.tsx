@@ -35,7 +35,7 @@ export interface BulkEditDialogProps {
   /** How many rows the selection has, for the title. */
   count: number;
   names: Names;
-  /** After the change was applied (the bar clears the selection). */
+  /** After the change was applied (the bar keeps the selection, as in the mockup). */
   onApplied?: () => void;
   /** The rows as listed, for the before/after table (all the loaded ones when the whole view is selected). */
   rows?: readonly DisplayRow[];

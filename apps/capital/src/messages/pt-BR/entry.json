@@ -212,6 +212,7 @@
   "rowMenu": {
     "label": "Ações da transação",
     "open": "Abrir detalhe",
+    "edit": "Editar",
     "duplicate": "Duplicar",
     "moveEntity": "Mover para entidade…",
     "changeCategory": "Mudar categoria…",
@@ -275,6 +276,12 @@
     "restore": "Restaurar",
     "empty": "A lixeira está vazia.",
     "more": "Carregar mais",
-    "transfer": "{from} → {to}"
+    "transfer": "{from} → {to}",
+    "purgeAll": "Esvaziar lixeira",
+    "confirmTitle": "Apagar de vez {count, plural, one {# transação} other {# transações}}?",
+    "confirmDesc": "Isso não dá para desfazer.",
+    "cancel": "Cancelar",
+    "purge": "Esvaziar",
+    "purged": "Lixeira esvaziada · {count, plural, one {# transação apagada} other {# transações apagadas}}"
   }
 }

@@ -3,7 +3,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { useTranslations } from "next-intl";
 import { Btn, Kbd } from "@/components/cap";
-import { useRouter } from "@/i18n/navigation";
 import { apiGet } from "@/lib/api/client";
 import { keys } from "@/lib/api/keys";
 import { useShortcut } from "@/lib/shortcuts/provider";
@@ -13,18 +12,14 @@ import type { TrashPage } from "./trash-sheet";
 /**
  * The actions in Transações' header (mockup 3099-3104, 5071-5077, 5413):
  * "Lixeira · N" (only with something in the trash; opens ?trash=1),
- * "Importar extrato", and N + "+ Nova transação" (opens ?create=1). N is
- * bound here at screen scope, so it works on Transações while nothing is
- * typed and no overlay is open.
- *
- * "Importar extrato" still goes to Ajustes › Importações; S3 points it at
- * openImport() once its dialog exists.
+ * "Importar extrato" (opens ?import=1, S3's ImportDialog), and N +
+ * "+ Nova transação" (opens ?create=1). N is bound here at screen scope, so
+ * it works on Transações while nothing is typed and no overlay is open.
  */
 export function TransactionsHeaderActions() {
   const t = useTranslations("entry.header");
   const tImport = useTranslations("import");
   const overlays = useLedgerOverlays();
-  const router = useRouter();
   const trash = useQuery({
     queryKey: keys.trash({ limit: 1 }),
     queryFn: () => apiGet<TrashPage>("/api/v2/trash", { limit: 1 }),
@@ -38,7 +33,7 @@ export function TransactionsHeaderActions() {
           {t("trash", { count: inTrash })}
         </Btn>
       ) : null}
-      <Btn onClick={() => router.push("/settings?page=imports")}>{tImport("action")}</Btn>
+      <Btn onClick={() => overlays.openImport()}>{tImport("action")}</Btn>
       <Kbd>N</Kbd>
       <Btn primary onClick={() => overlays.openCreate()}>
         {t("create")}

@@ -94,8 +94,8 @@ export function useRowShortcuts(row: ActionRow | null, actions: RowActions) {
 const SUB_TRIGGER = cn(MENU_ROW, "text-fg-1 data-[state=open]:bg-fill-3");
 
 /**
- * The ⋯ at the end of a table row (mockup 2655-2690): Abrir detalhe ↵,
- * Duplicar ⌘D, Mover para entidade…, Mudar categoria…, Excluir ⌫. A
+ * The ⋯ at the end of a table row (mockup 2617-2620, 5426-5433): Abrir
+ * detalhe ↵, Editar E (the detail sheet is the edit form), Duplicar ⌘D, Mover para entidade…, Mudar categoria…, Excluir ⌫. A
  * transfer keeps its entity and category (edit its endpoints in the sheet).
  */
 export function RowActionsMenu({ row }: { row: DisplayRow }) {
@@ -151,6 +151,7 @@ function RowMenuItems({ row, actions }: { row: DisplayRow; actions: RowActions }
   return (
     <>
       <MenuItem label={t("open")} shortcut="↵" onSelect={() => actions.open(row)} />
+      <MenuItem label={t("edit")} shortcut="E" onSelect={() => actions.open(row)} />
       <MenuItem label={t("duplicate")} shortcut={duplicateKey} onSelect={() => actions.duplicate(row)} />
       {sub(
         t("moveEntity"),

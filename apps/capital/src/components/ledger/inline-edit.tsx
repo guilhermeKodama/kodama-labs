@@ -255,6 +255,7 @@ function CellEditor({ row, field, names, onDone }: { row: DisplayRow; field: Edi
         commit({ entityId: value }, t("entity", { description: row.description, entity: names.entity.get(value) ?? "" }), null);
       }}
       onCancel={() => onDone(null)}
+      onMove={(move) => onDone(move)}
     />
   );
 }
@@ -327,6 +328,7 @@ function ListEditor({
   invalid,
   onPick,
   onCancel,
+  onMove,
 }: {
   row: DisplayRow;
   field: "categoryId" | "accountId" | "entityId";
@@ -334,6 +336,8 @@ function ListEditor({
   invalid: boolean;
   onPick: (value: string) => void;
   onCancel: () => void;
+  /** Tab / ⇧Tab: leave the list unchanged and open the next (previous) cell. */
+  onMove: (move: "next" | "previous") => void;
 }) {
   const tCommon = useTranslations("common");
   const trigger = useRef<HTMLButtonElement>(null);
@@ -369,6 +373,9 @@ function ListEditor({
         if (event.key === "Escape") {
           event.preventDefault();
           onCancel();
+        } else if (event.key === "Tab") {
+          event.preventDefault();
+          onMove(event.shiftKey ? "previous" : "next");
         }
       }}
       onBlur={(event: FocusEvent) => {

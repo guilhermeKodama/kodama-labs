@@ -1,11 +1,11 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { useTranslations } from "next-intl";
 import type { LedgerQueryResult } from "@capital/server/modules/ledger/contracts";
-import { Btn, DialogHead, Sheet } from "@/components/cap";
-import { apiGet, apiPost } from "@/lib/api/client";
+import { Btn, DialogFooter, DialogHead, Sheet } from "@/components/cap";
+import { apiDelete, apiGet, apiPost } from "@/lib/api/client";
 import type { Names } from "@/lib/api/catalog";
 import { keys } from "@/lib/api/keys";
 import { useAppMutation } from "@/lib/api/use-app-mutation";
@@ -28,7 +28,9 @@ const PAGE = 100;
  * "Lixeira", opened by ?trash=1 from the "Lixeira · N" header button
  * (mockup DeleteFlow 5413): a 440px sheet listing what was deleted, a
  * transfer as one row, with "Restaurar" (POST /v2/trash/restore, undoable).
- * Rows leave the trash for good after 30 days.
+ * Rows leave the trash for good after 30 days; "Esvaziar lixeira" does it
+ * now (DELETE /v2/trash) after an in-sheet confirmation, since it cannot be
+ * undone.
  */
 export function TrashSheet({ open, onOpenChange, names }: TrashSheetProps) {
   const t = useTranslations("entry.trash");
@@ -54,6 +56,14 @@ function TrashList({ names }: { names: Names }) {
     event: "ledger.write",
     mutationFn: (row: TrashRow) => apiPost<{ batchId: string | null }>("/api/v2/trash/restore", { ids: [row.id] }),
     undo: (_result, row) => t("toast.restored", { description: row.description }),
+  });
+  const [confirming, setConfirming] = useState(false);
+  const total = pages.data?.pages[0]?.rowsCount ?? rows.length;
+  const purge = useAppMutation({
+    event: "ledger.write",
+    mutationFn: () => apiDelete<{ groups: number; entries: number }>("/api/v2/trash"),
+    undo: () => t("trash.purged", { count: total }),
+    onSettled: () => setConfirming(false),
   });
 
   if (pages.isPending) return <p className="text-[12.5px] text-fg-3">{t("sheet.loading")}</p>;
@@ -86,6 +96,28 @@ function TrashList({ names }: { names: Names }) {
           {t("trash.more")}
         </Btn>
       ) : null}
+      <div className="mt-3 border-t border-stroke-3 pt-3">
+        {confirming ? (
+          <div role="alertdialog" aria-label={t("trash.confirmTitle", { count: total })} className="flex flex-col gap-2">
+            <span className="text-[12.5px] font-medium">{t("trash.confirmTitle", { count: total })}</span>
+            <span className="text-[11.5px] text-fg-3">{t("trash.confirmDesc")}</span>
+            <DialogFooter>
+              <Btn ghost autoFocus onClick={() => setConfirming(false)}>
+                {t("trash.cancel")}
+              </Btn>
+              <Btn primary disabled={purge.isPending} onClick={() => purge.mutate()}>
+                {t("trash.purge")}
+              </Btn>
+            </DialogFooter>
+          </div>
+        ) : (
+          <DialogFooter>
+            <Btn ghost danger onClick={() => setConfirming(true)}>
+              {t("trash.purgeAll")}
+            </Btn>
+          </DialogFooter>
+        )}
+      </div>
     </div>
   );
 }

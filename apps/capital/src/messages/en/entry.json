@@ -212,6 +212,7 @@
   "rowMenu": {
     "label": "Transaction actions",
     "open": "Open details",
+    "edit": "Edit",
     "duplicate": "Duplicate",
     "moveEntity": "Move to entity…",
     "changeCategory": "Change category…",
@@ -275,6 +276,12 @@
     "restore": "Restore",
     "empty": "The trash is empty.",
     "more": "Load more",
-    "transfer": "{from} → {to}"
+    "transfer": "{from} → {to}",
+    "purgeAll": "Empty trash",
+    "confirmTitle": "Delete {count, plural, one {# transaction} other {# transactions}} for good?",
+    "confirmDesc": "This cannot be undone.",
+    "cancel": "Cancel",
+    "purge": "Empty",
+    "purged": "Trash emptied · {count, plural, one {# transaction deleted} other {# transactions deleted}}"
   }
 }

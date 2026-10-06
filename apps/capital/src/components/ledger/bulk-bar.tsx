@@ -35,13 +35,24 @@ export interface BulkBarProps {
   canSelectAll: boolean;
   totalInView: number;
   onSelectAll: () => void;
-  /** Clears the selection; also called after a change went through. */
+  /** Clears the selection; also called after a bulk delete went through. */
   onClear: () => void;
   /** The picked rows as listed, for the before/after preview of "Editar…". */
   rows?: readonly DisplayRow[];
   /** Σ of the whole view, shown when it is all selected. */
   totalSumInView?: number;
 }
+
+/**
+ * Lifts the bottom-center toaster (ui/sonner.tsx, 16px offset) over the
+ * bar while it is up, so result toasts stack above it (mockup BulkBar toast
+ * slot 4410) instead of covering it: 40px of bar + 8px gap. Sonner places
+ * the toaster with a zero-specificity :where() rule (and a 2-attribute one
+ * under 600px), which this outranks.
+ */
+const TOASTS_ABOVE_BAR =
+  ':root [data-sonner-toaster][data-y-position="bottom"]{bottom:calc(var(--offset-bottom, 16px) + 48px)}' +
+  '@media (max-width:600px){:root [data-sonner-toaster][data-y-position="bottom"]{bottom:calc(var(--mobile-offset-bottom, 16px) + 48px)}}';
 
 interface BulkRequest {
   body: Record<string, unknown>;
@@ -54,7 +65,9 @@ interface BulkRequest {
  * "N selecionadas ✕", Σ / média / mín / máx (Σ of the view when it is all
  * selected), Editar… (BulkEditDialog), Categoria ▾, Entidade ▾, Marcar IR,
  * Duplicar, Exportar and Excluir. Each change is one undoable POST
- * /v2/ledger/bulk; Esc clears, ⌫ deletes and ⌘D duplicates the selection.
+ * /v2/ledger/bulk whose toast stacks above the bar; the selection stays
+ * except after Excluir (deleteMode "undo": no confirmation). Esc clears,
+ * ⌫ deletes and ⌘D duplicates the selection.
  */
 export function BulkBar({ selection, stats, names, allInView, totalInView, onClear, rows, totalSumInView }: BulkBarProps) {
   const t = useTranslations("entry.bulk");
@@ -65,7 +78,8 @@ export function BulkBar({ selection, stats, names, allInView, totalInView, onCle
     event: "ledger.write",
     mutationFn: ({ body }: BulkRequest) => apiPost<{ batchId: string | null; affected: number }>("/api/v2/ledger/bulk", { ...body, selection }),
     undo: (result, request) => request.message(result.affected),
-    onSuccess: () => onClear(),
+    // As in the mockup, the selection stays up after a change (its toast stacks above the bar); a delete clears it.
+    onSuccess: (_result, request) => request.body.op === "delete" && onClear(),
   });
   const exportCsv = useAppMutation({
     event: null,
@@ -111,6 +125,7 @@ export function BulkBar({ selection, stats, names, allInView, totalInView, onCle
 
   return (
     <div className="pointer-events-none sticky bottom-4 z-[35] mt-2 flex flex-col items-center gap-2">
+      <style>{TOASTS_ABOVE_BAR}</style>
       <div className="pointer-events-auto relative flex flex-wrap items-center justify-center gap-1 rounded-[12px] border border-stroke-1 bg-chrome p-[5px] text-[12px]">
         <span className="inline-flex h-7 items-center gap-2 rounded-[7px] border border-dashed border-stroke-1 pr-1.5 pl-2.5 font-semibold whitespace-nowrap">
           {allInView ? t("selectedAll", { count }) : t("selected", { count })}
@@ -168,7 +183,6 @@ export function BulkBar({ selection, stats, names, allInView, totalInView, onCle
         names={names}
         rows={rows}
         sum={allInView ? totalSumInView : stats.sum}
-        onApplied={onClear}
       />
     </div>
   );
