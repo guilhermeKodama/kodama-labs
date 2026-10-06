@@ -36,8 +36,8 @@ const patchAccountRoute = createRoute({
   path: "/v2/accounts/{id}",
   tags,
   summary:
-    "Update or archive an account. currency and entityId change only while the account has no entries (422 account.currency_locked / account.entity_locked). Returns batchId (null for a currency or entity change, which is not undoable).",
-  request: { params: idParams, ...jsonBody(accountBody.omit({ type: true }).partial().extend({ archived: z.boolean().optional() })) },
+    "Update or archive an account; balance sets what it holds now (moves initialBalance, same batch). currency and entityId change only while the account has no entries (422 account.currency_locked / account.entity_locked). Returns batchId (null for a currency or entity change, which is not undoable).",
+  request: { params: idParams, ...jsonBody(accountBody.omit({ type: true }).partial().extend({ archived: z.boolean().optional(), balance: z.number().finite().optional() })) },
   responses: v2Responses,
 });
 const setBalanceRoute = createRoute({

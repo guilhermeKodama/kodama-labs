@@ -127,6 +127,20 @@ describe("POST /v2/accounts/{id}/set-balance", () => {
 });
 
 describe("PATCH /v2/accounts/{id}", () => {
+  it("sets the balance together with other fields, in one undoable batch", async () => {
+    await call("POST", "/v2/ledger/entries", { kind: "expense", accountId: f.broker, amount: 100, date: "2026-09-01", description: "Taxa" });
+    const patched = await call("PATCH", `/v2/accounts/${f.broker}`, { name: "XP Investimentos", balance: 900 });
+    expect(patched.status).toBe(200);
+    expect(patched.body).toMatchObject({ name: "XP Investimentos", initialBalance: 1000, batchId: expect.any(String) });
+    const listed = ((await call("GET", "/v2/accounts")).body as { id: string; balance: number }[]).find((a) => a.id === f.broker);
+    expect(listed?.balance).toBe(900);
+
+    expect((await call("POST", `/v2/mutations/${patched.body.batchId}/undo`, {})).status).toBe(200);
+    const restored = await prisma.account.findUniqueOrThrow({ where: { id: f.broker } });
+    expect(Number(restored.initialBalance)).toBe(0);
+    expect(restored.name).not.toBe("XP Investimentos");
+  });
+
   it("changes the currency only while the account has no entries", async () => {
     const free = await call("PATCH", `/v2/accounts/${f.broker}`, { currency: "usd" });
     expect(free.status).toBe(200);

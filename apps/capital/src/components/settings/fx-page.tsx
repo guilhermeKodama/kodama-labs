@@ -65,7 +65,8 @@ export function FxPage() {
   const codes = (data?.currencies ?? []).map((c) => c.code);
 
   const commit = (row: CurrencyRow) => {
-    if (!editing || editing.code !== row.code) return;
+    // Enter commits, and the blur that follows must not save it a second time.
+    if (!editing || editing.code !== row.code || saveRate.isPending) return;
     const manualRate = manualRateFromBase(fmt.parseNumber(editing.text));
     if (manualRate === null || Math.abs(manualRate - row.manualRate) < 1e-12) {
       setEditing(null);
@@ -133,7 +134,8 @@ export function FxPage() {
           ),
           t(`source.${row.source}`),
           <span key="updated" className="text-fg-2">
-            {fmt.relative(row.rateUpdatedAt ?? row.updatedAt)}
+            {/* When the rate in force was quoted or typed; a seeded placeholder rate has no date yet. */}
+            {row.rateUpdatedAt ? fmt.relative(row.rateUpdatedAt) : "—"}
           </span>,
         ])}
       />

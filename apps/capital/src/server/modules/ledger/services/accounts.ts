@@ -60,7 +60,11 @@ export async function createAccount(userId: string, input: AccountInput, db: DbC
   });
 }
 
-export type AccountPatch = Partial<Omit<AccountInput, "type">> & { archived?: boolean };
+export type AccountPatch = Partial<Omit<AccountInput, "type">> & {
+  archived?: boolean;
+  /** What the account holds now (a broker's cash): moves initialBalance by the difference, in the same batch as the rest. */
+  balance?: number;
+};
 
 /**
  * Edit an account. Stored entries keep the account's currency and entity,
@@ -114,6 +118,11 @@ export async function updateAccount(
         }
       }
     }
+    let initialBalance = patch.initialBalance;
+    if (patch.balance !== undefined) {
+      const current = (await accountBalances(userId, db, [accountId])).get(accountId) ?? toNumber(account.initialBalance);
+      initialBalance = round(toNumber(account.initialBalance) + round(patch.balance - current, 4), 4);
+    }
     const updated = await db.account.update({
       where: { id: accountId },
       data: {
@@ -122,7 +131,7 @@ export async function updateAccount(
         ...(currency !== undefined && { currency }),
         ...(patch.entityId !== undefined && { entityId: patch.entityId }),
         ...(patch.externalId !== undefined && { externalId: patch.externalId }),
-        ...(patch.initialBalance !== undefined && { initialBalance: patch.initialBalance }),
+        ...(initialBalance !== undefined && { initialBalance }),
         ...(patch.color !== undefined && { color: patch.color }),
         ...(patch.creditLimit !== undefined && { creditLimit: patch.creditLimit }),
         ...(patch.closingDay !== undefined && { closingDay: patch.closingDay }),

@@ -138,10 +138,8 @@ function AccountDetail({
     event: "catalog.write",
     mutationFn: async (input: { body: Record<string, unknown>; cash: number | null }) => {
       if (!account) return apiPost<AccountRow>("/api/v2/accounts", input.body);
-      let saved: AccountRow & { batchId?: string | null } = account;
-      if (Object.keys(input.body).length) saved = await apiPatch<AccountRow & { batchId: string | null }>(`/api/v2/accounts/${account.id}`, input.body);
-      if (input.cash !== null) saved = await apiPost<AccountRow & { batchId: string | null }>(`/api/v2/accounts/${account.id}/set-balance`, { balance: input.cash });
-      return saved;
+      // One PATCH, so the fields and the broker's cash (balance) are one undo batch.
+      return apiPatch<AccountRow & { batchId: string | null }>(`/api/v2/accounts/${account.id}`, { ...input.body, ...(input.cash !== null && { balance: input.cash }) });
     },
     undo: (saved, input) =>
       !account ? t("toastCreated", { name: saved.name }) : input.cash !== null ? t("toastCash", { name: saved.name, amount: fmt.money(input.cash, saved.currency) }) : t("toastSaved", { name: saved.name }),
