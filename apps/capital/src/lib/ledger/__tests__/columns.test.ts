@@ -95,6 +95,13 @@ describe("footer calcs", () => {
     expect(calcAggregation("flowKind", "none")).toBeNull();
   });
 
+  it("counts distinct buckets of the view's date field", () => {
+    expect(calcAggregation("date:month", "countDistinct", "effectiveDate")).toEqual({ fn: "countDistinct", field: "effectiveDate", bucket: "month" });
+    expect(calcAggregation("description", "countDistinct", "effectiveDate")).toEqual({ fn: "countDistinct", field: "description" });
+    const config = viewConfig({ dateField: "effectiveDate", columns: ["date:quarter", "amountBase"], calcs: { "date:quarter": "countDistinct" } });
+    expect(tableAggregations(config)).toContainEqual({ fn: "countDistinct", field: "effectiveDate", bucket: "quarter" });
+  });
+
   it("asks for the subtotal, the count and each visible column's calc once", () => {
     const config = viewConfig({ columns: ["date", "description", "entityId", "date:month", "amountBase"], calcs: { amountBase: "avg", description: "count", entityId: "countDistinct", "date:month": "countDistinct", categoryId: "count" } });
     expect(tableAggregations(config)).toEqual([

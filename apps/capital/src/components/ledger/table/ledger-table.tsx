@@ -224,7 +224,7 @@ export function LedgerTable(props: LedgerTableProps) {
       case "amountBase":
         return amount(row);
       default:
-        return <span className="truncate text-fg-2">{labels.cell(id, row)}</span>;
+        return <span className="truncate text-fg-2">{labels.cell(id, row, config.dateField)}</span>;
     }
   };
 
@@ -309,7 +309,7 @@ export function LedgerTable(props: LedgerTableProps) {
   };
 
   const calcText = (id: PropId, calc: CalcFn) => {
-    const agg = calcAggregation(id, calc);
+    const agg = calcAggregation(id, calc, config.dateField);
     const value = agg ? (totals[aggKey(agg)] ?? null) : null;
     if (value === null) return "—";
     return calc === "count" || calc === "countDistinct" ? fmt.number(value, 0) : fmt.money(value);

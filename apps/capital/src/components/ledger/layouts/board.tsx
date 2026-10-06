@@ -55,7 +55,7 @@ export function BoardView({
   return (
     <div className="flex gap-2.5 overflow-x-auto pb-1">
       {groups.map((group) => (
-        <BoardColumn key={String(group.key)} group={group} groupKey={groupKey} rows={rows} badges={badges} labels={labels} columnQuery={columnQuery} onOpen={onOpen} />
+        <BoardColumn key={String(group.key)} group={group} groupKey={groupKey} rows={rows} badges={badges} dateField={config.dateField} labels={labels} columnQuery={columnQuery} onOpen={onOpen} />
       ))}
     </div>
   );
@@ -66,6 +66,7 @@ function BoardColumn({
   groupKey,
   rows,
   badges,
+  dateField,
   labels,
   columnQuery,
   onOpen,
@@ -74,6 +75,7 @@ function BoardColumn({
   groupKey: GroupKey;
   rows: readonly DisplayRow[];
   badges: ReturnType<typeof visibleColumns>;
+  dateField: ViewConfig["dateField"];
   labels: LedgerLabels;
   columnQuery: (value: string | null, limit: number) => LedgerQueryInput;
   onOpen: (row: DisplayRow) => void;
@@ -124,7 +126,7 @@ function BoardColumn({
           <span className="flex flex-wrap gap-1">
             <span className="font-mono text-[10.5px] text-fg-3 tabular-nums">{fmt.date(row.date)}</span>
             {badges.map((id) => (
-              <Badge key={id}>{labels.cell(id, row)}</Badge>
+              <Badge key={id}>{labels.cell(id, row, dateField)}</Badge>
             ))}
           </span>
         </button>

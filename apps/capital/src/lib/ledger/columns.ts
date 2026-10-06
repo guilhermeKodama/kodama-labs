@@ -162,13 +162,17 @@ export function calcOf(config: Pick<ViewConfig, "calcs">, column: string): CalcF
   return calcCycle(column).includes(calc) ? calc : "none";
 }
 
-/** The query aggregation behind a column's calc; null for none. */
-export function calcAggregation(column: string, calc: CalcFn): Aggregation | null {
+/**
+ * The query aggregation behind a column's calc; null for none. A date bucket
+ * column counts distinct buckets of the view's date field, the same date its
+ * cells and groups read.
+ */
+export function calcAggregation(column: string, calc: CalcFn, dateField: ViewConfig["dateField"] = "date"): Aggregation | null {
   if (calc === "none") return null;
   if (calc === "count") return { fn: "count", field: "amountBase" };
   if (calc === "countDistinct") {
     const bucket = bucketOf(column);
-    if (bucket) return { fn: "countDistinct", field: "date", bucket };
+    if (bucket) return { fn: "countDistinct", field: dateField, bucket };
     if (column === "amountBase") return { fn: "countDistinct", field: "amountBase" };
     return { fn: "countDistinct", field: column as Aggregation["field"] };
   }
@@ -186,10 +190,10 @@ export const SUM_KEY = aggKey(SUM_AGG);
 export const COUNT_KEY = aggKey(COUNT_AGG);
 
 /** Aggregations of a table query: the group subtotal (Σ) plus each visible column's calc, deduplicated, at most 8. */
-export function tableAggregations(config: Pick<ViewConfig, "calcs" | "columns">): Aggregation[] {
+export function tableAggregations(config: Pick<ViewConfig, "calcs" | "columns"> & Partial<Pick<ViewConfig, "dateField">>): Aggregation[] {
   const out: Aggregation[] = [SUM_AGG, COUNT_AGG];
   for (const column of visibleColumns(config)) {
-    const agg = calcAggregation(column, calcOf(config, column));
+    const agg = calcAggregation(column, calcOf(config, column), config.dateField);
     if (agg && !out.some((a) => aggKey(a) === aggKey(agg))) out.push(agg);
   }
   return out.slice(0, 8);

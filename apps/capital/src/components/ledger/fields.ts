@@ -69,10 +69,10 @@ export function useLedgerLabels(names: Names) {
       return t("uncategorized");
     };
 
-    /** Text of a property in a row (columns without their own rendering, board badges). */
-    const cell = (id: PropId, row: DisplayRow): string => {
+    /** Text of a property in a row (columns without their own rendering, board badges); date buckets read the view's date field. */
+    const cell = (id: PropId, row: DisplayRow, dateField: "date" | "effectiveDate" = "date"): string => {
       const bucket = bucketOf(id);
-      if (bucket) return fmt.bucketLabel(bucket, bucketKeyOf(row.date, bucket));
+      if (bucket) return fmt.bucketLabel(bucket, bucketKeyOf(row[dateField] || row.date, bucket));
       switch (id) {
         case "date":
           return fmt.date(row.date);
