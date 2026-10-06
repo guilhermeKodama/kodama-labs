@@ -7,6 +7,7 @@ import type { Names } from "@/lib/api/catalog";
 import { useFmt } from "@/lib/format/provider";
 import { bucketKeyOf, bucketOf, groupIdOf, groupLabelKey, isPropId, type PropId } from "@/lib/ledger/columns";
 import { COMPOSITE_SEPARATOR } from "@/lib/ledger/drill";
+import { FLOW_CATEGORY_KEYS, isFlowCategoryKey } from "@/lib/ledger/flow-category";
 import { chipText, filterProp, filterValues, NONE } from "@/lib/ledger/filters";
 import { presetOf } from "@/lib/ledger/period";
 import type { DisplayRow } from "./rows";
@@ -43,6 +44,7 @@ export function useLedgerLabels(names: Names) {
         case "accountId":
           return pair(raw, account);
         case "categoryId":
+          if (isFlowCategoryKey(raw)) return t(raw === FLOW_CATEGORY_KEYS.invest ? "categoryFlow.invest" : "categoryFlow.transfer");
           return names.category.get(raw) ?? t("uncategorized");
         case "flowKind":
           return ["in", "out", "transfer", "invest"].includes(raw) ? t(`flowKind.${raw}`) : raw;
@@ -63,7 +65,7 @@ export function useLedgerLabels(names: Names) {
       row.neutral && row.counterpartAccountId ? `${account(row.accountId)} → ${account(row.counterpartAccountId)}` : account(row.accountId);
     const rowCategory = (row: DisplayRow) => {
       if (row.categoryId) return names.category.get(row.categoryId) ?? t("uncategorized");
-      if (row.flowKind === "transfer" || row.flowKind === "invest") return t(`flowKind.${row.flowKind}`);
+      if (row.flowKind === "transfer" || row.flowKind === "invest") return t(`categoryFlow.${row.flowKind}`);
       return t("uncategorized");
     };
 

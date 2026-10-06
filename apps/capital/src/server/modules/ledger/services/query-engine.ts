@@ -24,6 +24,7 @@ import {
   type Period,
   type TimeBucket,
 } from "../contracts";
+import { FLOW_CATEGORY_KEYS, isFlowCategoryKey, type FlowCategoryKey } from "@/lib/ledger/flow-category";
 import { LedgerError } from "../lib/errors";
 import { flowKindJoins, flowKindSql, type FlowKind } from "../lib/flow-sql";
 import { toNumber } from "../lib/money";
@@ -152,17 +153,29 @@ export function resolvePeriod(period: Period, timezone: string): { from: Date | 
 // WHERE
 // ---------------------------------------------------------------------------
 
-function filterSql(f: LedgerFilter): Prisma.Sql {
+const flowOfCategoryKey = (key: FlowCategoryKey): FlowKind => (key === FLOW_CATEGORY_KEYS.invest ? "invest" : "transfer");
+
+/**
+ * In display mode a categoryId `in`/`nin` value set matches like the
+ * categoryId group keys: null is "Sem categoria" (empty category, neither
+ * an aporte nor a transfer) and FLOW_CATEGORY_KEYS select the
+ * uncategorized aportes and transfers. `isNull` matches every empty
+ * category, and legs mode (MCP, assistant) keeps null as any empty one.
+ */
+function filterSql(f: LedgerFilter, display: boolean): Prisma.Sql {
   switch (f.op) {
     case "in":
     case "nin": {
       const col = RAW_CATEGORICAL[f.field];
-      const nonNull = f.values.filter((v) => v !== null);
-      const hasNull = nonNull.length !== f.values.length;
+      const isCategory = display && f.field === "categoryId";
+      const flowKeys = isCategory ? f.values.filter(isFlowCategoryKey) : [];
+      const nonNull = f.values.filter((v) => v !== null && !flowKeys.includes(v as FlowCategoryKey));
+      const hasNull = f.values.includes(null);
       const values = BOOLEAN_FIELDS.has(f.field) ? nonNull.map((v) => v === true || v === "true") : nonNull.map(String);
       const parts: Prisma.Sql[] = [];
       if (values.length) parts.push(Prisma.sql`${col} IN (${Prisma.join(values)})`);
-      if (hasNull) parts.push(Prisma.sql`${col} IS NULL`);
+      if (hasNull) parts.push(isCategory ? Prisma.sql`(${col} IS NULL AND ${flowKindSql()} NOT IN ('invest', 'transfer'))` : Prisma.sql`${col} IS NULL`);
+      for (const key of flowKeys) parts.push(Prisma.sql`(${col} IS NULL AND ${flowKindSql()} = ${flowOfCategoryKey(key)})`);
       const inner = parts.length > 1 ? Prisma.sql`(${Prisma.join(parts, " OR ")})` : parts[0];
       return f.op === "in" ? inner : Prisma.sql`NOT coalesce(${inner}, false)`;
     }
@@ -211,7 +224,13 @@ function searchSql(search: string): Prisma.Sql {
       WHERE o."transferGroupId" = le."transferGroupId" AND o.id <> le.id AND (oa.name ILIKE ${like} OR oe.name ILIKE ${like}))))`;
 }
 
-export function buildWhere(userId: string, q: LedgerSelectionQuery, timezone: string): { sql: Prisma.Sql; range: { from: Date | null; to: Date | null } } {
+/** WHERE of a selection; `semantics` sets how categoryId filters read (see filterSql). */
+export function buildWhere(
+  userId: string,
+  q: LedgerSelectionQuery,
+  timezone: string,
+  semantics: LedgerQuery["semantics"] = "legs"
+): { sql: Prisma.Sql; range: { from: Date | null; to: Date | null } } {
   const parts: Prisma.Sql[] = [Prisma.sql`le."userId" = ${userId}`];
   if (q.deleted === "exclude") parts.push(Prisma.sql`le."deletedAt" IS NULL`);
   if (q.deleted === "only") parts.push(Prisma.sql`le."deletedAt" IS NOT NULL`);
@@ -219,7 +238,7 @@ export function buildWhere(userId: string, q: LedgerSelectionQuery, timezone: st
   const dateCol = RAW_DATE[q.dateField];
   if (range.from) parts.push(Prisma.sql`${dateCol} >= ${range.from}`);
   if (range.to) parts.push(Prisma.sql`${dateCol} <= ${range.to}`);
-  for (const f of q.filters) parts.push(filterSql(f));
+  for (const f of q.filters) parts.push(filterSql(f, semantics === "display"));
   if (q.search) parts.push(searchSql(q.search));
   return { sql: Prisma.sql`WHERE ${Prisma.join(parts, " AND ")}`, range };
 }
@@ -299,10 +318,17 @@ function numericExpr(field: NumericField, alias: string): Prisma.Sql {
   return Prisma.raw(field === "amountBase" ? `${alias}.display_amount` : `${alias}.display_amount_orig`);
 }
 
+// Inlined (not bound): the key expression repeats in SELECT and GROUP BY.
+const FLOW_KEY_SQL = { invest: Prisma.raw(`'${FLOW_CATEGORY_KEYS.invest}'`), transfer: Prisma.raw(`'${FLOW_CATEGORY_KEYS.transfer}'`) };
+
 /** A row's key for a group key. Neutral transfers between entities (any neutral transfer, by account) key as "from→to". */
 function groupKeyExpr(g: GroupKey, alias: string): Prisma.Sql {
   if ("bucket" in g) return bucketSql(g.bucket, ident(alias, g.field));
   const x = Prisma.raw(alias);
+  if (g.field === "categoryId") {
+    // Uncategorized aportes and counted transfers group as Investimentos / Transferência (FLOW_CATEGORY_KEYS).
+    return Prisma.sql`(CASE WHEN ${x}."categoryId" IS NULL AND ${x}."flowKind" IN ('invest', 'transfer') THEN (CASE ${x}."flowKind" WHEN 'invest' THEN ${FLOW_KEY_SQL.invest} ELSE ${FLOW_KEY_SQL.transfer} END) ELSE ${x}."categoryId" END)`;
+  }
   if (g.field === "entityId") {
     return Prisma.sql`(CASE WHEN ${x}.neutral AND ${x}.cp_entity IS NOT NULL AND ${x}.cp_entity <> ${x}."entityId" THEN ${x}."entityId" || '→' || ${x}.cp_entity ELSE ${x}."entityId" END)`;
   }
@@ -623,7 +649,7 @@ export async function queryLedger(userId: string, input: LedgerQueryInput, db: D
   const q = ledgerQuerySchema.parse(input);
   const display = q.semantics === "display";
   const timezone = await userTimezone(userId, db);
-  const { sql: where, range } = buildWhere(userId, q, timezone);
+  const { sql: where, range } = buildWhere(userId, q, timezone, q.semantics);
   const cte = sourceCte(where, q);
   const aggs = q.aggregations;
 
@@ -688,7 +714,7 @@ export async function displayRowsSource(
   rowsScope: LedgerQuery["rowsScope"] = "all"
 ): Promise<{ cte: Prisma.Sql; range: { from: string | null; to: string | null } }> {
   const timezone = await userTimezone(userId, db);
-  const { sql: where, range } = buildWhere(userId, selection, timezone);
+  const { sql: where, range } = buildWhere(userId, selection, timezone, "display");
   return {
     cte: sourceCte(where, { semantics: "display", rowsScope }),
     range: { from: range.from ? formatDateOnly(range.from) : null, to: range.to ? formatDateOnly(range.to) : null },
@@ -698,7 +724,7 @@ export async function displayRowsSource(
 /** Ids matched by a selection query (bulk "select all in view"), capped. */
 export async function selectEntryIds(userId: string, selection: LedgerSelectionQuery, db: DbClient, cap = 5000): Promise<string[]> {
   const timezone = await userTimezone(userId, db);
-  const { sql: where } = buildWhere(userId, selection, timezone);
+  const { sql: where } = buildWhere(userId, selection, timezone, "display");
   const rows = await db.$queryRaw<{ id: string }[]>`SELECT le.id ${FROM} ${where} LIMIT ${cap + 1}`;
   if (rows.length > cap) throw new LedgerError(`Selection matches more than ${cap} rows; narrow the filters`, 422, { code: "query.selection_too_large", params: { cap } });
   return rows.map((r) => r.id);
@@ -723,7 +749,7 @@ export async function exportLedgerCsv(userId: string, target: ExportTarget, db: 
     where = Prisma.sql`WHERE le."userId" = ${userId} AND le."deletedAt" IS NULL AND (le.id IN (${ids})
       OR le."transferGroupId" IN (SELECT x."transferGroupId" FROM ledger_entries x WHERE x."userId" = ${userId} AND x.id IN (${ids}) AND x."transferGroupId" IS NOT NULL))`;
   } else {
-    where = buildWhere(userId, target, timezone).sql;
+    where = buildWhere(userId, target, timezone, "display").sql;
   }
   const rows = await db.$queryRaw<
     { date: Date; description: string; entity: string; account: string; category: string | null; flowKind: FlowKind; amount: Prisma.Decimal; currency: string; amountBase: Prisma.Decimal; notes: string | null }[]

@@ -8,6 +8,7 @@ import { Badge, Check } from "@/components/cap";
 import type { Names } from "@/lib/api/catalog";
 import { useFmt } from "@/lib/format/provider";
 import { aggKey, calcAggregation, calcOf, gridTemplate, nextCalc, PROP_META, SORTS, sortIdOf, SUM_KEY, visibleColumns, type CalcFn, type PropId } from "@/lib/ledger/columns";
+import { nextEditableCell, type CellNavDirection } from "@/lib/ledger/cell-nav";
 import { allVisibleSelected, applySelectionClick, moveFocus } from "@/lib/ledger/selection";
 import { tableItems, visualRowIds, type GroupItem } from "@/lib/ledger/table-items";
 import { useShortcut } from "@/lib/shortcuts";
@@ -27,6 +28,9 @@ const EDITABLE: Partial<Record<PropId, EditableField>> = {
   categoryId: "categoryId",
   amountBase: "amount",
 };
+
+/** A transfer's account, category and entity are edited on the transfer, not in a cell. */
+const readOnlyCell = (row: DisplayRow, field: EditableField) => row.neutral && (field === "accountId" || field === "categoryId" || field === "entityId");
 
 /** The nearest scrolling ancestor (the page body), which the virtualizer follows. */
 function scrollParent(node: HTMLElement): HTMLElement | null {
@@ -159,6 +163,26 @@ export function LedgerTable(props: LedgerTableProps) {
     actions.duplicate(row);
   });
 
+  // Tab / ⇧Tab / ↵ after an inline commit: open the editor of the next cell (scrolled into view first).
+  const editableColumns = columns.filter((id) => EDITABLE[id]);
+  const navigateCell = (row: DisplayRow, column: PropId, direction: CellNavDirection) => {
+    const target = nextEditableCell(visual, editableColumns, { rowId: row.id, column }, direction, (rowId, id) => {
+      const other = byId.get(rowId);
+      const field = EDITABLE[id as PropId];
+      return !!other && !!field && !readOnlyCell(other, field);
+    });
+    if (!target) return;
+    focusRow(target.rowId);
+    const open = () => {
+      const wrapper = Array.from(listEl?.querySelectorAll<HTMLElement>("[data-cell-row]") ?? []).find(
+        (el) => el.dataset.cellRow === target.rowId && el.dataset.cellColumn === target.column
+      );
+      (wrapper?.firstElementChild as HTMLElement | null)?.click();
+    };
+    // The row may only be drawn after the scroll: wait two frames.
+    requestAnimationFrame(() => requestAnimationFrame(open));
+  };
+
   const toggleGroup = (id: string) =>
     setCollapsed((current) => {
       const next = new Set(current);
@@ -208,9 +232,9 @@ export function LedgerTable(props: LedgerTableProps) {
     const content = cellContent(row, id);
     const field = EDITABLE[id];
     return (
-      <span key={id} className="flex min-w-0 items-center overflow-hidden">
+      <span key={id} className="flex min-w-0 items-center overflow-hidden" data-cell-row={field ? row.id : undefined} data-cell-column={field ? id : undefined}>
         {field ? (
-          <EditableCell row={row} field={field} names={names} disabled={row.neutral && (field === "accountId" || field === "categoryId" || field === "entityId")}>
+          <EditableCell row={row} field={field} names={names} disabled={readOnlyCell(row, field)} onNavigate={(direction) => navigateCell(row, id, direction)}>
             {content}
           </EditableCell>
         ) : (

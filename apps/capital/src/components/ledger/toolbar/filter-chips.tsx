@@ -10,6 +10,7 @@ import { apiPost } from "@/lib/api/client";
 import type { Names } from "@/lib/api/catalog";
 import { keys } from "@/lib/api/keys";
 import { bucketOf, GROUPABLE, type PropId } from "@/lib/ledger/columns";
+import { FLOW_CATEGORY_KEYS } from "@/lib/ledger/flow-category";
 import { addableProps, chipIndex, filterProp, filterValues, NONE, removeFilterAt, setChipValues } from "@/lib/ledger/filters";
 import { bucketOptionsQuery } from "@/lib/ledger/view-query";
 import { cn } from "@/lib/utils";
@@ -39,6 +40,7 @@ function useOptions(prop: PropId | null, config: ViewConfig, names: Names, label
       case "categoryId":
         return [
           ...[...names.categories].filter((c) => keep(c.id, c.isArchived)).sort((a, b) => a.name.localeCompare(b.name)).map((c) => ({ value: c.id, label: c.name })),
+          ...Object.values(FLOW_CATEGORY_KEYS).map((key) => ({ value: key, label: labels.value("categoryId", key) })),
           { value: NONE, label: labels.value("categoryId", null) },
         ];
       case "flowKind":

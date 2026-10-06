@@ -126,6 +126,10 @@
     "transfer": "Transfer",
     "invest": "Investment"
   },
+  "categoryFlow": {
+    "invest": "Investments",
+    "transfer": "Transfer"
+  },
   "yes": "Yes",
   "no": "No",
   "uncategorized": "Uncategorized",

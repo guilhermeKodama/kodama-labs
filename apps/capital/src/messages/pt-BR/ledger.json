@@ -126,6 +126,10 @@
     "transfer": "Transferência",
     "invest": "Aporte"
   },
+  "categoryFlow": {
+    "invest": "Investimentos",
+    "transfer": "Transferência"
+  },
   "yes": "Sim",
   "no": "Não",
   "uncategorized": "Sem categoria",
