@@ -4,7 +4,7 @@ Runbook for applying the ledger v2 migrations on the production `capital` databa
 
 The live checkout is `~/Documents/Github/kodama-labs`, on `main`. `infrastructure/cronjobs/schedules` is bind-mounted into the running cronjobs container, so the git checkout and the cron image have to move together.
 
-The production database is the container named `postgres` (compose project `infrastructure/postgres`) on `docker --context desktop-linux`. It is attached to the external network `kodama`. Apps reach it as `postgres:5432`. The kodama-prod compose file has no postgres service. Do not use host port 5433: a stale server is published there under `--context default`.
+The production database is the container named `postgres` (compose project `infrastructure/postgres`) on `docker --context desktop-linux`. It is attached to the external network `kodama`. Apps reach it as `postgres:5432`. The kodama-prod compose file has no postgres service. Host port 5433 may belong to either the prod Postgres or a stale server under `--context default`, so never use it.
 
 Every docker command starts with `--context desktop-linux`. Every compose command is:
 
@@ -27,6 +27,7 @@ Editing `20261004200000_ledger_v2_schema`, `20261004200100_ledger_v2_backfill`, 
 Pause nothing. The script only `SELECT`s, inside `BEGIN READ ONLY` / `ROLLBACK`, and it uses pre-ledger tables.
 
 ```bash
+mkdir -p ~/backups
 docker --context desktop-linux exec -i postgres \
   psql -U root -d capital -v ON_ERROR_STOP=1 \
   < apps/capital/scripts/precheck-ledger-migration.sql \
@@ -59,7 +60,7 @@ docker --context desktop-linux build \
   --target capital \
   -t kodama-capital:pr67-rehearsal \
   --build-arg NEXT_PUBLIC_APP_URL=https://capital.kodamalabs.ai \
-  --build-arg NEXT_PUBLIC_VAPID_PUBLIC_KEY=<the capital value in docker-compose.yml> \
+  --build-arg NEXT_PUBLIC_VAPID_PUBLIC_KEY=BIZPytT1AcEzKXA5YQRz6V7tso9r_1uFeSfAuDhTLOotQ3_p8aIwOJwTKaEBWpG9xCSfUobWA2k00AumltvwztE \
   ~/capital-ledger-v2-rehearsal
 ```
 
@@ -89,15 +90,15 @@ docker --context desktop-linux run -d \
   -e POSTGRES_PASSWORD=rehearsal \
   -e POSTGRES_DB=capital \
   postgres:17
-docker --context desktop-linux exec capital-rehearsal-pg \
-  sh -c 'until pg_isready -U root; do sleep 1; done'
+until docker --context desktop-linux exec capital-rehearsal-pg \
+  pg_isready -h 127.0.0.1 -U root -d capital; do sleep 1; done
 
 docker --context desktop-linux exec -i capital-rehearsal-pg \
-  pg_restore -U root -d capital --no-owner --no-acl \
+  pg_restore -U root -d capital --no-owner --no-acl --exit-on-error --single-transaction \
   < ~/backups/capital-pre67-$ts.dump
 ```
 
-A warning that schema `public` already exists can be ignored. Confirm the restore with `SELECT count(*) FROM transactions` inside `capital-rehearsal-pg` (519 on the 2026-10-06 dump).
+The init-phase server listens on the socket only, so `pg_isready` has to go through `127.0.0.1`. `--exit-on-error` and `--single-transaction` are compatible with `--no-owner` and `--no-acl`, and `--single-transaction` still works together with `--clean` / `-c`. This restore is into an empty database, so the command does not pass `--clean`: a `DROP` of an object that is not there errors, and `--single-transaction` would roll the whole restore back. Confirm with `SELECT count(*) FROM transactions` inside `capital-rehearsal-pg` (519 on the 2026-10-06 dump).
 
 Run the precheck against the copy and confirm it matches the prod precheck, including section 4:
 
@@ -174,6 +175,7 @@ Leave the worktree until production is verified. Remove it later with `git workt
 
    ```bash
    docker --context desktop-linux tag kodama-capital:latest kodama-capital:rollback-pre67
+   docker --context desktop-linux tag kodama-monitoring:latest kodama-monitoring:rollback-pre67
    ```
 
 4. Stop the writers, then take the final dump on the host:
@@ -183,15 +185,17 @@ Leave the worktree until production is verified. Remove it later with `git workt
      stop capital-web cronjobs
 
    ts=$(date -u +%Y%m%dT%H%M%SZ)
+   dump=~/backups/capital-pre67-$ts.dump
    docker --context desktop-linux exec postgres \
-     pg_dump -Fc -U root capital > ~/backups/capital-pre67-$ts.dump
-   ls -lh ~/backups/capital-pre67-$ts.dump
+     pg_dump -Fc -U root capital > "$dump"
+   ls -lh "$dump"
    docker --context desktop-linux exec -i postgres \
-     pg_restore -l < ~/backups/capital-pre67-$ts.dump \
+     pg_restore -l < "$dump" \
      | tee ~/backups/capital-pre67-$ts.list
+   printf '%s\n' "$dump"
    ```
 
-   The file must be non-empty. The list must include `transactions` and `businesses`. This host file is the rollback dump.
+   The file must be non-empty. The list must include `transactions` and `businesses`. Record the path printed by `printf`. Rollback uses that literal path. A later shell does not have this `$ts`.
 
 5. Re-run the precheck on production. Section 1 must still be all zeros, and section 4 must match the rehearsal (or be recorded as the new baseline if rows were written after the earlier dump). Then repeat the rehearsal section against this final dump: new throwaway network and `postgres:17` container, restore this file, precheck, `kodama-capital:pr67-rehearsal` with both `-e DATABASE_URL` and `-e DIRECT_URL`, verify, then `rm` the container and the network. At this size that takes a few minutes. Do not `compose build`, and do not restore the dump into the prod `postgres` container. Start the production migrate only after that verify matches.
 
@@ -236,7 +240,11 @@ Leave the worktree until production is verified. Remove it later with `git workt
 
    The same equalities as the rehearsal must hold. Do not start the app while any of them fails.
 
-8. Start the app, then the cron runner, then the one-shot provisioner. `uptime-kuma-provision` has `restart: "no"`. `run` exits when it finishes; that exit code must be 0.
+8. Start the app, then the cron runner, then rebuild and run the provisioner. `infrastructure/monitoring/Dockerfile` copies `infrastructure/cronjobs/schedules` into the image, and `uptime-kuma-provision` has no bind mount for that directory. `run` on the current `kodama-monitoring:latest` would keep the old categorize-bills and categorize-statements monitors (they then go Down) and would not create notify, portfolio-snapshot, or benchmarks. Build the provisioner before running it. That build retags `kodama-monitoring:latest`.
+
+   `log-watcher` uses the same image and does not read the cron schedules (`node dist/watch.js` tails container logs). Recreate it after the build so it runs the new image; the container started earlier keeps the previous one.
+
+   `uptime-kuma-provision` has `restart: "no"`. `run` exits when it finishes; that exit code must be 0.
 
    ```bash
    docker --context desktop-linux compose -p kodama-prod -f docker-compose.yml \
@@ -246,8 +254,16 @@ Leave the worktree until production is verified. Remove it later with `git workt
      up -d --no-deps --force-recreate cronjobs
 
    docker --context desktop-linux compose -p kodama-prod -f docker-compose.yml \
+     build uptime-kuma-provision
+
+   docker --context desktop-linux compose -p kodama-prod -f docker-compose.yml \
      run --rm --no-deps uptime-kuma-provision
+
+   docker --context desktop-linux compose -p kodama-prod -f docker-compose.yml \
+     up -d --no-deps --force-recreate log-watcher
    ```
+
+   Then open Uptime Kuma and check that every Sentinel monitor that was paused is still paused. `editMonitor` sends `active: true`, so a monitor the provisioner updated is turned back on. Pause any that came back on.
 
 9. Smoke. Sign in, open a month that has card purchases and a month that has transfers, and confirm balances match the rehearsal verify output. Then run the idempotent follow-ups inside the image, dry-run first. Do not run them from the host.
 
@@ -276,7 +292,7 @@ Leave the worktree until production is verified. Remove it later with `git workt
 
 ## Rollback, before writes resume
 
-Use this only if verify failed or the app is wrong and nothing has written to the new ledger yet. Do not drop the failed database. `$ts` is the final pre-deploy dump from step 4.
+Use this only if verify failed or the app is wrong and nothing has written to the new ledger yet. Do not drop the failed database. The restore path is the literal dump path written down in step 4, not `$ts` from that shell.
 
 ```bash
 docker --context desktop-linux compose -p kodama-prod -f docker-compose.yml \
@@ -292,10 +308,11 @@ CREATE DATABASE capital;
 SQL
 
 docker --context desktop-linux exec -i postgres \
-  pg_restore -U root -d capital --no-owner --no-acl \
-  < ~/backups/capital-pre67-$ts.dump
+  pg_restore -U root -d capital --no-owner --no-acl --exit-on-error --single-transaction \
+  < ~/backups/capital-pre67-YYYYMMDDTHHMMSSZ.dump
 
 docker --context desktop-linux tag kodama-capital:rollback-pre67 kodama-capital:latest
+docker --context desktop-linux tag kodama-monitoring:rollback-pre67 kodama-monitoring:latest
 
 cd ~/Documents/Github/kodama-labs
 git checkout 14df14b61
@@ -309,6 +326,8 @@ docker --context desktop-linux compose -p kodama-prod -f docker-compose.yml \
   up -d --no-deps capital-web
 docker --context desktop-linux compose -p kodama-prod -f docker-compose.yml \
   up -d --no-deps --force-recreate cronjobs
+docker --context desktop-linux compose -p kodama-prod -f docker-compose.yml \
+  up -d --no-deps --force-recreate log-watcher
 docker --context desktop-linux compose -p kodama-prod -f docker-compose.yml \
   run --rm --no-deps uptime-kuma-provision
 docker --context desktop-linux compose -p kodama-prod -f docker-compose.yml \
