@@ -3,7 +3,7 @@
 import { useState, useSyncExternalStore } from "react";
 import { useTranslations } from "next-intl";
 import { toast } from "sonner";
-import { Btn, Field, Select, Table, TextInput } from "@/components/cap";
+import { Btn, Dialog, DialogFooter, DialogHead, Field, Select, Table, TextInput } from "@/components/cap";
 import { useApiTokens, useCreateApiToken, useRevokeApiToken, useUpdateApiToken, type ApiTokenRecord } from "@/lib/api/tokens";
 import { useFmt } from "@/lib/format/provider";
 import { ConfirmDialog } from "./confirm-dialog";
@@ -12,9 +12,10 @@ const noSubscribe = () => () => {};
 const useOrigin = () => useSyncExternalStore(noSubscribe, () => window.location.origin, () => "");
 
 /**
- * Integrações e API: the MCP server URL, the token (shown in full once,
- * right after "Gerar novo token"), the API docs, and each connected client
- * with its last use and the token's permissions (switchable, revocable).
+ * Integrações e API: the MCP server URL (click to copy), the newest token
+ * masked (the plaintext only exists in the dialog that opens right after
+ * "Gerar novo token"), the API docs, and each connected client with its
+ * last use and the token's permissions (switchable, revocable).
  */
 export function ApiPage() {
   const t = useTranslations("settings.api");
@@ -29,19 +30,21 @@ export function ApiPage() {
 
   const list = tokens.data ?? [];
   const latest = list[0] ?? null;
-  const tokenValue = revealed ?? latest?.masked ?? "";
+  const tokenValue = latest?.masked ?? "";
+  const serverUrl = origin ? `${origin}/mcp` : "";
 
   const generate = () =>
     create.mutate(
       {},
       {
-        onSuccess: ({ token }) => {
-          setRevealed(token);
-          toast(t("toastGenerated"));
-        },
+        onSuccess: ({ token }) => setRevealed(token),
       },
     );
-  const copy = (text: string) => void navigator.clipboard.writeText(text).then(() => toast(t("copied")));
+  const copy = (text: string) =>
+    void navigator.clipboard.writeText(text).then(
+      () => toast(t("copied")),
+      () => toast(t("copyFailed")),
+    );
 
   // One row per connected client; a token no client used yet gets its own row, so it can be switched or revoked.
   type Row = { key: string; token: ApiTokenRecord; name: string | null; lastUsedAt: string | null };
@@ -59,7 +62,17 @@ export function ApiPage() {
     <div className="flex flex-col gap-3">
       <div className="grid max-w-[620px] grid-cols-2 gap-3">
         <Field label={t("server")} htmlFor="api-server" hint={t("serverHint")}>
-          <TextInput id="api-server" value={origin ? `${origin}/mcp` : ""} onChange={() => undefined} readOnly mono onFocus={(event) => event.currentTarget.select()} />
+          <TextInput
+            id="api-server"
+            value={serverUrl}
+            title={t("copyServer")}
+            onChange={() => undefined}
+            readOnly
+            mono
+            onFocus={(event) => event.currentTarget.select()}
+            onClick={() => serverUrl && copy(serverUrl)}
+            className="cursor-copy"
+          />
         </Field>
         <Field label={t("token")} htmlFor="api-token" hint={t("tokenHint")}>
           <TextInput id="api-token" value={tokenValue} placeholder={t("noToken")} onChange={() => undefined} readOnly mono onFocus={(event) => event.currentTarget.select()} />
@@ -69,9 +82,6 @@ export function ApiPage() {
         <Btn onClick={generate} disabled={create.isPending}>
           {t("generate")}
         </Btn>
-        {revealed ? (
-          <Btn onClick={() => copy(revealed)}>{t("copy")}</Btn>
-        ) : null}
         <a href="/api/reference" target="_blank" rel="noreferrer" className="inline-flex h-[26px] items-center rounded-[6px] px-2.5 text-[12px] font-medium text-fg-2 outline-none hover:bg-fill-3 focus-visible:ring-2 focus-visible:ring-fg-3/40">
           {t("docs")}
         </a>
@@ -103,6 +113,9 @@ export function ApiPage() {
           </button>,
         ])}
       />
+      <Dialog open={revealed !== null} onOpenChange={(open) => !open && setRevealed(null)} width={480}>
+        {revealed ? <RevealBody token={revealed} onCopy={() => copy(revealed)} onDone={() => setRevealed(null)} /> : null}
+      </Dialog>
       <ConfirmDialog
         open={revoking !== null}
         onOpenChange={(open) => !open && setRevoking(null)}
@@ -116,12 +129,30 @@ export function ApiPage() {
           revoke.mutate(revoking.id, {
             onSuccess: () => {
               toast(t("toastRevoked", { last4: revoking.last4 }));
-              if (revealed?.endsWith(revoking.last4)) setRevealed(null);
               setRevoking(null);
             },
           })
         }
       />
+    </div>
+  );
+}
+
+/** The one time the plaintext token is shown: copy it now, it never comes back. */
+function RevealBody({ token, onCopy, onDone }: { token: string; onCopy: () => void; onDone: () => void }) {
+  const t = useTranslations("settings.api.reveal");
+  return (
+    <div className="flex flex-col gap-3.5">
+      <DialogHead title={t("title")} desc={t("desc")} />
+      <TextInput aria-label={t("title")} value={token} onChange={() => undefined} readOnly mono autoFocus onFocus={(event) => event.currentTarget.select()} className="w-full" />
+      <DialogFooter>
+        <Btn ghost onClick={onDone}>
+          {t("done")}
+        </Btn>
+        <Btn primary onClick={onCopy}>
+          {t("copy")}
+        </Btn>
+      </DialogFooter>
     </div>
   );
 }

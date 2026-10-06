@@ -267,12 +267,19 @@
   "api": {
     "server": "MCP server",
     "serverHint": "Use it in Cursor, Claude and other MCP clients",
+    "copyServer": "Click to copy",
     "token": "Token",
     "tokenHint": "Shown in full only once",
     "noToken": "No token yet",
     "generate": "Generate new token",
-    "copy": "Copy",
+    "reveal": {
+      "title": "New token",
+      "desc": "Copy it now and paste it into the MCP client as a Bearer token. It won't be shown in full again.",
+      "copy": "Copy token",
+      "done": "Done"
+    },
     "copied": "Copied",
+    "copyFailed": "Couldn't copy; select it and copy it by hand.",
     "docs": "API documentation",
     "headers": {
       "client": "Connected client",
@@ -293,7 +300,6 @@
       "desc": "{count, plural, =0 {No client uses this token yet.} one {# client loses access to Capital right away.} other {# clients lose access to Capital right away.}}",
       "confirm": "Revoke token"
     },
-    "toastGenerated": "Token generated. Copy it now: it is not shown in full again.",
     "toastRevoked": "Token …{last4} revoked"
   }
 }

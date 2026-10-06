@@ -7,7 +7,7 @@ import { useTranslations } from "next-intl";
 import { Badge, Btn, Combobox, Field, Select, TextInput } from "@/components/cap";
 import type { OpenStatement } from "@capital/server/modules/ledger/services/statements";
 import { useAccounts, useCurrencies, useEntities, type AccountRecord, type EntityRecord } from "@/lib/api/catalog";
-import { apiGet, apiPatch, apiPost } from "@/lib/api/client";
+import { ApiError, apiGet, apiPatch, apiPost } from "@/lib/api/client";
 import { invalidFields } from "@/lib/api/errors";
 import { keys } from "@/lib/api/keys";
 import { useSession } from "@/lib/api/session";
@@ -30,12 +30,19 @@ const TYPES: Record<AccountsPageKind, AccountRecord["type"][]> = {
 };
 const NEW_TYPE = { bank: "checking", card: "credit_card", broker: "brokerage" } as const;
 const NEW = "new";
+/** Refusals that mean "this field cannot change on this account" (the toast explains). */
+const LOCK_CODES: Record<string, "entityId" | "currency"> = {
+  "account.entity_locked": "entityId",
+  "account.default_entity_locked": "entityId",
+  "account.currency_locked": "currency",
+};
 
 /**
  * Contas bancárias, Cartões de crédito and Corretoras: accounts grouped by
  * entity (currency on the right) and the selected one's form. Entity and
  * currency are real fields: the server refuses them, with a coded error,
- * once the account has entries.
+ * once the account has entries; the form then puts the old value back and
+ * makes that field read-only (the error toast says why).
  */
 export function AccountsPage({ kind }: { kind: AccountsPageKind }) {
   const t = useTranslations("settings.acc");
@@ -116,6 +123,7 @@ function AccountDetail({
   const defaults = { entityId: me?.personalEntityId ?? entities[0]?.id ?? "", currency: me?.baseCurrency ?? "BRL" };
   const [form, setForm] = useState<AccountForm>(() => accountForm(account, defaults, format));
   const [invalid, setInvalid] = useState<Set<string>>(new Set());
+  const [locked, setLocked] = useState<{ entityId?: boolean; currency?: boolean }>({});
   const set = (patch: Partial<AccountForm>) => setForm((f) => ({ ...f, ...patch }));
   const isCard = type === "credit_card";
   const isBroker = type === "brokerage";
@@ -141,6 +149,14 @@ function AccountDetail({
       if (!account) onCreated(saved.id);
     },
     onError: (error) => {
+      if (account && error instanceof ApiError) {
+        const field = LOCK_CODES[error.code ?? ""];
+        if (field) {
+          setLocked((l) => ({ ...l, [field]: true }));
+          set({ [field]: account[field] });
+          return;
+        }
+      }
       const fields = invalidFields(error);
       if (fields.size) {
         setInvalid(fields);
@@ -215,10 +231,10 @@ function AccountDetail({
           />
         </Field>
         <Field label={t("entity")}>
-          <Select aria-label={t("entity")} value={form.entityId} onChange={(entityId) => set({ entityId })} options={entityOptions} disabled={account?.isDefault} invalid={invalid.has("entityId")} />
+          <Select aria-label={t("entity")} value={form.entityId} onChange={(entityId) => set({ entityId })} options={entityOptions} disabled={account?.isDefault || locked.entityId} invalid={invalid.has("entityId")} />
         </Field>
         <Field label={t("currency")}>
-          <Select aria-label={t("currency")} value={form.currency} onChange={(currency) => set({ currency })} options={currencyOptions} invalid={invalid.has("currency")} />
+          <Select aria-label={t("currency")} value={form.currency} onChange={(currency) => set({ currency })} options={currencyOptions} disabled={locked.currency} invalid={invalid.has("currency")} />
         </Field>
         {isCard ? (
           <>
