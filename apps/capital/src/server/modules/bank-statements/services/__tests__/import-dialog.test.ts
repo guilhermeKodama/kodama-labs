@@ -5,6 +5,7 @@ import { createLedgerFixture, deleteLedgerFixture, type LedgerFixture } from "@/
 import { importCardStatement } from "@capital/server/modules/credit-cards/services/import-card-statement";
 import { toNumber } from "@capital/server/modules/ledger/lib/money";
 import { createEntry } from "@capital/server/modules/ledger/services/entries";
+import { buildImportPlan, canCommit, encodeUse, initialDecisions, pickUse, reviewSummary, setIncluded, type ImportAnalysis } from "@/lib/import/review";
 import { analyzeImport } from "../analyze-import";
 import { BANK_FITIDS, BANK_OFX, CARD_CSV, CARD_OFX } from "./fixtures/import-files";
 
@@ -359,5 +360,56 @@ describe("POST /v2/imports (card bill)", () => {
     expect(await live({ importId: r.body.importId })).toHaveLength(3);
     expect((await call("POST", `/v2/imports/${r.body.importId}/revert`)).status).toBe(200);
     expect(await live({ accountId: f.card })).toHaveLength(0);
+  });
+});
+
+describe("the dialog's own plan (lib/import/review) round trip", () => {
+  const ctx = (accountId: string) => ({
+    entity: { id: f.pfId, kind: "personal" as const },
+    accountId,
+    entityKinds: new Map<string, "personal" | "business">([
+      [f.pfId, "personal"],
+      [f.pjId, "business"],
+    ]),
+    currency: "BRL",
+    linkPayment: true,
+  });
+
+  it("commits a reviewed bank statement as the dialog builds it", async () => {
+    const { ifood } = await seedBankDuplicates();
+    const a = (await call("POST", "/v2/imports/analyze", { files: [{ name: "extrato-setembro.ofx", content: BANK_OFX }] })).body as ImportAnalysis;
+    const row = (id: string) => a.rows.find((r) => r.id === id)!;
+    let decisions = initialDecisions(a);
+    decisions = pickUse(decisions, row(BANK_FITIDS.PETZ), encodeUse({ as: "category", categoryId: f.categories.Groceries })!);
+    decisions = pickUse(decisions, row(BANK_FITIDS.SALARY), encodeUse({ as: "transfer", entityId: f.pjId })!);
+    const summary = reviewSummary(a.rows, decisions);
+    expect(summary).toMatchObject({ included: 4, ignored: 2, ignoredDuplicates: 2, rules: 1, transfers: 2 });
+
+    const r = await call("POST", "/v2/imports", buildImportPlan(a, decisions, ctx(a.suggestedAccountId!)));
+    expect(r.status).toBe(200);
+    expect(r.body).toMatchObject({ accountId: bank2, rulesCreated: 1, cardPaymentsCreated: 1, fuzzyDuplicatesLinked: 1, viewName: "Importação · extrato-setembro" });
+    const rows = await live({ importId: r.body.importId });
+    expect(rows.find((e) => e.externalId === BANK_FITIDS.PETZ)).toMatchObject({ accountId: bank2, categoryId: f.categories.Groceries });
+    expect(rows.find((e) => e.externalId === BANK_FITIDS.UBER)).toMatchObject({ categoryId: transporte, categorizedByRuleId: uberRule });
+    const salary = await prisma.transferGroup.findFirstOrThrow({ where: { userId: USER, externalId: BANK_FITIDS.SALARY }, include: { legs: true } });
+    expect(salary.direction).toBe("profit_distribution");
+    expect((await prisma.ledgerEntry.findUniqueOrThrow({ where: { id: ifood } })).externalId).toBe(BANK_FITIDS.IFOOD);
+    expect(await live({ externalId: BANK_FITIDS.ALREADY })).toHaveLength(1);
+  });
+
+  it("commits a reviewed card bill as the dialog builds it", async () => {
+    const a = (await call("POST", "/v2/imports/analyze", { files: [{ name: "fatura.csv", content: CARD_CSV }] })).body as ImportAnalysis;
+    expect(canCommit(a, a.suggestedAccountId)).toBe(true);
+    let decisions = initialDecisions(a);
+    decisions = pickUse(decisions, a.rows[0], encodeUse({ as: "category", categoryId: f.categories.Software })!);
+    decisions = setIncluded(decisions, a.rows[2], false);
+
+    const r = await call("POST", "/v2/imports", buildImportPlan(a, decisions, ctx(a.suggestedAccountId!)));
+    expect(r.status).toBe(200);
+    expect(r.body).toMatchObject({ accountId: f.card, cardRowsCreated: 2, rulesCreated: 1 });
+    expect(await prisma.import.findUniqueOrThrow({ where: { id: r.body.importId } })).toMatchObject({ accountId: f.card, fileName: "fatura.csv" });
+    const rows = await live({ importId: r.body.importId });
+    expect(rows.map((e) => e.description).sort()).toEqual([a.rows[0].description, a.rows[1].description].sort());
+    expect(rows.find((e) => e.description === a.rows[0].description)).toMatchObject({ categoryId: f.categories.Software });
   });
 });
