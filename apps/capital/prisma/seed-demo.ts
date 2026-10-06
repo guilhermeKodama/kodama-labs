@@ -409,40 +409,64 @@ async function payCardBills(ctx: Ctx) {
   }
 }
 
+/** Day-by-day running sum of an account's entries (its opening balance excluded), oldest first. */
+async function runningFlows(db: Db, accountId: string): Promise<{ date: string; total: number }[]> {
+  const days = await db.ledgerEntry.groupBy({
+    by: ["date"],
+    where: { accountId, deletedAt: null },
+    _sum: { amount: true },
+    orderBy: { date: "asc" },
+  });
+  let total = 0;
+  return days.map((d) => {
+    total = round(total + Number(d._sum.amount ?? 0), 2);
+    return { date: formatDateOnly(d.date), total };
+  });
+}
+
 /**
- * Mercury's three months of invoices leave it above the mockup's US$ 18.240;
- * the LLC distributes the surplus (LLC_DISTRIBUTION) so its opening balance
- * stays at or above zero and it still lands on the mockup's figure.
+ * Mercury's invoices start in July but it pays IBKR every month of the year,
+ * so it ends above the mockup's US$ 18.240 while dipping below zero before
+ * July. The LLC distributes the surplus plus that dip (LLC_DISTRIBUTION), so
+ * its opening balance covers the dip and it still lands on the mockup's figure.
  */
 async function distributeLlcSurplus(ctx: Ctx) {
-  const { from, to, roundTo } = LLC_DISTRIBUTION;
+  const { from, to: destinations, roundTo, k, day, description } = LLC_DISTRIBUTION;
+  const date = ctx.date(k, day);
+  const source = ctx.accounts[from];
   const target = DEMO_ACCOUNTS[from].balance ?? 0;
   const balances = await accountBalances(ctx.userId, ctx.db);
   const flows = (key: AccountKey) => (balances.get(ctx.accounts[key].id) ?? 0) - Number(ctx.accounts[key].initialBalance);
   const surplus = round(flows(from) - target, 2);
-  if (surplus <= 0) return;
-  const amount = Math.ceil(surplus / roundTo) * roundTo;
-  // The destination ends at its own mockup balance, so its opening balance absorbs the amount.
-  const headroom = round((DEMO_ACCOUNTS[to].balance ?? 0) - flows(to), 2);
-  if (amount > headroom) {
-    log(`note: ${DEMO_ACCOUNTS[to].name} has no room for a ${amount} distribution (${headroom}); ${DEMO_ACCOUNTS[from].name} keeps ${surplus} over the mockup`);
-    return;
+  const lowest = Math.min(0, ...(await runningFlows(ctx.db, source.id)).filter((d) => d.date < date).map((d) => d.total));
+  const needed = round(surplus - lowest, 2);
+  if (needed <= 0) return;
+
+  const fx = await loadFx(ctx.userId, ctx.db);
+  let remaining = Math.ceil(needed / roundTo) * roundTo;
+  for (const key of destinations) {
+    if (remaining <= 0) break;
+    const dest = ctx.accounts[key];
+    // The destination ends at its own mockup balance, so its opening balance absorbs what it receives:
+    // every balance it had before the distribution drops by that much, and none may go below zero.
+    const opening = (DEMO_ACCOUNTS[key].balance ?? 0) - flows(key);
+    const before = (await runningFlows(ctx.db, dest.id)).filter((d) => d.date < date).map((d) => d.total);
+    const headroom = round(opening + Math.min(0, ...before), 2);
+    const room = Math.floor((headroom * fx.rateFor(dest.currency)) / fx.rateFor(source.currency) / roundTo) * roundTo;
+    const amount = Math.min(remaining, room);
+    if (amount <= 0) continue;
+    await createEntry(
+      ctx.userId,
+      { kind: "transfer", fromAccountId: source.id, toAccountId: dest.id, amount, description, date, direction: "profit_distribution" },
+      ctx.db
+    );
+    counts.transfers++;
+    remaining -= amount;
+    log(`LLC distribution: ${amount} ${source.currency} ${source.name} → ${dest.name} on ${date}`);
   }
-  await createEntry(
-    ctx.userId,
-    {
-      kind: "transfer",
-      fromAccountId: ctx.accounts[from].id,
-      toAccountId: ctx.accounts[to].id,
-      amount,
-      description: LLC_DISTRIBUTION.description,
-      date: ctx.date(LLC_DISTRIBUTION.k, LLC_DISTRIBUTION.day),
-      direction: "profit_distribution",
-    },
-    ctx.db
-  );
-  counts.transfers++;
-  log(`LLC distribution: ${amount} ${ctx.accounts[from].currency} ${DEMO_ACCOUNTS[from].name} → ${DEMO_ACCOUNTS[to].name} on ${ctx.date(LLC_DISTRIBUTION.k, LLC_DISTRIBUTION.day)}`);
+  if (remaining > 0) {
+    log(`note: the PF accounts had no room for ${remaining} ${source.currency} more of the LLC distribution; ${source.name} dips up to that far below zero before its first invoices`);
+  }
 }
 
 /** Opening balances so each account ends at the mockup's balance (never below zero). */
@@ -490,6 +514,12 @@ async function report(ctx: Ctx) {
   const spent = (overview.budgets ?? []).map((b) => `${b.category} ${b.committed ?? b.spent}/${b.amount}`).join(", ");
   log(`budgets ${label(m0)} (committed/amount): ${spent}`);
   const balances = await accountBalances(userId, db);
+  for (const a of Object.values(ctx.accounts)) {
+    if (a.type === "credit_card") continue;
+    const opening = Number((await db.account.findUniqueOrThrow({ where: { id: a.id }, select: { initialBalance: true } })).initialBalance);
+    const low = (await runningFlows(db, a.id)).reduce((min, d) => (opening + d.total < min.balance ? { date: d.date, balance: round(opening + d.total, 2) } : min), { date: "", balance: 0 });
+    if (low.balance < 0) log(`note: ${a.name} runs negative, lowest ${low.balance} ${a.currency} on ${low.date}`);
+  }
   log(`balances: ${Object.values(ctx.accounts).map((a) => `${a.name} ${round(balances.get(a.id) ?? 0, 2)} ${a.currency}`).join(" · ")}`);
 }
 

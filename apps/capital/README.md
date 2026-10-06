@@ -425,15 +425,26 @@ source `system`, so ⌘Z never undoes the seed):
   (R$ 12.250/mês, by contribution at R$ 15.000/mês).
 
 Opening balances are set so Nubank, Inter PJ, Mercury and XP end at the
-mockup's balances. Mercury's invoices leave it above US$ 18.240, so in
-August the LLC distributes the surplus (US$ 3.800) to Avenue, as a
-profit distribution rather than an aporte.
+mockup's balances. Mercury only invoices from July on but pays IBKR
+US$ 370 every month, so it needs opening cash for that drawdown and would
+still end above US$ 18.240. In August the LLC distributes the surplus plus
+the drawdown (a profit distribution, not an aporte) to the PF, which
+absorbs it in its opening balances: XP first, then Nubank, each taking at
+most its lowest balance before August so neither goes negative. In
+2026-10 that is US$ 3.800 to XP and US$ 500 to Nubank; what does not fit
+(US$ 2.800 there, more when M0 is January to March, when Nubank has no
+room) stays as a dip in Mercury before July. The seed's last lines list
+every account whose running balance goes below zero.
 
 Known differences from the mockup: Transações has more rows than t1–t18 a
 month (broker deposits, the cash legs of buys and proventos, card bill
-payments), which the year of aportes and proventos needs; FIRE progress
-counts holdings only, so it reads about 29,7% instead of 30,6%; and the
-LLC's Mercury runs negative before its first invoices (July).
+payments, the LLC distribution), which the year of aportes and proventos
+needs; FIRE progress counts holdings only, so it reads about 29,7% instead
+of 30,6%; running balances dip below zero in a few places: Mercury before
+July (above), Nubank between the day-16 aportes and the day-20 LTDA
+distribution in some months, and Tesouro Direto, Avenue and IBKR by their
+later proventos and rounding (their opening cash pays the opening
+positions, and the cash they collect afterwards lowers it).
 
 ---
 
