@@ -12,6 +12,7 @@ import {
   investedIn,
   nextAfterSave,
   parseDateText,
+  rateFieldText,
   todayIn,
   type EditableEntry,
   type EntryFormState,
@@ -295,5 +296,20 @@ describe("investedIn", () => {
     expect(investedIn(withHoldings([]), { id: "xp", currency: "BRL" })).toBeNull();
     const gbp = withHoldings([{ id: "a", accountId: "xp", ticker: null, name: "a", currentPrice: 1, averageCost: 1, marketValue: 10, currency: "GBP" }]);
     expect(investedIn(gbp, { id: "xp", currency: "BRL" })).toBeNull();
+  });
+});
+
+describe("rateFieldText", () => {
+  it("shows the default rate filled in while untouched", () => {
+    expect(rateFieldText("", "5,41", null)).toBe("5,41");
+  });
+  it("shows what was typed", () => {
+    expect(rateFieldText("5,5", "5,41", "5,41")).toBe("5,5");
+  });
+  it("lets the field be cleared after an edit", () => {
+    expect(rateFieldText("", "5,41", "5,41")).toBe("");
+  });
+  it("fills in again when the default changes (another currency)", () => {
+    expect(rateFieldText("", "6,20", "5,41")).toBe("6,20");
   });
 });

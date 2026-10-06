@@ -29,6 +29,7 @@ import {
 import { cn } from "@/lib/utils";
 import { DateInput } from "./date-input";
 import { KindSegmented } from "./kind-segmented";
+import { RateInput } from "./rate-input";
 
 export interface TxFormBodyProps {
   form: EntryFormState;
@@ -119,10 +120,10 @@ export function TxFormBody({ form, up, ctx, accounts, mode, lockedKinds = [], in
       </Field>
       {foreign ? (
         <Field label={t("rate")} hint={Number.isFinite(amount) && Number.isFinite(rate) ? t("rateHint", { value: fmt.money(amount * rate, ctx.baseCurrency) }) : undefined}>
-          <TextInput
+          <RateInput
             value={form.rate}
             onChange={(value) => up({ rate: value })}
-            placeholder={fmt.number(baseRate(currency, ctx), { min: 2, max: 4 })}
+            defaultText={fmt.number(baseRate(currency, ctx), { min: 2, max: 4 })}
             mono
             invalid={invalid === "rate"}
             disabled={editing && isTransfer}
@@ -370,7 +371,7 @@ function InvestBlock({
         </Field>
         {fx.differs ? (
           <Field label={tForm("rate")} hint={Number.isFinite(arrives) ? t("arrives", { value: fmt.money(arrives, to?.currency) }) : undefined}>
-            <TextInput value={form.rate} onChange={(value) => up({ rate: value })} placeholder={fmt.number(fx.defaultRate, { min: 2, max: 4 })} mono invalid={invalid === "rate"} disabled={mode === "edit"} />
+            <RateInput value={form.rate} onChange={(value) => up({ rate: value })} defaultText={fmt.number(fx.defaultRate, { min: 2, max: 4 })} mono invalid={invalid === "rate"} disabled={mode === "edit"} />
           </Field>
         ) : null}
         <Field label={tForm("date")}>

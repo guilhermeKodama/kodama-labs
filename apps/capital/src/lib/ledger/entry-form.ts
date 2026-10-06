@@ -214,6 +214,18 @@ export function typedRate(text: string, fallback: number, ctx: FormContext): num
   return Number.isFinite(value) && value > 0 ? value : Number.NaN;
 }
 
+/**
+ * What the Câmbio field shows. The mockup shows the rate filled in ("5,41"),
+ * so until the person edits it the field displays the default rate while the
+ * form keeps "" (= the default: the server's own rate on a plain entry).
+ * `editedFor` is the default the person was looking at when they first
+ * typed; a new default (another currency or account) fills the field again.
+ */
+export function rateFieldText(typed: string, defaultText: string, editedFor: string | null): string {
+  if (typed) return typed;
+  return editedFor === defaultText ? "" : defaultText;
+}
+
 /** Amount as typed, NaN when unreadable. */
 export function typedAmount(form: EntryFormState, ctx: FormContext): number {
   if (!form.amount.trim()) return Number.NaN;
