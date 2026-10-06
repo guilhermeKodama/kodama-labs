@@ -6,6 +6,7 @@ import { toNumber } from "@capital/server/modules/ledger/lib/money";
 import { accountBalances } from "@capital/server/modules/ledger/services/accounts";
 import { createEntry } from "@capital/server/modules/ledger/services/entries";
 import { undoBatch } from "@capital/server/modules/ledger/services/mutations";
+import { recalculateAllHoldings } from "../../lib/holding-position";
 import {
   createHolding,
   deleteOperation,
@@ -252,5 +253,38 @@ describe("listOperations", () => {
     expect(ticker(await listOperations(USER, prisma, { entityIds: [f.pjId] }))).toEqual(["WEGE3:buy"]);
     expect(ticker(await listOperations(USER, prisma, { types: ["dividend", "yield_payment"] }))).toEqual(["PETR4:dividend"]);
     expect(ticker(await listOperations(USER, prisma, { limit: 1, offset: 1 }))).toEqual(["PETR4:dividend"]);
+  });
+});
+
+describe("recalculateAllHoldings", () => {
+  it("fixes holdings stored by the old cost rules, skips ones without operations, and is idempotent", async () => {
+    const sold = await petr4();
+    await recordOperation(USER, { holdingId: sold.id, type: "buy", quantity: 10, pricePerUnit: 30, totalAmount: 300, fees: 2, date: "2026-08-10" }, prisma);
+    await recordOperation(USER, { holdingId: sold.id, type: "sell", quantity: 10, pricePerUnit: 31, totalAmount: 310, date: "2026-08-12" }, prisma);
+    const partial = await createHolding(USER, { accountId: f.broker, assetClass: "stocks", ticker: "VALE3", name: "Vale" }, prisma);
+    await recordOperation(USER, { holdingId: partial.id, type: "buy", quantity: 10, pricePerUnit: 50, totalAmount: 500, fees: 5, date: "2026-08-10" }, prisma);
+    await recordOperation(USER, { holdingId: partial.id, type: "sell", quantity: 5, pricePerUnit: 55, totalAmount: 275, date: "2026-08-12" }, prisma);
+    const direct = await createHolding(USER, { accountId: f.broker, assetClass: "fii", ticker: "HGLG11", name: "CSHG Logística" }, prisma);
+    // What the old logic left behind: a sold-out holding still active, a cost basis without fees or the sold share taken out,
+    // and a position entered without operations.
+    await prisma.investmentHolding.update({ where: { id: sold.id }, data: { isActive: true } });
+    await prisma.investmentHolding.update({ where: { id: partial.id }, data: { totalInvested: 500 } });
+    await prisma.investmentHolding.update({ where: { id: direct.id }, data: { currentQuantity: 3, totalInvested: 480, averageCost: 160 } });
+
+    const dry = await recalculateAllHoldings(prisma, { userId: USER, dryRun: true });
+    expect(dry).toMatchObject({ checked: 3, skipped: 1 });
+    expect(dry.changed.map((c) => [c.label, c.before.isActive, c.after.isActive, c.after.totalInvested])).toEqual([
+      ["PETR4", true, false, 0],
+      ["VALE3", true, true, 252.5],
+    ]);
+    expect(await holdingRow(sold.id)).toMatchObject({ isActive: true });
+
+    const run = await recalculateAllHoldings(prisma, { userId: USER });
+    expect(run.changed).toHaveLength(2);
+    expect(await holdingRow(sold.id)).toMatchObject({ isActive: false, currentQuantity: 0, totalInvested: 0 });
+    expect(await holdingRow(partial.id)).toMatchObject({ isActive: true, currentQuantity: 5, totalInvested: 252.5, averageCost: 50.5 });
+    expect(await holdingRow(direct.id)).toMatchObject({ isActive: true, currentQuantity: 3, totalInvested: 480 });
+
+    expect((await recalculateAllHoldings(prisma, { userId: USER })).changed).toEqual([]);
   });
 });

@@ -105,6 +105,25 @@ export function replayPosition(ops: readonly PositionOperation[]): Position {
   return { quantity: qty, cost, averageCost: qty > EPS ? cost / qty : 0, realizedGain: realized, oversold, closed };
 }
 
+/** What a holding stores that recalculation reads back. */
+export interface StoredPosition {
+  isActive: boolean;
+  currentQuantity: number;
+  totalInvested: number;
+}
+
+/**
+ * Whether a holding stays active after a replay: a position a sale emptied
+ * goes inactive; one that was emptied and has a position again comes back;
+ * otherwise the stored flag stays (a holding deactivated by hand while it
+ * still had a position is left inactive).
+ */
+export function nextIsActive(current: StoredPosition, position: Position): boolean {
+  if (position.closed) return false;
+  const wasEmptied = !current.isActive && current.currentQuantity <= EPS && current.totalInvested <= EPS;
+  return wasEmptied && (position.quantity > EPS || position.cost > EPS) ? true : current.isActive;
+}
+
 /**
  * Recomputes a holding from all its operations and stores quantity,
  * average cost and cost basis (totalInvested). A holding a sale emptied is
@@ -120,8 +139,7 @@ export async function recalculateHoldingDetailed(holdingId: string, db: DbClient
     db.investmentOperation.findMany({ where: { holdingId }, orderBy: [{ date: "asc" }, { createdAt: "asc" }] }),
   ]);
   const position = replayPosition(ops);
-  const wasEmptied = !current.isActive && current.currentQuantity <= EPS && current.totalInvested <= EPS;
-  const isActive = position.closed ? false : wasEmptied && (position.quantity > EPS || position.cost > EPS) ? true : current.isActive;
+  const isActive = nextIsActive(current, position);
   const holding = await db.investmentHolding.update({
     where: { id: holdingId },
     data: { currentQuantity: position.quantity, averageCost: position.averageCost, totalInvested: position.cost, isActive },
@@ -138,4 +156,59 @@ export async function recalculateHolding(holdingId: string, db: DbClient) {
 export async function oversoldOperations(holdingId: string, db: DbClient): Promise<Set<string>> {
   const ops = await db.investmentOperation.findMany({ where: { holdingId }, orderBy: [{ date: "asc" }, { createdAt: "asc" }] });
   return new Set(replayPosition(ops).oversold);
+}
+
+export interface HoldingRecalculation {
+  id: string;
+  userId: string;
+  label: string;
+  before: StoredPosition;
+  after: StoredPosition;
+}
+
+const MONEY_EPS = 0.005;
+
+function differs(a: StoredPosition, b: StoredPosition) {
+  return a.isActive !== b.isActive || Math.abs(a.currentQuantity - b.currentQuantity) > 1e-6 || Math.abs(a.totalInvested - b.totalInvested) > MONEY_EPS;
+}
+
+/**
+ * Brings every stored holding (of one user, or all) in line with
+ * replayPosition: holdings written before the cost-basis rules (fees in
+ * cost, proportional sells, deactivation on a full sale) keep their old
+ * totalInvested and isActive until an operation touches them. Holdings with
+ * no operations are skipped: their position was entered directly (an MCP or
+ * legacy import) and a replay would zero it. Idempotent; `dryRun` only
+ * reports what would change. Not recorded for undo (a maintenance pass).
+ */
+export async function recalculateAllHoldings(db: DbClient, opts: { userId?: string; dryRun?: boolean } = {}) {
+  const holdings = await db.investmentHolding.findMany({
+    where: opts.userId ? { account: { userId: opts.userId } } : {},
+    select: {
+      id: true,
+      ticker: true,
+      name: true,
+      isActive: true,
+      currentQuantity: true,
+      totalInvested: true,
+      account: { select: { userId: true } },
+      operations: { orderBy: [{ date: "asc" }, { createdAt: "asc" }] },
+    },
+    orderBy: { createdAt: "asc" },
+  });
+  const changed: HoldingRecalculation[] = [];
+  let skipped = 0;
+  for (const h of holdings) {
+    if (!h.operations.length) {
+      skipped++;
+      continue;
+    }
+    const position = replayPosition(h.operations);
+    const before: StoredPosition = { isActive: h.isActive, currentQuantity: h.currentQuantity, totalInvested: h.totalInvested };
+    const after: StoredPosition = { isActive: nextIsActive(before, position), currentQuantity: position.quantity, totalInvested: position.cost };
+    if (!differs(before, after)) continue;
+    if (!opts.dryRun) await recalculateHolding(h.id, db);
+    changed.push({ id: h.id, userId: h.account.userId, label: h.ticker || h.name, before, after });
+  }
+  return { checked: holdings.length, skipped, changed };
 }
