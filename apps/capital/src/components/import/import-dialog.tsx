@@ -226,7 +226,7 @@ function ImportFlow({ onClose, defaultAccountId }: { onClose: () => void; defaul
       {done ? null : (
         <DialogFooter>
           {step > 0 ? (
-            <Btn ghost onClick={() => setStep((step - 1) as Step)}>
+            <Btn ghost disabled={commit.isPending} onClick={() => setStep((step - 1) as Step)}>
               {t("nav.back")}
             </Btn>
           ) : null}

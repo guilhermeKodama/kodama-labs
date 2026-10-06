@@ -257,6 +257,8 @@ describe("POST /v2/imports (bank statement)", () => {
     expect(rows.find((e) => e.externalId === BANK_FITIDS.UBER)).toMatchObject({ id: uber.id, categoryId: transporte, categorizedByRuleId: uberRule });
     expect(rows.map((e) => e.externalId)).toContain(`${BANK_FITIDS.BILL}~dup1`);
     expect(await live({ externalId: BANK_FITIDS.UBER })).toHaveLength(1);
+    // The revert put the opening balance back; the import that replaces it sets it again.
+    expect(toNumber((await prisma.account.findUniqueOrThrow({ where: { id: bank2 } })).initialBalance)).toBe(-128.9);
   });
 
   it("imports an exact duplicate anyway under a suffixed external id", async () => {
@@ -350,6 +352,17 @@ describe("POST /v2/imports (card bill)", () => {
     const anyway = { ...plan, cardStatement: { ...plan.cardStatement, rows: [{ ...plan.cardStatement.rows[2], allowDuplicate: true }] } };
     expect((await call("POST", "/v2/imports", anyway)).body).toMatchObject({ cardRowsCreated: 1, cardRowsSkipped: 0 });
     expect(await live({ accountId: f.card, description: "DROGASIL 1234" })).toHaveLength(2);
+  });
+
+  it("imports anyway a row already on the statement without dropping an identical new one after it", async () => {
+    const plan = cardPlan();
+    plan.cardStatement.linkPayment = false;
+    const drogasil = plan.cardStatement.rows[2];
+    await call("POST", "/v2/imports", { ...plan, cardStatement: { ...plan.cardStatement, rows: [drogasil] } });
+    // The file has the purchase twice: the first repeats the booked one (imported anyway), the second is new.
+    const twice = { ...plan, cardStatement: { ...plan.cardStatement, rows: [{ ...drogasil, allowDuplicate: true }, { ...drogasil, createRule: false }] } };
+    expect((await call("POST", "/v2/imports", twice)).body).toMatchObject({ cardRowsCreated: 2, cardRowsSkipped: 0 });
+    expect(await live({ accountId: f.card, description: "DROGASIL 1234" })).toHaveLength(3);
   });
 
   it("books a card bill file from the card's own route as an import", async () => {

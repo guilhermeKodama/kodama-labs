@@ -177,8 +177,10 @@ export async function executeImport(
       : target;
     const locale = await loadUserLocale(userId, tx);
 
-    // The account's first import sets its opening balance (once its rows are booked, below).
-    const setsOpeningBalance = input.ledgerBalance != null && !isCard && (await tx.import.count({ where: { accountId: target.id } })) === 0;
+    // The account's first import sets its opening balance (once its rows are booked, below). A reverted
+    // import put the balance back, so the import that replaces it counts as the first again.
+    const setsOpeningBalance =
+      input.ledgerBalance != null && !isCard && (await tx.import.count({ where: { accountId: target.id, revertedAt: null } })) === 0;
 
     await ensureSystemCategories(userId, tx);
     const matcher = await loadRuleMatcher(userId, tx);

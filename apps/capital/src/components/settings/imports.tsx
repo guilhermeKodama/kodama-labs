@@ -84,7 +84,7 @@ export function ImportsPage(props: { names?: Names }) {
           </button>
         ),
       ])}
-      emptyMessage={history.isPending ? null : t("empty")}
+      emptyMessage={history.isPending ? null : history.isError ? t("loadError") : t("empty")}
     />
   );
 }

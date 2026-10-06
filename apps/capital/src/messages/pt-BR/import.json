@@ -123,6 +123,7 @@
     "revert": "Desfazer",
     "viaAssistant": "via assistente",
     "empty": "Nenhuma importação ainda.",
+    "loadError": "Não foi possível carregar o histórico de importações.",
     "revertedToast": "Importação desfeita · {file}"
   }
 }

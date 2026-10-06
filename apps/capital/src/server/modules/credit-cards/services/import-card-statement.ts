@@ -172,10 +172,13 @@ export async function importCardStatement(userId: string, input: ImportCardState
       const date = parseLocalDate(row.date);
       const key = dedupeKey(date, row.amount, row.description, row.installment?.number);
       const seen = counts.get(key) ?? 0;
-      if (seen > 0 && !row.allowDuplicate) {
+      // A row imported anyway still pairs with the booked row it repeats, so an identical new row after it is not taken for that one.
+      if (seen > 0) {
         counts.set(key, seen - 1);
-        skipped++;
-        continue;
+        if (!row.allowDuplicate) {
+          skipped++;
+          continue;
+        }
       }
       const currency = row.currency ?? account.currency;
       const rate = fx.rateFor(currency);

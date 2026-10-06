@@ -123,6 +123,7 @@
     "revert": "Undo",
     "viaAssistant": "via assistant",
     "empty": "No imports yet.",
+    "loadError": "Could not load the import history.",
     "revertedToast": "Import undone · {file}"
   }
 }
