@@ -232,7 +232,8 @@
   },
   "board": {
     "more": "Carregar mais",
-    "shown": "{shown} de {total} carregados"
+    "shown": "{shown} de {total}",
+    "loading": "Carregando…"
   },
   "calendar": {
     "weekdays": {
@@ -248,5 +249,9 @@
     "outside": "{count, plural, one {# lançamento} other {# lançamentos}} de outros meses do período",
     "more": "+{count}",
     "openDay": "Abrir {day} na tabela"
+  },
+  "drill": {
+    "detail": "Detalhe: {label}",
+    "back": "voltar à view"
   }
 }

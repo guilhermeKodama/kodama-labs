@@ -1,6 +1,7 @@
 import type { GroupKey, LedgerQueryInput, LedgerSelectionQuery, ViewConfig } from "@capital/server/modules/ledger/contracts";
 import type { LedgerFlowsInput } from "@capital/server/modules/ledger/services/flows";
 import { COUNT_AGG, SERIES_TYPES, SUM_AGG, tableAggregations } from "./columns";
+import { groupValueFilters } from "./drill";
 
 /**
  * ViewConfig → POST /v2/ledger/query body, per layout. Every query is in
@@ -101,17 +102,53 @@ export function boardQuery(config: ViewConfig, search?: string | null): LedgerQu
   };
 }
 
-/** Calendar: day totals from the groups, descriptions from the rows (counted rows only). */
+/**
+ * Calendar day totals: Σ and count per day of the whole period (counted
+ * rows, on the view's date field), and the period's count for "N de
+ * outros meses". No rows: the descriptions come from calendarRowsQuery.
+ */
 export function calendarQuery(config: ViewConfig, search?: string | null): LedgerQueryInput {
   return {
     ...viewSelection(config, search),
     semantics: "display",
     rowsScope: "counted",
-    groupBy: [DAY],
+    groupBy: [{ field: config.dateField, bucket: "day" }],
     aggregations: [SUM_AGG, COUNT_AGG],
+    includeRows: false,
+  };
+}
+
+/** The calendar's descriptions: counted rows of the month on screen ("YYYY-MM"), largest first, paged. */
+export function calendarRowsQuery(config: ViewConfig, search: string | null | undefined, month: string): LedgerQueryInput {
+  const selection = viewSelection(config, search);
+  return {
+    ...selection,
+    filters: [...selection.filters, { field: config.dateField, op: "inBuckets", bucket: "month", values: [month] }],
+    semantics: "display",
+    rowsScope: "counted",
+    groupBy: [],
+    aggregations: [],
     sort: [{ field: "absAmountBase", dir: "desc" }],
     includeRows: true,
+    skipTotals: true,
     page: { limit: CALENDAR_PAGE },
+  };
+}
+
+/** Board column "Carregar mais": the view's rows in one column (its group value), paged on their own. */
+export function boardColumnQuery(config: ViewConfig, search: string | null | undefined, value: string | null, limit: number): LedgerQueryInput {
+  const key = boardKey(config);
+  const selection = viewSelection(config, search);
+  return {
+    ...selection,
+    filters: [...selection.filters, ...groupValueFilters(key, value)],
+    semantics: "display",
+    groupBy: [key],
+    aggregations: [],
+    sort: config.sort,
+    includeRows: true,
+    skipTotals: true,
+    page: { limit: Math.min(BOARD_PAGE, Math.max(1, limit)) },
   };
 }
 
@@ -135,7 +172,7 @@ export function isPagedLayout(config: Pick<ViewConfig, "layout" | "chart">): boo
   return config.layout === "table" || config.layout === "board" || config.layout === "calendar";
 }
 
-/** The query of a layout (the sankey has its own endpoint, see flowsQuery). */
+/** The query of a layout (the sankey has its own endpoint, see flowsQuery; the calendar's rows, calendarRowsQuery). */
 export function layoutQuery(config: ViewConfig, search?: string | null): LedgerQueryInput {
   switch (config.layout) {
     case "pivot":

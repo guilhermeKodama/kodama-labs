@@ -3,24 +3,28 @@
 import { useTranslations } from "next-intl";
 import type { LedgerGroup } from "@capital/server/modules/ledger/contracts";
 import { useFmt } from "@/lib/format/provider";
-import { COUNT_KEY, SUM_KEY } from "@/lib/ledger/columns";
+import { calendarDays, dayIso, dayShade, monthGrid, outsideCount, rowsByDay } from "@/lib/ledger/calendar";
 import { cn } from "@/lib/utils";
 import type { DisplayRow } from "../rows";
 
 const WEEKDAYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"] as const;
+const SHADE = { 0: "", 2: "bg-fill-2", 3: "bg-fill-3", 4: "bg-fill-4" } as const;
 
 /**
  * Calendar (mockup 2994–3055): the last month of the period, Monday
  * first. Each day shows the net Σ of its counted rows, its first two
  * descriptions (each opens the detail) and "+N"; the background is
  * stronger on busier days. The day number opens the table for that day.
+ * Totals come from the day groups of the whole period; the descriptions
+ * from the month's own rows.
  */
 export function CalendarView({
   month,
   today,
+  dateField,
   rows,
   groups,
-  totalCount,
+  periodCount,
   onOpen,
   onDay,
 }: {
@@ -28,23 +32,22 @@ export function CalendarView({
   month: string;
   /** "YYYY-MM-DD" in the user's timezone. */
   today: string;
+  dateField: "date" | "effectiveDate";
+  /** Counted rows of the month, largest first. */
   rows: readonly DisplayRow[];
-  /** Day groups (key YYYY-MM-DD): Σ and count. */
+  /** Day groups of the period (key YYYY-MM-DD): Σ and count. */
   groups: readonly LedgerGroup[];
-  /** Rows in the whole period (counted), for "N de outros meses". */
-  totalCount: number;
+  /** Counted rows in the whole period, for "N de outros meses". */
+  periodCount: number;
   onOpen: (row: DisplayRow) => void;
   onDay: (day: string) => void;
 }) {
   const t = useTranslations("ledger.calendar");
   const fmt = useFmt();
-  const [year, m] = month.split("-").map(Number);
-  const days = new Date(Date.UTC(year, m, 0)).getUTCDate();
-  const lead = (new Date(Date.UTC(year, m - 1, 1)).getUTCDay() + 6) % 7;
-  const byDay = new Map(groups.filter((g) => g.key?.startsWith(month)).map((g) => [g.key as string, g]));
-  const inMonth = [...byDay.values()].reduce((s, g) => s + (g.values[COUNT_KEY] ?? g.count), 0);
-  const outside = Math.max(0, totalCount - inMonth);
-  const cells = Math.ceil((lead + days) / 7) * 7;
+  const { days, lead, cells } = monthGrid(month);
+  const byDay = calendarDays(groups, month);
+  const rowsOf = rowsByDay(rows, dateField);
+  const outside = outsideCount(byDay, periodCount);
 
   return (
     <div className="flex flex-col gap-2">
@@ -57,21 +60,12 @@ export function CalendarView({
         {Array.from({ length: cells }, (_, i) => {
           const day = i - lead + 1;
           if (day < 1 || day > days) return <span key={i} />;
-          const iso = `${month}-${String(day).padStart(2, "0")}`;
-          const group = byDay.get(iso);
-          const total = group?.values[SUM_KEY] ?? 0;
-          const count = group ? (group.values[COUNT_KEY] ?? group.count) : 0;
-          const mag = Math.abs(total);
-          const items = rows.filter((row) => row.date === iso).slice(0, 2);
+          const iso = dayIso(month, day);
+          const { total, count } = byDay.get(iso) ?? { total: 0, count: 0 };
+          const items = (rowsOf.get(iso) ?? []).slice(0, 2);
           const isToday = iso === today;
           return (
-            <div
-              key={i}
-              className={cn(
-                "flex min-h-[74px] min-w-0 flex-col gap-[3px] rounded-[6px] border border-stroke-3 p-1.5",
-                mag > 3000 ? "bg-fill-2" : mag > 500 ? "bg-fill-3" : mag > 0 ? "bg-fill-4" : "",
-              )}
-            >
+            <div key={i} className={cn("flex min-h-[74px] min-w-0 flex-col gap-[3px] rounded-[6px] border border-stroke-3 p-1.5", SHADE[dayShade(total)])}>
               <div className="flex items-baseline">
                 <button
                   type="button"

@@ -232,7 +232,8 @@
   },
   "board": {
     "more": "Load more",
-    "shown": "{shown} of {total} loaded"
+    "shown": "{shown} of {total}",
+    "loading": "Loading…"
   },
   "calendar": {
     "weekdays": {
@@ -248,5 +249,9 @@
     "outside": "{count, plural, one {# transaction} other {# transactions}} from other months in the period",
     "more": "+{count}",
     "openDay": "Open {day} in the table"
+  },
+  "drill": {
+    "detail": "Detail: {label}",
+    "back": "back to the view"
   }
 }

@@ -1,5 +1,5 @@
 import type { GroupKey, LedgerFilter, ViewConfig } from "@capital/server/modules/ledger/contracts";
-import { diffViewConfig, type ViewDraft } from "./view-draft";
+import { diffViewConfig, draftPatch, type ViewDraft } from "./view-draft";
 
 /**
  * Drill-down (mockup drill 2824–2834, lifecycle 3150–3163): a number in
@@ -64,7 +64,18 @@ export function drillFiltersDraft(saved: ViewConfig, applied: ViewConfig, keys: 
   return diffViewConfig(saved, drillConfig(applied, keys, filters));
 }
 
-/** A calendar day: the table for that date. */
+/** A calendar day: the table for that date (on the view's date field). */
 export function dayDraft(saved: ViewConfig, applied: ViewConfig, day: string): ViewDraft {
-  return drillDraft(saved, applied, [{ key: { field: "date", bucket: "day" }, value: day }]);
+  return drillDraft(saved, applied, [{ key: { field: applied.dateField, bucket: "day" }, value: day }]);
+}
+
+/**
+ * A drill's draft with its banner ("Detalhe: {label} · voltar à view"):
+ * the label names the slice, and `back` keeps the draft that was on
+ * screen before the drill (temporary filters of Todas, an earlier
+ * change), so going back restores it instead of dropping everything.
+ */
+export function withDrillBanner(draft: ViewDraft, label: string, previous: ViewDraft | null | undefined): ViewDraft {
+  const back = draftPatch(previous);
+  return { ...draft, label, ...(back ? { back } : {}) };
 }

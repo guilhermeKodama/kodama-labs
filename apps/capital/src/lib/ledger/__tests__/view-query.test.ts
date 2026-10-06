@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { boardQuery, bucketOptionsQuery, calendarQuery, chartKeys, chartQuery, flowsQuery, isPagedLayout, layoutQuery, pivotQuery, tableQuery, viewSelection } from "@/lib/ledger/view-query";
+import { boardColumnQuery, boardQuery, bucketOptionsQuery, calendarQuery, calendarRowsQuery, chartKeys, chartQuery, flowsQuery, isPagedLayout, layoutQuery, pivotQuery, tableQuery, viewSelection } from "@/lib/ledger/view-query";
 import { viewConfig } from "./fixtures";
 
 const chart = (type: "bar" | "line" | "area" | "pie" | "waterfall" | "bar100", patch = {}) =>
@@ -38,7 +38,25 @@ describe("view queries", () => {
   it("pages the board by its column key and the calendar by day over counted rows", () => {
     expect(boardQuery(viewConfig({ layout: "board" }))).toMatchObject({ groupBy: [{ field: "categoryId" }], includeRows: true });
     expect(boardQuery(viewConfig({ layout: "board", groupBy: [{ field: "accountId" }] })).groupBy).toEqual([{ field: "accountId" }]);
-    expect(calendarQuery(viewConfig({ layout: "calendar" }))).toMatchObject({ rowsScope: "counted", groupBy: [{ field: "date", bucket: "day" }], includeRows: true });
+    expect(calendarQuery(viewConfig({ layout: "calendar" }))).toMatchObject({ rowsScope: "counted", groupBy: [{ field: "date", bucket: "day" }], includeRows: false });
+  });
+
+  it("reads the calendar's day totals over the period and its rows for the month on screen, on the view's date field", () => {
+    const config = viewConfig({ layout: "calendar", dateField: "effectiveDate", period: { preset: "last_3m", offset: 0 }, filters: [{ field: "flowKind", op: "in", values: ["out"] }] });
+    expect(calendarQuery(config).groupBy).toEqual([{ field: "effectiveDate", bucket: "day" }]);
+    expect(calendarQuery(config).filters).toEqual(config.filters);
+    const rows = calendarRowsQuery(config, null, "2026-09");
+    expect(rows).toMatchObject({ rowsScope: "counted", includeRows: true, skipTotals: true, period: config.period, sort: [{ field: "absAmountBase", dir: "desc" }] });
+    expect(rows.filters).toEqual([...config.filters, { field: "effectiveDate", op: "inBuckets", bucket: "month", values: ["2026-09"] }]);
+  });
+
+  it("pages one board column on its own: the view's filters plus the column's value", () => {
+    const config = viewConfig({ layout: "board", groupBy: [{ field: "accountId" }], filters: [{ field: "flowKind", op: "in", values: ["out"] }] });
+    const q = boardColumnQuery(config, "uber", "acc1", 150);
+    expect(q).toMatchObject({ groupBy: [{ field: "accountId" }], includeRows: true, skipTotals: true, search: "uber", page: { limit: 150 }, sort: config.sort });
+    expect(q.filters).toEqual([...config.filters, { field: "accountId", op: "in", values: ["acc1"] }]);
+    expect(boardColumnQuery(viewConfig({ layout: "board" }), null, null, 9999).filters).toEqual([{ field: "categoryId", op: "in", values: [null] }]);
+    expect(boardColumnQuery(viewConfig({ layout: "board" }), null, null, 9999).page?.limit).toBe(500);
   });
 
   it("routes each layout and knows which ones page", () => {

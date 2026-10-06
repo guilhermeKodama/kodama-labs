@@ -31,6 +31,8 @@ export const VIEW_CONFIG_KEYS = [
 export type ViewDraft = Partial<ViewConfig> & {
   /** What the drill came from ("Saídas · set/2026"), for the banner; not part of the config. */
   label?: string;
+  /** The draft before the drill ("voltar à view" goes back to it); not part of the config. */
+  back?: Partial<ViewConfig>;
 };
 
 type ConfigKey = (typeof VIEW_CONFIG_KEYS)[number];
@@ -57,24 +59,41 @@ function shapeOf(value: unknown): "string" | "object" | "array" | "other" {
   return "other";
 }
 
+/** Known config keys with the right shape, undefined values dropped. */
+function cleanPatch(raw: Record<string, unknown>): Partial<ViewConfig> {
+  const patch: Record<string, unknown> = {};
+  for (const key of VIEW_CONFIG_KEYS) {
+    if (raw[key] !== undefined && shapeOf(raw[key]) === SHAPE[key]) patch[key] = raw[key];
+  }
+  return patch as Partial<ViewConfig>;
+}
+
 /** Known keys with the right shape, undefined values dropped. */
 export function cleanViewDraft(value: unknown): ViewDraft {
   if (shapeOf(value) !== "object") return {};
   const raw = value as Record<string, unknown>;
-  const draft: Record<string, unknown> = {};
-  for (const key of VIEW_CONFIG_KEYS) {
-    if (raw[key] !== undefined && shapeOf(raw[key]) === SHAPE[key]) draft[key] = raw[key];
+  const draft: ViewDraft = cleanPatch(raw);
+  if (typeof raw.label === "string" && raw.label) {
+    draft.label = raw.label;
+    // The way back only makes sense with the banner that offers it.
+    if (shapeOf(raw.back) === "object") draft.back = cleanPatch(raw.back as Record<string, unknown>);
   }
-  if (typeof raw.label === "string" && raw.label) draft.label = raw.label;
-  return draft as ViewDraft;
+  return draft;
 }
 
-/** The config part of a draft (the label left out). */
+/** The config part of a draft (the label and the way back left out). */
 function patchOf(draft: ViewDraft | null | undefined): Partial<ViewConfig> {
   if (!draft) return {};
-  const { label, ...patch } = cleanViewDraft(draft);
+  const { label, back, ...patch } = cleanViewDraft(draft);
   void label;
+  void back;
   return patch;
+}
+
+/** The config part of a draft, as a draft of its own (what "voltar à view" restores from `back`). */
+export function draftPatch(draft: ViewDraft | null | undefined): ViewDraft | null {
+  const patch = patchOf(draft);
+  return Object.keys(patch).length ? patch : null;
 }
 
 function toBase64Url(text: string): string {

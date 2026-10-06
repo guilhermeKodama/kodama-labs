@@ -14,12 +14,12 @@ import { keys } from "@/lib/api/keys";
 import { useAppMutation, useErrorMessage } from "@/lib/api/use-app-mutation";
 import { useFmt } from "@/lib/format/provider";
 import { normalizeLedgerConfig } from "@/lib/ledger/columns";
-import { dayDraft, drillDraft, drillFiltersDraft, type DrillCell } from "@/lib/ledger/drill";
+import { dayDraft, drillDraft, drillFiltersDraft, withDrillBanner, type DrillCell } from "@/lib/ledger/drill";
 import { currentMonth, periodDays, todayIso } from "@/lib/ledger/period";
 import { selectionStats } from "@/lib/ledger/selection";
 import { useLedgerViews, useViewSaver, type LedgerView } from "@/lib/ledger/use-views";
-import { applyViewDraft, decodeViewDraft, encodeViewDraft, canonicalViewParam, isDirty, resolveActiveView, type ViewDraft } from "@/lib/ledger/view-draft";
-import { boardKey, isPagedLayout, layoutQuery, pivotKeys, viewSelection } from "@/lib/ledger/view-query";
+import { applyViewDraft, decodeViewDraft, draftPatch, encodeViewDraft, canonicalViewParam, isDirty, resolveActiveView, type ViewDraft } from "@/lib/ledger/view-draft";
+import { boardColumnQuery, boardKey, calendarQuery, calendarRowsQuery, isPagedLayout, layoutQuery, pivotKeys, viewSelection } from "@/lib/ledger/view-query";
 import { planViewUpdate } from "@/lib/ledger/view-update";
 import { BulkBar } from "./bulk-bar";
 import { useLedgerLabels } from "./fields";
@@ -29,6 +29,9 @@ import { LedgerOverlays, useLedgerOverlays } from "./overlays";
 import type { DisplayRow } from "./rows";
 import { KpiSummary, LedgerTable } from "./table";
 import { DisplayMenu, FilterChips, PeriodControl, ViewTabs } from "./toolbar";
+
+/** Pages of the calendar month's rows read at most (500 each). */
+const CALENDAR_MAX_PAGES = 4;
 
 const URL_STATE = { view: parseAsString, draft: parseAsString, q: parseAsString };
 type SetParams = ReturnType<typeof useQueryStates<typeof URL_STATE>>[1];
@@ -149,7 +152,7 @@ function ViewScreen({
     setAllInView(false);
   }, []);
 
-  const setDraft = (next: ViewDraft | null) => void setParams({ draft: encodeViewDraft(next) });
+  const setDraft = (next: ViewDraft | null, history: "push" | "replace" = "replace") => void setParams({ draft: encodeViewDraft(next) }, { history });
   /** Every change on screen: saved at once, or kept in the draft (see planViewUpdate). */
   const update = (patch: Partial<ViewConfig>) => {
     const plan = planViewUpdate({ saved, draft, isBuiltin: view.isBuiltin, patch });
@@ -157,17 +160,26 @@ function ViewScreen({
     if (encodeViewDraft(plan.draft) !== draftParam) setDraft(plan.draft);
     if ("filters" in patch || "period" in patch || "layout" in patch || "dateField" in patch) clearSelection();
   };
-  const drill = (cells: DrillCell[]) => {
+  /** A drill opens the table with that slice as a draft, with its banner; the browser's Back also returns. */
+  const openDrill = (next: ViewDraft, label: string) => {
     clearSelection();
-    setDraft(drillDraft(saved, config, cells));
+    setDraft(withDrillBanner(next, label, draft), "push");
   };
-  const drillFilters = (groupKeys: GroupKey[], filters: LedgerFilter[]) => {
-    clearSelection();
-    setDraft(drillFiltersDraft(saved, config, groupKeys, filters));
-  };
+  const drill = (cells: DrillCell[]) =>
+    openDrill(drillDraft(saved, config, cells), cells.length ? cells.map((cell) => labels.groupValue(cell.key, cell.value)).join(" · ") : t("pivot.total"));
+  const drillFilters = (groupKeys: GroupKey[], filters: LedgerFilter[]) => openDrill(drillFiltersDraft(saved, config, groupKeys, filters), t("charts.others"));
+
+  // ---- period ----
+  const timezone = fmt.prefs.timezone;
+  const days = periodDays(config.period, currentMonth(timezone));
+  const rangeLabel = days ? fmt.periodRangeLabel(days.from, days.to) : t("period.whole");
+  const today = todayIso(timezone);
+  /** The calendar shows the last month of the period (this month for "Todo o período"). */
+  const calendarMonth = (days?.to ?? today).slice(0, 7);
 
   // ---- data ----
-  const body = useMemo(() => layoutQuery(config, q), [config, q]);
+  const calendar = config.layout === "calendar";
+  const body = useMemo(() => (calendar ? calendarRowsQuery(config, q, calendarMonth) : layoutQuery(config, q)), [calendar, config, q, calendarMonth]);
   const paged = isPagedLayout(config);
   const sankey = config.layout === "chart" && config.chart.type === "sankey";
   const pages = useInfiniteQuery({
@@ -184,17 +196,24 @@ function ViewScreen({
     queryFn: () => apiPost<LedgerDisplayQueryResult>("/api/v2/ledger/query", body),
     placeholderData: keepPreviousData,
   });
+  const calendarBody = useMemo(() => calendarQuery(config, q), [config, q]);
+  const calendarDays = useQuery({
+    queryKey: keys.ledgerQuery(calendarBody),
+    enabled: calendar,
+    queryFn: () => apiPost<LedgerDisplayQueryResult>("/api/v2/ledger/query", calendarBody),
+    placeholderData: keepPreviousData,
+  });
   const result = paged ? pages : single;
   const first = paged ? pages.data?.pages[0] : single.data;
   const rows = useMemo<DisplayRow[]>(() => (paged ? (pages.data?.pages.flatMap((page) => page.rows) ?? []) : []), [paged, pages.data]);
-  const { fetchNextPage } = pages;
+  const { fetchNextPage, hasNextPage, isFetchingNextPage } = pages;
   const loadMore = useCallback(() => void fetchNextPage(), [fetchNextPage]);
+  // The calendar reads every row of its month (for the descriptions), a few pages at most.
+  const calendarPages = pages.data?.pages.length ?? 0;
+  useEffect(() => {
+    if (calendar && hasNextPage && !isFetchingNextPage && calendarPages < CALENDAR_MAX_PAGES) void fetchNextPage();
+  }, [calendar, hasNextPage, isFetchingNextPage, calendarPages, fetchNextPage]);
   const totalCount = first?.summary?.count ?? first?.totals?.count ?? 0;
-
-  // ---- period ----
-  const timezone = fmt.prefs.timezone;
-  const days = periodDays(config.period, currentMonth(timezone));
-  const rangeLabel = days ? fmt.periodRangeLabel(days.from, days.to) : t("period.whole");
 
   const duplicate = useAppMutation({
     event: "views.write",
@@ -318,28 +337,23 @@ function ViewScreen({
           groupKey={boardKey(config)}
           config={config}
           labels={labels}
-          totalCount={totalCount}
-          hasMore={!!pages.hasNextPage}
           loading={result.isFetching}
-          onMore={loadMore}
+          columnQuery={(value, limit) => boardColumnQuery(config, q, value, limit)}
           onOpen={(row) => overlays.openEntry(row.id)}
         />
       );
       break;
     case "calendar": {
-      const today = todayIso(timezone);
       layout = (
         <CalendarView
-          month={(days?.to ?? today).slice(0, 7)}
+          month={calendarMonth}
           today={today}
+          dateField={config.dateField}
           rows={rows}
-          groups={first?.groups ?? []}
-          totalCount={first?.totals?.count ?? 0}
+          groups={calendarDays.data?.groups ?? []}
+          periodCount={calendarDays.data?.totals?.count ?? 0}
           onOpen={(row) => overlays.openEntry(row.id)}
-          onDay={(day) => {
-            clearSelection();
-            setDraft(dayDraft(saved, config, day));
-          }}
+          onDay={(day) => openDrill(dayDraft(saved, config, day), fmt.date(day))}
         />
       );
       break;
@@ -349,7 +363,16 @@ function ViewScreen({
   return (
     <Page crumbs={[t("crumb"), view.name]} subheader={tabs} actions={<TransactionsHeaderActions />} overlay={<LedgerOverlays names={names} rows={rows} />}>
       {filterBar}
+      {draft?.label ? (
+        <p className="text-[12px] text-fg-3">
+          {t("drill.detail", { label: draft.label })} ·{" "}
+          <button type="button" onClick={() => setDraft(draftPatch(draft.back))} className="underline underline-offset-[3px] hover:text-fg-1">
+            {t("drill.back")}
+          </button>
+        </p>
+      ) : null}
       {result.isError ? <p className="text-[12.5px] text-neg">{errorText(result.error)}</p> : null}
+      {calendar && calendarDays.isError ? <p className="text-[12.5px] text-neg">{errorText(calendarDays.error)}</p> : null}
       {layout}
     </Page>
   );
