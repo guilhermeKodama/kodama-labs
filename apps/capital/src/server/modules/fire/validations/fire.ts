@@ -53,6 +53,13 @@ export const FireGoalInputSchema = z.object({
   withdrawalStrategy: z.enum(WITHDRAWAL_STRATEGIES).default("perpetuity"),
 });
 
+/**
+ * PUT /v1/fire/goal body: any subset of the plan. Fields left out keep their
+ * stored value; creating the plan needs the income target, the withdrawal
+ * rate, return, inflation, planning mode, phase profile and phases.
+ */
+export const FireGoalPatchSchema = FireGoalInputSchema.partial();
+
 export const FireGoalSchema = z.object({
   id: z.string(),
   name: z.string().nullable(),
@@ -188,6 +195,16 @@ export const FireSummaryResponseSchema = z.object({
   tiers: z.array(FireTierSchema),
   coast: CoastSchema.nullable(),
   history: z.array(FireSnapshotSchema),
+  /** The plan's contribution for the current month (null without a plan). */
+  currentMonthContribution: z.number().nullable(),
+  /** With ?altContribution=: FIRE reached contributing that amount every month instead. */
+  altProjection: z
+    .object({
+      monthlyContribution: z.number(),
+      monthsToFire: z.number().nullable(),
+      projectedFireDate: z.string().nullable(),
+    })
+    .nullable(),
 });
 
 export const SnapshotUpsertSchema = z.object({
@@ -195,11 +212,8 @@ export const SnapshotUpsertSchema = z.object({
   currentMonthlyExpenses: z.number().nonnegative().optional(),
 });
 
-export const ErrorResponseSchema = z.object({
-  error: z.object({ code: z.string(), message: z.string() }),
-});
-
 export type FireGoalInput = z.infer<typeof FireGoalInputSchema>;
+export type FireGoalPatch = z.infer<typeof FireGoalPatchSchema>;
 export type FirePhaseInput = z.infer<typeof PhaseSchema>;
 export type MilestoneInput = z.infer<typeof MilestoneSchema>;
 export type FireGoalResponse = z.infer<typeof FireGoalSchema>;

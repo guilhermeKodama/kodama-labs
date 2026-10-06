@@ -1,10 +1,9 @@
 import type { DbClient } from "@capital/server/lib/prisma";
-import { updateTransactionService } from "../../transactions/services/update-transaction";
-import { deleteTransactionService } from "../../transactions/services/delete-transaction";
-import { fetchTransactionById } from "../../transactions/data/queries/fetch-transactions";
-import { parseLocalDate } from "@capital/server/lib/date-utils";
 import type { TransactionType } from "@/generated/prisma";
-import { formatCategoryValidationError, validateCategory } from "../lib/category-validation";
+import { parseLocalDate, formatDateOnly } from "@capital/server/lib/date-utils";
+import { softDeleteEntries, updateEntry, type InternalPatch } from "../../ledger/services/entries";
+import type { MutationRecordInput } from "../../ledger/services/mutations";
+import { categoryResolver, LEGACY_ENTRY_INCLUDE, legacyType, toLegacyTransaction } from "../lib/ledger-adapter";
 
 export interface UpdateTransactionParams {
   id: string;
@@ -18,63 +17,49 @@ export interface UpdateTransactionParams {
   isTaxDeductible?: boolean;
 }
 
-/**
- * Update a transaction by ID.
- */
-export async function updateTransactionTool(
-  userId: string,
-  params: UpdateTransactionParams,
-  db: DbClient
-) {
-  // Verify ownership first
-  const existing = await fetchTransactionById(userId, params.id, db);
-  if (!existing) {
-    throw new Error("Transaction not found or access denied");
-  }
+type Resolver = Awaited<ReturnType<typeof categoryResolver>>;
 
-  // Validate category if provided
-  if (params.category) {
-    const targetType = params.type ?? existing.type;
-    const validation = await validateCategory(userId, params.category, targetType, db);
-    const keepsCurrent =
-      validation.archived &&
-      validation.canonicalName != null &&
-      existing.category.toLowerCase() === validation.canonicalName.toLowerCase();
-    if (!validation.valid && !keepsCurrent) {
-      throw new Error(formatCategoryValidationError(params.category, targetType, validation));
-    }
-    if (validation.canonicalName) {
-      params.category = validation.canonicalName;
-    }
-  }
+export async function findOwnedEntry(userId: string, id: string, db: DbClient) {
+  return db.ledgerEntry.findFirst({ where: { id, userId, deletedAt: null }, include: LEGACY_ENTRY_INCLUDE });
+}
 
-  const updates = {
-    ...(params.type && { type: params.type }),
+/** MCP update fields as a ledger patch; the category name is resolved against the entry's (new) type. */
+export function toPatch(
+  params: Omit<UpdateTransactionParams, "id">,
+  existing: { kind: string; amount: unknown; categoryId: string | null },
+  resolver: Resolver
+): InternalPatch {
+  const type = params.type ?? legacyType(existing as never);
+  const patch: InternalPatch = {
+    ...(params.type && existing.kind !== "transfer" && { kind: params.type }),
     ...(params.amount !== undefined && { amount: params.amount }),
     ...(params.currency && { currency: params.currency }),
     ...(params.exchangeRate !== undefined && { exchangeRate: params.exchangeRate }),
     ...(params.description && { description: params.description }),
-    ...(params.category && { category: params.category }),
-    ...(params.date && { date: parseLocalDate(params.date) }),
+    ...(params.date && { date: formatDateOnly(parseLocalDate(params.date)) }),
     ...(params.isTaxDeductible !== undefined && { isTaxDeductible: params.isTaxDeductible }),
   };
-
-  return updateTransactionService(userId, params.id, updates, db);
+  if (params.category) {
+    const category = resolver.resolve(params.category, type, existing.categoryId);
+    if (category.id !== existing.categoryId) patch.categoryId = category.id;
+  }
+  return patch;
 }
 
-/**
- * Delete a transaction by ID.
- */
-export async function deleteTransactionTool(
-  userId: string,
-  id: string,
-  db: DbClient
-) {
-  // Verify ownership first
-  const existing = await fetchTransactionById(userId, id, db);
-  if (!existing) {
-    throw new Error("Transaction not found or access denied");
-  }
+/** Update a transaction by ID (one undoable batch). */
+export async function updateTransactionTool(userId: string, params: UpdateTransactionParams, db: DbClient, opts: { collect?: MutationRecordInput[] } = {}) {
+  const existing = await findOwnedEntry(userId, params.id, db);
+  if (!existing) throw new Error("Transaction not found or access denied");
+  const { id, ...fields } = params;
+  const patch = toPatch(fields, existing, await categoryResolver(userId, db));
+  await updateEntry(userId, id, patch, db, opts);
+  const updated = await db.ledgerEntry.findUniqueOrThrow({ where: { id }, include: LEGACY_ENTRY_INCLUDE });
+  return toLegacyTransaction(updated);
+}
 
-  return deleteTransactionService(userId, id, db);
+/** Move a transaction (and, for a transfer, its other leg) to the trash. */
+export async function deleteTransactionTool(userId: string, id: string, db: DbClient) {
+  const existing = await findOwnedEntry(userId, id, db);
+  if (!existing) throw new Error("Transaction not found or access denied");
+  return softDeleteEntries(userId, [id], db, { summary: existing.description });
 }

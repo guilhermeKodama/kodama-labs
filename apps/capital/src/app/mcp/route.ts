@@ -1,8 +1,8 @@
 import { NextRequest } from "next/server";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 import { createCapitalMcpServer } from "@capital/server/modules/mcp/lib/mcp-server";
+import { authenticateMcpRequest, McpConfigError, recordMcpClient, type McpPrincipal } from "@capital/server/modules/mcp/lib/auth";
 import { prisma } from "@capital/server/lib/prisma";
-import crypto from "crypto";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -17,98 +17,71 @@ export const revalidate = 0;
  */
 
 /**
- * Constant-time string comparison to prevent timing attacks.
- */
-function timingSafeEqual(a: string, b: string): boolean {
-  if (a.length !== b.length) {
-    return false;
-  }
-
-  const bufA = Buffer.from(a, "utf8");
-  const bufB = Buffer.from(b, "utf8");
-
-  return crypto.timingSafeEqual(bufA, bufB);
-}
-
-/**
  * MCP Server endpoint for remote accounting operations.
  *
  * This endpoint implements the MCP Streamable HTTP transport specification
- * for external AI assistants like Contador to read and write accounting data.
+ * for external AI assistants (Cursor, Claude, …) to read and write
+ * accounting data.
  *
  * Authentication (two layers):
  * 1. Cloudflare Access: CF-Access-Client-Id / CF-Access-Client-Secret headers
  *    (validated at tunnel level before reaching this handler)
- * 2. App-level: Bearer token in Authorization header (MCP_API_KEY env var)
+ * 2. App-level: `Authorization: Bearer <token>` with a personal API token
+ *    from Ajustes › Integrações e API (cap_live_…; read-only tokens get only
+ *    the read tools), or the server's MCP_API_KEY acting as MCP_USER_ID.
  *
  * Transport: Streamable HTTP (stateless mode) following MCP specification:
  * - POST: Handle JSON-RPC requests (initialize, tools/list, tools/call, etc.)
  * - GET: 405 Method Not Allowed (stateless mode)
  * - DELETE: 405 Method Not Allowed (stateless mode)
  *
- * Usage:
- * 1. Set MCP_API_KEY and MCP_USER_ID in .env.production
- * 2. Configure Cloudflare Access service tokens
- * 3. MCP clients send requests to https://capital.kodamalabs.ai/mcp
+ * The clientInfo of each initialize is recorded on the token, for the
+ * connected-clients table.
  */
 
-/**
- * Validate bearer token authentication.
- * Returns 401 with WWW-Authenticate header if invalid.
- */
-function validateAuth(request: NextRequest): Response | null {
-  const authHeader = request.headers.get("Authorization");
+const UNAUTHORIZED = () =>
+  new Response("Unauthorized", {
+    status: 401,
+    headers: {
+      "WWW-Authenticate": 'Bearer realm="MCP API"',
+    },
+  });
 
-  if (!authHeader || !authHeader.startsWith("Bearer ")) {
-    return new Response("Unauthorized", {
-      status: 401,
-      headers: {
-        "WWW-Authenticate": 'Bearer realm="MCP API"',
-      },
-    });
+/** initialize requests are small; a body declared larger (file uploads) is not read twice. */
+const CLIENT_INFO_PEEK_MAX_BYTES = 64 * 1024;
+
+async function rememberClient(request: NextRequest, principal: McpPrincipal) {
+  if (!principal.tokenId) return;
+  const declared = request.headers.get("content-length");
+  if (declared !== null && !(Number(declared) > 0 && Number(declared) <= CLIENT_INFO_PEEK_MAX_BYTES)) return;
+  try {
+    const body = await request.clone().json();
+    await recordMcpClient(principal, body, prisma);
+  } catch {
+    // An unreadable body is the transport's to reject; the client record is best effort.
   }
-
-  const token = authHeader.slice(7); // Remove "Bearer " prefix
-  const expectedToken = process.env.MCP_API_KEY;
-
-  if (!expectedToken) {
-    console.error("MCP_API_KEY not configured");
-    return new Response("Internal Server Error", {
-      status: 500,
-    });
-  }
-
-  if (!timingSafeEqual(token, expectedToken)) {
-    return new Response("Unauthorized", {
-      status: 401,
-      headers: {
-        "WWW-Authenticate": 'Bearer realm="MCP API"',
-      },
-    });
-  }
-
-  return null; // Auth successful
 }
 
 /**
  * Handle MCP requests with Streamable HTTP transport.
  */
 async function handleMcpRequest(request: NextRequest): Promise<Response> {
-  // Validate authentication first
-  const authError = validateAuth(request);
-  if (authError) {
-    return authError;
+  let principal: McpPrincipal | null;
+  try {
+    principal = await authenticateMcpRequest(request.headers.get("Authorization"), prisma);
+  } catch (error) {
+    if (error instanceof McpConfigError) {
+      console.error(error.message);
+      return new Response("Internal Server Error", { status: 500 });
+    }
+    throw error;
   }
+  if (!principal) return UNAUTHORIZED();
 
-  // Get user ID from environment
-  const userId = process.env.MCP_USER_ID;
-  if (!userId) {
-    console.error("MCP_USER_ID not configured");
-    return new Response("Internal Server Error", { status: 500 });
-  }
+  await rememberClient(request, principal);
 
   // Create MCP server and transport
-  const mcpServer = createCapitalMcpServer(userId, prisma);
+  const mcpServer = createCapitalMcpServer(principal.userId, prisma, { readOnly: principal.readOnly });
 
   // Create stateless transport (no session management)
   const transport = new WebStandardStreamableHTTPServerTransport({

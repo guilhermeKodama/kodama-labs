@@ -7,14 +7,14 @@ import type { CreatedRecordRef } from "@capital/server/modules/bank-statements/s
 export const proposeRevertPlan = defineTool({
   name: "propose_revert_plan",
   description:
-    "Build a plan that undoes a previous import batch, saved as PROPOSED - same confirm/commit gate as an import plan, nothing is deleted until the user confirms. Works best for imports this assistant created (source \"agent\"), where every created row is tracked; for a manual-wizard import (source \"manual\") only the transactions it created can be reverted - transfers or credit cards from that import are not tracked and stay untouched, which is called out as a warning.",
+    "Build a plan that undoes a previous import batch, saved as PROPOSED - same confirm/commit gate as an import plan, nothing changes until the user confirms. Every entry and transfer an import wrote carries its id, so the revert sends all of them to the trash (restorable). For imports this assistant created (source \"agent\") the credit cards it created are archived too; a manual import does not track created cards, which is called out as a warning.",
   inputSchema: z.object({
     statementImportId: z.string(),
     reason: z.string().optional(),
   }),
   access: "write_plan",
   handler: async (ctx, input) => {
-    const statementImport = await ctx.db.statementImport.findFirst({
+    const statementImport = await ctx.db.import.findFirst({
       where: { id: input.statementImportId, userId: ctx.userId },
     });
     if (!statementImport) {
@@ -25,25 +25,26 @@ export const proposeRevertPlan = defineTool({
     }
 
     const warnings: string[] = [];
-    let createdRecords: CreatedRecordRef[];
-
-    if (statementImport.source === "agent") {
-      const actions = await ctx.db.agentAction.findMany({
-        where: { toolName: "commit_plan", planId: statementImport.importPlanId ?? undefined },
-        select: { createdRecords: true },
-      });
-      createdRecords = actions.flatMap(
-        (a) => (a.createdRecords as unknown as CreatedRecordRef[] | null) ?? []
-      );
-    } else {
-      const transactions = await ctx.db.transaction.findMany({
-        where: { statementImportId: input.statementImportId },
-        select: { id: true },
-      });
-      createdRecords = transactions.map((t) => ({ model: "Transaction", id: t.id }));
-      warnings.push(
-        "This was a manual-wizard import - only its transactions are tracked for revert. Any transfer or credit card created alongside it will not be undone."
-      );
+    const tracked: CreatedRecordRef[] =
+      statementImport.source === "agent" && statementImport.importPlanId
+        ? (
+            await ctx.db.agentAction.findMany({
+              where: { toolName: "commit_plan", planId: statementImport.importPlanId },
+              select: { createdRecords: true },
+            })
+          ).flatMap((a) => (a.createdRecords as unknown as CreatedRecordRef[] | null) ?? [])
+        : [];
+    const [entries, groups] = await Promise.all([
+      ctx.db.ledgerEntry.findMany({ where: { importId: statementImport.id, deletedAt: null, transferGroupId: null }, select: { id: true } }),
+      ctx.db.transferGroup.findMany({ where: { importId: statementImport.id, deletedAt: null }, select: { id: true } }),
+    ]);
+    const createdRecords: CreatedRecordRef[] = [
+      ...entries.map((e) => ({ model: "LedgerEntry", id: e.id })),
+      ...groups.map((g) => ({ model: "TransferGroup", id: g.id })),
+      ...tracked.filter((r) => !["LedgerEntry", "TransferGroup"].includes(r.model)),
+    ];
+    if (statementImport.source !== "agent") {
+      warnings.push("This was a manual import - credit cards created alongside it are not tracked and will stay.");
     }
 
     if (createdRecords.length === 0) {

@@ -2,45 +2,41 @@ import type { AppOpenAPI } from "./types";
 
 import dbHealth from "./modules/health/routes/db";
 import v1Health from "./modules/health/routes/v1";
-import v1Auth from "./modules/auth/routes/v1";
-import v1Users from "./modules/users/routes/v1";
-import v1Businesses from "./modules/businesses/routes/v1";
-import v1Transactions from "./modules/transactions/routes/v1";
-import v1Transfers from "./modules/transfers/routes/v1";
-import v1Categories from "./modules/categories/routes/v1";
-import v1Currencies from "./modules/currencies/routes/v1";
-import v1Budgets from "./modules/budgets/routes/v1";
-import v1Recurring from "./modules/recurring/routes/v1";
-import v1RecurringTransfers from "./modules/recurring-transfers/routes/v1";
-import v1Reports from "./modules/reports/routes/v1";
-import v1CreditCards from "./modules/credit-cards/routes/v1";
-import v1Investments from "./modules/investments/routes/v1";
 import v1Fire from "./modules/fire/routes/v1";
-import v1BankStatements from "./modules/bank-statements/routes/v1";
-import v1Attachments from "./modules/attachments/routes/v1";
 import v1Assistant from "./modules/assistant/routes/v1";
 import v1Push from "./modules/push/routes/v1";
+import v2Ledger from "./modules/ledger/routes/v2";
+import { ledgerFlowRoutes } from "./modules/ledger/routes/v2/flows";
+import { v2ApiTokens } from "./modules/api-tokens/routes/v2";
+import { v2Auth } from "./modules/auth/routes/v2";
+import { v2Attachments } from "./modules/attachments/routes/v2";
+import { v2Budgets } from "./modules/budgets/routes/v2";
+import { v2Categories } from "./modules/categories/routes/v2";
+import { v2Currencies } from "./modules/currencies/routes/v2";
+import { v2Imports } from "./modules/bank-statements/routes/v2";
+import { v2Investments } from "./modules/investments/routes/v2";
+import { v2InvestmentsExtra } from "./modules/investments/routes/v2/extra";
+import { v2Notifications } from "./modules/notifications/routes/v2";
+import { v2Recurring } from "./modules/recurring/routes/v2";
 
 export function registerRoutes<T extends AppOpenAPI>(app: T) {
   return app
     .route("/", dbHealth)
     .route("/", v1Health)
-    .route("/", v1Auth)
-    .route("/", v1Users)
-    .route("/", v1Businesses)
-    .route("/", v1Transactions)
-    .route("/", v1Transfers)
-    .route("/", v1Categories)
-    .route("/", v1Currencies)
-    .route("/", v1Budgets)
-    .route("/", v1Recurring)
-    .route("/", v1RecurringTransfers)
-    .route("/", v1Reports)
-    .route("/", v1CreditCards)
-    .route("/", v1Investments)
     .route("/", v1Fire)
-    .route("/", v1BankStatements)
-    .route("/", v1Attachments)
     .route("/", v1Assistant)
-    .route("/", v1Push);
+    .route("/", v1Push)
+    .route("/", v2Ledger)
+    .route("/", ledgerFlowRoutes)
+    .route("/", v2Auth)
+    .route("/", v2Attachments)
+    .route("/", v2Budgets)
+    .route("/", v2Categories)
+    .route("/", v2Currencies)
+    .route("/", v2Imports)
+    .route("/", v2Investments)
+    .route("/", v2InvestmentsExtra)
+    .route("/", v2Recurring)
+    .route("/", v2Notifications)
+    .route("/", v2ApiTokens);
 }

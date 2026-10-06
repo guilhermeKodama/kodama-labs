@@ -8,6 +8,16 @@ The Capital app exposes an MCP (Model Context Protocol) server at `/mcp` that al
 
 **Solution:** MCP server with tools for bulk operations, duplicate detection, and direct database access through validated business logic.
 
+## Data model behind the tools
+
+The tools keep the contract they had before the ledger refactor (same names, same inputs). Underneath, everything is the ledger:
+
+- **Entities.** `businessId` and `personalAccountId` are entity ids (`entities` table, `kind` business or personal). A transaction created for an entity lands on its main checking account ("Conta principal").
+- **Transactions.** A "transaction" is a `LedgerEntry`. Tools take and return a positive `amount` plus `type`; stored amounts are signed (outflows negative) with a base-currency amount fixed when the entry is written. `category` is a category name resolved to a `categoryId`.
+- **Credit cards.** A card is an `Account` of type `credit_card` (`bankName` = institution, `lastFourDigits` = externalId, nickname = name). Statement purchases are expenses on the card, counted on the statement's closing date. A settled bill payment is a `card_payment` transfer from the bank account to the card, so it never counts as an expense.
+- **Undo and trash.** Writes made through these tools are recorded in undo batches. Deleting moves entries to the trash (restorable for 30 days) instead of removing them.
+- **Rules.** Learned categorizations are `CategorizationRule` rows; merging or deleting a category moves its entries, budgets, recurring rules and rules by id.
+
 ## Endpoint
 
 ```
@@ -169,7 +179,7 @@ List and search transactions by date range, type, and category.
 
 ### 3. `update_transaction`
 
-Update an existing transaction by ID.
+Update an existing transaction by ID (one undoable batch). Changing `date` on a card purchase moves it to the matching statement.
 
 **Parameters:**
 - `id`: UUID (required)
@@ -179,7 +189,7 @@ Update an existing transaction by ID.
 
 ### 4. `delete_transaction`
 
-Delete a transaction by ID.
+Move a transaction to the trash. A transfer leg takes its other leg with it. Restorable from the trash for 30 days (`POST /api/v2/trash/restore`) or by undoing the batch.
 
 **Parameters:**
 - `id`: UUID (required)
@@ -430,13 +440,21 @@ The implementation uses `@modelcontextprotocol/sdk` v1.30.1 with `WebStandardStr
 
 ## Credit cards and category archive
 
-`list_credit_cards`, `create_credit_card`, and `update_credit_card` sit on the same services as the web API. `list_credit_cards` accepts optional `accountId` (personal account or business), `entityType`, and `lastFourDigits` (exactly 4 digits). There is no brand column; `bankName` plus `lastFourDigits` identify a card. `create_credit_card` requires `creditLimit`. `update_credit_card` changes name, last 4, closing day, due day, and `isActive` only.
+`list_credit_cards`, `create_credit_card`, and `update_credit_card` sit on the same account services as the v2 API. `list_credit_cards` accepts optional `accountId` (personal or business entity id), `entityType`, and `lastFourDigits` (exactly 4 digits). There is no brand column; `bankName` plus `lastFourDigits` identify a card. `create_credit_card` requires `creditLimit` and pays from the entity's main account. `update_credit_card` changes name, last 4, closing day, due day, and `isActive` (archive) only.
 
-`list_categories` hides archived categories unless `includeArchived` is true. `update_category` accepts `isArchived`. Archiving hides a category from pickers. Existing transactions, budgets, and reports keep it. Assigning an archived category to a new transaction is rejected. System writes that resolve `credit_card`, `other_system`, or `other_income` still use that name when the row is archived.
+`import_credit_card_statement` treats rows as a multiset: re-importing the same rows creates nothing. Installment rows join an installment plan; the remaining installments are booked on the next statements as committed entries and replaced by the real row when that statement is imported. `get_credit_card_statement` lists purchases without those committed installments.
+
+`mark_transaction_as_card_settlement` turns a bank-account expense into the `card_payment` transfer for a statement (one per statement). `unmark_transaction_as_card_settlement` turns it back into an expense.
+
+`list_categories` hides archived categories unless `includeArchived` is true. `update_category` accepts `isArchived`. Archiving hides a category from pickers. Existing transactions, budgets, and reports keep it. Assigning an archived category to a new transaction is rejected. Internal fallbacks (the system Other category for uncategorized statement rows) still apply when the category is archived. Renaming a category changes one row: entries reference it by id.
+
+`find_orphan_transactions` returns income/expense entries with no category or an archived one; a category name that matches nothing can no longer exist.
+
+`update_settings` refuses a `baseCurrency` change while the ledger has entries unless `force: true` is passed, because base amounts are stored in the current base currency and are not converted.
 
 ## Migration Notes
 
-Category archiving adds `categories.isArchived` (`BOOLEAN NOT NULL DEFAULT false`). No backfill. Deploy the migration before the app that reads the column. The rest of the MCP server uses existing tables.
+The ledger refactor (`20261004200000_ledger_v2_schema`, `..._backfill`, `..._retire_legacy`) moved every transaction, transfer, bill and investment movement into the ledger and kept the old ids, so ids held by MCP clients still resolve. The previous tables live in the `legacy` schema, with `legacy.id_map` recording old → new ids, until `pnpm --filter @wallex/capital db:drop-legacy` removes them.
 
 ## Security Considerations
 
@@ -444,4 +462,4 @@ Category archiving adds `categories.isArchived` (`BOOLEAN NOT NULL DEFAULT false
 - Rotate the API key if it's compromised
 - The MCP server operates as a single user (`MCP_USER_ID`) - ensure this user has appropriate permissions
 - Consider rate limiting at the Cloudflare level if needed
-- Audit MCP operations by querying `transactions` with `createdAt` filters
+- Audit MCP operations through the undo batches (`GET /api/v2/mutations`) or by querying `ledger_entries` with `createdAt` filters

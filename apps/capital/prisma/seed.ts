@@ -133,35 +133,33 @@ async function main() {
   await seedDefaultCategoriesForUser(demoUser.id);
   await seedDefaultCurrenciesForUser(demoUser.id);
 
-  // Create a personal account for the demo user
-  await prisma.personalAccount.upsert({
-    where: { userId: demoUser.id },
+  // The personal entity and a sample business, each with its main checking account.
+  const entities = [
+    { id: `pf-${demoUser.id}`, kind: "personal" as const, name: "PF", description: null, color: null },
+    { id: "demo-business-1", kind: "business" as const, name: "My Freelance Business", description: "Software development consulting", color: "#3B82F6" },
+  ];
+  for (const e of entities) {
+    const existing = await prisma.entity.findFirst({ where: { userId: demoUser.id, kind: e.kind, ...(e.kind === "business" && { id: e.id }) } });
+    const entity =
+      existing ??
+      (await prisma.entity.create({
+        data: { id: e.id, userId: demoUser.id, kind: e.kind, name: e.name, description: e.description, color: e.color, defaultCurrency: "USD" },
+      }));
+    const hasMain = await prisma.account.count({ where: { entityId: entity.id, isDefault: true } });
+    if (!hasMain) {
+      await prisma.account.create({
+        data: { userId: demoUser.id, entityId: entity.id, type: "checking", name: "Conta principal", currency: "USD", isDefault: true },
+      });
+    }
+    console.log(`Entity ready: ${entity.name}`);
+  }
+
+  // The built-in "Todas" view.
+  await prisma.savedView.upsert({
+    where: { userId_builtinKey: { userId: demoUser.id, builtinKey: "all" } },
     update: {},
-    create: {
-      userId: demoUser.id,
-      defaultCurrency: "USD",
-    },
+    create: { userId: demoUser.id, dataset: "ledger", name: "Todas", position: 0, isBuiltin: true, builtinKey: "all", isFavorite: true, config: {} },
   });
-
-  console.log("Created personal account for demo user");
-
-  // Create a sample business
-  const business = await prisma.business.upsert({
-    where: {
-      id: "demo-business-1",
-    },
-    update: {},
-    create: {
-      id: "demo-business-1",
-      userId: demoUser.id,
-      name: "My Freelance Business",
-      description: "Software development consulting",
-      defaultCurrency: "USD",
-      color: "#3B82F6",
-    },
-  });
-
-  console.log(`Created sample business: ${business.name}`);
 
   console.log("Seed completed successfully!");
 }

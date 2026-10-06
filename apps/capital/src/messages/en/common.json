@@ -1,0 +1,46 @@
+{
+  "createNamed": "+ Create “{name}”",
+  "search": "Search…",
+  "noResults": "No results",
+  "close": "Close",
+  "undo": "Undo",
+  "select": "Select…",
+  "undone": "Undone",
+  "nothingToUndo": "Nothing to undo",
+  "cancel": "Cancel",
+  "save": "Save",
+  "delete": "Delete",
+  "edit": "Edit",
+  "create": "Create",
+  "back": "Back",
+  "loading": "Loading…",
+  "retry": "Try again",
+  "pickers": {
+    "categoryPlaceholder": "Search or create a category…",
+    "categorySearch": "Search categories…",
+    "accountSearch": "Search accounts…",
+    "createAccount": "+ Create account…",
+    "archived": "archived",
+    "categoryType": {
+      "expense": "Expense",
+      "income": "Income",
+      "investment": "Investment"
+    },
+    "accountType": {
+      "checking": "Checking account",
+      "credit_card": "Credit card",
+      "brokerage": "Brokerage",
+      "cash": "Cash"
+    },
+    "newAccount": {
+      "title": "New account",
+      "name": "Name",
+      "type": "Type",
+      "entity": "Entity",
+      "currency": "Currency",
+      "closingDay": "Closes on day",
+      "dueDay": "Due on day",
+      "submit": "Create account"
+    }
+  }
+}

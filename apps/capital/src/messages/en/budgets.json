@@ -1,0 +1,214 @@
+{
+  "crumbs": {
+    "transactions": "Transactions",
+    "budgets": "Budgets"
+  },
+  "mode": {
+    "label": "View",
+    "month": "Monthly",
+    "year": "Yearly"
+  },
+  "nav": {
+    "prevMonth": "Previous month",
+    "nextMonth": "Next month",
+    "prevYear": "Previous year",
+    "nextYear": "Next year"
+  },
+  "newBudget": "+ Budget",
+  "scope": {
+    "label": "Scope",
+    "all": "All",
+    "pf": "Personal",
+    "pj": "Business"
+  },
+  "loadError": "Could not load.",
+  "uncategorized": "Uncategorized",
+  "drillLabel": "{category} · {period}",
+  "rowMenu": {
+    "label": "Actions for {category}",
+    "edit": "Edit budget…",
+    "delete": "Delete…"
+  },
+  "month": {
+    "today": "Today: {month} {day} · {pct}% of the month",
+    "closed": "Month closed",
+    "notStarted": "Month has not started",
+    "kpi": {
+      "budget": "Budgeted",
+      "spent": "Spent",
+      "spentSub": "{pct}% of budget",
+      "remaining": "Remaining",
+      "projection": "Month-end projection",
+      "over": "{amount} over",
+      "slack": "{amount} to spare"
+    },
+    "table": {
+      "category": "Category",
+      "bar": "Spent / budgeted",
+      "barToday": "Spent / budgeted · mark = today (day {day})",
+      "spent": "Spent",
+      "remaining": "Remaining",
+      "status": "Status",
+      "total": "Total",
+      "resets": "Budget resets on {month} 1",
+      "empty": "No budgets in {month}. Create one with “+ Budget”."
+    },
+    "status": {
+      "over": "Over budget",
+      "ahead": "Ahead of pace",
+      "onTrack": "On track"
+    },
+    "chart": {
+      "title": "Cumulative spending vs ideal pace",
+      "cumulative": "Cumulative spending ({unit})",
+      "ideal": "Ideal pace ({unit})",
+      "budget": "Budgeted",
+      "caption": "Day of month × {unit} · {month}",
+      "empty": "No budgets this month.",
+      "notStarted": "The month has not started yet.",
+      "day": "{month} {day}"
+    },
+    "upcoming": {
+      "title": "Recurring bills · next 14 days",
+      "seeAll": "See all",
+      "bill": "{account} bill",
+      "overdue": "Overdue",
+      "empty": "No recurring bills in the next 14 days.",
+      "mode": {
+        "auto": "auto",
+        "reminder": "reminder",
+        "fatura": "card bill"
+      }
+    }
+  },
+  "year": {
+    "header": {
+      "done": "{actual} actual",
+      "future": "Year has not started · only what is already booked",
+      "noBasis": "{actual} actual · {projected} only what is already booked",
+      "projected": "{actual} actual · {projected} projected from the {basis} average"
+    },
+    "kpi": {
+      "spent": "Spent in {year} (through {month})",
+      "spentNoMonth": "Spent in {year}",
+      "spentSub": "{pct}% of budget through {month}",
+      "budget": "Budgeted through {month}",
+      "budgetYear": "Budgeted in {year}",
+      "projection": "Year projection",
+      "over": "{amount} over {budget}",
+      "slack": "{amount} to spare",
+      "overMonths": "Months over budget",
+      "overMonthsSub": "of {count} category·months"
+    },
+    "heatmap": {
+      "category": "Category",
+      "yearTotal": "Year (proj.)",
+      "trend": "Trend",
+      "trend_up": "↑ {pct}%",
+      "trend_down": "↓ {pct}%",
+      "trend_stable": "→ steady",
+      "total": "Total",
+      "empty": "No monthly budgets in {year}.",
+      "open": "Open {month}",
+      "legend": "Darker = closer to the limit · red = over · dashed = projection · * {month} in progress · click a cell to open that month",
+      "legendNoCurrent": "Darker = closer to the limit · red = over · dashed = projection · click a cell to open that month"
+    },
+    "chart": {
+      "title": "Monthly spending vs budget",
+      "real": "Actual ({unit})",
+      "projected": "Projection ({unit})",
+      "budget": "Budget/month",
+      "caption": "Month × {unit} · {year}"
+    },
+    "insights": {
+      "title": "Trends this year",
+      "overrunTitle": "{category}: over budget in {count} of {total, plural, one {# month} other {# months}}",
+      "overrunBody": "Average of {avg}/month against {budget} budgeted.",
+      "adjust": "Change to {amount}?",
+      "adjusted": "{category} budget changed to {amount} from {month}",
+      "growthTitle": "{category}: up {pct}% this year",
+      "growthBody": "Average {first} {firstAvg} → {last} {lastAvg}.",
+      "seasonalTitle": "{category}: seasonal",
+      "seasonalBody": "Peak in {month} ({value}). Maybe make it a yearly budget.",
+      "empty": "No repeated overruns, growth or seasonality."
+    },
+    "yearly": {
+      "title": "Yearly budgets",
+      "of": "of {amount}"
+    }
+  },
+  "dialog": {
+    "createTitle": "New budget",
+    "editTitle": "Edit budget",
+    "editDesc": "{category} · {entity} · {period}",
+    "category": "Category",
+    "entity": "Entity",
+    "allEntities": "All",
+    "allEntitiesHint": "“All” adds up personal and business spending in this category",
+    "amount": "Amount",
+    "period": "Period",
+    "monthly": "Monthly",
+    "yearly": "Yearly",
+    "from": "Starting",
+    "fromHint": "Earlier months keep the previous amount.",
+    "note": "Note",
+    "notePlaceholder": "paid between Jan and Mar",
+    "submitCreate": "Create budget",
+    "delete": "Delete…",
+    "created": "{category} budget created",
+    "updated": "{category} budget changed from {month}"
+  },
+  "delete": {
+    "title": "Delete the {category} budget",
+    "desc": "{amount} {period, select, yearly {a year} other {a month}}",
+    "fromLabel": "Starting {from}",
+    "fromDesc": "Earlier months keep the budget.",
+    "allLabel": "Every month",
+    "allDesc": "Removes the budget from every month, past ones included.",
+    "done": "{category} budget deleted"
+  },
+  "rule": {
+    "fallbackTitle": "Recurring bill",
+    "notFound": "This recurring bill no longer exists.",
+    "kind": {
+      "expense": "Expense",
+      "income": "Income",
+      "transfer": "Transfer",
+      "investment": "Contribution"
+    },
+    "pausedTag": "paused",
+    "next": "Next: {date} · {amount}",
+    "pay": "Book now",
+    "skip": "Skip",
+    "entries": "See entries →",
+    "amount": "Amount",
+    "frequency": "Frequency",
+    "freq": {
+      "daily": "Daily",
+      "weekly": "Weekly",
+      "monthly": "Monthly",
+      "yearly": "Yearly"
+    },
+    "mode": "Mode",
+    "modeAuto": "Book automatically",
+    "modeReminder": "Remind only (push on the day)",
+    "nextDue": "Next due date",
+    "endDate": "Ends on",
+    "endDateHint": "Leave blank to never end",
+    "active": "Active",
+    "activeHint": "Books or reminds on the due date",
+    "pausedHint": "Paused: neither books nor reminds",
+    "saved": "“{description}” saved",
+    "savedBooked": "“{description}” saved · {count, plural, one {# entry booked} other {# entries booked}}",
+    "paid": "“{description}” booked on {date}",
+    "skipped": "“{description}” on {date} skipped",
+    "deleted": "“{description}” deleted"
+  },
+  "rules": {
+    "title": "Recurring bills",
+    "desc": "All recurring transactions, including paused ones",
+    "active": "Active",
+    "paused": "Paused",
+    "empty": "No recurring transactions. Tick “Recurring” when creating a transaction."
+  }
+}

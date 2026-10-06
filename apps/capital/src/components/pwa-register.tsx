@@ -15,7 +15,7 @@ const SILENT_RELOAD_WINDOW_MS = 10_000;
 const BACKGROUND_CHECK_INTERVAL_MS = 60 * 60 * 1000;
 
 export function PwaRegister() {
-  const t = useTranslations("pwa");
+  const t = useTranslations("shell.pwa");
 
   useEffect(() => {
     if (!("serviceWorker" in navigator)) return;

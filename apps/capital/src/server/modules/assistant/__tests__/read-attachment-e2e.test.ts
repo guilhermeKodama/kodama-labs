@@ -1,7 +1,9 @@
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { prisma } from "@capital/server/lib/prisma";
-import { uploadAttachment } from "@capital/server/modules/attachments/services/upload-attachment";
+import { uploadAttachment } from "@capital/server/modules/attachments/services/attachments";
+import { createEntry } from "@capital/server/modules/ledger/services/entries";
+import { getDefaultAccount, getPersonalEntity } from "@capital/server/modules/ledger/services/entities";
 import { runAgentTurn } from "../agent/loop";
 
 const IMAGE = process.env.E2E_IMAGE;
@@ -11,27 +13,19 @@ describe.skipIf(!IMAGE)("read_attachment (live API)", () => {
     const userId = (
       await prisma.user.findFirstOrThrow({ where: { email: "demo@capital.app" }, select: { id: true } })
     ).id;
-    const personal = await prisma.personalAccount.findFirstOrThrow({ where: { userId }, select: { id: true } });
-
-    const tx = await prisma.transaction.create({
-      data: {
-        entityType: "personal",
-        personalAccountId: personal.id,
-        date: new Date("2026-08-14"),
-        description: "Compra no mercado (E2E anexo)",
-        amount: 247.9,
-        type: "expense",
-        category: "Other Expense",
-        currency: "BRL",
-      },
-      select: { id: true },
-    });
+    const account = await getDefaultAccount(await getPersonalEntity(userId, prisma), prisma);
+    const created = await createEntry(
+      userId,
+      { kind: "expense", accountId: account.id, date: "2026-08-14", description: "Compra no mercado (E2E anexo)", amount: 247.9, currency: "BRL" },
+      prisma
+    );
+    const tx = { id: created.entryIds[0] };
 
     await uploadAttachment(
       userId,
       {
         kind: "RECEIPT",
-        ownerType: "transaction",
+        ownerType: "entry",
         ownerId: tx.id,
         file: {
           buffer: readFileSync(IMAGE!),

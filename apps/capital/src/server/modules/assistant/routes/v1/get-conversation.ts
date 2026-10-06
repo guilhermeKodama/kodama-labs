@@ -5,6 +5,7 @@ import { jsonContent } from "stoker/openapi/helpers";
 import type { AppRouteHandler } from "@capital/server/types";
 import { prisma } from "@capital/server/lib/prisma";
 import { requireUserId } from "@capital/server/lib/auth-middleware";
+import { ApiErrorSchema } from "@capital/server/lib/http-error";
 import { getConversation } from "../../services/get-conversation";
 import { routeConfig } from "../../constants";
 
@@ -68,10 +69,6 @@ const ConversationDetailSchema = z.object({
   turns: z.array(TurnSchema),
 });
 
-const ErrorResponseSchema = z.object({
-  error: z.object({ code: z.string(), message: z.string() }),
-});
-
 export const route = createRoute({
   path: "/v1/assistant/conversations/{id}",
   method: "get",
@@ -84,78 +81,70 @@ export const route = createRoute({
   },
   responses: {
     [OK]: jsonContent(ConversationDetailSchema, "Conversation detail"),
-    [UNAUTHORIZED]: jsonContent(ErrorResponseSchema, "Not authenticated"),
-    [NOT_FOUND]: jsonContent(ErrorResponseSchema, "Conversation not found"),
-    [INTERNAL_SERVER_ERROR]: jsonContent(ErrorResponseSchema, "Internal server error"),
+    [UNAUTHORIZED]: jsonContent(ApiErrorSchema, "Not authenticated"),
+    [NOT_FOUND]: jsonContent(ApiErrorSchema, "Conversation not found"),
+    [INTERNAL_SERVER_ERROR]: jsonContent(ApiErrorSchema, "Internal server error"),
   },
 });
 
 export const handler: AppRouteHandler<typeof route> = async (c) => {
-  try {
-    const userId = requireUserId(c);
-    const { id } = c.req.valid("param");
-    const conversation = await getConversation(userId, id, prisma);
+  const userId = requireUserId(c);
+  const { id } = c.req.valid("param");
+  const conversation = await getConversation(userId, id, prisma);
 
-    return c.json(
-      {
-        id: conversation.id,
-        title: conversation.title,
-        status: conversation.status,
-        messages: conversation.messages.map((m) => ({
-          id: m.id,
-          turnId: m.turnId,
-          role: m.role,
-          content: m.content,
-          kind: m.kind,
-          createdAt: m.createdAt.toISOString(),
-        })),
-        files: conversation.files.map((f) => ({
-          id: f.id,
-          fileType: f.fileType,
-          statementKind: f.statementKind,
-          originalName: f.originalName,
-          mimeType: f.mimeType,
-          blobUrl: f.blobUrl,
-          sizeBytes: f.sizeBytes,
-          // Prisma models this as a plain string column (see schema
-          // comment on ConversationFile.parseStatus); only detect-and-parse-file.ts
-          // ever writes it, always one of these four values.
-          parseStatus: f.parseStatus as "pending" | "parsed" | "failed" | "not_applicable",
-          parseError: f.parseError,
-          createdAt: f.createdAt.toISOString(),
-        })),
-        plans: conversation.plans.map((p) => ({
-          id: p.id,
-          kind: p.kind,
-          status: p.status,
-          fileId: p.fileId,
-          payload: p.payload,
-          payloadHash: p.payloadHash,
-          summary: p.summary,
-          warnings: p.warnings,
-          confirmedAt: p.confirmedAt?.toISOString() ?? null,
-          committedAt: p.committedAt?.toISOString() ?? null,
-          createdAt: p.createdAt.toISOString(),
-        })),
-        turns: conversation.turns.map((t) => ({
-          id: t.id,
-          status: t.status,
-          model: t.model,
-          inputTokens: t.inputTokens,
-          outputTokens: t.outputTokens,
-          costUsd: Number(t.costUsd),
-          createdAt: t.createdAt.toISOString(),
-          completedAt: t.completedAt?.toISOString() ?? null,
-          error: t.error,
-        })),
-      },
-      OK
-    );
-  } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : "Unknown error";
-    if (message.includes("not found") || message.includes("access denied")) {
-      return c.json({ error: { code: "NOT_FOUND", message } }, NOT_FOUND);
-    }
-    return c.json({ error: { code: "INTERNAL_ERROR", message } }, INTERNAL_SERVER_ERROR);
-  }
+  return c.json(
+    {
+      id: conversation.id,
+      title: conversation.title,
+      status: conversation.status,
+      messages: conversation.messages.map((m) => ({
+        id: m.id,
+        turnId: m.turnId,
+        role: m.role,
+        content: m.content,
+        kind: m.kind,
+        createdAt: m.createdAt.toISOString(),
+      })),
+      files: conversation.files.map((f) => ({
+        id: f.id,
+        fileType: f.fileType,
+        statementKind: f.statementKind,
+        originalName: f.originalName,
+        mimeType: f.mimeType,
+        blobUrl: f.blobUrl,
+        sizeBytes: f.sizeBytes,
+        // Prisma models this as a plain string column (see schema
+        // comment on ConversationFile.parseStatus); only detect-and-parse-file.ts
+        // ever writes it, always one of these four values.
+        parseStatus: f.parseStatus as "pending" | "parsed" | "failed" | "not_applicable",
+        parseError: f.parseError,
+        createdAt: f.createdAt.toISOString(),
+      })),
+      plans: conversation.plans.map((p) => ({
+        id: p.id,
+        kind: p.kind,
+        status: p.status,
+        fileId: p.fileId,
+        payload: p.payload,
+        payloadHash: p.payloadHash,
+        summary: p.summary,
+        warnings: p.warnings,
+        confirmedAt: p.confirmedAt?.toISOString() ?? null,
+        committedAt: p.committedAt?.toISOString() ?? null,
+        createdAt: p.createdAt.toISOString(),
+      })),
+      turns: conversation.turns.map((t) => ({
+        id: t.id,
+        status: t.status,
+        model: t.model,
+        inputTokens: t.inputTokens,
+        outputTokens: t.outputTokens,
+        costUsd: Number(t.costUsd),
+        createdAt: t.createdAt.toISOString(),
+        completedAt: t.completedAt?.toISOString() ?? null,
+        error: t.error,
+      })),
+    },
+    OK
+  );
 };

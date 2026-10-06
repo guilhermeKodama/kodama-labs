@@ -1,6 +1,7 @@
 import type { DbClient } from "@capital/server/lib/prisma";
 import type { TransactionType } from "@/generated/prisma";
 import { fetchCategoriesByUserId } from "../../categories/data/queries/fetch-categories";
+import { findUncategorized } from "../../categories/services/categories";
 
 /**
  * Calculate Levenshtein distance between two strings for fuzzy matching.
@@ -204,60 +205,37 @@ export async function validateCategory(
 }
 
 /**
- * Find transactions with categories that don't match any existing category.
+ * Transactions that still need a category: no category at all, or an
+ * archived one. (Categories are foreign keys now, so a name that matches
+ * nothing can no longer exist.) Grouped by current category name, with
+ * "(none)" for uncategorized.
  */
-export async function findOrphanTransactions(
-  userId: string,
-  db: DbClient
-) {
-  const categories = await fetchCategoriesByUserId(userId, undefined, db, {
-    includeArchived: true,
+export async function findOrphanTransactions(userId: string, db: DbClient) {
+  const { total, rows } = await findUncategorized(userId, db, { limit: 100 });
+  const groups = await db.ledgerEntry.groupBy({
+    by: ["categoryId"],
+    where: {
+      userId,
+      deletedAt: null,
+      transferGroupId: null,
+      kind: { in: ["income", "expense"] },
+      OR: [{ categoryId: null }, { category: { isArchived: true } }],
+    },
+    _count: { id: true },
   });
-  const validNames = categories.map((c) => c.name);
-
-  const where = {
-    OR: [
-      { business: { userId } },
-      { personalAccount: { userId } },
-    ],
-    ...(validNames.length > 0 ? { category: { notIn: validNames } } : {}),
-  };
-
-  const [total, groups, transactions] = await Promise.all([
-    db.transaction.count({ where }),
-    db.transaction.groupBy({
-      by: ["category"],
-      where,
-      _count: { id: true },
-    }),
-    db.transaction.findMany({
-      where,
-      select: {
-        id: true,
-        category: true,
-        description: true,
-        amount: true,
-        date: true,
-        type: true,
-      },
-      orderBy: { date: "desc" },
-      take: 100,
-    }),
-  ]);
-
+  const names = new Map(
+    (await db.category.findMany({ where: { id: { in: groups.map((g) => g.categoryId).filter((id): id is string => !!id) } }, select: { id: true, name: true } })).map((c) => [c.id, c.name])
+  );
   return {
     total,
-    categories: groups.map((g) => ({
-      name: g.category,
-      count: g._count.id,
-    })),
-    transactions: transactions.map((t) => ({
+    categories: groups.map((g) => ({ name: g.categoryId ? names.get(g.categoryId) ?? "(none)" : "(none)", count: g._count.id })),
+    transactions: rows.map((t) => ({
       id: t.id,
-      category: t.category,
+      category: t.category?.name ?? null,
       description: t.description,
-      amount: t.amount,
+      amount: Math.abs(Number(t.amount)),
       date: t.date.toISOString(),
-      type: t.type,
+      type: t.kind,
     })),
   };
 }

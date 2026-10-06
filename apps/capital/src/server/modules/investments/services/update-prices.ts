@@ -1,196 +1,14 @@
 import type { DbClient } from "@capital/server/lib/prisma";
-import type { AssetClass } from "@/generated/prisma";
 import { env } from "@/env";
+import { fetchQuotes, quoteSourceFor, type Quote, type QuoteRequest } from "../lib/quotes";
 
-// ============================================
-// CoinGecko - Crypto prices
-// ============================================
-
-const COINGECKO_API = "https://api.coingecko.com/api/v3/simple/price";
-
-const CRYPTO_SYMBOL_TO_COINGECKO_ID: Record<string, string> = {
-  BTC: "bitcoin",
-  ETH: "ethereum",
-  BNB: "binancecoin",
-  ADA: "cardano",
-  SOL: "solana",
-  DOT: "polkadot",
-  DOGE: "dogecoin",
-  AVAX: "avalanche-2",
-  MATIC: "matic-network",
-  LINK: "chainlink",
-  XRP: "ripple",
-  USDT: "tether",
-  USDC: "usd-coin",
-  UNI: "uniswap",
-  AAVE: "aave",
-  ATOM: "cosmos",
-  NEAR: "near",
-  APT: "aptos",
-  ARB: "arbitrum",
-  OP: "optimism",
-};
-
-async function fetchCryptoPrices(
-  tickers: string[],
-  currency: string = "usd"
-): Promise<Record<string, number>> {
-  const ids = tickers
-    .map((t) => CRYPTO_SYMBOL_TO_COINGECKO_ID[t.toUpperCase()])
-    .filter(Boolean)
-    .join(",");
-
-  if (!ids) return {};
-
-  const vsCurrency = currency.toLowerCase();
-  const url = `${COINGECKO_API}?ids=${ids}&vs_currencies=${vsCurrency}`;
-
-  try {
-    const res = await fetch(url);
-    if (!res.ok) {
-      console.error(`[PriceUpdate] CoinGecko error: ${res.status}`);
-      return {};
-    }
-
-    const data = await res.json();
-    const prices: Record<string, number> = {};
-
-    for (const [symbol, cgId] of Object.entries(CRYPTO_SYMBOL_TO_COINGECKO_ID)) {
-      if (
-        data[cgId] &&
-        data[cgId][vsCurrency] &&
-        tickers.some((t) => t.toUpperCase() === symbol)
-      ) {
-        prices[symbol] = data[cgId][vsCurrency];
-      }
-    }
-
-    return prices;
-  } catch (error) {
-    console.error("[PriceUpdate] CoinGecko fetch failed:", error);
-    return {};
-  }
-}
-
-// ============================================
-// brapi.dev - Brazilian B3 stocks, FIIs, ETFs, BDRs
-// ============================================
-
-const BRAPI_API = "https://brapi.dev/api/quote";
-
-async function fetchBrazilianPrices(
-  tickers: string[],
-  token?: string
-): Promise<Record<string, number>> {
-  if (tickers.length === 0) return {};
-
-  // brapi.dev supports comma-separated tickers
-  const tickerList = tickers.join(",");
-  const url = token
-    ? `${BRAPI_API}/${tickerList}?token=${token}`
-    : `${BRAPI_API}/${tickerList}`;
-
-  try {
-    const res = await fetch(url);
-    if (!res.ok) {
-      console.error(`[PriceUpdate] brapi.dev error: ${res.status}`);
-      return {};
-    }
-
-    const data = (await res.json()) as {
-      results?: Array<{
-        symbol: string;
-        regularMarketPrice: number;
-      }>;
-    };
-
-    const prices: Record<string, number> = {};
-    if (data.results) {
-      for (const result of data.results) {
-        if (result.symbol && result.regularMarketPrice) {
-          prices[result.symbol.toUpperCase()] = result.regularMarketPrice;
-        }
-      }
-    }
-
-    return prices;
-  } catch (error) {
-    console.error("[PriceUpdate] brapi.dev fetch failed:", error);
-    return {};
-  }
-}
-
-// ============================================
-// Yahoo Finance - International stocks/ETFs
-// ============================================
-
-async function fetchYahooPrices(
-  tickers: string[]
-): Promise<Record<string, number>> {
-  if (tickers.length === 0) return {};
-
-  try {
-    // Dynamic import to avoid issues with SSR
-    const { default: YahooFinance } = await import("yahoo-finance2");
-    const yf = new (YahooFinance as unknown as new () => {
-      quote: (ticker: string) => Promise<{ regularMarketPrice?: number } | null>;
-    })();
-
-    const prices: Record<string, number> = {};
-
-    // Fetch quotes in parallel (batch of up to 20)
-    const batchSize = 20;
-    for (let i = 0; i < tickers.length; i += batchSize) {
-      const batch = tickers.slice(i, i + batchSize);
-      const promises = batch.map(async (ticker) => {
-        try {
-          const quote = await yf.quote(ticker);
-          if (quote && quote.regularMarketPrice) {
-            prices[ticker.toUpperCase()] = quote.regularMarketPrice;
-          }
-        } catch (err) {
-          console.error(
-            `[PriceUpdate] Yahoo Finance error for ${ticker}:`,
-            err
-          );
-        }
-      });
-      await Promise.all(promises);
-    }
-
-    return prices;
-  } catch (error) {
-    console.error("[PriceUpdate] Yahoo Finance fetch failed:", error);
-    return {};
-  }
-}
-
-// ============================================
-// Determine which API to use based on asset class
-// ============================================
-
-// Brazilian market asset classes
-const BRAZILIAN_ASSET_CLASSES: AssetClass[] = ["stocks", "fii", "bdr"];
-
-// International asset classes
-const INTERNATIONAL_ASSET_CLASSES: AssetClass[] = [
-  "international_stocks",
-  "international_etf",
-];
-
-function isBrazilianTicker(ticker: string): boolean {
-  // Brazilian tickers typically end with a digit (PETR4, VALE3, HGLG11, BOVA11)
-  return /\d$/.test(ticker);
-}
-
-// ============================================
-// Main update function
-// ============================================
-
-interface PriceUpdateResult {
+export interface PriceUpdateResult {
   totalHoldings: number;
   updated: number;
+  /** Holdings whose price could not be written. */
   failed: number;
+  /** Tickers no source returned a price for. */
+  missing: string[];
   bySource: {
     coingecko: number;
     brapi: number;
@@ -198,147 +16,76 @@ interface PriceUpdateResult {
   };
 }
 
-export async function updateAllPrices(
-  db: DbClient
-): Promise<PriceUpdateResult> {
-  const result: PriceUpdateResult = {
-    totalHoldings: 0,
-    updated: 0,
-    failed: 0,
-    bySource: { coingecko: 0, brapi: 0, yahoo: 0 },
-  };
+/**
+ * Fetches the current price of every active holding with a ticker (one
+ * user's with `userId`) and stores it with the time of the update. Crypto is
+ * priced in its holding's currency, B3 tickers on brapi.dev (Yahoo ".SA" as
+ * fallback) and the rest on Yahoo Finance (see lib/quotes.ts).
+ */
+export async function updateAllPrices(db: DbClient, opts: { userId?: string } = {}): Promise<PriceUpdateResult> {
+  const result: PriceUpdateResult = { totalHoldings: 0, updated: 0, failed: 0, missing: [], bySource: { coingecko: 0, brapi: 0, yahoo: 0 } };
 
-  // 1. Fetch all active holdings with non-empty tickers
   const holdings = await db.investmentHolding.findMany({
     where: {
       isActive: true,
       ticker: { not: null },
       NOT: { ticker: "" },
+      ...(opts.userId && { account: { userId: opts.userId } }),
     },
-    select: {
-      id: true,
-      ticker: true,
-      assetClass: true,
-      currency: true,
-    },
+    select: { id: true, ticker: true, assetClass: true, currency: true },
   });
-
   result.totalHoldings = holdings.length;
-  if (holdings.length === 0) return result;
+  if (!holdings.length) return result;
 
-  // 2. Group tickers by source
-  const cryptoTickers: string[] = [];
-  const brazilianTickers: string[] = [];
-  const yahooTickers: string[] = [];
-
-  const holdingsByTicker: Record<
-    string,
-    Array<{ id: string; currency: string }>
-  > = {};
-
+  // One request per ticker; crypto per ticker and currency (priced in the holding's currency).
+  const keyOf = (r: QuoteRequest) => (r.assetClass === "crypto" ? `${r.ticker}:${r.currency}` : r.ticker);
+  const requests = new Map<string, QuoteRequest & { holdingIds: string[] }>();
   for (const h of holdings) {
-    if (!h.ticker) continue;
-    const ticker = h.ticker.toUpperCase();
-
-    if (!holdingsByTicker[ticker]) {
-      holdingsByTicker[ticker] = [];
-    }
-    holdingsByTicker[ticker].push({ id: h.id, currency: h.currency });
-
-    if (h.assetClass === "crypto") {
-      if (!cryptoTickers.includes(ticker)) cryptoTickers.push(ticker);
-    } else if (
-      BRAZILIAN_ASSET_CLASSES.includes(h.assetClass) ||
-      (h.assetClass === "etf" && isBrazilianTicker(ticker))
-    ) {
-      if (!brazilianTickers.includes(ticker)) brazilianTickers.push(ticker);
-    } else if (
-      INTERNATIONAL_ASSET_CLASSES.includes(h.assetClass) ||
-      (h.assetClass === "etf" && !isBrazilianTicker(ticker))
-    ) {
-      if (!yahooTickers.includes(ticker)) yahooTickers.push(ticker);
-    }
+    const ticker = h.ticker!.toUpperCase();
+    if (!quoteSourceFor(ticker, h.assetClass)) continue;
+    const req: QuoteRequest = { ticker, assetClass: h.assetClass, currency: h.currency };
+    const entry = requests.get(keyOf(req)) ?? { ...req, holdingIds: [] };
+    entry.holdingIds.push(h.id);
+    requests.set(keyOf(req), entry);
   }
 
-  // 3. Fetch prices from all sources in parallel
-  const [cryptoPrices, brazilianPrices, yahooPrices] = await Promise.all([
-    fetchCryptoPrices(
-      cryptoTickers,
-      // Use the currency of the first crypto holding (usually USD)
-      holdings.find((h) => h.assetClass === "crypto")?.currency || "usd"
-    ),
-    fetchBrazilianPrices(brazilianTickers, env.BRAPI_TOKEN),
-    fetchYahooPrices(yahooTickers),
-  ]);
-
-  // 3b. Fallback: For any Brazilian tickers that brapi.dev didn't return prices for,
-  // try Yahoo Finance with .SA suffix (works for B3 stocks, BDRs, FIIs, ETFs)
-  const missingBrazilianTickers = brazilianTickers.filter(
-    (t) => !(t in brazilianPrices)
+  // fetchQuotes keys by ticker, so the same coin in two currencies needs two calls.
+  const batches = new Map<string, QuoteRequest[]>();
+  for (const r of requests.values()) {
+    const batch = r.assetClass === "crypto" ? (r.currency ?? "USD").toUpperCase() : "";
+    batches.set(batch, [...(batches.get(batch) ?? []), r]);
+  }
+  const quotes = new Map<string, Quote>();
+  await Promise.all(
+    [...batches].map(async ([currency, reqs]) => {
+      const found = await fetchQuotes(reqs, { brapiToken: env.BRAPI_TOKEN, cryptoCurrency: currency || undefined });
+      for (const r of reqs) if (found[r.ticker]) quotes.set(keyOf(r), found[r.ticker]);
+    })
   );
 
-  const yahooFallbackPrices: Record<string, number> = {};
-  if (missingBrazilianTickers.length > 0) {
-    console.log(
-      `[PriceUpdate] brapi.dev missed ${missingBrazilianTickers.length} tickers, trying Yahoo Finance fallback: ${missingBrazilianTickers.join(", ")}`
-    );
-    // Yahoo Finance uses .SA suffix for B3 tickers (e.g., AMZO34.SA, PETR4.SA)
-    const yahooSuffixedTickers = missingBrazilianTickers.map((t) => `${t}.SA`);
-    const fallbackRaw = await fetchYahooPrices(yahooSuffixedTickers);
-
-    // Map back from "AMZO34.SA" → "AMZO34"
-    for (const [yahooTicker, price] of Object.entries(fallbackRaw)) {
-      const originalTicker = yahooTicker.replace(/\.SA$/i, "");
-      yahooFallbackPrices[originalTicker] = price;
-    }
-  }
-
-  // 4. Merge all prices (Yahoo fallback fills gaps from brapi.dev)
-  const allPrices: Record<string, number> = {
-    ...cryptoPrices,
-    ...brazilianPrices,
-    ...yahooFallbackPrices,
-    ...yahooPrices,
-  };
-
-  result.bySource.coingecko = Object.keys(cryptoPrices).length;
-  result.bySource.brapi =
-    Object.keys(brazilianPrices).length +
-    Object.keys(yahooFallbackPrices).length;
-  result.bySource.yahoo = Object.keys(yahooPrices).length;
-
-  // 5. Batch update holdings
   const now = new Date();
   const updates: Promise<unknown>[] = [];
-
-  for (const [ticker, price] of Object.entries(allPrices)) {
-    const holdingsForTicker = holdingsByTicker[ticker];
-    if (!holdingsForTicker) continue;
-
-    for (const h of holdingsForTicker) {
+  for (const [key, req] of requests) {
+    const quote = quotes.get(key);
+    if (!quote) {
+      result.missing.push(req.ticker);
+      continue;
+    }
+    result.bySource[quote.source]++;
+    for (const id of req.holdingIds) {
       updates.push(
-        (db as unknown as { $executeRawUnsafe: (query: string, ...args: unknown[]) => Promise<number> })
-          .$executeRawUnsafe(
-            `UPDATE "investment_holdings" SET "currentPrice" = $1, "lastPriceUpdate" = $2, "updatedAt" = $2 WHERE "id" = $3`,
-            price,
-            now,
-            h.id
-          )
+        db.investmentHolding
+          .update({ where: { id }, data: { currentPrice: quote.price, lastPriceUpdate: now } })
           .then(() => {
             result.updated++;
           })
           .catch((err) => {
-            console.error(
-              `[PriceUpdate] Failed to update holding ${h.id}:`,
-              err
-            );
+            console.error(`[PriceUpdate] Failed to update holding ${id}:`, err);
             result.failed++;
           })
       );
     }
   }
-
   await Promise.all(updates);
-
   return result;
 }

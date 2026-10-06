@@ -1,0 +1,53 @@
+{
+  "due": "Recurring bills: {days, plural, =0 {on the due date} one {# day before} other {# days before}}, at {time}",
+  "overdue": "Recurring bill overdue",
+  "bill": "Card statement closed",
+  "budget": "Budget went over {threshold}",
+  "weekly": "Weekly summary ({day}, {time})",
+  "weekday": {
+    "0": "Sunday",
+    "1": "Monday",
+    "2": "Tuesday",
+    "3": "Wednesday",
+    "4": "Thursday",
+    "5": "Friday",
+    "6": "Saturday"
+  },
+  "devices": {
+    "device": "Device",
+    "lastUsed": "Last used",
+    "remove": "Remove",
+    "empty": "No devices receive alerts yet.",
+    "label": "{device} · {browser}",
+    "labelPwa": "{device} · installed app (PWA)"
+  },
+  "device": {
+    "iPhone": "iPhone",
+    "iPad": "iPad",
+    "Mac": "Mac",
+    "Android": "Android",
+    "Windows": "Windows",
+    "Linux": "Linux",
+    "device": "Device"
+  },
+  "browser": {
+    "Chrome": "Chrome",
+    "Safari": "Safari",
+    "Firefox": "Firefox",
+    "Edge": "Edge",
+    "Opera": "Opera",
+    "Samsung": "Samsung Internet",
+    "browser": "browser"
+  },
+  "push": {
+    "notConfigured": "The server is not set up to send push yet.",
+    "unsupported": "This browser cannot receive push notifications.",
+    "iosInstall": "On iPhone, add Capital to the Home Screen to get alerts.",
+    "denied": "Notifications are blocked in this browser; allow them in the site's permissions.",
+    "off": "This device isn't receiving alerts yet.",
+    "error": "Couldn't turn on alerts for this device: {message}",
+    "enable": "Turn on for this device",
+    "enabling": "Turning on…"
+  },
+  "toastRemoved": "“{device}” will no longer receive alerts"
+}

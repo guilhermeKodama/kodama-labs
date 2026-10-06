@@ -1,0 +1,87 @@
+{
+  "title": "Buscar ou executar",
+  "placeholder": "Buscar ou executar…",
+  "empty": "Nada encontrado",
+  "groups": {
+    "quickAdd": "Quick add",
+    "goTo": "Ir para",
+    "views": "Views",
+    "create": "Criar",
+    "entries": "Lançamentos",
+    "assistant": "Assistente",
+    "account": "Conta"
+  },
+  "goTo": {
+    "transactions": "Transações",
+    "budgets": "Orçamentos",
+    "portfolio": "Carteira",
+    "contributions": "Aportes",
+    "trash": "Lixeira",
+    "imports": "Importações",
+    "settings": "Ajustes",
+    "settingsPage": "Ajustes › {page}"
+  },
+  "settingsPages": {
+    "prefs": "Perfil e preferências",
+    "notif": "Notificações",
+    "ent": "Negócios e PF",
+    "bank": "Contas bancárias",
+    "card": "Cartões de crédito",
+    "broker": "Corretoras",
+    "cat": "Categorias",
+    "rules": "Regras de categorização",
+    "fx": "Moedas e câmbio",
+    "imports": "Importações",
+    "api": "Integrações e API"
+  },
+  "views": {
+    "favorite": "favorita"
+  },
+  "create": {
+    "entry": "Nova transação",
+    "import": "Importar extrato",
+    "view": "Nova view"
+  },
+  "quickAdd": {
+    "label": "{hasDescription, select, yes {Criar “{description}” · {amount}} other {Criar transação · {amount}}}",
+    "fill": "Preencher ↵",
+    "fields": {
+      "description": "Descrição",
+      "amount": "Valor",
+      "kind": "Tipo",
+      "account": "Conta",
+      "entity": "Entidade",
+      "date": "Data",
+      "category": "Categoria",
+      "currency": "Moeda"
+    },
+    "kinds": {
+      "expense": "Saída",
+      "income": "Entrada",
+      "transfer": "Transferência",
+      "invest": "Aporte"
+    },
+    "newCategory": "{name} (nova)"
+  },
+  "entries": {
+    "searching": "Buscando…",
+    "none": "Nenhum lançamento com “{query}”",
+    "failed": "Não deu para buscar os lançamentos.",
+    "seeAll": "Ver todos com “{query}” em Transações"
+  },
+  "assistant": {
+    "open": "Abrir o assistente",
+    "continue": "Continuar a conversa",
+    "ask": "Perguntar ao assistente: “{query}”"
+  },
+  "account": {
+    "theme": "Tema: {theme}",
+    "language": "Idioma: {language}",
+    "signOut": "Sair"
+  },
+  "footer": {
+    "navigate": "navegar",
+    "open": "abrir",
+    "close": "fechar"
+  }
+}

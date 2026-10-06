@@ -28,13 +28,12 @@ function mockDb(parsed: unknown = { kind: "bank_ofx", rows: ROWS }): DbClient {
     conversationFile: {
       findFirst: vi.fn().mockResolvedValue({ id: "file-1", parseStatus: "parsed", parsedPayload: parsed }),
     },
-    transaction: { findMany: vi.fn().mockResolvedValue([]), findFirst: vi.fn().mockResolvedValue(null) },
-    transfer: { findMany: vi.fn().mockResolvedValue([]) },
-    investmentAccount: { findMany: vi.fn().mockResolvedValue([{ id: "inv-1" }]) },
+    ledgerEntry: { findMany: vi.fn().mockResolvedValue([]), findFirst: vi.fn().mockResolvedValue(null) },
+    transferGroup: { findMany: vi.fn().mockResolvedValue([]) },
+    account: { findMany: vi.fn().mockResolvedValue([{ id: "inv-1" }]), findFirst: vi.fn().mockResolvedValue(null) },
     investmentHolding: { findMany: vi.fn().mockResolvedValue([]) },
-    investmentTransaction: { findMany: vi.fn().mockResolvedValue([]) },
-    creditCard: { findFirst: vi.fn().mockResolvedValue(null) },
-    creditCardBill: { findFirst: vi.fn().mockResolvedValue(null) },
+    investmentOperation: { findMany: vi.fn().mockResolvedValue([]) },
+    cardStatement: { findFirst: vi.fn().mockResolvedValue(null) },
   } as unknown as DbClient;
 }
 

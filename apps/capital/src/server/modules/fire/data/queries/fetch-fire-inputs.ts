@@ -1,5 +1,6 @@
 import type { DbClient } from "@capital/server/lib/prisma";
 import { getUserToday } from "@capital/server/lib/date-utils";
+import { accountBalances } from "@capital/server/modules/ledger/services/accounts";
 
 export interface FireInputHolding {
   currentQuantity: number;
@@ -30,6 +31,10 @@ export interface FireInputs {
  * Everything the FIRE engine needs about the user's actual finances: the
  * investment portfolio + cash (the FIRE base), and the trailing window of
  * expenses (for the gap) and investment outflows (for the suggested contribution).
+ *
+ * The brokers' cash counts as invested (the Carteira's "Caixa" class), one
+ * row per brokerage account at its positive balance, so FIRE progress uses
+ * the same base as the Carteira's Patrimônio for the same entities.
  */
 export async function fetchFireInputs(
   userId: string,
@@ -47,9 +52,12 @@ export async function fetchFireInputs(
   const start = new Date(now);
   start.setMonth(start.getMonth() - opts.trailingMonths);
 
-  const ownership = { OR: [{ business: { userId } }, { personalAccount: { userId } }] };
+  const live = { userId, deletedAt: null, effectiveDate: { gte: start } };
+  const select = { amountBase: true, effectiveDate: true, category: { select: { name: true } } } as const;
 
-  const [holdings, currencies, expenses, contributions, income] = await Promise.all([
+  // Contributions are money leaving everyday accounts for investments:
+  // deposit transfers into a brokerage, plus direct investment outflows.
+  const [holdings, brokers, currencies, expenseRows, contributionRows, incomeRows] = await Promise.all([
     db.investmentHolding.findMany({
       where: { account: { userId }, isActive: true },
       select: {
@@ -57,23 +65,36 @@ export async function fetchFireInputs(
         currentPrice: true,
         totalInvested: true,
         currency: true,
-        account: { select: { entityType: true } },
+        account: { select: { entity: { select: { kind: true } } } },
       },
     }),
+    db.account.findMany({
+      where: { userId, type: "brokerage", archivedAt: null },
+      select: { id: true, currency: true, entity: { select: { kind: true } } },
+    }),
     db.currency.findMany({ where: { userId }, select: { code: true, manualRate: true } }),
-    db.transaction.findMany({
-      where: { type: "expense", date: { gte: start }, ...ownership },
-      select: { amount: true, exchangeRate: true, category: true, date: true },
+    db.ledgerEntry.findMany({ where: { ...live, kind: "expense", transferGroupId: null }, select }),
+    db.ledgerEntry.findMany({
+      where: {
+        ...live,
+        account: { type: { not: "brokerage" } },
+        // Money leaving a bank account into investments. Income credited to a bank
+        // account (an "investment" leg with a positive amount) is not a contribution.
+        OR: [{ kind: "investment", amount: { lt: 0 } }, { transferGroup: { direction: "investment_deposit" }, amount: { lt: 0 } }],
+      },
+      select,
     }),
-    db.transaction.findMany({
-      where: { type: "investment", date: { gte: start }, ...ownership },
-      select: { amount: true, exchangeRate: true, category: true, date: true },
-    }),
-    db.transaction.findMany({
-      where: { type: "income", date: { gte: start }, ...ownership },
-      select: { amount: true, exchangeRate: true, category: true, date: true },
-    }),
+    db.ledgerEntry.findMany({ where: { ...live, kind: "income", transferGroupId: null }, select }),
   ]);
+  const spend = (sign: 1 | -1) => (r: (typeof expenseRows)[number]): FireInputSpend => ({
+    amount: sign * Number(r.amountBase),
+    exchangeRate: 1,
+    category: r.category?.name ?? null,
+    date: r.effectiveDate,
+  });
+  const expenses = expenseRows.map(spend(-1));
+  const contributions = contributionRows.map(spend(-1));
+  const income = incomeRows.map(spend(1));
 
   // manualRate means "1 base = X this currency", so base-per-unit = 1 / manualRate.
   // The base currency is ALWAYS 1 — never let a stray base-currency row (e.g. a
@@ -85,13 +106,20 @@ export async function fetchFireInputs(
     if (c.manualRate > 0) currencyRates[c.code] = 1 / c.manualRate;
   }
 
-  const mappedHoldings: FireInputHolding[] = holdings.map((h) => ({
-    currentQuantity: h.currentQuantity,
-    currentPrice: h.currentPrice,
-    totalInvested: h.totalInvested,
-    currency: h.currency,
-    entityType: h.account.entityType,
-  }));
+  const cash = brokers.length ? await accountBalances(userId, db, brokers.map((b) => b.id)) : new Map<string, number>();
+  const mappedHoldings: FireInputHolding[] = [
+    ...holdings.map((h) => ({
+      currentQuantity: h.currentQuantity,
+      currentPrice: h.currentPrice,
+      totalInvested: h.totalInvested,
+      currency: h.currency,
+      entityType: h.account.entity.kind,
+    })),
+    // Broker cash: valued at its balance (holdingValue falls back to totalInvested); overdrafts count as zero.
+    ...brokers
+      .map((b) => ({ currentQuantity: 0, currentPrice: null, totalInvested: Math.max(0, cash.get(b.id) ?? 0), currency: b.currency, entityType: b.entity.kind }))
+      .filter((b) => b.totalInvested > 0),
+  ];
 
   return {
     baseCurrency,

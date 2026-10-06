@@ -1,209 +1,74 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { prisma } from "@capital/server/lib/prisma";
-import {
-  listCreditCardsForMcp,
-  createCreditCardTool,
-  updateCreditCardTool,
-} from "../credit-cards";
+import { createLedgerFixture, deleteLedgerFixture, type LedgerFixture } from "@/test/ledger-fixtures";
+import { createCreditCardTool, listCreditCardsForMcp, updateCreditCardTool } from "../credit-cards";
+import { importCreditCardStatement } from "../credit-card-statements";
 
-const db = prisma;
 const USER_A = "test-user-mcp-cards-a";
 const USER_B = "test-user-mcp-cards-b";
+let a: LedgerFixture;
+let b: LedgerFixture;
 
-async function reset() {
-  await db.user.deleteMany({ where: { id: { in: [USER_A, USER_B] } } });
-  await db.user.create({
-    data: {
-      id: USER_A,
-      email: "mcp-cards-a@example.com",
-      passwordHash: "hash",
-      name: "Cards A",
-      baseCurrency: "BRL",
-    },
-  });
-  await db.user.create({
-    data: {
-      id: USER_B,
-      email: "mcp-cards-b@example.com",
-      passwordHash: "hash",
-      name: "Cards B",
-      baseCurrency: "BRL",
-    },
-  });
-}
+beforeEach(async () => {
+  a = await createLedgerFixture(prisma, USER_A);
+  b = await createLedgerFixture(prisma, USER_B);
+  await prisma.account.deleteMany({ where: { userId: { in: [USER_A, USER_B] }, type: "credit_card" } });
+});
+
+afterAll(async () => {
+  await deleteLedgerFixture(prisma, USER_A);
+  await deleteLedgerFixture(prisma, USER_B);
+});
+
+const card = (overrides: Record<string, unknown> = {}) => ({
+  entityType: "personal" as const,
+  bankName: "Nubank",
+  lastFourDigits: "3308",
+  creditLimit: 8000,
+  closingDay: 3,
+  dueDay: 10,
+  currency: "BRL",
+  personalAccountId: a.pfId,
+  ...overrides,
+});
 
 describe("MCP credit card tools", () => {
-  let personalA: string;
-  let businessA: string;
-  let personalB: string;
-
-  beforeEach(async () => {
-    await reset();
-    personalA = (await db.personalAccount.create({
-      data: { userId: USER_A, defaultCurrency: "BRL" },
-    })).id;
-    businessA = (await db.business.create({
-      data: { userId: USER_A, name: "Kodama Labs", defaultCurrency: "BRL" },
-    })).id;
-    personalB = (await db.personalAccount.create({
-      data: { userId: USER_B, defaultCurrency: "BRL" },
-    })).id;
-  });
-
   it("lists cards by last 4 and account, including the latest statement month", async () => {
-    const personal = await createCreditCardTool(USER_A, {
-      entityType: "personal",
-      bankName: "Nubank",
-      lastFourDigits: "3308",
-      nickname: "Personal",
-      creditLimit: 8000,
-      closingDay: 3,
-      dueDay: 10,
-      currency: "BRL",
-      personalAccountId: personalA,
-    }, db);
-    const business = await createCreditCardTool(USER_A, {
-      entityType: "business",
-      bankName: "Nubank",
-      lastFourDigits: "7809",
-      creditLimit: 20000,
-      closingDay: 8,
-      dueDay: 15,
-      currency: "BRL",
-      businessId: businessA,
-    }, db);
-    await db.creditCardStatement.create({
-      data: { creditCardId: personal.id, month: "2026-05" },
-    });
-    await db.creditCardStatement.create({
-      data: { creditCardId: personal.id, month: "2026-09" },
-    });
+    const personal = await createCreditCardTool(USER_A, card({ nickname: "Personal" }), prisma);
+    const business = await createCreditCardTool(USER_A, card({ entityType: "business", personalAccountId: undefined, businessId: a.pjId, bankName: "Itaú", lastFourDigits: "7809" }), prisma);
+    expect(personal).toMatchObject({ bankName: "Nubank", nickname: "Personal", lastFourDigits: "3308", personalAccountId: a.pfId, ownerName: "Personal", latestStatementMonth: null, isActive: true });
+    expect(business).toMatchObject({ bankName: "Itaú", nickname: null, businessId: a.pjId, ownerName: "Kodama LTDA" });
 
-    const byLast4 = await listCreditCardsForMcp(USER_A, { lastFourDigits: "3308" }, db);
-    expect(byLast4.creditCards).toHaveLength(1);
-    expect(byLast4.creditCards[0]).toMatchObject({
-      id: personal.id,
-      bankName: "Nubank",
-      lastFourDigits: "3308",
-      ownerName: "Personal",
-      closingDay: 3,
-      dueDay: 10,
-      currency: "BRL",
-      latestStatementMonth: "2026-09",
-    });
+    await importCreditCardStatement(USER_A, { creditCardId: personal.id, statement: { month: "2026-08" }, rows: [] }, prisma);
+    await importCreditCardStatement(USER_A, { creditCardId: personal.id, statement: { month: "2026-09" }, rows: [] }, prisma);
 
-    const byBusiness = await listCreditCardsForMcp(USER_A, { accountId: businessA }, db);
-    expect(byBusiness.creditCards.map((card) => card.id)).toEqual([business.id]);
-    expect(byBusiness.creditCards[0].ownerName).toBe("Kodama Labs");
-    expect(byBusiness.creditCards[0].latestStatementMonth).toBeNull();
+    const by4 = await listCreditCardsForMcp(USER_A, { lastFourDigits: "3308" }, prisma);
+    expect(by4.creditCards.map((c) => [c.id, c.latestStatementMonth])).toEqual([[personal.id, "2026-09"]]);
+    expect((await listCreditCardsForMcp(USER_A, { accountId: a.pjId }, prisma)).creditCards.map((c) => c.id)).toEqual([business.id]);
+    expect((await listCreditCardsForMcp(USER_A, { entityType: "personal" }, prisma)).creditCards.map((c) => c.id)).toEqual([personal.id]);
+    await expect(listCreditCardsForMcp(USER_A, { accountId: a.pjId, entityType: "personal" }, prisma)).rejects.toThrow(/does not match/);
   });
 
   it("does not list, create, or update another user's cards", async () => {
-    const foreign = await createCreditCardTool(USER_B, {
-      entityType: "personal",
-      bankName: "Nubank",
-      lastFourDigits: "3308",
-      creditLimit: 1000,
-      closingDay: 1,
-      dueDay: 8,
-      currency: "BRL",
-      personalAccountId: personalB,
-    }, db);
-
-    const listed = await listCreditCardsForMcp(USER_A, { lastFourDigits: "3308" }, db);
-    expect(listed.creditCards).toHaveLength(0);
-
-    await expect(
-      listCreditCardsForMcp(USER_A, { accountId: personalB }, db)
-    ).rejects.toThrow(/access denied/);
-
-    await expect(
-      createCreditCardTool(USER_A, {
-        entityType: "personal",
-        bankName: "Nubank",
-        lastFourDigits: "9999",
-        creditLimit: 1000,
-        closingDay: 1,
-        dueDay: 8,
-        currency: "BRL",
-        personalAccountId: personalB,
-      }, db)
-    ).rejects.toThrow(/access denied/);
-
-    await expect(
-      updateCreditCardTool(USER_A, { id: foreign.id, lastFourDigits: "1111" }, db)
-    ).rejects.toThrow(/Credit card not found/);
-
-    const businessB = (await db.business.create({
-      data: { userId: USER_B, name: "Other Co", defaultCurrency: "BRL" },
-    })).id;
-    await expect(
-      createCreditCardTool(USER_A, {
-        entityType: "business",
-        bankName: "Nubank",
-        lastFourDigits: "7809",
-        creditLimit: 2000,
-        closingDay: 2,
-        dueDay: 9,
-        currency: "BRL",
-        businessId: businessB,
-      }, db)
-    ).rejects.toThrow(/access denied/);
-
-    await expect(
-      createCreditCardTool(USER_A, {
-        entityType: "personal",
-        bankName: "Nubank",
-        lastFourDigits: "7809",
-        creditLimit: 2000,
-        closingDay: 2,
-        dueDay: 9,
-        currency: "BRL",
-        personalAccountId: personalA,
-        businessId: businessA,
-      }, db)
-    ).rejects.toThrow(/businessId is not allowed/);
-
-    await expect(
-      createCreditCardTool(USER_A, {
-        entityType: "business",
-        bankName: "Nubank",
-        lastFourDigits: "7809",
-        creditLimit: 2000,
-        closingDay: 2,
-        dueDay: 9,
-        currency: "BRL",
-        businessId: businessA,
-        personalAccountId: personalA,
-      }, db)
-    ).rejects.toThrow(/personalAccountId is not allowed/);
+    const mine = await createCreditCardTool(USER_A, card(), prisma);
+    expect((await listCreditCardsForMcp(USER_B, {}, prisma)).creditCards).toEqual([]);
+    await expect(listCreditCardsForMcp(USER_B, { accountId: a.pfId }, prisma)).rejects.toThrow(/not found/);
+    await expect(createCreditCardTool(USER_B, card(), prisma)).rejects.toThrow(/not found/);
+    await expect(updateCreditCardTool(USER_B, { id: mine.id, closingDay: 5 }, prisma)).rejects.toThrow(/not found/);
+    expect(b.pfId).not.toBe(a.pfId);
   });
 
-  it("updates last 4 and closing day without changing currency", async () => {
-    const created = await createCreditCardTool(USER_A, {
-      entityType: "personal",
-      bankName: "Nubank",
-      lastFourDigits: "0000",
-      creditLimit: 5000,
-      closingDay: 1,
-      dueDay: 10,
-      currency: "BRL",
-      personalAccountId: personalA,
-    }, db);
+  it("validates input like the web API", async () => {
+    await expect(createCreditCardTool(USER_A, card({ lastFourDigits: "33" }), prisma)).rejects.toThrow(/4 digits/);
+    await expect(createCreditCardTool(USER_A, card({ closingDay: 40 }), prisma)).rejects.toThrow(/closingDay/);
+    await expect(createCreditCardTool(USER_A, card({ personalAccountId: undefined }), prisma)).rejects.toThrow(/personalAccountId is required/);
+  });
 
-    const updated = await updateCreditCardTool(USER_A, {
-      id: created.id,
-      bankName: "Nubank",
-      nickname: "Personal",
-      lastFourDigits: "3308",
-      closingDay: 3,
-      dueDay: 10,
-    }, db);
-
-    expect(updated.lastFourDigits).toBe("3308");
-    expect(updated.closingDay).toBe(3);
-    expect(updated.nickname).toBe("Personal");
-    expect(updated.currency).toBe("BRL");
-    expect(updated.creditLimit).toBe(5000);
+  it("updates last 4 and closing day without changing currency, and hides a duplicate", async () => {
+    const c = await createCreditCardTool(USER_A, card({ currency: "USD" }), prisma);
+    const u = await updateCreditCardTool(USER_A, { id: c.id, lastFourDigits: "1111", closingDay: 7 }, prisma);
+    expect(u).toMatchObject({ lastFourDigits: "1111", closingDay: 7, currency: "USD", nickname: null, bankName: "Nubank" });
+    expect((await updateCreditCardTool(USER_A, { id: c.id, isActive: false }, prisma)).isActive).toBe(false);
+    expect((await listCreditCardsForMcp(USER_A, {}, prisma)).creditCards[0].isActive).toBe(false);
   });
 });

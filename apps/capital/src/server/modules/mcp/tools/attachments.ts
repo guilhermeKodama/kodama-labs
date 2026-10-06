@@ -1,12 +1,18 @@
 import type { DbClient } from "@capital/server/lib/prisma";
-import { uploadAttachment } from "../../attachments/services/upload-attachment";
-import { listAttachments } from "../../attachments/services/list-attachments";
-import { deleteAttachmentService } from "../../attachments/services/delete-attachment";
+import {
+  deleteAttachment as deleteAttachmentService,
+  listAttachments,
+  uploadAttachment,
+} from "../../attachments/services/attachments";
 import {
   MAX_FILE_SIZE_BYTES,
   ALLOWED_MIME_TYPES,
 } from "../../attachments/constants";
-import { fetchTransactionById } from "../../transactions/data/queries/fetch-transactions";
+
+async function assertOwnsEntry(userId: string, entryId: string, db: DbClient) {
+  const found = await db.ledgerEntry.count({ where: { id: entryId, userId } });
+  if (!found) throw new Error("Transaction not found or access denied");
+}
 
 export interface AttachReceiptParams {
   transactionId: string;
@@ -35,10 +41,7 @@ export async function attachReceipt(
   db: DbClient
 ) {
   // Verify transaction exists and user owns it
-  const transaction = await fetchTransactionById(userId, params.transactionId, db);
-  if (!transaction) {
-    throw new Error("Transaction not found or access denied");
-  }
+  await assertOwnsEntry(userId, params.transactionId, db);
 
   // Validate mime type
   if (!ALLOWED_MIME_TYPES.has(params.mimeType)) {
@@ -78,7 +81,7 @@ export async function attachReceipt(
     userId,
     {
       kind: "RECEIPT",
-      ownerType: "transaction",
+      ownerType: "entry",
       ownerId: params.transactionId,
       file: {
         buffer,
@@ -108,14 +111,11 @@ export async function listTransactionAttachments(
   db: DbClient
 ) {
   // Verify transaction exists and user owns it
-  const transaction = await fetchTransactionById(userId, params.transactionId, db);
-  if (!transaction) {
-    throw new Error("Transaction not found or access denied");
-  }
+  await assertOwnsEntry(userId, params.transactionId, db);
 
   const attachments = await listAttachments(
     userId,
-    "transaction",
+    "entry",
     params.transactionId,
     db
   );

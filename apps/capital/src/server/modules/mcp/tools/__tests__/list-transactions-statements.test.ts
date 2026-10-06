@@ -1,117 +1,54 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { prisma } from "@capital/server/lib/prisma";
+import { createLedgerFixture, deleteLedgerFixture, type LedgerFixture } from "@/test/ledger-fixtures";
+import { createEntry } from "@capital/server/modules/ledger/services/entries";
+import { markStatementPayment } from "@capital/server/modules/ledger/services/statements";
+import { importCardStatement } from "@capital/server/modules/credit-cards/services/import-card-statement";
 import { listTransactions } from "../list-transactions";
 
-const db = prisma;
-const USER_ID = "test-user-list-tx-statements-001";
-const EMAIL = "list-tx-statements-test@example.com";
+const USER = "test-user-mcp-list-statements-001";
+let f: LedgerFixture;
 
-describe("listTransactions statement purchases", () => {
-  let personalAccountId: string;
+beforeAll(async () => {
+  f = await createLedgerFixture(prisma, USER, { usdRate: 0.2 });
+  // October statement (closes 2026-10-05): a BRL purchase, a USD one, and installment 10/12 of a January purchase.
+  const { statementId } = await importCardStatement(
+    USER,
+    {
+      accountId: f.card,
+      month: "2026-10",
+      rows: [
+        { date: "2026-09-20", description: "Mercado", amount: 200, categoryId: f.categories.Groceries },
+        { date: "2026-09-22", description: "GitHub", amount: 10, currency: "USD", categoryId: f.categories.Software },
+        { date: "2026-01-15", description: "Notebook", amount: 300, categoryId: f.categories.Software, installment: { number: 10, total: 12 } },
+      ],
+    },
+    prisma
+  );
+  const payment = await createEntry(USER, { kind: "expense", accountId: f.pfChecking, amount: 550, date: "2026-10-12", description: "Pagamento fatura" }, prisma);
+  await markStatementPayment(USER, payment.entryIds[0], statementId, prisma);
+  await createEntry(USER, { kind: "income", accountId: f.pfChecking, amount: 5000, date: "2026-10-01", description: "Salário", categoryId: f.categories.Salary }, prisma);
+});
 
-  beforeEach(async () => {
-    const existing = await db.user.findMany({
-      where: { OR: [{ id: USER_ID }, { email: EMAIL }] },
-      select: { id: true },
-    });
-    for (const user of existing) {
-      await db.personalAccount.deleteMany({ where: { userId: user.id } });
-      await db.user.delete({ where: { id: user.id } });
-    }
+afterAll(async () => {
+  await deleteLedgerFixture(prisma, USER);
+});
 
-    await db.user.create({
-      data: {
-        id: USER_ID,
-        email: EMAIL,
-        passwordHash: "hash",
-        name: "List Transactions",
-        baseCurrency: "BRL",
-      },
+describe("listTransactions", () => {
+  it("summarizes October in base currency with card purchases on the closing date and no bill payment", async () => {
+    const r = await listTransactions(USER, { dateFrom: "2026-10-01", dateTo: "2026-10-31" }, prisma);
+    const by = Object.fromEntries(r.summaries.map((s) => [`${s.type}|${s.category}`, [Math.round(s.total * 100) / 100, s.count]]));
+    expect(by).toEqual({
+      "expense|Groceries": [200, 1],
+      "expense|Software": [350, 2],
+      "income|Salary": [5000, 1],
     });
-    const account = await db.personalAccount.create({
-      data: { userId: USER_ID, defaultCurrency: "USD" },
-    });
-    personalAccountId = account.id;
-    await db.currency.create({
-      data: {
-        userId: USER_ID,
-        code: "USD",
-        name: "US Dollar",
-        symbol: "$",
-        manualRate: 0.2,
-      },
-    });
-    await db.transaction.create({
-      data: {
-        entityType: "personal",
-        personalAccountId,
-        type: "expense",
-        amount: 1000,
-        currency: "USD",
-        exchangeRate: 5.5,
-        description: "Stored rate expense",
-        category: "Shopping",
-        date: new Date("2026-10-15T12:00:00.000Z"),
-      },
-    });
-    const card = await db.creditCard.create({
-      data: {
-        entityType: "personal",
-        personalAccountId,
-        bankName: "Nubank",
-        lastFourDigits: "4444",
-        creditLimit: 8000,
-        closingDay: 28,
-        dueDay: 5,
-        currency: "BRL",
-      },
-    });
-    await db.creditCardStatement.create({
-      data: {
-        creditCardId: card.id,
-        month: "2026-10",
-        closingDate: new Date("2026-10-28T12:00:00.000Z"),
-        purchases: {
-          create: [
-            {
-              category: "Shopping",
-              transactionDate: new Date("2026-01-15T12:00:00.000Z"),
-              description: "PARC 3/10",
-              amount: 20,
-              currency: "USD",
-              installmentNumber: 3,
-              totalInstallments: 10,
-            },
-            {
-              category: "Shopping",
-              transactionDate: new Date("2026-10-03T12:00:00.000Z"),
-              description: "Market",
-              amount: 80,
-              currency: "BRL",
-            },
-          ],
-        },
-      },
-    });
+    expect(r.transactions.find((t) => t.description === "Pagamento fatura")).toBeUndefined();
+    expect(r.transactions.every((t) => t.personalAccountId === f.pfId && t.amount > 0)).toBe(true);
   });
 
-  it("summarizes October in base currency, including a January-dated installment", async () => {
-    const october = await listTransactions(
-      USER_ID,
-      { dateFrom: "2026-10-01", dateTo: "2026-10-31", type: "expense" },
-      db
-    );
-    const shopping = october.summaries.find((row) => row.category === "Shopping");
-    expect(shopping?.currency).toBe("BRL");
-    expect(shopping?.total).toBe(5500 + 100 + 80);
-    expect(october.transactions[0].amount).toBe(1000);
-    expect(october.transactions[0].currency).toBe("USD");
-
-    const january = await listTransactions(
-      USER_ID,
-      { dateFrom: "2026-01-01", dateTo: "2026-01-31", type: "expense" },
-      db
-    );
-    expect(january.summaries.find((row) => row.category === "Shopping")).toBeUndefined();
+  it("filters by type and category", async () => {
+    const r = await listTransactions(USER, { dateFrom: "2026-10-01", dateTo: "2026-10-31", type: "expense", category: "Software" }, prisma);
+    expect(r.transactions.map((t) => t.description).sort()).toEqual(["GitHub", "Notebook"]);
   });
 });

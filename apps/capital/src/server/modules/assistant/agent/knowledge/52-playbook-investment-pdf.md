@@ -8,4 +8,4 @@ PDFs não são parseados deterministicamente - o arquivo chega para você como b
 4. Para cada movimentação, monte a entrada em `investmentTransactions` do payload de `propose_import_plan`: se o ativo já existe como `InvestmentHolding` (bateu por ticker + conta), referencie `holdingId`; senão, inclua `newHolding` com os dados para criá-la.
 5. Se o PDF menciona um aporte ou resgate de caixa que ainda não está registrado como `Transfer`, pergunte ao usuário se ele já lançou isso pelo extrato bancário antes de incluir - duplicar aporte é um erro caro (ver `40-investments.md`).
 6. Valores ambíguos (bruto vs. líquido de IR, taxa de custódia embutida ou não) são para perguntar, não assumir.
-7. Se houver mais de uma `InvestmentAccount` cadastrada e o PDF não deixar claro qual corretora é, pergunte antes de montar o plano.
+7. Se houver mais de uma conta de investimento cadastrada e o PDF não deixar claro qual corretora é, pergunte antes de montar o plano.

@@ -1,7 +1,6 @@
 import { z } from "zod";
 import { defineTool } from "../registry";
-import { createInvestmentHolding } from "../../../../investments/services/create-investment-holding";
-import { updateInvestmentHoldingService } from "../../../../investments/services/update-investment-holding";
+import { createHolding, updateHolding } from "@capital/server/modules/investments/services/portfolio";
 
 export const manageInvestmentHolding = defineTool({
   name: "manage_investment_holding",
@@ -52,7 +51,7 @@ export const manageInvestmentHolding = defineTool({
         throw new Error("currency must be a 3-letter ISO code");
       }
 
-      const holding = await createInvestmentHolding(
+      const holding = await createHolding(
         ctx.userId,
         {
           accountId: input.accountId,
@@ -72,7 +71,7 @@ export const manageInvestmentHolding = defineTool({
 
     if (input.action === "set_active") {
       if (input.isActive === undefined) throw new Error("isActive is required for action \"set_active\"");
-      const holding = await updateInvestmentHoldingService(
+      const holding = await updateHolding(
         ctx.userId,
         input.holdingId,
         { isActive: input.isActive },
@@ -82,7 +81,7 @@ export const manageInvestmentHolding = defineTool({
     }
 
     // action === "update"
-    const holding = await updateInvestmentHoldingService(
+    const holding = await updateHolding(
       ctx.userId,
       input.holdingId,
       {

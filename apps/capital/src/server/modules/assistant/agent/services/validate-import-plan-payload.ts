@@ -143,13 +143,8 @@ export async function validateImportPlanPayload(
   // is stale (built from data that has since changed).
   const incomingIds = payload.transactions.map((t) => t.externalId);
   if (incomingIds.length > 0) {
-    const existing = await db.transaction.findMany({
-      where: {
-        externalId: { in: incomingIds },
-        ...(payload.entityType === "business"
-          ? { businessId: payload.entityId }
-          : { personalAccountId: payload.entityId }),
-      },
+    const existing = await db.ledgerEntry.findMany({
+      where: { userId, entityId: payload.entityId, deletedAt: null, externalId: { in: incomingIds } },
       select: { externalId: true },
     });
     if (existing.length > 0) {
@@ -167,11 +162,8 @@ export async function validateImportPlanPayload(
           `duplicateDecisions entry for externalId ${decision.externalId} has resolution "link_fuzzy" but no existingTransactionId`
         );
       }
-      const target = await db.transaction.findFirst({
-        where: {
-          id: decision.existingTransactionId,
-          OR: [{ business: { userId } }, { personalAccount: { userId } }],
-        },
+      const target = await db.ledgerEntry.findFirst({
+        where: { id: decision.existingTransactionId, userId, deletedAt: null },
         select: { externalId: true },
       });
       if (!target) {
@@ -187,11 +179,9 @@ export async function validateImportPlanPayload(
     }
   }
 
-  // Transfer counterparties must belong to the user - a transfer writes
-  // directly into fromBusinessId/toBusinessId (or the personal equivalent)
-  // in execute-import.ts with no other ownership check downstream, so this
-  // is the only gate against pointing a transfer at another tenant's
-  // business/personalAccount.
+  // Transfer counterparties must belong to the user. execute-import.ts
+  // checks again at commit, but a plan pointing at another tenant's entity
+  // should never reach the confirmation card.
   const counterpartyKeys = new Map<string, { entityType: "business" | "personal"; entityId: string }>();
   for (const tr of payload.transfers) {
     counterpartyKeys.set(`${tr.counterpartyEntityType}:${tr.counterpartyEntityId}`, {
@@ -212,8 +202,8 @@ export async function validateImportPlanPayload(
     ...payload.investmentTransactions.map((t) => t.accountId),
   ]);
   if (investmentAccountIds.size > 0) {
-    const owned = await db.investmentAccount.findMany({
-      where: { id: { in: [...investmentAccountIds] }, userId },
+    const owned = await db.account.findMany({
+      where: { id: { in: [...investmentAccountIds] }, userId, type: "brokerage" },
       select: { id: true },
     });
     const ownedIds = new Set(owned.map((a) => a.id));
@@ -253,7 +243,7 @@ export async function validateImportPlanPayload(
   // Investment externalId collisions within holdings that already exist.
   const withHoldingId = payload.investmentTransactions.filter((t) => t.holdingId);
   if (withHoldingId.length > 0) {
-    const existing = await db.investmentTransaction.findMany({
+    const existing = await db.investmentOperation.findMany({
       where: {
         OR: withHoldingId.map((t) => ({ holdingId: t.holdingId!, externalId: t.externalId })),
       },
@@ -269,8 +259,8 @@ export async function validateImportPlanPayload(
   // Reconciliation targets must belong to the user.
   if (payload.reconciliations.length > 0) {
     const ids = payload.reconciliations.map((r) => r.existingTransactionId);
-    const owned = await db.transaction.findMany({
-      where: { id: { in: ids }, OR: [{ business: { userId } }, { personalAccount: { userId } }] },
+    const owned = await db.ledgerEntry.findMany({
+      where: { id: { in: ids }, userId, deletedAt: null },
       select: { id: true },
     });
     const ownedIds = new Set(owned.map((t) => t.id));
@@ -284,16 +274,8 @@ export async function validateImportPlanPayload(
   // Transfer reconciliation targets must belong to the user.
   if (payload.transferReconciliations.length > 0) {
     const ids = payload.transferReconciliations.map((r) => r.existingTransferId);
-    const owned = await db.transfer.findMany({
-      where: {
-        id: { in: ids },
-        OR: [
-          { fromBusiness: { userId } },
-          { fromPersonalAccount: { userId } },
-          { toBusiness: { userId } },
-          { toPersonalAccount: { userId } },
-        ],
-      },
+    const owned = await db.transferGroup.findMany({
+      where: { id: { in: ids }, userId, deletedAt: null },
       select: { id: true },
     });
     const ownedIds = new Set(owned.map((t) => t.id));
@@ -304,10 +286,9 @@ export async function validateImportPlanPayload(
     }
   }
 
-  // Bills: exactly one of creditCardId/newCreditCard, the referenced
-  // file/card must belong to the user, and warn (not throw) when a bill
-  // already exists for the same card+period - processBillCsv will REPLACE
-  // it at commit time, and the user needs to see that before confirming.
+  // Bills: exactly one of creditCardId/newCreditCard, and the referenced
+  // file/card must belong to the user. Re-importing a statement only adds
+  // rows it does not have yet, which is worth telling the user.
   for (const bill of payload.bills) {
     if (!bill.creditCardId === !bill.newCreditCard) {
       throw new Error(
@@ -322,23 +303,22 @@ export async function validateImportPlanPayload(
       throw new Error(`File ${bill.fileId} not found or access denied`);
     }
     if (bill.creditCardId) {
-      const card = await db.creditCard.findFirst({
-        where: {
-          id: bill.creditCardId,
-          OR: [{ business: { userId } }, { personalAccount: { userId } }],
-        },
+      const card = await db.account.findFirst({
+        where: { id: bill.creditCardId, userId, type: "credit_card" },
         select: { id: true },
       });
       if (!card) {
         throw new Error(`Credit card ${bill.creditCardId} not found or access denied`);
       }
-      const existingBill = await db.creditCardBill.findFirst({
-        where: { creditCardId: bill.creditCardId, closingDate: parseLocalDate(bill.closingDate) },
-        select: { id: true },
+      const closing = parseLocalDate(bill.closingDate);
+      const month = `${closing.getUTCFullYear()}-${String(closing.getUTCMonth() + 1).padStart(2, "0")}`;
+      const existingStatement = await db.cardStatement.findFirst({
+        where: { accountId: bill.creditCardId, month },
+        select: { _count: { select: { entries: { where: { deletedAt: null } } } } },
       });
-      if (existingBill) {
+      if (existingStatement && existingStatement._count.entries > 0) {
         warnings.push(
-          `A bill already exists for this card on ${bill.closingDate} - confirming will replace it (manual categorizations are preserved).`
+          `The ${month} statement of this card already has ${existingStatement._count.entries} entr(ies) - only rows not already on it will be added.`
         );
       }
     }

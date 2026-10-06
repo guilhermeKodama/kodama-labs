@@ -12,7 +12,7 @@ import { fetchMessageHistory } from "../data/queries/fetch-message-history";
 import { touchConversation } from "../data/commands/update-conversation";
 import { maybeGenerateConversationTitle } from "./services/generate-conversation-title";
 import { MAX_TOOL_ITERATIONS_DEFAULT, MAX_TURN_COST_USD_DEFAULT, MAX_WEB_SEARCHES_PER_TURN } from "../constants";
-import type { EmitFn } from "./events";
+import { TURN_LIMIT_CODE, type EmitFn } from "./events";
 
 export interface CardResponseInput {
   cardId: string;
@@ -25,6 +25,13 @@ export interface RunAgentTurnInput {
   text?: string;
   cardResponse?: CardResponseInput;
   fileIds?: string[];
+  /**
+   * Re-run the conversation's failed last turn ("Tentar de novo"): the
+   * user message it answered is already saved, so no new one is written
+   * and the model starts again from the saved history. The route checks
+   * there is such a turn (services/retry-turn.ts).
+   */
+  retry?: boolean;
 }
 
 const TOOL_LABELS: Record<string, string> = {
@@ -126,7 +133,85 @@ function emitWebSearchActivity(
 }
 
 /**
- * Runs one full agent turn: persists the user message, streams the
+ * Builds and saves the user message of a new turn (text, card answer,
+ * attached files) and announces it; also names a new conversation.
+ */
+async function saveUserMessage(input: RunAgentTurnInput, turnId: string, emit: EmitFn): Promise<void> {
+  const userBlocks: unknown[] = [];
+  if (input.text) userBlocks.push({ type: "text", text: input.text });
+  if (input.cardResponse) {
+    userBlocks.push({ type: "text", text: formatCardResponseText(input.cardResponse) });
+    userBlocks.push({
+      type: "capital_card_response",
+      cardId: input.cardResponse.cardId,
+      decisions: input.cardResponse.decisions,
+    });
+    emit({ type: "card_locked", cardId: input.cardResponse.cardId, decision: input.cardResponse.decisions });
+  }
+  const attachedNonPdfNames: string[] = [];
+  if (input.fileIds?.length) {
+    const files = await prisma.conversationFile.findMany({
+      where: { id: { in: input.fileIds }, conversationId: input.conversationId, userId: input.userId },
+      select: { id: true, fileType: true, originalName: true, blobUrl: true, mimeType: true },
+    });
+    for (const f of files) {
+      if (f.fileType === "pdf" || f.fileType === "image") {
+        const ref: CapitalFileRefBlock = {
+          type: "capital_file_ref",
+          fileId: f.id,
+          originalName: f.originalName,
+          blobUrl: f.blobUrl,
+          mediaType: f.mimeType,
+        };
+        userBlocks.push(ref);
+      } else {
+        // OFX/CSV never go in as a content block (they're read via
+        // get_parsed_rows, never transcribed) - but the model still
+        // needs a text cue that something was just attached, or a
+        // file-only send with no PDF would otherwise leave userBlocks
+        // empty going into the "no message at all" fallback below.
+        attachedNonPdfNames.push(f.originalName);
+      }
+    }
+  }
+  if (userBlocks.length === 0 && attachedNonPdfNames.length > 0) {
+    userBlocks.push({
+      type: "text",
+      text: `[Anexei ${attachedNonPdfNames.length === 1 ? "o arquivo" : "os arquivos"} ${attachedNonPdfNames.join(", ")} à conversa - veja list_statement_files.]`,
+    });
+  }
+  if (userBlocks.length === 0) {
+    userBlocks.push({ type: "text", text: "(mensagem vazia)" });
+  }
+
+  const userMessage = await insertAgentMessage(
+    {
+      conversationId: input.conversationId,
+      turnId,
+      role: "user",
+      content: userBlocks,
+      kind: input.cardResponse ? "card_response" : "user_text",
+    },
+    prisma
+  );
+  emit({
+    type: "message_created",
+    message: {
+      id: userMessage.id,
+      role: "user",
+      kind: userMessage.kind,
+      createdAt: userMessage.createdAt.toISOString(),
+    },
+  });
+  await touchConversation(input.conversationId, prisma);
+  if (!input.cardResponse) {
+    await maybeGenerateConversationTitle(input.conversationId, input.text, attachedNonPdfNames);
+  }
+}
+
+/**
+ * Runs one full agent turn: persists the user message (not on a retry,
+ * which answers the one already saved), streams the
  * model's response (and any tool calls) to `emit`, and persists every
  * assistant/tool_result message as it happens - so a killed serverless
  * function loses nothing durable, the next turn just continues from
@@ -152,79 +237,10 @@ export async function runAgentTurn(input: RunAgentTurnInput, emit: EmitFn): Prom
   let totalCacheCreate = 0;
   let totalCacheRead = 0;
   let totalCost = 0;
+  let iterations = 0;
 
   try {
-    // ---- Build and persist the new user message ----
-    const userBlocks: unknown[] = [];
-    if (input.text) userBlocks.push({ type: "text", text: input.text });
-    if (input.cardResponse) {
-      userBlocks.push({ type: "text", text: formatCardResponseText(input.cardResponse) });
-      userBlocks.push({
-        type: "capital_card_response",
-        cardId: input.cardResponse.cardId,
-        decisions: input.cardResponse.decisions,
-      });
-      emit({ type: "card_locked", cardId: input.cardResponse.cardId, decision: input.cardResponse.decisions });
-    }
-    const attachedNonPdfNames: string[] = [];
-    if (input.fileIds?.length) {
-      const files = await prisma.conversationFile.findMany({
-        where: { id: { in: input.fileIds }, conversationId: input.conversationId, userId: input.userId },
-        select: { id: true, fileType: true, originalName: true, blobUrl: true, mimeType: true },
-      });
-      for (const f of files) {
-        if (f.fileType === "pdf" || f.fileType === "image") {
-          const ref: CapitalFileRefBlock = {
-            type: "capital_file_ref",
-            fileId: f.id,
-            originalName: f.originalName,
-            blobUrl: f.blobUrl,
-            mediaType: f.mimeType,
-          };
-          userBlocks.push(ref);
-        } else {
-          // OFX/CSV never go in as a content block (they're read via
-          // get_parsed_rows, never transcribed) - but the model still
-          // needs a text cue that something was just attached, or a
-          // file-only send with no PDF would otherwise leave userBlocks
-          // empty going into the "no message at all" fallback below.
-          attachedNonPdfNames.push(f.originalName);
-        }
-      }
-    }
-    if (userBlocks.length === 0 && attachedNonPdfNames.length > 0) {
-      userBlocks.push({
-        type: "text",
-        text: `[Anexei ${attachedNonPdfNames.length === 1 ? "o arquivo" : "os arquivos"} ${attachedNonPdfNames.join(", ")} à conversa - veja list_statement_files.]`,
-      });
-    }
-    if (userBlocks.length === 0) {
-      userBlocks.push({ type: "text", text: "(mensagem vazia)" });
-    }
-
-    const userMessage = await insertAgentMessage(
-      {
-        conversationId: input.conversationId,
-        turnId: turn.id,
-        role: "user",
-        content: userBlocks,
-        kind: input.cardResponse ? "card_response" : "user_text",
-      },
-      prisma
-    );
-    emit({
-      type: "message_created",
-      message: {
-        id: userMessage.id,
-        role: "user",
-        kind: userMessage.kind,
-        createdAt: userMessage.createdAt.toISOString(),
-      },
-    });
-    await touchConversation(input.conversationId, prisma);
-    if (!input.cardResponse) {
-      await maybeGenerateConversationTitle(input.conversationId, input.text, attachedNonPdfNames);
-    }
+    if (!input.retry) await saveUserMessage(input, turn.id, emit);
 
     if (!anthropic) {
       // Thrown, not returned: the shared catch block below still needs
@@ -257,10 +273,15 @@ export async function runAgentTurn(input: RunAgentTurnInput, emit: EmitFn): Prom
     const tools: Anthropic.ToolUnion[] = [...toAnthropicTools(AGENT_TOOLS), webSearchTool];
     const ctx = { userId: input.userId, conversationId: input.conversationId, turnId: turn.id, db: prisma };
 
-    let iterations = 0;
     let budgetExceeded = false;
+    let iterationCapHit = false;
 
-    iterationLoop: while (iterations < maxIterations) {
+    iterationLoop: while (true) {
+      // The model still wants its tools after the last allowed round.
+      if (iterations >= maxIterations) {
+        iterationCapHit = true;
+        break;
+      }
       iterations++;
 
       const currentStatus = await fetchAgentTurnStatus(turn.id, prisma);
@@ -455,10 +476,12 @@ export async function runAgentTurn(input: RunAgentTurnInput, emit: EmitFn): Prom
       }
     }
 
-    if (budgetExceeded) {
-      turnError = "Orçamento do turno atingido - envie outra mensagem para continuar.";
-    } else if (iterations >= maxIterations) {
-      turnError = "Limite de iterações do turno atingido - envie outra mensagem para continuar.";
+    if (budgetExceeded || iterationCapHit) {
+      turnError = budgetExceeded
+        ? "Orçamento do turno atingido - envie outra mensagem para continuar."
+        : "Limite de iterações do turno atingido - envie outra mensagem para continuar.";
+      // The turn completes (its work is saved), but the UI must say it stopped short.
+      emit({ type: "error", code: TURN_LIMIT_CODE, message: turnError, retryable: false });
     }
   } catch (error) {
     status = "failed";
@@ -470,6 +493,7 @@ export async function runAgentTurn(input: RunAgentTurnInput, emit: EmitFn): Prom
     turn.id,
     {
       status,
+      iterations,
       inputTokens: totalInput,
       outputTokens: totalOutput,
       cacheCreationInputTokens: totalCacheCreate,

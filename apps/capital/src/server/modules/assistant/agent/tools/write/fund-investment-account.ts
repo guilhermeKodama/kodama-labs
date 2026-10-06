@@ -1,12 +1,12 @@
 import { z } from "zod";
 import { defineTool } from "../registry";
-import { fundInvestmentAccount, withdrawInvestmentAccount } from "../../../../investments/services/fund-investment-account";
-import { parseLocalDate } from "@capital/server/lib/date-utils";
+import { formatDateOnly, parseLocalDate } from "@capital/server/lib/date-utils";
+import { moveBrokerageCash } from "@capital/server/modules/investments/services/portfolio";
 
 export const fundInvestmentAccountTool = defineTool({
   name: "fund_investment_account",
   description:
-    "Move cash between an investment account and the checking account of the business/personal entity that owns it - deposit sends money into the investment account's cash balance (and creates a matching expense on the entity), withdraw brings it back out (and creates a matching income). Does NOT require plan confirmation - it is one bounded, explicitly-requested movement (not bulk-derived from an uploaded file), and it is fully reversible: deleting the linked movement via record_investment_transaction reverses both the cash balance and the entity transaction. Every call is audited.",
+    "Move cash between an investment account and the main checking account of the business/personal entity that owns it - deposit sends money into the investment account (an investment_deposit transfer), withdraw brings it back (an investment_withdrawal transfer). Neither side counts as income or expense. Does NOT require plan confirmation - it is one bounded, explicitly-requested movement (not bulk-derived from an uploaded file), and it is reversible from the trash/undo like any entry. Every call is audited.",
   inputSchema: z.object({
     action: z.enum(["deposit", "withdraw"]),
     accountId: z.string(),
@@ -18,27 +18,24 @@ export const fundInvestmentAccountTool = defineTool({
   }),
   access: "write_domain",
   handler: async (ctx, input) => {
-    const args = {
-      accountId: input.accountId,
-      amount: input.amount,
-      currency: input.currency,
-      exchangeRate: input.exchangeRate,
-      description: input.description,
-      date: parseLocalDate(input.date),
-    };
-
-    const result =
-      input.action === "deposit"
-        ? await fundInvestmentAccount(ctx.userId, args, ctx.db)
-        : await withdrawInvestmentAccount(ctx.userId, args, ctx.db);
-
+    const result = await moveBrokerageCash(
+      ctx.userId,
+      {
+        accountId: input.accountId,
+        direction: input.action,
+        amount: input.amount,
+        currency: input.currency,
+        exchangeRate: input.exchangeRate,
+        description: input.description,
+        date: formatDateOnly(parseLocalDate(input.date)),
+      },
+      ctx.db
+    );
     return {
-      account: result.account,
-      linkedTransaction: result.linkedTransaction,
-      createdRecords: [
-        { model: "InvestmentAccount", id: result.account.id },
-        { model: "Transaction", id: result.linkedTransaction.id },
-      ],
+      transferGroupId: result.transferGroupId,
+      entryIds: result.entryIds,
+      batchId: result.batchId,
+      createdRecords: [{ model: "TransferGroup", id: result.transferGroupId! }],
     };
   },
 });

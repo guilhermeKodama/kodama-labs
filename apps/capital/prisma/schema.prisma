@@ -13,11 +13,13 @@ datasource db {
 // ENUMS
 // ============================================
 
+// Kind of an Entity: the user's PF or one of their businesses.
 enum EntityType {
   business
   personal
 }
 
+// Category kind (kept name for compatibility with the MCP/assistant contracts).
 enum TransactionType {
   income
   expense
@@ -30,6 +32,25 @@ enum TransferDirection {
   reimbursement
   investment_deposit
   investment_withdrawal
+  card_payment
+  between_accounts
+}
+
+enum AccountType {
+  checking
+  credit_card
+  brokerage
+  cash
+}
+
+// Kind of a ledger entry. Transfer legs are `transfer`, except reimbursement
+// legs, which are `expense` on both sides (the payer books the cost, the
+// receiver books a negative expense) so P&L stays correct per entity.
+enum LedgerKind {
+  income
+  expense
+  transfer
+  investment
 }
 
 enum RecurrenceFrequency {
@@ -44,12 +65,6 @@ enum BudgetPeriod {
   yearly
 }
 
-enum BillStatus {
-  pending
-  paid
-  overdue
-}
-
 enum AssetClass {
   stocks
   fii
@@ -60,6 +75,26 @@ enum AssetClass {
   savings
   international_stocks
   international_etf
+}
+
+// The six classes the portfolio screen and the allocation targets use. Each
+// holding maps its AssetClass onto one of these (investments/lib/allocation-class.ts)
+// unless InvestmentHolding.allocationClass overrides it. `cash` is broker cash.
+enum AllocationClass {
+  fixed_income
+  br_stocks
+  fii
+  international
+  crypto
+  cash
+}
+
+// Kind of an income operation (dividend / yield_payment).
+enum IncomeType {
+  dividend
+  jcp
+  fii_income
+  interest
 }
 
 enum FixedIncomeSubType {
@@ -129,29 +164,44 @@ enum StatementFileType {
 // ============================================
 
 model User {
-  id           String   @id @default(uuid())
-  email        String   @unique
-  passwordHash String
-  name         String
-  baseCurrency String   @default("USD")
-  theme        String   @default("system") // light, dark, system
-  dateFormat   String   @default("yyyy-MM-dd")
-  numberFormat String   @default("en-US") // en-US, pt-BR, de-DE
-  timezone     String   @default("America/Sao_Paulo")
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id               String   @id @default(uuid())
+  email            String   @unique
+  passwordHash     String
+  name             String
+  baseCurrency     String   @default("BRL")
+  theme            String   @default("light") // light, dark, system
+  dateFormat       String   @default("dd/MM/yyyy")
+  numberFormat     String   @default("pt-BR") // en-US, pt-BR, de-DE
+  timezone         String   @default("America/Sao_Paulo")
+  locale           String   @default("pt-BR") // pt-BR, en
+  // Daily cron refreshes the currencies' rates (PTAX / ECB) unless false.
+  fxAutoUpdate     Boolean  @default(true)
+  // Default saved views seeded so far (ensureDefaultViews claims the bump).
+  viewsSeedVersion Int      @default(0)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
 
-  // Relations
-  businesses               Business[]
-  personalAccount          PersonalAccount?
-  categories               Category[]
-  currencies               Currency[]
-  sessions                 Session[]
-  investmentAccounts       InvestmentAccount[]
-  merchantCategoryMappings MerchantCategoryMapping[]
-  fireGoal                 FireGoal?
-  agentConversations       AgentConversation[]
-  pushSubscriptions        PushSubscription[]
+  categories             Category[]
+  currencies             Currency[]
+  sessions               Session[]
+  fireGoal               FireGoal?
+  agentConversations     AgentConversation[]
+  pushSubscriptions      PushSubscription[]
+  entities               Entity[]
+  accounts               Account[]
+  ledgerEntries          LedgerEntry[]
+  transferGroups         TransferGroup[]
+  installmentPlans       InstallmentPlan[]
+  recurringRules         RecurringRule[]
+  categorizationRules    CategorizationRule[]
+  savedViews             SavedView[]
+  mutationBatches        MutationBatch[]
+  portfolioTargets       PortfolioTarget[]
+  portfolioSnapshots     PortfolioSnapshot[]
+  budgets                Budget[]
+  notificationSettings   NotificationSettings?
+  notificationDispatches NotificationDispatch[]
+  apiTokens              ApiToken[]
 
   @@map("users")
 }
@@ -181,22 +231,100 @@ model PushSubscription {
   @@map("push_subscriptions")
 }
 
-// Idempotency ledger for reminder pushes: one row per (recurring item,
+// Idempotency ledger for reminder pushes: one row per (recurring rule,
 // occurrence, slot) so a cron tick that overlaps a prior one — or a re-run —
 // never double-sends. daysBefore >= 0 is a configured pre-due/day-of entry;
 // daysBefore < 0 is an overdue nag, where -N means "N days overdue".
 model ReminderDispatch {
-  id                     String               @id @default(uuid())
-  recurringTransactionId String
-  recurringTransaction   RecurringTransaction @relation(fields: [recurringTransactionId], references: [id], onDelete: Cascade)
-  occurrenceDate         DateTime // the nextDueDate (noon UTC) this dispatch was computed against
-  daysBefore             Int
-  sentAt                 DateTime             @default(now())
-  sentCount              Int                  @default(0)
-  failCount              Int                  @default(0)
+  id              String        @id @default(uuid())
+  recurringRuleId String
+  recurringRule   RecurringRule @relation(fields: [recurringRuleId], references: [id], onDelete: Cascade)
+  occurrenceDate  DateTime // the nextDueDate (noon UTC) this dispatch was computed against
+  daysBefore      Int
+  sentAt          DateTime      @default(now())
+  sentCount       Int           @default(0)
+  failCount       Int           @default(0)
 
-  @@unique([recurringTransactionId, occurrenceDate, daysBefore])
+  @@unique([recurringRuleId, occurrenceDate, daysBefore])
   @@map("reminder_dispatches")
+}
+
+// Per-user push preferences. A missing row means the defaults below.
+model NotificationSettings {
+  userId            String   @id
+  dueEnabled        Boolean  @default(true)
+  dueDaysBefore     Int      @default(1)
+  dueHour           Int      @default(9) // local hour (User.timezone)
+  overdueEnabled    Boolean  @default(true)
+  billClosedEnabled Boolean  @default(true)
+  budgetEnabled     Boolean  @default(true)
+  budgetThreshold   Float    @default(0.9) // share of the budget spent
+  weeklyEnabled     Boolean  @default(false)
+  weeklyDow         Int      @default(1) // 0 = Sunday
+  weeklyHour        Int      @default(8)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("notification_settings")
+}
+
+// Idempotency ledger for the bill_closed / budget_threshold / weekly_summary
+// pushes. dedupeKey: statementId, budgetId:YYYY-MM or the ISO week.
+model NotificationDispatch {
+  id        String   @id @default(uuid())
+  userId    String
+  kind      String // bill_closed | budget_threshold | weekly_summary
+  dedupeKey String
+  sentAt    DateTime @default(now())
+  sentCount Int      @default(0)
+  failCount Int      @default(0)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, kind, dedupeKey])
+  @@map("notification_dispatches")
+}
+
+// ============================================
+// API TOKENS (MCP / REST clients)
+// ============================================
+
+// Personal access token (cap_live_<base62>). Only the sha256 hash is stored;
+// prefix and last4 identify it in the UI.
+model ApiToken {
+  id         String    @id @default(uuid())
+  userId     String
+  name       String
+  prefix     String
+  last4      String
+  tokenHash  String    @unique
+  scopes     String[]  @default([]) // empty = full access; ["read"] = read-only
+  lastUsedAt DateTime?
+  revokedAt  DateTime?
+  createdAt  DateTime  @default(now())
+
+  user    User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  clients ApiClient[]
+
+  @@index([userId])
+  @@map("api_tokens")
+}
+
+// An MCP client seen on a token (clientInfo from initialize).
+model ApiClient {
+  id            String   @id @default(uuid())
+  tokenId       String
+  clientName    String
+  clientVersion String?
+  firstSeenAt   DateTime @default(now())
+  lastUsedAt    DateTime @default(now())
+
+  token ApiToken @relation(fields: [tokenId], references: [id], onDelete: Cascade)
+
+  @@unique([tokenId, clientName])
+  @@map("api_clients")
 }
 
 // ============================================
@@ -207,34 +335,34 @@ model ReminderDispatch {
 // plan, not separate rows. `phases` is a value object (array of contribution
 // phases) validated by Zod at the API boundary. All inputs are editable.
 model FireGoal {
-  id                    String   @id @default(uuid())
-  userId                String   @unique
-  name                  String?
-  targetMonthlyIncome   Float // primary input: desired monthly income in retirement (today's money)
-  safeWithdrawalRate    Float    @default(0.035)
-  nominalAnnualReturn   Float    @default(0.10)
-  annualInflation       Float    @default(0.045) // IPCA; the real return is derived from these two
-  monthlyIncome         Float? // optional, for savings-rate reporting
-  planningMode          String   @default("by_date") // by_date | by_contribution
-  targetYear            Int? // used in by_date mode
-  phaseProfile          String   @default("front_loaded") // front_loaded | constant | back_loaded | custom
-  phases                Json // [{ order, label, fromMonth, toMonth | null, monthlyContribution }]
-  baristaMonthlyIncome  Float?
-  coastStopYear         Int?
-  leanMultiplier        Float    @default(0.7)
-  fatMultiplier         Float    @default(1.6)
-  includeEntityBalances Boolean  @default(false) // base = portfolio + investment cash
-  includeBusinessInvestments Boolean @default(false) // also count business-entity investments
-  currency              String   @default("BRL")
+  id                         String   @id @default(uuid())
+  userId                     String   @unique
+  name                       String?
+  targetMonthlyIncome        Float // primary input: desired monthly income in retirement (today's money)
+  safeWithdrawalRate         Float    @default(0.035)
+  nominalAnnualReturn        Float    @default(0.10)
+  annualInflation            Float    @default(0.045) // IPCA; the real return is derived from these two
+  monthlyIncome              Float? // optional, for savings-rate reporting
+  planningMode               String   @default("by_date") // by_date | by_contribution
+  targetYear                 Int? // used in by_date mode
+  phaseProfile               String   @default("front_loaded") // front_loaded | constant | back_loaded | custom
+  phases                     Json // [{ order, label, fromMonth, toMonth | null, monthlyContribution }]
+  baristaMonthlyIncome       Float?
+  coastStopYear              Int?
+  leanMultiplier             Float    @default(0.7)
+  fatMultiplier              Float    @default(1.6)
+  includeEntityBalances      Boolean  @default(false) // base = portfolio + investment cash
+  includeBusinessInvestments Boolean  @default(false) // also count business-entity investments
+  currency                   String   @default("BRL")
   // Whole-life modelling (ProjectionLab-style): accumulate then withdraw.
-  currentAge            Int? // anchors the age axis + decumulation horizon
-  retirementAge         Int? // optional explicit retirement age (else retire at FIRE)
-  lifeExpectancyAge     Int      @default(95)
-  annualVolatility      Float    @default(0.12) // sd of real annual return, for Monte Carlo
-  milestones            Json     @default("[]") // MilestoneDef[]: { id, name, type, value }
-  withdrawalStrategy    String   @default("perpetuity") // perpetuity (live off yield) | depletion (spend down to ~0 by life expectancy)
-  createdAt             DateTime @default(now())
-  updatedAt             DateTime @updatedAt
+  currentAge                 Int? // anchors the age axis + decumulation horizon
+  retirementAge              Int? // optional explicit retirement age (else retire at FIRE)
+  lifeExpectancyAge          Int      @default(95)
+  annualVolatility           Float    @default(0.12) // sd of real annual return, for Monte Carlo
+  milestones                 Json     @default("[]") // MilestoneDef[]: { id, name, type, value }
+  withdrawalStrategy         String   @default("perpetuity") // perpetuity (live off yield) | depletion (spend down to ~0 by life expectancy)
+  createdAt                  DateTime @default(now())
+  updatedAt                  DateTime @updatedAt
 
   user      User           @relation(fields: [userId], references: [id], onDelete: Cascade)
   snapshots FireSnapshot[]
@@ -275,7 +403,6 @@ model Session {
   expiresAt DateTime
   createdAt DateTime @default(now())
 
-  // Relations
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
@@ -284,253 +411,265 @@ model Session {
 }
 
 // ============================================
-// BUSINESS
+// LEDGER - one table for every money movement
+//
+// Entity (PF + businesses) -> Account (checking / credit card / brokerage /
+// cash) -> LedgerEntry. Transfers are a TransferGroup with two legs, card
+// purchases are entries on the card account grouped by CardStatement, and
+// paying a card bill is a card_payment transfer from checking to the card,
+// so it never double-counts as an expense.
+//
+// Money columns are Decimal. `amount` is signed from the account's point of
+// view (outflow < 0). `amountBase` is the same value in the user's base
+// currency, fixed at write time with the rate in force then.
 // ============================================
 
-model Business {
-  id              String   @id @default(uuid())
+model Entity {
+  id              String     @id @default(uuid())
   userId          String
+  kind            EntityType
   name            String
   description     String?
-  defaultCurrency String   @default("USD")
+  defaultCurrency String     @default("BRL")
+  taxRate         Float      @default(0)
   color           String?
-  taxRate         Float    @default(0) // Tax rate percentage
-  initialBalance  Float    @default(0)
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  archivedAt      DateTime?
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
 
-  // Relations
-  user                   User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
-  transactions           Transaction[]
-  budgets                Budget[]
-  recurringTransactions  RecurringTransaction[]
-  transfersFrom          Transfer[]             @relation("TransferFrom")
-  transfersTo            Transfer[]             @relation("TransferTo")
-  recurringTransfersFrom RecurringTransfer[]    @relation("RecurringTransferFrom")
-  recurringTransfersTo   RecurringTransfer[]    @relation("RecurringTransferTo")
-  creditCards            CreditCard[]
-  investmentAccounts     InvestmentAccount[]
-  statementImports       StatementImport[]
+  user                User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accounts            Account[]
+  ledgerEntries       LedgerEntry[]
+  budgets             Budget[]
+  recurringRules      RecurringRule[]
+  categorizationRules CategorizationRule[]
+  imports             Import[]
+  portfolioSnapshots  PortfolioSnapshot[]
 
   @@index([userId])
-  @@map("businesses")
+  @@map("entities")
 }
 
-// ============================================
-// PERSONAL ACCOUNT
-// ============================================
+model Account {
+  id               String      @id @default(uuid())
+  userId           String
+  entityId         String
+  type             AccountType
+  name             String
+  institution      String?
+  currency         String      @default("BRL")
+  // Bank account number, card last four digits or broker account number.
+  externalId       String?
+  initialBalance   Decimal     @default(0) @db.Decimal(18, 4)
+  // The entity's main checking account (created for every entity).
+  isDefault        Boolean     @default(false)
+  color            String?
+  // Credit card fields
+  creditLimit      Decimal?    @db.Decimal(18, 4)
+  closingDay       Int?
+  dueDay           Int?
+  payFromAccountId String?
+  archivedAt       DateTime?
+  createdAt        DateTime    @default(now())
+  updatedAt        DateTime    @updatedAt
 
-model PersonalAccount {
-  id              String   @id @default(uuid())
-  userId          String   @unique
-  defaultCurrency String   @default("USD")
-  taxRate         Float    @default(0) // Tax rate percentage
-  initialBalance  Float    @default(0)
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  user             User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  entity           Entity              @relation(fields: [entityId], references: [id], onDelete: Cascade)
+  payFromAccount   Account?            @relation("CardPayFrom", fields: [payFromAccountId], references: [id], onDelete: SetNull)
+  paidCards        Account[]           @relation("CardPayFrom")
+  ledgerEntries    LedgerEntry[]
+  cardStatements   CardStatement[]
+  installmentPlans InstallmentPlan[]
+  recurringRules   RecurringRule[]     @relation("RecurringRuleAccount")
+  recurringTargets RecurringRule[]     @relation("RecurringRuleToAccount")
+  imports          Import[]
+  holdings         InvestmentHolding[]
 
-  // Relations
-  user                   User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
-  transactions           Transaction[]
-  budgets                Budget[]
-  recurringTransactions  RecurringTransaction[]
-  transfersFrom          Transfer[]             @relation("PersonalTransferFrom")
-  transfersTo            Transfer[]             @relation("PersonalTransferTo")
-  recurringTransfersFrom RecurringTransfer[]    @relation("PersonalRecurringTransferFrom")
-  recurringTransfersTo   RecurringTransfer[]    @relation("PersonalRecurringTransferTo")
-  creditCards            CreditCard[]
-  investmentAccounts     InvestmentAccount[]
-  statementImports       StatementImport[]
-
-  @@map("personal_accounts")
-}
-
-// ============================================
-// TRANSACTION
-// ============================================
-
-model Transaction {
-  id                     String          @id @default(uuid())
-  entityType             EntityType
-  type                   TransactionType
-  amount                 Float
-  currency               String
-  exchangeRate           Float           @default(1)
-  description            String
-  category               String
-  date                   DateTime
-  isTaxDeductible        Boolean         @default(false)
-  recurringTransactionId String?
-  externalId             String?
-  statementImportId      String?
-  createdAt              DateTime        @default(now())
-  updatedAt              DateTime        @updatedAt
-
-  // Relations - polymorphic association
-  businessId                  String?
-  business                    Business?               @relation(fields: [businessId], references: [id], onDelete: Cascade)
-  personalAccountId           String?
-  personalAccount             PersonalAccount?        @relation(fields: [personalAccountId], references: [id], onDelete: Cascade)
-  recurringTransaction        RecurringTransaction?   @relation(fields: [recurringTransactionId], references: [id], onDelete: SetNull)
-  statementImport             StatementImport?        @relation(fields: [statementImportId], references: [id], onDelete: SetNull)
-  creditCardBills             CreditCardBill[]
-  creditCardStatementPayment  CreditCardStatement?
-  linkedInvestmentTransaction InvestmentTransaction?
-  attachments                 Attachment[]
-
-  @@unique([externalId, businessId])
-  @@unique([externalId, personalAccountId])
-  @@index([businessId])
-  @@index([personalAccountId])
-  @@index([entityType])
+  @@index([userId])
+  @@index([entityId])
   @@index([type])
-  @@index([date])
-  @@index([category])
-  @@index([externalId])
-  @@map("transactions")
+  @@map("accounts")
 }
 
-// ============================================
-// TRANSFER
-// ============================================
-
-model Transfer {
-  id                  String            @id @default(uuid())
-  fromEntityType      EntityType
-  toEntityType        EntityType
-  direction           TransferDirection
-  amount              Float
+model LedgerEntry {
+  id                  String     @id @default(uuid())
+  userId              String
+  entityId            String
+  accountId           String
+  kind                LedgerKind
+  amount              Decimal    @db.Decimal(18, 4)
   currency            String
-  exchangeRate        Float             @default(1)
-  description         String?
+  // Base-currency units per 1 unit of `currency`.
+  exchangeRate        Decimal    @default(1) @db.Decimal(18, 8)
+  amountBase          Decimal    @db.Decimal(18, 4)
+  // When the movement happened (shown in the UI).
   date                DateTime
+  // When it counts for P&L and budgets. Card purchases count on their
+  // statement's closing date; everything else equals `date`.
+  effectiveDate       DateTime
+  description         String
+  notes               String?
+  merchantName        String?
+  categoryId          String?
+  isTaxDeductible     Boolean    @default(false)
+  isAutoCategorized   Boolean    @default(false)
+  // The categorization rule that assigned categoryId, when one did.
+  categorizedByRuleId String?
+  transferGroupId     String?
+  cardStatementId     String?
+  installmentPlanId   String?
+  installmentNumber   Int?
+  recurringRuleId     String?
+  importId            String?
   externalId          String?
-  recurringTransferId String?
-  createdAt           DateTime          @default(now())
-  updatedAt           DateTime          @updatedAt
+  metadata            Json?
+  deletedAt           DateTime?
+  createdAt           DateTime   @default(now())
+  updatedAt           DateTime   @updatedAt
 
-  // Relations - polymorphic association for from/to entities
-  fromBusinessId        String?
-  fromBusiness          Business?          @relation("TransferFrom", fields: [fromBusinessId], references: [id], onDelete: Cascade)
-  fromPersonalAccountId String?
-  fromPersonalAccount   PersonalAccount?   @relation("PersonalTransferFrom", fields: [fromPersonalAccountId], references: [id], onDelete: Cascade)
-  toBusinessId          String?
-  toBusiness            Business?          @relation("TransferTo", fields: [toBusinessId], references: [id], onDelete: Cascade)
-  toPersonalAccountId   String?
-  toPersonalAccount     PersonalAccount?   @relation("PersonalTransferTo", fields: [toPersonalAccountId], references: [id], onDelete: Cascade)
-  recurringTransfer     RecurringTransfer? @relation("GeneratedFromRecurring", fields: [recurringTransferId], references: [id], onDelete: SetNull)
+  user                User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  entity              Entity               @relation(fields: [entityId], references: [id], onDelete: Cascade)
+  account             Account              @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  category            Category?            @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  transferGroup       TransferGroup?       @relation(fields: [transferGroupId], references: [id], onDelete: Cascade)
+  cardStatement       CardStatement?       @relation(fields: [cardStatementId], references: [id], onDelete: SetNull)
+  installmentPlan     InstallmentPlan?     @relation(fields: [installmentPlanId], references: [id], onDelete: SetNull)
+  recurringRule       RecurringRule?       @relation(fields: [recurringRuleId], references: [id], onDelete: SetNull)
+  import              Import?              @relation(fields: [importId], references: [id], onDelete: SetNull)
+  categorizedByRule   CategorizationRule?  @relation(fields: [categorizedByRuleId], references: [id], onDelete: SetNull)
+  investmentOperation InvestmentOperation?
+  attachments         Attachment[]
 
-  // Investment account references (for investment_deposit / investment_withdrawal)
-  toInvestmentAccountId   String?
-  toInvestmentAccount     InvestmentAccount? @relation("TransferToInvestment", fields: [toInvestmentAccountId], references: [id], onDelete: Cascade)
-  fromInvestmentAccountId String?
-  fromInvestmentAccount   InvestmentAccount? @relation("TransferFromInvestment", fields: [fromInvestmentAccountId], references: [id], onDelete: Cascade)
-
-  attachments Attachment[]
-
-  @@index([fromBusinessId])
-  @@index([fromPersonalAccountId])
-  @@index([toBusinessId])
-  @@index([toPersonalAccountId])
-  @@index([toInvestmentAccountId])
-  @@index([fromInvestmentAccountId])
-  @@index([date])
-  @@index([externalId])
-  @@index([recurringTransferId])
-  @@map("transfers")
+  @@unique([accountId, externalId])
+  @@index([userId, date])
+  @@index([userId, effectiveDate])
+  @@index([accountId, date])
+  @@index([entityId])
+  @@index([categoryId])
+  @@index([transferGroupId])
+  @@index([cardStatementId])
+  @@index([installmentPlanId])
+  @@index([recurringRuleId])
+  @@index([importId])
+  @@index([categorizedByRuleId])
+  @@index([deletedAt])
+  @@map("ledger_entries")
 }
 
-// ============================================
-// RECURRING TRANSFER
-// ============================================
+model TransferGroup {
+  id              String            @id @default(uuid())
+  userId          String
+  direction       TransferDirection
+  description     String?
+  date            DateTime
+  recurringRuleId String?
+  importId        String?
+  externalId      String?
+  deletedAt       DateTime?
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
 
-model RecurringTransfer {
+  user            User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  recurringRule   RecurringRule?       @relation(fields: [recurringRuleId], references: [id], onDelete: SetNull)
+  import          Import?              @relation(fields: [importId], references: [id], onDelete: SetNull)
+  legs            LedgerEntry[]
+  cardStatement   CardStatement?
+  attachments     Attachment[]
+  // The investment operation this investment_deposit paid for.
+  fundedOperation InvestmentOperation?
+
+  @@index([userId, date])
+  @@index([recurringRuleId])
+  @@index([importId])
+  @@index([externalId])
+  @@map("transfer_groups")
+}
+
+model CardStatement {
+  id             String    @id @default(uuid())
+  accountId      String
+  month          String // YYYY-MM
+  closingDate    DateTime?
+  dueDate        DateTime?
+  totalAmount    Decimal?  @db.Decimal(18, 4)
+  // The card_payment transfer that settled this statement.
+  paymentGroupId String?   @unique
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  account      Account        @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  paymentGroup TransferGroup? @relation(fields: [paymentGroupId], references: [id], onDelete: SetNull)
+  entries      LedgerEntry[]
+
+  @@unique([accountId, month])
+  @@index([month])
+  @@map("card_statements")
+}
+
+model InstallmentPlan {
+  id                String   @id @default(uuid())
+  userId            String
+  accountId         String
+  description       String
+  totalAmount       Decimal  @db.Decimal(18, 4)
+  totalInstallments Int
+  installmentAmount Decimal  @db.Decimal(18, 4)
+  startDate         DateTime
+  isActive          Boolean  @default(true)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  user    User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  account Account       @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  entries LedgerEntry[]
+
+  @@index([userId])
+  @@index([accountId])
+  @@map("installment_plans")
+}
+
+// One template for both recurring entries and recurring transfers.
+model RecurringRule {
   id                String              @id @default(uuid())
-  fromEntityType    EntityType
-  toEntityType      EntityType
-  direction         TransferDirection
-  amount            Float
+  userId            String
+  entityId          String
+  accountId         String
+  kind              LedgerKind
+  // Positive; the sign comes from `kind` (expense/investment are outflows).
+  amount            Decimal             @db.Decimal(18, 4)
   currency          String
-  exchangeRate      Float               @default(1)
-  description       String?
+  // Explicit rate for every occurrence; null = the rate in force at booking.
+  exchangeRate      Decimal?            @db.Decimal(18, 8)
+  description       String
+  categoryId        String?
+  isTaxDeductible   Boolean             @default(false)
+  transferDirection TransferDirection?
+  toAccountId       String?
   frequency         RecurrenceFrequency
   startDate         DateTime
   endDate           DateTime?
   nextDueDate       DateTime
   lastGeneratedDate DateTime?
   isActive          Boolean             @default(true)
+  autoGenerate      Boolean             @default(true)
+  // Reminder-mode push config, see remindersConfigSchema.
+  reminders         Json?
   createdAt         DateTime            @default(now())
   updatedAt         DateTime            @updatedAt
 
-  // Relations - polymorphic association for from/to entities
-  fromBusinessId        String?
-  fromBusiness          Business?        @relation("RecurringTransferFrom", fields: [fromBusinessId], references: [id], onDelete: Cascade)
-  fromPersonalAccountId String?
-  fromPersonalAccount   PersonalAccount? @relation("PersonalRecurringTransferFrom", fields: [fromPersonalAccountId], references: [id], onDelete: Cascade)
-  toBusinessId          String?
-  toBusiness            Business?        @relation("RecurringTransferTo", fields: [toBusinessId], references: [id], onDelete: Cascade)
-  toPersonalAccountId   String?
-  toPersonalAccount     PersonalAccount? @relation("PersonalRecurringTransferTo", fields: [toPersonalAccountId], references: [id], onDelete: Cascade)
-
-  // Generated transfers
-  generatedTransfers Transfer[] @relation("GeneratedFromRecurring")
-
-  attachments Attachment[]
-
-  @@index([fromBusinessId])
-  @@index([fromPersonalAccountId])
-  @@index([toBusinessId])
-  @@index([toPersonalAccountId])
-  @@index([isActive])
-  @@index([nextDueDate])
-  @@map("recurring_transfers")
-}
-
-// ============================================
-// RECURRING TRANSACTION
-// ============================================
-
-model RecurringTransaction {
-  id                      String              @id @default(uuid())
-  entityType              EntityType
-  type                    TransactionType
-  amount                  Float
-  currency                String
-  exchangeRate            Float               @default(1)
-  description             String
-  category                String
-  frequency               RecurrenceFrequency
-  startDate               DateTime
-  endDate                 DateTime?
-  nextDueDate             DateTime
-  lastGeneratedDate       DateTime?
-  isActive                Boolean             @default(true)
-  autoGenerateTransaction Boolean             @default(true)
-  // Reminder-mode push config: { entries: [{daysBefore, time}], overdue: {enabled, time} }.
-  // Validated by remindersConfigSchema at the API boundary. NULL = feature not
-  // configured for this row (the reminder cron skips it entirely).
-  reminders               Json?
-  createdAt               DateTime            @default(now())
-  updatedAt               DateTime            @updatedAt
-
-  // Relations - polymorphic association
-  businessId        String?
-  business          Business?        @relation(fields: [businessId], references: [id], onDelete: Cascade)
-  personalAccountId String?
-  personalAccount   PersonalAccount? @relation(fields: [personalAccountId], references: [id], onDelete: Cascade)
-
-  // Generated transactions
-  generatedTransactions Transaction[]
-
+  user               User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  entity             Entity             @relation(fields: [entityId], references: [id], onDelete: Cascade)
+  account            Account            @relation("RecurringRuleAccount", fields: [accountId], references: [id], onDelete: Cascade)
+  toAccount          Account?           @relation("RecurringRuleToAccount", fields: [toAccountId], references: [id], onDelete: Cascade)
+  category           Category?          @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  entries            LedgerEntry[]
+  transferGroups     TransferGroup[]
   attachments        Attachment[]
   reminderDispatches ReminderDispatch[]
 
-  @@index([businessId])
-  @@index([personalAccountId])
-  @@index([entityType])
-  @@index([isActive])
-  @@index([nextDueDate])
-  @@map("recurring_transactions")
+  @@index([userId])
+  @@index([isActive, nextDueDate])
+  @@map("recurring_rules")
 }
 
 // ============================================
@@ -538,30 +677,32 @@ model RecurringTransaction {
 // ============================================
 
 model Budget {
-  id           String       @id @default(uuid())
-  entityType   EntityType
-  category     String
-  amount       Float
-  currency     String
-  period       BudgetPeriod
-  year         Int
-  month        Int? // 1-12 for monthly budgets
-  effectiveFrom DateTime    // Effective-dated budgets: when this budget takes effect
-  isActive     Boolean      @default(true)
-  createdAt    DateTime     @default(now())
-  updatedAt    DateTime     @updatedAt
+  id            String       @id @default(uuid())
+  userId        String
+  // Null = applies to all entities.
+  entityId      String?
+  categoryId    String
+  amount        Decimal      @db.Decimal(18, 4)
+  currency      String
+  period        BudgetPeriod
+  year          Int
+  month         Int? // 1-12 for monthly budgets
+  effectiveFrom DateTime // Effective-dated budgets: when this budget takes effect
+  rollover      Boolean      @default(false)
+  isActive      Boolean      @default(true)
+  // A version that ends the chain from effectiveFrom on ("delete from month").
+  isTombstone   Boolean      @default(false)
+  notes         String?
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
 
-  // Relations - polymorphic association
-  businessId        String?
-  business          Business?        @relation(fields: [businessId], references: [id], onDelete: Cascade)
-  personalAccountId String?
-  personalAccount   PersonalAccount? @relation(fields: [personalAccountId], references: [id], onDelete: Cascade)
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  entity   Entity?  @relation(fields: [entityId], references: [id], onDelete: Cascade)
+  category Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
 
-  @@unique([businessId, category, effectiveFrom])
-  @@unique([personalAccountId, category, effectiveFrom])
-  @@index([businessId])
-  @@index([personalAccountId])
-  @@index([entityType])
+  @@unique([userId, entityId, categoryId, period, effectiveFrom])
+  @@index([userId])
+  @@index([entityId])
   @@index([year, month])
   @@index([effectiveFrom])
   @@map("budgets")
@@ -572,21 +713,24 @@ model Budget {
 // ============================================
 
 model Category {
-  id        String          @id @default(uuid())
-  userId    String
-  name      String
-  type      TransactionType
-  color     String?
-  icon      String?
+  id         String          @id @default(uuid())
+  userId     String
+  name       String
+  type       TransactionType
+  color      String?
+  icon       String?
   isDefault  Boolean         @default(false)
   isSystem   Boolean         @default(false)
-  systemKey  String?         // Stable key for system categories (e.g., "credit_card", "home")
+  systemKey  String? // Stable key for system categories (e.g., "credit_card", "home")
   isArchived Boolean         @default(false) // Hidden from pickers; still valid on existing rows
-  createdAt DateTime        @default(now())
-  updatedAt DateTime        @updatedAt
+  createdAt  DateTime        @default(now())
+  updatedAt  DateTime        @updatedAt
 
-  // Relations
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user                User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  ledgerEntries       LedgerEntry[]
+  budgets             Budget[]
+  categorizationRules CategorizationRule[]
+  recurringRules      RecurringRule[]
 
   @@unique([userId, name, type])
   @@unique([userId, systemKey])
@@ -595,200 +739,42 @@ model Category {
   @@map("categories")
 }
 
-// ============================================
-// CREDIT CARD
-// ============================================
+model CategorizationRule {
+  id         String    @id @default(uuid())
+  userId     String
+  entityId   String?
+  // "equals" compares the normalized description; "contains" and "regex"
+  // match the raw description case-insensitively.
+  matchType  String    @default("equals")
+  pattern    String
+  categoryId String
+  source     String    @default("manual") // manual | ai | bulk
+  hitCount   Int       @default(0)
+  lastHitAt  DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
 
-model CreditCard {
-  id             String     @id @default(uuid())
-  entityType     EntityType
-  bankName       String
-  lastFourDigits String
-  nickname       String?
-  creditLimit    Float
-  closingDay     Int // 1-31
-  dueDay         Int // 1-31
-  color          String     @default("#3B82F6")
-  currency       String
-  isActive       Boolean    @default(true)
-  createdAt      DateTime   @default(now())
-  updatedAt      DateTime   @updatedAt
+  user               User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  entity             Entity?       @relation(fields: [entityId], references: [id], onDelete: Cascade)
+  category           Category      @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  categorizedEntries LedgerEntry[]
 
-  // Relations - polymorphic association
-  businessId        String?
-  business          Business?        @relation(fields: [businessId], references: [id], onDelete: Cascade)
-  personalAccountId String?
-  personalAccount   PersonalAccount? @relation(fields: [personalAccountId], references: [id], onDelete: Cascade)
-
-  bills        CreditCardBill[]
-  statements   CreditCardStatement[]
-  installments Installment[]
-
-  @@index([businessId])
-  @@index([personalAccountId])
-  @@index([entityType])
-  @@index([isActive])
-  @@map("credit_cards")
-}
-
-// ============================================
-// CREDIT CARD STATEMENT (monthly cycle)
-// ============================================
-
-model CreditCardStatement {
-  id                       String     @id @default(uuid())
-  creditCardId             String
-  month                    String // YYYY-MM format
-  closingDate              DateTime?
-  dueDate                  DateTime?
-  totalAmount              Float?
-  billPaymentTransactionId String?    @unique // The Transaction that paid this bill (excluded from expense totals)
-  createdAt                DateTime   @default(now())
-  updatedAt                DateTime   @updatedAt
-
-  // Relations
-  creditCard             CreditCard        @relation(fields: [creditCardId], references: [id], onDelete: Cascade)
-  billPaymentTransaction Transaction?      @relation(fields: [billPaymentTransactionId], references: [id], onDelete: SetNull)
-  purchases              BillTransaction[]
-
-  @@unique([creditCardId, month])
-  @@index([creditCardId])
-  @@index([month])
-  @@index([billPaymentTransactionId])
-  @@map("credit_card_statements")
-}
-
-// ============================================
-// CREDIT CARD BILL (legacy - being phased out, use CreditCardStatement)
-// ============================================
-
-model CreditCardBill {
-  id                   String     @id @default(uuid())
-  creditCardId         String
-  transactionId        String? // Links to an expense Transaction (optional)
-  closingDate          DateTime
-  dueDate              DateTime
-  totalAmount          Float
-  status               BillStatus @default(pending)
-  categorizationStatus String     @default("pending") // pending, processing, completed, failed
-  csvFileName          String?
-  createdAt            DateTime   @default(now())
-  updatedAt            DateTime   @updatedAt
-
-  // Relations
-  creditCard       CreditCard        @relation(fields: [creditCardId], references: [id], onDelete: Cascade)
-  transaction      Transaction?      @relation(fields: [transactionId], references: [id], onDelete: SetNull)
-  billTransactions BillTransaction[]
-
-  @@index([creditCardId])
-  @@index([transactionId])
-  @@index([status])
-  @@index([dueDate])
-  @@index([categorizationStatus])
-  @@map("credit_card_bills")
-}
-
-// ============================================
-// BILL TRANSACTION (line items from CSV / purchases on a statement)
-// ============================================
-
-model BillTransaction {
-  id                String   @id @default(uuid())
-  billId            String? // Legacy: links to CreditCardBill (being phased out)
-  statementId       String? // New: links to CreditCardStatement
-  category          String
-  transactionDate   DateTime
-  description       String
-  merchantName      String?
-  amount            Float
-  currency          String
-  installmentNumber Int?
-  totalInstallments Int?
-  isAutoCategorized Boolean  @default(false)
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
-
-  // Relations
-  bill        CreditCardBill?      @relation(fields: [billId], references: [id], onDelete: Cascade)
-  statement   CreditCardStatement? @relation(fields: [statementId], references: [id], onDelete: Cascade)
-  installment Installment?
-
-  @@index([billId])
-  @@index([statementId])
-  @@index([category])
-  @@index([transactionDate])
-  @@map("bill_transactions")
-}
-
-// ============================================
-// INSTALLMENT (parcela tracking)
-// ============================================
-
-model Installment {
-  id                String   @id @default(uuid())
-  creditCardId      String
-  billTransactionId String   @unique
-  description       String
-  totalAmount       Float
-  totalInstallments Int
-  paidInstallments  Int      @default(0)
-  startDate         DateTime
-  installmentAmount Float
-  isActive          Boolean  @default(true)
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
-
-  // Relations
-  creditCard      CreditCard      @relation(fields: [creditCardId], references: [id], onDelete: Cascade)
-  billTransaction BillTransaction @relation(fields: [billTransactionId], references: [id], onDelete: Cascade)
-
-  @@index([creditCardId])
-  @@index([isActive])
-  @@map("installments")
-}
-
-// ============================================
-// INVESTMENT ACCOUNT (broker/platform)
-// ============================================
-
-model InvestmentAccount {
-  id          String     @id @default(uuid())
-  userId      String
-  name        String // e.g., "Interactive Brokers", "NuInvest", "Tesouro Direto"
-  broker      String? // Broker identifier
-  externalId  String? // Broker account number, when known (statement imports)
-  entityType  EntityType
-  currency    String     @default("BRL")
-  cashBalance Float      @default(0) // Available cash in the account (not invested)
-  isActive    Boolean    @default(true)
-  createdAt   DateTime   @default(now())
-  updatedAt   DateTime   @updatedAt
-
-  // Relations - polymorphic association
-  user              User                @relation(fields: [userId], references: [id], onDelete: Cascade)
-  businessId        String?
-  business          Business?           @relation(fields: [businessId], references: [id], onDelete: Cascade)
-  personalAccountId String?
-  personalAccount   PersonalAccount?    @relation(fields: [personalAccountId], references: [id], onDelete: Cascade)
-  holdings          InvestmentHolding[]
-  transfersTo       Transfer[]          @relation("TransferToInvestment")
-  transfersFrom     Transfer[]          @relation("TransferFromInvestment")
-
+  @@unique([userId, matchType, pattern])
   @@index([userId])
-  @@index([entityType])
-  @@index([businessId])
-  @@index([personalAccountId])
-  @@map("investment_accounts")
+  @@map("categorization_rules")
 }
 
 // ============================================
-// INVESTMENT HOLDING (position/asset)
+// INVESTMENTS
 // ============================================
 
 model InvestmentHolding {
   id              String              @id @default(uuid())
+  // Brokerage Account.
   accountId       String
   assetClass      AssetClass
+  // Overrides the class derived from assetClass/currency on the portfolio screen.
+  allocationClass AllocationClass?
   subType         FixedIncomeSubType? // Only for fixed_income assets
   ticker          String? // For stocks, FIIs, crypto, ETFs (e.g., PETR4, HGLG11, BTC)
   name            String // Descriptive name (e.g., "CDB Nubank 120% CDI")
@@ -802,9 +788,8 @@ model InvestmentHolding {
   createdAt       DateTime            @default(now())
   updatedAt       DateTime            @updatedAt
 
-  // Relations
-  account      InvestmentAccount       @relation(fields: [accountId], references: [id], onDelete: Cascade)
-  transactions InvestmentTransaction[]
+  account    Account               @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  operations InvestmentOperation[]
 
   @@index([accountId])
   @@index([assetClass])
@@ -813,39 +798,96 @@ model InvestmentHolding {
   @@map("investment_holdings")
 }
 
-// ============================================
-// INVESTMENT TRANSACTION (buy/sell/dividend/yield)
-// ============================================
-
-model InvestmentTransaction {
-  id           String                    @id @default(uuid())
-  holdingId    String
-  type         InvestmentTransactionType
-  quantity     Float? // Number of units (for stocks, crypto, FIIs)
-  pricePerUnit Float? // Price paid per unit (for stocks, crypto, FIIs)
-  totalAmount  Float // Total cash value of the transaction
-  fees         Float                     @default(0) // Brokerage fees, taxes
-  date         DateTime
-  notes        String?
+model InvestmentOperation {
+  id             String                    @id @default(uuid())
+  holdingId      String
+  type           InvestmentTransactionType
+  quantity       Float? // Number of units (for stocks, crypto, FIIs)
+  pricePerUnit   Float? // Price paid per unit (for stocks, crypto, FIIs)
+  totalAmount    Float // Total cash value of the transaction
+  fees           Float                     @default(0) // Brokerage fees, taxes
+  // Income operations: what kind of income, and the tax withheld at source
+  // (the cash leg is totalAmount - taxWithheld).
+  incomeType     IncomeType?
+  taxWithheld    Float                     @default(0)
+  date           DateTime
+  notes          String?
   // Dedup key for statement imports. Native broker id when available;
   // otherwise a deterministic hash (see agent knowledge base
   // 20-dedup-rules.md) so re-uploading the same statement reconciles
   // cleanly instead of duplicating positions.
-  externalId   String?
-  createdAt    DateTime                  @default(now())
-  updatedAt    DateTime                  @updatedAt
+  externalId     String?
+  // Cash leg of the operation on the brokerage account (buy/sell/income).
+  cashEntryId    String?                   @unique
+  // investment_deposit transfer that brought the cash for this operation.
+  fundingGroupId String?                   @unique
+  createdAt      DateTime                  @default(now())
+  updatedAt      DateTime                  @updatedAt
 
-  // Relations
-  holding             InvestmentHolding @relation(fields: [holdingId], references: [id], onDelete: Cascade)
-  linkedTransactionId String?           @unique
-  linkedTransaction   Transaction?      @relation(fields: [linkedTransactionId], references: [id], onDelete: SetNull)
+  holding      InvestmentHolding @relation(fields: [holdingId], references: [id], onDelete: Cascade)
+  cashEntry    LedgerEntry?      @relation(fields: [cashEntryId], references: [id], onDelete: SetNull)
+  fundingGroup TransferGroup?    @relation(fields: [fundingGroupId], references: [id], onDelete: SetNull)
 
   @@unique([holdingId, externalId])
   @@index([holdingId])
   @@index([type])
   @@index([date])
   @@index([externalId])
-  @@map("investment_transactions")
+  @@map("investment_operations")
+}
+
+model PortfolioTarget {
+  id              String          @id @default(uuid())
+  userId          String
+  allocationClass AllocationClass
+  targetPercent   Float // fraction of the portfolio, 0-1
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, allocationClass])
+  @@map("portfolio_targets")
+}
+
+// Month-end portfolio position per entity, in base currency. The live month
+// is upserted by a daily cron and closed when the month turns; months before
+// the feature existed are backfilled from cost basis (estimated = true).
+model PortfolioSnapshot {
+  id              String   @id @default(uuid())
+  userId          String
+  entityId        String
+  period          Int // year*100 + month (e.g. 202609)
+  asOf            DateTime
+  marketValueBase Decimal  @db.Decimal(18, 4)
+  cashBase        Decimal  @db.Decimal(18, 4)
+  costBasisBase   Decimal  @db.Decimal(18, 4)
+  // Cumulative money moved into brokers up to asOf.
+  contributedBase Decimal  @db.Decimal(18, 4)
+  // Money moved into brokers minus money taken out, within the month.
+  netFlowBase     Decimal  @db.Decimal(18, 4)
+  byClass         Json // { [AllocationClass]: marketValueBase }
+  estimated       Boolean  @default(false)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  entity Entity @relation(fields: [entityId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, entityId, period])
+  @@index([entityId])
+  @@map("portfolio_snapshots")
+}
+
+// Benchmark series cached by a daily cron: CDI (BCB SGS 12, daily rate in %)
+// and IPCA (BCB SGS 433, monthly variation in %). `date` is noon UTC.
+model MarketIndexValue {
+  id        String   @id @default(uuid())
+  series    String // cdi | ipca
+  date      DateTime
+  value     Decimal  @db.Decimal(18, 8)
+  createdAt DateTime @default(now())
+
+  @@unique([series, date])
+  @@map("market_index_values")
 }
 
 // ============================================
@@ -853,16 +895,18 @@ model InvestmentTransaction {
 // ============================================
 
 model Currency {
-  id         String   @id @default(uuid())
-  userId     String
-  code       String // ISO 4217 code (e.g., USD, EUR, BRL)
-  name       String
-  symbol     String
-  manualRate Float    @default(1) // Rate relative to user's base currency
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  id            String    @id @default(uuid())
+  userId        String
+  code          String // ISO 4217 code (e.g., USD, EUR, BRL)
+  name          String
+  symbol        String
+  manualRate    Float     @default(1) // Rate relative to user's base currency
+  // Where manualRate came from: ptax | ecb (daily cron) | manual (the user).
+  source        String    @default("manual")
+  rateUpdatedAt DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
 
-  // Relations
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, code])
@@ -871,52 +915,30 @@ model Currency {
 }
 
 // ============================================
-// MERCHANT CATEGORY MAPPING (learned categories)
+// IMPORT (bulk import job tracker)
 // ============================================
 
-model MerchantCategoryMapping {
-  id                    String   @id @default(uuid())
-  userId                String
-  normalizedDescription String
-  category              String
-  source                String   @default("ai") // "manual" | "ai"
-  createdAt             DateTime @default(now())
-  updatedAt             DateTime @updatedAt
-
-  // Relations
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@unique([userId, normalizedDescription])
-  @@index([userId])
-  @@map("merchant_category_mappings")
-}
-
-// ============================================
-// STATEMENT IMPORT (bulk import job tracker)
-// ============================================
-
-model StatementImport {
-  id                   String     @id @default(uuid())
+model Import {
+  id                   String    @id @default(uuid())
   userId               String
-  entityType           EntityType
+  entityId             String?
+  accountId            String?
   bankName             String?
   fileName             String?
   transactionCount     Int
   ledgerBalance        Float?
   ledgerCurrency       String?
-  categorizationStatus String     @default("pending") // pending, processing, completed, failed
+  categorizationStatus String    @default("pending") // pending, processing, completed, failed
   // "manual" (existing wizard) or "agent" (assistant chat)
-  source               String     @default("manual")
+  source               String    @default("manual")
   revertedAt           DateTime?
-  createdAt            DateTime   @default(now())
-  updatedAt            DateTime   @updatedAt
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
 
-  // Relations - polymorphic association
-  businessId        String?
-  business          Business?        @relation(fields: [businessId], references: [id], onDelete: Cascade)
-  personalAccountId String?
-  personalAccount   PersonalAccount? @relation(fields: [personalAccountId], references: [id], onDelete: Cascade)
-  transactions      Transaction[]
+  entity         Entity?         @relation(fields: [entityId], references: [id], onDelete: Cascade)
+  account        Account?        @relation(fields: [accountId], references: [id], onDelete: SetNull)
+  ledgerEntries  LedgerEntry[]
+  transferGroups TransferGroup[]
 
   // Assistant linkage - set only when source == "agent"
   conversationId String?
@@ -926,10 +948,70 @@ model StatementImport {
 
   @@index([userId])
   @@index([categorizationStatus])
-  @@index([businessId])
-  @@index([personalAccountId])
+  @@index([entityId])
   @@index([conversationId])
-  @@map("statement_imports")
+  @@map("imports")
+}
+
+// ============================================
+// SAVED VIEWS + UNDO LOG
+// ============================================
+
+model SavedView {
+  id         String   @id @default(uuid())
+  userId     String
+  dataset    String   @default("ledger") // ledger | holdings | investment_ops
+  name       String
+  position   Int      @default(0)
+  isBuiltin  Boolean  @default(false)
+  builtinKey String?
+  // Key of the default view this row was seeded from (deleted ones never return).
+  seedKey    String?
+  isFavorite Boolean  @default(true)
+  // viewConfigSchema (modules/ledger/contracts.ts)
+  config     Json
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, builtinKey])
+  @@unique([userId, seedKey])
+  @@index([userId, dataset])
+  @@map("saved_views")
+}
+
+// Undo log. Every write through the ledger services records one batch with
+// before/after snapshots per touched row.
+model MutationBatch {
+  id        String    @id @default(uuid())
+  userId    String
+  op        String // create | update | delete | duplicate | restore | import | revert
+  source    String    @default("user") // user | import | assistant | mcp | system
+  summary   String?
+  undoneAt  DateTime?
+  createdAt DateTime  @default(now())
+
+  user    User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  records MutationRecord[]
+
+  @@index([userId, createdAt])
+  @@map("mutation_batches")
+}
+
+model MutationRecord {
+  id       String @id @default(uuid())
+  batchId  String
+  model    String // A MutationModel of the undo registry (src/server/modules/ledger/services/mutations.ts)
+  recordId String
+  before   Json?
+  after    Json?
+
+  batch MutationBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+
+  @@index([batchId])
+  @@index([model, recordId])
+  @@map("mutation_records")
 }
 
 // ============================================
@@ -947,19 +1029,16 @@ model Attachment {
   uploadedAt   DateTime       @default(now())
 
   // Polymorphic owner - exactly ONE of the following must be non-null
-  transactionId          String?
-  transaction            Transaction?          @relation(fields: [transactionId], references: [id], onDelete: Cascade)
-  transferId             String?
-  transfer               Transfer?             @relation(fields: [transferId], references: [id], onDelete: Cascade)
-  recurringTransactionId String?
-  recurringTransaction   RecurringTransaction? @relation(fields: [recurringTransactionId], references: [id], onDelete: Cascade)
-  recurringTransferId    String?
-  recurringTransfer      RecurringTransfer?    @relation(fields: [recurringTransferId], references: [id], onDelete: Cascade)
+  ledgerEntryId   String?
+  ledgerEntry     LedgerEntry?   @relation(fields: [ledgerEntryId], references: [id], onDelete: Cascade)
+  transferGroupId String?
+  transferGroup   TransferGroup? @relation(fields: [transferGroupId], references: [id], onDelete: Cascade)
+  recurringRuleId String?
+  recurringRule   RecurringRule? @relation(fields: [recurringRuleId], references: [id], onDelete: Cascade)
 
-  @@index([transactionId])
-  @@index([transferId])
-  @@index([recurringTransactionId])
-  @@index([recurringTransferId])
+  @@index([ledgerEntryId])
+  @@index([transferGroupId])
+  @@index([recurringRuleId])
   @@index([kind])
   @@map("attachments")
 }
@@ -971,27 +1050,27 @@ model Attachment {
 // import/revert plans the agent proposes from them. Domain writes only
 // ever happen through ImportPlan.status == "committed", which itself
 // requires "confirmed" - a state only the authenticated REST confirm
-// endpoint can set (see modules/assistant/routes/v1/post-plan-confirm.ts).
+// endpoint can set (see modules/assistant/routes/v2/post-plan-confirm.ts).
 // The agent's tool calls never reach Prisma directly; every tool wraps
 // an existing module service, and every write is audited in AgentAction.
 // ============================================
 
 model AgentConversation {
-  id            String                   @id @default(uuid())
+  id            String                  @id @default(uuid())
   userId        String
   title         String?
-  status        AgentConversationStatus  @default(active)
-  lastMessageAt DateTime                 @default(now())
-  createdAt     DateTime                 @default(now())
-  updatedAt     DateTime                 @updatedAt
+  status        AgentConversationStatus @default(active)
+  lastMessageAt DateTime                @default(now())
+  createdAt     DateTime                @default(now())
+  updatedAt     DateTime                @updatedAt
 
-  user             User               @relation(fields: [userId], references: [id], onDelete: Cascade)
-  messages         AgentMessage[]
-  turns            AgentTurn[]
-  files            ConversationFile[]
-  plans            ImportPlan[]
-  actions          AgentAction[]
-  statementImports StatementImport[]
+  user     User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages AgentMessage[]
+  turns    AgentTurn[]
+  files    ConversationFile[]
+  plans    ImportPlan[]
+  actions  AgentAction[]
+  imports  Import[]
 
   @@index([userId, lastMessageAt])
   @@map("agent_conversations")
@@ -1063,28 +1142,28 @@ model ConversationFile {
 }
 
 model ImportPlan {
-  id             String            @id @default(uuid())
+  id             String           @id @default(uuid())
   conversationId String
   userId         String
-  kind           ImportPlanKind    @default(import)
-  status         ImportPlanStatus  @default(proposed)
+  kind           ImportPlanKind   @default(import)
+  status         ImportPlanStatus @default(proposed)
   entityType     EntityType?
   entityId       String?
   fileId         String?
   payload        Json // validated plan (transactions/transfers/investmentTransactions/...)
   payloadHash    String // sha256 of payload - the UI confirm endpoint echoes this back
   summary        Json // counts for the plan/duplicate-review cards
-  warnings       Json              @default("[]")
+  warnings       Json             @default("[]")
   confirmedAt    DateTime?
   confirmedVia   String? // "ui_button"
   committedAt    DateTime?
-  createdAt      DateTime          @default(now())
-  updatedAt      DateTime          @updatedAt
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
 
-  conversation    AgentConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
-  file            ConversationFile? @relation(fields: [fileId], references: [id], onDelete: SetNull)
-  statementImport StatementImport?
-  actions         AgentAction[]
+  conversation AgentConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  file         ConversationFile? @relation(fields: [fileId], references: [id], onDelete: SetNull)
+  import       Import?
+  actions      AgentAction[]
 
   @@index([conversationId, status])
   @@map("import_plans")
@@ -1101,7 +1180,7 @@ model AgentAction {
   output         Json?
   status         String // "success" | "error"
   error          String?
-  createdRecords Json? // [{model:"Transaction",id},{model:"Transfer",id},...] - powers revert
+  createdRecords Json? // [{model:"LedgerEntry",id},{model:"TransferGroup",id},...] - powers revert
   durationMs     Int      @default(0)
   createdAt      DateTime @default(now())
 

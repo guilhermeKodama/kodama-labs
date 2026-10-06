@@ -385,6 +385,67 @@ pnpm build
 pnpm lint
 ```
 
+### Demo data
+
+`pnpm --filter @wallex/capital db:seed:demo` builds a demo user with the
+dataset of the new-UI mockup, so every screen has something real to show.
+It runs only against a `*_dev` / `*_test` database (same guard as `db:seed`).
+
+- **Login:** `demo@capital.test`. The password is `DEMO_USER_PASSWORD` in
+  `.env.example`; both can be overridden through `DEMO_USER_EMAIL` /
+  `DEMO_USER_PASSWORD`, but the email must end in `@capital.test`.
+- **Idempotent:** an existing demo user is deleted (cascade) and rebuilt.
+  Takes about 10 seconds.
+- **Dates:** the current month plays the mockup's September and the two
+  months before it its July and August. Everything up to day 22 of the
+  current month (the mockup's "today") is booked, so before the 22nd some
+  rows are dated in the future. `-- --month=YYYY-MM` picks another month;
+  `-- --dry-run` prints the investment plan without writing anything.
+
+What it creates, all through the app's services (so card statements, base
+amounts, rule hits and undo batches are the real ones; the batches carry
+source `system`, so ⌘Z never undoes the seed):
+
+- PF, Kodama LTDA (BRL, 6%, "Simples Nacional, anexo III") and Kodama LLC
+  (USD, "Recebe dos clientes internacionais"); Nubank, Inter PJ and Mercury,
+  four cards with limits and closing/due days, and the brokers XP, Tesouro
+  Direto, Avenue (USD), Binance, Inter Invest (LTDA) and IBKR (LLC, USD).
+- The mockup's categories, colors and "contains" rules (iFood, Uber, AWS…).
+- Transações: rows t1–t18 in the current month and the scaled July/August
+  history, the Distribuição de lucros LTDA → PF every month, the notebook in
+  10× on XP · cartão, the IPVA/IPTU, trips and PJ equipment the yearly
+  budgets count, and the card bills due so far paid from their accounts.
+- Recurring rules (Aluguel, Plano de saúde, SmartFit, AWS, Cursor, Figma,
+  Contabilizei, DAS, Aporte mensal), booked as the cron would have.
+- Monthly and yearly budgets (with notes) from the mockup's Orçamentos.
+- Carteira: eleven holdings opened a year back and bought monthly, so twelve
+  months of aportes match "Aportes por mês e classe" (≈ R$ 171 mil); a year
+  of proventos (FII income, dividends, JCP); prices and broker cash that land
+  on the mockup's values; the 40/20/10/25/5/0 targets; the FIRE goal
+  (R$ 12.250/mês, by contribution at R$ 15.000/mês).
+
+Opening balances are set so Nubank, Inter PJ, Mercury and XP end at the
+mockup's balances. Mercury only invoices from July on but pays IBKR
+US$ 370 every month, so it needs opening cash for that drawdown and would
+still end above US$ 18.240. In August the LLC distributes the surplus plus
+the drawdown (a profit distribution, not an aporte) to the PF, which
+absorbs it in its opening balances: XP first, then Nubank, each taking at
+most its lowest balance before August so neither goes negative. In
+2026-10 that is US$ 3.800 to XP and US$ 500 to Nubank; what does not fit
+(US$ 2.800 there, more when M0 is January to March, when Nubank has no
+room) stays as a dip in Mercury before July. The seed's last lines list
+every account whose running balance goes below zero.
+
+Known differences from the mockup: Transações has more rows than t1–t18 a
+month (broker deposits, the cash legs of buys and proventos, card bill
+payments, the LLC distribution), which the year of aportes and proventos
+needs; FIRE progress counts holdings only, so it reads about 29,7% instead
+of 30,6%; running balances dip below zero in a few places: Mercury before
+July (above), Nubank between the day-16 aportes and the day-20 LTDA
+distribution in some months, and Tesouro Direto, Avenue and IBKR by their
+later proventos and rounding (their opening cash pays the opening
+positions, and the cash they collect afterwards lowers it).
+
 ---
 
 ## Development Phases

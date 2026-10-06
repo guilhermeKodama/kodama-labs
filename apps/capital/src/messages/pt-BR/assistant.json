@@ -1,0 +1,137 @@
+{
+  "title": "Assistente",
+  "back": "← Voltar",
+  "newConversation": "Nova conversa",
+  "conversations": "Conversas",
+  "noConversations": "Nenhuma conversa ainda",
+  "untitled": "Conversa sem título",
+  "empty": {
+    "title": "Pergunte sobre as suas finanças",
+    "hint": "Ex.: “quanto gastei com mercado em setembro?”. Também dá para anexar extratos (OFX, CSV, PDF) e prints."
+  },
+  "composer": {
+    "placeholder": "Pergunte alguma coisa…",
+    "send": "Enviar",
+    "stop": "Parar",
+    "attach": "Anexar arquivo",
+    "drop": "Solte para anexar",
+    "remove": "Remover {name}",
+    "fileType": "{name}: só arquivos OFX, CSV, PDF e imagens.",
+    "fileTooLarge": "{name} passa de {max}."
+  },
+  "status": {
+    "thinking": "Pensando…",
+    "uploading": "Enviando arquivos…",
+    "stopped": "Interrompido",
+    "loading": "Carregando…"
+  },
+  "errors": {
+    "turnFailed": "O assistente não conseguiu responder.",
+    "turnLimit": "O assistente parou no limite desta resposta. Envie outra mensagem para continuar.",
+    "loadFailed": "Não deu para abrir a conversa.",
+    "listFailed": "Não deu para carregar as conversas.",
+    "retry": "Tentar de novo"
+  },
+  "tools": {
+    "get_context_snapshot": "Consultando contas e categorias",
+    "list_statement_files": "Verificando arquivos da conversa",
+    "read_attachment": "Abrindo comprovante anexado",
+    "get_parsed_rows": "Lendo linhas do extrato",
+    "reconcile_statement": "Comparando com o histórico",
+    "search_transactions": "Buscando transações",
+    "search_transfers": "Buscando transferências",
+    "query_investment_holdings": "Consultando posições de investimento",
+    "list_import_batches": "Consultando importações anteriores",
+    "list_credit_card_bills": "Consultando faturas de cartão",
+    "search_bill_transactions": "Buscando lançamentos de fatura",
+    "propose_import_plan": "Montando o plano de importação",
+    "update_import_plan": "Atualizando o plano",
+    "propose_revert_plan": "Montando o plano de reversão",
+    "commit_plan": "Aplicando o plano",
+    "record_merchant_category": "Salvando categoria aprendida",
+    "update_transactions": "Atualizando transações",
+    "manage_investment_account": "Gerenciando conta de investimento",
+    "manage_investment_holding": "Gerenciando posição de investimento",
+    "record_investment_transaction": "Registrando movimento de investimento",
+    "fund_investment_account": "Movendo caixa da conta de investimento",
+    "manage_credit_card": "Gerenciando cartão de crédito",
+    "update_bill_transactions": "Atualizando lançamentos de fatura",
+    "link_bill_to_transaction": "Vinculando fatura ao lançamento",
+    "update_bill": "Corrigindo datas da fatura",
+    "present_card": "Preparando card de decisão",
+    "web_search": "Pesquisando na web"
+  },
+  "plan": {
+    "title": {
+      "import": "Plano de importação",
+      "revert": "Plano de reversão"
+    },
+    "counts": {
+      "new": "{count, plural, one {# nova} other {# novas}}",
+      "duplicates": "{count, plural, one {# duplicada} other {# duplicadas}}",
+      "review": "{count} para revisar",
+      "reconciled": "{count, plural, one {# conciliada} other {# conciliadas}}",
+      "transfers": "{count, plural, one {# transferência} other {# transferências}}",
+      "cards": "{count, plural, one {# cartão} other {# cartões}}",
+      "bills": "{count, plural, one {# fatura} other {# faturas}}",
+      "investments": "{count, plural, one {# operação de investimento} other {# operações de investimento}}",
+      "recordsToDelete": "{count, plural, one {# registro a remover} other {# registros a remover}}"
+    },
+    "money": {
+      "income": "Entradas",
+      "expense": "Saídas",
+      "transfersOut": "Transferências saindo",
+      "transfersIn": "Transferências entrando",
+      "billsTotal": "Total das faturas"
+    },
+    "balanceMatches": "Saldo confere",
+    "confirm": {
+      "import": "Confirmar e importar",
+      "revert": "Confirmar reversão"
+    },
+    "reject": "Rejeitar",
+    "status": {
+      "proposed": "Aguardando confirmação",
+      "confirmed": "Confirmado",
+      "committed": "Aplicado",
+      "rejected": "Rejeitado",
+      "superseded": "Substituído por um plano novo",
+      "reverted": "Revertido"
+    },
+    "confirmedMessage": "Plano confirmado, pode aplicar."
+  },
+  "result": {
+    "title": {
+      "import": "Importação concluída",
+      "revert": "Reversão concluída"
+    },
+    "counts": {
+      "imported": "{count, plural, one {# transação importada} other {# transações importadas}}",
+      "duplicatesSkipped": "{count, plural, one {# duplicada ignorada} other {# duplicadas ignoradas}}",
+      "reconciled": "{count, plural, one {# conciliada} other {# conciliadas}}",
+      "transfersCreated": "{count, plural, one {# transferência criada} other {# transferências criadas}}",
+      "deleted": "{count, plural, one {# transação removida} other {# transações removidas}}"
+    },
+    "open": "Ver em Transações",
+    "undo": "Desfazer",
+    "undone": "Desfeito"
+  },
+  "card": {
+    "title": "Possíveis duplicatas",
+    "description": "{count, plural, one {Esta linha do extrato parece já estar lançada.} other {Estas # linhas do extrato parecem já estar lançadas.}}",
+    "fromStatement": "No extrato",
+    "existing": "Já lançada",
+    "decisions": {
+      "keep_both": "Manter as duas",
+      "merge": "Mesclar",
+      "skip": "Pular"
+    },
+    "confidence": {
+      "high": "Confiança alta",
+      "medium": "Confiança média",
+      "low": "Confiança baixa"
+    },
+    "submit": "Enviar respostas",
+    "answered": "Respondido"
+  }
+}

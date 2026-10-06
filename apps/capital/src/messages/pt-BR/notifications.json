@@ -1,0 +1,53 @@
+{
+  "due": "Contas fixas: {days, plural, =0 {no dia do vencimento} one {# dia antes} other {# dias antes}}, às {time}",
+  "overdue": "Conta fixa em atraso",
+  "bill": "Fatura do cartão fechou",
+  "budget": "Orçamento passou de {threshold}",
+  "weekly": "Resumo semanal ({day}, {time})",
+  "weekday": {
+    "0": "domingo",
+    "1": "segunda",
+    "2": "terça",
+    "3": "quarta",
+    "4": "quinta",
+    "5": "sexta",
+    "6": "sábado"
+  },
+  "devices": {
+    "device": "Dispositivo",
+    "lastUsed": "Último uso",
+    "remove": "Remover",
+    "empty": "Nenhum dispositivo recebe avisos ainda.",
+    "label": "{device} · {browser}",
+    "labelPwa": "{device} · app instalado (PWA)"
+  },
+  "device": {
+    "iPhone": "iPhone",
+    "iPad": "iPad",
+    "Mac": "Mac",
+    "Android": "Android",
+    "Windows": "Windows",
+    "Linux": "Linux",
+    "device": "Dispositivo"
+  },
+  "browser": {
+    "Chrome": "Chrome",
+    "Safari": "Safari",
+    "Firefox": "Firefox",
+    "Edge": "Edge",
+    "Opera": "Opera",
+    "Samsung": "Samsung Internet",
+    "browser": "navegador"
+  },
+  "push": {
+    "notConfigured": "O servidor ainda não está configurado para enviar push.",
+    "unsupported": "Este navegador não recebe notificações push.",
+    "iosInstall": "No iPhone, adicione o Capital à tela de início para receber avisos.",
+    "denied": "As notificações estão bloqueadas neste navegador; libere nas permissões do site.",
+    "off": "Este dispositivo ainda não recebe avisos.",
+    "error": "Não deu para ativar neste dispositivo: {message}",
+    "enable": "Ativar neste dispositivo",
+    "enabling": "Ativando…"
+  },
+  "toastRemoved": "“{device}” não recebe mais avisos"
+}

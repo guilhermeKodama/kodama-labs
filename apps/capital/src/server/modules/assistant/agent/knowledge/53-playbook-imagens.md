@@ -18,7 +18,7 @@ Vale também para `read_attachment`, que abre um comprovante já anexado a um la
 O caso mais comum: "registra essa despesa".
 
 1. Extraia valor, data, estabelecimento/contraparte e moeda.
-2. `get_context_snapshot` para resolver entidade (pessoal ou qual negócio), conta e categoria. Consulte os mapeamentos merchant→categoria que vêm no snapshot antes de decidir a categoria por conta própria.
+2. `get_context_snapshot` para resolver entidade (pessoal ou qual negócio), conta e categoria. Consulte as regras de categorização que vêm no snapshot antes de decidir a categoria por conta própria.
 3. `search_transactions` com a data e a faixa de valor, para não duplicar algo que já foi importado por extrato ou lançado à mão. Se achar um candidato, mostre e pergunte em vez de criar.
 4. `propose_import_plan` com **uma** transação. Se for movimentação entre contas do próprio usuário, é `transfers`, não `transactions` - ver `transfer-classification`.
 5. Peça o clique de confirmação. Sem `commit_plan` bem-sucedido, nada foi registrado (regras 4 e 5 de `identity`).

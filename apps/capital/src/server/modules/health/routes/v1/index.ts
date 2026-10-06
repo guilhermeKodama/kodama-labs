@@ -1,4 +1,4 @@
-import { createRouter } from "@capital/server/lib/create-app";
+import { createRouter } from "@capital/server/lib/router";
 
 import * as getHealth from "./get-health";
 

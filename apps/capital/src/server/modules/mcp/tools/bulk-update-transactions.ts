@@ -1,9 +1,9 @@
 import type { DbClient } from "@capital/server/lib/prisma";
 import type { TransactionType } from "@/generated/prisma";
-import { fetchTransactionById } from "../../transactions/data/queries/fetch-transactions";
-import { parseLocalDate } from "@capital/server/lib/date-utils";
-import { formatCategoryValidationError, matchCategoryName } from "../lib/category-validation";
-import { fetchCategoriesByUserId } from "../../categories/data/queries/fetch-categories";
+import { updateEntry, type InternalPatch } from "../../ledger/services/entries";
+import { inTransaction, recordMutation, type MutationRecordInput } from "../../ledger/services/mutations";
+import { categoryResolver, LEGACY_ENTRY_INCLUDE } from "../lib/ledger-adapter";
+import { toPatch } from "./manage-transactions";
 
 export interface BulkUpdateTransactionItem {
   id: string;
@@ -18,179 +18,61 @@ export interface BulkUpdateTransactionItem {
 }
 
 export interface BulkUpdateResult {
-  updated: Array<{
-    id: string;
-    description: string;
-    category?: string;
-    amount?: number;
-  }>;
-  errors: Array<{
-    id: string;
-    error: string;
-  }>;
+  updated: Array<{ id: string; description: string; category?: string; amount?: number }>;
+  errors: Array<{ id: string; error: string }>;
+  batchId?: string | null;
 }
 
 /**
- * Validate all updates before applying them.
+ * All-or-nothing: every update is validated (ownership, categories) before
+ * anything is written, then all of them are applied as one undoable batch.
  */
-async function validateUpdates(
-  userId: string,
-  updates: BulkUpdateTransactionItem[],
-  db: DbClient
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-): Promise<Map<string, any>> {
-  const errors: Array<{ id: string; error: string }> = [];
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const transactionMap = new Map<string, any>();
+export async function bulkUpdateTransactions(userId: string, updates: BulkUpdateTransactionItem[], dryRun: boolean, db: DbClient): Promise<BulkUpdateResult> {
+  const result: BulkUpdateResult = { updated: [], errors: [] };
+  if (updates.length === 0) return result;
 
-  // First pass: verify ownership and fetch existing transactions
-  for (const update of updates) {
-    const existing = await fetchTransactionById(userId, update.id, db);
-    if (!existing) {
-      errors.push({
-        id: update.id,
-        error: "Transaction not found or access denied",
-      });
+  const existing = await db.ledgerEntry.findMany({ where: { userId, deletedAt: null, id: { in: updates.map((u) => u.id) } }, include: LEGACY_ENTRY_INCLUDE });
+  const byId = new Map(existing.map((e) => [e.id, e]));
+  const resolver = await categoryResolver(userId, db);
+  const errors: { id: string; error: string }[] = [];
+  const patches = new Map<string, InternalPatch>();
+  for (const u of updates) {
+    const entry = byId.get(u.id);
+    if (!entry) {
+      errors.push({ id: u.id, error: "Transaction not found or access denied" });
       continue;
     }
-    transactionMap.set(update.id, existing);
-  }
-
-  const categories = await fetchCategoriesByUserId(userId, undefined, db, {
-    includeArchived: true,
-  });
-
-  // Second pass: validate categories against the list loaded once above
-  for (const update of updates) {
-    if (!transactionMap.has(update.id)) continue; // Already errored
-
-    if (update.category) {
-      const existing = transactionMap.get(update.id);
-      const targetType = update.type ?? existing.type;
-      const validation = matchCategoryName(update.category, categories, targetType);
-      const keepsCurrent =
-        validation.archived &&
-        validation.canonicalName != null &&
-        existing.category.toLowerCase() === validation.canonicalName.toLowerCase();
-      if (!validation.valid && !keepsCurrent) {
-        errors.push({
-          id: update.id,
-          error: formatCategoryValidationError(update.category, targetType, validation),
-        });
-        transactionMap.delete(update.id); // Remove from valid set
-      } else if (validation.canonicalName) {
-        update.category = validation.canonicalName;
-      }
+    try {
+      const { id, ...fields } = u;
+      patches.set(id, toPatch(fields, entry, resolver));
+    } catch (err) {
+      errors.push({ id: u.id, error: err instanceof Error ? err.message : String(err) });
     }
   }
-
   if (errors.length > 0) {
-    throw new Error(
-      `Validation failed for ${errors.length} transaction(s):\n` +
-      errors.map((e) => `  ${e.id}: ${e.error}`).join("\n")
-    );
+    throw new Error(`Validation failed for ${errors.length} transaction(s):\n` + errors.map((e) => `  ${e.id}: ${e.error}`).join("\n"));
   }
 
-  return transactionMap;
-}
-
-/**
- * Bulk update transactions with all-or-nothing semantics.
- * Validates everything first, then applies changes in a transaction.
- */
-export async function bulkUpdateTransactions(
-  userId: string,
-  updates: BulkUpdateTransactionItem[],
-  dryRun: boolean,
-  db: DbClient
-): Promise<BulkUpdateResult> {
-  const result: BulkUpdateResult = {
-    updated: [],
-    errors: [],
-  };
-
-  if (updates.length === 0) {
-    return result;
-  }
-
-  // Validate all updates first (throws on any error)
-  await validateUpdates(userId, updates, db);
-
-  // If dry-run, just return what would be updated
   if (dryRun) {
-    for (const update of updates) {
-      result.updated.push({
-        id: update.id,
-        description: update.description ?? "(unchanged)",
-        category: update.category,
-        amount: update.amount,
-      });
+    for (const u of updates) {
+      const p = patches.get(u.id)!;
+      result.updated.push({ id: u.id, description: u.description ?? "(unchanged)", category: p.categoryId ? resolver.nameOf(p.categoryId) ?? undefined : u.category, amount: u.amount });
     }
     return result;
   }
-
-  // Apply all updates - we need to use the base prisma client for transactions
-  // If db is already a transaction client, just execute directly
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const executeUpdates = async (client: any) => {
-    for (const update of updates) {
-      const existing = await client.transaction.findFirst({
-        where: {
-          id: update.id,
-          OR: [
-            { business: { userId } },
-            { personalAccount: { userId } },
-          ],
-        },
-      });
-
-      if (!existing) {
-        throw new Error(`Transaction ${update.id} not found during update`);
-      }
-
-      const updateData = {
-        ...(update.type && { type: update.type }),
-        ...(update.amount !== undefined && { amount: update.amount }),
-        ...(update.currency && { currency: update.currency }),
-        ...(update.exchangeRate !== undefined && { exchangeRate: update.exchangeRate }),
-        ...(update.description && { description: update.description }),
-        ...(update.category && { category: update.category }),
-        ...(update.date && { date: parseLocalDate(update.date) }),
-        ...(update.isTaxDeductible !== undefined && { isTaxDeductible: update.isTaxDeductible }),
-      };
-
-      const updated = await client.transaction.update({
-        where: { id: update.id },
-        data: updateData,
-      });
-
-      result.updated.push({
-        id: updated.id,
-        description: updated.description,
-        category: updated.category,
-        amount: updated.amount,
-      });
-    }
-  };
 
   try {
-    // Check if db has $transaction method (is PrismaClient, not TransactionClient)
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    if (typeof (db as any).$transaction === "function") {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      await (db as any).$transaction(executeUpdates, { timeout: 30_000 });
-    } else {
-      // Already in a transaction, execute directly
-      await executeUpdates(db);
-    }
-  } catch (error) {
-    // If transaction fails, clear results and add error
-    result.updated = [];
-    result.errors.push({
-      id: "batch",
-      error: error instanceof Error ? error.message : String(error),
+    result.batchId = await inTransaction(db, async (tx) => {
+      const records: MutationRecordInput[] = [];
+      for (const u of updates) {
+        const { raw } = await updateEntry(userId, u.id, patches.get(u.id)!, tx, { collect: records });
+        result.updated.push({ id: raw.id, description: raw.description, category: resolver.nameOf(raw.categoryId) ?? undefined, amount: Math.abs(Number(raw.amount)) });
+      }
+      return recordMutation(tx, userId, "update", `${updates.length} transactions (MCP)`, records);
     });
+  } catch (error) {
+    result.updated = [];
+    result.errors.push({ id: "batch", error: error instanceof Error ? error.message : String(error) });
   }
-
   return result;
 }

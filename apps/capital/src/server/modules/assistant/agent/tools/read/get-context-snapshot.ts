@@ -5,7 +5,7 @@ import { fetchContextSnapshot } from "../../../data/queries/fetch-context-snapsh
 export const getContextSnapshot = defineTool({
   name: "get_context_snapshot",
   description:
-    "Orient yourself before doing anything else: the user's businesses, personal account, categories, credit cards, investment accounts, currencies, last 5 statement imports, and up to 200 learned merchant->category mappings (most recently used first). Call this once near the start of a turn that will reconcile or import a statement - the mappings are what let you auto-categorize without asking, so always check them before writing 'Uncategorized'.",
+    "Orient yourself before doing anything else: the user's businesses, personal account, categories, credit cards, investment accounts, currencies, last 5 statement imports, and up to 200 learned categorization rules (most recently used first). Call this once near the start of a turn that will reconcile or import a statement - the rules are what let you auto-categorize without asking, so always check them before leaving a row uncategorized.",
   inputSchema: z.object({}),
   access: "read",
   handler: async (ctx) => {

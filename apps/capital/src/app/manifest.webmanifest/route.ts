@@ -14,7 +14,7 @@ export function GET() {
       name: "Capital — gestão financeira",
       short_name: "Capital",
       description: "Finanças PJ + PF, multi-moeda, investimentos e FIRE.",
-      start_url: "/dashboard",
+      start_url: "/transactions",
       scope: "/",
       display: "standalone",
       background_color: "#0a0a0a",

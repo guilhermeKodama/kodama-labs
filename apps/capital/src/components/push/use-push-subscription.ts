@@ -1,7 +1,8 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { client } from '@/lib/api-client';
+import { api, apiPost } from '@/lib/api/client';
+import { encodeDeviceLabel } from '@/lib/settings/device';
 import { env } from '@/env';
 
 export type PushSubscriptionStatus =
@@ -20,15 +21,6 @@ function urlBase64ToUint8Array(base64String: string) {
   return Uint8Array.from([...rawData].map((c) => c.charCodeAt(0)));
 }
 
-function guessDeviceLabel(): string {
-  const ua = navigator.userAgent;
-  if (/iPhone/.test(ua)) return 'iPhone';
-  if (/iPad/.test(ua)) return 'iPad';
-  if (/Macintosh/.test(ua)) return 'Mac';
-  if (/Android/.test(ua)) return 'Android';
-  return 'Dispositivo';
-}
-
 function isIos(): boolean {
   return /iPhone|iPad|iPod/.test(navigator.userAgent);
 }
@@ -43,25 +35,26 @@ function isStandalone(): boolean {
 async function postSubscription(subscription: PushSubscription) {
   const json = subscription.toJSON();
   if (!json.endpoint || !json.keys?.p256dh || !json.keys?.auth) return;
-  await client.v1.push.subscribe.$post({
-    json: {
-      endpoint: json.endpoint,
-      keys: { p256dh: json.keys.p256dh, auth: json.keys.auth },
-      deviceLabel: guessDeviceLabel(),
-      userAgent: navigator.userAgent,
-    },
+  await apiPost('/api/v1/push/subscribe', {
+    endpoint: json.endpoint,
+    keys: { p256dh: json.keys.p256dh, auth: json.keys.auth },
+    // "<device>|<browser>[|pwa]"; Ajustes › Notificações turns it into "Mac · Chrome".
+    deviceLabel: encodeDeviceLabel(navigator.userAgent, isStandalone()),
+    userAgent: navigator.userAgent.slice(0, 500),
   });
 }
 
 /**
- * Drives the "enable push notifications" flow for reminder-mode recurring
- * transactions. Safe to mount in multiple places at once (the settings card
- * and the recurring form's inline nudge both use it) — each instance
- * independently reads the same browser-level permission/subscription state.
+ * Drives the "enable push notifications" flow (Ajustes › Notificações).
+ * Safe to mount in several places at once — each instance independently
+ * reads the same browser-level permission/subscription state. `endpoint` is
+ * this browser's subscription, which marks the current row in the device
+ * list.
  */
 export function usePushSubscription() {
   const [status, setStatus] = useState<PushSubscriptionStatus>('not-subscribed');
   const [error, setError] = useState<string | null>(null);
+  const [endpoint, setEndpoint] = useState<string | null>(null);
 
   // On mount: detect current state, and if permission is already granted and
   // the browser still holds a subscription, silently re-POST it. This is the
@@ -96,7 +89,10 @@ export function usePushSubscription() {
           return;
         }
         await postSubscription(existing);
-        if (!cancelled) setStatus('subscribed');
+        if (!cancelled) {
+          setEndpoint(existing.endpoint);
+          setStatus('subscribed');
+        }
       } catch {
         if (!cancelled) setStatus('not-subscribed');
       }
@@ -114,20 +110,20 @@ export function usePushSubscription() {
     try {
       if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
         setStatus(isIos() && !isStandalone() ? 'ios-needs-install' : 'unsupported');
-        return;
+        return false;
       }
 
       const vapidPublicKey = env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
       if (!vapidPublicKey) {
         setError('Push not configured on the server');
         setStatus('error');
-        return;
+        return false;
       }
 
       const permission = await Notification.requestPermission();
       if (permission !== 'granted') {
         setStatus('denied');
-        return;
+        return false;
       }
 
       const registration = await navigator.serviceWorker.ready;
@@ -136,10 +132,13 @@ export function usePushSubscription() {
         applicationServerKey: urlBase64ToUint8Array(vapidPublicKey),
       });
       await postSubscription(subscription);
+      setEndpoint(subscription.endpoint);
       setStatus('subscribed');
+      return true;
     } catch (err) {
       setError(err instanceof Error ? err.message : 'unknown error');
       setStatus('error');
+      return false;
     }
   }, []);
 
@@ -149,10 +148,11 @@ export function usePushSubscription() {
       const registration = await navigator.serviceWorker.ready;
       const subscription = await registration.pushManager.getSubscription();
       if (subscription) {
-        const endpoint = subscription.endpoint;
+        const current = subscription.endpoint;
         await subscription.unsubscribe();
-        await client.v1.push.subscribe.$delete({ json: { endpoint } });
+        await api('/api/v1/push/subscribe', { method: 'DELETE', body: JSON.stringify({ endpoint: current }) });
       }
+      setEndpoint(null);
       setStatus('not-subscribed');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'unknown error');
@@ -160,5 +160,5 @@ export function usePushSubscription() {
     }
   }, []);
 
-  return { status, error, enable, disable };
+  return { status, error, endpoint, enable, disable };
 }

@@ -39,16 +39,7 @@ describe("MCP Server End-to-End", () => {
     process.env.MCP_USER_ID = TEST_USER_ID;
 
     // Clean up and create test data
-    await prisma.transaction.deleteMany({
-      where: {
-        OR: [
-          { business: { userId: TEST_USER_ID } },
-          { personalAccount: { userId: TEST_USER_ID } },
-        ],
-      },
-    });
-    await prisma.personalAccount.deleteMany({ where: { userId: TEST_USER_ID } });
-    await prisma.category.deleteMany({ where: { userId: TEST_USER_ID } });
+    // Deleting the user cascades its entities, accounts, entries and categories.
     await prisma.user.deleteMany({ where: { id: TEST_USER_ID } });
 
     // Create test user
@@ -62,11 +53,23 @@ describe("MCP Server End-to-End", () => {
       },
     });
 
-    // Create personal account
-    const personalAccount = await prisma.personalAccount.create({
+    // Create the personal entity and its main account
+    const personalAccount = await prisma.entity.create({
       data: {
         userId: TEST_USER_ID,
+        kind: "personal",
+        name: "PF",
         defaultCurrency: "BRL",
+      },
+    });
+    await prisma.account.create({
+      data: {
+        userId: TEST_USER_ID,
+        entityId: personalAccount.id,
+        type: "checking",
+        name: "Conta principal",
+        currency: "BRL",
+        isDefault: true,
       },
     });
     personalAccountId = personalAccount.id;
@@ -84,16 +87,7 @@ describe("MCP Server End-to-End", () => {
 
   afterAll(async () => {
     // Clean up
-    await prisma.transaction.deleteMany({
-      where: {
-        OR: [
-          { business: { userId: TEST_USER_ID } },
-          { personalAccount: { userId: TEST_USER_ID } },
-        ],
-      },
-    });
-    await prisma.personalAccount.deleteMany({ where: { userId: TEST_USER_ID } });
-    await prisma.category.deleteMany({ where: { userId: TEST_USER_ID } });
+    // Deleting the user cascades its entities, accounts, entries and categories.
     await prisma.user.deleteMany({ where: { id: TEST_USER_ID } });
 
     delete process.env.MCP_API_KEY;
@@ -323,10 +317,46 @@ describe("MCP Server End-to-End", () => {
       expect((resultText.created as Array<{ id: string }>)[0].id).toBe("dry-run");
 
       // Verify nothing was actually created
-      const count = await prisma.transaction.count({
-        where: { personalAccountId },
+      const count = await prisma.ledgerEntry.count({
+        where: { entityId: personalAccountId },
       });
       expect(count).toBe(0);
+    });
+
+    it("attributes the undo batch a tool writes to the MCP client", async () => {
+      const request = createMockNextRequest(
+        "POST",
+        {
+          jsonrpc: "2.0",
+          method: "tools/call",
+          params: {
+            name: "bulk_create_transactions",
+            arguments: {
+              transactions: [
+                {
+                  entityType: "personal",
+                  type: "income",
+                  amount: 12.5,
+                  currency: "BRL",
+                  description: "MCP source test",
+                  category: "Dividends",
+                  date: "2026-09-16",
+                  personalAccountId,
+                },
+              ],
+              dryRun: false,
+            },
+          },
+          id: 4,
+        },
+        { Authorization: `Bearer ${TEST_API_KEY}` }
+      );
+
+      const response = await POST(request as unknown as NextRequest);
+      expect(response.status).toBe(200);
+      const batch = await prisma.mutationBatch.findFirstOrThrow({ where: { userId: TEST_USER_ID }, orderBy: { createdAt: "desc" } });
+      expect(batch.source).toBe("mcp");
+      await prisma.ledgerEntry.deleteMany({ where: { userId: TEST_USER_ID } });
     });
   });
 

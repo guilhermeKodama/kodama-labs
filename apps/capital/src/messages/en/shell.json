@@ -1,0 +1,51 @@
+{
+  "meta": {
+    "title": "Capital",
+    "description": "Personal and business finances in one place."
+  },
+  "nav": {
+    "search": "Search or run…",
+    "transactions": "Transactions",
+    "newView": "New view",
+    "budgets": "Budgets",
+    "investments": "Investments",
+    "portfolio": "Portfolio",
+    "contributions": "Contributions",
+    "settings": "Settings",
+    "accountHint": "Settings · Theme",
+    "railSearch": "Search or run ({shortcut})"
+  },
+  "sidebar": {
+    "collapse": "Collapse the sidebar",
+    "expand": "Expand the sidebar",
+    "openMenu": "Open the menu"
+  },
+  "session": {
+    "loadFailed": "Your account could not be loaded."
+  },
+  "notFound": {
+    "title": "Page not found",
+    "description": "The address is wrong or the page has moved.",
+    "back": "Go to Transactions"
+  },
+  "pwa": {
+    "updateAvailable": "New version available",
+    "reload": "Reload"
+  },
+  "userMenu": {
+    "label": "{name}’s account",
+    "settings": "Settings",
+    "theme": "Theme",
+    "themes": {
+      "system": "System",
+      "light": "Light",
+      "dark": "Dark"
+    },
+    "language": "Language",
+    "languages": {
+      "ptBR": "Português",
+      "en": "English"
+    },
+    "signOut": "Sign out"
+  }
+}

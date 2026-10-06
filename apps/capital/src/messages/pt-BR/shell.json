@@ -1,0 +1,51 @@
+{
+  "meta": {
+    "title": "Capital",
+    "description": "Finanças pessoais e das suas empresas num só lugar."
+  },
+  "nav": {
+    "search": "Buscar ou executar…",
+    "transactions": "Transações",
+    "newView": "Nova view",
+    "budgets": "Orçamentos",
+    "investments": "Investimentos",
+    "portfolio": "Carteira",
+    "contributions": "Aportes",
+    "settings": "Ajustes",
+    "accountHint": "Ajustes · Tema",
+    "railSearch": "Buscar ou executar ({shortcut})"
+  },
+  "sidebar": {
+    "collapse": "Recolher a barra lateral",
+    "expand": "Expandir a barra lateral",
+    "openMenu": "Abrir o menu"
+  },
+  "session": {
+    "loadFailed": "Não deu para carregar sua conta."
+  },
+  "notFound": {
+    "title": "Página não encontrada",
+    "description": "O endereço está errado ou a página mudou de lugar.",
+    "back": "Ir para Transações"
+  },
+  "pwa": {
+    "updateAvailable": "Nova versão disponível",
+    "reload": "Atualizar"
+  },
+  "userMenu": {
+    "label": "Conta de {name}",
+    "settings": "Ajustes",
+    "theme": "Tema",
+    "themes": {
+      "system": "Sistema",
+      "light": "Claro",
+      "dark": "Escuro"
+    },
+    "language": "Idioma",
+    "languages": {
+      "ptBR": "Português",
+      "en": "English"
+    },
+    "signOut": "Sair"
+  }
+}
