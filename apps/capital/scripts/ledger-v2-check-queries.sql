@@ -157,7 +157,8 @@ fx_gaps AS (
   SELECT bt.id,
          'purchase'::text AS kind,
          bt.currency,
-         to_char(bt."transactionDate" AT TIME ZONE 'UTC', 'YYYY-MM-DD') AS day
+         -- timestamp without time zone: the stored calendar date, not the session zone
+         to_char(bt."transactionDate", 'YYYY-MM-DD') AS day
   FROM bill_transactions bt
   LEFT JOIN credit_card_statements s ON s.id = bt."statementId"
   LEFT JOIN credit_card_bills bill ON bill.id = bt."billId"
@@ -176,7 +177,7 @@ fx_gaps AS (
   SELECT it.id,
          'investment'::text,
          ia.currency,
-         to_char(it.date AT TIME ZONE 'UTC', 'YYYY-MM-DD')
+         to_char(it.date, 'YYYY-MM-DD') -- stored calendar date; see the purchase branch
   FROM investment_transactions it
   JOIN investment_holdings h ON h.id = it."holdingId"
   JOIN investment_accounts ia ON ia.id = h."accountId"
@@ -534,4 +535,35 @@ WHERE ia."businessId" IS NULL
   AND ia."entityType" = 'business'
   AND EXISTS (SELECT 1 FROM personal_accounts p WHERE p."userId" = ia."userId")
 -- END fallbacks
+;
+
+\echo '== 3b. Foreign rows stored at exchangeRate 1 (informational; the migration keeps that rate)'
+\echo 'A non-zero count does not block the migration.'
+-- BEGIN flat-rates
+SELECT 'transactions stored at exchangeRate 1'::text AS category,
+       count(*)::int AS row_count,
+       coalesce((array_agg(t.id ORDER BY t.id))[1:10], ARRAY[]::text[]) AS sample_ids
+FROM transactions t
+JOIN users u ON u.id = coalesce(
+  (SELECT b."userId" FROM businesses b WHERE b.id = t."businessId"),
+  (SELECT p."userId" FROM personal_accounts p WHERE p.id = t."personalAccountId")
+)
+WHERE t.currency <> u."baseCurrency"
+  AND t."exchangeRate" = 1
+UNION ALL
+SELECT 'transfers stored at exchangeRate 1',
+       count(*)::int,
+       coalesce((array_agg(tr.id ORDER BY tr.id))[1:10], ARRAY[]::text[])
+FROM transfers tr
+JOIN users u ON u.id = coalesce(
+  (SELECT b."userId" FROM businesses b WHERE b.id = tr."fromBusinessId"),
+  (SELECT p."userId" FROM personal_accounts p WHERE p.id = tr."fromPersonalAccountId"),
+  (SELECT ia."userId" FROM investment_accounts ia WHERE ia.id = tr."fromInvestmentAccountId"),
+  (SELECT b."userId" FROM businesses b WHERE b.id = tr."toBusinessId"),
+  (SELECT p."userId" FROM personal_accounts p WHERE p.id = tr."toPersonalAccountId"),
+  (SELECT ia."userId" FROM investment_accounts ia WHERE ia.id = tr."toInvestmentAccountId")
+)
+WHERE tr.currency <> u."baseCurrency"
+  AND tr."exchangeRate" = 1
+-- END flat-rates
 ;

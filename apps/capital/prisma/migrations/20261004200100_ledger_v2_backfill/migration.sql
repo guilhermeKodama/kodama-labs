@@ -194,7 +194,8 @@ fx_gaps AS (
   SELECT bt.id,
          'purchase'::text AS kind,
          bt.currency,
-         to_char(bt."transactionDate" AT TIME ZONE 'UTC', 'YYYY-MM-DD') AS day
+         -- timestamp without time zone: the stored calendar date, not the session zone
+         to_char(bt."transactionDate", 'YYYY-MM-DD') AS day
   FROM bill_transactions bt
   LEFT JOIN credit_card_statements s ON s.id = bt."statementId"
   LEFT JOIN credit_card_bills bill ON bill.id = bt."billId"
@@ -213,7 +214,7 @@ fx_gaps AS (
   SELECT it.id,
          'investment'::text,
          ia.currency,
-         to_char(it.date AT TIME ZONE 'UTC', 'YYYY-MM-DD')
+         to_char(it.date, 'YYYY-MM-DD') -- stored calendar date; see the purchase branch
   FROM investment_transactions it
   JOIN investment_holdings h ON h.id = it."holdingId"
   JOIN investment_accounts ia ON ia.id = h."accountId"
@@ -1299,12 +1300,17 @@ BEGIN
     SELECT p.entity_id, date_trunc('month', p.effective_date), 0, (p.amount * p.rate)::numeric, 0
       FROM _purchase p WHERE p."statementId" IS NOT NULL
     UNION ALL
-    -- reimbursements: business pays (expense), personal receives (negative expense)
-    SELECT tr."fromBusinessId", date_trunc('month', tr.date), 0, (tr.amount * tr."exchangeRate")::numeric, 0
-      FROM transfers tr WHERE tr.direction = 'reimbursement' AND tr."fromBusinessId" IS NOT NULL
+    -- reimbursements: the payer books an expense, the receiver a negative expense.
+    -- Sides are the ones the insert used, including the unambiguous fill-in.
+    SELECT fa."entityId", date_trunc('month', tr.date), 0, (tr.amount * tr."exchangeRate")::numeric, 0
+      FROM _tr tr
+      JOIN accounts fa ON fa.id = tr.from_account
+      WHERE tr.direction = 'reimbursement'
     UNION ALL
-    SELECT tr."toPersonalAccountId", date_trunc('month', tr.date), 0, -(tr.amount * tr."exchangeRate")::numeric, 0
-      FROM transfers tr WHERE tr.direction = 'reimbursement' AND tr."toPersonalAccountId" IS NOT NULL
+    SELECT ta."entityId", date_trunc('month', tr.date), 0, -(tr.amount * tr."exchangeRate")::numeric, 0
+      FROM _tr tr
+      JOIN accounts ta ON ta.id = tr.to_account
+      WHERE tr.direction = 'reimbursement'
     UNION ALL
     -- documented change: unlinked legacy bills now count their purchases at closing
     SELECT p.entity_id, date_trunc('month', p.effective_date), 0, (p.amount * p.rate)::numeric, 0

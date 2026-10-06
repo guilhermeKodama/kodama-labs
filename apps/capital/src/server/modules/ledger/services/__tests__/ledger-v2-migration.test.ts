@@ -30,6 +30,7 @@ describe("ledger v2 check SQL", () => {
       expect(backfillSql).toContain(text);
       expect(precheckSql).toContain(text);
     }
+    expect(precheckSql).toContain(block("flat-rates"));
   });
 
   it("is a read-only script", () => {
@@ -97,8 +98,8 @@ interface CheckRow {
   samples: string;
 }
 
-function checks(database: string, name: string): CheckRow[] {
-  const sql = `SELECT category, row_count, coalesce(array_to_string(sample_ids, ', '), '') FROM (\n${block(name)}\n) s`;
+function checks(database: string, name: string, timeZone?: string): CheckRow[] {
+  const sql = `${timeZone ? `SET TIME ZONE '${timeZone}';\n` : ""}SELECT category, row_count, coalesce(array_to_string(sample_ids, ', '), '') FROM (\n${block(name)}\n) s`;
   return query(database, sql).map(([category, count, samples]) => ({
     category: category ?? "",
     count: Number(count),
@@ -124,8 +125,9 @@ INSERT INTO personal_accounts (id, "userId", "updatedAt") VALUES ('pf-1', 'user-
 INSERT INTO businesses (id, "userId", name, "updatedAt") VALUES ('biz-1', 'user-1', 'Biz', now());
 `;
 
-function runBackfill(): { status: number; stderr: string } {
-  return psql(CASE, ["-q", "-f", backfillPath]);
+function runBackfill(timeZone?: string): { status: number; stderr: string } {
+  const args = timeZone ? ["-c", `SET TIME ZONE '${timeZone}'`, "-q", "-f", backfillPath] : ["-q", "-f", backfillPath];
+  return psql(CASE, args);
 }
 
 function expectRefusal(sql: string, category: string, id: string): void {
@@ -321,6 +323,55 @@ describe("ledger v2 migration", () => {
     );
   });
 
+  it("keeps the missing-rate day on the stored calendar date in any session zone", () => {
+    resetCase();
+    seed(
+      baseUser +
+        `INSERT INTO credit_cards (id, "entityType", "bankName", "lastFourDigits", "creditLimit", "closingDay", "dueDay", currency, "personalAccountId", "updatedAt")
+         VALUES ('card-1', 'personal', 'Bank', '1234', 1000, 1, 10, 'USD', 'pf-1', now());
+         INSERT INTO credit_card_statements (id, "creditCardId", month, "updatedAt")
+         VALUES ('stmt-1', 'card-1', '2026-01', now());
+         INSERT INTO bill_transactions (id, "statementId", category, "transactionDate", description, amount, currency, "updatedAt")
+         VALUES ('bt-midnight', 'stmt-1', 'Food', '2026-01-15 00:00:00', 'coffee', 10, 'USD', now());`,
+    );
+    const zone = "America/Sao_Paulo";
+    const row = checks(CASE, "failures", zone).find((item) => item.category.startsWith("missing exchange rate:"));
+    expect(row?.category).toBe("missing exchange rate: purchase USD 2026-01-15");
+    expect(row?.samples).toContain("bt-midnight");
+
+    const result = runBackfill(zone);
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain("missing exchange rate: purchase USD 2026-01-15: 1 [bt-midnight]");
+    expect(scalar(CASE, "SELECT count(*) FROM ledger_entries")).toBe("0");
+  });
+
+  it("lists foreign rows stored at exchangeRate 1 and still migrates them", () => {
+    resetCase();
+    seed(
+      baseUser +
+        `INSERT INTO transactions (id, "entityType", type, amount, currency, "exchangeRate", description, category, date, "personalAccountId", "updatedAt")
+         VALUES
+           ('tx-flat', 'personal', 'expense', 8, 'USD', 1, 'flat', 'Software', '2026-02-01 12:00:00', 'pf-1', now()),
+           ('tx-rated', 'personal', 'expense', 8, 'USD', 4.5, 'rated', 'Software', '2026-02-02 12:00:00', 'pf-1', now()),
+           ('tx-brl', 'personal', 'expense', 8, 'BRL', 1, 'local', 'Food', '2026-02-03 12:00:00', 'pf-1', now());
+         INSERT INTO transfers (id, "fromEntityType", "toEntityType", direction, amount, currency, "exchangeRate", date, "fromPersonalAccountId", "toBusinessId", "updatedAt")
+         VALUES
+           ('tr-flat', 'personal', 'business', 'profit_distribution', 10, 'USD', 1, '2026-02-04 12:00:00', 'pf-1', 'biz-1', now()),
+           ('tr-brl', 'personal', 'business', 'profit_distribution', 10, 'BRL', 1, '2026-02-05 12:00:00', 'pf-1', 'biz-1', now());`,
+    );
+    const listed = checks(CASE, "flat-rates");
+    const transactions = listed.find((row) => row.category === "transactions stored at exchangeRate 1");
+    const transfers = listed.find((row) => row.category === "transfers stored at exchangeRate 1");
+    expect(transactions?.count).toBe(1);
+    expect(transactions?.samples).toBe("tx-flat");
+    expect(transfers?.count).toBe(1);
+    expect(transfers?.samples).toBe("tr-flat");
+
+    const result = runBackfill();
+    expect(result.status, result.stderr).toBe(0);
+    expect(scalar(CASE, `SELECT "exchangeRate"::text FROM ledger_entries WHERE id = 'tx-flat'`)).toBe("1.00000000");
+  });
+
   it("refuses a foreign purchase with no currency row", () => {
     expectRefusal(
       `INSERT INTO credit_cards (id, "entityType", "bankName", "lastFourDigits", "creditLimit", "closingDay", "dueDay", currency, "personalAccountId", "updatedAt")
@@ -393,6 +444,29 @@ describe("ledger v2 migration", () => {
       "transactions without an account",
       "tx-orphan",
     );
+  });
+
+  it("migrates a reimbursement whose missing side the single-owner rule fills in", () => {
+    resetCase();
+    seed(
+      baseUser +
+        `INSERT INTO transfers (id, "fromEntityType", "toEntityType", direction, amount, currency, date, "fromBusinessId", "updatedAt")
+         VALUES ('tr-reimb-to', 'business', 'personal', 'reimbursement', 200, 'BRL', '2026-01-15 12:00:00', 'biz-1', now());
+         INSERT INTO transfers (id, "fromEntityType", "toEntityType", direction, amount, currency, date, "toPersonalAccountId", "updatedAt")
+         VALUES ('tr-reimb-from', 'business', 'personal', 'reimbursement', 200, 'BRL', '2026-01-15 12:00:00', 'pf-1', now());`,
+    );
+    const remapped = checks(CASE, "remaps").find((row) => row.category === "transfers the new rule will map");
+    expect(remapped?.samples.split(", ")).toEqual(expect.arrayContaining(["tr-reimb-to", "tr-reimb-from"]));
+    expect(checks(CASE, "failures").every((row) => row.count === 0)).toBe(true);
+
+    const result = runBackfill();
+    expect(result.status, result.stderr).toBe(0);
+    expect(scalar(CASE, `SELECT "entityId" FROM ledger_entries WHERE id = 'tr-reimb-to'`)).toBe("biz-1");
+    expect(scalar(CASE, `SELECT "amountBase"::text FROM ledger_entries WHERE id = 'tr-reimb-to'`)).toBe("-200.0000");
+    expect(scalar(CASE, `SELECT "entityId" FROM ledger_entries WHERE id = md5('transfer-to:' || 'tr-reimb-to')::uuid::text`)).toBe("pf-1");
+    expect(scalar(CASE, `SELECT "amountBase"::text FROM ledger_entries WHERE id = md5('transfer-to:' || 'tr-reimb-to')::uuid::text`)).toBe("200.0000");
+    expect(scalar(CASE, `SELECT "entityId" FROM ledger_entries WHERE id = 'tr-reimb-from'`)).toBe("biz-1");
+    expect(scalar(CASE, `SELECT "entityId" FROM ledger_entries WHERE id = md5('transfer-to:' || 'tr-reimb-from')::uuid::text`)).toBe("pf-1");
   });
 
   it("maps a missing transfer side when the user has one personal account", () => {

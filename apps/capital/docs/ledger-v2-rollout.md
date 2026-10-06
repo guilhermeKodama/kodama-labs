@@ -1,86 +1,120 @@
 # Ledger v2 production rollout
 
-This is the runbook for applying the ledger v2 migrations on the production `capital` database. Do not run `pnpm db:drop-legacy` as part of this rollout. The old tables stay in the `legacy` schema, including the link archives `legacy.attachment_links`, `legacy.budget_links`, and `legacy.reminder_dispatch_links`, until a later, separate decision.
+Runbook for applying the ledger v2 migrations on the production `capital` database. Do not run `pnpm db:drop-legacy` in this rollout. The old tables stay in the `legacy` schema, including `legacy.attachment_links`, `legacy.budget_links`, and `legacy.reminder_dispatch_links`.
 
-Every compose command uses the desktop Docker context and the production project, and names the services it touches:
+The live checkout is `~/Documents/Github/kodama-labs`, on `main`. `infrastructure/cronjobs/schedules` is bind-mounted into the running cronjobs container, so the git checkout and the cron image have to move together.
+
+The production database is the container named `postgres` (compose project `infrastructure/postgres`) on `docker --context desktop-linux`. It is attached to the external network `kodama`. Apps reach it as `postgres:5432`. The kodama-prod compose file has no postgres service. Do not use host port 5433: a stale server is published there under `--context default`.
+
+Every docker command starts with `--context desktop-linux`. Every compose command is:
 
 ```bash
 docker --context desktop-linux compose -p kodama-prod -f docker-compose.yml
 ```
 
-`up` and `run` always take `--no-deps`. `stop` does not accept `--no-deps`; it only stops the services named on the command line. Never `down`, never `-v`, never `prune`.
+Run compose from `~/Documents/Github/kodama-labs`. `up` and `run` take `--no-deps`. `stop` does not accept `--no-deps`; it only stops the services named on the command line. Never `down`, never `-v`, never `prune`.
 
-`capital-migrate` and `capital-web` share `image: kodama-capital:latest`. Building either one retags `latest`. The rehearsal must not build that image.
+`capital-migrate` and `capital-web` share `image: kodama-capital:latest`. Building either one retags `latest`. The rehearsal image is a different tag, built from a worktree, and it never runs against the prod `postgres` container.
+
+`apps/capital/.env.production` defines both `DATABASE_URL` and `DIRECT_URL` (the Prisma schema uses `directUrl`). `compose run capital-migrate` loads that file. Do not pass `-e DATABASE_URL` on a compose run unless the same command also passes `-e DIRECT_URL` for the same database. The rehearsal container below is not that service, so it sets both with `-e`.
 
 ## Checksums
 
-Editing `20261004200000_ledger_v2_schema`, `20261004200100_ledger_v2_backfill`, or `20261004200200_ledger_v2_retire_legacy` changes their Prisma checksums. Any local or dev database that already applied an older copy of those files will refuse `migrate deploy` until it is recreated (`pnpm --filter @wallex/capital db:reset` against `capital_dev`, or drop and recreate the database). Production has never applied them. Step 0 confirms that: the `_prisma_migrations` query must return no `ledger_v2_*` rows. The latest migration already applied in production is `20261004120000`.
+Editing `20261004200000_ledger_v2_schema`, `20261004200100_ledger_v2_backfill`, or `20261004200200_ledger_v2_retire_legacy` changes their Prisma checksums. Any local or dev database that already applied an older copy of those files will refuse `migrate deploy` until it is recreated (`pnpm --filter @wallex/capital db:reset` against `capital_dev`, or drop and recreate the database). Production has never applied them. Step 0 confirms that: section 0 returns no `ledger_v2_*` rows. The latest migration already applied in production is `20261004120000`.
 
 ## Step 0 — read-only precheck on production, before any dump
 
-Pause nothing yet. This script only `SELECT`s, inside `BEGIN READ ONLY` / `ROLLBACK`, and it uses pre-ledger tables, so it is safe on the live `capital` database.
+Pause nothing. The script only `SELECT`s, inside `BEGIN READ ONLY` / `ROLLBACK`, and it uses pre-ledger tables.
 
 ```bash
 docker --context desktop-linux exec -i postgres \
-  sh -c 'psql -U "$POSTGRES_USER" -d capital -v ON_ERROR_STOP=1' \
+  psql -U root -d capital -v ON_ERROR_STOP=1 \
   < apps/capital/scripts/precheck-ledger-migration.sql \
-  | tee /tmp/capital-ledger-v2-precheck-prod.txt
+  | tee ~/backups/capital-ledger-v2-precheck-prod.txt
 ```
 
-Read the saved output before continuing:
+If `main` does not have the script yet, read it from the rehearsal worktree in the next section (`~/capital-ledger-v2-rehearsal/apps/capital/scripts/precheck-ledger-migration.sql`).
 
-- Section 0 returns no rows. A `ledger_v2_*` row means production already applied one of these migrations and this runbook does not apply.
-- Section 1, every `row_count` is 0. A positive count aborts the backfill. Each row includes up to 10 sample ids. Fix those rows (or decide the case, for an `externalId collision`) and rerun the precheck. Do not start the rehearsal with a failing section 1.
-- Sections 2 and 3 are informational. Section 2 lists rows the unambiguous-owner rules will fill in. Section 3 lists business brokerages that keep the existing fallback onto the personal entity. Copy both lists into the rehearsal notes.
-- Section 4 is the baseline. Record 4a through 4e (row counts, purchase count and absolute sum, income/expense totals excluding future card payments, bill-payment totals, transfer count). The post-migration `verify-ledger-migration.sql` run is checked against these numbers, and against the same numbers captured again in the rehearsal.
+Read the saved output:
+
+- Section 0 returns no rows. A `ledger_v2_*` row means this runbook does not apply.
+- Section 1, every `row_count` is 0. A positive count aborts the backfill. Each row includes up to 10 sample ids. Fix those rows (or decide an `externalId collision`) and rerun. Do not rehearse with a failing section 1.
+- Sections 2 and 3 are informational. Section 2 lists rows the unambiguous-owner rules will fill in. Section 3 lists business brokerages that fall back onto the personal entity.
+- Section 3b lists non-base-currency transactions and transfers whose stored `exchangeRate` is 1, with up to 10 ids. A non-zero count does not block. Those rows stay 1:1, which is the rate already stored.
+- Section 4 is the baseline. Record 4a through 4e. `verify-ledger-migration.sql` is checked against these numbers.
+
+Precheck on production, 2026-10-06: section 1 blockers 0, section 2 remaps 0, section 3 brokerage fallbacks 0. Section 4a: 519 transactions, 2257 bill_transactions, 132 transfers, 75 investment_transactions. The final pre-deploy precheck in the maintenance window must match this unless something has written since; if it has, the new section 4 is the baseline and this one is the earlier record.
 
 ## Rehearsal
 
-Take a custom-format dump from inside the postgres container and restore it into a new database. Do not build `capital-migrate` or `capital-web` here.
+Build from a detached worktree of `capital-ledger-v2`. Do not check that branch out in `~/Documents/Github/kodama-labs`.
 
 ```bash
-docker --context desktop-linux exec postgres \
-  sh -c 'pg_dump -U "$POSTGRES_USER" -Fc -d capital -f /tmp/capital-rehearsal.dump'
+cd ~/Documents/Github/kodama-labs
+git fetch origin capital-ledger-v2
+git worktree add --detach ~/capital-ledger-v2-rehearsal origin/capital-ledger-v2
 
-docker --context desktop-linux exec postgres \
-  sh -c 'psql -U "$POSTGRES_USER" -d postgres -v ON_ERROR_STOP=1 \
-    -c "DROP DATABASE IF EXISTS capital_rehearsal_dev;" \
-    -c "CREATE DATABASE capital_rehearsal_dev;"'
-
-docker --context desktop-linux exec postgres \
-  sh -c 'pg_restore -U "$POSTGRES_USER" -d capital_rehearsal_dev --no-owner --no-acl /tmp/capital-rehearsal.dump'
-```
-
-Run the precheck against the restored copy and confirm it matches `/tmp/capital-ledger-v2-precheck-prod.txt`, including the section 4 totals:
-
-```bash
-docker --context desktop-linux exec -i postgres \
-  sh -c 'psql -U "$POSTGRES_USER" -d capital_rehearsal_dev -v ON_ERROR_STOP=1' \
-  < apps/capital/scripts/precheck-ledger-migration.sql \
-  | tee /tmp/capital-ledger-v2-precheck-rehearsal.txt
-```
-
-Apply the migrations with the host Prisma client pointed at `capital_rehearsal_dev` (published on `localhost:5433`). That does not retag `kodama-capital:latest`.
-
-```bash
-cd apps/capital
-DATABASE_URL="postgresql://root:<password>@127.0.0.1:5433/capital_rehearsal_dev" \
-DIRECT_URL="postgresql://root:<password>@127.0.0.1:5433/capital_rehearsal_dev" \
-  pnpm exec prisma migrate deploy
-```
-
-If the host client is not an option, build a separate tag and run that image only. Do not `compose build capital-migrate`, and do not tag the result `latest`. `capital-web` is pinned to `kodama-capital:latest`, so this `docker run` names the rehearsal tag explicitly:
-
-```bash
 docker --context desktop-linux build \
-  -f Dockerfile --target capital \
+  -f ~/capital-ledger-v2-rehearsal/Dockerfile \
+  --target capital \
   -t kodama-capital:pr67-rehearsal \
   --build-arg NEXT_PUBLIC_APP_URL=https://capital.kodamalabs.ai \
-  --build-arg NEXT_PUBLIC_VAPID_PUBLIC_KEY=<the value in docker-compose.yml> \
-  .
+  --build-arg NEXT_PUBLIC_VAPID_PUBLIC_KEY=<the capital value in docker-compose.yml> \
+  ~/capital-ledger-v2-rehearsal
+```
 
-docker --context desktop-linux run --rm --network kodama-prod_kodama \
-  -e DATABASE_URL="postgresql://root:<password>@postgres:5432/capital_rehearsal_dev" \
+Dump production to the host. `pg_dump` writes to the command's stdout; the redirect creates the file on the host.
+
+```bash
+mkdir -p ~/backups
+ts=$(date -u +%Y%m%dT%H%M%SZ)
+docker --context desktop-linux exec postgres \
+  pg_dump -Fc -U root capital > ~/backups/capital-pre67-$ts.dump
+ls -lh ~/backups/capital-pre67-$ts.dump
+docker --context desktop-linux exec -i postgres \
+  pg_restore -l < ~/backups/capital-pre67-$ts.dump \
+  | tee ~/backups/capital-pre67-$ts.list
+```
+
+The file must be non-empty. The list must include `transactions` and `businesses`.
+
+Restore into a throwaway Postgres 17 on its own network. Publish no port. Do not restore into the prod `postgres` container, and do not attach this network to `kodama`.
+
+```bash
+docker --context desktop-linux network create capital-rehearsal-net
+docker --context desktop-linux run -d \
+  --name capital-rehearsal-pg \
+  --network capital-rehearsal-net \
+  -e POSTGRES_USER=root \
+  -e POSTGRES_PASSWORD=rehearsal \
+  -e POSTGRES_DB=capital \
+  postgres:17
+docker --context desktop-linux exec capital-rehearsal-pg \
+  sh -c 'until pg_isready -U root; do sleep 1; done'
+
+docker --context desktop-linux exec -i capital-rehearsal-pg \
+  pg_restore -U root -d capital --no-owner --no-acl \
+  < ~/backups/capital-pre67-$ts.dump
+```
+
+A warning that schema `public` already exists can be ignored. Confirm the restore with `SELECT count(*) FROM transactions` inside `capital-rehearsal-pg` (519 on the 2026-10-06 dump).
+
+Run the precheck against the copy and confirm it matches the prod precheck, including section 4:
+
+```bash
+docker --context desktop-linux exec -i capital-rehearsal-pg \
+  psql -U root -d capital -v ON_ERROR_STOP=1 \
+  < ~/capital-ledger-v2-rehearsal/apps/capital/scripts/precheck-ledger-migration.sql \
+  | tee ~/backups/capital-ledger-v2-precheck-rehearsal.txt
+```
+
+Migrate the copy. Both URLs are required:
+
+```bash
+docker --context desktop-linux run --rm \
+  --network capital-rehearsal-net \
+  -e DATABASE_URL="postgresql://root:rehearsal@capital-rehearsal-pg:5432/capital" \
+  -e DIRECT_URL="postgresql://root:rehearsal@capital-rehearsal-pg:5432/capital" \
   --entrypoint pnpm \
   kodama-capital:pr67-rehearsal \
   exec prisma migrate deploy
@@ -89,10 +123,10 @@ docker --context desktop-linux run --rm --network kodama-prod_kodama \
 Wait until the log says `All migrations have been successfully applied`. Then:
 
 ```bash
-docker --context desktop-linux exec -i postgres \
-  sh -c 'psql -U "$POSTGRES_USER" -d capital_rehearsal_dev -v ON_ERROR_STOP=1' \
-  < apps/capital/scripts/verify-ledger-migration.sql \
-  | tee /tmp/capital-ledger-v2-verify-rehearsal.txt
+docker --context desktop-linux exec -i capital-rehearsal-pg \
+  psql -U root -d capital -v ON_ERROR_STOP=1 \
+  < ~/capital-ledger-v2-rehearsal/apps/capital/scripts/verify-ledger-migration.sql \
+  | tee ~/backups/capital-ledger-v2-verify-rehearsal.txt
 ```
 
 `ON_ERROR_STOP` only stops on SQL errors. Read the output:
@@ -106,58 +140,103 @@ docker --context desktop-linux exec -i postgres \
 - Section 8 archived counts equal the live counts.
 - Section 9 lists the same business-brokerage fallbacks as precheck section 3.
 
-Leave `capital_rehearsal_dev` in place until the production run has been verified. Drop it later with `DROP DATABASE capital_rehearsal_dev`. Do not drop `capital`.
+Remove the throwaway when the verify is saved, and also if a step fails:
+
+```bash
+docker --context desktop-linux rm -f capital-rehearsal-pg
+docker --context desktop-linux network rm capital-rehearsal-net
+```
+
+Leave the worktree until production is verified. Remove it later with `git worktree remove ~/capital-ledger-v2-rehearsal` from the live checkout. Do not drop the prod database.
 
 ## Maintenance window
 
-1. Pause the Contador MCP client so nothing writes during the dump or the migration.
-2. Tag the running image before any build:
+1. The pull request is merged to `main`. On the server:
+
+   ```bash
+   cd ~/Documents/Github/kodama-labs
+   git pull origin main
+   git status
+   ```
+
+   `git status` must be clean before any build. Do not check out `capital-ledger-v2` here.
+
+2. Open an Uptime Kuma maintenance window before stopping writers. From the live checkout, credentials come from the service env file:
+
+   ```bash
+   docker --context desktop-linux compose -p kodama-prod -f docker-compose.yml \
+     run --rm --no-deps uptime-kuma-provision node dist/maintenance.js start 60
+   ```
+
+   `start 60` is 60 minutes over every `kodama/` monitor. Clear it after verification (step 10), or at the end of a rollback.
+
+3. Tag the running image before any build:
 
    ```bash
    docker --context desktop-linux tag kodama-capital:latest kodama-capital:rollback-pre67
    ```
 
-3. Stop the writers, then take the final dump:
+4. Stop the writers, then take the final dump on the host:
 
    ```bash
    docker --context desktop-linux compose -p kodama-prod -f docker-compose.yml \
      stop capital-web cronjobs
 
+   ts=$(date -u +%Y%m%dT%H%M%SZ)
    docker --context desktop-linux exec postgres \
-     sh -c 'pg_dump -U "$POSTGRES_USER" -Fc -d capital -f /tmp/capital-pr67.dump'
-
-   docker --context desktop-linux exec postgres \
-     sh -c 'pg_restore -l /tmp/capital-pr67.dump' | tee /tmp/capital-pr67.list
+     pg_dump -Fc -U root capital > ~/backups/capital-pre67-$ts.dump
+   ls -lh ~/backups/capital-pre67-$ts.dump
+   docker --context desktop-linux exec -i postgres \
+     pg_restore -l < ~/backups/capital-pre67-$ts.dump \
+     | tee ~/backups/capital-pre67-$ts.list
    ```
 
-   The list must include the pre-ledger tables `transactions` and `businesses`. Copy the dump off the container before leaving the window (`docker cp postgres:/tmp/capital-pr67.dump`).
+   The file must be non-empty. The list must include `transactions` and `businesses`. This host file is the rollback dump.
 
-4. Rerun the precheck against production one last time and confirm section 1 is still all zeros and section 4 still matches the rehearsal baseline. A drift here means something wrote after the rehearsal dump; stop and re-rehearse.
+5. Re-run the precheck on production. Section 1 must still be all zeros, and section 4 must match the rehearsal (or be recorded as the new baseline if rows were written after the earlier dump). Then repeat the rehearsal section against this final dump: new throwaway network and `postgres:17` container, restore this file, precheck, `kodama-capital:pr67-rehearsal` with both `-e DATABASE_URL` and `-e DIRECT_URL`, verify, then `rm` the container and the network. At this size that takes a few minutes. Do not `compose build`, and do not restore the dump into the prod `postgres` container. Start the production migrate only after that verify matches.
 
-5. Build and apply. `--abort-on-container-exit` makes the shell return the migrate container's exit code:
+6. Apply on production. `capital-migrate` runs `prisma migrate deploy` and reads `DATABASE_URL` and `DIRECT_URL` from `apps/capital/.env.production`:
 
    ```bash
    docker --context desktop-linux compose -p kodama-prod -f docker-compose.yml \
      build capital-migrate
 
    docker --context desktop-linux compose -p kodama-prod -f docker-compose.yml \
-     up --no-deps --abort-on-container-exit --exit-code-from capital-migrate capital-migrate
+     run --rm --no-deps capital-migrate
    ```
 
-   The log must contain `All migrations have been successfully applied`, and the command must exit 0. A refusal (`ledger backfill refused:`) rolls the backfill transaction back. `ledger_v2_schema` stays applied (empty new tables, old tables intact) and `ledger_v2_retire_legacy` does not start. Fix the listed ids and rerun `capital-migrate`; do not restore yet unless you are abandoning the window.
+   The log must contain `All migrations have been successfully applied`, and the command must exit 0.
 
-6. Verify, and compare with the rehearsal file and with precheck section 4:
+   If the backfill refuses, `prisma migrate deploy` does not print the refusal list. The log shows `current transaction is aborted, commands ignored until end of transaction block`, and the migration is left failed. A second `migrate deploy` then stops with P3009. Read the rows from the precheck (section 1) or by running the backfill SQL with `psql` on the rehearsal copy.
+
+   Recovery is one of:
+
+   - Restore the host dump (rollback section) and stop.
+   - Mark the failed attempt rolled back, fix the data, and deploy again:
+
+     ```bash
+     docker --context desktop-linux compose -p kodama-prod -f docker-compose.yml \
+       run --rm --no-deps capital-migrate \
+       pnpm exec prisma migrate resolve --rolled-back 20261004200100_ledger_v2_backfill
+
+     docker --context desktop-linux compose -p kodama-prod -f docker-compose.yml \
+       run --rm --no-deps capital-migrate
+     ```
+
+     `ledger_v2_schema` stays applied (empty new tables, old tables intact). `ledger_v2_retire_legacy` has not started. Fix the ids from the precheck before the second deploy.
+
+7. Verify, and compare with the rehearsal file and with precheck section 4:
 
    ```bash
    docker --context desktop-linux exec -i postgres \
-     sh -c 'psql -U "$POSTGRES_USER" -d capital -v ON_ERROR_STOP=1' \
+     psql -U root -d capital -v ON_ERROR_STOP=1 \
      < apps/capital/scripts/verify-ledger-migration.sql \
-     | tee /tmp/capital-ledger-v2-verify-prod.txt
+     | tee ~/backups/capital-ledger-v2-verify-prod.txt
    ```
 
    The same equalities as the rehearsal must hold. Do not start the app while any of them fails.
 
-7. Start the app, then the cron runner, then the one-shot provisioner. `uptime-kuma-provision` has `restart: "no"`; wait until that container exits 0.
+8. Start the app, then the cron runner, then the one-shot provisioner. `uptime-kuma-provision` has `restart: "no"`. `run` exits when it finishes; that exit code must be 0.
 
    ```bash
    docker --context desktop-linux compose -p kodama-prod -f docker-compose.yml \
@@ -167,31 +246,44 @@ Leave `capital_rehearsal_dev` in place until the production run has been verifie
      up -d --no-deps --force-recreate cronjobs
 
    docker --context desktop-linux compose -p kodama-prod -f docker-compose.yml \
-     up --no-deps --abort-on-container-exit --exit-code-from uptime-kuma-provision uptime-kuma-provision
+     run --rm --no-deps uptime-kuma-provision
    ```
 
-8. Smoke. Sign in, open a month that has card purchases and a month that has transfers, and confirm balances match the rehearsal verify output. Then, from a shell that has `apps/capital/.env.production` and `DATABASE_URL` pointed at production, run the idempotent follow-ups dry-run first:
+9. Smoke. Sign in, open a month that has card purchases and a month that has transfers, and confirm balances match the rehearsal verify output. Then run the idempotent follow-ups inside the image, dry-run first. Do not run them from the host.
 
    ```bash
-   pnpm --filter @wallex/capital exec tsx --env-file=.env.production scripts/localize-system-categories.ts --dry-run
-   pnpm --filter @wallex/capital exec tsx --env-file=.env.production scripts/localize-system-categories.ts
+   docker --context desktop-linux compose -p kodama-prod -f docker-compose.yml \
+     run --rm --no-deps capital-migrate \
+     pnpm exec tsx scripts/localize-system-categories.ts --dry-run
+   docker --context desktop-linux compose -p kodama-prod -f docker-compose.yml \
+     run --rm --no-deps capital-migrate \
+     pnpm exec tsx scripts/localize-system-categories.ts
 
-   pnpm --filter @wallex/capital exec tsx --env-file=.env.production scripts/backfill-portfolio-snapshots.ts --dry-run
-   pnpm --filter @wallex/capital exec tsx --env-file=.env.production scripts/backfill-portfolio-snapshots.ts
+   docker --context desktop-linux compose -p kodama-prod -f docker-compose.yml \
+     run --rm --no-deps capital-migrate \
+     pnpm exec tsx scripts/backfill-portfolio-snapshots.ts --dry-run
+   docker --context desktop-linux compose -p kodama-prod -f docker-compose.yml \
+     run --rm --no-deps capital-migrate \
+     pnpm exec tsx scripts/backfill-portfolio-snapshots.ts
    ```
 
-   Resume the Contador MCP client only after the smoke checks pass.
+10. End the maintenance window, then resume the Contador MCP client:
+
+    ```bash
+    docker --context desktop-linux compose -p kodama-prod -f docker-compose.yml \
+      run --rm --no-deps uptime-kuma-provision node dist/maintenance.js clear
+    ```
 
 ## Rollback, before writes resume
 
-Use this only if verify failed or the app is wrong and nothing has written to the new ledger yet. Do not drop the failed database.
+Use this only if verify failed or the app is wrong and nothing has written to the new ledger yet. Do not drop the failed database. `$ts` is the final pre-deploy dump from step 4.
 
 ```bash
 docker --context desktop-linux compose -p kodama-prod -f docker-compose.yml \
   stop capital-web cronjobs
 
-docker --context desktop-linux exec postgres \
-  sh -c 'psql -U "$POSTGRES_USER" -d postgres -v ON_ERROR_STOP=1' <<'SQL'
+docker --context desktop-linux exec -i postgres \
+  psql -U root -d postgres -v ON_ERROR_STOP=1 <<'SQL'
 SELECT pg_terminate_backend(pid)
 FROM pg_stat_activity
 WHERE datname = 'capital' AND pid <> pg_backend_pid();
@@ -199,18 +291,31 @@ ALTER DATABASE capital RENAME TO capital_failed_pr67;
 CREATE DATABASE capital;
 SQL
 
-docker --context desktop-linux exec postgres \
-  sh -c 'pg_restore -U "$POSTGRES_USER" -d capital --no-owner --no-acl /tmp/capital-pr67.dump'
+docker --context desktop-linux exec -i postgres \
+  pg_restore -U root -d capital --no-owner --no-acl \
+  < ~/backups/capital-pre67-$ts.dump
 
 docker --context desktop-linux tag kodama-capital:rollback-pre67 kodama-capital:latest
 
+cd ~/Documents/Github/kodama-labs
+git checkout 14df14b61
+git status
+```
+
+`14df14b61` is `main` before this pull request. The checkout makes the bind-mounted schedules match the old image. `git status` must be clean. Do not recreate cronjobs before this checkout.
+
+```bash
 docker --context desktop-linux compose -p kodama-prod -f docker-compose.yml \
   up -d --no-deps capital-web
 docker --context desktop-linux compose -p kodama-prod -f docker-compose.yml \
   up -d --no-deps --force-recreate cronjobs
+docker --context desktop-linux compose -p kodama-prod -f docker-compose.yml \
+  run --rm --no-deps uptime-kuma-provision
+docker --context desktop-linux compose -p kodama-prod -f docker-compose.yml \
+  run --rm --no-deps uptime-kuma-provision node dist/maintenance.js clear
 ```
 
-`capital_failed_pr67` stays until someone decides to drop it. Resume Contador only after the restored app answers.
+`capital_failed_pr67` stays until someone decides to drop it. Resume Contador only after the restored app answers. `git checkout main` in the live tree comes later, together with a cronjobs recreate, so the mounted schedules and the image stay paired.
 
 ## What Contador sees
 
