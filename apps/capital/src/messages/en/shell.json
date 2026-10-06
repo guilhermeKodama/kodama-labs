@@ -12,7 +12,8 @@
     "portfolio": "Portfolio",
     "contributions": "Contributions",
     "settings": "Settings",
-    "signOut": "Sign out"
+    "accountHint": "Settings · Theme",
+    "railSearch": "Search or run ({shortcut})"
   },
   "sidebar": {
     "collapse": "Collapse the sidebar",
@@ -30,5 +31,21 @@
   "pwa": {
     "updateAvailable": "New version available",
     "reload": "Update"
+  },
+  "userMenu": {
+    "label": "{name}’s account",
+    "settings": "Settings",
+    "theme": "Theme",
+    "themes": {
+      "system": "System",
+      "light": "Light",
+      "dark": "Dark"
+    },
+    "language": "Language",
+    "languages": {
+      "ptBR": "Português",
+      "en": "English"
+    },
+    "signOut": "Sign out"
   }
 }
