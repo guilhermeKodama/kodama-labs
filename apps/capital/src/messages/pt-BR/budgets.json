@@ -1,1 +1,214 @@
-{}
+{
+  "crumbs": {
+    "transactions": "Transações",
+    "budgets": "Orçamentos"
+  },
+  "mode": {
+    "label": "Visão",
+    "month": "Mensal",
+    "year": "Anual"
+  },
+  "nav": {
+    "prevMonth": "Mês anterior",
+    "nextMonth": "Próximo mês",
+    "prevYear": "Ano anterior",
+    "nextYear": "Próximo ano"
+  },
+  "newBudget": "+ Orçamento",
+  "scope": {
+    "label": "Escopo",
+    "all": "Todas",
+    "pf": "PF",
+    "pj": "PJ"
+  },
+  "loadError": "Não foi possível carregar.",
+  "uncategorized": "Sem categoria",
+  "drillLabel": "{category} · {period}",
+  "rowMenu": {
+    "label": "Ações de {category}",
+    "edit": "Editar orçamento…",
+    "delete": "Excluir…"
+  },
+  "month": {
+    "today": "Hoje: {day}/{month} · {pct}% do mês",
+    "closed": "Mês fechado",
+    "notStarted": "Mês ainda não começou",
+    "kpi": {
+      "budget": "Orçado",
+      "spent": "Gasto",
+      "spentSub": "{pct}% do orçado",
+      "remaining": "Restante",
+      "projection": "Projeção fim do mês",
+      "over": "{amount} acima",
+      "slack": "{amount} de folga"
+    },
+    "table": {
+      "category": "Categoria",
+      "bar": "Gasto / orçado",
+      "barToday": "Gasto / orçado · marca = hoje (dia {day})",
+      "spent": "Gasto",
+      "remaining": "Restante",
+      "status": "Status",
+      "total": "Total",
+      "resets": "Orçamento zera em 1º/{month}",
+      "empty": "Nenhum orçamento em {month}. Crie um em “+ Orçamento”."
+    },
+    "status": {
+      "over": "Estourado",
+      "ahead": "Acima do ritmo",
+      "onTrack": "No ritmo"
+    },
+    "chart": {
+      "title": "Gasto acumulado vs ritmo ideal",
+      "cumulative": "Gasto acumulado ({unit})",
+      "ideal": "Ritmo ideal ({unit})",
+      "budget": "Orçado",
+      "caption": "Dia do mês × {unit} · {month}",
+      "empty": "Sem orçamentos neste mês.",
+      "notStarted": "O mês ainda não começou.",
+      "day": "{day}/{month}"
+    },
+    "upcoming": {
+      "title": "Contas fixas · próximos 14 dias",
+      "seeAll": "Ver todas",
+      "bill": "Fatura {account}",
+      "overdue": "Atrasada",
+      "empty": "Nenhuma conta fixa nos próximos 14 dias.",
+      "mode": {
+        "auto": "auto",
+        "reminder": "lembrete",
+        "fatura": "fatura"
+      }
+    }
+  },
+  "year": {
+    "header": {
+      "done": "{actual} realizado",
+      "future": "Ano ainda não começou · só o que já está lançado",
+      "noBasis": "{actual} realizado · {projected} só com o que já está lançado",
+      "projected": "{actual} realizado · {projected} projetado pela média de {basis}"
+    },
+    "kpi": {
+      "spent": "Gasto em {year} (até {month})",
+      "spentNoMonth": "Gasto em {year}",
+      "spentSub": "{pct}% do orçado até {month}",
+      "budget": "Orçado até {month}",
+      "budgetYear": "Orçado em {year}",
+      "projection": "Projeção do ano",
+      "over": "{amount} acima de {budget}",
+      "slack": "{amount} de folga",
+      "overMonths": "Meses estourados",
+      "overMonthsSub": "de {count} categoria·mês"
+    },
+    "heatmap": {
+      "category": "Categoria",
+      "yearTotal": "Ano (proj.)",
+      "trend": "Tendência",
+      "trend_up": "↑ {pct}%",
+      "trend_down": "↓ {pct}%",
+      "trend_stable": "→ estável",
+      "total": "Total",
+      "empty": "Nenhum orçamento mensal em {year}.",
+      "open": "Abrir {month}",
+      "legend": "Cor mais forte = mais perto do limite · vermelho = passou · tracejado = projeção · * {month} em andamento · clicar numa célula abre aquele mês",
+      "legendNoCurrent": "Cor mais forte = mais perto do limite · vermelho = passou · tracejado = projeção · clicar numa célula abre aquele mês"
+    },
+    "chart": {
+      "title": "Gasto mensal vs orçado",
+      "real": "Realizado ({unit})",
+      "projected": "Projeção ({unit})",
+      "budget": "Orçado/mês",
+      "caption": "Mês × {unit} · {year}"
+    },
+    "insights": {
+      "title": "Tendências do ano",
+      "overrunTitle": "{category}: passou do orçado em {count} de {total, plural, one {# mês} other {# meses}}",
+      "overrunBody": "Média de {avg}/mês contra {budget} orçados.",
+      "adjust": "Ajustar para {amount}?",
+      "adjusted": "Orçamento de {category} ajustado para {amount} a partir de {month}",
+      "growthTitle": "{category}: subiu {pct}% no ano",
+      "growthBody": "Média de {first} {firstAvg} → {last} {lastAvg}.",
+      "seasonalTitle": "{category}: sazonal",
+      "seasonalBody": "Pico em {month} ({value}). Talvez vire um orçamento anual.",
+      "empty": "Sem estouros recorrentes, crescimento ou sazonalidade."
+    },
+    "yearly": {
+      "title": "Orçamentos anuais",
+      "of": "de {amount}"
+    }
+  },
+  "dialog": {
+    "createTitle": "Novo orçamento",
+    "editTitle": "Editar orçamento",
+    "editDesc": "{category} · {entity} · {period}",
+    "category": "Categoria",
+    "entity": "Entidade",
+    "allEntities": "Todas",
+    "allEntitiesHint": "“Todas” soma os gastos de PF e PJ nessa categoria",
+    "amount": "Valor",
+    "period": "Período",
+    "monthly": "Mensal",
+    "yearly": "Anual",
+    "from": "A partir de",
+    "fromHint": "Os meses anteriores ficam com o valor de antes.",
+    "note": "Nota",
+    "notePlaceholder": "pago entre jan e mar",
+    "submitCreate": "Criar orçamento",
+    "delete": "Excluir…",
+    "created": "Orçamento de {category} criado",
+    "updated": "Orçamento de {category} alterado a partir de {month}"
+  },
+  "delete": {
+    "title": "Excluir o orçamento de {category}",
+    "desc": "{amount} {period, select, yearly {por ano} other {por mês}}",
+    "fromLabel": "A partir de {from}",
+    "fromDesc": "Os meses anteriores continuam com o orçamento.",
+    "allLabel": "Todos os meses",
+    "allDesc": "Remove o orçamento de todos os meses, inclusive dos que já passaram.",
+    "done": "Orçamento de {category} excluído"
+  },
+  "rule": {
+    "fallbackTitle": "Conta fixa",
+    "notFound": "Esta conta fixa não existe mais.",
+    "kind": {
+      "expense": "Despesa",
+      "income": "Receita",
+      "transfer": "Transferência",
+      "investment": "Aporte"
+    },
+    "pausedTag": "pausada",
+    "next": "Próxima: {date} · {amount}",
+    "pay": "Lançar agora",
+    "skip": "Pular",
+    "entries": "Ver lançamentos →",
+    "amount": "Valor",
+    "frequency": "Frequência",
+    "freq": {
+      "daily": "Diária",
+      "weekly": "Semanal",
+      "monthly": "Mensal",
+      "yearly": "Anual"
+    },
+    "mode": "Modo",
+    "modeAuto": "Lançar automaticamente",
+    "modeReminder": "Só lembrar (push no dia)",
+    "nextDue": "Próximo vencimento",
+    "endDate": "Termina em",
+    "endDateHint": "Em branco, não termina",
+    "active": "Ativa",
+    "activeHint": "Lança ou lembra no vencimento",
+    "pausedHint": "Pausada: não lança nem lembra",
+    "saved": "“{description}” salva",
+    "savedBooked": "“{description}” salva · {count, plural, one {# lançamento feito} other {# lançamentos feitos}}",
+    "paid": "“{description}” lançada em {date}",
+    "skipped": "“{description}” de {date} pulada",
+    "deleted": "“{description}” excluída"
+  },
+  "rules": {
+    "title": "Contas fixas",
+    "desc": "Todas as recorrências, inclusive as pausadas",
+    "active": "Ativas",
+    "paused": "Pausadas",
+    "empty": "Nenhuma recorrência. Marque “Recorrente” ao criar uma transação."
+  }
+}

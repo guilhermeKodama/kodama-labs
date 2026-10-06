@@ -81,7 +81,8 @@ export async function updateBudget(userId: string, params: UpdateBudgetParams, d
   const { budgetId, ...patch } = params;
   const owned = await db.budget.findFirst({ where: { id: budgetId, userId } });
   if (!owned) throw new Error("Budget not found or access denied");
-  return toMcpBudget(await updateBudgetService(userId, budgetId, patch, db));
+  // The MCP contract edits the version in place (every month it covers); the app's applyFrom versioning is not used here.
+  return toMcpBudget(await updateBudgetService(userId, budgetId, patch, db, { mode: "in_place" }));
 }
 
 export async function deleteBudget(userId: string, params: DeleteBudgetParams, db: DbClient) {

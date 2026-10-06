@@ -113,6 +113,7 @@ export const ERROR_CODES = {
   "budget.negative_amount": "The budget amount cannot be negative",
   "budget.clash": "A budget for this category already starts in that month",
   "budget.overview_period_required": "Choose a month (YYYY-MM) or a year (YYYY)",
+  "budget.apply_before_start": "The change can only apply from the month the budget starts",
 
   // Recurring rules
   "recurring.not_found": "Recurring rule not found",

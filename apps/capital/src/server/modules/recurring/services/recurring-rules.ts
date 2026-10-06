@@ -1,10 +1,12 @@
 import { endOfDay, isAfter } from "date-fns";
 import type { DbClient } from "@capital/server/lib/prisma";
 import { Prisma } from "@/generated/prisma";
-import type { LedgerKind, RecurrenceFrequency, RecurringRule, TransferDirection } from "@/generated/prisma";
+import type { Account, Category, Entity, LedgerKind, RecurrenceFrequency, RecurringRule, TransferDirection } from "@/generated/prisma";
 import { formatDateOnly, parseLocalDate, toNoonUTC } from "@capital/server/lib/date-utils";
 import { getNextOccurrence } from "@capital/server/lib/recurrence";
 import { remindersConfigSchema, type RemindersConfig } from "@/lib/validations/reminders";
+import { entityScopeWhere } from "@capital/server/lib/entity-scope";
+import { todayIn } from "@capital/server/modules/budgets/lib/today";
 import { LedgerError, notFound } from "@capital/server/modules/ledger/lib/errors";
 import { toNumber } from "@capital/server/modules/ledger/lib/money";
 import { getOwnedAccount } from "@capital/server/modules/ledger/services/accounts";
@@ -23,6 +25,8 @@ export interface RecurringRuleInput {
   exchangeRate?: number | null;
   description: string;
   categoryId?: string | null;
+  /** Occurrences are booked as tax-deductible expenses. */
+  isTaxDeductible?: boolean;
   frequency: RecurrenceFrequency;
   startDate: string;
   endDate?: string | null;
@@ -34,9 +38,30 @@ export interface RecurringRuleInput {
 export interface RuleWriteOptions {
   /** Mutation records are appended here instead of a new undo batch when given. */
   collect?: MutationRecordInput[];
+  /**
+   * Book the occurrences already due (start date up to today, in the user's
+   * timezone) of an active auto-generating rule in the same batch, instead
+   * of waiting for the morning cron. The v2 routes pass it.
+   */
+  bookDue?: boolean;
 }
 
-export function serializeRule(r: RecurringRule) {
+type RuleRelations = Partial<{
+  entity: Pick<Entity, "id" | "name" | "kind">;
+  account: Pick<Account, "id" | "name" | "type" | "currency">;
+  toAccount: Pick<Account, "id" | "name" | "type" | "currency"> | null;
+  category: Pick<Category, "id" | "name"> | null;
+}>;
+
+/** Relations listRecurringRules loads for the API (entity badge, account names). */
+export const RULE_INCLUDE = {
+  entity: { select: { id: true, name: true, kind: true } },
+  account: { select: { id: true, name: true, type: true, currency: true } },
+  toAccount: { select: { id: true, name: true, type: true, currency: true } },
+  category: { select: { id: true, name: true } },
+} as const;
+
+export function serializeRule(r: RecurringRule & RuleRelations) {
   return {
     id: r.id,
     kind: r.kind,
@@ -49,6 +74,7 @@ export function serializeRule(r: RecurringRule) {
     exchangeRate: r.exchangeRate === null ? null : toNumber(r.exchangeRate),
     description: r.description,
     categoryId: r.categoryId,
+    isTaxDeductible: r.isTaxDeductible,
     frequency: r.frequency,
     startDate: formatDateOnly(r.startDate),
     endDate: r.endDate ? formatDateOnly(r.endDate) : null,
@@ -57,6 +83,10 @@ export function serializeRule(r: RecurringRule) {
     isActive: r.isActive,
     autoGenerate: r.autoGenerate,
     reminders: r.reminders,
+    ...(r.entity && { entity: { id: r.entity.id, name: r.entity.name, kind: r.entity.kind } }),
+    ...(r.account && { account: { id: r.account.id, name: r.account.name, type: r.account.type, currency: r.account.currency } }),
+    ...(r.toAccount !== undefined && { toAccount: r.toAccount && { id: r.toAccount.id, name: r.toAccount.name, type: r.toAccount.type, currency: r.toAccount.currency } }),
+    ...(r.category !== undefined && { category: r.category && { id: r.category.id, name: r.category.name } }),
   };
 }
 
@@ -88,6 +118,7 @@ export async function createRecurringRule(userId: string, input: RecurringRuleIn
         exchangeRate: input.exchangeRate ?? null,
         description: input.description,
         categoryId: input.categoryId ?? null,
+        isTaxDeductible: input.isTaxDeductible ?? false,
         transferDirection: input.toAccountId ? input.transferDirection ?? null : null,
         toAccountId: input.toAccountId ?? null,
         frequency: input.frequency,
@@ -99,9 +130,11 @@ export async function createRecurringRule(userId: string, input: RecurringRuleIn
       },
     });
     const records: MutationRecordInput[] = opts.collect ?? [];
-    records.push({ model: "RecurringRule", recordId: rule.id, before: null, after: snapshot(rule) });
+    const booked = opts.bookDue ? await bookDueNow(rule, tx, records) : noneBooked(rule);
+    // One record with the final row: undo removes the occurrences, then the rule.
+    records.push({ model: "RecurringRule", recordId: rule.id, before: null, after: snapshot(booked.rule) });
     const batchId = opts.collect ? null : await recordMutation(tx, userId, "create", rule.description, records);
-    return { ...rule, batchId };
+    return { ...booked.rule, batchId, booked: bookedSummary(booked) };
   });
 }
 
@@ -129,6 +162,7 @@ export async function updateRecurringRule(
         ...(patch.exchangeRate !== undefined && { exchangeRate: patch.exchangeRate }),
         ...(patch.description !== undefined && { description: patch.description }),
         ...(patch.categoryId !== undefined && { categoryId: patch.categoryId }),
+        ...(patch.isTaxDeductible !== undefined && { isTaxDeductible: patch.isTaxDeductible }),
         ...(patch.frequency !== undefined && { frequency: patch.frequency }),
         ...(patch.startDate !== undefined && { startDate: parseLocalDate(patch.startDate) }),
         ...(patch.endDate !== undefined && { endDate: patch.endDate ? parseLocalDate(patch.endDate) : null }),
@@ -139,9 +173,11 @@ export async function updateRecurringRule(
       },
     });
     const records: MutationRecordInput[] = opts.collect ?? [];
-    records.push({ model: "RecurringRule", recordId: rule.id, before: snapshot(rule), after: snapshot(updated) });
+    // Switched to auto (or resumed) with occurrences already due: they are booked in the same batch.
+    const booked = opts.bookDue ? await bookDueNow(updated, tx, records) : noneBooked(updated);
+    records.push({ model: "RecurringRule", recordId: rule.id, before: snapshot(rule), after: snapshot(booked.rule) });
     const batchId = opts.collect ? null : await recordMutation(tx, userId, "update", updated.description, records);
-    return { ...updated, batchId };
+    return { ...booked.rule, batchId, booked: bookedSummary(booked) };
   });
 }
 
@@ -171,10 +207,17 @@ export async function deleteRecurringRule(userId: string, ruleId: string, db: Db
   });
 }
 
-export async function listRecurringRules(userId: string, db: DbClient, opts: { includeInactive?: boolean; entityId?: string } = {}) {
+/** Rules by next due date, with their entity, accounts and category. `entityIds` is a resolved scope (null = all). */
+export async function listRecurringRules(userId: string, db: DbClient, opts: { includeInactive?: boolean; entityId?: string; entityIds?: string[] | null } = {}) {
   return db.recurringRule.findMany({
-    where: { userId, ...(opts.includeInactive ? {} : { isActive: true }), ...(opts.entityId && { entityId: opts.entityId }) },
-    orderBy: { nextDueDate: "asc" },
+    where: {
+      userId,
+      ...(opts.includeInactive ? {} : { isActive: true }),
+      ...(opts.entityId && { entityId: opts.entityId }),
+      ...entityScopeWhere(opts.entityIds ?? null),
+    },
+    include: RULE_INCLUDE,
+    orderBy: [{ nextDueDate: "asc" }, { description: "asc" }],
   });
 }
 
@@ -218,6 +261,7 @@ export async function materializeRule(rule: RecurringRule, date: Date, db: DbCli
             exchangeRate,
             description: rule.description,
             categoryId: rule.categoryId,
+            isTaxDeductible: rule.isTaxDeductible,
             date: day,
           },
           db,
@@ -232,6 +276,45 @@ export async function materializeRule(rule: RecurringRule, date: Date, db: DbCli
     for (const a of pending) records?.push({ model: "Attachment", recordId: a.id, before: snapshot(a), after: snapshot({ ...a, ...owner }) });
   }
   return result;
+}
+
+interface BookedRun {
+  rule: RecurringRule;
+  generated: number;
+  entryIds: string[];
+  transferGroupIds: string[];
+}
+
+const noneBooked = (rule: RecurringRule): BookedRun => ({ rule, generated: 0, entryIds: [], transferGroupIds: [] });
+const bookedSummary = (run: BookedRun) => ({ count: run.generated, entryIds: run.entryIds, transferGroupIds: run.transferGroupIds });
+
+/**
+ * Books every occurrence of a rule from its next due date through `until`
+ * (and its end date), recording them in `records`, then advances the rule.
+ * The caller records the rule's own before/after.
+ */
+async function bookDueOccurrences(rule: RecurringRule, tx: DbClient, until: Date, generatedOn: Date, records: MutationRecordInput[]): Promise<BookedRun> {
+  const run = noneBooked(rule);
+  let next = toNoonUTC(rule.nextDueDate);
+  while (!isAfter(next, until)) {
+    if (rule.endDate && isAfter(next, toNoonUTC(rule.endDate))) break;
+    const result = await materializeRule(rule, next, tx, {}, records);
+    run.generated++;
+    run.entryIds.push(...result.entryIds);
+    if (result.transferGroupId) run.transferGroupIds.push(result.transferGroupId);
+    next = getNextOccurrence(next, rule.frequency);
+  }
+  if (!run.generated) return run;
+  run.rule = await tx.recurringRule.update({ where: { id: rule.id }, data: { nextDueDate: next, lastGeneratedDate: generatedOn } });
+  return run;
+}
+
+/** bookDueOccurrences up to today in the user's timezone, for an active auto-generating rule. */
+async function bookDueNow(rule: RecurringRule, tx: DbClient, records: MutationRecordInput[]): Promise<BookedRun> {
+  if (!rule.isActive || !rule.autoGenerate) return noneBooked(rule);
+  const user = await tx.user.findUniqueOrThrow({ where: { id: rule.userId }, select: { timezone: true } });
+  const today = todayIn(user.timezone);
+  return bookDueOccurrences(rule, tx, today.end, toNoonUTC(today.start), records);
 }
 
 /** Mark the next occurrence as paid: book it (optionally on another date/amount) and advance, in one undo batch. */
@@ -288,19 +371,11 @@ export async function processDueRules(db: DbClient, now = new Date(), opts: { us
   for (const rule of due) {
     const booked = await inTransaction(db, async (tx) => {
       const records: MutationRecordInput[] = [];
-      let next = toNoonUTC(rule.nextDueDate);
-      let generated = 0;
-      while (!isAfter(next, todayEnd)) {
-        if (rule.endDate && isAfter(next, toNoonUTC(rule.endDate))) break;
-        await materializeRule(rule, next, tx, {}, records);
-        generated++;
-        next = getNextOccurrence(next, rule.frequency);
-      }
-      if (!generated) return null;
-      const updated = await tx.recurringRule.update({ where: { id: rule.id }, data: { nextDueDate: next, lastGeneratedDate: today } });
-      records.push({ model: "RecurringRule", recordId: rule.id, before: snapshot(rule), after: snapshot(updated) });
+      const run = await bookDueOccurrences(rule, tx, todayEnd, today, records);
+      if (!run.generated) return null;
+      records.push({ model: "RecurringRule", recordId: rule.id, before: snapshot(rule), after: snapshot(run.rule) });
       const batchId = await recordMutation(tx, rule.userId, "create", rule.description, records, { source: "system" });
-      return { ruleId: rule.id, generated, nextDueDate: formatDateOnly(next), batchId };
+      return { ruleId: rule.id, generated: run.generated, nextDueDate: formatDateOnly(run.rule.nextDueDate), batchId };
     });
     if (booked) results.push(booked);
   }
