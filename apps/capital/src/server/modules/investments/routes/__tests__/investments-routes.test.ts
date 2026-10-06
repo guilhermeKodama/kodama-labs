@@ -271,4 +271,43 @@ describe("market data", () => {
     expect(local.results).toHaveLength(1);
     expect(fetchMock).not.toHaveBeenCalled();
   });
+
+  it("POST /v2/holdings/refresh-prices stores the fetched prices on the user's active holdings", async () => {
+    const petr = await json("POST", "/v2/holdings", { accountId: f.broker, assetClass: "stocks", ticker: "PETR4", name: "Petrobras PN", currentPrice: 30 });
+    const r = await json("POST", "/v2/holdings/refresh-prices", {});
+    expect(r).toMatchObject({ totalHoldings: 1, updated: 1, failed: 0 });
+    expect((await prisma.investmentHolding.findUniqueOrThrow({ where: { id: petr.id } })).currentPrice).toBe(38.2);
+  });
+});
+
+describe("targets and broker cash", () => {
+  afterAll(async () => {
+    await prisma.portfolioTarget.deleteMany({ where: { userId: USER } });
+  });
+
+  it("refuses targets that do not add up to 100% and keeps the saved ones", async () => {
+    await json("PUT", "/v2/portfolio/targets", { targets: [{ allocationClass: "fixed_income", targetPercent: 60 }, { allocationClass: "br_stocks", targetPercent: 40 }] });
+    const bad = await call("PUT", "/v2/portfolio/targets", { targets: [{ allocationClass: "fixed_income", targetPercent: 60 }, { allocationClass: "br_stocks", targetPercent: 30 }] });
+    expect(bad.status).toBe(422);
+    expect(await bad.json()).toMatchObject({ code: "portfolio.targets_sum" });
+    const saved = await json("GET", "/v2/portfolio/targets");
+    expect(saved.targets).toHaveLength(2);
+  });
+
+  it("deposits and withdraws broker cash undoably, refusing a withdrawal above the balance", async () => {
+    const deposit = await json("POST", "/v2/brokerage-cash", { accountId: f.broker, direction: "deposit", amount: 100, date: "2026-09-01", counterpartAccountId: f.pfChecking });
+    expect(deposit.batchId).toBeTruthy();
+    expect(await balance(f.broker)).toBe(100);
+
+    const over = await call("POST", "/v2/brokerage-cash", { accountId: f.broker, direction: "withdraw", amount: 100.01, date: "2026-09-02" });
+    expect(over.status).toBe(422);
+    expect(await over.json()).toMatchObject({ code: "brokerage.insufficient_cash" });
+
+    const withdraw = await json("POST", "/v2/brokerage-cash", { accountId: f.broker, direction: "withdraw", amount: 40, date: "2026-09-02", counterpartAccountId: f.pfChecking });
+    expect(await balance(f.broker)).toBe(60);
+    await undo(withdraw.batchId);
+    expect(await balance(f.broker)).toBe(100);
+    await undo(deposit.batchId);
+    expect(await balance(f.broker)).toBe(0);
+  });
 });
