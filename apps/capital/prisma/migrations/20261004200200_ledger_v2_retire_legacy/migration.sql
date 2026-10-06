@@ -280,6 +280,46 @@ DROP INDEX "budgets_personalAccountId_idx";
 -- DropIndex
 DROP INDEX "reminder_dispatches_recurringTransactionId_occurrenceDate_d_key";
 
+-- Keep the link columns that are about to be dropped. The tables themselves
+-- stay in public (they gained new columns); only these values move to legacy.
+CREATE SCHEMA IF NOT EXISTS legacy;
+
+CREATE TABLE legacy.attachment_links (
+    id TEXT NOT NULL,
+    "transactionId" TEXT,
+    "transferId" TEXT,
+    "recurringTransactionId" TEXT,
+    "recurringTransferId" TEXT,
+    CONSTRAINT attachment_links_pkey PRIMARY KEY (id)
+);
+
+INSERT INTO legacy.attachment_links (id, "transactionId", "transferId", "recurringTransactionId", "recurringTransferId")
+SELECT id, "transactionId", "transferId", "recurringTransactionId", "recurringTransferId"
+FROM attachments;
+
+CREATE TABLE legacy.budget_links (
+    id TEXT NOT NULL,
+    "businessId" TEXT,
+    "personalAccountId" TEXT,
+    category TEXT,
+    "entityType" "EntityType",
+    CONSTRAINT budget_links_pkey PRIMARY KEY (id)
+);
+
+INSERT INTO legacy.budget_links (id, "businessId", "personalAccountId", category, "entityType")
+SELECT id, "businessId", "personalAccountId", category, "entityType"
+FROM budgets;
+
+CREATE TABLE legacy.reminder_dispatch_links (
+    id TEXT NOT NULL,
+    "recurringTransactionId" TEXT NOT NULL,
+    CONSTRAINT reminder_dispatch_links_pkey PRIMARY KEY (id)
+);
+
+INSERT INTO legacy.reminder_dispatch_links (id, "recurringTransactionId")
+SELECT id, "recurringTransactionId"
+FROM reminder_dispatches;
+
 -- AlterTable
 ALTER TABLE "attachments" DROP COLUMN "recurringTransactionId",
 DROP COLUMN "recurringTransferId",

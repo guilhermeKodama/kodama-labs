@@ -5,6 +5,11 @@
 -- entity and month against the legacy tables and aborts (rolling back the
 -- whole migration) on any difference above R$ 0.01.
 --
+-- Before writing, the same predicates as scripts/precheck-ledger-migration.sql
+-- abort the migration if any legacy row would be left out of the ledger, if a
+-- bill purchase or investment cash leg has no usable rate, or if two rows
+-- would share (accountId, externalId). Up to 10 ids are listed per category.
+--
 -- Ids are preserved wherever a legacy row maps 1:1 (entities keep the
 -- business / personal account id, accounts keep the card / broker id, entries
 -- keep the transaction / bill transaction id, transfer groups keep the
@@ -35,6 +40,745 @@
 --     cash equals the old cashBalance.
 
 BEGIN;
+
+-- Predicates are copied verbatim from apps/capital/scripts/ledger-v2-check-queries.sql.
+CREATE TEMP TABLE _ledger_v2_failures ON COMMIT DROP AS
+WITH ia_target AS (
+  SELECT ia.id,
+         ia."userId",
+         coalesce(
+           ia."businessId",
+           ia."personalAccountId",
+           (SELECT p.id FROM personal_accounts p WHERE p."userId" = ia."userId" LIMIT 1),
+           CASE
+             WHEN ia."entityType" = 'business'
+              AND NOT EXISTS (SELECT 1 FROM personal_accounts p WHERE p."userId" = ia."userId")
+              AND (SELECT count(*) FROM businesses b WHERE b."userId" = ia."userId") = 1
+             THEN (SELECT min(b.id) FROM businesses b WHERE b."userId" = ia."userId")
+           END
+         ) AS entity_id
+  FROM investment_accounts ia
+),
+transfer_resolved AS (
+  SELECT tr.id,
+         tr."externalId",
+         tr."fromInvestmentAccountId",
+         tr."toInvestmentAccountId",
+         CASE
+           WHEN tr."fromInvestmentAccountId" IS NOT NULL THEN (
+             SELECT t.entity_id FROM ia_target t WHERE t.id = tr."fromInvestmentAccountId"
+           )
+           ELSE coalesce(
+             tr."fromBusinessId",
+             tr."fromPersonalAccountId",
+             (
+               SELECT CASE tr."fromEntityType"
+                 WHEN 'personal' THEN (
+                   SELECT min(p.id) FROM personal_accounts p
+                   WHERE p."userId" = ou.user_id
+                     AND (SELECT count(*) FROM personal_accounts p2 WHERE p2."userId" = ou.user_id) = 1
+                 )
+                 WHEN 'business' THEN (
+                   SELECT min(b.id) FROM businesses b
+                   WHERE b."userId" = ou.user_id
+                     AND (SELECT count(*) FROM businesses b2 WHERE b2."userId" = ou.user_id) = 1
+                 )
+               END
+               FROM (
+                 SELECT coalesce(
+                   (SELECT b."userId" FROM businesses b WHERE b.id = tr."toBusinessId"),
+                   (SELECT p."userId" FROM personal_accounts p WHERE p.id = tr."toPersonalAccountId"),
+                   (SELECT ia."userId" FROM investment_accounts ia WHERE ia.id = tr."toInvestmentAccountId")
+                 ) AS user_id
+               ) ou
+               WHERE tr."fromBusinessId" IS NULL
+                 AND tr."fromPersonalAccountId" IS NULL
+                 AND ou.user_id IS NOT NULL
+             )
+           )
+         END AS from_entity,
+         CASE
+           WHEN tr."toInvestmentAccountId" IS NOT NULL THEN (
+             SELECT t.entity_id FROM ia_target t WHERE t.id = tr."toInvestmentAccountId"
+           )
+           ELSE coalesce(
+             tr."toBusinessId",
+             tr."toPersonalAccountId",
+             (
+               SELECT CASE tr."toEntityType"
+                 WHEN 'personal' THEN (
+                   SELECT min(p.id) FROM personal_accounts p
+                   WHERE p."userId" = ou.user_id
+                     AND (SELECT count(*) FROM personal_accounts p2 WHERE p2."userId" = ou.user_id) = 1
+                 )
+                 WHEN 'business' THEN (
+                   SELECT min(b.id) FROM businesses b
+                   WHERE b."userId" = ou.user_id
+                     AND (SELECT count(*) FROM businesses b2 WHERE b2."userId" = ou.user_id) = 1
+                 )
+               END
+               FROM (
+                 SELECT coalesce(
+                   (SELECT b."userId" FROM businesses b WHERE b.id = tr."fromBusinessId"),
+                   (SELECT p."userId" FROM personal_accounts p WHERE p.id = tr."fromPersonalAccountId"),
+                   (SELECT ia."userId" FROM investment_accounts ia WHERE ia.id = tr."fromInvestmentAccountId")
+                 ) AS user_id
+               ) ou
+               WHERE tr."toBusinessId" IS NULL
+                 AND tr."toPersonalAccountId" IS NULL
+                 AND ou.user_id IS NOT NULL
+             )
+           )
+         END AS to_entity
+  FROM transfers tr
+),
+recurring_transfer_resolved AS (
+  SELECT rt.id,
+         coalesce(
+           rt."fromBusinessId",
+           rt."fromPersonalAccountId",
+           (
+             SELECT CASE rt."fromEntityType"
+               WHEN 'personal' THEN (
+                 SELECT min(p.id) FROM personal_accounts p
+                 WHERE p."userId" = ou.user_id
+                   AND (SELECT count(*) FROM personal_accounts p2 WHERE p2."userId" = ou.user_id) = 1
+               )
+               WHEN 'business' THEN (
+                 SELECT min(b.id) FROM businesses b
+                 WHERE b."userId" = ou.user_id
+                   AND (SELECT count(*) FROM businesses b2 WHERE b2."userId" = ou.user_id) = 1
+               )
+             END
+             FROM (
+               SELECT coalesce(
+                 (SELECT b."userId" FROM businesses b WHERE b.id = rt."toBusinessId"),
+                 (SELECT p."userId" FROM personal_accounts p WHERE p.id = rt."toPersonalAccountId")
+               ) AS user_id
+             ) ou
+             WHERE rt."fromBusinessId" IS NULL
+               AND rt."fromPersonalAccountId" IS NULL
+               AND ou.user_id IS NOT NULL
+           )
+         ) AS from_entity,
+         coalesce(
+           rt."toBusinessId",
+           rt."toPersonalAccountId",
+           (
+             SELECT CASE rt."toEntityType"
+               WHEN 'personal' THEN (
+                 SELECT min(p.id) FROM personal_accounts p
+                 WHERE p."userId" = ou.user_id
+                   AND (SELECT count(*) FROM personal_accounts p2 WHERE p2."userId" = ou.user_id) = 1
+               )
+               WHEN 'business' THEN (
+                 SELECT min(b.id) FROM businesses b
+                 WHERE b."userId" = ou.user_id
+                   AND (SELECT count(*) FROM businesses b2 WHERE b2."userId" = ou.user_id) = 1
+               )
+             END
+             FROM (
+               SELECT coalesce(
+                 (SELECT b."userId" FROM businesses b WHERE b.id = rt."fromBusinessId"),
+                 (SELECT p."userId" FROM personal_accounts p WHERE p.id = rt."fromPersonalAccountId")
+               ) AS user_id
+             ) ou
+             WHERE rt."toBusinessId" IS NULL
+               AND rt."toPersonalAccountId" IS NULL
+               AND ou.user_id IS NOT NULL
+           )
+         ) AS to_entity
+  FROM recurring_transfers rt
+),
+fx_gaps AS (
+  SELECT bt.id,
+         'purchase'::text AS kind,
+         bt.currency,
+         to_char(bt."transactionDate" AT TIME ZONE 'UTC', 'YYYY-MM-DD') AS day
+  FROM bill_transactions bt
+  LEFT JOIN credit_card_statements s ON s.id = bt."statementId"
+  LEFT JOIN credit_card_bills bill ON bill.id = bt."billId"
+  JOIN credit_cards c ON c.id = coalesce(s."creditCardId", bill."creditCardId")
+  JOIN users u ON u.id = coalesce(
+    (SELECT bs."userId" FROM businesses bs WHERE bs.id = c."businessId"),
+    (SELECT pa."userId" FROM personal_accounts pa WHERE pa.id = c."personalAccountId")
+  )
+  WHERE coalesce(c."businessId", c."personalAccountId") IS NOT NULL
+    AND bt.currency <> u."baseCurrency"
+    AND NOT EXISTS (
+      SELECT 1 FROM currencies cu
+      WHERE cu."userId" = u.id AND cu.code = bt.currency AND cu."manualRate" > 0
+    )
+  UNION ALL
+  SELECT it.id,
+         'investment'::text,
+         ia.currency,
+         to_char(it.date AT TIME ZONE 'UTC', 'YYYY-MM-DD')
+  FROM investment_transactions it
+  JOIN investment_holdings h ON h.id = it."holdingId"
+  JOIN investment_accounts ia ON ia.id = h."accountId"
+  JOIN ia_target t ON t.id = ia.id AND t.entity_id IS NOT NULL
+  JOIN users u ON u.id = ia."userId"
+  WHERE (CASE it.type
+           WHEN 'buy' THEN -(it."totalAmount" + it.fees)
+           WHEN 'deposit' THEN -(it."totalAmount" + it.fees)
+           WHEN 'sell' THEN it."totalAmount" - it.fees
+           WHEN 'withdrawal' THEN it."totalAmount" - it.fees
+           WHEN 'dividend' THEN it."totalAmount"
+           WHEN 'yield_payment' THEN it."totalAmount"
+           ELSE 0
+         END) <> 0
+    AND ia.currency <> u."baseCurrency"
+    AND NOT EXISTS (
+      SELECT 1 FROM currencies cu
+      WHERE cu."userId" = u.id AND cu.code = ia.currency AND cu."manualRate" > 0
+    )
+),
+ext_groups AS (
+  SELECT format(
+           'account=%s externalId=%s %s',
+           account_id,
+           external_id,
+           string_agg(source || ':' || source_id, ' ' ORDER BY source, source_id)
+         ) AS label
+  FROM (
+    SELECT md5('default-checking:' || coalesce(t."businessId", t."personalAccountId"))::uuid::text AS account_id,
+           t."externalId" AS external_id,
+           'transaction'::text AS source,
+           t.id AS source_id
+    FROM transactions t
+    WHERE t."externalId" IS NOT NULL
+      AND coalesce(t."businessId", t."personalAccountId") IS NOT NULL
+    UNION ALL
+    SELECT CASE
+             WHEN ts."fromInvestmentAccountId" IS NOT NULL THEN ts."fromInvestmentAccountId"
+             ELSE md5('default-checking:' || ts.from_entity)::uuid::text
+           END,
+           ts."externalId",
+           'transfer'::text,
+           ts.id
+    FROM transfer_resolved ts
+    WHERE ts."externalId" IS NOT NULL
+      AND ts.from_entity IS NOT NULL
+      AND ts.to_entity IS NOT NULL
+  ) claims
+  GROUP BY account_id, external_id
+  HAVING count(*) > 1
+)
+SELECT category, row_count, sample_ids
+FROM (
+  SELECT 'transactions without an account'::text AS category,
+         count(*)::int AS row_count,
+         coalesce((array_agg(id ORDER BY id))[1:10], ARRAY[]::text[]) AS sample_ids
+  FROM transactions
+  WHERE coalesce("businessId", "personalAccountId") IS NULL
+  UNION ALL
+  SELECT 'credit cards without an owner',
+         count(*)::int,
+         coalesce((array_agg(id ORDER BY id))[1:10], ARRAY[]::text[])
+  FROM credit_cards
+  WHERE coalesce("businessId", "personalAccountId") IS NULL
+  UNION ALL
+  SELECT 'card purchases whose card was not mapped',
+         count(*)::int,
+         coalesce((array_agg(bt.id ORDER BY bt.id))[1:10], ARRAY[]::text[])
+  FROM bill_transactions bt
+  LEFT JOIN credit_card_statements s ON s.id = bt."statementId"
+  LEFT JOIN credit_card_bills bill ON bill.id = bt."billId"
+  LEFT JOIN credit_cards c ON c.id = coalesce(s."creditCardId", bill."creditCardId")
+  WHERE c.id IS NULL OR coalesce(c."businessId", c."personalAccountId") IS NULL
+  UNION ALL
+  SELECT 'transfers missing a side',
+         count(*)::int,
+         coalesce((array_agg(id ORDER BY id))[1:10], ARRAY[]::text[])
+  FROM transfer_resolved
+  WHERE from_entity IS NULL OR to_entity IS NULL
+  UNION ALL
+  SELECT 'investment accounts without an owner',
+         count(*)::int,
+         coalesce((array_agg(id ORDER BY id))[1:10], ARRAY[]::text[])
+  FROM ia_target
+  WHERE entity_id IS NULL
+  UNION ALL
+  SELECT 'budgets without an owner',
+         count(*)::int,
+         coalesce((array_agg(id ORDER BY id))[1:10], ARRAY[]::text[])
+  FROM budgets
+  WHERE coalesce("businessId", "personalAccountId") IS NULL
+  UNION ALL
+  SELECT 'budgets with an unmappable category',
+         count(*)::int,
+         coalesce((array_agg(id ORDER BY id))[1:10], ARRAY[]::text[])
+  FROM budgets
+  WHERE coalesce("businessId", "personalAccountId") IS NOT NULL
+    AND btrim(category) = ''
+  UNION ALL
+  SELECT 'recurring transactions without an owner',
+         count(*)::int,
+         coalesce((array_agg(id ORDER BY id))[1:10], ARRAY[]::text[])
+  FROM recurring_transactions
+  WHERE coalesce("businessId", "personalAccountId") IS NULL
+  UNION ALL
+  SELECT 'recurring transfers missing a side',
+         count(*)::int,
+         coalesce((array_agg(id ORDER BY id))[1:10], ARRAY[]::text[])
+  FROM recurring_transfer_resolved
+  WHERE from_entity IS NULL OR to_entity IS NULL
+  UNION ALL
+  SELECT 'reminder dispatches whose recurring item will not migrate',
+         count(*)::int,
+         coalesce((array_agg(d.id ORDER BY d.id))[1:10], ARRAY[]::text[])
+  FROM reminder_dispatches d
+  JOIN recurring_transactions r ON r.id = d."recurringTransactionId"
+  WHERE coalesce(r."businessId", r."personalAccountId") IS NULL
+  UNION ALL
+  SELECT 'installments whose card was not mapped',
+         count(*)::int,
+         coalesce((array_agg(i.id ORDER BY i.id))[1:10], ARRAY[]::text[])
+  FROM installments i
+  LEFT JOIN credit_cards c ON c.id = i."creditCardId"
+  WHERE c.id IS NULL OR coalesce(c."businessId", c."personalAccountId") IS NULL
+  UNION ALL
+  SELECT 'card statements whose card was not mapped',
+         count(*)::int,
+         coalesce((array_agg(s.id ORDER BY s.id))[1:10], ARRAY[]::text[])
+  FROM credit_card_statements s
+  LEFT JOIN credit_cards c ON c.id = s."creditCardId"
+  WHERE c.id IS NULL OR coalesce(c."businessId", c."personalAccountId") IS NULL
+  UNION ALL
+  SELECT 'legacy bills whose card was not mapped',
+         count(*)::int,
+         coalesce((array_agg(b.id ORDER BY b.id))[1:10], ARRAY[]::text[])
+  FROM credit_card_bills b
+  LEFT JOIN credit_cards c ON c.id = b."creditCardId"
+  WHERE c.id IS NULL OR coalesce(c."businessId", c."personalAccountId") IS NULL
+  UNION ALL
+  SELECT 'externalId collision',
+         (SELECT count(*)::int FROM ext_groups),
+         coalesce((SELECT (array_agg(label ORDER BY label))[1:10] FROM ext_groups), ARRAY[]::text[])
+  UNION ALL
+  SELECT format('missing exchange rate: %s %s %s', kind, currency, day),
+         count(*)::int,
+         coalesce((array_agg(id ORDER BY id))[1:10], ARRAY[]::text[])
+  FROM fx_gaps
+  GROUP BY kind, currency, day
+) checks
+ORDER BY category
+;
+
+DO $$
+DECLARE
+  rec record;
+  problems text := '';
+  total int := 0;
+BEGIN
+  FOR rec IN
+    SELECT category, row_count, sample_ids
+    FROM _ledger_v2_failures
+    WHERE row_count > 0
+    ORDER BY category
+  LOOP
+    total := total + rec.row_count;
+    problems := problems || format(E'\n%s: %s [%s]', rec.category, rec.row_count, array_to_string(rec.sample_ids, ', '));
+  END LOOP;
+  IF total > 0 THEN
+    RAISE EXCEPTION 'ledger backfill refused:%', problems;
+  END IF;
+END $$;
+
+CREATE TEMP TABLE _ledger_v2_remaps ON COMMIT DROP AS
+WITH ia_target AS (
+  SELECT ia.id,
+         coalesce(
+           ia."businessId",
+           ia."personalAccountId",
+           (SELECT p.id FROM personal_accounts p WHERE p."userId" = ia."userId" LIMIT 1),
+           CASE
+             WHEN ia."entityType" = 'business'
+              AND NOT EXISTS (SELECT 1 FROM personal_accounts p WHERE p."userId" = ia."userId")
+              AND (SELECT count(*) FROM businesses b WHERE b."userId" = ia."userId") = 1
+             THEN (SELECT min(b.id) FROM businesses b WHERE b."userId" = ia."userId")
+           END
+         ) AS entity_id
+  FROM investment_accounts ia
+),
+transfer_resolved AS (
+  SELECT tr.id,
+         tr."fromInvestmentAccountId",
+         tr."fromBusinessId",
+         tr."fromPersonalAccountId",
+         tr."toInvestmentAccountId",
+         tr."toBusinessId",
+         tr."toPersonalAccountId",
+         CASE
+           WHEN tr."fromInvestmentAccountId" IS NOT NULL THEN (
+             SELECT t.entity_id FROM ia_target t WHERE t.id = tr."fromInvestmentAccountId"
+           )
+           ELSE coalesce(
+             tr."fromBusinessId",
+             tr."fromPersonalAccountId",
+             (
+               SELECT CASE tr."fromEntityType"
+                 WHEN 'personal' THEN (
+                   SELECT min(p.id) FROM personal_accounts p
+                   WHERE p."userId" = ou.user_id
+                     AND (SELECT count(*) FROM personal_accounts p2 WHERE p2."userId" = ou.user_id) = 1
+                 )
+                 WHEN 'business' THEN (
+                   SELECT min(b.id) FROM businesses b
+                   WHERE b."userId" = ou.user_id
+                     AND (SELECT count(*) FROM businesses b2 WHERE b2."userId" = ou.user_id) = 1
+                 )
+               END
+               FROM (
+                 SELECT coalesce(
+                   (SELECT b."userId" FROM businesses b WHERE b.id = tr."toBusinessId"),
+                   (SELECT p."userId" FROM personal_accounts p WHERE p.id = tr."toPersonalAccountId"),
+                   (SELECT ia."userId" FROM investment_accounts ia WHERE ia.id = tr."toInvestmentAccountId")
+                 ) AS user_id
+               ) ou
+               WHERE tr."fromBusinessId" IS NULL
+                 AND tr."fromPersonalAccountId" IS NULL
+                 AND ou.user_id IS NOT NULL
+             )
+           )
+         END AS from_entity,
+         CASE
+           WHEN tr."toInvestmentAccountId" IS NOT NULL THEN (
+             SELECT t.entity_id FROM ia_target t WHERE t.id = tr."toInvestmentAccountId"
+           )
+           ELSE coalesce(
+             tr."toBusinessId",
+             tr."toPersonalAccountId",
+             (
+               SELECT CASE tr."toEntityType"
+                 WHEN 'personal' THEN (
+                   SELECT min(p.id) FROM personal_accounts p
+                   WHERE p."userId" = ou.user_id
+                     AND (SELECT count(*) FROM personal_accounts p2 WHERE p2."userId" = ou.user_id) = 1
+                 )
+                 WHEN 'business' THEN (
+                   SELECT min(b.id) FROM businesses b
+                   WHERE b."userId" = ou.user_id
+                     AND (SELECT count(*) FROM businesses b2 WHERE b2."userId" = ou.user_id) = 1
+                 )
+               END
+               FROM (
+                 SELECT coalesce(
+                   (SELECT b."userId" FROM businesses b WHERE b.id = tr."fromBusinessId"),
+                   (SELECT p."userId" FROM personal_accounts p WHERE p.id = tr."fromPersonalAccountId"),
+                   (SELECT ia."userId" FROM investment_accounts ia WHERE ia.id = tr."fromInvestmentAccountId")
+                 ) AS user_id
+               ) ou
+               WHERE tr."toBusinessId" IS NULL
+                 AND tr."toPersonalAccountId" IS NULL
+                 AND ou.user_id IS NOT NULL
+             )
+           )
+         END AS to_entity
+  FROM transfers tr
+),
+recurring_transfer_resolved AS (
+  SELECT rt.id,
+         rt."fromBusinessId",
+         rt."fromPersonalAccountId",
+         rt."toBusinessId",
+         rt."toPersonalAccountId",
+         coalesce(
+           rt."fromBusinessId",
+           rt."fromPersonalAccountId",
+           (
+             SELECT CASE rt."fromEntityType"
+               WHEN 'personal' THEN (
+                 SELECT min(p.id) FROM personal_accounts p
+                 WHERE p."userId" = ou.user_id
+                   AND (SELECT count(*) FROM personal_accounts p2 WHERE p2."userId" = ou.user_id) = 1
+               )
+               WHEN 'business' THEN (
+                 SELECT min(b.id) FROM businesses b
+                 WHERE b."userId" = ou.user_id
+                   AND (SELECT count(*) FROM businesses b2 WHERE b2."userId" = ou.user_id) = 1
+               )
+             END
+             FROM (
+               SELECT coalesce(
+                 (SELECT b."userId" FROM businesses b WHERE b.id = rt."toBusinessId"),
+                 (SELECT p."userId" FROM personal_accounts p WHERE p.id = rt."toPersonalAccountId")
+               ) AS user_id
+             ) ou
+             WHERE rt."fromBusinessId" IS NULL
+               AND rt."fromPersonalAccountId" IS NULL
+               AND ou.user_id IS NOT NULL
+           )
+         ) AS from_entity,
+         coalesce(
+           rt."toBusinessId",
+           rt."toPersonalAccountId",
+           (
+             SELECT CASE rt."toEntityType"
+               WHEN 'personal' THEN (
+                 SELECT min(p.id) FROM personal_accounts p
+                 WHERE p."userId" = ou.user_id
+                   AND (SELECT count(*) FROM personal_accounts p2 WHERE p2."userId" = ou.user_id) = 1
+               )
+               WHEN 'business' THEN (
+                 SELECT min(b.id) FROM businesses b
+                 WHERE b."userId" = ou.user_id
+                   AND (SELECT count(*) FROM businesses b2 WHERE b2."userId" = ou.user_id) = 1
+               )
+             END
+             FROM (
+               SELECT coalesce(
+                 (SELECT b."userId" FROM businesses b WHERE b.id = rt."fromBusinessId"),
+                 (SELECT p."userId" FROM personal_accounts p WHERE p.id = rt."fromPersonalAccountId")
+               ) AS user_id
+             ) ou
+             WHERE rt."toBusinessId" IS NULL
+               AND rt."toPersonalAccountId" IS NULL
+               AND ou.user_id IS NOT NULL
+           )
+         ) AS to_entity
+  FROM recurring_transfers rt
+)
+SELECT category, row_count, sample_ids
+FROM (
+  SELECT 'transfers the new rule will map'::text AS category,
+         count(*)::int AS row_count,
+         coalesce((array_agg(tr.id ORDER BY tr.id))[1:10], ARRAY[]::text[]) AS sample_ids
+  FROM transfer_resolved tr
+  WHERE tr.from_entity IS NOT NULL
+    AND tr.to_entity IS NOT NULL
+    AND (
+      (tr."fromInvestmentAccountId" IS NULL AND tr."fromBusinessId" IS NULL AND tr."fromPersonalAccountId" IS NULL)
+      OR (tr."toInvestmentAccountId" IS NULL AND tr."toBusinessId" IS NULL AND tr."toPersonalAccountId" IS NULL)
+    )
+  UNION ALL
+  SELECT 'recurring transfers the new rule will map',
+         count(*)::int,
+         coalesce((array_agg(rt.id ORDER BY rt.id))[1:10], ARRAY[]::text[])
+  FROM recurring_transfer_resolved rt
+  WHERE rt.from_entity IS NOT NULL
+    AND rt.to_entity IS NOT NULL
+    AND (
+      (rt."fromBusinessId" IS NULL AND rt."fromPersonalAccountId" IS NULL)
+      OR (rt."toBusinessId" IS NULL AND rt."toPersonalAccountId" IS NULL)
+    )
+  UNION ALL
+  SELECT 'investment accounts the new rule will map',
+         count(*)::int,
+         coalesce((array_agg(ia.id ORDER BY ia.id))[1:10], ARRAY[]::text[])
+  FROM investment_accounts ia
+  WHERE ia."businessId" IS NULL
+    AND ia."personalAccountId" IS NULL
+    AND NOT EXISTS (SELECT 1 FROM personal_accounts p WHERE p."userId" = ia."userId")
+    AND ia."entityType" = 'business'
+    AND (SELECT count(*) FROM businesses b WHERE b."userId" = ia."userId") = 1
+) checks
+ORDER BY category
+;
+
+CREATE TEMP TABLE _ledger_v2_fallbacks ON COMMIT DROP AS
+SELECT 'business brokerages mapped to the personal entity'::text AS category,
+       count(*)::int AS row_count,
+       coalesce((array_agg(ia.id ORDER BY ia.id))[1:10], ARRAY[]::text[]) AS sample_ids
+FROM investment_accounts ia
+WHERE ia."businessId" IS NULL
+  AND ia."personalAccountId" IS NULL
+  AND ia."entityType" = 'business'
+  AND EXISTS (SELECT 1 FROM personal_accounts p WHERE p."userId" = ia."userId")
+;
+
+DO $$
+DECLARE
+  rec record;
+  msg text;
+BEGIN
+  msg := '';
+  FOR rec IN SELECT * FROM _ledger_v2_remaps WHERE row_count > 0 ORDER BY category LOOP
+    msg := msg || format(E'\n%s: %s [%s]', rec.category, rec.row_count, array_to_string(rec.sample_ids, ', '));
+  END LOOP;
+  IF msg <> '' THEN
+    RAISE NOTICE 'ledger backfill mapped rows that had no explicit owner:%', msg;
+  END IF;
+
+  msg := '';
+  FOR rec IN SELECT * FROM _ledger_v2_fallbacks WHERE row_count > 0 ORDER BY category LOOP
+    msg := msg || format(E'\n%s: %s [%s]', rec.category, rec.row_count, array_to_string(rec.sample_ids, ', '));
+  END LOOP;
+  IF msg <> '' THEN
+    RAISE NOTICE 'ledger backfill business brokerages mapped to the personal entity:%', msg;
+  END IF;
+END $$;
+
+-- Sides resolved with the same rules as the precheck, including the unambiguous fill-in.
+CREATE TEMP TABLE _tr ON COMMIT DROP AS
+WITH ia_target AS (
+
+  SELECT ia.id,
+         ia."userId",
+         coalesce(
+           ia."businessId",
+           ia."personalAccountId",
+           (SELECT p.id FROM personal_accounts p WHERE p."userId" = ia."userId" LIMIT 1),
+           CASE
+             WHEN ia."entityType" = 'business'
+              AND NOT EXISTS (SELECT 1 FROM personal_accounts p WHERE p."userId" = ia."userId")
+              AND (SELECT count(*) FROM businesses b WHERE b."userId" = ia."userId") = 1
+             THEN (SELECT min(b.id) FROM businesses b WHERE b."userId" = ia."userId")
+           END
+         ) AS entity_id
+  FROM investment_accounts ia
+
+),
+transfer_resolved AS (
+
+  SELECT tr.id,
+         tr."externalId",
+         tr."fromInvestmentAccountId",
+         tr."toInvestmentAccountId",
+         CASE
+           WHEN tr."fromInvestmentAccountId" IS NOT NULL THEN (
+             SELECT t.entity_id FROM ia_target t WHERE t.id = tr."fromInvestmentAccountId"
+           )
+           ELSE coalesce(
+             tr."fromBusinessId",
+             tr."fromPersonalAccountId",
+             (
+               SELECT CASE tr."fromEntityType"
+                 WHEN 'personal' THEN (
+                   SELECT min(p.id) FROM personal_accounts p
+                   WHERE p."userId" = ou.user_id
+                     AND (SELECT count(*) FROM personal_accounts p2 WHERE p2."userId" = ou.user_id) = 1
+                 )
+                 WHEN 'business' THEN (
+                   SELECT min(b.id) FROM businesses b
+                   WHERE b."userId" = ou.user_id
+                     AND (SELECT count(*) FROM businesses b2 WHERE b2."userId" = ou.user_id) = 1
+                 )
+               END
+               FROM (
+                 SELECT coalesce(
+                   (SELECT b."userId" FROM businesses b WHERE b.id = tr."toBusinessId"),
+                   (SELECT p."userId" FROM personal_accounts p WHERE p.id = tr."toPersonalAccountId"),
+                   (SELECT ia."userId" FROM investment_accounts ia WHERE ia.id = tr."toInvestmentAccountId")
+                 ) AS user_id
+               ) ou
+               WHERE tr."fromBusinessId" IS NULL
+                 AND tr."fromPersonalAccountId" IS NULL
+                 AND ou.user_id IS NOT NULL
+             )
+           )
+         END AS from_entity,
+         CASE
+           WHEN tr."toInvestmentAccountId" IS NOT NULL THEN (
+             SELECT t.entity_id FROM ia_target t WHERE t.id = tr."toInvestmentAccountId"
+           )
+           ELSE coalesce(
+             tr."toBusinessId",
+             tr."toPersonalAccountId",
+             (
+               SELECT CASE tr."toEntityType"
+                 WHEN 'personal' THEN (
+                   SELECT min(p.id) FROM personal_accounts p
+                   WHERE p."userId" = ou.user_id
+                     AND (SELECT count(*) FROM personal_accounts p2 WHERE p2."userId" = ou.user_id) = 1
+                 )
+                 WHEN 'business' THEN (
+                   SELECT min(b.id) FROM businesses b
+                   WHERE b."userId" = ou.user_id
+                     AND (SELECT count(*) FROM businesses b2 WHERE b2."userId" = ou.user_id) = 1
+                 )
+               END
+               FROM (
+                 SELECT coalesce(
+                   (SELECT b."userId" FROM businesses b WHERE b.id = tr."fromBusinessId"),
+                   (SELECT p."userId" FROM personal_accounts p WHERE p.id = tr."fromPersonalAccountId"),
+                   (SELECT ia."userId" FROM investment_accounts ia WHERE ia.id = tr."fromInvestmentAccountId")
+                 ) AS user_id
+               ) ou
+               WHERE tr."toBusinessId" IS NULL
+                 AND tr."toPersonalAccountId" IS NULL
+                 AND ou.user_id IS NOT NULL
+             )
+           )
+         END AS to_entity
+  FROM transfers tr
+
+)
+SELECT tr.*,
+       CASE
+         WHEN tr."fromInvestmentAccountId" IS NOT NULL AND ts.from_entity IS NOT NULL THEN tr."fromInvestmentAccountId"
+         WHEN ts.from_entity IS NOT NULL THEN md5('default-checking:' || ts.from_entity)::uuid::text
+       END AS from_account,
+       CASE
+         WHEN tr."toInvestmentAccountId" IS NOT NULL AND ts.to_entity IS NOT NULL THEN tr."toInvestmentAccountId"
+         WHEN ts.to_entity IS NOT NULL THEN md5('default-checking:' || ts.to_entity)::uuid::text
+       END AS to_account
+FROM transfers tr
+JOIN transfer_resolved ts ON ts.id = tr.id;
+
+CREATE TEMP TABLE _rt_sides ON COMMIT DROP AS
+WITH recurring_transfer_resolved AS (
+
+  SELECT rt.id,
+         coalesce(
+           rt."fromBusinessId",
+           rt."fromPersonalAccountId",
+           (
+             SELECT CASE rt."fromEntityType"
+               WHEN 'personal' THEN (
+                 SELECT min(p.id) FROM personal_accounts p
+                 WHERE p."userId" = ou.user_id
+                   AND (SELECT count(*) FROM personal_accounts p2 WHERE p2."userId" = ou.user_id) = 1
+               )
+               WHEN 'business' THEN (
+                 SELECT min(b.id) FROM businesses b
+                 WHERE b."userId" = ou.user_id
+                   AND (SELECT count(*) FROM businesses b2 WHERE b2."userId" = ou.user_id) = 1
+               )
+             END
+             FROM (
+               SELECT coalesce(
+                 (SELECT b."userId" FROM businesses b WHERE b.id = rt."toBusinessId"),
+                 (SELECT p."userId" FROM personal_accounts p WHERE p.id = rt."toPersonalAccountId")
+               ) AS user_id
+             ) ou
+             WHERE rt."fromBusinessId" IS NULL
+               AND rt."fromPersonalAccountId" IS NULL
+               AND ou.user_id IS NOT NULL
+           )
+         ) AS from_entity,
+         coalesce(
+           rt."toBusinessId",
+           rt."toPersonalAccountId",
+           (
+             SELECT CASE rt."toEntityType"
+               WHEN 'personal' THEN (
+                 SELECT min(p.id) FROM personal_accounts p
+                 WHERE p."userId" = ou.user_id
+                   AND (SELECT count(*) FROM personal_accounts p2 WHERE p2."userId" = ou.user_id) = 1
+               )
+               WHEN 'business' THEN (
+                 SELECT min(b.id) FROM businesses b
+                 WHERE b."userId" = ou.user_id
+                   AND (SELECT count(*) FROM businesses b2 WHERE b2."userId" = ou.user_id) = 1
+               )
+             END
+             FROM (
+               SELECT coalesce(
+                 (SELECT b."userId" FROM businesses b WHERE b.id = rt."fromBusinessId"),
+                 (SELECT p."userId" FROM personal_accounts p WHERE p.id = rt."fromPersonalAccountId")
+               ) AS user_id
+             ) ou
+             WHERE rt."toBusinessId" IS NULL
+               AND rt."toPersonalAccountId" IS NULL
+               AND ou.user_id IS NOT NULL
+           )
+         ) AS to_entity
+  FROM recurring_transfers rt
+
+)
+SELECT * FROM recurring_transfer_resolved;
 
 CREATE SCHEMA IF NOT EXISTS legacy;
 
@@ -74,11 +818,13 @@ CREATE TEMP TABLE _personal_entity ON COMMIT DROP AS
 SELECT DISTINCT ON ("userId") "userId" AS user_id, id AS entity_id FROM entities WHERE kind = 'personal' ORDER BY "userId", "createdAt";
 
 -- Base-currency units per 1 unit of each user currency (manualRate is "1 base = X foreign").
+-- A missing or non-positive rate stays null. Bill purchases and investment cash
+-- legs fail the precheck in that case; they are never stored at 1:1.
 CREATE TEMP TABLE _rate ON COMMIT DROP AS
 SELECT u.id AS user_id, c.code,
        CASE WHEN c.code = u."baseCurrency" THEN 1::numeric
             WHEN c."manualRate" > 0 THEN (1 / c."manualRate"::numeric)
-            ELSE 1::numeric END AS rate
+            ELSE NULL END AS rate
 FROM users u JOIN currencies c ON c."userId" = u.id;
 CREATE UNIQUE INDEX ON _rate (user_id, code);
 
@@ -99,11 +845,24 @@ ON CONFLICT (id) DO NOTHING;
 
 INSERT INTO accounts (id, "userId", "entityId", type, name, institution, currency, "externalId", "initialBalance", "isDefault",
                       "archivedAt", "createdAt", "updatedAt")
-SELECT a.id, a."userId", coalesce(a."businessId", a."personalAccountId", pe.entity_id), 'brokerage', a.name, a.broker, a.currency,
+SELECT a.id, a."userId", owner.entity_id, 'brokerage', a.name, a.broker, a.currency,
        a."externalId", 0, false, CASE WHEN a."isActive" THEN NULL ELSE a."updatedAt" END, a."createdAt", a."updatedAt"
 FROM investment_accounts a
 LEFT JOIN _personal_entity pe ON pe.user_id = a."userId"
-WHERE coalesce(a."businessId", a."personalAccountId", pe.entity_id) IS NOT NULL
+JOIN LATERAL (
+  SELECT coalesce(
+    a."businessId",
+    a."personalAccountId",
+    pe.entity_id,
+    (
+      SELECT min(b.id) FROM businesses b
+      WHERE pe.entity_id IS NULL
+        AND a."entityType" = 'business'
+        AND b."userId" = a."userId"
+        AND (SELECT count(*) FROM businesses b2 WHERE b2."userId" = a."userId") = 1
+    )
+  ) AS entity_id
+) owner ON owner.entity_id IS NOT NULL
 ON CONFLICT (id) DO NOTHING;
 
 -- ---------------------------------------------------------------------------
@@ -160,9 +919,10 @@ SELECT rt.id, e."userId", e.id, d.account_id,
        rt.direction, d2.account_id, rt.frequency, rt."startDate", rt."endDate", rt."nextDueDate", rt."lastGeneratedDate",
        rt."isActive", true, NULL, rt."createdAt", rt."updatedAt"
 FROM recurring_transfers rt
-JOIN entities e ON e.id = coalesce(rt."fromBusinessId", rt."fromPersonalAccountId")
-JOIN _default_acct d ON d.entity_id = e.id
-JOIN _default_acct d2 ON d2.entity_id = coalesce(rt."toBusinessId", rt."toPersonalAccountId")
+JOIN _rt_sides sides ON sides.id = rt.id AND sides.from_entity IS NOT NULL AND sides.to_entity IS NOT NULL
+JOIN entities e ON e.id = sides.from_entity
+JOIN _default_acct d ON d.entity_id = sides.from_entity
+JOIN _default_acct d2 ON d2.entity_id = sides.to_entity
 ON CONFLICT (id) DO NOTHING;
 
 -- ---------------------------------------------------------------------------
@@ -263,13 +1023,7 @@ ON CONFLICT (id) DO NOTHING;
 -- Transfers
 -- ---------------------------------------------------------------------------
 
-CREATE TEMP TABLE _tr ON COMMIT DROP AS
-SELECT tr.*,
-       coalesce(tr."fromInvestmentAccountId", df.account_id) AS from_account,
-       coalesce(tr."toInvestmentAccountId", dt.account_id) AS to_account
-FROM transfers tr
-LEFT JOIN _default_acct df ON df.entity_id = coalesce(tr."fromBusinessId", tr."fromPersonalAccountId")
-LEFT JOIN _default_acct dt ON dt.entity_id = coalesce(tr."toBusinessId", tr."toPersonalAccountId");
+-- _tr is built at the start of this migration, with the precheck rules.
 
 INSERT INTO transfer_groups (id, "userId", direction, description, date, "recurringRuleId", "externalId", "createdAt", "updatedAt")
 SELECT tr.id, fa."userId", tr.direction, tr.description, tr.date,
@@ -309,7 +1063,7 @@ SELECT bt.*,
          ELSE b."closingDate"
        END AS effective_date,
        (bt."statementId" IS NULL AND b."transactionId" IS NULL) AS legacy_unlinked,
-       CASE WHEN bt.currency = u."baseCurrency" THEN 1::numeric ELSE coalesce(r.rate, 1::numeric) END AS rate
+       CASE WHEN bt.currency = u."baseCurrency" THEN 1::numeric ELSE r.rate END AS rate
 FROM _bt bt
 JOIN users u ON u.id = bt.user_id
 LEFT JOIN _rate r ON r.user_id = bt.user_id AND r.code = bt.currency
@@ -369,7 +1123,7 @@ WHERE le.id = i."billTransactionId" AND le."installmentPlanId" IS NULL;
 
 CREATE TEMP TABLE _inv_cash ON COMMIT DROP AS
 SELECT it.id AS op_id, it.date, it."createdAt", a."userId" AS user_id, a."entityId" AS entity_id, a.id AS account_id, a.currency,
-       CASE WHEN a.currency = u."baseCurrency" THEN 1::numeric ELSE coalesce(r.rate, 1::numeric) END AS rate,
+       CASE WHEN a.currency = u."baseCurrency" THEN 1::numeric ELSE r.rate END AS rate,
        (CASE it.type
           WHEN 'buy' THEN -(it."totalAmount" + it.fees)
           WHEN 'deposit' THEN -(it."totalAmount" + it.fees)
@@ -505,14 +1259,11 @@ DECLARE
   report text;
 BEGIN
   SELECT count(*) INTO missing_tx FROM transactions t
-    WHERE NOT EXISTS (SELECT 1 FROM ledger_entries le WHERE le.id = t.id)
-      AND coalesce(t."businessId", t."personalAccountId") IS NOT NULL;
+    WHERE NOT EXISTS (SELECT 1 FROM ledger_entries le WHERE le.id = t.id);
   SELECT count(*) INTO missing_bt FROM bill_transactions bt
-    WHERE NOT EXISTS (SELECT 1 FROM ledger_entries le WHERE le.id = bt.id)
-      AND bt.id IN (SELECT id FROM _bt);
-  SELECT count(*) INTO missing_tr FROM _tr tr
-    WHERE tr.from_account IS NOT NULL AND tr.to_account IS NOT NULL
-      AND (SELECT count(*) FROM ledger_entries le WHERE le."transferGroupId" = tr.id) <> 2;
+    WHERE NOT EXISTS (SELECT 1 FROM ledger_entries le WHERE le.id = bt.id);
+  SELECT count(*) INTO missing_tr FROM transfers tr
+    WHERE (SELECT count(*) FROM ledger_entries le WHERE le."transferGroupId" = tr.id) <> 2;
   SELECT count(*) INTO unbalanced FROM transfer_groups tg
     WHERE (SELECT abs(sum(le.amount)) FROM ledger_entries le WHERE le."transferGroupId" = tg.id) > 0.0001;
 

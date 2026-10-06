@@ -81,3 +81,26 @@ select count(*) from (
   where "transferGroupId" is not null and "deletedAt" is null
   group by 1 having count(*) <> 2
 ) x;
+
+\echo '== 8. Archived link columns (archived count must equal the live count)'
+select 'attachments' as source,
+       (select count(*) from attachments) as live,
+       (select count(*) from legacy.attachment_links) as archived
+union all
+select 'budgets',
+       (select count(*) from budgets),
+       (select count(*) from legacy.budget_links)
+union all
+select 'reminder_dispatches',
+       (select count(*) from reminder_dispatches),
+       (select count(*) from legacy.reminder_dispatch_links);
+
+\echo '== 9. Business brokerages mapped onto the personal entity (informational)'
+select ia.id, ia."userId", ia.name, a."entityId" as personal_entity_id
+from legacy.investment_accounts ia
+join accounts a on a.id = ia.id
+join entities e on e.id = a."entityId" and e.kind = 'personal'
+where ia."businessId" is null
+  and ia."personalAccountId" is null
+  and ia."entityType" = 'business'
+order by ia.id;

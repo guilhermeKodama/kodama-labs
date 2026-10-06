@@ -76,16 +76,30 @@ describe("monitors", () => {
 
   it("gives every scheduled cron a push monitor that requires two misses", () => {
     const crons = cronPushMonitors(schedules);
-    expect(crons).toHaveLength(23);
+    expect(crons).toHaveLength(25);
     for (const monitor of crons) {
       expect(monitor.type).toBe("push");
       expect(monitor.maxretries).toBe(1);
       expect(monitor.interval).toBeGreaterThan(monitor.retryInterval);
     }
     const byName = new Map(crons.map((monitor) => [monitor.name, monitor]));
-    expect(byName.get("kodama/cron-capital-api-cron-categorize-bills")).toMatchObject({
+    expect(byName.has("kodama/cron-capital-api-cron-categorize-bills")).toBe(false);
+    expect(byName.has("kodama/cron-capital-api-cron-categorize-statements")).toBe(false);
+    expect(byName.get("kodama/cron-capital-api-cron-categorize")).toMatchObject({
       interval: 180,
       retryInterval: 120,
+    });
+    expect(byName.get("kodama/cron-capital-api-cron-notify")).toMatchObject({
+      interval: 960,
+      retryInterval: 900,
+    });
+    expect(byName.get("kodama/cron-capital-api-cron-portfolio-snapshot")).toMatchObject({
+      interval: 26 * 3600 + 60,
+      retryInterval: 26 * 3600,
+    });
+    expect(byName.get("kodama/cron-capital-api-cron-benchmarks")).toMatchObject({
+      interval: 26 * 3600 + 60,
+      retryInterval: 26 * 3600,
     });
     expect(byName.get("kodama/cron-capital-api-cron-send-reminders")).toMatchObject({
       interval: 360,
@@ -108,7 +122,10 @@ describe("monitors", () => {
   it("parses the schedule dialects we ship", () => {
     expect(cronPeriodSeconds("*/5 * * * *")).toBe(300);
     expect(cronPeriodSeconds("*/2 * * * *")).toBe(120);
+    expect(cronPeriodSeconds("*/15 * * * *")).toBe(900);
     expect(cronPeriodSeconds("0 * * * *")).toBe(3600);
+    expect(cronPeriodSeconds("30 23 * * *")).toBe(26 * 3600);
+    expect(cronPeriodSeconds("0 10 * * *")).toBe(26 * 3600);
     expect(cronPeriodSeconds("0 */3 * * *")).toBe(3 * 3600);
     expect(cronPeriodSeconds("0,30 * * * *")).toBe(1800);
     expect(cronPeriodSeconds("0 6 * * *")).toBe(26 * 3600);

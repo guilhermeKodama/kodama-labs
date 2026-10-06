@@ -1,4 +1,4 @@
-import { createRouter } from "@capital/server/lib/create-app";
+import { createRouter } from "@capital/server/lib/router";
 import { prisma } from "@capital/server/lib/prisma";
 
 const router = createRouter();
