@@ -6,6 +6,15 @@
     "newView": "New view",
     "modified": "Modified"
   },
+  "viewMenu": {
+    "open": "Options for “{name}”",
+    "title": "View options",
+    "rename": "Rename",
+    "duplicate": "Duplicate",
+    "favorite": "Add to favorites",
+    "unfavorite": "Remove from favorites",
+    "delete": "Delete view"
+  },
   "period": {
     "title": "View period",
     "prev": "Previous period",

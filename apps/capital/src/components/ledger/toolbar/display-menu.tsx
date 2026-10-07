@@ -2,6 +2,7 @@
 
 import { useState, type ReactNode } from "react";
 import { useTranslations } from "next-intl";
+import { Trash2 } from "lucide-react";
 import type { ViewConfig } from "@capital/server/modules/ledger/contracts";
 import { Btn, Check, Popover, Select, TextInput } from "@/components/cap";
 import {
@@ -22,7 +23,7 @@ import {
   TOPS,
 } from "@/lib/ledger/columns";
 import { PERIOD_PRESETS, presetOf } from "@/lib/ledger/period";
-import { LAYOUT_GLYPH } from "@/lib/ledger/view-glyphs";
+import { LAYOUT_ICON } from "@/lib/ledger/view-glyphs";
 import { cn } from "@/lib/utils";
 import type { LedgerLabels } from "../fields";
 
@@ -40,9 +41,10 @@ const TOP_LABEL: Record<(typeof TOPS)[number], "all" | "top5" | "top8"> = { 0: "
 
 /**
  * "Exibição" (mockup 2365–2522): name, layout, period, grouping, chart
- * options, sort, visible properties, favorite, Duplicar / Fechar / Excluir
- * view. Every change applies at once (auto-save; on Todas only display
- * preferences are kept). Open state lives in the URL (?display=1).
+ * options, sort, visible properties, favorite, then Duplicar / Fechar /
+ * Excluir view pinned at the bottom. Every change applies at once
+ * (auto-save; on Todas only display preferences are kept). Open state
+ * lives in the URL (?display=1).
  */
 export function DisplayMenu({
   open,
@@ -97,24 +99,30 @@ export function DisplayMenu({
         />
       </FieldRow>
       {isBuiltin ? <span className="text-[11.5px] text-fg-3">{t("display.builtinHint")}</span> : null}
-      <FieldRow label={t("display.layout")}>
-        <div className="grid grid-cols-5 gap-1">
-          {LAYOUTS.map((layout) => (
-            <button
-              key={layout}
-              type="button"
-              onClick={() => onConfig({ layout })}
-              className={cn(
-                "flex flex-col items-center gap-0.5 rounded-[6px] border py-1.5 text-[10.5px]",
-                config.layout === layout ? "border-fg-1 text-fg-1" : "border-stroke-2 text-fg-3 hover:text-fg-strong",
-              )}
-            >
-              <span className="text-[13px]">{LAYOUT_GLYPH[layout]}</span>
-              {t(`layouts.${layout}`)}
-            </button>
-          ))}
+      <div className="flex flex-col gap-1.5">
+        <span className="text-[12px] text-fg-3">{t("display.layout")}</span>
+        <div className="grid grid-cols-3 gap-1.5">
+          {LAYOUTS.map((layout) => {
+            const Icon = LAYOUT_ICON[layout];
+            const on = config.layout === layout;
+            return (
+              <button
+                key={layout}
+                type="button"
+                aria-pressed={on}
+                onClick={() => onConfig({ layout })}
+                className={cn(
+                  "flex h-14 flex-col items-center justify-center gap-1 rounded-[8px] border text-[11.5px] outline-none focus-visible:ring-2 focus-visible:ring-fg-3/40",
+                  on ? "border-fg-1 bg-fill-2 font-medium text-fg-1" : "border-stroke-2 text-fg-3 hover:bg-fill-4 hover:text-fg-strong",
+                )}
+              >
+                <Icon aria-hidden className="size-5" />
+                {t(`layouts.${layout}`)}
+              </button>
+            );
+          })}
         </div>
-      </FieldRow>
+      </div>
       <FieldRow label={t("display.period")}>
         <Select
           value={preset}
@@ -136,18 +144,19 @@ export function DisplayMenu({
         <div className="flex flex-col gap-1.5">
           <span className="text-[12px] text-fg-3">{t("display.chartType")}</span>
           <div className="grid grid-cols-3 gap-1">
-            {CHART_TYPE_META.map(({ type, glyph }) => (
+            {CHART_TYPE_META.map(({ type, icon: Icon }) => (
               <button
                 key={type}
                 type="button"
+                aria-pressed={chart.type === type}
                 onClick={() => onConfig({ chart: { ...chart, type } })}
                 className={cn(
                   "flex items-center gap-1.5 rounded-[6px] border px-2 py-[5px] text-[11.5px]",
-                  chart.type === type ? "border-fg-1 text-fg-1" : "border-stroke-2 text-fg-3 hover:text-fg-strong",
+                  chart.type === type ? "border-fg-1 bg-fill-2 text-fg-1" : "border-stroke-2 text-fg-3 hover:text-fg-strong",
                 )}
               >
-                <span className="w-3 text-[12px]">{glyph}</span>
-                {t(`charts.types.${type}`)}
+                <Icon aria-hidden className="size-3.5 shrink-0" />
+                <span className="truncate">{t(`charts.types.${type}`)}</span>
               </button>
             ))}
           </div>
@@ -213,14 +222,16 @@ export function DisplayMenu({
         </div>
       ) : null}
       <Check checked={isFavorite} onChange={onFavorite} label={t("display.favorite")} />
-      <div className="flex gap-1.5 border-t border-stroke-3 pt-2">
+      {/* Pinned to the bottom of the popover, so "Excluir view" is reachable however long the options get. */}
+      <div className="sticky bottom-0 -mx-2.5 -mb-2.5 flex shrink-0 items-center gap-1.5 border-t border-stroke-3 bg-editor px-2.5 py-2">
         <Btn onClick={onDuplicate}>{t("display.duplicate")}</Btn>
         <Btn ghost onClick={() => onOpenChange(false)}>
           {t("display.close")}
         </Btn>
         <span className="flex-1" />
         {!isBuiltin ? (
-          <Btn ghost onClick={onDelete}>
+          <Btn ghost danger onClick={onDelete}>
+            <Trash2 aria-hidden className="size-3.5" />
             {t("display.delete")}
           </Btn>
         ) : null}

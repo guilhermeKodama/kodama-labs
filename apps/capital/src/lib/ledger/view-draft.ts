@@ -194,6 +194,19 @@ export function resolveActiveView<V extends ViewRef>(views: readonly V[], param:
 }
 
 /**
+ * Whether `?view=<id>` names a view the list does not have yet while the
+ * list may still bring it (not loaded, or refetching): the screen shows
+ * "Carregando…" then, instead of falling back to Todas (where filters would
+ * go to Todas' draft and never be saved). Once the list has settled without
+ * it (a deleted view, an old link), the screen falls back to Todas.
+ */
+export function isViewParamPending(views: readonly ViewRef[], param: string | null | undefined, settled: boolean): boolean {
+  const wanted = parseViewParam(param);
+  if (!wanted || !("viewId" in wanted) || settled) return false;
+  return !views.some((view) => view.id === wanted.viewId);
+}
+
+/**
  * What `?view=seed:<key>` becomes once the views are loaded: the seeded view's own id, or null (Todas) when
  * the user deleted that view or it does not exist yet (PJ before a business entity). `undefined` = leave the
  * param alone (no seed key, or the views are still loading). A plain id is never rewritten: a view created

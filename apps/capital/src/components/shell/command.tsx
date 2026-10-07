@@ -17,6 +17,7 @@ import { useSession, useSignOut } from "@/lib/api/session";
 import { readLastConversation } from "@/lib/assistant/history";
 import { useFmt } from "@/lib/format/provider";
 import { parseQuickAdd, type QuickAddDraft, type QuickAddResult } from "@/lib/ledger/quick-add";
+import { useNewView } from "@/lib/ledger/use-views";
 import { useAssistantBridge } from "@/lib/shell/assistant-bridge";
 import { commandItems, filterCommands, normalizeSearch, type CommandAction, type CommandGroup, type CommandItem } from "@/lib/shell/command-items";
 import { COMMAND_MENU_EVENT } from "@/lib/shell/command-menu";
@@ -39,7 +40,6 @@ import { THEME_PREFERENCES, type ThemePreference } from "@/lib/theme/preference"
 import { cn } from "@/lib/utils";
 import { AssistantPanel } from "./assistant/assistant-panel";
 import { useAssistant, type AssistantController } from "./assistant/use-assistant";
-import { useNewView } from "./sidebar";
 import { LANGUAGE_KEY, useLocaleChoice, useOpenSettings, useThemeChoice } from "./user-menu";
 
 type Mode = "commands" | "assistant";

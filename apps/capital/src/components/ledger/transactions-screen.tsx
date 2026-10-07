@@ -7,17 +7,17 @@ import { parseAsString, useQueryStates } from "nuqs";
 import type { GroupKey, LedgerDisplayQueryResult, LedgerFilter, ViewConfig } from "@capital/server/modules/ledger/contracts";
 import { Btn, TextInput } from "@/components/cap";
 import { Page } from "@/components/shell/page";
-import { apiDelete, apiPost } from "@/lib/api/client";
+import { apiPost } from "@/lib/api/client";
 import { useNames } from "@/lib/api/catalog";
 import { keys } from "@/lib/api/keys";
-import { useAppMutation, useErrorMessage } from "@/lib/api/use-app-mutation";
+import { useErrorMessage } from "@/lib/api/use-app-mutation";
 import { useFmt } from "@/lib/format/provider";
 import { normalizeLedgerConfig } from "@/lib/ledger/columns";
 import { dayDraft, drillDraft, drillFiltersDraft, withDrillBanner, type DrillCell } from "@/lib/ledger/drill";
 import { currentMonth, periodDays, todayIso } from "@/lib/ledger/period";
 import { selectionStats } from "@/lib/ledger/selection";
-import { useLedgerViews, useViewSaver, type LedgerView } from "@/lib/ledger/use-views";
-import { applyViewDraft, decodeViewDraft, draftPatch, encodeViewDraft, canonicalViewParam, isDirty, resolveActiveView, type ViewDraft } from "@/lib/ledger/view-draft";
+import { useDuplicateView, useLedgerViewActions, useLedgerViews, useNewView, useViewSaver, type LedgerView } from "@/lib/ledger/use-views";
+import { applyViewDraft, decodeViewDraft, draftPatch, encodeViewDraft, canonicalViewParam, isDirty, isViewParamPending, resolveActiveView, type ViewDraft } from "@/lib/ledger/view-draft";
 import { boardColumnQuery, boardKey, calendarQuery, calendarRowsQuery, isPagedLayout, layoutQuery, pivotKeys, selectionScope, viewSelection } from "@/lib/ledger/view-query";
 import { planViewUpdate } from "@/lib/ledger/view-update";
 import { BulkBar } from "./bulk-bar";
@@ -58,10 +58,12 @@ export function TransactionsScreen() {
   const t = useTranslations("ledger");
   const tc = useTranslations("common");
   const views = useLedgerViews();
-  const overlays = useLedgerOverlays();
   const [params, setParams] = useQueryStates(URL_STATE);
   const list = useMemo(() => views.data ?? [], [views.data]);
-  const active = resolveActiveView(list, params.view);
+  // A view created a moment ago (or a link to one) may not be in the list yet: wait for it instead of showing Todas,
+  // where its first filter would go to Todas' draft and never be saved.
+  const waiting = isViewParamPending(list, params.view, views.isSuccess && !views.isFetching);
+  const active = waiting ? null : resolveActiveView(list, params.view);
 
   // ?view=seed:ir (e.g. the old /tax link) becomes the view's own id.
   // A seeded view the user deleted (or one not seeded yet, like PJ before a business entity) falls back to Todas.
@@ -71,24 +73,10 @@ export function TransactionsScreen() {
   }, [canonical, setParams]);
 
   const open = (id: string | null) => void setParams({ view: id, draft: null, q: null });
-  const create = useAppMutation({
-    event: "views.write",
-    mutationFn: () => apiPost<LedgerView>("/api/v2/views", { name: t("tabs.newView"), dataset: "ledger", isFavorite: true, config: {} }),
-    onSuccess: (view) => {
-      open(view.id);
-      overlays.setDisplayOpen(true);
-    },
-  });
-  // The delete is in the undo log: "Desfazer" (or ⌘Z) brings the view back under the same id, so links to it keep working.
-  const remove = useAppMutation({
-    event: "views.write",
-    mutationFn: (view: LedgerView) => apiDelete<{ ok: true; batchId: string | null }>(`/api/v2/views/${view.id}`),
-    undo: (_, view) => t("display.deleted", { name: view.name }),
-    onSuccess: () => {
-      overlays.setDisplayOpen(false);
-      open(null);
-    },
-  });
+  // "+", the sidebar's "+ Nova view" and ⌘K: the same hook (the view is in the list before it opens, with Exibição).
+  const newView = useNewView();
+  // The view menu (tabs, Exibição): deleting the view on screen opens Todas; the delete is undoable under the same id.
+  const actions = useLedgerViewActions({ activeId: active?.id ?? null });
 
   const tabs = (
     <ViewTabs
@@ -96,19 +84,20 @@ export function TransactionsScreen() {
       activeId={active?.id ?? null}
       dirty={!!active && isDirty(normalizeLedgerConfig(active.config), decodeViewDraft(params.draft))}
       onPick={(view) => open(view.id)}
-      onNew={() => create.mutate()}
-      creating={create.isPending}
+      onNew={newView.mutate}
+      creating={newView.isPending}
+      actions={actions}
     />
   );
 
   if (!active) {
     return (
       <Page crumbs={[t("crumb")]} subheader={tabs}>
-        <p className="text-[12.5px] text-fg-3">{views.isError ? t("viewsError") : tc("loading")}</p>
+        <p className="text-[12.5px] text-fg-3">{views.isError && !waiting ? t("viewsError") : tc("loading")}</p>
       </Page>
     );
   }
-  return <ViewScreen key={active.id} view={active} tabs={tabs} draftParam={params.draft} search={params.q ?? ""} setParams={setParams} onDelete={() => remove.mutate(active)} />;
+  return <ViewScreen key={active.id} view={active} tabs={tabs} draftParam={params.draft} search={params.q ?? ""} setParams={setParams} onDelete={() => actions.remove(active)} />;
 }
 
 function ViewScreen({
@@ -218,11 +207,12 @@ function ViewScreen({
   }, [calendar, hasNextPage, isFetchingNextPage, calendarPages, fetchNextPage]);
   const totalCount = first?.summary?.count ?? first?.totals?.count ?? 0;
 
-  const duplicate = useAppMutation({
-    event: "views.write",
-    mutationFn: () => apiPost<LedgerView>(`/api/v2/views/${view.id}/duplicate`, { config: applyViewDraft(saved, draft) }),
-    onSuccess: (copy) => void setParams({ view: copy.id, draft: null, q: null }),
-  });
+  // "Duplicar" and "Salvar como nova": the copy takes the config on screen (draft included) and opens, already in the list.
+  const duplicateMutation = useDuplicateView();
+  const duplicate = {
+    isPending: duplicateMutation.isPending,
+    mutate: () => duplicateMutation.mutate({ view, config: applyViewDraft(saved, draft) }, { onSuccess: (copy) => void setParams({ view: copy.id, draft: null, q: null }) }),
+  };
 
   const selectedRows = rows.filter((row) => selected.has(row.id));
   const summary = first?.summary ?? null;

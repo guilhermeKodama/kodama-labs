@@ -23,7 +23,7 @@ const TOOLTIP_STYLE = {
 const SHADE = { 1: "bg-fill-1", 2: "bg-fill-2", 3: "bg-fill-3", 4: "bg-fill-4" } as const;
 const color = (index: number) => CHART_SERIES[index % CHART_SERIES.length];
 
-/** Chart types above the chart (mockup 2925–2950): glyph and label, the hint as title. */
+/** Chart types above the chart (mockup 2925–2950): icon and label, the hint as title. */
 export function ChartTypeStrip({ type, onType }: { type: ChartType; onType: (type: ChartType) => void }) {
   const t = useTranslations("ledger.charts");
   return (
@@ -39,7 +39,7 @@ export function ChartTypeStrip({ type, onType }: { type: ChartType; onType: (typ
             type === meta.type ? "border-stroke-1 bg-fill-2 text-fg-1" : "border-transparent text-fg-3 hover:text-fg-strong",
           )}
         >
-          <span className="text-[11px]">{meta.glyph}</span>
+          <meta.icon aria-hidden className="size-3.5 shrink-0" />
           {t(`types.${meta.type}`)}
         </button>
       ))}

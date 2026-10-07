@@ -1,3 +1,4 @@
+import { ChartArea, ChartBar, ChartColumn, ChartColumnDecreasing, ChartColumnStacked, ChartLine, ChartPie, Donut, LayoutDashboard, Waypoints, type LucideIcon } from "lucide-react";
 import type { Aggregation, GroupKey, LedgerFilter, ViewConfig } from "@capital/server/modules/ledger/contracts";
 
 /**
@@ -245,18 +246,18 @@ export const LAYOUTS = ["table", "pivot", "chart", "board", "calendar"] as const
 
 export type ChartType = ViewConfig["chart"]["type"];
 
-/** Chart types in the mockup's order (CHART_TYPES 621–632), plus the sankey (decision sankey=v1). */
-export const CHART_TYPE_META: { type: ChartType; glyph: string }[] = [
-  { type: "bar", glyph: "▮" },
-  { type: "hbar", glyph: "▬" },
-  { type: "bar100", glyph: "▥" },
-  { type: "line", glyph: "⟋" },
-  { type: "area", glyph: "◢" },
-  { type: "pie", glyph: "◔" },
-  { type: "donut", glyph: "◯" },
-  { type: "treemap", glyph: "▦" },
-  { type: "waterfall", glyph: "▙" },
-  { type: "sankey", glyph: "⇶" },
+/** Chart types in the mockup's order (CHART_TYPES 621–632), plus the sankey (decision sankey=v1): text glyph and lucide icon. */
+export const CHART_TYPE_META: { type: ChartType; glyph: string; icon: LucideIcon }[] = [
+  { type: "bar", glyph: "▮", icon: ChartColumn },
+  { type: "hbar", glyph: "▬", icon: ChartBar },
+  { type: "bar100", glyph: "▥", icon: ChartColumnStacked },
+  { type: "line", glyph: "⟋", icon: ChartLine },
+  { type: "area", glyph: "◢", icon: ChartArea },
+  { type: "pie", glyph: "◔", icon: ChartPie },
+  { type: "donut", glyph: "◯", icon: Donut },
+  { type: "treemap", glyph: "▦", icon: LayoutDashboard },
+  { type: "waterfall", glyph: "▙", icon: ChartColumnDecreasing },
+  { type: "sankey", glyph: "⇶", icon: Waypoints },
 ];
 
 /** Types that draw a second grouping as series ("Séries"). */

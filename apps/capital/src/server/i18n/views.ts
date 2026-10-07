@@ -11,6 +11,8 @@ export const views = defineDictionary(
     builtin: {
       all: "Todas",
     },
+    /** A view created without a name ("+ Nova view"); the next ones are numbered: "Nova view 2". */
+    newView: "Nova view",
     ledger: {
       pj: "PJ",
       subs: "Assinaturas",
@@ -49,6 +51,7 @@ export const views = defineDictionary(
     builtin: {
       all: "All",
     },
+    newView: "New view",
     ledger: {
       pj: "Business",
       subs: "Subscriptions",

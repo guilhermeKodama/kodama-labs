@@ -15,7 +15,7 @@ const listViewsRoute = createRoute({
   request: { query: z.object({ dataset: z.string().optional() }) },
   responses: v2Responses,
 });
-const createViewRoute = createRoute({ method: "post", path: "/v2/views", tags, summary: "Create a view (undoable: returns batchId)", request: jsonBody(savedViewInputSchema), responses: v2Responses });
+const createViewRoute = createRoute({ method: "post", path: "/v2/views", tags, summary: "Create a view (undoable: returns batchId). Without a name it is called \"Nova view\", \"Nova view 2\"… per dataset, in the user's locale, and not recorded (batchId null)", request: jsonBody(savedViewInputSchema), responses: v2Responses });
 const patchViewRoute = createRoute({ method: "patch", path: "/v2/views/{id}", tags, summary: "Update a view (auto-save; a rename or favorite toggle returns batchId, config edits are not recorded)", request: { params: idParams, ...jsonBody(savedViewPatchSchema) }, responses: v2Responses });
 const deleteViewRoute = createRoute({ method: "delete", path: "/v2/views/{id}", tags, summary: "Delete a view (undoable: undo restores it under the same id)", request: { params: idParams }, responses: v2Responses });
 const duplicateViewRoute = createRoute({
