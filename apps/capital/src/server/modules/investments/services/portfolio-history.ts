@@ -33,12 +33,14 @@ import {
  * aportado", "Resultado", the history chart): brokerage accounts that are
  * not archived and the active holdings of accounts that are not archived
  * (PORTFOLIO_HOLDINGS / PORTFOLIO_BROKERS). An archived broker leaves with
- * its cash and every flow into or out of it; a deactivated holding leaves
- * with its position and the flows it brought in (a holding registered
- * without cash). Money moved from an archived broker into a live one is,
- * for the live population, money coming in. So Resultado = Patrimônio −
- * Total aportado never mixes what is counted on one side and not on the
- * other.
+ * its cash and every flow into or out of it; money moved from an archived
+ * broker into a live one is, for the live population, money coming in. A
+ * deactivated holding counted while it was held and left the portfolio
+ * when it was deactivated (its `updatedAt`, see `removedAt` in
+ * lib/portfolio-timeline.ts): what it still held goes out at cost then, so
+ * the cash spent on it is not read as a loss and a closed position keeps
+ * its realized gain. So Resultado = Patrimônio − Total aportado never mixes
+ * what is counted on one side and not on the other.
  */
 
 /** Holdings counted in the portfolio: active, on an account that is not archived. */
@@ -66,10 +68,13 @@ export async function loadTimeline(userId: string, db: DbClient): Promise<Loaded
       FROM ledger_entries le
       JOIN accounts a ON a.id = le."accountId" AND a.type = 'brokerage' AND a."archivedAt" IS NULL
       WHERE le."userId" = ${userId} AND le."deletedAt" IS NULL`,
+    // Deactivated ones too: they count until they were removed (removedAt).
     db.investmentHolding.findMany({
-      where: { ...PORTFOLIO_HOLDINGS, account: { userId, ...PORTFOLIO_HOLDINGS.account } },
+      where: { account: { userId, ...PORTFOLIO_HOLDINGS.account } },
       select: {
         id: true,
+        isActive: true,
+        updatedAt: true,
         assetClass: true,
         allocationClass: true,
         currency: true,
@@ -116,6 +121,7 @@ export async function loadTimeline(userId: string, db: DbClient): Promise<Loaded
       currentQuantity: h.currentQuantity,
       currentPrice: h.currentPrice,
       totalInvested: h.totalInvested,
+      removedAt: h.isActive ? null : h.updatedAt,
       operations: h.operations.map((op): TimelineOperation => {
         const leg = op.cashEntry && !op.cashEntry.deletedAt ? op.cashEntry : null;
         return {

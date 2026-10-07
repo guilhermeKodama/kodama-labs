@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
 import type { LedgerDisplayRow } from "@capital/server/modules/ledger/contracts";
-import { contributionRow, contributionsQuery, contributionTotals, EMPTY_CONTRIBUTION_FILTERS } from "../contributions-ledger";
+import {
+  contributionFiltersFromUrl,
+  contributionFiltersToUrl,
+  contributionRow,
+  contributionsQuery,
+  contributionTotals,
+  EMPTY_CONTRIBUTION_FILTERS,
+} from "../contributions-ledger";
 
 function row(over: Partial<LedgerDisplayRow>): LedgerDisplayRow {
   return {
@@ -95,5 +102,36 @@ describe("contributionRow", () => {
 
   it("sums aportes and resgates apart", () => {
     expect(contributionTotals([{ amount: 1000 }, { amount: -400 }, { amount: 250.5 }])).toEqual({ deposits: 1250.5, withdrawals: 400, net: 850.5 });
+  });
+});
+
+describe("contributionsQuery scope", () => {
+  it("follows the page's Consolidado / PF / PJ switch through the entity kind", () => {
+    const kind = (scope: "all" | "pf" | "pj") => contributionsQuery(EMPTY_CONTRIBUTION_FILTERS, scope).selection.filters.find((f) => f.field === "entityKind");
+    expect(kind("all")).toBeUndefined();
+    expect(kind("pf")).toEqual({ field: "entityKind", op: "in", values: ["personal"] });
+    expect(kind("pj")).toEqual({ field: "entityKind", op: "in", values: ["business"] });
+  });
+});
+
+describe("contribution filters in the URL", () => {
+  it("round-trips every chip and the search", () => {
+    const filters = { accountIds: ["nubank", "itau"], brokerIds: ["xp"], entityIds: ["pj"], period: "ytd" as const, directions: ["investment_withdrawal" as const], search: "salário" };
+    const params = contributionFiltersToUrl(filters);
+    expect(params).toEqual({ period: "ytd", type: "investment_withdrawal", account: "nubank,itau", broker: "xp", entity: "pj", q: "salário" });
+    expect(contributionFiltersFromUrl(params)).toEqual(filters);
+  });
+
+  it("writes no param for the defaults and reads none as the defaults", () => {
+    expect(contributionFiltersToUrl(EMPTY_CONTRIBUTION_FILTERS)).toEqual({ period: null, type: null, account: null, broker: null, entity: null, q: null });
+    expect(contributionFiltersFromUrl({})).toEqual(EMPTY_CONTRIBUTION_FILTERS);
+  });
+
+  it("drops unknown periods and types and empty list items", () => {
+    expect(contributionFiltersFromUrl({ period: "forever", type: "investment_deposit,bogus,investment_deposit", account: ",nubank,," })).toEqual({
+      ...EMPTY_CONTRIBUTION_FILTERS,
+      directions: ["investment_deposit"],
+      accountIds: ["nubank"],
+    });
   });
 });

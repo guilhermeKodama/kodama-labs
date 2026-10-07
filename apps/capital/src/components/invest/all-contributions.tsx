@@ -1,8 +1,9 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { keepPreviousData, useInfiniteQuery } from "@tanstack/react-query";
 import { useTranslations } from "next-intl";
+import { parseAsString, useQueryStates } from "nuqs";
 import type { LedgerDisplayQueryResult } from "@capital/server/modules/ledger/contracts";
 import { Btn, Check, EmptyRow, Popover, PopoverClose, TextInput } from "@/components/cap";
 import { MENU_ROW } from "@/components/cap/styles";
@@ -17,6 +18,9 @@ import { useDebounced } from "@/lib/invest/api";
 import {
   CONTRIBUTION_DIRECTIONS,
   CONTRIBUTION_PERIODS,
+  CONTRIBUTION_URL_KEYS,
+  contributionFiltersFromUrl,
+  contributionFiltersToUrl,
   contributionRow,
   contributionsQuery,
   contributionTotals,
@@ -25,7 +29,9 @@ import {
   type ContributionPeriod,
 } from "@/lib/invest/contributions-ledger";
 import { cn } from "@/lib/utils";
-import { MONO } from "./common";
+import { MONO, useScopeParam } from "./common";
+
+const URL_PARAMS = Object.fromEntries(CONTRIBUTION_URL_KEYS.map((key) => [key, parseAsString])) as Record<(typeof CONTRIBUTION_URL_KEYS)[number], typeof parseAsString>;
 
 type Option = { value: string; label: string; hint?: string };
 
@@ -110,11 +116,21 @@ export function AllContributions() {
   const names = useNames();
   const overlays = useLedgerOverlays();
   const errorText = useErrorMessage();
-  const [filters, setFilters] = useState<ContributionFilters>(EMPTY_CONTRIBUTION_FILTERS);
-  const [searchText, setSearchText] = useState("");
+  const [scope] = useScopeParam();
+  // The chips live in the URL (lib/invest/contributions-ledger.ts › contributionFiltersToUrl).
+  const [params, setParams] = useQueryStates(URL_PARAMS);
+  const filters = useMemo(() => contributionFiltersFromUrl(params), [params]);
+  const [searchText, setSearchText] = useState(filters.search);
   const search = useDebounced(searchText, 250);
-  const query = useMemo(() => contributionsQuery({ ...filters, search }), [filters, search]);
-  const set = (patch: Partial<ContributionFilters>) => setFilters((f) => ({ ...f, ...patch }));
+  // The typed search goes to ?q= once debounced; the URL is the source of every filter.
+  const typed = useRef(search);
+  useEffect(() => {
+    if (typed.current === search) return;
+    typed.current = search;
+    void setParams({ q: contributionFiltersToUrl({ ...EMPTY_CONTRIBUTION_FILTERS, search }).q });
+  }, [search, setParams]);
+  const query = useMemo(() => contributionsQuery(filters, scope), [filters, scope]);
+  const set = (patch: Partial<ContributionFilters>) => void setParams(contributionFiltersToUrl({ ...filters, ...patch }));
 
   const pages = useInfiniteQuery({
     queryKey: keys.ledgerQuery({ ...query.body, paged: true }),
@@ -129,11 +145,31 @@ export function AllContributions() {
   }, [pages.data, query]);
   const totals = contributionTotals(rows);
   const serverCount = pages.data?.pages[0]?.totals?.count ?? null;
+  // With Conta and Corretora together the bank side is matched here, so the server's count is not the rows'.
+  const loadedText = query.clientFilter
+    ? pages.hasNextPage
+      ? t("loadedPartial", { count: rows.length })
+      : t("loaded", { count: rows.length, total: rows.length })
+    : t("loaded", { count: rows.length, total: serverCount ?? rows.length });
 
   const exportCsv = useAppMutation({
     event: null,
     mutationFn: async () => {
-      const csv = await api<string>("/api/v2/ledger/export", { method: "POST", body: JSON.stringify({ query: query.selection }) });
+      // Conta with Corretora: the selection has every row of the broker, so read the rest of the
+      // pages and export the matching transfers by id (both legs, like Transações' bulk export).
+      let target: object = { query: query.selection };
+      if (query.clientFilter) {
+        const ids: string[] = [];
+        let cursor: string | undefined;
+        do {
+          const page = await apiPost<LedgerDisplayQueryResult>("/api/v2/ledger/query", { ...query.body, page: { limit: 500, cursor } });
+          ids.push(...page.rows.filter(query.clientFilter).map((row) => row.id));
+          cursor = page.pageInfo.hasMore ? (page.pageInfo.nextCursor ?? undefined) : undefined;
+        } while (cursor && ids.length < 5000);
+        // Nothing matches: the same selection narrowed to no id (a CSV with the header only).
+        target = ids.length ? { ids: ids.slice(0, 5000) } : { query: { ...query.selection, filters: [...query.selection.filters, { field: "id", op: "in", values: [""] }] } };
+      }
+      const csv = await api<string>("/api/v2/ledger/export", { method: "POST", body: JSON.stringify(target) });
       const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
       const link = document.createElement("a");
       link.href = url;
@@ -168,7 +204,7 @@ export function AllContributions() {
         </Btn>
       </div>
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[12px] text-fg-3">
-        <span>{t("loaded", { count: rows.length, total: query.clientFilter ? rows.length : (serverCount ?? rows.length) })}</span>
+        <span>{loadedText}</span>
         <span className={MONO}>{t("totals", { deposits: fmt.money0(totals.deposits, names.currency), withdrawals: fmt.money0(totals.withdrawals, names.currency), net: fmt.money0(totals.net, names.currency) })}</span>
       </div>
       {pages.isError ? <p className="text-[12.5px] text-neg">{errorText(pages.error)}</p> : null}

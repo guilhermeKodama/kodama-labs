@@ -12,6 +12,7 @@
  * row (`clientFilter`).
  */
 import type { LedgerDisplayRow, LedgerFilter, LedgerQueryInput, LedgerSelectionQuery, Period } from "@capital/server/modules/ledger/contracts";
+import type { PortfolioScope } from "./types";
 
 export const CONTRIBUTION_DIRECTIONS = ["investment_deposit", "investment_withdrawal"] as const;
 export type ContributionDirection = (typeof CONTRIBUTION_DIRECTIONS)[number];
@@ -45,8 +46,14 @@ export interface ContributionsQuery {
   clientFilter: ((row: Pick<LedgerDisplayRow, "accountId" | "counterpartAccountId" | "accountType">) => boolean) | null;
 }
 
-export function contributionsQuery(f: ContributionFilters): ContributionsQuery {
+/**
+ * The query of the chips. `scope` is the page's Consolidado / PF / PJ
+ * switch (?scope=), the same as the KPIs and the monthly summary above the
+ * table: PF keeps the personal entity, PJ every business one.
+ */
+export function contributionsQuery(f: ContributionFilters, scope: PortfolioScope = "all"): ContributionsQuery {
   const filters: LedgerFilter[] = [{ field: "transferDirection", op: "in", values: f.directions.length ? [...f.directions] : [...CONTRIBUTION_DIRECTIONS] }];
+  if (scope !== "all") filters.push({ field: "entityKind", op: "in", values: [scope === "pf" ? "personal" : "business"] });
   if (f.entityIds.length) filters.push({ field: "entityId", op: "in", values: [...f.entityIds] });
   let clientFilter: ContributionsQuery["clientFilter"] = null;
   if (f.brokerIds.length) {
@@ -124,4 +131,41 @@ export function contributionTotals(rows: readonly Pick<ContributionRow, "amount"
   const withdrawals = rows.reduce((s, r) => s + Math.max(0, -r.amount), 0);
   const round = (n: number) => Math.round(n * 100) / 100;
   return { deposits: round(deposits), withdrawals: round(withdrawals), net: round(deposits - withdrawals) };
+}
+
+// ---------------------------------------------------------------------------
+// URL (?period=&type=&account=&broker=&entity=&q=), so a reload or a shared
+// link keeps the chips. Lists are comma-separated ids; unknown values drop.
+// ---------------------------------------------------------------------------
+
+export const CONTRIBUTION_URL_KEYS = ["period", "type", "account", "broker", "entity", "q"] as const;
+export type ContributionUrlKey = (typeof CONTRIBUTION_URL_KEYS)[number];
+export type ContributionUrlParams = Record<ContributionUrlKey, string | null>;
+
+const list = (raw: string | null | undefined) => (raw ?? "").split(",").map((v) => v.trim()).filter(Boolean);
+const joined = (values: readonly string[]) => (values.length ? values.join(",") : null);
+
+export function contributionFiltersFromUrl(params: Partial<Record<ContributionUrlKey, string | null>>): ContributionFilters {
+  const period = (CONTRIBUTION_PERIODS as readonly string[]).includes(params.period ?? "") ? (params.period as ContributionPeriod) : "all";
+  const directions = list(params.type).filter((d): d is ContributionDirection => (CONTRIBUTION_DIRECTIONS as readonly string[]).includes(d));
+  return {
+    accountIds: list(params.account),
+    brokerIds: list(params.broker),
+    entityIds: list(params.entity),
+    period,
+    directions: [...new Set(directions)],
+    search: params.q ?? "",
+  };
+}
+
+/** The params of the filters; a default value is null (no param). */
+export function contributionFiltersToUrl(f: ContributionFilters): ContributionUrlParams {
+  return {
+    period: f.period === "all" ? null : f.period,
+    type: joined(f.directions),
+    account: joined(f.accountIds),
+    broker: joined(f.brokerIds),
+    entity: joined(f.entityIds),
+    q: f.search.trim() ? f.search : null,
+  };
 }

@@ -7,8 +7,9 @@ import { portfolioHistory } from "../portfolio-history";
 
 /**
  * "Patrimônio", "Total aportado" and "Resultado" are computed over the same
- * population: an archived broker and a deactivated holding count on
- * neither side (they used to count in "Total aportado" only, which turned
+ * population: an archived broker counts on neither side, and a deactivated
+ * holding counts until it was deactivated, when what it still held leaves
+ * at cost (they used to count in "Total aportado" only, which turned
  * Resultado deeply negative). A holding registered without operations is a
  * "posição inicial", reported apart from the aportes.
  */
@@ -32,7 +33,7 @@ const transfer = (fromAccountId: string, toAccountId: string, amount: number, da
   createEntry(USER, { kind: "transfer", fromAccountId, toAccountId, amount, date, direction: "investment_deposit" }, prisma);
 
 /** A holding typed in without any operation (MCP, legacy import): quantity and cost only. */
-const registered = (data: { ticker: string; quantity: number; averageCost: number; price: number; createdAt: string; isActive?: boolean }) =>
+const registered = (data: { ticker: string; quantity: number; averageCost: number; price: number; createdAt: string; isActive?: boolean; updatedAt?: string }) =>
   prisma.investmentHolding.create({
     data: {
       accountId: f.broker,
@@ -45,11 +46,12 @@ const registered = (data: { ticker: string; quantity: number; averageCost: numbe
       currentPrice: data.price,
       isActive: data.isActive ?? true,
       createdAt: new Date(`${data.createdAt}T12:00:00Z`),
+      ...(data.updatedAt && { updatedAt: new Date(`${data.updatedAt}T12:00:00Z`) }),
     },
   });
 
 describe("portfolio population", () => {
-  it("leaves archived brokers and deactivated holdings out of both Patrimônio and Total aportado", async () => {
+  it("leaves archived brokers out of both sides, and takes deactivated holdings out at cost when they were deactivated", async () => {
     // Live: 10k in, 100 PETR4 at 30 (now 40) paid from the broker's cash.
     await transfer(f.pfChecking, f.broker, 10000, ago(3, 10));
     const petr = await createHolding(USER, { accountId: f.broker, assetClass: "stocks", ticker: "PETR4", name: "Petrobras", currentPrice: 40 }, prisma);
@@ -60,8 +62,9 @@ describe("portfolio population", () => {
     await transfer(f.pfChecking, old.id, 5000, ago(3, 12));
     await prisma.account.update({ where: { id: old.id }, data: { archivedAt: new Date() } });
 
-    // A deactivated holding registered without operations (2k of cost), and one with operations, deactivated after selling nothing.
-    await registered({ ticker: "OIBR3", quantity: 1000, averageCost: 2, price: 1, createdAt: ago(2, 3), isActive: false });
+    // A holding registered without operations (2k of cost), deactivated last month, and one bought with
+    // the broker's cash (500), deactivated now while still holding it.
+    await registered({ ticker: "OIBR3", quantity: 1000, averageCost: 2, price: 1, createdAt: ago(2, 3), isActive: false, updatedAt: ago(1, 5) });
     const vale = await createHolding(USER, { accountId: f.broker, assetClass: "stocks", ticker: "VALE3", name: "Vale", currentPrice: 60 }, prisma);
     await recordOperation(USER, { holdingId: vale.id, type: "buy", quantity: 10, pricePerUnit: 50, totalAmount: 500, date: ago(2, 5) }, prisma);
     await updateHolding(USER, vale.id, { isActive: false }, prisma);
@@ -72,19 +75,21 @@ describe("portfolio population", () => {
     const summary = await portfolioSummary(USER, prisma);
     // 100 PETR4 x 40 + 100 ITUB4 x 25 + 6.5k of cash (10k − 3k − 500).
     expect(summary.netWorth).toBe(13000);
-    // 10k of aportes + 2k of posições iniciais; nothing from the archived broker or the deactivated holdings.
-    expect(summary.contributed).toBe(12000);
+    // 10k of aportes + 2k of posições iniciais (ITUB4) − the 500 of VALE3 that left at cost; OIBR3 came in
+    // and went out; nothing from the archived broker.
+    expect(summary.contributed).toBe(11500);
     expect(summary.initialPositions).toBe(2000);
-    // 1k on PETR4 + 500 on ITUB4 − the 500 that went into VALE3, which is no longer counted.
-    expect(summary.result).toBe(1000);
+    // 1k on PETR4 + 500 on ITUB4: deactivating VALE3 is not a loss of the cash spent on it.
+    expect(summary.result).toBe(1500);
     expect(summary.accountsCount).toBe(1);
 
     const history = await portfolioHistory(USER, prisma, { months: 4 });
     const live = history.months.at(-1)!;
-    expect([live.netWorth, live.contributed, live.initialPositions]).toEqual([13000, 12000, 2000]);
-    // The posição inicial enters in the month it was typed, as such, not as an aporte.
+    expect([live.netWorth, live.contributed, live.initialPositions]).toEqual([13000, 11500, 2000]);
+    // A posição inicial enters in the month it was typed, as such, not as an aporte, and a deactivated
+    // one leaves in the month it was deactivated.
     const byPeriod = new Map(history.months.map((m) => [m.period, m]));
-    expect(byPeriod.get(ago(2, 1).slice(0, 7))).toMatchObject({ contributed: 10000, initialPositions: 0 });
+    expect(byPeriod.get(ago(2, 1).slice(0, 7))).toMatchObject({ contributed: 12000, initialPositions: 2000 });
     expect(byPeriod.get(ago(1, 1).slice(0, 7))).toMatchObject({ contributed: 12000, initialPositions: 2000 });
   });
 });

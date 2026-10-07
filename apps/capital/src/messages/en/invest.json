@@ -411,6 +411,7 @@
       "export": "Export CSV",
       "exported": "Contributions CSV exported",
       "loaded": "{count} of {total} entries",
+      "loadedPartial": "{count} entries loaded (more to load)",
       "totals": "+{deposits} contributions · −{withdrawals} withdrawals · net {net}",
       "empty": "No contributions or withdrawals with these filters.",
       "loadMore": "Load more",

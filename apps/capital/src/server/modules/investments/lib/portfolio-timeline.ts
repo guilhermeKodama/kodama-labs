@@ -22,7 +22,14 @@ import { marketValue } from "./holding-value";
  *   apart in `initialPositions`, so the chart does not read it as an
  *   aporte of that month);
  * - an operation whose cash leg is on a bank account (income credited to
- *   the bank): the money leaves the portfolio.
+ *   the bank): the money leaves the portfolio;
+ * - a deactivated holding ("removed" from the portfolio, `removedAt`): what
+ *   it still held leaves at its cost basis on that day, like a resgate in
+ *   kind. Before that it counts as any other position. So deactivating a
+ *   position never turns into a loss in Resultado (its cash spent on the
+ *   buy is not counted as lost), a closed position keeps its realized gain
+ *   (nothing is left to remove), and a holding registered without
+ *   operations goes in and out as a "posição inicial".
  *
  * "Total aportado" (contributed) is the running sum of those flows except
  * income paid out to a bank: the money that went into the brokers (opening
@@ -76,6 +83,11 @@ export interface TimelineHolding {
   totalInvested: number;
   /** Oldest first. */
   operations: TimelineOperation[];
+  /**
+   * When a deactivated holding left the portfolio (its last write, since
+   * prices are refreshed for active holdings only); null while active.
+   */
+  removedAt?: Date | null;
 }
 
 export interface TimelineInput {
@@ -183,9 +195,21 @@ export interface HoldingsValue {
 const EPS = 1e-9;
 
 function holdingFlows(h: TimelineHolding, rate: number): { flows: Flow[]; events: PositionEvent[] } {
+  const { flows, events } = heldFlows(h, rate);
+  if (!h.removedAt) return { flows, events };
+  // Deactivated: what is left goes out at cost, on the day it was removed (never before its last event).
+  const last = events.at(-1);
+  const date = last && last.date > h.removedAt ? last.date : h.removedAt;
+  const cost = last?.cost ?? 0;
+  if (cost > EPS) flows.push({ date, contributed: -cost * rate, external: -cost * rate, ...(!h.operations.length && { initial: true }) });
+  events.push({ date, quantity: 0, cost: 0 });
+  return { flows, events };
+}
+
+function heldFlows(h: TimelineHolding, rate: number): { flows: Flow[]; events: PositionEvent[] } {
   if (!h.operations.length) {
     // Entered directly (MCP, legacy import): its cost basis came in when it was created.
-    const flows = h.totalInvested ? [{ date: h.createdAt, contributed: h.totalInvested * rate, external: h.totalInvested * rate, initial: true }] : [];
+    const flows: Flow[] = h.totalInvested ? [{ date: h.createdAt, contributed: h.totalInvested * rate, external: h.totalInvested * rate, initial: true }] : [];
     return { flows, events: [{ date: h.createdAt, quantity: h.currentQuantity, cost: h.totalInvested }] };
   }
   const flows: Flow[] = [];

@@ -411,6 +411,7 @@
       "export": "Exportar CSV",
       "exported": "CSV dos aportes exportado",
       "loaded": "{count} de {total} lançamentos",
+      "loadedPartial": "{count} lançamentos carregados (há mais)",
       "totals": "+{deposits} aportes · −{withdrawals} resgates · líquido {net}",
       "empty": "Nenhum aporte ou resgate com esses filtros.",
       "loadMore": "Carregar mais",
