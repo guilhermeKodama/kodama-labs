@@ -29,13 +29,13 @@ export function SessionGate({ children }: { children: ReactNode }) {
   if (session.isError && !isSessionExpired(session.error)) {
     return (
       <div className="flex min-h-dvh flex-col items-center justify-center gap-2 bg-editor px-4 text-center text-fg-1">
-        <span className="text-[13px] font-medium">{t("loadFailed")}</span>
-        <span className="text-[12.5px] text-fg-3">{errorText(session.error)}</span>
+        <span className="text-body-lg font-medium">{t("loadFailed")}</span>
+        <span className="text-body text-fg-3">{errorText(session.error)}</span>
         <Btn className="mt-1" disabled={session.isFetching} onClick={() => void session.refetch()}>
           {common("retry")}
         </Btn>
       </div>
     );
   }
-  return <div className="flex min-h-dvh items-center justify-center bg-background text-sm text-muted-foreground">…</div>;
+  return <div className="flex min-h-dvh items-center justify-center bg-background text-title-sm text-muted-foreground">…</div>;
 }

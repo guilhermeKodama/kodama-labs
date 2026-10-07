@@ -11,6 +11,7 @@ import type { BudgetsScope, BudgetsView } from "@/lib/budgets/url";
 import { useFmt } from "@/lib/format/provider";
 import type { ViewDraft } from "@/lib/ledger/view-draft";
 import { CHART, CHART_AXIS } from "@/lib/theme/chart-colors";
+import { textRole } from "@/lib/theme/type-scale";
 import { cn } from "@/lib/utils";
 import type { EditableBudget } from "./budget-dialog";
 import { BudgetEntityBadge, ChartCaption, ChartLegend, DrillLink, EntityBadge, PaceBar, RowMenu, ScopeBar, TONE_TEXT, TOOLTIP_STYLE, useEntityNames, ViewState, type BudgetActions } from "./parts";
@@ -95,7 +96,7 @@ function MonthBody({ data, actions, onOpenRule, onAllRules }: { data: MonthOverv
       </KpiStrip>
       <div className="grid items-start gap-3 md:grid-cols-[minmax(0,1.7fr)_minmax(0,1fr)]">
         <div className="min-w-0 overflow-x-auto rounded-[8px] border border-stroke-3">
-          <div className={cn(COLS, "h-[34px] text-[11.5px] text-fg-3")}>
+          <div className={cn(COLS, "h-[34px] text-label text-fg-3")}>
             <span>{t("month.table.category")}</span>
             <span className="truncate">{t(bar.key, bar.values)}</span>
             <span className="text-right">{t("month.table.spent")}</span>
@@ -116,7 +117,7 @@ function MonthBody({ data, actions, onOpenRule, onAllRules }: { data: MonthOverv
               period: "monthly",
             };
             return (
-              <div key={row.id} className={cn(COLS, "group h-10 border-t border-stroke-3 text-[12.5px]")}>
+              <div key={row.id} className={cn(COLS, "group h-10 border-t border-stroke-3 text-body")}>
                 <span className="flex min-w-0 items-center gap-1.5">
                   <DrillLink draft={drill(row, wholeMonth)} title={row.category} className="min-w-0 truncate">
                     {row.category}
@@ -126,7 +127,7 @@ function MonthBody({ data, actions, onOpenRule, onAllRules }: { data: MonthOverv
                 </span>
                 <span className="flex min-w-0 items-center gap-2">
                   <PaceBar ratio={ratio} tone={tone} marker={pace} label={row.category} />
-                  <span className="w-[34px] shrink-0 text-right font-mono text-[11px] text-fg-3 tabular-nums">{percent(ratio)}%</span>
+                  <span className="w-[34px] shrink-0 text-right font-mono text-caption text-fg-3 tabular-nums">{percent(ratio)}%</span>
                 </span>
                 <DrillLink draft={spent} className="text-right font-mono tabular-nums">
                   {fmt.money0(row.spent)}
@@ -134,14 +135,14 @@ function MonthBody({ data, actions, onOpenRule, onAllRules }: { data: MonthOverv
                 <DrillLink draft={spent} className={cn("text-right font-mono tabular-nums", row.remaining < 0 ? "text-cat-red" : "text-fg-2")}>
                   {fmt.money0(row.remaining)}
                 </DrillLink>
-                <span className={cn("truncate text-[12px]", TONE_TEXT[tone])}>{t(`month.status.${STATUS_KEY[tone]}`)}</span>
+                <span className={cn("truncate text-body-sm", TONE_TEXT[tone])}>{t(`month.status.${STATUS_KEY[tone]}`)}</span>
               </div>
             );
           })}
           {budgets.length ? (
-            <div className={cn(COLS, "h-9 border-t border-stroke-2 bg-fill-4 text-[12.5px] font-semibold")}>
+            <div className={cn(COLS, "h-9 border-t border-stroke-2 bg-fill-4 text-body font-semibold")}>
               <span>{t("month.table.total")}</span>
-              <span className="truncate text-[11.5px] font-normal text-fg-3">{t(resets.key, resets.values)}</span>
+              <span className="truncate text-label font-normal text-fg-3">{t(resets.key, resets.values)}</span>
               <DrillLink draft={totals(t("month.table.total"), spentPeriod)} className="text-right font-mono tabular-nums">
                 {fmt.money0(summary.totalSpent)}
               </DrillLink>
@@ -160,7 +161,7 @@ function MonthBody({ data, actions, onOpenRule, onAllRules }: { data: MonthOverv
             title={t("month.upcoming.title")}
             pad={false}
             trailing={
-              <button type="button" onClick={onAllRules} className="text-[11.5px] font-normal text-fg-3 outline-none hover:text-fg-1 focus-visible:text-fg-1">
+              <button type="button" onClick={onAllRules} className="text-label font-normal text-fg-3 outline-none hover:text-fg-1 focus-visible:text-fg-1">
                 {t("month.upcoming.seeAll")}
               </button>
             }
@@ -186,7 +187,7 @@ function PaceChart({ data, monthLabel }: { data: MonthOverview; monthLabel: stri
   return (
     <Panel title={t("month.chart.title")}>
       {empty ? (
-        <p className="py-6 text-center text-[12px] text-fg-3">{empty}</p>
+        <p className="py-6 text-center text-body-sm text-fg-3">{empty}</p>
       ) : (
         <>
           <div className="h-[150px]">
@@ -206,7 +207,7 @@ function PaceChart({ data, monthLabel }: { data: MonthOverview; monthLabel: stri
                     stroke={CHART.muted}
                     strokeDasharray="4 4"
                     ifOverflow="extendDomain"
-                    label={{ value: names.budget, position: "insideTopRight", fontSize: 10, fill: CHART.muted }}
+                    label={{ value: names.budget, position: "insideTopRight", fontSize: textRole("micro"), fill: CHART.muted }}
                   />
                 ) : null}
                 <Line dataKey="ideal" name={names.ideal} stroke={CHART.soft} strokeWidth={2} dot={false} isAnimationActive={false} />
@@ -234,15 +235,15 @@ function UpcomingLine({ item, names, onOpenRule }: { item: UpcomingItem; names: 
   const fmt = useFmt();
   const description = item.mode === "fatura" ? t("month.upcoming.bill", { account: item.description }) : item.description;
   const className =
-    "flex h-8 w-full items-center gap-2 border-t border-stroke-3 px-3 text-left text-[12.5px] outline-none first:border-t-0 hover:bg-fill-4 focus-visible:bg-fill-4";
+    "flex h-8 w-full items-center gap-2 border-t border-stroke-3 px-3 text-left text-control outline-none first:border-t-0 hover:bg-fill-4 focus-visible:bg-fill-4";
   const content = (
     <>
-      <span className={cn("w-[38px] shrink-0 font-mono text-[11.5px]", item.overdue ? "text-cat-red" : "text-fg-3")} title={item.overdue ? t("month.upcoming.overdue") : undefined}>
+      <span className={cn("w-[38px] shrink-0 font-mono text-label", item.overdue ? "text-cat-red" : "text-fg-3")} title={item.overdue ? t("month.upcoming.overdue") : undefined}>
         {fmt.date(item.dueDate)}
       </span>
       <span className="min-w-0 truncate">{description}</span>
       <EntityBadge entityId={item.entityId} names={names} />
-      <span className="ml-auto shrink-0 text-[11px] text-fg-4">{t(`month.upcoming.mode.${item.mode}`)}</span>
+      <span className="ml-auto shrink-0 text-caption text-fg-4">{t(`month.upcoming.mode.${item.mode}`)}</span>
       <span className="w-[74px] shrink-0 text-right font-mono tabular-nums">{fmt.money0(item.amount, item.currency)}</span>
     </>
   );

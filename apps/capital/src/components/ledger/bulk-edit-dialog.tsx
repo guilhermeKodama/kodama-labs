@@ -161,7 +161,7 @@ function EditDialog({ onOpenChange, selection, count, names, onApplied, rows = [
                 type="button"
                 aria-label={t("removeField")}
                 title={t("removeField")}
-                className="h-[26px] cursor-pointer px-1 text-fg-3 hover:text-fg-1"
+                className="h-(--cap-control-h) cursor-pointer px-1 text-fg-3 hover:text-fg-1"
                 onClick={() => setList((current) => current.filter((_, i) => i !== index))}
               >
                 ✕
@@ -173,7 +173,7 @@ function EditDialog({ onOpenChange, selection, count, names, onApplied, rows = [
       {nextField(list) ? (
         <button
           type="button"
-          className="w-fit cursor-pointer text-left text-[12px] text-fg-3 hover:text-fg-1"
+          className="w-fit cursor-pointer text-left text-body-sm text-fg-3 hover:text-fg-1"
           onClick={() => {
             const field = nextField(list);
             if (field) setList((current) => [...current, { field, value: "" }]);
@@ -187,7 +187,7 @@ function EditDialog({ onOpenChange, selection, count, names, onApplied, rows = [
           <Table headers={[t("colTx"), t("colBefore"), t("colAfter")]} rows={previewRows} rowKey={(index) => rows[index].id} />
         </div>
       ) : null}
-      {rows.length && rows.length < count ? <p className="text-[11.5px] text-fg-3">{t("partial", { shown: rows.length })}</p> : null}
+      {rows.length && rows.length < count ? <p className="text-label text-fg-3">{t("partial", { shown: rows.length })}</p> : null}
       {list.some((change) => change.field === "categoryId") ? <Check checked={rule} onChange={setRule} label={t("rule")} /> : null}
       <DialogFooter>
         <Btn ghost onClick={() => onOpenChange(false)}>

@@ -44,7 +44,7 @@ export function Popover({
           style={{ width }}
           className={cn(
             FLOATING,
-            "flex max-h-[var(--radix-popover-content-available-height)] flex-col gap-2 overflow-y-auto rounded-[10px] p-2.5 text-[12.5px]",
+            "flex max-h-[var(--radix-popover-content-available-height)] flex-col gap-2 overflow-y-auto rounded-[10px] p-2.5 text-body",
             className,
           )}
         >

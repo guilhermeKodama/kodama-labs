@@ -29,7 +29,7 @@ export function KindSegmented<T extends string>({
           disabled={option.disabled}
           onClick={() => onChange(option.v)}
           className={cn(
-            "inline-flex h-[22px] items-center rounded-[5px] px-2 text-[12px] whitespace-nowrap outline-none focus-visible:ring-2 focus-visible:ring-fg-3/40 disabled:cursor-not-allowed disabled:opacity-40",
+            "inline-flex h-[22px] items-center rounded-[5px] px-2 text-button whitespace-nowrap outline-none focus-visible:ring-2 focus-visible:ring-fg-3/40 disabled:cursor-not-allowed disabled:opacity-40",
             option.v === value ? "bg-fill-3 font-medium text-fg-1" : "text-fg-3 hover:text-fg-strong",
           )}
         >

@@ -2,10 +2,11 @@ import type { TextSize } from "@capital/server/modules/users/lib/preferences";
 
 /**
  * The UI text size (User.textSize: Pequeno, Médio, Grande). It lives on
- * <html data-text-size>, which globals.css turns into --cap-text-scale for
- * every text-cap-* token. localStorage keeps the last one applied, so the
- * inline script of app/[locale]/layout.tsx sets it before the first paint,
- * before /v2/me answers (the layout stays static: no cookies()).
+ * <html data-text-size>, which src/app/theme.css turns into --cap-text-scale
+ * for every type role and the heights tied to text. localStorage keeps the
+ * last one applied, so the inline script of app/[locale]/layout.tsx sets it
+ * before the first paint, before /v2/me answers (the layout stays static:
+ * no cookies()).
  */
 
 export type { TextSize };

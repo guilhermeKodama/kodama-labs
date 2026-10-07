@@ -47,14 +47,14 @@ function ViewTab({ view, on, dirty, onPick, actions }: { view: LedgerView; on: b
             onClick={onPick}
             onDoubleClick={editable ? () => setRenaming(true) : undefined}
             className={cn(
-              "inline-flex h-full items-center gap-1.5 pl-2 text-[12.5px] whitespace-nowrap outline-none focus-visible:bg-fill-4",
+              "inline-flex h-full items-center gap-1.5 pl-2 text-control whitespace-nowrap outline-none focus-visible:bg-fill-4",
               editable ? "pr-0.5" : "pr-2",
               on ? "font-medium text-fg-1" : "text-fg-3 hover:text-fg-strong",
             )}
           >
             <LayoutIcon layout={view.config.layout} />
             {view.name}
-            {view.isBuiltin ? <span className="text-[10px] text-fg-4">{t("fixed")}</span> : null}
+            {view.isBuiltin ? <span className="text-micro text-fg-4">{t("fixed")}</span> : null}
             {on && dirty ? <span title={t("modified")} className="size-1.5 rounded-full bg-cat-yellow" /> : null}
           </button>
           {editable ? <DeleteViewButton name={view.name} visible={on} onDelete={() => actions.remove(view)} /> : null}

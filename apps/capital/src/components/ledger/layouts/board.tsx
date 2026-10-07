@@ -105,10 +105,10 @@ function BoardColumn({
 
   return (
     <section className="flex w-[230px] shrink-0 flex-col gap-1.5 rounded-[8px] bg-fill-4 p-2">
-      <header className="flex items-center gap-1.5 px-0.5 pt-0.5 pb-1 text-[12px]">
+      <header className="flex items-center gap-1.5 px-0.5 pt-0.5 pb-1 text-body-sm">
         <span className="truncate font-semibold">{labels.groupValue(groupKey, group.key)}</span>
         <span className="text-fg-3">{group.count}</span>
-        <span className="ml-auto font-mono text-[11.5px] tabular-nums">{fmt.money0(group.values[SUM_KEY] ?? 0)}</span>
+        <span className="ml-auto font-mono text-label tabular-nums">{fmt.money0(group.values[SUM_KEY] ?? 0)}</span>
       </header>
       {cards.map((row) => (
         <button
@@ -118,13 +118,13 @@ function BoardColumn({
           className="flex flex-col gap-1.5 rounded-[7px] border border-stroke-3 bg-editor p-2 text-left hover:border-stroke-1"
         >
           <span className="flex min-w-0 items-baseline gap-1.5">
-            <span className="truncate text-[12.5px]">{row.description}</span>
-            <span className={cn("ml-auto shrink-0 font-mono text-[12px] tabular-nums", row.displayAmount > 0 && !row.neutral ? "text-pos" : "text-fg-1")}>
+            <span className="truncate text-body">{row.description}</span>
+            <span className={cn("ml-auto shrink-0 font-mono text-body-sm tabular-nums", row.displayAmount > 0 && !row.neutral ? "text-pos" : "text-fg-1")}>
               {row.neutral ? "⇄" : fmt.money0(row.displayAmount)}
             </span>
           </span>
           <span className="flex flex-wrap gap-1">
-            <span className="font-mono text-[10.5px] text-fg-3 tabular-nums">{fmt.date(row.date)}</span>
+            <span className="font-mono text-hint text-fg-3 tabular-nums">{fmt.date(row.date)}</span>
             {badges.map((id) => (
               <Badge key={id}>{labels.cell(id, row, dateField)}</Badge>
             ))}
@@ -132,14 +132,14 @@ function BoardColumn({
         </button>
       ))}
       {canLoad ? (
-        <div className="flex items-center gap-2 px-0.5 text-[11px] text-fg-3">
+        <div className="flex items-center gap-2 px-0.5 text-caption text-fg-3">
           <Btn ghost onClick={loadMore} disabled={pages.isFetching}>
             {pages.isFetching ? t("loading") : t("more")}
           </Btn>
           <span>{t("shown", { shown: cards.length, total: group.count })}</span>
         </div>
       ) : null}
-      {pages.isError ? <span className="px-0.5 text-[11px] text-neg">{errorText(pages.error)}</span> : null}
+      {pages.isError ? <span className="px-0.5 text-caption text-neg">{errorText(pages.error)}</span> : null}
     </section>
   );
 }

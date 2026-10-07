@@ -122,7 +122,7 @@ export function PortfolioScreen() {
     >
       <div className="flex items-center gap-2">
         <Segmented value={scope} options={(["all", "pf", "pj"] as const).map((v) => ({ v, l: ti(`scope.${v}`) }))} onChange={setScope} />
-        <span className="ml-auto truncate text-[12px] text-fg-3">{quotesText}</span>
+        <span className="ml-auto truncate text-body-sm text-fg-3">{quotesText}</span>
       </div>
       <KpiStrip>
         <Kpi label={t("kpi.netWorth")} value={fmt.money0(s?.netWorth ?? 0, cur)} />
@@ -168,9 +168,9 @@ export function PortfolioScreen() {
             {historyRows.length >= 2 ? (
               <NetWorthChart rows={historyRows} showInitial={chart.hasInitial} />
             ) : (
-              <p className="flex h-[180px] items-center justify-center text-[12px] text-fg-3">{history.isLoading ? ti("loading") : t("history.empty")}</p>
+              <p className="flex h-[180px] items-center justify-center text-body-sm text-fg-3">{history.isLoading ? ti("loading") : t("history.empty")}</p>
             )}
-            <span className="text-[11px] text-fg-4">{t("history.caption", { unit: fmt.kUnit(cur), range: historyRange, scope: ti(`scopeCaption.${scope}`) })}</span>
+            <span className="text-caption text-fg-4">{t("history.caption", { unit: fmt.kUnit(cur), range: historyRange, scope: ti(`scopeCaption.${scope}`) })}</span>
           </div>
         </Panel>
         <Panel
@@ -216,27 +216,27 @@ function AllocationPanel({ summary, onEditTargets }: { summary: PortfolioSummary
   const t = useTranslations("invest.portfolio.allocation");
   const ti = useTranslations("invest");
   const fmt = useFmt();
-  if (!summary?.allocation.length) return <p className="py-6 text-center text-[12px] text-fg-3">{t("empty")}</p>;
+  if (!summary?.allocation.length) return <p className="py-6 text-center text-body-sm text-fg-3">{t("empty")}</p>;
   const targeted = hasTargets(summary.allocation);
   return (
     <div className="flex flex-col gap-2.5">
       {allocationBars(summary.allocation).map((bar) => (
-        <div key={bar.allocationClass} className="grid grid-cols-[92px_minmax(0,1fr)_84px] items-center gap-2.5 text-[12px]">
+        <div key={bar.allocationClass} className="grid grid-cols-[92px_minmax(0,1fr)_84px] items-center gap-2.5 text-body-sm">
           <span className="truncate">{ti(`allocationClass.${bar.allocationClass}`)}</span>
           <span className="relative h-2 rounded-[4px] bg-fill-3">
             <span className="absolute inset-y-0 left-0 rounded-[4px] bg-fg-2" style={{ width: `${bar.barWidth}%` }} />
             {bar.tickLeft !== null ? <span className="absolute -top-[3px] h-3.5 w-0.5 bg-fg-1" style={{ left: `${bar.tickLeft}%` }} /> : null}
           </span>
-          <span className={cn(MONO, "text-right text-[11.5px]")}>
+          <span className={cn(MONO, "text-right text-label")}>
             {fmt.pct(bar.share, 0)}
             {bar.diffLabel !== null ? <span className={bar.highlight ? "text-cat-yellow" : "text-fg-4"}> {bar.diffLabel}</span> : null}
           </span>
         </div>
       ))}
       {targeted ? (
-        <span className="text-[11px] text-fg-4">{t("legend")}</span>
+        <span className="text-caption text-fg-4">{t("legend")}</span>
       ) : (
-        <span className="text-[11px] text-fg-3">
+        <span className="text-caption text-fg-3">
           {t("noTargets")} ·{" "}
           <button type="button" className="underline underline-offset-[3px] hover:text-fg-1" onClick={onEditTargets}>
             {t("editTargets")}
@@ -282,8 +282,8 @@ function HoldingsTable({
       case "ticker":
         return (
           <span key={column} className="flex min-w-0 items-baseline gap-2">
-            <span className={cn(MONO, "text-[12px] font-semibold")}>{row.kind === "cash" ? t("cashTicker") : (row.ticker ?? "—")}</span>
-            <span className="truncate text-[12px] text-fg-3">{row.kind === "cash" ? t("cashName") : row.name}</span>
+            <span className={cn(MONO, "text-body-sm font-semibold")}>{row.kind === "cash" ? t("cashTicker") : (row.ticker ?? "—")}</span>
+            <span className="truncate text-body-sm text-fg-3">{row.kind === "cash" ? t("cashName") : row.name}</span>
           </span>
         );
       case "allocationClass":
@@ -326,7 +326,7 @@ function HoldingsTable({
   };
   return (
     <div className="overflow-hidden rounded-[8px] border border-stroke-3">
-      <div className="grid h-[34px] items-center gap-2.5 px-3 text-[11.5px] text-fg-3" style={{ gridTemplateColumns: grid }}>
+      <div className="grid h-[34px] items-center gap-2.5 px-3 text-label text-fg-3" style={{ gridTemplateColumns: grid }}>
         {columns.map((c) => (
           <span key={c} className={RIGHT.has(c) ? "text-right" : undefined}>
             {t(`columns.${c}`)}
@@ -336,13 +336,13 @@ function HoldingsTable({
       {table.groups.map((g) => (
         <div key={g.key || "all"}>
           {g.key ? (
-            <div className="flex h-8 items-center gap-2 border-t border-stroke-3 bg-fill-4 px-3 text-[12px]">
+            <div className="flex h-8 items-center gap-2 border-t border-stroke-3 bg-fill-4 px-3 text-body-sm">
               <span className="text-fg-3">▾</span>
               <span className="font-semibold">{groupLabel(g.key)}</span>
               <span className="text-fg-3">{g.rows.length}</span>
               <span className="ml-auto" />
               {config.groupBy === "allocationClass" && targetOf(g.key) !== null ? (
-                <span className="text-[11.5px] text-fg-3">{t("target", { pct: fmt.pct(targetOf(g.key)!, 0) })}</span>
+                <span className="text-label text-fg-3">{t("target", { pct: fmt.pct(targetOf(g.key)!, 0) })}</span>
               ) : null}
               <span className={cn(MONO, "w-[110px] text-right font-semibold")}>{fmt.money0(g.value, cur)}</span>
               <span className={cn(MONO, "w-[60px] text-right text-fg-2")}>{fmt.pct(g.share, 0)}</span>
@@ -352,7 +352,7 @@ function HoldingsTable({
           {g.rows.map((row) => {
             const holding = row.holding;
             const content = columns.map((c) => cell(row, c));
-            const className = "grid h-9 w-full items-center gap-2.5 border-t border-stroke-3 px-3 text-left text-[12.5px]";
+            const className = "grid h-9 w-full items-center gap-2.5 border-t border-stroke-3 px-3 text-left text-body";
             return holding ? (
               <button key={row.key} type="button" onClick={() => onOpen(holding)} className={cn(className, "hover:bg-fill-4")} style={{ gridTemplateColumns: grid }}>
                 {content}
@@ -393,9 +393,9 @@ function OpsView({ config, scope, timezone }: { config: OpsViewConfig; scope: Po
     return (
       <div className="flex flex-col gap-2 rounded-[8px] border border-stroke-3 p-3">
         <IncomeChart rows={bars.rows.map((r) => ({ label: fmt.monthAbbr(Number(String(r.month).slice(5, 7))), values: r as unknown as Record<string, number> }))} series={bars.series} />
-        <div className="flex items-center text-[11px] text-fg-4">
+        <div className="flex items-center text-caption text-fg-4">
           <span>{t("chartCaption", { unit: fmt.currencySymbol(fx.base), range: bars.months.length ? range(bars.months[0], bars.months.at(-1)!) : "" })}</span>
-          <span className={cn(MONO, "ml-auto text-[12px] font-semibold text-fg-1")}>{t("totalValue", { amount: fmt.money(bars.total, fx.base) })}</span>
+          <span className={cn(MONO, "ml-auto text-body-sm font-semibold text-fg-1")}>{t("totalValue", { amount: fmt.money(bars.total, fx.base) })}</span>
         </div>
       </div>
     );
@@ -405,7 +405,7 @@ function OpsView({ config, scope, timezone }: { config: OpsViewConfig; scope: Po
   const incomeOnly = rows.length > 0 && rows.every(isIncome);
   return (
     <div className="overflow-hidden rounded-[8px] border border-stroke-3">
-      <div className="grid h-[34px] items-center gap-2.5 px-3 text-[11.5px] text-fg-3" style={{ gridTemplateColumns: grid }}>
+      <div className="grid h-[34px] items-center gap-2.5 px-3 text-label text-fg-3" style={{ gridTemplateColumns: grid }}>
         <span>{t("columns.date")}</span>
         <span>{t("columns.asset")}</span>
         <span>{t("columns.type")}</span>
@@ -414,11 +414,11 @@ function OpsView({ config, scope, timezone }: { config: OpsViewConfig; scope: Po
         <span />
       </div>
       {rows.map((op) => (
-        <div key={op.id} className="grid h-9 items-center gap-2.5 border-t border-stroke-3 px-3 text-[12.5px]" style={{ gridTemplateColumns: grid }}>
-          <span className={cn(MONO, "text-[11.5px] text-fg-3")}>{fmt.date(op.date)}</span>
+        <div key={op.id} className="grid h-9 items-center gap-2.5 border-t border-stroke-3 px-3 text-body" style={{ gridTemplateColumns: grid }}>
+          <span className={cn(MONO, "text-label text-fg-3")}>{fmt.date(op.date)}</span>
           <span className="flex min-w-0 items-baseline gap-2">
-            <span className={cn(MONO, "text-[12px] font-semibold")}>{op.ticker ?? "—"}</span>
-            <span className="truncate text-[12px] text-fg-3">{op.name}</span>
+            <span className={cn(MONO, "text-body-sm font-semibold")}>{op.ticker ?? "—"}</span>
+            <span className="truncate text-body-sm text-fg-3">{op.name}</span>
           </span>
           <span className="truncate text-fg-2">{opLabel({ ...op, ticker: null, name: null })}</span>
           <span className={cn(MONO, "text-right")}>{op.quantity !== null ? fmt.number(op.quantity, { min: 0, max: 8 }) : ""}</span>
@@ -441,7 +441,7 @@ function OpsView({ config, scope, timezone }: { config: OpsViewConfig; scope: Po
       ))}
       {!rows.length ? <EmptyRow>{ops.isLoading ? ti("loading") : config.filters.some((f) => f.field === "type") ? t("emptyIncome") : t("empty")}</EmptyRow> : null}
       {incomeOnly ? (
-        <div className="flex h-[34px] items-center border-t border-stroke-1 bg-fill-4 px-3 text-[12px] font-semibold">
+        <div className="flex h-[34px] items-center border-t border-stroke-1 bg-fill-4 px-3 text-body-sm font-semibold">
           <span>{t("total")}</span>
           <span className={cn(MONO, "ml-auto")}>{fmt.money(rows.reduce((sum, op) => sum + (op.totalAmount - op.taxWithheld) * fx.rateFor(op.currency), 0), fx.base)}</span>
           <span className="w-[38px]" />

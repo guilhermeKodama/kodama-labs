@@ -47,7 +47,7 @@ function Message({ message, controller, onNavigate }: { message: ChatMessage; co
 function UserBlock({ block }: { block: MessageBlock }) {
   if (block.kind === "attachments") return <Attachments files={block.files} />;
   if (block.kind === "text" || block.kind === "card_response") {
-    return <div className="max-w-[85%] rounded-[8px] bg-fill-3 px-2.5 py-1.5 text-[12.5px] whitespace-pre-wrap text-fg-1">{block.text}</div>;
+    return <div className="max-w-[85%] rounded-[8px] bg-fill-3 px-2.5 py-1.5 text-body whitespace-pre-wrap text-fg-1">{block.text}</div>;
   }
   return null;
 }
@@ -98,15 +98,15 @@ const MARKDOWN: Components = {
       {children}
     </a>
   ),
-  code: ({ children }) => <code className="rounded-[4px] bg-fill-3 px-1 font-mono text-[11.5px]">{children}</code>,
-  pre: ({ children }) => <pre className="overflow-x-auto rounded-[6px] bg-fill-4 p-2 font-mono text-[11.5px]">{children}</pre>,
-  h1: ({ children }) => <p className="text-[13px] font-semibold">{children}</p>,
-  h2: ({ children }) => <p className="text-[13px] font-semibold">{children}</p>,
+  code: ({ children }) => <code className="rounded-[4px] bg-fill-3 px-1 font-mono text-label">{children}</code>,
+  pre: ({ children }) => <pre className="overflow-x-auto rounded-[6px] bg-fill-4 p-2 font-mono text-label">{children}</pre>,
+  h1: ({ children }) => <p className="text-body-lg font-semibold">{children}</p>,
+  h2: ({ children }) => <p className="text-body-lg font-semibold">{children}</p>,
   h3: ({ children }) => <p className="font-semibold">{children}</p>,
   blockquote: ({ children }) => <blockquote className="border-l-2 border-stroke-2 pl-2 text-fg-2">{children}</blockquote>,
   table: ({ children }) => (
     <div className="overflow-x-auto">
-      <table className="w-full border-collapse text-[12px]">{children}</table>
+      <table className="w-full border-collapse text-body-sm">{children}</table>
     </div>
   ),
   th: ({ children }) => <th className="border-b border-stroke-2 px-1.5 py-1 text-left font-medium text-fg-3">{children}</th>,
@@ -116,7 +116,7 @@ const MARKDOWN: Components = {
 
 function Markdown({ text }: { text: string }) {
   return (
-    <div className="flex flex-col gap-2 text-[12.5px] text-fg-1">
+    <div className="flex flex-col gap-2 text-body text-fg-1">
       <ReactMarkdown remarkPlugins={[remarkGfm]} components={MARKDOWN}>
         {text}
       </ReactMarkdown>
@@ -133,7 +133,7 @@ function ToolLine({ tool, label, status }: { tool: string; label?: string; statu
   const key = toolLabelKey(tool);
   const text = key ? t(`tools.${key}`) : (label ?? tool);
   return (
-    <div className="flex items-center gap-1.5 text-[11.5px] text-fg-3" aria-live="polite">
+    <div className="flex items-center gap-1.5 text-label text-fg-3" aria-live="polite">
       <span aria-hidden className={cn("w-3 shrink-0 text-center", status === "error" && "text-neg", status === "running" && "animate-pulse")}>
         {status === "running" ? "·" : status === "success" ? "✓" : "✕"}
       </span>
@@ -151,9 +151,9 @@ function ToolLine({ tool, label, status }: { tool: string; label?: string; statu
 
 function CardBox({ title, aside, children }: { title: ReactNode; aside?: ReactNode; children: ReactNode }) {
   return (
-    <div className="flex flex-col gap-2 rounded-[8px] border border-stroke-2 p-2.5 text-[12px]">
+    <div className="flex flex-col gap-2 rounded-[8px] border border-stroke-2 p-2.5 text-body-sm">
       <div className="flex items-center gap-2">
-        <span className="min-w-0 flex-1 truncate text-[12.5px] font-semibold">{title}</span>
+        <span className="min-w-0 flex-1 truncate text-body font-semibold">{title}</span>
         {aside}
       </div>
       {children}
@@ -272,7 +272,7 @@ function DuplicateCard({ card, controller }: { card: DuplicateReviewCard; contro
                 <PairRow label={t("card.existing")} date={fmt.date(pair.existing.date)} description={pair.existing.description} amount={fmt.money(pair.existing.type === "expense" ? -Math.abs(pair.existing.amount) : Math.abs(pair.existing.amount))} />
               </div>
               <div className="flex flex-wrap items-center gap-1.5">
-                <span className="mr-auto text-[11px] text-fg-3">
+                <span className="mr-auto text-caption text-fg-3">
                   {t(`card.confidence.${pair.confidence}`)}
                   {pair.reason ? ` · ${pair.reason}` : ""}
                 </span>
@@ -284,7 +284,7 @@ function DuplicateCard({ card, controller }: { card: DuplicateReviewCard; contro
                     aria-pressed={chosen === decision}
                     onClick={() => setDecisions((current) => ({ ...current, [pair.pairId]: decision }))}
                     className={cn(
-                      "h-[22px] rounded-[5px] border px-2 text-[11.5px] outline-none focus-visible:ring-2 focus-visible:ring-fg-3/40 disabled:cursor-not-allowed",
+                      "h-[22px] rounded-[5px] border px-2 text-label outline-none focus-visible:ring-2 focus-visible:ring-fg-3/40 disabled:cursor-not-allowed",
                       chosen === decision ? "border-fg-1 bg-fg-1 text-editor" : "border-stroke-1 text-fg-1 hover:bg-fill-3 disabled:opacity-50",
                     )}
                   >
@@ -314,9 +314,9 @@ function DuplicateCard({ card, controller }: { card: DuplicateReviewCard; contro
 function PairRow({ label, date, description, amount }: { label: string; date: string; description: string; amount: string }) {
   return (
     <>
-      <span className="text-[11px] text-fg-3">{label}</span>
+      <span className="text-caption text-fg-3">{label}</span>
       <span className="truncate">{description}</span>
-      <span className="font-mono text-[11.5px] text-fg-3 tabular-nums">{date}</span>
+      <span className="font-mono text-label text-fg-3 tabular-nums">{date}</span>
       <span className="text-right font-mono tabular-nums">{amount}</span>
     </>
   );
@@ -328,7 +328,7 @@ function BtnLink({ href, onNavigate, children }: { href: string; onNavigate: () 
     <Link
       href={href}
       onClick={onNavigate}
-      className="inline-flex h-[26px] shrink-0 items-center justify-center rounded-[6px] border border-stroke-1 px-2.5 text-[12px] font-medium whitespace-nowrap text-fg-1 outline-none hover:bg-fill-4 focus-visible:ring-2 focus-visible:ring-fg-3/40"
+      className="inline-flex h-(--cap-control-h) shrink-0 items-center justify-center rounded-[6px] border border-stroke-1 px-2.5 text-button font-medium whitespace-nowrap text-fg-1 outline-none hover:bg-fill-4 focus-visible:ring-2 focus-visible:ring-fg-3/40"
     >
       {children}
     </Link>

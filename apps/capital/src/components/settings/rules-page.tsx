@@ -50,11 +50,11 @@ export function RulesPage() {
   return (
     <div className="flex flex-col gap-3">
       <div className="flex flex-wrap items-center gap-2">
-        <label htmlFor="rules-test" className="text-[12px] text-fg-3">
+        <label htmlFor="rules-test" className="text-body-sm text-fg-3">
           {t("test")}
         </label>
         <TextInput id="rules-test" value={test} onChange={setTest} className="w-[260px]" />
-        {description ? <span className={match ? "text-[12.5px] text-fg-1" : "text-[12.5px] text-fg-3"}>{result.isSuccess ? match ?? t("noMatch") : "…"}</span> : null}
+        {description ? <span className={match ? "text-body text-fg-1" : "text-body text-fg-3"}>{result.isSuccess ? match ?? t("noMatch") : "…"}</span> : null}
         <span className="flex-1" />
         <Btn primary onClick={() => setDialog({ rule: null, pattern: match ? "" : test.trim().toLowerCase() })}>
           {t("new")}

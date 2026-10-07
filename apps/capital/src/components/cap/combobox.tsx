@@ -170,7 +170,7 @@ export function Combobox({
             aria-controls={listId}
             aria-autocomplete="list"
             aria-activedescendant={active >= 0 ? optionId(active) : undefined}
-            className="h-8 w-full shrink-0 border-b border-stroke-3 bg-transparent px-2.5 text-[12.5px] outline-none placeholder:text-fg-3"
+            className="h-8 w-full shrink-0 border-b border-stroke-3 bg-transparent px-2.5 text-control outline-none placeholder:text-fg-3"
           />
           <ul ref={listRef} id={listId} role="listbox" className="max-h-[260px] overflow-y-auto p-1">
             {rows.map((row, index) => {
@@ -188,14 +188,14 @@ export function Combobox({
                   onMouseDown={(event) => event.preventDefault()}
                   onClick={() => choose(row)}
                   className={cn(
-                    "flex h-7 cursor-pointer items-center gap-2 rounded-[5px] px-2 text-[12.5px] select-none data-[active]:bg-fill-3",
+                    "flex h-(--cap-menu-row-h) cursor-pointer items-center gap-2 rounded-[5px] px-2 text-control select-none data-[active]:bg-fill-3",
                     row.disabled && "cursor-not-allowed opacity-40",
                   )}
                 >
                   {row.kind === "option" ? (
                     <>
                       <span className="min-w-0 flex-1 truncate">{row.option.label}</span>
-                      {row.option.hint ? <span className="shrink-0 text-[11px] text-fg-3">{row.option.hint}</span> : null}
+                      {row.option.hint ? <span className="shrink-0 text-caption text-fg-3">{row.option.hint}</span> : null}
                       <CheckIcon className={cn("size-3.5 shrink-0", !isSelected && "invisible")} />
                     </>
                   ) : (
@@ -206,7 +206,7 @@ export function Combobox({
                 </li>
               );
             })}
-            {rows.length === 0 ? <li className="px-2 py-1.5 text-[12px] text-fg-3">{emptyText ?? t("noResults")}</li> : null}
+            {rows.length === 0 ? <li className="px-2 py-1.5 text-body-sm text-fg-3">{emptyText ?? t("noResults")}</li> : null}
           </ul>
           {footer ? (
             <div className="border-t border-stroke-3 p-1">

@@ -82,7 +82,7 @@ export function FxPage() {
   return (
     <div className="flex flex-col gap-3">
       <div className="flex flex-wrap items-center gap-2.5">
-        <span className="text-[12px] text-fg-3">{t("base")}</span>
+        <span className="text-body-sm text-fg-3">{t("base")}</span>
         <Select
           aria-label={t("base")}
           className="w-[90px]"
@@ -139,7 +139,7 @@ export function FxPage() {
           </span>,
         ])}
       />
-      <span className="text-[12px] text-fg-3">{t("footnote")}</span>
+      <span className="text-body-sm text-fg-3">{t("footnote")}</span>
       {base.dialog}
     </div>
   );

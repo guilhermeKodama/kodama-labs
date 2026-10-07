@@ -18,7 +18,7 @@ export function Panel({
 }) {
   return (
     <section className={cn("min-w-0 overflow-hidden rounded-[8px] border border-stroke-3", className)}>
-      <header className="flex h-9 items-center gap-2 border-b border-stroke-3 px-3 text-[12.5px] font-medium">
+      <header className="flex h-9 items-center gap-2 border-b border-stroke-3 px-3 text-body font-medium">
         <span className="min-w-0 truncate">{title}</span>
         <span className="ml-auto flex shrink-0 items-center gap-1.5">{trailing}</span>
       </header>

@@ -94,8 +94,8 @@ export function DialogHead({ title, desc, onClose = true }: { title: ReactNode; 
   return (
     <div className="flex items-start gap-2">
       <div className="flex min-w-0 flex-1 flex-col gap-[3px]">
-        <DialogPrimitive.Title className="text-[15px] font-semibold">{title}</DialogPrimitive.Title>
-        {desc ? <DialogPrimitive.Description className="text-[12px] text-fg-3">{desc}</DialogPrimitive.Description> : null}
+        <DialogPrimitive.Title className="text-title font-semibold">{title}</DialogPrimitive.Title>
+        {desc ? <DialogPrimitive.Description className="text-body-sm text-fg-3">{desc}</DialogPrimitive.Description> : null}
       </div>
       {onClose === false ? null : typeof onClose === "function" ? close : <DialogPrimitive.Close asChild>{close}</DialogPrimitive.Close>}
     </div>

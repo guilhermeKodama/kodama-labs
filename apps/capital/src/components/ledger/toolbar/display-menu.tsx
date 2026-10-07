@@ -30,7 +30,7 @@ import type { LedgerLabels } from "../fields";
 function FieldRow({ label, children }: { label: ReactNode; children: ReactNode }) {
   return (
     <div className="flex items-center gap-2">
-      <span className="w-[92px] shrink-0 text-[12px] text-fg-3">{label}</span>
+      <span className="w-[92px] shrink-0 text-body-sm text-fg-3">{label}</span>
       <div className="min-w-0 flex-1">{children}</div>
     </div>
   );
@@ -95,9 +95,9 @@ export function DisplayMenu({
           }}
         />
       </FieldRow>
-      {isBuiltin ? <span className="text-[11.5px] text-fg-3">{t("display.builtinHint")}</span> : null}
+      {isBuiltin ? <span className="text-label text-fg-3">{t("display.builtinHint")}</span> : null}
       <div className="flex flex-col gap-1.5">
-        <span className="text-[12px] text-fg-3">{t("display.layout")}</span>
+        <span className="text-body-sm text-fg-3">{t("display.layout")}</span>
         <div className="grid grid-cols-3 gap-1.5">
           {LAYOUTS.map((layout) => {
             const Icon = LAYOUT_ICON[layout];
@@ -109,7 +109,7 @@ export function DisplayMenu({
                 aria-pressed={on}
                 onClick={() => onConfig({ layout })}
                 className={cn(
-                  "flex h-14 flex-col items-center justify-center gap-1 rounded-[8px] border text-[11.5px] outline-none focus-visible:ring-2 focus-visible:ring-fg-3/40",
+                  "flex h-14 flex-col items-center justify-center gap-1 rounded-[8px] border text-label outline-none focus-visible:ring-2 focus-visible:ring-fg-3/40",
                   on ? "border-fg-1 bg-fill-2 font-medium text-fg-1" : "border-stroke-2 text-fg-3 hover:bg-fill-4 hover:text-fg-strong",
                 )}
               >
@@ -134,12 +134,12 @@ export function DisplayMenu({
           <FieldRow label={t(`display.group.${groupTitleKey(config.layout)}`)}>
             <Select value={g1} placeholder={t("display.custom")} className="w-full" onChange={(value) => setGroups(value, value === "none" ? "none" : g2)} options={options} />
           </FieldRow>
-          <span className="-mt-1 text-[11px] text-fg-4">{t("display.groupHint")}</span>
+          <span className="-mt-1 text-caption text-fg-4">{t("display.groupHint")}</span>
         </>
       ) : null}
       {fields.chartType ? (
         <div className="flex flex-col gap-1.5">
-          <span className="text-[12px] text-fg-3">{t("display.chartType")}</span>
+          <span className="text-body-sm text-fg-3">{t("display.chartType")}</span>
           <div className="grid grid-cols-3 gap-1">
             {CHART_TYPE_META.map(({ type, icon: Icon }) => (
               <button
@@ -148,7 +148,7 @@ export function DisplayMenu({
                 aria-pressed={chart.type === type}
                 onClick={() => onConfig({ chart: { ...chart, type } })}
                 className={cn(
-                  "flex items-center gap-1.5 rounded-[6px] border px-2 py-[5px] text-[11.5px]",
+                  "flex items-center gap-1.5 rounded-[6px] border px-2 py-[5px] text-label",
                   chart.type === type ? "border-fg-1 bg-fill-2 text-fg-1" : "border-stroke-2 text-fg-3 hover:text-fg-strong",
                 )}
               >
@@ -157,7 +157,7 @@ export function DisplayMenu({
               </button>
             ))}
           </div>
-          <span className="text-[11px] text-fg-4">{t(`charts.hints.${chart.type}`)}</span>
+          <span className="text-caption text-fg-4">{t(`charts.hints.${chart.type}`)}</span>
         </div>
       ) : null}
       {fields.metric ? (
@@ -200,7 +200,7 @@ export function DisplayMenu({
       ) : null}
       {fields.props ? (
         <div className="flex flex-col gap-1.5">
-          <span className="text-[12px] text-fg-3">{t("display.props")}</span>
+          <span className="text-body-sm text-fg-3">{t("display.props")}</span>
           <div className="flex flex-wrap gap-1">
             {PROP_IDS.map((id) => {
               const on = config.columns.includes(id);
@@ -209,7 +209,7 @@ export function DisplayMenu({
                   key={id}
                   type="button"
                   onClick={() => onConfig({ columns: toggleColumn(config.columns, id) })}
-                  className={cn("rounded-[5px] border px-[7px] py-0.5 text-[11.5px]", on ? "border-stroke-1 bg-fill-2 text-fg-1" : "border-stroke-3 text-fg-4 hover:text-fg-2")}
+                  className={cn("rounded-[5px] border px-[7px] py-0.5 text-label", on ? "border-stroke-1 bg-fill-2 text-fg-1" : "border-stroke-3 text-fg-4 hover:text-fg-2")}
                 >
                   {labels.prop(id)}
                 </button>

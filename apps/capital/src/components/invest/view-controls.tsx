@@ -243,7 +243,7 @@ function InvestViewTab({ view, on, onSelect, onOpen, writes, onDelete }: { view:
             onClick={onSelect}
             onDoubleClick={editable ? () => setRenaming(true) : undefined}
             className={cn(
-              "inline-flex h-full items-center gap-1.5 pl-2 text-[12.5px] whitespace-nowrap outline-none focus-visible:bg-fill-4",
+              "inline-flex h-full items-center gap-1.5 pl-2 text-control whitespace-nowrap outline-none focus-visible:bg-fill-4",
               editable ? "pr-0.5" : "pr-2",
               on ? "font-medium text-fg-1" : "text-fg-3 hover:text-fg-strong",
             )}

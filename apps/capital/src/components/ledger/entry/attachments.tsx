@@ -71,7 +71,7 @@ export function Dropzone({ onFiles, items, disabled }: { onFiles: (files: File[]
           if (files.length) onFiles(files);
         }}
         className={cn(
-          "flex h-11 items-center justify-center rounded-[8px] border border-dashed border-stroke-1 text-[12px] text-fg-3 outline-none hover:border-fg-3 focus-visible:border-fg-muted disabled:opacity-40",
+          "flex h-11 items-center justify-center rounded-[8px] border border-dashed border-stroke-1 text-body-sm text-fg-3 outline-none hover:border-fg-3 focus-visible:border-fg-muted disabled:opacity-40",
           over && "border-fg-muted bg-fill-4",
         )}
       >
@@ -89,7 +89,7 @@ export function Dropzone({ onFiles, items, disabled }: { onFiles: (files: File[]
         }}
       />
       {items.map((item) => (
-        <span key={item.key} className="flex items-center gap-2 text-[12px]">
+        <span key={item.key} className="flex items-center gap-2 text-body-sm">
           {item.href ? (
             <a href={item.href} target="_blank" rel="noreferrer" className="min-w-0 truncate underline">
               {item.name}
@@ -97,7 +97,7 @@ export function Dropzone({ onFiles, items, disabled }: { onFiles: (files: File[]
           ) : (
             <span className="min-w-0 truncate">{item.name}</span>
           )}
-          <button type="button" className="ml-auto shrink-0 text-[11px] text-fg-3 hover:text-neg" onClick={item.onRemove}>
+          <button type="button" className="ml-auto shrink-0 text-caption text-fg-3 hover:text-neg" onClick={item.onRemove}>
             {t("removeFile")}
           </button>
         </span>

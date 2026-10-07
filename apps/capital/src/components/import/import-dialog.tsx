@@ -253,10 +253,10 @@ function Stepper({ step }: { step: Step }) {
   return (
     <div className="flex items-center gap-2">
       {STEPS.map((name, i) => (
-        <span key={name} className={cn("inline-flex items-center gap-1.5 text-[12px]", i === step ? "font-semibold text-fg-1" : "text-fg-3")}>
+        <span key={name} className={cn("inline-flex items-center gap-1.5 text-body-sm", i === step ? "font-semibold text-fg-1" : "text-fg-3")}>
           <span
             className={cn(
-              "inline-flex size-[18px] items-center justify-center rounded-full border font-mono text-[10px]",
+              "inline-flex size-[18px] items-center justify-center rounded-full border font-mono text-micro",
               i <= step ? "border-fg-1 bg-fg-1 text-editor" : "border-stroke-1 text-fg-3",
             )}
           >

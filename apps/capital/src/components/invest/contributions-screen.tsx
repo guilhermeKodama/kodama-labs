@@ -79,7 +79,7 @@ export function ContributionsScreen() {
       actions={
         <>
           <Segmented value={scope} options={(["all", "pf", "pj"] as const).map((v) => ({ v, l: ti(`scope.${v}`) }))} onChange={setScope} />
-          <span className="inline-flex h-[26px] items-center rounded-[6px] border border-stroke-1 bg-editor text-[12px]">
+          <span className="inline-flex h-(--cap-control-h) items-center rounded-[6px] border border-stroke-1 bg-editor text-button">
             <button type="button" aria-label={t("prev")} className="h-full border-r border-stroke-3 px-1.5 hover:bg-fill-4" onClick={() => void setEndParam(shiftMonth(end, -12))}>
               ‹
             </button>
@@ -140,7 +140,7 @@ export function ContributionsScreen() {
             role="tab"
             aria-selected={tab === key}
             onClick={() => void setTabParam(key === "all" ? "all" : null)}
-            className={cn("inline-flex h-[34px] items-center border-b-2 px-2 text-[12.5px]", tab === key ? "border-fg-1 font-medium text-fg-1" : "border-transparent text-fg-3 hover:text-fg-strong")}
+            className={cn("inline-flex h-[34px] items-center border-b-2 px-2 text-control", tab === key ? "border-fg-1 font-medium text-fg-1" : "border-transparent text-fg-3 hover:text-fg-strong")}
           >
             {t(`tabs.${key}`)}
           </button>
@@ -156,15 +156,15 @@ export function ContributionsScreen() {
                 {series.classes.length ? (
                   <ContributionsChart rows={series.rows.map((r) => ({ label: fmt.monthAbbr(Number(r.period.slice(5, 7))), values: r.values }))} classes={series.classes} goal={goal} />
                 ) : (
-                  <p className="flex h-[200px] items-center justify-center text-[12px] text-fg-3">{flows.isLoading ? ti("loading") : t("chart.empty")}</p>
+                  <p className="flex h-[200px] items-center justify-center text-body-sm text-fg-3">{flows.isLoading ? ti("loading") : t("chart.empty")}</p>
                 )}
-                <span className="text-[11px] text-fg-4">{t("chart.caption", { unit: fmt.kUnit(cur), range: data ? range(data.from, data.to) : "" })}</span>
+                <span className="text-caption text-fg-4">{t("chart.caption", { unit: fmt.kUnit(cur), range: data ? range(data.from, data.to) : "" })}</span>
               </div>
             </Panel>
             <Panel title={t("where.title")}>
               <div className="flex flex-col gap-2.5">
                 <div className="flex items-center gap-2">
-                  <span className="text-[12px] text-fg-3">{t("where.amount", { symbol: fmt.currencySymbol(cur) })}</span>
+                  <span className="text-body-sm text-fg-3">{t("where.amount", { symbol: fmt.currencySymbol(cur) })}</span>
                   <TextInput value={amountText ?? (amount ? String(amount) : "")} onChange={setAmountText} mono inputMode="numeric" className="w-[110px]" />
                   <Segmented
                     className="ml-auto"
@@ -177,7 +177,7 @@ export function ContributionsScreen() {
                   />
                 </div>
                 <SuggestionTable suggestion={suggestion.data} error={suggestion.error} amount={debounced} mode={mode} onTargets={() => setDialog("targets")} />
-                <span className="text-[11px] text-fg-4">{t("where.caption")}</span>
+                <span className="text-caption text-fg-4">{t("where.caption")}</span>
                 <div className="flex gap-1.5">
                   <Btn primary disabled={!suggestion.data?.assets} onClick={() => setDialog("orders")}>
                     {t("where.generate")}
@@ -198,7 +198,7 @@ export function ContributionsScreen() {
               }
             >
               {history.length ? (
-                <div className={cn(HISTORY_GRID, "h-[30px] text-[11px] text-fg-3")}>
+                <div className={cn(HISTORY_GRID, "h-[30px] text-caption text-fg-3")}>
                   <span>{t("history.columns.month")}</span>
                   <span className="text-right">{t("history.columns.deposits")}</span>
                   <span className="text-right">{t("history.columns.withdrawals")}</span>
@@ -210,9 +210,9 @@ export function ContributionsScreen() {
                 <div
                   key={row.period}
                   title={t("history.flows", { deposits: fmt.money0(row.deposits, cur), withdrawals: fmt.money0(row.withdrawals, cur) })}
-                  className={cn(HISTORY_GRID, "min-h-[34px] border-t border-stroke-3 py-1 text-[12.5px]")}
+                  className={cn(HISTORY_GRID, "min-h-[34px] border-t border-stroke-3 py-1 text-body")}
                 >
-                  <span className={cn(MONO, "text-[11.5px] text-fg-3")}>{short(row.period)}</span>
+                  <span className={cn(MONO, "text-label text-fg-3")}>{short(row.period)}</span>
                   <span className={cn(MONO, "text-right", !row.deposits && "text-fg-4")}>{row.deposits ? `+${fmt.money0(row.deposits, cur)}` : "—"}</span>
                   <span className={cn(MONO, "text-right", row.withdrawals ? "text-neg" : "text-fg-4")}>{row.withdrawals ? `−${fmt.money0(row.withdrawals, cur)}` : "—"}</span>
                   <span className={cn(MONO, "text-right font-medium", row.net < 0 && "text-neg")}>{fmt.money0(row.net, cur)}</span>
@@ -221,11 +221,11 @@ export function ContributionsScreen() {
                       {row.origins.deposits ? <span className="truncate">{t("history.originIn", { origin: row.origins.deposits })}</span> : null}
                       {row.origins.withdrawals ? <span className="truncate">{t("history.originOut", { origin: row.origins.withdrawals })}</span> : null}
                     </Link>
-                    {row.status ? <span className={cn("ml-auto shrink-0 text-[12px]", row.status === "below" ? "text-cat-yellow" : "text-fg-3")}>{t(`history.status.${row.status}`)}</span> : null}
+                    {row.status ? <span className={cn("ml-auto shrink-0 text-body-sm", row.status === "below" ? "text-cat-yellow" : "text-fg-3")}>{t(`history.status.${row.status}`)}</span> : null}
                   </span>
                 </div>
               ))}
-              {history.length ? <div className="border-t border-stroke-3 px-3 py-1.5 text-[11px] text-fg-4">{t("history.caption")}</div> : null}
+              {history.length ? <div className="border-t border-stroke-3 px-3 py-1.5 text-caption text-fg-4">{t("history.caption")}</div> : null}
               {!history.length ? <EmptyRow>{flows.isLoading ? ti("loading") : t("history.empty")}</EmptyRow> : null}
             </Panel>
             <Panel
@@ -251,7 +251,7 @@ export function ContributionsScreen() {
                   <span className="relative h-1.5 rounded-[3px] bg-fill-3">
                     <span className="absolute inset-y-0 left-0 rounded-[3px] bg-fg-1" style={{ width: `${Math.min(Math.max(fire.result.progress, 0), 1) * 100}%` }} />
                   </span>
-                  <span className="text-[11px] text-fg-3">
+                  <span className="text-caption text-fg-3">
                     {fire.result.reached
                       ? t("fire.reached")
                       : fire.result.projectedFireDate
@@ -265,7 +265,7 @@ export function ContributionsScreen() {
                   </span>
                 </div>
               ) : (
-                <span className="text-[12.5px] text-fg-2">
+                <span className="text-body text-fg-2">
                   {t("fire.noPlan", { invested: fmt.money0(fire?.suggestedDefaults.currentInvested ?? 0, cur), expenses: fmt.money0(fire?.suggestedDefaults.currentMonthlyExpenses ?? 0, cur) })}
                 </span>
               )}

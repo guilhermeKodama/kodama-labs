@@ -106,14 +106,14 @@ export function CredentialsForm({ mode }: { mode: AuthMode }) {
     <main className="flex min-h-dvh items-start justify-center bg-chrome px-4 pt-[12vh] pb-10 text-fg-1">
       <form noValidate onSubmit={onSubmit} aria-busy={pending} className="flex w-full max-w-[360px] flex-col gap-3.5 rounded-[12px] border border-stroke-1 bg-editor p-[18px]">
         <div className="flex items-center gap-2">
-          <span aria-hidden className="inline-flex size-6 shrink-0 items-center justify-center rounded-[6px] bg-fg-1 text-[12px] font-bold text-editor">
+          <span aria-hidden className="inline-flex size-6 shrink-0 items-center justify-center rounded-[6px] bg-fg-1 text-body-sm font-bold text-editor">
             C
           </span>
-          <span className="text-[12.5px] font-semibold">Capital</span>
+          <span className="text-body font-semibold">Capital</span>
         </div>
         <div className="flex flex-col gap-[3px]">
-          <h1 className="text-[15px] font-semibold">{t(`${mode}.title`)}</h1>
-          <p className="text-[12px] text-fg-3">{t(`${mode}.description`)}</p>
+          <h1 className="text-title font-semibold">{t(`${mode}.title`)}</h1>
+          <p className="text-body-sm text-fg-3">{t(`${mode}.description`)}</p>
         </div>
         {mode === "signup" ? (
           <Field label={t("fields.name")} htmlFor="auth-name" hint={problemText("name")}>
@@ -131,14 +131,14 @@ export function CredentialsForm({ mode }: { mode: AuthMode }) {
           <TextInput {...inputProps("password")} type="password" autoComplete={mode === "login" ? "current-password" : "new-password"} />
         </Field>
         {submit.isError ? (
-          <p role="alert" className="text-[12px] text-neg">
+          <p role="alert" className="text-body-sm text-neg">
             {errorText(submit.error)}
           </p>
         ) : null}
         <Btn primary type="submit" disabled={pending} className="w-full">
           {pending ? t(`${mode}.pending`) : t(`${mode}.submit`)}
         </Btn>
-        <p className="text-[12px] text-fg-3">
+        <p className="text-body-sm text-fg-3">
           {t(`${mode}.switchPrompt`)}{" "}
           <Link href={authSwitchHref(mode === "login" ? "signup" : "login", search)} className="font-medium text-fg-1 underline-offset-2 hover:underline">
             {t(`${mode}.switch`)}

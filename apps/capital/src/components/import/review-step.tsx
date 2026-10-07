@@ -154,9 +154,9 @@ export function ReviewStep({
             onCreateForm={openCreate}
           />
         ))}
-        {shown.length === 0 ? <div className="px-2.5 py-6 text-center text-[12px] text-fg-3">{t("empty")}</div> : null}
+        {shown.length === 0 ? <div className="px-2.5 py-6 text-center text-body-sm text-fg-3">{t("empty")}</div> : null}
       </div>
-      <span className="text-[11.5px] text-fg-3">{t("footer", { shown: shown.length, total: analysis.rows.length })}</span>
+      <span className="text-label text-fg-3">{t("footer", { shown: shown.length, total: analysis.rows.length })}</span>
       <NewCategoryDialog
         open={creatingFor !== null}
         onOpenChange={(open) => !open && setCreatingFor(null)}
@@ -214,18 +214,18 @@ const ReviewRow = memo(function ReviewRow({
   return (
     <div
       className={cn(
-        "grid min-h-[38px] grid-cols-[24px_44px_minmax(0,1.6fr)_minmax(0,1.3fr)_110px_96px] items-center gap-2 border-t border-stroke-3 px-2.5 text-[12px] first:border-t-0",
+        "grid min-h-[38px] grid-cols-[24px_44px_minmax(0,1.6fr)_minmax(0,1.3fr)_110px_96px] items-center gap-2 border-t border-stroke-3 px-2.5 text-body-sm first:border-t-0",
         !included && "opacity-45",
       )}
     >
       <Check checked={included} onChange={(on) => onInclude(row, on)} aria-label={t(row.status === "removed" ? "remove" : "include", { description: row.description })} />
-      <span className="font-mono text-[11px] text-fg-3">{fmt.date(row.date)}</span>
+      <span className="font-mono text-caption text-fg-3">{fmt.date(row.date)}</span>
       <span className="flex min-w-0 flex-col">
-        <span className="truncate font-mono text-[11.5px]" title={row.fullDescription ?? row.description}>
+        <span className="truncate font-mono text-label" title={row.fullDescription ?? row.description}>
           {row.description}
         </span>
         {note ? (
-          <span className="truncate text-[10.5px] text-fg-4" title={note}>
+          <span className="truncate text-hint text-fg-4" title={note}>
             {note}
           </span>
         ) : null}
@@ -254,7 +254,7 @@ const ReviewRow = memo(function ReviewRow({
         className="w-full"
         contentClassName="min-w-[260px]"
       />
-      <span className={cn("text-[11px]", status === "need" ? "text-cat-yellow" : status === "changed" ? "text-cat-blue" : status === "removed" ? "text-neg" : "text-fg-3")}>
+      <span className={cn("text-caption", status === "need" ? "text-cat-yellow" : status === "changed" ? "text-cat-blue" : status === "removed" ? "text-neg" : "text-fg-3")}>
         {t(`status.${status}`)}
       </span>
       <span className="text-right font-mono tabular-nums">{fmt.money(row.amount, currency)}</span>

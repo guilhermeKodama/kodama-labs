@@ -78,13 +78,13 @@ export function AccountsPage({ kind }: { kind: AccountsPageKind }) {
                         {account.archivedAt ? <Badge>{ta(kind)}</Badge> : null}
                       </>
                     }
-                    right={<span className="shrink-0 text-[11px] text-fg-3">{account.currency}</span>}
+                    right={<span className="shrink-0 text-caption text-fg-3">{account.currency}</span>}
                   />
                 ))}
               </div>
             );
           })}
-          {accounts.isSuccess && !rows.length ? <span className="px-2.5 py-2 text-[12px] text-fg-3">{t(`empty.${kind}`)}</span> : null}
+          {accounts.isSuccess && !rows.length ? <span className="px-2.5 py-2 text-body-sm text-fg-3">{t(`empty.${kind}`)}</span> : null}
           <AddRow on={isNew} onClick={() => void setSelected(NEW)}>
             {t(`new.${kind}`)}
           </AddRow>
@@ -204,7 +204,7 @@ function AccountDetail({
     >
       {isCard && account && open ? (
         <div className="flex flex-col gap-1.5">
-          <div className="flex items-center gap-2 text-[12px]">
+          <div className="flex items-center gap-2 text-body-sm">
             <span>{t("usage", { amount: fmt.money0(open.total, account.currency), date: fmt.date(open.closingDate) })}</span>
             <span className="flex-1" />
             <span className="text-fg-3">{t("usageShare", { share: fmt.pct(share, 0) })}</span>
@@ -261,7 +261,7 @@ function AccountDetail({
               <TextInput id="acc-number" value={form.externalId} onChange={(externalId) => set({ externalId })} mono />
             </Field>
             {account ? (
-              <span className="col-span-2 text-[12px] text-fg-3">{t("brokerSummary", { positions, cash: fmt.money0(account.balance ?? 0, account.currency) })}</span>
+              <span className="col-span-2 text-body-sm text-fg-3">{t("brokerSummary", { positions, cash: fmt.money0(account.balance ?? 0, account.currency) })}</span>
             ) : null}
           </>
         ) : (

@@ -38,7 +38,7 @@ export function Btn({
       onClick={onClick}
       disabled={disabled}
       className={cn(
-        "inline-flex h-[26px] shrink-0 items-center gap-1.5 rounded-[6px] px-2.5 text-[12px] font-medium whitespace-nowrap disabled:cursor-not-allowed disabled:opacity-40",
+        "inline-flex h-(--cap-control-h) shrink-0 items-center gap-1.5 rounded-[6px] px-2.5 text-button font-medium whitespace-nowrap disabled:cursor-not-allowed disabled:opacity-40",
         primary && "border border-fg-1 bg-fg-1 text-editor",
         !primary && !ghost && "border border-stroke-1 bg-editor text-fg-1 hover:bg-fill-4",
         dashed && "border-dashed",
@@ -59,7 +59,7 @@ export function KpiStrip({ children }: { children: ReactNode }) {
 export function Panel({ title, trailing, children, pad = true }: { title: string; trailing?: ReactNode; children: ReactNode; pad?: boolean }) {
   return (
     <section className="min-w-0 overflow-hidden rounded-lg border border-stroke-3">
-      <header className="flex h-9 items-center gap-2 border-b border-stroke-3 px-3 text-[12.5px] font-medium">
+      <header className="flex h-9 items-center gap-2 border-b border-stroke-3 px-3 text-body font-medium">
         <span>{title}</span>
         <span className="ml-auto flex items-center gap-1.5">{trailing}</span>
       </header>
@@ -88,7 +88,7 @@ export function SelectInput({
       value={value}
       required={required}
       onChange={(event) => onChange(event.target.value)}
-      className={cn("h-[26px] min-w-0 rounded-[6px] border border-stroke-1 bg-editor px-1.5 text-[12.5px] outline-none focus:border-fg-muted", className)}
+      className={cn("h-(--cap-control-h) min-w-0 rounded-[6px] border border-stroke-1 bg-editor px-1.5 text-control outline-none focus:border-fg-muted", className)}
     >
       {placeholder !== undefined ? <option value="">{placeholder}</option> : null}
       {options.map((option) => (
@@ -103,16 +103,16 @@ export function SelectInput({
 export function Field({ label, hint, children, className }: { label: string; hint?: ReactNode; children: ReactNode; className?: string }) {
   return (
     <label className={cn("flex min-w-0 flex-col gap-1", className)}>
-      <span className="text-[11px] text-fg-muted">{label}</span>
+      <span className="text-caption text-fg-muted">{label}</span>
       {children}
-      {hint ? <span className="text-[11px] text-fg-3">{hint}</span> : null}
+      {hint ? <span className="text-caption text-fg-3">{hint}</span> : null}
     </label>
   );
 }
 
 export function Check({ checked, onChange, label }: { checked: boolean; onChange: (value: boolean) => void; label?: string }) {
   return (
-    <label className="inline-flex cursor-pointer items-center gap-1.5 text-[12.5px]">
+    <label className="inline-flex cursor-pointer items-center gap-1.5 text-control">
       <input type="checkbox" checked={checked} onChange={(event) => onChange(event.target.checked)} className="size-3.5 accent-fg-ink" />
       {label}
     </label>
@@ -154,7 +154,7 @@ export function Popover({
       ref={ref}
       style={{ width }}
       className={cn(
-        "absolute z-40 flex max-h-[360px] flex-col gap-0.5 overflow-y-auto rounded-lg border border-stroke-1 bg-editor p-1.5 text-[12.5px] shadow-lg",
+        "absolute z-40 flex max-h-[360px] flex-col gap-0.5 overflow-y-auto rounded-lg border border-stroke-1 bg-editor p-1.5 text-control shadow-lg",
         align === "left" ? "left-0" : "right-0",
         up ? "bottom-[calc(100%+6px)]" : "top-[calc(100%+6px)]",
       )}
@@ -169,16 +169,16 @@ export function MenuItem({ label, hint, onClick, danger, active }: { label: Reac
     <button
       type="button"
       onClick={onClick}
-      className={cn("flex h-7 w-full items-center gap-2 rounded-[5px] px-2 text-left hover:bg-fill-3", danger && "text-neg", active && "font-medium")}
+      className={cn("flex h-(--cap-menu-row-h) w-full items-center gap-2 rounded-[5px] px-2 text-left hover:bg-fill-3", danger && "text-neg", active && "font-medium")}
     >
       <span className="min-w-0 flex-1 truncate">{label}</span>
-      {hint ? <span className="shrink-0 text-[11px] text-fg-3">{hint}</span> : null}
+      {hint ? <span className="shrink-0 text-caption text-fg-3">{hint}</span> : null}
     </button>
   );
 }
 
 export function MenuLabel({ children }: { children: ReactNode }) {
-  return <span className="px-2 pt-1 pb-0.5 text-[11px] text-fg-3">{children}</span>;
+  return <span className="px-2 pt-1 pb-0.5 text-caption text-fg-3">{children}</span>;
 }
 
 /** Rendered only while open, so it is an overlay for as long as it is mounted (like Popover). */
@@ -203,8 +203,8 @@ export function Modal({
       <div style={{ width }} className="flex max-w-[94vw] flex-col rounded-[10px] border border-stroke-1 bg-editor shadow-xl" onMouseDown={(event) => event.stopPropagation()}>
         <div className="flex items-start gap-2 border-b border-stroke-3 px-4 py-3">
           <div className="flex flex-col gap-0.5">
-            <span className="text-[14px] font-semibold">{title}</span>
-            {description ? <span className="text-[12px] text-fg-muted">{description}</span> : null}
+            <span className="text-title-sm font-semibold">{title}</span>
+            {description ? <span className="text-body-sm text-fg-muted">{description}</span> : null}
           </div>
           <button type="button" className="ml-auto text-fg-3 hover:text-fg-strong" onClick={onClose}>
             ✕

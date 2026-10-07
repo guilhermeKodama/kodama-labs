@@ -87,7 +87,7 @@ export function Select({
               <SelectPrimitive.Item key={option.value} value={encode(option.value)} disabled={option.disabled} className={cn(MENU_ROW, "pr-1.5")}>
                 <SelectPrimitive.ItemText>{option.label}</SelectPrimitive.ItemText>
                 <span className="ml-auto flex shrink-0 items-center gap-1.5">
-                  {option.hint ? <span className="text-[11px] text-fg-3">{option.hint}</span> : null}
+                  {option.hint ? <span className="text-caption text-fg-3">{option.hint}</span> : null}
                   <span className="flex w-3.5 justify-center">
                     <SelectPrimitive.ItemIndicator>
                       <CheckIcon className="size-3.5" />

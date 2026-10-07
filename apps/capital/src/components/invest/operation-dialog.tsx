@@ -259,11 +259,11 @@ function OperationForm({ holdings, initialHoldingId, onClose }: { holdings: read
       {kind === "buy" || kind === "sell" || kind === "income" ? (
         <Field label={t("asset")}>
           {picker.selected ? (
-            <div className="flex h-8 items-center gap-2 rounded-[8px] border border-stroke-3 bg-fill-4 px-2.5 text-[12.5px]">
+            <div className="flex h-8 items-center gap-2 rounded-[8px] border border-stroke-3 bg-fill-4 px-2.5 text-body">
               {picker.selected.ticker ? <span className={cn(MONO, "font-semibold")}>{picker.selected.ticker}</span> : null}
               <span className="min-w-0 truncate text-fg-3">{picker.selected.isNew ? t("newAssetSelected", { name: picker.selected.name }) : picker.selected.name}</span>
-              <span className={cn(MONO, "ml-auto text-[11.5px]")}>{picker.selected.price !== null ? fmt.money(picker.selected.price, picker.selected.currency) : ""}</span>
-              <button type="button" onClick={unpick} className="shrink-0 text-[12px] text-fg-2 underline underline-offset-[3px] hover:text-fg-1">
+              <span className={cn(MONO, "ml-auto text-label")}>{picker.selected.price !== null ? fmt.money(picker.selected.price, picker.selected.currency) : ""}</span>
+              <button type="button" onClick={unpick} className="shrink-0 text-body-sm text-fg-2 underline underline-offset-[3px] hover:text-fg-1">
                 {t("changeAsset")}
               </button>
             </div>
@@ -272,22 +272,22 @@ function OperationForm({ holdings, initialHoldingId, onClose }: { holdings: read
               <TextInput value={query} onChange={setQuery} placeholder={t("assetPlaceholder")} autoFocus />
               <div className="overflow-hidden rounded-[8px] border border-stroke-3">
                 {results.map((r) => (
-                  <button key={r.key} type="button" onClick={() => pick(r.pick)} className="flex h-8 w-full items-center gap-2 px-2.5 text-left text-[12.5px] hover:bg-fill-3">
+                  <button key={r.key} type="button" onClick={() => pick(r.pick)} className="flex h-8 w-full items-center gap-2 px-2.5 text-left text-control hover:bg-fill-3">
                     <span className={cn(MONO, "font-semibold")}>{r.ticker ?? "—"}</span>
                     <span className="min-w-0 truncate text-fg-3">{r.name}</span>
-                    <span className={cn(MONO, "ml-auto text-[11.5px]")}>{r.price !== null ? fmt.money(r.price, r.currency) : ""}</span>
+                    <span className={cn(MONO, "ml-auto text-label")}>{r.price !== null ? fmt.money(r.price, r.currency) : ""}</span>
                   </button>
                 ))}
                 {kind === "buy" && query.trim() ? (
                   <button
                     type="button"
                     onClick={() => setPicked({ type: "custom", name: query.trim(), assetClass: "fixed_income" })}
-                    className="flex h-8 w-full items-center gap-2 px-2.5 text-left text-[12.5px] text-fg-2 hover:bg-fill-3"
+                    className="flex h-8 w-full items-center gap-2 px-2.5 text-left text-control text-fg-2 hover:bg-fill-3"
                   >
                     {t("newAsset", { name: query.trim() })}
                   </button>
                 ) : null}
-                {!results.length && !(kind === "buy" && query.trim()) ? <div className="flex h-8 items-center px-2.5 text-[12px] text-fg-3">{search.isFetching ? t("searching") : t("noAssets")}</div> : null}
+                {!results.length && !(kind === "buy" && query.trim()) ? <div className="flex h-8 items-center px-2.5 text-body-sm text-fg-3">{search.isFetching ? t("searching") : t("noAssets")}</div> : null}
               </div>
             </>
           )}
@@ -385,7 +385,7 @@ function OperationForm({ holdings, initialHoldingId, onClose }: { holdings: read
           <Field label={t("date")}>
             <TextInput type="date" value={date} onChange={setDate} />
           </Field>
-          {picked && !target ? <span className="col-span-3 text-[12px] text-warn">{t("notHeld")}</span> : null}
+          {picked && !target ? <span className="col-span-3 text-body-sm text-warn">{t("notHeld")}</span> : null}
         </div>
       ) : null}
 
@@ -403,7 +403,7 @@ function OperationForm({ holdings, initialHoldingId, onClose }: { holdings: read
           <Field label={t("date")}>
             <TextInput type="date" value={date} onChange={setDate} />
           </Field>
-          <span className="col-span-3 text-[12px] text-fg-3">{kind === "deposit" ? t("cash.depositNote") : t("cash.withdrawNote")}</span>
+          <span className="col-span-3 text-body-sm text-fg-3">{kind === "deposit" ? t("cash.depositNote") : t("cash.withdrawNote")}</span>
         </div>
       ) : null}
 

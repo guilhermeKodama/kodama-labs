@@ -54,7 +54,7 @@ export function EntrySheet({ entryId, row, onClose }: EntrySheetProps) {
       {entry.data && ready ? (
         <EditForm key={entry.data.id} entry={entry.data} actions={actions} onClose={onClose} />
       ) : (
-        <p className="text-[12.5px] text-fg-3">{entry.isError ? null : t("sheet.loading")}</p>
+        <p className="text-body text-fg-3">{entry.isError ? null : t("sheet.loading")}</p>
       )}
       {actions.dialogs}
     </Sheet>
@@ -200,11 +200,11 @@ function History({ entryId }: { entryId: string }) {
 
   return (
     <div className="flex flex-col gap-1 border-t border-stroke-3 pt-2.5">
-      <span className="text-[11px] text-fg-3">{t("sheet.history")}</span>
+      <span className="text-caption text-fg-3">{t("sheet.history")}</span>
       {lines.map((line, index) => {
         const at = when(line);
         return (
-          <span key={index} className="text-[11.5px] text-fg-2">
+          <span key={index} className="text-label text-fg-2">
             · {text(line)}
             {at ? ` · ${at}` : ""}
           </span>

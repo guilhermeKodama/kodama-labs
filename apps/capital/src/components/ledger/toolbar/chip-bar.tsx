@@ -36,7 +36,7 @@ export function ChipValuesEditor({
   const tc = useTranslations("common");
   return (
     <>
-      <span className="text-[11px] text-fg-3">{title}</span>
+      <span className="text-caption text-fg-3">{title}</span>
       <div className="flex flex-col gap-1.5">
         {options.map((option) => (
           <Check
@@ -51,8 +51,8 @@ export function ChipValuesEditor({
             }
           />
         ))}
-        {loading ? <span className="text-[12px] text-fg-3">{tc("loading")}</span> : null}
-        {!loading && !options.length ? <span className="text-[12px] text-fg-3">{t("noOptions")}</span> : null}
+        {loading ? <span className="text-body-sm text-fg-3">{tc("loading")}</span> : null}
+        {!loading && !options.length ? <span className="text-body-sm text-fg-3">{t("noOptions")}</span> : null}
       </div>
     </>
   );
@@ -103,7 +103,7 @@ export function ChipBar<P extends string>({
       </button>
     );
     return (
-      <span key={key} className={cn("inline-flex h-6 shrink-0 items-center overflow-hidden rounded-[6px] border border-stroke-2 text-[12px]", open ? "bg-fill-2" : "bg-fill-4")}>
+      <span key={key} className={cn("inline-flex h-6 shrink-0 items-center overflow-hidden rounded-[6px] border border-stroke-2 text-button", open ? "bg-fill-2" : "bg-fill-4")}>
         {prop ? (
           <Popover open={open} onOpenChange={(next) => (next ? setEditing(prop) : close())} width={260} trigger={label}>
             {editor(prop)}
@@ -139,7 +139,7 @@ export function ChipBar<P extends string>({
     <>
       {all.map(chip)}
       <Popover open={adding} onOpenChange={setAdding} width={220} trigger={<Btn dashed>{t("add")}</Btn>}>
-        <span className="text-[11px] text-fg-3">{t("filterBy")}</span>
+        <span className="text-caption text-fg-3">{t("filterBy")}</span>
         <div className="-mx-1 flex flex-col">
           {addable.map((prop) => (
             <button

@@ -119,7 +119,7 @@ export function UserMenu({ trigger, side = "top", onNavigate }: { trigger: React
               }}
             >
               <span className="min-w-0 flex-1 truncate">{t("settings")}</span>
-              <span className="shrink-0 font-mono text-[10.5px] text-fg-4">{settingsLabel}</span>
+              <span className="shrink-0 font-mono text-hint text-fg-4">{settingsLabel}</span>
             </DropdownMenu.Item>
             <SubMenu label={t("theme")} value={t(`themes.${theme}`)}>
               <DropdownMenu.RadioGroup value={theme} onValueChange={pickTheme}>
@@ -152,8 +152,8 @@ function SubMenu({ label, value, children }: { label: string; value: string; chi
     <DropdownMenu.Sub>
       <DropdownMenu.SubTrigger className={cn(MENU_ROW, "text-fg-1 data-[state=open]:bg-fill-3")}>
         <span className="min-w-0 flex-1 truncate">{label}</span>
-        <span className="shrink-0 text-[12px] text-fg-3">{value}</span>
-        <span aria-hidden className="shrink-0 text-[11px] text-fg-3">
+        <span className="shrink-0 text-body-sm text-fg-3">{value}</span>
+        <span aria-hidden className="shrink-0 text-caption text-fg-3">
           ›
         </span>
       </DropdownMenu.SubTrigger>

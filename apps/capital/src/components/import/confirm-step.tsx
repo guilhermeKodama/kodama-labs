@@ -66,7 +66,7 @@ export function ConfirmStep({
         <Kpi label={t("total")} value={fmt.money(summary.total, currency)} />
         <Kpi label={t("rules")} value={fmt.number(summary.rules, 0)} />
       </KpiStrip>
-      {sentence ? <p className="text-[12px] text-fg-2">{sentence}</p> : null}
+      {sentence ? <p className="text-body-sm text-fg-2">{sentence}</p> : null}
     </>
   );
 }

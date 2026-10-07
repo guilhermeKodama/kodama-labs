@@ -5,7 +5,7 @@ import type { ToastClassnames } from "sonner";
 import { useTranslations } from "next-intl";
 import { cn } from "@/lib/utils";
 
-const PILL = "flex items-center gap-3.5 rounded-[8px] bg-fg-1 px-3.5 py-[9px] text-[12.5px] text-editor shadow-lg";
+const PILL = "flex items-center gap-3.5 rounded-[8px] bg-fg-1 px-3.5 py-[9px] text-body text-editor shadow-lg";
 const ACTION = "cursor-pointer font-semibold whitespace-nowrap underline outline-none focus-visible:ring-2 focus-visible:ring-editor/40";
 
 /**
@@ -17,7 +17,7 @@ export const TOAST_CLASS_NAMES: ToastClassnames = {
   toast: cn(PILL, "inset-x-0 mx-auto w-fit max-w-[calc(100vw-32px)]"),
   content: "min-w-0",
   title: "leading-snug",
-  description: "text-[11.5px] text-fg-4",
+  description: "text-label text-fg-4",
   actionButton: cn(ACTION, "bg-transparent"),
   cancelButton: "cursor-pointer whitespace-nowrap text-fg-4 underline",
   icon: "hidden",

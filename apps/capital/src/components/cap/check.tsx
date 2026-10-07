@@ -51,7 +51,7 @@ export function Check({
   );
   if (!label) return box;
   return (
-    <span className={cn("inline-flex items-center gap-1.5 text-[12.5px]", disabled && "opacity-60", className)}>
+    <span className={cn("inline-flex items-center gap-1.5 text-control", disabled && "opacity-60", className)}>
       {box}
       <label htmlFor={boxId} className={cn("cursor-pointer select-none", disabled && "cursor-not-allowed")}>
         {label}

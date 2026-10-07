@@ -71,11 +71,11 @@ export function HoldingSheet({ holding, onClose, onOperation }: { holding: Holdi
           </span>
         }
       />
-      <span className={cn(MONO, "text-[22px] font-medium")}>{money(holding.marketValue)}</span>
-      <div className="grid grid-cols-2 gap-x-3 gap-y-2.5 text-[12.5px]">
+      <span className={cn(MONO, "text-display font-medium")}>{money(holding.marketValue)}</span>
+      <div className="grid grid-cols-2 gap-x-3 gap-y-2.5 text-body">
         {details.map(([k, v]) => (
           <div key={k} className="flex min-w-0 flex-col gap-0.5">
-            <span className="text-[11px] text-fg-3">{k}</span>
+            <span className="text-caption text-fg-3">{k}</span>
             <span className="truncate">{v}</span>
           </div>
         ))}
@@ -113,10 +113,10 @@ export function HoldingSheet({ holding, onClose, onOperation }: { holding: Holdi
         </Btn>
       </form>
       <div className="flex flex-col border-t border-stroke-3 pt-3">
-        <span className="pb-1 text-[11px] text-fg-3">{t("operations")}</span>
+        <span className="pb-1 text-caption text-fg-3">{t("operations")}</span>
         {(ops.data ?? []).slice(0, 12).map((op) => (
-          <span key={op.id} className="flex h-7 items-center gap-2 text-[12.5px]">
-            <span className={cn(MONO, "w-12 text-[11px] text-fg-3")}>{fmt.date(op.date)}</span>
+          <span key={op.id} className="flex h-7 items-center gap-2 text-body">
+            <span className={cn(MONO, "w-12 text-caption text-fg-3")}>{fmt.date(op.date)}</span>
             <span className="min-w-0 flex-1 truncate">
               {opLabel({ ...op, ticker: null, name: null })}
               {op.quantity ? ` · ${fmt.number(op.quantity, { min: 0, max: 8 })}` : ""}
@@ -124,7 +124,7 @@ export function HoldingSheet({ holding, onClose, onOperation }: { holding: Holdi
             <span className={MONO}>{money(op.totalAmount)}</span>
           </span>
         ))}
-        {ops.data && !ops.data.length ? <span className="text-[12px] text-fg-3">{t("noOps")}</span> : null}
+        {ops.data && !ops.data.length ? <span className="text-body-sm text-fg-3">{t("noOps")}</span> : null}
       </div>
       <div className="mt-auto flex flex-wrap gap-1.5 border-t border-stroke-3 pt-3">
         <Btn primary onClick={onOperation}>
@@ -183,7 +183,7 @@ function TargetsForm({ onClose }: { onClose: () => void }) {
       <DialogHead title={t("title")} desc={t("desc")} />
       <div className="flex flex-col gap-2">
         {ALLOCATION_CLASSES.map((cls) => (
-          <label key={cls} className="flex items-center gap-2 text-[12.5px]">
+          <label key={cls} className="flex items-center gap-2 text-control">
             <span className="flex-1">{ti(`allocationClass.${cls}`)}</span>
             <TextInput value={current[cls] ?? ""} onChange={(v) => setValues({ ...current, [cls]: v })} mono className="w-20 text-right" inputMode="decimal" placeholder="0" />
             <span className="text-fg-3">%</span>
@@ -191,7 +191,7 @@ function TargetsForm({ onClose }: { onClose: () => void }) {
         ))}
       </div>
       <DialogFooter justify="between">
-        <span className={cn(MONO, "text-[12px]", payload.valid ? "text-pos" : "text-warn")}>{t("sum", { sum: fmt.number(payload.sum, { min: 0, max: 2 }) })}</span>
+        <span className={cn(MONO, "text-body-sm", payload.valid ? "text-pos" : "text-warn")}>{t("sum", { sum: fmt.number(payload.sum, { min: 0, max: 2 }) })}</span>
         <span className="flex gap-1.5">
           <Btn ghost onClick={onClose}>
             {tc("cancel")}
@@ -490,7 +490,7 @@ function OrdersForm({ orders, skipped, onClose }: { orders: OrderDraft[]; skippe
       ) : (
         <Callout tone="neutral">{t("empty")}</Callout>
       )}
-      {skipped ? <span className="text-[12px] text-fg-3">{t("skipped", { count: skipped })}</span> : null}
+      {skipped ? <span className="text-body-sm text-fg-3">{t("skipped", { count: skipped })}</span> : null}
       <div className="grid grid-cols-2 gap-2.5">
         <Field label={top("source")}>
           <Select

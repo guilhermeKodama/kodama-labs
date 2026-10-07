@@ -14,6 +14,7 @@ import type { BudgetsScope, BudgetsView } from "@/lib/budgets/url";
 import { useFmt } from "@/lib/format/provider";
 import type { ViewDraft } from "@/lib/ledger/view-draft";
 import { CHART, CHART_AXIS } from "@/lib/theme/chart-colors";
+import { textRole } from "@/lib/theme/type-scale";
 import { cn } from "@/lib/utils";
 import type { EditableBudget } from "./budget-dialog";
 import { BudgetEntityBadge, ChartCaption, ChartLegend, DrillLink, PaceBar, RowMenu, ScopeBar, TOOLTIP_STYLE, useEntityNames, ViewState, type BudgetActions } from "./parts";
@@ -124,7 +125,7 @@ function YearBody({ data, today, onOpenMonth, actions }: { data: YearOverview; t
 
       <div className="overflow-x-auto rounded-[8px] border border-stroke-3">
         <div className="min-w-[860px]">
-          <div className={cn(HEAT_COLS, "h-[34px] text-[11.5px] text-fg-3")}>
+          <div className={cn(HEAT_COLS, "h-[34px] text-label text-fg-3")}>
             <span>{t("year.heatmap.category")}</span>
             {MONTHS.map((m) => (
               <span key={m} className={cn("text-center", tense(m) === "projected" && "text-fg-4", tense(m) === "current" && "text-fg-1")}>
@@ -139,7 +140,7 @@ function YearBody({ data, today, onOpenMonth, actions }: { data: YearOverview; t
             const category = row.category ?? t("uncategorized");
             const trend = trendOf(row.trend);
             return (
-              <div key={`${row.entityId}:${row.categoryId}`} className={cn(HEAT_COLS, "h-[34px] border-t border-stroke-3 text-[12.5px]")}>
+              <div key={`${row.entityId}:${row.categoryId}`} className={cn(HEAT_COLS, "h-[34px] border-t border-stroke-3 text-body")}>
                 <span className="flex min-w-0 items-center gap-1.5">
                   <DrillLink draft={drill(row, category)} title={category} className="min-w-0 truncate">
                     {category}
@@ -150,7 +151,7 @@ function YearBody({ data, today, onOpenMonth, actions }: { data: YearOverview; t
                   const level = heatLevel(cell);
                   const pct = heatPercent(cell);
                   const text = pct !== null ? `${pct}%` : cell.spent > 0 ? fmt.k(cell.spent, { minDigits: 1 }) : "·";
-                  const className = cn("inline-flex h-[26px] min-w-0 items-center justify-center rounded border border-transparent font-mono text-[11px] tabular-nums", HEAT_CLASS[level]);
+                  const className = cn("inline-flex h-[26px] min-w-0 items-center justify-center rounded border border-transparent font-mono text-caption tabular-nums", HEAT_CLASS[level]);
                   if (!isClickable(cell)) return <span key={cell.month} className={className}>{text}</span>;
                   return (
                     <button
@@ -164,12 +165,12 @@ function YearBody({ data, today, onOpenMonth, actions }: { data: YearOverview; t
                     </button>
                   );
                 })}
-                <DrillLink draft={drill(row, category)} className="text-right font-mono text-[12px] tabular-nums">
+                <DrillLink draft={drill(row, category)} className="text-right font-mono text-body-sm tabular-nums">
                   {fmt.money0(row.yearTotal)}
                 </DrillLink>
                 <span
                   className={cn(
-                    "text-right font-mono text-[11.5px]",
+                    "text-right font-mono text-label",
                     trend.kind === "up" ? "text-cat-yellow" : trend.kind === "down" ? "text-cat-green" : trend.kind === "stable" ? "text-fg-3" : "text-fg-4",
                   )}
                 >
@@ -179,7 +180,7 @@ function YearBody({ data, today, onOpenMonth, actions }: { data: YearOverview; t
             );
           })}
           {data.categories.length ? (
-            <div className={cn(HEAT_COLS, "h-9 border-t border-stroke-2 bg-fill-4 text-[12px] font-semibold")}>
+            <div className={cn(HEAT_COLS, "h-9 border-t border-stroke-2 bg-fill-4 text-body-sm font-semibold")}>
               <span>{t("year.heatmap.total")}</span>
               {data.monthTotals.map((total, i) => {
                 const tone = totalTone(total, data.monthBudgets[i] ?? 0, tense(i + 1) === "projected");
@@ -187,7 +188,7 @@ function YearBody({ data, today, onOpenMonth, actions }: { data: YearOverview; t
                   <DrillLink
                     key={i}
                     draft={totals(totalLabel, monthRange(i + 1), fmt.monthLabel({ year: data.year, month: i + 1 }))}
-                    className={cn("text-center font-mono text-[10.5px] tabular-nums", tone === "projected" ? "text-fg-4" : tone === "over" ? "text-cat-red" : "text-fg-1")}
+                    className={cn("text-center font-mono text-hint tabular-nums", tone === "projected" ? "text-fg-4" : tone === "over" ? "text-cat-red" : "text-fg-1")}
                   >
                     {fmt.k(total, { minDigits: 1 })}
                   </DrillLink>
@@ -203,7 +204,7 @@ function YearBody({ data, today, onOpenMonth, actions }: { data: YearOverview; t
           )}
         </div>
       </div>
-      <p className="text-[12px] text-fg-4">{t(legend.key, legend.values)}</p>
+      <p className="text-body-sm text-fg-4">{t(legend.key, legend.values)}</p>
 
       <div className="grid items-start gap-3 md:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)]">
         <MonthlyChart data={data} isProjected={(m) => tense(m) === "projected"} />
@@ -216,16 +217,16 @@ function YearBody({ data, today, onOpenMonth, actions }: { data: YearOverview; t
             const ratio = usage(b.spent, b.amount);
             const editable: EditableBudget = { id: b.id, category: b.category, entityId: b.entityId, amount: b.amount, notes: b.notes, effectiveFrom: b.effectiveFrom, period: "yearly" };
             return (
-              <div key={b.id} className="group grid h-10 grid-cols-[minmax(0,1.2fr)_minmax(0,2fr)_96px_96px] items-center gap-3 border-t border-stroke-3 px-3 text-[12.5px] first:border-t-0">
+              <div key={b.id} className="group grid h-10 grid-cols-[minmax(0,1.2fr)_minmax(0,2fr)_96px_96px] items-center gap-3 border-t border-stroke-3 px-3 text-body first:border-t-0">
                 <span className="flex min-w-0 items-center gap-1.5">
                   <span className="shrink-0">{b.category}</span>
                   <BudgetEntityBadge entityId={b.entityId} kinds={kinds} />
-                  {b.notes ? <span className="min-w-0 truncate text-[11px] text-fg-4">{b.notes}</span> : null}
+                  {b.notes ? <span className="min-w-0 truncate text-caption text-fg-4">{b.notes}</span> : null}
                   <RowMenu category={b.category} onEdit={() => actions.onEdit(editable)} onDelete={() => actions.onDelete(editable)} />
                 </span>
                 <span className="flex min-w-0 items-center gap-2">
                   <PaceBar ratio={ratio} tone={yearlyTone(ratio)} marker={b.yearPace} label={b.category} />
-                  <span className="w-[34px] shrink-0 text-right font-mono text-[11px] text-fg-3 tabular-nums">{percent(ratio)}%</span>
+                  <span className="w-[34px] shrink-0 text-right font-mono text-caption text-fg-3 tabular-nums">{percent(ratio)}%</span>
                 </span>
                 <DrillLink draft={drill(b, b.category)} className="text-right font-mono tabular-nums">
                   {fmt.money0(b.spent)}
@@ -269,7 +270,7 @@ function MonthlyChart({ data, isProjected }: { data: YearOverview; isProjected: 
             <Bar dataKey="real" name={names.real} stackId="spend" fill={CHART.bar} isAnimationActive={false} />
             <Bar dataKey="proj" name={names.proj} stackId="spend" fill={CHART.soft} isAnimationActive={false} />
             {flat !== null ? (
-              <ReferenceLine y={flat} stroke={CHART.muted} strokeDasharray="4 4" ifOverflow="extendDomain" label={{ value: names.budget, position: "insideTopRight", fontSize: 10, fill: CHART.muted }} />
+              <ReferenceLine y={flat} stroke={CHART.muted} strokeDasharray="4 4" ifOverflow="extendDomain" label={{ value: names.budget, position: "insideTopRight", fontSize: textRole("micro"), fill: CHART.muted }} />
             ) : (
               <Line dataKey="budget" name={names.budget} type="stepAfter" stroke={CHART.muted} strokeDasharray="4 4" dot={false} connectNulls isAnimationActive={false} />
             )}
@@ -307,11 +308,11 @@ function Insights({ data, today }: { data: YearOverview; today: YearMonth }) {
         const copy = insightCopy(insight, category, fmt.monthAbbr, (v) => fmt.money0(v), data.period.projectionBasis);
         return (
           <div key={`${insight.budgetId}:${insight.kind}`} className="flex flex-col gap-0.5 border-t border-stroke-3 px-3 py-2.5 first:border-t-0">
-            <span className="flex min-w-0 items-center gap-1.5 text-[12.5px] font-medium">
+            <span className="flex min-w-0 items-center gap-1.5 text-body font-medium">
               <span className="min-w-0">{t(copy.title.key, copy.title.values)}</span>
               <BudgetEntityBadge entityId={insight.entityId} kinds={kinds} />
             </span>
-            <span className="text-[12px] text-fg-3">
+            <span className="text-body-sm text-fg-3">
               {t(copy.body.key, copy.body.values)}
               {copy.adjust ? (
                 <>

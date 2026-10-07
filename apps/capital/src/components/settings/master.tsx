@@ -21,7 +21,7 @@ export function ListDetail({ list, detail }: { list: ReactNode; detail: ReactNod
 
 /** 11px tertiary group label ("Despesas", an entity name). */
 export function GroupLabel({ children }: { children: ReactNode }) {
-  return <span className="px-2.5 pt-2 pb-0.5 text-[11px] text-fg-3">{children}</span>;
+  return <span className="px-2.5 pt-2 pb-0.5 text-caption text-fg-3">{children}</span>;
 }
 
 /** 34px list row: left content, right annotation (kind, currency, count). */
@@ -32,7 +32,7 @@ export function ListItem({ on, onClick, left, right, faded }: { on: boolean; onC
       onClick={onClick}
       aria-current={on || undefined}
       className={cn(
-        "flex h-[34px] items-center gap-2 rounded-[6px] px-2.5 text-left text-[12.5px] outline-none focus-visible:ring-2 focus-visible:ring-fg-3/40",
+        "flex h-[34px] items-center gap-2 rounded-[6px] px-2.5 text-left text-control outline-none focus-visible:ring-2 focus-visible:ring-fg-3/40",
         on ? "bg-fill-2/80" : "hover:bg-fill-4",
         faded && "opacity-50",
       )}
@@ -49,7 +49,7 @@ export function AddRow({ on, onClick, children }: { on?: boolean; onClick: () =>
     <button
       type="button"
       onClick={onClick}
-      className={cn("rounded-[6px] px-2.5 py-2 text-left text-[12.5px] outline-none hover:text-fg-strong focus-visible:ring-2 focus-visible:ring-fg-3/40", on ? "bg-fill-2/80 text-fg-1" : "text-fg-3")}
+      className={cn("rounded-[6px] px-2.5 py-2 text-left text-control outline-none hover:text-fg-strong focus-visible:ring-2 focus-visible:ring-fg-3/40", on ? "bg-fill-2/80 text-fg-1" : "text-fg-3")}
     >
       {children}
     </button>

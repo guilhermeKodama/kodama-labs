@@ -93,7 +93,7 @@ export function TransactionsScreen() {
   if (!active) {
     return (
       <Page crumbs={[t("crumb")]} subheader={tabs}>
-        <p className="text-[12.5px] text-fg-3">{views.isError && !waiting ? t("viewsError") : tc("loading")}</p>
+        <p className="text-body text-fg-3">{views.isError && !waiting ? t("viewsError") : tc("loading")}</p>
       </Page>
     );
   }
@@ -254,7 +254,7 @@ function ViewScreen({
           </Btn>
         </>
       ) : !view.isBuiltin ? (
-        <span className="text-[11px] text-fg-4">{t("autosaved")}</span>
+        <span className="text-caption text-fg-4">{t("autosaved")}</span>
       ) : null}
     </div>
   );
@@ -353,15 +353,15 @@ function ViewScreen({
     <Page crumbs={[t("crumb"), view.name]} subheader={tabs} actions={<TransactionsHeaderActions />} overlay={<LedgerOverlays names={names} rows={rows} />}>
       {filterBar}
       {draft?.label ? (
-        <p className="text-[12px] text-fg-3">
+        <p className="text-body-sm text-fg-3">
           {t("drill.detail", { label: draft.label })} ·{" "}
           <button type="button" onClick={() => setDraft(draftPatch(draft.back))} className="underline underline-offset-[3px] hover:text-fg-1">
             {t("drill.back")}
           </button>
         </p>
       ) : null}
-      {result.isError ? <p className="text-[12.5px] text-neg">{errorText(result.error)}</p> : null}
-      {calendar && calendarDays.isError ? <p className="text-[12.5px] text-neg">{errorText(calendarDays.error)}</p> : null}
+      {result.isError ? <p className="text-body text-neg">{errorText(result.error)}</p> : null}
+      {calendar && calendarDays.isError ? <p className="text-body text-neg">{errorText(calendarDays.error)}</p> : null}
       {/* A failed first load shows the error, not an empty table that reads "Nenhum lançamento…". */}
       {result.isError && !first && !sankey ? null : layout}
     </Page>

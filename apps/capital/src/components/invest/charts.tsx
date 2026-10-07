@@ -5,8 +5,9 @@ import { useTranslations } from "next-intl";
 import { useFmt } from "@/lib/format/provider";
 import type { AllocationClass } from "@/lib/invest/types";
 import { CHART, CHART_AXIS, CHART_SERIES } from "@/lib/theme/chart-colors";
+import { textRole } from "@/lib/theme/type-scale";
 
-const TOOLTIP_STYLE = { fontSize: 12, borderRadius: 8, border: `1px solid var(--cap-stroke-1)`, background: "var(--cap-bg-editor)", color: "var(--cap-text-1)" } as const;
+const TOOLTIP_STYLE = { fontSize: textRole("body-sm"), borderRadius: 8, border: `1px solid var(--cap-stroke-1)`, background: "var(--cap-bg-editor)", color: "var(--cap-text-1)" } as const;
 
 /** Series colors of the six classes (stable, so a class keeps its color in every chart). */
 export const CLASS_COLOR: Record<AllocationClass, string> = {
@@ -46,7 +47,7 @@ export function NetWorthChart({ rows, showInitial }: { rows: { label: string; ne
         </ResponsiveContainer>
       </div>
       {showInitial ? (
-        <div className="flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-fg-3">
+        <div className="flex flex-wrap gap-x-3 gap-y-1 text-caption text-fg-3">
           <span className="inline-flex items-center gap-1.5">
             <span aria-hidden className="size-2 rounded-[2px]" style={{ background: CHART.ink }} />
             {t("netWorth")}
@@ -83,7 +84,7 @@ export function ContributionsChart({ rows, classes, goal, height = 200 }: { rows
               <Bar key={c} dataKey={c} stackId="a" fill={CLASS_COLOR[c]} isAnimationActive={false} />
             ))}
             {goal !== null && goal > 0 ? (
-              <ReferenceLine y={fmt.thousands(goal)} stroke={CHART.warn} strokeDasharray="4 3" label={{ value: ti("contrib.chart.goal"), position: "right", fontSize: 11, fill: "var(--cap-chart-warn)" }} />
+              <ReferenceLine y={fmt.thousands(goal)} stroke={CHART.warn} strokeDasharray="4 3" label={{ value: ti("contrib.chart.goal"), position: "right", fontSize: textRole("caption"), fill: "var(--cap-chart-warn)" }} />
             ) : null}
           </BarChart>
         </ResponsiveContainer>
@@ -98,7 +99,7 @@ function ClassLegend({ classes }: { classes: AllocationClass[] }) {
   const ti = useTranslations("invest");
   if (classes.length < 2) return null;
   return (
-    <div className="flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-fg-3">
+    <div className="flex flex-wrap gap-x-3 gap-y-1 text-caption text-fg-3">
       {classes.map((c) => (
         <span key={c} className="inline-flex items-center gap-1.5">
           <span aria-hidden className="size-2 rounded-[2px]" style={{ background: CLASS_COLOR[c] }} />

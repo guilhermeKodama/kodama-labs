@@ -87,7 +87,7 @@ export function NotificationsPage() {
       <div className="flex flex-col gap-2">
         {(["dueEnabled", "overdueEnabled", "billClosedEnabled", "budgetEnabled", "weeklyEnabled"] as const).map((field) => (
           <div key={field} className="flex items-center gap-2">
-            <label htmlFor={`notif-${field}`} className="text-[12.5px]">
+            <label htmlFor={`notif-${field}`} className="text-control">
               {s ? label(field, s) : "…"}
             </label>
             <span className="flex-1" />
@@ -97,7 +97,7 @@ export function NotificationsPage() {
       </div>
       {pushNote ? (
         <div className="flex items-center gap-2">
-          <span className="text-[12px] text-fg-3">{pushNote}</span>
+          <span className="text-body-sm text-fg-3">{pushNote}</span>
           <span className="flex-1" />
           {canEnable ? (
             <Btn onClick={() => void enable()} disabled={push.status === "subscribing"}>

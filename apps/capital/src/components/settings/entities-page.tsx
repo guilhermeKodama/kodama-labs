@@ -58,7 +58,7 @@ export function EntitiesPage() {
                   {entity.archivedAt ? <Badge>{t("archivedBadge")}</Badge> : null}
                 </>
               }
-              right={<span className="shrink-0 text-[11px] text-fg-3">{kindLabel(entity)}</span>}
+              right={<span className="shrink-0 text-caption text-fg-3">{kindLabel(entity)}</span>}
             />
           ))}
           <AddRow on={isNew} onClick={() => void setSelected(NEW)}>
@@ -155,7 +155,7 @@ function EntityDetail({ entity, initialBalance, onCreated }: { entity: EntityRow
           <Swatches value={form.color} onChange={(color) => set({ color })} />
         </Field>
       </div>
-      {entity ? <span className="text-[12px] text-fg-3">{t("linked", { count: entity.accountsCount })}</span> : null}
+      {entity ? <span className="text-body-sm text-fg-3">{t("linked", { count: entity.accountsCount })}</span> : null}
       <DetailFooter
         end={
           entity && entity.kind !== "personal" ? (

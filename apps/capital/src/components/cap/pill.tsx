@@ -21,14 +21,14 @@ export function Pill({
       aria-pressed={active}
       {...props}
       className={cn(
-        "inline-flex shrink-0 items-center gap-1.5 rounded-full border text-[12px] whitespace-nowrap outline-none focus-visible:ring-2 focus-visible:ring-fg-3/40 disabled:cursor-not-allowed disabled:opacity-40",
-        size === "md" ? "h-6 px-2.5" : "h-5 px-2 text-[11.5px]",
+        "inline-flex shrink-0 items-center gap-1.5 rounded-full border text-button whitespace-nowrap outline-none focus-visible:ring-2 focus-visible:ring-fg-3/40 disabled:cursor-not-allowed disabled:opacity-40",
+        size === "md" ? "h-6 px-2.5" : "h-5 px-2 text-label",
         active ? "border-stroke-1 bg-fill-3 font-medium text-fg-1" : "border-stroke-2 text-fg-2 hover:bg-fill-4",
         className,
       )}
     >
       {children}
-      {hint ? <span className="font-mono text-[10.5px] text-fg-4">{hint}</span> : null}
+      {hint ? <span className="font-mono text-hint text-fg-4">{hint}</span> : null}
     </button>
   );
 }

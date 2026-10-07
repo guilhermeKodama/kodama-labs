@@ -7,11 +7,11 @@ export type KpiTone = "pos" | "neg" | "warn";
 export function Kpi({ label, value, sub, tone }: { label: ReactNode; value: ReactNode; sub?: ReactNode; tone?: KpiTone }) {
   return (
     <div className="flex min-w-0 flex-col gap-0.5">
-      <span className="text-[11px] text-fg-3">{label}</span>
-      <span className={cn("font-mono text-[17px] font-medium tabular-nums", tone === "pos" && "text-pos", tone === "neg" && "text-neg", tone === "warn" && "text-warn")}>
+      <span className="text-caption text-fg-3">{label}</span>
+      <span className={cn("font-mono text-kpi font-medium tabular-nums", tone === "pos" && "text-pos", tone === "neg" && "text-neg", tone === "warn" && "text-warn")}>
         {value}
       </span>
-      {sub ? <span className="text-[11px] text-fg-3">{sub}</span> : null}
+      {sub ? <span className="text-caption text-fg-3">{sub}</span> : null}
     </div>
   );
 }

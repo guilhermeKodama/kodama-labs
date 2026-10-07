@@ -57,7 +57,7 @@ function Chip({
   const on = values.length > 0;
   const shown = values.map((v) => options.find((o) => o.value === v)?.label ?? v).join(", ");
   return (
-    <span className={cn("inline-flex h-6 shrink-0 items-center overflow-hidden rounded-[6px] border text-[12px]", on ? "border-stroke-2 bg-fill-3" : "border-dashed border-stroke-1")}>
+    <span className={cn("inline-flex h-6 shrink-0 items-center overflow-hidden rounded-[6px] border text-button", on ? "border-stroke-2 bg-fill-3" : "border-dashed border-stroke-1")}>
       <Popover
         width={260}
         trigger={
@@ -66,7 +66,7 @@ function Chip({
           </button>
         }
       >
-        <span className="text-[11px] text-fg-3">{label}</span>
+        <span className="text-caption text-fg-3">{label}</span>
         <div className="-mx-1 flex max-h-[280px] flex-col gap-1.5 overflow-auto px-1">
           {options.map((o) =>
             single ? (
@@ -89,7 +89,7 @@ function Chip({
               />
             ),
           )}
-          {!options.length ? <span className="text-[12px] text-fg-3">{t("noOptions")}</span> : null}
+          {!options.length ? <span className="text-body-sm text-fg-3">{t("noOptions")}</span> : null}
         </div>
         {single ? null : (
           <PopoverClose>
@@ -215,13 +215,13 @@ export function AllContributions() {
           {t("export")}
         </Btn>
       </div>
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[12px] text-fg-3">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-body-sm text-fg-3">
         <span>{loadedText}</span>
         <span className={MONO}>{t(totalsPartial ? "totalsLoaded" : "totals", { deposits: fmt.money0(totals.deposits, names.currency), withdrawals: fmt.money0(totals.withdrawals, names.currency), net: fmt.money0(totals.net, names.currency) })}</span>
       </div>
-      {pages.isError ? <p className="text-[12.5px] text-neg">{errorText(pages.error)}</p> : null}
+      {pages.isError ? <p className="text-body text-neg">{errorText(pages.error)}</p> : null}
       <div className="overflow-hidden rounded-[8px] border border-stroke-3">
-        <div className="grid h-[34px] items-center gap-2.5 px-3 text-[11.5px] text-fg-3" style={{ gridTemplateColumns: grid }}>
+        <div className="grid h-[34px] items-center gap-2.5 px-3 text-label text-fg-3" style={{ gridTemplateColumns: grid }}>
           <span>{t("columns.date")}</span>
           <span>{t("columns.type")}</span>
           <span>{t("columns.route")}</span>
@@ -234,10 +234,10 @@ export function AllContributions() {
             key={r.id}
             type="button"
             onClick={() => overlays.openEntry(r.id)}
-            className="grid h-9 w-full items-center gap-2.5 border-t border-stroke-3 px-3 text-left text-[12.5px] hover:bg-fill-4"
+            className="grid h-9 w-full items-center gap-2.5 border-t border-stroke-3 px-3 text-left text-body hover:bg-fill-4"
             style={{ gridTemplateColumns: grid }}
           >
-            <span className={cn(MONO, "text-[11.5px] text-fg-3")}>{fmt.date(r.date)}</span>
+            <span className={cn(MONO, "text-label text-fg-3")}>{fmt.date(r.date)}</span>
             <span className={r.direction === "investment_withdrawal" ? "text-fg-2" : undefined}>{t(`type.${r.direction}`)}</span>
             <span className="truncate">
               {r.direction === "investment_withdrawal"

@@ -15,6 +15,7 @@ import type { DrillCell } from "@/lib/ledger/drill";
 import { expandOthers, type SankeyNode } from "@/lib/ledger/sankey";
 import { flowsQuery } from "@/lib/ledger/view-query";
 import { CHART } from "@/lib/theme/chart-colors";
+import { textRole } from "@/lib/theme/type-scale";
 
 const HEIGHT = 440;
 type Node = SankeyNode & { name: string };
@@ -159,7 +160,7 @@ export function SankeyView({
               return (
                 <g key={i} onClick={clickable ? () => click(node) : undefined} className={clickable ? "cursor-pointer" : undefined}>
                   <rect x={x0} y={y0} width={x1 - x0} height={Math.max(1, y1 - y0)} rx={2} fill={nodeColor(node)} />
-                  <text x={left ? x1 + 6 : x0 - 6} y={(y0 + y1) / 2} dy="0.35em" textAnchor={left ? "start" : "end"} fontSize={11} fill={CHART.label}>
+                  <text x={left ? x1 + 6 : x0 - 6} y={(y0 + y1) / 2} dy="0.35em" textAnchor={left ? "start" : "end"} fontSize={textRole("caption")} fill={CHART.label}>
                     {`${nameOf(node)} · ${fmt.money0(node.value ?? 0)}`}
                   </text>
                   <title>{`${nameOf(node)} · ${fmt.money0(node.value ?? 0)}`}</title>
@@ -170,7 +171,7 @@ export function SankeyView({
         ) : null}
       </div>
       {data ? (
-        <span className="text-[12px] text-fg-4">
+        <span className="text-body-sm text-fg-4">
           {t("caption", {
             income: fmt.money0(data.totals.income),
             expenses: fmt.money0(data.totals.expenses),

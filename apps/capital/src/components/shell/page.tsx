@@ -31,7 +31,7 @@ export function Page({
       <header className="flex h-[46px] shrink-0 items-center gap-2 border-b border-stroke-3 px-3.5">
         <SidebarTrigger />
         {/* One run of text, as in the mockup ("Transações / Todas"): the header's 8px gap is not between crumbs. */}
-        <span className="min-w-0 truncate text-[12.5px] text-fg-3">
+        <span className="min-w-0 truncate text-body text-fg-3">
           {parents.map((crumb, index) => (
             <span key={index} className="whitespace-nowrap">
               {crumb} /{" "}

@@ -124,7 +124,7 @@ export function RenameInput({ name, onDone, className }: { name: string; onDone:
         if (event.key === "Enter") finish(value);
         else if (event.key === "Escape") finish(null);
       }}
-      className={cn("h-[22px] min-w-0 rounded-[4px] border border-stroke-1 bg-editor px-1.5 text-[12.5px] text-fg-1 outline-none focus:border-fg-muted", className)}
+      className={cn("h-[22px] min-w-0 rounded-[4px] border border-stroke-1 bg-editor px-1.5 text-control text-fg-1 outline-none focus:border-fg-muted", className)}
     />
   );
 }

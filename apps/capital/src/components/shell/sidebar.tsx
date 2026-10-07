@@ -86,7 +86,7 @@ export function SidebarTrigger() {
       onClick={toggleSidebar}
       title={`${label} (${shortcut})`}
       aria-label={label}
-      className="text-[13px] text-fg-3 outline-none hover:text-fg-strong focus-visible:text-fg-strong"
+      className="text-body-lg text-fg-3 outline-none hover:text-fg-strong focus-visible:text-fg-strong"
     >
       ▤
     </button>
@@ -98,8 +98,8 @@ export function SidebarTrigger() {
 // ---------------------------------------------------------------------------
 
 /** 28px row, radius 6, 12.5px; the active one on fill.secondary in the primary ink. */
-const ITEM = "flex h-7 shrink-0 items-center gap-2 rounded-[6px] px-2 text-[12.5px] outline-none focus-visible:ring-2 focus-visible:ring-fg-3/40";
-const RAIL_ITEM = "flex size-8 shrink-0 items-center justify-center rounded-[6px] text-[12.5px] outline-none focus-visible:ring-2 focus-visible:ring-fg-3/40";
+const ITEM = "flex h-(--cap-menu-row-h) shrink-0 items-center gap-2 rounded-[6px] px-2 text-control outline-none focus-visible:ring-2 focus-visible:ring-fg-3/40";
+const RAIL_ITEM = "flex size-8 shrink-0 items-center justify-center rounded-[6px] text-control outline-none focus-visible:ring-2 focus-visible:ring-fg-3/40";
 const ON = "bg-fill-2 font-medium text-fg-1";
 const OFF = "text-fg-2 hover:bg-fill-3";
 
@@ -221,14 +221,14 @@ function SidebarContent({ rail, onNavigate }: { rail: boolean; onNavigate?: () =
     );
   };
   const section = (label: string) =>
-    rail ? <span aria-hidden className="my-1.5 h-px w-6 shrink-0 bg-stroke-3" /> : <p className="shrink-0 px-2 pt-3 pb-1 text-[11px] text-fg-3">{label}</p>;
+    rail ? <span aria-hidden className="my-1.5 h-px w-6 shrink-0 bg-stroke-3" /> : <p className="shrink-0 px-2 pt-3 pb-1 text-caption text-fg-3">{label}</p>;
   const openCommand = () => {
     onNavigate?.();
     openCommandMenu();
   };
   const accountName = firstName(user?.name, user?.email);
   const avatar = (
-    <span aria-hidden className="inline-flex size-6 shrink-0 items-center justify-center rounded-full bg-fill-2 text-[10px] font-semibold text-fg-1">
+    <span aria-hidden className="inline-flex size-6 shrink-0 items-center justify-center rounded-full bg-fill-2 text-micro font-semibold text-fg-1">
       {initials(user?.name, user?.email)}
     </span>
   );
@@ -236,10 +236,10 @@ function SidebarContent({ rail, onNavigate }: { rail: boolean; onNavigate?: () =
   return (
     <>
       <div className={cn("flex shrink-0 items-center gap-2", rail ? "justify-center pt-1 pb-2" : "px-1.5 pt-1 pb-2")}>
-        <span aria-hidden className="inline-flex size-6 shrink-0 items-center justify-center rounded-[6px] bg-fg-1 text-[12px] font-bold text-editor">
+        <span aria-hidden className="inline-flex size-6 shrink-0 items-center justify-center rounded-[6px] bg-fg-1 text-body-sm font-bold text-editor">
           C
         </span>
-        {rail ? null : <span className="text-[12.5px] font-semibold">Capital</span>}
+        {rail ? null : <span className="text-body font-semibold">Capital</span>}
       </div>
       {rail ? (
         <button
@@ -255,7 +255,7 @@ function SidebarContent({ rail, onNavigate }: { rail: boolean; onNavigate?: () =
         <button
           type="button"
           onClick={openCommand}
-          className="mb-1 flex h-7 shrink-0 items-center gap-1.5 rounded-[6px] border border-stroke-2 px-2 text-[12px] text-fg-3 outline-none hover:text-fg-2 focus-visible:ring-2 focus-visible:ring-fg-3/40"
+          className="mb-1 flex h-7 shrink-0 items-center gap-1.5 rounded-[6px] border border-stroke-2 px-2 text-button text-fg-3 outline-none hover:text-fg-2 focus-visible:ring-2 focus-visible:ring-fg-3/40"
         >
           <span className="flex-1 truncate text-left">{t("search")}</span>
           <Kbd>{searchLabel}</Kbd>
@@ -305,8 +305,8 @@ function SidebarContent({ rail, onNavigate }: { rail: boolean; onNavigate?: () =
               <FooterButton className="w-full gap-2 rounded-[6px] px-1.5 py-2 text-left hover:bg-fill-3 data-[state=open]:bg-fill-3">
                 {avatar}
                 <span className="flex min-w-0 flex-col">
-                  <span className="truncate text-[12px] text-fg-1">{accountName}</span>
-                  <span className="truncate text-[11px] text-fg-3">{t("accountHint")}</span>
+                  <span className="truncate text-body-sm text-fg-1">{accountName}</span>
+                  <span className="truncate text-caption text-fg-3">{t("accountHint")}</span>
                 </span>
               </FooterButton>
             }
