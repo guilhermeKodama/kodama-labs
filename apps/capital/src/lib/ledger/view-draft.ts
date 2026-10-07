@@ -207,6 +207,16 @@ export function isViewParamPending(views: readonly ViewRef[], param: string | nu
 }
 
 /**
+ * Whether the views query has settled (isViewParamPending's `settled`):
+ * it answered, with the list or with an error, and is not reading again.
+ * A failed read counts as settled, so a failed (re)fetch shows the error or
+ * Todas instead of "Carregando…" for good.
+ */
+export function viewListSettled(query: { status: "pending" | "error" | "success"; fetchStatus: "fetching" | "paused" | "idle" }): boolean {
+  return query.status !== "pending" && query.fetchStatus !== "fetching";
+}
+
+/**
  * What `?view=seed:<key>` becomes once the views are loaded: the seeded view's own id, or null (Todas) when
  * the user deleted that view or it does not exist yet (PJ before a business entity). `undefined` = leave the
  * param alone (no seed key, or the views are still loading). A plain id is never rewritten: a view created

@@ -255,13 +255,16 @@ export function useLedgerViewActions({ activeId, onNavigate }: { activeId: strin
           },
         },
       ),
-    remove: (view: LedgerView) =>
+    remove: (view: LedgerView) => {
+      // A second click while the delete is on its way would 404 (and toast an error).
+      if (remove.isPending && remove.variables?.id === view.id) return;
       remove.mutate(view, {
         onSuccess: () => {
           if (view.id !== activeId) return;
           onNavigate?.();
           router.replace(buildTransactionsHref());
         },
-      }),
+      });
+    },
   };
 }

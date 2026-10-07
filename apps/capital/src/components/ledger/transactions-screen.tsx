@@ -17,7 +17,7 @@ import { dayDraft, drillDraft, drillFiltersDraft, withDrillBanner, type DrillCel
 import { currentMonth, periodDays, todayIso } from "@/lib/ledger/period";
 import { selectionStats } from "@/lib/ledger/selection";
 import { useDuplicateView, useLedgerViewActions, useLedgerViews, useNewView, useViewSaver, type LedgerView } from "@/lib/ledger/use-views";
-import { applyViewDraft, decodeViewDraft, draftPatch, encodeViewDraft, canonicalViewParam, isDirty, isViewParamPending, resolveActiveView, type ViewDraft } from "@/lib/ledger/view-draft";
+import { applyViewDraft, decodeViewDraft, draftPatch, encodeViewDraft, canonicalViewParam, isDirty, isViewParamPending, resolveActiveView, viewListSettled, type ViewDraft } from "@/lib/ledger/view-draft";
 import { boardColumnQuery, boardKey, calendarQuery, calendarRowsQuery, isPagedLayout, layoutQuery, pivotKeys, selectionScope, viewSelection } from "@/lib/ledger/view-query";
 import { planViewUpdate } from "@/lib/ledger/view-update";
 import { BulkBar } from "./bulk-bar";
@@ -62,7 +62,7 @@ export function TransactionsScreen() {
   const list = useMemo(() => views.data ?? [], [views.data]);
   // A view created a moment ago (or a link to one) may not be in the list yet: wait for it instead of showing Todas,
   // where its first filter would go to Todas' draft and never be saved.
-  const waiting = isViewParamPending(list, params.view, views.isSuccess && !views.isFetching);
+  const waiting = isViewParamPending(list, params.view, viewListSettled(views));
   const active = waiting ? null : resolveActiveView(list, params.view);
 
   // ?view=seed:ir (e.g. the old /tax link) becomes the view's own id.

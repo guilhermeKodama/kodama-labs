@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isViewParamPending, resolveActiveView } from "@/lib/ledger/view-draft";
+import { isViewParamPending, resolveActiveView, viewListSettled } from "@/lib/ledger/view-draft";
 import { createViewSaver, insertView } from "@/lib/ledger/view-saver";
 import { planViewUpdate } from "@/lib/ledger/view-update";
 import { viewConfig } from "./fixtures";
@@ -27,6 +27,15 @@ describe("a new view's first filter", () => {
     expect(isViewParamPending(list, mercado.id, false)).toBe(false);
     expect(isViewParamPending(list, "seed:ir", false)).toBe(false);
     expect(isViewParamPending(list, null, false)).toBe(false);
+  });
+
+  it("stops waiting once the list has answered, also with an error (no endless Carregando…)", () => {
+    expect(viewListSettled({ status: "pending", fetchStatus: "fetching" })).toBe(false);
+    expect(viewListSettled({ status: "success", fetchStatus: "fetching" })).toBe(false);
+    expect(viewListSettled({ status: "success", fetchStatus: "idle" })).toBe(true);
+    // A failed first read or refetch: the screen shows the error (or Todas), not "Carregando…" for good.
+    expect(viewListSettled({ status: "error", fetchStatus: "idle" })).toBe(true);
+    expect(isViewParamPending([], created.id, viewListSettled({ status: "error", fetchStatus: "idle" }))).toBe(false);
   });
 
   it("opens the created view once it is in the cache, and PATCHes the filter into its config", async () => {

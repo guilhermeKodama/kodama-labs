@@ -310,12 +310,15 @@ export function InvestViewTabs({
   const t = useTranslations("invest.portfolio.tabs");
   const editable = !!active?.persisted;
   const create = (dataset: InvestDataset, config: object) => writes.create.mutate({ dataset, config }, { onSuccess: (view) => onSelect(view.id) });
-  const remove = (view: InvestView) =>
+  const remove = (view: InvestView) => {
+    // A second click while the delete is on its way would 404 (and toast an error).
+    if (writes.remove.isPending && writes.remove.variables?.id === view.id) return;
     writes.remove.mutate(view, {
       onSuccess: () => {
         if (view.id === active?.id) onSelect(null);
       },
     });
+  };
   return (
     <>
       <div className="flex items-center gap-0.5 overflow-x-auto border-b border-stroke-3">
