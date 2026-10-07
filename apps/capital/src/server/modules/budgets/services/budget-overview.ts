@@ -5,22 +5,29 @@ import { formatDateOnly } from "@capital/server/lib/date-utils";
 import { entityScopeSql, entityScopeWhere, inEntityScope } from "@capital/server/lib/entity-scope";
 import { loadFx, type FxContext } from "@capital/server/modules/ledger/lib/fx";
 import { round, toNumber } from "@capital/server/modules/ledger/lib/money";
+import { economicDateSql, paceDaySql, spentToDateSql } from "@capital/server/modules/ledger/lib/spend-as-of";
 import { budgetFor, excludedEntities, mean, slotKey, suggestedBudget } from "../lib/assign";
 import { getEffectiveBudgetsByMonth, getEffectiveBudgetsForMonth } from "../lib/effective-budgets";
 import { DAY_MS, todayIn, type UserToday } from "../lib/today";
 
 /**
  * Budget spend = expenses (kind expense, not transfer legs) by category and
- * entity on their effective date: card purchases count on their statement's
- * closing date, future installments are already real entries, so the
- * "committed" figure includes them without a separate projection. Spend of
- * an entity goes to its own budget for the category, else to the category's
- * budget for every entity (lib/assign.ts), so nothing counts twice.
+ * entity. Which month a row belongs to is its effective date: card purchases
+ * count in the statement's closing month, and future installments are already
+ * real entries, so "committed" includes them without a separate projection.
+ * Spend of an entity goes to its own budget for the category, else to the
+ * category's budget for every entity (lib/assign.ts), so nothing counts twice.
  *
- * A drill from a row to Transações selects the same entries with: kind in
- * [expense], transferDirection isNull, categoryId, the row's entity (or, for
- * a budget for every entity, the scope's entities minus excludeEntityIds),
- * dateField effectiveDate and the month's bounds (src/lib/budgets/drill.ts).
+ * "Spent to date" (Gasto) uses the economic date (ledger/lib/spend-as-of.ts):
+ * a card purchase once its purchase date has arrived, everything else once
+ * its effective date has. A statement that closes later in the month is
+ * therefore in Gasto as soon as the purchases are made.
+ *
+ * A drill from a row to Transações selects the same entries: kind expense,
+ * transferDirection isNull, categoryId, the row's entity (or, for a budget
+ * for every entity, the scope's entities minus excludeEntityIds), effective
+ * date within the month. Gasto adds the spentToDate filter through today
+ * (src/lib/budgets/drill.ts); the whole month, without it, is committed.
  *
  * Spend is in the base currency (amountBase), so every budget amount is
  * converted to base (the user's manual rates, as the ledger's amountBase)
@@ -47,7 +54,7 @@ interface Spend {
   month: number;
   /** Every expense in the range (committed, future installments included). */
   spent: number;
-  /** Expenses dated up to asOf. */
+  /** Expenses whose economic date is on or before asOf (card: purchase date). */
   spentToDate: number;
   count: number;
 }
@@ -67,7 +74,7 @@ async function spendBySlot(db: DbClient, userId: string, range: { from: Date; to
   const rows = await db.$queryRaw<SpendSqlRow[]>`
     SELECT le."entityId" AS entity_id, le."categoryId" AS category_id, ${month} AS m,
            coalesce(-sum(le."amountBase"), 0) AS spent,
-           coalesce(-sum(le."amountBase") FILTER (WHERE le."effectiveDate" <= ${asOf}), 0) AS spent_to_date,
+           coalesce(-sum(le."amountBase") FILTER (WHERE ${spentToDateSql("le", asOf)}), 0) AS spent_to_date,
            count(*)::int AS n
     FROM ledger_entries le
     WHERE le."userId" = ${userId} AND le."deletedAt" IS NULL AND le.kind = 'expense' AND le."transferGroupId" IS NULL
@@ -141,8 +148,10 @@ const HISTORY_MONTHS = 3;
 /**
  * What each (entity, category) usually spends after day `day` of a month,
  * from the HISTORY_MONTHS complete months before `year`/`month`: the
- * average over the months it had spend in. Rent paid on the 5th leaves
- * nothing for the rest of the month; groceries leave most of it.
+ * average over the months it had spend in. The day is the economic date
+ * (purchase date for a card, effective date otherwise), so a card bill is
+ * not one lump on its closing day. Rent paid on the 5th leaves nothing
+ * for the rest of the month; groceries leave most of it.
  */
 async function restOfMonthHistory(db: DbClient, userId: string, year: number, month: number, day: number, entityIds: string[] | null) {
   const from = new Date(Date.UTC(year, month - 1 - HISTORY_MONTHS, 1));
@@ -150,7 +159,7 @@ async function restOfMonthHistory(db: DbClient, userId: string, year: number, mo
   const rows = await db.$queryRaw<{ entity_id: string; category_id: string | null; months: number; rest: Prisma.Decimal }[]>`
     SELECT le."entityId" AS entity_id, le."categoryId" AS category_id,
            count(DISTINCT date_trunc('month', le."effectiveDate"))::int AS months,
-           coalesce(-sum(le."amountBase") FILTER (WHERE extract(day FROM le."effectiveDate") > ${day}), 0) AS rest
+           coalesce(-sum(le."amountBase") FILTER (WHERE extract(day FROM ${economicDateSql("le")}) > ${day}), 0) AS rest
     FROM ledger_entries le
     WHERE le."userId" = ${userId} AND le."deletedAt" IS NULL AND le.kind = 'expense' AND le."transferGroupId" IS NULL
       AND le."effectiveDate" BETWEEN ${from} AND ${to}
@@ -290,10 +299,15 @@ export async function monthOverview(userId: string, year: number, month: number,
       const dailySpendRate = daysElapsed > 0 ? spent / daysElapsed : 0;
       const allowedDailyRate = available / daysInMonth;
       const past = history.filter((h) => budgetFor(budgets, h.entityId, h.categoryId)?.id === b.id);
+      // Typical spend whose economic date falls after today. With no history, the daily rate of what is already spent.
       const restOfMonth = past.length
         ? past.reduce((sum, h) => sum + h.rest / Math.max(1, h.months), 0)
         : dailySpendRate * (daysInMonth - daysElapsed);
-      const projectedTotal = daysElapsed > 0 ? Math.max(committed, spent + restOfMonth) : committed;
+      // Already booked, but not yet spent (a swipe dated later this month, a future installment).
+      // projected = committed + max(0, typicalStillToCome − that booked tail), so a card bill
+      // already imported is not forecast a second time off its closing day.
+      const bookedAfterToday = Math.max(0, committed - spent);
+      const projectedTotal = daysElapsed > 0 ? committed + Math.max(0, restOfMonth - bookedAfterToday) : committed;
       const percentUsed = available > 0 ? (spent / available) * 100 : 0;
       const pacePercent = (daysElapsed / daysInMonth) * 100;
       const status = spent > available ? "over" : percentUsed > pacePercent + 12 ? "ahead_of_pace" : "on_track";
@@ -365,16 +379,19 @@ export async function monthOverview(userId: string, year: number, month: number,
     }))
     .sort((a, b) => severityRank[a.severity] - severityRank[b.severity]);
 
-  // Cumulative spend of the budgets per day up to today (the mockup's x axis ends today) vs. the ideal pace.
+  // Cumulative Gasto per day up to today (the chart's x axis ends today) vs. the ideal pace.
+  // The day is the economic date, so the line reaches the same total as Gasto: a card
+  // purchase from the previous cycle is already on day 1, not waiting for the closing day.
   const totalBudget = rows.reduce((s, r) => s + r.available, 0);
   const daily =
     daysElapsed > 0 && budgets.length
       ? await db.$queryRaw<{ day: number; entity_id: string; category_id: string | null; spent: Prisma.Decimal }[]>`
-          SELECT extract(day FROM le."effectiveDate")::int AS day, le."entityId" AS entity_id, le."categoryId" AS category_id,
+          SELECT ${paceDaySql("le", bounds.from)} AS day, le."entityId" AS entity_id, le."categoryId" AS category_id,
                  coalesce(-sum(le."amountBase"), 0) AS spent
           FROM ledger_entries le
           WHERE le."userId" = ${userId} AND le."deletedAt" IS NULL AND le.kind = 'expense' AND le."transferGroupId" IS NULL
-            AND le."effectiveDate" BETWEEN ${bounds.from} AND ${asOf}
+            AND le."effectiveDate" BETWEEN ${bounds.from} AND ${bounds.to}
+            AND ${spentToDateSql("le", asOf)}
             AND le."categoryId" IN (${Prisma.join([...new Set(budgets.map((b) => b.categoryId))])})
             AND ${entityScopeSql(Prisma.sql`le."entityId"`, entityIds)}
           GROUP BY 1, 2, 3`
@@ -479,7 +496,8 @@ export async function yearOverview(userId: string, year: number, db: DbClient, o
       if (!slots.has(key)) slots.set(key, { entityId: s.entityId, categoryId: s.categoryId, budgeted: false });
     }
     const c = cellsOf(key);
-    // Complete months count everything; the current month counts what is dated up to today.
+    // Complete months count everything. The month in progress (and a future one) counts
+    // spent to date: the same economic-date cutoff as Gasto (spentToDateSql, via spendBySlot).
     c.actual[i] += s.month < currentMonth ? s.spent : s.spentToDate;
     c.committed[i] += s.spent;
   }

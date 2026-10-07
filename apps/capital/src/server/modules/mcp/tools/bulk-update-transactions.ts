@@ -1,5 +1,6 @@
 import type { DbClient } from "@capital/server/lib/prisma";
 import type { TransactionType } from "@/generated/prisma";
+import { displayAmount } from "../../ledger/lib/money";
 import { updateEntry, type InternalPatch } from "../../ledger/services/entries";
 import { inTransaction, recordMutation, type MutationRecordInput } from "../../ledger/services/mutations";
 import { categoryResolver, LEGACY_ENTRY_INCLUDE } from "../lib/ledger-adapter";
@@ -56,7 +57,10 @@ export async function bulkUpdateTransactions(userId: string, updates: BulkUpdate
   if (dryRun) {
     for (const u of updates) {
       const p = patches.get(u.id)!;
-      result.updated.push({ id: u.id, description: u.description ?? "(unchanged)", category: p.categoryId ? resolver.nameOf(p.categoryId) ?? undefined : u.category, amount: u.amount });
+      const entry = byId.get(u.id)!;
+      // The amount the caller sent is already the signed user-facing one; otherwise show the stored row.
+      const amount = u.amount !== undefined ? u.amount : displayAmount(entry.kind, entry.amount);
+      result.updated.push({ id: u.id, description: u.description ?? "(unchanged)", category: p.categoryId ? resolver.nameOf(p.categoryId) ?? undefined : u.category, amount });
     }
     return result;
   }
@@ -66,7 +70,7 @@ export async function bulkUpdateTransactions(userId: string, updates: BulkUpdate
       const records: MutationRecordInput[] = [];
       for (const u of updates) {
         const { raw } = await updateEntry(userId, u.id, patches.get(u.id)!, tx, { collect: records });
-        result.updated.push({ id: raw.id, description: raw.description, category: resolver.nameOf(raw.categoryId) ?? undefined, amount: Math.abs(Number(raw.amount)) });
+        result.updated.push({ id: raw.id, description: raw.description, category: resolver.nameOf(raw.categoryId) ?? undefined, amount: displayAmount(raw.kind, raw.amount) });
       }
       return recordMutation(tx, userId, "update", `${updates.length} transactions (MCP)`, records);
     });

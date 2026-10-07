@@ -65,7 +65,7 @@ function MonthBody({ data, actions, onOpenRule, onAllRules }: { data: MonthOverv
   const projection = projectionVsBudget(summary.projectedTotal, summary.totalBudget);
   const bar = barHeader(period);
   const resets = resetsLabel(period.month, fmt.monthAbbr);
-  // "Gasto" counts what is dated up to today in the current month; the whole month is the committed spend.
+  // "Gasto" is spend to date (card purchases by purchase date). The drill widens the month so a statement that closes later still matches. The whole month is the committed spend.
   const spentPeriod = period.isCurrent ? monthPeriod(period.year, period.month, period.daysElapsed) : period.isPast ? monthPeriod(period.year, period.month) : null;
   const wholeMonth = monthPeriod(period.year, period.month);
   const drill = (row: BudgetRow, range: ReturnType<typeof monthPeriod> | null): ViewDraft | null =>

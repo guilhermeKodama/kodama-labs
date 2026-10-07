@@ -1,13 +1,14 @@
 import type { Category, Entity, LedgerEntry, Prisma, TransactionType } from "@/generated/prisma";
 import type { DbClient } from "@capital/server/lib/prisma";
 import { legacyEntityRef } from "@capital/server/modules/ledger/services/entities";
-import { toNumber } from "@capital/server/modules/ledger/lib/money";
+import { displayAmount, toNumber } from "@capital/server/modules/ledger/lib/money";
 import { formatCategoryValidationError, matchCategoryName } from "./category-validation";
 
 /**
- * The MCP contract predates the ledger: a "transaction" has a positive
- * amount, a `type`, a category name and a businessId/personalAccountId.
- * This file maps ledger entries to and from that shape.
+ * The MCP contract predates the ledger: a "transaction" has a `type`, a
+ * category name and a businessId/personalAccountId. Amounts are signed the
+ * way the ledger shows them: a charge is a positive expense, a refund or
+ * reversal is a negative expense.
  */
 
 export const LEGACY_ENTRY_INCLUDE = {
@@ -28,7 +29,7 @@ export function toLegacyTransaction(e: LegacyEntry) {
     id: e.id,
     entityType: ref.entityType,
     type: legacyType(e),
-    amount: Math.abs(toNumber(e.amount)),
+    amount: displayAmount(e.kind, e.amount),
     currency: e.currency,
     exchangeRate: toNumber(e.exchangeRate),
     description: e.description,

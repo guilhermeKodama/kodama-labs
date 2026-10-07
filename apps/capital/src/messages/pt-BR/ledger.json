@@ -38,6 +38,7 @@
     "isNull": "{prop}: vazio",
     "isNotNull": "{prop}: preenchido",
     "other": "{prop}: filtro personalizado",
+    "spentAsOf": "Gasto até {date}",
     "done": "Pronto",
     "remove": "Remover filtro",
     "noOptions": "Nenhum valor neste período.",

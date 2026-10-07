@@ -323,7 +323,8 @@ export function createCapitalMcpServer(userId: string, db: DbClient, opts: { rea
     {
       description:
         "List and search transactions by date range, type, and category. Returns " +
-        "individual transactions plus monthly totals grouped by type and category. " +
+        "individual transactions plus totals grouped by type and category. " +
+        "Amounts are signed: a charge is a positive expense, and a refund or reversal is a negative expense. " +
         "Example: List all Income/Dividends transactions in September 2026.",
       inputSchema: ListTransactionsInputSchema,
     },
@@ -346,7 +347,8 @@ export function createCapitalMcpServer(userId: string, db: DbClient, opts: { rea
     {
       description:
         "Update an existing transaction by ID. Can modify type, amount, currency, " +
-        "exchange rate, description, category, date, or tax deductible status.",
+        "exchange rate, description, category, date, or tax deductible status. " +
+        "The returned amount is signed: a refund or reversal is a negative expense.",
       inputSchema: UpdateTransactionInputSchema,
     },
     async (params) => {
@@ -716,7 +718,8 @@ export function createCapitalMcpServer(userId: string, db: DbClient, opts: { rea
       description:
         "Find income/expense transactions that still need a category: none set, or an archived one. " +
         "Returns counts grouped by current category name ('(none)' for uncategorized) and the " +
-        "latest 100 transactions. Useful for cleanup after imports or category changes.",
+        "latest 100 transactions. Amounts are signed: a refund or reversal is a negative expense. " +
+        "Useful for cleanup after imports or category changes.",
       inputSchema: z.object({}),
     },
     async () => {
@@ -741,8 +744,8 @@ export function createCapitalMcpServer(userId: string, db: DbClient, opts: { rea
         "(ownership, categories) first, then applies changes in a database transaction. " +
         "Supports updating type, amount, currency, exchange rate, description, category, " +
         "date, and tax deductible status. Dates are normalized to noon UTC via parseLocalDate. " +
-        "Returns per-transaction results. Example: Recategorize 95 transactions after reviewing " +
-        "statement imports.",
+        "Returns per-transaction results. Amounts are signed: a refund or reversal is a negative expense. " +
+        "Example: Recategorize 95 transactions after reviewing statement imports.",
       inputSchema: BulkUpdateTransactionsInputSchema,
     },
     async ({ updates, dryRun }) => {

@@ -9,7 +9,8 @@ import { LEGACY_ENTRY_INCLUDE, legacyType, toLegacyTransaction } from "../lib/le
  * Transactions (income, expenses including card purchases, investments;
  * not transfers or card bill payments) with per type/category totals in the
  * base currency. Dates filter on the effective date, so card purchases fall
- * in the month their statement closes.
+ * in the month their statement closes. A refund is an expense with a
+ * negative amount; the category total nets it, the same way the budget does.
  */
 export async function listTransactions(userId: string, params: ListTransactionsParams, db: DbClient) {
   const user = await db.user.findUnique({ where: { id: userId }, select: { baseCurrency: true } });

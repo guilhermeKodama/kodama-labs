@@ -27,6 +27,7 @@ import {
 import { FLOW_CATEGORY_KEYS, isFlowCategoryKey, type FlowCategoryKey } from "@/lib/ledger/flow-category";
 import { LedgerError } from "../lib/errors";
 import { flowKindJoins, flowKindSql, type FlowKind } from "../lib/flow-sql";
+import { spentToDateSql } from "../lib/spend-as-of";
 import { toNumber } from "../lib/money";
 
 /*
@@ -201,6 +202,8 @@ function filterSql(f: LedgerFilter, display: boolean): Prisma.Sql {
       return Prisma.sql`le.description ILIKE ${likePattern(f.value)}`;
     case "inBuckets":
       return Prisma.sql`${bucketSql(f.bucket, RAW_DATE[f.field])} IN (${Prisma.join(f.values)})`;
+    case "asOf":
+      return spentToDateSql("le", new Date(`${f.asOf}T23:59:59.999Z`));
   }
 }
 

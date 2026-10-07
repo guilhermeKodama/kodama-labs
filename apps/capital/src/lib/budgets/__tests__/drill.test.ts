@@ -60,10 +60,11 @@ describe("budgetsDrillFilters (KPIs and Total rows)", () => {
     expect(budgetsDrill([], null, monthPeriod(2026, 9))).toBeNull();
   });
 
-  it("drills on the effective date over the period", () => {
+  it("drills Gasto through today over the whole month, with the spent-to-date cutoff", () => {
     expect(budgetsDrill([{ entityId: "pf", categoryId: "c" }], ["pf"], monthPeriod(2026, 9, 22))).toMatchObject({
       dateField: "effectiveDate",
-      period: { from: "2026-09-01", to: "2026-09-22" },
+      period: { from: "2026-09-01", to: "2026-09-30" },
+      filters: expect.arrayContaining([{ field: "spentToDate", op: "asOf", asOf: "2026-09-22" }]),
     });
   });
 });
@@ -77,8 +78,17 @@ describe("periods", () => {
     expect(monthsPeriod(2026, 1, 9)).toEqual({ from: "2026-01-01", to: "2026-09-30" });
   });
 
-  it("drills on the effective date", () => {
-    expect(budgetDrill({ entityId: "pf", categoryId: "c" }, null, monthPeriod(2026, 9))).toMatchObject({ dateField: "effectiveDate", period: { from: "2026-09-01" } });
+  it("drills a whole month on the effective date, with no spent-to-date cutoff", () => {
+    const drill = budgetDrill({ entityId: "pf", categoryId: "c" }, null, monthPeriod(2026, 9));
+    expect(drill).toMatchObject({ dateField: "effectiveDate", period: { from: "2026-09-01", to: "2026-09-30" } });
+    expect(drill.filters.some((f) => f.op === "asOf")).toBe(false);
+  });
+
+  it("widens a year-to-date range through today so an open card statement in the last month is included", () => {
+    expect(budgetDrill({ entityId: "pf", categoryId: "c" }, null, { from: "2026-01-01", to: "2026-10-07" })).toMatchObject({
+      period: { from: "2026-01-01", to: "2026-10-31" },
+      filters: expect.arrayContaining([{ field: "spentToDate", op: "asOf", asOf: "2026-10-07" }]),
+    });
   });
 });
 
