@@ -153,6 +153,9 @@ export interface ParsedOfxCreditCardStatement {
   bankName: string;
   accountId: string;
   currency: string;
+  /** The range the file states (DTSTART/DTEND), YYYY-MM-DD; null when absent. */
+  dateStart: string | null;
+  dateEnd: string | null;
   transactions: ParsedTransaction[];
 }
 
@@ -195,6 +198,10 @@ export function parseOfxCreditCardContent(raw: string): ParsedOfxCreditCardState
 
   const tranList = extractBlock(ccstmtrs, "BANKTRANLIST");
   const trnBlocks = extractAllBlocks(tranList, "STMTTRN");
+  const ofxDay = (tag: string) => {
+    const raw = extractTag(tranList, tag).slice(0, 8);
+    return /^\d{8}$/.test(raw) ? raw.replace(/(\d{4})(\d{2})(\d{2})/, "$1-$2-$3") : null;
+  };
 
   const transactions: ParsedTransaction[] = trnBlocks.map((block) => {
     const trnType = extractTag(block, "TRNTYPE");
@@ -206,6 +213,8 @@ export function parseOfxCreditCardContent(raw: string): ParsedOfxCreditCardState
     // extraction the CSV path uses applies here instead of leaving OFX
     // rows with no installment info at all.
     const installmentInfo = nubankParser.parseInstallmentFromDescription(memo);
+    // The line's FITID: re-importing the bill (open, then closed) finds the same purchase by it.
+    const fitId = extractTag(block, "FITID");
     return {
       date: extractTag(block, "DTPOSTED").slice(0, 8).replace(/(\d{4})(\d{2})(\d{2})/, "$1-$2-$3"),
       description: installmentInfo.cleanDescription,
@@ -213,8 +222,9 @@ export function parseOfxCreditCardContent(raw: string): ParsedOfxCreditCardState
       installmentNumber: installmentInfo.installmentNumber,
       totalInstallments: installmentInfo.totalInstallments,
       isPayment: isOfxCreditCardPayment(trnType, memo),
+      ...(fitId && { externalId: fitId }),
     };
   });
 
-  return { bankName, accountId, currency: currency || "BRL", transactions };
+  return { bankName, accountId, currency: currency || "BRL", dateStart: ofxDay("DTSTART"), dateEnd: ofxDay("DTEND"), transactions };
 }

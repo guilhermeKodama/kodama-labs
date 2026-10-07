@@ -68,6 +68,22 @@ describe("PATCH /v2/me formats and theme", () => {
     await expect(updatePreferences(USER, { theme: "auto" }, prisma)).rejects.toMatchObject({ code: "user.invalid_preference", params: { field: "theme", value: "auto" } });
   });
 
+  it("stores the text size, serves it from GET /v2/me and refuses other sizes", async () => {
+    const getMe = async () => (await (await app.request("/api/v2/me", { headers: { cookie } })).json()) as { textSize: string };
+    expect((await getMe()).textSize).toBe("md");
+    const saved = await patchMe({ textSize: "lg" });
+    expect(saved.status).toBe(200);
+    expect(saved.body.textSize).toBe("lg");
+    expect(await prisma.user.findUniqueOrThrow({ where: { id: USER } })).toMatchObject({ textSize: "lg" });
+    expect((await getMe()).textSize).toBe("lg");
+
+    const refused = await patchMe({ textSize: "xl" });
+    expect(refused.status).toBe(422);
+    expect(refused.body).toMatchObject({ code: "validation", issues: [expect.objectContaining({ path: "textSize" })] });
+    await expect(updatePreferences(USER, { textSize: "huge" }, prisma)).rejects.toMatchObject({ code: "user.invalid_preference", params: { field: "textSize", value: "huge" } });
+    expect((await prisma.user.findUniqueOrThrow({ where: { id: USER } })).textSize).toBe("lg");
+  });
+
   it("sets NEXT_LOCALE only when the locale is sent", async () => {
     const withLocale = await patchMe({ locale: "en" });
     expect(withLocale.res.headers.getSetCookie().some((c) => c.startsWith("NEXT_LOCALE=en;"))).toBe(true);

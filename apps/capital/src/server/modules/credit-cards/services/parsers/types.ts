@@ -8,6 +8,8 @@ export interface ParsedTransaction {
   installmentNumber?: number;
   totalInstallments?: number;
   isPayment: boolean; // True for payment-to-card lines (e.g. "Pagamento recebido")
+  /** FITID of a card OFX line (CSV lines have none). */
+  externalId?: string;
 }
 
 /**

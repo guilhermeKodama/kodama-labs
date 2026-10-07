@@ -71,6 +71,12 @@
       "light": "Light",
       "dark": "Dark"
     },
+    "textSize": "Text size",
+    "textSizes": {
+      "sm": "Small",
+      "md": "Medium",
+      "lg": "Large"
+    },
     "language": "Language",
     "languages": {
       "pt-BR": "Português",

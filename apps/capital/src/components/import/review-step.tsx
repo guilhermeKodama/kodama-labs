@@ -9,11 +9,14 @@ import { useSession } from "@/lib/api/session";
 import { useFmt } from "@/lib/format/provider";
 import { entityLabel } from "@/lib/pickers/options";
 import {
+  OPTIONAL_STATUSES,
   REVIEW_STATUSES,
   effectiveStatus,
   encodeUse,
   filterRows,
+  includedByDefault,
   isCardKind,
+  keepsEntry,
   pickUse,
   setIncluded,
   statusCounts,
@@ -41,7 +44,8 @@ const formTypes = (variant: Variant): readonly CategoryType[] =>
 
 /**
  * Revisar (mockup 5715-5753): status pills, then one row per transaction
- * with its checkbox, date, description (and the entry it repeats), what it
+ * with its checkbox, date, description (and the entry it repeats, what a
+ * re-imported bill changed in it, or that it left the bill), what it
  * becomes, the status and the amount. The picker lists the categories of
  * the row's type, and for a bank statement the other entities
  * (transfer), the brokers (aporte/resgate) and the cards (bill payment).
@@ -129,7 +133,7 @@ export function ReviewStep({
         <Pill active={filter === "all"} onClick={() => onFilter("all")}>
           {t("pill", { label: t("all"), count: counts.all })}
         </Pill>
-        {REVIEW_STATUSES.map((status) => (
+        {REVIEW_STATUSES.filter((status) => counts[status] > 0 || !OPTIONAL_STATUSES.includes(status) || filter === status).map((status) => (
           <Pill key={status} active={filter === status} onClick={() => onFilter(status)}>
             {t("pill", { label: t(`status.${status}`), count: counts[status] })}
           </Pill>
@@ -188,8 +192,25 @@ const ReviewRow = memo(function ReviewRow({
 }) {
   const t = useTranslations("import.review");
   const fmt = useFmt();
-  const included = decision?.include ?? row.status !== "dup";
+  const included = decision?.include ?? includedByDefault(row);
   const status = effectiveStatus(row, decision);
+  const existing = row.duplicateOf;
+  // What the second line says: the entry a duplicate repeats, what a changed row changes, or that a row left the bill.
+  let note: string | null = null;
+  if (row.status === "removed") note = t("removedNote");
+  else if (row.status === "changed" && row.diffs?.length) {
+    note = t("changedNote", {
+      changes: row.diffs
+        .map((d) =>
+          d.field === "amount"
+            ? t("changes.amount", { from: fmt.money(Number(d.existingValue), currency), to: fmt.money(Number(d.ofxValue), currency) })
+            : d.field === "date"
+              ? t("changes.date", { from: fmt.date(d.existingValue), to: fmt.date(d.ofxValue) })
+              : t("changes.description", { from: d.existingValue }),
+        )
+        .join(" · "),
+    });
+  } else if (existing) note = t("duplicateOf", { description: existing.description, date: fmt.date(existing.date) });
   return (
     <div
       className={cn(
@@ -197,14 +218,16 @@ const ReviewRow = memo(function ReviewRow({
         !included && "opacity-45",
       )}
     >
-      <Check checked={included} onChange={(on) => onInclude(row, on)} aria-label={t("include", { description: row.description })} />
+      <Check checked={included} onChange={(on) => onInclude(row, on)} aria-label={t(row.status === "removed" ? "remove" : "include", { description: row.description })} />
       <span className="font-mono text-[11px] text-fg-3">{fmt.date(row.date)}</span>
       <span className="flex min-w-0 flex-col">
         <span className="truncate font-mono text-[11.5px]" title={row.fullDescription ?? row.description}>
           {row.description}
         </span>
-        {row.duplicateOf ? (
-          <span className="truncate text-[10.5px] text-fg-4">{t("duplicateOf", { description: row.duplicateOf.description, date: fmt.date(row.duplicateOf.date) })}</span>
+        {note ? (
+          <span className="truncate text-[10.5px] text-fg-4" title={note}>
+            {note}
+          </span>
         ) : null}
       </span>
       <Combobox
@@ -226,12 +249,14 @@ const ReviewRow = memo(function ReviewRow({
             {t("createCategory")}
           </button>
         )}
-        disabled={creating}
+        disabled={creating || keepsEntry(row)}
         aria-label={t("placeholder")}
         className="w-full"
         contentClassName="min-w-[260px]"
       />
-      <span className={cn("text-[11px]", status === "need" ? "text-cat-yellow" : "text-fg-3")}>{t(`status.${status}`)}</span>
+      <span className={cn("text-[11px]", status === "need" ? "text-cat-yellow" : status === "changed" ? "text-cat-blue" : status === "removed" ? "text-neg" : "text-fg-3")}>
+        {t(`status.${status}`)}
+      </span>
       <span className="text-right font-mono tabular-nums">{fmt.money(row.amount, currency)}</span>
     </div>
   );

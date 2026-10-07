@@ -6,7 +6,7 @@ import { prisma } from "@capital/server/lib/prisma";
 import { HttpError } from "@capital/server/lib/http-error";
 import { DEFAULT_LOCALE, LOCALE_COOKIE_NAME, LOCALES, matchLocale, negotiateLocale, resolveLocale, type Locale } from "@capital/server/i18n";
 import { jsonBody, toHttp, v2Handler, v2Responses } from "@capital/server/lib/v2";
-import { DATE_FORMATS, NUMBER_FORMATS, THEMES, normalizeNumberFormat } from "@capital/server/modules/users/lib/preferences";
+import { DATE_FORMATS, NUMBER_FORMATS, TEXT_SIZES, THEMES, normalizeNumberFormat } from "@capital/server/modules/users/lib/preferences";
 import { getMe, serializeUser, updatePreferences } from "@capital/server/modules/users/services/me";
 import { SESSION_COOKIE_NAME, SESSION_EXPIRY_DAYS } from "../../constants";
 import { login } from "../../services/login";
@@ -74,6 +74,8 @@ const patchMeRoute = createRoute({
         name: z.string().min(1).optional(),
         baseCurrency: z.string().regex(/^[A-Za-z]{3}$/).optional(),
         theme: z.enum(THEMES).optional(),
+        /** UI text size: sm (Pequeno), md (Médio) or lg (Grande). */
+        textSize: z.enum(TEXT_SIZES).optional(),
         dateFormat: z.enum(DATE_FORMATS).optional(),
         /** pt-BR (1.234,56) or en-US (1,234.56); the older "1.234,56" / "1,234.56" spellings are accepted and stored as those. */
         numberFormat: z.preprocess((v) => (typeof v === "string" ? normalizeNumberFormat(v) ?? v : v), z.enum(NUMBER_FORMATS)).optional(),

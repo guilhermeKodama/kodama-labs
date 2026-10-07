@@ -9,7 +9,8 @@ import { isCardKind, statementMonthParts, type ImportAnalysis, type ReviewSummar
 
 /**
  * Confirmar (mockup 5755-5768): what the commit will do, as KPIs, and for
- * a card bill the statement it ends up with and its payment.
+ * a card bill the statement it ends up with (rows it updates and removes)
+ * and its payment.
  */
 export function ConfirmStep({
   analysis,
@@ -43,11 +44,17 @@ export function ConfirmStep({
   if (card) {
     const parts = statementMonthParts(card.month);
     const month = tImport("monthShort", { abbr: fmt.monthAbbr(parts.month), yy: parts.yy });
-    const bill = t("card", { month, bank: analysis.bank ?? account?.name ?? "", count: card.existingCount + summary.included, total: fmt.money(card.total, currency) });
+    // Rows that update an entry are already on the statement (or join it from the one next to it); removed ones leave it.
+    const count = Math.max(0, card.existingCount + summary.included - summary.updated - summary.removed);
+    const bill = t("card", { month, bank: analysis.bank ?? account?.name ?? "", count, total: fmt.money(card.total, currency) });
     const payFrom = card.payFromAccountId ? accounts.find((a) => a.id === card.payFromAccountId)?.name : null;
     const due = card.dueDate ? fmt.date(card.dueDate) : null;
     const payment = linkBill && due ? (payFrom ? t("cardPayment", { due, account: payFrom }) : t("cardPaymentNoAccount", { due })) : null;
-    sentence = payment ? `${bill} ${payment}` : bill;
+    const changes = [
+      summary.updated > 0 ? t("cardUpdated", { count: summary.updated }) : null,
+      summary.removed > 0 ? t("cardRemoved", { count: summary.removed }) : null,
+    ].filter((part): part is string => !!part);
+    sentence = [bill, ...changes, payment].filter(Boolean).join(" ");
   } else if (summary.transfers > 0) {
     sentence = t("transfers", { count: summary.transfers });
   }

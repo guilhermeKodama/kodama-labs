@@ -151,6 +151,10 @@ export function FileStep({
               <EntitySelect value={entityId} onChange={onEntityChange} disabled={reading} aria-label={t("fields.entity")} className="w-full" />
             </Field>
           </div>
+          {kind === "card_csv" ? <p className="text-[11.5px] text-fg-3">{t("file.ofxHint")}</p> : null}
+          {card && statement && !statement.coversCycle && statement.existingCount > 0 ? (
+            <p className="text-[11.5px] text-fg-3">{t("file.partial", { month })}</p>
+          ) : null}
           {card && statement ? (
             <Check
               checked={linkBill}

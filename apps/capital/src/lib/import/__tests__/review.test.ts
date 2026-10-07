@@ -54,7 +54,7 @@ const analysis = (over: Partial<ImportAnalysis>): ImportAnalysis => ({
   payments: 0,
   card: null,
   rows: [],
-  summary: { counts: { all: 0, dup: 0, rule: 0, ai: 0, need: 0 }, income: 0, expense: 0 },
+  summary: { counts: { all: 0, dup: 0, changed: 0, removed: 0, rule: 0, ai: 0, need: 0 }, income: 0, expense: 0 },
   ai: { requested: true, available: false, used: false },
   ...over,
 });
@@ -96,7 +96,7 @@ describe("review decisions and statuses", () => {
     expect(d.IFOOD.include).toBe(false);
     expect(d.ALREADY.include).toBe(false);
     expect(d.BILL.use).toEqual({ as: "card_payment", cardAccountId: "card" });
-    expect(statusCounts(BANK_ROWS, d)).toEqual({ all: 6, rule: 2, ai: 0, need: 2, dup: 2 });
+    expect(statusCounts(BANK_ROWS, d)).toEqual({ all: 6, rule: 2, ai: 0, need: 2, changed: 0, dup: 2, removed: 0 });
   });
 
   it("turns a row without category into 'Regra aplicada' once one is picked, and filters by the shown status", () => {
@@ -145,7 +145,7 @@ describe("reviewSummary (the confirm KPIs)", () => {
     d = pickUse(d, BANK_ROWS[1], "cat:pet");
     d = pickUse(d, a.rows[6], "cat:pet");
     d = setIncluded(d, BANK_ROWS[2], false);
-    expect(reviewSummary(a.rows, d)).toEqual({ included: 4, ignored: 3, ignoredDuplicates: 2, total: -1723.3, rules: 1, transfers: 1 });
+    expect(reviewSummary(a.rows, d)).toEqual({ included: 4, updated: 0, removed: 0, ignored: 3, ignoredDuplicates: 2, total: -1723.3, rules: 1, transfers: 1 });
   });
 });
 
@@ -258,6 +258,7 @@ describe("buildImportPlan (card bill)", () => {
     statementId: null,
     total: 288.2,
     existingCount: 1,
+    coversCycle: true,
     paid: false,
     payFromAccountId: "acc-bank",
     payment: null,
@@ -287,6 +288,52 @@ describe("buildImportPlan (card bill)", () => {
         { date: "2026-09-02", description: "Loja Eletronicos", amount: 199, categoryId: "casa", installment: { number: 2, total: 6 } },
         { date: "2026-09-02", description: "DROGASIL 1234", amount: 64.3, categoryId: "saude", createRule: true },
       ],
+      matchedEntryIds: ["e-uber"],
+    });
+    expect(plan.reconciliations).toEqual([]);
+  });
+
+  describe("a bill imported again (Mudou, Saiu da fatura)", () => {
+    const changed = row({
+      id: "c4",
+      externalId: "fit-4",
+      description: "RESTAURANTE SABOR",
+      amount: -88.5,
+      status: "changed",
+      reconciliation: "changed",
+      duplicateOf: { id: "e-rest", description: "IFD*RESTAURANTE SABOR", date: "2026-08-28" },
+      suggestedCategoryId: "food",
+      source: "existing",
+      diffs: [
+        { field: "amount", existingValue: "87.90", ofxValue: "88.50" },
+        { field: "date", existingValue: "2026-08-28", ofxValue: "2026-08-29" },
+        { field: "description", existingValue: "IFD*RESTAURANTE SABOR", ofxValue: "RESTAURANTE SABOR" },
+      ],
+    });
+    const left = row({ id: "rm:e-gone", externalId: null, description: "Cinema", amount: -40, status: "removed", duplicateOf: { id: "e-gone", description: "Cinema", date: "2026-08-25" } });
+    const again = analysis({ kind: "card_ofx", suggestedAccountId: "card", card, rows: [...rows, changed, left], ledgerBalance: null });
+
+    it("updates a changed row in place and only trashes a removed one when checked", () => {
+      const d = initialDecisions(again);
+      expect(d["c4"].include).toBe(true);
+      expect(d["rm:e-gone"].include).toBe(false);
+      const plan = buildImportPlan(again, d, { ...ctx, accountId: "card" });
+      expect(plan.reconciliations).toEqual([
+        { existingTransactionId: "e-rest", externalId: "fit-4", updates: { amount: 88.5, date: "2026-08-29", description: "RESTAURANTE SABOR" }, linkExternalId: true },
+      ]);
+      expect(plan.cardStatement?.rows.map((r) => r.description)).not.toContain("RESTAURANTE SABOR");
+      expect(plan.cardStatement?.removeEntryIds).toBeUndefined();
+      expect(plan.cardStatement?.matchedEntryIds).toEqual(["e-uber", "e-rest"]);
+
+      const removing = buildImportPlan(again, setIncluded(d, left, true), { ...ctx, accountId: "card" });
+      expect(removing.cardStatement?.removeEntryIds).toEqual(["e-gone"]);
+      expect(removing.cardStatement?.rows.map((r) => r.description)).not.toContain("Cinema");
+    });
+
+    it("counts updates and removals apart from the rows booked anew", () => {
+      const d = setIncluded(initialDecisions(again), left, true);
+      expect(statusCounts(again.rows, d)).toMatchObject({ changed: 1, removed: 1, dup: 1 });
+      expect(reviewSummary(again.rows, d)).toMatchObject({ included: 4, updated: 1, removed: 1, ignored: 1, total: 20 - 199 - 64.3 });
     });
   });
 

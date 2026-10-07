@@ -69,6 +69,11 @@ export const ImportPlanBillSchema = z.object({
   previewTransactionCount: z.number().int().min(0),
 });
 
+// A row already in the ledger that the file changed: the entry keeps its id
+// and category and takes the file's values. In a card plan (cardStatement)
+// it is a row of the bill ("Mudou"): amount is the unsigned charge or refund,
+// the entry moves onto the plan's statement, and linkExternalId stores
+// externalId (the line's FITID) on it.
 export const ImportPlanReconciliationSchema = z.object({
   existingTransactionId: z.string().min(1),
   externalId: z.string().min(1),
@@ -77,6 +82,7 @@ export const ImportPlanReconciliationSchema = z.object({
     date: z.string().min(1).optional(),
     description: z.string().min(1).optional(),
   }),
+  linkExternalId: z.boolean().optional(),
 });
 
 // direction may only change within the from/to shape the transfer already
@@ -176,6 +182,8 @@ export const ImportPlanCardStatementRowSchema = z.object({
   installment: z.object({ number: z.number().int().min(1), total: z.number().int().min(1) }).optional(),
   /** Book it even when an identical row is already on the statement. */
   allowDuplicate: z.boolean().optional(),
+  /** FITID of a card OFX line, stored on the entry. */
+  externalId: z.string().min(1).optional(),
 });
 
 export const ImportPlanCardStatementSchema = z.object({
@@ -186,6 +194,10 @@ export const ImportPlanCardStatementSchema = z.object({
   rows: z.array(ImportPlanCardStatementRowSchema).max(2000),
   /** Turn the bank expense that paid this bill into the statement's card_payment transfer. */
   linkPayment: z.boolean().optional(),
+  /** Entries of the statement the bill no longer has ("Saiu da fatura"): moved to the trash. */
+  removeEntryIds: z.array(z.string().min(1)).max(2000).optional(),
+  /** Entries the review paired with rows of the file; the commit's duplicate check leaves them out. */
+  matchedEntryIds: z.array(z.string().min(1)).max(2000).optional(),
 });
 
 export const ImportPlanPayloadSchema = z.object({
