@@ -90,23 +90,43 @@ export function originLabel(origins: readonly OriginFields[]): string {
   return [...new Set(list)].join(" + ");
 }
 
+/**
+ * Both sides of a month: where the aportes came from and where the
+ * resgates went, largest first, each label once (null when the month has
+ * none of that side).
+ */
+export function originParts(origins: readonly OriginFields[]): { deposits: string | null; withdrawals: string | null } {
+  const side = (list: OriginFields[]) => (list.length ? [...new Set(list.sort((a, b) => Math.abs(b.amount) - Math.abs(a.amount)).map(originOf))].join(" + ") : null);
+  return { deposits: side(origins.filter((o) => o.amount > 0)), withdrawals: side(origins.filter((o) => o.amount < 0)) };
+}
+
 export interface HistoryRow {
   period: string;
+  /** Into the brokers (aportes), out of them (resgates, a positive number) and the net. */
+  deposits: number;
+  withdrawals: number;
   net: number;
-  origin: string;
+  /** Where the aportes came from and where the resgates went (see originParts). */
+  origins: { deposits: string | null; withdrawals: string | null };
   status: GoalStatus | null;
   /** The month's transfers (aportes and, across entities, the transfer that fed them), for the Transações drill. */
   transferGroupIds: string[];
 }
 
-/** One row per month with money moved, newest first (mockup "Histórico de aportes"). */
+/**
+ * One row per month with money moved, newest first (mockup "Histórico de
+ * aportes"): aportes and resgates apart ("+X aportes · −Y resgates"), so a
+ * month with a negative net never reads as an aporte.
+ */
 export function historyRows(months: readonly ContributionMonth[], goal: number | null): HistoryRow[] {
   return months
     .filter((m) => m.origins.length > 0)
     .map((m) => ({
       period: m.period,
+      deposits: m.deposits,
+      withdrawals: m.withdrawals,
       net: m.net,
-      origin: originLabel(m.origins),
+      origins: originParts(m.origins),
       status: goalStatus(m.net, goal),
       transferGroupIds: [...new Set(m.origins.flatMap((o) => (o.sourceTransferGroupId ? [o.transferGroupId, o.sourceTransferGroupId] : [o.transferGroupId])))],
     }))

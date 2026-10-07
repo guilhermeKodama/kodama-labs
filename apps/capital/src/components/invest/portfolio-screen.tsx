@@ -10,8 +10,10 @@ import { useNames } from "@/lib/api/catalog";
 import { useSession } from "@/lib/api/session";
 import { useAppMutation } from "@/lib/api/use-app-mutation";
 import { useFmt } from "@/lib/format/provider";
-import { allocationBars } from "@/lib/invest/allocation";
+import { allocationBars, hasTargets } from "@/lib/invest/allocation";
 import { return12mState } from "@/lib/invest/kpis";
+import { NOTE_FILE_ACCEPT } from "@/lib/invest/note-import";
+import { netWorthChartRows } from "@/lib/invest/portfolio-history-view";
 import { useFxRates, useHoldings, useOperations, usePortfolioHistory, usePortfolioSummary } from "@/lib/invest/api";
 import { buildHoldingsTable, type HoldingRow, type HoldingsViewConfig } from "@/lib/invest/holdings-view";
 import { filterOps, isIncome, monthlyBars, type OpsViewConfig } from "@/lib/invest/ops-view";
@@ -20,7 +22,7 @@ import { openAssistant } from "@/lib/shell/assistant-bridge";
 import { cn } from "@/lib/utils";
 import { IncomeChart, NetWorthChart } from "./charts";
 import { MONO, todayIn, useMonthRange, useScopeParam, useSignedPct } from "./common";
-import { EditOperationDialog, HoldingSheet, useOpLabel } from "./dialogs";
+import { EditOperationDialog, HoldingSheet, TargetsDialog, useOpLabel } from "./dialogs";
 import { OperationDialog } from "./operation-dialog";
 import { pickView, useInvestViews, useInvestViewWrites, type InvestView } from "./use-invest-views";
 import { DisplayPopover, FilterChips, FilterMenu } from "./view-controls";
@@ -56,6 +58,7 @@ export function PortfolioScreen() {
   const fx = useFxRates();
   const [opOpen, setOpOpen] = useState<{ holdingId: string | null } | null>(null);
   const [detail, setDetail] = useState<Holding | null>(null);
+  const [targetsOpen, setTargetsOpen] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
   const range = useMonthRange();
   const signedPct = useSignedPct();
@@ -83,7 +86,8 @@ export function PortfolioScreen() {
     return [when, ...rates].join(" · ");
   }, [s, holdings.data, cur, fx, fmt, t, timezone]);
 
-  const historyRows = (history.data?.months ?? []).map((m) => ({ label: fmt.monthAbbr(Number(m.period.slice(5, 7))), netWorth: m.netWorth, contributed: m.contributed }));
+  const chart = netWorthChartRows(history.data?.months ?? []);
+  const historyRows = chart.rows.map((r) => ({ ...r, label: fmt.monthAbbr(Number(r.period.slice(5, 7))) }));
   const historyRange = history.data ? range(history.data.from, history.data.to) : "";
   const ret = s?.return12m;
   const returnState = return12mState(ret);
@@ -96,11 +100,13 @@ export function PortfolioScreen() {
           <Btn disabled={refresh.isPending} onClick={() => refresh.mutate()}>
             {refresh.isPending ? t("refreshing") : t("refreshPrices")}
           </Btn>
-          <Btn onClick={() => fileInput.current?.click()}>{t("importNote")}</Btn>
+          <Btn title={t("importNoteHint")} onClick={() => fileInput.current?.click()}>
+            {t("importNote")}
+          </Btn>
           <input
             ref={fileInput}
             type="file"
-            accept="application/pdf,image/*"
+            accept={NOTE_FILE_ACCEPT}
             className="hidden"
             onChange={(event) => {
               const files = [...(event.target.files ?? [])];
@@ -120,7 +126,11 @@ export function PortfolioScreen() {
       </div>
       <KpiStrip>
         <Kpi label={t("kpi.netWorth")} value={fmt.money0(s?.netWorth ?? 0, cur)} />
-        <Kpi label={t("kpi.contributed")} value={fmt.money0(s?.contributed ?? 0, cur)} />
+        <Kpi
+          label={t("kpi.contributed")}
+          value={fmt.money0(s?.contributed ?? 0, cur)}
+          sub={s && s.initialPositions >= 0.005 ? <span title={t("history.initialPositionsHint")}>{t("kpi.contributedInitial", { amount: fmt.money0(s.initialPositions, cur) })}</span> : undefined}
+        />
         <Kpi
           label={t("kpi.result")}
           value={fmt.money0(s?.result ?? 0, cur)}
@@ -156,15 +166,22 @@ export function PortfolioScreen() {
         <Panel title={t("history.title")}>
           <div className="flex flex-col gap-2">
             {historyRows.length >= 2 ? (
-              <NetWorthChart rows={historyRows} />
+              <NetWorthChart rows={historyRows} showInitial={chart.hasInitial} />
             ) : (
               <p className="flex h-[180px] items-center justify-center text-[12px] text-fg-3">{history.isLoading ? ti("loading") : t("history.empty")}</p>
             )}
             <span className="text-[11px] text-fg-4">{t("history.caption", { unit: fmt.kUnit(cur), range: historyRange, scope: ti(`scopeCaption.${scope}`) })}</span>
           </div>
         </Panel>
-        <Panel title={t("allocation.title")}>
-          <AllocationPanel summary={s} />
+        <Panel
+          title={t("allocation.title")}
+          trailing={
+            <Btn ghost onClick={() => setTargetsOpen(true)}>
+              {t("allocation.editTargets")}
+            </Btn>
+          }
+        >
+          <AllocationPanel summary={s} onEditTargets={() => setTargetsOpen(true)} />
         </Panel>
       </div>
       <ViewTabs views={views} active={view} onSelect={(v) => void setViewParam(v.id)} writes={writes} holdings={holdings.data ?? []} summary={s} />
@@ -184,17 +201,23 @@ export function PortfolioScreen() {
           }}
         />
       ) : null}
+      {targetsOpen ? <TargetsDialog onClose={() => setTargetsOpen(false)} /> : null}
       {opOpen ? <OperationDialog holdings={holdings.data ?? []} initialHoldingId={opOpen.holdingId} onClose={() => setOpOpen(null)} /> : null}
     </Page>
   );
 }
 
-/** Mockup AllocationBars: 92px label, bar (0–50%) with the target tick, "pct ±pp". */
-function AllocationPanel({ summary }: { summary: PortfolioSummary | undefined }) {
+/**
+ * Mockup AllocationBars: 92px label, bar (0–50%) with the target tick, "pct ±pp".
+ * A class without a target shows only its bar; with no target at all the
+ * panel asks for them ("Defina alvos para comparar · Editar alvos").
+ */
+function AllocationPanel({ summary, onEditTargets }: { summary: PortfolioSummary | undefined; onEditTargets: () => void }) {
   const t = useTranslations("invest.portfolio.allocation");
   const ti = useTranslations("invest");
   const fmt = useFmt();
   if (!summary?.allocation.length) return <p className="py-6 text-center text-[12px] text-fg-3">{t("empty")}</p>;
+  const targeted = hasTargets(summary.allocation);
   return (
     <div className="flex flex-col gap-2.5">
       {allocationBars(summary.allocation).map((bar) => (
@@ -202,15 +225,24 @@ function AllocationPanel({ summary }: { summary: PortfolioSummary | undefined })
           <span className="truncate">{ti(`allocationClass.${bar.allocationClass}`)}</span>
           <span className="relative h-2 rounded-[4px] bg-fill-3">
             <span className="absolute inset-y-0 left-0 rounded-[4px] bg-fg-2" style={{ width: `${bar.barWidth}%` }} />
-            <span className="absolute -top-[3px] h-3.5 w-0.5 bg-fg-1" style={{ left: `${bar.tickLeft}%` }} />
+            {bar.tickLeft !== null ? <span className="absolute -top-[3px] h-3.5 w-0.5 bg-fg-1" style={{ left: `${bar.tickLeft}%` }} /> : null}
           </span>
           <span className={cn(MONO, "text-right text-[11.5px]")}>
             {fmt.pct(bar.share, 0)}
-            <span className={bar.highlight ? "text-cat-yellow" : "text-fg-4"}> {bar.diffLabel}</span>
+            {bar.diffLabel !== null ? <span className={bar.highlight ? "text-cat-yellow" : "text-fg-4"}> {bar.diffLabel}</span> : null}
           </span>
         </div>
       ))}
-      <span className="text-[11px] text-fg-4">{t("legend")}</span>
+      {targeted ? (
+        <span className="text-[11px] text-fg-4">{t("legend")}</span>
+      ) : (
+        <span className="text-[11px] text-fg-3">
+          {t("noTargets")} ·{" "}
+          <button type="button" className="underline underline-offset-[3px] hover:text-fg-1" onClick={onEditTargets}>
+            {t("editTargets")}
+          </button>
+        </span>
+      )}
     </div>
   );
 }

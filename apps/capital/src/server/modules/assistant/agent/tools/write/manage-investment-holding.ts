@@ -5,7 +5,7 @@ import { createHolding, updateHolding } from "@capital/server/modules/investment
 export const manageInvestmentHolding = defineTool({
   name: "manage_investment_holding",
   description:
-    "Create a new holding (position) inside an investment account, correct its metadata (name/ticker/asset class), or activate/deactivate it. Does NOT require plan confirmation - low-risk and reversible, every call is audited. currentQuantity/averageCost/totalInvested are never set directly here - they are always derived from the holding's transactions via record_investment_transaction, to keep them from drifting out of sync with real history.",
+    "Create a new holding (position) inside an investment account, correct its metadata (name/ticker/asset class), or activate/deactivate it, when the user asks for it in chat. Never create holdings from a brokerage note (nota de corretagem), statement or screenshot, in PDF or image: a new asset from a file goes as newHolding inside propose_import_plan's investmentTransactions, for the user to confirm. Does NOT require plan confirmation - low-risk and reversible, every call is audited. currentQuantity/averageCost/totalInvested are never set directly here - they are always derived from the holding's transactions via record_investment_transaction, to keep them from drifting out of sync with real history.",
   inputSchema: z.object({
     action: z.enum(["create", "update", "set_active"]),
     holdingId: z.string().optional(),

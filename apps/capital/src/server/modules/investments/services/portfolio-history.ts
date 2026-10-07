@@ -28,7 +28,23 @@ import {
  * stores the live month at today's prices and closes the previous month;
  * a month with no real snapshot is valued at cost and flagged `estimated`
  * (the backfill writes those rows on purpose, so the history starts full).
+ *
+ * The portfolio is the same population everywhere ("Patrimônio", "Total
+ * aportado", "Resultado", the history chart): brokerage accounts that are
+ * not archived and the active holdings of accounts that are not archived
+ * (PORTFOLIO_HOLDINGS / PORTFOLIO_BROKERS). An archived broker leaves with
+ * its cash and every flow into or out of it; a deactivated holding leaves
+ * with its position and the flows it brought in (a holding registered
+ * without cash). Money moved from an archived broker into a live one is,
+ * for the live population, money coming in. So Resultado = Patrimônio −
+ * Total aportado never mixes what is counted on one side and not on the
+ * other.
  */
+
+/** Holdings counted in the portfolio: active, on an account that is not archived. */
+export const PORTFOLIO_HOLDINGS = { isActive: true, account: { archivedAt: null } } as const;
+/** Brokerage accounts counted in the portfolio: not archived. */
+export const PORTFOLIO_BROKERS = { type: "brokerage", archivedAt: null } as const;
 
 // ---------------------------------------------------------------------------
 // Loading
@@ -44,14 +60,14 @@ export async function loadTimeline(userId: string, db: DbClient): Promise<Loaded
   const [fx, user, accounts, entries, holdings] = await Promise.all([
     loadFx(userId, db),
     db.user.findUniqueOrThrow({ where: { id: userId }, select: { timezone: true } }),
-    db.account.findMany({ where: { userId, type: "brokerage" }, select: { id: true, entityId: true, currency: true, initialBalance: true, createdAt: true } }),
+    db.account.findMany({ where: { userId, ...PORTFOLIO_BROKERS }, select: { id: true, entityId: true, currency: true, initialBalance: true, createdAt: true } }),
     db.$queryRaw<{ accountId: string; date: Date; amount: Prisma.Decimal; amountBase: Prisma.Decimal; transferGroupId: string | null }[]>`
       SELECT le."accountId", le.date, le.amount, le."amountBase", le."transferGroupId"
       FROM ledger_entries le
-      JOIN accounts a ON a.id = le."accountId" AND a.type = 'brokerage'
+      JOIN accounts a ON a.id = le."accountId" AND a.type = 'brokerage' AND a."archivedAt" IS NULL
       WHERE le."userId" = ${userId} AND le."deletedAt" IS NULL`,
     db.investmentHolding.findMany({
-      where: { account: { userId } },
+      where: { ...PORTFOLIO_HOLDINGS, account: { userId, ...PORTFOLIO_HOLDINGS.account } },
       select: {
         id: true,
         assetClass: true,
@@ -311,6 +327,13 @@ export interface HistoryMonth {
   costBasis: number;
   /** "Total aportado" at the month end. */
   contributed: number;
+  /**
+   * The part of `contributed` that is "posições iniciais": the cost of
+   * holdings registered without any operation (typed in when the user
+   * started, so there is no date of purchase). The chart shows it apart
+   * from the aportes, instead of as an aporte in the month they were typed.
+   */
+  initialPositions: number;
   /** External flow during the month (aportes − resgates − income paid out of the brokers). */
   netFlow: number;
   byClass: Record<AllocationClass, number>;
@@ -352,7 +375,7 @@ export async function portfolioHistory(userId: string, db: DbClient, opts: { mon
 
   const rows = periods.map((period) => {
     const byClass = Object.fromEntries(ALLOCATION_CLASSES.map((c) => [c, 0])) as Record<AllocationClass, number>;
-    const sum = { marketValue: 0, cash: 0, costBasis: 0, contributed: 0, netFlow: 0, estimated: false };
+    const sum = { marketValue: 0, cash: 0, costBasis: 0, contributed: 0, initialPositions: 0, netFlow: 0, estimated: false };
     for (const entityId of entityIds) {
       const first = timeline.firstPeriod(entityId);
       if (first === null || first > period) continue;
@@ -369,6 +392,7 @@ export async function portfolioHistory(userId: string, db: DbClient, opts: { mon
       sum.cash += state.cash;
       sum.costBasis += state.costBasis;
       sum.contributed += state.contributed;
+      sum.initialPositions += state.initialPositions;
       sum.netFlow += state.netFlow;
       for (const c of ALLOCATION_CLASSES) byClass[c] += value.byClass[c];
     }
@@ -385,6 +409,7 @@ export async function portfolioHistory(userId: string, db: DbClient, opts: { mon
     cash: round(r.cash, 2),
     costBasis: round(r.costBasis, 2),
     contributed: round(r.contributed, 2),
+    initialPositions: round(r.initialPositions, 2),
     netFlow: round(r.netFlow, 2),
     byClass: roundClasses(r.byClass),
     estimated: r.estimated,

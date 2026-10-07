@@ -63,7 +63,7 @@
     "refreshed": "{updated} de {total} cotações atualizadas",
     "refreshedMissing": "{updated} de {total} cotações atualizadas · sem cotação: {tickers}",
     "importNote": "Importar nota",
-    "importNotePrompt": "Importe esta nota de corretagem na minha carteira.",
+    "importNotePrompt": "Importe esta nota de corretagem na minha carteira: leia as operações e me mostre o plano para eu confirmar antes de gravar.",
     "newOperation": "+ Operação",
     "quotesToday": "Cotações de hoje {time}",
     "quotesOn": "Cotações de {date} {time}",
@@ -80,19 +80,24 @@
       "returnPending": "sem meses fechados ainda",
       "returnEstimated": "histórico estimado",
       "benchmarksEstimated": "histórico estimado · CDI {cdi} · IPCA+ 6% {ipca}",
-      "returnEstimatedHint": "Os meses da janela foram estimados pelo custo, antes de existirem fotos mensais com cotações. A rentabilidade aparece a partir do primeiro mês fechado com cotações."
+      "returnEstimatedHint": "Os meses da janela foram estimados pelo custo, antes de existirem fotos mensais com cotações. A rentabilidade aparece a partir do primeiro mês fechado com cotações.",
+      "contributedInitial": "inclui {amount} de posições iniciais"
     },
     "history": {
       "title": "Patrimônio vs total aportado",
       "netWorth": "Patrimônio",
       "contributed": "Aportado",
       "caption": "Mês × {unit} · {range} · {scope}",
-      "empty": "O histórico aparece a partir do segundo mês com posições."
+      "empty": "O histórico aparece a partir do segundo mês com posições.",
+      "initialPositions": "Posições iniciais",
+      "initialPositionsHint": "Posições cadastradas sem operações (sem data de compra): entram no mês do cadastro como posições iniciais, não como aporte."
     },
     "allocation": {
       "title": "Alocação atual vs alvo",
       "legend": "Barra = atual · traço = alvo · pp = diferença para o alvo",
-      "empty": "Sem posições. Registre uma operação para começar."
+      "empty": "Sem posições. Registre uma operação para começar.",
+      "editTargets": "Editar alvos",
+      "noTargets": "Defina alvos para comparar"
     },
     "tabs": {
       "byClass": "Por classe",
@@ -189,7 +194,8 @@
       "total": "Total",
       "totalValue": "Total {amount}",
       "chartCaption": "Mês × {unit} · {range}"
-    }
+    },
+    "importNoteHint": "Lê a nota com o assistente e mostra as operações para você confirmar."
   },
   "sheet": {
     "class": "Classe",
@@ -300,7 +306,9 @@
       "to": "Para",
       "depositNote": "Cria uma transferência do tipo “Aporte em investimento” que aparece em Transações e em Aportes.",
       "withdrawNote": "Cria uma transferência do tipo “Resgate de investimento”."
-    }
+    },
+    "changeAsset": "Trocar",
+    "newAssetSelected": "{name} · novo ativo"
   },
   "editOp": {
     "title": "Editar operação",
@@ -313,15 +321,17 @@
     "next": "Próximo período",
     "register": "+ Registrar aporte",
     "kpi": {
-      "month": "Aportado em {month}",
+      "month": "Aportado em {month} (líquido)",
       "goalFire": "Meta (plano FIRE): {amount}",
       "noGoal": "Sem meta: defina o plano FIRE",
-      "avg": "Média 12m",
-      "total": "Total 12m",
+      "avg": "Média 12m (líquida)",
+      "total": "Aportado (líquido)",
       "savings": "Taxa de poupança",
       "savingsSub": "aportes / renda líquida PF",
       "savingsCapped": "aportes acima da renda líquida PF",
-      "savingsCappedHint": "Aportes de {aportes} contra renda líquida PF de {income} no período: o excedente veio de saldo, vendas ou de outra entidade."
+      "savingsCappedHint": "Aportes de {aportes} contra renda líquida PF de {income} no período: o excedente veio de saldo, vendas ou de outra entidade.",
+      "totalSub": "+{deposits} aportes · −{withdrawals} resgates",
+      "savingsNegative": "resgates maiores que aportes"
     },
     "chart": {
       "title": "Aportes por mês e classe",
@@ -355,13 +365,24 @@
     },
     "history": {
       "title": "Histórico de aportes",
-      "link": "· ver em Transações ↗",
       "status": {
         "ok": "na meta",
         "above": "acima da meta",
         "below": "abaixo da meta"
       },
-      "empty": "Nenhum aporte no período."
+      "empty": "Nenhum aporte no período.",
+      "all": "Ver todos",
+      "columns": {
+        "month": "Mês",
+        "deposits": "Aportes",
+        "withdrawals": "Resgates",
+        "net": "Líquido",
+        "origin": "Origem"
+      },
+      "flows": "+{deposits} aportes · −{withdrawals} resgates",
+      "originIn": "{origin}",
+      "originOut": "resgate: {origin}",
+      "caption": "Clique na origem para ver as transferências em Transações ↗"
     },
     "fire": {
       "title": "Independência financeira",
@@ -376,6 +397,43 @@
       "noPlan": "Sem plano FIRE. Hoje: {invested} investidos e {expenses}/mês de gastos.",
       "edit": "Editar meta",
       "define": "Definir meta"
+    },
+    "tabs": {
+      "summary": "Resumo",
+      "all": "Todos os aportes"
+    },
+    "all": {
+      "chip": "{prop}: {values}",
+      "noOptions": "Nada para filtrar.",
+      "done": "Pronto",
+      "remove": "Remover filtro",
+      "search": "Buscar",
+      "export": "Exportar CSV",
+      "exported": "CSV dos aportes exportado",
+      "loaded": "{count} de {total} lançamentos",
+      "totals": "+{deposits} aportes · −{withdrawals} resgates · líquido {net}",
+      "empty": "Nenhum aporte ou resgate com esses filtros.",
+      "loadMore": "Carregar mais",
+      "route": "{from} → {to}",
+      "filters": {
+        "period": "Período",
+        "type": "Tipo",
+        "account": "Conta",
+        "broker": "Corretora",
+        "entity": "Entidade"
+      },
+      "type": {
+        "investment_deposit": "Aporte",
+        "investment_withdrawal": "Resgate"
+      },
+      "columns": {
+        "date": "Data",
+        "type": "Tipo",
+        "route": "De → para",
+        "description": "Descrição",
+        "entity": "Entidade",
+        "amount": "Valor"
+      }
     }
   },
   "aporte": {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { allocationBars, targetsPayload } from "../allocation";
+import { allocationBars, hasTargets, targetsPayload } from "../allocation";
 import {
   alternativeContribution,
   clampEnd,
@@ -8,6 +8,7 @@ import {
   goalStatus,
   historyRows,
   originLabel,
+  originParts,
   shiftMonth,
 } from "../contributions-view";
 import { irEstimate } from "../ir-estimate";
@@ -25,7 +26,15 @@ describe("allocationBars", () => {
     ]);
     expect(bars[0]).toMatchObject({ barWidth: 84, tickLeft: 80, highlight: false, diffLabel: "+2pp" });
     expect(bars[1]).toMatchObject({ highlight: true, diffLabel: "−5pp" });
-    expect(bars[2]).toMatchObject({ barWidth: 100, tickLeft: 0, target: 0, diffLabel: "+70pp" });
+    // No target is not a 0% target: no tick, no "pp", no highlight.
+    expect(bars[2]).toEqual({ allocationClass: "crypto", share: 0.7, target: null, diff: null, barWidth: 100, tickLeft: null, highlight: false, diffLabel: null });
+  });
+
+  it("knows when no class has a target", () => {
+    const row = (target: number | null) => ({ allocationClass: "fixed_income" as const, marketValue: 0, invested: 0, count: 1, share: 0.5, target });
+    expect(hasTargets([row(null), { ...row(null), allocationClass: "cash" }])).toBe(false);
+    expect(hasTargets([row(null), { ...row(0.2), allocationClass: "cash" }])).toBe(true);
+    expect(hasTargets([])).toBe(false);
   });
 
   it("builds the targets body and checks the sum", () => {
@@ -269,6 +278,23 @@ describe("contributions view", () => {
       ["2026-09", "ok", ["b"]],
       ["2026-08", "above", ["a", "s"]],
     ]);
+  });
+
+  it("shows aportes and resgates of a month apart, with both origins, so a negative month is not an aporte", () => {
+    const august: ContributionMonth = {
+      ...month("2026-08", -3000),
+      deposits: 5000,
+      withdrawals: 8000,
+      origins: [
+        origin({ transferGroupId: "a", description: "Salário PF", amount: 5000 }),
+        origin({ transferGroupId: "r", description: "Resgate de investimento: XP → Nubank", defaultDescription: true, amount: -8000 }),
+      ],
+    };
+    const [row] = historyRows([august], 15000);
+    expect(row).toMatchObject({ period: "2026-08", deposits: 5000, withdrawals: 8000, net: -3000, status: "below" });
+    expect(row.origins).toEqual({ deposits: "Salário PF", withdrawals: "XP → Nubank" });
+    expect(originParts([origin({ description: "Bônus", amount: 100 })])).toEqual({ deposits: "Bônus", withdrawals: null });
+    expect(originParts([origin({ description: "A", amount: -100 }), origin({ description: "B", amount: -900 })])).toEqual({ deposits: null, withdrawals: "B + A" });
   });
 
   it("stacks the classes with money in the window", () => {
