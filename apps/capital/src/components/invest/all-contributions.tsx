@@ -1,11 +1,22 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { keepPreviousData, useInfiniteQuery, useQuery } from "@tanstack/react-query";
+import {
+  keepPreviousData,
+  useInfiniteQuery,
+  useQuery,
+} from "@tanstack/react-query";
 import { useTranslations } from "next-intl";
 import { parseAsString, useQueryStates } from "nuqs";
 import type { LedgerDisplayQueryResult } from "@capital/server/modules/ledger/contracts";
-import { Btn, Check, EmptyRow, Popover, PopoverClose, TextInput } from "@/components/cap";
+import {
+  Btn,
+  Check,
+  EmptyRow,
+  Popover,
+  PopoverClose,
+  TextInput,
+} from "@/components/cap";
 import { MENU_ROW } from "@/components/cap/styles";
 import { EntrySheet } from "@/components/ledger/entry-sheet";
 import { useLedgerOverlays } from "@/components/ledger/overlay-state";
@@ -33,7 +44,9 @@ import {
 import { cn } from "@/lib/utils";
 import { MONO, useScopeParam } from "./common";
 
-const URL_PARAMS = Object.fromEntries(CONTRIBUTION_URL_KEYS.map((key) => [key, parseAsString])) as Record<(typeof CONTRIBUTION_URL_KEYS)[number], typeof parseAsString>;
+const URL_PARAMS = Object.fromEntries(
+  CONTRIBUTION_URL_KEYS.map((key) => [key, parseAsString]),
+) as Record<(typeof CONTRIBUTION_URL_KEYS)[number], typeof parseAsString>;
 
 type Option = { value: string; label: string; hint?: string };
 
@@ -55,13 +68,23 @@ function Chip({
 }) {
   const t = useTranslations("invest.contrib.all");
   const on = values.length > 0;
-  const shown = values.map((v) => options.find((o) => o.value === v)?.label ?? v).join(", ");
+  const shown = values
+    .map((v) => options.find((o) => o.value === v)?.label ?? v)
+    .join(", ");
   return (
-    <span className={cn("inline-flex h-6 shrink-0 items-center overflow-hidden rounded-[6px] border text-button", on ? "border-stroke-2 bg-fill-3" : "border-dashed border-stroke-1")}>
+    <span
+      className={cn(
+        "inline-flex h-6 shrink-0 items-center overflow-hidden rounded-[6px] border text-button",
+        on ? "border-stroke-2 bg-fill-3" : "border-dashed border-stroke-1",
+      )}
+    >
       <Popover
         width={260}
         trigger={
-          <button type="button" className="h-full max-w-[280px] truncate px-2 text-left whitespace-nowrap">
+          <button
+            type="button"
+            className="h-full max-w-[280px] truncate px-2 text-left whitespace-nowrap"
+          >
             {on ? t("chip", { prop: label, values: shown }) : label}
           </button>
         }
@@ -71,7 +94,15 @@ function Chip({
           {options.map((o) =>
             single ? (
               <PopoverClose key={o.value}>
-                <button type="button" className={cn(MENU_ROW, "hover:bg-fill-3", values.includes(o.value) && "font-medium text-fg-1")} onClick={() => onChange([o.value])}>
+                <button
+                  type="button"
+                  className={cn(
+                    MENU_ROW,
+                    "hover:bg-fill-3",
+                    values.includes(o.value) && "font-medium text-fg-1",
+                  )}
+                  onClick={() => onChange([o.value])}
+                >
                   {o.label}
                 </button>
               </PopoverClose>
@@ -79,17 +110,27 @@ function Chip({
               <Check
                 key={o.value}
                 checked={values.includes(o.value)}
-                onChange={(checked) => onChange(checked ? [...values, o.value] : values.filter((v) => v !== o.value))}
+                onChange={(checked) =>
+                  onChange(
+                    checked
+                      ? [...values, o.value]
+                      : values.filter((v) => v !== o.value),
+                  )
+                }
                 label={
                   <span className="inline-flex min-w-0 gap-1.5">
                     <span className="truncate">{o.label}</span>
-                    {o.hint ? <span className="truncate text-fg-3">{o.hint}</span> : null}
+                    {o.hint ? (
+                      <span className="truncate text-fg-3">{o.hint}</span>
+                    ) : null}
                   </span>
                 }
               />
             ),
           )}
-          {!options.length ? <span className="text-body-sm text-fg-3">{t("noOptions")}</span> : null}
+          {!options.length ? (
+            <span className="text-body-sm text-fg-3">{t("noOptions")}</span>
+          ) : null}
         </div>
         {single ? null : (
           <PopoverClose>
@@ -98,7 +139,13 @@ function Chip({
         )}
       </Popover>
       {on && clearable ? (
-        <button type="button" title={t("remove")} aria-label={t("remove")} className="h-full border-l border-stroke-3 px-[7px] text-fg-3 hover:text-fg-strong" onClick={() => onChange([])}>
+        <button
+          type="button"
+          title={t("remove")}
+          aria-label={t("remove")}
+          className="h-full border-l border-stroke-3 px-[7px] text-fg-3 hover:text-fg-strong"
+          onClick={() => onChange([])}
+        >
           ✕
         </button>
       ) : null}
@@ -129,32 +176,49 @@ export function AllContributions() {
   useEffect(() => {
     if (typed.current === search) return;
     typed.current = search;
-    void setParams({ q: contributionFiltersToUrl({ ...EMPTY_CONTRIBUTION_FILTERS, search }).q });
+    void setParams({
+      q: contributionFiltersToUrl({ ...EMPTY_CONTRIBUTION_FILTERS, search }).q,
+    });
   }, [search, setParams]);
-  const query = useMemo(() => contributionsQuery(filters, scope), [filters, scope]);
-  const set = (patch: Partial<ContributionFilters>) => void setParams(contributionFiltersToUrl({ ...filters, ...patch }));
+  const query = useMemo(
+    () => contributionsQuery(filters, scope),
+    [filters, scope],
+  );
+  const set = (patch: Partial<ContributionFilters>) =>
+    void setParams(contributionFiltersToUrl({ ...filters, ...patch }));
 
   const pages = useInfiniteQuery({
     queryKey: keys.ledgerQuery({ ...query.body, paged: true }),
     initialPageParam: undefined as string | undefined,
-    queryFn: ({ pageParam }) => apiPost<LedgerDisplayQueryResult>("/api/v2/ledger/query", { ...query.body, page: { ...query.body.page, cursor: pageParam } }),
-    getNextPageParam: (last) => (last.pageInfo.hasMore ? (last.pageInfo.nextCursor ?? undefined) : undefined),
+    queryFn: ({ pageParam }) =>
+      apiPost<LedgerDisplayQueryResult>("/api/v2/ledger/query", {
+        ...query.body,
+        page: { ...query.body.page, cursor: pageParam },
+      }),
+    getNextPageParam: (last) =>
+      last.pageInfo.hasMore
+        ? (last.pageInfo.nextCursor ?? undefined)
+        : undefined,
     placeholderData: keepPreviousData,
   });
   const rows = useMemo(() => {
     const all = (pages.data?.pages ?? []).flatMap((page) => page.rows);
-    return (query.clientFilter ? all.filter(query.clientFilter) : all).map(contributionRow);
+    return (query.clientFilter ? all.filter(query.clientFilter) : all).map(
+      contributionRow,
+    );
   }, [pages.data, query]);
   // Totals of the whole selection (every page); with Conta and Corretora together, of the loaded rows only.
   const totalsBody = contributionTotalsBody(query);
   const serverTotals = useQuery({
     queryKey: keys.ledgerQuery({ ...totalsBody, totals: true }),
-    queryFn: () => apiPost<LedgerDisplayQueryResult>("/api/v2/ledger/query", totalsBody),
+    queryFn: () =>
+      apiPost<LedgerDisplayQueryResult>("/api/v2/ledger/query", totalsBody),
     select: (result) => totalsFromGroups(result.groups),
     enabled: totalsBody !== null,
     placeholderData: keepPreviousData,
   });
-  const totals = (totalsBody ? serverTotals.data : null) ?? contributionTotals(rows);
+  const totals =
+    (totalsBody ? serverTotals.data : null) ?? contributionTotals(rows);
   const totalsPartial = !totalsBody && pages.hasNextPage;
   const serverCount = pages.data?.pages[0]?.totals?.count ?? null;
   // With Conta and Corretora together the bank side is matched here, so the server's count is not the rows'.
@@ -174,15 +238,37 @@ export function AllContributions() {
         const ids: string[] = [];
         let cursor: string | undefined;
         do {
-          const page = await apiPost<LedgerDisplayQueryResult>("/api/v2/ledger/query", { ...query.body, page: { limit: 500, cursor } });
-          ids.push(...page.rows.filter(query.clientFilter).map((row) => row.id));
-          cursor = page.pageInfo.hasMore ? (page.pageInfo.nextCursor ?? undefined) : undefined;
+          const page = await apiPost<LedgerDisplayQueryResult>(
+            "/api/v2/ledger/query",
+            { ...query.body, page: { limit: 500, cursor } },
+          );
+          ids.push(
+            ...page.rows.filter(query.clientFilter).map((row) => row.id),
+          );
+          cursor = page.pageInfo.hasMore
+            ? (page.pageInfo.nextCursor ?? undefined)
+            : undefined;
         } while (cursor && ids.length < 5000);
         // Nothing matches: the same selection narrowed to no id (a CSV with the header only).
-        target = ids.length ? { ids: ids.slice(0, 5000) } : { query: { ...query.selection, filters: [...query.selection.filters, { field: "id", op: "in", values: [""] }] } };
+        target = ids.length
+          ? { ids: ids.slice(0, 5000) }
+          : {
+              query: {
+                ...query.selection,
+                filters: [
+                  ...query.selection.filters,
+                  { field: "id", op: "in", values: [""] },
+                ],
+              },
+            };
       }
-      const csv = await api<string>("/api/v2/ledger/export", { method: "POST", body: JSON.stringify(target) });
-      const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
+      const csv = await api<string>("/api/v2/ledger/export", {
+        method: "POST",
+        body: JSON.stringify(target),
+      });
+      const url = URL.createObjectURL(
+        new Blob([csv], { type: "text/csv;charset=utf-8" }),
+      );
       const link = document.createElement("a");
       link.href = url;
       link.download = "capital-aportes.csv";
@@ -192,36 +278,111 @@ export function AllContributions() {
     undo: () => t("exported"),
   });
 
-  const accounts = names.accounts.filter((a) => !a.archivedAt || filters.accountIds.includes(a.id) || filters.brokerIds.includes(a.id));
-  const accountOptions = accounts.filter((a) => a.type === "checking" || a.type === "cash").map((a) => ({ value: a.id, label: a.name, hint: names.entity.get(a.entityId) }));
-  const brokerOptions = accounts.filter((a) => a.type === "brokerage").map((a) => ({ value: a.id, label: a.name, hint: names.entity.get(a.entityId) }));
-  const entityOptions = names.entities.map((e) => ({ value: e.id, label: names.entity.get(e.id) ?? e.id }));
-  const periodOptions = CONTRIBUTION_PERIODS.map((p) => ({ value: p, label: ti(`portfolio.display.periods.${p}`) }));
-  const typeOptions = CONTRIBUTION_DIRECTIONS.map((d) => ({ value: d, label: t(`type.${d}`) }));
-  const account = (id: string | null) => (id ? (names.account.get(id) ?? "—") : "—");
+  const accounts = names.accounts.filter(
+    (a) =>
+      !a.archivedAt ||
+      filters.accountIds.includes(a.id) ||
+      filters.brokerIds.includes(a.id),
+  );
+  const accountOptions = accounts
+    .filter((a) => a.type === "checking" || a.type === "cash")
+    .map((a) => ({
+      value: a.id,
+      label: a.name,
+      hint: names.entity.get(a.entityId),
+    }));
+  const brokerOptions = accounts
+    .filter((a) => a.type === "brokerage")
+    .map((a) => ({
+      value: a.id,
+      label: a.name,
+      hint: names.entity.get(a.entityId),
+    }));
+  const entityOptions = names.entities.map((e) => ({
+    value: e.id,
+    label: names.entity.get(e.id) ?? e.id,
+  }));
+  const periodOptions = CONTRIBUTION_PERIODS.map((p) => ({
+    value: p,
+    label: ti(`portfolio.display.periods.${p}`),
+  }));
+  const typeOptions = CONTRIBUTION_DIRECTIONS.map((d) => ({
+    value: d,
+    label: t(`type.${d}`),
+  }));
+  const account = (id: string | null) =>
+    id ? (names.account.get(id) ?? "—") : "—";
   const grid = "76px 70px minmax(0,1.6fr) minmax(0,1fr) 92px 112px";
 
   return (
     <div className="flex flex-col gap-2.5">
       <div className="flex flex-wrap items-center gap-1.5">
-        <Chip label={t("filters.period")} options={periodOptions} values={[filters.period]} single clearable={filters.period !== "all"} onChange={(v) => set({ period: (v[0] as ContributionPeriod | undefined) ?? "all" })} />
-        <Chip label={t("filters.type")} options={typeOptions} values={filters.directions} onChange={(v) => set({ directions: v as ContributionFilters["directions"] })} />
-        <Chip label={t("filters.account")} options={accountOptions} values={filters.accountIds} onChange={(v) => set({ accountIds: v })} />
-        <Chip label={t("filters.broker")} options={brokerOptions} values={filters.brokerIds} onChange={(v) => set({ brokerIds: v })} />
-        <Chip label={t("filters.entity")} options={entityOptions} values={filters.entityIds} onChange={(v) => set({ entityIds: v })} />
+        <Chip
+          label={t("filters.period")}
+          options={periodOptions}
+          values={[filters.period]}
+          single
+          clearable={filters.period !== "all"}
+          onChange={(v) =>
+            set({ period: (v[0] as ContributionPeriod | undefined) ?? "all" })
+          }
+        />
+        <Chip
+          label={t("filters.type")}
+          options={typeOptions}
+          values={filters.directions}
+          onChange={(v) =>
+            set({ directions: v as ContributionFilters["directions"] })
+          }
+        />
+        <Chip
+          label={t("filters.account")}
+          options={accountOptions}
+          values={filters.accountIds}
+          onChange={(v) => set({ accountIds: v })}
+        />
+        <Chip
+          label={t("filters.broker")}
+          options={brokerOptions}
+          values={filters.brokerIds}
+          onChange={(v) => set({ brokerIds: v })}
+        />
+        <Chip
+          label={t("filters.entity")}
+          options={entityOptions}
+          values={filters.entityIds}
+          onChange={(v) => set({ entityIds: v })}
+        />
         <span className="flex-1" />
-        <TextInput value={searchText} onChange={setSearchText} placeholder={t("search")} aria-label={t("search")} className="w-[170px]" />
+        <TextInput
+          value={searchText}
+          onChange={setSearchText}
+          placeholder={t("search")}
+          aria-label={t("search")}
+          className="w-[170px]"
+        />
         <Btn disabled={exportCsv.isPending} onClick={() => exportCsv.mutate()}>
           {t("export")}
         </Btn>
       </div>
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-body-sm text-fg-3">
         <span>{loadedText}</span>
-        <span className={MONO}>{t(totalsPartial ? "totalsLoaded" : "totals", { deposits: fmt.money0(totals.deposits, names.currency), withdrawals: fmt.money0(totals.withdrawals, names.currency), net: fmt.money0(totals.net, names.currency) })}</span>
+        <span className={MONO}>
+          {t(totalsPartial ? "totalsLoaded" : "totals", {
+            deposits: fmt.money0(totals.deposits, names.currency),
+            withdrawals: fmt.money0(totals.withdrawals, names.currency),
+            net: fmt.money0(totals.net, names.currency),
+          })}
+        </span>
       </div>
-      {pages.isError ? <p className="text-body text-neg">{errorText(pages.error)}</p> : null}
+      {pages.isError ? (
+        <p className="text-body text-neg">{errorText(pages.error)}</p>
+      ) : null}
       <div className="overflow-hidden rounded-[8px] border border-stroke-3">
-        <div className="grid h-(--cap-row-h) items-center gap-2.5 px-3 text-label text-fg-3" style={{ gridTemplateColumns: grid }}>
+        <div
+          className="grid h-(--cap-row-h) items-center gap-2.5 px-3 text-label text-fg-3"
+          style={{ gridTemplateColumns: grid }}
+        >
           <span>{t("columns.date")}</span>
           <span>{t("columns.type")}</span>
           <span>{t("columns.route")}</span>
@@ -237,26 +398,55 @@ export function AllContributions() {
             className="grid h-(--cap-table-row-h) w-full items-center gap-2.5 border-t border-stroke-3 px-3 text-left text-body hover:bg-fill-4"
             style={{ gridTemplateColumns: grid }}
           >
-            <span className={cn(MONO, "text-label text-fg-3")}>{fmt.date(r.date)}</span>
-            <span className={r.direction === "investment_withdrawal" ? "text-fg-2" : undefined}>{t(`type.${r.direction}`)}</span>
+            <span className={cn(MONO, "text-label text-fg-3")}>
+              {fmt.date(r.date)}
+            </span>
+            <span
+              className={
+                r.direction === "investment_withdrawal"
+                  ? "text-fg-2"
+                  : undefined
+              }
+            >
+              {t(`type.${r.direction}`)}
+            </span>
             <span className="truncate">
               {r.direction === "investment_withdrawal"
-                ? t("route", { from: account(r.brokerAccountId), to: account(r.otherAccountId) })
-                : t("route", { from: account(r.otherAccountId), to: account(r.brokerAccountId) })}
+                ? t("route", {
+                    from: account(r.brokerAccountId),
+                    to: account(r.otherAccountId),
+                  })
+                : t("route", {
+                    from: account(r.otherAccountId),
+                    to: account(r.brokerAccountId),
+                  })}
             </span>
             <span className="truncate text-fg-3">{r.description}</span>
-            <span className="truncate text-fg-2">{names.entity.get(r.entityId) ?? "—"}</span>
-            <span className={cn(MONO, "text-right", r.amount < 0 ? "text-neg" : "text-fg-1")}>
+            <span className="truncate text-fg-2">
+              {names.entity.get(r.entityId) ?? "—"}
+            </span>
+            <span
+              className={cn(
+                MONO,
+                "text-right",
+                r.amount < 0 ? "text-neg" : "text-fg-1",
+              )}
+            >
               {r.amount < 0 ? "−" : "+"}
               {fmt.money0(Math.abs(r.amount), names.currency)}
             </span>
           </button>
         ))}
-        {!rows.length ? <EmptyRow>{pages.isLoading ? ti("loading") : t("empty")}</EmptyRow> : null}
+        {!rows.length ? (
+          <EmptyRow>{pages.isLoading ? ti("loading") : t("empty")}</EmptyRow>
+        ) : null}
       </div>
       {pages.hasNextPage ? (
         <div className="flex justify-center">
-          <Btn disabled={pages.isFetchingNextPage} onClick={() => void pages.fetchNextPage()}>
+          <Btn
+            disabled={pages.isFetchingNextPage}
+            onClick={() => void pages.fetchNextPage()}
+          >
             {pages.isFetchingNextPage ? ti("loading") : t("loadMore")}
           </Btn>
         </div>
@@ -265,7 +455,13 @@ export function AllContributions() {
         <EntrySheet
           key={overlays.entryId}
           entryId={overlays.entryId}
-          row={rows.find((r) => r.id === overlays.entryId || r.row.legIds.includes(overlays.entryId!))?.row ?? null}
+          row={
+            rows.find(
+              (r) =>
+                r.id === overlays.entryId ||
+                r.row.legIds.includes(overlays.entryId!),
+            )?.row ?? null
+          }
           names={names}
           onClose={() => overlays.close("entry")}
         />

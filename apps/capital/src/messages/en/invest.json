@@ -144,9 +144,6 @@
         "ticker": "Asset"
       },
       "columns": "Columns",
-      "layout": "Layout",
-      "layoutTable": "Table",
-      "layoutChart": "Chart",
       "period": "Period",
       "periods": {
         "last_12m": "Last 12 months",
@@ -159,7 +156,20 @@
       "series": "Series",
       "seriesTotal": "Total",
       "seriesClass": "By class",
-      "deleted": "View “{name}” deleted"
+      "deleted": "View “{name}” deleted",
+      "metrics": {
+        "marketValue": "Market value",
+        "share": "% of portfolio",
+        "result": "Result (amount)",
+        "sum": "Sum",
+        "count": "Number of operations",
+        "avg": "Average ticket"
+      },
+      "axis": {
+        "month": "Month",
+        "type": "Type",
+        "allocationClass": "Class"
+      }
     },
     "columns": {
       "ticker": "Asset",

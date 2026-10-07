@@ -142,7 +142,7 @@ export function ChartView({
 }
 
 /** Bars (stacked with series), horizontal, 100%, line and area. */
-function CartesianBody({
+export function CartesianBody({
   data,
   type,
   catLabel,
@@ -231,7 +231,7 @@ function CartesianBody({
 }
 
 /** Pie and donut (positive values only), with the total in the donut's center and a legend. */
-function PieBody({
+export function PieBody({
   data,
   metric,
   donut,
@@ -291,7 +291,7 @@ function PieBody({
 }
 
 /** Treemap (mockup 1906–1960): tiles by value, shaded by rank, labelled when large enough. */
-function TreemapBody({ data, catLabel, onTile }: { data: ChartData; catLabel: (cat: ChartCategory) => string; onTile: (index: number) => void }) {
+export function TreemapBody({ data, catLabel, onTile, value }: { data: ChartData; catLabel: (cat: ChartCategory) => string; onTile: (index: number) => void; value?: (v: number) => string }) {
   const fmt = useFmt();
   const items = data.categories.map((category, index) => ({ value: data.totals[index], data: { category, index } }));
   const total = items.reduce((s, item) => s + Math.max(0, item.value), 0);
@@ -311,7 +311,7 @@ function TreemapBody({ data, catLabel, onTile }: { data: ChartData; catLabel: (c
             {showsTreemapLabel(r) ? (
               <>
                 <span className="truncate text-body-sm font-semibold">{catLabel(r.data.category)}</span>
-                <span className="font-mono text-caption text-fg-2 tabular-nums">{fmt.money0(r.value)}</span>
+                <span className="font-mono text-caption text-fg-2 tabular-nums">{value ? value(r.value) : fmt.money0(r.value)}</span>
                 <span className="font-mono text-hint text-fg-3 tabular-nums">{fmt.pct(total ? r.value / total : 0, 0)}</span>
               </>
             ) : null}

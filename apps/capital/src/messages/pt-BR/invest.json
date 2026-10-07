@@ -144,9 +144,6 @@
         "ticker": "Ativo"
       },
       "columns": "Colunas",
-      "layout": "Layout",
-      "layoutTable": "Tabela",
-      "layoutChart": "Gráfico",
       "period": "Período",
       "periods": {
         "last_12m": "Últimos 12 meses",
@@ -159,7 +156,20 @@
       "series": "Séries",
       "seriesTotal": "Total",
       "seriesClass": "Por classe",
-      "deleted": "View “{name}” excluída"
+      "deleted": "View “{name}” excluída",
+      "metrics": {
+        "marketValue": "Valor de mercado",
+        "share": "% da carteira",
+        "result": "Resultado (R$)",
+        "sum": "Soma",
+        "count": "Contagem de operações",
+        "avg": "Ticket médio"
+      },
+      "axis": {
+        "month": "Mês",
+        "type": "Tipo",
+        "allocationClass": "Classe"
+      }
     },
     "columns": {
       "ticker": "Ativo",

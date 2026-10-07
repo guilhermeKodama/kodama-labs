@@ -25,6 +25,21 @@ const datasetChartSchema = z
   })
   .default({});
 
+/**
+ * The chart of a holdings view: the same fields, with the portfolio metrics
+ * (valor de mercado, % da carteira, resultado) next to the legacy sum/count/avg
+ * (stored by older configs; the client reads "sum" as the market value).
+ */
+export const HOLDINGS_CHART_METRICS = ["marketValue", "share", "result"] as const;
+const holdingsChartSchema = z
+  .object({
+    type: z.enum(CHART_TYPES).default("bar"),
+    metric: z.enum([...HOLDINGS_CHART_METRICS, "sum", "count", "avg"]).default("sum"),
+    cumulative: z.boolean().default(false),
+    top: z.number().int().min(0).max(50).default(0),
+  })
+  .default({});
+
 // ---------------------------------------------------------------------------
 // Holdings (Investimentos › Carteira tabs). The engine runs on the client
 // over GET /v2/holdings; the server only stores the config.
@@ -51,7 +66,7 @@ export const holdingsViewConfigSchema = z.object({
   filters: z.array(holdingsFilterSchema).default([]),
   columns: z.array(z.string()).default([...HOLDINGS_COLUMNS]),
   sort: z.object({ field: z.enum(HOLDINGS_SORT_FIELDS), dir: sortDir }).default({ field: "marketValue", dir: "desc" }),
-  chart: datasetChartSchema,
+  chart: holdingsChartSchema,
 });
 export type HoldingsViewConfig = z.infer<typeof holdingsViewConfigSchema>;
 

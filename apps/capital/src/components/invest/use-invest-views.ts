@@ -5,13 +5,27 @@ import { useQuery } from "@tanstack/react-query";
 import { useTranslations } from "next-intl";
 import { apiGet } from "@/lib/api/client";
 import { keys } from "@/lib/api/keys";
-import { investTabs, type InvestDataset, type InvestView, type StoredInvestView } from "@/lib/invest/invest-tabs";
-import { useCreateView, useDeleteView, useDuplicateView, useViewSaver, type ViewPatch } from "@/lib/ledger/use-views";
+import {
+  investTabs,
+  type InvestDataset,
+  type InvestView,
+  type StoredInvestView,
+} from "@/lib/invest/invest-tabs";
+import {
+  useCreateView,
+  useDeleteView,
+  useDuplicateView,
+  useViewSaver,
+  type ViewPatch,
+} from "@/lib/ledger/use-views";
 
 export type { InvestDataset, InvestView };
 
 function listOf(dataset: InvestDataset) {
-  return { queryKey: keys.views(dataset), queryFn: () => apiGet<StoredInvestView[]>("/api/v2/views", { dataset }) };
+  return {
+    queryKey: keys.views(dataset),
+    queryFn: () => apiGet<StoredInvestView[]>("/api/v2/views", { dataset }),
+  };
 }
 
 /**
@@ -26,15 +40,27 @@ export function useInvestViews() {
   const holdings = useQuery(listOf("holdings"));
   const ops = useQuery(listOf("investment_ops"));
   const views = useMemo<InvestView[]>(
-    () => investTabs({ data: holdings.data, isError: holdings.isError }, { data: ops.data, isError: ops.isError }, (key) => t(key)),
+    () =>
+      investTabs(
+        { data: holdings.data, isError: holdings.isError },
+        { data: ops.data, isError: ops.isError },
+        (key) => t(key),
+      ),
     [holdings.data, ops.data, holdings.isError, ops.isError, t],
   );
   // "+" needs both lists read (a refetch that fails later keeps them).
-  return { views, isLoading: holdings.isLoading || ops.isLoading, canCreate: holdings.data !== undefined && ops.data !== undefined };
+  return {
+    views,
+    isLoading: holdings.isLoading || ops.isLoading,
+    canCreate: holdings.data !== undefined && ops.data !== undefined,
+  };
 }
 
 /** Finds the tab of ?view= (an id or seed:<key>), else the first one. */
-export function pickView(views: readonly InvestView[], param: string | null): InvestView | null {
+export function pickView(
+  views: readonly InvestView[],
+  param: string | null,
+): InvestView | null {
   if (!views.length) return null;
   if (param) {
     const byId = views.find((v) => v.id === param);
