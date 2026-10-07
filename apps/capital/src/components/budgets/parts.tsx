@@ -79,7 +79,7 @@ export function ScopeBar({ scope, onScope, children }: { scope: BudgetsScope; on
   // A link may scope to one entity (?scope=<id>): show it so the filter is visible.
   if (!["all", "pf", "pj"].includes(scope)) options.push({ v: scope, l: names.get(scope) ?? scope });
   return (
-    <div className="flex min-h-[28px] flex-wrap items-center gap-2">
+    <div className="flex min-h-(--cap-menu-row-h) flex-wrap items-center gap-2">
       <Segmented aria-label={t("scope.label")} value={scope} options={options} onChange={onScope} />
       <span className="ml-auto text-body-sm text-fg-3">{children}</span>
     </div>

@@ -39,8 +39,8 @@
   /* Density tied to text (base height at Médio). */
   --cap-control-h: calc(26px * var(--cap-text-scale)); /* buttons, inputs, selects (cap CONTROL, Btn) */
   --cap-menu-row-h: calc(28px * var(--cap-text-scale)); /* menu, listbox, command palette and nav rows (cap MENU_ROW) */
-  --cap-row-h: calc(34px * var(--cap-text-scale)); /* ledger table rows, header and footer */
-  --cap-table-row-h: calc(36px * var(--cap-text-scale)); /* cap Table body rows */
+  --cap-row-h: calc(34px * var(--cap-text-scale)); /* ledger table rows, the header and footer rows of the other tables, list rows, tab bars */
+  --cap-table-row-h: calc(36px * var(--cap-text-scale)); /* cap Table body rows, holdings, operations and contributions rows */
 }
 
 /* Pequeno and Grande. */

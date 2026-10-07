@@ -221,7 +221,7 @@ export function AllContributions() {
       </div>
       {pages.isError ? <p className="text-body text-neg">{errorText(pages.error)}</p> : null}
       <div className="overflow-hidden rounded-[8px] border border-stroke-3">
-        <div className="grid h-[34px] items-center gap-2.5 px-3 text-label text-fg-3" style={{ gridTemplateColumns: grid }}>
+        <div className="grid h-(--cap-row-h) items-center gap-2.5 px-3 text-label text-fg-3" style={{ gridTemplateColumns: grid }}>
           <span>{t("columns.date")}</span>
           <span>{t("columns.type")}</span>
           <span>{t("columns.route")}</span>
@@ -234,7 +234,7 @@ export function AllContributions() {
             key={r.id}
             type="button"
             onClick={() => overlays.openEntry(r.id)}
-            className="grid h-9 w-full items-center gap-2.5 border-t border-stroke-3 px-3 text-left text-body hover:bg-fill-4"
+            className="grid h-(--cap-table-row-h) w-full items-center gap-2.5 border-t border-stroke-3 px-3 text-left text-body hover:bg-fill-4"
             style={{ gridTemplateColumns: grid }}
           >
             <span className={cn(MONO, "text-label text-fg-3")}>{fmt.date(r.date)}</span>

@@ -125,7 +125,7 @@ function YearBody({ data, today, onOpenMonth, actions }: { data: YearOverview; t
 
       <div className="overflow-x-auto rounded-[8px] border border-stroke-3">
         <div className="min-w-[860px]">
-          <div className={cn(HEAT_COLS, "h-[34px] text-label text-fg-3")}>
+          <div className={cn(HEAT_COLS, "h-(--cap-row-h) text-label text-fg-3")}>
             <span>{t("year.heatmap.category")}</span>
             {MONTHS.map((m) => (
               <span key={m} className={cn("text-center", tense(m) === "projected" && "text-fg-4", tense(m) === "current" && "text-fg-1")}>
@@ -140,7 +140,7 @@ function YearBody({ data, today, onOpenMonth, actions }: { data: YearOverview; t
             const category = row.category ?? t("uncategorized");
             const trend = trendOf(row.trend);
             return (
-              <div key={`${row.entityId}:${row.categoryId}`} className={cn(HEAT_COLS, "h-[34px] border-t border-stroke-3 text-body")}>
+              <div key={`${row.entityId}:${row.categoryId}`} className={cn(HEAT_COLS, "h-(--cap-row-h) border-t border-stroke-3 text-body")}>
                 <span className="flex min-w-0 items-center gap-1.5">
                   <DrillLink draft={drill(row, category)} title={category} className="min-w-0 truncate">
                     {category}
@@ -151,7 +151,7 @@ function YearBody({ data, today, onOpenMonth, actions }: { data: YearOverview; t
                   const level = heatLevel(cell);
                   const pct = heatPercent(cell);
                   const text = pct !== null ? `${pct}%` : cell.spent > 0 ? fmt.k(cell.spent, { minDigits: 1 }) : "·";
-                  const className = cn("inline-flex h-[26px] min-w-0 items-center justify-center rounded border border-transparent font-mono text-caption tabular-nums", HEAT_CLASS[level]);
+                  const className = cn("inline-flex h-(--cap-control-h) min-w-0 items-center justify-center rounded border border-transparent font-mono text-caption tabular-nums", HEAT_CLASS[level]);
                   if (!isClickable(cell)) return <span key={cell.month} className={className}>{text}</span>;
                   return (
                     <button

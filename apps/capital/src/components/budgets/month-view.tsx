@@ -96,7 +96,7 @@ function MonthBody({ data, actions, onOpenRule, onAllRules }: { data: MonthOverv
       </KpiStrip>
       <div className="grid items-start gap-3 md:grid-cols-[minmax(0,1.7fr)_minmax(0,1fr)]">
         <div className="min-w-0 overflow-x-auto rounded-[8px] border border-stroke-3">
-          <div className={cn(COLS, "h-[34px] text-label text-fg-3")}>
+          <div className={cn(COLS, "h-(--cap-row-h) text-label text-fg-3")}>
             <span>{t("month.table.category")}</span>
             <span className="truncate">{t(bar.key, bar.values)}</span>
             <span className="text-right">{t("month.table.spent")}</span>

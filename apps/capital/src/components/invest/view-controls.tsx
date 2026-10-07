@@ -221,7 +221,7 @@ function InvestViewTab({ view, on, onSelect, onOpen, writes, onDelete }: { view:
   return (
     <ViewMenuTarget
       onContextMenu={editable && !renaming ? menu.onContextMenu : undefined}
-      className={cn("inline-flex h-[34px] shrink-0 items-center gap-0.5 border-b-2", on ? "border-fg-1" : "border-transparent")}
+      className={cn("inline-flex h-(--cap-row-h) shrink-0 items-center gap-0.5 border-b-2", on ? "border-fg-1" : "border-transparent")}
     >
       {renaming ? (
         // The menu is unmounted while renaming, so closing it cannot take the focus back from the field.

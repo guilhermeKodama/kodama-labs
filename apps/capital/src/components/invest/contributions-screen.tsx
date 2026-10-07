@@ -140,7 +140,7 @@ export function ContributionsScreen() {
             role="tab"
             aria-selected={tab === key}
             onClick={() => void setTabParam(key === "all" ? "all" : null)}
-            className={cn("inline-flex h-[34px] items-center border-b-2 px-2 text-control", tab === key ? "border-fg-1 font-medium text-fg-1" : "border-transparent text-fg-3 hover:text-fg-strong")}
+            className={cn("inline-flex h-(--cap-row-h) items-center border-b-2 px-2 text-control", tab === key ? "border-fg-1 font-medium text-fg-1" : "border-transparent text-fg-3 hover:text-fg-strong")}
           >
             {t(`tabs.${key}`)}
           </button>
@@ -210,7 +210,7 @@ export function ContributionsScreen() {
                 <div
                   key={row.period}
                   title={t("history.flows", { deposits: fmt.money0(row.deposits, cur), withdrawals: fmt.money0(row.withdrawals, cur) })}
-                  className={cn(HISTORY_GRID, "min-h-[34px] border-t border-stroke-3 py-1 text-body")}
+                  className={cn(HISTORY_GRID, "min-h-(--cap-row-h) border-t border-stroke-3 py-1 text-body")}
                 >
                   <span className={cn(MONO, "text-label text-fg-3")}>{short(row.period)}</span>
                   <span className={cn(MONO, "text-right", !row.deposits && "text-fg-4")}>{row.deposits ? `+${fmt.money0(row.deposits, cur)}` : "—"}</span>

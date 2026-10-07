@@ -24,7 +24,7 @@ export function GroupLabel({ children }: { children: ReactNode }) {
   return <span className="px-2.5 pt-2 pb-0.5 text-caption text-fg-3">{children}</span>;
 }
 
-/** 34px list row: left content, right annotation (kind, currency, count). */
+/** List row, --cap-row-h tall (34px at Médio): left content, right annotation (kind, currency, count). */
 export function ListItem({ on, onClick, left, right, faded }: { on: boolean; onClick: () => void; left: ReactNode; right?: ReactNode; faded?: boolean }) {
   return (
     <button
@@ -32,7 +32,7 @@ export function ListItem({ on, onClick, left, right, faded }: { on: boolean; onC
       onClick={onClick}
       aria-current={on || undefined}
       className={cn(
-        "flex h-[34px] items-center gap-2 rounded-[6px] px-2.5 text-left text-control outline-none focus-visible:ring-2 focus-visible:ring-fg-3/40",
+        "flex h-(--cap-row-h) items-center gap-2 rounded-[6px] px-2.5 text-left text-control outline-none focus-visible:ring-2 focus-visible:ring-fg-3/40",
         on ? "bg-fill-2/80" : "hover:bg-fill-4",
         faded && "opacity-50",
       )}

@@ -326,7 +326,7 @@ function HoldingsTable({
   };
   return (
     <div className="overflow-hidden rounded-[8px] border border-stroke-3">
-      <div className="grid h-[34px] items-center gap-2.5 px-3 text-label text-fg-3" style={{ gridTemplateColumns: grid }}>
+      <div className="grid h-(--cap-row-h) items-center gap-2.5 px-3 text-label text-fg-3" style={{ gridTemplateColumns: grid }}>
         {columns.map((c) => (
           <span key={c} className={RIGHT.has(c) ? "text-right" : undefined}>
             {t(`columns.${c}`)}
@@ -352,7 +352,7 @@ function HoldingsTable({
           {g.rows.map((row) => {
             const holding = row.holding;
             const content = columns.map((c) => cell(row, c));
-            const className = "grid h-9 w-full items-center gap-2.5 border-t border-stroke-3 px-3 text-left text-body";
+            const className = "grid h-(--cap-table-row-h) w-full items-center gap-2.5 border-t border-stroke-3 px-3 text-left text-body";
             return holding ? (
               <button key={row.key} type="button" onClick={() => onOpen(holding)} className={cn(className, "hover:bg-fill-4")} style={{ gridTemplateColumns: grid }}>
                 {content}
@@ -405,7 +405,7 @@ function OpsView({ config, scope, timezone }: { config: OpsViewConfig; scope: Po
   const incomeOnly = rows.length > 0 && rows.every(isIncome);
   return (
     <div className="overflow-hidden rounded-[8px] border border-stroke-3">
-      <div className="grid h-[34px] items-center gap-2.5 px-3 text-label text-fg-3" style={{ gridTemplateColumns: grid }}>
+      <div className="grid h-(--cap-row-h) items-center gap-2.5 px-3 text-label text-fg-3" style={{ gridTemplateColumns: grid }}>
         <span>{t("columns.date")}</span>
         <span>{t("columns.asset")}</span>
         <span>{t("columns.type")}</span>
@@ -414,7 +414,7 @@ function OpsView({ config, scope, timezone }: { config: OpsViewConfig; scope: Po
         <span />
       </div>
       {rows.map((op) => (
-        <div key={op.id} className="grid h-9 items-center gap-2.5 border-t border-stroke-3 px-3 text-body" style={{ gridTemplateColumns: grid }}>
+        <div key={op.id} className="grid h-(--cap-table-row-h) items-center gap-2.5 border-t border-stroke-3 px-3 text-body" style={{ gridTemplateColumns: grid }}>
           <span className={cn(MONO, "text-label text-fg-3")}>{fmt.date(op.date)}</span>
           <span className="flex min-w-0 items-baseline gap-2">
             <span className={cn(MONO, "text-body-sm font-semibold")}>{op.ticker ?? "—"}</span>
@@ -441,7 +441,7 @@ function OpsView({ config, scope, timezone }: { config: OpsViewConfig; scope: Po
       ))}
       {!rows.length ? <EmptyRow>{ops.isLoading ? ti("loading") : config.filters.some((f) => f.field === "type") ? t("emptyIncome") : t("empty")}</EmptyRow> : null}
       {incomeOnly ? (
-        <div className="flex h-[34px] items-center border-t border-stroke-1 bg-fill-4 px-3 text-body-sm font-semibold">
+        <div className="flex h-(--cap-row-h) items-center border-t border-stroke-1 bg-fill-4 px-3 text-body-sm font-semibold">
           <span>{t("total")}</span>
           <span className={cn(MONO, "ml-auto")}>{fmt.money(rows.reduce((sum, op) => sum + (op.totalAmount - op.taxWithheld) * fx.rateFor(op.currency), 0), fx.base)}</span>
           <span className="w-[38px]" />

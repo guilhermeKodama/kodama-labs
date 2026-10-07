@@ -25,6 +25,8 @@ const RULES: { name: string; pattern: RegExp; skip?: (rel: string) => boolean }[
   { name: "Tailwind text size", pattern: /(?<![\w-])text-(?:xs|sm|base|lg|xl|[2-9]xl)(?![\w-])/g, skip: (rel) => rel.startsWith(VENDORED) },
   { name: "fontSize literal", pattern: /fontSize\s*[:=]\s*\{?\s*["'`]?\d/g },
   { name: "font-size literal", pattern: /font-size:\s*\d/g },
+  // The control, menu-row and table-row heights hold text, so they scale with it (theme.css --cap-*-h).
+  { name: "fixed text-row height", pattern: /(?<![\w-])(?:min-)?h-\[(?:26|28|34|36)px\]/g, skip: (rel) => rel.startsWith(VENDORED) },
 ];
 
 function walk(dir: string, out: string[] = []): string[] {
@@ -60,6 +62,11 @@ describe("no raw text sizes in components", () => {
     expect(findRawTextSizes('"hover:text-[0.8rem]"\n"text-sm"')).toEqual(["1: text-[0.8rem] (arbitrary text size)", "2: text-sm (Tailwind text size)"]);
     expect(findRawTextSizes("tick: { fontSize: 11 }, <text fontSize={10} />")).toHaveLength(2);
     expect(findRawTextSizes(".x { font-size: 12px; }")).toHaveLength(1);
+    expect(findRawTextSizes('"grid h-[34px] px-3" "min-h-[34px]" "h-[26px]" "h-(--cap-row-h) h-[30px]"')).toEqual([
+      "1: h-[34px] (fixed text-row height)",
+      "1: min-h-[34px] (fixed text-row height)",
+      "1: h-[26px] (fixed text-row height)",
+    ]);
     expect(findRawTextSizes('className="text-caption text-fg-3" fontSize={textRole("caption")} data-text-size="sm"')).toEqual([]);
   });
 
