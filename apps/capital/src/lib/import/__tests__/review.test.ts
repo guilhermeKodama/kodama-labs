@@ -13,6 +13,7 @@ import {
   learnsRule,
   pickUse,
   reviewSummary,
+  statementRowCount,
   setIncluded,
   statementMonthParts,
   statusCounts,
@@ -145,7 +146,7 @@ describe("reviewSummary (the confirm KPIs)", () => {
     d = pickUse(d, BANK_ROWS[1], "cat:pet");
     d = pickUse(d, a.rows[6], "cat:pet");
     d = setIncluded(d, BANK_ROWS[2], false);
-    expect(reviewSummary(a.rows, d)).toEqual({ included: 4, updated: 0, removed: 0, ignored: 3, ignoredDuplicates: 2, total: -1723.3, rules: 1, transfers: 1 });
+    expect(reviewSummary(a.rows, d)).toEqual({ included: 4, updated: 0, joining: 0, removed: 0, ignored: 3, ignoredDuplicates: 2, total: -1723.3, rules: 1, transfers: 1 });
   });
 });
 
@@ -333,7 +334,13 @@ describe("buildImportPlan (card bill)", () => {
     it("counts updates and removals apart from the rows booked anew", () => {
       const d = setIncluded(initialDecisions(again), left, true);
       expect(statusCounts(again.rows, d)).toMatchObject({ changed: 1, removed: 1, dup: 1 });
-      expect(reviewSummary(again.rows, d)).toMatchObject({ included: 4, updated: 1, removed: 1, ignored: 1, total: 20 - 199 - 64.3 });
+      const summary = reviewSummary(again.rows, d);
+      expect(summary).toMatchObject({ included: 4, updated: 1, joining: 0, removed: 1, ignored: 1, total: 20 - 199 - 64.3 });
+      // The statement had 5 rows: 3 booked anew, the changed one stays, the cinema leaves.
+      expect(statementRowCount({ existingCount: 5 }, summary)).toBe(7);
+      // An entry updated from the statement next to it joins this one.
+      const joined = analysis({ ...again, rows: [...rows, { ...changed, joinsStatement: true }, left] });
+      expect(statementRowCount({ existingCount: 5 }, reviewSummary(joined.rows, d))).toBe(8);
     });
   });
 

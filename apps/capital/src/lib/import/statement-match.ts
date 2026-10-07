@@ -10,7 +10,10 @@ import type { FieldDiff } from "@capital/server/modules/bank-statements/services
  * Matching is one to one, in passes (each pass over every file row before
  * the next one starts):
  * 1. the same external id (the OFX FITID) anywhere on the card: duplicate,
- *    or changed with the fields that differ;
+ *    or changed with the fields that differ. Only for the same installment
+ *    number and a purchase date within FITID_DAYS: some banks number their
+ *    lines per file, or give every installment of a purchase one FITID, and
+ *    such a reused id must not move another month's row onto this bill;
  * 2. the same identity (date, amount, description, installment) on the
  *    statement or on the one a month before or after (a purchase that
  *    changed cycle): duplicate;
@@ -76,6 +79,8 @@ export interface StatementReconciliation {
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const FUZZY_DAYS = 3;
+/** How far the purchase date of a line may move and still be the line its FITID names. */
+const FITID_DAYS = 31;
 const DUPLICATE_SUFFIX = /~dup\d+$/;
 
 const collapse = (s: string) => s.toLowerCase().trim().replace(/\s+/g, " ");
@@ -163,7 +168,8 @@ export function reconcileStatement(
 ): StatementReconciliation {
   const matches = new Map<string, StatementMatch>();
   const used = new Set<string>();
-  const nearby = [...ledgerRows].filter((r) => r.scope !== "elsewhere").sort((a, b) => scopeRank[a.scope] - scopeRank[b.scope]);
+  const byScope = [...ledgerRows].sort((a, b) => scopeRank[a.scope] - scopeRank[b.scope]);
+  const nearby = byScope.filter((r) => r.scope !== "elsewhere");
 
   const settle = (file: StatementFileRow, row: StatementLedgerRow, by: StatementMatchBy) => {
     used.add(row.id);
@@ -175,9 +181,15 @@ export function reconcileStatement(
   for (const file of fileRows) {
     if (!file.externalId) continue;
     const id = baseExternalId(file.externalId);
-    const row = [...ledgerRows]
-      .sort((a, b) => scopeRank[a.scope] - scopeRank[b.scope])
-      .find((r) => !used.has(r.id) && r.externalId && baseExternalId(r.externalId) === id);
+    const fileDay = dayNumber(file.date);
+    const row = byScope.find(
+      (r) =>
+        !used.has(r.id) &&
+        !!r.externalId &&
+        baseExternalId(r.externalId) === id &&
+        (r.installmentNumber ?? null) === (file.installmentNumber ?? null) &&
+        Math.abs(dayNumber(r.date) - fileDay) <= FITID_DAYS
+    );
     if (row) settle(file, row, "externalId");
   }
 
@@ -221,8 +233,8 @@ export function reconcileStatement(
  * row missing from it have left the bill). An OFX states its range
  * (DTSTART/DTEND): it must start by the day after the previous closing and
  * end by the closing date, a day of slack each way. A CSV only has its
- * rows' dates: the statement must have closed and the file reach the last
- * three days of the cycle.
+ * rows' dates: the file must reach the last three days of the cycle.
+ * Either way the statement must have closed.
  */
 export function coversStatementCycle(input: {
   /** The file's own range (OFX) or the span of its rows (CSV), YYYY-MM-DD. */
@@ -238,6 +250,8 @@ export function coversStatementCycle(input: {
 }): boolean {
   const { from, to, stated, cycleStart, closingDate, today } = input;
   if (!to) return false;
+  // An open bill cannot cover a cycle that has not ended, whatever range it states (some banks state the bill's period).
+  if (closingDate > today) return false;
   if (stated) return !!from && from <= addDays(cycleStart, 1) && to >= addDays(closingDate, -1);
-  return closingDate <= today && to >= addDays(closingDate, -3);
+  return to >= addDays(closingDate, -3);
 }

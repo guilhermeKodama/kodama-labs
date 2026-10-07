@@ -77,6 +77,8 @@ export interface AnalyzedImportRow {
   installment?: { number: number; total: number };
   /** Card installment that replaces the projected one already booked. */
   replacesProjected?: boolean;
+  /** Card "changed" row whose entry sits on another statement (a month before or after): the update moves it onto this one. */
+  joinsStatement?: boolean;
   transfer?: TransferDetails;
   investment?: { direction: "investment_deposit" | "investment_withdrawal"; accountId: string | null };
   cardPayment?: { cardAccountId: string | null; statementMonth: string | null };
@@ -495,6 +497,7 @@ async function analyzeCard(userId: string, analysis: ImportAnalysis, files: Retu
         suggestedCategoryId: prior.categoryId,
         source: prior.categoryId ? "existing" : null,
         ...(match.status === "changed" && { diffs: match.diffs }),
+        ...(match.status === "changed" && prior.scope !== "target" && { joinsStatement: true }),
       });
       return row;
     }

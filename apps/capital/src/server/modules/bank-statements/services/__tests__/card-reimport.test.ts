@@ -6,6 +6,7 @@ import { undoBatch } from "@capital/server/modules/ledger/services/mutations";
 import { buildImportPlan, encodeUse, initialDecisions, pickUse, setIncluded, type Decisions, type ImportAnalysis, type PlanContext } from "@/lib/import/review";
 import { analyzeImport } from "../analyze-import";
 import { executeImport } from "../execute-import";
+import { executeRevert } from "../execute-revert";
 
 /**
  * Importing a card bill again (the open bill first, the closed one later):
@@ -152,12 +153,37 @@ describe("card bill imported again", () => {
     expect((await live()).map((e) => e.description).sort()).toEqual(["Cinema", "IFD*RESTAURANTE SABOR", "Netflix.com"]);
   });
 
+  it("reverting the import (Desfazer importação) puts the changed and the removed rows back", async () => {
+    const restaurant = await importOpenBill();
+    const closed = await analyze(CLOSED_BILL);
+    const cinema = closed.rows.find((r) => r.status === "removed")!;
+    const result = await commit(closed, setIncluded(initialDecisions(closed), cinema, true));
+    expect(result.cardRowsRemoved).toBe(1);
+
+    await executeRevert(USER, { statementImportId: result.importId, createdRecords: [] }, prisma);
+    const reverted = await prisma.ledgerEntry.findUniqueOrThrow({ where: { id: restaurant.id } });
+    expect(reverted).toMatchObject({ description: "IFD*RESTAURANTE SABOR", externalId: "open-rest", categoryId: f.categories.Groceries, deletedAt: null });
+    expect(toNumber(reverted.amount)).toBe(-87.9);
+    expect((await live()).map((e) => e.description).sort()).toEqual(["Cinema", "IFD*RESTAURANTE SABOR", "Netflix.com"]);
+  });
+
   it("leaves a row that left the bill alone unless it is checked", async () => {
     await importOpenBill();
     const closed = await analyze(CLOSED_BILL);
     const result = await commit(closed);
     expect(result.cardRowsRemoved).toBe(0);
     expect((await live()).map((e) => e.description)).toContain("Cinema");
+  });
+
+  it("commits a removal alone (Aplicar 1 alteração): the changed and new rows unchecked stay as they are", async () => {
+    const restaurant = await importOpenBill();
+    const closed = await analyze(CLOSED_BILL);
+    let d = initialDecisions(closed);
+    for (const r of closed.rows) d = setIncluded(d, r, r.status === "removed");
+    const result = await commit(closed, d);
+    expect(result).toMatchObject({ reconciled: 0, cardRowsCreated: 0, cardRowsRemoved: 1 });
+    expect((await live()).map((e) => e.description).sort()).toEqual(["IFD*RESTAURANTE SABOR", "Netflix.com"]);
+    expect(toNumber((await prisma.ledgerEntry.findUniqueOrThrow({ where: { id: restaurant.id } })).amount)).toBe(-87.9);
   });
 
   it("a partial file never proposes a removal", async () => {

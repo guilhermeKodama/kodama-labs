@@ -5,7 +5,7 @@ import type { ExecuteImportResult } from "@capital/server/modules/bank-statement
 import { Btn, Callout, Kpi, KpiStrip } from "@/components/cap";
 import type { AccountRecord } from "@/lib/api/catalog";
 import { useFmt } from "@/lib/format/provider";
-import { isCardKind, statementMonthParts, type ImportAnalysis, type ReviewSummary } from "@/lib/import/review";
+import { isCardKind, statementMonthParts, statementRowCount, type ImportAnalysis, type ReviewSummary } from "@/lib/import/review";
 
 /**
  * Confirmar (mockup 5755-5768): what the commit will do, as KPIs, and for
@@ -44,8 +44,7 @@ export function ConfirmStep({
   if (card) {
     const parts = statementMonthParts(card.month);
     const month = tImport("monthShort", { abbr: fmt.monthAbbr(parts.month), yy: parts.yy });
-    // Rows that update an entry are already on the statement (or join it from the one next to it); removed ones leave it.
-    const count = Math.max(0, card.existingCount + summary.included - summary.updated - summary.removed);
+    const count = statementRowCount(card, summary);
     const bill = t("card", { month, bank: analysis.bank ?? account?.name ?? "", count, total: fmt.money(card.total, currency) });
     const payFrom = card.payFromAccountId ? accounts.find((a) => a.id === card.payFromAccountId)?.name : null;
     const due = card.dueDate ? fmt.date(card.dueDate) : null;
@@ -89,6 +88,7 @@ export function DoneState({
     <>
       <Callout tone="success" title={t("title", { count: result.rowsImported + result.reconciled, account: result.accountName })}>
         {result.viewName ? t("body", { view: result.viewName }) : t("bodyNoView")}
+        {result.cardRowsRemoved > 0 ? ` ${t("removed", { count: result.cardRowsRemoved })}` : null}
       </Callout>
       <div className="flex items-center gap-1.5">
         {result.viewId ? (

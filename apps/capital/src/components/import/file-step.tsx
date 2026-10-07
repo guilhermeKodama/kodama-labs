@@ -112,6 +112,8 @@ export function FileStep({
           </span>
         )}
         <span className="text-[11.5px] text-fg-3">{t("file.help")}</span>
+        {/* Before a file is picked: the format to download the card bill in. A CSV bill repeats it below. */}
+        {first ? null : <span className="text-[11.5px] text-fg-3">{t("file.ofxHint")}</span>}
       </div>
 
       {viaAssistant ? <Callout tone="info">{t("file.assistantNote")}</Callout> : null}

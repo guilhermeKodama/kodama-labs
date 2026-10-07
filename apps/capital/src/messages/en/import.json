@@ -123,6 +123,7 @@
     "title": "{count, plural, one {# transaction imported} other {# transactions imported}} into {account}",
     "body": "All reviewed. The view “{view}” was created so you can check it.",
     "bodyNoView": "All reviewed.",
+    "removed": "{count, plural, one {# entry that left the bill went to the trash.} other {# entries that left the bill went to the trash.}}",
     "openView": "Open the import view",
     "undo": "Undo import",
     "undone": "Import undone"

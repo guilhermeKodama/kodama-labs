@@ -123,6 +123,7 @@
     "title": "{count, plural, one {# lançamento importado} other {# lançamentos importados}} em {account}",
     "body": "Tudo revisado. A view “{view}” foi criada para você conferir.",
     "bodyNoView": "Tudo revisado.",
+    "removed": "{count, plural, one {# lançamento que saiu da fatura foi para a lixeira.} other {# lançamentos que saíram da fatura foram para a lixeira.}}",
     "openView": "Abrir a view da importação",
     "undo": "Desfazer importação",
     "undone": "Importação desfeita"

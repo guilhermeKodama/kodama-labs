@@ -85,10 +85,26 @@ describe("reconcileStatement", () => {
   it("matches by FITID first, wherever the row sits, and reports what changed", () => {
     const { matches } = reconcileStatement(
       [file({ key: "c0", externalId: "fit-1", description: "Totally renamed", amount: 70, date: "2026-09-04" })],
-      [booked({ id: "near", amount: 70, date: "2026-09-04", description: "Totally renamed" }), booked({ id: "far", externalId: "fit-1", scope: "elsewhere", date: "2026-07-01" })],
+      [booked({ id: "near", amount: 70, date: "2026-09-04", description: "Totally renamed" }), booked({ id: "far", externalId: "fit-1", scope: "elsewhere", date: "2026-08-20" })],
       { coversCycle: false }
     );
     expect(matches.get("c0")).toMatchObject({ status: "changed", entryId: "far", by: "externalId" });
+  });
+
+  it("does not trust a FITID reused for another installment or a purchase months apart", () => {
+    const { matches } = reconcileStatement(
+      [
+        file({ key: "inst", externalId: "fit-loja", description: "Loja Eletronicos", amount: 199, installmentNumber: 3, date: "2026-06-10" }),
+        file({ key: "seq", externalId: "1", description: "Padaria", amount: 12 }),
+      ],
+      [
+        booked({ id: "inst2", externalId: "fit-loja", description: "Loja Eletronicos", amount: 199, installmentNumber: 2, date: "2026-06-10", scope: "neighbor" }),
+        booked({ id: "old", externalId: "1", description: "Posto", amount: 250, date: "2026-05-02", scope: "elsewhere" }),
+      ],
+      { coversCycle: false }
+    );
+    expect(matches.get("inst")).toEqual({ status: "new" });
+    expect(matches.get("seq")).toEqual({ status: "new" });
   });
 
   it("an identical row is a duplicate; an entry booked anyway (~dup) still answers to its FITID", () => {
@@ -152,6 +168,8 @@ describe("coversStatementCycle", () => {
     // The open bill, exported mid-cycle.
     expect(coversStatementCycle({ ...cycle, from: "2026-08-06", to: "2026-08-25", stated: true })).toBe(false);
     expect(coversStatementCycle({ ...cycle, from: "2026-08-15", to: "2026-09-05", stated: true })).toBe(false);
+    // A bill stating its whole period before it closed is still the open bill.
+    expect(coversStatementCycle({ ...cycle, today: "2026-08-25", from: "2026-08-06", to: "2026-09-05", stated: true })).toBe(false);
   });
 
   it("a CSV covers it once the statement closed and its rows reach the last days", () => {

@@ -157,6 +157,8 @@ export interface ReviewSummary {
   included: number;
   /** Of those, card rows that update the entry they are ("Mudou"). */
   updated: number;
+  /** Of those, updated entries that move onto the bill's statement from the one next to it. */
+  joining: number;
   /** Rows of the statement that left the bill and go to the trash (checked "Saiu da fatura"). */
   removed: number;
   /** Rows of the file left out, and how many of them are duplicates. */
@@ -171,7 +173,7 @@ export interface ReviewSummary {
 }
 
 export function reviewSummary(rows: readonly AnalyzedImportRow[], decisions: Decisions): ReviewSummary {
-  const summary: ReviewSummary = { included: 0, updated: 0, removed: 0, ignored: 0, ignoredDuplicates: 0, total: 0, rules: 0, transfers: 0 };
+  const summary: ReviewSummary = { included: 0, updated: 0, joining: 0, removed: 0, ignored: 0, ignoredDuplicates: 0, total: 0, rules: 0, transfers: 0 };
   const rules = new Set<string>();
   let cents = 0;
   for (const row of rows) {
@@ -184,6 +186,7 @@ export function reviewSummary(rows: readonly AnalyzedImportRow[], decisions: Dec
       if (decision.include) {
         summary.included++;
         summary.updated++;
+        if (row.joinsStatement) summary.joining++;
       } else {
         summary.ignored++;
       }
@@ -202,6 +205,15 @@ export function reviewSummary(rows: readonly AnalyzedImportRow[], decisions: Dec
   summary.total = cents / 100;
   summary.rules = rules.size;
   return summary;
+}
+
+/**
+ * Purchases the card statement ends up with: the ones it has, plus the rows
+ * booked anew and the updated entries that join it from the statement next
+ * to it, minus the ones that leave it.
+ */
+export function statementRowCount(card: Pick<NonNullable<ImportAnalysis["card"]>, "existingCount">, summary: Pick<ReviewSummary, "included" | "updated" | "joining" | "removed">): number {
+  return Math.max(0, card.existingCount + summary.included - (summary.updated - summary.joining) - summary.removed);
 }
 
 // ---------------------------------------------------------------------------
