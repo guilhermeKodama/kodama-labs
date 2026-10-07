@@ -93,7 +93,7 @@ export function TxFormBody({ form, up, ctx, accounts, mode, lockedKinds = [], in
       <Field label={t("to")}>
         <Select value={form.toAccountId} onChange={(toAccountId) => up({ toAccountId })} options={endpointOptions(form.toAccountId)} invalid={invalid === "to"} />
       </Field>
-      <div className="col-span-full flex items-center gap-2 text-[12px]">
+      <div className="col-span-full flex items-center gap-2 text-body-sm">
         <span className="text-fg-3">{t("transferType")}</span>
         <Badge>
           {t(`direction.${form.reimbursement ? "reimbursement" : detectDirection(ctx.accounts.find((a) => a.id === form.fromAccountId), ctx.accounts.find((a) => a.id === form.toAccountId), entities)}`)}
@@ -108,7 +108,7 @@ export function TxFormBody({ form, up, ctx, accounts, mode, lockedKinds = [], in
   const amountRow = !isInvest ? (
     <div className="grid grid-cols-[minmax(0,1.4fr)_90px_minmax(0,1fr)] items-end gap-2.5">
       <Field label={t("amount")}>
-        <TextInput value={form.amount} onChange={(value) => up({ amount: value })} placeholder="0,00" mono className="text-[15px]" invalid={invalid === "amount"} />
+        <TextInput value={form.amount} onChange={(value) => up({ amount: value })} placeholder="0,00" mono className="text-amount" invalid={invalid === "amount"} />
       </Field>
       <Field label={t("currency")}>
         <Select
@@ -263,7 +263,7 @@ export function TxFormBody({ form, up, ctx, accounts, mode, lockedKinds = [], in
           <Field label={t("nInstallments")}>
             <TextInput value={form.nInstallments} onChange={(nInstallments) => up({ nInstallments })} mono className="w-[70px]" invalid={invalid === "installments"} />
           </Field>
-          <span className="pb-1.5 text-[12px] text-fg-3">
+          <span className="pb-1.5 text-body-sm text-fg-3">
             {t("installmentsHint", {
               n: form.nInstallments,
               value: fmt.money((Number.isFinite(amount) ? amount : 0) / Math.max(1, Number(form.nInstallments) || 1), currency),
@@ -367,7 +367,7 @@ function InvestBlock({
       </div>
       <div className={cn("grid items-start gap-2.5", fx.differs ? "grid-cols-[minmax(0,1.4fr)_1fr_1fr]" : "grid-cols-[minmax(0,1.4fr)_1fr]")}>
         <Field label={t("amount", { currency: from?.currency ?? ctx.baseCurrency })}>
-          <TextInput value={form.amount} onChange={(value) => up({ amount: value })} placeholder="0,00" mono className="text-[15px]" invalid={invalid === "amount"} />
+          <TextInput value={form.amount} onChange={(value) => up({ amount: value })} placeholder="0,00" mono className="text-amount" invalid={invalid === "amount"} />
         </Field>
         {fx.differs ? (
           <Field label={tForm("rate")} hint={Number.isFinite(arrives) ? t("arrives", { value: fmt.money(arrives, to?.currency) }) : undefined}>
@@ -407,7 +407,7 @@ function InvestBlock({
                     : t("perUnit", { value: fmt.money(buy.price, brokerCurrency) })
                 }
               >
-                <span className="pt-1.5 font-mono text-[13px] tabular-nums">{fmt.money(buyTotal, brokerCurrency)}</span>
+                <span className="pt-1.5 font-mono text-body-lg tabular-nums">{fmt.money(buyTotal, brokerCurrency)}</span>
               </Field>
             </div>
           ) : null}

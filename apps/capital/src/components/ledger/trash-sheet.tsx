@@ -66,8 +66,8 @@ function TrashList({ names }: { names: Names }) {
     onSettled: () => setConfirming(false),
   });
 
-  if (pages.isPending) return <p className="text-[12.5px] text-fg-3">{t("sheet.loading")}</p>;
-  if (!rows.length) return <p className="text-[12.5px] text-fg-3">{t("trash.empty")}</p>;
+  if (pages.isPending) return <p className="text-body text-fg-3">{t("sheet.loading")}</p>;
+  if (!rows.length) return <p className="text-body text-fg-3">{t("trash.empty")}</p>;
 
   const where = (row: TrashRow) =>
     row.transfer && row.toAccountId
@@ -77,11 +77,11 @@ function TrashList({ names }: { names: Names }) {
   return (
     <div className="flex flex-col">
       {rows.map((row) => (
-        <div key={row.id} className="grid grid-cols-[52px_minmax(0,1fr)_auto_auto] items-center gap-2 border-t border-stroke-3 py-1.5 text-[12.5px] first:border-t-0">
-          <span className="font-mono text-[11.5px] text-fg-3">{fmt.date(row.date)}</span>
+        <div key={row.id} className="grid grid-cols-[52px_minmax(0,1fr)_auto_auto] items-center gap-2 border-t border-stroke-3 py-1.5 text-body first:border-t-0">
+          <span className="font-mono text-label text-fg-3">{fmt.date(row.date)}</span>
           <span className="flex min-w-0 flex-col">
             <span className="truncate">{row.description}</span>
-            <span className="truncate text-[11px] text-fg-3">{where(row)}</span>
+            <span className="truncate text-caption text-fg-3">{where(row)}</span>
           </span>
           <span className={cn("font-mono tabular-nums", row.transfer ? "text-fg-3" : row.amount > 0 && "text-pos")}>
             {row.transfer ? `⇄ ${fmt.money(row.amount, names.currency).replace("−", "")}` : fmt.money(row.amount, names.currency)}
@@ -99,8 +99,8 @@ function TrashList({ names }: { names: Names }) {
       <div className="mt-3 border-t border-stroke-3 pt-3">
         {confirming ? (
           <div role="alertdialog" aria-label={t("trash.confirmTitle", { count: total })} className="flex flex-col gap-2">
-            <span className="text-[12.5px] font-medium">{t("trash.confirmTitle", { count: total })}</span>
-            <span className="text-[11.5px] text-fg-3">{t("trash.confirmDesc")}</span>
+            <span className="text-body font-medium">{t("trash.confirmTitle", { count: total })}</span>
+            <span className="text-label text-fg-3">{t("trash.confirmDesc")}</span>
             <DialogFooter>
               <Btn ghost autoFocus onClick={() => setConfirming(false)}>
                 {t("trash.cancel")}

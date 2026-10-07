@@ -17,6 +17,7 @@ import { useSession, useSignOut } from "@/lib/api/session";
 import { readLastConversation } from "@/lib/assistant/history";
 import { useFmt } from "@/lib/format/provider";
 import { parseQuickAdd, type QuickAddDraft, type QuickAddResult } from "@/lib/ledger/quick-add";
+import { useNewView } from "@/lib/ledger/use-views";
 import { useAssistantBridge } from "@/lib/shell/assistant-bridge";
 import { commandItems, filterCommands, normalizeSearch, type CommandAction, type CommandGroup, type CommandItem } from "@/lib/shell/command-items";
 import { COMMAND_MENU_EVENT } from "@/lib/shell/command-menu";
@@ -39,7 +40,6 @@ import { THEME_PREFERENCES, type ThemePreference } from "@/lib/theme/preference"
 import { cn } from "@/lib/utils";
 import { AssistantPanel } from "./assistant/assistant-panel";
 import { useAssistant, type AssistantController } from "./assistant/use-assistant";
-import { useNewView } from "./sidebar";
 import { LANGUAGE_KEY, useLocaleChoice, useOpenSettings, useThemeChoice } from "./user-menu";
 
 type Mode = "commands" | "assistant";
@@ -227,7 +227,7 @@ function Palette({ assistant, onClose, onAssistant }: { assistant: AssistantCont
             <QuickAddLabel draft={quick.draft} />
             <QuickAddChips result={quick} />
           </span>
-          <span className="shrink-0 text-[11px] text-fg-3">{t("quickAdd.fill")}</span>
+          <span className="shrink-0 text-caption text-fg-3">{t("quickAdd.fill")}</span>
         </Command.Item>
       </Command.Group>
     ) : null,
@@ -293,17 +293,17 @@ function Palette({ assistant, onClose, onAssistant }: { assistant: AssistantCont
           value={query}
           onValueChange={setQuery}
           placeholder={t("placeholder")}
-          className="h-full min-w-0 flex-1 bg-transparent text-[13px] outline-none placeholder:text-fg-3"
+          className="h-full min-w-0 flex-1 bg-transparent text-body-lg outline-none placeholder:text-fg-3"
         />
         <Kbd>Esc</Kbd>
       </div>
-      <Command.List className="max-h-[min(400px,calc(100dvh-160px))] overflow-y-auto p-1 [&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:pt-2 [&_[cmdk-group-heading]]:pb-1 [&_[cmdk-group-heading]]:text-[11px] [&_[cmdk-group-heading]]:font-medium [&_[cmdk-group-heading]]:text-fg-3">
-        {noMatches ? <div className="px-2 pt-4 pb-3 text-center text-[12.5px] text-fg-3">{t("empty")}</div> : null}
+      <Command.List className="max-h-[min(400px,calc(100dvh-160px))] overflow-y-auto p-1 [&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:pt-2 [&_[cmdk-group-heading]]:pb-1 [&_[cmdk-group-heading]]:text-caption [&_[cmdk-group-heading]]:font-medium [&_[cmdk-group-heading]]:text-fg-3">
+        {noMatches ? <div className="px-2 pt-4 pb-3 text-center text-body text-fg-3">{t("empty")}</div> : null}
         {SECTION_ORDER.map((section) => (
           <Fragment key={section}>{rendered[section] ?? null}</Fragment>
         ))}
       </Command.List>
-      <div className="flex h-8 shrink-0 items-center gap-3 border-t border-stroke-3 px-3 text-[11px] text-fg-3">
+      <div className="flex h-8 shrink-0 items-center gap-3 border-t border-stroke-3 px-3 text-caption text-fg-3">
         <FooterHint keys="↑↓" label={t("footer.navigate")} />
         <FooterHint keys="↵" label={t("footer.open")} />
         <FooterHint keys="Esc" label={t("footer.close")} />
@@ -322,8 +322,8 @@ function lastConversation(): string | null {
 
 /** 28px row, radius 5, 12.5px; the selected one on fill.tertiary (MenuItem). */
 const ITEM =
-  "flex h-7 cursor-pointer items-center gap-2 rounded-[5px] px-2 text-[12.5px] text-fg-1 outline-none select-none data-[disabled=true]:cursor-not-allowed data-[disabled=true]:opacity-40 data-[selected=true]:bg-fill-3";
-const ITEM_TALL = "flex min-h-7 cursor-pointer items-center gap-2 rounded-[5px] px-2 py-1.5 text-[12.5px] text-fg-1 outline-none select-none data-[selected=true]:bg-fill-3";
+  "flex h-(--cap-menu-row-h) cursor-pointer items-center gap-2 rounded-[5px] px-2 text-control text-fg-1 outline-none select-none data-[disabled=true]:cursor-not-allowed data-[disabled=true]:opacity-40 data-[selected=true]:bg-fill-3";
+const ITEM_TALL = "flex min-h-(--cap-menu-row-h) cursor-pointer items-center gap-2 rounded-[5px] px-2 py-1.5 text-control text-fg-1 outline-none select-none data-[selected=true]:bg-fill-3";
 
 function FooterHint({ keys: combo, label }: { keys: string; label: string }) {
   return (
@@ -336,7 +336,7 @@ function FooterHint({ keys: combo, label }: { keys: string; label: string }) {
 
 function Glyph({ children }: { children?: ReactNode }) {
   return (
-    <span aria-hidden className="flex w-4 shrink-0 justify-center text-[12px] text-fg-3">
+    <span aria-hidden className="flex w-4 shrink-0 justify-center text-body-sm text-fg-3">
       {children}
     </span>
   );
@@ -344,7 +344,7 @@ function Glyph({ children }: { children?: ReactNode }) {
 
 /** A line inside a group that is not a command (searching, nothing found). */
 function Note({ children }: { children: ReactNode }) {
-  return <div className="flex h-7 items-center pr-2 pl-8 text-[12px] text-fg-3">{children}</div>;
+  return <div className="flex h-(--cap-menu-row-h) items-center pr-2 pl-8 text-body-sm text-fg-3">{children}</div>;
 }
 
 function CommandRow({ item, isMac, onSelect }: { item: CommandItem; isMac: boolean; onSelect: () => void }) {
@@ -352,8 +352,8 @@ function CommandRow({ item, isMac, onSelect }: { item: CommandItem; isMac: boole
     <Command.Item value={item.id} onSelect={onSelect} className={ITEM}>
       <Glyph>{item.glyph}</Glyph>
       <span className="min-w-0 flex-1 truncate">{item.label}</span>
-      {item.hint ? <span className="shrink-0 text-[11px] text-fg-3">{item.hint}</span> : null}
-      {item.shortcut ? <span className="shrink-0 font-mono text-[10.5px] text-fg-4">{formatCombo(item.shortcut, isMac)}</span> : null}
+      {item.hint ? <span className="shrink-0 text-caption text-fg-3">{item.hint}</span> : null}
+      {item.shortcut ? <span className="shrink-0 font-mono text-hint text-fg-4">{formatCombo(item.shortcut, isMac)}</span> : null}
       {item.checked ? <CheckIcon className="size-3.5 shrink-0 text-fg-2" aria-hidden /> : null}
     </Command.Item>
   );
@@ -439,7 +439,7 @@ function QuickAddChips({ result }: { result: QuickAddResult }) {
   return (
     <span className="flex flex-wrap gap-1">
       {fields.map((field) => (
-        <span key={field} className="rounded-[4px] border border-stroke-2 px-1.5 py-px text-[11px]">
+        <span key={field} className="rounded-[4px] border border-stroke-2 px-1.5 py-px text-caption">
           <span className="text-fg-3">{t(`fields.${field}`)}: </span>
           {value(field)}
         </span>
@@ -492,10 +492,10 @@ function EntryRow({ row }: { row: SearchRow }) {
   const date = row.date.slice(0, 4) === thisYear ? fmt.date(row.date) : fmt.dateFull(row.date);
   return (
     <>
-      <span className="min-w-11 shrink-0 font-mono text-[11px] text-fg-3 tabular-nums">{date}</span>
+      <span className="min-w-11 shrink-0 font-mono text-caption text-fg-3 tabular-nums">{date}</span>
       <span className="min-w-0 flex-1 truncate">{row.description}</span>
-      <span className="max-w-[140px] shrink-0 truncate text-[11.5px] text-fg-3">{names.account.get(row.accountId) ?? ""}</span>
-      <span className={cn("shrink-0 text-right font-mono text-[12px] tabular-nums", amount > 0 && "text-pos")}>{fmt.money(amount, row.currency)}</span>
+      <span className="max-w-[140px] shrink-0 truncate text-label text-fg-3">{names.account.get(row.accountId) ?? ""}</span>
+      <span className={cn("shrink-0 text-right font-mono text-body-sm tabular-nums", amount > 0 && "text-pos")}>{fmt.money(amount, row.currency)}</span>
     </>
   );
 }

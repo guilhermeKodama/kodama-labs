@@ -182,6 +182,8 @@ export interface ParsedCardRow {
   /** Charge > 0, refund < 0 (statement convention). */
   amount: number;
   installment?: { number: number; total: number };
+  /** FITID of a card OFX line; absent on CSV rows. */
+  externalId?: string;
 }
 
 export interface ParsedCardImport {
@@ -190,6 +192,11 @@ export interface ParsedCardImport {
   externalAccountId: string | null;
   currency: string | null;
   period: { from: string; to: string } | null;
+  /**
+   * The range the files state (OFX DTSTART/DTEND, widest over the files):
+   * whether the bill covers its whole cycle. Null for CSV, which states none.
+   */
+  statedRange: { from: string; to: string } | null;
   /** Every parsed line, payments included, for the bill total. */
   parsed: ParsedTransaction[];
   /** The purchases and refunds to book (payment lines left out). */
@@ -208,6 +215,9 @@ export function parseCardFiles(files: DecodedImportFile[]): ParsedCardImport {
   let externalAccountId: string | null = null;
   let currency: string | null = null;
   const parsed: ParsedTransaction[] = [];
+  // A stated range only when every file states one (a CSV among them leaves the coverage unknown).
+  const stated: { from: string; to: string }[] = [];
+  let unstated = false;
 
   for (const file of files) {
     const text = statementText(file.buffer);
@@ -217,9 +227,12 @@ export function parseCardFiles(files: DecodedImportFile[]): ParsedCardImport {
         bank ??= ofx.bankName ? bankDisplayName(ofx.bankName) : null;
         externalAccountId ??= ofx.accountId || null;
         currency ??= ofx.currency || null;
+        if (ofx.dateStart && ofx.dateEnd) stated.push({ from: ofx.dateStart, to: ofx.dateEnd });
+        else unstated = true;
         parsed.push(...ofx.transactions);
       } else {
         bank ??= csvBankName(text);
+        unstated = true;
         parsed.push(...parseCsvContent(text));
       }
     } catch (err) {
@@ -245,12 +258,25 @@ export function parseCardFiles(files: DecodedImportFile[]): ParsedCardImport {
       description: t.description,
       amount: t.amount,
       ...(t.installmentNumber && t.totalInstallments && t.totalInstallments > 1 && { installment: { number: t.installmentNumber, total: t.totalInstallments } }),
+      ...(t.externalId && { externalId: t.externalId }),
     });
   }
   if (!rows.length) throw new LedgerError("No valid transactions found in the bill file", 422, { code: "import.no_transactions" });
   // The cycle's purchases: installments carry the date of the original purchase.
   const dates = (rows.some((r) => !r.installment) ? rows.filter((r) => !r.installment) : rows).map((r) => r.date).sort();
-  return { bank, externalAccountId, currency, period: { from: dates[0], to: dates[dates.length - 1] }, parsed, rows, payments };
+  return {
+    bank,
+    externalAccountId,
+    currency,
+    period: { from: dates[0], to: dates[dates.length - 1] },
+    statedRange:
+      unstated || !stated.length
+        ? null
+        : { from: stated.map((r) => r.from).sort()[0], to: stated.map((r) => r.to).sort().pop()! },
+    parsed,
+    rows,
+    payments,
+  };
 }
 
 /** Last four digits of an account or card number ("•••• 1234", "5502 **** 1234" → "1234"). */

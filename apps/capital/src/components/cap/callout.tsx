@@ -29,7 +29,7 @@ export function Callout({
 }) {
   const glyph = icon === undefined ? TONE[tone].icon : icon;
   return (
-    <div role={tone === "danger" || tone === "warning" ? "alert" : "status"} className={cn("flex gap-2 rounded-[8px] border px-3 py-2 text-[12px]", TONE[tone].box, className)}>
+    <div role={tone === "danger" || tone === "warning" ? "alert" : "status"} className={cn("flex gap-2 rounded-[8px] border px-3 py-2 text-body-sm", TONE[tone].box, className)}>
       {glyph ? <span className="mt-px flex size-3.5 shrink-0 items-center justify-center [&>svg]:size-3.5">{glyph}</span> : null}
       <div className="flex min-w-0 flex-col gap-0.5">
         {title ? <span className="font-medium">{title}</span> : null}

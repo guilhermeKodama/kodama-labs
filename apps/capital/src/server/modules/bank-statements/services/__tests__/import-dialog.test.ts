@@ -102,7 +102,7 @@ describe("POST /v2/imports/analyze", () => {
     expect(row[BANK_FITIDS.IFOOD]).toMatchObject({ status: "dup", reconciliation: "fuzzy_match", duplicateOf: { id: ifood, description: "iFood", date: "2026-09-03" } });
     expect(row[BANK_FITIDS.ALREADY]).toMatchObject({ status: "dup", reconciliation: "duplicate", duplicateOf: { id: already, description: "PADARIA", date: "2026-09-10" } });
     expect(row[BANK_FITIDS.BILL]).toMatchObject({ status: "rule", kind: "card_payment", source: "classification", cardPayment: { cardAccountId: f.card, statementMonth: "2026-09" } });
-    expect(a.summary).toEqual({ counts: { all: 6, dup: 2, rule: 2, ai: 0, need: 2 }, income: 5000, expense: 1713.3 });
+    expect(a.summary).toEqual({ counts: { all: 6, dup: 2, changed: 0, removed: 0, rule: 2, ai: 0, need: 2 }, income: 5000, expense: 1713.3 });
   });
 
   it("asks the AI (when requested) only for the rows no rule covers", async () => {

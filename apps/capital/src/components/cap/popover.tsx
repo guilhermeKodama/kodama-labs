@@ -20,6 +20,7 @@ export function Popover({
   width = 260,
   open,
   onOpenChange,
+  keepFocusOnClose = false,
   className,
 }: {
   trigger: ReactNode;
@@ -29,6 +30,12 @@ export function Popover({
   width?: number;
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
+  /**
+   * Leave focus where it is on close instead of returning it to the
+   * trigger. For a menu that opens another popover as it closes: the focus
+   * coming back would count as "outside" and close that new one at once.
+   */
+  keepFocusOnClose?: boolean;
   className?: string;
 }) {
   const root = useOverlayRoot({ open, onOpenChange });
@@ -41,10 +48,11 @@ export function Popover({
           side={side}
           sideOffset={6}
           collisionPadding={8}
+          onCloseAutoFocus={keepFocusOnClose ? (event) => event.preventDefault() : undefined}
           style={{ width }}
           className={cn(
             FLOATING,
-            "flex max-h-[var(--radix-popover-content-available-height)] flex-col gap-2 overflow-y-auto rounded-[10px] p-2.5 text-[12.5px]",
+            "flex max-h-[var(--radix-popover-content-available-height)] flex-col gap-2 overflow-y-auto rounded-[10px] p-2.5 text-body",
             className,
           )}
         >

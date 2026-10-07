@@ -82,7 +82,7 @@ export function ApiPage() {
         <Btn onClick={generate} disabled={create.isPending}>
           {t("generate")}
         </Btn>
-        <a href="/api/reference" target="_blank" rel="noreferrer" className="inline-flex h-[26px] items-center rounded-[6px] px-2.5 text-[12px] font-medium text-fg-2 outline-none hover:bg-fill-3 focus-visible:ring-2 focus-visible:ring-fg-3/40">
+        <a href="/api/reference" target="_blank" rel="noreferrer" className="inline-flex h-(--cap-control-h) items-center rounded-[6px] px-2.5 text-button font-medium text-fg-2 outline-none hover:bg-fill-3 focus-visible:ring-2 focus-visible:ring-fg-3/40">
           {t("docs")}
         </a>
       </div>
@@ -94,7 +94,7 @@ export function ApiPage() {
         rows={rows.map((row) => [
           <span key="name" className="inline-flex items-baseline gap-1.5">
             {row.name ?? <span className="text-fg-3">{t("noClient")}</span>}
-            <span className="font-mono text-[11px] text-fg-3">{t("tokenSuffix", { last4: row.token.last4 })}</span>
+            <span className="font-mono text-caption text-fg-3">{t("tokenSuffix", { last4: row.token.last4 })}</span>
           </span>,
           <span key="used" className="text-fg-2">
             {row.lastUsedAt ? fmt.relative(row.lastUsedAt) : t("never")}

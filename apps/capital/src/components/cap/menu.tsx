@@ -75,7 +75,7 @@ export function MenuItem({
     <DropdownMenu.Item onSelect={onSelect} disabled={disabled} className={cn(MENU_ROW, danger ? "text-neg" : "text-fg-1")}>
       {icon ? <span className="flex size-3.5 shrink-0 items-center justify-center text-fg-3">{icon}</span> : null}
       <span className="min-w-0 flex-1 truncate">{label}</span>
-      {shortcut ? <span className="shrink-0 font-mono text-[10.5px] text-fg-4">{shortcut}</span> : null}
+      {shortcut ? <span className="shrink-0 font-mono text-hint text-fg-4">{shortcut}</span> : null}
     </DropdownMenu.Item>
   );
 }
@@ -113,5 +113,5 @@ export function MenuSep() {
 }
 
 export function MenuLabel({ children }: { children: ReactNode }) {
-  return <DropdownMenu.Label className="px-2 pt-1 pb-0.5 text-[11px] text-fg-3">{children}</DropdownMenu.Label>;
+  return <DropdownMenu.Label className="px-2 pt-1 pb-0.5 text-caption text-fg-3">{children}</DropdownMenu.Label>;
 }

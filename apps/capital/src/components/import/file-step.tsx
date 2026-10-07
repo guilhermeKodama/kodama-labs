@@ -88,10 +88,10 @@ export function FileStep({
       >
         {first ? (
           <div className="flex items-center gap-2.5">
-            <span className="rounded-[6px] bg-fill-2 px-2 py-1.5 font-mono text-[11px]">{fileBadge(first.name, first.type)}</span>
+            <span className="rounded-[6px] bg-fill-2 px-2 py-1.5 font-mono text-caption">{fileBadge(first.name, first.type)}</span>
             <div className="flex min-w-0 flex-col">
-              <span className="truncate text-[13px] font-medium">{files.length > 1 ? t("file.many", { first: first.name, count: files.length - 1 }) : first.name}</span>
-              <span className="text-[11.5px] text-fg-3">
+              <span className="truncate text-body-lg font-medium">{files.length > 1 ? t("file.many", { first: first.name, count: files.length - 1 }) : first.name}</span>
+              <span className="text-label text-fg-3">
                 {sizeLabel} ·{" "}
                 {reading ? (
                   t("file.reading")
@@ -104,14 +104,16 @@ export function FileStep({
             </div>
           </div>
         ) : (
-          <span className="text-[13px]">
+          <span className="text-body-lg">
             {t("file.drop")}{" "}
             <button type="button" onClick={choose} className="font-medium underline">
               {t("file.choose")}
             </button>
           </span>
         )}
-        <span className="text-[11.5px] text-fg-3">{t("file.help")}</span>
+        <span className="text-label text-fg-3">{t("file.help")}</span>
+        {/* Before a file is picked: the format to download the card bill in. A CSV bill repeats it below. */}
+        {first ? null : <span className="text-label text-fg-3">{t("file.ofxHint")}</span>}
       </div>
 
       {viaAssistant ? <Callout tone="info">{t("file.assistantNote")}</Callout> : null}
@@ -128,8 +130,8 @@ export function FileStep({
               ] as const
             ).map(([key, value]) => (
               <div key={key} className="flex min-w-0 flex-col gap-0.5">
-                <span className="text-[11px] text-fg-3">{t(`meta.${key}`)}</span>
-                <span className="truncate text-[12.5px]">{value}</span>
+                <span className="text-caption text-fg-3">{t(`meta.${key}`)}</span>
+                <span className="truncate text-body">{value}</span>
               </div>
             ))}
           </div>
@@ -151,6 +153,10 @@ export function FileStep({
               <EntitySelect value={entityId} onChange={onEntityChange} disabled={reading} aria-label={t("fields.entity")} className="w-full" />
             </Field>
           </div>
+          {kind === "card_csv" ? <p className="text-label text-fg-3">{t("file.ofxHint")}</p> : null}
+          {card && statement && !statement.coversCycle && statement.existingCount > 0 ? (
+            <p className="text-label text-fg-3">{t("file.partial", { month })}</p>
+          ) : null}
           {card && statement ? (
             <Check
               checked={linkBill}

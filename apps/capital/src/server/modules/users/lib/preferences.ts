@@ -8,6 +8,10 @@
 export const THEMES = ["light", "dark", "system"] as const;
 export type Theme = (typeof THEMES)[number];
 
+/** Text size of the UI: Pequeno, Médio, Grande (globals.css scales every text token by it). */
+export const TEXT_SIZES = ["sm", "md", "lg"] as const;
+export type TextSize = (typeof TEXT_SIZES)[number];
+
 /** Number formats are named by the locale whose separators they use: pt-BR is 1.234,56 and en-US is 1,234.56. */
 export const NUMBER_FORMATS = ["pt-BR", "en-US"] as const;
 export type NumberFormatPref = (typeof NUMBER_FORMATS)[number];
@@ -34,4 +38,8 @@ export function isDateFormat(value: string): value is DateFormatPref {
 
 export function isTheme(value: string): value is Theme {
   return (THEMES as readonly string[]).includes(value);
+}
+
+export function isTextSize(value: string): value is TextSize {
+  return (TEXT_SIZES as readonly string[]).includes(value);
 }

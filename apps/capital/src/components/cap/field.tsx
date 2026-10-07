@@ -21,7 +21,7 @@ export function Field({
   children: ReactNode;
   className?: string;
 }) {
-  const labelClass = "text-[12px] font-medium";
+  const labelClass = "text-body-sm font-medium";
   return (
     <div className={cn("flex min-w-0 flex-col gap-[5px]", className)} style={span ? { gridColumn: `span ${span}` } : undefined}>
       {htmlFor ? (
@@ -32,7 +32,7 @@ export function Field({
         <span className={labelClass}>{label}</span>
       )}
       {children}
-      {hint ? <span className="text-[11px] text-fg-3">{hint}</span> : null}
+      {hint ? <span className="text-caption text-fg-3">{hint}</span> : null}
     </div>
   );
 }

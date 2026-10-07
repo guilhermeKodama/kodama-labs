@@ -8,6 +8,7 @@ import { useSession } from "@/lib/api/session";
 import { entityBadgeKey } from "@/lib/budgets/labels";
 import type { PaceTone } from "@/lib/budgets/pace";
 import type { BudgetsScope } from "@/lib/budgets/url";
+import { textRole } from "@/lib/theme/type-scale";
 import { buildTransactionsHref, type ViewDraft } from "@/lib/ledger/view-draft";
 import { entityLabel } from "@/lib/pickers/options";
 import { cn } from "@/lib/utils";
@@ -78,9 +79,9 @@ export function ScopeBar({ scope, onScope, children }: { scope: BudgetsScope; on
   // A link may scope to one entity (?scope=<id>): show it so the filter is visible.
   if (!["all", "pf", "pj"].includes(scope)) options.push({ v: scope, l: names.get(scope) ?? scope });
   return (
-    <div className="flex min-h-[28px] flex-wrap items-center gap-2">
+    <div className="flex min-h-(--cap-menu-row-h) flex-wrap items-center gap-2">
       <Segmented aria-label={t("scope.label")} value={scope} options={options} onChange={onScope} />
-      <span className="ml-auto text-[12px] text-fg-3">{children}</span>
+      <span className="ml-auto text-body-sm text-fg-3">{children}</span>
     </div>
   );
 }
@@ -89,7 +90,7 @@ export function ScopeBar({ scope, onScope, children }: { scope: BudgetsScope; on
 export function PeriodNav({ label, onPrev, onNext, prevLabel, nextLabel }: { label: string; onPrev: () => void; onNext: () => void; prevLabel: string; nextLabel: string }) {
   const arrow = "inline-flex h-full items-center px-1.5 text-fg-2 outline-none hover:text-fg-1 focus-visible:text-fg-1";
   return (
-    <span className="inline-flex h-[26px] shrink-0 items-center rounded-[6px] border border-stroke-1 text-[12px] font-medium whitespace-nowrap">
+    <span className="inline-flex h-(--cap-control-h) shrink-0 items-center rounded-[6px] border border-stroke-1 text-button font-medium whitespace-nowrap">
       <button type="button" aria-label={prevLabel} title={prevLabel} onClick={onPrev} className={cn(arrow, "pl-2.5")}>
         ‹
       </button>
@@ -104,7 +105,7 @@ export function PeriodNav({ label, onPrev, onNext, prevLabel, nextLabel }: { lab
 /** Series names under a chart: a short swatch (solid or dashed) and the name. */
 export function ChartLegend({ items }: { items: { label: string; color: string; dashed?: boolean }[] }) {
   return (
-    <div className="flex flex-wrap items-center gap-x-3.5 gap-y-1 text-[11px] text-fg-3">
+    <div className="flex flex-wrap items-center gap-x-3.5 gap-y-1 text-caption text-fg-3">
       {items.map((item) => (
         <span key={item.label} className="inline-flex items-center gap-1.5">
           <svg width="14" height="8" aria-hidden className="shrink-0">
@@ -119,15 +120,15 @@ export function ChartLegend({ items }: { items: { label: string; color: string; 
 
 /** Caption under a chart ("Dia do mês × R$ mil · set/2026"). */
 export function ChartCaption({ children }: { children: ReactNode }) {
-  return <p className="mt-1.5 text-[12px] text-fg-4">{children}</p>;
+  return <p className="mt-1.5 text-body-sm text-fg-4">{children}</p>;
 }
 
 /** Loading and error states in place of a view's body. */
 export function ViewState({ error, onRetry }: { error: string | null; onRetry: () => void }) {
   const t = useTranslations("common");
-  if (!error) return <p className="text-[12.5px] text-fg-3">{t("loading")}</p>;
+  if (!error) return <p className="text-body text-fg-3">{t("loading")}</p>;
   return (
-    <p className="flex items-center gap-2 text-[12.5px] text-fg-3">
+    <p className="flex items-center gap-2 text-body text-fg-3">
       {error}
       <button type="button" className="font-medium text-fg-1 underline-offset-2 hover:underline" onClick={onRetry}>
         {t("retry")}
@@ -143,7 +144,7 @@ export interface BudgetActions {
 
 /** Recharts tooltip in the theme tokens. */
 export const TOOLTIP_STYLE = {
-  contentStyle: { background: "var(--cap-bg-editor)", border: "1px solid var(--cap-stroke-1)", borderRadius: 6, fontSize: 12, padding: "6px 8px" },
+  contentStyle: { background: "var(--cap-bg-editor)", border: "1px solid var(--cap-stroke-1)", borderRadius: 6, fontSize: textRole("body-sm"), padding: "6px 8px" },
   labelStyle: { color: "var(--cap-text-3)", marginBottom: 2 },
   itemStyle: { color: "var(--cap-text-1)", padding: 0 },
 } as const;

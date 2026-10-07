@@ -7,11 +7,14 @@
  * "Taxa de poupança" (PF aportes ÷ PF Entradas): shown up to 100%. Aportes
  * above the PF income of the window (money that came from savings, a sale or
  * another entity) show 100% and say so (`capped`) instead of a rate like
- * 96.312%.
+ * 96.312%. Aportes are net of resgates, so the rate goes negative when more
+ * came out of the brokers than went in (`negative`: "resgates maiores que
+ * aportes").
  */
-export function savingsRateKpi(rate: number | null | undefined): { value: number | null; capped: boolean } {
-  if (rate === null || rate === undefined || !Number.isFinite(rate)) return { value: null, capped: false };
-  return rate > 1 ? { value: 1, capped: true } : { value: rate, capped: false };
+export function savingsRateKpi(rate: number | null | undefined): { value: number | null; capped: boolean; negative: boolean } {
+  if (rate === null || rate === undefined || !Number.isFinite(rate)) return { value: null, capped: false, negative: false };
+  if (rate > 1) return { value: 1, capped: true, negative: false };
+  return { value: rate, capped: false, negative: rate < 0 };
 }
 
 export type ReturnKpiState = "value" | "estimated" | "pending";

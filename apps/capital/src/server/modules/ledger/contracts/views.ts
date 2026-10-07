@@ -43,11 +43,15 @@ export type AnyViewConfig = z.infer<(typeof VIEW_CONFIG_SCHEMAS)[ViewDataset]>;
 
 const viewName = z.string().min(1).max(120);
 
-/** A new view; the config schema follows the dataset (ledger when omitted). */
+/**
+ * A new view; the config schema follows the dataset (ledger when omitted).
+ * Without a name the server names it "Nova view", "Nova view 2", … in the
+ * user's locale, numbered per dataset (the "+" buttons and ⌘K).
+ */
 export const savedViewInputSchema = z.union([
-  z.object({ name: viewName, dataset: z.literal("ledger").default("ledger"), isFavorite: z.boolean().default(true), config: viewConfigSchema }),
-  z.object({ name: viewName, dataset: z.literal("holdings"), isFavorite: z.boolean().default(true), config: holdingsViewConfigSchema }),
-  z.object({ name: viewName, dataset: z.literal("investment_ops"), isFavorite: z.boolean().default(true), config: opsViewConfigSchema }),
+  z.object({ name: viewName.optional(), dataset: z.literal("ledger").default("ledger"), isFavorite: z.boolean().default(true), config: viewConfigSchema }),
+  z.object({ name: viewName.optional(), dataset: z.literal("holdings"), isFavorite: z.boolean().default(true), config: holdingsViewConfigSchema }),
+  z.object({ name: viewName.optional(), dataset: z.literal("investment_ops"), isFavorite: z.boolean().default(true), config: opsViewConfigSchema }),
 ]);
 export type SavedViewInput = z.infer<typeof savedViewInputSchema>;
 

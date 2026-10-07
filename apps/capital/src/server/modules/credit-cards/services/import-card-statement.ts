@@ -1,14 +1,18 @@
 import type { DbClient } from "@capital/server/lib/prisma";
-import { parseLocalDate } from "@capital/server/lib/date-utils";
+import { formatDateOnly, parseLocalDate } from "@capital/server/lib/date-utils";
 import { matchCategoryName } from "@capital/server/modules/mcp/lib/category-validation";
 import { getSystemCategory } from "@capital/server/modules/categories/lib/system-categories";
 import { LedgerError } from "@capital/server/modules/ledger/lib/errors";
 import { loadFx } from "@capital/server/modules/ledger/lib/fx";
 import { round } from "@capital/server/modules/ledger/lib/money";
+import { kindSign } from "@capital/server/modules/ledger/lib/money";
+import { softDeleteEntries, updateEntry } from "@capital/server/modules/ledger/services/entries";
 import { inTransaction, recordMutation, snapshot, type MutationRecordInput } from "@capital/server/modules/ledger/services/mutations";
 import { loadRuleMatcher, recordRuleHits } from "@capital/server/modules/ledger/services/rules";
 import { closingDateFor, ensureStatement, statementEffectiveDate } from "@capital/server/modules/ledger/services/statements";
 import type { Account } from "@/generated/prisma";
+import { baseExternalId, reconcileStatement, statementRowKey, type StatementLedgerRow } from "@/lib/import/statement-match";
+import { bookableExternalId } from "@capital/server/modules/bank-statements/services/external-ids";
 import { parseCsvContent, parseDate, computeCycleStart, type ParsedTransaction } from "./parsers";
 import { parseOfxCreditCardContent } from "@capital/server/modules/bank-statements/services/parsers";
 
@@ -24,6 +28,22 @@ export interface StatementRowInput {
   installment?: { number: number; total: number };
   /** Book the row even when an identical one is already on the statement (the user chose "import anyway"). */
   allowDuplicate?: boolean;
+  /** FITID of a card OFX line: stored on the entry, so the next import of the bill finds it. */
+  externalId?: string | null;
+}
+
+/**
+ * A row of the statement the bill changed ("Mudou"): the entry keeps its
+ * id and category and takes the file's values. `amount` is unsigned: the
+ * entry stays a charge or a refund.
+ */
+export interface StatementRowUpdate {
+  entryId: string;
+  date?: string;
+  description?: string;
+  amount?: number;
+  /** The line's FITID, stored on the entry when it has none (or another). */
+  externalId?: string | null;
 }
 
 export interface ImportCardStatementInput {
@@ -36,6 +56,17 @@ export interface ImportCardStatementInput {
   importId?: string | null;
   /** Category for rows nothing else categorizes: "other" (system Other) or "none" (left for the AI cron). */
   fallback?: "other" | "none";
+  /** Entries of the statement (or the ones next to it) the bill changed: updated in place and moved onto this statement. */
+  updates?: StatementRowUpdate[];
+  /** Entries of this statement the bill no longer has ("Saiu da fatura"): moved to the trash. */
+  removeEntryIds?: string[];
+  /**
+   * Entries the import analysis already paired with rows of the file
+   * (kept as they are, updated, or imported anyway). The safety net leaves
+   * them out, so a row the review left unchecked does not swallow a new
+   * one like it. Without it, every live row of the statement counts.
+   */
+  matchedEntryIds?: string[];
 }
 
 export interface CardImportOptions {
@@ -47,11 +78,11 @@ const normalize = (s: string) => s.toLowerCase().trim().replace(/\s+/g, " ");
 const baseDescription = (s: string) => normalize(s.replace(/\s*\(?\d{1,2}\s*\/\s*\d{1,2}\)?\s*$/, ""));
 /**
  * Identity of a statement row (charge > 0): two rows with the same key are
- * the same purchase, which is how re-importing a file stays a no-op. The
- * import analysis uses it too, to flag rows already on the statement.
+ * the same purchase (statementRowKey, the second pass of the statement
+ * reconciliation).
  */
 export const dedupeKey = (date: Date, amount: number, description: string, n?: number | null) =>
-  `${date.toISOString().slice(0, 10)}|${amount.toFixed(2)}|${normalize(description)}${n ? `|${n}` : ""}`;
+  statementRowKey(date.toISOString().slice(0, 10), amount, description, n);
 
 export const isProjected = (metadata: unknown) =>
   typeof metadata === "object" && metadata !== null && (metadata as { projected?: unknown }).projected === true;
@@ -66,10 +97,56 @@ export async function excludeProjected(userId: string, db: DbClient) {
   return projected.length ? { id: { notIn: projected.map((p) => p.id) } } : {};
 }
 
-function shiftMonth(month: string, by: number) {
+export function shiftMonth(month: string, by: number) {
   const [y, m] = month.split("-").map(Number);
   const d = new Date(Date.UTC(y, m - 1 + by, 1));
   return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
+}
+
+/** A ledger row as the statement reconciliation sees it, with what the review shows of it. */
+export interface StatementLedgerEntry extends StatementLedgerRow {
+  categoryId: string | null;
+  cardStatementId: string | null;
+}
+
+/**
+ * The rows a bill of `month` is reconciled against: the live, booked (not
+ * projected) purchases and refunds of that statement and of the ones a
+ * month before and after, plus any row of the card holding one of the
+ * file's external ids. Amounts in the statement convention (charge > 0).
+ */
+export async function statementLedgerRows(account: Pick<Account, "id" | "currency">, month: string, externalIds: readonly string[], db: DbClient): Promise<StatementLedgerEntry[]> {
+  const statements = await db.cardStatement.findMany({
+    where: { accountId: account.id, month: { in: [shiftMonth(month, -1), month, shiftMonth(month, 1)] } },
+    select: { id: true, month: true },
+  });
+  const scopeOf = new Map(statements.map((s) => [s.id, s.month === month ? ("target" as const) : ("neighbor" as const)]));
+  const ids = [...new Set(externalIds.map(baseExternalId))];
+  const where = [
+    ...(scopeOf.size ? [{ cardStatementId: { in: [...scopeOf.keys()] } }] : []),
+    ...(ids.length ? [{ externalId: { in: ids } }] : []),
+  ];
+  if (!where.length) return [];
+  const entries = await db.ledgerEntry.findMany({
+    where: { accountId: account.id, deletedAt: null, transferGroupId: null, OR: where },
+    select: { id: true, date: true, amount: true, description: true, installmentNumber: true, externalId: true, metadata: true, importId: true, currency: true, categoryId: true, cardStatementId: true },
+    orderBy: [{ date: "asc" }, { createdAt: "asc" }],
+  });
+  return entries
+    .filter((e) => !isProjected(e.metadata))
+    .map((e) => ({
+      id: e.id,
+      date: formatDateOnly(e.date),
+      description: e.description,
+      amount: round(-Number(e.amount), 2),
+      installmentNumber: e.installmentNumber,
+      externalId: e.externalId,
+      scope: (e.cardStatementId && scopeOf.get(e.cardStatementId)) || "elsewhere",
+      manual: !e.importId,
+      foreign: e.currency !== account.currency,
+      categoryId: e.categoryId,
+      cardStatementId: e.cardStatementId,
+    }));
 }
 
 /** ensureStatement, recording whether it created the month's statement or changed it. */
@@ -155,30 +232,63 @@ export async function importCardStatement(userId: string, input: ImportCardState
       return { categoryId: fallbackId, auto: false, ruleId: null };
     };
 
-    const existing = await tx.ledgerEntry.findMany({
-      where: { cardStatementId: statement.id, deletedAt: null },
-      select: { date: true, amount: true, description: true, installmentNumber: true, metadata: true },
-    });
-    const counts = new Map<string, number>();
-    for (const e of existing) {
-      if (isProjected(e.metadata)) continue;
-      const k = dedupeKey(e.date, -Number(e.amount), e.description, e.installmentNumber);
-      counts.set(k, (counts.get(k) ?? 0) + 1);
+    // The bill's changes to rows already booked: same id and category, the file's values, on this statement.
+    let updated = 0;
+    const claimed = new Set<string>(input.matchedEntryIds ?? []);
+    for (const update of input.updates ?? []) {
+      const entry = await tx.ledgerEntry.findFirst({ where: { id: update.entryId, userId, accountId: account.id, deletedAt: null, transferGroupId: null } });
+      if (!entry) throw new LedgerError(`Transaction ${update.entryId} not found`, 404, { code: "entry.not_found" });
+      claimed.add(entry.id);
+      // Statement convention of the entry (charge > 0) keeps its direction; updateEntry takes the magnitude its kind shows.
+      const charge = -Number(entry.amount) >= 0;
+      const statementAmount = update.amount === undefined ? undefined : (charge ? 1 : -1) * Math.abs(update.amount);
+      const patch = {
+        ...(statementAmount !== undefined && { amount: -statementAmount * kindSign(entry.kind) }),
+        ...(update.date && { date: update.date }),
+        ...(update.description && { description: update.description }),
+      };
+      if (Object.keys(patch).length) await updateEntry(userId, entry.id, patch, tx, { collect: records, checkCategoryType: false });
+      const current = await tx.ledgerEntry.findUniqueOrThrow({ where: { id: entry.id } });
+      const linkId =
+        update.externalId && baseExternalId(current.externalId ?? "") !== baseExternalId(update.externalId) ? await bookableExternalId(account.id, update.externalId, tx) : null;
+      const data = {
+        ...(current.cardStatementId !== statement.id && { cardStatementId: statement.id, effectiveDate }),
+        ...(linkId && { externalId: linkId }),
+      };
+      if (Object.keys(data).length) {
+        const moved = await tx.ledgerEntry.update({ where: { id: entry.id }, data });
+        records.push({ model: "LedgerEntry", recordId: entry.id, before: snapshot(current), after: snapshot(moved) });
+      }
+      updated++;
     }
+
+    // Rows that left the bill: to the trash (only rows of this statement, still there).
+    let removed = 0;
+    if (input.removeEntryIds?.length) {
+      const gone = await tx.ledgerEntry.findMany({
+        where: { id: { in: input.removeEntryIds }, userId, accountId: account.id, cardStatementId: statement.id, deletedAt: null, transferGroupId: null },
+        select: { id: true, metadata: true },
+      });
+      const ids = gone.filter((e) => !isProjected(e.metadata)).map((e) => e.id);
+      if (ids.length) removed = (await softDeleteEntries(userId, ids, tx, { collect: records })).deleted;
+    }
+
+    // Safety net (the plan may be minutes old): rows the statement already has, by the same reconciliation as the analysis.
+    const ledger = (await statementLedgerRows(account, input.month, input.rows.flatMap((r) => (r.externalId ? [r.externalId] : [])), tx)).filter((e) => !claimed.has(e.id));
+    const { matches } = reconcileStatement(
+      input.rows.map((row, i) => ({ key: String(i), date: formatDateOnly(parseLocalDate(row.date)), description: row.description, amount: row.amount, installmentNumber: row.installment?.number ?? null, externalId: row.externalId ?? null })),
+      ledger,
+      { coversCycle: false }
+    );
 
     const createdIds: string[] = [];
     let skipped = 0;
-    for (const row of input.rows) {
+    for (const [i, row] of input.rows.entries()) {
       const date = parseLocalDate(row.date);
-      const key = dedupeKey(date, row.amount, row.description, row.installment?.number);
-      const seen = counts.get(key) ?? 0;
       // A row imported anyway still pairs with the booked row it repeats, so an identical new row after it is not taken for that one.
-      if (seen > 0) {
-        counts.set(key, seen - 1);
-        if (!row.allowDuplicate) {
-          skipped++;
-          continue;
-        }
+      if (matches.get(String(i))?.status !== "new" && !row.allowDuplicate) {
+        skipped++;
+        continue;
       }
       const currency = row.currency ?? account.currency;
       const rate = fx.rateFor(currency);
@@ -264,6 +374,7 @@ export async function importCardStatement(userId: string, input: ImportCardState
           installmentPlanId: planId,
           installmentNumber: row.installment?.number ?? null,
           importId: input.importId ?? null,
+          externalId: row.externalId ? await bookableExternalId(account.id, row.externalId, tx) : null,
           ...(row.installment && { metadata: { totalInstallments: row.installment.total } }),
         },
       });
@@ -273,7 +384,7 @@ export async function importCardStatement(userId: string, input: ImportCardState
     if (ruleHits.length) await recordRuleHits(ruleHits, tx);
     const batchId =
       opts.collect || !records.length ? null : await recordMutation(tx, userId, "import", `${account.name} ${input.month}`, records, { source: "import" });
-    return { statementId: statement.id, created: createdIds.length, skipped, createdIds, batchId };
+    return { statementId: statement.id, created: createdIds.length, skipped, updated, removed, createdIds, batchId };
   });
 }
 
@@ -340,6 +451,7 @@ export async function importCardFile(
       description: t.description,
       amount: t.amount,
       installment: t.installmentNumber && t.totalInstallments ? { number: t.installmentNumber, total: t.totalInstallments } : undefined,
+      externalId: t.externalId ?? null,
     }));
   const result = await importCardStatement(
     userId,

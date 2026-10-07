@@ -57,7 +57,7 @@ export function ImportsPage(props: { names?: Names }) {
       columnAlign={["left", "left", "left", "right", "left", "right"]}
       rowKey={(index) => items[index].id}
       rows={items.map((item) => [
-        <span key="date" className="font-mono text-[11.5px] text-fg-3">
+        <span key="date" className="font-mono text-label text-fg-3">
           {fmt.date(item.createdAt)}
         </span>,
         <span key="file" className="block max-w-[320px] truncate" title={fileOf(item)}>

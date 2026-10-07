@@ -18,7 +18,9 @@ export type { AnalyzedImportRow, ImportAnalysis, ImportRowStatus };
 
 export type ImportKind = ImportAnalysis["kind"];
 export type ReviewFilter = "all" | ImportRowStatus;
-export const REVIEW_STATUSES: readonly ImportRowStatus[] = ["rule", "ai", "need", "dup"];
+export const REVIEW_STATUSES: readonly ImportRowStatus[] = ["rule", "ai", "need", "changed", "dup", "removed"];
+/** Pills shown only when some row has the status (a card bill re-imported). */
+export const OPTIONAL_STATUSES: readonly ImportRowStatus[] = ["changed", "removed"];
 
 /** How a row is booked. Only bank rows can be transfers, aportes/resgates or bill payments. */
 export type RowUse =
@@ -28,7 +30,11 @@ export type RowUse =
   | { as: "card_payment"; cardAccountId: string };
 
 export interface RowDecision {
-  /** Imported (checked). Duplicates start unchecked. */
+  /**
+   * Acted on (checked): imported, a changed row updates its entry, a row
+   * that left the bill goes to the trash. Duplicates and removals start
+   * unchecked.
+   */
   include: boolean;
   use: RowUse;
   /** The user chose the use in the review (a category picked here becomes a rule). */
@@ -53,12 +59,18 @@ export function defaultUse(row: AnalyzedImportRow): RowUse {
   return { as: "category", categoryId: row.suggestedCategoryId };
 }
 
+/** Whether a row starts checked: not a duplicate, and not a removal (deleting is opt-in). */
+export const includedByDefault = (row: AnalyzedImportRow) => row.status !== "dup" && row.status !== "removed";
+
+/** A row standing for an entry already booked: its category is the entry's and stays. */
+export const keepsEntry = (row: AnalyzedImportRow) => row.status === "changed" || row.status === "removed";
+
 export function initialDecisions(analysis: Pick<ImportAnalysis, "rows">): Decisions {
-  return Object.fromEntries(analysis.rows.map((row) => [row.id, { include: row.status !== "dup", use: defaultUse(row), picked: false }]));
+  return Object.fromEntries(analysis.rows.map((row) => [row.id, { include: includedByDefault(row), use: defaultUse(row), picked: false }]));
 }
 
 const decisionOf = (row: AnalyzedImportRow, decisions: Decisions): RowDecision =>
-  decisions[row.id] ?? { include: row.status !== "dup", use: defaultUse(row), picked: false };
+  decisions[row.id] ?? { include: includedByDefault(row), use: defaultUse(row), picked: false };
 
 const hasTarget = (use: RowUse) => use.as !== "category" || !!use.categoryId;
 
@@ -69,7 +81,7 @@ export function effectiveStatus(row: AnalyzedImportRow, decision: RowDecision | 
 }
 
 export function statusCounts(rows: readonly AnalyzedImportRow[], decisions: Decisions): Record<ReviewFilter, number> {
-  const counts: Record<ReviewFilter, number> = { all: rows.length, rule: 0, ai: 0, need: 0, dup: 0 };
+  const counts: Record<ReviewFilter, number> = { all: rows.length, rule: 0, ai: 0, need: 0, changed: 0, dup: 0, removed: 0 };
   for (const row of rows) counts[effectiveStatus(row, decisions[row.id])]++;
   return counts;
 }
@@ -141,12 +153,18 @@ export function learnsRule(row: AnalyzedImportRow, decision: RowDecision): boole
 }
 
 export interface ReviewSummary {
-  /** Rows that will be imported (checked). */
+  /** Rows of the file that will be imported (checked), changed rows included. */
   included: number;
-  /** Rows left out, and how many of them are duplicates. */
+  /** Of those, card rows that update the entry they are ("Mudou"). */
+  updated: number;
+  /** Of those, updated entries that move onto the bill's statement from the one next to it. */
+  joining: number;
+  /** Rows of the statement that left the bill and go to the trash (checked "Saiu da fatura"). */
+  removed: number;
+  /** Rows of the file left out, and how many of them are duplicates. */
   ignored: number;
   ignoredDuplicates: number;
-  /** Signed sum of the imported rows, as they hit the account. */
+  /** Signed sum of the rows booked anew, as they hit the account. */
   total: number;
   /** Rules the commit will learn (distinct descriptions). */
   rules: number;
@@ -155,11 +173,25 @@ export interface ReviewSummary {
 }
 
 export function reviewSummary(rows: readonly AnalyzedImportRow[], decisions: Decisions): ReviewSummary {
-  const summary: ReviewSummary = { included: 0, ignored: 0, ignoredDuplicates: 0, total: 0, rules: 0, transfers: 0 };
+  const summary: ReviewSummary = { included: 0, updated: 0, joining: 0, removed: 0, ignored: 0, ignoredDuplicates: 0, total: 0, rules: 0, transfers: 0 };
   const rules = new Set<string>();
   let cents = 0;
   for (const row of rows) {
     const decision = decisionOf(row, decisions);
+    if (row.status === "removed") {
+      if (decision.include) summary.removed++;
+      continue;
+    }
+    if (row.status === "changed") {
+      if (decision.include) {
+        summary.included++;
+        summary.updated++;
+        if (row.joinsStatement) summary.joining++;
+      } else {
+        summary.ignored++;
+      }
+      continue;
+    }
     if (!decision.include) {
       summary.ignored++;
       if (row.status === "dup") summary.ignoredDuplicates++;
@@ -173,6 +205,15 @@ export function reviewSummary(rows: readonly AnalyzedImportRow[], decisions: Dec
   summary.total = cents / 100;
   summary.rules = rules.size;
   return summary;
+}
+
+/**
+ * Purchases the card statement ends up with: the ones it has, plus the rows
+ * booked anew and the updated entries that join it from the statement next
+ * to it, minus the ones that leave it.
+ */
+export function statementRowCount(card: Pick<NonNullable<ImportAnalysis["card"]>, "existingCount">, summary: Pick<ReviewSummary, "included" | "updated" | "joining" | "removed">): number {
+  return Math.max(0, card.existingCount + summary.included - (summary.updated - summary.joining) - summary.removed);
 }
 
 // ---------------------------------------------------------------------------
@@ -280,33 +321,56 @@ function bankPlanRows(rows: readonly AnalyzedImportRow[], decisions: Decisions, 
   return plan;
 }
 
-function cardStatementPlan(analysis: ImportAnalysis, decisions: Decisions, ctx: PlanContext): NonNullable<ImportPlanPayload["cardStatement"]> {
+function cardStatementPlan(analysis: ImportAnalysis, decisions: Decisions, ctx: PlanContext) {
   const card = analysis.card!;
-  const rows = analysis.rows.flatMap((row) => {
+  const rows: NonNullable<ImportPlanPayload["cardStatement"]>["rows"] = [];
+  const reconciliations: ImportPlanPayload["reconciliations"] = [];
+  const removeEntryIds: string[] = [];
+  const matchedEntryIds: string[] = [];
+  for (const row of analysis.rows) {
     const decision = decisionOf(row, decisions);
-    if (!decision.include) return [];
+    const entryId = row.duplicateOf?.id ?? null;
+    if ((row.status === "dup" || row.status === "changed") && entryId) matchedEntryIds.push(entryId);
+    if (!decision.include) continue;
+    if (row.status === "removed") {
+      if (entryId) removeEntryIds.push(entryId);
+      continue;
+    }
+    if (row.status === "changed") {
+      // The entry keeps its id and category and takes the bill's values (amount unsigned: still a charge or a refund).
+      if (!entryId || !row.diffs?.length) continue;
+      reconciliations.push({
+        existingTransactionId: entryId,
+        externalId: row.externalId ?? row.id,
+        updates: Object.fromEntries(row.diffs.map((d) => [d.field, d.field === "amount" ? abs2(Number(d.ofxValue)) : d.ofxValue])),
+        ...(row.externalId && { linkExternalId: true }),
+      });
+      continue;
+    }
     const categoryId = decision.use.as === "category" ? decision.use.categoryId : null;
-    return [
-      {
-        date: row.date,
-        description: row.description,
-        // Statement convention: a charge is positive, a refund negative.
-        amount: Math.round(-row.amount * 100) / 100,
-        ...(categoryId ? { categoryId } : {}),
-        ...(learnsRule(row, decision) && { createRule: true }),
-        ...(row.installment && { installment: row.installment }),
-        ...(row.status === "dup" && { allowDuplicate: true }),
-      },
-    ];
-  });
-  return {
+    rows.push({
+      date: row.date,
+      description: row.description,
+      // Statement convention: a charge is positive, a refund negative.
+      amount: Math.round(-row.amount * 100) / 100,
+      ...(categoryId ? { categoryId } : {}),
+      ...(learnsRule(row, decision) && { createRule: true }),
+      ...(row.installment && { installment: row.installment }),
+      ...(row.status === "dup" && { allowDuplicate: true }),
+      ...(row.externalId && { externalId: row.externalId }),
+    });
+  }
+  const statement: NonNullable<ImportPlanPayload["cardStatement"]> = {
     month: card.month,
     closingDate: card.closingDate,
     ...(card.dueDate ? { dueDate: card.dueDate } : {}),
     total: card.total,
     rows,
     linkPayment: ctx.linkPayment,
+    ...(removeEntryIds.length > 0 && { removeEntryIds }),
+    ...(matchedEntryIds.length > 0 && { matchedEntryIds }),
   };
+  return { statement, reconciliations };
 }
 
 /** The body of POST /v2/imports for the reviewed analysis. */
@@ -329,7 +393,11 @@ export function buildImportPlan(analysis: ImportAnalysis, decisions: Decisions, 
     investmentTransactions: [],
   };
   if (isCardKind(analysis.kind)) {
-    if (analysis.card) plan.cardStatement = cardStatementPlan(analysis, decisions, ctx);
+    if (analysis.card) {
+      const { statement, reconciliations } = cardStatementPlan(analysis, decisions, ctx);
+      plan.cardStatement = statement;
+      plan.reconciliations = reconciliations;
+    }
     return plan;
   }
   const rows = bankPlanRows(analysis.rows, decisions, ctx);

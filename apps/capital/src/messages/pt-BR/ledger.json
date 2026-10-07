@@ -6,6 +6,20 @@
     "newView": "Nova view",
     "modified": "Modificada"
   },
+  "viewMenu": {
+    "open": "Opções de “{name}”",
+    "title": "Opções da view",
+    "rename": "Renomear",
+    "duplicate": "Duplicar",
+    "favorite": "Favoritar",
+    "unfavorite": "Desfavoritar"
+  },
+  "deleteView": {
+    "button": "Excluir “{name}”",
+    "title": "Excluir a view “{name}”?",
+    "body": "Os lançamentos não são afetados. Você pode desfazer logo depois.",
+    "confirm": "Excluir"
+  },
   "period": {
     "title": "Período da view",
     "prev": "Período anterior",
@@ -89,7 +103,6 @@
     "favorite": "Favorita (aparece na sidebar)",
     "duplicate": "Duplicar",
     "close": "Fechar",
-    "delete": "Excluir view",
     "deleted": "View “{name}” excluída",
     "custom": "Personalizado"
   },

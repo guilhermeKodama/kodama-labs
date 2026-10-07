@@ -71,6 +71,12 @@
       "light": "Claro",
       "dark": "Escuro"
     },
+    "textSize": "Tamanho da letra",
+    "textSizes": {
+      "sm": "Pequeno",
+      "md": "Médio",
+      "lg": "Grande"
+    },
     "language": "Idioma",
     "languages": {
       "pt-BR": "Português",

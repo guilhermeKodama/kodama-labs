@@ -140,7 +140,7 @@ function ScopeQuestion({ entryId, description, onOpenChange, onDeleted }: Delete
       />
       {linked ? (
         <>
-          <p className="text-[12.5px] text-fg-2">
+          <p className="text-body text-fg-2">
             {t(linked.via === "funding" ? "linked.funding" : "linked.cash", {
               type: linked.type === "buy" || linked.type === "sell" ? linked.type : "other",
               quantity: fmt.number(linked.quantity ?? 0, { min: 0, max: 8 }),

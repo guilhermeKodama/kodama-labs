@@ -53,7 +53,7 @@ export function CategoriesPage() {
 
   return (
     <div className="flex flex-col gap-3">
-      <span className="text-[12px] text-fg-3">{t("hint")}</span>
+      <span className="text-body-sm text-fg-3">{t("hint")}</span>
       <ListDetail
         list={
           <>
@@ -76,7 +76,7 @@ export function CategoriesPage() {
                           {category.isArchived ? <Badge>{t("archivedBadge")}</Badge> : null}
                         </>
                       }
-                      right={<span className="shrink-0 font-mono text-[11px] text-fg-3 tabular-nums">{category.counts.entries}</span>}
+                      right={<span className="shrink-0 font-mono text-caption text-fg-3 tabular-nums">{category.counts.entries}</span>}
                     />
                   ))}
               </div>
@@ -112,7 +112,7 @@ export function CategoriesPage() {
             )}
           </>
         }
-        detail={current ? <CategoryDetail key={current.id} category={current} /> : categories.isSuccess ? <span className="text-[12px] text-fg-3">{t("empty")}</span> : null}
+        detail={current ? <CategoryDetail key={current.id} category={current} /> : categories.isSuccess ? <span className="text-body-sm text-fg-3">{t("empty")}</span> : null}
       />
     </div>
   );
@@ -187,7 +187,7 @@ function CategoryDetail({ category }: { category: CategoryRow }) {
             </Badge>
           ))}
           {ruleDraft === null ? (
-            <button type="button" className="text-[11.5px] text-fg-3 outline-none hover:text-fg-strong focus-visible:underline" onClick={() => setRuleDraft("")}>
+            <button type="button" className="text-label text-fg-3 outline-none hover:text-fg-strong focus-visible:underline" onClick={() => setRuleDraft("")}>
               {t("addRule")}
             </button>
           ) : (
@@ -211,18 +211,18 @@ function CategoryDetail({ category }: { category: CategoryRow }) {
                     setRuleDraft(null);
                   }
                 }}
-                className="h-[22px] w-36 font-mono text-[11.5px]"
+                className="h-[22px] w-36 font-mono text-label"
               />
             </form>
           )}
         </span>
       </Field>
-      <span className="text-[12px] text-fg-3">{t("usage", { entries: category.counts.entries, budgets: category.counts.budgets })}</span>
+      <span className="text-body-sm text-fg-3">{t("usage", { entries: category.counts.entries, budgets: category.counts.budgets })}</span>
       <div className="flex items-center gap-2 border-t border-stroke-3 pt-2.5">
         <Btn disabled={archive.isPending} onClick={() => archive.mutate(!category.isArchived)}>
           {category.isArchived ? t("unarchive") : t("archive")}
         </Btn>
-        <span className="text-[11.5px] text-fg-3">{t("archiveHint")}</span>
+        <span className="text-label text-fg-3">{t("archiveHint")}</span>
       </div>
     </>
   );

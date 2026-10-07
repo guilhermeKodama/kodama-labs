@@ -83,7 +83,7 @@ export function QuickAddBox({ ctx, categories, onFill }: { ctx: FormContext; cat
       {parsed.tokens.length ? (
         <div className="flex flex-wrap gap-1">
           {parsed.tokens.map((token) => (
-            <span key={token.field} className="rounded-[4px] border border-stroke-2 px-1.5 py-px text-[11px]">
+            <span key={token.field} className="rounded-[4px] border border-stroke-2 px-1.5 py-px text-caption">
               <span className="text-fg-3">{t(`chip.${token.field}`)}: </span>
               {value(token.field)}
             </span>

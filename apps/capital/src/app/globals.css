@@ -1,5 +1,7 @@
 @import "tailwindcss";
 @import "tw-animate-css";
+/* Type scale and density: text roles, Pequeno/Médio/Grande. */
+@import "./theme.css";
 
 @custom-variant dark (&:is(.dark *));
 

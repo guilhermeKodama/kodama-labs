@@ -14,7 +14,8 @@
     "continue": "Continuar",
     "commit": "Importar {count, plural, one {# lançamento} other {# lançamentos}}",
     "committing": "Importando…",
-    "assistant": "Mandar pelo assistente"
+    "assistant": "Mandar pelo assistente",
+    "apply": "Aplicar {count, plural, one {# alteração} other {# alterações}}"
   },
   "file": {
     "drop": "Arraste o extrato ou a fatura para cá, ou",
@@ -26,7 +27,9 @@
     "sizeKB": "{size} KB",
     "sizeMB": "{size} MB",
     "assistantNote": "PDFs e fotos são lidos pelo assistente: ele monta o plano com o arquivo e você confirma na conversa.",
-    "assistantPrompt": "Importe este arquivo."
+    "assistantPrompt": "Importe este arquivo.",
+    "ofxHint": "OFX dá o casamento mais confiável: ao importar a fatura de novo (aberta e depois fechada), cada compra é reconhecida pelo identificador do banco.",
+    "partial": "O arquivo não cobre a fatura de {month} inteira: nada que já está nela será removido."
   },
   "meta": {
     "bank": "Banco",
@@ -65,7 +68,9 @@
       "rule": "Regra aplicada",
       "ai": "Sugestão da IA",
       "need": "Sem categoria",
-      "dup": "Duplicada"
+      "changed": "Mudou",
+      "dup": "Duplicada",
+      "removed": "Saiu da fatura"
     },
     "placeholder": "Escolher categoria…",
     "search": "Buscar categoria, conta ou entidade…",
@@ -90,7 +95,15 @@
       "name": "Nome",
       "type": "Tipo",
       "submit": "Criar categoria"
-    }
+    },
+    "changedNote": "atualiza o lançamento: {changes}",
+    "changes": {
+      "amount": "{from} → {to}",
+      "date": "{from} → {to}",
+      "description": "era “{from}”"
+    },
+    "removedNote": "não está mais na fatura · marque para mandar para a lixeira",
+    "remove": "Remover {description} da fatura"
   },
   "confirm": {
     "included": "Serão importadas",
@@ -102,12 +115,15 @@
     "card": "A fatura de {month} do {bank} fica com {count, plural, one {# compra} other {# compras}} e {total}.",
     "cardPayment": "O pagamento de {due} sai de {account} e não conta como gasto.",
     "cardPaymentNoAccount": "O pagamento de {due} não conta como gasto.",
-    "transfers": "{count, plural, one {# linha entra como transferência (pagamento de fatura, aporte ou entre entidades) e não conta como gasto.} other {# linhas entram como transferências (pagamento de fatura, aporte ou entre entidades) e não contam como gasto.}}"
+    "transfers": "{count, plural, one {# linha entra como transferência (pagamento de fatura, aporte ou entre entidades) e não conta como gasto.} other {# linhas entram como transferências (pagamento de fatura, aporte ou entre entidades) e não contam como gasto.}}",
+    "cardUpdated": "{count, plural, one {# lançamento que mudou é atualizado, mantendo a categoria.} other {# lançamentos que mudaram são atualizados, mantendo a categoria.}}",
+    "cardRemoved": "{count, plural, one {# lançamento que saiu da fatura vai para a lixeira.} other {# lançamentos que saíram da fatura vão para a lixeira.}}"
   },
   "done": {
     "title": "{count, plural, one {# lançamento importado} other {# lançamentos importados}} em {account}",
     "body": "Tudo revisado. A view “{view}” foi criada para você conferir.",
     "bodyNoView": "Tudo revisado.",
+    "removed": "{count, plural, one {# lançamento que saiu da fatura foi para a lixeira.} other {# lançamentos que saíram da fatura foram para a lixeira.}}",
     "openView": "Abrir a view da importação",
     "undo": "Desfazer importação",
     "undone": "Importação desfeita"

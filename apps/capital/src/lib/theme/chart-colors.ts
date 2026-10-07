@@ -1,3 +1,5 @@
+import { textRole } from "./type-scale";
+
 /**
  * Chart colors as CSS variable references (defined in src/app/globals.css
  * for light and dark). Recharts and plain SVG take them as fill/stroke
@@ -21,7 +23,7 @@ export const CHART = {
 export const CHART_SERIES = Array.from({ length: 10 }, (_, i) => `var(--cap-chart-${i + 1})`);
 
 /** Axis props shared by every cartesian chart. */
-export const CHART_AXIS = { tick: { fontSize: 11, fill: CHART.muted }, stroke: CHART.axis } as const;
+export const CHART_AXIS = { tick: { fontSize: textRole("caption"), fill: CHART.muted }, stroke: CHART.axis } as const;
 
 /**
  * Heatmap cell background: the heat ink at `alpha` (0..1) over the

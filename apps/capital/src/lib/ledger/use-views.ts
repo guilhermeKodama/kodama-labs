@@ -1,12 +1,18 @@
 "use client";
 
-import { useCallback, useEffect, useRef } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
-import type { ViewConfig } from "@capital/server/modules/ledger/contracts";
+import { useCallback, useEffect } from "react";
+import { useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
+import { useTranslations } from "next-intl";
+import { toast } from "sonner";
+import type { ViewConfig, ViewDataset } from "@capital/server/modules/ledger/contracts";
 import type { SerializedView } from "@capital/server/modules/ledger/services/views";
-import { api, apiPatch } from "@/lib/api/client";
+import { useRouter } from "@/i18n/navigation";
+import { api, apiDelete, apiPatch, apiPost, isUnauthenticated } from "@/lib/api/client";
 import { keys } from "@/lib/api/keys";
-import { useAppMutation } from "@/lib/api/use-app-mutation";
+import { announceWrite } from "@/lib/api/undo";
+import { useAppMutation, useErrorMessage } from "@/lib/api/use-app-mutation";
+import { buildTransactionsHref } from "./view-draft";
+import { createViewSaver, insertView, patchView, removeView, type ViewSaver } from "./view-saver";
 
 /** A ledger view as GET /v2/views returns it. */
 export type LedgerView = Extract<SerializedView, { dataset: "ledger" }>;
@@ -14,7 +20,14 @@ export type LedgerView = Extract<SerializedView, { dataset: "ledger" }>;
 export interface ViewPatch {
   name?: string;
   isFavorite?: boolean;
-  config?: ViewConfig;
+  /** The whole config (ledger: ViewConfig; Carteira: its dataset's config). */
+  config?: ViewConfig | object;
+}
+
+/** What a views cache holds: GET /v2/views rows (any dataset). */
+interface CachedView {
+  id: string;
+  config: unknown;
 }
 
 /** The user's ledger views (Todas and the defaults are created on first access). Same cache as the sidebar. */
@@ -28,86 +41,230 @@ export function useLedgerViews() {
 /** Debounce of the auto-save (mockup viewSave=auto). */
 export const VIEW_SAVE_DELAY = 250;
 
-/**
- * Auto-save of views: the change shows at once (the views cache, which the
- * tabs and the sidebar read, is updated in place), and the PATCH goes out
- * after VIEW_SAVE_DELAY, merged per view and one at a time, so a quick
- * series of edits lands in order and the last one wins. A failed save is
- * toasted and the views are read back from the server.
- */
-export function useViewSaver() {
-  const queryClient = useQueryClient();
-  const pending = useRef(new Map<string, ViewPatch>());
-  /** Edits per view so far: a saved answer is written back only when no newer edit of that view came after it. */
-  const edits = useRef(new Map<string, number>());
-  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const chain = useRef<Promise<void>>(Promise.resolve());
-  const patch = useAppMutation({
-    event: null,
-    mutationFn: ({ id, body }: { id: string; body: ViewPatch }) => apiPatch<LedgerView>(`/api/v2/views/${id}`, body),
-    onError: () => {
-      void queryClient.invalidateQueries({ queryKey: keys.views("ledger") });
-    },
-  });
-  const mutateAsync = patch.mutateAsync;
+// ---------------------------------------------------------------------------
+// The auto-save queue: one per dataset for the whole app (view-saver.ts)
+// ---------------------------------------------------------------------------
 
-  const flush = useCallback(() => {
-    timer.current = null;
-    const batch = [...pending.current.entries()].map(([id, body]) => ({ id, body, edit: edits.current.get(id) ?? 0 }));
-    pending.current.clear();
-    if (!batch.length) return;
-    chain.current = chain.current.then(async () => {
-      for (const { id, body, edit } of batch) {
-        try {
-          const saved = await mutateAsync({ id, body });
-          // A read of the views that landed between the edit and this save showed the old view: put the saved one back.
-          if ((edits.current.get(id) ?? 0) === edit) {
-            queryClient.setQueryData<LedgerView[]>(keys.views("ledger"), (list) => list?.map((view) => (view.id === id ? saved : view)));
-          }
-        } catch {
-          // Toasted by useAppMutation; the views are refetched.
-        }
-      }
-    });
-  }, [mutateAsync, queryClient]);
+interface SaverContext {
+  queryClient: QueryClient;
+  errorText: (error: unknown) => string;
+}
 
-  const save = useCallback(
-    (id: string, body: ViewPatch) => {
-      void queryClient.cancelQueries({ queryKey: keys.views("ledger") });
-      queryClient.setQueryData<LedgerView[]>(keys.views("ledger"), (list) => list?.map((view) => (view.id === id ? { ...view, ...body, config: body.config ?? view.config } : view)));
-      pending.current.set(id, { ...pending.current.get(id), ...body });
-      edits.current.set(id, (edits.current.get(id) ?? 0) + 1);
-      if (timer.current) clearTimeout(timer.current);
-      timer.current = setTimeout(flush, VIEW_SAVE_DELAY);
-    },
-    [queryClient, flush],
-  );
+interface SaverSlot {
+  saver: ViewSaver<ViewPatch>;
+  context: SaverContext | null;
+}
 
-  // Leaving the screen saves what is still waiting.
-  useEffect(
-    () => () => {
-      if (timer.current) {
-        clearTimeout(timer.current);
-        flush();
-      }
-    },
-    [flush],
-  );
+const savers = new Map<ViewDataset, SaverSlot>();
+let pageHideBound = false;
 
-  // A reload or a closed tab inside the delay still saves: keepalive requests outlive the page.
-  useEffect(() => {
-    const onPageHide = () => {
-      if (!timer.current) return;
-      clearTimeout(timer.current);
-      timer.current = null;
-      for (const [id, body] of pending.current) {
+/** A reload or a closed tab inside the delay still saves: keepalive requests outlive the page. */
+function bindPageHide() {
+  if (pageHideBound || typeof window === "undefined") return;
+  pageHideBound = true;
+  window.addEventListener("pagehide", () => {
+    for (const { saver } of savers.values()) {
+      for (const [id, body] of saver.takePending()) {
         void api(`/api/v2/views/${id}`, { method: "PATCH", body: JSON.stringify(body), keepalive: true }).catch(() => undefined);
       }
-      pending.current.clear();
-    };
-    window.addEventListener("pagehide", onPageHide);
-    return () => window.removeEventListener("pagehide", onPageHide);
-  }, []);
+    }
+  });
+}
 
-  return save;
+function saverOf(dataset: ViewDataset): SaverSlot {
+  const existing = savers.get(dataset);
+  if (existing) return existing;
+  const slot = { context: null } as SaverSlot;
+  slot.saver = createViewSaver<ViewPatch, SerializedView & { batchId?: string | null }>({
+    delay: VIEW_SAVE_DELAY,
+    send: (id, body) => apiPatch(`/api/v2/views/${id}`, body),
+    onSaved: (id, saved) => {
+      const { batchId, ...view } = saved;
+      // A read of the views that landed between the edit and this save showed the old view: put the saved one back.
+      slot.context?.queryClient.setQueryData<CachedView[]>(keys.views(dataset), (list) => list?.map((item) => (item.id === id ? view : item)));
+      // A rename or a favorite toggle is recorded: on the ⌘Z stack, silently.
+      announceWrite(batchId ?? null, null);
+    },
+    onError: (_id, error) => {
+      const context = slot.context;
+      void context?.queryClient.invalidateQueries({ queryKey: keys.views(dataset) });
+      if (context && !isUnauthenticated(error)) toast(context.errorText(error));
+    },
+  });
+  savers.set(dataset, slot);
+  bindPageHide();
+  return slot;
+}
+
+/** The query client and error text the queue reports with (set by the mounted savers). */
+function setSaverContext(dataset: ViewDataset, context: SaverContext): void {
+  saverOf(dataset).context = context;
+}
+
+/** Forgets what is waiting to be saved for a view that is being deleted (any dataset), so no PATCH lands after the delete. */
+export function dropViewSave(id: string): void {
+  for (const { saver } of savers.values()) saver.drop(id);
+}
+
+/**
+ * Auto-save of views, for any dataset: the change shows at once (the views
+ * cache, which the tabs and the sidebar read, is updated in place), and
+ * the PATCH goes out after VIEW_SAVE_DELAY, merged per view and one at a
+ * time, so a quick series of edits lands in order and the last one wins
+ * (view-saver.ts). One queue per dataset is shared by every screen, so
+ * the tabs, the sidebar and Exibição never race each other, leaving a
+ * screen inside the delay still saves, and a delete anywhere drops what is
+ * waiting (dropViewSave). A failed save is toasted and the views are read
+ * back from the server.
+ */
+export function useViewSaver(dataset: ViewDataset = "ledger") {
+  const queryClient = useQueryClient();
+  const errorText = useErrorMessage();
+  useEffect(() => setSaverContext(dataset, { queryClient, errorText }), [dataset, queryClient, errorText]);
+
+  return useCallback(
+    (id: string, body: ViewPatch) => {
+      void queryClient.cancelQueries({ queryKey: keys.views(dataset) });
+      queryClient.setQueryData<CachedView[]>(keys.views(dataset), (list) => patchView(list, id, body));
+      saverOf(dataset).saver.save(id, body);
+    },
+    [queryClient, dataset],
+  );
+}
+
+// ---------------------------------------------------------------------------
+// New view, and the view menu's actions (tabs, sidebar, ⌘K, Carteira)
+// ---------------------------------------------------------------------------
+
+/** Puts a created view in its list before anything reads it, so the screen opens it and not Todas while the list refetches. */
+function useInsertView() {
+  const queryClient = useQueryClient();
+  return useCallback(
+    (dataset: ViewDataset, view: CachedView) => {
+      void queryClient.cancelQueries({ queryKey: keys.views(dataset) });
+      queryClient.setQueryData<CachedView[]>(keys.views(dataset), (list) => insertView(list, view));
+    },
+    [queryClient],
+  );
+}
+
+/**
+ * Creates a blank view the server names ("Nova view", "Nova view 2"…) and
+ * puts it in the cache. Its creation is not recorded (no batch), so it is
+ * not on the ⌘Z stack: ⌘Z after its first filter does not delete it.
+ */
+export function useCreateView() {
+  const insert = useInsertView();
+  return useAppMutation({
+    event: "views.write",
+    mutationFn: async (input: { dataset: ViewDataset; config: object }) => {
+      const { batchId, ...view } = await apiPost<SerializedView & { batchId?: string | null }>("/api/v2/views", { dataset: input.dataset, isFavorite: true, config: input.config });
+      void batchId;
+      return view as SerializedView;
+    },
+    onSuccess: (view, input) => insert(input.dataset, view),
+  });
+}
+
+/**
+ * "Nova view" (the tabs' "+", the sidebar's "+ Nova view" and ⌘K): a blank
+ * favorite ledger view (useCreateView), opened on Transações with Exibição
+ * open, where a new view starts.
+ */
+export function useNewView(onNavigate?: () => void) {
+  const router = useRouter();
+  const create = useCreateView();
+  return {
+    isPending: create.isPending,
+    mutate: () =>
+      create.mutate(
+        { dataset: "ledger", config: {} },
+        {
+          onSuccess: (view) => {
+            onNavigate?.();
+            router.push(buildTransactionsHref({ viewId: view.id, display: true }));
+          },
+        },
+      ),
+  };
+}
+
+/**
+ * Deletes a view of any dataset, undoably ("View “X” excluída · Desfazer";
+ * undo brings it back under the same id): drops its pending auto-save
+ * first and takes it out of the cache on success.
+ */
+export function useDeleteView() {
+  const t = useTranslations("ledger.display");
+  const queryClient = useQueryClient();
+  return useAppMutation({
+    event: "views.write",
+    mutationFn: (view: { id: string; name: string; dataset: ViewDataset }) => {
+      dropViewSave(view.id);
+      return apiDelete<{ ok: true; batchId: string | null }>(`/api/v2/views/${view.id}`);
+    },
+    undo: (_data, view) => t("deleted", { name: view.name }),
+    onSuccess: (_data, view) => {
+      queryClient.setQueryData<CachedView[]>(keys.views(view.dataset), (list) => removeView(list, view.id));
+    },
+  });
+}
+
+/**
+ * "Duplicar" of any dataset: the copy ("<nome> (cópia)", with `config` or
+ * the stored one) goes in the cache. Like a new view it is not recorded
+ * (no batch), so ⌘Z after filtering the copy does not delete it.
+ */
+export function useDuplicateView() {
+  const insert = useInsertView();
+  return useAppMutation({
+    event: "views.write",
+    mutationFn: (input: { view: { id: string; dataset: ViewDataset }; config?: object }) =>
+      apiPost<SerializedView & { batchId: string | null }>(`/api/v2/views/${input.view.id}/duplicate`, input.config ? { config: input.config } : {}),
+    onSuccess: (copy, input) => {
+      const { batchId, ...view } = copy;
+      void batchId;
+      insert(input.view.dataset, view);
+    },
+  });
+}
+
+/**
+ * The view menu and "×" of a ledger view (tabs and sidebar): rename and favorite
+ * auto-save, duplicate opens the copy, delete opens Todas when the deleted
+ * view was on screen (`activeId`).
+ */
+export function useLedgerViewActions({ activeId, onNavigate }: { activeId: string | null; onNavigate?: () => void }) {
+  const router = useRouter();
+  const save = useViewSaver("ledger");
+  const remove = useDeleteView();
+  const duplicate = useDuplicateView();
+  return {
+    rename: (view: LedgerView, name: string) => {
+      const next = name.trim();
+      if (next && next !== view.name) save(view.id, { name: next });
+    },
+    toggleFavorite: (view: LedgerView) => save(view.id, { isFavorite: !view.isFavorite }),
+    duplicate: (view: LedgerView) =>
+      duplicate.mutate(
+        { view },
+        {
+          onSuccess: (copy) => {
+            onNavigate?.();
+            router.push(buildTransactionsHref({ viewId: copy.id }));
+          },
+        },
+      ),
+    remove: (view: LedgerView) => {
+      // A second click while the delete is on its way would 404 (and toast an error).
+      if (remove.isPending && remove.variables?.id === view.id) return;
+      remove.mutate(view, {
+        onSuccess: () => {
+          if (view.id !== activeId) return;
+          onNavigate?.();
+          router.replace(buildTransactionsHref());
+        },
+      });
+    },
+  };
 }

@@ -12,12 +12,14 @@ import { nextEditableCell, type CellNavDirection } from "@/lib/ledger/cell-nav";
 import { allVisibleSelected, applySelectionClick, moveFocus } from "@/lib/ledger/selection";
 import { tableItems, visualRowIds, type GroupItem } from "@/lib/ledger/table-items";
 import { useShortcut } from "@/lib/shortcuts";
+import { useTextScale } from "@/lib/theme/use-text-scale";
 import { cn } from "@/lib/utils";
 import type { LedgerLabels } from "../fields";
 import { EditableCell, type EditableField } from "../inline-edit";
 import { RowActionsMenu, useRowActions } from "../row-actions";
 import type { DisplayRow } from "../rows";
 
+/** Row height at Médio; the rows are --cap-row-h (theme.css), this times the text scale. */
 const ROW_H = 34;
 const GROUP_H = 32;
 const EDITABLE: Partial<Record<PropId, EditableField>> = {
@@ -102,14 +104,18 @@ export function LedgerTable(props: LedgerTableProps) {
     for (const child of Array.from(scrollEl.children)) observer.observe(child);
     return () => observer.disconnect();
   }, [scrollEl, listEl]);
+  const textScale = useTextScale();
+  const rowH = ROW_H * textScale;
   const virtualizer = useVirtualizer({
     count: items.length,
     getScrollElement: () => scrollEl,
-    estimateSize: (index) => (items[index]?.type === "group" ? GROUP_H : ROW_H),
+    estimateSize: (index) => (items[index]?.type === "group" ? GROUP_H : rowH),
     getItemKey: (index) => items[index]?.id ?? index,
     overscan: 12,
     scrollMargin: margin,
   });
+  // Tamanho da letra changed: drop the cached sizes so rows are laid out at the new height.
+  useEffect(() => virtualizer.measure(), [virtualizer, rowH]);
   const virtualItems = virtualizer.getVirtualItems();
   const lastIndex = virtualItems.length ? virtualItems[virtualItems.length - 1].index : -1;
   useEffect(() => {
@@ -193,8 +199,8 @@ export function LedgerTable(props: LedgerTableProps) {
 
   const amount = (row: DisplayRow) => (
     <span className="flex min-w-0 items-baseline justify-end gap-1.5">
-      {row.currency !== names.currency ? <span className="truncate font-mono text-[10.5px] text-fg-4 tabular-nums">{fmt.money(Math.abs(row.amount), row.currency)}</span> : null}
-      <span className={cn("font-mono text-[12.5px] whitespace-nowrap tabular-nums", row.neutral ? "text-fg-3" : row.displayAmount > 0 ? "text-pos" : "text-fg-1")}>
+      {row.currency !== names.currency ? <span className="truncate font-mono text-hint text-fg-4 tabular-nums">{fmt.money(Math.abs(row.amount), row.currency)}</span> : null}
+      <span className={cn("font-mono text-body whitespace-nowrap tabular-nums", row.neutral ? "text-fg-3" : row.displayAmount > 0 ? "text-pos" : "text-fg-1")}>
         {row.neutral ? `⇄ ${fmt.number(Math.abs(row.displayAmount))}` : fmt.money(row.displayAmount)}
       </span>
     </span>
@@ -203,16 +209,16 @@ export function LedgerTable(props: LedgerTableProps) {
   const cellContent = (row: DisplayRow, id: PropId) => {
     switch (id) {
       case "date":
-        return <span className="font-mono text-[11.5px] text-fg-3 tabular-nums">{fmt.date(row.date)}</span>;
+        return <span className="font-mono text-label text-fg-3 tabular-nums">{fmt.date(row.date)}</span>;
       case "description":
         return (
           <button type="button" className="flex min-w-0 items-center gap-1.5 text-left" onClick={() => actions.open(row)}>
             <span className="truncate">{row.description}</span>
             {row.installmentNumber && row.installmentTotal ? (
-              <span className="shrink-0 font-mono text-[11px] text-fg-4">{t("installment", { n: row.installmentNumber, total: row.installmentTotal })}</span>
+              <span className="shrink-0 font-mono text-caption text-fg-4">{t("installment", { n: row.installmentNumber, total: row.installmentTotal })}</span>
             ) : null}
             {row.isRecurring ? (
-              <span className="shrink-0 text-[11px] text-fg-4" title={t("recurring")}>
+              <span className="shrink-0 text-caption text-fg-4" title={t("recurring")}>
                 ↻
               </span>
             ) : null}
@@ -248,7 +254,7 @@ export function LedgerTable(props: LedgerTableProps) {
     const isSel = allInView || selected.has(row.id);
     return (
       <div
-        className={cn("relative grid h-[34px] items-center gap-2 border-t border-stroke-3 px-2.5 text-[12.5px]", isSel ? "bg-fill-3" : focused === row.id && "bg-fill-4")}
+        className={cn("relative grid h-(--cap-row-h) items-center gap-2 border-t border-stroke-3 px-2.5 text-body", isSel ? "bg-fill-3" : focused === row.id && "bg-fill-4")}
         style={{ gridTemplateColumns: template }}
         onMouseDown={() => setFocused(row.id)}
       >
@@ -275,7 +281,7 @@ export function LedgerTable(props: LedgerTableProps) {
       <button
         type="button"
         onClick={() => toggleGroup(item.id)}
-        className={cn("flex h-8 w-full items-center gap-2 border-t border-stroke-3 pr-2.5 text-left text-[12px]", item.level === 0 ? "bg-fill-3" : "bg-fill-4")}
+        className={cn("flex h-8 w-full items-center gap-2 border-t border-stroke-3 pr-2.5 text-left text-body-sm", item.level === 0 ? "bg-fill-3" : "bg-fill-4")}
         style={{ paddingLeft: 16 + item.level * 18 }}
       >
         <span className="w-2.5 text-fg-3">{item.collapsed ? "▸" : "▾"}</span>
@@ -317,7 +323,7 @@ export function LedgerTable(props: LedgerTableProps) {
 
   return (
     <div ref={rootRef} className="rounded-[8px] border border-stroke-3">
-      <div className="grid h-[34px] items-center gap-2 px-2.5 text-[11.5px] text-fg-3" style={{ gridTemplateColumns: template }}>
+      <div className="grid h-(--cap-row-h) items-center gap-2 px-2.5 text-label text-fg-3" style={{ gridTemplateColumns: template }}>
         <Check
           checked={hasRows && everyVisible}
           aria-label={t("selectVisible")}
@@ -330,7 +336,7 @@ export function LedgerTable(props: LedgerTableProps) {
         <span />
       </div>
       {hasRows && everyVisible ? (
-        <div className="flex flex-wrap justify-center gap-1.5 border-t border-stroke-3 bg-fill-4 px-3 py-[7px] text-[12px]">
+        <div className="flex flex-wrap justify-center gap-1.5 border-t border-stroke-3 bg-fill-4 px-3 py-[7px] text-body-sm">
           {allInView ? (
             <>
               <span>{t("allSelected", { count: totalCount })}</span>
@@ -356,7 +362,7 @@ export function LedgerTable(props: LedgerTableProps) {
         </div>
       ) : null}
       {!hasRows ? (
-        <div className="border-t border-stroke-3 px-3 py-[18px] text-center text-[12.5px] text-fg-3">{loading ? t("loading") : t("empty", { period: periodLabel })}</div>
+        <div className="border-t border-stroke-3 px-3 py-[18px] text-center text-body text-fg-3">{loading ? t("loading") : t("empty", { period: periodLabel })}</div>
       ) : null}
       <div ref={setListEl} className="relative" style={{ height: virtualizer.getTotalSize() }}>
         {virtualItems.map((virtual) => {
@@ -369,8 +375,8 @@ export function LedgerTable(props: LedgerTableProps) {
           );
         })}
       </div>
-      {hasRows && hasMore ? <div className="border-t border-stroke-3 px-3 py-2 text-center text-[12px] text-fg-3">{t("loading")}</div> : null}
-      <div className="grid h-[34px] items-center gap-2 rounded-b-[8px] border-t border-stroke-2 bg-fill-4 px-2.5" style={{ gridTemplateColumns: template }}>
+      {hasRows && hasMore ? <div className="border-t border-stroke-3 px-3 py-2 text-center text-body-sm text-fg-3">{t("loading")}</div> : null}
+      <div className="grid h-(--cap-row-h) items-center gap-2 rounded-b-[8px] border-t border-stroke-2 bg-fill-4 px-2.5" style={{ gridTemplateColumns: template }}>
         <span />
         {columns.map((id) => {
           const calc = calcOf(config, id);
@@ -381,8 +387,8 @@ export function LedgerTable(props: LedgerTableProps) {
               onClick={() => onConfig({ calcs: { ...config.calcs, [id]: nextCalc(id, calc) } })}
               className={cn("flex min-w-0 items-baseline gap-1.5 overflow-hidden", PROP_META[id].label === "amount" ? "justify-end" : "justify-start")}
             >
-              <span className={cn("text-[10px] tracking-[0.4px] whitespace-nowrap uppercase", calc === "none" ? "text-fg-4" : "text-fg-3")}>{t(`calc.${calc}`)}</span>
-              {calc !== "none" ? <span className="truncate font-mono text-[12px] font-semibold tabular-nums">{calcText(id, calc)}</span> : null}
+              <span className={cn("text-micro tracking-[0.4px] whitespace-nowrap uppercase", calc === "none" ? "text-fg-4" : "text-fg-3")}>{t(`calc.${calc}`)}</span>
+              {calc !== "none" ? <span className="truncate font-mono text-body-sm font-semibold tabular-nums">{calcText(id, calc)}</span> : null}
             </button>
           );
         })}

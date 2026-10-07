@@ -47,7 +47,7 @@ export function PivotView({
     );
   };
 
-  const caption = <span className="text-[12px] text-fg-3">{t("caption", { rows: rowsName, cols: colsName })}</span>;
+  const caption = <span className="text-body-sm text-fg-3">{t("caption", { rows: rowsName, cols: colsName })}</span>;
   if (!pivot || !pivot.rowKeys.length) {
     return (
       <div className="flex flex-col gap-2">

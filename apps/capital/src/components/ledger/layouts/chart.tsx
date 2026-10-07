@@ -13,17 +13,18 @@ import { layoutTreemap, showsTreemapLabel, treemapShade, TREEMAP_H, TREEMAP_W } 
 import { chartKeys } from "@/lib/ledger/view-query";
 import { waterfallBar, waterfallScale, waterfallSteps } from "@/lib/ledger/waterfall";
 import { CHART, CHART_AXIS, CHART_SERIES } from "@/lib/theme/chart-colors";
+import { textRole } from "@/lib/theme/type-scale";
 import { cn } from "@/lib/utils";
 import type { LedgerLabels } from "../fields";
 
 const TOOLTIP_STYLE = {
-  contentStyle: { background: "var(--cap-bg-editor)", border: "1px solid var(--cap-stroke-1)", borderRadius: 8, fontSize: 12 },
+  contentStyle: { background: "var(--cap-bg-editor)", border: "1px solid var(--cap-stroke-1)", borderRadius: 8, fontSize: textRole("body-sm") },
   labelStyle: { color: "var(--cap-text-2)" },
 } as const;
 const SHADE = { 1: "bg-fill-1", 2: "bg-fill-2", 3: "bg-fill-3", 4: "bg-fill-4" } as const;
 const color = (index: number) => CHART_SERIES[index % CHART_SERIES.length];
 
-/** Chart types above the chart (mockup 2925–2950): glyph and label, the hint as title. */
+/** Chart types above the chart (mockup 2925–2950): icon and label, the hint as title. */
 export function ChartTypeStrip({ type, onType }: { type: ChartType; onType: (type: ChartType) => void }) {
   const t = useTranslations("ledger.charts");
   return (
@@ -35,11 +36,11 @@ export function ChartTypeStrip({ type, onType }: { type: ChartType; onType: (typ
           title={t(`hints.${meta.type}`)}
           onClick={() => onType(meta.type)}
           className={cn(
-            "inline-flex h-6 items-center gap-[5px] rounded-[6px] border px-2 text-[11.5px]",
+            "inline-flex h-6 items-center gap-[5px] rounded-[6px] border px-2 text-label",
             type === meta.type ? "border-stroke-1 bg-fill-2 text-fg-1" : "border-transparent text-fg-3 hover:text-fg-strong",
           )}
         >
-          <span className="text-[11px]">{meta.glyph}</span>
+          <meta.icon aria-hidden className="size-3.5 shrink-0" />
           {t(`types.${meta.type}`)}
         </button>
       ))}
@@ -133,7 +134,7 @@ export function ChartView({
       <Panel title={t("charts.title", { view: viewName, type: typeLabel })}>
         <div className="flex flex-col gap-2">
           {body}
-          {type !== "sankey" ? <span className="text-[12px] text-fg-4">{caption}</span> : null}
+          {type !== "sankey" ? <span className="text-body-sm text-fg-4">{caption}</span> : null}
         </div>
       </Panel>
     </div>
@@ -141,7 +142,7 @@ export function ChartView({
 }
 
 /** Bars (stacked with series), horizontal, 100%, line and area. */
-function CartesianBody({
+export function CartesianBody({
   data,
   type,
   catLabel,
@@ -164,7 +165,7 @@ function CartesianBody({
   const height = horizontal ? Math.max(200, data.categories.length * 28) : 260;
   const stacked = data.hasSeries;
   const tick = (v: number) => value(Number(v));
-  const legend = data.hasSeries ? <Legend iconSize={8} wrapperStyle={{ fontSize: 11 }} /> : null;
+  const legend = data.hasSeries ? <Legend iconSize={8} wrapperStyle={{ fontSize: textRole("caption") }} /> : null;
   const tooltip = <Tooltip {...TOOLTIP_STYLE} formatter={(v) => tick(Number(v))} />;
   const seriesColor = (j: number) => (data.hasSeries ? color(j) : CHART.bar);
   const many = data.categories.length > 8;
@@ -230,7 +231,7 @@ function CartesianBody({
 }
 
 /** Pie and donut (positive values only), with the total in the donut's center and a legend. */
-function PieBody({
+export function PieBody({
   data,
   metric,
   donut,
@@ -272,16 +273,16 @@ function PieBody({
           </PieChart>
         </ResponsiveContainer>
         {donut ? (
-          <span className="pointer-events-none absolute inset-0 flex items-center justify-center font-mono text-[13px] font-semibold tabular-nums">{value(total)}</span>
+          <span className="pointer-events-none absolute inset-0 flex items-center justify-center font-mono text-body-lg font-semibold tabular-nums">{value(total)}</span>
         ) : null}
       </div>
       <div className="flex min-w-0 flex-1 flex-col gap-1">
         {items.map((item, i) => (
-          <button key={item.index} type="button" onClick={() => onSlice(item.index)} className="flex items-center gap-2 text-left text-[12px] hover:underline">
+          <button key={item.index} type="button" onClick={() => onSlice(item.index)} className="flex items-center gap-2 text-left text-body-sm hover:underline">
             <span className="size-2 shrink-0 rounded-full" style={{ background: color(i) }} />
             <span className="min-w-0 flex-1 truncate">{catLabel(item.category)}</span>
             <span className="font-mono text-fg-2 tabular-nums">{value(item.value)}</span>
-            <span className="w-10 text-right font-mono text-[11px] text-fg-3 tabular-nums">{fmt.pct(total ? item.value / total : 0, 0)}</span>
+            <span className="w-10 text-right font-mono text-caption text-fg-3 tabular-nums">{fmt.pct(total ? item.value / total : 0, 0)}</span>
           </button>
         ))}
       </div>
@@ -290,7 +291,7 @@ function PieBody({
 }
 
 /** Treemap (mockup 1906–1960): tiles by value, shaded by rank, labelled when large enough. */
-function TreemapBody({ data, catLabel, onTile }: { data: ChartData; catLabel: (cat: ChartCategory) => string; onTile: (index: number) => void }) {
+export function TreemapBody({ data, catLabel, onTile, value }: { data: ChartData; catLabel: (cat: ChartCategory) => string; onTile: (index: number) => void; value?: (v: number) => string }) {
   const fmt = useFmt();
   const items = data.categories.map((category, index) => ({ value: data.totals[index], data: { category, index } }));
   const total = items.reduce((s, item) => s + Math.max(0, item.value), 0);
@@ -309,9 +310,9 @@ function TreemapBody({ data, catLabel, onTile }: { data: ChartData; catLabel: (c
           <span className={cn("box-border flex h-full flex-col gap-0.5 overflow-hidden rounded-[5px] p-2 hover:opacity-90", SHADE[treemapShade(r.rank)])}>
             {showsTreemapLabel(r) ? (
               <>
-                <span className="truncate text-[12px] font-semibold">{catLabel(r.data.category)}</span>
-                <span className="font-mono text-[11px] text-fg-2 tabular-nums">{fmt.money0(r.value)}</span>
-                <span className="font-mono text-[10.5px] text-fg-3 tabular-nums">{fmt.pct(total ? r.value / total : 0, 0)}</span>
+                <span className="truncate text-body-sm font-semibold">{catLabel(r.data.category)}</span>
+                <span className="font-mono text-caption text-fg-2 tabular-nums">{value ? value(r.value) : fmt.money0(r.value)}</span>
+                <span className="font-mono text-hint text-fg-3 tabular-nums">{fmt.pct(total ? r.value / total : 0, 0)}</span>
               </>
             ) : null}
           </span>
@@ -353,7 +354,7 @@ function WaterfallBody({
               title={label(step.data)}
               className="relative min-w-0 flex-1 disabled:cursor-default"
             >
-              <span className="absolute right-0 left-0 text-center font-mono text-[10px] whitespace-nowrap text-fg-3 tabular-nums" style={{ top: Math.max(0, bar.top - 15) }}>
+              <span className="absolute right-0 left-0 text-center font-mono text-micro whitespace-nowrap text-fg-3 tabular-nums" style={{ top: Math.max(0, bar.top - 15) }}>
                 {fmt.k(step.value)}
               </span>
               <span
@@ -366,7 +367,7 @@ function WaterfallBody({
       </div>
       <div className="flex gap-1.5">
         {steps.map((step, i) => (
-          <span key={i} className={cn("min-w-0 flex-1 truncate text-center text-[10.5px]", step.kind === "total" ? "text-fg-1" : "text-fg-3")}>
+          <span key={i} className={cn("min-w-0 flex-1 truncate text-center text-hint", step.kind === "total" ? "text-fg-1" : "text-fg-3")}>
             {label(step.data)}
           </span>
         ))}

@@ -1,22 +1,25 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useTranslations } from "next-intl";
 import { Field, Segmented, Select, TextInput } from "@/components/cap";
 import { usePathname, useRouter } from "@/i18n/navigation";
 import { useCurrencies } from "@/lib/api/catalog";
 import { apiPatch } from "@/lib/api/client";
+import { keys } from "@/lib/api/keys";
 import { useSession, type SessionUser } from "@/lib/api/session";
 import { useAppMutation } from "@/lib/api/use-app-mutation";
 import { APP_LOCALES, DATE_FORMATS, NUMBER_FORMATS, normalizeDateFormat, normalizeLocale, normalizeNumberFormat, type AppLocale } from "@/lib/format/prefs";
 import { THEME_PREFERENCES, parseThemePreference, type ThemePreference } from "@/lib/theme/preference";
+import { DEFAULT_TEXT_SIZE, TEXT_SIZES, applyTextSize, parseTextSize, type TextSize } from "@/lib/theme/text-size";
 import { useBaseCurrencyChange } from "./base-currency";
 
 type MePatch = Partial<Pick<SessionUser, "name" | "theme" | "dateFormat" | "numberFormat" | "timezone">> & { locale?: AppLocale };
 
 /**
  * Perfil e preferências: every field saves on its own (no Salvar). Formats,
- * theme and language only touch the session; the time zone and the base
+ * theme, text size and language only touch the session; the time zone and the base
  * currency change how periods and totals are computed.
  */
 export function PrefsPage() {
@@ -30,6 +33,24 @@ export function PrefsPage() {
 
   const saveDisplay = useAppMutation({ event: "me.write", mutationFn: (body: MePatch) => apiPatch<SessionUser>("/api/v2/me", body) });
   const saveTimezone = useAppMutation({ event: "settings.write", mutationFn: (timezone: string) => apiPatch<SessionUser>("/api/v2/me", { timezone }) });
+  // Applied at once (optimistic): the page and the session take the new size before the PATCH answers, and go back if it fails.
+  const queryClient = useQueryClient();
+  const saveTextSize = useAppMutation<SessionUser, TextSize, SessionUser | undefined>({
+    event: "me.write",
+    mutationFn: (textSize) => apiPatch<SessionUser>("/api/v2/me", { textSize }),
+    onMutate: async (textSize) => {
+      await queryClient.cancelQueries({ queryKey: keys.me() });
+      const previous = queryClient.getQueryData<SessionUser>(keys.me());
+      if (previous) queryClient.setQueryData<SessionUser>(keys.me(), { ...previous, textSize });
+      applyTextSize(textSize);
+      return previous;
+    },
+    onError: (_error, _textSize, previous) => {
+      if (!previous) return;
+      queryClient.setQueryData(keys.me(), previous);
+      applyTextSize(parseTextSize(previous.textSize) ?? DEFAULT_TEXT_SIZE);
+    },
+  });
 
   const timezone = me?.timezone;
   const zones = useMemo(() => {
@@ -106,6 +127,14 @@ export function PrefsPage() {
           value={parseThemePreference(me.theme) ?? "light"}
           options={THEME_PREFERENCES.map((v) => ({ v, l: t(`themes.${v}`) })).sort((a, b) => ORDER.indexOf(a.v) - ORDER.indexOf(b.v))}
           onChange={(theme) => saveDisplay.mutate({ theme })}
+        />
+      </Field>
+      <Field label={t("textSize")}>
+        <Segmented<TextSize>
+          aria-label={t("textSize")}
+          value={parseTextSize(me.textSize) ?? DEFAULT_TEXT_SIZE}
+          options={TEXT_SIZES.map((v) => ({ v, l: t(`textSizes.${v}`) }))}
+          onChange={(textSize) => saveTextSize.mutate(textSize)}
         />
       </Field>
       <Field label={t("language")}>

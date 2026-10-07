@@ -63,7 +63,7 @@
     "refreshed": "{updated} of {total} quotes updated",
     "refreshedMissing": "{updated} of {total} quotes updated · no quote: {tickers}",
     "importNote": "Import brokerage note",
-    "importNotePrompt": "Import this brokerage note into my portfolio.",
+    "importNotePrompt": "Import this brokerage note into my portfolio: read the operations and show me the plan to confirm before saving anything.",
     "newOperation": "+ Operation",
     "quotesToday": "Today's quotes {time}",
     "quotesOn": "Quotes from {date} {time}",
@@ -80,19 +80,24 @@
       "returnPending": "no closed months yet",
       "returnEstimated": "estimated history",
       "benchmarksEstimated": "estimated history · CDI {cdi} · IPCA+ 6% {ipca}",
-      "returnEstimatedHint": "The months in the window were estimated at cost, before monthly snapshots with prices existed. The return shows from the first closed month with prices."
+      "returnEstimatedHint": "The months in the window were estimated at cost, before monthly snapshots with prices existed. The return shows from the first closed month with prices.",
+      "contributedInitial": "includes {amount} of initial positions"
     },
     "history": {
       "title": "Net worth vs total contributed",
       "netWorth": "Net worth",
       "contributed": "Contributed",
       "caption": "Month × {unit} · {range} · {scope}",
-      "empty": "History appears from the second month with positions."
+      "empty": "History appears from the second month with positions.",
+      "initialPositions": "Initial positions",
+      "initialPositionsHint": "Holdings registered without operations (no purchase date): they enter in the month they were registered as initial positions, not as a contribution."
     },
     "allocation": {
       "title": "Current allocation vs target",
       "legend": "Bar = current · tick = target · pp = difference from target",
-      "empty": "No positions. Record an operation to start."
+      "empty": "No positions. Record an operation to start.",
+      "editTargets": "Edit targets",
+      "noTargets": "Set targets to compare"
     },
     "tabs": {
       "byClass": "By class",
@@ -139,9 +144,6 @@
         "ticker": "Asset"
       },
       "columns": "Columns",
-      "layout": "Layout",
-      "layoutTable": "Table",
-      "layoutChart": "Chart",
       "period": "Period",
       "periods": {
         "last_12m": "Last 12 months",
@@ -154,8 +156,20 @@
       "series": "Series",
       "seriesTotal": "Total",
       "seriesClass": "By class",
-      "delete": "Delete view",
-      "deleted": "View “{name}” deleted"
+      "deleted": "View “{name}” deleted",
+      "metrics": {
+        "marketValue": "Market value",
+        "share": "% of portfolio",
+        "result": "Result (amount)",
+        "sum": "Sum",
+        "count": "Number of operations",
+        "avg": "Average ticket"
+      },
+      "axis": {
+        "month": "Month",
+        "type": "Type",
+        "allocationClass": "Class"
+      }
     },
     "columns": {
       "ticker": "Asset",
@@ -189,7 +203,8 @@
       "total": "Total",
       "totalValue": "Total {amount}",
       "chartCaption": "Month × {unit} · {range}"
-    }
+    },
+    "importNoteHint": "Reads the note with the assistant and shows the operations for you to confirm."
   },
   "sheet": {
     "class": "Class",
@@ -300,7 +315,9 @@
       "to": "To",
       "depositNote": "Creates an “Investment contribution” transfer that shows in Transactions and in Contributions.",
       "withdrawNote": "Creates an “Investment withdrawal” transfer."
-    }
+    },
+    "changeAsset": "Change",
+    "newAssetSelected": "{name} · new asset"
   },
   "editOp": {
     "title": "Edit operation",
@@ -313,15 +330,17 @@
     "next": "Next period",
     "register": "+ Record contribution",
     "kpi": {
-      "month": "Contributed in {month}",
+      "month": "Contributed in {month} (net)",
       "goalFire": "Goal (FIRE plan): {amount}",
       "noGoal": "No goal: set up the FIRE plan",
-      "avg": "12m average",
-      "total": "Total 12m",
+      "avg": "12m average (net)",
+      "total": "Contributed 12m (net)",
       "savings": "Savings rate",
       "savingsSub": "contributions / personal net income",
       "savingsCapped": "contributions above personal net income",
-      "savingsCappedHint": "Contributions of {aportes} against personal net income of {income} in the period: the excess came from savings, sales or another entity."
+      "savingsCappedHint": "Contributions of {aportes} against personal net income of {income} in the period: the excess came from savings, sales or another entity.",
+      "totalSub": "+{deposits} contributions · −{withdrawals} withdrawals",
+      "savingsNegative": "withdrawals larger than contributions"
     },
     "chart": {
       "title": "Contributions by month and class",
@@ -355,13 +374,24 @@
     },
     "history": {
       "title": "Contribution history",
-      "link": "· see in Transactions ↗",
       "status": {
         "ok": "on target",
         "above": "above target",
         "below": "below target"
       },
-      "empty": "No contributions in this period."
+      "empty": "No contributions in this period.",
+      "all": "See all",
+      "columns": {
+        "month": "Month",
+        "deposits": "In",
+        "withdrawals": "Out",
+        "net": "Net",
+        "origin": "Source"
+      },
+      "flows": "+{deposits} contributions · −{withdrawals} withdrawals",
+      "originIn": "{origin}",
+      "originOut": "withdrawal: {origin}",
+      "caption": "Click a source to see its transfers in Transactions ↗"
     },
     "fire": {
       "title": "Financial independence",
@@ -376,6 +406,45 @@
       "noPlan": "No FIRE plan. Today: {invested} invested and {expenses}/month in expenses.",
       "edit": "Edit goal",
       "define": "Set goal"
+    },
+    "tabs": {
+      "summary": "Summary",
+      "all": "All contributions"
+    },
+    "all": {
+      "chip": "{prop}: {values}",
+      "noOptions": "Nothing to filter.",
+      "done": "Done",
+      "remove": "Remove filter",
+      "search": "Search",
+      "export": "Export CSV",
+      "exported": "Contributions CSV exported",
+      "loaded": "{count} of {total} entries",
+      "loadedPartial": "{count} entries loaded (more to load)",
+      "totals": "+{deposits} contributions · −{withdrawals} withdrawals · net {net}",
+      "totalsLoaded": "loaded so far: +{deposits} contributions · −{withdrawals} withdrawals · net {net}",
+      "empty": "No contributions or withdrawals with these filters.",
+      "loadMore": "Load more",
+      "route": "{from} → {to}",
+      "filters": {
+        "period": "Period",
+        "type": "Type",
+        "account": "Account",
+        "broker": "Broker",
+        "entity": "Entity"
+      },
+      "type": {
+        "investment_deposit": "Contribution",
+        "investment_withdrawal": "Withdrawal"
+      },
+      "columns": {
+        "date": "Date",
+        "type": "Type",
+        "route": "From → to",
+        "description": "Description",
+        "entity": "Entity",
+        "amount": "Amount"
+      }
     }
   },
   "aporte": {

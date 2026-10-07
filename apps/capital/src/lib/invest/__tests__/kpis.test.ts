@@ -4,12 +4,17 @@ import { return12mState, savingsRateKpi } from "../kpis";
 
 describe("savingsRateKpi", () => {
   it("caps Taxa de poupança at 100% and says so when aportes exceed the PF income", () => {
-    expect(savingsRateKpi(963.12)).toEqual({ value: 1, capped: true });
-    expect(savingsRateKpi(1.0001)).toEqual({ value: 1, capped: true });
-    expect(savingsRateKpi(1)).toEqual({ value: 1, capped: false });
-    expect(savingsRateKpi(0.38)).toEqual({ value: 0.38, capped: false });
-    expect(savingsRateKpi(null)).toEqual({ value: null, capped: false });
-    expect(savingsRateKpi(undefined)).toEqual({ value: null, capped: false });
+    expect(savingsRateKpi(963.12)).toEqual({ value: 1, capped: true, negative: false });
+    expect(savingsRateKpi(1.0001)).toEqual({ value: 1, capped: true, negative: false });
+    expect(savingsRateKpi(1)).toEqual({ value: 1, capped: false, negative: false });
+    expect(savingsRateKpi(0.38)).toEqual({ value: 0.38, capped: false, negative: false });
+    expect(savingsRateKpi(null)).toEqual({ value: null, capped: false, negative: false });
+    expect(savingsRateKpi(undefined)).toEqual({ value: null, capped: false, negative: false });
+  });
+
+  it("flags a negative rate (resgates maiores que aportes) instead of hiding it", () => {
+    expect(savingsRateKpi(-0.12)).toEqual({ value: -0.12, capped: false, negative: true });
+    expect(savingsRateKpi(0)).toEqual({ value: 0, capped: false, negative: false });
   });
 });
 

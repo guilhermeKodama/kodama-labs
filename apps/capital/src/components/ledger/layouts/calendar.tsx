@@ -53,7 +53,7 @@ export function CalendarView({
     <div className="flex flex-col gap-2">
       <div className="grid grid-cols-7 gap-1">
         {WEEKDAYS.map((d) => (
-          <span key={d} className="px-1 text-[11px] text-fg-3">
+          <span key={d} className="px-1 text-caption text-fg-3">
             {t(`weekdays.${d}`)}
           </span>
         ))}
@@ -71,23 +71,23 @@ export function CalendarView({
                   type="button"
                   title={t("openDay", { day: fmt.date(iso) })}
                   onClick={() => onDay(iso)}
-                  className={cn("font-mono text-[11px] tabular-nums hover:underline", isToday ? "font-bold text-fg-1" : "text-fg-3")}
+                  className={cn("font-mono text-caption tabular-nums hover:underline", isToday ? "font-bold text-fg-1" : "text-fg-3")}
                 >
                   {day}
                 </button>
-                {count > 0 ? <span className={cn("ml-auto font-mono text-[11px] font-semibold tabular-nums", total > 0 ? "text-pos" : "text-fg-1")}>{fmt.money0(total)}</span> : null}
+                {count > 0 ? <span className={cn("ml-auto font-mono text-caption font-semibold tabular-nums", total > 0 ? "text-pos" : "text-fg-1")}>{fmt.money0(total)}</span> : null}
               </div>
               {items.map((row) => (
-                <button key={row.id} type="button" onClick={() => onOpen(row)} className="truncate text-left text-[11px] text-fg-2 hover:underline">
+                <button key={row.id} type="button" onClick={() => onOpen(row)} className="truncate text-left text-caption text-fg-2 hover:underline">
                   {row.description}
                 </button>
               ))}
-              {count > 2 ? <span className="text-[10.5px] text-fg-4">{t("more", { count: count - 2 })}</span> : null}
+              {count > 2 ? <span className="text-hint text-fg-4">{t("more", { count: count - 2 })}</span> : null}
             </div>
           );
         })}
       </div>
-      <span className="text-[12px] text-fg-4">
+      <span className="text-body-sm text-fg-4">
         {t("caption", { month: fmt.monthLabel(month) })}
         {outside ? ` · ${t("outside", { count: outside })}` : ""}
       </span>

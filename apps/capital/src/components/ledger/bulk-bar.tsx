@@ -112,7 +112,7 @@ export function BulkBar({ selection, stats, names, allInView, totalInView, onCle
   );
   const btnClass = (danger?: boolean) =>
     cn(
-      "inline-flex h-7 cursor-pointer items-center gap-1 rounded-[7px] px-2.5 text-[12px] font-medium whitespace-nowrap outline-none hover:bg-fill-3 focus-visible:bg-fill-3 disabled:opacity-40 data-[state=open]:bg-fill-2",
+      "inline-flex h-7 cursor-pointer items-center gap-1 rounded-[7px] px-2.5 text-button font-medium whitespace-nowrap outline-none hover:bg-fill-3 focus-visible:bg-fill-3 disabled:opacity-40 data-[state=open]:bg-fill-2",
       danger ? "text-neg" : "text-fg-1",
     );
   const btn = (label: string, onClick: () => void, danger?: boolean) => (
@@ -125,7 +125,7 @@ export function BulkBar({ selection, stats, names, allInView, totalInView, onCle
   return (
     <div className="pointer-events-none sticky bottom-4 z-[35] mt-2 flex flex-col items-center gap-2">
       <style>{TOASTS_ABOVE_BAR}</style>
-      <div className="pointer-events-auto relative flex flex-wrap items-center justify-center gap-1 rounded-[12px] border border-stroke-1 bg-chrome p-[5px] text-[12px]">
+      <div className="pointer-events-auto relative flex flex-wrap items-center justify-center gap-1 rounded-[12px] border border-stroke-1 bg-chrome p-[5px] text-button">
         <span className="inline-flex h-7 items-center gap-2 rounded-[7px] border border-dashed border-stroke-1 pr-1.5 pl-2.5 font-semibold whitespace-nowrap">
           {allInView ? t("selectedAll", { count }) : t("selected", { count })}
           <button type="button" title={t("clear")} aria-label={t("clear")} className="cursor-pointer font-normal text-fg-3 outline-none hover:text-fg-1" onClick={onClear}>

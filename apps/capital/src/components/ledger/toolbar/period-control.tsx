@@ -35,7 +35,7 @@ export function PeriodControl({ period, rangeLabel, onChange }: { period: Period
 
   return (
     <>
-      <span className="inline-flex h-[26px] shrink-0 items-center overflow-hidden rounded-[6px] border border-stroke-1 text-[12px]">
+      <span className="inline-flex h-(--cap-control-h) shrink-0 items-center overflow-hidden rounded-[6px] border border-stroke-1 text-button">
         {steppable ? (
           <button type="button" title={t("prev")} aria-label={t("prev")} className={cn(step, "border-r border-stroke-3")} onClick={() => onChange(stepPeriod(period, -1))}>
             ‹
@@ -55,7 +55,7 @@ export function PeriodControl({ period, rangeLabel, onChange }: { period: Period
             </button>
           }
         >
-          <span className="text-[11px] text-fg-3">{t("title")}</span>
+          <span className="text-caption text-fg-3">{t("title")}</span>
           <div className="-mx-1 flex flex-col">
             {PERIOD_PRESETS.map((p) => (
               <button
@@ -68,13 +68,13 @@ export function PeriodControl({ period, rangeLabel, onChange }: { period: Period
                 }}
               >
                 <span className="min-w-0 flex-1 truncate">{t(`presets.${p}`)}</span>
-                <span className="shrink-0 font-mono text-[10.5px] text-fg-4">{hint(p)}</span>
+                <span className="shrink-0 font-mono text-hint text-fg-4">{hint(p)}</span>
               </button>
             ))}
             <span className="my-1 h-px bg-stroke-3" />
             <button type="button" className={cn(MENU_ROW, "hover:bg-fill-3")} onClick={() => setCustom((v) => !v)}>
               <span className="min-w-0 flex-1 truncate">{t("custom")}</span>
-              {!preset ? <span className="shrink-0 font-mono text-[10.5px] text-fg-4">✓</span> : null}
+              {!preset ? <span className="shrink-0 font-mono text-hint text-fg-4">✓</span> : null}
             </button>
           </div>
           {custom ? (
@@ -111,7 +111,7 @@ export function PeriodControl({ period, rangeLabel, onChange }: { period: Period
         ) : null}
       </span>
       {offset !== 0 ? (
-        <button type="button" className="text-[11.5px] whitespace-nowrap text-fg-3 underline" onClick={() => preset && onChange({ preset, offset: 0 })}>
+        <button type="button" className="text-label whitespace-nowrap text-fg-3 underline" onClick={() => preset && onChange({ preset, offset: 0 })}>
           {t("backToCurrent")}
         </button>
       ) : null}

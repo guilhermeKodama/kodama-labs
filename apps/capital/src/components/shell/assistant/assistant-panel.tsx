@@ -67,8 +67,8 @@ export function AssistantPanel({ controller, onBack, onNavigate }: { controller:
         <Btn ghost onClick={onBack}>
           {t("back")}
         </Btn>
-        <DialogPrimitive.Title className="text-[13px] font-semibold">{t("title")}</DialogPrimitive.Title>
-        {state.title ? <span className="min-w-0 truncate text-[12px] text-fg-3">· {state.title}</span> : null}
+        <DialogPrimitive.Title className="text-body-lg font-semibold">{t("title")}</DialogPrimitive.Title>
+        {state.title ? <span className="min-w-0 truncate text-body-sm text-fg-3">· {state.title}</span> : null}
         <span className="flex-1" />
         <Conversations controller={controller} />
         <Btn ghost disabled={controller.busy || (!state.conversationId && !state.messages.length)} onClick={controller.newConversation}>
@@ -77,23 +77,23 @@ export function AssistantPanel({ controller, onBack, onNavigate }: { controller:
       </div>
 
       <div ref={scrollRef} className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-3.5 py-3">
-        {controller.loading ? <span className="text-[12px] text-fg-3">{t("status.loading")}</span> : null}
+        {controller.loading ? <span className="text-body-sm text-fg-3">{t("status.loading")}</span> : null}
         {!controller.loading && !state.messages.length && !state.error ? (
           <div className="flex flex-col gap-1 pt-6 text-center">
-            <span className="text-[13px] font-semibold">{t("empty.title")}</span>
-            <span className="mx-auto max-w-[420px] text-[12px] text-fg-3">{t("empty.hint")}</span>
+            <span className="text-body-lg font-semibold">{t("empty.title")}</span>
+            <span className="mx-auto max-w-[420px] text-body-sm text-fg-3">{t("empty.hint")}</span>
           </div>
         ) : null}
         <Thread controller={controller} onNavigate={onNavigate} />
         {controller.uploading ? <Status text={t("status.uploading")} /> : thinking ? <Status text={t("status.thinking")} /> : null}
-        {!controller.busy && state.lastTurn === "cancelled" ? <span className="text-[11.5px] text-fg-3">{t("status.stopped")}</span> : null}
+        {!controller.busy && state.lastTurn === "cancelled" ? <span className="text-label text-fg-3">{t("status.stopped")}</span> : null}
         {state.error ? <ErrorNotice error={state.error} canRetry={controller.canRetry} onRetry={controller.retry} /> : null}
       </div>
 
       <Composer controller={controller} />
 
       {dragging ? (
-        <div className="pointer-events-none absolute inset-1 flex items-center justify-center rounded-[10px] border border-dashed border-stroke-1 bg-editor/90 text-[12.5px] text-fg-2">
+        <div className="pointer-events-none absolute inset-1 flex items-center justify-center rounded-[10px] border border-dashed border-stroke-1 bg-editor/90 text-body text-fg-2">
           {t("composer.drop")}
         </div>
       ) : null}
@@ -103,7 +103,7 @@ export function AssistantPanel({ controller, onBack, onNavigate }: { controller:
 
 function Status({ text }: { text: string }) {
   return (
-    <span className="animate-pulse text-[11.5px] text-fg-3" aria-live="polite">
+    <span className="animate-pulse text-label text-fg-3" aria-live="polite">
       {text}
     </span>
   );
@@ -149,9 +149,9 @@ function Conversations({ controller }: { controller: AssistantController }) {
         </Btn>
       }
     >
-      {list.isPending ? <span className="px-1 text-[12px] text-fg-3">{t("status.loading")}</span> : null}
-      {list.isError ? <span className="px-1 text-[12px] text-neg">{t("errors.listFailed")}</span> : null}
-      {list.data && !list.data.length ? <span className="px-1 text-[12px] text-fg-3">{t("noConversations")}</span> : null}
+      {list.isPending ? <span className="px-1 text-body-sm text-fg-3">{t("status.loading")}</span> : null}
+      {list.isError ? <span className="px-1 text-body-sm text-neg">{t("errors.listFailed")}</span> : null}
+      {list.data && !list.data.length ? <span className="px-1 text-body-sm text-fg-3">{t("noConversations")}</span> : null}
       {list.data?.length ? (
         <div className="-m-1 flex flex-col">
           {list.data.map((conversation) => (
@@ -160,12 +160,12 @@ function Conversations({ controller }: { controller: AssistantController }) {
                 type="button"
                 onClick={() => controller.open(conversation.id)}
                 className={cn(
-                  "flex h-7 w-full items-center gap-2 rounded-[5px] px-2 text-left text-[12.5px] outline-none hover:bg-fill-3 focus-visible:bg-fill-3",
+                  "flex h-(--cap-menu-row-h) w-full items-center gap-2 rounded-[5px] px-2 text-left text-control outline-none hover:bg-fill-3 focus-visible:bg-fill-3",
                   conversation.id === controller.state.conversationId && "bg-fill-2 font-medium",
                 )}
               >
                 <span className="min-w-0 flex-1 truncate">{conversation.title || t("untitled")}</span>
-                <span className="shrink-0 text-[11px] text-fg-3">{fmt.relative(conversation.lastMessageAt)}</span>
+                <span className="shrink-0 text-caption text-fg-3">{fmt.relative(conversation.lastMessageAt)}</span>
               </button>
             </PopoverClose>
           ))}
@@ -219,7 +219,7 @@ function Composer({ controller }: { controller: AssistantController }) {
       {attachments.length ? (
         <div className="flex flex-wrap gap-1">
           {attachments.map((file, index) => (
-            <span key={`${file.name}-${index}`} className="inline-flex h-[20px] items-center gap-1 rounded-[4px] border border-stroke-2 pr-0.5 pl-1.5 font-mono text-[11px] text-fg-2">
+            <span key={`${file.name}-${index}`} className="inline-flex h-[20px] items-center gap-1 rounded-[4px] border border-stroke-2 pr-0.5 pl-1.5 font-mono text-caption text-fg-2">
               <span className="max-w-[220px] truncate">{file.name}</span>
               <button
                 type="button"
@@ -258,7 +258,7 @@ function Composer({ controller }: { controller: AssistantController }) {
           onPaste={onPaste}
           placeholder={t("composer.placeholder")}
           aria-label={t("composer.placeholder")}
-          className="min-h-[26px] flex-1 resize-none rounded-[6px] border border-stroke-1 bg-editor px-2 py-[5px] text-[12.5px] leading-[1.25] outline-none placeholder:text-fg-3 focus:border-fg-muted"
+          className="min-h-(--cap-control-h) flex-1 resize-none rounded-[6px] border border-stroke-1 bg-editor px-2 py-[5px] text-control leading-[1.25] outline-none placeholder:text-fg-3 focus:border-fg-muted"
         />
         {controller.busy ? (
           <Btn onClick={controller.stop}>{t("composer.stop")}</Btn>

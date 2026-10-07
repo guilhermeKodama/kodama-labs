@@ -6,6 +6,20 @@
     "newView": "New view",
     "modified": "Modified"
   },
+  "viewMenu": {
+    "open": "Options for “{name}”",
+    "title": "View options",
+    "rename": "Rename",
+    "duplicate": "Duplicate",
+    "favorite": "Add to favorites",
+    "unfavorite": "Remove from favorites"
+  },
+  "deleteView": {
+    "button": "Delete “{name}”",
+    "title": "Delete the view “{name}”?",
+    "body": "Your transactions are not affected. You can undo right after.",
+    "confirm": "Delete"
+  },
   "period": {
     "title": "View period",
     "prev": "Previous period",
@@ -89,7 +103,6 @@
     "favorite": "Favorite (shows in the sidebar)",
     "duplicate": "Duplicate",
     "close": "Close",
-    "delete": "Delete view",
     "deleted": "View “{name}” deleted",
     "custom": "Custom"
   },

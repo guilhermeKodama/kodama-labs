@@ -51,14 +51,14 @@ export function Table({
 }) {
   const align = (column: number) => ALIGN[columnAlign?.[column] ?? "left"];
   const table = (
-    <table className="w-full border-collapse text-[12.5px]">
+    <table className="w-full border-collapse text-body">
       <thead>
         <tr className="h-8">
           {headers.map((header, column) => (
             <th
               key={column}
               scope="col"
-              className={cn("px-3 text-[11.5px] font-normal whitespace-nowrap text-fg-3", align(column), stickyHeader && "sticky top-0 z-[1] bg-editor")}
+              className={cn("px-3 text-label font-normal whitespace-nowrap text-fg-3", align(column), stickyHeader && "sticky top-0 z-[1] bg-editor")}
             >
               {header}
             </th>
@@ -74,7 +74,7 @@ export function Table({
               onClick={onRowClick ? () => onRowClick(index) : undefined}
               aria-selected={isSelected ? isSelected(index) : undefined}
               className={cn(
-                "h-9 border-t border-stroke-3",
+                "h-(--cap-table-row-h) border-t border-stroke-3",
                 striped && index % 2 === 1 && "bg-fill-4",
                 onRowClick && "cursor-pointer hover:bg-fill-4",
                 isSelected?.(index) && "bg-fill-3 hover:bg-fill-3",
@@ -91,7 +91,7 @@ export function Table({
         })}
         {rows.length === 0 && emptyMessage ? (
           <tr className="border-t border-stroke-3">
-            <td colSpan={headers.length} className="px-3 py-6 text-center text-[12px] text-fg-3">
+            <td colSpan={headers.length} className="px-3 py-6 text-center text-body-sm text-fg-3">
               {emptyMessage}
             </td>
           </tr>

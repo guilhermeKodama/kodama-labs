@@ -37,7 +37,7 @@ function RuleLoader({ ruleId, scope, onDone }: { ruleId: string; scope: BudgetsS
   return (
     <>
       <DialogHead title={t("rule.fallbackTitle")} />
-      <p className="text-[12.5px] text-fg-3">{rules.isPending ? tc("loading") : t("rule.notFound")}</p>
+      <p className="text-body text-fg-3">{rules.isPending ? tc("loading") : t("rule.notFound")}</p>
     </>
   );
 }
@@ -104,7 +104,7 @@ function RuleForm({ rule, onDone }: { rule: RecurringRule; onDone: () => void })
     >
       <DialogHead title={description} desc={[kind, account, entity, rule.isActive ? null : t("rule.pausedTag")].filter(Boolean).join(" · ")} />
       {rule.isActive ? (
-        <div className="flex flex-wrap items-center gap-2 rounded-[8px] border border-stroke-3 px-2.5 py-2 text-[12.5px]">
+        <div className="flex flex-wrap items-center gap-2 rounded-[8px] border border-stroke-3 px-2.5 py-2 text-body">
           <span className="text-fg-2">{t("rule.next", { date: dueLabel, amount: fmt.money(rule.amount, rule.currency) })}</span>
           <span className="ml-auto flex items-center gap-1.5">
             <Btn ghost disabled={busy} onClick={() => skip.mutate()}>
@@ -145,10 +145,10 @@ function RuleForm({ rule, onDone }: { rule: RecurringRule; onDone: () => void })
         <Field label={t("rule.endDate")} htmlFor={`${ids}-end`} hint={t("rule.endDateHint")}>
           <TextInput id={`${ids}-end`} type="date" value={form.endDate} onChange={(endDate) => update({ endDate })} mono invalid={errors.has("endDate")} />
         </Field>
-        <label htmlFor={`${ids}-active`} className="col-span-2 flex items-center gap-2 text-[12.5px]">
+        <label htmlFor={`${ids}-active`} className="col-span-2 flex items-center gap-2 text-control">
           <Toggle id={`${ids}-active`} checked={form.isActive} onChange={(isActive) => update({ isActive })} />
           <span className="font-medium">{t("rule.active")}</span>
-          <span className="text-[11.5px] text-fg-3">{form.isActive ? t("rule.activeHint") : t("rule.pausedHint")}</span>
+          <span className="text-label text-fg-3">{form.isActive ? t("rule.activeHint") : t("rule.pausedHint")}</span>
         </label>
       </div>
       <DialogFooter justify="between">
@@ -156,7 +156,7 @@ function RuleForm({ rule, onDone }: { rule: RecurringRule; onDone: () => void })
           <Btn ghost danger disabled={busy} onClick={() => remove.mutate()}>
             {tc("delete")}
           </Btn>
-          <DrillLink draft={ruleEntriesDraft(rule)} className="text-[12px] text-fg-3">
+          <DrillLink draft={ruleEntriesDraft(rule)} className="text-body-sm text-fg-3">
             {t("rule.entries")}
           </DrillLink>
         </span>
@@ -189,7 +189,7 @@ export function RulesSheet({ open, onOpenChange, scope, onOpenRule }: { open: bo
           {grouped.paused.length ? <RuleGroup title={t("rules.paused")} rules={grouped.paused} onOpenRule={onOpenRule} /> : null}
         </>
       ) : (
-        <p className="text-[12.5px] text-fg-3">{rules.isError ? t("loadError") : tc("loading")}</p>
+        <p className="text-body text-fg-3">{rules.isError ? t("loadError") : tc("loading")}</p>
       )}
     </Sheet>
   );
@@ -201,19 +201,19 @@ function RuleGroup({ title, rules, onOpenRule }: { title: string; rules: Recurri
   const { names } = useEntityNames();
   return (
     <section className="flex flex-col">
-      <h3 className="pb-1.5 text-[11.5px] font-medium text-fg-3">{title}</h3>
+      <h3 className="pb-1.5 text-label font-medium text-fg-3">{title}</h3>
       <div className="overflow-hidden rounded-[8px] border border-stroke-3">
         {rules.map((rule) => (
           <button
             key={rule.id}
             type="button"
             onClick={() => onOpenRule(rule.id)}
-            className="flex h-8 w-full items-center gap-2 border-t border-stroke-3 px-3 text-left text-[12.5px] outline-none first:border-t-0 hover:bg-fill-4 focus-visible:bg-fill-4"
+            className="flex h-8 w-full items-center gap-2 border-t border-stroke-3 px-3 text-left text-control outline-none first:border-t-0 hover:bg-fill-4 focus-visible:bg-fill-4"
           >
-            <span className="w-[38px] shrink-0 font-mono text-[11.5px] text-fg-3">{fmt.date(rule.nextDueDate)}</span>
+            <span className="w-[38px] shrink-0 font-mono text-label text-fg-3">{fmt.date(rule.nextDueDate)}</span>
             <span className="min-w-0 truncate">{rule.description}</span>
             <EntityBadge entityId={rule.entityId} names={names} />
-            <span className="ml-auto shrink-0 text-[11px] text-fg-4">{rule.isActive ? t(rule.autoGenerate ? "month.upcoming.mode.auto" : "month.upcoming.mode.reminder") : t("rule.pausedTag")}</span>
+            <span className="ml-auto shrink-0 text-caption text-fg-4">{rule.isActive ? t(rule.autoGenerate ? "month.upcoming.mode.auto" : "month.upcoming.mode.reminder") : t("rule.pausedTag")}</span>
             <span className={cn("w-[74px] shrink-0 text-right font-mono tabular-nums", rule.kind === "income" && "text-pos")}>{fmt.money0(rule.amount, rule.currency)}</span>
           </button>
         ))}

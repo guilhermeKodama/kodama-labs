@@ -5,12 +5,14 @@ import { rebaseCurrencies, relabelCurrencySources } from "@capital/server/module
 import { LedgerError } from "@capital/server/modules/ledger/lib/errors";
 import { getPersonalEntity, listEntities } from "@capital/server/modules/ledger/services/entities";
 import { inTransaction } from "@capital/server/modules/ledger/services/mutations";
-import { isDateFormat, isTheme, normalizeNumberFormat } from "../lib/preferences";
+import { isDateFormat, isTextSize, isTheme, normalizeNumberFormat } from "../lib/preferences";
 
 export interface PreferencesPatch {
   name?: string;
   baseCurrency?: string;
   theme?: string;
+  /** UI text size: sm, md or lg. */
+  textSize?: string;
   dateFormat?: string;
   numberFormat?: string;
   timezone?: string;
@@ -27,6 +29,7 @@ export function serializeUser(user: User) {
     name: user.name,
     baseCurrency: user.baseCurrency,
     theme: user.theme,
+    textSize: isTextSize(user.textSize) ? user.textSize : "md",
     dateFormat: user.dateFormat,
     numberFormat: user.numberFormat,
     timezone: user.timezone,
@@ -51,14 +54,15 @@ export async function getMe(userId: string, db: DbClient) {
 }
 
 /** The stored spelling of each format preference, or a coded 422 (the MCP settings tool passes free text). */
-function normalizeFormats(patch: PreferencesPatch): Pick<PreferencesPatch, "theme" | "dateFormat" | "numberFormat"> {
+function normalizeFormats(patch: PreferencesPatch): Pick<PreferencesPatch, "theme" | "textSize" | "dateFormat" | "numberFormat"> {
   const invalid = (field: string, value: string) =>
     new LedgerError(`'${value}' is not a valid ${field}`, 422, { code: "user.invalid_preference", params: { field, value } });
   if (patch.theme !== undefined && !isTheme(patch.theme)) throw invalid("theme", patch.theme);
+  if (patch.textSize !== undefined && !isTextSize(patch.textSize)) throw invalid("textSize", patch.textSize);
   if (patch.dateFormat !== undefined && !isDateFormat(patch.dateFormat)) throw invalid("dateFormat", patch.dateFormat);
   const numberFormat = patch.numberFormat === undefined ? undefined : normalizeNumberFormat(patch.numberFormat);
   if (patch.numberFormat !== undefined && !numberFormat) throw invalid("numberFormat", patch.numberFormat);
-  return { theme: patch.theme, dateFormat: patch.dateFormat, numberFormat };
+  return { theme: patch.theme, textSize: patch.textSize, dateFormat: patch.dateFormat, numberFormat };
 }
 
 /**
@@ -100,6 +104,7 @@ export async function updatePreferences(userId: string, patch: PreferencesPatch,
         ...(patch.name !== undefined && { name: patch.name }),
         ...(baseCurrency !== undefined && { baseCurrency }),
         ...(formats.theme !== undefined && { theme: formats.theme }),
+        ...(formats.textSize !== undefined && { textSize: formats.textSize }),
         ...(formats.dateFormat !== undefined && { dateFormat: formats.dateFormat }),
         ...(formats.numberFormat !== undefined && { numberFormat: formats.numberFormat }),
         ...(patch.timezone !== undefined && { timezone: patch.timezone }),

@@ -1,0 +1,71 @@
+/* Capital type scale and density — the one place text sizes are defined.
+
+   Change a role below to change it app-wide: every component uses the role
+   utilities (text-caption, text-body, text-title, …), never a pixel size;
+   src/lib/__tests__/no-raw-text-sizes.test.ts fails on text-[Npx] and on
+   fontSize literals. Charts and inline styles read the same roles through
+   textRole() (src/lib/theme/type-scale.ts), which is var(--cap-font-<role>).
+
+   Ajustes › Perfil › Tamanho da letra (Pequeno · Médio · Grande) only
+   changes --cap-text-scale, through <html data-text-size="sm|md|lg">
+   (TextSizeSync, and the inline script of app/[locale]/layout.tsx before
+   the first paint). Médio is scale 1: each role renders its base size. The
+   heights tied to text (controls, menu rows, table rows) scale with it, so
+   Grande does not clip.
+
+   Roles set no line-height: like the text-[Npx] classes they replaced, they
+   keep the inherited one, so Médio renders exactly as before. */
+
+:root {
+  --cap-text-scale: 1;
+
+  /* Type roles (base size at Médio). */
+  --cap-font-micro: calc(10px * var(--cap-text-scale)); /* kbd keys, avatar initials, step dots, bar values, column calc labels */
+  --cap-font-hint: calc(10.5px * var(--cap-text-scale)); /* shortcut hints, mono notes next to a value (%, foreign amount, card date) */
+  --cap-font-caption: calc(11px * var(--cap-text-scale)); /* list and menu section labels, field hints, KPI labels, legends, badges, axis ticks */
+  --cap-font-label: calc(11.5px * var(--cap-text-scale)); /* table headers, row dates and meta, notes under controls, small chips */
+  --cap-font-body-sm: calc(12px * var(--cap-text-scale)); /* secondary copy: descriptions, field labels, empty states, callouts, tooltips */
+  --cap-font-button: calc(12px * var(--cap-text-scale)); /* buttons, segmented controls, pills, filter chips */
+  --cap-font-body: calc(12.5px * var(--cap-text-scale)); /* default copy: table and list rows, panels, dialogs */
+  --cap-font-control: calc(12.5px * var(--cap-text-scale)); /* inputs, selects, menu and listbox rows, nav items, tabs */
+  --cap-font-body-lg: calc(13px * var(--cap-text-scale)); /* emphasized copy: panel titles, file names, command input, big totals */
+  --cap-font-title-sm: calc(14px * var(--cap-text-scale)); /* top bar and settings sidebar titles */
+  --cap-font-title: calc(15px * var(--cap-text-scale)); /* dialog and sign-in titles */
+  --cap-font-amount: calc(15px * var(--cap-text-scale)); /* the amount field of the entry forms */
+  --cap-font-heading: calc(17px * var(--cap-text-scale)); /* page headings (Ajustes, 404) */
+  --cap-font-kpi: calc(17px * var(--cap-text-scale)); /* KPI values */
+  --cap-font-display: calc(22px * var(--cap-text-scale)); /* a holding's market value */
+
+  /* Density tied to text (base height at Médio). */
+  --cap-control-h: calc(26px * var(--cap-text-scale)); /* buttons, inputs, selects (cap CONTROL, Btn) */
+  --cap-menu-row-h: calc(28px * var(--cap-text-scale)); /* menu, listbox, command palette and nav rows (cap MENU_ROW) */
+  --cap-row-h: calc(34px * var(--cap-text-scale)); /* ledger table rows, the header and footer rows of the other tables, list rows, tab bars */
+  --cap-table-row-h: calc(36px * var(--cap-text-scale)); /* cap Table body rows, holdings, operations and contributions rows */
+}
+
+/* Pequeno and Grande. */
+:root[data-text-size="sm"] {
+  --cap-text-scale: 0.92;
+}
+:root[data-text-size="lg"] {
+  --cap-text-scale: 1.14;
+}
+
+/* The roles as Tailwind utilities: text-micro … text-display. */
+@theme inline {
+  --text-micro: var(--cap-font-micro);
+  --text-hint: var(--cap-font-hint);
+  --text-caption: var(--cap-font-caption);
+  --text-label: var(--cap-font-label);
+  --text-body-sm: var(--cap-font-body-sm);
+  --text-button: var(--cap-font-button);
+  --text-body: var(--cap-font-body);
+  --text-control: var(--cap-font-control);
+  --text-body-lg: var(--cap-font-body-lg);
+  --text-title-sm: var(--cap-font-title-sm);
+  --text-title: var(--cap-font-title);
+  --text-amount: var(--cap-font-amount);
+  --text-heading: var(--cap-font-heading);
+  --text-kpi: var(--cap-font-kpi);
+  --text-display: var(--cap-font-display);
+}

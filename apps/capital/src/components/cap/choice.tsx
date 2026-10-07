@@ -39,8 +39,8 @@ export function Choice<T extends string>({
             <RadioGroup.Indicator className="block size-[7px] rounded-full bg-fg-1" />
           </span>
           <span className="flex min-w-0 flex-col gap-0.5">
-            <span className="text-[12.5px] font-medium">{option.l}</span>
-            {option.d ? <span className="text-[11.5px] text-fg-3">{option.d}</span> : null}
+            <span className="text-body font-medium">{option.l}</span>
+            {option.d ? <span className="text-label text-fg-3">{option.d}</span> : null}
           </span>
         </RadioGroup.Item>
       ))}
