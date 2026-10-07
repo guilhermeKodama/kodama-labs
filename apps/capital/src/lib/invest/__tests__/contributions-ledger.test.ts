@@ -6,7 +6,9 @@ import {
   contributionRow,
   contributionsQuery,
   contributionTotals,
+  contributionTotalsBody,
   EMPTY_CONTRIBUTION_FILTERS,
+  totalsFromGroups,
 } from "../contributions-ledger";
 
 function row(over: Partial<LedgerDisplayRow>): LedgerDisplayRow {
@@ -102,6 +104,29 @@ describe("contributionRow", () => {
 
   it("sums aportes and resgates apart", () => {
     expect(contributionTotals([{ amount: 1000 }, { amount: -400 }, { amount: 250.5 }])).toEqual({ deposits: 1250.5, withdrawals: 400, net: 850.5 });
+  });
+});
+
+describe("totals of the whole selection", () => {
+  it("groups the same selection by direction, without rows, and reads aportes (negative) and resgates apart", () => {
+    const q = contributionsQuery({ ...EMPTY_CONTRIBUTION_FILTERS, period: "ytd" });
+    expect(contributionTotalsBody(q)).toMatchObject({
+      period: q.selection.period,
+      filters: q.selection.filters,
+      semantics: "display",
+      groupBy: [{ field: "transferDirection" }],
+      aggregations: [{ fn: "sum", field: "amountBase" }],
+      includeRows: false,
+    });
+    expect(totalsFromGroups([
+      { key: "investment_deposit", values: { "sum:amountBase": -7500 } },
+      { key: "investment_withdrawal", values: { "sum:amountBase": 800 } },
+    ])).toEqual({ deposits: 7500, withdrawals: 800, net: 6700 });
+    expect(totalsFromGroups([])).toEqual({ deposits: 0, withdrawals: 0, net: 0 });
+  });
+
+  it("has no server totals when Conta and Corretora are matched on the client", () => {
+    expect(contributionTotalsBody(contributionsQuery({ ...EMPTY_CONTRIBUTION_FILTERS, accountIds: ["nubank"], brokerIds: ["xp"] }))).toBeNull();
   });
 });
 

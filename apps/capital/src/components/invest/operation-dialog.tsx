@@ -9,7 +9,7 @@ import { useSession } from "@/lib/api/session";
 import { useAppMutation } from "@/lib/api/use-app-mutation";
 import { useFmt } from "@/lib/format/provider";
 import { useAssetSearch, useDebounced, useFxRates, useOperations } from "@/lib/invest/api";
-import { assetPickerState, clearedPick } from "@/lib/invest/asset-picker";
+import { assetPickerState, clearedPick, pickKeptFor } from "@/lib/invest/asset-picker";
 import { exemptionGroup, irEstimate } from "@/lib/invest/ir-estimate";
 import { buyPreview, sellPreview, withheldTax } from "@/lib/invest/op-preview";
 import { opsPeriodRange } from "@/lib/invest/ops-view";
@@ -246,7 +246,15 @@ function OperationForm({ holdings, initialHoldingId, onClose }: { holdings: read
       }}
     >
       <DialogHead title={t("title")} desc={t("desc")} />
-      <Segmented value={kind} options={OP_KINDS.map((k) => ({ v: k, l: t(`kind.${k}`) }))} onChange={setKind} aria-label={t("title")} />
+      <Segmented
+        value={kind}
+        options={OP_KINDS.map((k) => ({ v: k, l: t(`kind.${k}`) }))}
+        onChange={(next) => {
+          setKind(next);
+          if (!pickKeptFor(picked, next)) unpick();
+        }}
+        aria-label={t("title")}
+      />
 
       {kind === "buy" || kind === "sell" || kind === "income" ? (
         <Field label={t("asset")}>

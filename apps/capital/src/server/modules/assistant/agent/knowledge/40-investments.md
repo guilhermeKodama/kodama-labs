@@ -47,6 +47,6 @@ O caminho:
 
 1. Confirme com `query_investment_holdings` o que já existe - o nome no extrato pode ser variação de uma conta cadastrada ("NuInvest" vs "Nubank Investment").
 2. Se realmente falta, pergunte **só o mínimo que você não consegue inferir**: normalmente o nome da corretora já vem no extrato, então a pergunta costuma ser a moeda da conta (e a entidade dona, se o usuário tiver mais de uma). Uma pergunta objetiva, não uma lista de pendências.
-3. Crie com `manage_investment_account` (e `manage_investment_holding` quando der para identificar o ativo), depois monte o plano de importação já classificando a linha corretamente como aporte/resgate.
+3. Crie com `manage_investment_account` (e `manage_investment_holding` quando der para identificar o ativo), depois monte o plano de importação já classificando a linha corretamente como aporte/resgate. Exceção: numa nota de corretagem (PDF ou imagem), nunca crie a posição com `manage_investment_holding` - o ativo novo entra como `newHolding` dentro de `investmentTransactions` no `propose_import_plan`, para o usuário confirmar junto com as operações.
 
 Quando faltar informação que muda o significado do lançamento (é resgate ou é receita?), pergunte antes de propor o plano - mas pergunte **junto com a proposta de criar a conta**, não como um impedimento separado. O objetivo é que uma resposta do usuário destrave tudo.

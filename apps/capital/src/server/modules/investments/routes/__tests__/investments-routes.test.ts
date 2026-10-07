@@ -447,3 +447,16 @@ describe("history and contributions", () => {
     expect((await call("GET", "/v2/portfolio/history?scope=nope")).status).toBe(404);
   });
 });
+
+describe("Carteira population", () => {
+  it("lists no holding of an archived broker (Patrimônio leaves them out too), unless everything is asked for", async () => {
+    const holding = await prisma.investmentHolding.create({
+      data: { accountId: pjBroker, assetClass: "stocks", ticker: "ANT3", name: "Antiga", currentQuantity: 10, averageCost: 30, totalInvested: 300, currentPrice: 35 },
+    });
+    expect((await json("GET", "/v2/holdings")).holdings.map((h: { id: string }) => h.id)).toContain(holding.id);
+    await prisma.account.update({ where: { id: pjBroker }, data: { archivedAt: new Date() } });
+    expect((await json("GET", "/v2/holdings")).holdings.map((h: { id: string }) => h.id)).not.toContain(holding.id);
+    expect((await json("GET", "/v2/portfolio/summary")).netWorth).toBe(0);
+    expect((await json("GET", "/v2/holdings?includeInactive=true")).holdings.map((h: { id: string }) => h.id)).toContain(holding.id);
+  });
+});

@@ -884,7 +884,8 @@ export async function rebalanceSuggestion(userId: string, amount: number, mode: 
   }));
   if (mode === "class") return { amount, total: round(total, 2), classes };
 
-  const holdings = await listHoldings(userId, db, { entityIds: opts.entityIds });
+  // The same population as the class values (portfolioSummary): never a holding on an archived broker.
+  const holdings = await listHoldings(userId, db, { entityIds: opts.entityIds, includeArchivedAccounts: false });
   const fx = await loadFx(userId, db);
   const assets = classes
     .filter((c) => c.amount > 0)

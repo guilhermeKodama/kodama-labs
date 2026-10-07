@@ -37,6 +37,9 @@ describe("brokerage notes always go through a confirmable plan", () => {
     const recordLine = guide.split("\n").find((line) => line.startsWith("- `record_investment_transaction`"));
     expect(recordLine).toMatch(/nota de corretagem em PDF ou imagem/);
     expect(recordLine).toMatch(/propose_import_plan/);
+    // The "create the missing holding" step of statement imports carves notes out.
+    const createStep = knowledgeFile("40-investments.md").split("\n").find((line) => line.includes("Crie com `manage_investment_account`"));
+    expect(createStep).toMatch(/nota de corretagem[^\n]*nunca crie a posição com `manage_investment_holding`[^\n]*newHolding[^\n]*propose_import_plan/);
     expect(loadAgentKnowledge()).toContain("Nota de corretagem (nota de negociação) ou extrato de operações, em imagem ou PDF: sempre `propose_import_plan`");
   });
 

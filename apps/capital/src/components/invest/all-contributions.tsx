@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { keepPreviousData, useInfiniteQuery } from "@tanstack/react-query";
+import { keepPreviousData, useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { useTranslations } from "next-intl";
 import { parseAsString, useQueryStates } from "nuqs";
 import type { LedgerDisplayQueryResult } from "@capital/server/modules/ledger/contracts";
@@ -24,7 +24,9 @@ import {
   contributionRow,
   contributionsQuery,
   contributionTotals,
+  contributionTotalsBody,
   EMPTY_CONTRIBUTION_FILTERS,
+  totalsFromGroups,
   type ContributionFilters,
   type ContributionPeriod,
 } from "@/lib/invest/contributions-ledger";
@@ -143,7 +145,17 @@ export function AllContributions() {
     const all = (pages.data?.pages ?? []).flatMap((page) => page.rows);
     return (query.clientFilter ? all.filter(query.clientFilter) : all).map(contributionRow);
   }, [pages.data, query]);
-  const totals = contributionTotals(rows);
+  // Totals of the whole selection (every page); with Conta and Corretora together, of the loaded rows only.
+  const totalsBody = contributionTotalsBody(query);
+  const serverTotals = useQuery({
+    queryKey: keys.ledgerQuery({ ...totalsBody, totals: true }),
+    queryFn: () => apiPost<LedgerDisplayQueryResult>("/api/v2/ledger/query", totalsBody),
+    select: (result) => totalsFromGroups(result.groups),
+    enabled: totalsBody !== null,
+    placeholderData: keepPreviousData,
+  });
+  const totals = (totalsBody ? serverTotals.data : null) ?? contributionTotals(rows);
+  const totalsPartial = !totalsBody && pages.hasNextPage;
   const serverCount = pages.data?.pages[0]?.totals?.count ?? null;
   // With Conta and Corretora together the bank side is matched here, so the server's count is not the rows'.
   const loadedText = query.clientFilter
@@ -205,7 +217,7 @@ export function AllContributions() {
       </div>
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[12px] text-fg-3">
         <span>{loadedText}</span>
-        <span className={MONO}>{t("totals", { deposits: fmt.money0(totals.deposits, names.currency), withdrawals: fmt.money0(totals.withdrawals, names.currency), net: fmt.money0(totals.net, names.currency) })}</span>
+        <span className={MONO}>{t(totalsPartial ? "totalsLoaded" : "totals", { deposits: fmt.money0(totals.deposits, names.currency), withdrawals: fmt.money0(totals.withdrawals, names.currency), net: fmt.money0(totals.net, names.currency) })}</span>
       </div>
       {pages.isError ? <p className="text-[12.5px] text-neg">{errorText(pages.error)}</p> : null}
       <div className="overflow-hidden rounded-[8px] border border-stroke-3">

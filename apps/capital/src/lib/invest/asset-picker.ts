@@ -41,6 +41,16 @@ export function assetPickerState(picked: PickedAsset | null, query: string): Ass
   return { mode: "list", searchEnabled: query.trim().length > 0, selected: null };
 }
 
+/**
+ * Whether a pick survives a change of the operation kind. A new asset
+ * typed by hand only exists for a buy (a sale or income needs a holding),
+ * so switching away from "Compra" brings the box back instead of a
+ * selected row that can never be saved.
+ */
+export function pickKeptFor(picked: PickedAsset | null, kind: string): boolean {
+  return !(picked?.type === "custom" && kind !== "buy");
+}
+
 /** "Trocar": back to an empty box with no pick. */
 export function clearedPick(): { picked: null; query: "" } {
   return { picked: null, query: "" };

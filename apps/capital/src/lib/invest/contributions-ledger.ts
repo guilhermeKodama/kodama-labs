@@ -11,7 +11,7 @@
  * broker legs and the bank side is matched here, on the counterpart of each
  * row (`clientFilter`).
  */
-import type { LedgerDisplayRow, LedgerFilter, LedgerQueryInput, LedgerSelectionQuery, Period } from "@capital/server/modules/ledger/contracts";
+import type { LedgerDisplayRow, LedgerFilter, LedgerGroup, LedgerQueryInput, LedgerSelectionQuery, Period } from "@capital/server/modules/ledger/contracts";
 import type { PortfolioScope } from "./types";
 
 export const CONTRIBUTION_DIRECTIONS = ["investment_deposit", "investment_withdrawal"] as const;
@@ -123,6 +123,34 @@ export function contributionRow(row: LedgerDisplayRow): ContributionRow {
     amount: direction === "investment_deposit" ? abs : -abs,
     row,
   };
+}
+
+/**
+ * The totals of the whole selection, not only the loaded pages: the same
+ * query grouped by direction, without rows. In display mode an aporte sums
+ * negative (money into the broker) and a resgate positive, whichever leg the
+ * filters keep. Null with Conta and Corretora together: the bank side is
+ * matched on the client, so only the loaded rows can be summed.
+ */
+export function contributionTotalsBody(q: ContributionsQuery): (LedgerQueryInput & { semantics: "display" }) | null {
+  if (q.clientFilter) return null;
+  return {
+    ...q.selection,
+    semantics: "display",
+    groupBy: [{ field: "transferDirection" }],
+    aggregations: [{ fn: "sum", field: "amountBase" }],
+    includeRows: false,
+    page: { limit: 1 },
+  };
+}
+
+/** The groups of `contributionTotalsBody` → aportes, resgates (positive numbers) and the net. */
+export function totalsFromGroups(groups: readonly Pick<LedgerGroup, "key" | "values">[]): { deposits: number; withdrawals: number; net: number } {
+  const sum = (key: ContributionDirection) => Math.abs(groups.find((g) => g.key === key)?.values["sum:amountBase"] ?? 0);
+  const round = (n: number) => Math.round(n * 100) / 100;
+  const deposits = round(sum("investment_deposit"));
+  const withdrawals = round(sum("investment_withdrawal"));
+  return { deposits, withdrawals, net: round(deposits - withdrawals) };
 }
 
 /** Σ of the rows on screen: aportes, resgates and the net (aportes − resgates). */

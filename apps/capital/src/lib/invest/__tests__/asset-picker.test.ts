@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { assetPickerState, clearedPick, type PickedAsset } from "../asset-picker";
+import { assetPickerState, clearedPick, pickKeptFor, type PickedAsset } from "../asset-picker";
 
 const holding: PickedAsset = { type: "holding", holding: { id: "h1", ticker: "PETR4", name: "Petrobras PN", currentPrice: 38.5, currency: "BRL" } };
 const market: PickedAsset = { type: "market", item: { ticker: "VOO", name: "Vanguard S&P 500", price: 512.3, currency: "USD", source: "yahoo" } as Extract<PickedAsset, { type: "market" }>["item"] };
@@ -34,5 +34,15 @@ describe("assetPickerState", () => {
     const cleared = clearedPick();
     expect(cleared).toEqual({ picked: null, query: "" });
     expect(assetPickerState(cleared.picked, cleared.query).mode).toBe("list");
+  });
+
+  it("drops a new asset when the operation is no longer a buy, and keeps holdings and market picks", () => {
+    const custom: PickedAsset = { type: "custom", name: "CDB Banco X", assetClass: "fixed_income" };
+    expect(pickKeptFor(custom, "buy")).toBe(true);
+    expect(pickKeptFor(custom, "sell")).toBe(false);
+    expect(pickKeptFor(custom, "income")).toBe(false);
+    expect(pickKeptFor(holding, "sell")).toBe(true);
+    expect(pickKeptFor(market, "income")).toBe(true);
+    expect(pickKeptFor(null, "sell")).toBe(true);
   });
 });
