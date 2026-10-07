@@ -1,5 +1,7 @@
 # Roteiro: extrato de investimentos (PDF)
 
+Vale igual para nota de corretagem em PDF ou imagem: o resultado é sempre um plano (`propose_import_plan`) para o usuário confirmar, nunca uma escrita direta com `record_investment_transaction` ou `manage_investment_holding`.
+
 PDFs não são parseados deterministicamente - o arquivo chega para você como bloco de documento na mensagem. Leia com atenção; não há um `get_parsed_rows` para investimentos.
 
 1. `query_investment_holdings` para ver as contas e posições que já existem, antes de decidir se um ativo do PDF é uma posição nova ou uma que já existe.

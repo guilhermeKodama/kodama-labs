@@ -15,7 +15,7 @@ import { getDefaultAccount } from "@capital/server/modules/ledger/services/entit
 import { inTransaction, recordMutation, snapshot, type MutationRecordInput } from "@capital/server/modules/ledger/services/mutations";
 import { benchmarks12m } from "./benchmarks";
 import { convertAmount, fundBroker, withdrawFromBroker } from "./funding";
-import { portfolioHistory } from "./portfolio-history";
+import { PORTFOLIO_BROKERS, portfolioHistory } from "./portfolio-history";
 
 export { recalculateHolding, marketValue };
 
@@ -113,10 +113,10 @@ export interface PortfolioScope {
   entityIds?: string[] | null;
 }
 
-export async function listHoldings(userId: string, db: DbClient, opts: PortfolioScope & { accountId?: string; includeInactive?: boolean } = {}) {
+export async function listHoldings(userId: string, db: DbClient, opts: PortfolioScope & { accountId?: string; includeInactive?: boolean; includeArchivedAccounts?: boolean } = {}) {
   return db.investmentHolding.findMany({
     where: {
-      account: { userId, ...entityScopeWhere(opts.entityIds ?? null) },
+      account: { userId, ...entityScopeWhere(opts.entityIds ?? null), ...(opts.includeArchivedAccounts === false && { archivedAt: null }) },
       ...(opts.accountId && { accountId: opts.accountId }),
       ...(opts.includeInactive ? {} : { isActive: true }),
     },
@@ -719,8 +719,9 @@ export async function moveBrokerageCash(
 export async function portfolioSummary(userId: string, db: DbClient, opts: PortfolioScope = {}) {
   const fx = await loadFx(userId, db);
   const scope = entityScopeWhere(opts.entityIds ?? null);
-  const holdings = await listHoldings(userId, db, { entityIds: opts.entityIds });
-  const brokers = await db.account.findMany({ where: { userId, type: "brokerage", archivedAt: null, ...scope }, orderBy: { createdAt: "asc" } });
+  // The same population as the history ("Total aportado"): see PORTFOLIO_HOLDINGS in portfolio-history.ts.
+  const holdings = await listHoldings(userId, db, { entityIds: opts.entityIds, includeArchivedAccounts: false });
+  const brokers = await db.account.findMany({ where: { userId, ...PORTFOLIO_BROKERS, ...scope }, orderBy: { createdAt: "asc" } });
   const balances = await accountBalances(userId, db, brokers.map((b) => b.id));
 
   const byClass = new Map<AllocationClass, { marketValue: number; invested: number; count: number }>(ALLOCATION_CLASSES.map((c) => [c, { marketValue: 0, invested: 0, count: 0 }]));
@@ -755,6 +756,7 @@ export async function portfolioSummary(userId: string, db: DbClient, opts: Portf
   const net = marketTotal + cashTotal;
   const [history, benchmarks] = await Promise.all([portfolioHistory(userId, db, { months: 12, entityIds: opts.entityIds ?? null }), benchmarks12m(db)]);
   const contributed = history.months.at(-1)?.contributed ?? 0;
+  const initialPositions = history.months.at(-1)?.initialPositions ?? 0;
   return {
     baseCurrency: fx.baseCurrency,
     marketValue: round(marketTotal, 2),
@@ -769,6 +771,8 @@ export async function portfolioSummary(userId: string, db: DbClient, opts: Portf
      * lib/portfolio-timeline.ts.
      */
     contributed,
+    /** The part of `contributed` that is "posições iniciais" (holdings registered without operations). */
+    initialPositions,
     /** "Resultado": netWorth − contributed (what the money earned, realized or not). */
     result: round(net - contributed, 2),
     resultPercent: contributed > 0 ? round((net - contributed) / contributed, 4) : null,
@@ -880,7 +884,8 @@ export async function rebalanceSuggestion(userId: string, amount: number, mode: 
   }));
   if (mode === "class") return { amount, total: round(total, 2), classes };
 
-  const holdings = await listHoldings(userId, db, { entityIds: opts.entityIds });
+  // The same population as the class values (portfolioSummary): never a holding on an archived broker.
+  const holdings = await listHoldings(userId, db, { entityIds: opts.entityIds, includeArchivedAccounts: false });
   const fx = await loadFx(userId, db);
   const assets = classes
     .filter((c) => c.amount > 0)

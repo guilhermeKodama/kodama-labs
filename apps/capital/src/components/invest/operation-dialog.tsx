@@ -9,6 +9,7 @@ import { useSession } from "@/lib/api/session";
 import { useAppMutation } from "@/lib/api/use-app-mutation";
 import { useFmt } from "@/lib/format/provider";
 import { useAssetSearch, useDebounced, useFxRates, useOperations } from "@/lib/invest/api";
+import { assetPickerState, clearedPick, pickKeptFor } from "@/lib/invest/asset-picker";
 import { exemptionGroup, irEstimate } from "@/lib/invest/ir-estimate";
 import { buyPreview, sellPreview, withheldTax } from "@/lib/invest/op-preview";
 import { opsPeriodRange } from "@/lib/invest/ops-view";
@@ -54,7 +55,7 @@ function OperationForm({ holdings, initialHoldingId, onClose }: { holdings: read
   const initial = initialHoldingId ? (holdings.find((h) => h.id === initialHoldingId) ?? null) : null;
 
   const [kind, setKind] = useState<OpKind>("buy");
-  const [query, setQuery] = useState(initial?.ticker ?? initial?.name ?? "");
+  const [query, setQuery] = useState("");
   const [picked, setPicked] = useState<Picked | null>(initial ? { type: "holding", holding: initial } : null);
   const [qty, setQty] = useState("");
   const [price, setPrice] = useState(initial?.currentPrice ? fmt.number(initial.currentPrice, 2) : "");
@@ -92,14 +93,19 @@ function OperationForm({ holdings, initialHoldingId, onClose }: { holdings: read
   const defaultSource = (ownAccounts.find((a) => a.isDefault) ?? ownAccounts[0])?.id ?? "cash";
   const fundFrom = source ?? defaultSource;
 
-  // Asset picker: the user's holdings while the box is empty; a search otherwise (market results only for a buy).
+  // Asset picker (lib/invest/asset-picker.ts): once an asset is picked, a compact row replaces the box and the list,
+  // and the search is off; otherwise the user's holdings while the box is empty, search results while typing
+  // (market results only for a buy).
+  const picker = assetPickerState(picked, query);
   const debounced = useDebounced(query, 250);
-  const showingHolding = picked?.type === "holding" ? picked.holding : null;
-  const search = useAssetSearch(debounced, kind === "buy", query.trim().length > 0 && !(showingHolding && (showingHolding.ticker ?? showingHolding.name) === query));
+  const search = useAssetSearch(debounced, kind === "buy", picker.searchEnabled);
   const results: { key: string; ticker: string | null; name: string; price: number | null; currency: string; pick: Picked }[] = (() => {
-    if (!query.trim() || (showingHolding && (showingHolding.ticker ?? showingHolding.name) === query)) {
-      const list = showingHolding ? [showingHolding, ...active.filter((h) => h.id !== showingHolding.id)] : [...active].sort((a, b) => b.marketValueBase - a.marketValueBase);
-      return list.slice(0, 4).map((h) => ({ key: h.id, ticker: h.ticker, name: h.name, price: h.currentPrice, currency: h.currency, pick: { type: "holding", holding: h } }));
+    if (picker.mode === "selected") return [];
+    if (!query.trim()) {
+      return [...active]
+        .sort((a, b) => b.marketValueBase - a.marketValueBase)
+        .slice(0, 4)
+        .map((h) => ({ key: h.id, ticker: h.ticker, name: h.name, price: h.currentPrice, currency: h.currency, pick: { type: "holding", holding: h } }));
     }
     return (search.data?.results ?? []).slice(0, 4).map((item) => {
       const held = item.holdingId ? holdings.find((h) => h.id === item.holdingId) : null;
@@ -117,15 +123,18 @@ function OperationForm({ holdings, initialHoldingId, onClose }: { holdings: read
   const pick = (p: Picked) => {
     setPicked(p);
     if (p.type === "holding") {
-      setQuery(p.holding.ticker ?? p.holding.name);
       setBrokerId(p.holding.accountId);
       if (p.holding.currentPrice) setPrice(fmt.number(p.holding.currentPrice, 2));
       setPriceAsOf(p.holding.lastPriceUpdate);
     } else if (p.type === "market") {
-      setQuery(p.item.ticker ?? p.item.name);
       if (p.item.price) setPrice(fmt.number(p.item.price, 2));
       setPriceAsOf(p.item.priceAsOf ?? new Date().toISOString());
     }
+  };
+  const unpick = () => {
+    const cleared = clearedPick();
+    setPicked(cleared.picked);
+    setQuery(cleared.query);
   };
 
   // Numbers
@@ -237,50 +246,51 @@ function OperationForm({ holdings, initialHoldingId, onClose }: { holdings: read
       }}
     >
       <DialogHead title={t("title")} desc={t("desc")} />
-      <Segmented value={kind} options={OP_KINDS.map((k) => ({ v: k, l: t(`kind.${k}`) }))} onChange={setKind} aria-label={t("title")} />
+      <Segmented
+        value={kind}
+        options={OP_KINDS.map((k) => ({ v: k, l: t(`kind.${k}`) }))}
+        onChange={(next) => {
+          setKind(next);
+          if (!pickKeptFor(picked, next)) unpick();
+        }}
+        aria-label={t("title")}
+      />
 
       {kind === "buy" || kind === "sell" || kind === "income" ? (
         <Field label={t("asset")}>
-          <TextInput
-            value={query}
-            onChange={(v) => {
-              setQuery(v);
-              // Typing past the picked asset un-picks it (a new asset keeps the typed name).
-              if (picked?.type === "custom") setPicked({ ...picked, name: v });
-              else if (picked && v !== (picked.type === "holding" ? (picked.holding.ticker ?? picked.holding.name) : (picked.item.ticker ?? picked.item.name))) setPicked(null);
-            }}
-            placeholder={t("assetPlaceholder")}
-            autoFocus
-          />
-          <div className="overflow-hidden rounded-[8px] border border-stroke-3">
-            {results.map((r) => {
-              const selected =
-                (r.pick.type === "holding" && picked?.type === "holding" && picked.holding.id === r.pick.holding.id) ||
-                (r.pick.type === "market" && picked?.type === "market" && picked.item.ticker === r.pick.item.ticker && picked.item.source === r.pick.item.source);
-              return (
-                <button
-                  key={r.key}
-                  type="button"
-                  onClick={() => pick(r.pick)}
-                  className={cn("flex h-8 w-full items-center gap-2 px-2.5 text-left text-[12.5px] hover:bg-fill-3", selected && "bg-fill-2")}
-                >
-                  <span className={cn(MONO, "font-semibold")}>{r.ticker ?? "—"}</span>
-                  <span className="min-w-0 truncate text-fg-3">{r.name}</span>
-                  <span className={cn(MONO, "ml-auto text-[11.5px]")}>{r.price !== null ? fmt.money(r.price, r.currency) : ""}</span>
-                </button>
-              );
-            })}
-            {kind === "buy" && query.trim() && !(picked?.type === "holding" && (picked.holding.ticker ?? picked.holding.name) === query) ? (
-              <button
-                type="button"
-                onClick={() => setPicked({ type: "custom", name: query.trim(), assetClass: picked?.type === "custom" ? picked.assetClass : "fixed_income" })}
-                className={cn("flex h-8 w-full items-center gap-2 px-2.5 text-left text-[12.5px] text-fg-2 hover:bg-fill-3", picked?.type === "custom" && "bg-fill-2")}
-              >
-                {t("newAsset", { name: query.trim() })}
+          {picker.selected ? (
+            <div className="flex h-8 items-center gap-2 rounded-[8px] border border-stroke-3 bg-fill-4 px-2.5 text-[12.5px]">
+              {picker.selected.ticker ? <span className={cn(MONO, "font-semibold")}>{picker.selected.ticker}</span> : null}
+              <span className="min-w-0 truncate text-fg-3">{picker.selected.isNew ? t("newAssetSelected", { name: picker.selected.name }) : picker.selected.name}</span>
+              <span className={cn(MONO, "ml-auto text-[11.5px]")}>{picker.selected.price !== null ? fmt.money(picker.selected.price, picker.selected.currency) : ""}</span>
+              <button type="button" onClick={unpick} className="shrink-0 text-[12px] text-fg-2 underline underline-offset-[3px] hover:text-fg-1">
+                {t("changeAsset")}
               </button>
-            ) : null}
-            {!results.length && !(kind === "buy" && query.trim()) ? <div className="flex h-8 items-center px-2.5 text-[12px] text-fg-3">{search.isFetching ? t("searching") : t("noAssets")}</div> : null}
-          </div>
+            </div>
+          ) : (
+            <>
+              <TextInput value={query} onChange={setQuery} placeholder={t("assetPlaceholder")} autoFocus />
+              <div className="overflow-hidden rounded-[8px] border border-stroke-3">
+                {results.map((r) => (
+                  <button key={r.key} type="button" onClick={() => pick(r.pick)} className="flex h-8 w-full items-center gap-2 px-2.5 text-left text-[12.5px] hover:bg-fill-3">
+                    <span className={cn(MONO, "font-semibold")}>{r.ticker ?? "—"}</span>
+                    <span className="min-w-0 truncate text-fg-3">{r.name}</span>
+                    <span className={cn(MONO, "ml-auto text-[11.5px]")}>{r.price !== null ? fmt.money(r.price, r.currency) : ""}</span>
+                  </button>
+                ))}
+                {kind === "buy" && query.trim() ? (
+                  <button
+                    type="button"
+                    onClick={() => setPicked({ type: "custom", name: query.trim(), assetClass: "fixed_income" })}
+                    className="flex h-8 w-full items-center gap-2 px-2.5 text-left text-[12.5px] text-fg-2 hover:bg-fill-3"
+                  >
+                    {t("newAsset", { name: query.trim() })}
+                  </button>
+                ) : null}
+                {!results.length && !(kind === "buy" && query.trim()) ? <div className="flex h-8 items-center px-2.5 text-[12px] text-fg-3">{search.isFetching ? t("searching") : t("noAssets")}</div> : null}
+              </div>
+            </>
+          )}
           {picked?.type === "custom" ? (
             <div className="grid grid-cols-2 gap-2.5 pt-1">
               <Field label={t("newAssetClass")}>

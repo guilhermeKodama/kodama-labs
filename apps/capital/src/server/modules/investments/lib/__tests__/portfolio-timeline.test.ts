@@ -135,6 +135,61 @@ describe("buildTimeline", () => {
     expect(t.state("pf", 202602)).toMatchObject({ contributed: -49, netFlow: -149, costBasis: 0, positions: [] });
   });
 
+  it("takes what a deactivated holding still held out at cost on the day it was removed", () => {
+    const t = buildTimeline(
+      input({
+        entries: [
+          { accountId: "xp", date: d("2026-01-02"), amount: 1000, amountBase: 1000, isTransfer: true },
+          { accountId: "xp", date: d("2026-01-05"), amount: -500, amountBase: -500, isTransfer: false },
+          { accountId: "xp", date: d("2026-02-05"), amount: 350, amountBase: 350, isTransfer: false },
+        ],
+        holdings: [
+          // Bought 10 for 500 with the broker's cash, sold 5 for 350 (realized 100), removed in March holding 5 (cost 250).
+          holding({
+            id: "vale",
+            currentPrice: 60,
+            removedAt: d("2026-03-10"),
+            operations: [
+              op("b", "2026-01-05", { type: "buy", quantity: 10, pricePerUnit: 50, totalAmount: 500 }),
+              op("s", "2026-02-05", { type: "sell", quantity: 5, pricePerUnit: 70, totalAmount: 350 }),
+            ],
+          }),
+          // Registered without operations and removed: a posição inicial that comes in and goes out.
+          holding({ id: "oibr", createdAt: d("2026-01-20"), currentQuantity: 100, totalInvested: 200, currentPrice: 1, removedAt: d("2026-03-12"), operations: [] }),
+        ],
+      })
+    );
+    // While held, they count like any position.
+    expect(t.state("pf", 202602)).toMatchObject({ cash: 850, costBasis: 450, contributed: 1200, initialPositions: 200 });
+    const mar = t.state("pf", 202603);
+    // Out at cost (250 + 200): Patrimônio 850 of cash, Total aportado 750, so the realized 100 stays as Resultado.
+    expect(mar).toMatchObject({ cash: 850, costBasis: 0, contributed: 750, initialPositions: 0, netFlow: -450, positions: [] });
+    expect(t.value(mar, "price").marketValue).toBe(0);
+  });
+
+  it("removes nothing from a deactivated holding that was already closed (its gain stays)", () => {
+    const t = buildTimeline(
+      input({
+        entries: [
+          { accountId: "xp", date: d("2026-01-02"), amount: 500, amountBase: 500, isTransfer: true },
+          { accountId: "xp", date: d("2026-01-05"), amount: -500, amountBase: -500, isTransfer: false },
+          { accountId: "xp", date: d("2026-02-05"), amount: 700, amountBase: 700, isTransfer: false },
+        ],
+        holdings: [
+          holding({
+            id: "h",
+            removedAt: d("2026-03-01"),
+            operations: [
+              op("b", "2026-01-05", { type: "buy", quantity: 10, pricePerUnit: 50, totalAmount: 500 }),
+              op("s", "2026-02-05", { type: "sell", quantity: 10, pricePerUnit: 70, totalAmount: 700 }),
+            ],
+          }),
+        ],
+      })
+    );
+    expect(t.state("pf", 202603)).toMatchObject({ cash: 700, contributed: 500, netFlow: 0, positions: [] });
+  });
+
   it("keeps amount-based fixed income at its cost when it has no price", () => {
     const t = buildTimeline(
       input({

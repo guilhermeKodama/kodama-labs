@@ -218,7 +218,9 @@ export const v2Investments = createRouter()
   .openapi(holdingsRoute, v2Handler(holdingsRoute, async (c, userId) => {
     const q = c.req.valid("query");
     const entityIds = await resolveScopeQuery(userId, q, prisma);
-    const [holdings, fx] = await Promise.all([listHoldings(userId, prisma, { accountId: q.accountId, entityIds, includeInactive: q.includeInactive === "true" }), loadFx(userId, prisma)]);
+    // The Carteira lists the portfolio population (PORTFOLIO_HOLDINGS in portfolio-history.ts); includeInactive lists everything.
+    const all = q.includeInactive === "true";
+    const [holdings, fx] = await Promise.all([listHoldings(userId, prisma, { accountId: q.accountId, entityIds, includeInactive: all, includeArchivedAccounts: all }), loadFx(userId, prisma)]);
     return { holdings: holdings.map((h) => serializeHolding(h, fx)) };
   }))
   .openapi(createHoldingRoute, v2Handler(createHoldingRoute, async (c, userId) => {

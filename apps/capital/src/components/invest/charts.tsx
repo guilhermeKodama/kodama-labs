@@ -18,23 +18,49 @@ export const CLASS_COLOR: Record<AllocationClass, string> = {
   cash: CHART_SERIES[9],
 };
 
-/** "Patrimônio vs total aportado": two filled lines over 12 months, in thousands, not from zero. */
-export function NetWorthChart({ rows }: { rows: { label: string; netWorth: number; contributed: number }[] }) {
+/**
+ * "Patrimônio vs total aportado": filled lines over 12 months, in thousands, not from zero. "Aportado" is
+ * stacked from the aportes and, when there are any, the "posições iniciais" (holdings registered without
+ * operations), so a portfolio typed in at once never reads as an aporte of that month.
+ */
+export function NetWorthChart({ rows, showInitial }: { rows: { label: string; netWorth: number; aportes: number; initial: number }[]; showInitial: boolean }) {
   const t = useTranslations("invest.portfolio.history");
   const fmt = useFmt();
-  const data = rows.map((r) => ({ label: r.label, netWorth: fmt.thousands(r.netWorth), contributed: fmt.thousands(r.contributed) }));
+  const data = rows.map((r) => ({ label: r.label, netWorth: fmt.thousands(r.netWorth), aportes: fmt.thousands(r.aportes), initial: fmt.thousands(r.initial) }));
+  const name = (key: unknown) => (key === "netWorth" ? t("netWorth") : key === "initial" ? t("initialPositions") : t("contributed"));
   return (
-    <div className="h-[180px]">
-      <ResponsiveContainer width="100%" height="100%">
-        <AreaChart data={data} margin={{ top: 6, right: 4, left: 0, bottom: 0 }}>
-          <CartesianGrid stroke={CHART.grid} vertical={false} />
-          <XAxis dataKey="label" tick={CHART_AXIS.tick} stroke={CHART_AXIS.stroke} tickLine={false} />
-          <YAxis tick={CHART_AXIS.tick} stroke={CHART_AXIS.stroke} tickLine={false} axisLine={false} width={48} domain={["auto", "auto"]} tickFormatter={(v) => fmt.number(Number(v), 0)} />
-          <Tooltip contentStyle={TOOLTIP_STYLE} formatter={(v, name) => [`${fmt.number(Number(v), { min: 0, max: 1 })}`, name === "netWorth" ? t("netWorth") : t("contributed")]} />
-          <Area type="monotone" dataKey="contributed" name="contributed" stroke={CHART.muted} fill={CHART.area} fillOpacity={0.6} strokeWidth={1.5} dot={false} isAnimationActive={false} />
-          <Area type="monotone" dataKey="netWorth" name="netWorth" stroke={CHART.ink} fill={CHART.soft} fillOpacity={0.35} strokeWidth={2} dot={false} isAnimationActive={false} />
-        </AreaChart>
-      </ResponsiveContainer>
+    <div className="flex flex-col gap-1.5">
+      <div className="h-[180px]">
+        <ResponsiveContainer width="100%" height="100%">
+          <AreaChart data={data} margin={{ top: 6, right: 4, left: 0, bottom: 0 }}>
+            <CartesianGrid stroke={CHART.grid} vertical={false} />
+            <XAxis dataKey="label" tick={CHART_AXIS.tick} stroke={CHART_AXIS.stroke} tickLine={false} />
+            <YAxis tick={CHART_AXIS.tick} stroke={CHART_AXIS.stroke} tickLine={false} axisLine={false} width={48} domain={["auto", "auto"]} tickFormatter={(v) => fmt.number(Number(v), 0)} />
+            <Tooltip contentStyle={TOOLTIP_STYLE} formatter={(v, key) => [`${fmt.number(Number(v), { min: 0, max: 1 })}`, name(key)]} />
+            {showInitial ? (
+              <Area type="monotone" dataKey="initial" name="initial" stackId="contributed" stroke={CHART.muted} strokeDasharray="3 3" fill={CHART.soft} fillOpacity={0.5} strokeWidth={1} dot={false} isAnimationActive={false} />
+            ) : null}
+            <Area type="monotone" dataKey="aportes" name="aportes" stackId="contributed" stroke={CHART.muted} fill={CHART.area} fillOpacity={0.6} strokeWidth={1.5} dot={false} isAnimationActive={false} />
+            <Area type="monotone" dataKey="netWorth" name="netWorth" stroke={CHART.ink} fill={CHART.soft} fillOpacity={0.35} strokeWidth={2} dot={false} isAnimationActive={false} />
+          </AreaChart>
+        </ResponsiveContainer>
+      </div>
+      {showInitial ? (
+        <div className="flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-fg-3">
+          <span className="inline-flex items-center gap-1.5">
+            <span aria-hidden className="size-2 rounded-[2px]" style={{ background: CHART.ink }} />
+            {t("netWorth")}
+          </span>
+          <span className="inline-flex items-center gap-1.5">
+            <span aria-hidden className="size-2 rounded-[2px]" style={{ background: CHART.area }} />
+            {t("contributed")}
+          </span>
+          <span className="inline-flex items-center gap-1.5" title={t("initialPositionsHint")}>
+            <span aria-hidden className="size-2 rounded-[2px] border border-dashed" style={{ background: CHART.soft, borderColor: CHART.muted }} />
+            {t("initialPositions")}
+          </span>
+        </div>
+      ) : null}
     </div>
   );
 }

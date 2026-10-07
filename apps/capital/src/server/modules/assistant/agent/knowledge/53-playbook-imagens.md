@@ -34,8 +34,8 @@ O caso mais comum: "registra essa despesa".
 
 Ver `investments` para as regras de posição, aporte e provento.
 
-- Posição/carteira (ticker, quantidade, preço médio, valor atual): `query_investment_holdings` para comparar com o que já está na base, depois `manage_investment_holding` para ajustar o que mudou.
-- Nota de negociação ou extrato de operações: `record_investment_transaction`, ou `propose_import_plan` com `investmentTransactions` quando forem várias.
+- Posição/carteira (ticker, quantidade, preço médio, valor atual): `query_investment_holdings` para comparar com o que já está na base e mostre as diferenças. Quantidade e custo nunca mudam por `manage_investment_holding`: o que precisar de lançamento entra em `propose_import_plan`, para o usuário confirmar.
+- **Nota de corretagem (nota de negociação) ou extrato de operações, em imagem ou PDF: sempre `propose_import_plan`** com `investmentTransactions`, mesmo quando é uma operação só, e um ativo novo entra como `newHolding` dentro do plano. Nunca `record_investment_transaction` nem `manage_investment_holding` direto a partir de uma nota: o conteúdo vem de arquivo, então o usuário confere e confirma antes de gravar (o mesmo roteiro de `playbook-investment-pdf`). O botão "Importar nota" da Carteira promete exatamente isso: "lê a nota e mostra as operações para você confirmar".
 - Aporte vindo de conta corrente é transferência, não despesa - `fund_investment_account`.
 
 ## Uso geral
