@@ -8,11 +8,12 @@ import { apiPost } from "@/lib/api/client";
 import type { Names } from "@/lib/api/catalog";
 import { keys } from "@/lib/api/keys";
 import { bucketOf, GROUPABLE, type PropId } from "@/lib/ledger/columns";
+import { ledgerChipKeys } from "@/lib/ledger/chip-keys";
 import { FLOW_CATEGORY_KEYS } from "@/lib/ledger/flow-category";
 import { addableProps, chipIndex, filterProp, filterValues, NONE, removeFilterAt, setChipValues } from "@/lib/ledger/filters";
 import { bucketOptionsQuery } from "@/lib/ledger/view-query";
 import type { LedgerLabels } from "../fields";
-import { ChipBar, chipKey, ChipValuesEditor, type ChipOption, type FilterChip } from "./chip-bar";
+import { ChipBar, ChipValuesEditor, type ChipOption, type FilterChip } from "./chip-bar";
 
 type Option = ChipOption;
 
@@ -75,12 +76,13 @@ export function FilterChips({ config, names, labels, onChange }: { config: ViewC
     const index = chipIndex(filters, prop);
     return index < 0 ? [] : filterValues(filters[index]);
   };
+  const chipKeys = ledgerChipKeys(filters);
   const chips: FilterChip<PropId>[] = filters.map((filter, index) => {
     const prop = filterProp(filter);
-    // The chip that edits a property is keyed by it (the first filter on it); any other keeps its place.
+    // The first filter on a property is its chip; any other shows with its ✕ only.
     const editsProp = prop !== null && chipIndex(filters, prop) === index;
     return {
-      key: chipKey(editsProp ? prop : null, index, filter.field),
+      key: chipKeys[index],
       text: labels.filterLabel(filter),
       prop: editsProp ? prop : null,
       onRemove: () => onChange(removeFilterAt(filters, index)),

@@ -11,6 +11,7 @@ import { useNames } from "@/lib/api/catalog";
 import { filterOptions, HOLDINGS_FILTER_FIELDS, HOLDINGS_SORT_FIELDS, type HoldingsFilter, type HoldingsViewConfig } from "@/lib/invest/holdings-view";
 import type { OpsFilter, OpsViewConfig } from "@/lib/invest/ops-view";
 import { ALLOCATION_CLASSES, type Holding, type PortfolioSummary } from "@/lib/invest/types";
+import { fieldChipKeys } from "@/lib/ledger/chip-keys";
 import { addableFields, fieldChipIndex, fieldChipValues, setFieldChipValues, type FieldFilter } from "@/lib/ledger/field-filters";
 import { cn } from "@/lib/utils";
 import type { InvestDataset, InvestView, InvestViewWrites } from "./use-invest-views";
@@ -63,10 +64,11 @@ export function InvestFilterChips({ view, writes, holdings, summary }: { view: I
   };
   const save = (next: FieldFilter<FilterField>[]) => writes.update(view, { config: { ...view.config, filters: next as HoldingsFilter[] | OpsFilter[] } });
 
+  const chipKeys = fieldChipKeys(filters);
   const chips: FilterChip<FilterField>[] = filters.map((f, index) => {
     const editable = fieldChipIndex(filters, f.field) === index;
     return {
-      key: editable ? `prop:${f.field}` : `${index}:${f.field}:${f.op}`,
+      key: chipKeys[index],
       text: t(f.op === "nin" ? "filter.chipNot" : "filter.chip", { field: fieldLabel(f.field), values: f.values.map((v) => label(f.field, v)).join(", ") }),
       prop: editable ? f.field : null,
       onRemove: () => save(filters.filter((_, i) => i !== index)),

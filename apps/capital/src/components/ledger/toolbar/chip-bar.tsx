@@ -4,13 +4,14 @@ import { useState, type ReactNode } from "react";
 import { useTranslations } from "next-intl";
 import { Btn, Check, Popover } from "@/components/cap";
 import { MENU_ROW } from "@/components/cap/styles";
+import { propChipKey } from "@/lib/ledger/chip-keys";
 import { cn } from "@/lib/utils";
 
 export type ChipOption = { value: string; label: string; hint?: string };
 
 /** One filter on screen: its text, the property it edits (null: shown with ✕ only) and its removal. */
 export interface FilterChip<P extends string> {
-  /** Stable per property ("prop:<id>"), so the chip keeps its editor open while its filter is created or changed. */
+  /** Stable per property (lib/ledger/chip-keys.ts), so the chip keeps its editor open while its filter is created or changed. */
   key: string;
   text: string;
   prop: P | null;
@@ -55,11 +56,6 @@ export function ChipValuesEditor({
       </div>
     </>
   );
-}
-
-/** The key of a chip: per property when it has one, so it survives being created and reordered. */
-export function chipKey(prop: string | null, index: number, field: string): string {
-  return prop ? `prop:${prop}` : `${index}:${field}`;
 }
 
 /**
@@ -138,7 +134,7 @@ export function ChipBar<P extends string>({
 
   const pendingShown = pending !== null && !chips.some((c) => c.prop === pending);
   // One list, so the picked property's chip keeps its key (and its open editor) when its filter appears.
-  const all: FilterChip<P>[] = pendingShown ? [...chips, { key: chipKey(pending, -1, pending), text: pendingText(pending), prop: pending, onRemove: close }] : [...chips];
+  const all: FilterChip<P>[] = pendingShown ? [...chips, { key: propChipKey(pending), text: pendingText(pending), prop: pending, onRemove: close }] : [...chips];
   return (
     <>
       {all.map(chip)}

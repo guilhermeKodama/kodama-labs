@@ -210,7 +210,11 @@ export function useDeleteView() {
   });
 }
 
-/** "Duplicar" of any dataset: the copy ("<nome> (cópia)", with `config` or the stored one) goes in the cache. */
+/**
+ * "Duplicar" of any dataset: the copy ("<nome> (cópia)", with `config` or
+ * the stored one) goes in the cache. Like a new view it is not recorded
+ * (no batch), so ⌘Z after filtering the copy does not delete it.
+ */
 export function useDuplicateView() {
   const insert = useInsertView();
   return useAppMutation({

@@ -140,10 +140,17 @@ export function nextNewViewName(base: string, taken: readonly string[]): string 
  * per dataset) and its creation is not recorded (batchId null), like the
  * config edits that follow it: ⌘Z after setting up a new view's filters
  * must not delete the view. "Excluir view" (undoable) removes it.
+ * `record: false` keeps a named creation off the log too (duplicateView).
  */
-export async function createView(userId: string, input: CreateViewInput, db: DbClient, opts: ViewWriteOptions & { op?: string } = {}): Promise<ViewWriteResult> {
+export async function createView(
+  userId: string,
+  input: CreateViewInput,
+  db: DbClient,
+  opts: ViewWriteOptions & { record?: boolean } = {},
+): Promise<ViewWriteResult> {
   const parsed = savedViewInputSchema.parse(input);
   const named = parsed.name !== undefined;
+  const recorded = opts.record ?? named;
   const base = named ? null : st(await loadUserLocale(userId, db), "views.newView");
   return inTransaction(db, async (tx) => {
     let name = parsed.name;
@@ -167,8 +174,8 @@ export async function createView(userId: string, input: CreateViewInput, db: DbC
       opts.collect.push(record);
       return { ...serializeView(view), batchId: null };
     }
-    if (!named) return { ...serializeView(view), batchId: null };
-    const batchId = await recordMutation(tx, userId, opts.op ?? "view.create", view.name, [record]);
+    if (!recorded) return { ...serializeView(view), batchId: null };
+    const batchId = await recordMutation(tx, userId, "view.create", view.name, [record]);
     return { ...serializeView(view), batchId };
   });
 }
@@ -252,7 +259,10 @@ export async function updateView(userId: string, viewId: string, patch: SavedVie
  * "Duplicar" and "Salvar como nova": a new favorite view of the same
  * dataset. `config`, the one on screen (temporary filters of "Todas" or of
  * a drill included), replaces the stored one; the name defaults to
- * "<name> (cópia)" in the user's locale.
+ * "<name> (cópia)" in the user's locale. Like "Nova view", the creation is
+ * not recorded (batchId null): the copy's filters are auto-saved off the
+ * log, so a recorded creation would be what ⌘Z after them undoes, and it
+ * would delete the copy. "Excluir view" (undoable) removes it.
  */
 export async function duplicateView(userId: string, viewId: string, db: DbClient, input: DuplicateViewInput = {}) {
   const view = await db.savedView.findFirst({ where: { id: viewId, userId } });
@@ -260,7 +270,7 @@ export async function duplicateView(userId: string, viewId: string, db: DbClient
   const dataset = datasetOf(view.dataset);
   const config = input.config ? validateConfig(dataset, input.config) : parseConfig(dataset, view.config);
   const name = input.name ?? `${view.name} ${st(await loadUserLocale(userId, db), "common.copySuffix")}`;
-  return createView(userId, { name, dataset, isFavorite: true, config } as CreateViewInput, db, { op: "view.duplicate" });
+  return createView(userId, { name, dataset, isFavorite: true, config } as CreateViewInput, db, { record: false });
 }
 
 /**

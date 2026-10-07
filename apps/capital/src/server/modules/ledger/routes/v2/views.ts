@@ -22,7 +22,7 @@ const duplicateViewRoute = createRoute({
   method: "post",
   path: "/v2/views/{id}/duplicate",
   tags,
-  summary: "Duplicate a view, optionally with the config on screen",
+  summary: "Duplicate a view, optionally with the config on screen (not recorded: batchId null, like an unnamed create)",
   request: { params: idParams, ...jsonBody(duplicateViewSchema) },
   responses: v2Responses,
 });

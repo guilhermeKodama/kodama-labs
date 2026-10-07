@@ -4,7 +4,7 @@ import { createApp } from "@capital/server/lib/create-app";
 import { nextNewViewName } from "@capital/server/modules/ledger/services/views";
 import { createLedgerFixture, deleteLedgerFixture } from "@/test/ledger-fixtures";
 
-/** POST /v2/views without a name: "Nova view", "Nova view 2", … per dataset, in the user's locale, off the undo log. */
+/** POST /v2/views without a name: "Nova view", "Nova view 2", … per dataset, in the user's locale, off the undo log (and so are copies). */
 const USER = "test-user-fu-a-view-names-001";
 const app = createApp();
 let cookie: string;
@@ -53,8 +53,13 @@ describe("new view names", () => {
     const named = await call("POST", "/v2/views", { name: "Mercado", config: {} });
     expect(named.body.batchId).toEqual(expect.any(String));
 
+    // Nor is a copy ("Duplicar", "Salvar como nova"), named or not.
+    const copy = await call("POST", `/v2/views/${second.body.id as string}/duplicate`, { config: { filters: [{ field: "flowKind", op: "in", values: ["out"] }] } });
+    expect(copy.body).toMatchObject({ name: "Nova view 2 (cópia)", batchId: null });
+    expect((await call("POST", `/v2/views/${second.body.id as string}/duplicate`, { name: "Saídas" })).body.batchId).toBeNull();
+
     // ⌘Z's fallback (the newest undoable batch) is never a view's creation.
-    const batches = await prisma.mutationBatch.findMany({ where: { userId: USER, op: "view.create" } });
+    const batches = await prisma.mutationBatch.findMany({ where: { userId: USER, op: { in: ["view.create", "view.duplicate"] } } });
     expect(batches.map((b) => b.summary)).toEqual(["Mercado"]);
   });
 

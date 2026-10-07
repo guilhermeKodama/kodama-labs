@@ -103,9 +103,10 @@ const ON = "bg-fill-2 font-medium text-fg-1";
 const OFF = "text-fg-2 hover:bg-fill-3";
 
 /**
- * A favorite view in the sidebar: layout icon and name, and (expanded) the
- * view's menu on "⋯" or a right click (Renomear in place, Duplicar,
- * Desfavoritar, Excluir view; nothing for Todas).
+ * A favorite view in the sidebar: layout icon and name, and the view's
+ * menu on "⋯" or a right click (Renomear in place, Duplicar, Desfavoritar,
+ * Excluir view; nothing for Todas). The rail has no room to rename, so its
+ * menu (right click) leaves Renomear out.
  */
 function SidebarViewItem({
   view,
@@ -123,14 +124,34 @@ function SidebarViewItem({
   const menu = useViewMenu();
   const [renaming, setRenaming] = useState(false);
   const href = buildTransactionsHref({ viewId: view.id });
+  const editable = !view.isBuiltin;
   if (rail) {
-    return (
+    // No room to rename in place: the right click (or the hidden "⋯", reached with Tab) offers the rest, to the right.
+    const link = (
       <Link href={href} title={view.name} aria-label={view.name} aria-current={on ? "page" : undefined} onClick={onNavigate} className={cn(RAIL_ITEM, on ? ON : OFF)}>
         <LayoutIcon layout={view.config.layout} className="size-3.5" />
       </Link>
     );
+    if (!editable) return link;
+    return (
+      <ViewMenuTarget onContextMenu={menu.onContextMenu} className="relative flex shrink-0">
+        {link}
+        <ViewMenu
+          label={view.name}
+          open={menu.open}
+          onOpenChange={menu.setOpen}
+          side="right"
+          className="pointer-events-none absolute inset-0 size-auto bg-fill-2 group-hover:opacity-0 focus-visible:pointer-events-auto data-[state=open]:opacity-0"
+          actions={{
+            onDuplicate: () => actions.duplicate(view),
+            favorite: view.isFavorite,
+            onFavorite: () => actions.toggleFavorite(view),
+            onDelete: () => actions.remove(view),
+          }}
+        />
+      </ViewMenuTarget>
+    );
   }
-  const editable = !view.isBuiltin;
   if (renaming) {
     // The menu is unmounted while renaming, so closing it cannot take the focus back from the field.
     return (

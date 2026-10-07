@@ -44,6 +44,7 @@ export function ViewMenu({
   open,
   onOpenChange,
   visible,
+  side,
   className,
 }: {
   /** The view's name, for the button's accessible label. */
@@ -53,6 +54,8 @@ export function ViewMenu({
   onOpenChange: (open: boolean) => void;
   /** Always shown (the active tab); otherwise on hover or focus. */
   visible?: boolean;
+  /** Where the menu opens (below the button by default; the sidebar rail opens it to the right). */
+  side?: "bottom" | "right";
   className?: string;
 }) {
   const t = useTranslations("ledger.viewMenu");
@@ -60,6 +63,7 @@ export function ViewMenu({
     <Menu
       open={open}
       onOpenChange={onOpenChange}
+      side={side}
       width={190}
       trigger={
         <button
