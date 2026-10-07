@@ -1,19 +1,17 @@
 "use client";
 
-import { useEffect, useSyncExternalStore, type ComponentProps, type ReactNode } from "react";
+import { useEffect, useState, useSyncExternalStore, type ComponentProps, type ReactNode } from "react";
 import { useSearchParams } from "next/navigation";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslations } from "next-intl";
 import { Dialog as DialogPrimitive } from "radix-ui";
 import { Briefcase, PiggyBank, Plus, Search, Target } from "lucide-react";
 import { Kbd } from "@/components/cap";
 import { BACKDROP } from "@/components/cap/styles";
-import { Link, usePathname, useRouter } from "@/i18n/navigation";
-import { api, apiPost } from "@/lib/api/client";
-import { keys } from "@/lib/api/keys";
+import { LayoutIcon } from "@/components/ledger/toolbar/layout-icon";
+import { RenameInput, useViewMenu, ViewMenu, ViewMenuTarget } from "@/components/ledger/toolbar/view-menu";
+import { Link, usePathname } from "@/i18n/navigation";
 import { useSession } from "@/lib/api/session";
-import { useAppMutation } from "@/lib/api/use-app-mutation";
-import { layoutGlyph } from "@/lib/ledger/view-glyphs";
+import { useLedgerViewActions, useLedgerViews, useNewView, type LedgerView } from "@/lib/ledger/use-views";
 import { buildTransactionsHref } from "@/lib/ledger/view-draft";
 import { openCommandMenu } from "@/lib/shell/command-menu";
 import { SHELL_SHORTCUTS, TRANSACTIONS_PATH } from "@/lib/shell/shortcuts";
@@ -24,7 +22,6 @@ import {
   SIDEBAR_DRAWER_QUERY,
   type SidebarState,
   type SidebarStore,
-  type SidebarViewLike,
 } from "@/lib/shell/sidebar";
 import { firstName, initials } from "@/lib/shell/user";
 import { OverlayScope, useOverlay, useShortcutLabel } from "@/lib/shortcuts/provider";
@@ -99,11 +96,6 @@ export function SidebarTrigger() {
 // Content (mockup MockSidebar)
 // ---------------------------------------------------------------------------
 
-interface SidebarView extends SidebarViewLike {
-  name: string;
-  config: { layout: string };
-}
-
 /** 28px row, radius 6, 12.5px; the active one on fill.secondary in the primary ink. */
 const ITEM = "flex h-7 shrink-0 items-center gap-2 rounded-[6px] px-2 text-[12.5px] outline-none focus-visible:ring-2 focus-visible:ring-fg-3/40";
 const RAIL_ITEM = "flex size-8 shrink-0 items-center justify-center rounded-[6px] text-[12.5px] outline-none focus-visible:ring-2 focus-visible:ring-fg-3/40";
@@ -111,24 +103,94 @@ const ON = "bg-fill-2 font-medium text-fg-1";
 const OFF = "text-fg-2 hover:bg-fill-3";
 
 /**
- * "+ Nova view": creates a blank favorite view ("Nova view", the
- * defaults of a new table) and opens it on Transações with Exibição open,
- * where a new view starts.
+ * A favorite view in the sidebar: layout icon and name, and the view's
+ * menu on "⋯" or a right click (Renomear in place, Duplicar, Desfavoritar,
+ * Excluir view; nothing for Todas). The rail has no room to rename, so its
+ * menu (right click) leaves Renomear out.
  */
-export function useNewView(onNavigate?: () => void) {
-  const t = useTranslations("shell.nav");
-  const router = useRouter();
-  const queryClient = useQueryClient();
-  return useAppMutation({
-    event: "views.write",
-    mutationFn: () => apiPost<SidebarView>("/api/v2/views", { name: t("newView"), dataset: "ledger", isFavorite: true, config: {} }),
-    onSuccess: (view) => {
-      // In the list before Transações reads it, so the screen opens this view and not the first one while the list refetches.
-      queryClient.setQueryData<SidebarView[]>(keys.views("ledger"), (views) => (views && !views.some((item) => item.id === view.id) ? [...views, view] : views));
-      onNavigate?.();
-      router.push(buildTransactionsHref({ viewId: view.id, display: true }));
-    },
-  });
+function SidebarViewItem({
+  view,
+  rail,
+  on,
+  onNavigate,
+  actions,
+}: {
+  view: LedgerView;
+  rail: boolean;
+  on: boolean;
+  onNavigate?: () => void;
+  actions: ReturnType<typeof useLedgerViewActions>;
+}) {
+  const menu = useViewMenu();
+  const [renaming, setRenaming] = useState(false);
+  const href = buildTransactionsHref({ viewId: view.id });
+  const editable = !view.isBuiltin;
+  if (rail) {
+    // No room to rename in place: the right click (or the hidden "⋯", reached with Tab) offers the rest, to the right.
+    const link = (
+      <Link href={href} title={view.name} aria-label={view.name} aria-current={on ? "page" : undefined} onClick={onNavigate} className={cn(RAIL_ITEM, on ? ON : OFF)}>
+        <LayoutIcon layout={view.config.layout} className="size-3.5" />
+      </Link>
+    );
+    if (!editable) return link;
+    return (
+      <ViewMenuTarget onContextMenu={menu.onContextMenu} className="relative flex shrink-0">
+        {link}
+        <ViewMenu
+          label={view.name}
+          open={menu.open}
+          onOpenChange={menu.setOpen}
+          side="right"
+          className="pointer-events-none absolute inset-0 size-auto bg-fill-2 group-hover:opacity-0 focus-visible:pointer-events-auto data-[state=open]:opacity-0"
+          actions={{
+            onDuplicate: () => actions.duplicate(view),
+            favorite: view.isFavorite,
+            onFavorite: () => actions.toggleFavorite(view),
+            onDelete: () => actions.remove(view),
+          }}
+        />
+      </ViewMenuTarget>
+    );
+  }
+  if (renaming) {
+    // The menu is unmounted while renaming, so closing it cannot take the focus back from the field.
+    return (
+      <div className={cn(ITEM, ON)}>
+        <LayoutIcon layout={view.config.layout} />
+        <RenameInput
+          name={view.name}
+          className="w-full"
+          onDone={(name) => {
+            setRenaming(false);
+            if (name) actions.rename(view, name);
+          }}
+        />
+      </div>
+    );
+  }
+  return (
+    <ViewMenuTarget onContextMenu={editable ? menu.onContextMenu : undefined} className={cn("relative flex shrink-0 items-center rounded-[6px]", on ? ON : OFF)}>
+      <Link href={href} aria-current={on ? "page" : undefined} onClick={onNavigate} className={cn(ITEM, "min-w-0 flex-1", editable && "pr-7")}>
+        <LayoutIcon layout={view.config.layout} />
+        <span className="truncate">{view.name}</span>
+      </Link>
+      {editable ? (
+        <ViewMenu
+          label={view.name}
+          open={menu.open}
+          onOpenChange={menu.setOpen}
+          className="absolute right-1"
+          actions={{
+            onRename: () => setRenaming(true),
+            onDuplicate: () => actions.duplicate(view),
+            favorite: view.isFavorite,
+            onFavorite: () => actions.toggleFavorite(view),
+            onDelete: () => actions.remove(view),
+          }}
+        />
+      ) : null}
+    </ViewMenuTarget>
+  );
 }
 
 function SidebarContent({ rail, onNavigate }: { rail: boolean; onNavigate?: () => void }) {
@@ -137,14 +199,12 @@ function SidebarContent({ rail, onNavigate }: { rail: boolean; onNavigate?: () =
   const params = useSearchParams();
   const session = useSession();
   const searchLabel = useShortcutLabel(SHELL_SHORTCUTS.command.combo);
-  const views = useQuery({
-    queryKey: keys.views("ledger"),
-    queryFn: () => api<SidebarView[]>("/api/v2/views?dataset=ledger"),
-  });
+  const views = useLedgerViews();
   const newView = useNewView(onNavigate);
   const user = session.data;
   const list = views.data ?? [];
   const activeId = pathname === TRANSACTIONS_PATH ? activeViewId(list, params.get("view")) : null;
+  const actions = useLedgerViewActions({ activeId, onNavigate });
 
   const nav = (href: string, label: string, icon: ReactNode) => {
     const on = pathname === href;
@@ -200,23 +260,9 @@ function SidebarContent({ rail, onNavigate }: { rail: boolean; onNavigate?: () =
         </button>
       )}
       {section(t("transactions"))}
-      {favoriteViews(list).map((view) => {
-        const on = view.id === activeId;
-        const href = buildTransactionsHref({ viewId: view.id });
-        const glyph = layoutGlyph(view.config.layout);
-        return rail ? (
-          <Link key={view.id} href={href} title={view.name} aria-label={view.name} aria-current={on ? "page" : undefined} onClick={onNavigate} className={cn(RAIL_ITEM, on ? ON : OFF)}>
-            <span className="text-[12px]">{glyph}</span>
-          </Link>
-        ) : (
-          <Link key={view.id} href={href} aria-current={on ? "page" : undefined} onClick={onNavigate} className={cn(ITEM, on ? ON : OFF)}>
-            <span aria-hidden className="w-3 shrink-0 text-[11px] text-fg-3">
-              {glyph}
-            </span>
-            <span className="truncate">{view.name}</span>
-          </Link>
-        );
-      })}
+      {favoriteViews(list).map((view) => (
+        <SidebarViewItem key={view.id} view={view} rail={rail} on={view.id === activeId} onNavigate={onNavigate} actions={actions} />
+      ))}
       <button
         type="button"
         disabled={newView.isPending}
@@ -229,9 +275,7 @@ function SidebarContent({ rail, onNavigate }: { rail: boolean; onNavigate?: () =
           <Plus className="size-3.5" />
         ) : (
           <>
-            <span aria-hidden className="w-3 shrink-0">
-              +
-            </span>
+            <Plus aria-hidden className="size-3.5 shrink-0" />
             <span>{t("newView")}</span>
           </>
         )}

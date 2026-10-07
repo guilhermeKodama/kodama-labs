@@ -35,7 +35,7 @@ afterAll(async () => {
 });
 
 describe("saved views in the undo log", () => {
-  it("records create, rename, favorite, duplicate and delete; a deleted view comes back under the same id", async () => {
+  it("records a named create, rename, favorite and delete (not a duplicate); a deleted view comes back under the same id", async () => {
     const created = await call("POST", "/v2/views", { name: "Mercado", config: { filters: [{ field: "flowKind", op: "in", values: ["out"] }] } });
     expect(created.status).toBe(200);
     const id = created.body.id as string;
@@ -58,10 +58,12 @@ describe("saved views in the undo log", () => {
     expect((await undo(fav.body.batchId)).status).toBe(200);
     expect((await prisma.savedView.findUniqueOrThrow({ where: { id } })).isFavorite).toBe(true);
 
+    // A copy is not recorded (⌘Z after its filters must not delete it); deleting it is.
     const copy = await call("POST", `/v2/views/${id}/duplicate`, {});
-    expect(await prisma.mutationBatch.findUniqueOrThrow({ where: { id: copy.body.batchId } })).toMatchObject({ op: "view.duplicate" });
-    expect((await undo(copy.body.batchId)).status).toBe(200);
-    expect(await prisma.savedView.count({ where: { id: copy.body.id } })).toBe(0);
+    expect(copy.body).toMatchObject({ batchId: null });
+    const copyRemoved = await call("DELETE", `/v2/views/${copy.body.id as string}`);
+    expect(copyRemoved.body).toMatchObject({ ok: true, batchId: expect.any(String) });
+    expect(await prisma.savedView.count({ where: { id: copy.body.id as string } })).toBe(0);
 
     const before = await prisma.savedView.findUniqueOrThrow({ where: { id } });
     const removed = await call("DELETE", `/v2/views/${id}`);

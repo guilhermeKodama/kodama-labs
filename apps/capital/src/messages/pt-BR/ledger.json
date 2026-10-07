@@ -6,6 +6,15 @@
     "newView": "Nova view",
     "modified": "Modificada"
   },
+  "viewMenu": {
+    "open": "Opções de “{name}”",
+    "title": "Opções da view",
+    "rename": "Renomear",
+    "duplicate": "Duplicar",
+    "favorite": "Favoritar",
+    "unfavorite": "Desfavoritar",
+    "delete": "Excluir view"
+  },
   "period": {
     "title": "Período da view",
     "prev": "Período anterior",

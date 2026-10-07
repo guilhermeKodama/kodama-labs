@@ -99,7 +99,7 @@ export async function listViews(userId: string, db: DbClient, dataset?: string) 
   return views.map(serializeView);
 }
 
-/** Input of createView: the API body (dataset defaults to ledger, the config to the dataset's defaults). */
+/** Input of createView: the API body (dataset defaults to ledger, the config to the dataset's defaults, the name to "Nova view N"). */
 export type CreateViewInput = z.input<typeof savedViewInputSchema>;
 
 /** A view write: the view, and the undo batch it recorded (null when nothing was recorded, see updateView). */
@@ -110,6 +110,23 @@ export interface ViewWriteOptions {
   collect?: MutationRecordInput[];
 }
 
+const escapeRegExp = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+/**
+ * The name of a view created without one: `base` ("Nova view") when no
+ * view of the dataset is called that yet, else `base N` with N one past
+ * the highest number in use ("Nova view" counts as 1), as Notion does.
+ */
+export function nextNewViewName(base: string, taken: readonly string[]): string {
+  const pattern = new RegExp(`^${escapeRegExp(base)}(?: (\\d+))?$`);
+  let highest = 0;
+  for (const name of taken) {
+    const match = pattern.exec(name.trim());
+    if (match) highest = Math.max(highest, match[1] ? Number(match[1]) : 1);
+  }
+  return highest ? `${base} ${highest + 1}` : base;
+}
+
 /**
  * Creates a view at the end of the list, in one undoable batch (undo
  * removes it). Also the entry point for views other services create, e.g.
@@ -117,15 +134,35 @@ export interface ViewWriteOptions {
  * through `collect`: createView(userId, { name, isFavorite: false, config:
  * { period: { preset: "all" }, filters: [{ field: "importId", op: "in",
  * values: [importId] }] } }, tx, { collect: records }).
+ *
+ * Without a name (the "+" of the tabs, "+ Nova view" and ⌘K) the view is
+ * named "Nova view", "Nova view 2", … in the user's locale (nextNewViewName,
+ * per dataset) and its creation is not recorded (batchId null), like the
+ * config edits that follow it: ⌘Z after setting up a new view's filters
+ * must not delete the view. "Excluir view" (undoable) removes it.
+ * `record: false` keeps a named creation off the log too (duplicateView).
  */
-export async function createView(userId: string, input: CreateViewInput, db: DbClient, opts: ViewWriteOptions & { op?: string } = {}): Promise<ViewWriteResult> {
+export async function createView(
+  userId: string,
+  input: CreateViewInput,
+  db: DbClient,
+  opts: ViewWriteOptions & { record?: boolean } = {},
+): Promise<ViewWriteResult> {
   const parsed = savedViewInputSchema.parse(input);
+  const named = parsed.name !== undefined;
+  const recorded = opts.record ?? named;
+  const base = named ? null : st(await loadUserLocale(userId, db), "views.newView");
   return inTransaction(db, async (tx) => {
+    let name = parsed.name;
+    if (name === undefined) {
+      const taken = await tx.savedView.findMany({ where: { userId, dataset: parsed.dataset, name: { startsWith: base! } }, select: { name: true } });
+      name = nextNewViewName(base!, taken.map((view) => view.name));
+    }
     const last = await tx.savedView.aggregate({ where: { userId }, _max: { position: true } });
     const view = await tx.savedView.create({
       data: {
         userId,
-        name: parsed.name,
+        name,
         dataset: parsed.dataset,
         isFavorite: parsed.isFavorite,
         position: (last._max.position ?? 0) + 1,
@@ -137,7 +174,8 @@ export async function createView(userId: string, input: CreateViewInput, db: DbC
       opts.collect.push(record);
       return { ...serializeView(view), batchId: null };
     }
-    const batchId = await recordMutation(tx, userId, opts.op ?? "view.create", view.name, [record]);
+    if (!recorded) return { ...serializeView(view), batchId: null };
+    const batchId = await recordMutation(tx, userId, "view.create", view.name, [record]);
     return { ...serializeView(view), batchId };
   });
 }
@@ -221,7 +259,10 @@ export async function updateView(userId: string, viewId: string, patch: SavedVie
  * "Duplicar" and "Salvar como nova": a new favorite view of the same
  * dataset. `config`, the one on screen (temporary filters of "Todas" or of
  * a drill included), replaces the stored one; the name defaults to
- * "<name> (cópia)" in the user's locale.
+ * "<name> (cópia)" in the user's locale. Like "Nova view", the creation is
+ * not recorded (batchId null): the copy's filters are auto-saved off the
+ * log, so a recorded creation would be what ⌘Z after them undoes, and it
+ * would delete the copy. "Excluir view" (undoable) removes it.
  */
 export async function duplicateView(userId: string, viewId: string, db: DbClient, input: DuplicateViewInput = {}) {
   const view = await db.savedView.findFirst({ where: { id: viewId, userId } });
@@ -229,7 +270,7 @@ export async function duplicateView(userId: string, viewId: string, db: DbClient
   const dataset = datasetOf(view.dataset);
   const config = input.config ? validateConfig(dataset, input.config) : parseConfig(dataset, view.config);
   const name = input.name ?? `${view.name} ${st(await loadUserLocale(userId, db), "common.copySuffix")}`;
-  return createView(userId, { name, dataset, isFavorite: true, config } as CreateViewInput, db, { op: "view.duplicate" });
+  return createView(userId, { name, dataset, isFavorite: true, config } as CreateViewInput, db, { record: false });
 }
 
 /**

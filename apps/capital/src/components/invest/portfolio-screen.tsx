@@ -22,8 +22,8 @@ import { IncomeChart, NetWorthChart } from "./charts";
 import { MONO, todayIn, useMonthRange, useScopeParam, useSignedPct } from "./common";
 import { EditOperationDialog, HoldingSheet, useOpLabel } from "./dialogs";
 import { OperationDialog } from "./operation-dialog";
-import { pickView, useInvestViews, useInvestViewWrites, type InvestView } from "./use-invest-views";
-import { DisplayPopover, FilterChips, FilterMenu } from "./view-controls";
+import { pickView, useInvestViews, useInvestViewWrites } from "./use-invest-views";
+import { InvestViewTabs } from "./view-controls";
 
 /** Holdings table columns (mockup COLS: Ativo · Classe · Corretora · Entidade · Valor · % cart. · Result.). */
 const COLUMN_WIDTH: Record<string, string> = {
@@ -50,7 +50,7 @@ export function PortfolioScreen() {
   const summary = usePortfolioSummary(scope);
   const holdings = useHoldings(scope);
   const history = usePortfolioHistory(scope);
-  const { views } = useInvestViews();
+  const { views, canCreate } = useInvestViews();
   const writes = useInvestViewWrites();
   const view = pickView(views, viewParam);
   const fx = useFxRates();
@@ -167,7 +167,7 @@ export function PortfolioScreen() {
           <AllocationPanel summary={s} />
         </Panel>
       </div>
-      <ViewTabs views={views} active={view} onSelect={(v) => void setViewParam(v.id)} writes={writes} holdings={holdings.data ?? []} summary={s} />
+      <InvestViewTabs views={views} active={view} onSelect={(id) => void setViewParam(id)} writes={writes} canCreate={canCreate} holdings={holdings.data ?? []} summary={s} />
       {view?.dataset === "holdings" ? (
         <HoldingsTable config={view.config} holdings={holdings.data ?? []} summary={s} loading={holdings.isLoading} onOpen={setDetail} />
       ) : view?.dataset === "investment_ops" ? (
@@ -212,72 +212,6 @@ function AllocationPanel({ summary }: { summary: PortfolioSummary | undefined })
       ))}
       <span className="text-[11px] text-fg-4">{t("legend")}</span>
     </div>
-  );
-}
-
-function ViewTabs({
-  views,
-  active,
-  onSelect,
-  writes,
-  holdings,
-  summary,
-}: {
-  views: InvestView[];
-  active: InvestView | null;
-  onSelect: (view: InvestView) => void;
-  writes: ReturnType<typeof useInvestViewWrites>;
-  holdings: Holding[];
-  summary: PortfolioSummary | undefined;
-}) {
-  const t = useTranslations("invest.portfolio.tabs");
-  const editable = !!active?.persisted;
-  const created = (view: { id: string }) => onSelect({ id: view.id } as InvestView);
-  return (
-    <>
-      <div className="flex items-center gap-0.5 border-b border-stroke-3">
-        {views.map((v) => {
-          const on = v.id === active?.id;
-          return (
-            <button
-              key={v.id}
-              type="button"
-              onClick={() => onSelect(v)}
-              className={cn(
-                "inline-flex h-[34px] items-center gap-1.5 border-b-2 px-2 text-[12.5px]",
-                on ? "border-fg-1 font-medium text-fg-1" : "border-transparent text-fg-3 hover:text-fg-strong",
-              )}
-            >
-              <span className="text-[11px] text-fg-3">{v.config.layout === "chart" ? "▮" : "▦"}</span>
-              {v.name}
-            </button>
-          );
-        })}
-        {views.some((v) => v.persisted) ? (
-          <Menu
-            trigger={
-              <button type="button" aria-label={t("addView")} className="px-2 text-[14px] text-fg-3 hover:text-fg-1">
-                +
-              </button>
-            }
-            width={220}
-          >
-            <MenuItem label={t("newHoldingsView")} onSelect={() => writes.create.mutate({ dataset: "holdings", name: t("newViewName"), config: { groupBy: "none" } }, { onSuccess: created })} />
-            <MenuItem
-              label={t("newOpsView")}
-              onSelect={() => writes.create.mutate({ dataset: "investment_ops", name: t("newViewName"), config: { layout: "table", period: { preset: "all", offset: 0 } } }, { onSuccess: created })}
-            />
-          </Menu>
-        ) : null}
-        {active && editable ? (
-          <span className="ml-auto flex items-center gap-1.5">
-            <FilterMenu view={active} writes={writes} holdings={holdings} summary={summary} />
-            <DisplayPopover view={active} writes={writes} onDeleted={() => views[0] && onSelect(views[0])} />
-          </span>
-        ) : null}
-      </div>
-      {active && editable ? <FilterChips view={active} writes={writes} /> : null}
-    </>
   );
 }
 
