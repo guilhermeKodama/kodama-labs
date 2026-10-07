@@ -114,6 +114,8 @@ describe("the × on the Transações tabs", () => {
     expect(deleteClass(html, "Assinaturas")).toMatch(/(^| )opacity-100( |$)/);
     expect(deleteClass(html, "Minha view")).toMatch(/opacity-0 group-hover:opacity-100/);
     expect(deleteClass(html, "Minha view")).toContain("focus-visible:opacity-100");
+    // Keyboard focus on the tab's name shows its × too, so tabbing on lands on a visible button.
+    expect(deleteClass(html, "Minha view")).toContain("group-focus-within:opacity-100");
   });
 
   it("gives a seeded view no label of its own (only Todas says fixa)", () => {

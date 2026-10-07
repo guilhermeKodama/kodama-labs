@@ -59,7 +59,7 @@ export function DeleteViewConfirm({ name, onCancel, onConfirm, confirmRef }: { n
 /**
  * "×" right of a view's name (Transações tabs, sidebar favorites, Carteira
  * tabs; never on Todas): the one way to delete a view. Shown on hover or
- * focus, and always when `visible` (the active tab). It asks first, in a
+ * focus (of the tab or row), and always when `visible` (the active tab). It asks first, in a
  * small dialog (480): Excluir (or Enter) calls `onDelete`, which deletes
  * undoably and leaves the view if it was on screen; Cancelar or Esc keeps
  * it.
@@ -80,7 +80,8 @@ export function DeleteViewButton({ name, onDelete, visible, className }: { name:
         }}
         className={cn(
           "inline-flex size-5 shrink-0 items-center justify-center rounded-[4px] text-fg-3 outline-none hover:bg-fill-3 hover:text-fg-1 focus-visible:opacity-100",
-          visible || open ? "opacity-100" : "opacity-0 group-hover:opacity-100",
+          // Also while the tab or row has keyboard focus, so Tab from the name reaches a visible ×.
+          visible || open ? "opacity-100" : "opacity-0 group-hover:opacity-100 group-focus-within:opacity-100",
           className,
         )}
       >
