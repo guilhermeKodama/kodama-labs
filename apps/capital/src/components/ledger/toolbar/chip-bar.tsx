@@ -138,7 +138,7 @@ export function ChipBar<P extends string>({
   return (
     <>
       {all.map(chip)}
-      <Popover open={adding} onOpenChange={setAdding} width={220} trigger={<Btn dashed>{t("add")}</Btn>}>
+      <Popover open={adding} onOpenChange={setAdding} keepFocusOnClose width={220} trigger={<Btn dashed>{t("add")}</Btn>}>
         <span className="text-caption text-fg-3">{t("filterBy")}</span>
         <div className="-mx-1 flex flex-col">
           {addable.map((prop) => (
