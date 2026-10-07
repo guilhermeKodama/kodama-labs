@@ -5,6 +5,7 @@ import { useTranslations } from "next-intl";
 import { Plus } from "lucide-react";
 import { Btn, Check, Field, Menu, MenuItem, Popover, Segmented, Select, TextInput } from "@/components/cap";
 import { ChipBar, ChipValuesEditor, type FilterChip } from "@/components/ledger/toolbar/chip-bar";
+import { DeleteViewButton } from "@/components/ledger/toolbar/delete-view";
 import { LayoutIcon } from "@/components/ledger/toolbar/layout-icon";
 import { RenameInput, useViewMenu, ViewMenu, ViewMenuTarget } from "@/components/ledger/toolbar/view-menu";
 import { useNames } from "@/lib/api/catalog";
@@ -103,11 +104,11 @@ export function InvestFilterChips({ view, writes, holdings, summary }: { view: I
 
 /**
  * "Exibição": grouping, order and columns of a positions view; layout,
- * period and series of an operations view; name and delete. Controlled and
+ * period and series of an operations view; its name. Controlled and
  * mounted per view (key = view.id), so its name field never carries over
- * to another view: it closes when the view is deleted, without saving.
+ * to another view. Deleting is the "×" next to the tab's name.
  */
-export function DisplayPopover({ view, writes, onDelete }: { view: InvestView; writes: InvestViewWrites; onDelete: () => void }) {
+export function DisplayPopover({ view, writes }: { view: InvestView; writes: InvestViewWrites }) {
   const t = useTranslations("invest.portfolio.display");
   const tp = useTranslations("invest.portfolio");
   const [open, setOpen] = useState(false);
@@ -209,19 +210,6 @@ export function DisplayPopover({ view, writes, onDelete }: { view: InvestView; w
           ) : null}
         </>
       )}
-      <div className="sticky bottom-0 -mx-2.5 -mb-2.5 flex shrink-0 border-t border-stroke-3 bg-editor px-2.5 py-2">
-        <Btn
-          ghost
-          danger
-          onClick={() => {
-            // Closed without the rename on close: the name typed belongs to this view only.
-            setOpen(false);
-            onDelete();
-          }}
-        >
-          {t("delete")}
-        </Btn>
-      </div>
     </Popover>
   );
 }
@@ -263,6 +251,7 @@ function InvestViewTab({ view, on, onSelect, onOpen, writes, onDelete }: { view:
             <LayoutIcon layout={view.config.layout} />
             {view.name}
           </button>
+          {editable ? <DeleteViewButton name={view.name} visible={on} onDelete={onDelete} /> : null}
           {editable ? (
             <ViewMenu
               label={view.name}
@@ -273,7 +262,6 @@ function InvestViewTab({ view, on, onSelect, onOpen, writes, onDelete }: { view:
               actions={{
                 onRename: () => setRenaming(true),
                 onDuplicate: () => writes.duplicate.mutate({ view }, { onSuccess: (copy) => onOpen(copy.id) }),
-                onDelete,
               }}
             />
           ) : null}
@@ -284,10 +272,11 @@ function InvestViewTab({ view, on, onSelect, onOpen, writes, onDelete }: { view:
 }
 
 /**
- * The Carteira tabs (positions and operations views) with their menus
- * ("⋯" or right click: Renomear, Duplicar, Excluir view), "+" for a new
- * view of either dataset, then "+ Filtro" chips and Exibição of the
- * active view.
+ * The Carteira tabs (positions and operations views), each with "×" to
+ * delete it (after a confirmation; deleting the open one opens the first
+ * tab left) and its menu ("⋯" or right click: Renomear, Duplicar), "+"
+ * for a new view of either dataset, then "+ Filtro" chips and Exibição of
+ * the active view. With every view deleted the strip holds only "+".
  */
 export function InvestViewTabs({
   views,
@@ -345,7 +334,7 @@ export function InvestViewTabs({
         ) : null}
         {active && editable ? (
           <span className="ml-auto flex shrink-0 items-center gap-1.5">
-            <DisplayPopover key={active.id} view={active} writes={writes} onDelete={() => remove(active)} />
+            <DisplayPopover key={active.id} view={active} writes={writes} />
           </span>
         ) : null}
       </div>

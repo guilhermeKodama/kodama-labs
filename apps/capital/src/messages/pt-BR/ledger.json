@@ -12,8 +12,13 @@
     "rename": "Renomear",
     "duplicate": "Duplicar",
     "favorite": "Favoritar",
-    "unfavorite": "Desfavoritar",
-    "delete": "Excluir view"
+    "unfavorite": "Desfavoritar"
+  },
+  "deleteView": {
+    "button": "Excluir “{name}”",
+    "title": "Excluir a view “{name}”?",
+    "body": "Os lançamentos não são afetados. Você pode desfazer logo depois.",
+    "confirm": "Excluir"
   },
   "period": {
     "title": "Período da view",
@@ -97,7 +102,6 @@
     "favorite": "Favorita (aparece na sidebar)",
     "duplicate": "Duplicar",
     "close": "Fechar",
-    "delete": "Excluir view",
     "deleted": "View “{name}” excluída",
     "custom": "Personalizado"
   },

@@ -139,7 +139,7 @@ export function nextNewViewName(base: string, taken: readonly string[]): string 
  * named "Nova view", "Nova view 2", … in the user's locale (nextNewViewName,
  * per dataset) and its creation is not recorded (batchId null), like the
  * config edits that follow it: ⌘Z after setting up a new view's filters
- * must not delete the view. "Excluir view" (undoable) removes it.
+ * must not delete the view. Its "×" (undoable) removes it.
  * `record: false` keeps a named creation off the log too (duplicateView).
  */
 export async function createView(
@@ -262,7 +262,7 @@ export async function updateView(userId: string, viewId: string, patch: SavedVie
  * "<name> (cópia)" in the user's locale. Like "Nova view", the creation is
  * not recorded (batchId null): the copy's filters are auto-saved off the
  * log, so a recorded creation would be what ⌘Z after them undoes, and it
- * would delete the copy. "Excluir view" (undoable) removes it.
+ * would delete the copy. Its "×" (undoable) removes it.
  */
 export async function duplicateView(userId: string, viewId: string, db: DbClient, input: DuplicateViewInput = {}) {
   const view = await db.savedView.findFirst({ where: { id: viewId, userId } });

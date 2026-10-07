@@ -230,7 +230,7 @@ export function useDuplicateView() {
 }
 
 /**
- * The view menu of a ledger view (tabs and sidebar): rename and favorite
+ * The view menu and "×" of a ledger view (tabs and sidebar): rename and favorite
  * auto-save, duplicate opens the copy, delete opens Todas when the deleted
  * view was on screen (`activeId`).
  */

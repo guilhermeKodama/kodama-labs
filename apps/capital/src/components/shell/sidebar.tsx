@@ -8,6 +8,7 @@ import { Briefcase, PiggyBank, Plus, Search, Target } from "lucide-react";
 import { Kbd } from "@/components/cap";
 import { BACKDROP } from "@/components/cap/styles";
 import { LayoutIcon } from "@/components/ledger/toolbar/layout-icon";
+import { DeleteViewButton } from "@/components/ledger/toolbar/delete-view";
 import { RenameInput, useViewMenu, ViewMenu, ViewMenuTarget } from "@/components/ledger/toolbar/view-menu";
 import { Link, usePathname } from "@/i18n/navigation";
 import { useSession } from "@/lib/api/session";
@@ -103,12 +104,13 @@ const ON = "bg-fill-2 font-medium text-fg-1";
 const OFF = "text-fg-2 hover:bg-fill-3";
 
 /**
- * A favorite view in the sidebar: layout icon and name, and the view's
- * menu on "⋯" or a right click (Renomear in place, Duplicar, Desfavoritar,
- * Excluir view; nothing for Todas). The rail has no room to rename, so its
- * menu (right click) leaves Renomear out.
+ * A favorite view in the sidebar: layout icon and name, "×" to delete it
+ * (after a confirmation; shown on hover or focus, always on the active
+ * one), and the view's menu on "⋯" or a right click (Renomear in place,
+ * Duplicar, Desfavoritar). Todas has neither. The rail shows no names, so
+ * it has no "×", and its menu (right click) leaves Renomear out.
  */
-function SidebarViewItem({
+export function SidebarViewItem({
   view,
   rail,
   on,
@@ -146,7 +148,6 @@ function SidebarViewItem({
             onDuplicate: () => actions.duplicate(view),
             favorite: view.isFavorite,
             onFavorite: () => actions.toggleFavorite(view),
-            onDelete: () => actions.remove(view),
           }}
         />
       </ViewMenuTarget>
@@ -170,24 +171,25 @@ function SidebarViewItem({
   }
   return (
     <ViewMenuTarget onContextMenu={editable ? menu.onContextMenu : undefined} className={cn("relative flex shrink-0 items-center rounded-[6px]", on ? ON : OFF)}>
-      <Link href={href} aria-current={on ? "page" : undefined} onClick={onNavigate} className={cn(ITEM, "min-w-0 flex-1", editable && "pr-7")}>
+      <Link href={href} aria-current={on ? "page" : undefined} onClick={onNavigate} className={cn(ITEM, "min-w-0 flex-1", editable && "pr-12")}>
         <LayoutIcon layout={view.config.layout} />
         <span className="truncate">{view.name}</span>
       </Link>
       {editable ? (
-        <ViewMenu
-          label={view.name}
-          open={menu.open}
-          onOpenChange={menu.setOpen}
-          className="absolute right-1"
-          actions={{
-            onRename: () => setRenaming(true),
-            onDuplicate: () => actions.duplicate(view),
-            favorite: view.isFavorite,
-            onFavorite: () => actions.toggleFavorite(view),
-            onDelete: () => actions.remove(view),
-          }}
-        />
+        <span className="absolute right-1 flex items-center gap-0.5">
+          <DeleteViewButton name={view.name} visible={on} onDelete={() => actions.remove(view)} />
+          <ViewMenu
+            label={view.name}
+            open={menu.open}
+            onOpenChange={menu.setOpen}
+            actions={{
+              onRename: () => setRenaming(true),
+              onDuplicate: () => actions.duplicate(view),
+              favorite: view.isFavorite,
+              onFavorite: () => actions.toggleFavorite(view),
+            }}
+          />
+        </span>
       ) : null}
     </ViewMenuTarget>
   );

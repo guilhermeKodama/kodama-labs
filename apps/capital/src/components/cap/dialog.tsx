@@ -22,6 +22,7 @@ export function Dialog({
   open,
   onOpenChange,
   width = 560,
+  onOpenAutoFocus,
   onCloseAutoFocus,
   children,
   className,
@@ -29,6 +30,8 @@ export function Dialog({
   open: boolean;
   onOpenChange: (open: boolean) => void;
   width?: DialogWidth;
+  /** Runs as the dialog opens; call `event.preventDefault()` and focus something else than the first control. */
+  onOpenAutoFocus?: (event: Event) => void;
   /** Runs as the dialog closes; call `event.preventDefault()` and focus something else. */
   onCloseAutoFocus?: (event: Event) => void;
   children: ReactNode;
@@ -42,6 +45,7 @@ export function Dialog({
         <DialogPrimitive.Overlay className={BACKDROP} />
         <DialogPrimitive.Content
           aria-describedby={undefined}
+          onOpenAutoFocus={onOpenAutoFocus}
           onCloseAutoFocus={returnFocus}
           style={{ width }}
           className={cn(

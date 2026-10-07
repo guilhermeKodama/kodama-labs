@@ -30,7 +30,10 @@ import { inTransaction } from "./mutations";
  *   time, are rewritten once (migrateBusinessViews).
  * A version is claimed with one conditional UPDATE inside the transaction
  * that inserts its views, so concurrent requests seed once, and a default
- * the user deleted never comes back.
+ * the user deleted never comes back. A user who has deleted every seeded
+ * Transações view by the time their first business arrives gets no PJ
+ * views either (version 2 is claimed empty): an empty tab strip stays
+ * empty, nothing shows up that looks like the deleted defaults returning.
  *
  * Runs at signup and lazily on GET /v2/views (users who predate it).
  */
@@ -256,7 +259,9 @@ export async function ensureDefaultViews(userId: string, db: DbClient): Promise<
     const seeds: ViewSeed[] = [];
     const base = await claim(tx, userId, 1);
     const business = ctx.businessIds.length > 0 && (await claim(tx, userId, 2));
-    for (const { seed, needsBusiness } of ledgerAll) if (needsBusiness ? business : base) seeds.push(seed);
+    // Seeded before (version 1) and every seeded Transações view since deleted: the user cleared the defaults.
+    const cleared = business && !base && !(await tx.savedView.count({ where: { userId, dataset: "ledger", seedKey: { not: null } } }));
+    for (const { seed, needsBusiness } of ledgerAll) if (needsBusiness ? business && !cleared : base) seeds.push(seed);
     if (base) seeds.push(...investmentSeeds());
     if (!seeds.length) return [];
 

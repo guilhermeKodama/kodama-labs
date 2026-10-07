@@ -2,7 +2,6 @@
 
 import { useState, type ReactNode } from "react";
 import { useTranslations } from "next-intl";
-import { Trash2 } from "lucide-react";
 import type { ViewConfig } from "@capital/server/modules/ledger/contracts";
 import { Btn, Check, Popover, Select, TextInput } from "@/components/cap";
 import {
@@ -41,8 +40,8 @@ const TOP_LABEL: Record<(typeof TOPS)[number], "all" | "top5" | "top8"> = { 0: "
 
 /**
  * "Exibição" (mockup 2365–2522): name, layout, period, grouping, chart
- * options, sort, visible properties, favorite, then Duplicar / Fechar /
- * Excluir view pinned at the bottom. Every change applies at once
+ * options, sort, visible properties, favorite, then Duplicar / Fechar
+ * pinned at the bottom (a view is deleted with the "×" next to its name). Every change applies at once
  * (auto-save; on Todas only display preferences are kept). Open state
  * lives in the URL (?display=1).
  */
@@ -58,7 +57,6 @@ export function DisplayMenu({
   onFavorite,
   onConfig,
   onDuplicate,
-  onDelete,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -71,7 +69,6 @@ export function DisplayMenu({
   onFavorite: (value: boolean) => void;
   onConfig: (patch: Partial<ViewConfig>) => void;
   onDuplicate: () => void;
-  onDelete: () => void;
 }) {
   const t = useTranslations("ledger");
   // Mounted per view (keyed by the screen), so the name typed here is the source while it is open.
@@ -222,19 +219,12 @@ export function DisplayMenu({
         </div>
       ) : null}
       <Check checked={isFavorite} onChange={onFavorite} label={t("display.favorite")} />
-      {/* Pinned to the bottom of the popover, so "Excluir view" is reachable however long the options get. */}
+      {/* Pinned to the bottom of the popover, reachable however long the options get. */}
       <div className="sticky bottom-0 -mx-2.5 -mb-2.5 flex shrink-0 items-center gap-1.5 border-t border-stroke-3 bg-editor px-2.5 py-2">
         <Btn onClick={onDuplicate}>{t("display.duplicate")}</Btn>
         <Btn ghost onClick={() => onOpenChange(false)}>
           {t("display.close")}
         </Btn>
-        <span className="flex-1" />
-        {!isBuiltin ? (
-          <Btn ghost danger onClick={onDelete}>
-            <Trash2 aria-hidden className="size-3.5" />
-            {t("display.delete")}
-          </Btn>
-        ) : null}
       </div>
     </Popover>
   );

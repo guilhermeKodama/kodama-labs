@@ -159,7 +159,6 @@
       "series": "Series",
       "seriesTotal": "Total",
       "seriesClass": "By class",
-      "delete": "Delete view",
       "deleted": "View “{name}” deleted"
     },
     "columns": {

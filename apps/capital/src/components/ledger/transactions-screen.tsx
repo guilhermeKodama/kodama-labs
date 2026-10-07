@@ -75,7 +75,7 @@ export function TransactionsScreen() {
   const open = (id: string | null) => void setParams({ view: id, draft: null, q: null });
   // "+", the sidebar's "+ Nova view" and ⌘K: the same hook (the view is in the list before it opens, with Exibição).
   const newView = useNewView();
-  // The view menu (tabs, Exibição): deleting the view on screen opens Todas; the delete is undoable under the same id.
+  // The tabs' menu and "×": deleting the view on screen opens Todas; the delete is undoable under the same id.
   const actions = useLedgerViewActions({ activeId: active?.id ?? null });
 
   const tabs = (
@@ -97,7 +97,7 @@ export function TransactionsScreen() {
       </Page>
     );
   }
-  return <ViewScreen key={active.id} view={active} tabs={tabs} draftParam={params.draft} search={params.q ?? ""} setParams={setParams} onDelete={() => actions.remove(active)} />;
+  return <ViewScreen key={active.id} view={active} tabs={tabs} draftParam={params.draft} search={params.q ?? ""} setParams={setParams} />;
 }
 
 function ViewScreen({
@@ -106,14 +106,12 @@ function ViewScreen({
   draftParam,
   search,
   setParams,
-  onDelete,
 }: {
   view: LedgerView;
   tabs: ReactNode;
   draftParam: string | null;
   search: string;
   setParams: SetParams;
-  onDelete: () => void;
 }) {
   const t = useTranslations("ledger");
   const fmt = useFmt();
@@ -245,7 +243,6 @@ function ViewScreen({
         onFavorite={(isFavorite) => saveView(view.id, { isFavorite })}
         onConfig={update}
         onDuplicate={() => duplicate.mutate()}
-        onDelete={onDelete}
       />
       {dirty ? (
         <>

@@ -2,11 +2,15 @@
 
 import { useState, type MouseEvent, type ReactNode } from "react";
 import { useTranslations } from "next-intl";
-import { Copy, Ellipsis, Pencil, Star, StarOff, Trash2 } from "lucide-react";
-import { Menu, MenuItem, MenuSep } from "@/components/cap";
+import { Copy, Ellipsis, Pencil, Star, StarOff } from "lucide-react";
+import { Menu, MenuItem } from "@/components/cap";
 import { cn } from "@/lib/utils";
 
-/** What a view's menu offers; an action left out is not shown ("Todas" gets no menu at all). */
+/**
+ * What a view's menu offers; an action left out is not shown ("Todas" gets
+ * no menu at all). Deleting is not here: it is the "×" next to the name
+ * (DeleteViewButton), the one way to delete a view.
+ */
 export interface ViewMenuActions {
   /** Starts renaming the view in place. */
   onRename?: () => void;
@@ -14,7 +18,6 @@ export interface ViewMenuActions {
   /** Whether the view is a favorite (in the sidebar), with its toggle. */
   favorite?: boolean;
   onFavorite?: () => void;
-  onDelete?: () => void;
 }
 
 /**
@@ -35,7 +38,7 @@ export function useViewMenu() {
 
 /**
  * "⋯" of a view (Transações tabs and sidebar, Carteira tabs): Renomear,
- * Duplicar, Favoritar / Desfavoritar and Excluir view. Shown on hover, on
+ * Duplicar and Favoritar / Desfavoritar. Shown on hover, on
  * the active tab and while open.
  */
 export function ViewMenu({
@@ -88,12 +91,6 @@ export function ViewMenu({
           label={t(actions.favorite ? "unfavorite" : "favorite")}
           onSelect={actions.onFavorite}
         />
-      ) : null}
-      {actions.onDelete ? (
-        <>
-          <MenuSep />
-          <MenuItem icon={<Trash2 className="size-3.5 text-neg" />} label={t("delete")} danger onSelect={actions.onDelete} />
-        </>
       ) : null}
     </Menu>
   );

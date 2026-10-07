@@ -5,10 +5,11 @@ import { useTranslations } from "next-intl";
 import { Plus } from "lucide-react";
 import type { LedgerView } from "@/lib/ledger/use-views";
 import { cn } from "@/lib/utils";
+import { DeleteViewButton } from "./delete-view";
 import { LayoutIcon } from "./layout-icon";
 import { RenameInput, useViewMenu, ViewMenu, ViewMenuTarget } from "./view-menu";
 
-/** What the tabs can do to a view (its menu); Todas gets none. */
+/** What the tabs can do to a view (its menu and its "×"); Todas gets none. */
 export interface ViewTabActions {
   rename: (view: LedgerView, name: string) => void;
   duplicate: (view: LedgerView) => void;
@@ -56,6 +57,7 @@ function ViewTab({ view, on, dirty, onPick, actions }: { view: LedgerView; on: b
             {view.isBuiltin ? <span className="text-[10px] text-fg-4">{t("fixed")}</span> : null}
             {on && dirty ? <span title={t("modified")} className="size-1.5 rounded-full bg-cat-yellow" /> : null}
           </button>
+          {editable ? <DeleteViewButton name={view.name} visible={on} onDelete={() => actions.remove(view)} /> : null}
           {editable ? (
             <ViewMenu
               label={view.name}
@@ -68,7 +70,6 @@ function ViewTab({ view, on, dirty, onPick, actions }: { view: LedgerView; on: b
                 onDuplicate: () => actions.duplicate(view),
                 favorite: view.isFavorite,
                 onFavorite: () => actions.toggleFavorite(view),
-                onDelete: () => actions.remove(view),
               }}
             />
           ) : null}
@@ -81,8 +82,9 @@ function ViewTab({ view, on, dirty, onPick, actions }: { view: LedgerView; on: b
 /**
  * The view tabs above the table (mockup 2196–2231): layout icon, name,
  * "fixa" on Todas, the active underline, the yellow dot while the active
- * view has an unsaved draft, "⋯" (or a right click, or a double click to
- * rename) for the view's menu, and "+" for a new view.
+ * view has an unsaved draft, "×" to delete the view (after a confirmation),
+ * "⋯" (or a right click, or a double click to rename) for the view's menu,
+ * and "+" for a new view. Todas has neither "×" nor "⋯".
  */
 export function ViewTabs({
   views,
