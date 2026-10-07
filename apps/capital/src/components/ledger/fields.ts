@@ -158,6 +158,8 @@ export function useLedgerLabels(names: Names, imports: ReadonlyMap<string, strin
           return t("filters.isNotNull", { prop: name });
         case "contains":
           return t("filters.values", { prop: name, values: `“${filter.value}”` });
+        case "asOf":
+          return t("filters.spentAsOf", { date: fmt.date(filter.asOf) });
         default:
           return t("filters.other", { prop: name });
       }

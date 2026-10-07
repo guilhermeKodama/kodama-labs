@@ -2,6 +2,7 @@ import type { DbClient } from "@capital/server/lib/prisma";
 import type { TransactionType } from "@/generated/prisma";
 import { fetchCategoriesByUserId } from "../../categories/data/queries/fetch-categories";
 import { findUncategorized } from "../../categories/services/categories";
+import { displayAmount } from "../../ledger/lib/money";
 
 /**
  * Calculate Levenshtein distance between two strings for fuzzy matching.
@@ -233,7 +234,7 @@ export async function findOrphanTransactions(userId: string, db: DbClient) {
       id: t.id,
       category: t.category?.name ?? null,
       description: t.description,
-      amount: Math.abs(Number(t.amount)),
+      amount: displayAmount(t.kind, t.amount),
       date: t.date.toISOString(),
       type: t.kind,
     })),

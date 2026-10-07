@@ -5,6 +5,7 @@ import { createEntry } from "@capital/server/modules/ledger/services/entries";
 import { undoBatch } from "@capital/server/modules/ledger/services/mutations";
 import { findOrphanTransactions, validateCategory } from "../../lib/category-validation";
 import { bulkUpdateTransactions } from "../bulk-update-transactions";
+import { listTransactions } from "../list-transactions";
 import { deleteTransactionTool, updateTransactionTool } from "../manage-transactions";
 
 const USER = "test-user-mcp-bulk-update-001";
@@ -105,6 +106,21 @@ describe("update_transaction / delete_transaction", () => {
     await expect(updateTransactionTool(USER, { id: a, category: "Salary", description: "kept" }, prisma)).resolves.toMatchObject({ description: "kept" });
     const b = await expense("b");
     await expect(updateTransactionTool(USER, { id: b, type: "income", category: "Salary" }, prisma)).rejects.toThrow(/archived/);
+  });
+
+  it("returns a refund as a negative expense from the list, the update and the orphan read-backs", async () => {
+    const id = (await createEntry(USER, { kind: "expense", accountId: f.pfChecking, amount: -20, date: "2026-09-10", description: "IOF de volta", categoryId: null }, prisma, { skipRules: true })).entryIds[0];
+    const listed = await listTransactions(USER, { dateFrom: "2026-09-01", dateTo: "2026-09-30" }, prisma);
+    expect(listed.transactions.find((t) => t.id === id)).toMatchObject({ type: "expense", amount: -20 });
+    expect(listed.summaries.find((s) => s.type === "expense")?.total).toBeCloseTo(-20, 2);
+
+    expect(await updateTransactionTool(USER, { id, description: "Estorno" }, prisma)).toMatchObject({ amount: -20, type: "expense" });
+    const orphans = await findOrphanTransactions(USER, prisma);
+    expect(orphans.transactions.find((t) => t.id === id)?.amount).toBe(-20);
+    const bulk = await bulkUpdateTransactions(USER, [{ id, description: "IOF de volta" }], false, prisma);
+    expect(bulk.updated[0].amount).toBe(-20);
+    const preview = await bulkUpdateTransactions(USER, [{ id, description: "prévia" }], true, prisma);
+    expect(preview.updated[0].amount).toBe(-20);
   });
 
   it("delete moves the entry to the trash", async () => {

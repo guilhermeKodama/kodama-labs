@@ -2,9 +2,12 @@ import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vites
 import { prisma } from "@capital/server/lib/prisma";
 import { createLedgerFixture, deleteLedgerFixture, type LedgerFixture } from "@/test/ledger-fixtures";
 import { budgetDrill, monthPeriod } from "@/lib/budgets/drill";
+import { importCardStatement } from "@capital/server/modules/credit-cards/services/import-card-statement";
 import { createEntry } from "@capital/server/modules/ledger/services/entries";
 import { queryLedger } from "@capital/server/modules/ledger/services/query-engine";
 import { markStatementPayment } from "@capital/server/modules/ledger/services/statements";
+import { getBudgetStatus } from "@capital/server/modules/mcp/tools/budgets";
+import { listTransactions } from "@capital/server/modules/mcp/tools/list-transactions";
 import { createRecurringRule } from "@capital/server/modules/recurring/services/recurring-rules";
 import { createBudget } from "../budget-crud";
 import { monthOverview, yearOverview } from "../budget-overview";
@@ -296,10 +299,10 @@ describe("drill", () => {
       [`${f.pjId}|${c.Software}`]: [200, 200],
     });
 
-    // The purchase of 10/09 counts in October, on its statement's closing date.
+    // The purchase of 10/09 belongs to October (statement closes 05/10) and has already been swiped, so it is Gasto even though October has not started.
     const oct = await monthOverview(USER, 2026, 10, prisma);
     const mercado = oct.budgets.find((b) => b.categoryId === c.Mercado)!;
-    expect([mercado.spent, mercado.committed]).toEqual([0, 999]);
+    expect([mercado.spent, mercado.committed]).toEqual([999, 999]);
     expect(await total(budgetDrill(mercado, null, monthPeriod(2026, 10)))).toBeCloseTo(999, 2);
 
     // The year matrix's cells reconcile the same way.
@@ -307,5 +310,128 @@ describe("drill", () => {
     for (const row of y.categories) {
       expect(await total(budgetDrill(row, null, monthPeriod(2026, 9, 22)))).toBeCloseTo(row.months[8].spent, 2);
     }
+  });
+});
+
+describe("open card statement", () => {
+  // 07/out/2026, noon in São Paulo. The fixture card closes on the 5th; Visa closes on the 20th.
+  const TODAY = new Date("2026-10-07T15:00:00Z");
+
+  const drilledTotal = async (drill: ReturnType<typeof budgetDrill>) => {
+    const result = await queryLedger(USER, { ...drill, includeRows: false }, prisma);
+    return -Number(result.totals.values["sum:amountBase"]);
+  };
+
+  /** July–September are cash only. October has a statement that already closed and one that is still open. */
+  async function seedOctober() {
+    vi.setSystemTime(TODAY);
+    await createBudget(USER, { entityId: f.pfId, categoryId: c.Mercado, amount: 20000, effectiveFrom: "2026-01" }, prisma);
+    for (const m of ["07", "08", "09"]) {
+      await spend(f.pfChecking, c.Mercado, 500, `2026-${m}-03`);
+      await spend(f.pfChecking, c.Mercado, 200, `2026-${m}-18`);
+    }
+    await spend(f.pfChecking, c.Mercado, 500, "2026-10-03");
+    await importCardStatement(
+      USER,
+      { accountId: f.card, month: "2026-10", closingDate: "2026-10-05", rows: [{ date: "2026-09-20", description: "Farmácia", amount: 120, categoryId: c.Mercado }] },
+      prisma
+    );
+    const visa = await prisma.account.create({
+      data: { userId: USER, entityId: f.pfId, type: "credit_card", name: "Visa", currency: "BRL", closingDay: 20, dueDay: 27, payFromAccountId: f.pfChecking },
+    });
+    await importCardStatement(
+      USER,
+      {
+        accountId: visa.id,
+        month: "2026-10",
+        closingDate: "2026-10-20",
+        rows: [
+          { date: "2026-09-28", description: "Mercado", amount: 300, categoryId: c.Mercado },
+          { date: "2026-10-04", description: "Padaria", amount: 80, categoryId: c.Mercado },
+          { date: "2026-10-05", description: "IOF de volta", amount: -40, categoryId: c.Mercado },
+          { date: "2026-10-18", description: "Viagem", amount: 70, categoryId: c.Mercado },
+        ],
+      },
+      prisma
+    );
+  }
+
+  it("counts a closed statement and an open one in Gasto, and Gasto plus later rows equals committed", async () => {
+    await seedOctober();
+    const o = await monthOverview(USER, 2026, 10, prisma, { entityIds: [f.pfId] });
+    const row = o.budgets.find((b) => b.categoryId === c.Mercado)!;
+    // 500 cash + 120 closed bill + 300 + 80 − 40 already swiped. The 70 on the 18th is still ahead.
+    expect(row.spent).toBe(960);
+    expect(row.committed).toBe(1030);
+    expect(row.spent + 70).toBe(row.committed);
+    expect(o.summary).toMatchObject({ totalSpent: 960, totalCommitted: 1030 });
+    expect(o.series).toHaveLength(7);
+    expect(o.series.at(-1)!.cumulative).toBe(960);
+    expect(await drilledTotal(budgetDrill(row, o.scope.entityIds, monthPeriod(2026, 10, 7)))).toBeCloseTo(row.spent, 2);
+    expect(await drilledTotal(budgetDrill(row, o.scope.entityIds, monthPeriod(2026, 10)))).toBeCloseTo(row.committed, 2);
+
+    const status = await getBudgetStatus(USER, { month: "2026-10", accountId: f.pfId }, prisma);
+    expect(status.summary.totalActual).toBe(row.committed);
+    expect(row.spent + 70).toBe(status.summary.totalActual);
+
+    const listed = await listTransactions(USER, { dateFrom: "2026-10-01", dateTo: "2026-10-31", personalAccountId: f.pfId, type: "expense" }, prisma);
+    expect(listed.transactions.find((t) => t.description === "IOF de volta")).toMatchObject({ type: "expense", amount: -40 });
+    const net = listed.transactions.reduce((sum, t) => sum + t.amount, 0);
+    expect(net).toBeCloseTo(1030, 2);
+    expect(listed.summaries.reduce((sum, s) => sum + s.total, 0)).toBeCloseTo(net, 2);
+
+    const year = await yearOverview(USER, 2026, prisma, { entityIds: [f.pfId] });
+    const heat = year.categories.find((r) => r.categoryId === c.Mercado)!;
+    expect(heat.months[9]).toMatchObject({ spent: 960, isPartial: true });
+    expect(heat.months[6]).toMatchObject({ spent: 700, isPartial: false });
+  });
+
+  it("does not invent a card bill when the history has no card at all", async () => {
+    await seedOctober();
+    const o = await monthOverview(USER, 2026, 10, prisma, { entityIds: [f.pfId] });
+    // Tail is the 200 of cash after the 7th, minus the 70 already booked on the 18th. The open statement is not added again.
+    expect(o.summary.projectedTotal).toBe(1160);
+    expect(o.budgets[0].pace.projectedTotal).toBe(1160);
+  });
+
+  it("projects a card bill from the days it was swiped, not from the closing day", async () => {
+    vi.setSystemTime(TODAY);
+    await createBudget(USER, { entityId: f.pfId, categoryId: c.Mercado, amount: 20000, effectiveFrom: "2026-01" }, prisma);
+    for (const month of ["2026-07", "2026-08", "2026-09"]) {
+      await importCardStatement(
+        USER,
+        {
+          accountId: f.card,
+          month,
+          closingDate: `${month}-20`,
+          rows: [
+            { date: `${month}-04`, description: "Cedo", amount: 100, categoryId: c.Mercado },
+            { date: `${month}-15`, description: "Tarde", amount: 900, categoryId: c.Mercado },
+          ],
+        },
+        prisma
+      );
+    }
+    await importCardStatement(
+      USER,
+      {
+        accountId: f.card,
+        month: "2026-10",
+        closingDate: "2026-10-20",
+        rows: [
+          { date: "2026-10-04", description: "Cedo", amount: 400, categoryId: c.Mercado },
+          { date: "2026-10-18", description: "Tarde", amount: 50, categoryId: c.Mercado },
+        ],
+      },
+      prisma
+    );
+    const o = await monthOverview(USER, 2026, 10, prisma, { entityIds: [f.pfId] });
+    const row = o.budgets.find((b) => b.categoryId === c.Mercado)!;
+    expect(row.spent).toBe(400);
+    expect(row.committed).toBe(450);
+    expect(row.spent + 50).toBe(row.committed);
+    // 450 already booked + (900 usually after the 7th − 50 already booked). The whole historical bill of 1,000 is not the forecast.
+    expect(row.pace.projectedTotal).toBe(1300);
+    expect(o.summary.projectedTotal).toBe(1300);
   });
 });

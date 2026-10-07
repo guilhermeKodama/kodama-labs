@@ -38,6 +38,7 @@
     "isNull": "{prop}: empty",
     "isNotNull": "{prop}: not empty",
     "other": "{prop}: custom filter",
+    "spentAsOf": "Spent through {date}",
     "done": "Done",
     "remove": "Remove filter",
     "noOptions": "No values in this period.",

@@ -8,6 +8,7 @@ import { isPushConfigured, sendToSubscriptions, type PushPayload, type PushSubsc
 import { resolveLocale, st, type Locale } from "@capital/server/i18n";
 import { getEffectiveBudgetsForMonth } from "@capital/server/modules/budgets/lib/effective-budgets";
 import { loadFx } from "@capital/server/modules/ledger/lib/fx";
+import { spentToDateSql } from "@capital/server/modules/ledger/lib/spend-as-of";
 import { closingDateFor, dueDateFor, statementMonthFor } from "@capital/server/modules/ledger/services/statements";
 import { REMINDER_PUSH_URL } from "@capital/server/modules/push/constants";
 import { addDays, BILL_CLOSED_GRACE_DAYS, billJustClosed, inAlertHours, localNow, weeklySummaryWindow, type LocalNow } from "../lib/schedule";
@@ -123,10 +124,11 @@ async function sendBillClosed(db: PrismaClient, ctx: UserContext, result: Notify
 }
 
 /**
- * "Orçamento passou de 90%": this month's monthly budgets whose spending to
- * date (expenses by effective date, as Orçamentos counts them) reached the
- * user's threshold. Once per budget chain (entity and category) and month,
- * so editing the amount mid-month does not send it again. Spending is in
+ * "Orçamento passou de 90%": this month's monthly budgets whose Gasto
+ * (spentToDateSql: card purchases by purchase date, everything else by
+ * effective date — the same cutoff as Orçamentos) reached the user's
+ * threshold. Once per budget chain (entity and category) and month, so
+ * editing the amount mid-month does not send it again. Spending is in
  * the base currency (amountBase), so a budget in another currency is
  * converted to base before the comparison, and the push shows both in the
  * budget's currency.
@@ -139,12 +141,14 @@ async function sendBudgetThreshold(db: PrismaClient, ctx: UserContext, result: N
   );
   if (!budgets.length) return;
   const from = new Date(Date.UTC(year, month - 1, 1));
-  const to = new Date(`${ctx.local.ymd}T23:59:59.999Z`);
+  const monthEnd = new Date(Date.UTC(year, month, 0, 23, 59, 59, 999));
+  const asOf = new Date(`${ctx.local.ymd}T23:59:59.999Z`);
   const spend = await db.$queryRaw<{ entity_id: string; category_id: string; spent: Prisma.Decimal }[]>`
     SELECT le."entityId" AS entity_id, le."categoryId" AS category_id, coalesce(-sum(le."amountBase"), 0) AS spent
     FROM ledger_entries le
     WHERE le."userId" = ${ctx.userId} AND le."deletedAt" IS NULL AND le.kind = 'expense' AND le."transferGroupId" IS NULL
-      AND le."effectiveDate" BETWEEN ${from} AND ${to}
+      AND le."effectiveDate" BETWEEN ${from} AND ${monthEnd}
+      AND ${spentToDateSql("le", asOf)}
       AND le."categoryId" IN (${Prisma.join([...new Set(budgets.map((b) => b.categoryId))])})
     GROUP BY 1, 2`;
   const categories = await db.category.findMany({ where: { id: { in: budgets.map((b) => b.categoryId) } }, select: { id: true, name: true } });

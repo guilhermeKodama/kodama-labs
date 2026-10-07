@@ -28,5 +28,17 @@ export const ledgerFilterSchema = z.union([
     bucket: timeBucketSchema,
     values: z.array(z.string().min(1)).min(1).max(1000),
   }),
+  /**
+   * Spent to date through this day (YYYY-MM-DD, inclusive). Card purchases
+   * count on their purchase date; every other expense on its effective date.
+   * The period still selects the month (effective date), so a purchase whose
+   * statement closes later in the month is included once it has been swiped.
+   * See ledger/lib/spend-as-of.ts — the only implementation of this predicate.
+   */
+  z.object({
+    field: z.literal("spentToDate"),
+    op: z.literal("asOf"),
+    asOf: z.string().date(),
+  }),
 ]);
 export type LedgerFilter = z.infer<typeof ledgerFilterSchema>;
