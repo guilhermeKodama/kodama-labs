@@ -136,6 +136,38 @@
   --radius-4xl: calc(var(--radius) + 16px);
 }
 
+/* Text size (Ajustes › Perfil › Tamanho da letra: Pequeno · Médio · Grande).
+
+   The user's choice sits on <html data-text-size="sm|md|lg"> (TextSizeSync,
+   and before the first paint the inline script in app/[locale]/layout.tsx).
+   Every text size in use is a token scaled by it: text-cap-12 is 12px at
+   Médio, 11.04px at Pequeno and 13.68px at Grande (text-cap-10.5 for the
+   half sizes). */
+
+:root {
+  --cap-text-scale: 1;
+}
+:root[data-text-size="sm"] {
+  --cap-text-scale: 0.92;
+}
+:root[data-text-size="lg"] {
+  --cap-text-scale: 1.14;
+}
+
+@theme inline {
+  --text-cap-10: calc(10px * var(--cap-text-scale));
+  --text-cap-10\.5: calc(10.5px * var(--cap-text-scale));
+  --text-cap-11: calc(11px * var(--cap-text-scale));
+  --text-cap-11\.5: calc(11.5px * var(--cap-text-scale));
+  --text-cap-12: calc(12px * var(--cap-text-scale));
+  --text-cap-12\.5: calc(12.5px * var(--cap-text-scale));
+  --text-cap-13: calc(13px * var(--cap-text-scale));
+  --text-cap-14: calc(14px * var(--cap-text-scale));
+  --text-cap-15: calc(15px * var(--cap-text-scale));
+  --text-cap-17: calc(17px * var(--cap-text-scale));
+  --text-cap-22: calc(22px * var(--cap-text-scale));
+}
+
 :root {
   /* Text. */
   --cap-text-1: oklch(14.5% 0 0); /* neutral-950 */

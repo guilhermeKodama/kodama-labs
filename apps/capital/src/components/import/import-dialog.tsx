@@ -172,7 +172,7 @@ function ImportFlow({ onClose, defaultAccountId }: { onClose: () => void; defaul
     onClose();
   };
 
-  const canSubmit = step === 0 ? viaAssistant || ready : step === 1 ? ready : ready && summary.included > 0 && !commit.isPending;
+  const canSubmit = step === 0 ? viaAssistant || ready : step === 1 ? ready : ready && summary.included + summary.removed > 0 && !commit.isPending;
   const primary = () => {
     if (done || !canSubmit) return;
     if (step === 0 && viaAssistant) sendToAssistant();
@@ -237,7 +237,9 @@ function ImportFlow({ onClose, defaultAccountId }: { onClose: () => void; defaul
                 ? t("nav.continue")
                 : commit.isPending
                   ? t("nav.committing")
-                  : t("nav.commit", { count: summary.included })}
+                  : summary.included > 0
+                    ? t("nav.commit", { count: summary.included })
+                    : t("nav.apply", { count: summary.removed })}
           </Btn>
         </DialogFooter>
       )}

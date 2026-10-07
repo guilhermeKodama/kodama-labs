@@ -14,7 +14,8 @@
     "continue": "Continue",
     "commit": "Import {count, plural, one {# transaction} other {# transactions}}",
     "committing": "Importing…",
-    "assistant": "Send to the assistant"
+    "assistant": "Send to the assistant",
+    "apply": "Apply {count, plural, one {# change} other {# changes}}"
   },
   "file": {
     "drop": "Drag the statement or card bill here, or",
@@ -26,7 +27,9 @@
     "sizeKB": "{size} KB",
     "sizeMB": "{size} MB",
     "assistantNote": "PDFs and photos are read by the assistant: it builds the plan from the file and you confirm it in the conversation.",
-    "assistantPrompt": "Import this file."
+    "assistantPrompt": "Import this file.",
+    "ofxHint": "OFX gives the most reliable match: when you import the bill again (open, then closed), each purchase is recognized by the bank's identifier.",
+    "partial": "The file does not cover the whole {month} bill: nothing already on it will be removed."
   },
   "meta": {
     "bank": "Bank",
@@ -65,7 +68,9 @@
       "rule": "Rule applied",
       "ai": "AI suggestion",
       "need": "No category",
-      "dup": "Duplicate"
+      "changed": "Changed",
+      "dup": "Duplicate",
+      "removed": "Left the bill"
     },
     "placeholder": "Choose category…",
     "search": "Search category, account or entity…",
@@ -90,7 +95,15 @@
       "name": "Name",
       "type": "Type",
       "submit": "Create category"
-    }
+    },
+    "changedNote": "updates the entry: {changes}",
+    "changes": {
+      "amount": "{from} → {to}",
+      "date": "{from} → {to}",
+      "description": "was “{from}”"
+    },
+    "removedNote": "no longer on the bill · check it to move it to the trash",
+    "remove": "Remove {description} from the bill"
   },
   "confirm": {
     "included": "To import",
@@ -102,12 +115,15 @@
     "card": "The {bank} bill for {month} will have {count, plural, one {# purchase} other {# purchases}} totaling {total}.",
     "cardPayment": "The {due} payment comes out of {account} and does not count as spending.",
     "cardPaymentNoAccount": "The {due} payment does not count as spending.",
-    "transfers": "{count, plural, one {# row is booked as a transfer (bill payment, contribution or between entities) and does not count as spending.} other {# rows are booked as transfers (bill payments, contributions or between entities) and do not count as spending.}}"
+    "transfers": "{count, plural, one {# row is booked as a transfer (bill payment, contribution or between entities) and does not count as spending.} other {# rows are booked as transfers (bill payments, contributions or between entities) and do not count as spending.}}",
+    "cardUpdated": "{count, plural, one {# changed entry is updated, keeping its category.} other {# changed entries are updated, keeping their categories.}}",
+    "cardRemoved": "{count, plural, one {# entry that left the bill goes to the trash.} other {# entries that left the bill go to the trash.}}"
   },
   "done": {
     "title": "{count, plural, one {# transaction imported} other {# transactions imported}} into {account}",
     "body": "All reviewed. The view “{view}” was created so you can check it.",
     "bodyNoView": "All reviewed.",
+    "removed": "{count, plural, one {# entry that left the bill went to the trash.} other {# entries that left the bill went to the trash.}}",
     "openView": "Open the import view",
     "undo": "Undo import",
     "undone": "Import undone"

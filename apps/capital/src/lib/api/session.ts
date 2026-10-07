@@ -23,6 +23,8 @@ export interface SessionUser {
   name: string;
   baseCurrency: string;
   theme: string;
+  /** UI text size ("sm" | "md" | "lg"); absent before the user_text_size migration. */
+  textSize?: string;
   dateFormat: string;
   numberFormat: string;
   timezone: string;

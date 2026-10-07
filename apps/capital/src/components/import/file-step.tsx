@@ -112,6 +112,8 @@ export function FileStep({
           </span>
         )}
         <span className="text-[11.5px] text-fg-3">{t("file.help")}</span>
+        {/* Before a file is picked: the format to download the card bill in. A CSV bill repeats it below. */}
+        {first ? null : <span className="text-[11.5px] text-fg-3">{t("file.ofxHint")}</span>}
       </div>
 
       {viaAssistant ? <Callout tone="info">{t("file.assistantNote")}</Callout> : null}
@@ -151,6 +153,10 @@ export function FileStep({
               <EntitySelect value={entityId} onChange={onEntityChange} disabled={reading} aria-label={t("fields.entity")} className="w-full" />
             </Field>
           </div>
+          {kind === "card_csv" ? <p className="text-[11.5px] text-fg-3">{t("file.ofxHint")}</p> : null}
+          {card && statement && !statement.coversCycle && statement.existingCount > 0 ? (
+            <p className="text-[11.5px] text-fg-3">{t("file.partial", { month })}</p>
+          ) : null}
           {card && statement ? (
             <Check
               checked={linkBill}

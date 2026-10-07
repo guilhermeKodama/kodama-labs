@@ -6,11 +6,12 @@ import { BILL_LABEL_KEYS, STATEMENT_LABEL_KEYS } from "@capital/server/lib/categ
 import { fetchReconciliationContext } from "@capital/server/modules/assistant/data/queries/fetch-reconciliation-context";
 import { getSystemCategory, getSystemCategoryNames } from "@capital/server/modules/categories/lib/system-categories";
 import type { AiCategorizers } from "@capital/server/modules/categories/services/ai-categorize";
-import { calculateBillTotal, dedupeKey, isProjected } from "@capital/server/modules/credit-cards/services/import-card-statement";
+import { calculateBillTotal, isProjected, shiftMonth, statementLedgerRows } from "@capital/server/modules/credit-cards/services/import-card-statement";
+import { addDays, coversStatementCycle, reconcileStatement } from "@/lib/import/statement-match";
 import { LedgerError, notFound } from "@capital/server/modules/ledger/lib/errors";
 import { round } from "@capital/server/modules/ledger/lib/money";
 import { loadRuleMatcher } from "@capital/server/modules/ledger/services/rules";
-import { closingDateFor, dueDateFor, statementMonthFor } from "@capital/server/modules/ledger/services/statements";
+import { closingDateFor, dueDateFor, statementMonthFor, userCalendarDay } from "@capital/server/modules/ledger/services/statements";
 import { findStatementPaymentEntry, paymentStatementMonth } from "./card-payments";
 import {
   accountNumberMatches,
@@ -41,14 +42,19 @@ import {
  * Reads only, except that an AI pass may seed the user's system categories.
  */
 
-export type ImportRowStatus = "dup" | "rule" | "ai" | "need";
+/**
+ * changed: a row of the card statement the bill changed (it updates the
+ * entry it is); removed: a row of the statement the bill no longer has
+ * (only for a file covering the whole cycle; not a row of the file).
+ */
+export type ImportRowStatus = "dup" | "changed" | "removed" | "rule" | "ai" | "need";
 export type ImportRowKind = "entry" | "transfer" | "investment_transfer" | "card_payment";
 export type ImportCategorySource = "rule" | "ai" | "existing" | "classification";
 
 export interface AnalyzedImportRow {
-  /** FITID for bank rows, "c<index>" for card rows; the review keys its decisions by it. */
+  /** FITID for bank rows, "c<index>" for card rows, "rm:<entry id>" for a card row that left the bill; the review keys its decisions by it. */
   id: string;
-  /** FITID of a bank row (the plan's externalId); null on card rows. */
+  /** FITID of a bank row or of a card OFX line (the plan's externalId); null on card CSV rows. */
   externalId: string | null;
   date: string;
   description: string;
@@ -59,9 +65,9 @@ export interface AnalyzedImportRow {
   type: "income" | "expense";
   kind: ImportRowKind;
   status: ImportRowStatus;
-  /** The ledger row this one repeats (dup rows). */
+  /** The ledger row this one repeats (dup rows), updates (changed rows) or is (removed rows). */
   duplicateOf: { id: string | null; description: string; date: string } | null;
-  /** Bank rows: how the row compares with the ledger (a "changed" row updates its existing entry). */
+  /** How the row compares with the ledger (a "changed" row updates its existing entry). */
   reconciliation?: "new" | "duplicate" | "changed" | "fuzzy_match";
   diffs?: FieldDiff[];
   suggestedCategoryId: string | null;
@@ -71,6 +77,8 @@ export interface AnalyzedImportRow {
   installment?: { number: number; total: number };
   /** Card installment that replaces the projected one already booked. */
   replacesProjected?: boolean;
+  /** Card "changed" row whose entry sits on another statement (a month before or after): the update moves it onto this one. */
+  joinsStatement?: boolean;
   transfer?: TransferDetails;
   investment?: { direction: "investment_deposit" | "investment_withdrawal"; accountId: string | null };
   cardPayment?: { cardAccountId: string | null; statementMonth: string | null };
@@ -89,6 +97,12 @@ export interface ImportCardTarget {
   total: number;
   /** Live rows the statement already has. */
   existingCount: number;
+  /**
+   * The file covers the statement's whole cycle (an OFX by its stated
+   * range, a CSV of a closed bill up to its last days): only then are rows
+   * it no longer has proposed for removal.
+   */
+  coversCycle: boolean;
   paid: boolean;
   payFromAccountId: string | null;
   /** Bank expense that looks like this bill's payment (linkPayment turns it into the card_payment transfer). */
@@ -135,7 +149,6 @@ export interface AnalyzeImportOptions {
 }
 
 const BANK_TYPES = ["checking", "cash"] as const;
-const FUZZY_DAYS_MS = 3 * 24 * 60 * 60 * 1000;
 const normalize = (s: string) => s.toLowerCase().trim().replace(/\s+/g, " ");
 
 function emptyAnalysis(kind: ImportFileKind, files: ImportAnalysis["files"]): ImportAnalysis {
@@ -155,7 +168,7 @@ function emptyAnalysis(kind: ImportFileKind, files: ImportAnalysis["files"]): Im
     payments: 0,
     card: null,
     rows: [],
-    summary: { counts: { all: 0, dup: 0, rule: 0, ai: 0, need: 0 }, income: 0, expense: 0 },
+    summary: { counts: { all: 0, dup: 0, changed: 0, removed: 0, rule: 0, ai: 0, need: 0 }, income: 0, expense: 0 },
     ai: { requested: false, available: false, used: false },
   };
 }
@@ -205,12 +218,12 @@ async function suggestAccount(
 }
 
 function summarize(rows: AnalyzedImportRow[]): ImportAnalysis["summary"] {
-  const counts = { all: rows.length, dup: 0, rule: 0, ai: 0, need: 0 };
+  const counts = { all: rows.length, dup: 0, changed: 0, removed: 0, rule: 0, ai: 0, need: 0 };
   let income = 0;
   let expense = 0;
   for (const r of rows) {
     counts[r.status]++;
-    if (r.status === "dup") continue;
+    if (r.status === "dup" || r.status === "changed" || r.status === "removed") continue;
     if (r.amount >= 0) income += r.amount;
     else expense -= r.amount;
   }
@@ -398,7 +411,7 @@ async function analyzeCard(userId: string, analysis: ImportAnalysis, files: Retu
 
   const baseRow = (r: ParsedCardRow, i: number): AnalyzedImportRow => ({
     id: `c${i}`,
-    externalId: null,
+    externalId: r.externalId ?? null,
     date: r.date,
     description: r.description,
     amount: round(-r.amount, 2),
@@ -427,12 +440,22 @@ async function analyzeCard(userId: string, analysis: ImportAnalysis, files: Retu
   const total = round(calculateBillTotal(parsed.parsed, closingDate), 2);
   const payment = await findStatementPaymentEntry(userId, account, { dueDate, paymentGroupId: statement?.paymentGroupId ?? null }, total, db);
 
-  const onCard = await db.ledgerEntry.findMany({
-    where: { userId, accountId: account.id, deletedAt: null, transferGroupId: null },
-    select: { id: true, date: true, amount: true, description: true, installmentNumber: true, metadata: true, cardStatementId: true, importId: true, categoryId: true },
+  // Whether the file covers the whole cycle: from the day after the previous closing to this one.
+  const previous = await db.cardStatement.findUnique({ where: { accountId_month: { accountId: account.id, month: shiftMonth(month, -1) } } });
+  const cycleStart = addDays(formatDateOnly(previous?.closingDate ?? closingDateFor(shiftMonth(month, -1), closingDay)), 1);
+  const user = await db.user.findUnique({ where: { id: userId }, select: { timezone: true } });
+  const range = parsed.statedRange ?? parsed.period;
+  const coversCycle = coversStatementCycle({
+    from: range?.from ?? null,
+    to: range?.to ?? null,
+    stated: !!parsed.statedRange,
+    cycleStart,
+    closingDate: formatDateOnly(closingDate),
+    today: formatDateOnly(userCalendarDay(user?.timezone ?? "America/Sao_Paulo")),
   });
-  const live = onCard.filter((e) => !isProjected(e.metadata));
-  const onStatement = statement ? live.filter((e) => e.cardStatementId === statement.id) : [];
+
+  const ledger = await statementLedgerRows(account, month, parsed.rows.flatMap((r) => (r.externalId ? [r.externalId] : [])), db);
+  const ledgerById = new Map(ledger.map((e) => [e.id, e]));
   analysis.card = {
     accountId: account.id,
     month,
@@ -440,43 +463,45 @@ async function analyzeCard(userId: string, analysis: ImportAnalysis, files: Retu
     dueDate: dueDate ? formatDateOnly(dueDate) : null,
     statementId: statement?.id ?? null,
     total,
-    existingCount: onStatement.length,
+    existingCount: ledger.filter((e) => e.scope === "target").length,
+    coversCycle,
     paid: !!statement?.paymentGroupId,
     payFromAccountId: account.payFromAccountId,
     payment: payment ? { entryId: payment.id, description: payment.description, date: formatDateOnly(payment.date), amount: Number(payment.amount) } : null,
   };
 
-  // Same multiset identity as importCardStatement: each existing row absorbs one identical file row.
-  const byKey = new Map<string, typeof live>();
-  for (const e of onStatement) {
-    const k = dedupeKey(e.date, -Number(e.amount), e.description, e.installmentNumber);
-    byKey.set(k, [...(byKey.get(k) ?? []), e]);
-  }
-  const used = new Set<string>();
-  const typedByHand = live.filter((e) => !e.importId);
-  const projected = onCard.filter((e) => isProjected(e.metadata));
+  // Same reconciliation as the commit's safety net: FITID, then identity, then close enough (open → closed bill).
+  const { matches, removed } = reconcileStatement(
+    parsed.rows.map((r, i) => ({ key: `c${i}`, date: r.date, description: r.description, amount: r.amount, installmentNumber: r.installment?.number ?? null, externalId: r.externalId ?? null })),
+    ledger,
+    { coversCycle }
+  );
+  const projected = parsed.rows.some((r) => r.installment)
+    ? (await db.ledgerEntry.findMany({
+        where: { userId, accountId: account.id, deletedAt: null, transferGroupId: null, installmentNumber: { not: null }, metadata: { path: ["projected"], equals: true } },
+        select: { installmentNumber: true, amount: true, description: true, metadata: true },
+      })).filter((e) => isProjected(e.metadata))
+    : [];
 
   const matcher = await loadRuleMatcher(userId, db);
 
-  analysis.rows = parsed.rows.map((r, i) => {
+  const fileRows = parsed.rows.map((r, i) => {
     const row = baseRow(r, i);
-    const date = parseLocalDate(r.date);
-    const exact = byKey.get(dedupeKey(date, r.amount, r.description, r.installment?.number))?.find((e) => !used.has(e.id));
-    const fuzzy =
-      exact ??
-      typedByHand.find(
-        (e) => !used.has(e.id) && Math.abs(-Number(e.amount) - r.amount) < 0.005 && Math.abs(e.date.getTime() - date.getTime()) <= FUZZY_DAYS_MS
-      );
-    if (fuzzy) {
-      used.add(fuzzy.id);
+    const match = matches.get(row.id);
+    const prior = match && match.status !== "new" ? ledgerById.get(match.entryId) : undefined;
+    if (match && prior && match.status !== "new") {
       Object.assign(row, {
-        status: "dup",
-        duplicateOf: { id: fuzzy.id, description: fuzzy.description, date: formatDateOnly(fuzzy.date) },
-        suggestedCategoryId: fuzzy.categoryId,
-        source: fuzzy.categoryId ? "existing" : null,
+        status: match.status === "changed" ? "changed" : "dup",
+        reconciliation: match.status,
+        duplicateOf: { id: prior.id, description: prior.description, date: prior.date },
+        suggestedCategoryId: prior.categoryId,
+        source: prior.categoryId ? "existing" : null,
+        ...(match.status === "changed" && { diffs: match.diffs }),
+        ...(match.status === "changed" && prior.scope !== "target" && { joinsStatement: true }),
       });
       return row;
     }
+    row.reconciliation = "new";
     if (r.installment) {
       const base = normalize(r.description);
       row.replacesProjected = projected.some(
@@ -490,6 +515,30 @@ async function analyzeCard(userId: string, analysis: ImportAnalysis, files: Retu
     if (rule) Object.assign(row, { status: "rule", suggestedCategoryId: rule.categoryId, source: "rule", ruleId: rule.id, rulePattern: rule.pattern });
     return row;
   });
+
+  // Rows of the statement the bill no longer has (a file covering the whole cycle only).
+  const leftRows = removed.flatMap((id): AnalyzedImportRow[] => {
+    const e = ledgerById.get(id);
+    if (!e) return [];
+    return [
+      {
+        id: `rm:${e.id}`,
+        externalId: e.externalId,
+        date: e.date,
+        description: e.description,
+        amount: round(-e.amount, 2),
+        type: e.amount > 0 ? "expense" : "income",
+        kind: "entry",
+        status: "removed",
+        duplicateOf: { id: e.id, description: e.description, date: e.date },
+        suggestedCategoryId: e.categoryId,
+        source: e.categoryId ? "existing" : null,
+        ruleId: null,
+        rulePattern: null,
+      },
+    ];
+  });
+  analysis.rows = [...fileRows, ...leftRows];
 }
 
 // ---------------------------------------------------------------------------
@@ -508,7 +557,7 @@ export async function analyzeImport(userId: string, input: AnalyzeImportInput, d
   const analysis = emptyAnalysis(decoded[0].kind, files);
   if (kinds.has("bank")) await analyzeBank(userId, analysis, decoded, input.accountId, db);
   else await analyzeCard(userId, analysis, decoded, input.accountId, db);
-  analysis.count = analysis.rows.length;
+  analysis.count = analysis.rows.filter((r) => r.status !== "removed").length;
 
   const available = !!opts.categorizers || !!process.env.ANTHROPIC_API_KEY;
   analysis.ai = { requested: !!input.ai, available, used: false };

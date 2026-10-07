@@ -54,6 +54,8 @@ export interface ExecuteImportResult {
   /** Card bill rows booked, and those skipped as already on the statement. */
   cardRowsCreated: number;
   cardRowsSkipped: number;
+  /** Card bill: rows of the statement the bill no longer has, moved to the trash ("Saiu da fatura"). */
+  cardRowsRemoved: number;
   /** Card statement the rows went to, and whether its payment got linked (linkPayment). */
   cardStatementId: string | null;
   paymentLinked: boolean;
@@ -150,7 +152,9 @@ function directionMatchesSides(direction: TransferDirection, fromKind: string, t
  * rule hit counts aside).
  *
  * Bank rows book into `accountId` (default: the entity's main checking).
- * A plan for a credit card books `cardStatement` rows on one statement;
+ * A plan for a credit card books `cardStatement` rows on one statement,
+ * updates the entries its `reconciliations` name (rows the bill changed)
+ * and trashes its `removeEntryIds` (rows that left the bill);
  * `cardPayments` become card_payment transfers that settle a statement.
  * An exact duplicate the plan imports anyway (duplicateDecisions
  * "import_anyway") is booked under `<externalId>~dup<n>`, since an account
@@ -172,7 +176,13 @@ export async function executeImport(
     }
     const target = await targetAccount(userId, entity, input.accountId, tx);
     const isCard = target.type === "credit_card";
-    const bankOnly = input.transfers.length || input.investmentTransfers.length || input.reconciliations.length || input.transferReconciliations.length || input.cardPayments?.length;
+    // A card plan's reconciliations are rows of its bill that changed (they need the bill).
+    const bankOnly =
+      input.transfers.length ||
+      input.investmentTransfers.length ||
+      input.transferReconciliations.length ||
+      input.cardPayments?.length ||
+      (input.reconciliations.length && !input.cardStatement);
     if ((isCard && bankOnly) || (!isCard && input.cardStatement)) {
       throw new LedgerError(`Account "${target.name}" cannot receive this import`, 422, { code: "import.account_kind_mismatch", params: { name: target.name } });
     }
@@ -377,7 +387,7 @@ export async function executeImport(
     }
 
     let reconciled = 0;
-    for (const rec of input.reconciliations) {
+    for (const rec of isCard ? [] : input.reconciliations) {
       const patch = { ...(rec.updates.amount !== undefined && { amount: rec.updates.amount }), ...(rec.updates.date && { date: parseLocalDate(rec.updates.date).toISOString().slice(0, 10) }), ...(rec.updates.description && { description: rec.updates.description }) };
       if (!Object.keys(patch).length) continue;
       await updateEntry(userId, rec.existingTransactionId, patch, tx, { collect: records });
@@ -481,6 +491,7 @@ export async function executeImport(
 
     let cardRowsCreated = 0;
     let cardRowsSkipped = 0;
+    let cardRowsRemoved = 0;
     let cardStatementId: string | null = null;
     let paymentLinked = false;
     if (input.cardStatement) {
@@ -493,9 +504,17 @@ export async function executeImport(
           closingDate: bill.closingDate,
           dueDate: bill.dueDate,
           total: bill.total,
-          rows: bill.rows.map((r) => ({ date: r.date, description: r.description, amount: r.amount, categoryId: r.categoryId, installment: r.installment, allowDuplicate: r.allowDuplicate })),
+          rows: bill.rows.map((r) => ({ date: r.date, description: r.description, amount: r.amount, categoryId: r.categoryId, installment: r.installment, allowDuplicate: r.allowDuplicate, externalId: r.externalId })),
           importId: imp.id,
           fallback: "none",
+          updates: input.reconciliations.map((rec) => ({
+            entryId: rec.existingTransactionId,
+            ...rec.updates,
+            ...(rec.updates.date && { date: parseLocalDate(rec.updates.date).toISOString().slice(0, 10) }),
+            externalId: rec.linkExternalId ? rec.externalId : null,
+          })),
+          removeEntryIds: bill.removeEntryIds,
+          matchedEntryIds: bill.matchedEntryIds,
         },
         tx,
         { collect: records }
@@ -503,6 +522,8 @@ export async function executeImport(
       cardStatementId = result.statementId;
       cardRowsCreated = result.created;
       cardRowsSkipped = result.skipped;
+      cardRowsRemoved = result.removed;
+      reconciled += result.updated;
       createdRecords.push({ model: "CardStatement", id: result.statementId });
       for (const id of result.createdIds) createdRecords.push({ model: "LedgerEntry", id });
       for (const r of bill.rows) {
@@ -589,6 +610,7 @@ export async function executeImport(
       cardPaymentsCreated,
       cardRowsCreated,
       cardRowsSkipped,
+      cardRowsRemoved,
       cardStatementId,
       paymentLinked,
       rowsImported,

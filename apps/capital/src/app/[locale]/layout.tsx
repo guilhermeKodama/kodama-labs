@@ -10,6 +10,7 @@ import { PwaRegister } from '@/components/pwa-register';
 import { ThemeProvider } from '@/components/theme-provider';
 import { Toaster } from '@/components/ui/sonner';
 import { isLocale, routing } from '@/i18n/routing';
+import { TEXT_SIZE_SCRIPT } from '@/lib/theme/text-size';
 
 export function generateStaticParams() {
   return routing.locales.map((locale) => ({ locale }));
@@ -55,6 +56,9 @@ export default async function LocaleLayout({ children, params }: LocaleLayoutPro
   return (
     <html lang={locale} suppressHydrationWarning>
       <body className={BODY_CLASS} suppressHydrationWarning>
+        {/* The text size last applied on this device (TextSizeSync stores it), set on <html> before
+            the first paint. From localStorage, not a cookie, so this layout stays static. */}
+        <script dangerouslySetInnerHTML={{ __html: TEXT_SIZE_SCRIPT }} />
         {/* crossOrigin="use-credentials": the whole app sits behind Cloudflare
             Access, and a manifest fetch without cookies gets redirected to the
             Access login page — see manifest.webmanifest/route.ts for the full
