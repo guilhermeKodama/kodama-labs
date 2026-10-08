@@ -14,6 +14,7 @@ import {
   periodRange,
   type MonthState,
   type PortfolioTimeline,
+  type TimelineInput,
   type TimelineOperation,
 } from "../lib/portfolio-timeline";
 
@@ -58,11 +59,21 @@ export interface LoadedTimeline {
   timezone: string;
 }
 
-export async function loadTimeline(userId: string, db: DbClient): Promise<LoadedTimeline> {
+/** The ledger rows `buildTimeline` reads, plus the names the repair report prints. */
+export interface PortfolioTimelineSource {
+  fx: FxContext;
+  timezone: string;
+  input: TimelineInput;
+  accountNames: Map<string, string>;
+  accountCreatedAt: Map<string, Date>;
+  holdingAccountIds: Map<string, string>;
+}
+
+export async function loadPortfolioTimelineSource(userId: string, db: DbClient): Promise<PortfolioTimelineSource> {
   const [fx, user, accounts, entries, holdings] = await Promise.all([
     loadFx(userId, db),
     db.user.findUniqueOrThrow({ where: { id: userId }, select: { timezone: true } }),
-    db.account.findMany({ where: { userId, ...PORTFOLIO_BROKERS }, select: { id: true, entityId: true, currency: true, initialBalance: true, createdAt: true } }),
+    db.account.findMany({ where: { userId, ...PORTFOLIO_BROKERS }, select: { id: true, name: true, entityId: true, currency: true, initialBalance: true, createdAt: true } }),
     db.$queryRaw<{ accountId: string; date: Date; amount: Prisma.Decimal; amountBase: Prisma.Decimal; transferGroupId: string | null }[]>`
       SELECT le."accountId", le.date, le.amount, le."amountBase", le."transferGroupId"
       FROM ledger_entries le
@@ -109,7 +120,7 @@ export async function loadTimeline(userId: string, db: DbClient): Promise<Loaded
     const first = firstEntry.get(a.id);
     return [a.id, first && first < a.createdAt ? first : a.createdAt] as const;
   }));
-  const timeline = buildTimeline({
+  const input: TimelineInput = {
     rateFor: (c) => fx.rateFor(c),
     rateOn: (c, date) => fx.rateOn(c, date),
     accounts: accounts.map((a) => ({ id: a.id, entityId: a.entityId, currency: a.currency, initialBalance: toNumber(a.initialBalance), openedAt: openedAtOf.get(a.id)! })),
@@ -142,8 +153,20 @@ export async function loadTimeline(userId: string, db: DbClient): Promise<Loaded
         };
       }),
     })),
-  });
-  return { timeline, fx, timezone: user.timezone };
+  };
+  return {
+    fx,
+    timezone: user.timezone,
+    input,
+    accountNames: new Map(accounts.map((a) => [a.id, a.name])),
+    accountCreatedAt: new Map(accounts.map((a) => [a.id, a.createdAt])),
+    holdingAccountIds: new Map(holdings.map((h) => [h.id, h.account.id])),
+  };
+}
+
+export async function loadTimeline(userId: string, db: DbClient): Promise<LoadedTimeline> {
+  const source = await loadPortfolioTimelineSource(userId, db);
+  return { timeline: buildTimeline(source.input), fx: source.fx, timezone: source.timezone };
 }
 
 /** The current month (YYYYMM) in the user's timezone. */

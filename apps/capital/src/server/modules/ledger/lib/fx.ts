@@ -26,13 +26,18 @@ export interface RateClose {
  * The latest close strictly before `day` ("YYYY-MM-DD"). `closes` is sorted
  * ascending by day. Null when every close is on or after `day`.
  */
-export function previousBusinessDayRate(closes: readonly RateClose[], day: string): number | null {
-  let best: number | null = null;
+export function previousBusinessDayClose(closes: readonly RateClose[], day: string): RateClose | null {
+  let best: RateClose | null = null;
   for (const row of closes) {
-    if (row.day < day) best = row.brlPerUnit;
+    if (row.day < day) best = row;
     else break;
   }
   return best;
+}
+
+/** `previousBusinessDayClose` as a rate, or null when no earlier close exists. */
+export function previousBusinessDayRate(closes: readonly RateClose[], day: string): number | null {
+  return previousBusinessDayClose(closes, day)?.brlPerUnit ?? null;
 }
 
 /**
