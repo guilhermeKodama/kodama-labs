@@ -152,6 +152,7 @@ export function HoldingSheet({
           {t("update")}
         </Btn>
       </form>
+      <p className="text-caption text-fg-4">{t("adjustHint")}</p>
       <form
         className="flex items-end gap-1.5"
         onSubmit={(event) => {

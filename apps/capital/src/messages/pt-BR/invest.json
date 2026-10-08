@@ -219,6 +219,7 @@
     "update": "Atualizar",
     "adjust": "Ajustar",
     "adjustNote": "Ajuste manual",
+    "adjustHint": "Uma venda se registra como venda, com o valor recebido. O ajuste só corrige a quantidade e o preço médio.",
     "operations": "Operações",
     "noOps": "Nenhuma operação.",
     "newOp": "+ Operação",
@@ -235,7 +236,7 @@
   },
   "op": {
     "title": "Nova operação",
-    "desc": "Compra, venda, provento ou movimentação de caixa da corretora.",
+    "desc": "Compra, venda, provento ou movimentação de caixa da corretora. Uma venda se registra como venda, não como ajuste.",
     "kind": {
       "buy": "Compra",
       "sell": "Venda",
@@ -343,9 +344,11 @@
       "savingsNegative": "resgates maiores que aportes"
     },
     "chart": {
-      "title": "Aportes por mês e classe",
+      "title": "Aportes por mês",
+      "net": "Líquido",
       "goal": "Meta",
-      "caption": "Mês × {unit} aportados · {range}",
+      "purchases": "Compras",
+      "caption": "Mês × {unit} · líquido · {range}",
       "empty": "Nenhum aporte no período."
     },
     "where": {

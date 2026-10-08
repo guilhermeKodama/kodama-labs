@@ -60,8 +60,15 @@ beforeEach(async () => {
   await createUser(OFF_USER, "BRL", false, [{ code: "USD", manualRate: 0.1, source: "ptax" }]);
 });
 
-afterEach(() => {
+afterEach(async () => {
   vi.unstubAllGlobals();
+  // The refresh writes the shared PTAX day. Put the embedded close back.
+  const date = new Date("2026-10-02T00:00:00.000Z");
+  await prisma.currencyRateDay.upsert({
+    where: { code_date: { code: "USD", date } },
+    create: { code: "USD", date, brlPerUnit: 5.2238, source: "ptax" },
+    update: { brlPerUnit: 5.2238, source: "ptax" },
+  });
 });
 
 afterAll(async () => {
@@ -70,6 +77,8 @@ afterAll(async () => {
 
 describe("updateAllCurrencyRates", () => {
   it("writes PTAX on a BRL base and the ECB otherwise, skipping manual rates and users with the update off", async () => {
+    const closeDay = new Date("2026-10-02T00:00:00.000Z");
+    const seeded = await prisma.currencyRateDay.findUnique({ where: { code_date: { code: "USD", date: closeDay } } });
     const result = await updateAllCurrencyRates(prisma, { now: NOW, fetch: providers, userIds: USERS });
     expect(result).toEqual({ usersProcessed: 2, ratesUpdated: 4, ratesUnchanged: 0, manualSkipped: 1, errors: 0 });
 
@@ -77,6 +86,10 @@ describe("updateAllCurrencyRates", () => {
     const usd = await rateOf(BRL_USER, "USD");
     expect(usd).toMatchObject({ source: "ptax", rateUpdatedAt: FRIDAY_CLOSE });
     expect(usd.manualRate).toBeCloseTo(1 / 5.1991, 12);
+    const close = await prisma.currencyRateDay.findUniqueOrThrow({ where: { code_date: { code: "USD", date: closeDay } } });
+    expect(Number(close.brlPerUnit)).toBeCloseTo(5.1991, 4);
+    if (seeded) await prisma.currencyRateDay.update({ where: { code_date: { code: "USD", date: closeDay } }, data: { brlPerUnit: seeded.brlPerUnit, source: seeded.source } });
+    else await prisma.currencyRateDay.delete({ where: { code_date: { code: "USD", date: closeDay } } });
     expect(await rateOf(BRL_USER, "ARS")).toMatchObject({ manualRate: 280.5, source: "ecb", rateUpdatedAt: new Date("2026-10-02T14:00:00Z") });
     expect(await rateOf(BRL_USER, "EUR")).toMatchObject({ manualRate: 0.15, source: "manual", rateUpdatedAt: TYPED_AT });
     expect(await rateOf(BRL_USER, "BRL")).toMatchObject({ manualRate: 1 });
@@ -99,10 +112,14 @@ describe("updateAllCurrencyRates", () => {
   });
 
   it("keeps the old rates when a provider fails", async () => {
+    const closeDay = new Date("2026-01-02T00:00:00.000Z");
+    const before = await prisma.currencyRateDay.findUnique({ where: { code_date: { code: "USD", date: closeDay } } });
     const failing = vi.fn(async (url: string) => (url.includes("olinda") ? json({ message: "down" }, 503) : providers(url)));
     const result = await updateAllCurrencyRates(prisma, { now: NOW, fetch: failing, userIds: USERS });
     expect(result).toMatchObject({ errors: 1, ratesUpdated: 3 });
     expect(await rateOf(BRL_USER, "USD")).toMatchObject({ manualRate: 0.18, rateUpdatedAt: null });
+    const after = await prisma.currencyRateDay.findUnique({ where: { code_date: { code: "USD", date: closeDay } } });
+    expect(after?.brlPerUnit?.toString() ?? null).toBe(before?.brlPerUnit?.toString() ?? null);
   });
 
   it("relabels an automatic rate whose source no longer fits the base", async () => {

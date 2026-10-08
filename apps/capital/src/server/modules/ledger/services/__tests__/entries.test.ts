@@ -76,6 +76,32 @@ describe("createEntry", () => {
     expect(legs.every((l) => l.kind === "expense")).toBe(true);
   });
 
+  it("books a statement amount in the other account's currency instead of 1:1", async () => {
+    const usd = await prisma.account.create({ data: { userId: USER, entityId: f.pfId, type: "brokerage", name: "Avenue", currency: "USD" } });
+    const r = await createEntry(
+      USER,
+      { kind: "transfer", fromAccountId: usd.id, toAccountId: f.pfChecking, amount: 10000, currency: "BRL", exchangeRate: 1, date: "2026-08-12", direction: "investment_withdrawal" },
+      prisma
+    );
+    const legs = await prisma.ledgerEntry.findMany({ where: { transferGroupId: r.transferGroupId! } });
+    const broker = legs.find((l) => l.accountId === usd.id)!;
+    const bank = legs.find((l) => l.accountId === f.pfChecking)!;
+    expect(broker.currency).toBe("USD");
+    expect(toNumber(broker.amount)).toBeCloseTo(-2000, 4);
+    expect(toNumber(broker.exchangeRate)).toBeCloseTo(5, 4);
+    expect(bank.currency).toBe("BRL");
+    expect(toNumber(bank.amount)).toBe(10000);
+    expect(legs.reduce((s, l) => s + toNumber(l.amountBase), 0)).toBeCloseTo(0, 2);
+  });
+
+  it("refuses a cross-currency transfer when no rate is stored", async () => {
+    const eur = await prisma.account.create({ data: { userId: USER, entityId: f.pfId, type: "brokerage", name: "Degiro", currency: "EUR" } });
+    await expect(createEntry(USER, { kind: "transfer", fromAccountId: f.pfChecking, toAccountId: eur.id, amount: 100, currency: "BRL", exchangeRate: 1, date: "2026-09-20" }, prisma)).rejects.toMatchObject({
+      status: 422,
+      code: "transfer.fx_required",
+    });
+  });
+
   it("converts the destination leg when the accounts use different currencies", async () => {
     const usd = await prisma.account.create({ data: { userId: USER, entityId: f.pfId, type: "brokerage", name: "IBKR", currency: "USD" } });
     const r = await createEntry(USER, { kind: "transfer", fromAccountId: f.pfChecking, toAccountId: usd.id, amount: 1000, date: "2026-09-20" }, prisma);

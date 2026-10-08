@@ -58,6 +58,18 @@ describe("replayPosition", () => {
     expect(replayPosition([op("buy", { quantity: 10, pricePerUnit: 20, totalAmount: 200 }), op("adjustment", { quantity: 0, pricePerUnit: 0 })])).toMatchObject({ quantity: 0, closed: true });
   });
 
+  it("scales a delta adjustment so the average cost stays, and still resets when the mode is absolute", () => {
+    const buy = op("buy", { quantity: 18.672, pricePerUnit: 144.67, totalAmount: 18.672 * 144.67 });
+    const delta = replayPosition([buy, op("adjustment", { quantity: -1.3929, pricePerUnit: 148.5, totalAmount: 0, adjustmentMode: "delta" })]);
+    expect(delta.quantity).toBeCloseTo(17.2791, 4);
+    expect(delta.averageCost).toBeCloseTo(144.67, 2);
+    expect(delta.cost).toBeCloseTo(17.2791 * 144.67, 2);
+    expect(delta.closed).toBe(false);
+    const absolute = replayPosition([buy, op("adjustment", { quantity: -1.3929, pricePerUnit: 148.5, totalAmount: 0 })]);
+    expect(absolute).toMatchObject({ quantity: 0, cost: 0, closed: true });
+    expect(replayPosition([buy, op("adjustment", { quantity: 10, pricePerUnit: 20, totalAmount: 200, adjustmentMode: "absolute" })]).quantity).toBe(10);
+  });
+
   it("ignores income for the position", () => {
     expect(replayPosition([op("buy", { quantity: 1, pricePerUnit: 10, totalAmount: 10 }), op("dividend", { totalAmount: 3 }), op("yield_payment", { totalAmount: 1 })])).toMatchObject({
       quantity: 1,

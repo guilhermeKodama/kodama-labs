@@ -219,6 +219,7 @@
     "update": "Update",
     "adjust": "Adjust",
     "adjustNote": "Manual adjustment",
+    "adjustHint": "A sale is recorded as a sell, with the proceeds. An adjustment only corrects the quantity and the average price.",
     "operations": "Operations",
     "noOps": "No operations.",
     "newOp": "+ Operation",
@@ -235,7 +236,7 @@
   },
   "op": {
     "title": "New operation",
-    "desc": "Buy, sell, income or a broker cash movement.",
+    "desc": "Buy, sell, income or a broker cash movement. A sale is recorded as a sell, not as an adjustment.",
     "kind": {
       "buy": "Buy",
       "sell": "Sell",
@@ -343,9 +344,11 @@
       "savingsNegative": "withdrawals larger than contributions"
     },
     "chart": {
-      "title": "Contributions by month and class",
+      "title": "Contributions by month",
+      "net": "Net",
       "goal": "Goal",
-      "caption": "Month × {unit} contributed · {range}",
+      "purchases": "Purchases",
+      "caption": "Month × {unit} · net · {range}",
       "empty": "No contributions in this period."
     },
     "where": {

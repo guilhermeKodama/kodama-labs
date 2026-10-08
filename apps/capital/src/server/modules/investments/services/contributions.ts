@@ -16,10 +16,15 @@ import { currentPeriod } from "./portfolio-history";
  * month by month, where it went, where it came from, and the savings rate.
  *
  * - deposits / withdrawals / net: the brokerage legs of the transfers whose
- *   flowKind is "invest" (investment_deposit / investment_withdrawal);
- * - byAllocationClass: buys of the month by class (gross amount + fees, in
- *   the base currency at today's rates), plus "cash" for the part of the
- *   net aporte that was not spent on buys; byAssetClass the buys only;
+ *   flowKind is "invest" (investment_deposit / investment_withdrawal), plus
+ *   kind=investment rows on checking or cash with no transfer and no
+ *   operation cash leg, unless a brokerage leg in the same entity matches
+ *   the base amount within R$ 0.01 and the date within 3 days (money that
+ *   left the bank is an aporte, money that arrived is a resgate);
+ * - byAllocationClass: buys of the month by class (gross amount + fees, at
+ *   the rate on the buy's date), excluding a no-cash opening lot; the chart
+ *   labels that split "Compras". The net bars are deposits − withdrawals.
+ *   byAssetClass is the same buys;
  * - origins: each of those transfers, with the account it came from and,
  *   when the aporte crossed entities, the entity the money started in (the
  *   capital injection or profit distribution booked in the same batch);
@@ -56,6 +61,11 @@ export interface ContributionOrigin {
   sourceTransferGroupId: string | null;
   /** The description typed on that transfer; null when it has the default one. */
   sourceDescription: string | null;
+  /**
+   * A checking or cash investment row with no transfer. It counts in the
+   * month's net, and it is not a transfer group the Transações drill can open.
+   */
+  standalone?: boolean;
 }
 
 export interface ContributionMonth {
@@ -150,36 +160,43 @@ export async function contributions(userId: string, db: DbClient, opts: Contribu
         ORDER BY dep."recordId", src."createdAt"`
     : [];
   const sourceOf = new Map(sources.map((s) => [s.deposit_group, s]));
+  const bankInvestments = await unlinkedBankInvestments(userId, db, entityIds, from, to);
 
   // Buys by holding class; totalAmount and fees are in the holding's currency.
-  const buys = await db.$queryRaw<{ period: number; asset_class: AssetClass; allocation_class: AllocationClass | null; currency: string; total: number }[]>`
-    SELECT (extract(year FROM o.date) * 100 + extract(month FROM o.date))::int AS period,
-           h."assetClass"::text AS asset_class, h."allocationClass"::text AS allocation_class, h.currency,
-           sum(o."totalAmount" + o.fees) AS total
+  // A no-cash first operation is an opening lot (posição inicial), not a purchase of that month.
+  const buys = await db.$queryRaw<{ date: Date; asset_class: AssetClass; allocation_class: AllocationClass | null; currency: string; total: number; opening: boolean }[]>`
+    SELECT o.date, h."assetClass"::text AS asset_class, h."allocationClass"::text AS allocation_class, h.currency,
+           (o."totalAmount" + o.fees) AS total,
+           (cash.id IS NULL AND NOT EXISTS (
+             SELECT 1 FROM investment_operations earlier
+             WHERE earlier."holdingId" = o."holdingId"
+               AND (earlier.date < o.date OR (earlier.date = o.date AND earlier."createdAt" < o."createdAt"))
+           )) AS opening
     FROM investment_operations o
     JOIN investment_holdings h ON h.id = o."holdingId"
     JOIN accounts a ON a.id = h."accountId"
+    LEFT JOIN ledger_entries cash ON cash.id = o."cashEntryId" AND cash."deletedAt" IS NULL
     WHERE a."userId" = ${userId} AND o.type IN ('buy', 'deposit') AND o.date >= ${from} AND o.date < ${to}
-      AND ${entityScopeSql(Prisma.sql`a."entityId"`, entityIds)}
-    GROUP BY 1, 2, 3, 4`;
+      AND ${entityScopeSql(Prisma.sql`a."entityId"`, entityIds)}`;
 
   const months: ContributionMonth[] = periodRange(window.from, window.to).map((period) => {
       const inMonth = legs.filter((l) => periodOf(l.date) === period);
-      const deposits = inMonth.reduce((s, l) => s + Math.max(0, toNumber(l.amountBase)), 0);
-      const withdrawals = inMonth.reduce((s, l) => s + Math.max(0, -toNumber(l.amountBase)), 0);
+      const bankInMonth = bankInvestments.filter((r) => periodOf(r.date) === period);
+      let deposits = inMonth.reduce((s, l) => s + Math.max(0, toNumber(l.amountBase)), 0);
+      let withdrawals = inMonth.reduce((s, l) => s + Math.max(0, -toNumber(l.amountBase)), 0);
+      for (const row of bankInMonth) {
+        if (row.amountBase < 0) deposits += -row.amountBase;
+        else withdrawals += row.amountBase;
+      }
       const byAssetClass: Partial<Record<AssetClass, number>> = {};
       const byAllocationClass: Partial<Record<AllocationClass, number>> = {};
-      let bought = 0;
       for (const b of buys) {
-        if (b.period !== period) continue;
-        const base = Number(b.total) * fx.rateFor(b.currency);
+        if (b.opening || periodOf(b.date) !== period) continue;
+        const base = Number(b.total) * fx.rateOn(b.currency, b.date);
         const cls = holdingAllocationClass({ assetClass: b.asset_class, currency: b.currency, allocationClass: b.allocation_class });
         byAssetClass[b.asset_class] = (byAssetClass[b.asset_class] ?? 0) + base;
         byAllocationClass[cls] = (byAllocationClass[cls] ?? 0) + base;
-        bought += base;
       }
-      const unspent = deposits - withdrawals - bought;
-      if (unspent > 0.005) byAllocationClass.cash = (byAllocationClass.cash ?? 0) + unspent;
       return {
         period: periodLabel(period),
         year: Math.floor(period / 100),
@@ -189,27 +206,47 @@ export async function contributions(userId: string, db: DbClient, opts: Contribu
         net: round(deposits - withdrawals, 2),
         byAllocationClass: roundValues(byAllocationClass),
         byAssetClass: roundValues(byAssetClass),
-        origins: inMonth.map((l) => {
-          const source = sourceOf.get(l.transferGroupId);
-          const description = l.group_description ?? l.description;
-          return {
-            transferGroupId: l.transferGroupId,
-            entryId: l.id,
-            date: l.date.toISOString().slice(0, 10),
-            amount: round(toNumber(l.amountBase), 2),
-            direction: l.direction,
-            description,
-            defaultDescription: isDefaultTransferDescription(description, l.direction),
-            brokerAccountId: l.broker_id,
-            brokerAccountName: l.broker_name,
-            brokerEntityName: l.broker_entity,
-            counterpartAccountName: l.cp_account,
-            counterpartEntityName: l.cp_entity,
-            sourceEntityName: source?.source_entity ?? null,
-            sourceTransferGroupId: source?.source_group ?? null,
-            sourceDescription: source && !isDefaultTransferDescription(source.source_description, source.source_direction) ? source.source_description?.trim() || null : null,
-          };
-        }),
+        origins: [
+          ...inMonth.map((l) => {
+            const source = sourceOf.get(l.transferGroupId);
+            const description = l.group_description ?? l.description;
+            return {
+              transferGroupId: l.transferGroupId,
+              entryId: l.id,
+              date: l.date.toISOString().slice(0, 10),
+              amount: round(toNumber(l.amountBase), 2),
+              direction: l.direction,
+              description,
+              defaultDescription: isDefaultTransferDescription(description, l.direction),
+              brokerAccountId: l.broker_id,
+              brokerAccountName: l.broker_name,
+              brokerEntityName: l.broker_entity,
+              counterpartAccountName: l.cp_account,
+              counterpartEntityName: l.cp_entity,
+              sourceEntityName: source?.source_entity ?? null,
+              sourceTransferGroupId: source?.source_group ?? null,
+              sourceDescription: source && !isDefaultTransferDescription(source.source_description, source.source_direction) ? source.source_description?.trim() || null : null,
+            };
+          }),
+          ...bankInMonth.map((row) => ({
+            transferGroupId: row.id,
+            entryId: row.id,
+            date: row.date.toISOString().slice(0, 10),
+            amount: round(-row.amountBase, 2),
+            direction: (row.amountBase < 0 ? "investment_deposit" : "investment_withdrawal") as TransferDirection,
+            description: row.description,
+            defaultDescription: false,
+            brokerAccountId: row.accountId,
+            brokerAccountName: row.accountName,
+            brokerEntityName: row.entityName,
+            counterpartAccountName: null,
+            counterpartEntityName: null,
+            sourceEntityName: null,
+            sourceTransferGroupId: null,
+            sourceDescription: null,
+            standalone: true,
+          })),
+        ].sort((a, b) => b.date.localeCompare(a.date) || b.entryId.localeCompare(a.entryId)),
       };
     });
 
@@ -244,9 +281,64 @@ export async function savingsRate(userId: string, db: DbClient, pfIds: string[],
       sum("amountBase") FILTER (WHERE flow_kind = 'invest' AND "transferGroupId" IS NOT NULL AND account_type = 'brokerage') AS aportes,
       sum("amountBase") FILTER (WHERE flow_kind <> 'invest' AND "amountBase" > 0 AND ("transferGroupId" IS NULL OR legs = 1)) AS income
     FROM counted`;
-  const aportes = toNumber(row?.aportes ?? 0);
+  const bank = await unlinkedBankInvestments(userId, db, pfIds, from, to);
+  const aportes = toNumber(row?.aportes ?? 0) + bank.reduce((s, r) => s + -r.amountBase, 0);
   const income = toNumber(row?.income ?? 0);
   return { aportes: round(aportes, 2), income: round(income, 2), rate: income > 0 ? round(aportes / income, 4) : null };
+}
+
+interface BankInvestment {
+  id: string;
+  date: Date;
+  amountBase: number;
+  entityId: string;
+  description: string | null;
+  accountId: string;
+  accountName: string;
+  entityName: string;
+}
+
+const MATCH_MS = 3 * 86_400_000;
+
+/**
+ * kind=investment on checking or cash, with no transfer group and no
+ * operation pointing at the row. A brokerage leg in the same entity within
+ * R$ 0.01 and 3 days already accounts for the money, so that row is left out.
+ * Each brokerage leg matches at most one bank row.
+ */
+async function unlinkedBankInvestments(userId: string, db: DbClient, entityIds: string[] | null, from: Date, to: Date): Promise<BankInvestment[]> {
+  const matchFrom = new Date(from.getTime() - MATCH_MS);
+  const matchTo = new Date(to.getTime() + MATCH_MS);
+  const [rows, legs] = await Promise.all([
+    db.$queryRaw<{ id: string; date: Date; amountBase: Prisma.Decimal; entityId: string; description: string | null; accountId: string; accountName: string; entityName: string }[]>`
+      SELECT le.id, le.date, le."amountBase", le."entityId", le.description, a.id AS "accountId", a.name AS "accountName", e.name AS "entityName"
+      FROM ledger_entries le
+      JOIN accounts a ON a.id = le."accountId" AND a.type IN ('checking', 'cash') AND a."archivedAt" IS NULL
+      JOIN entities e ON e.id = le."entityId"
+      WHERE le."userId" = ${userId} AND le."deletedAt" IS NULL AND le.kind = 'investment' AND le."transferGroupId" IS NULL
+        AND le.date >= ${from} AND le.date < ${to}
+        AND NOT EXISTS (SELECT 1 FROM investment_operations o WHERE o."cashEntryId" = le.id)
+        AND ${entityScopeSql(Prisma.sql`le."entityId"`, entityIds)}`,
+    db.$queryRaw<{ entityId: string; date: Date; absBase: Prisma.Decimal }[]>`
+      SELECT le."entityId", le.date, abs(le."amountBase") AS "absBase"
+      FROM ledger_entries le
+      JOIN accounts a ON a.id = le."accountId" AND a.type = 'brokerage' AND a."archivedAt" IS NULL
+      WHERE le."userId" = ${userId} AND le."deletedAt" IS NULL
+        AND le.date >= ${matchFrom} AND le.date < ${matchTo}
+        AND ${entityScopeSql(Prisma.sql`le."entityId"`, entityIds)}`,
+  ]);
+  const pool = legs.map((leg) => ({ entityId: leg.entityId, date: leg.date, absBase: toNumber(leg.absBase), taken: false }));
+  const out: BankInvestment[] = [];
+  for (const row of rows) {
+    const base = Math.abs(toNumber(row.amountBase));
+    const hit = pool.find((leg) => !leg.taken && leg.entityId === row.entityId && Math.abs(leg.absBase - base) <= 0.01 && Math.abs(leg.date.getTime() - row.date.getTime()) <= MATCH_MS);
+    if (hit) {
+      hit.taken = true;
+      continue;
+    }
+    out.push({ ...row, amountBase: toNumber(row.amountBase) });
+  }
+  return out;
 }
 
 const escapeRegExp = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");

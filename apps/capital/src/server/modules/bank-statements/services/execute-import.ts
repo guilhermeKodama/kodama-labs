@@ -332,7 +332,7 @@ export async function executeImport(
       const [from, to] = await Promise.all([sideAccount(fromEntity), sideAccount(toEntity)]);
       const created = await createEntry(
         userId,
-        { kind: "transfer", fromAccountId: from.id, toAccountId: to.id, amount: tr.amount, currency: input.currency, exchangeRate: 1, description: tr.description, date: tr.date, direction: tr.direction },
+        { kind: "transfer", fromAccountId: from.id, toAccountId: to.id, amount: tr.amount, currency: input.currency, description: tr.description, date: tr.date, direction: tr.direction },
         tx,
         { importId: imp.id, collect: records }
       );
@@ -356,7 +356,6 @@ export async function executeImport(
           toAccountId: deposit ? broker.id : checking.id,
           amount: it.amount,
           currency: input.currency,
-          exchangeRate: 1,
           description: it.description,
           date: it.date,
           direction: it.direction,

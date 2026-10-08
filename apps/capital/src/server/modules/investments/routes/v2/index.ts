@@ -84,7 +84,7 @@ const adjustRoute = createRoute({
   method: "post",
   path: "/v2/holdings/{id}/adjust",
   tags,
-  summary: "Reset the position (quantity and average cost) with an adjustment operation",
+  summary: "Reset the position (quantity and average cost) with an adjustment operation. A sale is recorded as a sell, not as an adjustment",
   request: { params: idParams, ...jsonBody(z.object({ currentQuantity: z.number().nonnegative(), averageCost: z.number().nonnegative(), notes: z.string().optional() })) },
   responses: v2Responses,
 });

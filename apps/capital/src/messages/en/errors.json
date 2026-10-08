@@ -56,6 +56,7 @@
   },
   "transfer": {
     "same_account": "A transfer needs two different accounts.",
+    "fx_required": "A transfer between different currencies needs an exchange rate.",
     "from_account_not_found": "Source account not found.",
     "to_account_not_found": "Destination account not found.",
     "kind_change": "A transfer can't change type. Delete it and create it again."

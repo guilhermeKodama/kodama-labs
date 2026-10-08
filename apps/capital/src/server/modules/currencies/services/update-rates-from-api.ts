@@ -80,6 +80,24 @@ export async function updateAllCurrencyRates(db: DbClient, opts: UpdateRatesOpti
     }
   }
 
+  // Append the PTAX close for the day. A failed fetch never reaches here, and a
+  // write failure is counted and left for the next run; stored days stay.
+  for (const [key, quote] of quotes) {
+    if (!key.startsWith("BRL:") || quote.source !== "ptax" || !(quote.manualRate > 0)) continue;
+    try {
+      const day = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo", year: "numeric", month: "2-digit", day: "2-digit" }).format(quote.quotedAt);
+      const date = new Date(`${day}T00:00:00.000Z`);
+      await db.currencyRateDay.upsert({
+        where: { code_date: { code: quote.code, date } },
+        create: { code: quote.code, date, brlPerUnit: 1 / quote.manualRate, source: "ptax" },
+        update: { brlPerUnit: 1 / quote.manualRate, source: "ptax" },
+      });
+    } catch (error) {
+      console.error(`[RateUpdate] ${error instanceof Error ? error.message : String(error)}`);
+      result.errors++;
+    }
+  }
+
   for (const user of users) {
     for (const c of user.currencies) {
       if (c.code === user.baseCurrency || c.source === "manual") continue;

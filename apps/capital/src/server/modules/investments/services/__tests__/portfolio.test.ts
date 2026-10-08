@@ -200,6 +200,14 @@ describe("income", () => {
     });
     expect((await portfolioSummary(USER, prisma)).income12m).toBe(85);
 
+    const category = await prisma.category.create({ data: { userId: USER, name: "Proventos", type: "income" } });
+    await createEntry(USER, { kind: "income", accountId: f.pfChecking, amount: 85, date: today(), description: "JCP PETR4", categoryId: category.id }, prisma);
+    await createEntry(USER, { kind: "income", accountId: f.pfChecking, amount: 40, date: today(), description: "FII", categoryId: category.id }, prisma);
+    const withIncome = await portfolioSummary(USER, prisma);
+    expect(withIncome.income12m).toBe(125);
+    expect(withIncome.incomeEvents.filter((row) => row.source === "ledger")).toHaveLength(1);
+    expect(withIncome.incomeEvents.find((row) => row.source === "ledger")).toMatchObject({ totalAmount: 40, name: "FII" });
+
     const moved = await updateOperation(USER, jcp.operation.id, { creditToAccountId: null, taxWithheld: 0 }, prisma);
     const back = await prisma.ledgerEntry.findUniqueOrThrow({ where: { id: jcp.cashEntryId! } });
     expect(back).toMatchObject({ accountId: f.broker });

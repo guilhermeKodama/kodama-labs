@@ -495,7 +495,8 @@ export function createCapitalMcpServer(userId: string, db: DbClient, opts: { rea
       description:
         "Manually adjust an investment position's quantity and average cost. Use " +
         "when the broker statement shows different values than recorded. Records an " +
-        "audit trail transaction. Example: Update PMLL11 from 164 to 174 cotas.",
+        "audit trail transaction. A sale is recorded as a sell, not as an adjustment. " +
+        "Example: Update PMLL11 from 164 to 174 cotas.",
       inputSchema: AdjustPositionInputSchema,
     },
     async (params) => {

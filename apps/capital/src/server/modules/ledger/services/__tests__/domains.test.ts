@@ -225,9 +225,9 @@ describe("investments", () => {
     await recordOperation(USER, { holdingId: bova.id, type: "buy", quantity: 10, pricePerUnit: 30, totalAmount: 300, date: "2026-08-04" }, prisma);
     await recordOperation(USER, { holdingId: petr.id, type: "buy", quantity: 10, pricePerUnit: 40, totalAmount: 400, date: "2026-08-05" }, prisma);
     const c = await contributions(USER, prisma, { year: 2026 });
-    // 1 BRL = 0.2 USD, so the USD 100 buy counts as BRL 500.
-    expect(c.months[7].byAssetClass).toEqual({ etf: 800, stocks: 400 });
-    expect(c.months[7].byAllocationClass).toEqual({ international: 500, br_stocks: 700 });
+    // The USD 100 buy uses the PTAX close before 2026-08-03 (2026-07-31, 5.0773), not today's 5.
+    expect(c.months[7].byAssetClass).toEqual({ etf: 807.73, stocks: 400 });
+    expect(c.months[7].byAllocationClass).toEqual({ international: 507.73, br_stocks: 700 });
     expect(c.months[6].byAllocationClass).toEqual({});
   });
 

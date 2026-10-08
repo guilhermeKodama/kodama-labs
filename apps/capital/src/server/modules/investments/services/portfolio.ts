@@ -16,6 +16,7 @@ import { inTransaction, recordMutation, snapshot, type MutationRecordInput } fro
 import { benchmarks12m } from "./benchmarks";
 import { convertAmount, fundBroker, withdrawFromBroker } from "./funding";
 import { PORTFOLIO_BROKERS, portfolioHistory } from "./portfolio-history";
+import { proventos12m } from "./proventos";
 
 export { recalculateHolding, marketValue };
 
@@ -634,6 +635,7 @@ export async function adjustPosition(userId: string, input: { holdingId: string;
         fees: 0,
         date: parseLocalDate(new Date().toISOString().slice(0, 10)),
         notes: input.notes ?? "Manual adjustment",
+        adjustmentMode: "absolute",
       },
     });
     // The adjustment resets the position; an adjustment to zero closes it.
@@ -748,13 +750,12 @@ export async function portfolioSummary(userId: string, db: DbClient, opts: Portf
 
   const targets = await db.portfolioTarget.findMany({ where: { userId } });
   const targetOf = new Map(targets.map((t) => [t.allocationClass, t.targetPercent]));
-  const yearAgo = new Date(Date.now() - 365 * 86400_000);
-  const income = await db.investmentOperation.findMany({
-    where: { holding: { account: { userId, ...scope } }, type: { in: ["dividend", "yield_payment"] }, date: { gte: yearAgo } },
-    select: { totalAmount: true, taxWithheld: true, holding: { select: { currency: true } } },
-  });
   const net = marketTotal + cashTotal;
-  const [history, benchmarks] = await Promise.all([portfolioHistory(userId, db, { months: 12, entityIds: opts.entityIds ?? null }), benchmarks12m(db)]);
+  const [history, benchmarks, income] = await Promise.all([
+    portfolioHistory(userId, db, { months: 12, entityIds: opts.entityIds ?? null }),
+    benchmarks12m(db),
+    proventos12m(userId, db, opts.entityIds ?? null),
+  ]);
   const contributed = history.months.at(-1)?.contributed ?? 0;
   const initialPositions = history.months.at(-1)?.initialPositions ?? 0;
   return {
@@ -783,8 +784,14 @@ export async function portfolioSummary(userId: string, db: DbClient, opts: Portf
      * of the same 12 months (fractions; null without cached data).
      */
     return12m: { ...history.return, cdi: benchmarks.cdi, ipca: benchmarks.ipca, ipcaPlus6: benchmarks.ipcaPlus6 },
-    /** Income of the last 12 months, net of tax withheld. */
-    income12m: round(income.reduce((s, op) => s + (op.totalAmount - op.taxWithheld) * fx.rateFor(op.holding.currency), 0), 2),
+    /**
+     * Income of the last 12 months, net of tax withheld: dividend and yield
+     * operations (inactive holdings included, archived accounts excluded)
+     * plus ledger income in Proventos that no operation already counted.
+     */
+    income12m: income.total,
+    /** The rows behind income12m. Ledger rows are not operations. */
+    incomeEvents: income.rows,
     holdingsCount: holdings.length,
     accountsCount: brokers.length,
     /** Latest price refresh among the holdings. */

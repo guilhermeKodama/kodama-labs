@@ -82,7 +82,7 @@ export async function loadTimeline(userId: string, db: DbClient): Promise<Loaded
         currentQuantity: true,
         currentPrice: true,
         totalInvested: true,
-        account: { select: { entityId: true } },
+        account: { select: { id: true, entityId: true } },
         operations: {
           orderBy: [{ date: "asc" }, { createdAt: "asc" }],
           select: {
@@ -93,6 +93,7 @@ export async function loadTimeline(userId: string, db: DbClient): Promise<Loaded
             totalAmount: true,
             fees: true,
             date: true,
+            adjustmentMode: true,
             cashEntry: { select: { deletedAt: true, amountBase: true, account: { select: { type: true } } } },
           },
         },
@@ -104,12 +105,14 @@ export async function loadTimeline(userId: string, db: DbClient): Promise<Loaded
     const d = firstEntry.get(e.accountId);
     if (!d || e.date < d) firstEntry.set(e.accountId, e.date);
   }
+  const openedAtOf = new Map(accounts.map((a) => {
+    const first = firstEntry.get(a.id);
+    return [a.id, first && first < a.createdAt ? first : a.createdAt] as const;
+  }));
   const timeline = buildTimeline({
     rateFor: (c) => fx.rateFor(c),
-    accounts: accounts.map((a) => {
-      const first = firstEntry.get(a.id);
-      return { id: a.id, entityId: a.entityId, currency: a.currency, initialBalance: toNumber(a.initialBalance), openedAt: first && first < a.createdAt ? first : a.createdAt };
-    }),
+    rateOn: (c, date) => fx.rateOn(c, date),
+    accounts: accounts.map((a) => ({ id: a.id, entityId: a.entityId, currency: a.currency, initialBalance: toNumber(a.initialBalance), openedAt: openedAtOf.get(a.id)! })),
     entries: entries.map((e) => ({ accountId: e.accountId, date: e.date, amount: toNumber(e.amount), amountBase: toNumber(e.amountBase), isTransfer: e.transferGroupId !== null })),
     holdings: holdings.map((h) => ({
       id: h.id,
@@ -118,6 +121,7 @@ export async function loadTimeline(userId: string, db: DbClient): Promise<Loaded
       allocationClass: holdingAllocationClass(h),
       currency: h.currency,
       createdAt: h.createdAt,
+      openedAt: openedAtOf.get(h.account.id) ?? h.createdAt,
       currentQuantity: h.currentQuantity,
       currentPrice: h.currentPrice,
       totalInvested: h.totalInvested,
@@ -131,6 +135,7 @@ export async function loadTimeline(userId: string, db: DbClient): Promise<Loaded
           pricePerUnit: op.pricePerUnit,
           totalAmount: op.totalAmount,
           fees: op.fees,
+          adjustmentMode: op.adjustmentMode,
           date: op.date,
           cash: !leg ? "none" : leg.account.type === "brokerage" ? "broker" : "outside",
           outsideAmountBase: leg && leg.account.type !== "brokerage" ? toNumber(leg.amountBase) : 0,
