@@ -332,6 +332,49 @@ describe("editing", () => {
     expect(
       buildEditPatch(leg, start, { ...start, amount: "7.000,00" }, ctx),
     ).toEqual({ ok: true, patch: { amount: 7000, toAmount: 33721.17 } });
+    expect(
+      buildEditPatch(
+        leg,
+        start,
+        { ...start, amount: "7.000,00", rate: "5,10" },
+        ctx,
+      ),
+    ).toEqual({ ok: true, patch: { amount: 7000, exchangeRate: 5.1 } });
+    expect(
+      buildEditPatch(
+        leg,
+        start,
+        { ...start, amount: "7.000,00", received: "30.000,00", rate: "5,10" },
+        ctx,
+      ),
+    ).toEqual({ ok: true, patch: { amount: 7000, toAmount: 30000 } });
+  });
+
+  it("recomputes a cleared received amount when the account changes", () => {
+    const leg: EditableEntry = {
+      ...entry,
+      kind: "transfer",
+      description: "Resgate Crypto",
+      amount: 33721.17,
+      currency: "BRL",
+      exchangeRate: 1,
+      accountId: "nubank",
+      categoryId: null,
+      transferGroupId: "g",
+      transferDirection: "investment_withdrawal",
+      counterpartAccountId: "avenue",
+      counterpartAmount: -6757.75,
+      counterpartCurrency: "USD",
+    };
+    const start = formFromEntry(leg, ctx, brl);
+    expect(
+      buildEditPatch(
+        leg,
+        start,
+        { ...start, cashAccountId: "inter", received: "" },
+        ctx,
+      ),
+    ).toEqual({ ok: true, patch: { toAccountId: "inter", toAmount: 33721.17 } });
   });
 
   it("opens an aporte as Aporte", () => {

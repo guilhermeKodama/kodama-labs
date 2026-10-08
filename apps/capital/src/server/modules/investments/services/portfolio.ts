@@ -752,6 +752,9 @@ export async function moveBrokerageCash(
     }
     const from = input.direction === "deposit" ? checking.id : broker.id;
     const to = input.direction === "deposit" ? broker.id : checking.id;
+    // Same currency has one amount. toAmount is only what arrived when the
+    // broker and the counterpart are in different currencies (funding.ts).
+    const crossCash = checking.currency !== broker.currency;
     const result = await createEntry(
       userId,
       {
@@ -761,7 +764,8 @@ export async function moveBrokerageCash(
         amount: input.amount,
         currency: input.currency,
         exchangeRate: input.exchangeRate,
-        ...(input.toAmount != null &&
+        ...(crossCash &&
+          input.toAmount != null &&
           input.toAmount > 0 && { toAmount: input.toAmount }),
         date: input.date,
         description: input.description,

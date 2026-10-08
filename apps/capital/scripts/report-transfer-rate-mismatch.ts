@@ -3,7 +3,7 @@
  * reproduce amountBase (|amount × exchangeRate − amountBase| > 0.01).
  * Does not write. Never prints DATABASE_URL.
  *
- *   pnpm exec tsx scripts/report-transfer-rate-mismatch.ts [--user <userId>]
+ *   pnpm exec tsx scripts/report-transfer-rate-mismatch.ts [--user <userId or email>]
  */
 import { prisma } from "../src/server/lib/prisma";
 
@@ -18,10 +18,21 @@ function num(value: { toString(): string }): number {
   return Number(value.toString());
 }
 
+async function resolveUserId(value: string): Promise<string> {
+  if (!value.includes("@")) return value;
+  const user = await prisma.user.findUnique({
+    where: { email: value },
+    select: { id: true },
+  });
+  if (!user) throw new Error("--user email was not found");
+  return user.id;
+}
+
 async function main() {
   const userFlag = process.argv.indexOf("--user");
-  const userId = userFlag >= 0 ? process.argv[userFlag + 1] : undefined;
-  if (userFlag >= 0 && !userId) throw new Error("--user needs a user id");
+  const userArg = userFlag >= 0 ? process.argv[userFlag + 1] : undefined;
+  if (userFlag >= 0 && !userArg) throw new Error("--user needs a user id or email");
+  const userId = userArg ? await resolveUserId(userArg) : undefined;
 
   const legs = await prisma.ledgerEntry.findMany({
     where: {
@@ -57,9 +68,12 @@ async function main() {
     return Math.abs(amount * rate - amountBase) > TOLERANCE;
   });
 
+  const driftOf = (leg: (typeof mismatched)[number]) =>
+    num(leg.amount) * num(leg.exchangeRate) - num(leg.amountBase);
+  const total = mismatched.reduce((sum, leg) => sum + Math.abs(driftOf(leg)), 0);
   const lines = [
     `${mismatched.length} cross-currency transfer leg(s) where |amount × exchangeRate − amountBase| > ${TOLERANCE}`,
-    "id\tdate\taccount\tamount\trate\tamountBase",
+    "id\tdate\taccount\tamount\trate\tamountBase\tdrift",
     ...mismatched.map((leg) =>
       [
         leg.id,
@@ -68,8 +82,10 @@ async function main() {
         num(leg.amount),
         num(leg.exchangeRate),
         num(leg.amountBase),
+        driftOf(leg).toFixed(4),
       ].join("\t"),
     ),
+    `total\t${total.toFixed(4)}`,
   ];
   process.stdout.write(`${lines.join("\n")}\n`);
 }

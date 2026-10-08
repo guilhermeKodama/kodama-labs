@@ -88,6 +88,9 @@ export const v2Currencies = createRouter()
     const { code } = c.req.valid("param");
     const { date } = c.req.valid("query");
     const fx = await loadFx(userId, prisma);
+    if (code !== fx.baseCurrency && !fx.hasRate(code)) {
+      throw new LedgerError("Currency not found", 404, { code: "currency.not_found" });
+    }
     return { code, date, rate: fx.rateOn(code, parseLocalDate(date)) };
   }))
   .openapi(deleteRouteDef, v2Handler(deleteRouteDef, async (c, userId) => {

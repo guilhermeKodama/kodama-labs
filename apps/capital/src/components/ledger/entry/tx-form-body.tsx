@@ -346,9 +346,27 @@ function InvestBlock({
     ].filter(Boolean);
     return parts.length ? parts.join(" · ") : balance != null ? t("brokerCash", { value: fmt.money0(balance, broker.currency) }) : undefined;
   })();
-  const cashSelect = <Select value={form.cashAccountId} onChange={(cashAccountId) => up({ cashAccountId, rate: "", received: "" })} options={cashOptions} invalid={invalid === "cash"} />;
+  // Create clears the received amount. Edit keeps it when the currency pair
+  // stays, and recomputes it when the pair changes, so Salvar does not fail
+  // on a blank field.
+  const onInvestAccount = (patch: Partial<EntryFormState>) => {
+    if (mode !== "edit") return { ...patch, rate: "", received: "" };
+    const before = investSides(form, ctx);
+    const after = investSides({ ...form, ...patch }, ctx);
+    const samePair =
+      before.from?.currency === after.from?.currency &&
+      before.to?.currency === after.to?.currency;
+    if (samePair) return patch;
+    if (!after.fx.differs) return { ...patch, rate: "", received: "" };
+    const value = typedAmount(form, ctx);
+    const arrived = after.fx.arrives(value, after.fx.defaultRate);
+    if (!Number.isFinite(arrived) || !(arrived > 0))
+      return { ...patch, rate: "", received: "" };
+    return { ...patch, rate: "", received: fmt.number(arrived) };
+  };
+  const cashSelect = <Select value={form.cashAccountId} onChange={(cashAccountId) => up(onInvestAccount({ cashAccountId }))} options={cashOptions} invalid={invalid === "cash"} />;
   const brokerSelect = (
-    <Select value={form.brokerAccountId} onChange={(brokerAccountId) => up({ brokerAccountId, rate: "", received: "", buyHoldingId: "" })} options={brokerOptions} invalid={invalid === "broker"} />
+    <Select value={form.brokerAccountId} onChange={(brokerAccountId) => up(onInvestAccount({ brokerAccountId, buyHoldingId: "" }))} options={brokerOptions} invalid={invalid === "broker"} />
   );
   const holdings = (ctx.holdings ?? []).filter((holding) => holding.accountId === form.brokerAccountId && holding.isActive !== false);
   const buy = buyHolding(form, ctx);
@@ -365,7 +383,7 @@ function InvestBlock({
           { v: "withdraw", l: t("withdraw") },
         ]}
         onChange={(investDir) =>
-          up({ investDir, rate: "", received: "", buyAlso: false })
+          up(onInvestAccount({ investDir, buyAlso: false }))
         }
       />
       <div className="grid grid-cols-[1fr_24px_1fr] items-start gap-2">

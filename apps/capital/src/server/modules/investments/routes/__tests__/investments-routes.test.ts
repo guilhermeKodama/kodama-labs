@@ -369,6 +369,35 @@ describe("cross-currency resgate", () => {
     });
   }
 
+  it("keeps a same-currency withdrawal balanced when toAmount differs", async () => {
+    await json("POST", "/v2/brokerage-cash", {
+      accountId: f.broker,
+      direction: "deposit",
+      amount: 100,
+      date: "2026-09-01",
+      counterpartAccountId: f.pfChecking,
+    });
+    const r = await json("POST", "/v2/brokerage-cash", {
+      accountId: f.broker,
+      direction: "withdraw",
+      amount: 100,
+      toAmount: 90,
+      date: "2026-09-02",
+      counterpartAccountId: f.pfChecking,
+    });
+    const legs = await prisma.ledgerEntry.findMany({
+      where: { transferGroupId: r.transferGroupId },
+    });
+    expect(legs.find((l) => l.accountId === f.broker)!.amount.toFixed(2)).toBe(
+      "-100.00",
+    );
+    expect(
+      legs.find((l) => l.accountId === f.pfChecking)!.amount.toFixed(2),
+    ).toBe("100.00");
+    expect(await balance(f.broker)).toBeCloseTo(0, 2);
+    expect(await balance(f.pfChecking)).toBeCloseTo(0, 2);
+  });
+
   it("records the received BRL on a same-entity withdrawal", async () => {
     const cash = await prisma.account.create({
       data: {

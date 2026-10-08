@@ -358,7 +358,7 @@ export function createCapitalMcpServer(userId: string, db: DbClient, opts: { rea
         "and exchangeRate is the effective base-per-foreign rate; either one leaves the foreign " +
         "amount in place and keeps both legs' base amounts in agreement. Sending amount together " +
         "with toAmount sets the outflow and the inflow. amount alone still scales both legs. " +
-        "A same-currency transfer rejects toAmount and exchangeRate. " +
+        "A same-currency transfer returns 422 when toAmount is set or exchangeRate is not 1. " +
         "The returned amount is signed: a refund or reversal is a negative expense.",
       inputSchema: UpdateTransactionInputSchema,
     },
@@ -762,6 +762,8 @@ export function createCapitalMcpServer(userId: string, db: DbClient, opts: { rea
         "Supports updating type, amount, currency, exchange rate, description, category, " +
         "date, and tax deductible status. Dates are normalized to noon UTC via parseLocalDate. " +
         "Returns per-transaction results. Amounts are signed: a refund or reversal is a negative expense. " +
+        "On a transfer, toAmount and exchangeRate restate a cross-currency pair the same way as update_transaction. " +
+        "A same-currency transfer returns 422 when toAmount is set or exchangeRate is not 1. " +
         "Example: Recategorize 95 transactions after reviewing statement imports.",
       inputSchema: BulkUpdateTransactionsInputSchema,
     },

@@ -720,32 +720,39 @@ export function buildEditPatch(entry: EditableEntry, initial: EntryFormState, fo
           ? ctx.parseNumber(form.received)
           : null;
         const receivedChanged = form.received !== initial.received;
-        if (receivedChanged) {
-          if (
-            receivedRaw == null ||
-            !Number.isFinite(receivedRaw) ||
-            receivedRaw <= 0
-          )
+        const accountsChanged =
+          (!!from && from !== fromBefore) || (!!to && to !== toBefore);
+        const rateChanged = !!form.rate.trim() && form.rate !== initial.rate;
+        const amountChanged = form.amount !== initial.amount;
+        // An account change that cleared a filled received amount used to fail
+        // validation. Recompute what arrives from the amount and the rate.
+        const recomputeReceived =
+          accountsChanged && !form.received.trim() && !!initial.received.trim();
+
+        if (receivedChanged || recomputeReceived) {
+          let next = receivedRaw;
+          if (recomputeReceived) {
+            const rate = typedRate(form.rate, fx.defaultRate, ctx);
+            if (!Number.isFinite(rate))
+              return { ok: false, error: "rate", field: "rate" };
+            next = fx.arrives(amount, rate);
+          }
+          if (next == null || !Number.isFinite(next) || next <= 0)
             return { ok: false, error: "amount", field: "amount" };
-          patch.toAmount = round2(receivedRaw);
-        }
-        if (form.amount !== initial.amount) patch.amount = amount;
-        if (
-          patch.amount !== undefined &&
-          patch.toAmount === undefined &&
-          receivedRaw != null &&
-          receivedRaw > 0
-        )
-          patch.toAmount = round2(receivedRaw);
-        if (
-          !receivedChanged &&
-          form.rate.trim() &&
-          form.rate !== initial.rate
-        ) {
+          patch.toAmount = round2(next);
+          if (amountChanged) patch.amount = amount;
+        } else if (rateChanged) {
+          // Rate change wins over the pre-filled received amount: sending both
+          // makes the server reject the pair as transfer.fx_mismatch.
           const rate = typedRate(form.rate, fx.defaultRate, ctx);
           if (!Number.isFinite(rate))
             return { ok: false, error: "rate", field: "rate" };
           patch.exchangeRate = rate;
+          if (amountChanged) patch.amount = amount;
+        } else if (amountChanged) {
+          patch.amount = amount;
+          if (receivedRaw != null && receivedRaw > 0)
+            patch.toAmount = round2(receivedRaw);
         }
       }
     }

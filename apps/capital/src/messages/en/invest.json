@@ -313,7 +313,7 @@
       "amount": "Amount",
       "amountIn": "Amount ({currency})",
       "received": "Amount received ({currency})",
-      "receivedHint": "Optional. Blank uses the previous business day's PTAX.",
+      "receivedHint": "Optional. Blank uses the day's exchange rate.",
       "rateWarning": "Effective rate {effective} differs from PTAX {ptax}.",
       "from": "From",
       "to": "To",

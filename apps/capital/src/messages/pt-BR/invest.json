@@ -313,7 +313,7 @@
       "amount": "Valor",
       "amountIn": "Valor ({currency})",
       "received": "Valor recebido ({currency})",
-      "receivedHint": "Opcional. Em branco, usa a PTAX do dia útil anterior.",
+      "receivedHint": "Opcional. Em branco, usa a cotação do dia.",
       "rateWarning": "Taxa efetiva {effective} difere da PTAX {ptax}.",
       "from": "De",
       "to": "Para",

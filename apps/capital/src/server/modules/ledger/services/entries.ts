@@ -320,6 +320,8 @@ async function createTransferIn(
       fromRate = from.currency === base ? 1 : derived;
       toRate = to.currency === base ? 1 : derived;
     } else {
+      // A pair with neither leg in the base currency keeps these quoted rates
+      // even when toAmount is set. Restating that pair is out of scope.
       fromRate = quoted(from.currency);
       toRate = quoted(to.currency);
     }
@@ -617,14 +619,16 @@ async function updateTransferIn(tx: DbClient, userId: string, entry: LedgerEntry
       fromRate = fromAccount.currency === base ? 1 : derived;
       toRate = toAccount.currency === base ? 1 : derived;
     } else if (stated != null) {
+      // Cent rounding of the foreign leg can make amount × the typed rate miss
+      // amountBase by more than 0.01. Store the rate the rounded legs imply.
       if (fromAccount.currency === base) {
         destAbs = roundNative(sourceAbs / stated, toAccount.currency);
         fromRate = 1;
-        toRate = round(stated, 8);
+        toRate = destAbs > 0 ? round(sourceAbs / destAbs, 8) : round(stated, 8);
       } else {
         destAbs = roundNative(sourceAbs * stated, toAccount.currency);
-        fromRate = round(stated, 8);
-        toRate = toAccount.currency === base ? 1 : round(stated, 8);
+        fromRate = sourceAbs > 0 ? round(destAbs / sourceAbs, 8) : round(stated, 8);
+        toRate = 1;
       }
     } else fxRequired();
   }
