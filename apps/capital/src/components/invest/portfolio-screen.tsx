@@ -42,6 +42,7 @@ import {
 } from "@/lib/invest/chart-view";
 import {
   filterOps,
+  INCOME_TYPES,
   isIncome,
   monthlyBars,
   opsPeriodRange,
@@ -651,11 +652,43 @@ function OpsView({
   const opLabel = useOpLabel();
   const range = useMonthRange();
   const ops = useOperations({ scope });
+  const summary = usePortfolioSummary(scope);
   const today = todayIn(timezone);
-  const rows = useMemo(
-    () => filterOps(ops.data ?? [], config, today),
-    [ops.data, config, today],
+  const incomeOnly = config.filters.some(
+    (f) => f.field === "type" && f.op === "in" && f.values.length > 0 && f.values.every((v) => (INCOME_TYPES as readonly string[]).includes(v)),
   );
+  const rows = useMemo(() => {
+    const events = (summary.data?.incomeEvents ?? []).map(
+      (row): Operation & { source: "operation" | "ledger" } => ({
+        id: row.id,
+        holdingId: row.holdingId ?? "",
+        ticker: row.ticker,
+        name: row.name,
+        assetClass: null,
+        allocationClass: row.allocationClass,
+        accountId: row.accountId,
+        accountName: null,
+        entityId: row.entityId,
+        currency: row.currency,
+        type: row.type,
+        incomeType: row.incomeType,
+        quantity: row.quantity,
+        pricePerUnit: null,
+        totalAmount: row.totalAmount,
+        fees: 0,
+        taxWithheld: row.taxWithheld,
+        cashAmount: row.totalAmount - row.taxWithheld,
+        date: row.date,
+        notes: null,
+        externalId: null,
+        cashEntryId: null,
+        creditToAccountId: null,
+        fundingGroupId: null,
+        source: row.source,
+      }),
+    );
+    return filterOps(incomeOnly ? events : (ops.data ?? []), config, today) as (Operation & { source?: "operation" | "ledger" })[];
+  }, [ops.data, summary.data, config, today, incomeOnly]);
   const [editing, setEditing] = useState<Operation | null>(null);
   const remove = useAppMutation({
     event: "investments.write",
@@ -717,7 +750,7 @@ function OpsView({
   }
 
   const grid = "64px minmax(0,2fr) 120px 90px 120px 28px";
-  const incomeOnly = rows.length > 0 && rows.every(isIncome);
+  const incomeTable = rows.length > 0 && rows.every(isIncome);
   return (
     <div className="overflow-hidden rounded-[8px] border border-stroke-3">
       <div
@@ -766,6 +799,9 @@ function OpsView({
               op.currency,
             )}
           </span>
+          {op.source === "ledger" ? (
+            <span />
+          ) : (
           <Menu
             trigger={
               <button
@@ -786,18 +822,19 @@ function OpsView({
               onSelect={() => remove.mutate(op)}
             />
           </Menu>
+          )}
         </div>
       ))}
       {!rows.length ? (
         <EmptyRow>
-          {ops.isLoading
+          {ops.isLoading || (incomeOnly && summary.isLoading)
             ? ti("loading")
             : config.filters.some((f) => f.field === "type")
               ? t("emptyIncome")
               : t("empty")}
         </EmptyRow>
       ) : null}
-      {incomeOnly ? (
+      {incomeTable ? (
         <div className="flex h-(--cap-row-h) items-center border-t border-stroke-1 bg-fill-4 px-3 text-body-sm font-semibold">
           <span>{t("total")}</span>
           <span className={cn(MONO, "ml-auto")}>

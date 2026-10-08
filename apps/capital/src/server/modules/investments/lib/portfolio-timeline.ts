@@ -16,11 +16,14 @@ import { marketValue } from "./holding-value";
  * - a brokerage account's initial balance, when the account opens (its
  *   creation or its first entry, whichever is earlier);
  * - positions registered without cash: an operation with no cash leg (or a
- *   trashed one) brings its cost in (a buy, an adjustment) or takes its
- *   proceeds out (a sale); a holding with no operations at all brings its
- *   cost basis in on the day it was created, as a "posição inicial" (kept
- *   apart in `initialPositions`, so the chart does not read it as an
- *   aporte of that month);
+ *   trashed one) brings its cost in (a buy) or takes its proceeds out (a
+ *   sale). The holding's first operation, when it is a buy or deposit, is a
+ *   "posição inicial", same as a holding with no operations at all and the
+ *   same rule contributions.ts uses (kept apart in `initialPositions`, so
+ *   the chart does not read it as an aporte of that month). A later buy
+ *   after a full sale is a new aporte at the rate on that day. An adjustment
+ *   with no cash leg is return: it changes the position and does not move
+ *   contributed or the month's external flow;
  * - an operation whose cash leg is on a bank account (income credited to
  *   the bank): the money leaves the portfolio;
  * - a deactivated holding ("removed" from the portfolio, `removedAt`): what
@@ -37,9 +40,13 @@ import { marketValue } from "./holding-value";
  * netFlow, used by Modified Dietz, includes income paid out as well, so a
  * dividend credited to the bank still counts as return.
  *
- * Amounts in a foreign currency are converted at today's rates (rateFor),
- * except transfer legs, which keep the amountBase fixed when they were
- * written. Month ends are UTC (dates are stored at noon UTC).
+ * Live cash, cost basis and market value convert at today's rate (rateFor).
+ * Opening cash and opening lots convert at the rate on the account's
+ * openedAt (rateOn: the previous business day's close, or today's rate when
+ * that day was never stored). A later position registered without cash
+ * converts at the rate on the operation's date. Transfer legs keep the
+ * amountBase fixed when they were written. Month ends are UTC (dates are
+ * stored at noon UTC).
  */
 
 export interface TimelineAccount {
@@ -81,6 +88,12 @@ export interface TimelineHolding {
   currentQuantity: number;
   currentPrice: number | null;
   totalInvested: number;
+  /**
+   * When the brokerage opened (its creation or its first entry, whichever
+   * is earlier). Opening lots use the rate on this day, the same rule as
+   * opening cash. Defaults to createdAt.
+   */
+  openedAt?: Date;
   /** Oldest first. */
   operations: TimelineOperation[];
   /**
@@ -94,8 +107,13 @@ export interface TimelineInput {
   accounts: TimelineAccount[];
   entries: TimelineEntry[];
   holdings: TimelineHolding[];
-  /** Base-currency units per unit of `currency`. */
+  /** Base-currency units per unit of `currency`, today. Live cash, cost and market value. */
   rateFor(currency: string): number;
+  /**
+   * Base-currency units per unit of `currency` on `date`. Opening cash,
+   * opening lots and later no-cash flows. Defaults to rateFor.
+   */
+  rateOn?(currency: string, date: Date): number;
 }
 
 // ---------------------------------------------------------------------------
@@ -194,22 +212,36 @@ export interface HoldingsValue {
 
 const EPS = 1e-9;
 
-function holdingFlows(h: TimelineHolding, rate: number): { flows: Flow[]; events: PositionEvent[] } {
-  const { flows, events } = heldFlows(h, rate);
+function rateOn(input: TimelineInput, currency: string, date: Date): number {
+  return input.rateOn?.(currency, date) ?? input.rateFor(currency);
+}
+
+function openedAtOf(h: TimelineHolding): Date {
+  return h.openedAt ?? h.createdAt;
+}
+
+function holdingFlows(h: TimelineHolding, input: TimelineInput): { flows: Flow[]; events: PositionEvent[] } {
+  const { flows, events } = heldFlows(h, input);
   if (!h.removedAt) return { flows, events };
   // Deactivated: what is left goes out at cost, on the day it was removed (never before its last event).
   const last = events.at(-1);
   const date = last && last.date > h.removedAt ? last.date : h.removedAt;
   const cost = last?.cost ?? 0;
-  if (cost > EPS) flows.push({ date, contributed: -cost * rate, external: -cost * rate, ...(!h.operations.length && { initial: true }) });
+  // An opening lot booked at the open-date rate leaves at that same rate, so taking it out cancels what came in.
+  const initialOnly = flows.length > 0 && flows.every((f) => f.initial);
+  if (cost > EPS) {
+    const base = cost * rateOn(input, h.currency, initialOnly ? openedAtOf(h) : date);
+    flows.push({ date, contributed: -base, external: -base, ...(initialOnly && { initial: true }) });
+  }
   events.push({ date, quantity: 0, cost: 0 });
   return { flows, events };
 }
 
-function heldFlows(h: TimelineHolding, rate: number): { flows: Flow[]; events: PositionEvent[] } {
+function heldFlows(h: TimelineHolding, input: TimelineInput): { flows: Flow[]; events: PositionEvent[] } {
+  const openRate = rateOn(input, h.currency, openedAtOf(h));
   if (!h.operations.length) {
-    // Entered directly (MCP, legacy import): its cost basis came in when it was created.
-    const flows: Flow[] = h.totalInvested ? [{ date: h.createdAt, contributed: h.totalInvested * rate, external: h.totalInvested * rate, initial: true }] : [];
+    // Entered directly (MCP, legacy import): its cost basis came in when it was created, at the account's opening rate.
+    const flows: Flow[] = h.totalInvested ? [{ date: h.createdAt, contributed: h.totalInvested * openRate, external: h.totalInvested * openRate, initial: true }] : [];
     return { flows, events: [{ date: h.createdAt, quantity: h.currentQuantity, cost: h.totalInvested }] };
   }
   const flows: Flow[] = [];
@@ -222,11 +254,16 @@ function heldFlows(h: TimelineHolding, rate: number): { flows: Flow[]; events: P
     if (op.cash === "outside") {
       const income = op.type === "dividend" || op.type === "yield_payment";
       flows.push({ date: op.date, contributed: income ? 0 : -op.outsideAmountBase, external: -op.outsideAmountBase });
-    } else if (op.cash === "none") {
+    } else if (op.cash === "none" && op.type !== "adjustment") {
+      // First operation of the holding, oldest first. A re-buy after a full sale is not an opening lot.
+      const opening = i === 0 && (op.type === "buy" || op.type === "deposit");
       let amount = 0;
-      if (op.type === "buy" || op.type === "deposit" || op.type === "adjustment") amount = after.cost - before.cost;
+      if (op.type === "buy" || op.type === "deposit") amount = after.cost - before.cost;
       else if (op.type === "sell" || op.type === "withdrawal") amount = -(after.realizedGain - before.realizedGain + (before.cost - after.cost));
-      if (Math.abs(amount) > EPS) flows.push({ date: op.date, contributed: amount * rate, external: amount * rate });
+      if (Math.abs(amount) > EPS) {
+        const rate = opening ? openRate : rateOn(input, h.currency, op.date);
+        flows.push({ date: op.date, contributed: amount * rate, external: amount * rate, ...(opening && { initial: true }) });
+      }
     }
     before = after;
   }
@@ -260,7 +297,7 @@ export function buildTimeline(input: TimelineInput): PortfolioTimeline {
   for (const a of input.accounts) {
     if (!flowsByEntity.has(a.entityId)) flowsByEntity.set(a.entityId, []);
     if (a.initialBalance) {
-      const base = a.initialBalance * input.rateFor(a.currency);
+      const base = a.initialBalance * rateOn(input, a.currency, a.openedAt);
       addFlow(a.entityId, { date: a.openedAt, contributed: base, external: base });
       touch(a.entityId, a.openedAt);
     }
@@ -278,7 +315,7 @@ export function buildTimeline(input: TimelineInput): PortfolioTimeline {
   const eventsByHolding = new Map<string, PositionEvent[]>();
   for (const h of input.holdings) {
     if (!flowsByEntity.has(h.entityId)) flowsByEntity.set(h.entityId, []);
-    const { flows, events } = holdingFlows(h, input.rateFor(h.currency));
+    const { flows, events } = holdingFlows(h, input);
     for (const f of flows) addFlow(h.entityId, f);
     eventsByHolding.set(h.id, events);
     if (events[0]) touch(h.entityId, events[0].date);

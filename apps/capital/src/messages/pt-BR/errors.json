@@ -56,6 +56,7 @@
   },
   "transfer": {
     "same_account": "Uma transferência precisa de duas contas diferentes.",
+    "fx_required": "Uma transferência entre moedas diferentes precisa da cotação.",
     "from_account_not_found": "Conta de origem não encontrada.",
     "to_account_not_found": "Conta de destino não encontrada.",
     "kind_change": "Uma transferência não muda de tipo. Exclua e crie de novo."

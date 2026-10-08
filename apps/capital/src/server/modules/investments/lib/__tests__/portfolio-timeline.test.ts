@@ -190,6 +190,82 @@ describe("buildTimeline", () => {
     expect(t.state("pf", 202603)).toMatchObject({ cash: 700, contributed: 500, netFlow: 0, positions: [] });
   });
 
+  it("values opening cash and an opening lot at the rate on openedAt, and leaves a no-cash adjustment out of contributed", () => {
+    const t = buildTimeline(
+      input({
+        rateFor: () => 6,
+        rateOn: (_currency, date) => (date.toISOString().slice(0, 10) < "2026-08-01" ? 5 : 5.5),
+        accounts: [{ id: "av", entityId: "pf", currency: "USD", initialBalance: 100, openedAt: d("2026-02-08") }],
+        holdings: [
+          holding({
+            id: "btc",
+            currency: "USD",
+            assetClass: "crypto",
+            allocationClass: "crypto",
+            openedAt: d("2026-02-08"),
+            operations: [
+              op("b", "2026-03-01", { type: "buy", quantity: 1, pricePerUnit: 50, totalAmount: 50, cash: "none" }),
+              op("a", "2026-04-01", { type: "adjustment", quantity: 1, pricePerUnit: 80, totalAmount: 80, cash: "none" }),
+              op("b2", "2026-09-01", { type: "buy", quantity: 1, pricePerUnit: 10, totalAmount: 10, cash: "none" }),
+            ],
+          }),
+        ],
+      })
+    );
+    // 100 USD of opening cash at 5, while the cash on hand is marked at today's 6.
+    expect(t.state("pf", 202602)).toMatchObject({ contributed: 500, cash: 600 });
+    // The first no-cash buy is an opening lot at the same rate (50 * 5). The adjustment resets the lot and adds nothing.
+    const apr = t.state("pf", 202604);
+    expect(apr).toMatchObject({ contributed: 750, initialPositions: 250, costBasis: 480 });
+    // The later no-cash buy uses the September rate, 10 * 5.5.
+    expect(t.state("pf", 202609).contributed).toBe(805);
+  });
+
+  it("counts only the holding's first operation as an opening lot", () => {
+    const t = buildTimeline(
+      input({
+        rateFor: () => 6,
+        rateOn: (_currency, date) => (date.toISOString().slice(0, 10) < "2026-06-01" ? 5 : 6),
+        accounts: [{ id: "av", entityId: "pf", currency: "USD", initialBalance: 0, openedAt: d("2026-02-08") }],
+        holdings: [
+          holding({
+            id: "btc",
+            currency: "USD",
+            openedAt: d("2026-02-08"),
+            operations: [
+              op("b", "2026-03-01", { type: "buy", quantity: 1, pricePerUnit: 10, totalAmount: 10, cash: "none" }),
+              op("s", "2026-04-01", { type: "sell", quantity: 1, pricePerUnit: 10, totalAmount: 10, cash: "none" }),
+              op("b2", "2026-09-01", { type: "buy", quantity: 1, pricePerUnit: 10, totalAmount: 10, cash: "none" }),
+            ],
+          }),
+        ],
+      })
+    );
+    const sep = t.state("pf", 202609);
+    // The March lot comes in at 5 and leaves in April at 5. The September re-buy is not an opening lot, so it uses 6.
+    expect(sep.initialPositions).toBe(50);
+    expect(sep.contributed).toBe(60);
+  });
+
+  it("does not count an amount-only adjustment as an aporte", () => {
+    const t = buildTimeline(
+      input({
+        holdings: [
+          holding({
+            id: "box",
+            assetClass: "fixed_income",
+            allocationClass: "fixed_income",
+            operations: [
+              op("b", "2026-01-02", { type: "buy", totalAmount: 1000, cash: "none" }),
+              op("a", "2026-03-02", { type: "adjustment", totalAmount: 50, cash: "none" }),
+            ],
+          }),
+        ],
+      })
+    );
+    expect(t.state("pf", 202603)).toMatchObject({ contributed: 1000, costBasis: 1050, netFlow: 0 });
+  });
+
   it("keeps amount-based fixed income at its cost when it has no price", () => {
     const t = buildTimeline(
       input({

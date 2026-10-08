@@ -10,6 +10,13 @@ export interface PositionOperation {
   pricePerUnit: number | null;
   totalAmount: number;
   fees: number;
+  /**
+   * Priced adjustments only. `absolute` (and null) replace the position with
+   * the quantity and price. `delta` adds the quantity and scales the cost so
+   * the average stays. New adjusts write absolute; a later migration marks
+   * legacy deltas.
+   */
+  adjustmentMode?: "delta" | "absolute" | null;
 }
 
 export interface Position {
@@ -37,8 +44,10 @@ const EPS = 1e-9;
  *   reported in `oversold`. Without a quantity (amount-based assets such as
  *   fixed income) it takes the amount out of the cost basis.
  * - A split changes the quantity only.
- * - An adjustment carrying quantity and price resets the position (to zero
- *   closes it); one with an amount only moves the cost basis.
+ * - An adjustment carrying quantity and price resets the position when its
+ *   mode is absolute or unset (to zero closes it). Mode delta adds the
+ *   quantity and scales the cost so the average is unchanged. One with an
+ *   amount only moves the cost basis.
  */
 export function replayPosition(ops: readonly PositionOperation[]): Position {
   let qty = 0;
@@ -88,7 +97,12 @@ export function replayPosition(ops: readonly PositionOperation[]): Position {
         qty += q;
         break;
       case "adjustment":
-        if (op.quantity !== null && op.pricePerUnit !== null) {
+        if (op.adjustmentMode === "delta" && op.quantity !== null) {
+          const next = Math.max(0, qty + q);
+          cost = qty > EPS ? cost * (next / qty) : 0;
+          qty = next;
+          closed = qty <= EPS && cost <= EPS;
+        } else if (op.quantity !== null && op.pricePerUnit !== null) {
           qty = Math.max(0, q);
           cost = qty * p;
           closed = qty <= EPS;

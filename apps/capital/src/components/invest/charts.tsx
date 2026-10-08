@@ -169,16 +169,53 @@ export function NetWorthChart({
   );
 }
 
-/** "Aportes por mês e classe": stacked bars in thousands with the goal line. */
+/** Net new money each month, in thousands. A resgate month is a bar below zero. */
 export function ContributionsChart({
   rows,
-  classes,
   goal,
   height = 200,
 }: {
+  rows: { label: string; net: number }[];
+  goal: number | null;
+  height?: number;
+}) {
+  const t = useTranslations("invest.contrib.chart");
+  const fmt = useFmt();
+  const data = rows.map((r) => ({ label: r.label, net: fmt.thousands(r.net) }));
+  return (
+    <div className="flex flex-col gap-1.5">
+      <div style={{ height }}>
+        <ResponsiveContainer width="100%" height="100%">
+          <BarChart data={data} margin={{ top: 10, right: 4, left: 0, bottom: 0 }}>
+            <CartesianGrid stroke={CHART.grid} vertical={false} />
+            <XAxis dataKey="label" tick={CHART_AXIS.tick} stroke={CHART_AXIS.stroke} tickLine={false} />
+            <YAxis tick={CHART_AXIS.tick} stroke={CHART_AXIS.stroke} tickLine={false} axisLine={false} width={40} tickFormatter={(v) => `${fmt.number(Number(v), 0)}k`} />
+            <Tooltip contentStyle={TOOLTIP_STYLE} formatter={(v) => [`${fmt.number(Number(v), { min: 0, max: 1 })}k`, t("net")]} />
+            <ReferenceLine y={0} stroke={CHART.axis} />
+            <Bar dataKey="net" fill={CHART.bar} isAnimationActive={false} />
+            {goal !== null && goal > 0 ? (
+              <ReferenceLine
+                y={fmt.thousands(goal)}
+                stroke={CHART.warn}
+                strokeDasharray="4 3"
+                label={{ value: t("goal"), position: "right", fontSize: textRole("caption"), fill: "var(--cap-chart-warn)" }}
+              />
+            ) : null}
+          </BarChart>
+        </ResponsiveContainer>
+      </div>
+    </div>
+  );
+}
+
+/** "Compras": purchases of the month by class, in thousands. */
+export function PurchasesChart({
+  rows,
+  classes,
+  height = 160,
+}: {
   rows: { label: string; values: Partial<Record<AllocationClass, number>> }[];
   classes: AllocationClass[];
-  goal: number | null;
   height?: number;
 }) {
   const ti = useTranslations("invest");
@@ -228,19 +265,6 @@ export function ContributionsChart({
                 isAnimationActive={false}
               />
             ))}
-            {goal !== null && goal > 0 ? (
-              <ReferenceLine
-                y={fmt.thousands(goal)}
-                stroke={CHART.warn}
-                strokeDasharray="4 3"
-                label={{
-                  value: ti("contrib.chart.goal"),
-                  position: "right",
-                  fontSize: textRole("caption"),
-                  fill: "var(--cap-chart-warn)",
-                }}
-              />
-            ) : null}
           </BarChart>
         </ResponsiveContainer>
       </div>

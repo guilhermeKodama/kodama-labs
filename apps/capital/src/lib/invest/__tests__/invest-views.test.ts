@@ -5,6 +5,7 @@ import {
   clampEnd,
   compactAmount,
   contributionSeries,
+  purchaseSeries,
   goalStatus,
   historyRows,
   originLabel,
@@ -297,8 +298,10 @@ describe("contributions view", () => {
     expect(originParts([origin({ description: "A", amount: -100 }), origin({ description: "B", amount: -900 })])).toEqual({ deposits: null, withdrawals: "B + A" });
   });
 
-  it("stacks the classes with money in the window", () => {
-    const s = contributionSeries([month("2026-08", 1, [], { br_stocks: 3000, cash: 0 }), month("2026-09", 1, [], { fixed_income: 2000 })]);
+  it("plots net new money, and keeps purchases by class apart", () => {
+    const months = [month("2026-08", -500, [], { br_stocks: 3000, cash: 0 }), month("2026-09", 2000, [], { fixed_income: 2000 })];
+    expect(contributionSeries(months).rows.map((r) => r.net)).toEqual([-500, 2000]);
+    const s = purchaseSeries(months);
     expect(s.classes).toEqual(["fixed_income", "br_stocks"]);
     expect(s.rows[0].values).toEqual({ fixed_income: 0, br_stocks: 3000 });
   });

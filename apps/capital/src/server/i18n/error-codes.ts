@@ -57,6 +57,7 @@ export const ERROR_CODES = {
   "entry.kind_locked": "The type of an investment operation's cash cannot change; edit the operation instead",
   "entry.not_transfer": "Only a transfer has a source and a destination account",
   "transfer.same_account": "A transfer needs two different accounts",
+  "transfer.fx_required": "A transfer between different currencies needs an exchange rate",
   "transfer.from_account_not_found": "Source account not found",
   "transfer.to_account_not_found": "Destination account not found",
   "transfer.kind_change": "A transfer cannot change type; delete it and create it again",

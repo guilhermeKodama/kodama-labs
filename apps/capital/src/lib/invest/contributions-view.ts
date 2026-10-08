@@ -37,8 +37,13 @@ export interface StackedMonth {
   values: Partial<Record<AllocationClass, number>>;
 }
 
-/** Series of the "Aportes por mês e classe" chart: classes with money in the window, in display order. */
-export function contributionSeries(months: readonly ContributionMonth[]): { classes: AllocationClass[]; rows: StackedMonth[] } {
+/** Series of the aportes chart: net new money each month (negative when resgates win). */
+export function contributionSeries(months: readonly ContributionMonth[]): { rows: { period: string; net: number }[] } {
+  return { rows: months.map((m) => ({ period: m.period, net: m.net })) };
+}
+
+/** Purchases of the month by class ("Compras"), not derived from the net. */
+export function purchaseSeries(months: readonly ContributionMonth[]): { classes: AllocationClass[]; rows: StackedMonth[] } {
   const classes = ALLOCATION_CLASSES.filter((cls) => months.some((m) => (m.byAllocationClass[cls] ?? 0) > 0.005));
   const rows = months.map((m) => ({
     period: m.period,
@@ -128,7 +133,7 @@ export function historyRows(months: readonly ContributionMonth[], goal: number |
       net: m.net,
       origins: originParts(m.origins),
       status: goalStatus(m.net, goal),
-      transferGroupIds: [...new Set(m.origins.flatMap((o) => (o.sourceTransferGroupId ? [o.transferGroupId, o.sourceTransferGroupId] : [o.transferGroupId])))],
+      transferGroupIds: [...new Set(m.origins.filter((o) => !o.standalone).flatMap((o) => (o.sourceTransferGroupId ? [o.transferGroupId, o.sourceTransferGroupId] : [o.transferGroupId])))],
     }))
     .reverse();
 }

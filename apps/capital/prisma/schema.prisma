@@ -120,6 +120,13 @@ enum InvestmentTransactionType {
   adjustment
 }
 
+// How a priced adjustment changes the position. Null means absolute: the
+// quantity and price replace what is held (what adjust_position writes).
+enum AdjustmentMode {
+  delta
+  absolute
+}
+
 enum AttachmentKind {
   BILL
   RECEIPT
@@ -813,6 +820,9 @@ model InvestmentOperation {
   taxWithheld    Float                     @default(0)
   date           DateTime
   notes          String?
+  // Null means absolute (the quantity replaces the position). Legacy rows
+  // that were deltas are marked delta by a later data migration.
+  adjustmentMode AdjustmentMode?
   // Dedup key for statement imports. Native broker id when available;
   // otherwise a deterministic hash (see agent knowledge base
   // 20-dedup-rules.md) so re-uploading the same statement reconciles
@@ -913,6 +923,19 @@ model Currency {
   @@unique([userId, code])
   @@index([userId])
   @@map("currencies")
+}
+
+// One BRL-per-unit close per currency and day (PTAX Fechamento). The cron
+// appends new days. A missing day falls back to today's rate.
+model CurrencyRateDay {
+  code       String
+  date       DateTime @db.Date
+  brlPerUnit Decimal  @db.Decimal(18, 8)
+  source     String   @default("ptax")
+  createdAt  DateTime @default(now())
+
+  @@id([code, date])
+  @@map("currency_rate_days")
 }
 
 // ============================================

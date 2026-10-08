@@ -197,6 +197,10 @@ async function createSimpleIn(
   return { entryIds, transferGroupId: null };
 }
 
+function fxRequired(): never {
+  throw new LedgerError("A transfer between different currencies needs an exchange rate", 422, { code: "transfer.fx_required" });
+}
+
 function shiftMonth(month: string, by: number): string {
   const [y, m] = month.split("-").map(Number);
   const d = new Date(Date.UTC(y, m - 1 + by, 1));
@@ -223,22 +227,56 @@ async function createTransferIn(
 
   const direction = input.direction ?? inferDirection(from, to);
   const legKind: LedgerKind = direction === "reimbursement" ? "expense" : "transfer";
-  const currency = input.currency ?? from.currency;
-  const rate = input.exchangeRate ?? fx.rateFor(currency);
   const date = parseLocalDate(input.date);
-  const fromAmount = round(-input.amount, 4);
-  const fromBase = round(fromAmount * rate, 4);
-
-  // The destination leg mirrors the source in base currency so the group nets to zero.
-  let toCurrency = currency;
-  let toAmount = input.amount;
-  let toRate = rate;
-  if (to.currency !== currency && (input.toAmount || fx.rateFor(to.currency) !== rate)) {
-    toCurrency = to.currency;
-    toAmount = input.toAmount ?? round(-fromBase / fx.rateFor(to.currency), 2);
-    toRate = toAmount ? -fromBase / toAmount : 1;
-  }
   const description = input.description ?? defaultTransferDescription(await loadUserLocale(userId, tx), direction, from, to);
+  // Each leg is booked in its account's currency. The stated amount applies to
+  // the account that uses that currency; the other leg is converted. Across
+  // currencies a caller rate of exactly 1 is not a rate (imports send it): the
+  // conversion uses the rate on the transfer's date. A positive rate other
+  // than 1 is the caller's rate. The base-currency leg is the anchor: rate 1
+  // and amountBase equal to its amount. The other leg's amountBase is the
+  // negation, so rounding stays off the base currency.
+  const amountCurrency = input.currency ?? from.currency;
+  const fromCurrency = from.currency;
+  const toCurrency = to.currency;
+  let fromAmount: number;
+  let toAmount: number;
+  let fromRate: number;
+  let toRate: number;
+  if (from.currency === to.currency) {
+    if (amountCurrency !== from.currency) throw new LedgerError("A transfer between different currencies needs an exchange rate", 422, { code: "transfer.fx_required" });
+    fromRate = input.exchangeRate && input.exchangeRate > 0 ? input.exchangeRate : fx.rateFor(from.currency);
+    fromAmount = round(-input.amount, 4);
+    toAmount = round(input.toAmount ?? input.amount, 4);
+    toRate = toAmount ? (-fromAmount * fromRate) / toAmount : fromRate;
+  } else if (amountCurrency !== from.currency && amountCurrency !== to.currency) {
+    throw new LedgerError("A transfer between different currencies needs an exchange rate", 422, { code: "transfer.fx_required" });
+  } else {
+    const stated = input.exchangeRate != null && input.exchangeRate > 0 && input.exchangeRate !== 1 ? input.exchangeRate : null;
+    const base = fx.baseCurrency;
+    const oneBase = from.currency === base || to.currency === base;
+    const quoted = (currency: string) => {
+      if (currency === base) return 1;
+      if (stated != null && oneBase) return stated;
+      if (!fx.hasRate(currency)) fxRequired();
+      return fx.rateOn(currency, date);
+    };
+    const across = (amount: number, fromCode: string, toCode: string) => {
+      const perTo = quoted(toCode);
+      if (!(perTo > 0)) fxRequired();
+      return round((amount * quoted(fromCode)) / perTo, 4);
+    };
+    if (amountCurrency === from.currency) {
+      fromAmount = round(-input.amount, 4);
+      toAmount = input.toAmount && input.toAmount > 0 ? round(input.toAmount, 4) : across(input.amount, from.currency, to.currency);
+    } else {
+      toAmount = round(input.toAmount ?? input.amount, 4);
+      fromAmount = round(-across(Math.abs(toAmount), to.currency, from.currency), 4);
+    }
+    fromRate = quoted(from.currency);
+    toRate = quoted(to.currency);
+  }
+  const fromBase = from.currency === fx.baseCurrency ? fromAmount : to.currency === fx.baseCurrency ? round(-toAmount, 4) : round(fromAmount * fromRate, 4);
 
   const group = await tx.transferGroup.create({
     data: {
@@ -259,8 +297,8 @@ async function createTransferIn(
       accountId: from.id,
       kind: legKind,
       amount: fromAmount,
-      currency,
-      exchangeRate: rate,
+      currency: fromCurrency,
+      exchangeRate: round(fromRate, 8),
       amountBase: fromBase,
       date,
       effectiveDate: date,
@@ -520,6 +558,7 @@ async function updateTransferIn(tx: DbClient, userId: string, entry: LedgerEntry
       }
     }
     if (moved.has(leg.id) && target.currency !== leg.currency) {
+      if (!fx.hasRate(target.currency)) throw new LedgerError("A transfer between different currencies needs an exchange rate", 422, { code: "transfer.fx_required" });
       currency = target.currency;
       exchangeRate = fx.rateFor(currency);
       amount = round(amountBase / exchangeRate, 4);

@@ -30,6 +30,7 @@ import {
   alternativeContribution,
   clampEnd,
   contributionSeries,
+  purchaseSeries,
   currentMonth,
   historyRows,
   parseMonth,
@@ -46,7 +47,7 @@ import type { ViewDraft } from "@/lib/ledger/view-draft";
 import { buildTransactionsHref } from "@/lib/ledger/view-draft";
 import { cn } from "@/lib/utils";
 import { AllContributions } from "./all-contributions";
-import { ContributionsChart } from "./charts";
+import { ContributionsChart, PurchasesChart } from "./charts";
 import {
   MONO,
   useCompactMoney,
@@ -116,6 +117,7 @@ export function ContributionsScreen() {
   const last = months.at(-1);
   const savings = savingsRateKpi(data?.savingsRate.rate);
   const series = contributionSeries(months);
+  const purchases = purchaseSeries(months);
   const history = historyRows(months, goal);
   const year = parseMonth(end).year;
 
@@ -261,13 +263,12 @@ export function ContributionsScreen() {
           <div className="grid items-start gap-3 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)]">
             <Panel title={t("chart.title")}>
               <div className="flex flex-col gap-2">
-                {series.classes.length ? (
+                {series.rows.some((r) => Math.abs(r.net) > 0.005) ? (
                   <ContributionsChart
                     rows={series.rows.map((r) => ({
                       label: fmt.monthAbbr(Number(r.period.slice(5, 7))),
-                      values: r.values,
+                      net: r.net,
                     }))}
-                    classes={series.classes}
                     goal={goal}
                   />
                 ) : (
@@ -275,6 +276,18 @@ export function ContributionsScreen() {
                     {flows.isLoading ? ti("loading") : t("chart.empty")}
                   </p>
                 )}
+                {purchases.classes.length ? (
+                  <div className="flex flex-col gap-1.5 border-t border-stroke-3 pt-2">
+                    <span className="text-caption text-fg-3">{t("chart.purchases")}</span>
+                    <PurchasesChart
+                      rows={purchases.rows.map((r) => ({
+                        label: fmt.monthAbbr(Number(r.period.slice(5, 7))),
+                        values: r.values,
+                      }))}
+                      classes={purchases.classes}
+                    />
+                  </div>
+                ) : null}
                 <span className="text-caption text-fg-4">
                   {t("chart.caption", {
                     unit: fmt.kUnit(cur),
