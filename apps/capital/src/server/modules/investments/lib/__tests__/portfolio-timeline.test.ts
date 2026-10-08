@@ -221,6 +221,32 @@ describe("buildTimeline", () => {
     expect(t.state("pf", 202609).contributed).toBe(805);
   });
 
+  it("counts only the holding's first operation as an opening lot", () => {
+    const t = buildTimeline(
+      input({
+        rateFor: () => 6,
+        rateOn: (_currency, date) => (date.toISOString().slice(0, 10) < "2026-06-01" ? 5 : 6),
+        accounts: [{ id: "av", entityId: "pf", currency: "USD", initialBalance: 0, openedAt: d("2026-02-08") }],
+        holdings: [
+          holding({
+            id: "btc",
+            currency: "USD",
+            openedAt: d("2026-02-08"),
+            operations: [
+              op("b", "2026-03-01", { type: "buy", quantity: 1, pricePerUnit: 10, totalAmount: 10, cash: "none" }),
+              op("s", "2026-04-01", { type: "sell", quantity: 1, pricePerUnit: 10, totalAmount: 10, cash: "none" }),
+              op("b2", "2026-09-01", { type: "buy", quantity: 1, pricePerUnit: 10, totalAmount: 10, cash: "none" }),
+            ],
+          }),
+        ],
+      })
+    );
+    const sep = t.state("pf", 202609);
+    // The March lot comes in at 5 and leaves in April at 5. The September re-buy is not an opening lot, so it uses 6.
+    expect(sep.initialPositions).toBe(50);
+    expect(sep.contributed).toBe(60);
+  });
+
   it("does not count an amount-only adjustment as an aporte", () => {
     const t = buildTimeline(
       input({

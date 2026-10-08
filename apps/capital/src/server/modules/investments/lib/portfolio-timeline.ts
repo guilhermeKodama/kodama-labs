@@ -17,11 +17,13 @@ import { marketValue } from "./holding-value";
  *   creation or its first entry, whichever is earlier);
  * - positions registered without cash: an operation with no cash leg (or a
  *   trashed one) brings its cost in (a buy) or takes its proceeds out (a
- *   sale). The first of those buys, on a flat position, is a "posição
- *   inicial", same as a holding with no operations at all (kept apart in
- *   `initialPositions`, so the chart does not read it as an aporte of that
- *   month). An adjustment with no cash leg is return: it changes the
- *   position and does not move contributed or the month's external flow;
+ *   sale). The holding's first operation, when it is a buy or deposit, is a
+ *   "posição inicial", same as a holding with no operations at all and the
+ *   same rule contributions.ts uses (kept apart in `initialPositions`, so
+ *   the chart does not read it as an aporte of that month). A later buy
+ *   after a full sale is a new aporte at the rate on that day. An adjustment
+ *   with no cash leg is return: it changes the position and does not move
+ *   contributed or the month's external flow;
  * - an operation whose cash leg is on a bank account (income credited to
  *   the bank): the money leaves the portfolio;
  * - a deactivated holding ("removed" from the portfolio, `removedAt`): what
@@ -253,7 +255,8 @@ function heldFlows(h: TimelineHolding, input: TimelineInput): { flows: Flow[]; e
       const income = op.type === "dividend" || op.type === "yield_payment";
       flows.push({ date: op.date, contributed: income ? 0 : -op.outsideAmountBase, external: -op.outsideAmountBase });
     } else if (op.cash === "none" && op.type !== "adjustment") {
-      const opening = before.quantity <= EPS && before.cost <= EPS && (op.type === "buy" || op.type === "deposit");
+      // First operation of the holding, oldest first. A re-buy after a full sale is not an opening lot.
+      const opening = i === 0 && (op.type === "buy" || op.type === "deposit");
       let amount = 0;
       if (op.type === "buy" || op.type === "deposit") amount = after.cost - before.cost;
       else if (op.type === "sell" || op.type === "withdrawal") amount = -(after.realizedGain - before.realizedGain + (before.cost - after.cost));

@@ -1,7 +1,7 @@
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { prisma } from "@capital/server/lib/prisma";
 import { createLedgerFixture, deleteLedgerFixture, type LedgerFixture } from "@/test/ledger-fixtures";
-import { toNumber } from "../../lib/money";
+import { round, toNumber } from "../../lib/money";
 import {
   bulkUpdateEntries,
   createEntry,
@@ -76,7 +76,7 @@ describe("createEntry", () => {
     expect(legs.every((l) => l.kind === "expense")).toBe(true);
   });
 
-  it("books a statement amount in the other account's currency instead of 1:1", async () => {
+  it("ignores a cross-currency rate of 1 and converts at the rate on the date", async () => {
     const usd = await prisma.account.create({ data: { userId: USER, entityId: f.pfId, type: "brokerage", name: "Avenue", currency: "USD" } });
     const r = await createEntry(
       USER,
@@ -86,12 +86,34 @@ describe("createEntry", () => {
     const legs = await prisma.ledgerEntry.findMany({ where: { transferGroupId: r.transferGroupId! } });
     const broker = legs.find((l) => l.accountId === usd.id)!;
     const bank = legs.find((l) => l.accountId === f.pfChecking)!;
+    const dated = 5.1285; // 2026-08-11 PTAX, the close before 2026-08-12. Today's fixture rate is 5.
     expect(broker.currency).toBe("USD");
-    expect(toNumber(broker.amount)).toBeCloseTo(-2000, 4);
-    expect(toNumber(broker.exchangeRate)).toBeCloseTo(5, 4);
+    expect(toNumber(broker.amount)).toBeCloseTo(-round(10000 / dated, 4), 4);
+    expect(toNumber(broker.exchangeRate)).toBeCloseTo(dated, 4);
+    expect(toNumber(broker.amount)).not.toBeCloseTo(-2000, 2);
     expect(bank.currency).toBe("BRL");
     expect(toNumber(bank.amount)).toBe(10000);
-    expect(legs.reduce((s, l) => s + toNumber(l.amountBase), 0)).toBeCloseTo(0, 2);
+    expect(toNumber(bank.exchangeRate)).toBe(1);
+    expect(toNumber(bank.amountBase)).toBe(10000);
+    expect(toNumber(broker.amountBase)).toBe(-10000);
+  });
+
+  it("uses a caller exchange rate other than 1 across currencies", async () => {
+    const usd = await prisma.account.create({ data: { userId: USER, entityId: f.pfId, type: "brokerage", name: "IBKR", currency: "USD" } });
+    const r = await createEntry(
+      USER,
+      { kind: "transfer", fromAccountId: f.pfChecking, toAccountId: usd.id, amount: 10000, currency: "BRL", exchangeRate: 4, date: "2026-08-12", direction: "investment_deposit" },
+      prisma
+    );
+    const legs = await prisma.ledgerEntry.findMany({ where: { transferGroupId: r.transferGroupId! } });
+    const broker = legs.find((l) => l.accountId === usd.id)!;
+    const bank = legs.find((l) => l.accountId === f.pfChecking)!;
+    expect(toNumber(bank.amount)).toBe(-10000);
+    expect(toNumber(bank.exchangeRate)).toBe(1);
+    expect(toNumber(bank.amountBase)).toBe(-10000);
+    expect(toNumber(broker.amount)).toBe(2500);
+    expect(toNumber(broker.exchangeRate)).toBe(4);
+    expect(toNumber(broker.amountBase)).toBe(10000);
   });
 
   it("refuses a cross-currency transfer when no rate is stored", async () => {
@@ -106,10 +128,13 @@ describe("createEntry", () => {
     const usd = await prisma.account.create({ data: { userId: USER, entityId: f.pfId, type: "brokerage", name: "IBKR", currency: "USD" } });
     const r = await createEntry(USER, { kind: "transfer", fromAccountId: f.pfChecking, toAccountId: usd.id, amount: 1000, date: "2026-09-20" }, prisma);
     const legs = await prisma.ledgerEntry.findMany({ where: { transferGroupId: r.transferGroupId! } });
-    const to = legs.find((l) => l.accountId === usd.id)!;
-    expect(to.currency).toBe("USD");
-    expect(toNumber(to.amount)).toBe(200);
-    expect(legs.reduce((s, l) => s + toNumber(l.amountBase), 0)).toBeCloseTo(0, 4);
+    const toLeg = legs.find((l) => l.accountId === usd.id)!;
+    const from = legs.find((l) => l.accountId === f.pfChecking)!;
+    expect(toLeg.currency).toBe("USD");
+    expect(toNumber(toLeg.amount)).toBeCloseTo(round(1000 / 5.1575, 4), 4); // 2026-09-18 close, the business day before 2026-09-20
+    expect(toNumber(from.exchangeRate)).toBe(1);
+    expect(toNumber(from.amountBase)).toBe(-1000);
+    expect(toNumber(toLeg.amountBase)).toBe(1000);
   });
 
   it("auto-categorizes from rules and counts the hit", async () => {

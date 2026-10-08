@@ -3,8 +3,9 @@ import { prisma } from "@capital/server/lib/prisma";
 import { createLedgerFixture, deleteLedgerFixture, type LedgerFixture } from "@/test/ledger-fixtures";
 import { createEntry } from "@capital/server/modules/ledger/services/entries";
 import { recordAporte } from "../aporte";
+import { proventos12m } from "../proventos";
 import { contributions, isDefaultTransferDescription } from "../contributions";
-import { createHolding, moveBrokerageCash, recordOperation } from "../portfolio";
+import { createHolding, moveBrokerageCash, portfolioSummary, recordOperation } from "../portfolio";
 
 const USER = "test-user-investments-contributions-001";
 let f: LedgerFixture;
@@ -109,6 +110,22 @@ describe("contributions", () => {
     expect(c.months[0].origins.map((o) => o.amount).sort((a, b) => b - a)).toEqual([800, 500, -200]);
     expect(c.months[0].origins.find((o) => o.amount === 800)).toMatchObject({ standalone: true, description: "Caixinha" });
     expect(c.savingsRate.aportes).toBe(1100);
+    // The caixinha is not a broker, so Carteira counts only the R$500 that reached XP.
+    const summary = await portfolioSummary(USER, prisma);
+    expect(summary.contributed).toBe(500);
+    expect(summary.netWorth).toBe(500);
+    expect(summary.result).toBe(0);
+  });
+
+  it("matches a bank investment to the closest brokerage leg", async () => {
+    await createEntry(USER, { kind: "expense", accountId: f.pfChecking, amount: 100, date: "2026-10-04", description: "Perto" }, prisma, { kind: "investment" });
+    await createEntry(USER, { kind: "expense", accountId: f.pfChecking, amount: 100, date: "2026-10-06", description: "Longe" }, prisma, { kind: "investment" });
+    await transfer(f.pfChecking, f.broker, 100, "2026-10-01", "Corretora distante");
+    await transfer(f.pfChecking, f.broker, 100, "2026-10-06", "Corretora no dia");
+    const c = await contributions(USER, prisma, { months: 1, end: "2026-10" });
+    // Oct 4 is closer to Oct 6 than to Oct 1, so it takes that leg and Oct 6's bank row is the aporte.
+    const standalone = c.months[0].origins.filter((o) => o.standalone);
+    expect(standalone.map((o) => o.description)).toEqual(["Longe"]);
   });
 
   it("leaves a no-cash opening lot out of purchases", async () => {
@@ -119,6 +136,17 @@ describe("contributions", () => {
     const c = await contributions(USER, prisma, { months: 1, end: "2026-03" });
     expect(c.months[0].byAllocationClass).toEqual({});
     expect(c.months[0].byAssetClass).toEqual({});
+  });
+
+  it("converts a USD dividend at the rate on its date", async () => {
+    await prisma.currency.create({ data: { userId: USER, code: "USD", name: "US Dollar", symbol: "$", manualRate: 0.2 } });
+    const h = await createHolding(USER, { accountId: f.broker, assetClass: "international_etf", ticker: "VUAA", name: "VUAA", currency: "USD" }, prisma);
+    await prisma.investmentOperation.create({
+      data: { holdingId: h.id, type: "dividend", quantity: 1, totalAmount: 10, taxWithheld: 0, date: new Date("2026-08-12T12:00:00Z") },
+    });
+    const proventos = await proventos12m(USER, prisma);
+    expect(proventos.total).toBeCloseTo(51.29, 2);
+    expect(proventos.total).not.toBeCloseTo(50, 2);
   });
 
   it("has no savings rate without PF income", async () => {

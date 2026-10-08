@@ -78,7 +78,9 @@ afterAll(async () => {
 describe("updateAllCurrencyRates", () => {
   it("writes PTAX on a BRL base and the ECB otherwise, skipping manual rates and users with the update off", async () => {
     const closeDay = new Date("2026-10-02T00:00:00.000Z");
+    const aberturaDay = new Date("2026-10-05T00:00:00.000Z");
     const seeded = await prisma.currencyRateDay.findUnique({ where: { code_date: { code: "USD", date: closeDay } } });
+    const seededAbertura = await prisma.currencyRateDay.findUnique({ where: { code_date: { code: "USD", date: aberturaDay } } });
     const result = await updateAllCurrencyRates(prisma, { now: NOW, fetch: providers, userIds: USERS });
     expect(result).toEqual({ usersProcessed: 2, ratesUpdated: 4, ratesUnchanged: 0, manualSkipped: 1, errors: 0 });
 
@@ -88,6 +90,10 @@ describe("updateAllCurrencyRates", () => {
     expect(usd.manualRate).toBeCloseTo(1 / 5.1991, 12);
     const close = await prisma.currencyRateDay.findUniqueOrThrow({ where: { code_date: { code: "USD", date: closeDay } } });
     expect(Number(close.brlPerUnit)).toBeCloseTo(5.1991, 4);
+    // The Monday Abertura (5.3001) is not a Fechamento, so that day is left as it was.
+    const abertura = await prisma.currencyRateDay.findUnique({ where: { code_date: { code: "USD", date: aberturaDay } } });
+    expect(abertura?.brlPerUnit?.toString() ?? null).toBe(seededAbertura?.brlPerUnit?.toString() ?? null);
+    expect(Number(abertura?.brlPerUnit ?? 0)).not.toBeCloseTo(5.3001, 4);
     if (seeded) await prisma.currencyRateDay.update({ where: { code_date: { code: "USD", date: closeDay } }, data: { brlPerUnit: seeded.brlPerUnit, source: seeded.source } });
     else await prisma.currencyRateDay.delete({ where: { code_date: { code: "USD", date: closeDay } } });
     expect(await rateOf(BRL_USER, "ARS")).toMatchObject({ manualRate: 280.5, source: "ecb", rateUpdatedAt: new Date("2026-10-02T14:00:00Z") });

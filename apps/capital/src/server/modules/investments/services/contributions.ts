@@ -20,9 +20,13 @@ import { currentPeriod } from "./portfolio-history";
  *   kind=investment rows on checking or cash with no transfer and no
  *   operation cash leg, unless a brokerage leg in the same entity matches
  *   the base amount within R$ 0.01 and the date within 3 days (money that
- *   left the bank is an aporte, money that arrived is a resgate);
+ *   left the bank is an aporte, money that arrived is a resgate). Those
+ *   rows are only this chart and the savings rate. A caixinha balance is
+ *   not a brokerage account, so it is not in Carteira Patrimônio, and the
+ *   row is not in Total aportado or Resultado;
  * - byAllocationClass: buys of the month by class (gross amount + fees, at
- *   the rate on the buy's date), excluding a no-cash opening lot; the chart
+ *   the rate on the buy's date), excluding a no-cash first operation of the
+ *   holding (the same opening-lot rule as the portfolio timeline); the chart
  *   labels that split "Compras". The net bars are deposits − withdrawals.
  *   byAssetClass is the same buys;
  * - origins: each of those transfers, with the account it came from and,
@@ -163,7 +167,7 @@ export async function contributions(userId: string, db: DbClient, opts: Contribu
   const bankInvestments = await unlinkedBankInvestments(userId, db, entityIds, from, to);
 
   // Buys by holding class; totalAmount and fees are in the holding's currency.
-  // A no-cash first operation is an opening lot (posição inicial), not a purchase of that month.
+  // A no-cash first operation of the holding is an opening lot (posição inicial), not a purchase of that month.
   const buys = await db.$queryRaw<{ date: Date; asset_class: AssetClass; allocation_class: AllocationClass | null; currency: string; total: number; opening: boolean }[]>`
     SELECT o.date, h."assetClass"::text AS asset_class, h."allocationClass"::text AS allocation_class, h.currency,
            (o."totalAmount" + o.fees) AS total,
@@ -304,7 +308,8 @@ const MATCH_MS = 3 * 86_400_000;
  * kind=investment on checking or cash, with no transfer group and no
  * operation pointing at the row. A brokerage leg in the same entity within
  * R$ 0.01 and 3 days already accounts for the money, so that row is left out.
- * Each brokerage leg matches at most one bank row.
+ * Each brokerage leg matches at most one bank row: the closest date, then
+ * the closest amount, then the lowest id. Bank rows are matched oldest first.
  */
 async function unlinkedBankInvestments(userId: string, db: DbClient, entityIds: string[] | null, from: Date, to: Date): Promise<BankInvestment[]> {
   const matchFrom = new Date(from.getTime() - MATCH_MS);
@@ -319,19 +324,35 @@ async function unlinkedBankInvestments(userId: string, db: DbClient, entityIds: 
         AND le.date >= ${from} AND le.date < ${to}
         AND NOT EXISTS (SELECT 1 FROM investment_operations o WHERE o."cashEntryId" = le.id)
         AND ${entityScopeSql(Prisma.sql`le."entityId"`, entityIds)}`,
-    db.$queryRaw<{ entityId: string; date: Date; absBase: Prisma.Decimal }[]>`
-      SELECT le."entityId", le.date, abs(le."amountBase") AS "absBase"
+    db.$queryRaw<{ id: string; entityId: string; date: Date; absBase: Prisma.Decimal }[]>`
+      SELECT le.id, le."entityId", le.date, abs(le."amountBase") AS "absBase"
       FROM ledger_entries le
       JOIN accounts a ON a.id = le."accountId" AND a.type = 'brokerage' AND a."archivedAt" IS NULL
       WHERE le."userId" = ${userId} AND le."deletedAt" IS NULL
         AND le.date >= ${matchFrom} AND le.date < ${matchTo}
-        AND ${entityScopeSql(Prisma.sql`le."entityId"`, entityIds)}`,
+        AND ${entityScopeSql(Prisma.sql`le."entityId"`, entityIds)}
+      ORDER BY le.date, le.id`,
   ]);
-  const pool = legs.map((leg) => ({ entityId: leg.entityId, date: leg.date, absBase: toNumber(leg.absBase), taken: false }));
+  const pool = legs.map((leg) => ({ id: leg.id, entityId: leg.entityId, date: leg.date, absBase: toNumber(leg.absBase), taken: false }));
+  const ordered = [...rows].sort((a, b) => a.date.getTime() - b.date.getTime() || a.id.localeCompare(b.id));
   const out: BankInvestment[] = [];
-  for (const row of rows) {
+  for (const row of ordered) {
     const base = Math.abs(toNumber(row.amountBase));
-    const hit = pool.find((leg) => !leg.taken && leg.entityId === row.entityId && Math.abs(leg.absBase - base) <= 0.01 && Math.abs(leg.date.getTime() - row.date.getTime()) <= MATCH_MS);
+    let hit: (typeof pool)[number] | null = null;
+    let bestGap = Infinity;
+    let bestAmount = Infinity;
+    for (const leg of pool) {
+      if (leg.taken || leg.entityId !== row.entityId) continue;
+      const amountGap = Math.abs(leg.absBase - base);
+      if (amountGap > 0.01) continue;
+      const gap = Math.abs(leg.date.getTime() - row.date.getTime());
+      if (gap > MATCH_MS) continue;
+      const closer = gap < bestGap || (gap === bestGap && (amountGap < bestAmount || (amountGap === bestAmount && (!hit || leg.id < hit.id))));
+      if (!closer) continue;
+      hit = leg;
+      bestGap = gap;
+      bestAmount = amountGap;
+    }
     if (hit) {
       hit.taken = true;
       continue;

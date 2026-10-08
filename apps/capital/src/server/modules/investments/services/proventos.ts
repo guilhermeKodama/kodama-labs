@@ -84,7 +84,7 @@ export async function proventos12m(userId: string, db: DbClient, entityIds: stri
     `,
   ]);
 
-  const opBase = (op: (typeof operations)[number]) => (op.totalAmount - op.taxWithheld) * fx.rateFor(op.holding.currency);
+  const opBase = (op: (typeof operations)[number]) => (op.totalAmount - op.taxWithheld) * fx.rateOn(op.holding.currency, op.date);
   const unmatched = new Set(
     unmatchedProventos(
       operations.map((op) => ({ id: op.id, at: op.date.getTime(), base: opBase(op) })),

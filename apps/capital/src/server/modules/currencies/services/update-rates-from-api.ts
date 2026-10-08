@@ -80,8 +80,9 @@ export async function updateAllCurrencyRates(db: DbClient, opts: UpdateRatesOpti
     }
   }
 
-  // Append the PTAX close for the day. A failed fetch never reaches here, and a
-  // write failure is counted and left for the next run; stored days stay.
+  // Append the PTAX Fechamento for the day. Opening and intermediate bulletins
+  // are already dropped by latestPtaxClose. A failed fetch never reaches here,
+  // and a write failure is counted and left for the next run; stored days stay.
   for (const [key, quote] of quotes) {
     if (!key.startsWith("BRL:") || quote.source !== "ptax" || !(quote.manualRate > 0)) continue;
     try {
