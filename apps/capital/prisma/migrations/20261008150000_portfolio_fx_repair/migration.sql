@@ -14,7 +14,11 @@
 -- A leg whose description or metadata states a USD amount and a BRL-per-USD rate
 -- that reproduce the BRL amount within 0.5%, and whose rate is within 3% of
 -- that day's PTAX, uses that USD amount. Otherwise the previous business day's
--- PTAX. The opening balance absorbs the difference. Matching is case-insensitive.
+-- PTAX. Matching is case-insensitive.
+-- Avenue running cash, on the old amounts, must be 0 within 0.01 right after
+-- the 2026-08-12 leg. Ending cash is the legacy ending minus (old − new) on
+-- repaired legs dated after the last zero. The opening absorbs the rest, so
+-- the rate-1 2026-09-16 deposit is not left in the balance as US$2,575.
 
 CREATE TABLE IF NOT EXISTS portfolio_fx_repair_entry (
     id TEXT PRIMARY KEY,
@@ -288,6 +292,7 @@ DECLARE
     mode_count INTEGER := 0;
     holding_count INTEGER := 0;
     legacy_ok BOOLEAN;
+    phantom NUMERIC := 0;
 BEGIN
     PERFORM set_config('TimeZone', 'UTC', true);
 
@@ -656,6 +661,43 @@ BEGIN
     FROM accounts a
     JOIN _touch t ON t.account_id = a.id;
 
+    -- Old running cash. A repaired leg after the last ~0 balance reduces ending
+    -- cash by old_amount − new_amount. Avenue must be 0 right after 2026-08-12.
+    CREATE TEMP TABLE _phantom (account_id TEXT PRIMARY KEY, amount NUMERIC NOT NULL) ON COMMIT DROP;
+    FOR rec IN SELECT account_id FROM _touch WHERE rule = 'avenue' LOOP
+        DECLARE
+            running NUMERIC;
+            after_out NUMERIC := NULL;
+            leg_phantom NUMERIC := 0;
+            zero_seen BOOLEAN := false;
+            entry_rec RECORD;
+        BEGIN
+            SELECT "initialBalance" INTO running FROM accounts WHERE id = rec.account_id;
+            FOR entry_rec IN
+                SELECT e.id, e.amount, f.applied_usd, f.signature
+                FROM ledger_entries e
+                LEFT JOIN _fx f ON f.entry_id = e.id
+                WHERE e."accountId" = rec.account_id AND e."deletedAt" IS NULL
+                ORDER BY e.date, e."createdAt", e.id
+            LOOP
+                running := round(running + entry_rec.amount, 4);
+                IF abs(running) <= 0.01 THEN
+                    zero_seen := true;
+                    leg_phantom := 0;
+                ELSIF zero_seen AND entry_rec.applied_usd IS NOT NULL THEN
+                    leg_phantom := leg_phantom + (entry_rec.amount - entry_rec.applied_usd);
+                END IF;
+                IF entry_rec.signature = 'avenue_out' THEN
+                    after_out := running;
+                END IF;
+            END LOOP;
+            IF after_out IS NULL OR abs(after_out) > 0.01 THEN
+                RAISE EXCEPTION 'portfolio fx repair: Avenue running cash after 2026-08-12 is %, expected 0', coalesce(after_out, 0);
+            END IF;
+            INSERT INTO _phantom (account_id, amount) VALUES (rec.account_id, round(leg_phantom, 4));
+        END;
+    END LOOP;
+
     INSERT INTO portfolio_fx_repair_entry (id, amount, currency, "exchangeRate", "amountBase", "deletedAt")
     SELECT e.id, e.amount, e.currency, e."exchangeRate", e."amountBase", e."deletedAt"
     FROM ledger_entries e
@@ -751,7 +793,8 @@ BEGIN
                 new_initial := new_initial + (6757.75 - projected_cash);
             END IF;
         ELSE
-            base_initial := legacy_ending - corrected_sum;
+            SELECT coalesce((SELECT amount FROM _phantom WHERE account_id = rec.account_id), 0) INTO phantom;
+            base_initial := legacy_ending - phantom - corrected_sum;
             deficit := -(base_initial + min_prefix);
             IF deficit > 0.0001 THEN
                 new_initial := base_initial + deficit;
