@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { budgetFor, excludedEntities, mean, suggestedBudget, typical } from "../assign";
+import { budgetFor, excludedEntities, mean, stillToCome, suggestedBudget, typical } from "../assign";
 import { resolveEffective } from "../effective-budgets";
 import { todayIn } from "../today";
 
@@ -76,6 +76,23 @@ describe("helpers", () => {
     expect(typical([2000, 2000, 150000])).toBe(2000);
     expect(typical([2000, 2000, 2000, 2000, 2000, 150000])).toBe(2000);
     expect(typical([1780, 1990, 2080, 2100, 2240, 2310])).toBe(2090);
+  });
+
+  it("does not forecast a variable-day bill again once it has been paid", () => {
+    // 15,000 on the 20th in four months and on the 3rd in two. Already paid.
+    const totals = [15000, 15000, 15000, 15000, 15000, 15000];
+    const tails = [15000, 15000, 15000, 15000, 0, 0];
+    expect(stillToCome(totals, tails, 15000)).toBe(0);
+  });
+
+  it("keeps a stable post-today tail when this month is already ahead of any historical early spend", () => {
+    // Card: 100 by today and 900 after, every month. 400 is already spent.
+    expect(stillToCome([1000, 1000, 1000], [900, 900, 900], 400)).toBe(900);
+  });
+
+  it("keeps the usual remainder when spent-to-date matches the historical early amount", () => {
+    // Groceries: 600 by today and 600 after. 600 is already spent.
+    expect(stillToCome([1200, 1200, 1200], [600, 600, 600], 600)).toBe(600);
   });
 
   it("reads today in the user's timezone", () => {

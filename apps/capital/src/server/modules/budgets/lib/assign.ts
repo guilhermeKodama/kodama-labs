@@ -57,5 +57,34 @@ export function typical(values: readonly number[]): number {
   return sorted.length % 2 === 1 ? hi : (lo + hi) / 2;
 }
 
+/**
+ * What is still to come after today for one series.
+ *
+ * `tails[i]` and `totals[i]` are the same historical month (spend after
+ * today, and the whole month). `spentToDate` is this month so far.
+ *
+ *   recognized   = min(max(0, spentToDate), earlyCeiling)
+ *   earlyCeiling = max over months of (total - tail)
+ *   stillToCome  = min(typical(tails), max(0, typical(totals) - recognized))
+ *
+ * Rent of 15,000 paid on the 20th in four months (tail 15,000) and on the
+ * 3rd in two (tail 0): the typical tail and the typical month are both
+ * 15,000, and the early ceiling is 15,000. Already paid on the 3rd, so
+ * recognized is 15,000 and still to come is 0 — the month stays 15,000,
+ * not 30,000. Spend past the early ceiling does not consume the tail: a
+ * card series whose history is 100 by today and 900 after still projects
+ * that 900 when 400 has already been spent this month.
+ */
+export function stillToCome(totals: readonly number[], tails: readonly number[], spentToDate: number): number {
+  if (totals.length === 0) return 0;
+  let earlyCeiling = -Infinity;
+  for (let i = 0; i < totals.length; i++) {
+    const early = (totals[i] ?? 0) - (tails[i] ?? 0);
+    if (early > earlyCeiling) earlyCeiling = early;
+  }
+  const recognized = Math.min(Math.max(0, spentToDate), earlyCeiling);
+  return Math.min(typical(tails), Math.max(0, typical(totals) - recognized));
+}
+
 /** The rounded amount an insight suggests for a budget: the average spend, up to the next 50. */
 export const suggestedBudget = (avg: number) => Math.ceil(avg / 50) * 50;
