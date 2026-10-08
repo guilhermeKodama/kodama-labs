@@ -6,7 +6,7 @@ import { entityScopeSql, entityScopeWhere, inEntityScope } from "@capital/server
 import { loadFx, type FxContext } from "@capital/server/modules/ledger/lib/fx";
 import { round, toNumber } from "@capital/server/modules/ledger/lib/money";
 import { economicDateSql, paceDaySql, spentToDateSql } from "@capital/server/modules/ledger/lib/spend-as-of";
-import { budgetFor, excludedEntities, mean, slotKey, suggestedBudget, typical } from "../lib/assign";
+import { budgetFor, excludedEntities, mean, slotKey, stillToCome, suggestedBudget, typical } from "../lib/assign";
 import { getEffectiveBudgetsByMonth, getEffectiveBudgetsForMonth } from "../lib/effective-budgets";
 import { DAY_MS, todayIn, type UserToday } from "../lib/today";
 
@@ -146,39 +146,51 @@ function yearlyRows(yearly: readonly Budget[], yearSpend: readonly Spend[], name
 const HISTORY_MONTHS = 6;
 
 /**
- * What each (entity, category) spent after day `day` of a month, one row
- * per month, from up to HISTORY_MONTHS complete months before `year`/`month`.
- * The day is the economic date (purchase date for a card, effective date
- * otherwise), so a card bill is not one lump on its closing day. A month
- * with spend but nothing after that day counts as 0: rent paid on the 5th
- * leaves nothing for the rest of the month. A month with no spend for that
- * series is absent and must not be treated as zero.
+ * What each (entity, category) spent in a month, and how much of it fell
+ * after day `day`, one row per month, from up to HISTORY_MONTHS complete
+ * months before `year`/`month`. The day is the economic date (purchase
+ * date for a card, effective date otherwise), so a card bill is not one
+ * lump on its closing day. A month with spend but nothing after that day
+ * counts as rest 0: rent paid on the 5th leaves nothing for the rest of
+ * the month. A month with no spend for that series is absent and must not
+ * be treated as zero. `total` and `rest` come from this one query.
  */
 async function restOfMonthHistory(db: DbClient, userId: string, year: number, month: number, day: number, entityIds: string[] | null) {
   const from = new Date(Date.UTC(year, month - 1 - HISTORY_MONTHS, 1));
   const to = new Date(Date.UTC(year, month - 1, 1) - 1);
-  const rows = await db.$queryRaw<{ entity_id: string; category_id: string | null; rest: Prisma.Decimal }[]>`
+  const rows = await db.$queryRaw<{ entity_id: string; category_id: string | null; total: Prisma.Decimal; rest: Prisma.Decimal }[]>`
     SELECT le."entityId" AS entity_id, le."categoryId" AS category_id,
+           coalesce(-sum(le."amountBase"), 0) AS total,
            coalesce(-sum(le."amountBase") FILTER (WHERE extract(day FROM ${economicDateSql("le")}) > ${day}), 0) AS rest
     FROM ledger_entries le
     WHERE le."userId" = ${userId} AND le."deletedAt" IS NULL AND le.kind = 'expense' AND le."transferGroupId" IS NULL
       AND le."effectiveDate" BETWEEN ${from} AND ${to}
       AND ${entityScopeSql(Prisma.sql`le."entityId"`, entityIds)}
     GROUP BY 1, 2, date_trunc('month', le."effectiveDate")`;
-  return rows.map((r) => ({ entityId: r.entity_id, categoryId: r.category_id, rest: toNumber(r.rest) }));
+  return rows.map((r) => ({ entityId: r.entity_id, categoryId: r.category_id, total: toNumber(r.total), rest: toNumber(r.rest) }));
 }
 
-/** Median tail of each (entity, category) series, summed onto one budget. */
-function restFromHistory(rows: readonly { entityId: string; categoryId: string | null; rest: number }[]) {
-  const bySeries = new Map<string, number[]>();
+/** Bounded tail of each (entity, category) series, summed onto one budget. */
+function restFromHistory(
+  rows: readonly { entityId: string; categoryId: string | null; total: number; rest: number }[],
+  current: readonly { entityId: string; categoryId: string | null; spentToDate: number }[],
+) {
+  const spentToDate = new Map<string, number>();
+  for (const row of current) {
+    const key = slotKey(row.entityId, row.categoryId);
+    spentToDate.set(key, (spentToDate.get(key) ?? 0) + row.spentToDate);
+  }
+  const bySeries = new Map<string, { totals: number[]; tails: number[] }>();
   for (const row of rows) {
     const key = slotKey(row.entityId, row.categoryId);
-    const tails = bySeries.get(key);
-    if (tails) tails.push(row.rest);
-    else bySeries.set(key, [row.rest]);
+    const series = bySeries.get(key);
+    if (series) {
+      series.totals.push(row.total);
+      series.tails.push(row.rest);
+    } else bySeries.set(key, { totals: [row.total], tails: [row.rest] });
   }
   let sum = 0;
-  for (const tails of bySeries.values()) sum += typical(tails);
+  for (const [key, series] of bySeries) sum += stillToCome(series.totals, series.tails, spentToDate.get(key) ?? 0);
   return sum;
 }
 
@@ -324,11 +336,17 @@ export async function monthOverview(userId: string, year: number, month: number,
       const dailySpendRate = daysElapsed > 0 ? spent / daysElapsed : 0;
       const allowedDailyRate = available / daysInMonth;
       const past = history.filter((h) => budgetFor(budgets, h.entityId, h.categoryId)?.id === b.id);
-      // Typical spend whose economic date falls after today (`typical`: median, or the smaller of two months).
+      // Still to come is the typical post-today tail, capped by a typical full
+      // month (`stillToCome`) so a bill that already landed is not added again.
       // With no history, the daily rate of what is already spent.
-      const restOfMonth = past.length ? restFromHistory(past) : dailySpendRate * (daysInMonth - daysElapsed);
+      const restOfMonth = past.length
+        ? restFromHistory(
+            past,
+            spend.filter((s) => budgetFor(budgets, s.entityId, s.categoryId)?.id === b.id),
+          )
+        : dailySpendRate * (daysInMonth - daysElapsed);
       // Already booked, but not yet spent (a swipe dated later this month, a future installment).
-      // projected = committed + max(0, typicalStillToCome − that booked tail), so a card bill
+      // projected = committed + max(0, stillToCome − that booked tail), so a card bill
       // already imported is not forecast a second time off its closing day.
       const bookedAfterToday = Math.max(0, committed - spent);
       const projectedTotal = daysElapsed > 0 ? committed + Math.max(0, restOfMonth - bookedAfterToday) : committed;

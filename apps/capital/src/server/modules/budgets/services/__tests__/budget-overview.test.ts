@@ -140,6 +140,24 @@ describe("month-end projection", () => {
     expect(row.pace.projectedTotal).toBe(7000);
     expect(o.summary.projectedTotal).toBe(7000);
   });
+
+  it("does not add the tail of a once-a-month bill that was already paid earlier this month", async () => {
+    // 08/out/2026, noon in São Paulo.
+    vi.setSystemTime(new Date("2026-10-08T15:00:00Z"));
+    await createBudget(USER, { entityId: f.pfId, categoryId: c.Moradia, amount: 20000, effectiveFrom: "2026-04" }, prisma);
+    for (const m of ["04", "05", "06", "08"]) await spend(f.pfChecking, c.Moradia, 15000, `2026-${m}-20`);
+    for (const m of ["07", "09"]) await spend(f.pfChecking, c.Moradia, 15000, `2026-${m}-03`);
+    await spend(f.pfChecking, c.Moradia, 15000, "2026-10-03");
+
+    const o = await monthOverview(USER, 2026, 10, prisma);
+    const row = o.budgets.find((b) => b.categoryId === c.Moradia)!;
+    // Four tails of 15,000 and two of 0. The median tail is 15,000, so adding
+    // it on top of the rent paid on the 3rd would project 30,000.
+    expect(row.spent).toBe(15000);
+    expect(row.committed).toBe(15000);
+    expect(row.pace.projectedTotal).toBe(15000);
+    expect(o.summary.projectedTotal).toBe(15000);
+  });
 });
 
 describe("year matrix", () => {
