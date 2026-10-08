@@ -3,6 +3,7 @@ import { Prisma } from "@/generated/prisma";
 import { previousBusinessDayClose, type RateClose } from "@capital/server/modules/ledger/lib/fx";
 import { round, toNumber } from "@capital/server/modules/ledger/lib/money";
 import { nextIsActive, replayPosition } from "./holding-position";
+import { marketValue } from "./holding-value";
 import { buildTimeline, monthEnd, type TimelineEntry, type TimelineHolding, type TimelineInput } from "./portfolio-timeline";
 import { currentPeriod, loadPortfolioTimelineSource, type PortfolioTimelineSource } from "../services/portfolio-history";
 
@@ -26,6 +27,9 @@ const SELL_DAY = "2026-09-30";
 const SELL_CASH = 6757.75;
 const MONEY = 0.01;
 const NATIVE = 0.0001;
+/** A description or metadata quote is used when USD × rate reproduces the BRL amount within this fraction. */
+const EXECUTION_TOLERANCE = 0.005;
+const RESIDUAL_FLAG = 0.01;
 
 export interface AccountFigures {
   accountId: string;
@@ -62,6 +66,7 @@ interface Row {
   date: Date;
   createdAt: Date;
   description: string;
+  metadata: Prisma.JsonValue | null;
   transferGroupId: string | null;
   accountCurrency: string;
   accountName: string;
@@ -75,9 +80,13 @@ interface PlannedLeg {
   signature: "avenue_out" | "avenue_in" | "crypto_deposit";
   day: string;
   brl: number;
+  /** Rate written on the leg: the execution quote, or the previous-day PTAX. */
   rate: number;
+  /** Previous business day's PTAX, even when `rate` is an execution quote. */
+  ptax: number;
   rateDay: string;
   usd: number;
+  source: "execution" | "ptax";
 }
 
 interface DeltaCandidate {
@@ -136,6 +145,63 @@ function fmt(value: number, places: number): string {
   return value.toFixed(places);
 }
 
+/**
+ * USD amount and BRL-per-USD rate stated on the leg. Accepts `US$33,322.17 @
+ * R$5.0657` (and the pt-BR separators) in the description, or the same pair
+ * under metadata keys `usd` / `usdAmount` / `amountUsd` and `exchangeRate` /
+ * `fxRate` / `rate`. The pair is explicit only when USD × rate reproduces
+ * `brlAbs` within 0.5%; otherwise the caller keeps PTAX.
+ */
+function executionQuote(description: string, metadata: Prisma.JsonValue | null, brlAbs: number): { usd: number; rate: number } | null {
+  if (!(brlAbs > 0)) return null;
+  const blob = `${description} ${metadata == null ? "" : typeof metadata === "string" ? metadata : JSON.stringify(metadata)}`;
+  const usds = matchedNumbers(blob, /(?:US\$|USD|U\$)\s*([0-9][0-9.,]*)/gi).concat(matchedNumbers(blob, /"(?:usd|usdAmount|amountUsd)"\s*:\s*"?([0-9][0-9.,]*)/gi));
+  const rates = matchedNumbers(blob, /@\s*(?:R\$\s*)?([0-9][0-9.,]*)/gi)
+    .concat(matchedNumbers(blob, /"(?:exchangeRate|fxRate|rate)"\s*:\s*"?([0-9][0-9.,]*)/gi))
+    .filter((rate) => rate > 0.5 && rate < 20);
+  let best: { usd: number; rate: number; gap: number } | null = null;
+  for (const usd of usds) {
+    for (const rate of rates) {
+      const gap = Math.abs(usd * rate - brlAbs) / brlAbs;
+      if (gap <= EXECUTION_TOLERANCE && (!best || gap < best.gap)) best = { usd, rate, gap };
+    }
+  }
+  return best ? { usd: best.usd, rate: best.rate } : null;
+}
+
+function matchedNumbers(text: string, pattern: RegExp): number[] {
+  return [...text.matchAll(pattern)].flatMap((match) => {
+    const value = parseLocalizedNumber(match[1] ?? "");
+    return value != null && value > 0 ? [value] : [];
+  });
+}
+
+/** `33,322.17` and `33.322,17` and `5,0657`. A group of exactly three digits after a comma is thousands. */
+function parseLocalizedNumber(raw: string): number | null {
+  const text = raw.trim();
+  if (!/^\d[\d.,]*$/.test(text)) return null;
+  const dots = text.split(".").length - 1;
+  const commas = text.split(",").length - 1;
+  let normalized: string;
+  if (dots > 0 && commas > 0) {
+    normalized = text.lastIndexOf(",") > text.lastIndexOf(".") ? text.replace(/\./g, "").replace(",", ".") : text.replace(/,/g, "");
+  } else if (commas > 0) {
+    const fraction = text.slice(text.lastIndexOf(",") + 1);
+    normalized = fraction.length === 3 ? text.replace(/,/g, "") : text.replace(/,/g, ".");
+  } else {
+    normalized = text;
+  }
+  if ((normalized.match(/\./g) ?? []).length > 1) return null;
+  const value = Number(normalized);
+  return Number.isFinite(value) ? value : null;
+}
+
+function quotedUsd(brl: number, description: string, metadata: Prisma.JsonValue | null, ptax: number): { usd: number; rate: number; source: "execution" | "ptax" } {
+  const quote = executionQuote(description, metadata, Math.abs(brl));
+  if (!quote) return { usd: round(brl / ptax, 4), rate: ptax, source: "ptax" };
+  return { usd: round(Math.sign(brl) * quote.usd, 4), rate: quote.rate, source: "execution" };
+}
+
 async function loadCloses(db: DbClient): Promise<RateClose[]> {
   const rows = await db.currencyRateDay.findMany({ where: { code: "USD" }, orderBy: { date: "asc" }, select: { date: true, brlPerUnit: true } });
   return rows.map((row) => ({ day: dayOf(row.date), brlPerUnit: toNumber(row.brlPerUnit) }));
@@ -153,6 +219,7 @@ async function loadRows(db: DbClient): Promise<Row[]> {
       date: Date;
       createdAt: Date;
       description: string;
+      metadata: Prisma.JsonValue | null;
       transferGroupId: string | null;
       accountCurrency: string;
       accountName: string;
@@ -160,7 +227,7 @@ async function loadRows(db: DbClient): Promise<Row[]> {
     }[]
   >`
     SELECT e.id, e."accountId", e.amount, e."amountBase", e.currency, e."exchangeRate", e.date, e."createdAt",
-           e.description, e."transferGroupId", a.currency AS "accountCurrency", a.name AS "accountName", a."initialBalance"
+           e.description, e.metadata, e."transferGroupId", a.currency AS "accountCurrency", a.name AS "accountName", a."initialBalance"
     FROM ledger_entries e
     JOIN accounts a ON a.id = e."accountId" AND a."archivedAt" IS NULL
     WHERE e."deletedAt" IS NULL
@@ -246,7 +313,8 @@ async function planRepair(db: DbClient, closes: RateClose[]): Promise<RepairPlan
         continue;
       }
       const brl = -other.amount;
-      legs.push({ entryId: broker.id, accountId: broker.accountId, accountName: broker.accountName, signature, day, brl, rate: close.brlPerUnit, rateDay: close.day, usd: round(brl / close.brlPerUnit, 4) });
+      const quoted = quotedUsd(brl, broker.description, broker.metadata, close.brlPerUnit);
+      legs.push({ entryId: broker.id, accountId: broker.accountId, accountName: broker.accountName, signature, day, brl, rate: quoted.rate, ptax: close.brlPerUnit, rateDay: close.day, usd: quoted.usd, source: quoted.source });
     }
   }
   if (legs.filter((leg) => leg.signature === "avenue_out").length > 1) issues.push("more than one Avenue 2026-08-12 leg");
@@ -495,7 +563,7 @@ function runningFlows(opening: number, rows: { id: string; date: Date; createdAt
     running = round(running + row.amount, 4);
     const leg = planned.get(row.id);
     const base = `${dayOf(row.date)}\t${fmt(row.amount, 4)}\tUSD\t${row.description}\trunning\t${fmt(running, 4)}`;
-    return leg ? `${base}\tbrl\t${fmt(leg.brl, 4)}\tptax_day\t${leg.rateDay}\tptax\t${leg.rate}` : base;
+    return leg ? `${base}\tbrl\t${fmt(leg.brl, 4)}\tptax_day\t${leg.rateDay}\tptax\t${leg.ptax}\tapplied\t${leg.rate}\tsource\t${leg.source}` : base;
   });
 }
 
@@ -585,6 +653,7 @@ function beforeFromBackup(source: PortfolioTimelineSource, rows: Row[], backup: 
       date: previous.date,
       createdAt: previous.createdAt,
       description: previous.description,
+      metadata: null,
       transferGroupId: previous.transferGroupId,
       accountCurrency: account.currency,
       accountName: source.accountNames.get(account.id) ?? "",
@@ -642,6 +711,7 @@ export async function portfolioFxReport(db: DbClient, mode: "precheck" | "verify
     after.push(...afterRows);
     sections.push(table(beforeRows, afterRows));
     sections.push(await reconciliation(db, { source, rows, plan, before: beforeRows, after: afterRows, closes, issues, backup, mode }));
+    sections.push(decomposition(afterInput, source, afterRows, period));
     sections.push(await holdingLines(db, user.id, mode, plan, backup));
     const deltas = mode === "verify" && backup ? await markedDeltas(db, backup, user.id) : plan.deltas.filter((row) => row.userId === user.id);
     if (deltas.length) sections.push(deltas.map(deltaLine).join("\n"));
@@ -663,19 +733,41 @@ function correctedLegs(rows: Row[], plan: RepairPlan, backup: Backup | null, clo
     if (!close) continue;
     const signature: PlannedLeg["signature"] | null = near(previous.amount, AVENUE_OUT) ? "avenue_out" : near(previous.amount, AVENUE_IN) ? "avenue_in" : near(previous.amount, CRYPTO_DEPOSIT) ? "crypto_deposit" : null;
     if (!signature) continue;
-    legs.push({ entryId: row.id, accountId: row.accountId, accountName: row.accountName, signature, day, brl: previous.amount, rate: close.brlPerUnit, rateDay: close.day, usd: row.amount });
+    const brl = previous.amount;
+    const quote = executionQuote(row.description, row.metadata, Math.abs(brl));
+    const executed = quote != null && near(row.amount, round(Math.sign(brl) * quote.usd, 4), NATIVE) && near(row.exchangeRate, quote.rate, 1e-4);
+    legs.push({
+      entryId: row.id,
+      accountId: row.accountId,
+      accountName: row.accountName,
+      signature,
+      day,
+      brl,
+      rate: executed && quote ? quote.rate : close.brlPerUnit,
+      ptax: close.brlPerUnit,
+      rateDay: close.day,
+      usd: row.amount,
+      source: executed ? "execution" : "ptax",
+    });
   }
   return legs;
 }
 
 async function reconciliation(db: DbClient, input: { source: PortfolioTimelineSource; rows: Row[]; plan: RepairPlan; before: AccountFigures[]; after: AccountFigures[]; closes: RateClose[]; issues: string[]; backup: Backup | null; mode: "precheck" | "verify" }): Promise<string> {
-  const { rows, plan, before, after, closes, issues, backup } = input;
+  const { source, rows, plan, before, after, closes, issues, backup } = input;
   const lines: string[] = [];
-  const legs = correctedLegs(rows, plan, backup, closes);
+  const accountIds = new Set(source.input.accounts.map((account) => account.id));
+  const legs = correctedLegs(rows, plan, backup, closes).filter((leg) => accountIds.has(leg.accountId));
+  for (const leg of legs) lines.push(["leg_source", leg.signature, leg.accountName, leg.day, leg.source, leg.rate, fmt(leg.usd, 4)].join("\t"));
   const avenue = legs.find((leg) => leg.signature === "avenue_out" || leg.signature === "avenue_in");
   const accountId = avenue?.accountId;
-  const detached = new Set(plan.detaches.map((row) => row.cashId));
-  if (backup) for (const [id, previous] of backup.entries) if (!previous.deletedAt && !rows.some((row) => row.id === id)) detached.add(id);
+  const detached = new Set(plan.detaches.filter((row) => accountIds.has(row.accountId)).map((row) => row.cashId));
+  if (backup) {
+    for (const [id, previous] of backup.entries) {
+      if (!accountIds.has(previous.accountId) || previous.deletedAt || rows.some((row) => row.id === id)) continue;
+      detached.add(id);
+    }
+  }
   if (accountId) {
     const left = before.find((row) => row.accountId === accountId);
     const right = after.find((row) => row.accountId === accountId);
@@ -694,8 +786,14 @@ async function reconciliation(db: DbClient, input: { source: PortfolioTimelineSo
     const identity = near(endingAfter, endingBefore + lift, 0.001);
     if (!identity) issues.push(`Avenue ending cash ${endingAfter} != ending before ${endingBefore} + lift ${lift}`);
     for (const leg of legs.filter((item) => item.accountId === accountId)) {
-      const close = previousBusinessDayClose(closes, leg.day);
-      if (!close || !near(leg.usd, round(leg.brl / close.brlPerUnit, 4), NATIVE) || !near(leg.rate, close.brlPerUnit, 1e-8)) issues.push(`Avenue leg ${leg.day} is not BRL / PTAX ${close?.day ?? "?"}`);
+      if (leg.source === "execution") {
+        const scale = Math.abs(leg.brl);
+        const gap = scale > 0 ? Math.abs(Math.abs(leg.usd) * leg.rate - scale) / scale : 1;
+        if (gap > EXECUTION_TOLERANCE) issues.push(`Avenue leg ${leg.day} execution quote does not reproduce the BRL amount`);
+      } else {
+        const close = previousBusinessDayClose(closes, leg.day);
+        if (!close || !near(leg.usd, round(leg.brl / close.brlPerUnit, 4), NATIVE) || !near(leg.rate, close.brlPerUnit, 1e-8)) issues.push(`Avenue leg ${leg.day} is not BRL / PTAX ${close?.day ?? "?"}`);
+      }
     }
     lines.push("avenue_reconciliation_usd");
     lines.push(`ending_before\t${fmt(endingBefore, 4)}`);
@@ -710,10 +808,15 @@ async function reconciliation(db: DbClient, input: { source: PortfolioTimelineSo
     lines.push(await legacyCashLine(db, accountId, endingBefore, rows, backup, issues));
     if (right) lines.push(`opening_lot_brl\t${fmt(right.initialPositions - right.openingBrl, 2)}\topening_brl\t${fmt(right.openingBrl, 2)}\tcontributed\t${fmt(right.contributed, 2)}`);
   } else lines.push("avenue_reconciliation_usd\tnone");
-  const cryptoAccounts = new Set([...legs.filter((leg) => leg.signature === "crypto_deposit").map((leg) => leg.accountId), ...plan.detaches.map((row) => row.accountId)]);
-  if (backup) for (const cashId of backup.cashOf.values()) {
-    const previous = backup.entries.get(cashId);
-    if (previous) cryptoAccounts.add(previous.accountId);
+  const cryptoAccounts = new Set([
+    ...legs.filter((leg) => leg.signature === "crypto_deposit").map((leg) => leg.accountId),
+    ...plan.detaches.filter((row) => accountIds.has(row.accountId)).map((row) => row.accountId),
+  ]);
+  if (backup) {
+    for (const cashId of backup.cashOf.values()) {
+      const previous = backup.entries.get(cashId);
+      if (previous && accountIds.has(previous.accountId)) cryptoAccounts.add(previous.accountId);
+    }
   }
   for (const accountIdOf of cryptoAccounts) {
     const row = after.find((item) => item.accountId === accountIdOf);
@@ -838,8 +941,8 @@ async function expectTargetIssues(db: DbClient, plan: RepairPlan, closes: RateCl
 
 async function targetLegCount(db: DbClient, plan: RepairPlan, closes: RateClose[], signature: PlannedLeg["signature"], day: string, brokerAmount: number, rate: number, inScope: (accountId: string) => boolean): Promise<number> {
   const planned = new Set(plan.legs.filter((leg) => leg.signature === signature && inScope(leg.accountId)).map((leg) => leg.entryId));
-  const rows = await db.$queryRaw<{ id: string; accountId: string; amount: Prisma.Decimal; amountBase: Prisma.Decimal; exchangeRate: Prisma.Decimal; date: Date }[]>`
-    SELECT b.id, b."accountId", b.amount, b."amountBase", b."exchangeRate", b.date
+  const rows = await db.$queryRaw<{ id: string; accountId: string; amount: Prisma.Decimal; amountBase: Prisma.Decimal; exchangeRate: Prisma.Decimal; date: Date; description: string; metadata: Prisma.JsonValue | null }[]>`
+    SELECT b.id, b."accountId", b.amount, b."amountBase", b."exchangeRate", b.date, b.description, b.metadata
     FROM ledger_entries b
     JOIN accounts a ON a.id = b."accountId" AND a.type = 'brokerage' AND a.currency = 'USD' AND a."archivedAt" IS NULL
     JOIN ledger_entries o ON o."transferGroupId" = b."transferGroupId" AND o.id <> b.id AND o."deletedAt" IS NULL
@@ -850,15 +953,15 @@ async function targetLegCount(db: DbClient, plan: RepairPlan, closes: RateClose[
     if (!inScope(row.accountId) || planned.has(row.id)) continue;
     const close = previousBusinessDayClose(closes, day);
     if (!close || !near(close.brlPerUnit, rate, 1e-8)) continue;
-    if (near(toNumber(row.amountBase), brokerAmount, 0.05) && near(toNumber(row.exchangeRate), close.brlPerUnit, 1e-4) && near(toNumber(row.amount), round(brokerAmount / close.brlPerUnit, 4), NATIVE)) planned.add(row.id);
+    if (repairedLeg(toNumber(row.amount), toNumber(row.amountBase), toNumber(row.exchangeRate), row.description, row.metadata, brokerAmount, close.brlPerUnit)) planned.add(row.id);
   }
   return planned.size;
 }
 
 async function repairedDepositCount(db: DbClient, plan: RepairPlan, closes: RateClose[], inScope: (accountId: string) => boolean): Promise<number> {
   const planned = new Set(plan.legs.filter((leg) => leg.signature === "crypto_deposit" && inScope(leg.accountId)).map((leg) => leg.entryId));
-  const rows = await db.$queryRaw<{ id: string; accountId: string; amount: Prisma.Decimal; amountBase: Prisma.Decimal; exchangeRate: Prisma.Decimal; date: Date }[]>`
-    SELECT b.id, b."accountId", b.amount, b."amountBase", b."exchangeRate", b.date
+  const rows = await db.$queryRaw<{ id: string; accountId: string; amount: Prisma.Decimal; amountBase: Prisma.Decimal; exchangeRate: Prisma.Decimal; date: Date; description: string; metadata: Prisma.JsonValue | null }[]>`
+    SELECT b.id, b."accountId", b.amount, b."amountBase", b."exchangeRate", b.date, b.description, b.metadata
     FROM ledger_entries b
     JOIN accounts a ON a.id = b."accountId" AND a.type = 'brokerage' AND a.currency = 'USD' AND a."archivedAt" IS NULL
     WHERE b."deletedAt" IS NULL AND b.currency = 'USD' AND abs(b."amountBase" - 10000) < 0.05
@@ -869,9 +972,140 @@ async function repairedDepositCount(db: DbClient, plan: RepairPlan, closes: Rate
     if (!close) continue;
     const buys = await db.investmentOperation.count({ where: { type: "buy", holding: { accountId: row.accountId, ticker: "BTC" }, quantity: { gte: BTC_QTY - 1e-6, lte: BTC_QTY + 1e-6 }, pricePerUnit: { gte: BTC_PRICE - 0.01, lte: BTC_PRICE + 0.01 }, totalAmount: { gte: BTC_TOTAL - 0.01, lte: BTC_TOTAL + 0.01 } } });
     if (buys !== 1) continue;
-    if (near(toNumber(row.exchangeRate), close.brlPerUnit, 1e-4) && near(toNumber(row.amount), round(CRYPTO_DEPOSIT / close.brlPerUnit, 4), NATIVE)) planned.add(row.id);
+    if (repairedLeg(toNumber(row.amount), toNumber(row.amountBase), toNumber(row.exchangeRate), row.description, row.metadata, CRYPTO_DEPOSIT, close.brlPerUnit)) planned.add(row.id);
   }
   return planned.size;
+}
+
+/** A repaired target: amountBase is still the BRL amount, and the USD amount is either BRL / PTAX or the execution quote. */
+function repairedLeg(amount: number, amountBase: number, exchangeRate: number, description: string, metadata: Prisma.JsonValue | null, brokerAmount: number, ptax: number): boolean {
+  if (!near(amountBase, brokerAmount, 0.05)) return false;
+  if (near(exchangeRate, ptax, 1e-4) && near(amount, round(brokerAmount / ptax, 4), NATIVE)) return true;
+  const quote = executionQuote(description, metadata, Math.abs(brokerAmount));
+  return quote != null && near(exchangeRate, quote.rate, 1e-4) && near(amount, round(Math.sign(brokerAmount) * quote.usd, 4), NATIVE);
+}
+
+/**
+ * Resultado = Patrimônio − Total aportado, split so each piece can be checked
+ * on its own. Unrealized is the current holding marked against its average
+ * cost (native, then today's BRL). Realized is sell/withdrawal gain at today's
+ * rate. Income is dividend and yield that stayed in the broker. FX on cash is
+ * the opening balance and transfer flows marked from the rate that booked them
+ * to today. FX on cost is the same gap for no-cash opening lots and later
+ * no-cash buys. Residual is what those pieces do not explain, and it is flagged
+ * when it exceeds 1% of Patrimônio.
+ */
+function decomposition(input: TimelineInput, source: PortfolioTimelineSource, rows: AccountFigures[], period: number): string {
+  const lines: string[] = [];
+  const holdingIds = (accountId: string) => new Set([...source.holdingAccountIds.entries()].filter(([, id]) => id === accountId).map(([holdingId]) => holdingId));
+  for (const row of rows) {
+    const account = input.accounts.find((item) => item.id === row.accountId);
+    if (!account) continue;
+    const ids = holdingIds(account.id);
+    const slice: TimelineInput = {
+      ...input,
+      accounts: [account],
+      entries: input.entries.filter((entry) => entry.accountId === account.id),
+      holdings: input.holdings.filter((holding) => ids.has(holding.id)),
+    };
+    lines.push(decompositionBlock(slice, row, period));
+  }
+  return lines.join("\n");
+}
+
+function decompositionBlock(input: TimelineInput, row: AccountFigures, period: number): string {
+  const account = input.accounts[0];
+  if (!account) return "";
+  const nativePlaces = account.currency === "BRL" ? 2 : 4;
+  const today = input.rateFor(account.currency);
+  const open = input.rateOn?.(account.currency, account.openedAt) ?? today;
+  let fxCash = account.initialBalance * (today - open);
+  for (const entry of input.entries) if (entry.isTransfer) fxCash += entry.amount * today - entry.amountBase;
+
+  const timeline = buildTimeline(input);
+  const state = timeline.state(account.entityId, period);
+  let unrealizedNative = 0;
+  let unrealizedBrl = 0;
+  let costNative = 0;
+  let marketNative = 0;
+  for (const position of state.positions) {
+    const native = marketValue({ assetClass: position.holding.assetClass, currentQuantity: position.quantity, currentPrice: position.holding.currentPrice, totalInvested: position.cost });
+    const rate = input.rateFor(position.holding.currency);
+    unrealizedBrl += (native - position.cost) * rate;
+    if (position.holding.currency === account.currency) {
+      unrealizedNative += native - position.cost;
+      costNative += position.cost;
+      marketNative += native;
+    }
+  }
+
+  let realizedNative = 0;
+  let realizedBrl = 0;
+  let income = 0;
+  let fxCost = 0;
+  for (const holding of input.holdings) {
+    const rate = input.rateFor(holding.currency);
+    const position = replayPosition(holding.operations);
+    realizedBrl += position.realizedGain * rate;
+    if (holding.currency === account.currency) realizedNative += position.realizedGain;
+    for (const op of holding.operations) {
+      if ((op.type === "dividend" || op.type === "yield_payment") && op.cash === "broker") income += op.totalAmount * rate;
+    }
+    fxCost += costBasisFx(holding, input);
+  }
+
+  const unrealized = round(unrealizedBrl, 2);
+  const realized = round(realizedBrl, 2);
+  const incomeBrl = round(income, 2);
+  const fxCashBrl = round(fxCash, 2);
+  const fxCostBrl = round(fxCost, 2);
+  const resultado = round(row.resultado, 2);
+  const residual = round(resultado - unrealized - realized - incomeBrl - fxCashBrl - fxCostBrl, 2);
+  const flagged = Math.abs(residual) > Math.abs(round(row.patrimonio, 2)) * RESIDUAL_FLAG;
+  return [
+    ["resultado_decomposition", row.name, account.currency].join("\t"),
+    ["unrealized_native", fmt(unrealizedNative, nativePlaces), "cost_native", fmt(costNative, nativePlaces), "market_native", fmt(marketNative, nativePlaces)].join("\t"),
+    `unrealized_brl\t${fmt(unrealized, 2)}`,
+    ["realized_native", fmt(realizedNative, nativePlaces)].join("\t"),
+    `realized_brl\t${fmt(realized, 2)}`,
+    `income_brl\t${fmt(incomeBrl, 2)}`,
+    `fx_cash_brl\t${fmt(fxCashBrl, 2)}`,
+    `fx_cost_brl\t${fmt(fxCostBrl, 2)}`,
+    `residual_brl\t${fmt(residual, 2)}`,
+    `patrimonio_brl\t${fmt(round(row.patrimonio, 2), 2)}`,
+    `resultado_brl\t${fmt(resultado, 2)}`,
+    `residual_flag\t${flagged ? "yes" : "no"}`,
+  ].join("\n");
+}
+
+/** BRL change from marking no-cash cost (opening lots and later no-cash buys) at today's rate instead of the rate that booked it. */
+function costBasisFx(holding: TimelineHolding, input: TimelineInput): number {
+  if (holding.removedAt) {
+    const position = replayPosition(holding.operations);
+    if (position.cost > 1e-9 || position.quantity > 1e-9) return 0;
+  }
+  const today = input.rateFor(holding.currency);
+  const openRate = input.rateOn?.(holding.currency, holding.openedAt ?? holding.createdAt) ?? today;
+  if (!holding.operations.length) return holding.totalInvested * (today - openRate);
+  let native = 0;
+  let booked = 0;
+  let before = replayPosition([]);
+  for (let i = 0; i < holding.operations.length; i++) {
+    const op = holding.operations[i];
+    const after = replayPosition(holding.operations.slice(0, i + 1));
+    if ((op.type !== "buy" && op.type !== "deposit") || op.cash !== "none") {
+      before = after;
+      continue;
+    }
+    const delta = after.cost - before.cost;
+    if (Math.abs(delta) > 1e-9) {
+      const rate = i === 0 ? openRate : (input.rateOn?.(holding.currency, op.date) ?? today);
+      native += delta;
+      booked += delta * rate;
+    }
+    before = after;
+  }
+  return native * today - booked;
 }
 
 async function legacyCashLine(db: DbClient, accountId: string, endingBefore: number, rows: Row[], backup: Backup | null, issues: string[]): Promise<string> {

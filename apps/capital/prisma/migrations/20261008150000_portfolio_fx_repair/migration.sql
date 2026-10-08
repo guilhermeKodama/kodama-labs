@@ -11,6 +11,9 @@
 --   2026-08-12 -> 2026-08-11 = 5.1285
 --   2026-09-16 -> 2026-09-15 = 5.1490
 -- The Crypto deposit date is read from the row; its previous close comes from this series.
+-- A leg whose description or metadata states a USD amount and a BRL-per-USD rate
+-- that reproduce the BRL amount within 0.5% uses that USD amount. Otherwise the
+-- previous business day's PTAX. The opening balance absorbs the difference.
 
 CREATE TABLE IF NOT EXISTS portfolio_fx_repair_entry (
     id TEXT PRIMARY KEY,
@@ -152,6 +155,117 @@ BEGIN
     RETURN NEXT;
 END
 $fn$;
+
+-- Same quote rule as portfolio-fx-report.ts executionQuote. A comma group of
+-- exactly three digits is thousands; any other comma is the decimal mark.
+CREATE OR REPLACE FUNCTION pg_temp.portfolio_fx_num(raw TEXT) RETURNS NUMERIC
+LANGUAGE plpgsql IMMUTABLE AS $num$
+DECLARE
+    text_value TEXT := btrim(raw);
+    normalized TEXT;
+    fraction TEXT;
+    dots INT;
+    commas INT;
+BEGIN
+    IF text_value IS NULL OR text_value !~ '^[0-9][0-9.,]*$' THEN
+        RETURN NULL;
+    END IF;
+    dots := length(text_value) - length(replace(text_value, '.', ''));
+    commas := length(text_value) - length(replace(text_value, ',', ''));
+    IF dots > 0 AND commas > 0 THEN
+        IF length(text_value) - strpos(reverse(text_value), ',') > length(text_value) - strpos(reverse(text_value), '.') THEN
+            normalized := replace(replace(text_value, '.', ''), ',', '.');
+        ELSE
+            normalized := replace(text_value, ',', '');
+        END IF;
+    ELSIF commas > 0 THEN
+        fraction := reverse(split_part(reverse(text_value), ',', 1));
+        IF length(fraction) = 3 THEN
+            normalized := replace(text_value, ',', '');
+        ELSE
+            normalized := replace(text_value, ',', '.');
+        END IF;
+    ELSE
+        normalized := text_value;
+    END IF;
+    IF length(normalized) - length(replace(normalized, '.', '')) > 1 THEN
+        RETURN NULL;
+    END IF;
+    RETURN normalized::numeric;
+EXCEPTION WHEN invalid_text_representation THEN
+    RETURN NULL;
+END;
+$num$;
+
+CREATE OR REPLACE FUNCTION pg_temp.portfolio_fx_execution(description TEXT, metadata JSONB, brl NUMERIC)
+RETURNS TABLE(usd NUMERIC, rate NUMERIC)
+LANGUAGE plpgsql STABLE AS $quote$
+DECLARE
+    blob TEXT;
+    match TEXT[];
+    usd_vals NUMERIC[] := '{}';
+    rate_vals NUMERIC[] := '{}';
+    num NUMERIC;
+    usd_value NUMERIC;
+    rate_value NUMERIC;
+    best_gap NUMERIC := NULL;
+    best_usd NUMERIC;
+    best_rate NUMERIC;
+    gap NUMERIC;
+BEGIN
+    IF brl IS NULL OR abs(brl) < 0.01 THEN
+        RETURN;
+    END IF;
+    blob := coalesce(description, '') || ' ' || coalesce(metadata::text, '');
+    FOR match IN
+        SELECT m FROM regexp_matches(blob, '(US\$|USD|U\$)\s*([0-9][0-9.,]*)', 'g') AS m
+    LOOP
+        num := pg_temp.portfolio_fx_num(match[2]);
+        IF num IS NOT NULL AND num > 0 THEN
+            usd_vals := array_append(usd_vals, num);
+        END IF;
+    END LOOP;
+    FOR match IN
+        SELECT m FROM regexp_matches(blob, '("usd"|"usdAmount"|"amountUsd")\s*:\s*"?([0-9][0-9.,]*)', 'g') AS m
+    LOOP
+        num := pg_temp.portfolio_fx_num(match[2]);
+        IF num IS NOT NULL AND num > 0 THEN
+            usd_vals := array_append(usd_vals, num);
+        END IF;
+    END LOOP;
+    FOR match IN
+        SELECT m FROM regexp_matches(blob, '@\s*(R\$\s*)?([0-9][0-9.,]*)', 'g') AS m
+    LOOP
+        num := pg_temp.portfolio_fx_num(match[2]);
+        IF num IS NOT NULL AND num > 0.5 AND num < 20 THEN
+            rate_vals := array_append(rate_vals, num);
+        END IF;
+    END LOOP;
+    FOR match IN
+        SELECT m FROM regexp_matches(blob, '("exchangeRate"|"fxRate"|"rate")\s*:\s*"?([0-9][0-9.,]*)', 'g') AS m
+    LOOP
+        num := pg_temp.portfolio_fx_num(match[2]);
+        IF num IS NOT NULL AND num > 0.5 AND num < 20 THEN
+            rate_vals := array_append(rate_vals, num);
+        END IF;
+    END LOOP;
+    FOREACH usd_value IN ARRAY usd_vals LOOP
+        FOREACH rate_value IN ARRAY rate_vals LOOP
+            gap := abs(usd_value * rate_value - abs(brl)) / abs(brl);
+            IF gap <= 0.005 AND (best_gap IS NULL OR gap < best_gap) THEN
+                best_gap := gap;
+                best_usd := usd_value;
+                best_rate := rate_value;
+            END IF;
+        END LOOP;
+    END LOOP;
+    IF best_gap IS NOT NULL THEN
+        usd := best_usd;
+        rate := best_rate;
+        RETURN NEXT;
+    END IF;
+END;
+$quote$;
 
 DO $repair$
 DECLARE
@@ -374,7 +488,9 @@ BEGIN
            b.amount AS broker_amount,
            b.date AS entry_date,
            o.amount AS other_amount,
-           a.currency AS account_currency
+           a.currency AS account_currency,
+           b.description AS description,
+           b.metadata AS metadata
     FROM ledger_entries b
     JOIN accounts a ON a.id = b."accountId" AND a.type = 'brokerage' AND a."archivedAt" IS NULL
     JOIN ledger_entries o ON o."transferGroupId" = b."transferGroupId" AND o.id <> b.id AND o."deletedAt" IS NULL
@@ -497,6 +613,25 @@ BEGIN
             (SELECT rate FROM _fx WHERE signature = 'avenue_in' LIMIT 1);
     END IF;
 
+    -- `rate` stays the previous-day PTAX. An explicit quote replaces only the amount written.
+    ALTER TABLE _fx ADD COLUMN applied_rate NUMERIC;
+    ALTER TABLE _fx ADD COLUMN applied_usd NUMERIC;
+    ALTER TABLE _fx ADD COLUMN rate_source TEXT;
+    UPDATE _fx SET
+        applied_rate = rate,
+        applied_usd = round((-other_amount) / rate, 4),
+        rate_source = 'ptax';
+    UPDATE _fx AS target SET
+        applied_rate = quote.rate,
+        applied_usd = round(sign(target.broker_amount) * quote.usd, 4),
+        rate_source = 'execution'
+    FROM (
+        SELECT f.entry_id, ex.rate, ex.usd
+        FROM _fx f
+        CROSS JOIN LATERAL pg_temp.portfolio_fx_execution(f.description, f.metadata, abs(f.broker_amount)) ex
+    ) AS quote
+    WHERE target.entry_id = quote.entry_id;
+
     CREATE TEMP TABLE _touch (account_id TEXT PRIMARY KEY, rule TEXT NOT NULL) ON COMMIT DROP;
     INSERT INTO _touch (account_id, rule)
     SELECT DISTINCT account_id, 'avenue' FROM _fx WHERE signature IN ('avenue_out', 'avenue_in');
@@ -555,8 +690,8 @@ BEGIN
 
     UPDATE ledger_entries e
     SET currency = f.account_currency,
-        amount = round((-f.other_amount) / f.rate, 4),
-        "exchangeRate" = round(f.rate, 8),
+        amount = f.applied_usd,
+        "exchangeRate" = round(f.applied_rate, 8),
         "amountBase" = round(-f.other_amount, 4),
         "updatedAt" = CURRENT_TIMESTAMP
     FROM _fx f
@@ -735,3 +870,5 @@ END
 $repair$;
 
 DROP FUNCTION IF EXISTS pg_temp.portfolio_fx_replay(TEXT, BOOLEAN, DOUBLE PRECISION, DOUBLE PRECISION);
+DROP FUNCTION IF EXISTS pg_temp.portfolio_fx_execution(TEXT, JSONB, NUMERIC);
+DROP FUNCTION IF EXISTS pg_temp.portfolio_fx_num(TEXT);

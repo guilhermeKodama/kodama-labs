@@ -35,6 +35,22 @@ function runMigration(): void {
   if (result.status !== 0) throw new Error(result.stderr || result.stdout);
 }
 
+function assertDecomposition(text: string): void {
+  const blocks = text.split(/(?=resultado_decomposition\t)/).filter((block) => block.startsWith("resultado_decomposition"));
+  expect(blocks.length).toBeGreaterThan(0);
+  for (const block of blocks) {
+    const num = (key: string) => {
+      const match = block.match(new RegExp(`^${key}\\t(-?[0-9.]+)`, "m"));
+      expect(match, block).not.toBeNull();
+      return Number(match?.[1]);
+    };
+    const parts = num("unrealized_brl") + num("realized_brl") + num("income_brl") + num("fx_cash_brl") + num("fx_cost_brl") + num("residual_brl");
+    expect(parts).toBeCloseTo(num("resultado_brl"), 2);
+    const flagged = Math.abs(num("residual_brl")) > Math.abs(num("patrimonio_brl")) * 0.01;
+    expect(block).toContain(`residual_flag\t${flagged ? "yes" : "no"}`);
+  }
+}
+
 async function fingerprint(userIds: string[]): Promise<string> {
   const rows = await prisma.$queryRaw<{ line: string }[]>`
     SELECT line FROM (
@@ -349,6 +365,9 @@ describe("portfolio fx repair", () => {
     expect(report.text).toContain("match\tyes");
     expect(report.text).toContain("ptax_day\t2026-08-11\tptax\t5.1285");
     expect(report.text).toContain("ptax_day\t2026-09-15\tptax\t5.149");
+    expect(report.text).toContain("source\tptax");
+    expect(report.text).toContain("resultado_decomposition\tAvenue");
+    assertDecomposition(report.text);
     expect(report.text).toMatch(/delta\tVUAA\t2026-04-01\t-1\.3929\t0\t/);
     expect(report.text).toMatch(/delta\tNEG\t2026-03-06\t-1\t0\t/);
     expect(report.text).not.toMatch(/delta\tLEG\t/);
@@ -377,6 +396,28 @@ describe("portfolio fx repair", () => {
       "2026-08-01",
     );
     expect(crypto && crypto.initialPositions - crypto.openingBrl).toBeCloseTo(22002 * (rate ?? 0), 1);
+  });
+
+  it("prechecks every user without taking another account's Avenue leg", async () => {
+    const soloId = "test-user-fx-repair-solo-001";
+    await createLedgerFixture(prisma, soloId);
+    await prisma.$executeRaw`
+      INSERT INTO legacy.investment_accounts (id, "userId", name, broker, "entityType", currency, "isActive", "createdAt", "updatedAt", "cashBalance")
+      VALUES (${avenueId}, ${SELL_USER}, 'Avenue', 'Avenue', 'personal'::"EntityType", 'USD', true, NOW(), NOW(), 167225.12)
+    `;
+    try {
+      const report = await portfolioFxReport(prisma, "precheck");
+      expect(report.ok, report.issues.join("; ")).toBe(true);
+      expect(report.issues.join("\n")).not.toMatch(/Avenue ending before/);
+      expect(report.text).toContain("ending_before\t950.0000");
+      expect(report.text).not.toContain("ending_before\t0.0000");
+      expect(report.text).toContain("avenue_reconciliation_usd\tnone");
+      expect(report.text).toContain("legacy_cash\t167225.1200");
+      assertDecomposition(report.text);
+    } finally {
+      await prisma.$executeRaw`DELETE FROM legacy.investment_accounts WHERE id = ${avenueId}`;
+      await deleteLedgerFixture(prisma, soloId);
+    }
   });
 
   it("repairs the listed rows, keeps the sell, and matches the timeline", async () => {
@@ -484,6 +525,9 @@ describe("portfolio fx repair", () => {
     expect(verified.ok, verified.issues.join("; ")).toBe(true);
     expect(verified.text).toContain("opening_native_after");
     expect(verified.text).toContain("match\tyes");
+    expect(verified.text).toContain("source\tptax");
+    expect(verified.text).toContain("resultado_decomposition\tAvenue");
+    assertDecomposition(verified.text);
     expect(verified.text).toContain("ending_before\t950.0000");
     expect(verified.text).toContain("ending_after\t950.0000");
     expect(verified.text).toMatch(/holding\tBTC\tqty\t0\.3667\t0\.2885\t/);
@@ -563,5 +607,84 @@ describe("portfolio fx repair double sale", () => {
     expect(failed.stderr).toMatch(/both live/);
     expect(await fingerprint([userId])).toBe(before);
     expect(await prisma.investmentHolding.findFirstOrThrow({ where: { accountId, ticker: "BTC" } })).toMatchObject({ currentQuantity: 0.2885 });
+  });
+});
+
+describe("portfolio fx repair execution quote", () => {
+  const userId = "test-user-fx-repair-exec-001";
+  let fixture: LedgerFixture;
+  let avenue = "";
+  let crypto = "";
+
+  beforeAll(async () => {
+    fixture = await createLedgerFixture(prisma, userId, { usdRate: 1 / 4.9935 });
+    const avenueAccount = await prisma.account.create({
+      data: { userId, entityId: fixture.pfId, type: "brokerage", name: "Avenue Exec", currency: "USD", initialBalance: "200000", createdAt: noon("2026-02-08") },
+    });
+    const cryptoAccount = await prisma.account.create({
+      data: { userId, entityId: fixture.pfId, type: "brokerage", name: "Crypto Exec", currency: "USD", initialBalance: "12002", createdAt: noon("2026-08-01") },
+    });
+    avenue = avenueAccount.id;
+    crypto = cryptoAccount.id;
+    await rateOne(userId, fixture.pfId, fixture.pfChecking, avenue, -168800.12, "2026-08-12", "US$33,322.17 @ R$5.0657 for R$168,800.12");
+    const inn = await rateOne(userId, fixture.pfId, fixture.pfChecking, avenue, 2575, "2026-09-16", "Avenue deposit");
+    await prisma.ledgerEntry.update({ where: { id: inn.brokerEntryId }, data: { metadata: { usdAmount: 500, exchangeRate: 5.15 } } });
+    await rateOne(userId, fixture.pfId, fixture.pfChecking, crypto, 10000, "2026-08-20", "US$2,000.00 @ R$5.0000 for R$10,000.00");
+    const cash = await prisma.ledgerEntry.create({
+      data: {
+        userId, entityId: fixture.pfId, accountId: crypto, kind: "investment", amount: -22002, currency: "USD", exchangeRate: 5, amountBase: -110010,
+        date: noon("2026-08-21"), effectiveDate: noon("2026-08-21"), description: "BTC buy cash",
+      },
+    });
+    const holding = await prisma.investmentHolding.create({
+      data: { accountId: crypto, assetClass: "crypto", ticker: "BTC", name: "Bitcoin", currency: "USD", currentQuantity: 0.3667, averageCost: 60000, totalInvested: 22002, isActive: true },
+    });
+    await prisma.investmentOperation.create({
+      data: { holdingId: holding.id, type: "buy", quantity: 0.3667, pricePerUnit: 60000, totalAmount: 22002, date: noon("2026-08-21"), cashEntryId: cash.id },
+    });
+  });
+
+  afterAll(async () => {
+    await deleteLedgerFixture(prisma, userId);
+  });
+
+  it("writes the quoted USD amount and still reconciles ending cash", async () => {
+    const before = await portfolioFxReport(prisma, "precheck", { userId, expectTargets: true });
+    expect(before.ok, before.issues.join("; ")).toBe(true);
+    expect(before.text).toContain("leg_source\tavenue_out\tAvenue Exec\t2026-08-12\texecution\t5.0657\t-33322.1700");
+    expect(before.text).toContain("leg_source\tavenue_in\tAvenue Exec\t2026-09-16\texecution\t5.15\t500.0000");
+    expect(before.text).toContain("leg_source\tcrypto_deposit\tCrypto Exec\t2026-08-20\texecution\t5\t2000.0000");
+    expect(before.text).toContain("-33322.1700");
+    expect(before.text).toContain("match\tyes");
+    assertDecomposition(before.text);
+    runMigration();
+    const out = await prisma.ledgerEntry.findFirstOrThrow({ where: { accountId: avenue, description: { contains: "33,322.17" } } });
+    expect(out.currency).toBe("USD");
+    expect(Number(out.amount)).toBeCloseTo(-33322.17, 4);
+    expect(Number(out.exchangeRate)).toBeCloseTo(5.0657, 4);
+    expect(Number(out.amountBase)).toBeCloseTo(-168800.12, 2);
+    const inn = await prisma.ledgerEntry.findFirstOrThrow({ where: { accountId: avenue, description: "Avenue deposit" } });
+    expect(Number(inn.amount)).toBeCloseTo(500, 4);
+    expect(Number(inn.exchangeRate)).toBeCloseTo(5.15, 4);
+    expect(Number(inn.amountBase)).toBeCloseTo(2575, 2);
+    const deposit = await prisma.ledgerEntry.findFirstOrThrow({ where: { accountId: crypto, description: { contains: "2,000.00" } } });
+    expect(Number(deposit.amount)).toBeCloseTo(2000, 4);
+    expect(Number(deposit.exchangeRate)).toBeCloseTo(5, 4);
+    expect(Number(deposit.amountBase)).toBeCloseTo(10000, 2);
+    const verified = await portfolioFxReport(prisma, "verify", { userId, expectTargets: true });
+    expect(verified.ok, verified.issues.join("; ")).toBe(true);
+    expect(verified.text).toContain("source\texecution");
+    expect(verified.text).toContain("match\tyes");
+    expect(verified.text).toContain("ending_before\t");
+    const endingBefore = verified.text.match(/ending_before\t(-?[0-9.]+)/)?.[1];
+    const endingAfter = verified.text.match(/ending_after\t(-?[0-9.]+)/)?.[1];
+    const lift = verified.text.match(/lift\t(-?[0-9.]+)/)?.[1];
+    expect(Number(endingAfter)).toBeCloseTo(Number(endingBefore) + Number(lift), 4);
+    assertDecomposition(verified.text);
+    runMigration();
+    const runs = await prisma.$queryRaw<{ fxLegs: number; btcDetached: number; modes: number; holdings: number }[]>`
+      SELECT "fxLegs", "btcDetached", modes, holdings FROM portfolio_fx_repair_run ORDER BY id DESC LIMIT 1
+    `;
+    expect(runs[0]).toEqual({ fxLegs: 0, btcDetached: 0, modes: 0, holdings: 0 });
   });
 });

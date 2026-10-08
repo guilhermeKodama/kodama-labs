@@ -24,7 +24,7 @@ Run compose from `~/Documents/Github/kodama-labs`. `up` and `run` take `--no-dep
 
 Pause nothing. The script only reads.
 
-The precheck needs #75's migration `20261008140000_adjustment_mode_and_rate_days` (the `currency_rate_days` series and `adjustmentMode`). Production receives #75 first, deployed in this same window, before this precheck. A copy that does not have that migration yet is not this step: apply `20261008140000` on its own before prechecking it (`prisma db execute` of that migration file, then `prisma migrate resolve --applied 20261008140000_adjustment_mode_and_rate_days`).
+The precheck needs #75's migration `20261008140000_adjustment_mode_and_rate_days` (the `currency_rate_days` series and `adjustmentMode`). Production receives #75 first, deployed in this same window, before this precheck. A copy that does not have that migration yet is not this step: apply `20261008140000` on its own before prechecking it (`prisma db execute --schema prisma/schema.prisma` of that migration file, then `prisma migrate resolve --applied 20261008140000_adjustment_mode_and_rate_days`).
 
 ```bash
 mkdir -p ~/backups
@@ -43,11 +43,12 @@ Read the saved output:
 - `delta` lines list every adjustment the migration will mark as delta: ticker, date, quantity, total, and notes. Confirm that list before migrating.
 - `holding` lines show quantity, average, cost, and active, before and after, for every holding the replay changes.
 - `--expect-targets` fails unless the Avenue 2026-08-12 leg, the Avenue 2026-09-16 leg, the Crypto deposit, and the BTC buy are each found once, or are already repaired.
-- Avenue reconciliation: ending USD cash after equals ending cash before plus the lift. Each flow prints a running balance. The two repaired flows show the BRL amount, the previous business day, and the PTAX (`2026-08-12` uses `2026-08-11 = 5.1285`, `2026-09-16` uses `2026-09-15 = 5.1490`). `match` is `yes`. When `legacy.investment_accounts` is absent the line is `legacy_schema missing`. When the Avenue account is not in that table the line is `legacy_account missing`.
-- Crypto lines show a non-negative running minimum. Where the 2026-09-30 sell is present, cash after is at least 6757.75.
+- Avenue reconciliation: ending USD cash after equals ending cash before plus the lift. Each flow prints a running balance. The two repaired flows show the BRL amount, the previous business day, and the PTAX (`2026-08-12` uses `2026-08-11 = 5.1285`, `2026-09-16` uses `2026-09-15 = 5.1490`). Each repaired leg prints `leg_source` and, on its flow line, `source`: `execution` when the description or metadata states a USD amount and a rate that reproduce the BRL amount within 0.5% (that USD amount is what gets written; the opening absorbs the difference), otherwise `ptax`. `match` is `yes`. When `legacy.investment_accounts` is absent the line is `legacy_schema missing`. When the Avenue account is not in that table the line is `legacy_account missing`.
+- Crypto lines show a non-negative running minimum. Where the 2026-09-30 sell is present, cash after is at least 6757.75. The Crypto deposit uses the same `execution` / `ptax` rule.
+- `resultado_decomposition` is one block per brokerage account: unrealized on current holdings at average cost (holding currency, then BRL), realized from sells, income, FX on cash and on cost basis (opening and flow rates versus today), and a residual. `residual_flag` is `yes` when the residual exceeds 1% of that account's Patrimônio.
 - Opening lots use the same `openedAt` rate as opening cash. The BTC buy is that lot; there is no separate BTC rate.
 
-Record the TOTAL before and after. The expected move is Total aportado down by about R$0.6–0.7M, with Resultado moving from about −R$190k to about +R$450k on about R$1M of Patrimônio. If the Avenue opening is not the reconciliation above, do not migrate.
+Record the TOTAL before and after. The rehearsal on a copy of production moved PF Total aportado from 1,330,710.90 to 682,671.29 and Resultado from −251,443.60 to +419,072.53. Avenue Resultado moved from about −507k to about +193k on about 303k contributed. If the Avenue opening is not the reconciliation above, do not migrate.
 
 ## Rehearsal
 
@@ -125,7 +126,7 @@ docker --context desktop-linux run --rm \
   -e DIRECT_URL="postgresql://root:rehearsal@capital-rehearsal-pg:5432/capital" \
   --entrypoint pnpm \
   kodama-capital:portfolio-fx-rehearsal \
-  exec prisma db execute --file prisma/migrations/20261008140000_adjustment_mode_and_rate_days/migration.sql
+  exec prisma db execute --file prisma/migrations/20261008140000_adjustment_mode_and_rate_days/migration.sql --schema prisma/schema.prisma
 
 docker --context desktop-linux run --rm \
   --network capital-rehearsal-net \
@@ -187,8 +188,9 @@ docker --context desktop-linux run --rm \
 The command must exit 0. Read the output:
 
 - The same per-account table, now from the backup (before) and the repaired ledger (after).
-- Avenue `match` is `yes`, and each repaired flow is the BRL amount divided by the embedded previous-day PTAX.
+- Avenue `match` is `yes`. Each repaired flow prints `source execution` when the leg carried a USD amount and rate within 0.5% of the BRL amount, and `source ptax` otherwise (BRL divided by the embedded previous-day PTAX).
 - Crypto running minimum is non-negative. With the sell present, cash is at least 6757.75.
+- `resultado_decomposition` is present for every brokerage account, and any `residual_flag yes` is checked before continuing.
 - Every holding with a delta operation matches replay: VUAA is about 17.2791 shares at US$144.67 and active, and the Crypto BTC holding includes the live sell. There is no `issue` line.
 
 Remove the throwaway when the verify is saved, and also if a step fails:
