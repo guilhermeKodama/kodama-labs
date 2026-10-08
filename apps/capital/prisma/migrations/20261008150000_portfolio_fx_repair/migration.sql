@@ -10,8 +10,6 @@
 -- A flow on calendar day D uses the latest close strictly before D.
 --   2026-08-12 -> 2026-08-11 = 5.1285
 --   2026-09-16 -> 2026-09-15 = 5.1490
---   2026-08-20 -> 2026-08-19 = 5.1714
---   2026-09-01 -> 2026-08-31 = 5.1816
 -- The Crypto deposit date is read from the row; its previous close comes from this series.
 
 CREATE TABLE IF NOT EXISTS portfolio_fx_repair_entry (
@@ -386,7 +384,8 @@ BEGIN
       AND b."exchangeRate" = 1
       AND o."exchangeRate" = 1
       AND abs(abs(b.amount) - abs(o.amount)) < 0.01
-      AND a.currency <> oa.currency
+      AND a.currency = 'USD'
+      AND oa.currency = 'BRL'
       AND b.currency IS DISTINCT FROM a.currency
       AND abs(b.amount + o.amount) < 0.01
       AND (SELECT count(*) FROM ledger_entries x WHERE x."transferGroupId" = b."transferGroupId" AND x."deletedAt" IS NULL) = 2;
@@ -412,10 +411,8 @@ BEGIN
         ELSE 'unexpected'
     END;
 
-    IF EXISTS (SELECT 1 FROM _fx WHERE signature = 'unexpected') THEN
-        RAISE EXCEPTION 'portfolio fx repair: unexpected rate-1 cross-currency broker leg(s): %',
-            (SELECT string_agg(entry_id || ' ' || account_id || ' ' || broker_amount::text, ', ') FROM _fx WHERE signature = 'unexpected');
-    END IF;
+    -- A rate-1 USD/BRL leg that is not one of the three targets is left unchanged.
+    DELETE FROM _fx WHERE signature = 'unexpected';
     IF (SELECT count(*) FROM _fx WHERE signature = 'avenue_out') > 1 THEN
         RAISE EXCEPTION 'portfolio fx repair: more than one Avenue 2026-08-12 leg';
     END IF;
@@ -455,6 +452,23 @@ BEGIN
         JOIN _fx f ON f.account_id = b.account_id AND f.signature IN ('avenue_out', 'avenue_in')
     ) THEN
         RAISE EXCEPTION 'portfolio fx repair: opening BTC buy is on the Avenue account';
+    END IF;
+
+    IF EXISTS (
+        SELECT 1
+        FROM investment_operations sell
+        JOIN investment_operations adj ON adj."holdingId" = sell."holdingId"
+        JOIN investment_holdings h ON h.id = sell."holdingId"
+        WHERE h.ticker = 'BTC'
+          AND sell.type = 'sell'
+          AND (sell.date AT TIME ZONE 'UTC')::date = DATE '2026-09-30'
+          AND abs(sell.quantity - 0.0782) < 0.000001
+          AND adj.type = 'adjustment'
+          AND (adj.date AT TIME ZONE 'UTC')::date = DATE '2026-10-02'
+          AND adj.quantity IS NOT NULL
+          AND abs(adj.quantity - (-0.0782)) < 0.000001
+    ) THEN
+        RAISE EXCEPTION 'portfolio fx repair: the 2026-09-30 BTC sell and the 2026-10-02 adjustment are both live';
     END IF;
 
     ALTER TABLE _fx ADD COLUMN rate NUMERIC;
@@ -542,12 +556,28 @@ BEGIN
     WHERE e.id = f.entry_id;
     GET DIAGNOSTICS fx_count = ROW_COUNT;
 
-    UPDATE ledger_entries e
-    SET "deletedAt" = CURRENT_TIMESTAMP,
+    CREATE TABLE IF NOT EXISTS portfolio_fx_repair_removed_entry (
+        id TEXT PRIMARY KEY,
+        "operationId" TEXT NOT NULL,
+        snapshot JSONB NOT NULL
+    );
+
+    INSERT INTO portfolio_fx_repair_removed_entry (id, "operationId", snapshot)
+    SELECT e.id, b.op_id, to_jsonb(e)
+    FROM ledger_entries e
+    JOIN _btc b ON b.cash_id = e.id
+    ON CONFLICT (id) DO NOTHING;
+
+    UPDATE investment_operations op
+    SET "cashEntryId" = NULL,
         "updatedAt" = CURRENT_TIMESTAMP
     FROM _btc b
-    WHERE e.id = b.cash_id AND e."deletedAt" IS NULL;
+    WHERE op.id = b.op_id AND op."cashEntryId" IS NOT NULL;
     GET DIAGNOSTICS detach_count = ROW_COUNT;
+
+    DELETE FROM ledger_entries e
+    USING _btc b
+    WHERE e.id = b.cash_id;
 
     FOR rec IN SELECT * FROM _touch LOOP
         SELECT l.ending INTO legacy_ending FROM _legacy l WHERE l.account_id = rec.account_id;
@@ -594,25 +624,30 @@ BEGIN
         WHERE table_schema = 'legacy' AND table_name = 'investment_transactions'
     ) INTO legacy_ok;
 
+    -- Delta only for a pre-v2 negative quantity (the row is in
+    -- legacy.investment_transactions; a later negative quantity is an absolute
+    -- reset) or a zero-amount quantity change that is not the old MCP absolute
+    -- write (notes 'Manual adjustment%'). A positive adjustment whose
+    -- totalAmount is about quantity times price stays absolute.
     CREATE TEMP TABLE _delta (id TEXT PRIMARY KEY, holding_id TEXT NOT NULL) ON COMMIT DROP;
-    IF legacy_ok THEN
-        INSERT INTO _delta (id, holding_id)
-        SELECT o.id, o."holdingId"
-        FROM investment_operations o
-        WHERE o.type = 'adjustment'
-          AND o."adjustmentMode" IS DISTINCT FROM 'delta'
-          AND o.quantity IS NOT NULL
-          AND o."pricePerUnit" IS NOT NULL
-          AND EXISTS (SELECT 1 FROM legacy.investment_transactions t WHERE t.id = o.id);
-    END IF;
     INSERT INTO _delta (id, holding_id)
     SELECT o.id, o."holdingId"
     FROM investment_operations o
     WHERE o.type = 'adjustment'
       AND o."adjustmentMode" IS DISTINCT FROM 'delta'
       AND o.quantity IS NOT NULL
-      AND o.quantity < 0
-    ON CONFLICT (id) DO NOTHING;
+      AND o.quantity <> 0
+      AND (
+        (
+          o.quantity < 0
+          AND legacy_ok
+          AND EXISTS (SELECT 1 FROM legacy.investment_transactions t WHERE t.id = o.id)
+        )
+        OR (
+          abs(o."totalAmount") < 0.0000001
+          AND coalesce(o.notes, '') NOT ILIKE 'Manual adjustment%'
+        )
+      );
 
     INSERT INTO portfolio_fx_repair_operation (id, "adjustmentMode")
     SELECT o.id, o."adjustmentMode"::text
@@ -624,6 +659,7 @@ BEGIN
     SELECT h.id, h."currentQuantity", h."averageCost", h."totalInvested", h."isActive", h."updatedAt"
     FROM investment_holdings h
     WHERE h.id IN (SELECT holding_id FROM _delta)
+       OR h."accountId" IN (SELECT account_id FROM _touch)
     ON CONFLICT (id) DO NOTHING;
 
     UPDATE investment_operations o
@@ -636,6 +672,7 @@ BEGIN
         SELECT h.id, h."isActive", h."currentQuantity", h."totalInvested", h."averageCost"
         FROM investment_holdings h
         WHERE h.id IN (SELECT DISTINCT "holdingId" FROM investment_operations WHERE "adjustmentMode" = 'delta')
+           OR h."accountId" IN (SELECT account_id FROM _touch)
     LOOP
         SELECT * INTO replay FROM pg_temp.portfolio_fx_replay(rec.id, rec."isActive", rec."currentQuantity", rec."totalInvested");
         IF rec."isActive" IS DISTINCT FROM replay.is_active
@@ -658,7 +695,8 @@ BEGIN
         SELECT 1
         FROM portfolio_fx_repair_frozen f
         JOIN investment_operations op ON op.id = f.id
-        WHERE f.kind = 'operation' AND to_jsonb(op) IS DISTINCT FROM f.snapshot
+        WHERE f.kind = 'operation'
+          AND (to_jsonb(op) - 'cashEntryId' - 'updatedAt') IS DISTINCT FROM (f.snapshot - 'cashEntryId' - 'updatedAt')
     ) THEN
         RAISE EXCEPTION 'portfolio fx repair: a frozen BTC buy or sell changed';
     END IF;

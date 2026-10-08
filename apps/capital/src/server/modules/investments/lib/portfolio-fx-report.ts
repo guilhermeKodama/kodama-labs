@@ -46,6 +46,7 @@ export interface AccountFigures {
 export interface PortfolioFxReport {
   ok: boolean;
   issues: string[];
+  warnings: string[];
   text: string;
   before: AccountFigures[];
   after: AccountFigures[];
@@ -79,10 +80,22 @@ interface PlannedLeg {
   usd: number;
 }
 
+interface DeltaCandidate {
+  id: string;
+  ticker: string;
+  date: Date;
+  quantity: number;
+  totalAmount: number;
+  notes: string | null;
+  userId: string;
+}
+
 interface RepairPlan {
   issues: string[];
+  warnings: string[];
   legs: PlannedLeg[];
   detaches: { opId: string; cashId: string; accountId: string }[];
+  deltas: DeltaCandidate[];
   deltaOperationIds: string[];
   initials: Map<string, number>;
 }
@@ -104,7 +117,7 @@ interface Backup {
   entries: Map<string, BackupEntry>;
   initials: Map<string, number>;
   modes: Map<string, "delta" | "absolute" | null>;
-  holdings: Map<string, { isActive: boolean; updatedAt: Date; currentQuantity: number; totalInvested: number }>;
+  holdings: Map<string, { isActive: boolean; updatedAt: Date; currentQuantity: number; averageCost: number; totalInvested: number }>;
   /** Operation id → cash entry id, for legs the migration detached. */
   cashOf: Map<string, string>;
 }
@@ -184,6 +197,7 @@ function prefixMin(entries: { id: string; date: Date; createdAt: Date; amount: n
 
 async function planRepair(db: DbClient, closes: RateClose[]): Promise<RepairPlan> {
   const issues: string[] = [];
+  const warnings: string[] = [];
   const rows = await loadRows(db);
   const byGroup = new Map<string, Row[]>();
   for (const row of rows) {
@@ -209,7 +223,8 @@ async function planRepair(db: DbClient, closes: RateClose[]): Promise<RepairPlan
     if (group.length !== 2) continue;
     for (const broker of group) {
       const other = group.find((row) => row.id !== broker.id)!;
-      const pattern = near(broker.exchangeRate, 1, 1e-8) && near(other.exchangeRate, 1, 1e-8) && near(Math.abs(broker.amount), Math.abs(other.amount)) && broker.accountCurrency !== other.accountCurrency && broker.currency !== broker.accountCurrency;
+      const usdBrl = broker.accountCurrency === "USD" && other.accountCurrency === "BRL";
+      const pattern = near(broker.exchangeRate, 1, 1e-8) && near(other.exchangeRate, 1, 1e-8) && near(Math.abs(broker.amount), Math.abs(other.amount)) && usdBrl && broker.currency !== broker.accountCurrency;
       if (!pattern) continue;
       if (!near(broker.amount + other.amount, 0)) {
         issues.push(`broker and BRL legs do not balance: ${broker.id}`);
@@ -220,7 +235,7 @@ async function planRepair(db: DbClient, closes: RateClose[]): Promise<RepairPlan
       const signature: PlannedLeg["signature"] | null =
         day === "2026-08-12" && near(broker.amount, AVENUE_OUT) ? "avenue_out" : day === "2026-09-16" && near(broker.amount, AVENUE_IN) ? "avenue_in" : near(broker.amount, CRYPTO_DEPOSIT) && oneBtc ? "crypto_deposit" : null;
       if (!signature) {
-        issues.push(`unexpected rate-1 cross-currency broker leg ${broker.id} ${broker.accountName} ${day} ${broker.amount}`);
+        warnings.push(`unexpected rate-1 cross-currency broker leg ${broker.id} ${broker.accountName} ${day} ${broker.amount}`);
         continue;
       }
       const close = previousBusinessDayClose(closes, day);
@@ -244,7 +259,9 @@ async function planRepair(db: DbClient, closes: RateClose[]): Promise<RepairPlan
   }
 
   const detaches = [...btcByAccount.values()].flatMap((list) => (list.length === 1 && list[0].cashEntryId && !list[0].cashEntry?.deletedAt ? [{ opId: list[0].id, cashId: list[0].cashEntryId, accountId: list[0].holding.accountId }] : []));
-  const deltaOperationIds = await deltaIds(db);
+  if (await bothBtcSaleAndAdjustmentLive(db)) issues.push("the 2026-09-30 BTC sell and the 2026-10-02 adjustment are both live");
+  const deltas = await deltaCandidates(db);
+  const deltaOperationIds = deltas.map((row) => row.id);
   const initials = new Map<string, number>();
   if (!issues.length) {
     const touched = new Set([...legs.map((leg) => leg.accountId), ...detaches.map((row) => row.accountId)]);
@@ -266,7 +283,25 @@ async function planRepair(db: DbClient, closes: RateClose[]): Promise<RepairPlan
       initials.set(accountId, round(opening, 4));
     }
   }
-  return { issues, legs, detaches, deltaOperationIds, initials };
+  return { issues, warnings, legs, detaches, deltas, deltaOperationIds, initials };
+}
+
+async function bothBtcSaleAndAdjustmentLive(db: DbClient): Promise<boolean> {
+  const rows = await db.$queryRaw<{ holdingId: string }[]>`
+    SELECT sell."holdingId" AS "holdingId"
+    FROM investment_operations sell
+    JOIN investment_operations adj ON adj."holdingId" = sell."holdingId"
+    JOIN investment_holdings h ON h.id = sell."holdingId"
+    WHERE h.ticker = 'BTC'
+      AND sell.type = 'sell'
+      AND (sell.date AT TIME ZONE 'UTC')::date = DATE '2026-09-30'
+      AND abs(sell.quantity - 0.0782) < 0.000001
+      AND adj.type = 'adjustment'
+      AND (adj.date AT TIME ZONE 'UTC')::date = DATE '2026-10-02'
+      AND adj.quantity IS NOT NULL
+      AND abs(adj.quantity - (-0.0782)) < 0.000001
+  `;
+  return rows.length > 0;
 }
 
 async function sellIsLive(db: DbClient, accountId: string): Promise<boolean> {
@@ -277,15 +312,42 @@ async function sellIsLive(db: DbClient, accountId: string): Promise<boolean> {
   return ops.some((op) => op.quantity != null && near(op.quantity, SELL_QTY, 1e-6) && dayOf(op.date) === SELL_DAY && op.cashEntry != null && toNumber(op.cashEntry.amount) >= SELL_CASH - MONEY);
 }
 
-async function deltaIds(db: DbClient): Promise<string[]> {
-  const ops = await db.investmentOperation.findMany({ where: { type: "adjustment", adjustmentMode: null }, select: { id: true, quantity: true, pricePerUnit: true } });
+/**
+ * Same predicate as the migration. A negative quantity is a delta only when
+ * the row was written before v2 (it is in legacy.investment_transactions):
+ * the old MCP adjust_position stored an absolute quantity with
+ * totalAmount ≈ qty × price and notes "Manual adjustment%". A later negative
+ * quantity is an absolute reset. A zero-amount quantity change is a delta
+ * unless those notes mark it as that absolute MCP write.
+ */
+async function deltaCandidates(db: DbClient): Promise<DeltaCandidate[]> {
+  const ops = await db.investmentOperation.findMany({
+    where: { type: "adjustment" },
+    select: { id: true, quantity: true, totalAmount: true, notes: true, date: true, adjustmentMode: true, holding: { select: { ticker: true, account: { select: { userId: true } } } } },
+  });
+  const open = ops.filter((op) => op.adjustmentMode !== "delta");
   const legacy = new Set<string>();
   const table = await db.$queryRaw<{ exists: boolean }[]>`SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'legacy' AND table_name = 'investment_transactions') AS exists`;
-  if (table[0]?.exists && ops.length) {
-    const rows = await db.$queryRaw<{ id: string }[]>`SELECT id FROM legacy.investment_transactions WHERE id IN (${Prisma.join(ops.map((op) => op.id))})`;
+  if (table[0]?.exists && open.length) {
+    const rows = await db.$queryRaw<{ id: string }[]>`SELECT id FROM legacy.investment_transactions WHERE id IN (${Prisma.join(open.map((op) => op.id))})`;
     for (const row of rows) legacy.add(row.id);
   }
-  return ops.filter((op) => (op.quantity != null && op.quantity < 0) || (op.quantity != null && op.pricePerUnit != null && legacy.has(op.id))).map((op) => op.id);
+  return open.flatMap((op) => {
+    if (op.quantity == null || op.quantity === 0) return [];
+    const manual = /^manual adjustment/i.test(op.notes ?? "");
+    const preV2Negative = op.quantity < 0 && legacy.has(op.id);
+    const zeroAmount = Math.abs(op.totalAmount) < 1e-7 && !manual;
+    if (!preV2Negative && !zeroAmount) return [];
+    return [{ id: op.id, ticker: op.holding.ticker ?? "", date: op.date, quantity: op.quantity, totalAmount: op.totalAmount, notes: op.notes, userId: op.holding.account.userId }];
+  });
+}
+
+function deltaLine(row: DeltaCandidate): string {
+  return ["delta", row.ticker, dayOf(row.date), trimNum(row.quantity, 8), trimNum(row.totalAmount, 4), row.notes ?? ""].join("\t");
+}
+
+function trimNum(value: number, places: number): string {
+  return value.toFixed(places).replace(/\.?0+$/, "") || "0";
 }
 
 function asEntry(row: { accountId: string; date: Date; amount: number; amountBase: number; transferGroupId: string | null }): TimelineEntry {
@@ -405,13 +467,28 @@ function table(before: AccountFigures[], after: AccountFigures[]): string {
   return lines.join("\n");
 }
 
-function flowLines(accountId: string, rows: Row[], legs: PlannedLeg[]): string[] {
-  const planned = new Map(legs.filter((leg) => leg.accountId === accountId).map((leg) => [leg.entryId, leg]));
-  const ordered = rows.filter((row) => row.accountId === accountId).sort((a, b) => a.date.getTime() - b.date.getTime() || a.createdAt.getTime() - b.createdAt.getTime() || a.id.localeCompare(b.id));
+function accountFlows(accountId: string, rows: Row[], backup: Backup | null, replacement: Map<string, number> | null): { id: string; date: Date; createdAt: Date; amount: number; description: string }[] {
+  const list = rows.filter((row) => row.accountId === accountId).map((row) => {
+    const previous = backup?.entries.get(row.id);
+    const restored = previous && !previous.deletedAt ? previous.amount : row.amount;
+    return { id: row.id, date: row.date, createdAt: row.createdAt, amount: replacement?.get(row.id) ?? restored, description: row.description };
+  });
+  if (!backup) return list;
+  for (const [id, previous] of backup.entries) {
+    if (previous.accountId !== accountId || previous.deletedAt || list.some((row) => row.id === id)) continue;
+    list.push({ id, date: previous.date, createdAt: previous.createdAt, amount: replacement?.get(id) ?? previous.amount, description: previous.description });
+  }
+  return list;
+}
+
+function runningFlows(opening: number, rows: { id: string; date: Date; createdAt: Date; amount: number; description: string }[], legs: PlannedLeg[]): string[] {
+  const planned = new Map(legs.map((leg) => [leg.entryId, leg]));
+  const ordered = [...rows].sort((a, b) => a.date.getTime() - b.date.getTime() || a.createdAt.getTime() - b.createdAt.getTime() || a.id.localeCompare(b.id));
+  let running = opening;
   return ordered.map((row) => {
+    running = round(running + row.amount, 4);
     const leg = planned.get(row.id);
-    const amount = leg?.usd ?? row.amount;
-    const base = `${dayOf(row.date)}\t${fmt(amount, 4)}\tUSD\t${row.description}`;
+    const base = `${dayOf(row.date)}\t${fmt(row.amount, 4)}\tUSD\t${row.description}\trunning\t${fmt(running, 4)}`;
     return leg ? `${base}\tbrl\t${fmt(leg.brl, 4)}\tptax_day\t${leg.rateDay}\tptax\t${leg.rate}` : base;
   });
 }
@@ -432,18 +509,54 @@ async function loadBackup(db: DbClient): Promise<Backup> {
   `;
   const initials = await db.$queryRaw<{ id: string; initialBalance: Prisma.Decimal }[]>`SELECT id, "initialBalance" FROM portfolio_fx_repair_account`;
   const modes = await db.$queryRaw<{ id: string; adjustmentMode: string | null }[]>`SELECT id, "adjustmentMode" FROM portfolio_fx_repair_operation`;
-  const holdings = await db.$queryRaw<{ id: string; currentQuantity: number; totalInvested: number; isActive: boolean; updatedAt: Date }[]>`
-    SELECT id, "currentQuantity", "totalInvested", "isActive", "updatedAt" FROM portfolio_fx_repair_holding
+  const holdings = await db.$queryRaw<{ id: string; currentQuantity: number; averageCost: number; totalInvested: number; isActive: boolean; updatedAt: Date }[]>`
+    SELECT id, "currentQuantity", "averageCost", "totalInvested", "isActive", "updatedAt" FROM portfolio_fx_repair_holding
   `;
   const cashOf = await db.$queryRaw<{ opId: string; cashId: string }[]>`
     SELECT id AS "opId", "cashEntryId" AS "cashId" FROM investment_operations WHERE "cashEntryId" IN (SELECT id FROM portfolio_fx_repair_entry)
   `;
+  const removedTable = await db.$queryRaw<{ exists: boolean }[]>`SELECT to_regclass('public.portfolio_fx_repair_removed_entry') IS NOT NULL AS exists`;
+  const removed = removedTable[0]?.exists
+    ? await db.$queryRaw<{ id: string; operationId: string; snapshot: Prisma.JsonValue }[]>`SELECT id, "operationId", snapshot FROM portfolio_fx_repair_removed_entry`
+    : [];
+  const entryMap = new Map(entries.map((row) => [row.id, { amount: toNumber(row.amount), amountBase: toNumber(row.amountBase), exchangeRate: toNumber(row.exchangeRate), currency: row.currency, deletedAt: row.deletedAt, accountId: row.accountId, date: row.date, createdAt: row.createdAt, description: row.description, transferGroupId: row.transferGroupId }]));
+  const cashLinks = new Map(cashOf.map((row) => [row.opId, row.cashId]));
+  for (const row of removed) {
+    const restored = entryFromSnapshot(row.snapshot);
+    if (!restored) continue;
+    entryMap.set(row.id, restored);
+    cashLinks.set(row.operationId, row.id);
+  }
   return {
-    entries: new Map(entries.map((row) => [row.id, { amount: toNumber(row.amount), amountBase: toNumber(row.amountBase), exchangeRate: toNumber(row.exchangeRate), currency: row.currency, deletedAt: row.deletedAt, accountId: row.accountId, date: row.date, createdAt: row.createdAt, description: row.description, transferGroupId: row.transferGroupId }])),
+    entries: entryMap,
     initials: new Map(initials.map((row) => [row.id, toNumber(row.initialBalance)])),
     modes: new Map(modes.map((row) => [row.id, row.adjustmentMode === "delta" || row.adjustmentMode === "absolute" ? row.adjustmentMode : null])),
     holdings: new Map(holdings.map((row) => [row.id, row])),
-    cashOf: new Map(cashOf.map((row) => [row.opId, row.cashId])),
+    cashOf: cashLinks,
+  };
+}
+
+function entryFromSnapshot(snapshot: Prisma.JsonValue): BackupEntry | null {
+  if (!snapshot || typeof snapshot !== "object" || Array.isArray(snapshot)) return null;
+  const row = snapshot as Record<string, Prisma.JsonValue>;
+  const num = (value: Prisma.JsonValue | undefined) => (typeof value === "number" ? value : Number(value));
+  const date = (value: Prisma.JsonValue | undefined) => {
+    if (value instanceof Date) return value;
+    const text = String(value);
+    return /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?$/.test(text) ? new Date(`${text}Z`) : new Date(text);
+  };
+  if (row.accountId == null || row.amount == null) return null;
+  return {
+    amount: num(row.amount),
+    amountBase: num(row.amountBase),
+    exchangeRate: num(row.exchangeRate),
+    currency: String(row.currency),
+    deletedAt: row.deletedAt ? date(row.deletedAt) : null,
+    accountId: String(row.accountId),
+    date: date(row.date),
+    createdAt: date(row.createdAt),
+    description: String(row.description ?? ""),
+    transferGroupId: row.transferGroupId ? String(row.transferGroupId) : null,
   };
 }
 
@@ -495,11 +608,12 @@ function beforeFromBackup(source: PortfolioTimelineSource, rows: Row[], backup: 
   return recomputeOpenedAt({ ...source.input, accounts, holdings, entries: restored.map(asEntry) }, source);
 }
 
-export async function portfolioFxReport(db: DbClient, mode: "precheck" | "verify", opts: { userId?: string } = {}): Promise<PortfolioFxReport> {
+export async function portfolioFxReport(db: DbClient, mode: "precheck" | "verify", opts: { userId?: string; expectTargets?: boolean } = {}): Promise<PortfolioFxReport> {
   const issues: string[] = [];
   const closes = await loadCloses(db);
   const plan = await planRepair(db, closes);
   issues.push(...plan.issues);
+  if (opts.expectTargets) issues.push(...(await expectTargetIssues(db, plan, closes, opts.userId)));
   const users = opts.userId ? [{ id: opts.userId }] : await db.user.findMany({ select: { id: true }, orderBy: { createdAt: "asc" } });
   const before: AccountFigures[] = [];
   const after: AccountFigures[] = [];
@@ -521,11 +635,14 @@ export async function portfolioFxReport(db: DbClient, mode: "precheck" | "verify
     before.push(...beforeRows);
     after.push(...afterRows);
     sections.push(table(beforeRows, afterRows));
-    sections.push(reconciliation({ source, rows, plan, before: beforeRows, after: afterRows, closes, issues, backup, mode }));
+    sections.push(await reconciliation(db, { source, rows, plan, before: beforeRows, after: afterRows, closes, issues, backup, mode }));
+    sections.push(await holdingLines(db, user.id, mode, plan, backup));
+    const deltas = mode === "verify" && backup ? await markedDeltas(db, backup, user.id) : plan.deltas.filter((row) => row.userId === user.id);
+    if (deltas.length) sections.push(deltas.map(deltaLine).join("\n"));
   }
-  if (mode === "verify") issues.push(...(await storedChecks(db, opts.userId)));
-  const text = [`portfolio fx repair ${mode}`, "Opening cash and opening lots use the previous business day's PTAX on the account openedAt. Live cash and holdings use today's rate.", ...sections, ...issues.map((issue) => `issue\t${issue}`)].join("\n") + "\n";
-  return { ok: issues.length === 0, issues, text, before, after };
+  if (mode === "verify") issues.push(...(await storedChecks(db, opts.userId, backup)));
+  const text = [`portfolio fx repair ${mode}`, "Opening cash and opening lots use the previous business day's PTAX on the account openedAt. Live cash and holdings use today's rate.", ...sections, ...plan.warnings.map((warning) => `warn\t${warning}`), ...issues.map((issue) => `issue\t${issue}`)].join("\n") + "\n";
+  return { ok: issues.length === 0, issues, warnings: plan.warnings, text, before, after };
 }
 
 function correctedLegs(rows: Row[], plan: RepairPlan, backup: Backup | null, closes: RateClose[]): PlannedLeg[] {
@@ -545,7 +662,7 @@ function correctedLegs(rows: Row[], plan: RepairPlan, backup: Backup | null, clo
   return legs;
 }
 
-function reconciliation(input: { source: PortfolioTimelineSource; rows: Row[]; plan: RepairPlan; before: AccountFigures[]; after: AccountFigures[]; closes: RateClose[]; issues: string[]; backup: Backup | null; mode: "precheck" | "verify" }): string {
+async function reconciliation(db: DbClient, input: { source: PortfolioTimelineSource; rows: Row[]; plan: RepairPlan; before: AccountFigures[]; after: AccountFigures[]; closes: RateClose[]; issues: string[]; backup: Backup | null; mode: "precheck" | "verify" }): Promise<string> {
   const { rows, plan, before, after, closes, issues, backup } = input;
   const lines: string[] = [];
   const legs = correctedLegs(rows, plan, backup, closes);
@@ -560,32 +677,31 @@ function reconciliation(input: { source: PortfolioTimelineSource; rows: Row[]; p
       const leg = legs.find((item) => item.entryId === row.id);
       return leg ? { ...row, amount: leg.usd, amountBase: leg.brl } : row;
     });
-    const flows = flowLines(accountId, projected, legs);
-    const sum = projected.reduce((total, row) => total + row.amount, 0);
-    const legacy = left?.cashNative ?? 0;
-    const opening = right?.openingNative ?? 0;
-    const beforeLift = round(legacy - sum, 4);
-    const lift = round(opening - beforeLift, 4);
-    const identity = near(beforeLift + sum, legacy, 0.001);
+    const beforeFlows = accountFlows(accountId, rows, backup, null);
+    const endingBefore = round((left?.openingNative ?? 0) + beforeFlows.reduce((total, row) => total + row.amount, 0), 4);
+    const endingAfter = round((right?.openingNative ?? 0) + projected.reduce((total, row) => total + row.amount, 0), 4);
+    const correctedSum = projected.reduce((total, row) => total + row.amount, 0);
+    const baseInitial = round(endingBefore - correctedSum, 4);
     const minPrefix = prefixMin(projected);
-    const deficit = -(beforeLift + minPrefix);
-    const required = round(beforeLift + (deficit > NATIVE ? deficit : 0), 4);
-    if (!identity) issues.push(`Avenue opening + flows ${beforeLift + sum} != legacy ending ${legacy}`);
-    if (!near(opening, required, 0.001)) issues.push(`Avenue opening ${opening} != corrected opening ${required}`);
+    const deficit = -(baseInitial + minPrefix);
+    const lift = round(deficit > NATIVE ? deficit : 0, 4);
+    const identity = near(endingAfter, endingBefore + lift, 0.001);
+    if (!identity) issues.push(`Avenue ending cash ${endingAfter} != ending before ${endingBefore} + lift ${lift}`);
     for (const leg of legs.filter((item) => item.accountId === accountId)) {
       const close = previousBusinessDayClose(closes, leg.day);
       if (!close || !near(leg.usd, round(leg.brl / close.brlPerUnit, 4), NATIVE) || !near(leg.rate, close.brlPerUnit, 1e-8)) issues.push(`Avenue leg ${leg.day} is not BRL / PTAX ${close?.day ?? "?"}`);
     }
     lines.push("avenue_reconciliation_usd");
-    lines.push(`legacy_ending\t${fmt(legacy, 4)}`);
-    lines.push(`opening_before_lift\t${fmt(beforeLift, 4)}`);
+    lines.push(`ending_before\t${fmt(endingBefore, 4)}`);
     lines.push(`lift\t${fmt(lift, 4)}`);
-    lines.push(`opening_written\t${fmt(opening, 4)}`);
+    lines.push(`ending_after\t${fmt(endingAfter, 4)}`);
+    lines.push(`ending_before_plus_lift\t${fmt(round(endingBefore + lift, 4), 4)}`);
+    lines.push(`opening_written\t${fmt(right?.openingNative ?? 0, 4)}`);
     lines.push("flows");
-    lines.push(...flows);
-    lines.push(`sum_flows\t${fmt(sum, 4)}`);
-    lines.push(`opening_before_lift_plus_flows\t${fmt(round(beforeLift + sum, 4), 4)}`);
+    lines.push(...runningFlows(right?.openingNative ?? 0, projected, legs));
+    lines.push(`sum_flows\t${fmt(correctedSum, 4)}`);
     lines.push(`match\t${identity ? "yes" : "no"}`);
+    lines.push(await legacyCashLine(db, accountId, endingBefore, rows, backup, issues));
     if (right) lines.push(`opening_lot_brl\t${fmt(right.initialPositions - right.openingBrl, 2)}\topening_brl\t${fmt(right.openingBrl, 2)}\tcontributed\t${fmt(right.contributed, 2)}`);
   } else lines.push("avenue_reconciliation_usd\tnone");
   const cryptoAccounts = new Set([...legs.filter((leg) => leg.signature === "crypto_deposit").map((leg) => leg.accountId), ...plan.detaches.map((row) => row.accountId)]);
@@ -612,13 +728,159 @@ function reconciliation(input: { source: PortfolioTimelineSource; rows: Row[]; p
   return lines.join("\n");
 }
 
-async function storedChecks(db: DbClient, userId?: string): Promise<string[]> {
+async function storedChecks(db: DbClient, userId: string | undefined, backup: Backup | null): Promise<string[]> {
   const issues: string[] = [];
-  const vuaa = await db.investmentHolding.findMany({ where: { ticker: "VUAA", ...(userId ? { account: { userId } } : {}) }, select: { currentQuantity: true, averageCost: true, isActive: true, account: { select: { name: true } } } });
-  for (const holding of vuaa) {
-    if (!near(holding.currentQuantity, 17.2791, 0.0001) || !near(holding.averageCost, 144.67, 0.01) || !holding.isActive) {
-      issues.push(`VUAA on ${holding.account.name} is ${holding.currentQuantity} @ ${holding.averageCost} active=${holding.isActive}`);
+  const backedIds = backup ? [...backup.holdings.keys()] : [];
+  const holdings = await db.investmentHolding.findMany({
+    where: {
+      ...(userId ? { account: { userId } } : {}),
+      OR: [{ operations: { some: { adjustmentMode: "delta" } } }, ...(backedIds.length ? [{ id: { in: backedIds } }] : [])],
+    },
+    select: {
+      id: true,
+      ticker: true,
+      currentQuantity: true,
+      averageCost: true,
+      totalInvested: true,
+      isActive: true,
+      account: { select: { name: true } },
+      operations: { orderBy: [{ date: "asc" }, { createdAt: "asc" }], select: { id: true, type: true, quantity: true, pricePerUnit: true, totalAmount: true, fees: true, adjustmentMode: true } },
+    },
+  });
+  for (const holding of holdings) {
+    const hasDelta = holding.operations.some((op) => op.adjustmentMode === "delta");
+    const prior = backup?.holdings.get(holding.id);
+    if (!hasDelta && !prior) continue;
+    const position = replayPosition(holding.operations);
+    const active = nextIsActive(
+      { isActive: prior?.isActive ?? holding.isActive, currentQuantity: prior?.currentQuantity ?? holding.currentQuantity, totalInvested: prior?.totalInvested ?? holding.totalInvested },
+      position,
+    );
+    const storedMatches = near(holding.currentQuantity, position.quantity, 1e-6) && near(holding.averageCost, position.averageCost, 1e-6) && near(holding.totalInvested, position.cost, 0.005) && holding.isActive === active;
+    if (!storedMatches) {
+      issues.push(`${holding.ticker} on ${holding.account.name} stored ${holding.currentQuantity} @ ${holding.averageCost} cost ${holding.totalInvested} active=${holding.isActive} != replay ${position.quantity} @ ${position.averageCost} cost ${position.cost} active=${active}`);
     }
   }
   return issues;
+}
+
+async function markedDeltas(db: DbClient, backup: Backup, userId: string): Promise<DeltaCandidate[]> {
+  const ids = [...backup.modes.keys()];
+  if (!ids.length) return [];
+  const ops = await db.investmentOperation.findMany({
+    where: { id: { in: ids }, holding: { account: { userId } } },
+    select: { id: true, quantity: true, totalAmount: true, notes: true, date: true, holding: { select: { ticker: true, account: { select: { userId: true } } } } },
+  });
+  return ops.flatMap((op) => (op.quantity == null ? [] : [{ id: op.id, ticker: op.holding.ticker ?? "", date: op.date, quantity: op.quantity, totalAmount: op.totalAmount, notes: op.notes, userId: op.holding.account.userId }]));
+}
+
+async function holdingLines(db: DbClient, userId: string, mode: "precheck" | "verify", plan: RepairPlan, backup: Backup | null): Promise<string> {
+  const holdings = await db.investmentHolding.findMany({
+    where: { account: { userId, type: "brokerage", archivedAt: null } },
+    select: {
+      id: true,
+      ticker: true,
+      accountId: true,
+      currentQuantity: true,
+      averageCost: true,
+      totalInvested: true,
+      isActive: true,
+      operations: { orderBy: [{ date: "asc" }, { createdAt: "asc" }], select: { id: true, type: true, quantity: true, pricePerUnit: true, totalAmount: true, fees: true, adjustmentMode: true } },
+    },
+  });
+  const touched = new Set([...plan.legs.map((leg) => leg.accountId), ...plan.detaches.map((row) => row.accountId)]);
+  const lines: string[] = [];
+  for (const holding of holdings) {
+    const inReplay = holding.operations.some((op) => plan.deltaOperationIds.includes(op.id) || op.adjustmentMode === "delta") || touched.has(holding.accountId) || backup?.holdings.has(holding.id) === true;
+    if (!inReplay) continue;
+    const prior = mode === "verify" ? backup?.holdings.get(holding.id) : undefined;
+    const before = {
+      quantity: prior?.currentQuantity ?? holding.currentQuantity,
+      average: prior?.averageCost ?? holding.averageCost,
+      cost: prior?.totalInvested ?? holding.totalInvested,
+      active: prior?.isActive ?? holding.isActive,
+    };
+    const operations = holding.operations.map((op) => ({ ...op, adjustmentMode: plan.deltaOperationIds.includes(op.id) ? ("delta" as const) : op.adjustmentMode }));
+    const position = replayPosition(mode === "verify" ? holding.operations : operations);
+    const afterActive = mode === "verify" ? holding.isActive : nextIsActive({ isActive: before.active, currentQuantity: before.quantity, totalInvested: before.cost }, position);
+    const after = mode === "verify"
+      ? { quantity: holding.currentQuantity, average: holding.averageCost, cost: holding.totalInvested, active: holding.isActive }
+      : { quantity: position.quantity, average: position.averageCost, cost: position.cost, active: afterActive };
+    const changed = !near(before.quantity, after.quantity, 1e-6) || !near(before.average, after.average, 1e-6) || !near(before.cost, after.cost, 0.005) || before.active !== after.active;
+    if (!changed) continue;
+    lines.push(["holding", holding.ticker, "qty", trimNum(before.quantity, 8), trimNum(after.quantity, 8), "average", trimNum(before.average, 4), trimNum(after.average, 4), "cost", trimNum(before.cost, 4), trimNum(after.cost, 4), "active", before.active, after.active].join("\t"));
+  }
+  return lines.join("\n");
+}
+
+async function expectTargetIssues(db: DbClient, plan: RepairPlan, closes: RateClose[], userId?: string): Promise<string[]> {
+  const issues: string[] = [];
+  const scope = userId ? new Set((await db.account.findMany({ where: { userId }, select: { id: true } })).map((row) => row.id)) : null;
+  const inScope = (accountId: string) => !scope || scope.has(accountId);
+  const avenueOut = await targetLegCount(db, plan, closes, "avenue_out", "2026-08-12", AVENUE_OUT, 5.1285, inScope);
+  const avenueIn = await targetLegCount(db, plan, closes, "avenue_in", "2026-09-16", AVENUE_IN, 5.149, inScope);
+  const deposit = await repairedDepositCount(db, plan, closes, inScope);
+  const buys = await db.investmentOperation.findMany({
+    where: { type: "buy", holding: { ticker: "BTC", account: { type: "brokerage", archivedAt: null, ...(userId ? { userId } : {}) } } },
+    select: { type: true, quantity: true, pricePerUnit: true, totalAmount: true },
+  });
+  const btc = buys.filter(isBtcBuy).length;
+  const found: [string, number][] = [["Avenue 2026-08-12 leg", avenueOut], ["Avenue 2026-09-16 leg", avenueIn], ["Crypto deposit", deposit], ["BTC buy", btc]];
+  for (const [label, count] of found) if (count !== 1) issues.push(`--expect-targets: ${label} found ${count} time(s)`);
+  return issues;
+}
+
+async function targetLegCount(db: DbClient, plan: RepairPlan, closes: RateClose[], signature: PlannedLeg["signature"], day: string, brokerAmount: number, rate: number, inScope: (accountId: string) => boolean): Promise<number> {
+  const planned = new Set(plan.legs.filter((leg) => leg.signature === signature && inScope(leg.accountId)).map((leg) => leg.entryId));
+  const rows = await db.$queryRaw<{ id: string; accountId: string; amount: Prisma.Decimal; amountBase: Prisma.Decimal; exchangeRate: Prisma.Decimal; date: Date }[]>`
+    SELECT b.id, b."accountId", b.amount, b."amountBase", b."exchangeRate", b.date
+    FROM ledger_entries b
+    JOIN accounts a ON a.id = b."accountId" AND a.type = 'brokerage' AND a.currency = 'USD' AND a."archivedAt" IS NULL
+    JOIN ledger_entries o ON o."transferGroupId" = b."transferGroupId" AND o.id <> b.id AND o."deletedAt" IS NULL
+    JOIN accounts oa ON oa.id = o."accountId" AND oa.currency = 'BRL'
+    WHERE b."deletedAt" IS NULL AND b.currency = 'USD' AND b.date::date = ${day}::date
+  `;
+  for (const row of rows) {
+    if (!inScope(row.accountId) || planned.has(row.id)) continue;
+    const close = previousBusinessDayClose(closes, day);
+    if (!close || !near(close.brlPerUnit, rate, 1e-8)) continue;
+    if (near(toNumber(row.amountBase), brokerAmount, 0.05) && near(toNumber(row.exchangeRate), close.brlPerUnit, 1e-4) && near(toNumber(row.amount), round(brokerAmount / close.brlPerUnit, 4), NATIVE)) planned.add(row.id);
+  }
+  return planned.size;
+}
+
+async function repairedDepositCount(db: DbClient, plan: RepairPlan, closes: RateClose[], inScope: (accountId: string) => boolean): Promise<number> {
+  const planned = new Set(plan.legs.filter((leg) => leg.signature === "crypto_deposit" && inScope(leg.accountId)).map((leg) => leg.entryId));
+  const rows = await db.$queryRaw<{ id: string; accountId: string; amount: Prisma.Decimal; amountBase: Prisma.Decimal; exchangeRate: Prisma.Decimal; date: Date }[]>`
+    SELECT b.id, b."accountId", b.amount, b."amountBase", b."exchangeRate", b.date
+    FROM ledger_entries b
+    JOIN accounts a ON a.id = b."accountId" AND a.type = 'brokerage' AND a.currency = 'USD' AND a."archivedAt" IS NULL
+    WHERE b."deletedAt" IS NULL AND b.currency = 'USD' AND abs(b."amountBase" - 10000) < 0.05
+  `;
+  for (const row of rows) {
+    if (!inScope(row.accountId) || planned.has(row.id)) continue;
+    const close = previousBusinessDayClose(closes, dayOf(row.date));
+    if (!close) continue;
+    const buys = await db.investmentOperation.count({ where: { type: "buy", holding: { accountId: row.accountId, ticker: "BTC" }, quantity: { gte: BTC_QTY - 1e-6, lte: BTC_QTY + 1e-6 }, pricePerUnit: { gte: BTC_PRICE - 0.01, lte: BTC_PRICE + 0.01 }, totalAmount: { gte: BTC_TOTAL - 0.01, lte: BTC_TOTAL + 0.01 } } });
+    if (buys !== 1) continue;
+    if (near(toNumber(row.exchangeRate), close.brlPerUnit, 1e-4) && near(toNumber(row.amount), round(CRYPTO_DEPOSIT / close.brlPerUnit, 4), NATIVE)) planned.add(row.id);
+  }
+  return planned.size;
+}
+
+async function legacyCashLine(db: DbClient, accountId: string, endingBefore: number, rows: Row[], backup: Backup | null, issues: string[]): Promise<string> {
+  const schema = await db.$queryRaw<{ exists: boolean }[]>`SELECT to_regclass('legacy.investment_accounts') IS NOT NULL AS exists`;
+  if (!schema[0]?.exists) return "legacy_schema\tmissing";
+  const accounts = await db.$queryRaw<{ cashBalance: number }[]>`SELECT "cashBalance" FROM legacy.investment_accounts WHERE id = ${accountId}`;
+  if (!accounts.length) return "legacy_account\tmissing";
+  const cashBalance = accounts[0]?.cashBalance ?? 0;
+  const flows = accountFlows(accountId, rows, backup, null);
+  const ids = flows.map((row) => row.id);
+  const mapped = ids.length
+    ? new Set((await db.$queryRaw<{ id: string }[]>`SELECT new_id AS id FROM legacy.id_map WHERE new_model = 'LedgerEntry' AND new_id IN (${Prisma.join(ids)})`).map((row) => row.id))
+    : new Set<string>();
+  const added = flows.filter((row) => !mapped.has(row.id)).reduce((total, row) => total + row.amount, 0);
+  const expected = round(cashBalance + added, 4);
+  if (!near(endingBefore, expected, 0.05)) issues.push(`Avenue ending before ${endingBefore} != legacy cashBalance ${cashBalance} + entries since backfill ${added}`);
+  return `legacy_cash\t${fmt(cashBalance, 4)}\tadded_since_backfill\t${fmt(added, 4)}\texpected_ending_before\t${fmt(expected, 4)}`;
 }

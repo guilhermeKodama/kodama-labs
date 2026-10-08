@@ -28,7 +28,7 @@ Pause nothing. The script only reads.
 mkdir -p ~/backups
 docker --context desktop-linux compose -p kodama-prod -f docker-compose.yml \
   run --rm --no-deps capital-migrate \
-  pnpm exec tsx scripts/precheck-portfolio-fx.ts \
+  pnpm exec tsx scripts/precheck-portfolio-fx.ts --expect-targets \
   | tee ~/backups/capital-fx-precheck-prod.txt
 ```
 
@@ -37,8 +37,11 @@ If `main` does not have the script yet, run it from the rehearsal image in the n
 Read the saved output:
 
 - The table has one row per brokerage account, with opening (native and BRL), contributed, current cash, holdings, Patrimônio, Total aportado, and Resultado, before and after.
-- `fx` issue lines are absent. An `unexpected` line means the migration will abort. Fix that leg or stop.
-- Avenue reconciliation lists each flow in USD. The two repaired flows show the BRL amount, the previous business day, and the PTAX (`2026-08-12` uses `2026-08-11 = 5.1285`, `2026-09-16` uses `2026-09-15 = 5.1490`). `match` is `yes`.
+- `issue` lines are absent. A `warn` line is a rate-1 USD/BRL leg outside the three targets. The migration leaves it unchanged. Duplicates and ambiguity are `issue` lines, and the migration aborts on those.
+- `delta` lines list every adjustment the migration will mark as delta: ticker, date, quantity, total, and notes. Confirm that list before migrating.
+- `holding` lines show quantity, average, cost, and active, before and after, for every holding the replay changes.
+- `--expect-targets` fails unless the Avenue 2026-08-12 leg, the Avenue 2026-09-16 leg, the Crypto deposit, and the BTC buy are each found once, or are already repaired.
+- Avenue reconciliation: ending USD cash after equals ending cash before plus the lift. Each flow prints a running balance. The two repaired flows show the BRL amount, the previous business day, and the PTAX (`2026-08-12` uses `2026-08-11 = 5.1285`, `2026-09-16` uses `2026-09-15 = 5.1490`). `match` is `yes`. When `legacy.investment_accounts` is absent the line is `legacy_schema missing`. When the Avenue account is not in that table the line is `legacy_account missing`.
 - Crypto lines show a non-negative running minimum. Where the 2026-09-30 sell is present, cash after is at least 6757.75.
 - Opening lots use the same `openedAt` rate as opening cash. The BTC buy is that lot; there is no separate BTC rate.
 
@@ -59,6 +62,16 @@ docker --context desktop-linux build \
   -t kodama-capital:portfolio-fx-rehearsal \
   --build-arg NEXT_PUBLIC_APP_URL=https://capital.kodamalabs.ai \
   --build-arg NEXT_PUBLIC_VAPID_PUBLIC_KEY=BIZPytT1AcEzKXA5YQRz6V7tso9r_1uFeSfAuDhTLOotQ3_p8aIwOJwTKaEBWpG9xCSfUobWA2k00AumltvwztE \
+  ~/capital-fx-rehearsal
+```
+
+On the 8 GB Docker Desktop VM the rehearsal may build `--target base` instead, so it does not run a second `next build`. The `base` stage's workdir is `/repo` and it does not set `NODE_ENV`. The run commands below pass `--workdir /repo/apps/capital` and `NODE_ENV=production` for that reason: the throwaway database is named `capital`, and db-guard refuses that name unless `NODE_ENV` is `production`.
+
+```bash
+docker --context desktop-linux build \
+  -f ~/capital-fx-rehearsal/Dockerfile \
+  --target base \
+  -t kodama-capital:portfolio-fx-rehearsal \
   ~/capital-fx-rehearsal
 ```
 
@@ -103,11 +116,13 @@ Precheck the copy. Both URLs are the throwaway database, not production:
 ```bash
 docker --context desktop-linux run --rm \
   --network capital-rehearsal-net \
+  --workdir /repo/apps/capital \
+  -e NODE_ENV=production \
   -e DATABASE_URL="postgresql://root:rehearsal@capital-rehearsal-pg:5432/capital" \
   -e DIRECT_URL="postgresql://root:rehearsal@capital-rehearsal-pg:5432/capital" \
   --entrypoint pnpm \
   kodama-capital:portfolio-fx-rehearsal \
-  exec tsx scripts/precheck-portfolio-fx.ts \
+  exec tsx scripts/precheck-portfolio-fx.ts --expect-targets \
   | tee ~/backups/capital-fx-precheck-rehearsal.txt
 ```
 
@@ -116,6 +131,8 @@ The rehearsal precheck must match the production precheck, including the TOTAL r
 ```bash
 docker --context desktop-linux run --rm \
   --network capital-rehearsal-net \
+  --workdir /repo/apps/capital \
+  -e NODE_ENV=production \
   -e DATABASE_URL="postgresql://root:rehearsal@capital-rehearsal-pg:5432/capital" \
   -e DIRECT_URL="postgresql://root:rehearsal@capital-rehearsal-pg:5432/capital" \
   --entrypoint pnpm \
@@ -128,11 +145,13 @@ Wait until the log says `All migrations have been successfully applied`. Then:
 ```bash
 docker --context desktop-linux run --rm \
   --network capital-rehearsal-net \
+  --workdir /repo/apps/capital \
+  -e NODE_ENV=production \
   -e DATABASE_URL="postgresql://root:rehearsal@capital-rehearsal-pg:5432/capital" \
   -e DIRECT_URL="postgresql://root:rehearsal@capital-rehearsal-pg:5432/capital" \
   --entrypoint pnpm \
   kodama-capital:portfolio-fx-rehearsal \
-  exec tsx scripts/verify-portfolio-fx.ts \
+  exec tsx scripts/verify-portfolio-fx.ts --expect-targets \
   | tee ~/backups/capital-fx-verify-rehearsal.txt
 ```
 
@@ -141,7 +160,7 @@ The command must exit 0. Read the output:
 - The same per-account table, now from the backup (before) and the repaired ledger (after).
 - Avenue `match` is `yes`, and each repaired flow is the BRL amount divided by the embedded previous-day PTAX.
 - Crypto running minimum is non-negative. With the sell present, cash is at least 6757.75.
-- VUAA is about 17.2791 shares at US$144.67 and active. There is no `issue` line.
+- Every holding with a delta operation matches replay: VUAA is about 17.2791 shares at US$144.67 and active, and the Crypto BTC holding includes the live sell. There is no `issue` line.
 
 Remove the throwaway when the verify is saved, and also if a step fails:
 
@@ -154,10 +173,12 @@ Leave the worktree until production is verified. Remove it later with `git workt
 
 ## Maintenance window
 
-1. The pull request is merged to `main`. On the server:
+1. The pull request is merged to `main`. On the server, record the pre-merge SHA before pulling. Rollback checks out that SHA.
 
    ```bash
    cd ~/Documents/Github/kodama-labs
+   mkdir -p ~/backups
+   git rev-parse HEAD | tee ~/backups/capital-pre-fx-sha.txt
    git pull origin main
    git status
    ```
@@ -179,7 +200,14 @@ Leave the worktree until production is verified. Remove it later with `git workt
    docker --context desktop-linux tag kodama-capital:latest kodama-capital:rollback-pre-fx
    ```
 
-4. Stop the writers, then take the final dump on the host:
+4. Build `capital-migrate` before stopping writers. The tag in step 3 still points at the image that is running.
+
+   ```bash
+   docker --context desktop-linux compose -p kodama-prod -f docker-compose.yml \
+     build capital-migrate
+   ```
+
+5. Stop the writers, then take the final dump on the host:
 
    ```bash
    docker --context desktop-linux compose -p kodama-prod -f docker-compose.yml \
@@ -198,14 +226,11 @@ Leave the worktree until production is verified. Remove it later with `git workt
 
    The file must be non-empty. The list must include `ledger_entries` and `accounts`. Record the path printed by `printf`. Rollback uses that literal path. A later shell does not have this `$ts`.
 
-5. Repeat the rehearsal against this final dump: new throwaway network and `postgres:17` container, restore this file, precheck, migrate, verify, then `rm` the container and the network. Do not `compose build`, and do not restore the dump into the prod `postgres` container. Start the production migrate only after that verify exits 0.
+6. Repeat the rehearsal against this final dump: new throwaway network and `postgres:17` container, restore this file, precheck, migrate, verify, then `rm` the container and the network. Do not `compose build`, and do not restore the dump into the prod `postgres` container. Start the production migrate only after that verify exits 0.
 
-6. Apply on production. `capital-migrate` runs `prisma migrate deploy` and reads `DATABASE_URL` and `DIRECT_URL` from `apps/capital/.env.production`:
+7. Apply on production. The image was built in step 4. `capital-migrate` runs `prisma migrate deploy` and reads `DATABASE_URL` and `DIRECT_URL` from `apps/capital/.env.production`:
 
    ```bash
-   docker --context desktop-linux compose -p kodama-prod -f docker-compose.yml \
-     build capital-migrate
-
    docker --context desktop-linux compose -p kodama-prod -f docker-compose.yml \
      run --rm --no-deps capital-migrate
    ```
@@ -226,18 +251,18 @@ Leave the worktree until production is verified. Remove it later with `git workt
        run --rm --no-deps capital-migrate
      ```
 
-7. Verify, and compare with the rehearsal file:
+8. Verify, and compare with the rehearsal file:
 
    ```bash
    docker --context desktop-linux compose -p kodama-prod -f docker-compose.yml \
      run --rm --no-deps capital-migrate \
-     pnpm exec tsx scripts/verify-portfolio-fx.ts \
+     pnpm exec tsx scripts/verify-portfolio-fx.ts --expect-targets \
      | tee ~/backups/capital-fx-verify-prod.txt
    ```
 
    The command must exit 0. The TOTAL after row must match the rehearsal. Do not start the app while any `issue` line is present.
 
-8. Start the app, then the cron runner:
+9. Start the app, then the cron runner:
 
    ```bash
    docker --context desktop-linux compose -p kodama-prod -f docker-compose.yml \
@@ -247,7 +272,7 @@ Leave the worktree until production is verified. Remove it later with `git workt
      up -d --no-deps --force-recreate cronjobs
    ```
 
-9. End the maintenance window:
+10. End the maintenance window:
 
    ```bash
    docker --context desktop-linux compose -p kodama-prod -f docker-compose.yml \
@@ -256,7 +281,7 @@ Leave the worktree until production is verified. Remove it later with `git workt
 
 ## Rollback, before writes resume
 
-Use this only if verify failed or the app is wrong and nothing has written to the ledger since the dump. Do not drop the failed database. The restore path is the literal dump path written down in step 4, not `$ts` from that shell.
+Use this only if verify failed or the app is wrong and nothing has written to the ledger since the dump. Do not drop the failed database. The restore path is the literal dump path written down in step 5, not `$ts` from that shell. The app role and the restore role are both `root`, so this restore does not pass `--no-owner` or `--no-acl`. The rehearsal restore keeps those flags because that database is empty and throwaway.
 
 ```bash
 docker --context desktop-linux compose -p kodama-prod -f docker-compose.yml \
@@ -272,17 +297,17 @@ CREATE DATABASE capital;
 SQL
 
 docker --context desktop-linux exec -i postgres \
-  pg_restore -U root -d capital --no-owner --no-acl --exit-on-error --single-transaction \
+  pg_restore -U root -d capital --exit-on-error --single-transaction \
   < ~/backups/capital-pre-fx-YYYYMMDDTHHMMSSZ.dump
 
 docker --context desktop-linux tag kodama-capital:rollback-pre-fx kodama-capital:latest
 
 cd ~/Documents/Github/kodama-labs
-git checkout main
+git checkout "$(cat ~/backups/capital-pre-fx-sha.txt)"
 git status
 ```
 
-`git status` must be clean, and `main` must be the commit from before this repair if the repair commit is what was pulled. Do not recreate cronjobs before this checkout.
+`git status` must be clean, and `HEAD` must be the SHA recorded in step 1. Do not recreate cronjobs before this checkout.
 
 ```bash
 docker --context desktop-linux compose -p kodama-prod -f docker-compose.yml \

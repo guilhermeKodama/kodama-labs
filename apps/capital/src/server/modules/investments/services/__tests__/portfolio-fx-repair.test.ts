@@ -175,6 +175,21 @@ describe("portfolio fx repair", () => {
     await prisma.investmentOperation.create({ data: { holdingId: kept.id, type: "buy", quantity: 10, pricePerUnit: 10, totalAmount: 100, date: noon("2026-03-07") } });
     await prisma.investmentOperation.create({ data: { holdingId: kept.id, type: "adjustment", quantity: 4, pricePerUnit: 20, totalAmount: 80, date: noon("2026-03-08") } });
 
+    const postV2 = await prisma.investmentHolding.create({
+      data: { accountId: avenue.id, assetClass: "stocks", ticker: "POST", name: "POST", currency: "USD", currentQuantity: 99, averageCost: 1, totalInvested: 99, isActive: true },
+    });
+    await prisma.investmentOperation.create({ data: { holdingId: postV2.id, type: "buy", quantity: 10, pricePerUnit: 10, totalAmount: 100, date: noon("2026-03-09") } });
+    await prisma.investmentOperation.create({
+      data: { holdingId: postV2.id, type: "adjustment", quantity: -3, pricePerUnit: 10, totalAmount: 30, date: noon("2026-03-10") },
+    });
+    const mcp = await prisma.investmentHolding.create({
+      data: { accountId: avenue.id, assetClass: "stocks", ticker: "MCP", name: "MCP", currency: "USD", currentQuantity: 8, averageCost: 12, totalInvested: 96, isActive: true },
+    });
+    await prisma.investmentOperation.create({ data: { holdingId: mcp.id, type: "buy", quantity: 5, pricePerUnit: 10, totalAmount: 50, date: noon("2026-03-11") } });
+    await prisma.investmentOperation.create({
+      data: { holdingId: mcp.id, type: "adjustment", quantity: 8, pricePerUnit: 12, totalAmount: 0, notes: "Manual adjustment via MCP", date: noon("2026-03-12") },
+    });
+
     async function btc(accountId: string, userId: string, entityId: string, buyDay: string) {
       const cash = await prisma.ledgerEntry.create({
         data: {
@@ -264,31 +279,52 @@ describe("portfolio fx repair", () => {
     expect(previousBusinessDayRate(embedded.map(([day, brlPerUnit]) => ({ day, brlPerUnit })), "2026-09-16")).toBe(5.149);
   });
 
-  it("aborts on an unexpected rate-1 leg and leaves the fixture untouched", async () => {
+  it("warns on an unexpected rate-1 leg and still hard-fails a duplicate Avenue leg", async () => {
     const odd = await prisma.account.create({
       data: { userId: SELL_USER, entityId: sell.pfId, type: "brokerage", name: "Odd", currency: "USD" },
     });
     const bad = await rateOne(SELL_USER, sell.pfId, sell.pfChecking, odd.id, 12345.67, "2026-07-01", "Unexpected");
-    const before = await fingerprint([SELL_USER, ADJ_USER]);
-    const failed = psql(migrationSql);
-    expect(failed.status).not.toBe(0);
-    expect(failed.stderr).toMatch(/unexpected/);
-    expect(await fingerprint([SELL_USER, ADJ_USER])).toBe(before);
+    const warned = await portfolioFxReport(prisma, "precheck", { userId: SELL_USER });
+    expect(warned.ok, warned.issues.join("; ")).toBe(true);
+    expect(warned.warnings.join("\n")).toMatch(/unexpected rate-1/);
+    expect(warned.text).toMatch(/warn\tunexpected rate-1/);
+    const duplicate = await rateOne(SELL_USER, sell.pfId, sell.pfChecking, avenueId, -168800.12, "2026-08-12", "Avenue withdrawal duplicate");
+    const ambiguous = await portfolioFxReport(prisma, "precheck", { userId: SELL_USER });
+    expect(ambiguous.ok).toBe(false);
+    expect(ambiguous.issues.join("\n")).toMatch(/more than one Avenue 2026-08-12/);
+    await prisma.transferGroup.delete({ where: { id: duplicate.groupId } });
     await prisma.transferGroup.delete({ where: { id: bad.groupId } });
     await prisma.account.delete({ where: { id: odd.id } });
   });
 
   it("prints the per-account before/after table and the Avenue reconciliation before writing", async () => {
-    const report = await portfolioFxReport(prisma, "precheck", { userId: SELL_USER });
+    const report = await portfolioFxReport(prisma, "precheck", { userId: SELL_USER, expectTargets: true });
     expect(report.ok, report.issues.join("; ")).toBe(true);
     expect(report.text).toContain("opening_native_before");
     expect(report.text).toContain("patrimonio_before");
     expect(report.text).toContain("total_aportado_before");
     expect(report.text).toContain("resultado_before");
     expect(report.text).toContain("avenue_reconciliation_usd");
+    expect(report.text).toContain("ending_before\t950.0000");
+    expect(report.text).toContain("lift\t0.0000");
+    expect(report.text).toContain("ending_after\t950.0000");
+    expect(report.text).toContain("ending_before_plus_lift\t950.0000");
+    expect(report.text).toContain("running\t");
+    expect(report.text).toContain("legacy_account\tmissing");
     expect(report.text).toContain("match\tyes");
     expect(report.text).toContain("ptax_day\t2026-08-11\tptax\t5.1285");
     expect(report.text).toContain("ptax_day\t2026-09-15\tptax\t5.149");
+    expect(report.text).toMatch(/delta\tVUAA\t2026-04-01\t-1\.3929\t0\t/);
+    expect(report.text).toMatch(/delta\tNEG\t2026-03-06\t-1\t0\t/);
+    expect(report.text).not.toMatch(/delta\tLEG\t/);
+    expect(report.text).not.toMatch(/delta\tMCP\t/);
+    expect(report.text).not.toMatch(/delta\tPOST\t/);
+    expect(report.text).toMatch(/holding\tVUAA\tqty\t0\t17\.2791\t/);
+    expect(report.text).toMatch(/holding\tBTC\tqty\t0\.3667\t0\.2885\t/);
+    expect(report.text).not.toMatch(/holding\tLEG\t/);
+    const missingAvenue = await portfolioFxReport(prisma, "precheck", { userId: ADJ_USER, expectTargets: true });
+    expect(missingAvenue.ok).toBe(false);
+    expect(missingAvenue.issues.join("\n")).toMatch(/Avenue 2026-08-12/);
     const avenue = report.after.find((row) => row.name === "Avenue");
     const before = report.before.find((row) => row.name === "Avenue");
     expect(before?.openingNative).toBeCloseTo(167225.12, 2);
@@ -336,8 +372,11 @@ describe("portfolio fx repair", () => {
     const deposit = await prisma.ledgerEntry.findFirstOrThrow({ where: { accountId: cryptoSellId, description: "Crypto deposit" } });
     expect(Number(deposit.amount)).toBeCloseTo(round(10000 / 5.1714, 4), 4);
     expect(Number(deposit.amountBase)).toBeCloseTo(10000, 2);
-    const buyCash = await prisma.ledgerEntry.findFirstOrThrow({ where: { accountId: cryptoSellId, description: "BTC buy cash" } });
-    expect(buyCash.deletedAt).not.toBeNull();
+    const buy = await prisma.investmentOperation.findFirstOrThrow({ where: { holding: { accountId: cryptoSellId, ticker: "BTC" }, type: "buy" } });
+    expect(buy.cashEntryId).toBeNull();
+    expect(await prisma.ledgerEntry.findFirst({ where: { accountId: cryptoSellId, description: "BTC buy cash" } })).toBeNull();
+    const removed = await prisma.$queryRaw<{ id: string }[]>`SELECT id FROM portfolio_fx_repair_removed_entry WHERE "operationId" = ${buy.id}`;
+    expect(removed).toHaveLength(1);
     const sellAfter = await prisma.investmentOperation.findUniqueOrThrow({ where: { id: sellOpId } });
     expect(sellAfter).toMatchObject({
       quantity: sellBefore.quantity,
@@ -349,7 +388,9 @@ describe("portfolio fx repair", () => {
     });
     expect(await prisma.investmentOperation.findUnique({ where: { id: "fx-repair-deleted-btc-adj" } })).toBeNull();
     const liveBtc = await prisma.investmentHolding.findFirstOrThrow({ where: { accountId: cryptoSellId, ticker: "BTC" } });
-    expect(liveBtc.currentQuantity).toBeCloseTo(0.3667, 4);
+    expect(liveBtc.currentQuantity).toBeCloseTo(0.2885, 4);
+    expect(liveBtc.averageCost).toBeCloseTo(60000, 2);
+    expect(liveBtc.isActive).toBe(true);
 
     const other = await prisma.account.findUniqueOrThrow({ where: { id: cryptoAdjId } });
     expect(Number(other.initialBalance)).toBeCloseTo(0, 4);
@@ -371,8 +412,16 @@ describe("portfolio fx repair", () => {
     expect(vuaa.averageCost).toBeCloseTo(144.67, 2);
     expect(vuaa.isActive).toBe(true);
     const legacyPositive = await prisma.investmentHolding.findFirstOrThrow({ where: { ticker: "LEG", accountId: avenueId } });
-    expect(legacyPositive.currentQuantity).toBeCloseTo(12, 4);
-    expect(legacyPositive.averageCost).toBeCloseTo(10, 2);
+    expect(legacyPositive.currentQuantity).toBeCloseTo(2, 4);
+    expect(legacyPositive.averageCost).toBeCloseTo(15, 2);
+    expect(await prisma.investmentOperation.findFirst({ where: { holdingId: legacyPositive.id, type: "adjustment" } })).toMatchObject({ adjustmentMode: null, quantity: 2 });
+    const postV2 = await prisma.investmentHolding.findFirstOrThrow({ where: { ticker: "POST", accountId: avenueId } });
+    expect(postV2.currentQuantity).toBeCloseTo(0, 4);
+    expect(await prisma.investmentOperation.findFirst({ where: { holdingId: postV2.id, type: "adjustment" } })).toMatchObject({ adjustmentMode: null, quantity: -3 });
+    const mcp = await prisma.investmentHolding.findFirstOrThrow({ where: { ticker: "MCP", accountId: avenueId } });
+    expect(mcp.currentQuantity).toBeCloseTo(8, 4);
+    expect(mcp.averageCost).toBeCloseTo(12, 2);
+    expect(await prisma.investmentOperation.findFirst({ where: { holdingId: mcp.id, type: "adjustment" } })).toMatchObject({ adjustmentMode: null });
     const negative = await prisma.investmentHolding.findFirstOrThrow({ where: { ticker: "NEG", accountId: avenueId } });
     expect(negative.currentQuantity).toBeCloseTo(4, 4);
     expect(negative.isActive).toBe(true);
@@ -380,37 +429,88 @@ describe("portfolio fx repair", () => {
     expect(kept.currentQuantity).toBeCloseTo(4, 4);
     expect(await prisma.investmentOperation.findFirst({ where: { holdingId: kept.id, type: "adjustment" } })).toMatchObject({ adjustmentMode: null, quantity: 4 });
 
-    const verified = await portfolioFxReport(prisma, "verify", { userId: SELL_USER });
+    const verified = await portfolioFxReport(prisma, "verify", { userId: SELL_USER, expectTargets: true });
     expect(verified.ok, verified.issues.join("; ")).toBe(true);
     expect(verified.text).toContain("opening_native_after");
     expect(verified.text).toContain("match\tyes");
+    expect(verified.text).toContain("ending_before\t950.0000");
+    expect(verified.text).toContain("ending_after\t950.0000");
+    expect(verified.text).toMatch(/holding\tBTC\tqty\t0\.3667\t0\.2885\t/);
+    expect(verified.text).toMatch(/delta\tVUAA\t/);
+    expect(verified.text).toMatch(/delta\tNEG\t/);
+    expect(verified.text).not.toMatch(/delta\tLEG\t/);
     const summary = await portfolioSummary(SELL_USER, prisma);
     const total = verified.after.reduce((sum, row) => sum + row.patrimonio, 0);
     const contributed = verified.after.reduce((sum, row) => sum + row.totalAportado, 0);
-    // The sell user's BTC holding is left at the pre-sell quantity on purpose: this repair
-    // recalculates only delta adjustments. The screen still counts those 0.0782 shares;
-    // the timeline, which the table uses, has already applied the accountant's sell.
-    const unsyncedSoldBrl = 0.0782 * 60000 * 4.9935;
     expect(contributed).toBeCloseTo(summary.contributed, 1);
-    expect(total).toBeCloseTo(summary.netWorth - unsyncedSoldBrl, 1);
-    expect(total - contributed).toBeCloseTo(summary.result - unsyncedSoldBrl, 1);
+    expect(total).toBeCloseTo(summary.netWorth, 1);
+    expect(total - contributed).toBeCloseTo(summary.result, 1);
     const otherReport = await portfolioFxReport(prisma, "verify", { userId: ADJ_USER });
     expect(otherReport.ok, otherReport.issues.join("; ")).toBe(true);
     expect(otherReport.text).toContain("sell\tno");
   });
 
-  it("is a no-op on the second run and verify still passes", async () => {
+  it("is a no-op on the second run and leaves an unexpected leg unchanged", async () => {
+    const odd = await prisma.account.create({
+      data: { userId: SELL_USER, entityId: sell.pfId, type: "brokerage", name: "Odd", currency: "USD" },
+    });
+    const bad = await rateOne(SELL_USER, sell.pfId, sell.pfChecking, odd.id, 12345.67, "2026-07-01", "Unexpected");
     const before = await fingerprint([SELL_USER, ADJ_USER]);
     const backups = await prisma.$queryRaw<{ n: number }[]>`SELECT count(*)::int AS n FROM portfolio_fx_repair_entry`;
     runMigration();
     expect(await fingerprint([SELL_USER, ADJ_USER])).toBe(before);
+    const untouched = await prisma.ledgerEntry.findUniqueOrThrow({ where: { id: bad.brokerEntryId } });
+    expect(Number(untouched.amount)).toBeCloseTo(12345.67, 2);
+    expect(Number(untouched.exchangeRate)).toBe(1);
+    expect(untouched.currency).toBe("BRL");
+    await prisma.transferGroup.delete({ where: { id: bad.groupId } });
+    await prisma.account.delete({ where: { id: odd.id } });
     const backupsAfter = await prisma.$queryRaw<{ n: number }[]>`SELECT count(*)::int AS n FROM portfolio_fx_repair_entry`;
     expect(backupsAfter[0]?.n).toBe(backups[0]?.n);
     const runs = await prisma.$queryRaw<{ fxLegs: number; btcDetached: number; modes: number; holdings: number }[]>`
       SELECT "fxLegs", "btcDetached", modes, holdings FROM portfolio_fx_repair_run ORDER BY id DESC LIMIT 1
     `;
     expect(runs[0]).toEqual({ fxLegs: 0, btcDetached: 0, modes: 0, holdings: 0 });
-    const verified = await portfolioFxReport(prisma, "verify", { userId: SELL_USER });
+    const verified = await portfolioFxReport(prisma, "verify", { userId: SELL_USER, expectTargets: true });
     expect(verified.ok, verified.issues.join("; ")).toBe(true);
+  });
+});
+
+describe("portfolio fx repair double sale", () => {
+  const userId = "test-user-fx-repair-both-001";
+  let fixture: LedgerFixture;
+  let accountId = "";
+
+  beforeAll(async () => {
+    fixture = await createLedgerFixture(prisma, userId, { usdRate: 0.2 });
+    const account = await prisma.account.create({
+      data: { userId, entityId: fixture.pfId, type: "brokerage", name: "Crypto Both", currency: "USD", initialBalance: 0 },
+    });
+    accountId = account.id;
+    const holding = await prisma.investmentHolding.create({
+      data: { accountId, assetClass: "crypto", ticker: "BTC", name: "Bitcoin", currency: "USD", currentQuantity: 0.2885, averageCost: 60000, totalInvested: 17310, isActive: true },
+    });
+    await prisma.investmentOperation.create({
+      data: { holdingId: holding.id, type: "sell", quantity: 0.0782, pricePerUnit: 86416.23, totalAmount: 6757.75, date: noon("2026-09-30") },
+    });
+    await prisma.investmentOperation.create({
+      data: { holdingId: holding.id, type: "adjustment", quantity: -0.0782, pricePerUnit: 86416.23, totalAmount: 0, date: noon("2026-10-02") },
+    });
+  });
+
+  afterAll(async () => {
+    await deleteLedgerFixture(prisma, userId);
+  });
+
+  it("hard-fails precheck and the migration when the sell and the adjustment are both live", async () => {
+    const report = await portfolioFxReport(prisma, "precheck", { userId });
+    expect(report.ok).toBe(false);
+    expect(report.issues.join("\n")).toMatch(/both live/);
+    const before = await fingerprint([userId]);
+    const failed = psql(migrationSql);
+    expect(failed.status).not.toBe(0);
+    expect(failed.stderr).toMatch(/both live/);
+    expect(await fingerprint([userId])).toBe(before);
+    expect(await prisma.investmentHolding.findFirstOrThrow({ where: { accountId, ticker: "BTC" } })).toMatchObject({ currentQuantity: 0.2885 });
   });
 });
