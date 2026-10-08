@@ -471,6 +471,13 @@ BEGIN
         RAISE EXCEPTION 'portfolio fx repair: the 2026-09-30 BTC sell and the 2026-10-02 adjustment are both live';
     END IF;
 
+    IF EXISTS (
+        SELECT 1 FROM attachments att
+        JOIN _btc b ON b.cash_id = att."ledgerEntryId"
+    ) THEN
+        RAISE EXCEPTION 'portfolio fx repair: the BTC buy cash leg has attachments';
+    END IF;
+
     ALTER TABLE _fx ADD COLUMN rate NUMERIC;
     UPDATE _fx f SET rate = (
         SELECT p.brl FROM _ptax p
@@ -624,17 +631,20 @@ BEGIN
         WHERE table_schema = 'legacy' AND table_name = 'investment_transactions'
     ) INTO legacy_ok;
 
-    -- Delta only for a pre-v2 negative quantity (the row is in
-    -- legacy.investment_transactions; a later negative quantity is an absolute
-    -- reset) or a zero-amount quantity change that is not the old MCP absolute
-    -- write (notes 'Manual adjustment%'). A positive adjustment whose
-    -- totalAmount is about quantity times price stays absolute.
+    -- Only a still-unmarked adjustment (mode null) can become delta. An
+    -- explicit absolute, which is what adjustPosition writes today, stays
+    -- absolute even when the price and total are 0. Delta is a pre-v2
+    -- negative quantity (the row is in legacy.investment_transactions) or a
+    -- zero-amount quantity change that is not the old MCP absolute write
+    -- (notes 'Manual adjustment%'). A positive zero-amount change also needs
+    -- a positive price: the old MCP adjust_position with average 0 stored
+    -- price 0 and total 0 for an absolute quantity.
     CREATE TEMP TABLE _delta (id TEXT PRIMARY KEY, holding_id TEXT NOT NULL) ON COMMIT DROP;
     INSERT INTO _delta (id, holding_id)
     SELECT o.id, o."holdingId"
     FROM investment_operations o
     WHERE o.type = 'adjustment'
-      AND o."adjustmentMode" IS DISTINCT FROM 'delta'
+      AND o."adjustmentMode" IS NULL
       AND o.quantity IS NOT NULL
       AND o.quantity <> 0
       AND (
@@ -646,6 +656,7 @@ BEGIN
         OR (
           abs(o."totalAmount") < 0.0000001
           AND coalesce(o.notes, '') NOT ILIKE 'Manual adjustment%'
+          AND (o.quantity < 0 OR o."pricePerUnit" > 0)
         )
       );
 
@@ -655,24 +666,32 @@ BEGIN
     JOIN _delta d ON d.id = o.id
     ON CONFLICT (id) DO NOTHING;
 
+    -- Replay only holdings that receive a delta, plus the BTC holding of each
+    -- opening buy. A holding with no operations is never backed up or rewritten.
     INSERT INTO portfolio_fx_repair_holding (id, "currentQuantity", "averageCost", "totalInvested", "isActive", "updatedAt")
     SELECT h.id, h."currentQuantity", h."averageCost", h."totalInvested", h."isActive", h."updatedAt"
     FROM investment_holdings h
-    WHERE h.id IN (SELECT holding_id FROM _delta)
-       OR h."accountId" IN (SELECT account_id FROM _touch)
+    WHERE (
+        h.id IN (SELECT holding_id FROM _delta)
+        OR h.id IN (SELECT op."holdingId" FROM investment_operations op JOIN _btc b ON b.op_id = op.id)
+      )
+      AND EXISTS (SELECT 1 FROM investment_operations op WHERE op."holdingId" = h.id)
     ON CONFLICT (id) DO NOTHING;
 
     UPDATE investment_operations o
     SET "adjustmentMode" = 'delta', "updatedAt" = CURRENT_TIMESTAMP
     FROM _delta d
-    WHERE o.id = d.id AND o."adjustmentMode" IS DISTINCT FROM 'delta';
+    WHERE o.id = d.id AND o."adjustmentMode" IS NULL;
     GET DIAGNOSTICS mode_count = ROW_COUNT;
 
     FOR rec IN
         SELECT h.id, h."isActive", h."currentQuantity", h."totalInvested", h."averageCost"
         FROM investment_holdings h
-        WHERE h.id IN (SELECT DISTINCT "holdingId" FROM investment_operations WHERE "adjustmentMode" = 'delta')
-           OR h."accountId" IN (SELECT account_id FROM _touch)
+        WHERE (
+            h.id IN (SELECT DISTINCT o."holdingId" FROM investment_operations o WHERE o."adjustmentMode" = 'delta')
+            OR h.id IN (SELECT op."holdingId" FROM investment_operations op JOIN _btc b ON b.op_id = op.id)
+          )
+          AND EXISTS (SELECT 1 FROM investment_operations op WHERE op."holdingId" = h.id)
     LOOP
         SELECT * INTO replay FROM pg_temp.portfolio_fx_replay(rec.id, rec."isActive", rec."currentQuantity", rec."totalInvested");
         IF rec."isActive" IS DISTINCT FROM replay.is_active

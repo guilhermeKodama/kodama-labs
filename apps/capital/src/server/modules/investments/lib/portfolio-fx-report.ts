@@ -95,6 +95,8 @@ interface RepairPlan {
   warnings: string[];
   legs: PlannedLeg[];
   detaches: { opId: string; cashId: string; accountId: string }[];
+  /** Holdings of the opening BTC buys. The replay includes these and no other untouched account. */
+  btcHoldingIds: string[];
   deltas: DeltaCandidate[];
   deltaOperationIds: string[];
   initials: Map<string, number>;
@@ -208,7 +210,7 @@ async function planRepair(db: DbClient, closes: RateClose[]): Promise<RepairPlan
   }
   const buys = await db.investmentOperation.findMany({
     where: { type: "buy", holding: { ticker: "BTC", account: { type: "brokerage", archivedAt: null } } },
-    select: { id: true, type: true, quantity: true, pricePerUnit: true, totalAmount: true, cashEntryId: true, holding: { select: { accountId: true } }, cashEntry: { select: { deletedAt: true } } },
+    select: { id: true, type: true, quantity: true, pricePerUnit: true, totalAmount: true, cashEntryId: true, holding: { select: { id: true, accountId: true } }, cashEntry: { select: { deletedAt: true } } },
   });
   const btcByAccount = new Map<string, typeof buys>();
   for (const buy of buys.filter(isBtcBuy)) {
@@ -259,6 +261,11 @@ async function planRepair(db: DbClient, closes: RateClose[]): Promise<RepairPlan
   }
 
   const detaches = [...btcByAccount.values()].flatMap((list) => (list.length === 1 && list[0].cashEntryId && !list[0].cashEntry?.deletedAt ? [{ opId: list[0].id, cashId: list[0].cashEntryId, accountId: list[0].holding.accountId }] : []));
+  const btcHoldingIds = [...btcByAccount.values()].flatMap((list) => list.map((buy) => buy.holding.id));
+  if (detaches.length) {
+    const attached = await db.attachment.count({ where: { ledgerEntryId: { in: detaches.map((row) => row.cashId) } } });
+    if (attached > 0) issues.push("the BTC buy cash leg has attachments");
+  }
   if (await bothBtcSaleAndAdjustmentLive(db)) issues.push("the 2026-09-30 BTC sell and the 2026-10-02 adjustment are both live");
   const deltas = await deltaCandidates(db);
   const deltaOperationIds = deltas.map((row) => row.id);
@@ -283,7 +290,7 @@ async function planRepair(db: DbClient, closes: RateClose[]): Promise<RepairPlan
       initials.set(accountId, round(opening, 4));
     }
   }
-  return { issues, warnings, legs, detaches, deltas, deltaOperationIds, initials };
+  return { issues, warnings, legs, detaches, btcHoldingIds, deltas, deltaOperationIds, initials };
 }
 
 async function bothBtcSaleAndAdjustmentLive(db: DbClient): Promise<boolean> {
@@ -313,30 +320,29 @@ async function sellIsLive(db: DbClient, accountId: string): Promise<boolean> {
 }
 
 /**
- * Same predicate as the migration. A negative quantity is a delta only when
- * the row was written before v2 (it is in legacy.investment_transactions):
- * the old MCP adjust_position stored an absolute quantity with
- * totalAmount ≈ qty × price and notes "Manual adjustment%". A later negative
- * quantity is an absolute reset. A zero-amount quantity change is a delta
- * unless those notes mark it as that absolute MCP write.
+ * Same predicate as the migration. Only a null mode is eligible; an explicit
+ * absolute stays absolute. A negative quantity is a delta only when the row
+ * was written before v2 (it is in legacy.investment_transactions). A
+ * zero-amount quantity change is a delta unless the notes are the old MCP
+ * absolute write, and a positive one also needs pricePerUnit > 0 so a
+ * zero-average MCP adjust (price 0, total 0, custom notes) stays absolute.
  */
 async function deltaCandidates(db: DbClient): Promise<DeltaCandidate[]> {
   const ops = await db.investmentOperation.findMany({
-    where: { type: "adjustment" },
-    select: { id: true, quantity: true, totalAmount: true, notes: true, date: true, adjustmentMode: true, holding: { select: { ticker: true, account: { select: { userId: true } } } } },
+    where: { type: "adjustment", adjustmentMode: null },
+    select: { id: true, quantity: true, pricePerUnit: true, totalAmount: true, notes: true, date: true, holding: { select: { ticker: true, account: { select: { userId: true } } } } },
   });
-  const open = ops.filter((op) => op.adjustmentMode !== "delta");
   const legacy = new Set<string>();
   const table = await db.$queryRaw<{ exists: boolean }[]>`SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'legacy' AND table_name = 'investment_transactions') AS exists`;
-  if (table[0]?.exists && open.length) {
-    const rows = await db.$queryRaw<{ id: string }[]>`SELECT id FROM legacy.investment_transactions WHERE id IN (${Prisma.join(open.map((op) => op.id))})`;
+  if (table[0]?.exists && ops.length) {
+    const rows = await db.$queryRaw<{ id: string }[]>`SELECT id FROM legacy.investment_transactions WHERE id IN (${Prisma.join(ops.map((op) => op.id))})`;
     for (const row of rows) legacy.add(row.id);
   }
-  return open.flatMap((op) => {
+  return ops.flatMap((op) => {
     if (op.quantity == null || op.quantity === 0) return [];
     const manual = /^manual adjustment/i.test(op.notes ?? "");
     const preV2Negative = op.quantity < 0 && legacy.has(op.id);
-    const zeroAmount = Math.abs(op.totalAmount) < 1e-7 && !manual;
+    const zeroAmount = Math.abs(op.totalAmount) < 1e-7 && !manual && (op.quantity < 0 || (op.pricePerUnit ?? 0) > 0);
     if (!preV2Negative && !zeroAmount) return [];
     return [{ id: op.id, ticker: op.holding.ticker ?? "", date: op.date, quantity: op.quantity, totalAmount: op.totalAmount, notes: op.notes, userId: op.holding.account.userId }];
   });
@@ -788,10 +794,10 @@ async function holdingLines(db: DbClient, userId: string, mode: "precheck" | "ve
       operations: { orderBy: [{ date: "asc" }, { createdAt: "asc" }], select: { id: true, type: true, quantity: true, pricePerUnit: true, totalAmount: true, fees: true, adjustmentMode: true } },
     },
   });
-  const touched = new Set([...plan.legs.map((leg) => leg.accountId), ...plan.detaches.map((row) => row.accountId)]);
+  const btcHoldings = new Set(plan.btcHoldingIds);
   const lines: string[] = [];
   for (const holding of holdings) {
-    const inReplay = holding.operations.some((op) => plan.deltaOperationIds.includes(op.id) || op.adjustmentMode === "delta") || touched.has(holding.accountId) || backup?.holdings.has(holding.id) === true;
+    const inReplay = holding.operations.length > 0 && (holding.operations.some((op) => plan.deltaOperationIds.includes(op.id) || op.adjustmentMode === "delta") || btcHoldings.has(holding.id) || backup?.holdings.has(holding.id) === true);
     if (!inReplay) continue;
     const prior = mode === "verify" ? backup?.holdings.get(holding.id) : undefined;
     const before = {

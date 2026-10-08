@@ -24,6 +24,8 @@ Run compose from `~/Documents/Github/kodama-labs`. `up` and `run` take `--no-dep
 
 Pause nothing. The script only reads.
 
+The precheck needs #75's migration `20261008140000_adjustment_mode_and_rate_days` (the `currency_rate_days` series and `adjustmentMode`). Production receives #75 first, deployed in this same window, before this precheck. A copy that does not have that migration yet is not this step: apply `20261008140000` on its own before prechecking it (`prisma db execute` of that migration file, then `prisma migrate resolve --applied 20261008140000_adjustment_mode_and_rate_days`).
+
 ```bash
 mkdir -p ~/backups
 docker --context desktop-linux compose -p kodama-prod -f docker-compose.yml \
@@ -37,7 +39,7 @@ If `main` does not have the script yet, run it from the rehearsal image in the n
 Read the saved output:
 
 - The table has one row per brokerage account, with opening (native and BRL), contributed, current cash, holdings, Patrimônio, Total aportado, and Resultado, before and after.
-- `issue` lines are absent. A `warn` line is a rate-1 USD/BRL leg outside the three targets. The migration leaves it unchanged. Duplicates and ambiguity are `issue` lines, and the migration aborts on those.
+- `issue` lines are absent. A `warn` line is a rate-1 USD/BRL leg outside the three targets. The migration leaves it unchanged. Duplicates and ambiguity are `issue` lines, and the migration aborts on those. An attachment on the BTC buy cash leg is an `issue` line; do not migrate until that file is moved off the leg.
 - `delta` lines list every adjustment the migration will mark as delta: ticker, date, quantity, total, and notes. Confirm that list before migrating.
 - `holding` lines show quantity, average, cost, and active, before and after, for every holding the replay changes.
 - `--expect-targets` fails unless the Avenue 2026-08-12 leg, the Avenue 2026-09-16 leg, the Crypto deposit, and the BTC buy are each found once, or are already repaired.
@@ -90,9 +92,10 @@ docker --context desktop-linux exec -i postgres \
 
 The file must be non-empty. The list must include `ledger_entries` and `accounts`.
 
-Restore into a throwaway Postgres 17 on its own network. Publish no port. Do not restore into the prod `postgres` container, and do not attach this network to `kodama`.
+Restore into a throwaway Postgres on its own network, using the same image as the prod `postgres` container. Publish no port. Do not restore into the prod `postgres` container, and do not attach this network to `kodama`.
 
 ```bash
+pg_image=$(docker --context desktop-linux inspect -f '{{.Config.Image}}' postgres)
 docker --context desktop-linux network create capital-rehearsal-net
 docker --context desktop-linux run -d \
   --name capital-rehearsal-pg \
@@ -100,7 +103,7 @@ docker --context desktop-linux run -d \
   -e POSTGRES_USER=root \
   -e POSTGRES_PASSWORD=rehearsal \
   -e POSTGRES_DB=capital \
-  postgres:17
+  "$pg_image"
 until docker --context desktop-linux exec capital-rehearsal-pg \
   pg_isready -h 127.0.0.1 -U root -d capital; do sleep 1; done
 
@@ -110,6 +113,32 @@ docker --context desktop-linux exec -i capital-rehearsal-pg \
 ```
 
 The init-phase server listens on the socket only, so `pg_isready` has to go through `127.0.0.1`. This restore is into an empty database, so the command does not pass `--clean`.
+
+The precheck needs #75's migration `20261008140000_adjustment_mode_and_rate_days`. A dump taken before that migration was on production does not have it. Apply that file alone, then mark it applied, before the precheck:
+
+```bash
+docker --context desktop-linux run --rm \
+  --network capital-rehearsal-net \
+  --workdir /repo/apps/capital \
+  -e NODE_ENV=production \
+  -e DATABASE_URL="postgresql://root:rehearsal@capital-rehearsal-pg:5432/capital" \
+  -e DIRECT_URL="postgresql://root:rehearsal@capital-rehearsal-pg:5432/capital" \
+  --entrypoint pnpm \
+  kodama-capital:portfolio-fx-rehearsal \
+  exec prisma db execute --file prisma/migrations/20261008140000_adjustment_mode_and_rate_days/migration.sql
+
+docker --context desktop-linux run --rm \
+  --network capital-rehearsal-net \
+  --workdir /repo/apps/capital \
+  -e NODE_ENV=production \
+  -e DATABASE_URL="postgresql://root:rehearsal@capital-rehearsal-pg:5432/capital" \
+  -e DIRECT_URL="postgresql://root:rehearsal@capital-rehearsal-pg:5432/capital" \
+  --entrypoint pnpm \
+  kodama-capital:portfolio-fx-rehearsal \
+  exec prisma migrate resolve --applied 20261008140000_adjustment_mode_and_rate_days
+```
+
+Skip those two commands when the restored copy already has `20261008140000`. Production itself gets #75 first, in the same window, so a dump taken after that deploy already has it.
 
 Precheck the copy. Both URLs are the throwaway database, not production:
 
@@ -226,7 +255,7 @@ Leave the worktree until production is verified. Remove it later with `git workt
 
    The file must be non-empty. The list must include `ledger_entries` and `accounts`. Record the path printed by `printf`. Rollback uses that literal path. A later shell does not have this `$ts`.
 
-6. Repeat the rehearsal against this final dump: new throwaway network and `postgres:17` container, restore this file, precheck, migrate, verify, then `rm` the container and the network. Do not `compose build`, and do not restore the dump into the prod `postgres` container. Start the production migrate only after that verify exits 0.
+6. Repeat the rehearsal against this final dump: new throwaway network and a container of the prod Postgres image (`docker inspect -f '{{.Config.Image}}' postgres`), restore this file, apply `20261008140000` first if the dump does not have it, precheck, migrate, verify, then `rm` the container and the network. Do not `compose build`, and do not restore the dump into the prod `postgres` container. Start the production migrate only after that verify exits 0.
 
 7. Apply on production. The image was built in step 4. `capital-migrate` runs `prisma migrate deploy` and reads `DATABASE_URL` and `DIRECT_URL` from `apps/capital/.env.production`:
 

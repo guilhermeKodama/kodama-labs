@@ -176,7 +176,7 @@ describe("portfolio fx repair", () => {
     await prisma.investmentOperation.create({ data: { holdingId: kept.id, type: "adjustment", quantity: 4, pricePerUnit: 20, totalAmount: 80, date: noon("2026-03-08") } });
 
     const postV2 = await prisma.investmentHolding.create({
-      data: { accountId: avenue.id, assetClass: "stocks", ticker: "POST", name: "POST", currency: "USD", currentQuantity: 99, averageCost: 1, totalInvested: 99, isActive: true },
+      data: { accountId: avenue.id, assetClass: "stocks", ticker: "POST", name: "POST", currency: "USD", currentQuantity: 0, averageCost: 0, totalInvested: 0, isActive: false },
     });
     await prisma.investmentOperation.create({ data: { holdingId: postV2.id, type: "buy", quantity: 10, pricePerUnit: 10, totalAmount: 100, date: noon("2026-03-09") } });
     await prisma.investmentOperation.create({
@@ -188,6 +188,21 @@ describe("portfolio fx repair", () => {
     await prisma.investmentOperation.create({ data: { holdingId: mcp.id, type: "buy", quantity: 5, pricePerUnit: 10, totalAmount: 50, date: noon("2026-03-11") } });
     await prisma.investmentOperation.create({
       data: { holdingId: mcp.id, type: "adjustment", quantity: 8, pricePerUnit: 12, totalAmount: 0, notes: "Manual adjustment via MCP", date: noon("2026-03-12") },
+    });
+    const absolute = await prisma.investmentHolding.create({
+      data: { accountId: avenue.id, assetClass: "stocks", ticker: "ABS", name: "ABS", currency: "USD", currentQuantity: 5, averageCost: 0, totalInvested: 0, isActive: true },
+    });
+    await prisma.investmentOperation.create({
+      data: { holdingId: absolute.id, type: "adjustment", quantity: 5, pricePerUnit: 0, totalAmount: 0, notes: "broker sync", adjustmentMode: "absolute", date: noon("2026-03-13") },
+    });
+    const zeroPrice = await prisma.investmentHolding.create({
+      data: { accountId: avenue.id, assetClass: "stocks", ticker: "ZERO", name: "ZERO", currency: "USD", currentQuantity: 6, averageCost: 0, totalInvested: 0, isActive: true },
+    });
+    await prisma.investmentOperation.create({
+      data: { holdingId: zeroPrice.id, type: "adjustment", quantity: 6, pricePerUnit: 0, totalAmount: 0, notes: "broker sync custom", date: noon("2026-03-14") },
+    });
+    await prisma.investmentHolding.create({
+      data: { accountId: avenue.id, assetClass: "stocks", ticker: "EMPTY", name: "EMPTY", currency: "USD", currentQuantity: 7, averageCost: 3, totalInvested: 21, isActive: true },
     });
 
     async function btc(accountId: string, userId: string, entityId: string, buyDay: string) {
@@ -279,6 +294,26 @@ describe("portfolio fx repair", () => {
     expect(previousBusinessDayRate(embedded.map(([day, brlPerUnit]) => ({ day, brlPerUnit })), "2026-09-16")).toBe(5.149);
   });
 
+  it("hard-fails when the BTC buy cash leg has an attachment", async () => {
+    const cash = await prisma.ledgerEntry.findFirstOrThrow({ where: { accountId: cryptoSellId, description: "BTC buy cash" } });
+    const attachment = await prisma.attachment.create({
+      data: { kind: "RECEIPT", blobUrl: "https://example.invalid/btc-cash", pathname: "btc-cash", mimeType: "application/pdf", sizeBytes: 1, originalName: "btc.pdf", ledgerEntryId: cash.id },
+    });
+    try {
+      const report = await portfolioFxReport(prisma, "precheck", { userId: SELL_USER });
+      expect(report.ok).toBe(false);
+      expect(report.issues.join("\n")).toMatch(/attachments/);
+      const before = await fingerprint([SELL_USER, ADJ_USER]);
+      const failed = psql(migrationSql);
+      expect(failed.status).not.toBe(0);
+      expect(failed.stderr).toMatch(/attachments/);
+      expect(await fingerprint([SELL_USER, ADJ_USER])).toBe(before);
+      expect(await prisma.ledgerEntry.findUnique({ where: { id: cash.id } })).not.toBeNull();
+    } finally {
+      await prisma.attachment.delete({ where: { id: attachment.id } });
+    }
+  });
+
   it("warns on an unexpected rate-1 leg and still hard-fails a duplicate Avenue leg", async () => {
     const odd = await prisma.account.create({
       data: { userId: SELL_USER, entityId: sell.pfId, type: "brokerage", name: "Odd", currency: "USD" },
@@ -319,6 +354,9 @@ describe("portfolio fx repair", () => {
     expect(report.text).not.toMatch(/delta\tLEG\t/);
     expect(report.text).not.toMatch(/delta\tMCP\t/);
     expect(report.text).not.toMatch(/delta\tPOST\t/);
+    expect(report.text).not.toMatch(/delta\tABS\t/);
+    expect(report.text).not.toMatch(/delta\tZERO\t/);
+    expect(report.text).not.toMatch(/holding\tEMPTY\t/);
     expect(report.text).toMatch(/holding\tVUAA\tqty\t0\t17\.2791\t/);
     expect(report.text).toMatch(/holding\tBTC\tqty\t0\.3667\t0\.2885\t/);
     expect(report.text).not.toMatch(/holding\tLEG\t/);
@@ -342,6 +380,8 @@ describe("portfolio fx repair", () => {
   });
 
   it("repairs the listed rows, keeps the sell, and matches the timeline", async () => {
+    const emptyBefore = await prisma.investmentHolding.findFirstOrThrow({ where: { ticker: "EMPTY", accountId: avenueId } });
+    const postBefore = await prisma.investmentHolding.findFirstOrThrow({ where: { ticker: "POST", accountId: avenueId } });
     const sellBefore = await prisma.investmentOperation.findUniqueOrThrow({ where: { id: sellOpId } });
     const adjBefore = await prisma.investmentOperation.findUniqueOrThrow({ where: { id: adjOpId } });
     const snapshotBefore = await prisma.ledgerEntry.findUniqueOrThrow({ where: { id: snapshotLegId } });
@@ -416,8 +456,19 @@ describe("portfolio fx repair", () => {
     expect(legacyPositive.averageCost).toBeCloseTo(15, 2);
     expect(await prisma.investmentOperation.findFirst({ where: { holdingId: legacyPositive.id, type: "adjustment" } })).toMatchObject({ adjustmentMode: null, quantity: 2 });
     const postV2 = await prisma.investmentHolding.findFirstOrThrow({ where: { ticker: "POST", accountId: avenueId } });
-    expect(postV2.currentQuantity).toBeCloseTo(0, 4);
+    expect(postV2.currentQuantity).toBe(0);
+    expect(postV2.isActive).toBe(false);
+    expect(postV2.updatedAt).toEqual(postBefore.updatedAt);
     expect(await prisma.investmentOperation.findFirst({ where: { holdingId: postV2.id, type: "adjustment" } })).toMatchObject({ adjustmentMode: null, quantity: -3 });
+    const absolute = await prisma.investmentHolding.findFirstOrThrow({ where: { ticker: "ABS", accountId: avenueId } });
+    expect(absolute.currentQuantity).toBe(5);
+    expect(await prisma.investmentOperation.findFirst({ where: { holdingId: absolute.id, type: "adjustment" } })).toMatchObject({ adjustmentMode: "absolute", pricePerUnit: 0, totalAmount: 0, notes: "broker sync" });
+    const zeroPrice = await prisma.investmentHolding.findFirstOrThrow({ where: { ticker: "ZERO", accountId: avenueId } });
+    expect(zeroPrice.currentQuantity).toBe(6);
+    expect(zeroPrice.averageCost).toBe(0);
+    expect(await prisma.investmentOperation.findFirst({ where: { holdingId: zeroPrice.id, type: "adjustment" } })).toMatchObject({ adjustmentMode: null, pricePerUnit: 0, totalAmount: 0, notes: "broker sync custom" });
+    const emptyAfter = await prisma.investmentHolding.findFirstOrThrow({ where: { id: emptyBefore.id } });
+    expect(emptyAfter).toMatchObject({ currentQuantity: emptyBefore.currentQuantity, averageCost: emptyBefore.averageCost, totalInvested: emptyBefore.totalInvested, isActive: true, updatedAt: emptyBefore.updatedAt });
     const mcp = await prisma.investmentHolding.findFirstOrThrow({ where: { ticker: "MCP", accountId: avenueId } });
     expect(mcp.currentQuantity).toBeCloseTo(8, 4);
     expect(mcp.averageCost).toBeCloseTo(12, 2);
