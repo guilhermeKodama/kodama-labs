@@ -27,6 +27,8 @@ const SELL_DAY = "2026-09-30";
 const SELL_CASH = 6757.75;
 const MONEY = 0.01;
 const NATIVE = 0.0001;
+/** Legacy running cash counts as zero inside this band. Avenue must be there right after the 2026-08-12 leg. */
+const ZERO_CASH = 0.01;
 /** A description or metadata quote is used when USD × rate reproduces the BRL amount within this fraction. */
 const EXECUTION_TOLERANCE = 0.005;
 /** And the quoted rate is within this fraction of that day's PTAX. A rate of 1 reproduces a BRL amount written as USD and is rejected. */
@@ -257,8 +259,12 @@ function isBtcBuy(op: { type: string; quantity: number | null; pricePerUnit: num
   return op.type === "buy" && op.quantity != null && op.pricePerUnit != null && near(op.quantity, BTC_QTY, 1e-6) && near(op.pricePerUnit, BTC_PRICE) && near(op.totalAmount, BTC_TOTAL);
 }
 
+function orderedByLedger<T extends { id: string; date: Date; createdAt: Date }>(entries: T[]): T[] {
+  return [...entries].sort((a, b) => a.date.getTime() - b.date.getTime() || a.createdAt.getTime() - b.createdAt.getTime() || a.id.localeCompare(b.id));
+}
+
 function prefixMin(entries: { id: string; date: Date; createdAt: Date; amount: number }[]): number {
-  const ordered = [...entries].sort((a, b) => a.date.getTime() - b.date.getTime() || a.createdAt.getTime() - b.createdAt.getTime() || a.id.localeCompare(b.id));
+  const ordered = orderedByLedger(entries);
   let run = 0;
   let min = 0;
   for (const entry of ordered) {
@@ -266,6 +272,35 @@ function prefixMin(entries: { id: string; date: Date; createdAt: Date; amount: n
     if (run < min) min = run;
   }
   return min;
+}
+
+/** Old running cash, rounded like the migration. `after` is the balance once that entry is included. */
+function legacyPath(initial: number, entries: { id: string; date: Date; createdAt: Date; amount: number }[]): { id: string; amount: number; after: number }[] {
+  let run = initial;
+  return orderedByLedger(entries).map((entry) => {
+    run = round(run + entry.amount, 4);
+    return { id: entry.id, amount: entry.amount, after: run };
+  });
+}
+
+/**
+ * Repaired legs after the last legacy zero. Their (old − new) is phantom cash
+ * when the old amount was a rate-1 BRL figure stored as USD. No zero means no
+ * adjustment: the ending stays the legacy ending.
+ */
+function cashPhantom(path: { id: string; amount: number; after: number }[], newAmount: Map<string, number>): number {
+  let zeroAt = -1;
+  path.forEach((point, index) => {
+    if (Math.abs(point.after) <= ZERO_CASH) zeroAt = index;
+  });
+  if (zeroAt < 0) return 0;
+  let phantom = 0;
+  for (let index = zeroAt + 1; index < path.length; index++) {
+    const next = newAmount.get(path[index].id);
+    if (next == null) continue;
+    phantom += path[index].amount - next;
+  }
+  return round(phantom, 4);
 }
 
 async function planRepair(db: DbClient, closes: RateClose[]): Promise<RepairPlan> {
@@ -341,6 +376,11 @@ async function planRepair(db: DbClient, closes: RateClose[]): Promise<RepairPlan
   if (await bothBtcSaleAndAdjustmentLive(db)) issues.push("the 2026-09-30 BTC sell and the 2026-10-02 adjustment are both live");
   const deltas = await deltaCandidates(db);
   const deltaOperationIds = deltas.map((row) => row.id);
+  for (const leg of legs.filter((row) => row.signature === "avenue_out")) {
+    const accountRows = rows.filter((row) => row.accountId === leg.accountId);
+    const after = legacyPath(accountRows[0]?.initialBalance ?? 0, accountRows).find((point) => point.id === leg.entryId);
+    if (!after || Math.abs(after.after) > ZERO_CASH) issues.push(`Avenue running cash after 2026-08-12 is ${fmt(after?.after ?? 0, 4)}, expected 0`);
+  }
   const initials = new Map<string, number>();
   if (!issues.length) {
     const touched = new Set([...legs.map((leg) => leg.accountId), ...detaches.map((row) => row.accountId)]);
@@ -353,7 +393,8 @@ async function planRepair(db: DbClient, closes: RateClose[]): Promise<RepairPlan
       const correctedSum = after.reduce((sum, row) => sum + row.amount, 0);
       const minPrefix = prefixMin(after);
       const crypto = legs.some((leg) => leg.accountId === accountId && leg.signature === "crypto_deposit") || detaches.some((row) => row.accountId === accountId && btcByAccount.has(accountId));
-      let opening = crypto ? Math.max(0, -minPrefix) : legacyEnding - correctedSum;
+      const phantom = crypto ? 0 : cashPhantom(legacyPath(accountRows[0]?.initialBalance ?? 0, accountRows), usdOf);
+      let opening = crypto ? Math.max(0, -minPrefix) : legacyEnding - phantom - correctedSum;
       if (!crypto) {
         const deficit = -(opening + minPrefix);
         if (deficit > NATIVE) opening += deficit;
@@ -561,7 +602,7 @@ function accountFlows(accountId: string, rows: Row[], backup: Backup | null, rep
 
 function runningFlows(opening: number, rows: { id: string; date: Date; createdAt: Date; amount: number; description: string }[], legs: PlannedLeg[]): string[] {
   const planned = new Map(legs.map((leg) => [leg.entryId, leg]));
-  const ordered = [...rows].sort((a, b) => a.date.getTime() - b.date.getTime() || a.createdAt.getTime() - b.createdAt.getTime() || a.id.localeCompare(b.id));
+  const ordered = orderedByLedger(rows);
   let running = opening;
   return ordered.map((row) => {
     running = round(running + row.amount, 4);
@@ -783,12 +824,20 @@ async function reconciliation(db: DbClient, input: { source: PortfolioTimelineSo
     const endingBefore = round((left?.openingNative ?? 0) + beforeFlows.reduce((total, row) => total + row.amount, 0), 4);
     const endingAfter = round((right?.openingNative ?? 0) + projected.reduce((total, row) => total + row.amount, 0), 4);
     const correctedSum = projected.reduce((total, row) => total + row.amount, 0);
-    const baseInitial = round(endingBefore - correctedSum, 4);
+    const oldPath = legacyPath(left?.openingNative ?? 0, beforeFlows);
+    const outLeg = legs.find((leg) => leg.accountId === accountId && leg.signature === "avenue_out");
+    const afterOut = outLeg ? oldPath.find((point) => point.id === outLeg.entryId) : undefined;
+    if (outLeg && (!afterOut || Math.abs(afterOut.after) > ZERO_CASH) && !issues.some((issue) => issue.includes("running cash after 2026-08-12"))) {
+      issues.push(`Avenue running cash after 2026-08-12 is ${fmt(afterOut?.after ?? 0, 4)}, expected 0`);
+    }
+    const phantom = cashPhantom(oldPath, new Map(legs.filter((leg) => leg.accountId === accountId).map((leg) => [leg.entryId, leg.usd])));
+    const endingCorrected = round(endingBefore - phantom, 4);
+    const baseInitial = round(endingCorrected - correctedSum, 4);
     const minPrefix = prefixMin(projected);
     const deficit = -(baseInitial + minPrefix);
     const lift = round(deficit > NATIVE ? deficit : 0, 4);
-    const identity = near(endingAfter, endingBefore + lift, 0.001);
-    if (!identity) issues.push(`Avenue ending cash ${endingAfter} != ending before ${endingBefore} + lift ${lift}`);
+    const identity = near(endingAfter, endingCorrected + lift, 0.001);
+    if (!identity) issues.push(`Avenue ending cash ${endingAfter} != corrected ending ${endingCorrected} + lift ${lift}`);
     for (const leg of legs.filter((item) => item.accountId === accountId)) {
       if (leg.source === "execution") {
         const scale = Math.abs(leg.brl);
@@ -801,15 +850,16 @@ async function reconciliation(db: DbClient, input: { source: PortfolioTimelineSo
     }
     lines.push("avenue_reconciliation_usd");
     lines.push(`ending_before\t${fmt(endingBefore, 4)}`);
+    lines.push(`ending_corrected\t${fmt(endingCorrected, 4)}`);
     lines.push(`lift\t${fmt(lift, 4)}`);
     lines.push(`ending_after\t${fmt(endingAfter, 4)}`);
-    lines.push(`ending_before_plus_lift\t${fmt(round(endingBefore + lift, 4), 4)}`);
+    lines.push(`ending_corrected_plus_lift\t${fmt(round(endingCorrected + lift, 4), 4)}`);
     lines.push(`opening_written\t${fmt(right?.openingNative ?? 0, 4)}`);
     lines.push("flows");
     lines.push(...runningFlows(right?.openingNative ?? 0, projected, legs));
     lines.push(`sum_flows\t${fmt(correctedSum, 4)}`);
     lines.push(`match\t${identity ? "yes" : "no"}`);
-    lines.push(await legacyCashLine(db, accountId, endingBefore, rows, backup, issues));
+    lines.push(await legacyCashLine(db, accountId, endingBefore, endingCorrected, rows, backup, issues));
     if (right) lines.push(`opening_lot_brl\t${fmt(right.initialPositions - right.openingBrl, 2)}\topening_brl\t${fmt(right.openingBrl, 2)}\tcontributed\t${fmt(right.contributed, 2)}`);
   } else lines.push("avenue_reconciliation_usd\tnone");
   const cryptoAccounts = new Set([
@@ -1112,7 +1162,7 @@ function costBasisFx(holding: TimelineHolding, input: TimelineInput): number {
   return native * today - booked;
 }
 
-async function legacyCashLine(db: DbClient, accountId: string, endingBefore: number, rows: Row[], backup: Backup | null, issues: string[]): Promise<string> {
+async function legacyCashLine(db: DbClient, accountId: string, endingBefore: number, endingCorrected: number, rows: Row[], backup: Backup | null, issues: string[]): Promise<string> {
   const schema = await db.$queryRaw<{ exists: boolean }[]>`SELECT to_regclass('legacy.investment_accounts') IS NOT NULL AS exists`;
   if (!schema[0]?.exists) return "legacy_schema\tmissing";
   const accounts = await db.$queryRaw<{ cashBalance: number }[]>`SELECT "cashBalance" FROM legacy.investment_accounts WHERE id = ${accountId}`;
@@ -1124,7 +1174,8 @@ async function legacyCashLine(db: DbClient, accountId: string, endingBefore: num
     ? new Set((await db.$queryRaw<{ id: string }[]>`SELECT new_id AS id FROM legacy.id_map WHERE new_model = 'LedgerEntry' AND new_id IN (${Prisma.join(ids)})`).map((row) => row.id))
     : new Set<string>();
   const added = flows.filter((row) => !mapped.has(row.id)).reduce((total, row) => total + row.amount, 0);
-  const expected = round(cashBalance + added, 4);
-  if (!near(endingBefore, expected, 0.05)) issues.push(`Avenue ending before ${endingBefore} != legacy cashBalance ${cashBalance} + entries since backfill ${added}`);
-  return `legacy_cash\t${fmt(cashBalance, 4)}\tadded_since_backfill\t${fmt(added, 4)}\texpected_ending_before\t${fmt(expected, 4)}`;
+  const endingOld = round(cashBalance + added, 4);
+  // cashBalance still has to match the ledger that was imported. It is not the USD cash to keep: a rate-1 deposit stored as dollars sits in that balance, and ending_corrected is what the repair writes.
+  if (!near(endingBefore, endingOld, 0.05)) issues.push(`Avenue ending before ${endingBefore} != legacy cashBalance ${cashBalance} + entries since backfill ${added}`);
+  return `legacy_cash\t${fmt(cashBalance, 4)}\tadded_since_backfill\t${fmt(added, 4)}\tending_old\t${fmt(endingOld, 4)}\tending_corrected\t${fmt(endingCorrected, 4)}`;
 }
