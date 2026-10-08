@@ -29,6 +29,8 @@ const MONEY = 0.01;
 const NATIVE = 0.0001;
 /** A description or metadata quote is used when USD × rate reproduces the BRL amount within this fraction. */
 const EXECUTION_TOLERANCE = 0.005;
+/** And the quoted rate is within this fraction of that day's PTAX. A rate of 1 reproduces a BRL amount written as USD and is rejected. */
+const PTAX_BAND = 0.03;
 const RESIDUAL_FLAG = 0.01;
 
 export interface AccountFigures {
@@ -147,13 +149,14 @@ function fmt(value: number, places: number): string {
 
 /**
  * USD amount and BRL-per-USD rate stated on the leg. Accepts `US$33,322.17 @
- * R$5.0657` (and the pt-BR separators) in the description, or the same pair
- * under metadata keys `usd` / `usdAmount` / `amountUsd` and `exchangeRate` /
- * `fxRate` / `rate`. The pair is explicit only when USD × rate reproduces
- * `brlAbs` within 0.5%; otherwise the caller keeps PTAX.
+ * R$5.0657` (and the pt-BR separators, any case) in the description, or the
+ * same pair under metadata keys `usd` / `usdAmount` / `amountUsd` and
+ * `exchangeRate` / `fxRate` / `rate`. The pair is explicit only when USD × rate
+ * reproduces `brlAbs` within 0.5% and the rate is within 3% of `ptax`;
+ * otherwise the caller keeps PTAX.
  */
-function executionQuote(description: string, metadata: Prisma.JsonValue | null, brlAbs: number): { usd: number; rate: number } | null {
-  if (!(brlAbs > 0)) return null;
+function executionQuote(description: string, metadata: Prisma.JsonValue | null, brlAbs: number, ptax: number): { usd: number; rate: number } | null {
+  if (!(brlAbs > 0) || !(ptax > 0)) return null;
   const blob = `${description} ${metadata == null ? "" : typeof metadata === "string" ? metadata : JSON.stringify(metadata)}`;
   const usds = matchedNumbers(blob, /(?:US\$|USD|U\$)\s*([0-9][0-9.,]*)/gi).concat(matchedNumbers(blob, /"(?:usd|usdAmount|amountUsd)"\s*:\s*"?([0-9][0-9.,]*)/gi));
   const rates = matchedNumbers(blob, /@\s*(?:R\$\s*)?([0-9][0-9.,]*)/gi)
@@ -162,6 +165,7 @@ function executionQuote(description: string, metadata: Prisma.JsonValue | null, 
   let best: { usd: number; rate: number; gap: number } | null = null;
   for (const usd of usds) {
     for (const rate of rates) {
+      if (Math.abs(rate / ptax - 1) > PTAX_BAND) continue;
       const gap = Math.abs(usd * rate - brlAbs) / brlAbs;
       if (gap <= EXECUTION_TOLERANCE && (!best || gap < best.gap)) best = { usd, rate, gap };
     }
@@ -197,7 +201,7 @@ function parseLocalizedNumber(raw: string): number | null {
 }
 
 function quotedUsd(brl: number, description: string, metadata: Prisma.JsonValue | null, ptax: number): { usd: number; rate: number; source: "execution" | "ptax" } {
-  const quote = executionQuote(description, metadata, Math.abs(brl));
+  const quote = executionQuote(description, metadata, Math.abs(brl), ptax);
   if (!quote) return { usd: round(brl / ptax, 4), rate: ptax, source: "ptax" };
   return { usd: round(Math.sign(brl) * quote.usd, 4), rate: quote.rate, source: "execution" };
 }
@@ -734,7 +738,7 @@ function correctedLegs(rows: Row[], plan: RepairPlan, backup: Backup | null, clo
     const signature: PlannedLeg["signature"] | null = near(previous.amount, AVENUE_OUT) ? "avenue_out" : near(previous.amount, AVENUE_IN) ? "avenue_in" : near(previous.amount, CRYPTO_DEPOSIT) ? "crypto_deposit" : null;
     if (!signature) continue;
     const brl = previous.amount;
-    const quote = executionQuote(row.description, row.metadata, Math.abs(brl));
+    const quote = executionQuote(row.description, row.metadata, Math.abs(brl), close.brlPerUnit);
     const executed = quote != null && near(row.amount, round(Math.sign(brl) * quote.usd, 4), NATIVE) && near(row.exchangeRate, quote.rate, 1e-4);
     legs.push({
       entryId: row.id,
@@ -981,7 +985,7 @@ async function repairedDepositCount(db: DbClient, plan: RepairPlan, closes: Rate
 function repairedLeg(amount: number, amountBase: number, exchangeRate: number, description: string, metadata: Prisma.JsonValue | null, brokerAmount: number, ptax: number): boolean {
   if (!near(amountBase, brokerAmount, 0.05)) return false;
   if (near(exchangeRate, ptax, 1e-4) && near(amount, round(brokerAmount / ptax, 4), NATIVE)) return true;
-  const quote = executionQuote(description, metadata, Math.abs(brokerAmount));
+  const quote = executionQuote(description, metadata, Math.abs(brokerAmount), ptax);
   return quote != null && near(exchangeRate, quote.rate, 1e-4) && near(amount, round(Math.sign(brokerAmount) * quote.usd, 4), NATIVE);
 }
 

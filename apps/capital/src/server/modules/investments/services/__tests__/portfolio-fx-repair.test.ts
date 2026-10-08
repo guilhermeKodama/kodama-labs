@@ -626,10 +626,11 @@ describe("portfolio fx repair execution quote", () => {
     });
     avenue = avenueAccount.id;
     crypto = cryptoAccount.id;
-    await rateOne(userId, fixture.pfId, fixture.pfChecking, avenue, -168800.12, "2026-08-12", "US$33,322.17 @ R$5.0657 for R$168,800.12");
+    const out = await rateOne(userId, fixture.pfId, fixture.pfChecking, avenue, -168800.12, "2026-08-12", "us$33,322.17 @ r$5.0657 for R$168,800.12");
+    await prisma.ledgerEntry.update({ where: { id: out.brokerEntryId }, data: { metadata: { UsdAmount: 33322.17, FxRate: 5.0657 } } });
     const inn = await rateOne(userId, fixture.pfId, fixture.pfChecking, avenue, 2575, "2026-09-16", "Avenue deposit");
-    await prisma.ledgerEntry.update({ where: { id: inn.brokerEntryId }, data: { metadata: { usdAmount: 500, exchangeRate: 5.15 } } });
-    await rateOne(userId, fixture.pfId, fixture.pfChecking, crypto, 10000, "2026-08-20", "US$2,000.00 @ R$5.0000 for R$10,000.00");
+    await prisma.ledgerEntry.update({ where: { id: inn.brokerEntryId }, data: { metadata: { usd: 2575, exchangeRate: 1 } } });
+    await rateOne(userId, fixture.pfId, fixture.pfChecking, crypto, 10000, "2026-08-20", "usd 1,980.20 @ r$5.05 for R$10,000.00");
     const cash = await prisma.ledgerEntry.create({
       data: {
         userId, entityId: fixture.pfId, accountId: crypto, kind: "investment", amount: -22002, currency: "USD", exchangeRate: 5, amountBase: -110010,
@@ -651,9 +652,12 @@ describe("portfolio fx repair execution quote", () => {
   it("writes the quoted USD amount and still reconciles ending cash", async () => {
     const before = await portfolioFxReport(prisma, "precheck", { userId, expectTargets: true });
     expect(before.ok, before.issues.join("; ")).toBe(true);
-    expect(before.text).toContain("leg_source\tavenue_out\tAvenue Exec\t2026-08-12\texecution\t5.0657\t-33322.1700");
-    expect(before.text).toContain("leg_source\tavenue_in\tAvenue Exec\t2026-09-16\texecution\t5.15\t500.0000");
-    expect(before.text).toContain("leg_source\tcrypto_deposit\tCrypto Exec\t2026-08-20\texecution\t5\t2000.0000");
+    const legSources = [
+      "leg_source\tavenue_out\tAvenue Exec\t2026-08-12\texecution\t5.0657\t-33322.1700",
+      "leg_source\tavenue_in\tAvenue Exec\t2026-09-16\tptax\t5.149\t500.0971",
+      "leg_source\tcrypto_deposit\tCrypto Exec\t2026-08-20\texecution\t5.05\t1980.2000",
+    ];
+    for (const line of legSources) expect(before.text).toContain(line);
     expect(before.text).toContain("-33322.1700");
     expect(before.text).toContain("match\tyes");
     assertDecomposition(before.text);
@@ -664,15 +668,16 @@ describe("portfolio fx repair execution quote", () => {
     expect(Number(out.exchangeRate)).toBeCloseTo(5.0657, 4);
     expect(Number(out.amountBase)).toBeCloseTo(-168800.12, 2);
     const inn = await prisma.ledgerEntry.findFirstOrThrow({ where: { accountId: avenue, description: "Avenue deposit" } });
-    expect(Number(inn.amount)).toBeCloseTo(500, 4);
-    expect(Number(inn.exchangeRate)).toBeCloseTo(5.15, 4);
+    expect(Number(inn.amount)).toBeCloseTo(500.0971, 4);
+    expect(Number(inn.exchangeRate)).toBeCloseTo(5.149, 4);
     expect(Number(inn.amountBase)).toBeCloseTo(2575, 2);
-    const deposit = await prisma.ledgerEntry.findFirstOrThrow({ where: { accountId: crypto, description: { contains: "2,000.00" } } });
-    expect(Number(deposit.amount)).toBeCloseTo(2000, 4);
-    expect(Number(deposit.exchangeRate)).toBeCloseTo(5, 4);
+    const deposit = await prisma.ledgerEntry.findFirstOrThrow({ where: { accountId: crypto, description: { contains: "1,980.20" } } });
+    expect(Number(deposit.amount)).toBeCloseTo(1980.2, 4);
+    expect(Number(deposit.exchangeRate)).toBeCloseTo(5.05, 4);
     expect(Number(deposit.amountBase)).toBeCloseTo(10000, 2);
     const verified = await portfolioFxReport(prisma, "verify", { userId, expectTargets: true });
     expect(verified.ok, verified.issues.join("; ")).toBe(true);
+    for (const line of legSources) expect(verified.text).toContain(line);
     expect(verified.text).toContain("source\texecution");
     expect(verified.text).toContain("match\tyes");
     expect(verified.text).toContain("ending_before\t");

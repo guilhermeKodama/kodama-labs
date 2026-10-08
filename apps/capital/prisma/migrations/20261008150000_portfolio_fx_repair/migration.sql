@@ -12,8 +12,9 @@
 --   2026-09-16 -> 2026-09-15 = 5.1490
 -- The Crypto deposit date is read from the row; its previous close comes from this series.
 -- A leg whose description or metadata states a USD amount and a BRL-per-USD rate
--- that reproduce the BRL amount within 0.5% uses that USD amount. Otherwise the
--- previous business day's PTAX. The opening balance absorbs the difference.
+-- that reproduce the BRL amount within 0.5%, and whose rate is within 3% of
+-- that day's PTAX, uses that USD amount. Otherwise the previous business day's
+-- PTAX. The opening balance absorbs the difference. Matching is case-insensitive.
 
 CREATE TABLE IF NOT EXISTS portfolio_fx_repair_entry (
     id TEXT PRIMARY KEY,
@@ -197,7 +198,7 @@ EXCEPTION WHEN invalid_text_representation THEN
 END;
 $num$;
 
-CREATE OR REPLACE FUNCTION pg_temp.portfolio_fx_execution(description TEXT, metadata JSONB, brl NUMERIC)
+CREATE OR REPLACE FUNCTION pg_temp.portfolio_fx_execution(description TEXT, metadata JSONB, brl NUMERIC, ptax NUMERIC)
 RETURNS TABLE(usd NUMERIC, rate NUMERIC)
 LANGUAGE plpgsql STABLE AS $quote$
 DECLARE
@@ -213,12 +214,12 @@ DECLARE
     best_rate NUMERIC;
     gap NUMERIC;
 BEGIN
-    IF brl IS NULL OR abs(brl) < 0.01 THEN
+    IF brl IS NULL OR abs(brl) < 0.01 OR ptax IS NULL OR ptax <= 0 THEN
         RETURN;
     END IF;
     blob := coalesce(description, '') || ' ' || coalesce(metadata::text, '');
     FOR match IN
-        SELECT m FROM regexp_matches(blob, '(US\$|USD|U\$)\s*([0-9][0-9.,]*)', 'g') AS m
+        SELECT m FROM regexp_matches(blob, '(US\$|USD|U\$)\s*([0-9][0-9.,]*)', 'gi') AS m
     LOOP
         num := pg_temp.portfolio_fx_num(match[2]);
         IF num IS NOT NULL AND num > 0 THEN
@@ -226,7 +227,7 @@ BEGIN
         END IF;
     END LOOP;
     FOR match IN
-        SELECT m FROM regexp_matches(blob, '("usd"|"usdAmount"|"amountUsd")\s*:\s*"?([0-9][0-9.,]*)', 'g') AS m
+        SELECT m FROM regexp_matches(blob, '("usd"|"usdAmount"|"amountUsd")\s*:\s*"?([0-9][0-9.,]*)', 'gi') AS m
     LOOP
         num := pg_temp.portfolio_fx_num(match[2]);
         IF num IS NOT NULL AND num > 0 THEN
@@ -234,7 +235,7 @@ BEGIN
         END IF;
     END LOOP;
     FOR match IN
-        SELECT m FROM regexp_matches(blob, '@\s*(R\$\s*)?([0-9][0-9.,]*)', 'g') AS m
+        SELECT m FROM regexp_matches(blob, '@\s*(R\$\s*)?([0-9][0-9.,]*)', 'gi') AS m
     LOOP
         num := pg_temp.portfolio_fx_num(match[2]);
         IF num IS NOT NULL AND num > 0.5 AND num < 20 THEN
@@ -242,7 +243,7 @@ BEGIN
         END IF;
     END LOOP;
     FOR match IN
-        SELECT m FROM regexp_matches(blob, '("exchangeRate"|"fxRate"|"rate")\s*:\s*"?([0-9][0-9.,]*)', 'g') AS m
+        SELECT m FROM regexp_matches(blob, '("exchangeRate"|"fxRate"|"rate")\s*:\s*"?([0-9][0-9.,]*)', 'gi') AS m
     LOOP
         num := pg_temp.portfolio_fx_num(match[2]);
         IF num IS NOT NULL AND num > 0.5 AND num < 20 THEN
@@ -251,6 +252,9 @@ BEGIN
     END LOOP;
     FOREACH usd_value IN ARRAY usd_vals LOOP
         FOREACH rate_value IN ARRAY rate_vals LOOP
+            IF abs(rate_value / ptax - 1) > 0.03 THEN
+                CONTINUE;
+            END IF;
             gap := abs(usd_value * rate_value - abs(brl)) / abs(brl);
             IF gap <= 0.005 AND (best_gap IS NULL OR gap < best_gap) THEN
                 best_gap := gap;
@@ -628,7 +632,7 @@ BEGIN
     FROM (
         SELECT f.entry_id, ex.rate, ex.usd
         FROM _fx f
-        CROSS JOIN LATERAL pg_temp.portfolio_fx_execution(f.description, f.metadata, abs(f.broker_amount)) ex
+        CROSS JOIN LATERAL pg_temp.portfolio_fx_execution(f.description, f.metadata, abs(f.broker_amount), f.rate) ex
     ) AS quote
     WHERE target.entry_id = quote.entry_id;
 
@@ -870,5 +874,5 @@ END
 $repair$;
 
 DROP FUNCTION IF EXISTS pg_temp.portfolio_fx_replay(TEXT, BOOLEAN, DOUBLE PRECISION, DOUBLE PRECISION);
-DROP FUNCTION IF EXISTS pg_temp.portfolio_fx_execution(TEXT, JSONB, NUMERIC);
+DROP FUNCTION IF EXISTS pg_temp.portfolio_fx_execution(TEXT, JSONB, NUMERIC, NUMERIC);
 DROP FUNCTION IF EXISTS pg_temp.portfolio_fx_num(TEXT);
