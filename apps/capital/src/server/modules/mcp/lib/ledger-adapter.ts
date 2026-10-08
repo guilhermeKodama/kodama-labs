@@ -1,4 +1,4 @@
-import type { Category, Entity, LedgerEntry, Prisma, TransactionType } from "@/generated/prisma";
+import { Prisma, type Category, type Entity, type LedgerEntry, type TransactionType } from "@/generated/prisma";
 import type { DbClient } from "@capital/server/lib/prisma";
 import { legacyEntityRef } from "@capital/server/modules/ledger/services/entities";
 import { displayAmount, toNumber } from "@capital/server/modules/ledger/lib/money";
@@ -14,9 +14,14 @@ import { formatCategoryValidationError, matchCategoryName } from "./category-val
 export const LEGACY_ENTRY_INCLUDE = {
   category: { select: { name: true } },
   entity: { select: { id: true, kind: true } },
+  transferGroup: { select: { id: true, legs: { select: { id: true, amount: true, currency: true } } } },
 } satisfies Prisma.LedgerEntryInclude;
 
-type LegacyEntry = LedgerEntry & { category: Pick<Category, "name"> | null; entity: Pick<Entity, "id" | "kind"> };
+type LegacyEntry = LedgerEntry & {
+  category: Pick<Category, "name"> | null;
+  entity: Pick<Entity, "id" | "kind">;
+  transferGroup?: { id: string; legs: { id: string; amount: Prisma.Decimal; currency: string }[] } | null;
+};
 
 export function legacyType(entry: Pick<LedgerEntry, "kind" | "amount">): TransactionType {
   if (entry.kind === "transfer") return toNumber(entry.amount) >= 0 ? "income" : "expense";
@@ -40,7 +45,24 @@ export function toLegacyTransaction(e: LegacyEntry) {
     personalAccountId: ref.personalAccountId,
     accountId: e.accountId,
     createdAt: e.createdAt.toISOString(),
+    /** Set on a transfer leg: the pair, and the other leg's signed amount and currency. */
+    transferGroupId: e.transferGroupId,
+    counterpartAmount: counterpartAmount(e),
+    counterpartCurrency: counterpartCurrency(e),
   };
+}
+
+function counterpartLeg(e: LegacyEntry) {
+  return e.transferGroup?.legs.find((leg) => leg.id !== e.id) ?? null;
+}
+
+function counterpartAmount(e: LegacyEntry): number | null {
+  const other = counterpartLeg(e);
+  return other ? toNumber(other.amount) : null;
+}
+
+function counterpartCurrency(e: LegacyEntry): string | null {
+  return counterpartLeg(e)?.currency ?? null;
 }
 
 /** Category loader for a batch: resolves names (exact, then case-insensitive) to ids with the MCP error messages. */

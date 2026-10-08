@@ -661,8 +661,19 @@ export async function adjustPosition(userId: string, input: { holdingId: string;
  */
 export async function moveBrokerageCash(
   userId: string,
-  input: { accountId: string; amount: number; date: string; direction: "deposit" | "withdraw"; currency?: string; exchangeRate?: number; description?: string; counterpartAccountId?: string },
-  db: DbClient
+  input: {
+    accountId: string;
+    amount: number;
+    date: string;
+    direction: "deposit" | "withdraw";
+    currency?: string;
+    exchangeRate?: number;
+    description?: string;
+    counterpartAccountId?: string;
+    /** What arrives in the other account's currency when the two differ. Omitted, the leg converts at the rate on the date. */
+    toAmount?: number;
+  },
+  db: DbClient,
 ) {
   return inTransaction(db, async (tx) => {
     const broker = await brokerage(userId, input.accountId, tx);
@@ -678,13 +689,66 @@ export async function moveBrokerageCash(
       const records: MutationRecordInput[] = [];
       const moved =
         input.direction === "withdraw"
-          ? await withdrawFromBroker(tx, userId, { broker, to: checking, amount: input.amount, date: input.date, description: input.description }, fx, records)
-          : await fundBroker(tx, userId, { fromAccountId: checking.id, broker, brokerAmount: input.amount, date: input.date, description: input.description }, fx, records);
-      const groupId = "withdrawalGroupId" in moved ? moved.withdrawalGroupId : moved.depositGroupId;
-      const group = await tx.transferGroup.findUniqueOrThrow({ where: { id: groupId }, select: { description: true } });
-      const entryIds = records.filter((r) => r.model === "LedgerEntry" && r.before === null).map((r) => r.recordId);
-      const batchId = await recordMutation(tx, userId, "create", group.description, records);
-      return { batchId, entryIds, transferGroupId: groupId, transferGroupIds: moved.transferGroupIds };
+          ? await withdrawFromBroker(
+              tx,
+              userId,
+              {
+                broker,
+                to: checking,
+                amount: input.amount,
+                date: input.date,
+                description: input.description,
+                receivedAmount: input.toAmount,
+              },
+              fx,
+              records,
+            )
+          : await fundBroker(
+              tx,
+              userId,
+              {
+                fromAccountId: checking.id,
+                broker,
+                brokerAmount:
+                  input.toAmount != null &&
+                  checking.currency !== broker.currency
+                    ? input.toAmount
+                    : input.amount,
+                fundAmount:
+                  input.toAmount != null &&
+                  checking.currency !== broker.currency
+                    ? input.amount
+                    : undefined,
+                date: input.date,
+                description: input.description,
+              },
+              fx,
+              records,
+            );
+      const groupId =
+        "withdrawalGroupId" in moved
+          ? moved.withdrawalGroupId
+          : moved.depositGroupId;
+      const group = await tx.transferGroup.findUniqueOrThrow({
+        where: { id: groupId },
+        select: { description: true },
+      });
+      const entryIds = records
+        .filter((r) => r.model === "LedgerEntry" && r.before === null)
+        .map((r) => r.recordId);
+      const batchId = await recordMutation(
+        tx,
+        userId,
+        "create",
+        group.description,
+        records,
+      );
+      return {
+        batchId,
+        entryIds,
+        transferGroupId: groupId,
+        transferGroupIds: moved.transferGroupIds,
+      };
     }
     const from = input.direction === "deposit" ? checking.id : broker.id;
     const to = input.direction === "deposit" ? broker.id : checking.id;
@@ -697,6 +761,8 @@ export async function moveBrokerageCash(
         amount: input.amount,
         currency: input.currency,
         exchangeRate: input.exchangeRate,
+        ...(input.toAmount != null &&
+          input.toAmount > 0 && { toAmount: input.toAmount }),
         date: input.date,
         description: input.description,
         direction: input.direction === "deposit" ? "investment_deposit" : "investment_withdrawal",

@@ -57,6 +57,8 @@
   "transfer": {
     "same_account": "Uma transferência precisa de duas contas diferentes.",
     "fx_required": "Uma transferência entre moedas diferentes precisa da cotação.",
+    "fx_mismatch": "A cotação e o valor recebido divergem em mais de 0,01.",
+    "same_currency": "Uma transferência na mesma moeda tem um único valor.",
     "from_account_not_found": "Conta de origem não encontrada.",
     "to_account_not_found": "Conta de destino não encontrada.",
     "kind_change": "Uma transferência não muda de tipo. Exclua e crie de novo."

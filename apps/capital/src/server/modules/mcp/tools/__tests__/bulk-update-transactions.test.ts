@@ -123,6 +123,62 @@ describe("update_transaction / delete_transaction", () => {
     expect(preview.updated[0].amount).toBe(-20);
   });
 
+  it("restates a cross-currency transfer from the amount that arrived", async () => {
+    const usd = await prisma.account.create({
+      data: {
+        userId: USER,
+        entityId: f.pfId,
+        type: "brokerage",
+        name: "Crypto",
+        currency: "USD",
+      },
+    });
+    const created = await createEntry(
+      USER,
+      {
+        kind: "transfer",
+        fromAccountId: usd.id,
+        toAccountId: f.pfChecking,
+        amount: 100,
+        toAmount: 500,
+        date: "2026-09-10",
+        description: "Resgate",
+        direction: "investment_withdrawal",
+      },
+      prisma,
+    );
+    const usdLeg = await prisma.ledgerEntry.findFirstOrThrow({
+      where: { transferGroupId: created.transferGroupId!, currency: "USD" },
+    });
+    const updated = await updateTransactionTool(
+      USER,
+      { id: usdLeg.id, toAmount: 480 },
+      prisma,
+    );
+    expect(updated).toMatchObject({
+      currency: "USD",
+      transferGroupId: created.transferGroupId,
+      counterpartAmount: 480,
+      counterpartCurrency: "BRL",
+      exchangeRate: 4.8,
+    });
+    const listed = await listTransactions(
+      USER,
+      { dateFrom: "2026-09-10", dateTo: "2026-09-10" },
+      prisma,
+    );
+    const pair = listed.transactions.filter(
+      (t) => t.transferGroupId === created.transferGroupId,
+    );
+    expect(pair).toHaveLength(2);
+    expect(pair.find((t) => t.currency === "BRL")).toMatchObject({
+      counterpartAmount: -100,
+      counterpartCurrency: "USD",
+      amount: 480,
+    });
+    expect(listed.summaries.every((s) => s.category !== "Resgate")).toBe(true);
+  });
+
   it("delete moves the entry to the trash", async () => {
     const a = await expense("a");
     await deleteTransactionTool(USER, a, prisma);

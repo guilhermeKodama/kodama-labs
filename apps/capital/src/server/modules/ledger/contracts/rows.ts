@@ -25,6 +25,9 @@ export const ledgerRowSchema = z.object({
   transferGroupId: z.string().nullable(),
   transferDirection: transferDirectionSchema.nullable(),
   counterpartAccountId: z.string().nullable(),
+  /** The other leg of a transfer, signed as stored. Absent on list rows. */
+  counterpartAmount: z.number().nullable().optional(),
+  counterpartCurrency: z.string().nullable().optional(),
   cardStatementId: z.string().nullable(),
   installmentPlanId: z.string().nullable(),
   installmentNumber: z.number().nullable(),

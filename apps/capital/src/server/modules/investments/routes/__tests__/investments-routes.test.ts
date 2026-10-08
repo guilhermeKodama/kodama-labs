@@ -356,6 +356,160 @@ describe("undo and delete keep positions consistent", () => {
   });
 });
 
+describe("cross-currency resgate", () => {
+  async function usdBroker(entityId: string, name: string) {
+    return prisma.account.create({
+      data: {
+        userId: USER,
+        entityId,
+        type: "brokerage",
+        name,
+        currency: "USD",
+      },
+    });
+  }
+
+  it("records the received BRL on a same-entity withdrawal", async () => {
+    const cash = await prisma.account.create({
+      data: {
+        userId: USER,
+        entityId: f.pfId,
+        type: "cash",
+        name: "Caixa USD",
+        currency: "USD",
+      },
+    });
+    const broker = await usdBroker(f.pfId, "Crypto Wallet");
+    await json("POST", "/v2/brokerage-cash", {
+      accountId: broker.id,
+      direction: "deposit",
+      amount: 6757.75,
+      date: "2026-09-29",
+      counterpartAccountId: cash.id,
+    });
+    const r = await json("POST", "/v2/brokerage-cash", {
+      accountId: broker.id,
+      direction: "withdraw",
+      amount: 6757.75,
+      toAmount: 33721.17,
+      date: "2026-09-30",
+      counterpartAccountId: f.pfChecking,
+    });
+    const legs = await prisma.ledgerEntry.findMany({
+      where: { transferGroupId: r.transferGroupId },
+    });
+    expect(
+      legs.find((l) => l.accountId === f.pfChecking)!.amount.toFixed(2),
+    ).toBe("33721.17");
+    expect(legs.find((l) => l.accountId === broker.id)!.amount.toFixed(2)).toBe(
+      "-6757.75",
+    );
+    expect(
+      legs.find((l) => l.accountId === broker.id)!.exchangeRate.toFixed(8),
+    ).toBe("4.98999963");
+    expect(await balance(f.pfChecking)).toBeCloseTo(33721.17, 2);
+  });
+
+  it("uses the dated PTAX when the received amount is omitted", async () => {
+    await prisma.currency.create({
+      data: {
+        userId: USER,
+        code: "USD",
+        name: "US Dollar",
+        symbol: "$",
+        manualRate: 0.2,
+      },
+    });
+    const cash = await prisma.account.create({
+      data: {
+        userId: USER,
+        entityId: f.pfId,
+        type: "cash",
+        name: "Caixa USD PTAX",
+        currency: "USD",
+      },
+    });
+    const broker = await usdBroker(f.pfId, "Crypto PTAX");
+    await json("POST", "/v2/brokerage-cash", {
+      accountId: broker.id,
+      direction: "deposit",
+      amount: 100,
+      date: "2026-09-19",
+      counterpartAccountId: cash.id,
+    });
+    const r = await json("POST", "/v2/brokerage-cash", {
+      accountId: broker.id,
+      direction: "withdraw",
+      amount: 100,
+      date: "2026-09-20",
+      counterpartAccountId: f.pfChecking,
+    });
+    const bank = await prisma.ledgerEntry.findFirstOrThrow({
+      where: { transferGroupId: r.transferGroupId, accountId: f.pfChecking },
+    });
+    expect(Number(bank.amount)).toBeCloseTo(515.75, 2);
+    await prisma.currency.deleteMany({ where: { userId: USER, code: "USD" } });
+  });
+
+  it("nets the intermediate checking to zero and credits toAmount on a cross-entity resgate", async () => {
+    const cash = await prisma.account.create({
+      data: {
+        userId: USER,
+        entityId: f.pjId,
+        type: "cash",
+        name: "Caixa USD PJ",
+        currency: "USD",
+      },
+    });
+    const broker = await usdBroker(f.pjId, "Crypto PJ");
+    await json("POST", "/v2/brokerage-cash", {
+      accountId: broker.id,
+      direction: "deposit",
+      amount: 6757.75,
+      date: "2026-09-29",
+      counterpartAccountId: cash.id,
+    });
+    const r = await json("POST", "/v2/brokerage-cash", {
+      accountId: broker.id,
+      direction: "withdraw",
+      amount: 6757.75,
+      toAmount: 33721.17,
+      date: "2026-09-30",
+      counterpartAccountId: f.pfChecking,
+    });
+    const groups = await prisma.transferGroup.findMany({
+      where: { id: { in: r.transferGroupIds } },
+      select: { id: true, direction: true },
+    });
+    expect(
+      r.transferGroupIds.map(
+        (id: string) => groups.find((g) => g.id === id)!.direction,
+      ),
+    ).toEqual(["investment_withdrawal", "profit_distribution"]);
+    const hop = await prisma.ledgerEntry.findMany({
+      where: {
+        transferGroupId: { in: r.transferGroupIds },
+        accountId: f.pjChecking,
+      },
+    });
+    expect(hop).toHaveLength(2);
+    expect(hop.reduce((sum, leg) => sum + Number(leg.amount), 0)).toBeCloseTo(
+      0,
+      2,
+    );
+    const dest = await prisma.ledgerEntry.findFirstOrThrow({
+      where: {
+        transferGroupId: { in: r.transferGroupIds },
+        accountId: f.pfChecking,
+      },
+    });
+    expect(dest.amount.toFixed(2)).toBe("33721.17");
+    expect(await balance(f.pjChecking)).toBeCloseTo(0, 2);
+    expect(await balance(f.pfChecking)).toBeCloseTo(33721.17, 2);
+    expect(await balance(broker.id)).toBeCloseTo(0, 2);
+  });
+});
+
 describe("resgate across entities", () => {
   it("books a resgate from a PJ broker into a PF account as a withdrawal plus a profit distribution, in one batch", async () => {
     await json("POST", "/v2/brokerage-cash", { accountId: pjBroker, direction: "deposit", amount: 1000, date: "2026-09-01", counterpartAccountId: f.pjChecking });

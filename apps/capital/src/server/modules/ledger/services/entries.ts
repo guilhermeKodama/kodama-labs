@@ -10,7 +10,7 @@ import { restoreLegOperations } from "@capital/server/modules/investments/lib/re
 import type { CreateEntryInput, EntryPatch } from "../contracts";
 import { LedgerError, notFound } from "../lib/errors";
 import { loadFx, type FxContext } from "../lib/fx";
-import { displayAmount, kindSign, round, splitAmount, toNumber } from "../lib/money";
+import { displayAmount, kindSign, round, roundNative, splitAmount, toNumber } from "../lib/money";
 import { ENTRY_CONTEXT_INCLUDE, serializeEntry } from "../lib/serialize";
 import { getOwnedAccount } from "./accounts";
 import { getDefaultAccount, getOwnedEntity } from "./entities";
@@ -201,6 +201,37 @@ function fxRequired(): never {
   throw new LedgerError("A transfer between different currencies needs an exchange rate", 422, { code: "transfer.fx_required" });
 }
 
+function fxMismatch(): never {
+  throw new LedgerError(
+    "The exchange rate and the received amount disagree by more than 0.01",
+    422,
+    { code: "transfer.fx_mismatch" },
+  );
+}
+
+/** A caller rate of exactly 1 is not a rate (imports send it). */
+function statedRate(exchangeRate: number | null | undefined): number | null {
+  return exchangeRate != null && exchangeRate > 0 && exchangeRate !== 1
+    ? exchangeRate
+    : null;
+}
+
+/**
+ * Both legs are known and one of them is the base currency. The foreign
+ * rate is |base| / |foreign|, so amount × rate and amountBase agree.
+ * A stated rate that misses the received base amount by more than 0.01 is rejected.
+ */
+function agreeRate(
+  foreign: number,
+  receivedBase: number,
+  stated: number | null,
+): number {
+  if (!(foreign > 0) || !(receivedBase > 0)) fxRequired();
+  if (stated != null && Math.abs(foreign * stated - receivedBase) > 0.01)
+    fxMismatch();
+  return round(receivedBase / foreign, 8);
+}
+
 function shiftMonth(month: string, by: number): string {
   const [y, m] = month.split("-").map(Number);
   const d = new Date(Date.UTC(y, m - 1 + by, 1));
@@ -252,9 +283,11 @@ async function createTransferIn(
   } else if (amountCurrency !== from.currency && amountCurrency !== to.currency) {
     throw new LedgerError("A transfer between different currencies needs an exchange rate", 422, { code: "transfer.fx_required" });
   } else {
-    const stated = input.exchangeRate != null && input.exchangeRate > 0 && input.exchangeRate !== 1 ? input.exchangeRate : null;
+    const stated = statedRate(input.exchangeRate);
     const base = fx.baseCurrency;
     const oneBase = from.currency === base || to.currency === base;
+    // The destination amount is what actually arrived. BRL and USD snap to cents.
+    const explicitTo = input.toAmount != null && input.toAmount > 0;
     const quoted = (currency: string) => {
       if (currency === base) return 1;
       if (stated != null && oneBase) return stated;
@@ -266,15 +299,30 @@ async function createTransferIn(
       if (!(perTo > 0)) fxRequired();
       return round((amount * quoted(fromCode)) / perTo, 4);
     };
-    if (amountCurrency === from.currency) {
+    // Both native amounts are the caller's when the stated amount is the source's and toAmount is set.
+    const bothLegs = explicitTo && amountCurrency === from.currency;
+    if (bothLegs) {
+      fromAmount = round(-roundNative(input.amount, from.currency), 4);
+      toAmount = round(roundNative(input.toAmount!, to.currency), 4);
+    } else if (amountCurrency === from.currency) {
       fromAmount = round(-input.amount, 4);
-      toAmount = input.toAmount && input.toAmount > 0 ? round(input.toAmount, 4) : across(input.amount, from.currency, to.currency);
+      toAmount = across(input.amount, from.currency, to.currency);
     } else {
-      toAmount = round(input.toAmount ?? input.amount, 4);
+      toAmount = round(explicitTo ? roundNative(input.toAmount!, to.currency) : input.amount, 4);
       fromAmount = round(-across(Math.abs(toAmount), to.currency, from.currency), 4);
     }
-    fromRate = quoted(from.currency);
-    toRate = quoted(to.currency);
+    if (bothLegs && oneBase) {
+      const foreign =
+        from.currency === base ? Math.abs(toAmount) : Math.abs(fromAmount);
+      const receivedBase =
+        from.currency === base ? Math.abs(fromAmount) : Math.abs(toAmount);
+      const derived = agreeRate(foreign, receivedBase, stated);
+      fromRate = from.currency === base ? 1 : derived;
+      toRate = to.currency === base ? 1 : derived;
+    } else {
+      fromRate = quoted(from.currency);
+      toRate = quoted(to.currency);
+    }
   }
   const fromBase = from.currency === fx.baseCurrency ? fromAmount : to.currency === fx.baseCurrency ? round(-toAmount, 4) : round(fromAmount * fromRate, 4);
 
@@ -539,7 +587,56 @@ async function updateTransferIn(tx: DbClient, userId: string, entry: LedgerEntry
     records.push({ model: "TransferGroup", recordId: group.id, before: snapshot(groupRow), after: snapshot(updatedGroup) });
   }
 
+  const cross = fromAccount.currency !== toAccount.currency;
+  const base = fx.baseCurrency;
+  const oneBase = fromAccount.currency === base || toAccount.currency === base;
+  // A rate of exactly 1 is not a rate (imports send it). toAmount or a real
+  // exchange rate restates the two legs. amount alone still scales both.
+  const stated = statedRate(patch.exchangeRate);
+  const restating = patch.toAmount !== undefined || (cross && stated != null);
+  if ((patch.toAmount !== undefined || stated != null) && !cross) {
+    throw new LedgerError("A same-currency transfer has one amount", 422, {
+      code: "transfer.same_currency",
+    });
+  }
+  if (restating && !oneBase) fxRequired();
+
+  let sourceAbs = Math.abs(toNumber(fromLeg.amount));
+  let destAbs = Math.abs(toNumber(toLeg.amount));
+  let fromRate = toNumber(fromLeg.exchangeRate);
+  let toRate = toNumber(toLeg.exchangeRate);
+  if (restating) {
+    if (patch.amount !== undefined)
+      sourceAbs = roundNative(Math.abs(patch.amount), fromAccount.currency);
+    if (patch.toAmount !== undefined)
+      destAbs = roundNative(patch.toAmount, toAccount.currency);
+    if (patch.toAmount !== undefined) {
+      const foreign = fromAccount.currency === base ? destAbs : sourceAbs;
+      const receivedBase = fromAccount.currency === base ? sourceAbs : destAbs;
+      const derived = agreeRate(foreign, receivedBase, stated);
+      fromRate = fromAccount.currency === base ? 1 : derived;
+      toRate = toAccount.currency === base ? 1 : derived;
+    } else if (stated != null) {
+      if (fromAccount.currency === base) {
+        destAbs = roundNative(sourceAbs / stated, toAccount.currency);
+        fromRate = 1;
+        toRate = round(stated, 8);
+      } else {
+        destAbs = roundNative(sourceAbs * stated, toAccount.currency);
+        fromRate = round(stated, 8);
+        toRate = toAccount.currency === base ? 1 : round(stated, 8);
+      }
+    } else fxRequired();
+  }
+
   const current = Math.abs(toNumber(entry.amount));
+  const fromBase = restating
+    ? fromAccount.currency === base
+      ? round(-sourceAbs, 4)
+      : toAccount.currency === base
+        ? round(-destAbs, 4)
+        : round(-sourceAbs * fromRate, 4)
+    : 0;
   for (const { account: legAccount, ...leg } of legs) {
     const target = moved.get(leg.id) ?? legAccount;
     const sign = leg.id === fromLeg.id ? -1 : 1;
@@ -547,7 +644,13 @@ async function updateTransferIn(tx: DbClient, userId: string, entry: LedgerEntry
     let amountBase = toNumber(leg.amountBase);
     let currency = leg.currency;
     let exchangeRate = toNumber(leg.exchangeRate);
-    if (patch.amount !== undefined) {
+    if (restating) {
+      const native = leg.id === fromLeg.id ? sourceAbs : destAbs;
+      amount = round(sign * native, 4);
+      amountBase = leg.id === fromLeg.id ? fromBase : round(-fromBase, 4);
+      currency = target.currency;
+      exchangeRate = round(leg.id === fromLeg.id ? fromRate : toRate, 8);
+    } else if (patch.amount !== undefined) {
       if (current > 0) {
         const scale = Math.abs(patch.amount) / current;
         amount = round(sign * Math.abs(amount) * scale, 4);
@@ -557,7 +660,7 @@ async function updateTransferIn(tx: DbClient, userId: string, entry: LedgerEntry
         amountBase = round(amount * exchangeRate, 4);
       }
     }
-    if (moved.has(leg.id) && target.currency !== leg.currency) {
+    if (!restating && moved.has(leg.id) && target.currency !== leg.currency) {
       if (!fx.hasRate(target.currency)) throw new LedgerError("A transfer between different currencies needs an exchange rate", 422, { code: "transfer.fx_required" });
       currency = target.currency;
       exchangeRate = fx.rateFor(currency);

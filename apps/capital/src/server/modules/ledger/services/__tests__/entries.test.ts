@@ -124,6 +124,173 @@ describe("createEntry", () => {
     });
   });
 
+  it("books the received amount and derives the rate so both legs agree", async () => {
+    const usd = await prisma.account.create({
+      data: {
+        userId: USER,
+        entityId: f.pfId,
+        type: "brokerage",
+        name: "Crypto Wallet",
+        currency: "USD",
+      },
+    });
+    const r = await createEntry(
+      USER,
+      {
+        kind: "transfer",
+        fromAccountId: usd.id,
+        toAccountId: f.pfChecking,
+        amount: 6757.75,
+        toAmount: 33721.17,
+        date: "2026-09-30",
+        direction: "investment_withdrawal",
+        description: "Resgate Crypto",
+      },
+      prisma,
+    );
+    const legs = await prisma.ledgerEntry.findMany({
+      where: { transferGroupId: r.transferGroupId! },
+    });
+    const broker = legs.find((l) => l.accountId === usd.id)!;
+    const bank = legs.find((l) => l.accountId === f.pfChecking)!;
+    expect(broker.amount.toFixed(2)).toBe("-6757.75");
+    expect(bank.amount.toFixed(2)).toBe("33721.17");
+    expect(broker.exchangeRate.toFixed(8)).toBe("4.98999963");
+    expect(bank.exchangeRate.toFixed(8)).toBe("1.00000000");
+    expect(broker.amountBase.toFixed(2)).toBe("-33721.17");
+    expect(bank.amountBase.toFixed(2)).toBe("33721.17");
+    expect(
+      Math.abs(
+        toNumber(broker.amount) * toNumber(broker.exchangeRate) -
+          toNumber(broker.amountBase),
+      ),
+    ).toBeLessThanOrEqual(0.01);
+  });
+
+  it("snaps BRL and USD native amounts to cents before deriving the rate", async () => {
+    const usd = await prisma.account.create({
+      data: {
+        userId: USER,
+        entityId: f.pfId,
+        type: "brokerage",
+        name: "IBKR cents",
+        currency: "USD",
+      },
+    });
+    const r = await createEntry(
+      USER,
+      {
+        kind: "transfer",
+        fromAccountId: usd.id,
+        toAccountId: f.pfChecking,
+        amount: 6757.754,
+        toAmount: 33721.174,
+        date: "2026-09-30",
+        direction: "investment_withdrawal",
+      },
+      prisma,
+    );
+    const legs = await prisma.ledgerEntry.findMany({
+      where: { transferGroupId: r.transferGroupId! },
+    });
+    expect(legs.find((l) => l.accountId === usd.id)!.amount.toFixed(2)).toBe(
+      "-6757.75",
+    );
+    expect(
+      legs.find((l) => l.accountId === f.pfChecking)!.amount.toFixed(2),
+    ).toBe("33721.17");
+  });
+
+  it("rejects a stated rate that misses the received amount by more than 0.01", async () => {
+    const usd = await prisma.account.create({
+      data: {
+        userId: USER,
+        entityId: f.pfId,
+        type: "brokerage",
+        name: "IBKR mismatch",
+        currency: "USD",
+      },
+    });
+    await expect(
+      createEntry(
+        USER,
+        {
+          kind: "transfer",
+          fromAccountId: usd.id,
+          toAccountId: f.pfChecking,
+          amount: 6757.75,
+          toAmount: 33721.17,
+          exchangeRate: 5.22,
+          date: "2026-09-30",
+        },
+        prisma,
+      ),
+    ).rejects.toMatchObject({ status: 422, code: "transfer.fx_mismatch" });
+  });
+
+  it("keeps the derived rate when a stated rate agrees within 0.01", async () => {
+    const usd = await prisma.account.create({
+      data: {
+        userId: USER,
+        entityId: f.pfId,
+        type: "brokerage",
+        name: "IBKR agree",
+        currency: "USD",
+      },
+    });
+    const r = await createEntry(
+      USER,
+      {
+        kind: "transfer",
+        fromAccountId: usd.id,
+        toAccountId: f.pfChecking,
+        amount: 6757.75,
+        toAmount: 33721.17,
+        exchangeRate: 4.99,
+        date: "2026-09-30",
+      },
+      prisma,
+    );
+    const broker = await prisma.ledgerEntry.findFirstOrThrow({
+      where: { transferGroupId: r.transferGroupId!, accountId: usd.id },
+    });
+    expect(broker.exchangeRate.toFixed(8)).toBe("4.98999963");
+    expect(broker.amountBase.toFixed(2)).toBe("-33721.17");
+  });
+
+  it("still converts at the dated rate when only the source amount is given", async () => {
+    const usd = await prisma.account.create({
+      data: {
+        userId: USER,
+        entityId: f.pfId,
+        type: "brokerage",
+        name: "IBKR ptax",
+        currency: "USD",
+      },
+    });
+    const r = await createEntry(
+      USER,
+      {
+        kind: "transfer",
+        fromAccountId: usd.id,
+        toAccountId: f.pfChecking,
+        amount: 100,
+        date: "2026-09-20",
+        direction: "investment_withdrawal",
+      },
+      prisma,
+    );
+    const bank = await prisma.ledgerEntry.findFirstOrThrow({
+      where: { transferGroupId: r.transferGroupId!, accountId: f.pfChecking },
+    });
+    const broker = await prisma.ledgerEntry.findFirstOrThrow({
+      where: { transferGroupId: r.transferGroupId!, accountId: usd.id },
+    });
+    expect(toNumber(bank.amount)).toBeCloseTo(round(100 * 5.1575, 4), 4);
+    expect(toNumber(broker.exchangeRate)).toBeCloseTo(5.1575, 4);
+    expect(toNumber(broker.amountBase)).toBe(toNumber(bank.amountBase) * -1);
+  });
+
   it("converts the destination leg when the accounts use different currencies", async () => {
     const usd = await prisma.account.create({ data: { userId: USER, entityId: f.pfId, type: "brokerage", name: "IBKR", currency: "USD" } });
     const r = await createEntry(USER, { kind: "transfer", fromAccountId: f.pfChecking, toAccountId: usd.id, amount: 1000, date: "2026-09-20" }, prisma);
@@ -148,6 +315,123 @@ describe("createEntry", () => {
 });
 
 describe("updates, trash and undo", () => {
+  it("restates a cross-currency transfer from the received amount or the rate, and undo puts it back", async () => {
+    const usd = await prisma.account.create({
+      data: {
+        userId: USER,
+        entityId: f.pfId,
+        type: "brokerage",
+        name: "Crypto edit",
+        currency: "USD",
+      },
+    });
+    const created = await createEntry(
+      USER,
+      {
+        kind: "transfer",
+        fromAccountId: usd.id,
+        toAccountId: f.pfChecking,
+        amount: 6757.75,
+        toAmount: 35278.16,
+        date: "2026-09-30",
+        direction: "investment_withdrawal",
+      },
+      prisma,
+    );
+    const legs = () =>
+      prisma.ledgerEntry.findMany({
+        where: { transferGroupId: created.transferGroupId! },
+      });
+    const usdLeg = (await legs()).find((l) => l.accountId === usd.id)!;
+    const brlLeg = (await legs()).find((l) => l.accountId === f.pfChecking)!;
+
+    const byReceived = await updateEntry(
+      USER,
+      brlLeg.id,
+      { toAmount: 33721.17 },
+      prisma,
+    );
+    const afterReceived = await legs();
+    expect(
+      afterReceived
+        .find((l) => l.accountId === f.pfChecking)!
+        .amount.toFixed(2),
+    ).toBe("33721.17");
+    expect(
+      afterReceived.find((l) => l.accountId === usd.id)!.amount.toFixed(2),
+    ).toBe("-6757.75");
+    expect(
+      afterReceived
+        .find((l) => l.accountId === usd.id)!
+        .exchangeRate.toFixed(8),
+    ).toBe("4.98999963");
+    expect(
+      afterReceived.find((l) => l.accountId === usd.id)!.amountBase.toFixed(2),
+    ).toBe("-33721.17");
+
+    await undoBatch(USER, byReceived.batchId!, prisma);
+    const restored = await legs();
+    expect(
+      restored.find((l) => l.accountId === f.pfChecking)!.amount.toFixed(2),
+    ).toBe("35278.16");
+    expect(
+      restored.find((l) => l.accountId === usd.id)!.amount.toFixed(2),
+    ).toBe("-6757.75");
+
+    await updateEntry(USER, usdLeg.id, { exchangeRate: 5 }, prisma);
+    const afterRate = await legs();
+    expect(
+      afterRate.find((l) => l.accountId === usd.id)!.amount.toFixed(2),
+    ).toBe("-6757.75");
+    expect(
+      afterRate.find((l) => l.accountId === f.pfChecking)!.amount.toFixed(2),
+    ).toBe("33788.75");
+    expect(
+      afterRate.find((l) => l.accountId === usd.id)!.exchangeRate.toFixed(8),
+    ).toBe("5.00000000");
+
+    await updateEntry(USER, usdLeg.id, { amount: 100 }, prisma);
+    const afterScale = await legs();
+    expect(
+      afterScale.find((l) => l.accountId === usd.id)!.amount.toFixed(2),
+    ).toBe("-100.00");
+    expect(
+      afterScale.find((l) => l.accountId === f.pfChecking)!.amount.toFixed(2),
+    ).toBe("500.00");
+
+    await updateEntry(USER, usdLeg.id, { amount: 200, toAmount: 900 }, prisma);
+    const restated = await legs();
+    expect(
+      restated.find((l) => l.accountId === usd.id)!.amount.toFixed(2),
+    ).toBe("-200.00");
+    expect(
+      restated.find((l) => l.accountId === f.pfChecking)!.amount.toFixed(2),
+    ).toBe("900.00");
+    expect(
+      restated.find((l) => l.accountId === usd.id)!.exchangeRate.toFixed(8),
+    ).toBe("4.50000000");
+  });
+
+  it("rejects a received amount or a rate on a same-currency transfer", async () => {
+    const created = await createEntry(
+      USER,
+      {
+        kind: "transfer",
+        fromAccountId: f.pfChecking,
+        toAccountId: f.broker,
+        amount: 100,
+        date: "2026-09-20",
+      },
+      prisma,
+    );
+    await expect(
+      updateEntry(USER, created.entryIds[0], { toAmount: 90 }, prisma),
+    ).rejects.toMatchObject({ status: 422, code: "transfer.same_currency" });
+    await expect(
+      updateEntry(USER, created.entryIds[0], { exchangeRate: 5 }, prisma),
+    ).rejects.toMatchObject({ status: 422, code: "transfer.same_currency" });
+  });
+
   it("moves a card purchase to another statement when its date changes", async () => {
     const r = await createEntry(USER, { kind: "expense", accountId: f.card, amount: 50, description: "Uber", date: "2026-09-04" }, prisma);
     await updateEntry(USER, r.entryIds[0], { date: "2026-09-08", amount: 70 }, prisma);

@@ -20,6 +20,11 @@ export interface EntryFormState {
   currency: string;
   /** Exchange rate as typed; "" = the default rate. */
   rate: string;
+  /**
+   * What arrives in the destination currency, as typed. "" = convert from the
+   * rate (create) or leave the other leg alone until it is filled (edit).
+   */
+  received: string;
   /** YYYY-MM-DD. */
   date: string;
   description: string;
@@ -143,6 +148,7 @@ export function blankForm(ctx: FormContext): EntryFormState {
     amount: "",
     currency: "",
     rate: "",
+    received: "",
     date: ctx.today,
     description: "",
     entityId: account?.entityId ?? entityId,
@@ -247,6 +253,35 @@ export function fxPair(fromCurrency: string, toCurrency: string, ctx: FormContex
 }
 
 const round2 = (value: number) => Math.round(value * 100) / 100;
+
+/**
+ * Base units per 1 unit of the foreign currency, from the amount that left
+ * and the amount that arrived. Null when neither side is the base currency
+ * or either amount is missing.
+ */
+export function effectiveCrossRate(
+  fromCurrency: string,
+  toCurrency: string,
+  amount: number,
+  received: number,
+  baseCurrency: string,
+): number | null {
+  if (!(amount > 0) || !(received > 0) || fromCurrency === toCurrency)
+    return null;
+  if (toCurrency === baseCurrency) return received / amount;
+  if (fromCurrency === baseCurrency) return amount / received;
+  return null;
+}
+
+/** The effective rate is more than `tolerance` (5%) away from the reference PTAX. */
+export function rateDeviates(
+  effective: number,
+  reference: number,
+  tolerance = 0.05,
+): boolean {
+  if (!(effective > 0) || !(reference > 0)) return false;
+  return Math.abs(effective - reference) / reference > tolerance;
+}
 
 /** The direction the server infers from a transfer's two accounts (entries.ts inferDirection). */
 export function detectDirection(from: FormAccount | undefined, to: FormAccount | undefined, entities: readonly FormEntity[]): TransferDirection {
@@ -379,7 +414,20 @@ export function buildCreateRequest(form: EntryFormState, ctx: FormContext, extra
         },
       };
     }
-    const toAmount = fx.differs ? round2(fx.arrives(amount, rate)) : undefined;
+    const receivedRaw = form.received.trim()
+      ? ctx.parseNumber(form.received)
+      : null;
+    if (
+      fx.differs &&
+      form.received.trim() &&
+      (receivedRaw == null || !Number.isFinite(receivedRaw) || receivedRaw <= 0)
+    )
+      return fail("amount", "amount");
+    const toAmount = fx.differs
+      ? receivedRaw != null && receivedRaw > 0
+        ? round2(receivedRaw)
+        : round2(fx.arrives(amount, rate))
+      : undefined;
     if (deposit && (crossEntity || form.buyAlso)) {
       let buy: Record<string, unknown> | undefined;
       if (form.buyAlso) {
@@ -565,6 +613,9 @@ export interface EditableEntry {
   transferGroupId: string | null;
   transferDirection: TransferDirection | null;
   counterpartAccountId: string | null;
+  /** The other leg, signed as stored. Absent when the entry payload has no pair. */
+  counterpartAmount?: number | null;
+  counterpartCurrency?: string | null;
 }
 
 /** Investment transfers (aportes and resgates) are edited as Aporte. */
@@ -578,7 +629,9 @@ export function formFromEntry(entry: EditableEntry, ctx: FormContext, formatAmou
     ...base,
     amount: formatAmount(magnitude),
     currency: entry.currency,
-    rate: entry.currency !== ctx.baseCurrency ? formatRate(entry.exchangeRate) : "",
+    rate:
+      entry.currency !== ctx.baseCurrency ? formatRate(entry.exchangeRate) : "",
+    received: "",
     date: entry.date.slice(0, 10),
     description: entry.description,
     deductible: entry.isTaxDeductible,
@@ -591,13 +644,28 @@ export function formFromEntry(entry: EditableEntry, ctx: FormContext, formatAmou
     const toAccountId = outgoing ? (entry.counterpartAccountId ?? "") : entry.accountId;
     if (isInvestDirection(entry.transferDirection)) {
       const deposit = entry.transferDirection === "investment_deposit";
+      const fromCurrency = accountOf(ctx, fromAccountId)?.currency;
+      const toCurrency = accountOf(ctx, toAccountId)?.currency;
+      const other =
+        entry.counterpartAmount != null
+          ? Math.abs(entry.counterpartAmount)
+          : null;
+      const sourceAbs = outgoing ? magnitude : (other ?? magnitude);
+      const destAbs = outgoing ? (other ?? magnitude) : magnitude;
+      const cross =
+        !!fromCurrency && !!toCurrency && fromCurrency !== toCurrency;
+      const foreignAbs =
+        fromCurrency === ctx.baseCurrency ? destAbs : sourceAbs;
+      const baseAbs = fromCurrency === ctx.baseCurrency ? sourceAbs : destAbs;
       return {
         ...common,
         kind: "invest",
         investDir: deposit ? "deposit" : "withdraw",
         cashAccountId: deposit ? fromAccountId : toAccountId,
         brokerAccountId: deposit ? toAccountId : fromAccountId,
-        rate: "",
+        amount: formatAmount(sourceAbs),
+        received: cross ? formatAmount(destAbs) : "",
+        rate: cross && foreignAbs > 0 ? formatRate(baseAbs / foreignAbs) : "",
       };
     }
     return { ...common, kind: "transfer", fromAccountId, toAccountId, reimbursement: entry.transferDirection === "reimbursement" };
@@ -641,7 +709,46 @@ export function buildEditPatch(entry: EditableEntry, initial: EntryFormState, fo
     if (from && to && from === to) return { ok: false, error: "sameAccount", field: invest ? "broker" : "to" };
     if (from && from !== fromBefore) patch.fromAccountId = from;
     if (to && to !== toBefore) patch.toAccountId = to;
-    if (!invest && form.reimbursement !== initial.reimbursement) patch.reimbursement = form.reimbursement;
+    if (!invest && form.reimbursement !== initial.reimbursement)
+      patch.reimbursement = form.reimbursement;
+    if (invest) {
+      const { fx } = investSides(form, ctx);
+      if (fx.differs) {
+        // The amount field is the outflow, which may not be the opened leg.
+        delete patch.amount;
+        const receivedRaw = form.received.trim()
+          ? ctx.parseNumber(form.received)
+          : null;
+        const receivedChanged = form.received !== initial.received;
+        if (receivedChanged) {
+          if (
+            receivedRaw == null ||
+            !Number.isFinite(receivedRaw) ||
+            receivedRaw <= 0
+          )
+            return { ok: false, error: "amount", field: "amount" };
+          patch.toAmount = round2(receivedRaw);
+        }
+        if (form.amount !== initial.amount) patch.amount = amount;
+        if (
+          patch.amount !== undefined &&
+          patch.toAmount === undefined &&
+          receivedRaw != null &&
+          receivedRaw > 0
+        )
+          patch.toAmount = round2(receivedRaw);
+        if (
+          !receivedChanged &&
+          form.rate.trim() &&
+          form.rate !== initial.rate
+        ) {
+          const rate = typedRate(form.rate, fx.defaultRate, ctx);
+          if (!Number.isFinite(rate))
+            return { ok: false, error: "rate", field: "rate" };
+          patch.exchangeRate = rate;
+        }
+      }
+    }
     return { ok: true, patch };
   }
 

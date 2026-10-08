@@ -312,6 +312,9 @@
     "cash": {
       "amount": "Valor",
       "amountIn": "Valor ({currency})",
+      "received": "Valor recebido ({currency})",
+      "receivedHint": "Opcional. Em branco, usa a PTAX do dia útil anterior.",
+      "rateWarning": "Taxa efetiva {effective} difere da PTAX {ptax}.",
       "from": "De",
       "to": "Para",
       "depositNote": "Cria uma transferência do tipo “Aporte em investimento” que aparece em Transações e em Aportes.",

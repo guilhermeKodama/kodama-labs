@@ -2,7 +2,9 @@ import { createRoute, z } from "@hono/zod-openapi";
 import { createRouter } from "@capital/server/lib/router";
 import { prisma } from "@capital/server/lib/prisma";
 import { jsonBody, v2Handler, v2Responses } from "@capital/server/lib/v2";
+import { parseLocalDate } from "@capital/server/lib/date-utils";
 import { LedgerError } from "@capital/server/modules/ledger/lib/errors";
+import { loadFx } from "@capital/server/modules/ledger/lib/fx";
 import { createCurrency } from "../../services/create-currency";
 import { deleteCurrencyService } from "../../services/delete-currency";
 import { listCurrencies } from "../../services/list-currencies";
@@ -44,6 +46,14 @@ const rateRoute = createRoute({
   responses: v2Responses,
 });
 const deleteRouteDef = createRoute({ method: "delete", path: "/v2/currencies/{code}", tags, summary: "Remove an unused currency", request: { params: codeParams }, responses: v2Responses });
+const datedRateRoute = createRoute({
+  method: "get",
+  path: "/v2/currencies/{code}/rate",
+  tags,
+  summary: "Base-currency units of one unit of this currency on a date (prior business-day PTAX when the base is BRL; today's rate otherwise)",
+  request: { params: codeParams, query: z.object({ date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/) }) },
+  responses: v2Responses,
+});
 
 const serialize = (c: { code: string; name: string; symbol: string; manualRate: number; source: string; rateUpdatedAt: Date | null; updatedAt: Date }) => ({
   code: c.code,
@@ -74,6 +84,12 @@ export const v2Currencies = createRouter()
   }))
   .openapi(upsertRoute, v2Handler(upsertRoute, async (c, userId) => serialize(await createCurrency({ userId, ...c.req.valid("json") }, prisma))))
   .openapi(rateRoute, v2Handler(rateRoute, async (c, userId) => serialize(await updateCurrencyRateService(userId, c.req.valid("param").code, c.req.valid("json").manualRate, prisma))))
+  .openapi(datedRateRoute, v2Handler(datedRateRoute, async (c, userId) => {
+    const { code } = c.req.valid("param");
+    const { date } = c.req.valid("query");
+    const fx = await loadFx(userId, prisma);
+    return { code, date, rate: fx.rateOn(code, parseLocalDate(date)) };
+  }))
   .openapi(deleteRouteDef, v2Handler(deleteRouteDef, async (c, userId) => {
     const { code } = c.req.valid("param");
     const [user, accounts, entries] = await Promise.all([

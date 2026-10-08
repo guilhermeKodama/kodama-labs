@@ -18,6 +18,18 @@ export function round(value: number, places = 4): number {
   return Math.round((value + Number.EPSILON) * f) / f;
 }
 
+/** BRL and USD are quoted in cents. Other currencies keep the ledger's 4 decimal places. */
+const CENT_CURRENCIES = new Set(["BRL", "USD"]);
+
+export function nativePlaces(currency: string): number {
+  return CENT_CURRENCIES.has(currency) ? 2 : 4;
+}
+
+/** `amount` snapped onto the currency's minor-unit grid (cents for BRL and USD). */
+export function roundNative(amount: number, currency: string): number {
+  return round(amount, nativePlaces(currency));
+}
+
 /**
  * Sign applied to a user-facing amount to get the stored, account-signed
  * amount: income is an inflow, expense and investment are outflows. A

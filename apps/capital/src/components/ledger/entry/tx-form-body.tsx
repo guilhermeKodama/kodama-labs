@@ -13,8 +13,10 @@ import {
   buyHolding,
   detectDirection,
   formCurrency,
+  effectiveCrossRate,
   investSides,
   investedIn,
+  rateDeviates,
   isBroker,
   isCashAccount,
   isCashOrCard,
@@ -27,6 +29,7 @@ import {
   type FormKind,
 } from "@/lib/ledger/entry-form";
 import { cn } from "@/lib/utils";
+import { useDatedFxRate } from "@/lib/ledger/use-dated-rate";
 import { DateInput } from "./date-input";
 import { KindSegmented } from "./kind-segmented";
 import { RateInput } from "./rate-input";
@@ -313,7 +316,14 @@ function InvestBlock({
   const t = useTranslations("entry.form.invest");
   const tForm = useTranslations("entry.form");
   const fmt = useFmt();
-  const { cash, broker, deposit, fx, crossEntity, entityFlow, from, to } = investSides(form, ctx);
+  const { cash, broker, deposit, fx, crossEntity, entityFlow, from, to } =
+    investSides(form, ctx);
+  const foreign = fx.differs
+    ? from?.currency === ctx.baseCurrency
+      ? to?.currency
+      : from?.currency
+    : null;
+  const dated = useDatedFxRate(foreign, form.date, ctx.baseCurrency);
   const amount = typedAmount(form, ctx);
   const rate = typedRate(form.rate, fx.defaultRate, ctx);
   const arrives = Number.isFinite(amount) && Number.isFinite(rate) ? fx.arrives(amount, rate) : Number.NaN;
@@ -336,9 +346,9 @@ function InvestBlock({
     ].filter(Boolean);
     return parts.length ? parts.join(" · ") : balance != null ? t("brokerCash", { value: fmt.money0(balance, broker.currency) }) : undefined;
   })();
-  const cashSelect = <Select value={form.cashAccountId} onChange={(cashAccountId) => up({ cashAccountId, rate: "" })} options={cashOptions} invalid={invalid === "cash"} />;
+  const cashSelect = <Select value={form.cashAccountId} onChange={(cashAccountId) => up({ cashAccountId, rate: "", received: "" })} options={cashOptions} invalid={invalid === "cash"} />;
   const brokerSelect = (
-    <Select value={form.brokerAccountId} onChange={(brokerAccountId) => up({ brokerAccountId, rate: "", buyHoldingId: "" })} options={brokerOptions} invalid={invalid === "broker"} />
+    <Select value={form.brokerAccountId} onChange={(brokerAccountId) => up({ brokerAccountId, rate: "", received: "", buyHoldingId: "" })} options={brokerOptions} invalid={invalid === "broker"} />
   );
   const holdings = (ctx.holdings ?? []).filter((holding) => holding.accountId === form.brokerAccountId && holding.isActive !== false);
   const buy = buyHolding(form, ctx);
@@ -354,7 +364,9 @@ function InvestBlock({
           { v: "deposit", l: t("deposit") },
           { v: "withdraw", l: t("withdraw") },
         ]}
-        onChange={(investDir) => up({ investDir, rate: "", buyAlso: false })}
+        onChange={(investDir) =>
+          up({ investDir, rate: "", received: "", buyAlso: false })
+        }
       />
       <div className="grid grid-cols-[1fr_24px_1fr] items-start gap-2">
         <Field label={deposit ? t("fromCash") : t("fromBroker")} hint={deposit ? cashHint : brokerHint}>
@@ -365,19 +377,84 @@ function InvestBlock({
           {deposit ? brokerSelect : cashSelect}
         </Field>
       </div>
-      <div className={cn("grid items-start gap-2.5", fx.differs ? "grid-cols-[minmax(0,1.4fr)_1fr_1fr]" : "grid-cols-[minmax(0,1.4fr)_1fr]")}>
-        <Field label={t("amount", { currency: from?.currency ?? ctx.baseCurrency })}>
-          <TextInput value={form.amount} onChange={(value) => up({ amount: value })} placeholder="0,00" mono className="text-amount" invalid={invalid === "amount"} />
+      <div
+        className={cn(
+          "grid items-start gap-2.5",
+          fx.differs ? "grid-cols-2" : "grid-cols-[minmax(0,1.4fr)_1fr]",
+        )}
+      >
+        <Field
+          label={t("amount", { currency: from?.currency ?? ctx.baseCurrency })}
+        >
+          <TextInput
+            value={form.amount}
+            onChange={(value) => up({ amount: value })}
+            placeholder="0,00"
+            mono
+            className="text-amount"
+            invalid={invalid === "amount"}
+          />
         </Field>
         {fx.differs ? (
-          <Field label={tForm("rate")} hint={Number.isFinite(arrives) ? t("arrives", { value: fmt.money(arrives, to?.currency) }) : undefined}>
-            <RateInput value={form.rate} onChange={(value) => up({ rate: value })} defaultText={fmt.number(fx.defaultRate, { min: 2, max: 4 })} mono invalid={invalid === "rate"} disabled={mode === "edit"} />
+          <Field
+            label={t("received", {
+              currency: to?.currency ?? ctx.baseCurrency,
+            })}
+            hint={t("receivedHint")}
+          >
+            <TextInput
+              value={form.received}
+              onChange={(received) => up({ received })}
+              placeholder={fmt.number(0, 2)}
+              mono
+              inputMode="decimal"
+            />
+          </Field>
+        ) : null}
+        {fx.differs ? (
+          <Field
+            label={tForm("rate")}
+            hint={
+              !form.received.trim() && Number.isFinite(arrives)
+                ? t("arrives", { value: fmt.money(arrives, to?.currency) })
+                : undefined
+            }
+          >
+            <RateInput
+              value={form.rate}
+              onChange={(value) => up({ rate: value })}
+              defaultText={fmt.number(fx.defaultRate, { min: 2, max: 4 })}
+              mono
+              invalid={invalid === "rate"}
+            />
           </Field>
         ) : null}
         <Field label={tForm("date")}>
           <DateInput value={form.date} onChange={(date) => up({ date })} today={ctx.today} invalid={invalid === "date"} />
         </Field>
       </div>
+      {fx.differs && form.received.trim() && dated.data && from && to
+        ? (() => {
+            const receivedValue = ctx.parseNumber(form.received);
+            const effective = effectiveCrossRate(
+              from.currency,
+              to.currency,
+              amount,
+              receivedValue,
+              ctx.baseCurrency,
+            );
+            if (effective == null || !rateDeviates(effective, dated.data.rate))
+              return null;
+            return (
+              <Callout tone="warning">
+                {t("rateWarning", {
+                  effective: fmt.number(effective, { min: 2, max: 4 }),
+                  ptax: fmt.number(dated.data.rate, { min: 2, max: 4 }),
+                })}
+              </Callout>
+            );
+          })()
+        : null}
       {/* A recurring aporte books one investment transfer per occurrence (POST /v2/recurring), not the two legs or the buy. */}
       {crossEntity && deposit && mode === "create" && !form.recurring && cash && broker ? (
         <Callout tone="warning" title={t("crossTitle")}>

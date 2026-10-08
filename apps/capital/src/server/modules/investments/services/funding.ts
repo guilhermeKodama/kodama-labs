@@ -2,7 +2,7 @@ import type { DbClient } from "@capital/server/lib/prisma";
 import type { Account } from "@/generated/prisma";
 import { LedgerError } from "@capital/server/modules/ledger/lib/errors";
 import type { FxContext } from "@capital/server/modules/ledger/lib/fx";
-import { round } from "@capital/server/modules/ledger/lib/money";
+import { round, roundNative } from "@capital/server/modules/ledger/lib/money";
 import { getOwnedAccount } from "@capital/server/modules/ledger/services/accounts";
 import { createEntry } from "@capital/server/modules/ledger/services/entries";
 import { getDefaultAccount } from "@capital/server/modules/ledger/services/entities";
@@ -104,6 +104,11 @@ export interface WithdrawFromBrokerInput {
   to: Account;
   /** What leaves the broker, in its currency. */
   amount: number;
+  /**
+   * What arrives in `to`'s currency when it differs from the broker's.
+   * Omitted, the hop converts at the current rate.
+   */
+  receivedAmount?: number | null;
   date: string;
   /** Description of the investment withdrawal (default: the localized transfer description). */
   description?: string | null;
@@ -116,12 +121,40 @@ export interface WithdrawFromBrokerInput {
  * distribution (PJ → PF), a capital injection (PF → PJ) or a transfer
  * between businesses, so each entity's books stay right. Both transfers are
  * recorded into the caller's `records` (one undo batch). Across currencies
- * each leg is in its account's currency, converted at today's rates.
+ * each leg is in its account's currency. `receivedAmount` is what `to`
+ * actually got; without it the hop converts at today's rates.
  */
 export async function withdrawFromBroker(tx: DbClient, userId: string, input: WithdrawFromBrokerInput, fx: FxContext, records: MutationRecordInput[]) {
   const { broker, to } = input;
   const checking = await entityChecking(broker.entityId, tx, records);
-  const checkingAmount = convertAmount(input.amount, broker.currency, checking.currency, fx);
+  const received =
+    input.receivedAmount != null &&
+    input.receivedAmount > 0 &&
+    to.currency !== broker.currency
+      ? roundNative(input.receivedAmount, to.currency)
+      : null;
+  // The final account's currency, then the broker entity's checking. When those
+  // two share a currency the checking hop uses the same amount, so it nets to zero.
+  const arrived =
+    received ??
+    roundNative(
+      convertAmount(input.amount, broker.currency, to.currency, fx),
+      to.currency,
+    );
+  const checkingAmount =
+    checking.currency === to.currency
+      ? arrived
+      : checking.currency === broker.currency
+        ? round(input.amount, 4)
+        : roundNative(
+            convertAmount(
+              received ?? input.amount,
+              received != null ? to.currency : broker.currency,
+              checking.currency,
+              fx,
+            ),
+            checking.currency,
+          );
   const withdrawal = await createEntry(
     userId,
     {
@@ -129,23 +162,31 @@ export async function withdrawFromBroker(tx: DbClient, userId: string, input: Wi
       fromAccountId: broker.id,
       toAccountId: checking.id,
       amount: round(input.amount, 4),
-      ...(checking.currency !== broker.currency && { currency: broker.currency, toAmount: round(checkingAmount, 2) }),
+      ...(checking.currency !== broker.currency && {
+        currency: broker.currency,
+        toAmount: roundNative(checkingAmount, checking.currency),
+      }),
       date: input.date,
       direction: "investment_withdrawal",
       ...(input.description && { description: input.description }),
     },
     tx,
-    { collect: records }
+    { collect: records },
   );
-  const toAmount = convertAmount(checkingAmount, checking.currency, to.currency, fx);
   const onward = await createEntry(
     userId,
     {
       kind: "transfer",
       fromAccountId: checking.id,
       toAccountId: to.id,
-      amount: round(checkingAmount, checking.currency === broker.currency ? 4 : 2),
-      ...(to.currency !== checking.currency && { currency: checking.currency, toAmount: round(toAmount, 2) }),
+      amount:
+        checking.currency === broker.currency
+          ? round(checkingAmount, 4)
+          : roundNative(checkingAmount, checking.currency),
+      ...(to.currency !== checking.currency && {
+        currency: checking.currency,
+        toAmount: arrived,
+      }),
       date: input.date,
     },
     tx,

@@ -35,16 +35,92 @@ afterAll(async () => {
 });
 
 describe("listTransactions", () => {
-  it("summarizes October in base currency with card purchases on the closing date and no bill payment", async () => {
-    const r = await listTransactions(USER, { dateFrom: "2026-10-01", dateTo: "2026-10-31" }, prisma);
-    const by = Object.fromEntries(r.summaries.map((s) => [`${s.type}|${s.category}`, [Math.round(s.total * 100) / 100, s.count]]));
+  it("summarizes October in base currency with card purchases on the closing date, and lists the bill payment as a transfer", async () => {
+    const r = await listTransactions(
+      USER,
+      { dateFrom: "2026-10-01", dateTo: "2026-10-31" },
+      prisma,
+    );
+    const by = Object.fromEntries(
+      r.summaries.map((s) => [
+        `${s.type}|${s.category}`,
+        [Math.round(s.total * 100) / 100, s.count],
+      ]),
+    );
     expect(by).toEqual({
       "expense|Groceries": [200, 1],
       "expense|Software": [350, 2],
       "income|Salary": [5000, 1],
     });
-    expect(r.transactions.find((t) => t.description === "Pagamento fatura")).toBeUndefined();
-    expect(r.transactions.every((t) => t.personalAccountId === f.pfId && t.amount > 0)).toBe(true);
+    const payments = r.transactions.filter(
+      (t) => t.description === "Pagamento fatura",
+    );
+    expect(payments).toHaveLength(2);
+    expect(
+      payments.every(
+        (t) =>
+          t.transferGroupId &&
+          t.counterpartCurrency === "BRL" &&
+          t.counterpartAmount != null,
+      ),
+    ).toBe(true);
+    expect(
+      payments.map((t) => t.counterpartAmount).sort((a, b) => a! - b!),
+    ).toEqual([-550, 550]);
+    expect(
+      r.transactions.every(
+        (t) => t.personalAccountId === f.pfId && t.amount > 0,
+      ),
+    ).toBe(true);
+  });
+
+  it("lists a cross-currency resgate with the other leg's amount, currency and transfer id", async () => {
+    const usd = await prisma.account.create({
+      data: {
+        userId: USER,
+        entityId: f.pfId,
+        type: "brokerage",
+        name: "Crypto Wallet",
+        currency: "USD",
+      },
+    });
+    const created = await createEntry(
+      USER,
+      {
+        kind: "transfer",
+        fromAccountId: usd.id,
+        toAccountId: f.pfChecking,
+        amount: 6757.75,
+        toAmount: 33721.17,
+        date: "2026-09-30",
+        direction: "investment_withdrawal",
+        description: "Resgate Crypto",
+      },
+      prisma,
+    );
+    const r = await listTransactions(
+      USER,
+      { dateFrom: "2026-09-30", dateTo: "2026-09-30" },
+      prisma,
+    );
+    const legs = r.transactions.filter(
+      (t) => t.description === "Resgate Crypto",
+    );
+    expect(legs).toHaveLength(2);
+    expect(new Set(legs.map((t) => t.transferGroupId))).toEqual(
+      new Set([created.transferGroupId]),
+    );
+    expect(legs.find((t) => t.currency === "USD")).toMatchObject({
+      counterpartAmount: 33721.17,
+      counterpartCurrency: "BRL",
+      exchangeRate: 4.98999963,
+    });
+    expect(legs.find((t) => t.currency === "BRL")).toMatchObject({
+      counterpartAmount: -6757.75,
+      counterpartCurrency: "USD",
+      amount: 33721.17,
+    });
+    expect(r.summaries).toEqual([]);
   });
 
   it("filters by type and category", async () => {

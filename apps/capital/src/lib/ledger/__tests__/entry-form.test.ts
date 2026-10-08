@@ -7,12 +7,14 @@ import {
   buildEditPatch,
   dateInputValue,
   detectDirection,
+  effectiveCrossRate,
   formFromEntry,
   fxPair,
   investSides,
   investedIn,
   nextAfterSave,
   parseDateText,
+  rateDeviates,
   rateFieldText,
   todayIn,
   type EditableEntry,
@@ -174,6 +176,36 @@ describe("buildCreateRequest", () => {
     expect(request({ kind: "invest", amount: "5.500", cashAccountId: "nubank", brokerAccountId: "avenue", rate: "5,50" }).body).toMatchObject({ toAmount: 1000 });
   });
 
+  it("sends the typed received amount instead of the rate-derived one", () => {
+    expect(
+      request({
+        kind: "invest",
+        investDir: "withdraw",
+        amount: "6.757,75",
+        cashAccountId: "nubank",
+        brokerAccountId: "avenue",
+        received: "33.721,17",
+      }).body,
+    ).toMatchObject({
+      fromAccountId: "avenue",
+      toAccountId: "nubank",
+      amount: 6757.75,
+      toAmount: 33721.17,
+      direction: "investment_withdrawal",
+    });
+    expect(
+      request({
+        kind: "invest",
+        amount: "33.721,17",
+        cashAccountId: "nubank",
+        brokerAccountId: "avenue",
+        received: "6.757,75",
+      }).body,
+    ).toMatchObject({
+      toAmount: 6757.75,
+    });
+  });
+
   it("withdraws through brokerage cash, and as a transfer across currencies", () => {
     expect(request({ kind: "invest", investDir: "withdraw", amount: "500", cashAccountId: "nubank", brokerAccountId: "xp" })).toMatchObject({
       path: "/api/v2/brokerage-cash",
@@ -261,11 +293,66 @@ describe("editing", () => {
     expect(buildEditPatch(leg, start, { ...start, fromAccountId: "mercury", reimbursement: true }, ctx)).toEqual({ ok: true, patch: { fromAccountId: "mercury", reimbursement: true } });
   });
 
+  it("opens a cross-currency resgate with the received amount and patches that amount, the rate, or both legs", () => {
+    const leg: EditableEntry = {
+      ...entry,
+      kind: "transfer",
+      description: "Resgate Crypto",
+      amount: 33721.17,
+      currency: "BRL",
+      exchangeRate: 1,
+      accountId: "nubank",
+      categoryId: null,
+      transferGroupId: "g",
+      transferDirection: "investment_withdrawal",
+      counterpartAccountId: "avenue",
+      counterpartAmount: -6757.75,
+      counterpartCurrency: "USD",
+    };
+    const start = formFromEntry(leg, ctx, brl);
+    expect(start).toMatchObject({
+      kind: "invest",
+      investDir: "withdraw",
+      cashAccountId: "nubank",
+      brokerAccountId: "avenue",
+      amount: "6757,75",
+      received: "33721,17",
+    });
+    expect(
+      buildEditPatch(
+        leg,
+        start,
+        { ...start, received: "30.000,00", rate: "4,44" },
+        ctx,
+      ),
+    ).toEqual({ ok: true, patch: { toAmount: 30000 } });
+    expect(buildEditPatch(leg, start, { ...start, rate: "5,10" }, ctx)).toEqual(
+      { ok: true, patch: { exchangeRate: 5.1 } },
+    );
+    expect(
+      buildEditPatch(leg, start, { ...start, amount: "7.000,00" }, ctx),
+    ).toEqual({ ok: true, patch: { amount: 7000, toAmount: 33721.17 } });
+  });
+
   it("opens an aporte as Aporte", () => {
     const leg: EditableEntry = { ...entry, kind: "transfer", amount: -1000, accountId: "nubank", transferGroupId: "g", transferDirection: "investment_deposit", counterpartAccountId: "xp" };
     const start = formFromEntry(leg, ctx, brl);
     expect(start).toMatchObject({ kind: "invest", investDir: "deposit", cashAccountId: "nubank", brokerAccountId: "xp" });
     expect(buildEditPatch(leg, start, { ...start, brokerAccountId: "avenue" }, ctx)).toEqual({ ok: true, patch: { toAccountId: "avenue" } });
+  });
+});
+
+describe("effectiveCrossRate", () => {
+  it("quotes base per foreign unit and warns only past 5%", () => {
+    expect(
+      effectiveCrossRate("USD", "BRL", 6757.75, 33721.17, "BRL"),
+    ).toBeCloseTo(4.98999963, 8);
+    expect(
+      effectiveCrossRate("BRL", "USD", 33721.17, 6757.75, "BRL"),
+    ).toBeCloseTo(4.98999963, 8);
+    expect(effectiveCrossRate("USD", "EUR", 10, 9, "BRL")).toBeNull();
+    expect(rateDeviates(4.98999963, 5.2204)).toBe(false);
+    expect(rateDeviates(4.5, 5.2204)).toBe(true);
   });
 });
 
