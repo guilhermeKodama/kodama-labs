@@ -6,7 +6,7 @@ import { entityScopeSql, entityScopeWhere, inEntityScope } from "@capital/server
 import { loadFx, type FxContext } from "@capital/server/modules/ledger/lib/fx";
 import { round, toNumber } from "@capital/server/modules/ledger/lib/money";
 import { economicDateSql, paceDaySql, spentToDateSql } from "@capital/server/modules/ledger/lib/spend-as-of";
-import { budgetFor, excludedEntities, mean, slotKey, suggestedBudget } from "../lib/assign";
+import { budgetFor, excludedEntities, mean, slotKey, suggestedBudget, typical } from "../lib/assign";
 import { getEffectiveBudgetsByMonth, getEffectiveBudgetsForMonth } from "../lib/effective-budgets";
 import { DAY_MS, todayIn, type UserToday } from "../lib/today";
 
@@ -142,30 +142,55 @@ function yearlyRows(yearly: readonly Budget[], yearSpend: readonly Spend[], name
   });
 }
 
-/** Complete months before the current one whose spend shapes the rest-of-month projection. */
-const HISTORY_MONTHS = 3;
+/** Complete months before the current one whose spend shapes a projection. */
+const HISTORY_MONTHS = 6;
 
 /**
- * What each (entity, category) usually spends after day `day` of a month,
- * from the HISTORY_MONTHS complete months before `year`/`month`: the
- * average over the months it had spend in. The day is the economic date
- * (purchase date for a card, effective date otherwise), so a card bill is
- * not one lump on its closing day. Rent paid on the 5th leaves nothing
- * for the rest of the month; groceries leave most of it.
+ * What each (entity, category) spent after day `day` of a month, one row
+ * per month, from up to HISTORY_MONTHS complete months before `year`/`month`.
+ * The day is the economic date (purchase date for a card, effective date
+ * otherwise), so a card bill is not one lump on its closing day. A month
+ * with spend but nothing after that day counts as 0: rent paid on the 5th
+ * leaves nothing for the rest of the month. A month with no spend for that
+ * series is absent and must not be treated as zero.
  */
 async function restOfMonthHistory(db: DbClient, userId: string, year: number, month: number, day: number, entityIds: string[] | null) {
   const from = new Date(Date.UTC(year, month - 1 - HISTORY_MONTHS, 1));
   const to = new Date(Date.UTC(year, month - 1, 1) - 1);
-  const rows = await db.$queryRaw<{ entity_id: string; category_id: string | null; months: number; rest: Prisma.Decimal }[]>`
+  const rows = await db.$queryRaw<{ entity_id: string; category_id: string | null; rest: Prisma.Decimal }[]>`
     SELECT le."entityId" AS entity_id, le."categoryId" AS category_id,
-           count(DISTINCT date_trunc('month', le."effectiveDate"))::int AS months,
            coalesce(-sum(le."amountBase") FILTER (WHERE extract(day FROM ${economicDateSql("le")}) > ${day}), 0) AS rest
     FROM ledger_entries le
     WHERE le."userId" = ${userId} AND le."deletedAt" IS NULL AND le.kind = 'expense' AND le."transferGroupId" IS NULL
       AND le."effectiveDate" BETWEEN ${from} AND ${to}
       AND ${entityScopeSql(Prisma.sql`le."entityId"`, entityIds)}
-    GROUP BY 1, 2`;
-  return rows.map((r) => ({ entityId: r.entity_id, categoryId: r.category_id, months: r.months, rest: toNumber(r.rest) }));
+    GROUP BY 1, 2, date_trunc('month', le."effectiveDate")`;
+  return rows.map((r) => ({ entityId: r.entity_id, categoryId: r.category_id, rest: toNumber(r.rest) }));
+}
+
+/** Median tail of each (entity, category) series, summed onto one budget. */
+function restFromHistory(rows: readonly { entityId: string; categoryId: string | null; rest: number }[]) {
+  const bySeries = new Map<string, number[]>();
+  for (const row of rows) {
+    const key = slotKey(row.entityId, row.categoryId);
+    const tails = bySeries.get(key);
+    if (tails) tails.push(row.rest);
+    else bySeries.set(key, [row.rest]);
+  }
+  let sum = 0;
+  for (const tails of bySeries.values()) sum += typical(tails);
+  return sum;
+}
+
+/**
+ * Full months that project the rest of a year: the last HISTORY_MONTHS
+ * after this row's first spend. Zeros before that first spend are not
+ * history. A later zero (the row existed and spent nothing) stays.
+ */
+function projectionSample(complete: readonly number[]): number[] {
+  const first = complete.findIndex((v) => v > 0);
+  if (first === -1) return [];
+  return complete.slice(first).slice(-HISTORY_MONTHS);
 }
 
 /** Days a past-due unpaid card statement still shows in Contas fixas. */
@@ -299,10 +324,9 @@ export async function monthOverview(userId: string, year: number, month: number,
       const dailySpendRate = daysElapsed > 0 ? spent / daysElapsed : 0;
       const allowedDailyRate = available / daysInMonth;
       const past = history.filter((h) => budgetFor(budgets, h.entityId, h.categoryId)?.id === b.id);
-      // Typical spend whose economic date falls after today. With no history, the daily rate of what is already spent.
-      const restOfMonth = past.length
-        ? past.reduce((sum, h) => sum + h.rest / Math.max(1, h.months), 0)
-        : dailySpendRate * (daysInMonth - daysElapsed);
+      // Typical spend whose economic date falls after today (`typical`: median, or the smaller of two months).
+      // With no history, the daily rate of what is already spent.
+      const restOfMonth = past.length ? restFromHistory(past) : dailySpendRate * (daysInMonth - daysElapsed);
       // Already booked, but not yet spent (a swipe dated later this month, a future installment).
       // projected = committed + max(0, typicalStillToCome − that booked tail), so a card bill
       // already imported is not forecast a second time off its closing day.
@@ -451,8 +475,9 @@ export const INSIGHT_RULES = { overrunMonths: 3, growth: 0.12, seasonalPeak: 1.4
  * Category x month matrix of a year, one row per monthly budget slot
  * (entity or every entity, category). Months before the current one are
  * actuals; the current month is month-to-date; later months are projected
- * from the average of the last three complete months (committed entries
- * such as future installments are added on top).
+ * from the median of up to six complete months (`typical`, the same
+ * estimator as the month view). Committed entries such as future
+ * installments are added on top.
  */
 export async function yearOverview(userId: string, year: number, db: DbClient, opts: YearOverviewOptions = {}) {
   const entityIds = opts.entityIds ?? null;
@@ -527,7 +552,7 @@ export async function yearOverview(userId: string, year: number, db: DbClient, o
     const complete = actual.slice(0, completeMonths);
     const lastThree = complete.slice(-3);
     const firstThree = complete.slice(0, 3);
-    const projectionBase = mean(lastThree);
+    const projectionBase = typical(projectionSample(complete));
     const months = Array.from({ length: 12 }, (_, i) => {
       const m = i + 1;
       const budget = budgetAt(i);
@@ -624,8 +649,8 @@ export async function yearOverview(userId: string, year: number, db: DbClient, o
       completeMonths,
       isPast: currentMonth === 13,
       yearPace,
-      /** Months (1-12) whose average projects the rest of the year, e.g. [6, 8] = jun–ago; null when nothing is projected. */
-      projectionBasis: completeMonths > 0 && currentMonth <= 12 ? ([Math.max(1, completeMonths - 2), completeMonths] as [number, number]) : null,
+      /** Months (1-12) whose median projects the rest of the year, e.g. [3, 8] = mar–ago; null when nothing is projected. */
+      projectionBasis: completeMonths > 0 && currentMonth <= 12 ? ([Math.max(1, completeMonths - (HISTORY_MONTHS - 1)), completeMonths] as [number, number]) : null,
     },
     scope: { entityIds },
     categories: matrix,

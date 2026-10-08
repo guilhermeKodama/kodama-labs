@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { barHeader, entityBadgeKey, heatmapLegend, insightCopy, monthHeader, monthSpan, resetsLabel, yearHeader, yearToDateMonth, type YearInsight } from "../labels";
+import { barHeader, entityBadgeKey, heatmapLegend, insightCopy, monthHeader, monthSpan, resetsLabel, trendBasis, yearHeader, yearToDateMonth, type YearInsight } from "../labels";
 
 const ABBR = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
 const abbr = (m: number) => ABBR[m - 1];
@@ -67,6 +67,12 @@ describe("insightCopy", () => {
 
   it("never suggests lowering a budget that spending runs over", () => {
     expect(insightCopy({ ...base, avg: 1884, suggested: 1900 }, "Mercado", abbr, money, [6, 8]).adjust).toBeNull();
+  });
+
+  it("names the last three complete months, separate from the projection window", () => {
+    expect(trendBasis(8)).toEqual([6, 8]);
+    expect(trendBasis(2)).toEqual([1, 2]);
+    expect(trendBasis(0)).toBeNull();
   });
 
   it("growth: first three months against the last three complete ones", () => {

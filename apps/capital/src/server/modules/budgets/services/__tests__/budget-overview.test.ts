@@ -85,7 +85,7 @@ describe("scope", () => {
     ]);
     expect(yPj.yearlyBudgets).toEqual([]);
     expect(yPj.summary).toMatchObject({ budgetToDate: 1300 * 9, budgetedCells: 18 });
-    expect(yPj.period).toMatchObject({ nElapsed: 9, completeMonths: 8, projectionBasis: [6, 8] });
+    expect(yPj.period).toMatchObject({ nElapsed: 9, completeMonths: 8, projectionBasis: [3, 8] });
   });
 });
 
@@ -110,6 +110,35 @@ describe("month-end projection", () => {
     // A closed month projects what it spent.
     const aug = await monthOverview(USER, 2026, 8, prisma);
     expect(aug.summary.projectedTotal).toBe(5400);
+  });
+
+  it("does not let one outlier month set the rest-of-month projection", async () => {
+    await createBudget(USER, { entityId: f.pfId, categoryId: c.Viagens, amount: 5000, effectiveFrom: "2026-03" }, prisma);
+    for (const m of ["03", "04", "05", "06", "07"]) await spend(f.pfChecking, c.Viagens, 2000, `2026-${m}-25`);
+    await spend(f.pfChecking, c.Viagens, 150000, "2026-08-25");
+    await spend(f.pfChecking, c.Viagens, 1500, "2026-09-10");
+
+    const o = await monthOverview(USER, 2026, 9, prisma);
+    const row = o.budgets.find((b) => b.categoryId === c.Viagens)!;
+    // A 3-month mean of Jun–Aug is (2_000 + 2_000 + 150_000) / 3 = 51_333.33,
+    // so the old projection was 1_500 + 51_333.33 = 52_833.33. The median of
+    // the six tails is 2_000.
+    expect(row.pace.projectedTotal).toBe(3500);
+    expect(o.summary.projectedTotal).toBe(3500);
+  });
+
+  it("with only two months of history projects the smaller tail, even when both are high", async () => {
+    await createBudget(USER, { entityId: f.pfId, categoryId: c.Viagens, amount: 20000, effectiveFrom: "2026-07" }, prisma);
+    await spend(f.pfChecking, c.Viagens, 6000, "2026-07-25");
+    await spend(f.pfChecking, c.Viagens, 8000, "2026-08-25");
+    await spend(f.pfChecking, c.Viagens, 1000, "2026-09-10");
+
+    const o = await monthOverview(USER, 2026, 9, prisma);
+    const row = o.budgets.find((b) => b.categoryId === c.Viagens)!;
+    // Both tails are real spend. Their mean is 7_000, which would project 8_000.
+    // Two months cannot tell that apart from a one-off, so the forecast uses 6_000.
+    expect(row.pace.projectedTotal).toBe(7000);
+    expect(o.summary.projectedTotal).toBe(7000);
   });
 });
 
@@ -191,8 +220,9 @@ describe("year matrix", () => {
     expect(saude).toMatchObject({ peakMonth: 3, peakValue: 2600, budget: 1800 });
 
     const mercadoRow = y.categories.find((r) => r.categoryId === c.Mercado)!;
-    // October to December are projected from the average of June to August.
-    expect(mercadoRow.months[9]).toMatchObject({ spent: 2210, isProjected: true });
+    // October to December are projected from the median of March to August
+    // (1_780, 1_990, 2_080, 2_100, 2_240, 2_310 → 2_090). The June–August mean was 2_210.
+    expect(mercadoRow.months[9]).toMatchObject({ spent: 2090, isProjected: true });
     expect(y.summary).toMatchObject({ overBudgetMonths: 7, budgetedCells: 45 });
   });
 });

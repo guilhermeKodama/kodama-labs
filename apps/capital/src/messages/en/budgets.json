@@ -86,7 +86,7 @@
       "done": "{actual} actual",
       "future": "Year has not started · only what is already booked",
       "noBasis": "{actual} actual · {projected} only what is already booked",
-      "projected": "{actual} actual · {projected} projected from the {basis} average"
+      "projected": "{actual} actual · {projected} projected from the {basis} median"
     },
     "kpi": {
       "spent": "Spent in {year} (through {month})",

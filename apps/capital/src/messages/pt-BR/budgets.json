@@ -86,7 +86,7 @@
       "done": "{actual} realizado",
       "future": "Ano ainda não começou · só o que já está lançado",
       "noBasis": "{actual} realizado · {projected} só com o que já está lançado",
-      "projected": "{actual} realizado · {projected} projetado pela média de {basis}"
+      "projected": "{actual} realizado · {projected} projetado pela mediana de {basis}"
     },
     "kpi": {
       "spent": "Gasto em {year} (até {month})",

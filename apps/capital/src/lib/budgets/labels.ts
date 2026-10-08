@@ -57,7 +57,7 @@ export interface YearPeriod {
   projectionBasis: readonly [number, number] | null;
 }
 
-/** "jan–set realizado · out–dez projetado pela média de jun–ago", and its variants for other years. */
+/** "jan–set realizado · out–dez projetado pela mediana de mar–ago", and its variants for other years. */
 export function yearHeader(period: YearPeriod, abbr: Abbr): Message {
   if (period.isPast || period.nElapsed >= 12) return { key: "year.header.done", values: { actual: monthSpan(1, 12, abbr) } };
   if (period.nElapsed <= 0) return { key: "year.header.future" };
@@ -65,6 +65,12 @@ export function yearHeader(period: YearPeriod, abbr: Abbr): Message {
   const projected = monthSpan(period.nElapsed + 1, 12, abbr);
   if (!period.projectionBasis) return { key: "year.header.noBasis", values: { actual, projected } };
   return { key: "year.header.projected", values: { actual, projected, basis: monthSpan(period.projectionBasis[0], period.projectionBasis[1], abbr) } };
+}
+
+/** Months named in a growth insight: the last three complete ones. Not the projection window. */
+export function trendBasis(completeMonths: number): readonly [number, number] | null {
+  if (completeMonths <= 0) return null;
+  return [Math.max(1, completeMonths - 2), completeMonths];
 }
 
 /** The month the Anual KPIs run up to ("até set"), or null for a year that has not started. */
@@ -104,7 +110,8 @@ export interface InsightCopy {
  * - overrun: "Mercado: passou do orçado em 5 de 9 meses" · "Média de R$ 1.990/mês contra R$ 2.000 orçados. Ajustar para R$ 2.000?"
  * - growth: "Software: subiu 18% no ano" · "Média de jan–mar R$ 1.220 → jun–ago R$ 1.437."
  * - seasonal: "Lazer: sazonal" · "Pico em jun (R$ 1.900). Talvez vire um orçamento anual."
- * `basis` is the months the last-three average covers (yearOverview.period.projectionBasis).
+ * `basis` is the span named in a growth insight (the last three complete months).
+ * It is not the year projection window (`yearOverview.period.projectionBasis`).
  */
 export function insightCopy(insight: YearInsight, category: string, abbr: Abbr, money: Money, basis: readonly [number, number] | null): InsightCopy {
   if (insight.kind === "overrun") {

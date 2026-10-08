@@ -7,7 +7,7 @@ import { apiPatch } from "@/lib/api/client";
 import { useAppMutation, useErrorMessage } from "@/lib/api/use-app-mutation";
 import { budgetDrill, budgetsDrill, monthPeriod } from "@/lib/budgets/drill";
 import { columnTense, flatMonthlyBudget, heatLevel, heatPercent, isClickable, monthlyBars, totalTone, trendOf, type HeatLevel } from "@/lib/budgets/heatmap";
-import { heatmapLegend, insightCopy, yearHeader, yearToDateMonth } from "@/lib/budgets/labels";
+import { heatmapLegend, insightCopy, trendBasis, yearHeader, yearToDateMonth } from "@/lib/budgets/labels";
 import { percent, projectionVsBudget, usage, yearlyTone } from "@/lib/budgets/pace";
 import { monthKey, type YearMonth } from "@/lib/budgets/period";
 import type { BudgetsScope, BudgetsView } from "@/lib/budgets/url";
@@ -305,7 +305,7 @@ function Insights({ data, today }: { data: YearOverview; today: YearMonth }) {
     <Panel title={t("year.insights.title")} pad={false}>
       {data.insights.map((insight) => {
         const category = insight.category ?? t("uncategorized");
-        const copy = insightCopy(insight, category, fmt.monthAbbr, (v) => fmt.money0(v), data.period.projectionBasis);
+        const copy = insightCopy(insight, category, fmt.monthAbbr, (v) => fmt.money0(v), trendBasis(data.period.completeMonths));
         return (
           <div key={`${insight.budgetId}:${insight.kind}`} className="flex flex-col gap-0.5 border-t border-stroke-3 px-3 py-2.5 first:border-t-0">
             <span className="flex min-w-0 items-center gap-1.5 text-body font-medium">
