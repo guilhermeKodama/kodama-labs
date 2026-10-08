@@ -332,8 +332,7 @@ async function seedEntries(ctx: Ctx) {
  * the entries above already count that month (by effective date, as
  * Orçamentos counts them: card purchases on their statement's closing day).
  * M0 gets the mockup's September at the real today's pace (mockPace), so the
- * month so far, its pace and the projection from the last three months look
- * like the mockup's.
+ * month so far, its pace and the end-of-month projection look like the mockup's.
  */
 async function seedDayToDay(ctx: Ctx) {
   const { db, userId } = ctx;

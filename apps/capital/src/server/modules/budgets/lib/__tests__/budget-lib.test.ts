@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { budgetFor, excludedEntities, mean, suggestedBudget } from "../assign";
+import { budgetFor, excludedEntities, mean, suggestedBudget, typical } from "../assign";
 import { resolveEffective } from "../effective-budgets";
 import { todayIn } from "../today";
 
@@ -64,6 +64,18 @@ describe("helpers", () => {
     expect(suggestedBudget(851.2)).toBe(900);
     expect(mean([])).toBe(0);
     expect(mean([1, 2, 3])).toBe(2);
+  });
+
+  it("takes a median, and the smaller of two months even when both are legitimate", () => {
+    expect(typical([])).toBe(0);
+    expect(typical([150000])).toBe(150000);
+    // 6_000 and 8_000 are both real spend. The mean would be 7_000; two months
+    // cannot separate that from a one-off, so the forecast stays at 6_000.
+    expect(typical([6000, 8000])).toBe(6000);
+    expect(typical([8000, 6000])).toBe(6000);
+    expect(typical([2000, 2000, 150000])).toBe(2000);
+    expect(typical([2000, 2000, 2000, 2000, 2000, 150000])).toBe(2000);
+    expect(typical([1780, 1990, 2080, 2100, 2240, 2310])).toBe(2090);
   });
 
   it("reads today in the user's timezone", () => {

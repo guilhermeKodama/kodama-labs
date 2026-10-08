@@ -62,6 +62,12 @@ RUN pnpm --filter @wallex/careers exec prisma generate \
  && pnpm --filter @wallex/capital exec prisma generate \
  && pnpm --filter @wallex/sentinel exec prisma generate
 
+# `next build` typechecks in-process. Capital's typecheck needs about 2.7 GB,
+# past Node's default ~2 GB old-space limit, so the build OOMs on an 8 GB
+# Docker Desktop VM. Peak RSS is about 3.5 GB with this 4 GB cap. The
+# assignment is on the RUN, not an ENV: this image is also the runtime
+# (no separate runner stage), and next start, prisma migrate and the cron
+# jobs that reuse it keep the default heap.
 # ---------------------------------------------------------------------------
 FROM base AS careers
 # Next.js inlines NEXT_PUBLIC_* into the client bundle at build time — must
@@ -70,7 +76,7 @@ ARG NEXT_PUBLIC_APP_URL
 ARG NEXT_PUBLIC_VAPID_PUBLIC_KEY
 ENV NEXT_PUBLIC_APP_URL=$NEXT_PUBLIC_APP_URL
 ENV NEXT_PUBLIC_VAPID_PUBLIC_KEY=$NEXT_PUBLIC_VAPID_PUBLIC_KEY
-RUN cd apps/careers && pnpm exec next build
+RUN cd apps/careers && NODE_OPTIONS=--max-old-space-size=4096 pnpm exec next build
 WORKDIR /repo/apps/careers
 ENV PORT=3006
 CMD ["pnpm", "start"]
@@ -81,7 +87,7 @@ ARG NEXT_PUBLIC_APP_URL
 ARG NEXT_PUBLIC_VAPID_PUBLIC_KEY
 ENV NEXT_PUBLIC_APP_URL=$NEXT_PUBLIC_APP_URL
 ENV NEXT_PUBLIC_VAPID_PUBLIC_KEY=$NEXT_PUBLIC_VAPID_PUBLIC_KEY
-RUN cd apps/attention && pnpm exec next build
+RUN cd apps/attention && NODE_OPTIONS=--max-old-space-size=4096 pnpm exec next build
 RUN cd apps/attention && pnpm run worker:whatsapp:build
 WORKDIR /repo/apps/attention
 ENV PORT=3005
@@ -98,7 +104,7 @@ ARG NEXT_PUBLIC_APP_URL=https://capital.kodamalabs.ai
 ARG NEXT_PUBLIC_VAPID_PUBLIC_KEY
 ENV NEXT_PUBLIC_APP_URL=$NEXT_PUBLIC_APP_URL
 ENV NEXT_PUBLIC_VAPID_PUBLIC_KEY=$NEXT_PUBLIC_VAPID_PUBLIC_KEY
-RUN cd apps/capital && pnpm exec next build
+RUN cd apps/capital && NODE_OPTIONS=--max-old-space-size=4096 pnpm exec next build
 WORKDIR /repo/apps/capital
 ENV PORT=3000
 # Explicit rather than relying on `next start` to infer it. capital's
@@ -111,7 +117,7 @@ CMD ["pnpm", "start"]
 
 # ---------------------------------------------------------------------------
 FROM base AS kodamalabs
-RUN cd apps/kodamalabs && pnpm exec next build
+RUN cd apps/kodamalabs && NODE_OPTIONS=--max-old-space-size=4096 pnpm exec next build
 WORKDIR /repo/apps/kodamalabs
 ENV PORT=3003
 CMD ["pnpm", "start"]
@@ -120,7 +126,7 @@ CMD ["pnpm", "start"]
 FROM base AS sentinel
 ARG NEXT_PUBLIC_APP_URL=https://sentinel.kodamalabs.ai
 ENV NEXT_PUBLIC_APP_URL=$NEXT_PUBLIC_APP_URL
-RUN cd apps/sentinel && pnpm exec next build
+RUN cd apps/sentinel && NODE_OPTIONS=--max-old-space-size=4096 pnpm exec next build
 WORKDIR /repo/apps/sentinel
 ENV PORT=3002
 CMD ["pnpm", "start"]

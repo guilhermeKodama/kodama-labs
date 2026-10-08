@@ -33,5 +33,29 @@ export const slotKey = (entityId: string | null, categoryId: string | null) => `
 /** Mean of a list (0 when empty). */
 export const mean = (xs: readonly number[]) => (xs.length ? xs.reduce((s, x) => s + x, 0) / xs.length : 0);
 
+/**
+ * Typical value of a spend series, for the rest-of-month tail and for
+ * future months in the year view.
+ *
+ * No samples is 0, and the caller treats that as "no history". One sample
+ * is that sample: a single month is not an outlier. Two samples take the
+ * smaller one. That deliberately biases low when both months are legitimate
+ * and merely different — 6,000 and 8,000 project 6,000, not their mean of
+ * 7,000 — because the ordinary median of two values is the mean, so one
+ * huge month would still contribute half, and two months cannot tell a
+ * trend from a one-off. Under-projecting is the safer forecast there.
+ * Three or more use the ordinary median (an even count averages the two
+ * central values), so a single outlier drops out of the center.
+ */
+export function typical(values: readonly number[]): number {
+  if (values.length === 0) return 0;
+  if (values.length < 3) return Math.min(...values);
+  const sorted = [...values].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  const hi = sorted[mid] ?? 0;
+  const lo = sorted[mid - 1] ?? hi;
+  return sorted.length % 2 === 1 ? hi : (lo + hi) / 2;
+}
+
 /** The rounded amount an insight suggests for a budget: the average spend, up to the next 50. */
 export const suggestedBudget = (avg: number) => Math.ceil(avg / 50) * 50;
