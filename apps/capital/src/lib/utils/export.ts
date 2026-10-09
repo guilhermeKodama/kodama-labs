@@ -2,11 +2,20 @@ import { format } from 'date-fns';
 import type { Transaction, Transfer } from '@/types';
 
 /**
- * Escape CSV value (handle commas, quotes, newlines)
+ * Escape CSV value (handle commas, quotes, newlines) and neutralize
+ * spreadsheet formula injection. Numbers and plain numeric strings
+ * (e.g. "-12.30" from toFixed) are left untouched.
  */
-function escapeCSV(value: string | number | undefined): string {
+export function escapeCSV(value: string | number | undefined): string {
   if (value === undefined || value === null) return '';
-  const str = String(value);
+  let str = String(value);
+  if (
+    typeof value === 'string' &&
+    /^[=+\-@]/.test(str) &&
+    !/^[-+]?\d+(\.\d+)?$/.test(str)
+  ) {
+    str = `'${str}`;
+  }
   if (str.includes(',') || str.includes('"') || str.includes('\n')) {
     return `"${str.replace(/"/g, '""')}"`;
   }
