@@ -63,6 +63,13 @@ export const entryPatchSchema = z
     direction: transferDirectionSchema,
     /** Transfers only: true books the legs as a reimbursement (expense legs), false back to a plain transfer. */
     reimbursement: z.boolean(),
+    /**
+     * Cross-currency transfers only: the inflow leg's amount in the destination
+     * currency. The outflow amount stays unless `amount` is sent too (`amount`
+     * is then the outflow, not a scale). The foreign rate is derived so it
+     * matches. A same-currency transfer rejects it.
+     */
+    toAmount: z.number().positive(),
   })
   .partial()
   .refine((p) => Object.keys(p).length > 0, "Empty patch");

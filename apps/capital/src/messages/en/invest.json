@@ -312,6 +312,9 @@
     "cash": {
       "amount": "Amount",
       "amountIn": "Amount ({currency})",
+      "received": "Amount received ({currency})",
+      "receivedHint": "Optional. Blank uses the day's exchange rate.",
+      "rateWarning": "Effective rate {effective} differs from PTAX {ptax}.",
       "from": "From",
       "to": "To",
       "depositNote": "Creates an “Investment contribution” transfer that shows in Transactions and in Contributions.",

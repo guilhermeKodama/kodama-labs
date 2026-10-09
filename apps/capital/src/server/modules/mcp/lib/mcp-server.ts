@@ -109,6 +109,7 @@ const UpdateTransactionInputSchema = z.object({
   amount: z.number().positive().optional(),
   currency: z.string().length(3).optional(),
   exchangeRate: z.number().positive().optional(),
+  toAmount: z.number().positive().optional(),
   description: z.string().min(1).optional(),
   category: z.string().min(1).optional(),
   date: DateStringSchema.optional(),
@@ -158,6 +159,7 @@ const BulkUpdateTransactionsInputSchema = z.object({
       amount: z.number().positive().optional(),
       currency: z.string().length(3).optional(),
       exchangeRate: z.number().positive().optional(),
+      toAmount: z.number().positive().optional(),
       description: z.string().min(1).optional(),
       category: z.string().min(1).optional(),
       date: DateStringSchema.optional(),
@@ -325,6 +327,10 @@ export function createCapitalMcpServer(userId: string, db: DbClient, opts: { rea
         "List and search transactions by date range, type, and category. Returns " +
         "individual transactions plus totals grouped by type and category. " +
         "Amounts are signed: a charge is a positive expense, and a refund or reversal is a negative expense. " +
+        "Without a type filter, transfer legs are included. Each one has transferGroupId, " +
+        "counterpartAmount (the other leg, signed) and counterpartCurrency, so a USD to BRL " +
+        "resgate can be found and then corrected with update_transaction (toAmount or exchangeRate). " +
+        "Transfer legs are left out of the type/category totals. " +
         "Example: List all Income/Dividends transactions in September 2026.",
       inputSchema: ListTransactionsInputSchema,
     },
@@ -348,6 +354,11 @@ export function createCapitalMcpServer(userId: string, db: DbClient, opts: { rea
       description:
         "Update an existing transaction by ID. Can modify type, amount, currency, " +
         "exchange rate, description, category, date, or tax deductible status. " +
+        "On a cross-currency transfer, toAmount is what arrived on the other leg (its currency) " +
+        "and exchangeRate is the effective base-per-foreign rate; either one leaves the foreign " +
+        "amount in place and keeps both legs' base amounts in agreement. Sending amount together " +
+        "with toAmount sets the outflow and the inflow. amount alone still scales both legs. " +
+        "A same-currency transfer returns 422 when toAmount is set or exchangeRate is not 1. " +
         "The returned amount is signed: a refund or reversal is a negative expense.",
       inputSchema: UpdateTransactionInputSchema,
     },
@@ -362,9 +373,14 @@ export function createCapitalMcpServer(userId: string, db: DbClient, opts: { rea
                 id: result.id,
                 type: result.type,
                 amount: result.amount,
+                currency: result.currency,
+                exchangeRate: result.exchangeRate,
                 description: result.description,
                 category: result.category,
                 date: result.date,
+                transferGroupId: result.transferGroupId,
+                counterpartAmount: result.counterpartAmount,
+                counterpartCurrency: result.counterpartCurrency,
               },
               null,
               2
@@ -746,6 +762,8 @@ export function createCapitalMcpServer(userId: string, db: DbClient, opts: { rea
         "Supports updating type, amount, currency, exchange rate, description, category, " +
         "date, and tax deductible status. Dates are normalized to noon UTC via parseLocalDate. " +
         "Returns per-transaction results. Amounts are signed: a refund or reversal is a negative expense. " +
+        "On a transfer, toAmount and exchangeRate restate a cross-currency pair the same way as update_transaction. " +
+        "A same-currency transfer returns 422 when toAmount is set or exchangeRate is not 1. " +
         "Example: Recategorize 95 transactions after reviewing statement imports.",
       inputSchema: BulkUpdateTransactionsInputSchema,
     },

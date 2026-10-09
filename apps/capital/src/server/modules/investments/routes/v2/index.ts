@@ -151,6 +151,8 @@ const cashRoute = createRoute({
       description: z.string().optional(),
       currency: z.string().length(3).optional(),
       exchangeRate: z.number().positive().optional(),
+      /** What arrives in the other account's currency. Omitted, the leg converts at the prior-day PTAX. */
+      toAmount: z.number().positive().optional(),
     })
   ),
   responses: v2Responses,

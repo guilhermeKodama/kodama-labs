@@ -11,6 +11,12 @@ export interface UpdateTransactionParams {
   amount?: number;
   currency?: string;
   exchangeRate?: number;
+  /**
+   * Cross-currency transfers: the inflow leg's amount in the destination
+   * currency. The outflow stays unless `amount` is sent too (`amount` is then
+   * the outflow). The foreign rate is derived from the two amounts.
+   */
+  toAmount?: number;
   description?: string;
   category?: string;
   date?: string;
@@ -35,6 +41,7 @@ export function toPatch(
     ...(params.amount !== undefined && { amount: params.amount }),
     ...(params.currency && { currency: params.currency }),
     ...(params.exchangeRate !== undefined && { exchangeRate: params.exchangeRate }),
+    ...(params.toAmount !== undefined && { toAmount: params.toAmount }),
     ...(params.description && { description: params.description }),
     ...(params.date && { date: formatDateOnly(parseLocalDate(params.date)) }),
     ...(params.isTaxDeductible !== undefined && { isTaxDeductible: params.isTaxDeductible }),
