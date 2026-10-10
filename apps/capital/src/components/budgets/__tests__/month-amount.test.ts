@@ -143,7 +143,15 @@ describe("the Orçado column", () => {
 
   it("gives the category the wide track and keeps a long name whole, with the badge beside it", () => {
     const html = render("pt-BR", createElement(MonthBody, { data: overview, actions, onOpenRule: noop, onAllRules: noop }));
-    expect(html).toContain("grid-cols-[minmax(0,2.2fr)_minmax(0,1.8fr)_80px_80px_80px_110px_28px]");
+    expect(html).toContain("md:grid-cols-[minmax(0,2.2fr)_minmax(0,1.8fr)_80px_80px_80px_110px_28px]");
+    expect(html).toContain("@container");
+    expect(html).toContain("@min-[1280px]:grid-cols-[minmax(0,1.7fr)_minmax(0,1fr)]");
+    expect(html).not.toContain("md:grid-cols-[minmax(0,1.7fr)_minmax(0,1fr)]");
+    expect(html).toContain("grid-cols-4");
+    expect(html).toContain("col-span-3");
+    expect(html).toContain("col-span-4");
+    expect(html).toContain("md:h-10");
+    expect(html).not.toMatch(/["\s]h-10["\s]/);
     expect(html).not.toContain("min-w-[640px]");
     expect(html).toContain("Cuidados pessoais");
 
