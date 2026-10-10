@@ -18,11 +18,13 @@ import { BudgetEntityBadge, ChartCaption, ChartLegend, DrillLink, EntityBadge, P
 import { useMonthOverview, type BudgetRow, type MonthOverview, type UpcomingItem } from "./use-budgets";
 
 /**
- * Mensal columns, same tracks as Transações (description 2.2fr, a narrower
- * flexible column, fixed amounts, ⋯ in its own 28px column).
+ * Mensal columns, like Transações: the name stays the widest flexible
+ * track (at least 2fr) and truncates only past that, the pace bar takes
+ * a real share of the remainder (1.8fr, not a leftover sliver), and the
+ * amounts, status and ⋯ stay fixed.
  * Categoria | bar | Orçado | Gasto | Restante | Status | ⋯.
  */
-const COLS = "grid grid-cols-[minmax(0,2.2fr)_minmax(0,1fr)_80px_80px_80px_110px_28px] items-center gap-2 px-2.5";
+const COLS = "grid grid-cols-[minmax(0,2.2fr)_minmax(0,1.8fr)_80px_80px_80px_110px_28px] items-center gap-2 px-2.5";
 
 /** Mensal: Todas / PF / PJ and today, KPIs, the budget table, the month's pace chart and Contas fixas. */
 export function MonthView({
