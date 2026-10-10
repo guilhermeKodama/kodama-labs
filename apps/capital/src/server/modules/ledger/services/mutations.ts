@@ -32,6 +32,7 @@ type DelegateName =
   | "investmentOperation"
   | "categorizationRule"
   | "budget"
+  | "fireGoal"
   | "import";
 
 interface ModelSpec {
@@ -138,6 +139,8 @@ const MODELS = {
   },
   CategorizationRule: { delegate: "categorizationRule", owned: byUser, userScoped: true },
   Budget: { delegate: "budget", owned: byUser, userScoped: true },
+  // The single FIRE plan. phases and milestones are JSON value objects.
+  FireGoal: { delegate: "fireGoal", owned: byUser, userScoped: true, json: ["phases", "milestones"] },
   Import: { delegate: "import", owned: byUser, userScoped: true },
 } satisfies Record<string, ModelSpec>;
 
@@ -158,6 +161,7 @@ export const RESTORE_ORDER: readonly MutationModel[] = [
   "Category",
   "Import",
   "Budget",
+  "FireGoal",
   "CategorizationRule",
   "RecurringRule",
   "InstallmentPlan",

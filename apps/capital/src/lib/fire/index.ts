@@ -9,6 +9,7 @@ export * from './types';
 export * from './rates';
 export * from './fire-number';
 export * from './phases';
+export * from './contribution-edit';
 export * from './solve';
 export * from './profiles';
 export * from './coast';

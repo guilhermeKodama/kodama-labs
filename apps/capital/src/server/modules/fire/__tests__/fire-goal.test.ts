@@ -1,7 +1,9 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { prisma } from "@capital/server/lib/prisma";
 import { createApp } from "@capital/server/lib/create-app";
+import { patchPhaseContributions } from "@/lib/fire/contribution-edit";
 import { moveBrokerageCash } from "@capital/server/modules/investments/services/portfolio";
+import { undoBatch } from "@capital/server/modules/ledger/services/mutations";
 import { createLedgerFixture, deleteLedgerFixture, type LedgerFixture } from "@/test/ledger-fixtures";
 
 const USER = "test-user-fire-goal-001";
@@ -43,6 +45,7 @@ beforeAll(async () => {
 
 beforeEach(async () => {
   await prisma.fireGoal.deleteMany({ where: { userId: USER } });
+  await prisma.portfolioTarget.deleteMany({ where: { userId: USER } });
 });
 
 afterAll(async () => {
@@ -90,6 +93,73 @@ describe("PUT /v1/fire/goal", () => {
     const emptyPhases = await call("PUT", "/v1/fire/goal", { phases: [] });
     expect(emptyPhases.status).toBe(422);
     expect((await prisma.fireGoal.findUniqueOrThrow({ where: { userId: USER } })).phases).toEqual(PLAN.phases);
+  });
+
+  it("updates the current phase amount, leaves the rest of the schedule, and undoes", async () => {
+    await prisma.portfolioTarget.create({ data: { userId: USER, allocationClass: "br_stocks", targetPercent: 0.2 } });
+    const created = await call("PUT", "/v1/fire/goal", {
+      ...PLAN,
+      planningMode: "by_contribution",
+      phaseProfile: "custom",
+      targetYear: null,
+      phases: [
+        { fromMonth: 0, toMonth: 15, monthlyContribution: 15000, label: "curto" },
+        { fromMonth: 15, toMonth: null, monthlyContribution: 8000, label: "depois" },
+      ],
+    });
+    expect(created.status).toBe(200);
+    expect(created.data.batchId).toEqual(expect.any(String));
+
+    const patch = patchPhaseContributions(
+      {
+        planningMode: "by_contribution",
+        phaseProfile: "custom",
+        phases: created.data.phases,
+      },
+      new Map([[0, 25000]]),
+    );
+    const saved = await call("PUT", "/v1/fire/goal", patch);
+    expect(saved.status).toBe(200);
+    expect(saved.data.phases).toEqual([
+      { fromMonth: 0, toMonth: 15, monthlyContribution: 25000, label: "curto" },
+      { fromMonth: 15, toMonth: null, monthlyContribution: 8000, label: "depois" },
+    ]);
+    expect(saved.data).toMatchObject({ planningMode: "by_contribution", phaseProfile: "custom", targetYear: null });
+    expect((await call("GET", "/v1/fire/summary")).data.currentMonthContribution).toBe(25000);
+    expect(await prisma.portfolioTarget.findMany({ where: { userId: USER } })).toEqual([
+      expect.objectContaining({ allocationClass: "br_stocks", targetPercent: 0.2 }),
+    ]);
+
+    expect((await call("POST", `/v2/mutations/${saved.data.batchId}/undo`)).status).toBe(200);
+    expect((await prisma.fireGoal.findUniqueOrThrow({ where: { userId: USER } })).phases).toEqual([
+      { fromMonth: 0, toMonth: 15, monthlyContribution: 15000, label: "curto" },
+      { fromMonth: 15, toMonth: null, monthlyContribution: 8000, label: "depois" },
+    ]);
+  });
+
+  it("saving a contribution on a by_date plan switches to by_contribution and uses that amount", async () => {
+    const phases = [
+      { fromMonth: 0, toMonth: 15, monthlyContribution: 15000, label: "curto" },
+      { fromMonth: 15, toMonth: null, monthlyContribution: 8000, label: "depois" },
+    ];
+    await call("PUT", "/v1/fire/goal", { ...PLAN, planningMode: "by_date", phaseProfile: "front_loaded", targetYear: 2045, phases });
+    const patch = patchPhaseContributions({ planningMode: "by_date", phaseProfile: "front_loaded", phases }, new Map([[0, 25000]]));
+    const saved = await call("PUT", "/v1/fire/goal", patch);
+    expect(saved.status).toBe(200);
+    expect(saved.data).toMatchObject({
+      planningMode: "by_contribution",
+      phaseProfile: "custom",
+      targetYear: 2045,
+      phases: [
+        { fromMonth: 0, toMonth: 15, monthlyContribution: 25000, label: "curto" },
+        { fromMonth: 15, toMonth: null, monthlyContribution: 8000, label: "depois" },
+      ],
+    });
+    expect((await call("GET", "/v1/fire/summary")).data.currentMonthContribution).toBe(25000);
+    await undoBatch(USER, saved.data.batchId, prisma);
+    const restored = await prisma.fireGoal.findUniqueOrThrow({ where: { userId: USER } });
+    expect(restored).toMatchObject({ planningMode: "by_date", phaseProfile: "front_loaded", targetYear: 2045 });
+    expect(restored.phases).toEqual(phases);
   });
 });
 
