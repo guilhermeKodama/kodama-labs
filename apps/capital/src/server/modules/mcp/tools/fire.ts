@@ -1,5 +1,5 @@
 import type { DbClient } from "@capital/server/lib/prisma";
-import { contributionAtMonth, currentPhaseIndex, patchPhaseContributions, type ContributionPhase } from "@/lib/fire";
+import { contributionAtMonth, currentPhaseIndex, patchPhaseContributions, phasesShownForContributionEdit, type ContributionPhase } from "@/lib/fire";
 import { fetchFireGoal } from "../../fire/data/queries/fetch-fire-goal";
 import { getFireSummary } from "../../fire/services/get-fire-summary";
 import { serializeGoal } from "../../fire/services/serialize";
@@ -32,10 +32,12 @@ export async function getFirePlan(userId: string, db: DbClient) {
 }
 
 /**
- * Set one phase's consolidated monthly contribution. Bounds, labels and the
- * other phases stay. The same amount is a no-op. A by_date plan becomes
- * by_contribution / custom only when the amount changes and the target year
- * is still in the future. A past or missing target year only updates the amount.
+ * Set one phase's consolidated monthly contribution. Bounds and labels stay.
+ * On a future by_date plan the baseline is the solved schedule, same as the
+ * goal dialog, so an untouched phase keeps the solved amount rather than the
+ * stale stored one. The same amount as that baseline is a no-op. The plan
+ * becomes by_contribution / custom only when an amount changes and the target
+ * year is still in the future. A past or missing target year only updates the amount.
  */
 export async function updateFirePhaseContribution(
   userId: string,
@@ -47,9 +49,10 @@ export async function updateFirePhaseContribution(
   const goal = serializeGoal(existing);
   if (goal.phases.length === 0) throw new Error("The FIRE plan has no contribution phases.");
   const index = params.phaseIndex ?? currentPhaseIndex(goal.phases);
-  const patch = patchPhaseContributions(goal, new Map([[index, params.monthlyContribution]]));
+  const summary = await getFireSummary(userId, db, { skipSnapshot: true });
+  const baseline = phasesShownForContributionEdit(goal, summary.requiredContribution?.phases);
+  const patch = patchPhaseContributions({ ...goal, phases: baseline }, new Map([[index, params.monthlyContribution]]));
   if (!patch) {
-    const plan = await getFirePlan(userId, db);
     return {
       id: goal.id,
       planningMode: goal.planningMode,
@@ -57,8 +60,8 @@ export async function updateFirePhaseContribution(
       targetYear: goal.targetYear,
       phases: goal.phases,
       updatedPhaseIndex: index,
-      currentPhaseIndex: plan.currentPhaseIndex ?? currentPhaseIndex(goal.phases),
-      currentMonthContribution: plan.currentMonthContribution,
+      currentPhaseIndex: currentPhaseIndex(goal.phases),
+      currentMonthContribution: summary.currentMonthContribution,
       batchId: null,
     };
   }

@@ -1,5 +1,6 @@
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { prisma } from "@capital/server/lib/prisma";
+import { getFireSummary } from "@capital/server/modules/fire/services/get-fire-summary";
 import { upsertFireGoal } from "@capital/server/modules/fire/services/upsert-fire-goal";
 import type { FireGoalPatch } from "@capital/server/modules/fire/validations/fire";
 import { undoBatch, withMutationSource } from "@capital/server/modules/ledger/services/mutations";
@@ -108,14 +109,18 @@ describe("FIRE MCP tools", () => {
     await expect(updateFirePhaseContribution(USER, { phaseIndex: 4, monthlyContribution: 1 }, prisma)).rejects.toThrow(/outside 0–1/);
   });
 
-  it("does not switch or write when the amount is already the stored one", async () => {
-    await upsertFireGoal(USER, PLAN, prisma);
+  it("does not switch or write when the amount is already the solved one", async () => {
+    await upsertFireGoal(USER, { ...PLAN, phaseProfile: "custom" }, prisma);
+    const solved = (await getFireSummary(USER, prisma, { skipSnapshot: true })).requiredContribution?.phases;
+    expect(solved).toHaveLength(PLAN.phases.length);
+    expect(solved![0].monthlyContribution).not.toBe(PLAN.phases[0].monthlyContribution);
+
     const batches = await prisma.mutationBatch.count({ where: { userId: USER } });
-    const updated = await updateFirePhaseContribution(USER, { monthlyContribution: 15000 }, prisma);
+    const updated = await updateFirePhaseContribution(USER, { monthlyContribution: solved![0].monthlyContribution }, prisma);
     expect(updated.batchId).toBeNull();
     expect(updated).toMatchObject({
       planningMode: "by_date",
-      phaseProfile: "front_loaded",
+      phaseProfile: "custom",
       targetYear: 2045,
       updatedPhaseIndex: 0,
       phases: PLAN.phases,
@@ -123,7 +128,36 @@ describe("FIRE MCP tools", () => {
     expect(await prisma.mutationBatch.count({ where: { userId: USER } })).toBe(batches);
     expect(await prisma.fireGoal.findUniqueOrThrow({ where: { userId: USER } })).toMatchObject({
       planningMode: "by_date",
-      phaseProfile: "front_loaded",
+      phaseProfile: "custom",
+      phases: PLAN.phases,
+    });
+  });
+
+  it("keeps the solved amount on an untouched phase when a future by_date plan switches", async () => {
+    await upsertFireGoal(USER, { ...PLAN, phaseProfile: "custom" }, prisma);
+    const solved = (await getFireSummary(USER, prisma, { skipSnapshot: true })).requiredContribution?.phases ?? [];
+    expect(solved).toHaveLength(PLAN.phases.length);
+    expect(solved[1].monthlyContribution).not.toBe(PLAN.phases[1].monthlyContribution);
+    const next = solved[0].monthlyContribution + 1000;
+
+    const updated = await updateFirePhaseContribution(USER, { monthlyContribution: next }, prisma);
+    expect(updated).toMatchObject({
+      planningMode: "by_contribution",
+      phaseProfile: "custom",
+      targetYear: 2045,
+      updatedPhaseIndex: 0,
+    });
+    expect(updated.currentMonthContribution).toBeCloseTo(next, 6);
+    expect(updated.phases[0]).toMatchObject({ fromMonth: 0, toMonth: 15, label: "curto" });
+    expect(updated.phases[0].monthlyContribution).toBeCloseTo(next, 6);
+    expect(updated.phases[1]).toMatchObject({ fromMonth: 15, toMonth: null, label: "depois" });
+    expect(updated.phases[1].monthlyContribution).toBeCloseTo(solved[1].monthlyContribution, 6);
+    expect(updated.phases[1].monthlyContribution).not.toBe(PLAN.phases[1].monthlyContribution);
+    expect(updated.batchId).toEqual(expect.any(String));
+    expect(await prisma.fireGoal.findUniqueOrThrow({ where: { userId: USER } })).toMatchObject({
+      planningMode: "by_contribution",
+      phaseProfile: "custom",
+      phases: updated.phases,
     });
   });
 

@@ -587,13 +587,14 @@ export function createCapitalMcpServer(userId: string, db: DbClient, opts: { rea
       description:
         "Set the consolidated monthly contribution of one FIRE phase. phaseIndex is 0-based; omit it to update " +
         "the phase that covers month 0 (the current phase). Only that phase's monthlyContribution changes. " +
-        "fromMonth, toMonth, label, and every other phase stay as they are. Allocation targets are not changed. " +
-        "There is no PF/PJ split; the amount is one consolidated number. Setting the amount the phase already " +
-        "has does nothing (batchId is null). A by_date plan whose target year is still in the future becomes " +
-        "by_contribution with phaseProfile custom, so the amount you set is what the plan asks for and the target " +
-        "year stops prescribing the contribution. A past or missing target year only updates that amount; the mode " +
-        "and the phase profile stay. A guided profile (front_loaded, constant, back_loaded) stays as it is. " +
-        "Undoable (batchId) when something changed. Requires an existing plan.",
+        "fromMonth, toMonth and label stay. On a by_date plan whose target year is still in the future, the other " +
+        "phases keep the solved amounts the plan was using, not the stale stored numbers, and the plan becomes " +
+        "by_contribution with phaseProfile custom. Otherwise the other phases keep their stored amounts. Setting " +
+        "the amount that phase already uses (the solved one, on a future by_date plan) does nothing (batchId is null). " +
+        "A past or missing target year only updates that amount; the mode and the phase profile stay. A guided " +
+        "profile (front_loaded, constant, back_loaded) stays as it is. Allocation targets are not changed. " +
+        "There is no PF/PJ split; the amount is one consolidated number. Undoable (batchId) when something changed. " +
+        "Requires an existing plan.",
       inputSchema: z.object({
         monthlyContribution: z.number().min(0),
         phaseIndex: z.number().int().min(0).optional(),
