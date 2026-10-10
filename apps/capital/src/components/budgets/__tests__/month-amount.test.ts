@@ -2,6 +2,7 @@ import { createElement, type ComponentProps, type ReactElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { NextIntlClientProvider } from "next-intl";
+import { Dialog as DialogPrimitive } from "radix-ui";
 import { describe, expect, it, vi } from "vitest";
 
 vi.mock("@/i18n/navigation", async () => {
@@ -117,7 +118,10 @@ describe("the edit form", () => {
     expect(editBudgetBody(2000, "BRL", "  feira ", "2026-10")).toEqual({ amount: 2000, currency: "BRL", notes: "feira", applyFrom: "2026-10" });
     expect(editBudgetBody(2000, "BRL", "   ", "2026-10").notes).toBeNull();
 
-    const html = render("pt-BR", createElement(EditForm, { budget, month: { year: 2026, month: 10 }, onDone: noop, onDelete: noop }));
+    const html = render(
+      "pt-BR",
+      createElement(DialogPrimitive.Root, { open: true }, createElement(EditForm, { budget, month: { year: 2026, month: 10 }, onDone: noop, onDelete: noop })),
+    );
     expect(html).toContain('value="1.800"');
     expect(html).toMatch(/<input[^>]*autoFocus|autofocus/);
     expect(html).toContain("A partir de");
