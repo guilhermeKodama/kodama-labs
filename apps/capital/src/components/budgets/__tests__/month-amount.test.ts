@@ -77,6 +77,28 @@ const overview = {
       status: "on_track",
       pace: { dailySpendRate: 40, allowedDailyRate: 60, projectedTotal: 900, isOverPace: false, daysElapsed: 10, daysRemaining: 21, daysInPeriod: 31 },
     },
+    {
+      id: "b2",
+      entityId: "pf",
+      categoryId: "cuidados",
+      category: "Cuidados pessoais",
+      amount: 400,
+      budgetAmount: 400,
+      currency: "BRL",
+      effectiveFrom: "2026-01-01",
+      rollover: false,
+      notes: null,
+      excludeEntityIds: [],
+      carry: 0,
+      available: 400,
+      spent: 350,
+      committed: 350,
+      remaining: 50,
+      percentUsed: 88,
+      isOverBudget: false,
+      status: "ahead_of_pace",
+      pace: { dailySpendRate: 35, allowedDailyRate: 13, projectedTotal: 1085, isOverPace: true, daysElapsed: 10, daysRemaining: 21, daysInPeriod: 31 },
+    },
   ],
   yearlyBudgets: [],
   insights: [],
@@ -110,6 +132,37 @@ describe("the Orçado column", () => {
     expect(menu![0]).toContain("focus-visible:opacity-100");
     expect(menu![0]).toContain("data-[state=open]:opacity-100");
     expect(menu![0]).not.toMatch(/(^|["\s])opacity-0(["\s]|$)/);
+    expect(menu![0]).toContain("ml-0");
+    expect(menu![0]).not.toContain("ml-auto");
+
+    const amount = /<button[^>]*aria-label="Orçado de Mercado, R\$ 1\.800\. Editar"[^>]*>/.exec(html);
+    expect(amount).not.toBeNull();
+    expect(amount![0]).toContain("whitespace-nowrap");
+    expect(amount![0]).toContain("tabular-nums");
+  });
+
+  it("gives the category the wide track and keeps a long name whole, with the badge beside it", () => {
+    const html = render("pt-BR", createElement(MonthBody, { data: overview, actions, onOpenRule: noop, onAllRules: noop }));
+    expect(html).toContain("grid-cols-[minmax(0,2.2fr)_minmax(0,1fr)_80px_80px_80px_110px_28px]");
+    expect(html).not.toContain("min-w-[640px]");
+    expect(html).toContain("Cuidados pessoais");
+
+    const link = /<a[^>]*title="Cuidados pessoais"[^>]*>/.exec(html);
+    expect(link).not.toBeNull();
+    expect(link![0]).toContain("truncate");
+    expect(link![0]).toContain("min-w-0");
+
+    const titleAt = html.indexOf('title="Cuidados pessoais"');
+    const badgeAt = html.indexOf(">PF<", titleAt);
+    const menuAt = html.indexOf('aria-label="Ações de Cuidados pessoais"', titleAt);
+    expect(badgeAt).toBeGreaterThan(titleAt);
+    expect(menuAt).toBeGreaterThan(badgeAt);
+    expect(html.slice(titleAt, badgeAt)).toContain("shrink-0");
+
+    const status = /<span[^>]*>Acima do ritmo<\/span>/.exec(html);
+    expect(status).not.toBeNull();
+    expect(status![0]).toContain("whitespace-nowrap");
+    expect(status![0]).not.toContain("truncate");
   });
 });
 

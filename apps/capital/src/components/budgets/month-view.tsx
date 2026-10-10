@@ -17,8 +17,12 @@ import type { EditableBudget } from "./budget-dialog";
 import { BudgetEntityBadge, ChartCaption, ChartLegend, DrillLink, EntityBadge, PaceBar, RowMenu, ScopeBar, TONE_TEXT, TOOLTIP_STYLE, useEntityNames, ViewState, type BudgetActions } from "./parts";
 import { useMonthOverview, type BudgetRow, type MonthOverview, type UpcomingItem } from "./use-budgets";
 
-/** Mockup BudgetsScreen table: Categoria | bar | Orçado | Gasto | Restante | Status. */
-const COLS = "grid min-w-[640px] grid-cols-[minmax(0,1.3fr)_minmax(0,2fr)_96px_96px_96px_110px] items-center gap-3 px-3";
+/**
+ * Mensal columns, same tracks as Transações (description 2.2fr, a narrower
+ * flexible column, fixed amounts, ⋯ in its own 28px column).
+ * Categoria | bar | Orçado | Gasto | Restante | Status | ⋯.
+ */
+const COLS = "grid grid-cols-[minmax(0,2.2fr)_minmax(0,1fr)_80px_80px_80px_110px_28px] items-center gap-2 px-2.5";
 
 /** Mensal: Todas / PF / PJ and today, KPIs, the budget table, the month's pace chart and Contas fixas. */
 export function MonthView({
@@ -99,10 +103,11 @@ export function MonthBody({ data, actions, onOpenRule, onAllRules }: { data: Mon
           <div className={cn(COLS, "h-(--cap-row-h) text-label text-fg-3")}>
             <span>{t("month.table.category")}</span>
             <span className="truncate">{t(bar.key, bar.values)}</span>
-            <span className="text-right">{t("month.table.budgeted")}</span>
-            <span className="text-right">{t("month.table.spent")}</span>
-            <span className="text-right">{t("month.table.remaining")}</span>
-            <span>{t("month.table.status")}</span>
+            <span className="text-right whitespace-nowrap">{t("month.table.budgeted")}</span>
+            <span className="text-right whitespace-nowrap">{t("month.table.spent")}</span>
+            <span className="text-right whitespace-nowrap">{t("month.table.remaining")}</span>
+            <span className="whitespace-nowrap">{t("month.table.status")}</span>
+            <span />
           </div>
           {budgets.map((row) => {
             const ratio = usage(row.spent, row.available);
@@ -119,12 +124,11 @@ export function MonthBody({ data, actions, onOpenRule, onAllRules }: { data: Mon
             };
             return (
               <div key={row.id} className={cn(COLS, "group h-10 border-t border-stroke-3 text-body")}>
-                <span className="flex min-w-0 items-center gap-1.5">
+                <span className="flex min-w-0 items-center gap-1.5 overflow-hidden">
                   <DrillLink draft={drill(row, wholeMonth)} title={row.category} className="min-w-0 truncate">
                     {row.category}
                   </DrillLink>
                   <BudgetEntityBadge entityId={row.entityId} kinds={kinds} />
-                  <RowMenu category={row.category} onEdit={() => actions.onEdit(editable)} onDelete={() => actions.onDelete(editable)} />
                 </span>
                 <span className="flex min-w-0 items-center gap-2">
                   <PaceBar ratio={ratio} tone={tone} marker={pace} label={row.category} />
@@ -134,17 +138,20 @@ export function MonthBody({ data, actions, onOpenRule, onAllRules }: { data: Mon
                   type="button"
                   aria-label={t("month.table.editAmount", { category: row.category, amount: fmt.money0(row.amount) })}
                   onClick={() => actions.onEdit(editable)}
-                  className="w-full text-right font-mono tabular-nums outline-none hover:underline focus-visible:underline"
+                  className="w-full text-right font-mono whitespace-nowrap tabular-nums outline-none hover:underline focus-visible:underline"
                 >
                   {fmt.money0(row.amount)}
                 </button>
-                <DrillLink draft={spent} className="text-right font-mono tabular-nums">
+                <DrillLink draft={spent} className="text-right font-mono whitespace-nowrap tabular-nums">
                   {fmt.money0(row.spent)}
                 </DrillLink>
-                <DrillLink draft={spent} className={cn("text-right font-mono tabular-nums", row.remaining < 0 ? "text-cat-red" : "text-fg-2")}>
+                <DrillLink draft={spent} className={cn("text-right font-mono whitespace-nowrap tabular-nums", row.remaining < 0 ? "text-cat-red" : "text-fg-2")}>
                   {fmt.money0(row.remaining)}
                 </DrillLink>
-                <span className={cn("truncate text-body-sm", TONE_TEXT[tone])}>{t(`month.status.${STATUS_KEY[tone]}`)}</span>
+                <span className={cn("text-body-sm whitespace-nowrap", TONE_TEXT[tone])}>{t(`month.status.${STATUS_KEY[tone]}`)}</span>
+                <span className="flex justify-center">
+                  <RowMenu className="ml-0" category={row.category} onEdit={() => actions.onEdit(editable)} onDelete={() => actions.onDelete(editable)} />
+                </span>
               </div>
             );
           })}
@@ -153,12 +160,13 @@ export function MonthBody({ data, actions, onOpenRule, onAllRules }: { data: Mon
               <span>{t("month.table.total")}</span>
               <span className="truncate text-label font-normal text-fg-3">{t(resets.key, resets.values)}</span>
               <span />
-              <DrillLink draft={totals(t("month.table.total"), spentPeriod)} className="text-right font-mono tabular-nums">
+              <DrillLink draft={totals(t("month.table.total"), spentPeriod)} className="text-right font-mono whitespace-nowrap tabular-nums">
                 {fmt.money0(summary.totalSpent)}
               </DrillLink>
-              <DrillLink draft={totals(t("month.table.total"), spentPeriod)} className="text-right font-mono tabular-nums">
+              <DrillLink draft={totals(t("month.table.total"), spentPeriod)} className="text-right font-mono whitespace-nowrap tabular-nums">
                 {fmt.money0(summary.totalRoom)}
               </DrillLink>
+              <span />
               <span />
             </div>
           ) : (
