@@ -33,8 +33,9 @@ export async function getFirePlan(userId: string, db: DbClient) {
 
 /**
  * Set one phase's consolidated monthly contribution. Bounds, labels and the
- * other phases stay. A by_date plan becomes by_contribution / custom so the
- * typed amount is what the plan asks for.
+ * other phases stay. The same amount is a no-op. A by_date plan becomes
+ * by_contribution / custom only when the amount changes and the target year
+ * is still in the future. A past or missing target year only updates the amount.
  */
 export async function updateFirePhaseContribution(
   userId: string,
@@ -47,6 +48,20 @@ export async function updateFirePhaseContribution(
   if (goal.phases.length === 0) throw new Error("The FIRE plan has no contribution phases.");
   const index = params.phaseIndex ?? currentPhaseIndex(goal.phases);
   const patch = patchPhaseContributions(goal, new Map([[index, params.monthlyContribution]]));
+  if (!patch) {
+    const plan = await getFirePlan(userId, db);
+    return {
+      id: goal.id,
+      planningMode: goal.planningMode,
+      phaseProfile: goal.phaseProfile,
+      targetYear: goal.targetYear,
+      phases: goal.phases,
+      updatedPhaseIndex: index,
+      currentPhaseIndex: plan.currentPhaseIndex ?? currentPhaseIndex(goal.phases),
+      currentMonthContribution: plan.currentMonthContribution,
+      batchId: null,
+    };
+  }
   const saved = await upsertFireGoal(userId, patch, db);
   const phases = (saved.phases as unknown as ContributionPhase[]) ?? patch.phases;
   return {

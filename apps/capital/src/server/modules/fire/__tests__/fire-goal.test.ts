@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { prisma } from "@capital/server/lib/prisma";
 import { createApp } from "@capital/server/lib/create-app";
-import { patchPhaseContributions } from "@/lib/fire/contribution-edit";
+import { fireGoalDialogBody, patchPhaseContributions } from "@/lib/fire/contribution-edit";
 import { moveBrokerageCash } from "@capital/server/modules/investments/services/portfolio";
 import { undoBatch } from "@capital/server/modules/ledger/services/mutations";
 import { createLedgerFixture, deleteLedgerFixture, type LedgerFixture } from "@/test/ledger-fixtures";
@@ -118,6 +118,7 @@ describe("PUT /v1/fire/goal", () => {
       },
       new Map([[0, 25000]]),
     );
+    if (!patch) throw new Error("expected a contribution patch");
     const saved = await call("PUT", "/v1/fire/goal", patch);
     expect(saved.status).toBe(200);
     expect(saved.data.phases).toEqual([
@@ -143,7 +144,12 @@ describe("PUT /v1/fire/goal", () => {
       { fromMonth: 15, toMonth: null, monthlyContribution: 8000, label: "depois" },
     ];
     await call("PUT", "/v1/fire/goal", { ...PLAN, planningMode: "by_date", phaseProfile: "front_loaded", targetYear: 2045, phases });
-    const patch = patchPhaseContributions({ planningMode: "by_date", phaseProfile: "front_loaded", phases }, new Map([[0, 25000]]));
+    const patch = patchPhaseContributions(
+      { planningMode: "by_date", phaseProfile: "front_loaded", targetYear: 2045, phases },
+      new Map([[0, 25000]]),
+      2026,
+    );
+    if (!patch) throw new Error("expected a contribution patch");
     const saved = await call("PUT", "/v1/fire/goal", patch);
     expect(saved.status).toBe(200);
     expect(saved.data).toMatchObject({
@@ -160,6 +166,66 @@ describe("PUT /v1/fire/goal", () => {
     const restored = await prisma.fireGoal.findUniqueOrThrow({ where: { userId: USER } });
     expect(restored).toMatchObject({ planningMode: "by_date", phaseProfile: "front_loaded", targetYear: 2045 });
     expect(restored.phases).toEqual(phases);
+  });
+
+  it("saving only income and return on a by_date plan leaves mode, profile and phases alone", async () => {
+    await call("PUT", "/v1/fire/goal", PLAN);
+    const solved = [
+      { ...PLAN.phases[0], monthlyContribution: 22000 },
+      { ...PLAN.phases[1], monthlyContribution: 9000 },
+    ];
+    const baselineTexts = ["22000", "9000"];
+    const body = fireGoalDialogBody({
+      fields: { targetMonthlyIncome: 18000, nominalAnnualReturn: 0.08 },
+      goal: { planningMode: "by_date", phaseProfile: "custom", targetYear: 2045, phases: PLAN.phases },
+      solvedPhases: solved,
+      texts: baselineTexts,
+      baselineTexts,
+      parseNumber: Number,
+      nowYear: 2026,
+    });
+    expect(body).toEqual({ targetMonthlyIncome: 18000, nominalAnnualReturn: 0.08 });
+
+    const saved = await call("PUT", "/v1/fire/goal", body);
+    expect(saved.status).toBe(200);
+    expect(saved.data).toMatchObject({
+      targetMonthlyIncome: 18000,
+      nominalAnnualReturn: 0.08,
+      planningMode: "by_date",
+      phaseProfile: "custom",
+      targetYear: 2045,
+      phases: PLAN.phases,
+    });
+  });
+
+  it("a by_date plan with a past target year updates the amount and does not switch", async () => {
+    const phases = [
+      { fromMonth: 0, toMonth: 15, monthlyContribution: 15000, label: "curto" },
+      { fromMonth: 15, toMonth: null, monthlyContribution: 8000, label: "depois" },
+    ];
+    await call("PUT", "/v1/fire/goal", { ...PLAN, planningMode: "by_date", phaseProfile: "constant", targetYear: 2020, phases });
+    const patch = patchPhaseContributions(
+      { planningMode: "by_date", phaseProfile: "constant", targetYear: 2020, phases },
+      new Map([[0, 25000]]),
+      2026,
+    );
+    expect(patch).toEqual({
+      phases: [
+        { fromMonth: 0, toMonth: 15, monthlyContribution: 25000, label: "curto" },
+        phases[1],
+      ],
+    });
+    const saved = await call("PUT", "/v1/fire/goal", patch);
+    expect(saved.status).toBe(200);
+    expect(saved.data).toMatchObject({
+      planningMode: "by_date",
+      phaseProfile: "constant",
+      targetYear: 2020,
+      phases: [
+        { fromMonth: 0, toMonth: 15, monthlyContribution: 25000, label: "curto" },
+        { fromMonth: 15, toMonth: null, monthlyContribution: 8000, label: "depois" },
+      ],
+    });
   });
 });
 
