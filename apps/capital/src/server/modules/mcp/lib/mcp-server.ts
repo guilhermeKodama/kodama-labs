@@ -33,6 +33,7 @@ import {
   adjustPosition,
   addInvestmentAsset,
 } from "../tools/investments";
+import { getFirePlan, updateFirePhaseContribution } from "../tools/fire";
 import {
   attachReceipt,
   listTransactionAttachments,
@@ -545,6 +546,67 @@ export function createCapitalMcpServer(userId: string, db: DbClient, opts: { rea
     },
     async (params) => {
       const result = await addInvestmentAsset(userId, params, db);
+      return {
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify(result, null, 2),
+          },
+        ],
+      };
+    }
+  );
+
+  // Register tool: get_fire_plan
+  server.registerTool(
+    "get_fire_plan",
+    {
+      description:
+        "Read the FIRE plan: planning mode, phase profile, target year, and each contribution phase " +
+        "(label, fromMonth, toMonth, monthlyContribution). fromMonth and toMonth are month offsets from today, " +
+        "not calendar dates; toMonth is exclusive and null means the phase runs on. currentPhaseIndex is the phase " +
+        "that covers month 0 (the current phase). currentMonthContribution is the amount the Aportes screen and the " +
+        "FIRE projection use for this month: the stored phase amount when planning by contribution, the solved amount " +
+        "when planning by date. Does not change the plan, its phases, or allocation targets. hasGoal is false when " +
+        "there is no plan.",
+      inputSchema: z.object({}),
+      annotations: { readOnlyHint: true },
+    },
+    async () => {
+      const result = await getFirePlan(userId, db);
+      return {
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify(result, null, 2),
+          },
+        ],
+      };
+    }
+  );
+
+  // Register tool: update_fire_phase_contribution
+  server.registerTool(
+    "update_fire_phase_contribution",
+    {
+      description:
+        "Set the consolidated monthly contribution of one FIRE phase. phaseIndex is 0-based; omit it to update " +
+        "the phase that covers month 0 (the current phase). Only that phase's monthlyContribution changes. " +
+        "fromMonth, toMonth and label stay. On a by_date plan whose target year is still in the future, the other " +
+        "phases keep the solved amounts the plan was using, not the stale stored numbers, and the plan becomes " +
+        "by_contribution with phaseProfile custom. Otherwise the other phases keep their stored amounts. Setting " +
+        "the amount that phase already uses (the solved one, on a future by_date plan) does nothing (batchId is null). " +
+        "A past or missing target year only updates that amount; the mode and the phase profile stay. A guided " +
+        "profile (front_loaded, constant, back_loaded) stays as it is. Allocation targets are not changed. " +
+        "There is no PF/PJ split; the amount is one consolidated number. Undoable (batchId) when something changed. " +
+        "Requires an existing plan.",
+      inputSchema: z.object({
+        monthlyContribution: z.number().min(0),
+        phaseIndex: z.number().int().min(0).optional(),
+      }),
+    },
+    async (params) => {
+      const result = await updateFirePhaseContribution(userId, params, db);
       return {
         content: [
           {

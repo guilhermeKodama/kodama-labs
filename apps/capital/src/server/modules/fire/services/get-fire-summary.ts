@@ -55,7 +55,7 @@ import { finite, serializeDate, serializeGoal, serializeSnapshot } from "./seria
 export async function getFireSummary(
   userId: string,
   db: DbClient,
-  opts: { forceSnapshot?: boolean; altContribution?: number } = {}
+  opts: { forceSnapshot?: boolean; altContribution?: number; skipSnapshot?: boolean } = {}
 ): Promise<FireSummaryResponse> {
   const inputs = await fetchFireInputs(userId, db, { trailingMonths: TRAILING_MONTHS });
   const now = getUserToday(inputs.timezone);
@@ -271,23 +271,26 @@ export async function getFireSummary(
     };
   }
 
-  // Lazy (or forced) monthly snapshot.
-  const period = now.getFullYear() * 100 + (now.getMonth() + 1);
-  await recordFireSnapshot(
-    goal.id,
-    period,
-    {
-      snapshotDate: now,
-      currentInvested,
-      currentMonthlyExpenses,
-      fireNumber,
-      progress,
-      monthsToFire: Number.isFinite(monthsToFire) ? Math.round(monthsToFire) : null,
-      projectedFireDate,
-    },
-    opts.forceSnapshot ?? false,
-    db
-  );
+  // Lazy (or forced) monthly snapshot. Readers that must not write (the MCP
+  // read tool) pass skipSnapshot.
+  if (!opts.skipSnapshot) {
+    const period = now.getFullYear() * 100 + (now.getMonth() + 1);
+    await recordFireSnapshot(
+      goal.id,
+      period,
+      {
+        snapshotDate: now,
+        currentInvested,
+        currentMonthlyExpenses,
+        fireNumber,
+        progress,
+        monthsToFire: Number.isFinite(monthsToFire) ? Math.round(monthsToFire) : null,
+        projectedFireDate,
+      },
+      opts.forceSnapshot ?? false,
+      db
+    );
+  }
 
   const snapshots = await fetchFireSnapshots(goal.id, db);
 
