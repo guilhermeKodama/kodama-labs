@@ -250,6 +250,11 @@ const UpdateBudgetInputSchema = z.object({
   currency: z.string().length(3).optional(),
   effectiveFrom: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(), // YYYY-MM-DD
   isActive: z.boolean().optional(),
+  applyFrom: z
+    .string()
+    .regex(/^\d{4}-\d{2}$/)
+    .optional()
+    .describe("YYYY-MM. Keep earlier months and apply the change from this month on. Omit to edit the version in place."),
 });
 
 const DeleteBudgetInputSchema = z.object({
@@ -908,10 +913,11 @@ export function createCapitalMcpServer(userId: string, db: DbClient, opts: { rea
     {
       description:
         "Update an existing budget. Can change amount, currency, effectiveFrom date, or isActive status. " +
-        "The change is made in place: it applies to every month this budget version covers, past months included. " +
-        "To change the amount only from a later month on, create a new budget with that effectiveFrom instead. " +
-        "Changing effectiveFrom will update when the budget takes effect. Setting isActive=false soft-deletes " +
-        "the budget. Amount must be non-negative if provided.",
+        "Two modes for the amount. Omit applyFrom to edit this version in place: the new amount applies to every month this version covers, past months included. " +
+        "Pass applyFrom (YYYY-MM) to keep earlier months and apply the change from that month on: a new version of the same category and entity, or an in-place edit when this version already starts in that month. Yearly budgets version by year, so any month of a year means its January. " +
+        "applyFrom cannot be combined with effectiveFrom or isActive. " +
+        "Changing effectiveFrom (without applyFrom) updates when this version takes effect. Setting isActive=false soft-deletes the budget. " +
+        "Amount must be non-negative if provided.",
       inputSchema: UpdateBudgetInputSchema,
     },
     async (params) => {

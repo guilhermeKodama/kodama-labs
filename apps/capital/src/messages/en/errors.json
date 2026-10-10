@@ -118,7 +118,7 @@
   "budget": {
     "not_found": "Budget not found.",
     "negative_amount": "The budget can't be negative.",
-    "clash": "There is already a budget for this category starting that month.",
+    "clash": "A budget for {category} already starts that month. Change the amount in that row's Budgeted column.",
     "overview_period_required": "Choose a month or a year.",
     "apply_before_start": "The change can only apply from the month the budget starts."
   },

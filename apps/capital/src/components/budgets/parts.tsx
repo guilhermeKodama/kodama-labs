@@ -149,7 +149,7 @@ export const TOOLTIP_STYLE = {
   itemStyle: { color: "var(--cap-text-1)", padding: 0 },
 } as const;
 
-/** ⋯ on a budget row (shown on hover): edit the amount from a month on, or delete. */
+/** ⋯ on a budget row: edit the amount from a month on, or delete. Visible at rest, solid on hover, focus, open, or a coarse pointer. */
 export function RowMenu({ category, onEdit, onDelete }: { category: string; onEdit: () => void; onDelete: () => void }) {
   const t = useTranslations("budgets");
   return (
@@ -160,7 +160,7 @@ export function RowMenu({ category, onEdit, onDelete }: { category: string; onEd
         <button
           type="button"
           aria-label={t("rowMenu.label", { category })}
-          className="ml-auto inline-flex size-5 shrink-0 items-center justify-center rounded text-fg-3 opacity-0 outline-none group-hover:opacity-100 pointer-coarse:opacity-100 hover:bg-fill-3 hover:text-fg-1 focus-visible:opacity-100 data-[state=open]:opacity-100"
+          className="ml-auto inline-flex size-5 shrink-0 items-center justify-center rounded text-fg-3 opacity-40 outline-none group-hover:opacity-100 pointer-coarse:opacity-100 hover:bg-fill-3 hover:text-fg-1 hover:opacity-100 focus-visible:opacity-100 data-[state=open]:opacity-100"
         >
           ⋯
         </button>
