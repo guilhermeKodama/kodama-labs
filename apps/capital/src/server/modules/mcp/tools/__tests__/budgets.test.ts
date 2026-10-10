@@ -91,6 +91,26 @@ describe("update_budget / delete_budget", () => {
     expect((await updateBudget(USER, { budgetId: b.id, isActive: false }, prisma)).isActive).toBe(false);
   });
 
+  it("applyFrom versions from that month and leaves earlier months; omitting it rewrites the version in place", async () => {
+    const oct = await createBudget(USER, budget({ amount: 2800, effectiveFrom: "2026-10-01" }), prisma);
+    const fromDec = await updateBudget(USER, { budgetId: oct.id, amount: 2000, applyFrom: "2026-12" }, prisma);
+    expect(fromDec.id).not.toBe(oct.id);
+    expect(fromDec).toMatchObject({ amount: 2000, effectiveFrom: "2026-12-01" });
+    const nov = await listBudgets(USER, { effectiveDate: "2026-11" }, prisma);
+    expect(nov.find((b) => b.category === "Shopping")).toMatchObject({ id: oct.id, amount: 2800 });
+    const dec = await listBudgets(USER, { effectiveDate: "2026-12" }, prisma);
+    expect(dec.find((b) => b.category === "Shopping")).toMatchObject({ id: fromDec.id, amount: 2000 });
+
+    const rewritten = await updateBudget(USER, { budgetId: oct.id, amount: 1500 }, prisma);
+    expect(rewritten).toMatchObject({ id: oct.id, amount: 1500, effectiveFrom: "2026-10-01" });
+    expect((await listBudgets(USER, { effectiveDate: "2026-11" }, prisma)).find((b) => b.category === "Shopping")?.amount).toBe(1500);
+    expect((await listBudgets(USER, { effectiveDate: "2026-12" }, prisma)).find((b) => b.category === "Shopping")?.amount).toBe(2000);
+
+    await expect(updateBudget(USER, { budgetId: oct.id, amount: 1, applyFrom: "2026-12", effectiveFrom: "2026-11-01" }, prisma)).rejects.toThrow(/applyFrom cannot be combined/);
+    await expect(updateBudget(USER, { budgetId: oct.id, amount: -1, applyFrom: "2026-12" }, prisma)).rejects.toThrow(/non-negative/);
+    await expect(updateBudget(OTHER, { budgetId: oct.id, amount: 1, applyFrom: "2026-12" }, prisma)).rejects.toThrow(/not found/);
+  });
+
   it("soft deletes", async () => {
     const b = await createBudget(USER, budget(), prisma);
     expect(await deleteBudget(USER, { budgetId: b.id }, prisma)).toEqual({ success: true, budgetId: b.id });

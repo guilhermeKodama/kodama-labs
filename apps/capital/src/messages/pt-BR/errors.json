@@ -118,7 +118,7 @@
   "budget": {
     "not_found": "Orçamento não encontrado.",
     "negative_amount": "O orçamento não pode ser negativo.",
-    "clash": "Já existe um orçamento para essa categoria começando nesse mês.",
+    "clash": "Já existe um orçamento de {category} começando nesse mês. Altere o valor na coluna Orçado dessa linha.",
     "overview_period_required": "Escolha um mês ou um ano.",
     "apply_before_start": "A mudança só pode valer a partir do mês em que o orçamento começa."
   },

@@ -26,6 +26,8 @@ export interface UpdateBudgetParams {
   currency?: string;
   effectiveFrom?: string; // YYYY-MM-DD
   isActive?: boolean;
+  /** YYYY-MM: keep earlier months and apply the change from this month on. Omit to edit the version in place. */
+  applyFrom?: string;
 }
 
 export interface DeleteBudgetParams {
@@ -78,11 +80,15 @@ export async function createBudget(userId: string, params: CreateBudgetParams, d
 }
 
 export async function updateBudget(userId: string, params: UpdateBudgetParams, db: DbClient) {
-  const { budgetId, ...patch } = params;
+  const { budgetId, applyFrom, ...patch } = params;
   const owned = await db.budget.findFirst({ where: { id: budgetId, userId } });
   if (!owned) throw new Error("Budget not found or access denied");
-  // The MCP contract edits the version in place (every month it covers); the app's applyFrom versioning is not used here.
-  return toMcpBudget(await updateBudgetService(userId, budgetId, patch, db, { mode: "in_place" }));
+  if (applyFrom && (patch.effectiveFrom !== undefined || patch.isActive !== undefined)) {
+    throw new Error("applyFrom cannot be combined with effectiveFrom or isActive");
+  }
+  // Omit applyFrom: edit this version in place (every month it covers). Pass it: a new version from that month, earlier months unchanged.
+  const change = applyFrom ? { ...patch, applyFrom } : patch;
+  return toMcpBudget(await updateBudgetService(userId, budgetId, change, db, { mode: applyFrom ? "version" : "in_place" }));
 }
 
 export async function deleteBudget(userId: string, params: DeleteBudgetParams, db: DbClient) {

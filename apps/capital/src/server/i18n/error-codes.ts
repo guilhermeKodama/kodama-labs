@@ -119,7 +119,7 @@ export const ERROR_CODES = {
   // Budgets
   "budget.not_found": "Budget not found",
   "budget.negative_amount": "The budget amount cannot be negative",
-  "budget.clash": "A budget for this category already starts in that month",
+  "budget.clash": "A budget for {category} already starts in that month; change the amount in that row's budget column",
   "budget.overview_period_required": "Choose a month (YYYY-MM) or a year (YYYY)",
   "budget.apply_before_start": "The change can only apply from the month the budget starts",
 

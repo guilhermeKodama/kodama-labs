@@ -17,8 +17,8 @@ import type { EditableBudget } from "./budget-dialog";
 import { BudgetEntityBadge, ChartCaption, ChartLegend, DrillLink, EntityBadge, PaceBar, RowMenu, ScopeBar, TONE_TEXT, TOOLTIP_STYLE, useEntityNames, ViewState, type BudgetActions } from "./parts";
 import { useMonthOverview, type BudgetRow, type MonthOverview, type UpcomingItem } from "./use-budgets";
 
-/** Mockup BudgetsScreen table: Categoria | bar | Gasto | Restante | Status. */
-const COLS = "grid min-w-[560px] grid-cols-[minmax(0,1.3fr)_minmax(0,2fr)_96px_96px_110px] items-center gap-3 px-3";
+/** Mockup BudgetsScreen table: Categoria | bar | Orçado | Gasto | Restante | Status. */
+const COLS = "grid min-w-[640px] grid-cols-[minmax(0,1.3fr)_minmax(0,2fr)_96px_96px_96px_110px] items-center gap-3 px-3";
 
 /** Mensal: Todas / PF / PJ and today, KPIs, the budget table, the month's pace chart and Contas fixas. */
 export function MonthView({
@@ -56,7 +56,7 @@ export function MonthView({
   );
 }
 
-function MonthBody({ data, actions, onOpenRule, onAllRules }: { data: MonthOverview; actions: BudgetActions; onOpenRule: (id: string) => void; onAllRules: () => void }) {
+export function MonthBody({ data, actions, onOpenRule, onAllRules }: { data: MonthOverview; actions: BudgetActions; onOpenRule: (id: string) => void; onAllRules: () => void }) {
   const t = useTranslations("budgets");
   const fmt = useFmt();
   const { names, kinds } = useEntityNames();
@@ -99,6 +99,7 @@ function MonthBody({ data, actions, onOpenRule, onAllRules }: { data: MonthOverv
           <div className={cn(COLS, "h-(--cap-row-h) text-label text-fg-3")}>
             <span>{t("month.table.category")}</span>
             <span className="truncate">{t(bar.key, bar.values)}</span>
+            <span className="text-right">{t("month.table.budgeted")}</span>
             <span className="text-right">{t("month.table.spent")}</span>
             <span className="text-right">{t("month.table.remaining")}</span>
             <span>{t("month.table.status")}</span>
@@ -129,6 +130,14 @@ function MonthBody({ data, actions, onOpenRule, onAllRules }: { data: MonthOverv
                   <PaceBar ratio={ratio} tone={tone} marker={pace} label={row.category} />
                   <span className="w-[34px] shrink-0 text-right font-mono text-caption text-fg-3 tabular-nums">{percent(ratio)}%</span>
                 </span>
+                <button
+                  type="button"
+                  aria-label={t("month.table.editAmount", { category: row.category, amount: fmt.money0(row.amount) })}
+                  onClick={() => actions.onEdit(editable)}
+                  className="w-full text-right font-mono tabular-nums outline-none hover:underline focus-visible:underline"
+                >
+                  {fmt.money0(row.amount)}
+                </button>
                 <DrillLink draft={spent} className="text-right font-mono tabular-nums">
                   {fmt.money0(row.spent)}
                 </DrillLink>
@@ -143,6 +152,7 @@ function MonthBody({ data, actions, onOpenRule, onAllRules }: { data: MonthOverv
             <div className={cn(COLS, "h-9 border-t border-stroke-2 bg-fill-4 text-body font-semibold")}>
               <span>{t("month.table.total")}</span>
               <span className="truncate text-label font-normal text-fg-3">{t(resets.key, resets.values)}</span>
+              <span />
               <DrillLink draft={totals(t("month.table.total"), spentPeriod)} className="text-right font-mono tabular-nums">
                 {fmt.money0(summary.totalSpent)}
               </DrillLink>
