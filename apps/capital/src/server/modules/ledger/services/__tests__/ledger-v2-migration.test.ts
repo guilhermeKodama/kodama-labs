@@ -125,8 +125,10 @@ function expectRefusal(sql: string, category: string, id: string): void {
   expect(scalar(CASE, "SELECT count(*) FROM _prisma_migrations WHERE migration_name LIKE '%ledger_v2_backfill%'")).toBe("0");
 }
 
-describe("ledger v2 migration", () => {
-  beforeAll(() => {
+// Every case clones a database and runs migration SQL through psql. Through
+// the container fallback that takes seconds, so the default 5 s is too tight.
+describe("ledger v2 migration", { timeout: 60_000 }, () => {
+  beforeAll(async () => {
     execSql(
       "postgres",
       `SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname IN ('${TPL}', '${CASE}') AND pid <> pg_backend_pid();\nDROP DATABASE IF EXISTS ${CASE};\nDROP DATABASE IF EXISTS ${TPL};\nCREATE DATABASE ${TPL};`,
@@ -139,6 +141,8 @@ describe("ledger v2 migration", () => {
       if (folder > "20261004200000_ledger_v2_schema") break;
       const result = psql(TPL, ["-q", "-f", path.join(migrationsDir, folder, "migration.sql")]);
       if (result.status !== 0) throw new Error(`${folder}\n${result.stderr}`);
+      // psql runs synchronously; yield so the worker can answer the runner between migrations.
+      await new Promise((resolve) => setImmediate(resolve));
     }
     execSql(
       TPL,
