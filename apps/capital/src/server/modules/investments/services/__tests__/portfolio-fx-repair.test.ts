@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { Prisma } from "@/generated/prisma";
 import { prisma } from "@capital/server/lib/prisma";
 import { previousBusinessDayRate } from "@capital/server/modules/ledger/lib/fx";
@@ -420,23 +420,15 @@ describe("portfolio fx repair", () => {
     }
   });
 
-  it("skips a user removed while every user is walked, and still fails for a named one", async () => {
-    const gone = "test-user-fx-repair-gone-001";
-    // The listing still returns the user; every later read finds it gone.
-    const listsGone = new Proxy(prisma, {
-      get(target, prop) {
-        if (prop !== "user") return Reflect.get(target, prop);
-        return new Proxy(target.user, {
-          get(users, key) {
-            return key === "findMany" ? async () => [{ id: gone }] : Reflect.get(users, key);
-          },
-        });
-      },
-    });
-    const report = await portfolioFxReport(listsGone, "precheck");
-    expect(report.before).toEqual([]);
-    expect(report.after).toEqual([]);
-    await expect(portfolioFxReport(prisma, "precheck", { userId: gone })).rejects.toThrow();
+  it("reads everything in one snapshot", async () => {
+    const transaction = vi.spyOn(prisma, "$transaction");
+    try {
+      await portfolioFxReport(prisma, "precheck", { userId: SELL_USER });
+      expect(transaction).toHaveBeenCalledTimes(1);
+      expect(transaction.mock.calls[0][1]).toMatchObject({ isolationLevel: "RepeatableRead" });
+    } finally {
+      transaction.mockRestore();
+    }
   });
 
   it("aborts when Avenue cash is not zero right after the 2026-08-12 withdrawal", async () => {
