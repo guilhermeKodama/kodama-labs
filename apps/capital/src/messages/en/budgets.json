@@ -46,6 +46,8 @@
       "category": "Category",
       "bar": "Spent / budgeted",
       "barToday": "Spent / budgeted · mark = today (day {day})",
+      "budgeted": "Budgeted",
+      "editAmount": "Budgeted for {category}, {amount}. Edit",
       "spent": "Spent",
       "remaining": "Remaining",
       "status": "Status",

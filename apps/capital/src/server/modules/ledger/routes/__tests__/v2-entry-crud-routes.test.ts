@@ -73,7 +73,62 @@ describe("entry CRUD routes", () => {
     expect(history.json.events.map((e: Json) => e.type)).toEqual(["created", "updated"]);
     expect(history.json.events[1]).toMatchObject({ source: "user", changes: [{ field: "kind", before: "expense", after: "income" }] });
 
-    const t = await call("POST", "/v2/ledger/entries", { kind: "transfer", fromAccountId: f.pfChecking, toAccountId: f.pjChecking, amount: 1000, date: "2026-09-20" });
+    const usd = await prisma.account.create({
+      data: {
+        userId: USER,
+        entityId: f.pfId,
+        type: "brokerage",
+        name: "Avenue",
+        currency: "USD",
+      },
+    });
+    const cross = await call("POST", "/v2/ledger/entries", {
+      kind: "transfer",
+      fromAccountId: usd.id,
+      toAccountId: f.pfChecking,
+      amount: 6757.75,
+      toAmount: 35278.16,
+      exchangeRate: 5.22,
+      date: "2026-09-30",
+      direction: "investment_withdrawal",
+    });
+    expect(cross.status).toBe(422);
+    expect(cross.json.code).toBe("transfer.fx_mismatch");
+
+    const booked = await call("POST", "/v2/ledger/entries", {
+      kind: "transfer",
+      fromAccountId: usd.id,
+      toAccountId: f.pfChecking,
+      amount: 6757.75,
+      toAmount: 35278.16,
+      date: "2026-09-30",
+      direction: "investment_withdrawal",
+    });
+    expect(booked.status).toBe(200);
+    const brlLeg = (booked.json.entries as Json[]).find(
+      (e) => e.currency === "BRL",
+    )!;
+    const received = await call("PATCH", `/v2/ledger/entries/${brlLeg.id}`, {
+      toAmount: 33721.17,
+    });
+    expect(received.status).toBe(200);
+    const stored = await prisma.ledgerEntry.findMany({
+      where: { transferGroupId: brlLeg.transferGroupId },
+    });
+    expect(stored.find((l) => l.currency === "BRL")!.amount.toFixed(2)).toBe(
+      "33721.17",
+    );
+    expect(
+      stored.find((l) => l.currency === "USD")!.exchangeRate.toFixed(8),
+    ).toBe("4.98999963");
+
+    const t = await call("POST", "/v2/ledger/entries", {
+      kind: "transfer",
+      fromAccountId: f.pfChecking,
+      toAccountId: f.pjChecking,
+      amount: 1000,
+      date: "2026-09-20",
+    });
     const leg = t.json.entries[0];
     const moved = await call("PATCH", `/v2/ledger/entries/${leg.id}`, { fromAccountId: f.pjChecking, toAccountId: f.pfChecking });
     expect(moved.status).toBe(200);

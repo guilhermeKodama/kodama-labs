@@ -54,11 +54,13 @@ async function assertBudgetTargets(userId: string, input: { entityId?: string | 
     const entity = await db.entity.findFirst({ where: { id: input.entityId, userId } });
     if (!entity) throw notFound("Entity", "entity.not_found");
   }
+  let category: Category | null = null;
   if (input.categoryId) {
-    const category = await db.category.findFirst({ where: { id: input.categoryId, userId } });
+    category = await db.category.findFirst({ where: { id: input.categoryId, userId } });
     if (!category) throw notFound("Category", "category.not_found");
     if (category.isArchived) throw new LedgerError(`Category "${category.name}" is archived`, 422, { code: "category.archived", params: { name: category.name } });
   }
+  return category;
 }
 
 function effectiveDate(value: string) {
@@ -87,6 +89,11 @@ function rowAtMonth(db: DbClient, chain: Chain, month: Date) {
 
 const negativeAmount = () => new LedgerError("Budget amount must be non-negative", 422, { code: "budget.negative_amount" });
 
+/** An active budget already starts in that month. `category` is the name the UI toast shows. */
+function budgetClash(category: string) {
+  return new LedgerError(`A budget for "${category}" already starts in that month; update it instead`, 409, { code: "budget.clash", params: { category } });
+}
+
 /**
  * Creates a budget (a chain's version from effectiveFrom on), or revives an
  * inactive row or a tombstone starting in the same month; one undo batch
@@ -95,13 +102,13 @@ const negativeAmount = () => new LedgerError("Budget amount must be non-negative
 export async function createBudget(userId: string, input: BudgetInput, db: DbClient, opts: BudgetWriteOptions = {}) {
   if (input.amount < 0) throw negativeAmount();
   return inTransaction(db, async (tx) => {
-    await assertBudgetTargets(userId, input, tx);
+    const category = await assertBudgetTargets(userId, input, tx);
     const effectiveFrom = effectiveDate(input.effectiveFrom);
     const period = input.period ?? "monthly";
     const records: MutationRecordInput[] = opts.collect ?? [];
     // Same key as the unique index: a monthly and a yearly budget may start in the same month.
     const clash = await rowAtMonth(tx, { userId, entityId: input.entityId ?? null, categoryId: input.categoryId, period }, effectiveFrom);
-    if (clash?.isActive && !clash.isTombstone) throw new LedgerError("A budget for this category already starts in that month; update it instead", 409, { code: "budget.clash" });
+    if (clash?.isActive && !clash.isTombstone) throw budgetClash(category?.name ?? "");
     let budget;
     if (clash) {
       budget = await tx.budget.update({
@@ -208,7 +215,10 @@ export async function updateBudget(userId: string, budgetId: string, patch: Budg
       const clash = await tx.budget.findFirst({
         where: { userId, entityId: budget.entityId, categoryId: budget.categoryId, period, effectiveFrom: monthRange(start), id: { not: budgetId } },
       });
-      if (clash) throw new LedgerError("Another budget for this category already starts in that month", 409, { code: "budget.clash" });
+      if (clash) {
+        const category = await tx.category.findFirst({ where: { id: budget.categoryId }, select: { name: true } });
+        throw budgetClash(category?.name ?? "");
+      }
     }
     const updated = await tx.budget.update({
       where: { id: budgetId },

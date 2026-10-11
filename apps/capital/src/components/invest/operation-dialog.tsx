@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useTranslations } from "next-intl";
 import {
   Btn,
+  Callout,
   Dialog,
   DialogFooter,
   DialogHead,
@@ -31,6 +32,8 @@ import {
   pickKeptFor,
 } from "@/lib/invest/asset-picker";
 import { exemptionGroup, irEstimate } from "@/lib/invest/ir-estimate";
+import { effectiveCrossRate, rateDeviates } from "@/lib/ledger/entry-form";
+import { useDatedFxRate } from "@/lib/ledger/use-dated-rate";
 import { buyPreview, sellPreview, withheldTax } from "@/lib/invest/op-preview";
 import { opsPeriodRange } from "@/lib/invest/ops-view";
 import {
@@ -138,6 +141,7 @@ function OperationForm({
   const [taxText, setTaxText] = useState<string | null>(null);
   const [creditTo, setCreditTo] = useState("cash");
   const [cashAmount, setCashAmount] = useState("");
+  const [received, setReceived] = useState("");
   const [cashChoice, setCashAccountId] = useState("");
   const cashAccountId =
     cashChoice ||
@@ -306,10 +310,66 @@ function OperationForm({
   );
   const taxValue = taxText === null ? autoTax : fmt.parseNumber(taxText);
   const cashValue = fmt.parseNumber(cashAmount);
+  // Across currencies the amount is the bank's on a deposit (the aporte debit) and the broker's on a redemption.
+  const cashAccount = cashAccounts.find((a) => a.id === cashAccountId);
+  const crossCash = !!(
+    cashAccount &&
+    broker &&
+    cashAccount.currency !== broker.currency
+  );
+  const cashCurrencyLabel = crossCash
+    ? kind === "deposit"
+      ? cashAccount.currency
+      : broker.currency
+    : null;
+  const receivedCurrency = crossCash
+    ? kind === "deposit"
+      ? broker.currency
+      : cashAccount.currency
+    : null;
+  const fromCurrency =
+    kind === "deposit" ? cashAccount?.currency : broker?.currency;
+  const toCurrency =
+    kind === "deposit" ? broker?.currency : cashAccount?.currency;
+  const foreign =
+    crossCash && fromCurrency && toCurrency
+      ? fromCurrency === fx.base
+        ? toCurrency
+        : fromCurrency
+      : null;
+  const dated = useDatedFxRate(foreign, date, fx.base);
+  const receivedValue = fmt.parseNumber(received);
+  const receivedBody =
+    crossCash && receivedValue > 0
+      ? { toAmount: Math.round(receivedValue * 100) / 100 }
+      : {};
+  const effective =
+    crossCash &&
+    received.trim() &&
+    fromCurrency &&
+    toCurrency &&
+    receivedValue > 0
+      ? effectiveCrossRate(
+          fromCurrency,
+          toCurrency,
+          cashValue,
+          receivedValue,
+          fx.base,
+        )
+      : null;
+  const rateWarning =
+    effective != null && dated.data && rateDeviates(effective, dated.data.rate)
+      ? t("cash.rateWarning", {
+          effective: fmt.number(effective, { min: 2, max: 4 }),
+          ptax: fmt.number(dated.data.rate, { min: 2, max: 4 }),
+        })
+      : null;
 
   const valid = (() => {
-    if (kind === "deposit" || kind === "withdraw")
+    if (kind === "deposit" || kind === "withdraw") {
+      if (received.trim() && !(receivedValue > 0)) return false;
       return !!broker && !!cashAccountId && cashValue > 0;
+    }
     if (!broker || !picked) return false;
     if (kind === "income")
       return (
@@ -344,6 +404,7 @@ function OperationForm({
             brokerAccountId: brokerId,
             amount: cashValue,
             date,
+            ...receivedBody,
           },
         );
         return { ...r, funded: false };
@@ -357,6 +418,7 @@ function OperationForm({
             amount: cashValue,
             date,
             counterpartAccountId: cashAccountId,
+            ...receivedBody,
           },
         );
         return { ...r, funded: false };
@@ -466,14 +528,6 @@ function OperationForm({
       : "—";
   const money = (v: number) => fmt.money(v, assetCurrency);
   const qtyText = (v: number) => fmt.number(v, { min: 0, max: 8 });
-  // Across currencies the amount is the bank's on a deposit (the aporte debit) and the broker's on a redemption.
-  const cashAccount = cashAccounts.find((a) => a.id === cashAccountId);
-  const cashCurrencyLabel =
-    cashAccount && broker && cashAccount.currency !== broker.currency
-      ? kind === "deposit"
-        ? cashAccount.currency
-        : broker.currency
-      : null;
 
   return (
     <form
@@ -489,6 +543,7 @@ function OperationForm({
         options={OP_KINDS.map((k) => ({ v: k, l: t(`kind.${k}`) }))}
         onChange={(next) => {
           setKind(next);
+          setReceived("");
           if (!pickKeptFor(picked, next)) unpick();
         }}
         aria-label={t("title")}
@@ -780,10 +835,27 @@ function OperationForm({
               autoFocus
             />
           </Field>
+          {receivedCurrency ? (
+            <Field
+              label={t("cash.received", { currency: receivedCurrency })}
+              hint={t("cash.receivedHint")}
+            >
+              <TextInput
+                value={received}
+                onChange={setReceived}
+                mono
+                inputMode="decimal"
+                placeholder={fmt.number(0, 2)}
+              />
+            </Field>
+          ) : null}
           <Field label={kind === "deposit" ? t("cash.from") : t("cash.to")}>
             <Select
               value={cashAccountId}
-              onChange={setCashAccountId}
+              onChange={(id) => {
+                setCashAccountId(id);
+                setReceived("");
+              }}
               options={cashAccounts.map((a) => ({
                 value: a.id,
                 label: `${names.entity.get(a.entityId) ?? ""} · ${a.name}`,
@@ -793,7 +865,10 @@ function OperationForm({
           <Field label={t("broker")}>
             <Select
               value={brokerId}
-              onChange={setBrokerId}
+              onChange={(id) => {
+                setBrokerId(id);
+                setReceived("");
+              }}
               options={brokerOptions}
               placeholder={t("noBrokers")}
             />
@@ -806,6 +881,11 @@ function OperationForm({
               ? t("cash.depositNote")
               : t("cash.withdrawNote")}
           </span>
+          {rateWarning ? (
+            <Callout tone="warning" className="col-span-3">
+              {rateWarning}
+            </Callout>
+          ) : null}
         </div>
       ) : null}
 

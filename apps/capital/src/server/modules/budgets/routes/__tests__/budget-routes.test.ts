@@ -46,6 +46,12 @@ const amounts = async () =>
   (await json("GET", "/v2/budgets/overview?year=2026")).categories[0]?.months.map((m: { budget: number | null }) => m.budget) ?? [];
 
 describe("budget routes", () => {
+  it("names the category when a budget already starts in that month", async () => {
+    await json("POST", "/v2/budgets", { entityId: f.pfId, categoryId: f.categories.Mercado, amount: 500, effectiveFrom: "2026-09" });
+    const clash = await json("POST", "/v2/budgets", { entityId: f.pfId, categoryId: f.categories.Mercado, amount: 800, effectiveFrom: "2026-09" }, 409);
+    expect(clash).toMatchObject({ code: "budget.clash", params: { category: "Mercado" } });
+  });
+
   it("edits from a month on (applyFrom), ends from a month (?from), deletes every version (?all), each undoable", async () => {
     const created = await json("POST", "/v2/budgets", { entityId: f.pfId, categoryId: f.categories.Mercado, amount: 500, effectiveFrom: "2026-01", notes: "  feira e mercado  " });
     expect(created).toMatchObject({ notes: "feira e mercado", isTombstone: false, batchId: expect.any(String) });

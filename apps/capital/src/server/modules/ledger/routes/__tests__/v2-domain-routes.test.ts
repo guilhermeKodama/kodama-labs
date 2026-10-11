@@ -127,5 +127,11 @@ describe("v2 domain routes", () => {
     const currencies = await (await call("GET", "/v2/currencies")).json();
     expect(currencies.baseCurrency).toBe("BRL");
     expect((await call("DELETE", "/v2/currencies/BRL")).status).toBe(422);
+    const brlRate = await call("GET", "/v2/currencies/BRL/rate?date=2026-09-30");
+    expect(brlRate.status).toBe(200);
+    expect(await brlRate.json()).toMatchObject({ code: "BRL", rate: 1 });
+    const missing = await call("GET", "/v2/currencies/ZZZ/rate?date=2026-09-30");
+    expect(missing.status).toBe(404);
+    expect(await missing.json()).toMatchObject({ code: "currency.not_found" });
   });
 });

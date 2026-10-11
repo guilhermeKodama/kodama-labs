@@ -19,6 +19,15 @@ import { useAccounts, useNames, type AccountRecord } from "@/lib/api/catalog";
 import { useSession } from "@/lib/api/session";
 import { useAppMutation } from "@/lib/api/use-app-mutation";
 import { useFmt } from "@/lib/format/provider";
+import {
+  currentPhaseIndex,
+  fireGoalDialogBody,
+  isFutureDatedPlan,
+  parseContributionText,
+  phaseMonthRange,
+  phasesShownForContributionEdit,
+} from "@/lib/fire/contribution-edit";
+import type { ContributionPhase } from "@/lib/fire/types";
 import { targetsPayload } from "@/lib/invest/allocation";
 import { useFxRates, useOperations, useTargets } from "@/lib/invest/api";
 import { ordersPayload, type OrderDraft } from "@/lib/invest/rebalance-view";
@@ -806,10 +815,82 @@ export function FireGoalDialog({
   summary: FireSummaryResponse;
   onClose: () => void;
 }) {
+  const multi = (summary.goal?.phases.length ?? 0) > 1;
   return (
-    <Dialog open onOpenChange={(open) => !open && onClose()} width={480}>
+    <Dialog open onOpenChange={(open) => !open && onClose()} width={multi ? 560 : 480}>
       <FireGoalForm summary={summary} onClose={onClose} />
     </Dialog>
+  );
+}
+
+function CurrentPhaseMark({ children }: { children: string }) {
+  return (
+    <span className="rounded-[4px] bg-fill-3 px-1.5 py-px text-caption font-medium text-fg-1">
+      {children}
+    </span>
+  );
+}
+
+function phaseRangeText(
+  t: ReturnType<typeof useTranslations<"invest.fireGoal">>,
+  phase: Pick<ContributionPhase, "fromMonth" | "toMonth">,
+) {
+  const range = phaseMonthRange(phase);
+  if (range.kind === "open") return t("phaseOpen", { from: range.from });
+  if (range.kind === "month") return t("phasePoint", { month: range.month });
+  return t("phaseSpan", { from: range.from, months: range.months });
+}
+
+/** One amount field per phase. The phase that covers month 0 carries the current-phase badge. */
+export function FireGoalPhaseList({
+  phases,
+  amounts,
+  currentIndex,
+  byDateNote,
+  onAmount,
+}: {
+  phases: readonly ContributionPhase[];
+  amounts: readonly string[];
+  currentIndex: number;
+  /** Set when saving an edited amount would make the typed numbers the plan. */
+  byDateNote: string | null;
+  onAmount: (index: number, value: string) => void;
+}) {
+  const t = useTranslations("invest.fireGoal");
+  return (
+    <div className="flex flex-col gap-2">
+      {phases.map((phase, index) => {
+        const current = index === currentIndex;
+        return (
+          <div
+            key={`${phase.fromMonth}-${phase.toMonth ?? "open"}-${index}`}
+            data-current-phase={current ? "true" : undefined}
+            className={cn(
+              "rounded-[8px] border px-2.5 py-2",
+              current ? "border-stroke-1 bg-fill-4" : "border-stroke-3",
+            )}
+          >
+            <Field
+              label={
+                <span className="inline-flex flex-wrap items-center gap-1.5">
+                  {phase.label?.trim() || t("phaseFallback", { n: index + 1 })}
+                  {current ? <CurrentPhaseMark>{t("phaseCurrent")}</CurrentPhaseMark> : null}
+                </span>
+              }
+              hint={phaseRangeText(t, phase)}
+            >
+              <TextInput
+                value={amounts[index] ?? ""}
+                onChange={(value) => onAmount(index, value)}
+                mono
+                inputMode="decimal"
+              />
+            </Field>
+          </div>
+        );
+      })}
+      {byDateNote ? <span className="text-caption text-fg-3">{byDateNote}</span> : null}
+    </div>
   );
 }
 
@@ -825,10 +906,18 @@ function FireGoalForm({
   const fmt = useFmt();
   const goal = summary.goal;
   const cur = summary.baseCurrency;
-  // The monthly contribution is editable only on a single-phase contribution plan; other plans keep their phases.
-  const simplePlan =
-    !goal ||
-    (goal.planningMode === "by_contribution" && goal.phases.length === 1);
+  const nowYear = new Date().getFullYear();
+  // A future by_date plan shows the solved contributions. Stored phases there
+  // are the shape the solver scales, not the amounts on screen.
+  const shownPhases = goal
+    ? phasesShownForContributionEdit(goal, summary.requiredContribution?.phases, nowYear)
+    : [];
+  const baselineTexts = shownPhases.map((phase) =>
+    fmt.number(phase.monthlyContribution, { min: 0, max: 2 }),
+  );
+  // One phase keeps a single "Aporte mensal" field. More than one lists each phase's amount.
+  const multi = !!goal && goal.phases.length > 1;
+  const currentIndex = goal ? currentPhaseIndex(goal.phases) : -1;
   const pctText = (v: number) => fmt.number(v * 100, { min: 0, max: 2 });
   const [income, setIncome] = useState(
     fmt.number(
@@ -838,12 +927,11 @@ function FireGoalForm({
     ),
   );
   const [contribution, setContribution] = useState(
-    fmt.number(
-      goal?.phases[0]?.monthlyContribution ??
-        summary.suggestedDefaults.suggestedMonthlyContribution,
-      { min: 0, max: 2 },
-    ),
+    shownPhases[0]
+      ? fmt.number(shownPhases[0].monthlyContribution, { min: 0, max: 2 })
+      : fmt.number(summary.suggestedDefaults.suggestedMonthlyContribution, { min: 0, max: 2 }),
   );
+  const [phaseAmounts, setPhaseAmounts] = useState(() => baselineTexts);
   const [ret, setRet] = useState(pctText(goal?.nominalAnnualReturn ?? 0.1));
   const [inflation, setInflation] = useState(
     pctText(goal?.annualInflation ?? 0.045),
@@ -858,6 +946,8 @@ function FireGoalForm({
     goal?.currentAge ? String(goal.currentAge) : "",
   );
   const fraction = (text: string) => fmt.parseNumber(text) / 100;
+  // Blank is not a number, so it cannot be saved as 0. A typed 0 stays valid.
+  const amountOk = (text: string) => parseContributionText(text, (value) => fmt.parseNumber(value)) != null;
   const body = () => {
     const fields: Record<string, unknown> = {
       targetMonthlyIncome: fmt.parseNumber(income),
@@ -869,34 +959,17 @@ function FireGoalForm({
         : null,
       currentAge: age.trim() ? Number(age) : null,
     };
-    if (!goal) {
-      return {
-        ...fields,
-        planningMode: "by_contribution",
-        phaseProfile: "constant",
-        currency: cur,
-        phases: [
-          {
-            fromMonth: 0,
-            toMonth: null,
-            monthlyContribution: fmt.parseNumber(contribution),
-          },
-        ],
-      };
-    }
-    if (simplePlan)
-      return {
-        ...fields,
-        phases: [
-          {
-            ...goal.phases[0],
-            fromMonth: 0,
-            toMonth: null,
-            monthlyContribution: fmt.parseNumber(contribution),
-          },
-        ],
-      };
-    return fields;
+    const texts = multi ? phaseAmounts : [contribution];
+    return fireGoalDialogBody({
+      fields,
+      goal,
+      solvedPhases: summary.requiredContribution?.phases,
+      texts,
+      baselineTexts: multi ? baselineTexts : baselineTexts.slice(0, 1),
+      parseNumber: (value) => fmt.parseNumber(value),
+      currency: goal ? undefined : cur,
+      nowYear,
+    });
   };
   const valid =
     fmt.parseNumber(income) > 0 &&
@@ -904,7 +977,7 @@ function FireGoalForm({
     fraction(swr) <= 1 &&
     Number.isFinite(fraction(ret)) &&
     Number.isFinite(fraction(inflation)) &&
-    (!simplePlan || fmt.parseNumber(contribution) >= 0);
+    (multi ? phaseAmounts.every(amountOk) : amountOk(contribution));
   const save = useAppMutation({
     event: "investments.write",
     mutationFn: () => apiPut("/api/v1/fire/goal", body()),
@@ -915,6 +988,9 @@ function FireGoalForm({
     if (valid && !save.isPending) save.mutate();
   };
   useShortcut("mod+enter", submit, { allowInInputs: true });
+  // The note only applies when an edited amount would stop the year from prescribing the contribution.
+  const contributionBecomesThePlan = !!goal && isFutureDatedPlan(goal, nowYear);
+  const byDateNote = contributionBecomesThePlan ? t("contributionByDate") : null;
   return (
     <form
       className="flex flex-col gap-3.5"
@@ -934,27 +1010,56 @@ function FireGoalForm({
             autoFocus
           />
         </Field>
-        <Field
-          label={t("contribution")}
-          hint={
-            simplePlan
-              ? t("contributionHint", {
-                  amount: fmt.money0(
-                    summary.suggestedDefaults.suggestedMonthlyContribution,
-                    cur,
-                  ),
-                })
-              : t("contributionPhased")
+        {multi ? null : (
+          <Field
+            label={
+              <span className="inline-flex flex-wrap items-center gap-1.5">
+                {t("contribution")}
+                {goal ? (
+                  <>
+                    {goal.phases[0]?.label ? (
+                      <span className="font-normal text-fg-3">
+                        {goal.phases[0].label}
+                      </span>
+                    ) : null}
+                    <CurrentPhaseMark>{t("phaseCurrent")}</CurrentPhaseMark>
+                  </>
+                ) : null}
+              </span>
+            }
+            hint={
+              byDateNote ??
+              (goal?.phases[0]?.toMonth != null
+                ? phaseRangeText(t, goal.phases[0])
+                : t("contributionHint", {
+                    amount: fmt.money0(
+                      summary.suggestedDefaults.suggestedMonthlyContribution,
+                      cur,
+                    ),
+                  }))
+            }
+          >
+            <TextInput
+              value={contribution}
+              onChange={setContribution}
+              mono
+              inputMode="decimal"
+            />
+          </Field>
+        )}
+      </div>
+      {multi && goal ? (
+        <FireGoalPhaseList
+          phases={goal.phases}
+          amounts={phaseAmounts}
+          currentIndex={currentIndex}
+          byDateNote={byDateNote}
+          onAmount={(index, value) =>
+            setPhaseAmounts((prev) => prev.map((amount, i) => (i === index ? value : amount)))
           }
-        >
-          <TextInput
-            value={contribution}
-            onChange={setContribution}
-            mono
-            inputMode="decimal"
-            disabled={!simplePlan}
-          />
-        </Field>
+        />
+      ) : null}
+      <div className="grid grid-cols-2 gap-2.5">
         <Field label={t("ret")}>
           <TextInput value={ret} onChange={setRet} mono inputMode="decimal" />
         </Field>

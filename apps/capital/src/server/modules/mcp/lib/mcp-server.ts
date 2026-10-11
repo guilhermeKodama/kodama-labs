@@ -33,6 +33,7 @@ import {
   adjustPosition,
   addInvestmentAsset,
 } from "../tools/investments";
+import { getFirePlan, updateFirePhaseContribution } from "../tools/fire";
 import {
   attachReceipt,
   listTransactionAttachments,
@@ -109,6 +110,7 @@ const UpdateTransactionInputSchema = z.object({
   amount: z.number().positive().optional(),
   currency: z.string().length(3).optional(),
   exchangeRate: z.number().positive().optional(),
+  toAmount: z.number().positive().optional(),
   description: z.string().min(1).optional(),
   category: z.string().min(1).optional(),
   date: DateStringSchema.optional(),
@@ -158,6 +160,7 @@ const BulkUpdateTransactionsInputSchema = z.object({
       amount: z.number().positive().optional(),
       currency: z.string().length(3).optional(),
       exchangeRate: z.number().positive().optional(),
+      toAmount: z.number().positive().optional(),
       description: z.string().min(1).optional(),
       category: z.string().min(1).optional(),
       date: DateStringSchema.optional(),
@@ -248,6 +251,11 @@ const UpdateBudgetInputSchema = z.object({
   currency: z.string().length(3).optional(),
   effectiveFrom: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(), // YYYY-MM-DD
   isActive: z.boolean().optional(),
+  applyFrom: z
+    .string()
+    .regex(/^\d{4}-\d{2}$/)
+    .optional()
+    .describe("YYYY-MM. Keep earlier months and apply the change from this month on. Omit to edit the version in place."),
 });
 
 const DeleteBudgetInputSchema = z.object({
@@ -325,6 +333,10 @@ export function createCapitalMcpServer(userId: string, db: DbClient, opts: { rea
         "List and search transactions by date range, type, and category. Returns " +
         "individual transactions plus totals grouped by type and category. " +
         "Amounts are signed: a charge is a positive expense, and a refund or reversal is a negative expense. " +
+        "Without a type filter, transfer legs are included. Each one has transferGroupId, " +
+        "counterpartAmount (the other leg, signed) and counterpartCurrency, so a USD to BRL " +
+        "resgate can be found and then corrected with update_transaction (toAmount or exchangeRate). " +
+        "Transfer legs are left out of the type/category totals. " +
         "Example: List all Income/Dividends transactions in September 2026.",
       inputSchema: ListTransactionsInputSchema,
     },
@@ -348,6 +360,11 @@ export function createCapitalMcpServer(userId: string, db: DbClient, opts: { rea
       description:
         "Update an existing transaction by ID. Can modify type, amount, currency, " +
         "exchange rate, description, category, date, or tax deductible status. " +
+        "On a cross-currency transfer, toAmount is what arrived on the other leg (its currency) " +
+        "and exchangeRate is the effective base-per-foreign rate; either one leaves the foreign " +
+        "amount in place and keeps both legs' base amounts in agreement. Sending amount together " +
+        "with toAmount sets the outflow and the inflow. amount alone still scales both legs. " +
+        "A same-currency transfer returns 422 when toAmount is set or exchangeRate is not 1. " +
         "The returned amount is signed: a refund or reversal is a negative expense.",
       inputSchema: UpdateTransactionInputSchema,
     },
@@ -362,9 +379,14 @@ export function createCapitalMcpServer(userId: string, db: DbClient, opts: { rea
                 id: result.id,
                 type: result.type,
                 amount: result.amount,
+                currency: result.currency,
+                exchangeRate: result.exchangeRate,
                 description: result.description,
                 category: result.category,
                 date: result.date,
+                transferGroupId: result.transferGroupId,
+                counterpartAmount: result.counterpartAmount,
+                counterpartCurrency: result.counterpartCurrency,
               },
               null,
               2
@@ -524,6 +546,67 @@ export function createCapitalMcpServer(userId: string, db: DbClient, opts: { rea
     },
     async (params) => {
       const result = await addInvestmentAsset(userId, params, db);
+      return {
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify(result, null, 2),
+          },
+        ],
+      };
+    }
+  );
+
+  // Register tool: get_fire_plan
+  server.registerTool(
+    "get_fire_plan",
+    {
+      description:
+        "Read the FIRE plan: planning mode, phase profile, target year, and each contribution phase " +
+        "(label, fromMonth, toMonth, monthlyContribution). fromMonth and toMonth are month offsets from today, " +
+        "not calendar dates; toMonth is exclusive and null means the phase runs on. currentPhaseIndex is the phase " +
+        "that covers month 0 (the current phase). currentMonthContribution is the amount the Aportes screen and the " +
+        "FIRE projection use for this month: the stored phase amount when planning by contribution, the solved amount " +
+        "when planning by date. Does not change the plan, its phases, or allocation targets. hasGoal is false when " +
+        "there is no plan.",
+      inputSchema: z.object({}),
+      annotations: { readOnlyHint: true },
+    },
+    async () => {
+      const result = await getFirePlan(userId, db);
+      return {
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify(result, null, 2),
+          },
+        ],
+      };
+    }
+  );
+
+  // Register tool: update_fire_phase_contribution
+  server.registerTool(
+    "update_fire_phase_contribution",
+    {
+      description:
+        "Set the consolidated monthly contribution of one FIRE phase. phaseIndex is 0-based; omit it to update " +
+        "the phase that covers month 0 (the current phase). Only that phase's monthlyContribution changes. " +
+        "fromMonth, toMonth and label stay. On a by_date plan whose target year is still in the future, the other " +
+        "phases keep the solved amounts the plan was using, not the stale stored numbers, and the plan becomes " +
+        "by_contribution with phaseProfile custom. Otherwise the other phases keep their stored amounts. Setting " +
+        "the amount that phase already uses (the solved one, on a future by_date plan) does nothing (batchId is null). " +
+        "A past or missing target year only updates that amount; the mode and the phase profile stay. A guided " +
+        "profile (front_loaded, constant, back_loaded) stays as it is. Allocation targets are not changed. " +
+        "There is no PF/PJ split; the amount is one consolidated number. Undoable (batchId) when something changed. " +
+        "Requires an existing plan.",
+      inputSchema: z.object({
+        monthlyContribution: z.number().min(0),
+        phaseIndex: z.number().int().min(0).optional(),
+      }),
+    },
+    async (params) => {
+      const result = await updateFirePhaseContribution(userId, params, db);
       return {
         content: [
           {
@@ -746,6 +829,8 @@ export function createCapitalMcpServer(userId: string, db: DbClient, opts: { rea
         "Supports updating type, amount, currency, exchange rate, description, category, " +
         "date, and tax deductible status. Dates are normalized to noon UTC via parseLocalDate. " +
         "Returns per-transaction results. Amounts are signed: a refund or reversal is a negative expense. " +
+        "On a transfer, toAmount and exchangeRate restate a cross-currency pair the same way as update_transaction. " +
+        "A same-currency transfer returns 422 when toAmount is set or exchangeRate is not 1. " +
         "Example: Recategorize 95 transactions after reviewing statement imports.",
       inputSchema: BulkUpdateTransactionsInputSchema,
     },
@@ -890,10 +975,11 @@ export function createCapitalMcpServer(userId: string, db: DbClient, opts: { rea
     {
       description:
         "Update an existing budget. Can change amount, currency, effectiveFrom date, or isActive status. " +
-        "The change is made in place: it applies to every month this budget version covers, past months included. " +
-        "To change the amount only from a later month on, create a new budget with that effectiveFrom instead. " +
-        "Changing effectiveFrom will update when the budget takes effect. Setting isActive=false soft-deletes " +
-        "the budget. Amount must be non-negative if provided.",
+        "Two modes for the amount. Omit applyFrom to edit this version in place: the new amount applies to every month this version covers, past months included. " +
+        "Pass applyFrom (YYYY-MM) to keep earlier months and apply the change from that month on: a new version of the same category and entity, or an in-place edit when this version already starts in that month. Yearly budgets version by year, so any month of a year means its January. " +
+        "applyFrom cannot be combined with effectiveFrom or isActive. " +
+        "Changing effectiveFrom (without applyFrom) updates when this version takes effect. Setting isActive=false soft-deletes the budget. " +
+        "Amount must be non-negative if provided.",
       inputSchema: UpdateBudgetInputSchema,
     },
     async (params) => {

@@ -17,8 +17,19 @@ import type { EditableBudget } from "./budget-dialog";
 import { BudgetEntityBadge, ChartCaption, ChartLegend, DrillLink, EntityBadge, PaceBar, RowMenu, ScopeBar, TONE_TEXT, TOOLTIP_STYLE, useEntityNames, ViewState, type BudgetActions } from "./parts";
 import { useMonthOverview, type BudgetRow, type MonthOverview, type UpcomingItem } from "./use-budgets";
 
-/** Mockup BudgetsScreen table: Categoria | bar | Gasto | Restante | Status. */
-const COLS = "grid min-w-[560px] grid-cols-[minmax(0,1.3fr)_minmax(0,2fr)_96px_96px_110px] items-center gap-3 px-3";
+/**
+ * Mensal columns. From md up, the same tracks as Transações: the name is
+ * the widest flexible column (2.2fr) and truncates only past that, the
+ * pace bar takes 1.8fr, and Orçado / Gasto / Restante / Status / ⋯ stay
+ * fixed. Below md the fixed tracks are wider than the screen, so each row
+ * stacks instead: name + badge, the bar full width, then the four figures.
+ */
+const COLS =
+  "grid-cols-4 gap-x-2 gap-y-1 px-2.5 md:grid-cols-[minmax(0,2.2fr)_minmax(0,1.8fr)_80px_80px_80px_110px_28px] md:items-center md:gap-2";
+const NAME_CELL = "order-1 col-span-3 flex min-w-0 items-center gap-1.5 overflow-hidden md:order-0 md:col-span-1";
+const BAR_CELL = "order-3 col-span-4 flex min-w-0 items-center gap-2 md:order-0 md:col-span-1";
+const MENU_CELL = "order-2 col-span-1 flex items-center justify-end md:order-0 md:col-span-1 md:justify-center";
+const STAT_CELL = "col-span-2 flex flex-col items-end gap-0.5 text-right md:col-span-1 md:block";
 
 /** Mensal: Todas / PF / PJ and today, KPIs, the budget table, the month's pace chart and Contas fixas. */
 export function MonthView({
@@ -56,7 +67,7 @@ export function MonthView({
   );
 }
 
-function MonthBody({ data, actions, onOpenRule, onAllRules }: { data: MonthOverview; actions: BudgetActions; onOpenRule: (id: string) => void; onAllRules: () => void }) {
+export function MonthBody({ data, actions, onOpenRule, onAllRules }: { data: MonthOverview; actions: BudgetActions; onOpenRule: (id: string) => void; onAllRules: () => void }) {
   const t = useTranslations("budgets");
   const fmt = useFmt();
   const { names, kinds } = useEntityNames();
@@ -94,14 +105,18 @@ function MonthBody({ data, actions, onOpenRule, onAllRules }: { data: MonthOverv
           tone={projection?.kind === "over" ? "warn" : undefined}
         />
       </KpiStrip>
-      <div className="grid items-start gap-3 md:grid-cols-[minmax(0,1.7fr)_minmax(0,1fr)]">
+      {/* Side by side only once the month body is wide enough for a 2.2fr name and a 1.8fr bar. At a 1280px window the sidebar leaves ~1050px, and the 1.7fr pane would ellipsize Contas de Consumo. */}
+      <div className="@container">
+        <div className="grid items-start gap-3 @min-[1280px]:grid-cols-[minmax(0,1.7fr)_minmax(0,1fr)]">
         <div className="min-w-0 overflow-x-auto rounded-[8px] border border-stroke-3">
-          <div className={cn(COLS, "h-(--cap-row-h) text-label text-fg-3")}>
+          <div className={cn("hidden md:grid", COLS, "h-(--cap-row-h) text-label text-fg-3")}>
             <span>{t("month.table.category")}</span>
             <span className="truncate">{t(bar.key, bar.values)}</span>
-            <span className="text-right">{t("month.table.spent")}</span>
-            <span className="text-right">{t("month.table.remaining")}</span>
-            <span>{t("month.table.status")}</span>
+            <span className="text-right whitespace-nowrap">{t("month.table.budgeted")}</span>
+            <span className="text-right whitespace-nowrap">{t("month.table.spent")}</span>
+            <span className="text-right whitespace-nowrap">{t("month.table.remaining")}</span>
+            <span className="whitespace-nowrap">{t("month.table.status")}</span>
+            <span />
           </div>
           {budgets.map((row) => {
             const ratio = usage(row.spent, row.available);
@@ -117,39 +132,59 @@ function MonthBody({ data, actions, onOpenRule, onAllRules }: { data: MonthOverv
               period: "monthly",
             };
             return (
-              <div key={row.id} className={cn(COLS, "group h-10 border-t border-stroke-3 text-body")}>
-                <span className="flex min-w-0 items-center gap-1.5">
+              <div key={row.id} className={cn("grid", COLS, "group border-t border-stroke-3 py-2 text-body md:h-10 md:py-0")}>
+                <span className={NAME_CELL}>
                   <DrillLink draft={drill(row, wholeMonth)} title={row.category} className="min-w-0 truncate">
                     {row.category}
                   </DrillLink>
                   <BudgetEntityBadge entityId={row.entityId} kinds={kinds} />
-                  <RowMenu category={row.category} onEdit={() => actions.onEdit(editable)} onDelete={() => actions.onDelete(editable)} />
                 </span>
-                <span className="flex min-w-0 items-center gap-2">
+                <span className={BAR_CELL}>
                   <PaceBar ratio={ratio} tone={tone} marker={pace} label={row.category} />
                   <span className="w-[34px] shrink-0 text-right font-mono text-caption text-fg-3 tabular-nums">{percent(ratio)}%</span>
                 </span>
-                <DrillLink draft={spent} className="text-right font-mono tabular-nums">
+                <button
+                  type="button"
+                  aria-label={t("month.table.editAmount", { category: row.category, amount: fmt.money0(row.amount) })}
+                  onClick={() => actions.onEdit(editable)}
+                  className={cn(STAT_CELL, "order-4 w-full font-mono whitespace-nowrap tabular-nums outline-none hover:underline focus-visible:underline md:order-0")}
+                >
+                  <span className="text-caption font-normal text-fg-3 md:hidden">{t("month.table.budgeted")}</span>
+                  {fmt.money0(row.amount)}
+                </button>
+                <DrillLink draft={spent} className={cn(STAT_CELL, "order-5 font-mono whitespace-nowrap tabular-nums md:order-0")}>
+                  <span className="text-caption font-normal text-fg-3 md:hidden">{t("month.table.spent")}</span>
                   {fmt.money0(row.spent)}
                 </DrillLink>
-                <DrillLink draft={spent} className={cn("text-right font-mono tabular-nums", row.remaining < 0 ? "text-cat-red" : "text-fg-2")}>
+                <DrillLink draft={spent} className={cn(STAT_CELL, "order-6 font-mono whitespace-nowrap tabular-nums md:order-0", row.remaining < 0 ? "text-cat-red" : "text-fg-2")}>
+                  <span className="text-caption font-normal text-fg-3 md:hidden">{t("month.table.remaining")}</span>
                   {fmt.money0(row.remaining)}
                 </DrillLink>
-                <span className={cn("truncate text-body-sm", TONE_TEXT[tone])}>{t(`month.status.${STATUS_KEY[tone]}`)}</span>
+                <span className={cn(STAT_CELL, "order-7 md:order-0 md:text-left")}>
+                  <span className="text-caption font-normal text-fg-3 md:hidden">{t("month.table.status")}</span>
+                  <span className={cn("text-body-sm whitespace-nowrap", TONE_TEXT[tone])}>{t(`month.status.${STATUS_KEY[tone]}`)}</span>
+                </span>
+                <span className={MENU_CELL}>
+                  <RowMenu className="ml-0" category={row.category} onEdit={() => actions.onEdit(editable)} onDelete={() => actions.onDelete(editable)} />
+                </span>
               </div>
             );
           })}
           {budgets.length ? (
-            <div className={cn(COLS, "h-9 border-t border-stroke-2 bg-fill-4 text-body font-semibold")}>
-              <span>{t("month.table.total")}</span>
-              <span className="truncate text-label font-normal text-fg-3">{t(resets.key, resets.values)}</span>
-              <DrillLink draft={totals(t("month.table.total"), spentPeriod)} className="text-right font-mono tabular-nums">
+            <div className={cn("grid", COLS, "border-t border-stroke-2 bg-fill-4 py-2 text-body font-semibold md:h-9 md:py-0")}>
+              <span className="order-1 col-span-4 md:order-0 md:col-span-1">{t("month.table.total")}</span>
+              <span className="order-2 col-span-4 truncate text-label font-normal text-fg-3 md:order-0 md:col-span-1">{t(resets.key, resets.values)}</span>
+              <span className="hidden md:block" />
+              <DrillLink draft={totals(t("month.table.total"), spentPeriod)} className={cn(STAT_CELL, "order-3 font-mono whitespace-nowrap tabular-nums md:order-0")}>
+                <span className="text-caption font-normal text-fg-3 md:hidden">{t("month.table.spent")}</span>
                 {fmt.money0(summary.totalSpent)}
               </DrillLink>
-              <DrillLink draft={totals(t("month.table.total"), spentPeriod)} className="text-right font-mono tabular-nums">
+              <DrillLink draft={totals(t("month.table.total"), spentPeriod)} className={cn(STAT_CELL, "order-4 font-mono whitespace-nowrap tabular-nums md:order-0")}>
+                <span className="text-caption font-normal text-fg-3 md:hidden">{t("month.table.remaining")}</span>
                 {fmt.money0(summary.totalRoom)}
               </DrillLink>
-              <span />
+              <span className="hidden md:block" />
+              <span className="hidden md:block" />
             </div>
           ) : (
             <EmptyRow>{t("month.table.empty", { month: monthLabel })}</EmptyRow>
@@ -171,6 +206,7 @@ function MonthBody({ data, actions, onOpenRule, onAllRules }: { data: MonthOverv
             ))}
             {!data.upcoming.length ? <EmptyRow>{t("month.upcoming.empty")}</EmptyRow> : null}
           </Panel>
+        </div>
         </div>
       </div>
     </>

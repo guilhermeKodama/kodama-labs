@@ -46,6 +46,8 @@
       "category": "Categoria",
       "bar": "Gasto / orçado",
       "barToday": "Gasto / orçado · marca = hoje (dia {day})",
+      "budgeted": "Orçado",
+      "editAmount": "Orçado de {category}, {amount}. Editar",
       "spent": "Gasto",
       "remaining": "Restante",
       "status": "Status",

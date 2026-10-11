@@ -212,6 +212,11 @@ export const SnapshotUpsertSchema = z.object({
   currentMonthlyExpenses: z.number().nonnegative().optional(),
 });
 
+/** PUT /v1/fire/goal response: the saved plan plus the undo batch. */
+export const FireGoalWriteResponseSchema = FireGoalSchema.extend({
+  batchId: z.string(),
+});
+
 export type FireGoalInput = z.infer<typeof FireGoalInputSchema>;
 export type FireGoalPatch = z.infer<typeof FireGoalPatchSchema>;
 export type FirePhaseInput = z.infer<typeof PhaseSchema>;

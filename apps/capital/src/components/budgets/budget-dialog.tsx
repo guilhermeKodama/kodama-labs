@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, useMemo, useState } from "react";
+import { useId, useMemo, useRef, useState, type Ref } from "react";
 import { useTranslations } from "next-intl";
 import { Btn, Choice, Dialog, DialogFooter, DialogHead, Field, Kbd, Segmented, Select, TextInput } from "@/components/cap";
 import { CategoryCombobox } from "@/components/pickers";
@@ -37,14 +37,33 @@ interface BatchResult {
   category: string;
 }
 
+/** PATCH body of an edit: the amount in the base currency, the note, and applyFrom (the month the dialog already chose). */
+export function editBudgetBody(amount: number, currency: string, notes: string, applyFrom: string) {
+  return { amount, currency, notes: notes.trim() || null, applyFrom };
+}
+
 /** "+ Orçamento", "Editar orçamento…" and "Excluir…": one dialog, mounted while open. */
 export function BudgetDialogs({ state, onChange }: { state: BudgetDialogState | null; onChange: (state: BudgetDialogState | null) => void }) {
   const close = () => onChange(null);
+  const amountRef = useRef<HTMLInputElement>(null);
   return (
-    <Dialog open={state !== null} onOpenChange={(open) => (open ? undefined : close())} width={480}>
+    <Dialog
+      open={state !== null}
+      onOpenChange={(open) => (open ? undefined : close())}
+      width={480}
+      onOpenAutoFocus={
+        state?.kind === "edit"
+          ? (event) => {
+              event.preventDefault();
+              amountRef.current?.focus();
+              amountRef.current?.select();
+            }
+          : undefined
+      }
+    >
       {state?.kind === "create" ? <CreateForm key="create" month={state.month} scope={state.scope} onDone={close} /> : null}
       {state?.kind === "edit" ? (
-        <EditForm key={`edit:${state.budget.id}`} budget={state.budget} month={state.month} onDone={close} onDelete={() => onChange({ ...state, kind: "delete" })} />
+        <EditForm key={`edit:${state.budget.id}`} budget={state.budget} month={state.month} amountRef={amountRef} onDone={close} onDelete={() => onChange({ ...state, kind: "delete" })} />
       ) : null}
       {state?.kind === "delete" ? <DeleteForm key={`delete:${state.budget.id}`} budget={state.budget} month={state.month} onDone={close} /> : null}
     </Dialog>
@@ -182,7 +201,19 @@ function CreateForm({ month, scope, onDone }: { month: YearMonth; scope: Budgets
   );
 }
 
-function EditForm({ budget, month, onDone, onDelete }: { budget: EditableBudget; month: YearMonth; onDone: () => void; onDelete: () => void }) {
+export function EditForm({
+  budget,
+  month,
+  amountRef,
+  onDone,
+  onDelete,
+}: {
+  budget: EditableBudget;
+  month: YearMonth;
+  amountRef?: Ref<HTMLInputElement>;
+  onDone: () => void;
+  onDelete: () => void;
+}) {
   const t = useTranslations("budgets");
   const tc = useTranslations("common");
   const fmt = useFmt();
@@ -213,7 +244,7 @@ function EditForm({ budget, month, onDone, onDelete }: { budget: EditableBudget;
       return;
     }
     // The amount shown and typed is in the base currency (the overview converts a budget in another currency), so it is saved in base.
-    if (!update.isPending) update.mutate({ amount: value, currency: fmt.prefs.baseCurrency, notes: notes.trim() || null, applyFrom: from });
+    if (!update.isPending) update.mutate(editBudgetBody(value, fmt.prefs.baseCurrency, notes, from));
   };
   useShortcut("mod+enter", submit, { allowInInputs: true });
 
@@ -232,7 +263,7 @@ function EditForm({ budget, month, onDone, onDelete }: { budget: EditableBudget;
       />
       <div className="grid grid-cols-2 gap-2.5">
         <Field label={t("dialog.amount")} htmlFor={`${ids}-amount`}>
-          <TextInput id={`${ids}-amount`} value={amount} onChange={setAmount} mono inputMode="decimal" autoFocus invalid={showErrors && invalidAmount} />
+          <TextInput ref={amountRef} id={`${ids}-amount`} value={amount} onChange={setAmount} mono inputMode="decimal" autoFocus invalid={showErrors && invalidAmount} />
         </Field>
         <Field label={t("dialog.from")} htmlFor={`${ids}-from`} hint={t("dialog.fromHint")}>
           <Select id={`${ids}-from`} value={from} onChange={setFrom} options={fromOptions} />

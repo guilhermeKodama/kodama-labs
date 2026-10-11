@@ -6,11 +6,14 @@ import { toNumber } from "../../ledger/lib/money";
 import { LEGACY_ENTRY_INCLUDE, legacyType, toLegacyTransaction } from "../lib/ledger-adapter";
 
 /**
- * Transactions (income, expenses including card purchases, investments;
- * not transfers or card bill payments) with per type/category totals in the
- * base currency. Dates filter on the effective date, so card purchases fall
- * in the month their statement closes. A refund is an expense with a
- * negative amount; the category total nets it, the same way the budget does.
+ * Transactions in a date range: income, expenses (including card purchases),
+ * investments, and — unless a type is requested — transfer legs. A transfer
+ * leg carries transferGroupId plus the other leg's signed counterpartAmount
+ * and counterpartCurrency, so a cross-currency resgate can be found and then
+ * corrected with update_transaction. Type/category totals stay income,
+ * expenses and investments only. Dates filter on the effective date, so card
+ * purchases fall in the month their statement closes. A refund is an expense
+ * with a negative amount; the category total nets it, the same way the budget does.
  */
 export async function listTransactions(userId: string, params: ListTransactionsParams, db: DbClient) {
   const user = await db.user.findUnique({ where: { id: userId }, select: { baseCurrency: true } });
@@ -21,8 +24,17 @@ export async function listTransactions(userId: string, params: ListTransactionsP
   const where: Prisma.LedgerEntryWhereInput = {
     userId,
     deletedAt: null,
-    transferGroupId: null,
-    kind: params.type ? params.type : { in: ["income", "expense", "investment"] },
+    ...(params.type
+      ? { kind: params.type, transferGroupId: null }
+      : {
+          OR: [
+            {
+              transferGroupId: null,
+              kind: { in: ["income", "expense", "investment"] },
+            },
+            { transferGroupId: { not: null } },
+          ],
+        }),
     ...(entityId && { entityId }),
     ...(params.entityType && { entity: { kind: params.entityType } }),
     ...(params.category && { category: { name: params.category } }),
@@ -32,6 +44,7 @@ export async function listTransactions(userId: string, params: ListTransactionsP
 
   const summaryMap = new Map<string, TransactionSummary>();
   for (const e of entries) {
+    if (e.transferGroupId) continue;
     const type = legacyType(e);
     const category = e.category?.name ?? "";
     const key = `${type}|${category}`;
@@ -60,6 +73,9 @@ export async function listTransactions(userId: string, params: ListTransactionsP
         businessId: t.businessId,
         personalAccountId: t.personalAccountId,
         createdAt: t.createdAt,
+        transferGroupId: t.transferGroupId,
+        counterpartAmount: t.counterpartAmount,
+        counterpartCurrency: t.counterpartCurrency,
       };
     }),
     summaries: [...summaryMap.values()],

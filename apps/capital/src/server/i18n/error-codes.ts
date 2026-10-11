@@ -58,6 +58,8 @@ export const ERROR_CODES = {
   "entry.not_transfer": "Only a transfer has a source and a destination account",
   "transfer.same_account": "A transfer needs two different accounts",
   "transfer.fx_required": "A transfer between different currencies needs an exchange rate",
+  "transfer.fx_mismatch": "The exchange rate and the received amount disagree by more than 0.01",
+  "transfer.same_currency": "A same-currency transfer has one amount",
   "transfer.from_account_not_found": "Source account not found",
   "transfer.to_account_not_found": "Destination account not found",
   "transfer.kind_change": "A transfer cannot change type; delete it and create it again",
@@ -117,7 +119,7 @@ export const ERROR_CODES = {
   // Budgets
   "budget.not_found": "Budget not found",
   "budget.negative_amount": "The budget amount cannot be negative",
-  "budget.clash": "A budget for this category already starts in that month",
+  "budget.clash": "A budget for {category} already starts in that month; change the amount in that row's budget column",
   "budget.overview_period_required": "Choose a month (YYYY-MM) or a year (YYYY)",
   "budget.apply_before_start": "The change can only apply from the month the budget starts",
 

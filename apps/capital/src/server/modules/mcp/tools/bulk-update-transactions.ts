@@ -12,6 +12,8 @@ export interface BulkUpdateTransactionItem {
   amount?: number;
   currency?: string;
   exchangeRate?: number;
+  /** Cross-currency transfers: what arrived on the other leg, in its currency. */
+  toAmount?: number;
   description?: string;
   category?: string;
   date?: string;
