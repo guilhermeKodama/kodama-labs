@@ -744,7 +744,14 @@ export async function portfolioFxReport(db: DbClient, mode: "precheck" | "verify
     else backup = await loadBackup(db);
   }
   for (const user of users) {
-    const source = await loadPortfolioTimelineSource(user.id, db);
+    let source: PortfolioTimelineSource;
+    try {
+      source = await loadPortfolioTimelineSource(user.id, db);
+    } catch (error) {
+      // Walking every user: one removed since the listing has nothing to report.
+      if (!opts.userId && !(await db.user.findUnique({ where: { id: user.id }, select: { id: true } }))) continue;
+      throw error;
+    }
     if (!source.input.accounts.length) continue;
     const period = currentPeriod(source.timezone);
     const rows = (await loadRows(db)).filter((row) => source.input.accounts.some((account) => account.id === row.accountId));

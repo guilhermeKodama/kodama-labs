@@ -420,6 +420,25 @@ describe("portfolio fx repair", () => {
     }
   });
 
+  it("skips a user removed while every user is walked, and still fails for a named one", async () => {
+    const gone = "test-user-fx-repair-gone-001";
+    // The listing still returns the user; every later read finds it gone.
+    const listsGone = new Proxy(prisma, {
+      get(target, prop) {
+        if (prop !== "user") return Reflect.get(target, prop);
+        return new Proxy(target.user, {
+          get(users, key) {
+            return key === "findMany" ? async () => [{ id: gone }] : Reflect.get(users, key);
+          },
+        });
+      },
+    });
+    const report = await portfolioFxReport(listsGone, "precheck");
+    expect(report.before).toEqual([]);
+    expect(report.after).toEqual([]);
+    await expect(portfolioFxReport(prisma, "precheck", { userId: gone })).rejects.toThrow();
+  });
+
   it("aborts when Avenue cash is not zero right after the 2026-08-12 withdrawal", async () => {
     const extra = await prisma.ledgerEntry.create({
       data: {
