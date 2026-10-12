@@ -1,4 +1,4 @@
-import { execFile } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
@@ -236,6 +236,18 @@ export default class ProofReporter implements Reporter {
 
   onBegin(config: FullConfig): void {
     this.rootDir = config.rootDir;
+    // A machine that dozes off mid-recording freezes the browser and the
+    // flows time out. On macOS, hold idle sleep off until this run ends.
+    // A closed lid on battery still sleeps; nothing here can stop that.
+    if (isRecording() && process.platform === "darwin") {
+      try {
+        spawn("caffeinate", ["-i", "-w", String(process.pid)], { stdio: "ignore", detached: true })
+          .on("error", () => undefined)
+          .unref();
+      } catch {
+        // Recording still works without it.
+      }
+    }
   }
 
   onTestEnd(test: TestCase, result: TestResult): void {

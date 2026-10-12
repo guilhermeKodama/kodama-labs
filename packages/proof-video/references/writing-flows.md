@@ -88,6 +88,7 @@ Every run starts by rebuilding the demo data, so a flow does not need to undo th
 - Limits: an `expect` retries for 10 seconds, an action waits 15 seconds for its target, and a flow has 90 seconds as a test and 5 minutes when recording. A flow that needs longer says so itself: `flow.setTimeout(ms)`.
 - A check that passes as a test and fails when recording is almost always a timing assumption: something asserted on a toast or a transient state that the caption outlived.
 - The opposite, passing when recorded and failing as a test, is a step that relied on the recording's pauses. See "Typing right after a dropdown closes".
+- A recording where one flow takes many minutes and the next ones time out on plain clicks means the machine went to sleep. The recorder holds idle sleep off on macOS, but a laptop with its lid closed on battery sleeps anyway. Record again with the machine awake.
 
 ## What a recording writes
 
