@@ -155,7 +155,8 @@ services:
   # the tunnel config lists kodamalabs.ai and www.
   kodamalabs-web:
     <<: *restart
-    build: { context: ., dockerfile: Dockerfile, target: kodamalabs }
+    # e.g. KODAMALABS_COMMIT=$(git rev-parse --short HEAD) KODAMALABS_BUILT_AT=$(date -u +%F)
+    build: { context: ., dockerfile: Dockerfile, target: kodamalabs, args: { KODAMALABS_COMMIT: "${KODAMALABS_COMMIT:-}", KODAMALABS_BUILT_AT: "${KODAMALABS_BUILT_AT:-}" } }
     image: kodama-kodamalabs:latest
     ports: ["${KODAMALABS_WEB_PORT:-13003}:3003"]
     networks: [kodama]

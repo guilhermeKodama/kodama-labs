@@ -1,8 +1,12 @@
 import type { Sheet } from '../geometry/grid';
 
 interface FigureFrameProps {
-  /** Stable name of the figure, and the id of its timeline in src/motion. */
-  id: string;
+  /**
+   * Stable name of the figure, and the id of its timeline in src/motion.
+   * Left out by a figure that plays in several acts: each act is then a group
+   * with its own timeline inside the sheet.
+   */
+  id?: string;
   sheet: Sheet;
   height: number;
   /** One or two sentences that say what the drawing shows. */
@@ -26,10 +30,8 @@ export function FigureFrame({ id, sheet, height, alt, interactive = false, child
         viewBox={`0 0 ${sheet.width} ${height}`}
         role={interactive ? 'group' : 'img'}
         aria-label={alt}
-        data-fig={id}
         // Rendered waiting; the motion scripts move it on (see src/motion/verbs.css).
-        data-state="idle"
-        suppressHydrationWarning
+        {...(id ? { 'data-fig': id, 'data-state': 'idle', suppressHydrationWarning: true } : {})}
         className={`block h-auto w-full ${minWidth} wide:min-w-0`}
       >
         {children}

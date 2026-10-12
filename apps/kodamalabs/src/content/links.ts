@@ -1,4 +1,6 @@
 /** Addresses and profiles. Facts, not copy: they are the same in every locale. */
+export const SITE_URL = 'https://kodamalabs.ai';
+
 export const EMAIL = 'contato@kodamalabs.ai';
 
 export const LINKS = {

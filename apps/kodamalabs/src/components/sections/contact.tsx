@@ -1,5 +1,6 @@
 import { useTranslations } from 'next-intl';
 
+import { CopyButton } from '@/components/controls/copy-button';
 import { SplitRow } from '@/components/layout/split-row';
 import type { Facts } from '@/content/facts';
 import { EMAIL, LINKS, SECTIONS } from '@/content/links';
@@ -8,6 +9,7 @@ import { EMAIL, LINKS, SECTIONS } from '@/content/links';
 export function Contact({ facts }: { facts: Facts }) {
   const t = useTranslations('contact');
   const hero = useTranslations('hero.facts');
+  const controls = useTranslations('site.controls');
 
   return (
     <section id={SECTIONS.contact} aria-labelledby="contact-title" className="pt-32.5">
@@ -18,12 +20,12 @@ export function Contact({ facts }: { facts: Facts }) {
             <h2 id="contact-title" className="font-display text-h2-sm font-normal">
               {t('title')}
             </h2>
-            <a
-              href={LINKS.email}
-              className="self-start font-display text-mail-sm font-normal underline-offset-8 wide:text-mail"
-            >
-              {EMAIL}
-            </a>
+            <div className="flex flex-wrap items-baseline gap-x-5 self-start">
+              <a href={LINKS.email} className="font-display text-mail-sm font-normal underline-offset-8 wide:text-mail">
+                {EMAIL}
+              </a>
+              <CopyButton text={EMAIL} label={controls('copy')} done={controls('copied')} />
+            </div>
           </div>
         }
         side={

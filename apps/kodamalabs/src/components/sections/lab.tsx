@@ -6,7 +6,8 @@ import type { Facts } from '@/content/facts';
 import { SECTIONS } from '@/content/links';
 import { RICH } from '@/content/rich';
 import { SHOW_LEARNING_FILTER } from '@/content/site';
-import { FigureSlot } from '@/figures/figure-slot';
+import { PlaybookFigure } from '@/figures/playbook/playbook-figure';
+import { TriageFigure } from '@/figures/triage/triage-figure';
 
 const ENTRY_TITLE = 'font-display text-h3 font-medium';
 const ENTRY_TEXT = 'text-small text-pretty';
@@ -14,7 +15,6 @@ const ENTRY_TEXT = 'text-small text-pretty';
 /** Smaller systems, in a lighter register than the flagships. */
 export function Lab({ facts }: { facts: Facts }) {
   const t = useTranslations('lab');
-  const figures = useTranslations('figures');
   const mode = facts.triageMode;
 
   return (
@@ -40,7 +40,7 @@ export function Lab({ facts }: { facts: Facts }) {
               />
             </>
           }
-          figure={<FigureSlot width={792} height={214} alt={figures('triage.alt')} />}
+          figure={<TriageFigure />}
         />
       ) : null}
 
@@ -56,8 +56,8 @@ export function Lab({ facts }: { facts: Facts }) {
         }
         figure={
           <div className="flex flex-col gap-6">
-            <FigureSlot width={792} height={164} alt={figures('playbook.alt')} />
-            <p className="font-display text-quote font-medium text-balance wide:ml-[40.2%]">
+            <PlaybookFigure verdict={facts.milhasVerdict} />
+            <p data-ink="wait" className="font-display text-quote font-medium text-balance wide:ml-[40.2%]">
               {t('playbook.quote')}
             </p>
           </div>

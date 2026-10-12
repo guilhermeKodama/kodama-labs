@@ -54,6 +54,9 @@ describe('token layer', () => {
   });
 
   it('keeps font sizes in src/styles', () => {
-    expect(offenders(RAW_TEXT_SIZE, (name) => name.startsWith('styles/'))).toEqual([]);
+    // The share image is a PNG drawn by another renderer, which reads no
+    // stylesheet: its sizes are pixels of that image, not of the page.
+    const SHARE_IMAGE = 'app/[locale]/opengraph-image.tsx';
+    expect(offenders(RAW_TEXT_SIZE, (name) => name.startsWith('styles/') || name === SHARE_IMAGE)).toEqual([]);
   });
 });

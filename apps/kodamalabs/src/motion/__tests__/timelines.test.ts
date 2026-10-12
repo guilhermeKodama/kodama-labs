@@ -52,13 +52,15 @@ describe.each(TIMELINES.map((timeline) => ({ id: timeline.id, timeline })))('tim
     }
   });
 
-  it('hides a part until its first step, unless the part is a transient mark', () => {
+  it('gives every part one nature: drawn in, always there, or a transient mark', () => {
     for (const key of timelineKeys(timeline)) {
       const steps = timeline.steps.filter((step) => step.k === key).sort((a, b) => a.at - b.at);
-      const transient = steps.every((step) => verbSpec(step.verb).transient);
-      if (!transient) expect(verbSpec(steps[0]!.verb).fill, key).toBe('both');
-      // A part is either a mark that only exists while it runs, or a part of the drawing.
-      expect(steps.some((step) => verbSpec(step.verb).transient), key).toBe(transient);
+      const transient = steps.filter((step) => verbSpec(step.verb).transient).length;
+      // A mark that only exists while it runs never also belongs to the drawing.
+      expect(transient === 0 || transient === steps.length, key).toBe(true);
+      // A part that is drawn in is hidden from the first frame, not from its second step.
+      const drawnIn = steps.some((step) => verbSpec(step.verb).fill === 'both');
+      if (drawnIn) expect(verbSpec(steps[0]!.verb).fill, key).toBe('both');
     }
   });
 
@@ -85,9 +87,10 @@ describe.each(TIMELINES.map((timeline) => ({ id: timeline.id, timeline })))('tim
 
       const arrived = Math.max(...proposed.map(stepEnd));
       const decisions = gate.map(decidedAt).filter((at) => at !== undefined);
-      // One decision per story, made after the whole proposal stands at the gate.
-      expect(decisions, name).toHaveLength(1);
-      const decided = decisions[0]!;
+      // Decided after the whole proposal stands at the gate. A gate with two
+      // conditions (a check, then a person) has decided when the last one has.
+      expect(decisions.length, name).toBeGreaterThan(0);
+      const decided = Math.max(...decisions);
       for (const step of gate) expect(step.at, `${name}: ${step.k}`).toBeGreaterThanOrEqual(arrived);
       // Nothing is committed before the gate has decided.
       for (const step of committed) expect(step.at, `${name}: ${step.k}`).toBeGreaterThanOrEqual(decided);

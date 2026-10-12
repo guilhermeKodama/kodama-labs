@@ -13,17 +13,24 @@
  *
  * The verbs, and what they mean on this page:
  *
- *   rule-x   a ruled line extends from its left end
- *   arrive   a dashed proposal streams toward its gate and stops short of it
- *   ink-x    a solid line is drawn in one stroke: something was committed
- *   ink-y    the same, downward (the spine)
- *   set      a thing that exists now simply appears, without moving
- *   wait     a gate shows it is waiting: a hollow ring, for as long as it waits
- *   press    a person decides: the gate is pressed like a button
- *   ripple   the echo of that press
- *   stamp    an evaluator decides: the gate fills in discrete steps
- *   check    a check decides: a ring completes one part at a time, then clears
- *   spine    the page's spine is inked down the screen
+ *   rule-x    a ruled line extends from its left end
+ *   unfold    a surface or a row is drawn in, left to right
+ *   unfold-y  the same, top to bottom
+ *   rise      a bar grows from its top edge
+ *   arrive    a dashed proposal streams toward its gate and stops short of it
+ *   advance   the same at an even pace: time passing, not something sent
+ *   ink-x     a solid line is drawn in one stroke: something was committed
+ *   ink-y     the same, downward
+ *   set       a thing that exists now simply appears, without moving
+ *   print     a line of output appears whole, at once
+ *   pulse     a running thing blinks once: it restarted
+ *   return-x  a loop back across the gate is drawn right to left
+ *   wait      a gate shows it is waiting: a hollow ring, for as long as it waits
+ *   press     a person decides: the gate is pressed like a button
+ *   ripple    the echo of that press
+ *   stamp     an evaluator decides: the gate fills in discrete steps
+ *   scan      an evaluator reads its candidates one by one (a mark steps down)
+ *   check     a check decides: a ring completes one part at a time, then clears
  */
 
 export const EASE = {
@@ -60,16 +67,23 @@ interface VerbSpec {
 
 export const VERBS = {
   'rule-x': { keyframes: 'm-grow-x', duration: 380, ease: EASE.draft, fill: 'both', origin: 'left center' },
+  unfold: { keyframes: 'm-wipe-x', duration: 420, ease: EASE.draft, fill: 'both' },
+  'unfold-y': { keyframes: 'm-wipe-y', duration: 420, ease: EASE.draft, fill: 'both' },
+  rise: { keyframes: 'm-grow-y', duration: 380, ease: EASE.draft, fill: 'both', origin: 'center top' },
   arrive: { keyframes: 'm-wipe-x', duration: 600, ease: EASE.draft, fill: 'both', flow: true },
+  advance: { keyframes: 'm-wipe-x', duration: 900, ease: EASE.linear, fill: 'both', flow: true },
   'ink-x': { keyframes: 'm-wipe-x', duration: 520, ease: EASE.ink, fill: 'both' },
   'ink-y': { keyframes: 'm-grow-y', duration: 520, ease: EASE.ink, fill: 'both', origin: 'center top' },
   set: { keyframes: 'm-set', duration: 160, ease: EASE.out, fill: 'both' },
+  print: { keyframes: 'm-set', duration: 60, ease: 'steps(1, end)', fill: 'both' },
+  pulse: { keyframes: 'm-pulse', duration: 260, ease: EASE.inOut, fill: 'none' },
+  'return-x': { keyframes: 'm-wipe-back', duration: 600, ease: EASE.ink, fill: 'both' },
   wait: { keyframes: 'm-wait', duration: 240, ease: EASE.linear, fill: 'none', transient: true, gateOnly: true },
   press: { keyframes: 'm-press', duration: 180, ease: EASE.inOut, fill: 'none', gateOnly: true, decidesAt: 0.45 },
   ripple: { keyframes: 'm-ripple', duration: 420, ease: EASE.out, fill: 'none', transient: true, gateOnly: true },
   stamp: { keyframes: 'm-wipe-y', duration: 400, ease: 'steps(5, start)', fill: 'both', gateOnly: true, decidesAt: 1 },
+  scan: { keyframes: 'm-scan', duration: 700, ease: 'steps(5, jump-none)', fill: 'none', transient: true, gateOnly: true, decidesAt: 0.4 },
   check: { keyframes: 'm-check', duration: 440, ease: EASE.linear, fill: 'none', transient: true, gateOnly: true, decidesAt: 0.75 },
-  spine: { keyframes: 'm-spine', duration: 1100, ease: EASE.ink, fill: 'both' },
 } as const satisfies Record<string, VerbSpec>;
 
 export type Verb = keyof typeof VERBS;

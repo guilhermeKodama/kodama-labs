@@ -3,12 +3,14 @@ import { useFormatter, useTranslations } from 'next-intl';
 import { isoDay } from '@/content/dates';
 import type { Facts } from '@/content/facts';
 
+import { MotionToggle } from './controls/motion-toggle';
 import { LanguageLink } from './language-link';
 import { Mark } from './mark';
 
 /** Imprint, the note about the drawings, and where this build came from. */
 export function SiteFooter({ facts }: { facts: Facts }) {
   const t = useTranslations('site.footer');
+  const controls = useTranslations('site.controls');
   const format = useFormatter();
 
   return (
@@ -33,6 +35,7 @@ export function SiteFooter({ facts }: { facts: Facts }) {
           </span>
         ) : null}
         <LanguageLink />
+        <MotionToggle on={controls('motionOn')} off={controls('motionOff')} />
       </div>
     </footer>
   );

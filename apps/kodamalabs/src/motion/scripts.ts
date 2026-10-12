@@ -25,8 +25,8 @@ export function seen(top: number, bottom: number, viewport: number): boolean {
  * motion and says so with one class on <html>, so animated parts are hidden
  * from the very first frame instead of flashing in and then restarting.
  *
- * No motion with reduced motion, with `?m=off`, or without JavaScript (this
- * never runs). If the controller has not started three seconds later the class
+ * No motion with reduced motion, with `?m=off`, when the reader turned it off
+ * (the footer's switch), or without JavaScript (this never runs). If the controller has not started three seconds later the class
  * is removed again, so a failed script can never leave part of the page hidden.
  */
 export function prepaint(): void {
@@ -34,6 +34,11 @@ export function prepaint(): void {
     const root = document.documentElement;
     if (new URLSearchParams(location.search).get('m') === 'off') return;
     if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    try {
+      if (localStorage.getItem('kl:motion') === 'off') return;
+    } catch {
+      // No storage: motion stays on.
+    }
     root.classList.add('m-on');
     setTimeout(function () {
       if (!window.__m) root.classList.remove('m-on');

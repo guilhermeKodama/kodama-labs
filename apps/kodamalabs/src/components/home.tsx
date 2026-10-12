@@ -1,6 +1,7 @@
 import { useTranslations } from 'next-intl';
 
 import { SpineRegion } from '@/components/layout/spine-region';
+import { PersonJsonLd } from '@/components/person-json-ld';
 import { About } from '@/components/sections/about';
 import { Contact } from '@/components/sections/contact';
 import { Hero, HeroLanes } from '@/components/sections/hero';
@@ -41,6 +42,7 @@ export function Home({ facts = FACTS }: { facts?: Facts }) {
         <Contact facts={facts} />
       </main>
       <SiteFooter facts={facts} />
+      <PersonJsonLd />
     </div>
   );
 }

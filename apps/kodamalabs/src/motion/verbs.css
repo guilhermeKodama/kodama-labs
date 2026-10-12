@@ -5,6 +5,7 @@
  *
  *   idle     waiting: each part holds the first frame of its schedule (hidden)
  *   playing  each part runs the schedule it carries in --m
+ *   held     stopped at a point of its schedule, waiting for the reader
  *   done     nothing applies: the page is exactly the static page
  *
  * All of it sits behind `html.m-on`, a class set before first paint by the
@@ -23,7 +24,7 @@
 }
 
 @media screen and (prefers-reduced-motion: no-preference) {
-  html.m-on [data-fig][data-state='idle'] [data-k] {
+  html.m-on [data-fig]:is([data-state='idle'], [data-state='held']) [data-k] {
     animation: var(--m);
     animation-play-state: paused;
   }
@@ -51,6 +52,59 @@
   html.m-on svg [data-k] {
     transform-box: fill-box;
   }
+
+  /*
+   * The page's spine is inked as far as the reader has come (--ink, set by
+   * the controller); it leads them down the page and never goes back up.
+   */
+  html.m-on [data-spine] {
+    clip-path: inset(0 0 calc(100% - var(--ink, 0px)) 0);
+    transition: clip-path 700ms var(--m-ink);
+  }
+
+  /*
+   * A sentence the spine has not reached is pencil; it is inked left to right
+   * when the reader gets to it, and is then plain text again (`done`).
+   */
+  html.m-on [data-ink]:is([data-ink='wait'], [data-ink='on']) {
+    color: transparent;
+    background: linear-gradient(90deg, var(--kl-ink) 50%, var(--kl-muted) 50%) 100% 0 / 200% 100%;
+    -webkit-background-clip: text;
+    background-clip: text;
+    transition: background-position 900ms var(--m-ink);
+  }
+
+  html.m-on [data-ink='on'] {
+    background-position: 0 0;
+  }
+
+  /* Sentences that follow one another are inked one after the other. */
+  html.m-on [data-ink] + [data-ink] {
+    transition-delay: 160ms;
+  }
+
+  html.m-on [data-ink] + [data-ink] + [data-ink] {
+    transition-delay: 320ms;
+  }
+
+  /* A part of a drawing the reader can act on, only while it is a control. */
+  html.m-on .fig-control[role='button'] {
+    cursor: pointer;
+    outline: none;
+  }
+
+  html.m-on .fig-control[role='button']:is(:hover, :focus-visible) .fig-text {
+    text-decoration: underline;
+  }
+
+  html.m-on .fig-control[role='button']:focus-visible .fig-text-muted {
+    fill: var(--kl-ink);
+  }
+}
+
+/* Controls of the motion layer exist only for a visit that has motion. */
+html:not(.m-on) .m-only {
+  display: none;
 }
 
 /*
@@ -88,6 +142,16 @@
   }
 }
 
+/* A loop back is drawn from its far end: right to left. */
+@keyframes m-wipe-back {
+  from {
+    clip-path: inset(0 0 0 100%);
+  }
+  to {
+    clip-path: inset(0 0 0 0);
+  }
+}
+
 /* Three dash periods (5 + 4) of travel. */
 @keyframes m-flow {
   from {
@@ -101,6 +165,27 @@
 @keyframes m-set {
   from {
     opacity: 0;
+  }
+}
+
+@keyframes m-pulse {
+  50% {
+    opacity: 0.2;
+  }
+}
+
+/*
+ * A mark steps down a gate that reads five candidates, 12 units apart: the
+ * capsule of the Sentinel figure. It stands on the third at two fifths.
+ */
+@keyframes m-scan {
+  from {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(48px);
   }
 }
 
@@ -148,18 +233,5 @@
     opacity: 0;
     stroke-dasharray: 1;
     stroke-dashoffset: 0;
-  }
-}
-
-/*
- * The page's spine is inked from its top down one screen. The rest of it is
- * below the fold and is simply there once the figure is done.
- */
-@keyframes m-spine {
-  from {
-    clip-path: inset(0 0 100% 0);
-  }
-  to {
-    clip-path: inset(0 0 calc(100% - 100vh) 0);
   }
 }

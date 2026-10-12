@@ -7,6 +7,8 @@ import { routing } from './i18n/routing';
 export default createIntlMiddleware(routing);
 
 export const config = {
-  // Skip the API, Next internals and anything with a file extension.
-  matcher: ['/((?!api|_next|.*\\..*).*)', '/'],
+  // Skip the API, Next internals, anything with a file extension, and the
+  // share image, which link previews fetch by its full path and must not be
+  // redirected.
+  matcher: ['/((?!api|_next|.*opengraph-image.*|.*\\..*).*)', '/'],
 };

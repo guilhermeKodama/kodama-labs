@@ -37,7 +37,7 @@ function element(dataset: Record<string, string> = {}, rect = { top: 0, bottom: 
 /** Runs an inline script the way the document would, against a stand-in page. */
 function run(
   script: string,
-  page: { search?: string; reduced?: boolean; hidden?: boolean; figures?: ReturnType<typeof element>[]; on?: boolean },
+  page: { search?: string; reduced?: boolean; hidden?: boolean; stored?: string; figures?: ReturnType<typeof element>[]; on?: boolean },
 ) {
   const root = element();
   if (page.on) root.classList.add('m-on');
@@ -54,13 +54,14 @@ function run(
     },
   };
 
-  new Function('document', 'location', 'matchMedia', 'setTimeout', 'window', 'innerHeight', script)(
+  new Function('document', 'location', 'matchMedia', 'setTimeout', 'window', 'innerHeight', 'localStorage', script)(
     document,
     { search: page.search ?? '' },
     () => ({ matches: page.reduced ?? false }),
     (callback: () => void) => timers.push(callback),
     window,
     900,
+    { getItem: () => page.stored ?? null },
   );
 
   return { root, window, timers };
@@ -71,9 +72,11 @@ describe('the script in the document head', () => {
     expect(run(PREPAINT_SCRIPT, {}).root.classList.contains('m-on')).toBe(true);
   });
 
-  it('gives none with reduced motion or ?m=off', () => {
+  it('gives none with reduced motion, ?m=off, or when the reader turned it off', () => {
     expect(run(PREPAINT_SCRIPT, { reduced: true }).root.classList.contains('m-on')).toBe(false);
     expect(run(PREPAINT_SCRIPT, { search: '?m=off' }).root.classList.contains('m-on')).toBe(false);
+    expect(run(PREPAINT_SCRIPT, { stored: 'off' }).root.classList.contains('m-on')).toBe(false);
+    expect(run(PREPAINT_SCRIPT, { stored: 'on' }).root.classList.contains('m-on')).toBe(true);
   });
 
   it('takes motion back if the controller never started, and keeps it if it did', () => {

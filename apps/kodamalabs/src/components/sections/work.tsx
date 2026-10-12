@@ -4,7 +4,9 @@ import { StatusLine } from '@/components/status-line';
 import { isoMonth } from '@/content/dates';
 import type { Facts } from '@/content/facts';
 import { SECTIONS } from '@/content/links';
-import { FigureSlot } from '@/figures/figure-slot';
+import { CapitalFigure } from '@/figures/capital/capital-figure';
+import { CosmosFigure } from '@/figures/cosmos/cosmos-figure';
+import { SentinelFigure } from '@/figures/sentinel/sentinel-figure';
 
 import { Flagship } from './flagship';
 
@@ -13,7 +15,6 @@ export function Work({ facts }: { facts: Facts }) {
   const capital = useTranslations('work.capital.status');
   const sentinel = useTranslations('work.sentinel.status');
   const cosmos = useTranslations('work.cosmos.status');
-  const figures = useTranslations('figures');
   const format = useFormatter();
 
   const since = facts.capitalInProductionSince;
@@ -24,7 +25,8 @@ export function Work({ facts }: { facts: Facts }) {
       <Flagship
         id={SECTIONS.capital}
         name="capital"
-        figure={<FigureSlot width={1200} height={368} alt={figures('capital.alt')} />}
+        figure={<CapitalFigure />}
+        plays={['capital']}
         status={
           <StatusLine
             segments={[
@@ -46,7 +48,8 @@ export function Work({ facts }: { facts: Facts }) {
       <Flagship
         id={SECTIONS.sentinel}
         name="sentinel"
-        figure={<FigureSlot width={1200} height={270} alt={figures('sentinel.alt')} />}
+        figure={<SentinelFigure />}
+        plays={['sentinel']}
         status={
           <StatusLine
             segments={[
@@ -64,7 +67,8 @@ export function Work({ facts }: { facts: Facts }) {
       <Flagship
         id={SECTIONS.cosmos}
         name="cosmos"
-        figure={<FigureSlot width={1200} height={372} alt={figures('cosmos.alt')} />}
+        figure={<CosmosFigure />}
+        plays={['cosmos-line', 'cosmos-run']}
         status={<StatusLine segments={[cosmos('since'), cosmos('cli'), cosmos('private')]} />}
       />
     </>

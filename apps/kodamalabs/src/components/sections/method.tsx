@@ -6,7 +6,8 @@ import { StatusLine } from '@/components/status-line';
 import { isoDay } from '@/content/dates';
 import { SECTIONS } from '@/content/links';
 import { MERGED_PULL_REQUESTS } from '@/content/site';
-import { FigureSlot } from '@/figures/figure-slot';
+import { AgentsFigure } from '@/figures/agents/agents-figure';
+import { DeployFigure } from '@/figures/deploy/deploy-figure';
 
 const ENTRY_TITLE = 'font-display text-h3 font-medium';
 const ENTRY_TEXT = 'text-small text-pretty';
@@ -14,7 +15,6 @@ const ENTRY_TEXT = 'text-small text-pretty';
 /** How the work gets made and kept running: coding agents, and his own machine. */
 export function Method() {
   const t = useTranslations('method');
-  const figures = useTranslations('figures');
   const format = useFormatter();
 
   // "10 Oct": day first in every locale, as in a changelog.
@@ -35,9 +35,9 @@ export function Method() {
         }
         side={
           <div className="flex flex-col gap-0.5 font-display text-habit font-medium wide:pt-1.5">
-            <span>{t('habits.incidents')}</span>
-            <span>{t('habits.migrations')}</span>
-            <span>{t('habits.conventions')}</span>
+            <span data-ink="wait">{t('habits.incidents')}</span>
+            <span data-ink="wait">{t('habits.migrations')}</span>
+            <span data-ink="wait">{t('habits.conventions')}</span>
           </div>
         }
       />
@@ -52,7 +52,7 @@ export function Method() {
         }
         figure={
           <div className="flex flex-col gap-5">
-            <FigureSlot width={792} height={234} alt={figures('agents.alt')} />
+            <AgentsFigure />
             <div className="flex flex-col gap-1 font-mono text-label leading-4.5 wide:ml-[40.2%]">
               <div className="text-muted">{t('agents.merged.label')}</div>
               {MERGED_PULL_REQUESTS.map((pr) => (
@@ -76,7 +76,7 @@ export function Method() {
             <StatusLine className="mt-0.5" segments={[t('production.limits')]} />
           </>
         }
-        figure={<FigureSlot width={792} height={214} alt={figures('deploy.alt')} />}
+        figure={<DeployFigure />}
       />
     </section>
   );

@@ -2,7 +2,8 @@ import type { Metadata } from 'next';
 import { getTranslations, setRequestLocale } from 'next-intl/server';
 import { notFound } from 'next/navigation';
 
-import { isPublishedLocale } from '@/i18n/locales';
+import { SITE_URL } from '@/content/links';
+import { PUBLISHED_LOCALES, isPublishedLocale, localeHref } from '@/i18n/locales';
 import { routing } from '@/i18n/routing';
 import { MotionRoot } from '@/motion/motion-root';
 import { BOOT_SCRIPT, PREPAINT_SCRIPT } from '@/motion/scripts';
@@ -29,9 +30,22 @@ export async function generateMetadata({ params }: LocaleLayoutProps): Promise<M
   const t = await getTranslations({ locale, namespace: 'site.meta' });
 
   return {
-    metadataBase: new URL('https://kodamalabs.ai'),
+    metadataBase: new URL(SITE_URL),
     title: t('title'),
     description: t('description'),
+    alternates: {
+      canonical: localeHref(locale),
+      languages: Object.fromEntries(PUBLISHED_LOCALES.map((other) => [other, localeHref(other)])),
+    },
+    openGraph: {
+      type: 'profile',
+      url: localeHref(locale),
+      siteName: t('siteName'),
+      title: t('title'),
+      description: t('description'),
+      locale,
+    },
+    twitter: { card: 'summary_large_image', title: t('title'), description: t('description') },
   };
 }
 

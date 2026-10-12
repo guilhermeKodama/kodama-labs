@@ -27,24 +27,286 @@
     }
   },
   "capital": {
-    "alt": "Capital. Left of the line, an import plan proposed by the assistant: five rows separated by dashed rules, 37 more below, a note that it is waiting for my click, and a Confirm import button. On the line, one gate: my click, valid 30 minutes. Right of the line, 42 ledger rows, and above them the same ledger drawn as a cash-flow diagram from income, through two companies and the person, to spending, investments and surplus. All rows and amounts are invented."
+    "alt": "Capital. Left of the line, an import plan proposed by the assistant: five rows separated by dashed rules, 37 more below, a note that it is waiting for my click, and a Confirm import button. On the line, one gate: my click, valid 30 minutes. Right of the line, 42 ledger rows, and above them the same ledger drawn as a cash-flow diagram from income, through two companies and the person, to spending, investments and surplus. All rows and amounts are invented.",
+    "plan": {
+      "title": "Import plan",
+      "state": "proposed · nothing written",
+      "count": "42 rows",
+      "more": "+ 37 more rows",
+      "waiting": "waiting for my click",
+      "confirm": "Confirm import"
+    },
+    "rows": {
+      "grocery": {
+        "date": "02 Sep",
+        "what": "Grocery store",
+        "account": "Checking",
+        "category": "Food",
+        "amount": "−186.40"
+      },
+      "invoice": {
+        "date": "03 Sep",
+        "what": "Client invoice 0142",
+        "account": "Company A",
+        "category": "Consulting",
+        "amount": "+12,400.00"
+      },
+      "electricity": {
+        "date": "05 Sep",
+        "what": "Electricity",
+        "account": "Checking",
+        "category": "Housing",
+        "amount": "−212.75"
+      },
+      "card": {
+        "date": "07 Sep",
+        "what": "Card payment",
+        "account": "Checking → Card",
+        "category": "Transfer",
+        "amount": "3,950.00"
+      },
+      "pharmacy": {
+        "date": "09 Sep",
+        "what": "Pharmacy",
+        "account": "Card",
+        "category": "Health",
+        "amount": "−64.90"
+      }
+    },
+    "gate": "my click · valid 30 min",
+    "ledger": "42 ledger rows",
+    "undo": "⌘Z undoes the whole batch",
+    "invented": "rows and amounts invented",
+    "assistant": "the assistant: 26 tools · capped at US$0.50 and 12 tool iterations a turn",
+    "views": {
+      "table": "Table",
+      "pivot": "Pivot",
+      "chart": "Chart",
+      "board": "Board",
+      "calendar": "Calendar"
+    },
+    "flow": {
+      "consulting": "Consulting 24,000",
+      "products": "Products 9,000",
+      "dividends": "Dividends 2,000",
+      "companyA": "Company A",
+      "companyB": "Company B",
+      "personal": "Personal 28,000",
+      "costs": "Costs 3,000",
+      "taxes": "Taxes 4,000",
+      "housing": "Housing 6,500",
+      "food": "Food 3,500",
+      "transport": "Transport 2,000",
+      "other": "Other 4,000",
+      "investments": "Investments 8,000",
+      "surplus": "Surplus 4,000"
+    },
+    "controls": {
+      "undo": "Undo the import",
+      "confirm": "Confirm the import"
+    }
   },
   "sentinel": {
-    "alt": "Sentinel. Left of the line, the data pipeline: seven kinds of public record, five of the processing steps and the six analysis engines, with one job running from tenders to price ranges. The price engine sends dashed candidates to the line. On the line, an evaluator whose default is to suppress: the candidates it does not confirm stop there. One continues, solid, to an alert written as a point to review. Invented example, no real tender, company or person."
+    "alt": "Sentinel. Left of the line, the data pipeline: seven kinds of public record, five of the processing steps and the six analysis engines, with one job running from tenders to price ranges. The price engine sends dashed candidates to the line. On the line, an evaluator whose default is to suppress: the candidates it does not confirm stop there. One continues, solid, to an alert written as a point to review. Invented example, no real tender, company or person.",
+    "heads": {
+      "sources": "public records",
+      "steps": "processing",
+      "engines": "analysis"
+    },
+    "sources": {
+      "tenders": "Tenders",
+      "contracts": "Contracts",
+      "items": "Items and bids",
+      "documents": "Tender documents",
+      "companies": "Companies and shareholders",
+      "sanctions": "Sanction lists",
+      "elections": "Election records"
+    },
+    "steps": {
+      "normalise": "Normalise tenders",
+      "link": "Link companies",
+      "shareholders": "Match shareholders",
+      "sanctions": "Match sanctions",
+      "donations": "Match donations"
+    },
+    "engines": {
+      "indicators": "Company indicators",
+      "sanctioned": "Sanctioned suppliers",
+      "prices": "Price ranges",
+      "shared": "Shared shareholders",
+      "political": "Political links",
+      "review": "Document review"
+    },
+    "gate": "an evaluator · default: suppress",
+    "alert": {
+      "severity": "Medium",
+      "kind": "Price to review",
+      "title": "Unit price above the reference range",
+      "body1": "Awarded at 1.8 times the median of 23 comparable purchases.",
+      "body2": "Worth checking the item specification first."
+    },
+    "notes": {
+      "failClosed": "no key, failed call or unreadable reply: suppress",
+      "scope": "this gate covers price alerts only",
+      "invented": "invented example · no real tender, company or person"
+    }
   },
   "cosmos": {
-    "alt": "Cosmos. Top: the example line. Three stations left of the line, each a typed contract with a worker: plan with Pietra the planner, implement with Caio the implementer, review with Vera the reviewer, joined by dashed deliveries, with a return loop from review to implement at most twice. On the line, one gate: every contract passed and the pull request action is pre-authorized. Right of the line: a draft pull request, opened by the line and merged by a person. Bottom: a real run from 11 October 2026, translated from the command line. The implementer is refused a command outside its authority and escalates with a question. The line stops and waits for me, then resumes with my answer and opens the draft pull request."
+    "alt": "Cosmos. Top: the example line. Three stations left of the line, each a typed contract with a worker: plan with Pietra the planner, implement with Caio the implementer, review with Vera the reviewer, joined by dashed deliveries, with a return loop from review to implement at most twice. On the line, one gate: every contract passed and the pull request action is pre-authorized. Right of the line: a draft pull request, opened by the line and merged by a person. Bottom: a real run from 11 October 2026, translated from the command line. The implementer is refused a command outside its authority and escalates with a question. The line stops and waits for me, then resumes with my answer and opens the draft pull request.",
+    "heads": {
+      "line": "the example line: one objective in, one draft pull request out",
+      "gate": "every contract passed · open_pr pre-authorized",
+      "run": "a real run, 11 Oct 2026 · translated: the command line speaks Portuguese"
+    },
+    "stations": {
+      "plan": {
+        "name": "plan",
+        "access": "read",
+        "worker": "Pietra · planner",
+        "delivers1": "delivers plan, tasks",
+        "delivers2": "sections · JSON schema"
+      },
+      "implement": {
+        "name": "implement",
+        "access": "write",
+        "worker": "Caio · implementer",
+        "delivers1": "delivers a summary",
+        "delivers2": "engine diff · typecheck"
+      },
+      "review": {
+        "name": "review",
+        "access": "read",
+        "worker": "Vera · reviewer",
+        "delivers1": "delivers verdict, review",
+        "delivers2": "approve or return"
+      }
+    },
+    "returns": "returns with a note, at most 2 times",
+    "pr": {
+      "title": "Draft pull request",
+      "state": "draft",
+      "worker": "open_pr · GitHub, a machine worker",
+      "line1": "its own branch, pushed by the line",
+      "line2": "marked ready and merged by a person"
+    },
+    "run": {
+      "lines": {
+        "station": "── 2/4 · implement",
+        "command": "⚙ run_command npx vitest run src/lib/__tests__/money.test.ts",
+        "refused": "✗ outside the worker’s authority",
+        "escalated": "⚑ Caio escalated · 26 s · 6 turns",
+        "question1": "⚑ needs you: May I run vitest in apps/capital? If not,",
+        "question2": "which command should I use to run the tests?",
+        "stopped": "item stopped in implement, waiting for your answer"
+      },
+      "gate": "stopped: it needs a person",
+      "resumed": "resumed with my answer",
+      "then": "then round 2, review, and the draft pull request",
+      "sofar": "three draft pull requests so far, none merged yet"
+    }
   },
   "triage": {
-    "alt": "The learning filter. Left of the line, four dashed rows in shadow mode: what the model would discard. On the line, one gate: 95 percent cross-validated precision, then my switch. Right of the line, three solid rows really discarded, each with Revert. A loop runs back across the line: 46 restored from the audit trail. Items are numbered, never named."
+    "alt": "The learning filter. Left of the line, four dashed rows in shadow mode: what the model would discard. On the line, one gate: 95 percent cross-validated precision, then my switch. Right of the line, three solid rows really discarded, each with Revert. A loop runs back across the line: 46 restored from the audit trail. Items are numbered, never named.",
+    "heads": {
+      "shadow": "shadow mode: the model would discard",
+      "gate": "95% cross-validated precision, then my switch"
+    },
+    "shadow": {
+      "a": {
+        "score": "0.03",
+        "item": "Item 1182"
+      },
+      "b": {
+        "score": "0.05",
+        "item": "Item 1175"
+      },
+      "c": {
+        "score": "0.08",
+        "item": "Item 1169"
+      },
+      "d": {
+        "score": "0.11",
+        "item": "Item 1160"
+      }
+    },
+    "would": "would discard",
+    "kept": {
+      "a": {
+        "score": "0.02",
+        "item": "Item 1067"
+      },
+      "b": {
+        "score": "0.02",
+        "item": "Item 1041"
+      },
+      "c": {
+        "score": "0.04",
+        "item": "Item 1033"
+      }
+    },
+    "discarded": "discarded · Revert",
+    "limits": {
+      "threshold": "discard threshold capped at 0.15",
+      "daily": "at most 15 discards a day"
+    },
+    "restored": "46 restored from the audit trail"
   },
   "playbook": {
-    "alt": "The validation playbook on a time axis from day 0 to week 4, where the line is the go, pivot or kill decision. MilhasGrupo runs dashed from one page, through a prototype and paid traffic, and ends on the line in a hollow ring: its verdict is not recorded yet. FIRE-BR is a short dashed stroke: one page, June 2026."
+    "alt": "The validation playbook on a time axis from day 0 to week 4, where the line is the go, pivot or kill decision. MilhasGrupo runs dashed from one page, through a prototype and paid traffic, and ends on the line in a hollow ring: its verdict is not recorded yet. FIRE-BR is a short dashed stroke: one page, June 2026.",
+    "criteria": "kill criteria, written before I spend",
+    "marks": {
+      "page": "one page",
+      "prototype": "prototype",
+      "traffic": "paid traffic"
+    },
+    "milhas": {
+      "pending": "MilhasGrupo · verdict not recorded yet",
+      "decided": "MilhasGrupo · verdict {verdict, select, go {GO} pivot {PIVOT} other {KILL}}, {date}"
+    },
+    "fire": "FIRE-BR · one page, June 2026",
+    "axis": {
+      "start": "day 0",
+      "cap": "day 5, the cap",
+      "verdict": "week 4: go, pivot or kill"
+    }
   },
   "agents": {
-    "alt": "Working with coding agents. Left of the line, six dashed branches fan out from a written contract, CLAUDE.md, read first since August 2026. On the line, one gate: lint, typecheck and tests, then my merge. Five branches pass and merge, solid, into main, 80 merged. One stops at the gate: closed, not merged."
+    "alt": "Working with coding agents. Left of the line, six dashed branches fan out from a written contract, CLAUDE.md, read first since August 2026. On the line, one gate: lint, typecheck and tests, then my merge. Five branches pass and merge, solid, into main, 80 merged. One stops at the gate: closed, not merged.",
+    "contract": {
+      "line1": "CLAUDE.md,",
+      "line2": "read first",
+      "line3": "since Aug 2026"
+    },
+    "worktrees": {
+      "claude": "claude/… worktrees",
+      "cursor": "cursor/… worktrees"
+    },
+    "gate": "lint · typecheck · tests, then my merge",
+    "main": "main",
+    "merged": "80 merged",
+    "closed": "closed, not merged"
   },
   "deploy": {
-    "alt": "Deploys. Left of the line: git pull and build, then a migrate step drawn dashed because the new version is still a proposal. On the line, one gate: the migration exits zero. Right of the line, one machine at home with 21 services behind a tunnel with no inbound ports, four databases each with a dev twin, and 53 uptime monitors generated from one spec. A second dashed path stops at the line: if the migration fails, the old version keeps running."
+    "alt": "Deploys. Left of the line: git pull and build, then a migrate step drawn dashed because the new version is still a proposal. On the line, one gate: the migration exits zero. Right of the line, one machine at home with 21 services behind a tunnel with no inbound ports, four databases each with a dev twin, and 53 uptime monitors generated from one spec. A second dashed path stops at the line: if the migration fails, the old version keeps running.",
+    "steps": {
+      "pull": "git pull",
+      "build": "build",
+      "migrate": "migrate"
+    },
+    "gate": "its migration exits 0",
+    "fails": {
+      "line1": "migration fails:",
+      "line2": "the old version keeps running"
+    },
+    "machine": "one machine at home",
+    "tunnel": "Cloudflare Tunnel · no inbound ports",
+    "services": {
+      "apps": "15 app services",
+      "edge1": "tunnel",
+      "edge2": "and cron",
+      "monitoring": "monitoring"
+    },
+    "databases": "Postgres: 4 databases, each with a dev twin",
+    "monitors": "53 uptime monitors, generated from one spec"
   }
 }

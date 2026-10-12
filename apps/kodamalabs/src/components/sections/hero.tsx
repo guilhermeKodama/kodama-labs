@@ -1,5 +1,6 @@
 import { useTranslations } from 'next-intl';
 
+import { ReplayButton } from '@/components/controls/replay-button';
 import { SplitRow } from '@/components/layout/split-row';
 import type { Facts } from '@/content/facts';
 import { RICH, SpineWords } from '@/content/rich';
@@ -40,6 +41,7 @@ export function Hero({ facts }: { facts: Facts }) {
 /** The first figure and its legend. The spine starts here. */
 export function HeroLanes() {
   const t = useTranslations('hero.legend');
+  const controls = useTranslations('site.controls');
 
   return (
     <>
@@ -58,6 +60,7 @@ export function HeroLanes() {
             </svg>
             {t('committed')}
           </span>
+          <ReplayButton figures={['intro', 'lanes']} label={controls('replay')} />
         </div>
         <div className="flex items-center gap-2.5 wide:col-start-5">
           <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true" className="shrink-0">

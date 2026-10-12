@@ -117,7 +117,11 @@ CMD ["pnpm", "start"]
 
 # ---------------------------------------------------------------------------
 FROM base AS kodamalabs
-RUN cd apps/kodamalabs && NODE_OPTIONS=--max-old-space-size=4096 pnpm exec next build
+# The page's footer says which commit this build is and when it was made.
+# Both are optional: left empty, the footer says neither.
+ARG KODAMALABS_COMMIT=
+ARG KODAMALABS_BUILT_AT=
+RUN cd apps/kodamalabs && KODAMALABS_COMMIT="$KODAMALABS_COMMIT" KODAMALABS_BUILT_AT="$KODAMALABS_BUILT_AT" NODE_OPTIONS=--max-old-space-size=4096 pnpm exec next build
 WORKDIR /repo/apps/kodamalabs
 ENV PORT=3003
 CMD ["pnpm", "start"]
