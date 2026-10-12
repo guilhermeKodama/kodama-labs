@@ -8,7 +8,7 @@
     "build": "prisma generate && node ../../scripts/next-build.mjs",
     "start": "next start --port 3000",
     "lint": "eslint --max-warnings 0",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p proof/tsconfig.json",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate deploy",
     "db:migrate:dev": "node scripts/assert-dev-db.mjs 'prisma migrate dev' && prisma migrate dev",
@@ -18,7 +18,11 @@
     "db:reset": "node scripts/assert-dev-db.mjs 'prisma migrate reset' && prisma migrate reset --force",
     "db:drop-legacy": "node scripts/drop-legacy.mjs",
     "db:reconcile-ledger": "tsx scripts/ledger-reconcile.ts",
-    "test": "vitest run"
+    "test": "vitest run",
+    "proof": "playwright test -c proof/playwright.config.ts",
+    "proof:record": "PROOF_RECORD=1 playwright test -c proof/playwright.config.ts",
+    "proof:once": "PROOF_ONCE=1 PROOF_RECORD=1 playwright test -c proof/playwright.config.ts",
+    "proof:server": "tsx proof/server.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.73.0",
@@ -74,6 +78,8 @@
     "zod-to-json-schema": "^3"
   },
   "devDependencies": {
+    "@playwright/test": "1.64.0",
+    "@repo/proof-video": "workspace:*",
     "@tailwindcss/postcss": "^4",
     "@types/bcrypt": "^6.0.0",
     "@types/d3-sankey": "^0.12.5",
