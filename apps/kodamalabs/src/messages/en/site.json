@@ -1,0 +1,25 @@
+{
+  "meta": {
+    "title": "Guilherme Kodama · Kodama Labs",
+    "description": "Software engineer in São Paulo. I build software that puts language models next to things that must not go wrong, and I run it myself."
+  },
+  "brand": "Kodama Labs",
+  "skip": "Skip to content",
+  "nav": {
+    "label": "Sections",
+    "work": "Work",
+    "lab": "Lab",
+    "method": "Method",
+    "about": "About"
+  },
+  "footer": {
+    "place": "Kodama Labs · São Paulo",
+    "note": "The drawings on this page use invented rows, names and amounts, because the real screens show real ones. The limits and counts are real.",
+    "commit": "main @ {commit}",
+    "updated": "updated {date}"
+  },
+  "notFound": {
+    "title": "Nothing here.",
+    "back": "Back to the homepage"
+  }
+}

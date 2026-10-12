@@ -1,0 +1,165 @@
+/*
+ * The motion layer. See src/motion/timeline.ts for the verbs and the idea.
+ *
+ * A figure (any element with data-fig) is in one of three states:
+ *
+ *   idle     waiting: each part holds the first frame of its schedule (hidden)
+ *   playing  each part runs the schedule it carries in --m
+ *   done     nothing applies: the page is exactly the static page
+ *
+ * All of it sits behind `html.m-on`, a class set before first paint by the
+ * inline script in the document head, and behind the reduced-motion query.
+ * Without JavaScript, with reduced motion or on paper, no rule here matches
+ * and the page is the static page.
+ */
+:root {
+  --m-draft: cubic-bezier(0.2, 0.7, 0.2, 1);
+  --m-ink: cubic-bezier(0.4, 0, 0.1, 1);
+}
+
+/* A mark a gate makes only while it decides. Never part of the finished page. */
+.m-transient {
+  opacity: 0;
+}
+
+@media screen and (prefers-reduced-motion: no-preference) {
+  html.m-on [data-fig][data-state='idle'] [data-k] {
+    animation: var(--m);
+    animation-play-state: paused;
+  }
+
+  html.m-on [data-fig][data-state='playing'] [data-k] {
+    animation: var(--m);
+  }
+
+  /* The dashes of an arriving proposal flow toward the gate. */
+  html.m-on [data-fig][data-state='playing'] [data-k] > :is(.fig-proposed, .fig-candidate) {
+    animation: var(--flow);
+  }
+
+  /* A figure that left the screen while playing waits for the reader. */
+  html.m-on [data-fig][data-state='playing'][data-inview='false'] [data-k],
+  html.m-on [data-fig][data-state='playing'][data-inview='false'] [data-k] > :is(.fig-proposed, .fig-candidate) {
+    animation-play-state: paused;
+  }
+
+  html.m-on [data-k] {
+    transform-origin: var(--o, center);
+  }
+
+  /* An SVG part scales around its own box, not the sheet's origin. */
+  html.m-on svg [data-k] {
+    transform-box: fill-box;
+  }
+}
+
+/*
+ * Each set starts from a hidden value; where `to` is not given, it ends at the
+ * element's own value.
+ */
+@keyframes m-grow-x {
+  from {
+    transform: scaleX(0);
+  }
+}
+
+@keyframes m-grow-y {
+  from {
+    transform: scaleY(0);
+  }
+}
+
+/* A group is revealed left to right. Its Pad gives it a box with a height. */
+@keyframes m-wipe-x {
+  from {
+    clip-path: inset(0 100% 0 0);
+  }
+  to {
+    clip-path: inset(0 0 0 0);
+  }
+}
+
+@keyframes m-wipe-y {
+  from {
+    clip-path: inset(0 0 100% 0);
+  }
+  to {
+    clip-path: inset(0 0 0 0);
+  }
+}
+
+/* Three dash periods (5 + 4) of travel. */
+@keyframes m-flow {
+  from {
+    stroke-dashoffset: 27;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes m-set {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes m-wait {
+  from,
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes m-press {
+  45% {
+    transform: scale(0.82);
+  }
+}
+
+@keyframes m-ripple {
+  from {
+    opacity: 0.55;
+    transform: scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: scale(2.3);
+  }
+}
+
+/*
+ * A ring (pathLength 1) completes one third at a time, holds, then clears.
+ * It is complete and held at 75%: that is when the check has decided.
+ */
+@keyframes m-check {
+  0% {
+    opacity: 1;
+    stroke-dasharray: 1;
+    stroke-dashoffset: 1;
+    animation-timing-function: steps(3, start);
+  }
+  75% {
+    opacity: 1;
+    stroke-dasharray: 1;
+    stroke-dashoffset: 0;
+  }
+  100% {
+    opacity: 0;
+    stroke-dasharray: 1;
+    stroke-dashoffset: 0;
+  }
+}
+
+/*
+ * The page's spine is inked from its top down one screen. The rest of it is
+ * below the fold and is simply there once the figure is done.
+ */
+@keyframes m-spine {
+  from {
+    clip-path: inset(0 0 100% 0);
+  }
+  to {
+    clip-path: inset(0 0 calc(100% - 100vh) 0);
+  }
+}
