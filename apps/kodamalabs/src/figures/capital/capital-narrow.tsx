@@ -43,13 +43,16 @@ const UNDO = {
   head: '299,353 304,347 309,353',
 } as const;
 
-/** The cash flow keeps its heights and loses width: the columns move together. */
+/**
+ * The cash flow keeps its heights and loses width: the columns move together,
+ * each gap just wide enough for the names that sit in it.
+ */
 const FLOW = {
-  columns: [0, 74, 148, 222],
+  columns: [0, 70, 150, 226],
   /** How far down the sheet the wide chart's coordinates are moved. */
   dy: 456,
   /** Where a column's names start: in the gap after its bars. */
-  nameOffset: 16,
+  nameOffset: 14,
 } as const;
 
 const HEIGHT = 796;
