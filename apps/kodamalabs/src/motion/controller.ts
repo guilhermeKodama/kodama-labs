@@ -26,7 +26,7 @@ export interface MotionApi {
   resume(id: string): void;
   /** Turns motion on or off for this visit and the next ones. */
   enable(on: boolean): void;
-  /** State of every figure, by id. */
+  /** State of every figure on the page, by id. */
   state(): Record<string, string>;
 }
 
@@ -59,11 +59,9 @@ export function startMotion(): () => void {
     return run;
   }
 
-  /** A figure and the figures that start together with it. */
+  /** Every element that plays a timeline: its wide and its narrow drawing, and each act of either. */
   function group(id: string): Figure[] {
-    return figures().filter(
-      (figure) => id === 'all' || figure.dataset.fig === id || figure.dataset.with === id,
-    );
+    return figures().filter((figure) => id === 'all' || figure.dataset.fig === id);
   }
 
   let inked = 0;
@@ -93,6 +91,9 @@ export function startMotion(): () => void {
     figure.dataset.state = 'playing';
     // The line is there before anything arrives at it.
     ink(figure.getBoundingClientRect().bottom);
+    // A later act of a timeline picks it up where that act begins.
+    const from = Number(figure.dataset.from ?? 0);
+    if (from > 0) for (const animation of figure.getAnimations({ subtree: true })) animation.currentTime = from;
     void settle(figure);
   }
 
@@ -177,8 +178,8 @@ export function startMotion(): () => void {
 
     for (const { figure, rect } of measured) {
       const { state } = figure.dataset;
-      if (state === 'idle' && !figure.dataset.with && visible && seen(rect.top, rect.bottom, viewport)) {
-        for (const member of group(figure.dataset.fig ?? '')) play(member);
+      if (state === 'idle' && visible && seen(rect.top, rect.bottom, viewport)) {
+        play(figure);
       } else if (state === 'playing') {
         figure.dataset.inview = String(visible && rect.bottom > 0 && rect.top < viewport);
       }
@@ -239,7 +240,13 @@ export function startMotion(): () => void {
     undo,
     resume,
     enable,
-    state: () => Object.fromEntries(figures().map((figure) => [figure.dataset.fig ?? '', figure.dataset.state ?? ''])),
+    // A figure is drawn twice, wide and narrow; only the one on the page is reported.
+    state: () =>
+      Object.fromEntries(
+        figures()
+          .filter((figure) => figure.getClientRects().length > 0)
+          .map((figure) => [figure.dataset.fig ?? '', figure.dataset.state ?? '']),
+      ),
   };
   window.__m = api;
 

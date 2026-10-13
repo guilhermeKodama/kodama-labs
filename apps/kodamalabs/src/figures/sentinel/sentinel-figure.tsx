@@ -14,18 +14,19 @@ import { Strand } from '../primitives/strand';
 import {
   ALERT,
   CANDIDATES,
-  JOB_MARKS,
   PIPELINE,
   PRICE_ENGINE,
   STRAND,
   candidatePath,
   feeds,
   job,
+  jobMark,
   lineageRules,
   nodeBox,
   nodeId,
   nodeLabel,
 } from './sentinel-data';
+import { SentinelNarrow } from './sentinel-narrow';
 
 const HEIGHT = 270;
 const m = bind(SENTINEL_TIMELINE);
@@ -54,7 +55,7 @@ function Pipeline() {
       </g>
       {PIPELINE.map((column) => (
         <g key={column.key} {...m(`column.${column.key}`)}>
-          <Label tone="muted" x={column.x - 0.5} y={18}>
+          <Label tone="muted" x={nodeBox(column, 0).x - 0.5} y={18}>
             {t(`heads.${column.key}`)}
           </Label>
           {column.nodes.map((node, index) =>
@@ -80,8 +81,8 @@ function Pipeline() {
           </g>
         );
       })}
-      {JOB_MARKS.map((mark, index) => (
-        <Fill key={mark.cx} tone="ink" {...mark} r={2.4} {...m(`job.mark.${index}`)} />
+      {([0, 1] as const).map((gap) => (
+        <Fill key={gap} tone="ink" {...jobMark(gap)} r={2.4} {...m(`job.mark.${gap}`)} />
       ))}
     </>
   );
@@ -130,7 +131,7 @@ function Alert() {
 }
 
 /** Sentinel: a pipeline over public records, an evaluator that fails closed, one alert. */
-export function SentinelFigure() {
+export function SentinelWide() {
   const t = useTranslations('figures.sentinel');
 
   return (
@@ -157,5 +158,15 @@ export function SentinelFigure() {
 
       <Alert />
     </FigureFrame>
+  );
+}
+
+/** The Sentinel figure: drawn across on a wide screen, downward on a narrow one. */
+export function SentinelFigure() {
+  return (
+    <>
+      <SentinelWide />
+      <SentinelNarrow />
+    </>
   );
 }

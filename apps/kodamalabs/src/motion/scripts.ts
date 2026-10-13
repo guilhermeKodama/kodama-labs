@@ -26,7 +26,8 @@ export function seen(top: number, bottom: number, viewport: number): boolean {
  * from the very first frame instead of flashing in and then restarting.
  *
  * No motion with reduced motion, with `?m=off`, when the reader turned it off
- * (the footer's switch), or without JavaScript (this never runs). If the controller has not started three seconds later the class
+ * (the footer's switch), or without JavaScript (this never runs). If the
+ * controller has not started three seconds later the class
  * is removed again, so a failed script can never leave part of the page hidden.
  */
 export function prepaint(): void {
@@ -61,14 +62,13 @@ export function boot(isSeen: (top: number, bottom: number, viewport: number) => 
     // A frozen frame was asked for (?m=<figure>@<ms>): the controller sets it.
     if ((new URLSearchParams(location.search).get('m') || '').indexOf('@') >= 0) return;
 
-    const waiting = document.querySelectorAll<HTMLElement>('[data-fig][data-state="idle"]:not([data-with])');
+    // An act that picks a timeline up midway is never on screen at load, and
+    // needs the controller to start it at the right point.
+    const waiting = document.querySelectorAll<HTMLElement>('[data-fig][data-state="idle"]:not([data-from])');
     for (let i = 0; i < waiting.length; i++) {
       const figure = waiting[i]!;
       const rect = figure.getBoundingClientRect();
-      if (!isSeen(rect.top, rect.bottom, innerHeight)) continue;
-      figure.dataset.state = 'playing';
-      const followers = document.querySelectorAll<HTMLElement>('[data-with="' + figure.dataset.fig + '"]');
-      for (let j = 0; j < followers.length; j++) followers[j]!.dataset.state = 'playing';
+      if (isSeen(rect.top, rect.bottom, innerHeight)) figure.dataset.state = 'playing';
     }
   } catch {
     // The controller starts them once the page has hydrated.

@@ -226,7 +226,8 @@
   outline: none;
 }
 
-.fig-lane .fig-pad {
+.fig-lane .fig-pad,
+.fig-control .fig-pad {
   pointer-events: all;
 }
 

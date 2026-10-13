@@ -3,6 +3,8 @@ import { PLAN_ROWS } from '@/figures/capital/capital-data';
 import type { Step, Timeline } from '../timeline';
 
 const STORY = 'import';
+/** When the ledger starts to be read as a cash flow: the second act of the narrow drawing. */
+export const CAPITAL_FLOW_AT = 2600;
 const ARRIVED = 1400;
 /** The reader's click on Confirm. Until here nothing is written. */
 const CLICK = 2100;
@@ -46,7 +48,7 @@ export const CAPITAL_TIMELINE: Timeline = {
 
     committed({ k: 'committed', verb: 'ink-x', at: DECIDED + 19, d: 420 }),
     committed({ k: 'ledger', verb: 'set', at: 2500 }),
-    committed({ k: 'views', verb: 'unfold', at: 2600 }),
+    committed({ k: 'views', verb: 'unfold', at: CAPITAL_FLOW_AT }),
     ...flowColumn(0, 2800),
     ...flowColumn(1, 3250),
     ...flowColumn(2, 3700),

@@ -23,6 +23,7 @@ import {
   delivery,
   stationX,
 } from './cosmos-data';
+import { CosmosNarrow } from './cosmos-narrow';
 
 const HEIGHT = 372;
 const line = bind(COSMOS_LINE_TIMELINE);
@@ -164,7 +165,7 @@ function RealRun() {
 }
 
 /** Cosmos: a production line of agents, and a real run of it that needed a person. */
-export function CosmosFigure() {
+export function CosmosWide() {
   const t = useTranslations('figures.cosmos');
 
   return (
@@ -173,5 +174,15 @@ export function CosmosFigure() {
       <ExampleLine />
       <RealRun />
     </FigureFrame>
+  );
+}
+
+/** The Cosmos figure: drawn across on a wide screen, downward on a narrow one. */
+export function CosmosFigure() {
+  return (
+    <>
+      <CosmosWide />
+      <CosmosNarrow />
+    </>
   );
 }

@@ -50,7 +50,7 @@ export function Flagship({ id, name, figure, plays, status }: FlagshipProps) {
       />
       <div className="mt-12">{figure}</div>
       <div className="mt-5 grid grid-cols-[minmax(0,1fr)] gap-y-2 wide:grid-cols-(--kl-tracks)">
-        <div className="order-last wide:order-none wide:col-span-3">
+        <div className="order-last flex items-start wide:order-none wide:col-span-3">
           <ReplayButton figures={plays} label={controls('replay')} />
         </div>
         <div className="wide:col-start-5">{status}</div>

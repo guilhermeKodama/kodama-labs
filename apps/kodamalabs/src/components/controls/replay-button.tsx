@@ -2,9 +2,13 @@
 
 import type { MotionApi } from '@/motion/controller';
 
-/** Shared look of the small mono controls that sit beside a figure or in the footer. */
+/**
+ * Shared look of the small mono controls that sit beside a figure or in the
+ * footer. The padding, taken back by the margin, gives a thumb a target taller
+ * than the text without moving anything.
+ */
 export const QUIET_CONTROL =
-  'cursor-pointer font-mono text-label text-muted underline decoration-1 underline-offset-4 hover:decoration-2';
+  '-my-2.5 cursor-pointer py-2.5 font-mono text-label text-muted underline decoration-1 underline-offset-4 hover:decoration-2';
 
 interface ReplayButtonProps {
   /** Ids of the figures to play again (their `data-fig`). */

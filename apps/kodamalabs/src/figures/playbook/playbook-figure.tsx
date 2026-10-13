@@ -13,6 +13,7 @@ import { Pad, SpineLine } from '../primitives/lines';
 import { Strand } from '../primitives/strand';
 
 import { AXIS, FIRE, IDEA_END, MARKS, MILHAS } from './playbook-data';
+import { PlaybookNarrow } from './playbook-narrow';
 
 const HEIGHT = 164;
 const m = bind(PLAYBOOK_TIMELINE);
@@ -21,7 +22,7 @@ const m = bind(PLAYBOOK_TIMELINE);
  * The validation playbook. MilhasGrupo's gate is a hollow ring until its
  * verdict is a recorded fact; then it is a decision like any other.
  */
-export function PlaybookFigure({ verdict }: { verdict: Facts['milhasVerdict'] }) {
+export function PlaybookWide({ verdict }: { verdict: Facts['milhasVerdict'] }) {
   const t = useTranslations('figures.playbook');
   const format = useFormatter();
   const day = (date: string) =>
@@ -76,5 +77,15 @@ export function PlaybookFigure({ verdict }: { verdict: Facts['milhasVerdict'] })
         </Label>
       </g>
     </FigureFrame>
+  );
+}
+
+/** Drawn across from the `nav` breakpoint up, downward below it. */
+export function PlaybookFigure({ verdict }: { verdict: Facts['milhasVerdict'] }) {
+  return (
+    <>
+      <PlaybookWide verdict={verdict} />
+      <PlaybookNarrow verdict={verdict} />
+    </>
   );
 }

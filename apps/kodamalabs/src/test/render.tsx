@@ -63,8 +63,6 @@ export function elements(html: string, tag: string): Array<Record<string, string
 export interface FigureMarkup {
   id: string;
   state: string | undefined;
-  /** The figure it starts together with, if any. */
-  follows: string | undefined;
   /** `data-k` of every part inside it, in document order. */
   keys: string[];
   /** Attributes of each part, by key. */
@@ -101,11 +99,15 @@ export function figuresOf(html: string): FigureMarkup[] {
       parent.keys.push(attrs['data-k']);
       parent.parts[attrs['data-k']] = attrs;
     }
-    if (attrs['data-fig']) {
+    if (attrs['data-fig'] && attrs['data-from']) {
+      // A later act of the same drawing: its parts belong to the figure it continues.
+      figure = figures.findLast((earlier) => earlier.id === attrs['data-fig']) ?? null;
+      if (figure && attrs['data-state'] !== figure.state) figure.state = undefined;
+      if (figure && parent !== null) figure.nested = true;
+    } else if (attrs['data-fig']) {
       figure = {
         id: attrs['data-fig'],
         state: attrs['data-state'],
-        follows: attrs['data-with'],
         keys: [],
         parts: {},
         nested: parent !== null,

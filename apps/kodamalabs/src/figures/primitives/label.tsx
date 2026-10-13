@@ -1,5 +1,7 @@
 import type { SVGAttributes } from 'react';
 
+import { wrapLabel } from '../geometry/wrap';
+
 interface LabelProps extends Omit<SVGAttributes<SVGTextElement>, 'className' | 'x' | 'y'> {
   x: number;
   /** Baseline. */
@@ -50,5 +52,25 @@ export function Label({
     <text className={classes.join(' ')} x={x} y={y} {...rest}>
       {children}
     </text>
+  );
+}
+
+interface LinesProps extends Pick<LabelProps, 'x' | 'y' | 'face' | 'size' | 'tone' | 'bold' | 'anchor' | 'children'> {
+  /** Longest line, in characters. */
+  max: number;
+  /** Distance between baselines. */
+  pitch?: number;
+}
+
+/** A label that may need more than one line: wrapped at `max` characters, top line at `y`. */
+export function Lines({ max, pitch = 15, y, children, ...label }: LinesProps) {
+  return (
+    <>
+      {wrapLabel(children, max).map((line, index) => (
+        <Label key={line} y={y + index * pitch} {...label}>
+          {line}
+        </Label>
+      ))}
+    </>
   );
 }

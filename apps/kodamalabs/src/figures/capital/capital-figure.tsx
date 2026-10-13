@@ -24,6 +24,7 @@ import {
   flowRibbons,
   nodeBox,
 } from './capital-data';
+import { CapitalNarrow } from './capital-narrow';
 
 const HEIGHT = 368;
 const m = bind(CAPITAL_TIMELINE);
@@ -145,7 +146,7 @@ function CashFlow() {
  * Capital: a plan proposed by the assistant, my click, the ledger. After the
  * figure has played, the reader can undo the import and confirm it again.
  */
-export function CapitalFigure() {
+export function CapitalWide() {
   const t = useTranslations('figures.capital');
   const y = PLAN.strand;
 
@@ -177,6 +178,7 @@ export function CapitalFigure() {
         <Chevron points={LEDGER.undoHead} />
       </g>
       <FigureControl act="undo" at={CAPITAL_HOLD_AT} label={t('controls.undo')}>
+        <Pad x={WIDE.right - 4} y={LEDGER.notes - 16} width={190} height={24} />
         <Label tone="muted" x={WIDE.right} y={LEDGER.notes} {...m('undo.note')}>
           {t('undo')}
         </Label>
@@ -190,5 +192,15 @@ export function CapitalFigure() {
 
       <CashFlow />
     </FigureFrame>
+  );
+}
+
+/** The Capital figure: drawn across on a wide screen, downward on a narrow one. */
+export function CapitalFigure() {
+  return (
+    <>
+      <CapitalWide />
+      <CapitalNarrow />
+    </>
   );
 }

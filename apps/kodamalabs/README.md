@@ -34,6 +34,13 @@ Opens at http://localhost:3003.
 
 Each figure has a folder in `src/figures`: its data (`*-data.ts`, all invented), its component, and a timeline in `src/motion/timelines`. `src/figures/__tests__/port.test.tsx` compares every figure with its drawing in the mockup, shape for shape and word for word, so a figure can be refactored without drifting from the design.
 
+Every figure is drawn twice, and CSS shows the one that fits:
+
+- **wide** (`*-figure.tsx`), across the page, with the spine as a vertical line. Shown from the `wide` breakpoint up; the four smaller figures from `nav` up.
+- **narrow** (`*-narrow.tsx`), on a 340-unit sheet that reads top to bottom, where the gate is a horizontal rule the flow crosses on its way down. There is no mockup of these; `narrow.test.tsx` holds them to the same rules (words from the messages, text inside the sheet, every gate on a gate rule).
+
+Both drawings of a figure play the same timeline, so they have the same parts; a narrow part that runs down the sheet asks for its verb turned (`m(key, true)`). A drawing taller than a phone can play its timeline in acts (`scope(timeline, from)`), each starting when the reader reaches it.
+
 ## Motion
 
 A figure's markup carries its own schedule and CSS plays it; see the header of `src/motion/timeline.ts`. A figure plays when the reader scrolls to it, the spine is inked as far as they have come, and a few sentences are inked when reached. With reduced motion or without JavaScript the page is simply the static page.

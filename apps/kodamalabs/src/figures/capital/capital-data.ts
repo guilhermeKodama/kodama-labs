@@ -105,8 +105,9 @@ const FLOW_LINKS: ReadonlyArray<readonly [from: string, to: string, value: numbe
 
 const round = (value: number) => Math.round(value * 10) / 10;
 
-export function nodeBox(node: FlowNode) {
-  return { x: COLUMNS[node.column], y: node.y, width: NODE_WIDTH, height: round(node.value * UNIT), rx: 2 };
+/** A node's bar. `columns` is where each column starts: the wide sheet's, or a narrower one. */
+export function nodeBox(node: FlowNode, columns: readonly number[] = COLUMNS) {
+  return { x: columns[node.column]!, y: node.y, width: NODE_WIDTH, height: round(node.value * UNIT), rx: 2 };
 }
 
 export interface Ribbon {
@@ -119,7 +120,7 @@ export interface Ribbon {
  * The ribbons of the flow. Each takes the next free slice of its source and
  * of its target, top down, and bends across the whole gap between them.
  */
-export function flowRibbons(): Ribbon[] {
+export function flowRibbons(columns: readonly number[] = COLUMNS): Ribbon[] {
   const used = new Map<string, { out: number; in: number }>();
   const slot = (key: string) => used.get(key) ?? used.set(key, { out: 0, in: 0 }).get(key)!;
   const node = (key: string) => FLOW_NODES.find((candidate) => candidate.key === key)!;
@@ -135,9 +136,9 @@ export function flowRibbons(): Ribbon[] {
     slot(fromKey).out += height;
     slot(toKey).in += height;
 
-    const start = COLUMNS[from.column] + NODE_WIDTH;
-    const end = COLUMNS[to.column];
-    const bend = past === undefined ? start : COLUMNS[past]! + NODE_WIDTH;
+    const start = columns[from.column]! + NODE_WIDTH;
+    const end = columns[to.column]!;
+    const bend = past === undefined ? start : columns[past]! + NODE_WIDTH;
     const mid = (bend + end) / 2;
 
     if (top0 === top1) {

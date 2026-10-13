@@ -63,6 +63,11 @@ interface VerbSpec {
   gateOnly?: boolean;
   /** For a verb that decides: the fraction of its duration at which it has. */
   decidesAt?: number;
+  /**
+   * The same verb in a narrow figure, which reads top to bottom: what moved
+   * along x moves along y, and the other way round.
+   */
+  turned?: { keyframes: string; origin?: string };
 }
 
 export const VERBS = {
@@ -70,19 +75,19 @@ export const VERBS = {
   unfold: { keyframes: 'm-wipe-x', duration: 420, ease: EASE.draft, fill: 'both' },
   'unfold-y': { keyframes: 'm-wipe-y', duration: 420, ease: EASE.draft, fill: 'both' },
   rise: { keyframes: 'm-grow-y', duration: 380, ease: EASE.draft, fill: 'both', origin: 'center top' },
-  arrive: { keyframes: 'm-wipe-x', duration: 600, ease: EASE.draft, fill: 'both', flow: true },
-  advance: { keyframes: 'm-wipe-x', duration: 900, ease: EASE.linear, fill: 'both', flow: true },
-  'ink-x': { keyframes: 'm-wipe-x', duration: 520, ease: EASE.ink, fill: 'both' },
-  'ink-y': { keyframes: 'm-grow-y', duration: 520, ease: EASE.ink, fill: 'both', origin: 'center top' },
+  arrive: { keyframes: 'm-wipe-x', duration: 600, ease: EASE.draft, fill: 'both', flow: true, turned: { keyframes: 'm-wipe-y' } },
+  advance: { keyframes: 'm-wipe-x', duration: 900, ease: EASE.linear, fill: 'both', flow: true, turned: { keyframes: 'm-wipe-y' } },
+  'ink-x': { keyframes: 'm-wipe-x', duration: 520, ease: EASE.ink, fill: 'both', turned: { keyframes: 'm-wipe-y' } },
+  'ink-y': { keyframes: 'm-grow-y', duration: 520, ease: EASE.ink, fill: 'both', origin: 'center top', turned: { keyframes: 'm-grow-x', origin: 'left center' } },
   set: { keyframes: 'm-set', duration: 160, ease: EASE.out, fill: 'both' },
   print: { keyframes: 'm-set', duration: 60, ease: 'steps(1, end)', fill: 'both' },
   pulse: { keyframes: 'm-pulse', duration: 260, ease: EASE.inOut, fill: 'none' },
-  'return-x': { keyframes: 'm-wipe-back', duration: 600, ease: EASE.ink, fill: 'both' },
+  'return-x': { keyframes: 'm-wipe-back', duration: 600, ease: EASE.ink, fill: 'both', turned: { keyframes: 'm-wipe-up' } },
   wait: { keyframes: 'm-wait', duration: 240, ease: EASE.linear, fill: 'none', transient: true, gateOnly: true },
   press: { keyframes: 'm-press', duration: 180, ease: EASE.inOut, fill: 'none', gateOnly: true, decidesAt: 0.45 },
   ripple: { keyframes: 'm-ripple', duration: 420, ease: EASE.out, fill: 'none', transient: true, gateOnly: true },
-  stamp: { keyframes: 'm-wipe-y', duration: 400, ease: 'steps(5, start)', fill: 'both', gateOnly: true, decidesAt: 1 },
-  scan: { keyframes: 'm-scan', duration: 700, ease: 'steps(5, jump-none)', fill: 'none', transient: true, gateOnly: true, decidesAt: 0.4 },
+  stamp: { keyframes: 'm-wipe-y', duration: 400, ease: 'steps(5, start)', fill: 'both', gateOnly: true, decidesAt: 1, turned: { keyframes: 'm-wipe-x' } },
+  scan: { keyframes: 'm-scan', duration: 700, ease: 'steps(5, jump-none)', fill: 'none', transient: true, gateOnly: true, decidesAt: 0.4, turned: { keyframes: 'm-scan-x' } },
   check: { keyframes: 'm-check', duration: 440, ease: EASE.linear, fill: 'none', transient: true, gateOnly: true, decidesAt: 0.75 },
 } as const satisfies Record<string, VerbSpec>;
 
@@ -153,23 +158,30 @@ export interface MotionProps {
  * Returns `m(key)`, which gives the element with that key its schedule as CSS
  * custom properties. Asking for a key the timeline does not have throws, so a
  * typo fails at render (and in the tests) instead of silently not moving.
+ *
+ * `m(key, true)` is for a part of a narrow figure that runs down the sheet
+ * instead of across it: the same schedule, with each verb turned.
  */
-export function bind(timeline: Timeline): (key: string) => MotionProps {
+export function bind(timeline: Timeline): (key: string, turned?: boolean) => MotionProps {
   const byKey = new Map<string, Step[]>();
   for (const step of timeline.steps) {
     byKey.set(step.k, [...(byKey.get(step.k) ?? []), step]);
   }
 
-  return (key) => {
+  return (key, turned = false) => {
     const steps = byKey.get(key);
     if (!steps) throw new Error(`Timeline "${timeline.id}" has no step for "${key}".`);
+    const motion = (step: Step) => {
+      const verb = verbSpec(step.verb);
+      return (turned && verb.turned) || verb;
+    };
 
     const style: Record<string, string> = {
-      '--m': steps.map((step) => shorthand(step, VERBS[step.verb].keyframes)).join(', '),
+      '--m': steps.map((step) => shorthand(step, motion(step).keyframes)).join(', '),
     };
     const flowing = steps.filter((step) => verbSpec(step.verb).flow);
     if (flowing.length > 0) style['--flow'] = flowing.map((step) => shorthand(step, 'm-flow')).join(', ');
-    const origin = steps.map((step) => verbSpec(step.verb).origin).find(Boolean);
+    const origin = steps.map((step) => motion(step).origin).find(Boolean);
     if (origin) style['--o'] = origin;
 
     return { 'data-k': key, style: style as React.CSSProperties };
@@ -180,20 +192,23 @@ export function bind(timeline: Timeline): (key: string) => MotionProps {
 export interface ScopeProps {
   'data-fig': string;
   'data-state': 'idle';
-  'data-with'?: string;
+  'data-from'?: number;
   suppressHydrationWarning: true;
 }
 
 /**
  * Every figure is rendered waiting (`idle`); scripts move it on from there, so
  * React must not complain that the attribute changed before it hydrated.
- * `follows` makes it start together with another figure instead of on its own.
+ *
+ * A tall drawing may play one timeline in several acts, each its own element
+ * that starts when the reader reaches it. `from` is where in the timeline an
+ * act after the first picks up, in ms.
  */
-export function scope(timeline: Timeline, follows?: Timeline): ScopeProps {
+export function scope(timeline: Timeline, from = 0): ScopeProps {
   return {
     'data-fig': timeline.id,
     'data-state': 'idle',
-    ...(follows ? { 'data-with': follows.id } : {}),
+    ...(from > 0 ? { 'data-from': from } : {}),
     suppressHydrationWarning: true,
   };
 }

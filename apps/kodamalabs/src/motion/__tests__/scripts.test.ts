@@ -47,11 +47,7 @@ function run(
   const document = {
     documentElement: root,
     visibilityState: page.hidden ? 'hidden' : 'visible',
-    querySelectorAll: (selector: string) => {
-      const follows = /^\[data-with="(.+)"\]$/.exec(selector);
-      if (follows) return figures.filter((figure) => figure.dataset.with === follows[1]);
-      return figures.filter((figure) => figure.dataset.state === 'idle' && !figure.dataset.with);
-    },
+    querySelectorAll: () => figures.filter((figure) => figure.dataset.state === 'idle' && !figure.dataset.from),
   };
 
   new Function('document', 'location', 'matchMedia', 'setTimeout', 'window', 'innerHeight', 'localStorage', script)(
@@ -96,22 +92,20 @@ describe('the script at the end of the body', () => {
     return [
       element({ fig: 'intro', state: 'idle' }, { top: 80, bottom: 430 }),
       element({ fig: 'lanes', state: 'idle' }, { top: 473, bottom: 709 }),
-      element({ fig: 'spine', state: 'idle', with: 'lanes' }, { top: 473, bottom: 5200 }),
       element({ fig: 'capital', state: 'idle' }, { top: 1500, bottom: 1868 }),
     ];
   }
 
-  it('starts the figures on screen and the ones that follow them', () => {
+  it('starts the figures on screen and leaves the rest waiting', () => {
     const figures = page();
     run(BOOT_SCRIPT, { on: true, figures });
-    expect(figures.map((figure) => figure.dataset.state)).toEqual(['playing', 'playing', 'playing', 'idle']);
+    expect(figures.map((figure) => figure.dataset.state)).toEqual(['playing', 'playing', 'idle']);
   });
 
-  it('leaves a follower waiting while its figure is below the fold', () => {
-    const figures = page();
-    figures[1]!.getBoundingClientRect = () => ({ top: 880, bottom: 1116 });
+  it('leaves a later act of a timeline to the controller, which starts it midway', () => {
+    const figures = [element({ fig: 'capital', state: 'idle', from: '2600' }, { top: 100, bottom: 400 })];
     run(BOOT_SCRIPT, { on: true, figures });
-    expect(figures.map((figure) => figure.dataset.state)).toEqual(['playing', 'idle', 'idle', 'idle']);
+    expect(figures[0]!.dataset.state).toBe('idle');
   });
 
   it('starts nothing in a background tab', () => {

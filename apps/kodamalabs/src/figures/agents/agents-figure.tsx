@@ -12,12 +12,13 @@ import { Panel } from '../primitives/shapes';
 import { Strand } from '../primitives/strand';
 
 import { BRANCHES, CONTRACT, MAIN, MERGED, STRAND, branchPath, mergePath } from './agents-data';
+import { AgentsNarrow } from './agents-narrow';
 
 const HEIGHT = 234;
 const m = bind(AGENTS_TIMELINE);
 
 /** Coding agents: a written contract, branches to one gate, and what merges into main. */
-export function AgentsFigure() {
+export function AgentsWide() {
   const t = useTranslations('figures.agents');
 
   return (
@@ -85,5 +86,15 @@ export function AgentsFigure() {
         {t('closed')}
       </Label>
     </FigureFrame>
+  );
+}
+
+/** Drawn across from the `nav` breakpoint up, downward below it. */
+export function AgentsFigure() {
+  return (
+    <>
+      <AgentsWide />
+      <AgentsNarrow />
+    </>
   );
 }

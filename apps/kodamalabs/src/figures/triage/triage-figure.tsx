@@ -13,12 +13,13 @@ import { Chevron, Panel } from '../primitives/shapes';
 import { Strand } from '../primitives/strand';
 
 import { KEPT_ROWS, RESTORE, ROW, SHADOW_ROWS, STRAND } from './triage-data';
+import { TriageNarrow } from './triage-narrow';
 
 const HEIGHT = 214;
 const m = bind(TRIAGE_TIMELINE);
 
 /** The learning filter: what a model would discard, the gate, and what it then discards alone. */
-export function TriageFigure() {
+export function TriageWide() {
   const t = useTranslations('figures.triage');
 
   return (
@@ -93,5 +94,15 @@ export function TriageFigure() {
         {t('restored')}
       </Label>
     </FigureFrame>
+  );
+}
+
+/** Drawn across from the `nav` breakpoint up, downward below it. */
+export function TriageFigure() {
+  return (
+    <>
+      <TriageWide />
+      <TriageNarrow />
+    </>
   );
 }

@@ -12,6 +12,7 @@ import { Hairline, Pad, SpineLine } from '../primitives/lines';
 import { Strand } from '../primitives/strand';
 
 import { LANES, LANES_SHEET, laneGeometry, type Lane } from './lanes-data';
+import { LanesNarrow } from './lanes-narrow';
 
 const m = bind(LANES_TIMELINE);
 
@@ -79,7 +80,7 @@ function LaneRow({ lane, index }: { lane: Lane; index: number }) {
  *
  * It plays in that order too: src/motion/timelines/lanes.ts.
  */
-export function LanesFigure() {
+export function LanesWide() {
   const t = useTranslations('figures.lanes');
   const { columns, headBaseline, height, rules } = LANES_SHEET;
 
@@ -105,5 +106,15 @@ export function LanesFigure() {
         <LaneRow key={lane.key} lane={lane} index={index} />
       ))}
     </FigureFrame>
+  );
+}
+
+/** The first figure: drawn across on a wide screen, downward on a narrow one. */
+export function LanesFigure() {
+  return (
+    <>
+      <LanesWide />
+      <LanesNarrow />
+    </>
   );
 }

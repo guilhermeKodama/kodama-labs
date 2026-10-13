@@ -16,10 +16,18 @@ interface GateProps extends Omit<SVGAttributes<SVGElement>, 'x' | 'y' | 'height'
   y: number;
   /** Extent along the spine, for bar and capsule. */
   height?: number;
+  /** The spine is horizontal (a narrow figure): bar and capsule lie along it. */
+  across?: boolean;
 }
 
 /** The only accent in a figure: where a person or a fail-closed check decides. */
-export function Gate({ shape, x, y, height = 26, ...rest }: GateProps) {
+export function Gate({ shape, x, y, height = 26, across = false, ...rest }: GateProps) {
+  /** A box of `thickness` across the spine and `height` along it, centred on the gate. */
+  const along = (thickness: number) =>
+    across
+      ? { x: x - height / 2, y: y - thickness / 2, width: height, height: thickness, rx: thickness / 2 }
+      : { x: x - thickness / 2, y: y - height / 2, width: thickness, height, rx: thickness / 2 };
+
   switch (shape) {
     case 'dot':
       return <circle data-part="gate" className="fig-gate" cx={x} cy={y} r={6.5} {...rest} />;
@@ -27,16 +35,7 @@ export function Gate({ shape, x, y, height = 26, ...rest }: GateProps) {
       return <circle data-part="gate" className="fig-gate-open" cx={x} cy={y} r={6} {...rest} />;
     case 'bar':
       return (
-        <rect
-          data-part="gate"
-          className="fig-gate"
-          x={x - 3}
-          y={y - height / 2}
-          width={6}
-          height={height}
-          rx={3}
-          {...rest}
-        />
+        <rect data-part="gate" className="fig-gate" {...along(6)} {...rest} />
       );
     case 'band':
       return (
@@ -53,16 +52,7 @@ export function Gate({ shape, x, y, height = 26, ...rest }: GateProps) {
       );
     case 'capsule':
       return (
-        <rect
-          data-part="gate"
-          className="fig-gate-open"
-          x={x - 6}
-          y={y - height / 2}
-          width={12}
-          height={height}
-          rx={6}
-          {...rest}
-        />
+        <rect data-part="gate" className="fig-gate-open" {...along(12)} {...rest} />
       );
   }
 }

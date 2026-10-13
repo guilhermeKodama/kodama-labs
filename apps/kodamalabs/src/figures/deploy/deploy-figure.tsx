@@ -13,6 +13,7 @@ import { Chevron, Panel } from '../primitives/shapes';
 import { Strand } from '../primitives/strand';
 
 import { DATABASES, FAILURE, MACHINE, SERVICE, SERVICES, STEP, STEPS, STRAND } from './deploy-data';
+import { DeployNarrow } from './deploy-narrow';
 
 const HEIGHT = 214;
 const m = bind(DEPLOY_TIMELINE);
@@ -65,7 +66,7 @@ function Machine() {
 }
 
 /** Deploys: steps to one gate, the machine behind it, and what a failed migration leaves alone. */
-export function DeployFigure() {
+export function DeployWide() {
   const t = useTranslations('figures.deploy');
 
   return (
@@ -119,5 +120,15 @@ export function DeployFigure() {
 
       <Machine />
     </FigureFrame>
+  );
+}
+
+/** Drawn across from the `nav` breakpoint up, downward below it. */
+export function DeployFigure() {
+  return (
+    <>
+      <DeployWide />
+      <DeployNarrow />
+    </>
   );
 }

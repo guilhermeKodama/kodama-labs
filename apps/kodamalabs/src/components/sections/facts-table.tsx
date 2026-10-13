@@ -8,6 +8,9 @@ import { INTRO_TIMELINE } from '@/motion/timelines/intro';
 
 const m = bind(INTRO_TIMELINE);
 
+/** Padding, taken back by the margin: a taller target for a thumb, in the same place. */
+const TARGET = '-my-1.5 py-1.5';
+
 interface Fact {
   label: string;
   value: React.ReactNode;
@@ -29,10 +32,20 @@ export function FactsTable({ facts }: { facts: Facts }) {
       label: t('contact.label'),
       value: (
         <span className="flex flex-wrap gap-x-3.5 gap-y-1">
-          <a href={LINKS.email}>{EMAIL}</a>
-          <a href={LINKS.github}>{t('contact.github')}</a>
-          <a href={LINKS.linkedin}>{t('contact.linkedin')}</a>
-          {facts.cvUrl.known ? <a href={facts.cvUrl.value}>{t('contact.cv')}</a> : null}
+          <a href={LINKS.email} className={TARGET}>
+            {EMAIL}
+          </a>
+          <a href={LINKS.github} className={TARGET}>
+            {t('contact.github')}
+          </a>
+          <a href={LINKS.linkedin} className={TARGET}>
+            {t('contact.linkedin')}
+          </a>
+          {facts.cvUrl.known ? (
+            <a href={facts.cvUrl.value} className={TARGET}>
+              {t('contact.cv')}
+            </a>
+          ) : null}
         </span>
       ),
     },

@@ -16,6 +16,19 @@ export function SpineLine({ x, height, ...rest }: SpineLineProps) {
   return <line data-part="spine" className="fig-spine wide:hidden" x1={x} y1={0} x2={x} y2={height} {...rest} />;
 }
 
+interface GateRuleProps extends LineAttributes {
+  y: number;
+  width: number;
+}
+
+/**
+ * The spine of a narrow figure: a horizontal rule across the sheet, which the
+ * flow crosses on its way down.
+ */
+export function GateRule({ y, width, ...rest }: GateRuleProps) {
+  return <line data-part="spine" className="fig-spine" x1={0} y1={y} x2={width} y2={y} {...rest} />;
+}
+
 interface HairlineProps extends LineAttributes {
   from: readonly [number, number];
   to: readonly [number, number];

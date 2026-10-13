@@ -5,9 +5,9 @@ import { elements, messageValues, messagesFor, renderWithMessages, textOf } from
 
 import { WIDE } from '../geometry/grid';
 import { LANES } from '../lanes/lanes-data';
-import { LanesFigure } from '../lanes/lanes-figure';
+import { LanesWide } from '../lanes/lanes-figure';
 
-const html = renderWithMessages(<LanesFigure />);
+const html = renderWithMessages(<LanesWide />);
 
 /** Splits the figure into the markup of each lane link. */
 const lanes = html.split('<a ').slice(1).map((chunk) => `<a ${chunk.split('</a>')[0]}</a>`);

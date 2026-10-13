@@ -4,25 +4,25 @@ import { unknown } from '@/content/facts';
 import { mockupSignatures, signatures } from '@/test/mockup';
 import { renderWithMessages } from '@/test/render';
 
-import { AgentsFigure } from '../agents/agents-figure';
-import { CapitalFigure } from '../capital/capital-figure';
-import { CosmosFigure } from '../cosmos/cosmos-figure';
-import { DeployFigure } from '../deploy/deploy-figure';
-import { LanesFigure } from '../lanes/lanes-figure';
-import { PlaybookFigure } from '../playbook/playbook-figure';
-import { SentinelFigure } from '../sentinel/sentinel-figure';
-import { TriageFigure } from '../triage/triage-figure';
+import { AgentsWide } from '../agents/agents-figure';
+import { CapitalWide } from '../capital/capital-figure';
+import { CosmosWide } from '../cosmos/cosmos-figure';
+import { DeployWide } from '../deploy/deploy-figure';
+import { LanesWide } from '../lanes/lanes-figure';
+import { PlaybookWide } from '../playbook/playbook-figure';
+import { SentinelWide } from '../sentinel/sentinel-figure';
+import { TriageWide } from '../triage/triage-figure';
 
-/** Each figure, rendered, beside the name of its drawing in the mockup. */
+/** The wide drawing of each figure, rendered, beside the name of its drawing in the mockup. */
 const FIGURES = [
-  { name: 'lanes', node: <LanesFigure /> },
-  { name: 'capital', node: <CapitalFigure /> },
-  { name: 'sentinel', node: <SentinelFigure /> },
-  { name: 'cosmos', node: <CosmosFigure /> },
-  { name: 'triage', node: <TriageFigure /> },
-  { name: 'playbook', node: <PlaybookFigure verdict={unknown()} /> },
-  { name: 'agents', node: <AgentsFigure /> },
-  { name: 'deploy', node: <DeployFigure /> },
+  { name: 'lanes', node: <LanesWide /> },
+  { name: 'capital', node: <CapitalWide /> },
+  { name: 'sentinel', node: <SentinelWide /> },
+  { name: 'cosmos', node: <CosmosWide /> },
+  { name: 'triage', node: <TriageWide /> },
+  { name: 'playbook', node: <PlaybookWide verdict={unknown()} /> },
+  { name: 'agents', node: <AgentsWide /> },
+  { name: 'deploy', node: <DeployWide /> },
 ] as const;
 
 /**
