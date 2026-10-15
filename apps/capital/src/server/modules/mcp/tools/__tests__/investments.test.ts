@@ -67,6 +67,14 @@ describe("MCP investment tools", () => {
     expect(perUnit.averageCost).toBe(102.5);
     await expect(updateHoldingPrice(USER, { holdingId, price: 1, totalValue: 2 }, prisma)).rejects.toMatchObject({ status: 422, code: "holding.price_choice" });
     await expect(updateHoldingPrice(USER, { holdingId }, prisma)).rejects.toMatchObject({ status: 422, code: "holding.price_choice" });
+    await expect(updateHoldingPrice(USER, { holdingId, price: -1 }, prisma)).rejects.toMatchObject({ status: 422, code: "holding.price_choice" });
+    await expect(updateHoldingPrice(USER, { holdingId, price: 1, date: "2099-01-01" }, prisma)).rejects.toMatchObject({ status: 422, code: "holding.future_date" });
+    const zero = await updateHoldingPrice(USER, { holdingId, price: 0 }, prisma);
+    expect(zero.currentPrice).toBe(0);
+    expect(zero.totalInvested).toBe(16810);
+    const zeroValue = await updateHoldingPrice(USER, { holdingId, totalValue: 0 }, prisma);
+    expect(zeroValue.currentPrice).toBe(0);
+    expect(zeroValue.totalInvested).toBe(16810);
     await expect(updateHoldingPrice(OTHER, { holdingId, price: 1 }, prisma)).rejects.toMatchObject({ status: 404, code: "holding.not_found" });
   });
 

@@ -1295,6 +1295,7 @@ export function createCapitalMcpServer(userId: string, db: DbClient, opts: { rea
     quantity: z.number().optional(),
     price: z.number().optional(),
     mode: z.enum(["by_value", "by_units"]).optional(),
+    notes: z.string().optional(),
   };
 
   server.registerTool(
@@ -1324,6 +1325,9 @@ export function createCapitalMcpServer(userId: string, db: DbClient, opts: { rea
         "checking → broker is an investment_deposit and counts as an aporte of cash only (the holding is unchanged). " +
         "Do not use this to contribute to a holding such as Caixinha Nubank PJ — record_investment_contribution " +
         "already books that cash transfer and the buy. A second create_transfer would move the cash twice. " +
+        "A deposit or withdrawal that crosses entities (PF checking into a PJ broker, or the reverse) is rejected: " +
+        "use record_investment_contribution or record_investment_redemption, which route through the broker entity's checking account. " +
+        "Same-entity checking ↔ broker is allowed and does not change a holding. " +
         "Credit cards are rejected. Same currency: pass amount only (toAmount and exchangeRate are rejected). " +
         "Different currencies: amount leaves the source account; toAmount is what arrives (or pass exchangeRate). " +
         "A repeat of the same from account, to account, date, amount, description, and toAmount returns the existing " +
@@ -1351,7 +1355,8 @@ export function createCapitalMcpServer(userId: string, db: DbClient, opts: { rea
       description:
         "List live transfers, one row per transfer (both legs collapsed): date, direction, description, " +
         "the account money left and the account it arrived in, with amounts and currencies. " +
-        "Optional filters: dateFrom, dateTo, accountId (either leg), direction, entityId (either leg).",
+        "Optional filters: dateFrom, dateTo, accountId (either leg), direction, entityId (either leg). " +
+        "accountId and entityId both apply. limit defaults to 100 and caps at 500; offset skips that many transfers.",
       inputSchema: z.object({
         dateFrom: DateStringSchema.optional(),
         dateTo: DateStringSchema.optional(),
@@ -1366,6 +1371,8 @@ export function createCapitalMcpServer(userId: string, db: DbClient, opts: { rea
           "between_accounts",
         ]).optional(),
         entityId: z.string().uuid().optional(),
+        limit: z.number().int().min(1).max(500).optional(),
+        offset: z.number().int().min(0).optional(),
       }),
       annotations: { readOnlyHint: true },
     },
@@ -1392,12 +1399,18 @@ export function createCapitalMcpServer(userId: string, db: DbClient, opts: { rea
         "by_units buys new units (a stock or FII). Pass quantity and price (quantity × price must match the amount the holding " +
         "receives, within 0.01), or one of them, or neither when the holding already has a current price " +
         "(units = amount / current price).\n\n" +
-        "Default mode: by_value when the asset class is fixed income or savings, when the name contains \"caixinha\", " +
-        "or when quantity is 1 and you omit quantity and price. Otherwise by_units. Pass mode to override.\n\n" +
+        "Default mode: by_value when the asset class is fixed income or savings, or when the name contains \"caixinha\". " +
+        "Otherwise by_units. Quantity 1 on its own does not select by_value. A holding whose ticker is repriced from the " +
+        "market (updateAllPrices) stays by_units unless you pass mode by_value explicitly.\n\n" +
+        "A by_value buy on a live position is stored with quantity 0 so replaying the operations reproduces the cost. " +
+        "A fully redeemed position (quantity 0) is reopened as quantity 1 at the contribution amount, so price times quantity is the value again. " +
+        "Deleting that quantity-0 buy in the Investments screen removes the cost and the cash, and leaves currentPrice where this tool set it. " +
+        "Undo the batch to put the price back as well.\n\n" +
         "amount is what leaves cashAccountId, in that account's currency. When the holding's currency differs, toAmount " +
         "is what the holding receives in its currency. description is the text Aportes shows " +
-        "(for example \"Aplicação Caixinha Nubank PJ (CDB)\"). The same holding, date, and amount returns the existing " +
-        "operation (duplicate: true) instead of booking again, including a parallel double-submit.",
+        "(for example \"Aplicação Caixinha Nubank PJ (CDB)\"). notes, when passed, are kept and \"by_value\" is appended. " +
+        "The same holding, date, and amount returns the existing operation (duplicate: true) instead of booking again, " +
+        "including a parallel double-submit. A cross-entity duplicate lists every transfer group, including the hop.",
       inputSchema: z.object(cashflowFields),
     },
     async (params) => {
@@ -1421,7 +1434,9 @@ export function createCapitalMcpServer(userId: string, db: DbClient, opts: { rea
         "Paying out the whole value (within R$0.01) can zero the position. Do not pass quantity or price in by_value.\n\n" +
         "by_units sells that many units at that price.\n\n" +
         "amount is what leaves the holding, in the holding's currency. When the cash account's currency differs, toAmount " +
-        "is what arrives there. The same holding, date, and amount returns the existing redemption (duplicate: true).",
+        "is what arrives there. notes, when passed, are kept and \"by_value\" is appended. " +
+        "The same holding, date, and amount returns the existing redemption (duplicate: true), including a full payout " +
+        "retried after the position is already empty. A cross-entity duplicate lists every transfer group, including the hop.",
       inputSchema: z.object(cashflowFields),
     },
     async (params) => {
@@ -1438,7 +1453,8 @@ export function createCapitalMcpServer(userId: string, db: DbClient, opts: { rea
         "Pass exactly one of price (per unit) or totalValue (the whole position: current price becomes totalValue / current quantity). " +
         "For a caixinha stored as quantity 1, totalValue is the new gross value — Caixinha Nubank PJ at R$39,943.76 " +
         "becomes current price 39943.76. totalValue on a position with quantity 0 is rejected. " +
-        "date (YYYY-MM-DD) is the day of the price; omit it to stamp now. There is no price history.",
+        "date (YYYY-MM-DD) is the day of the price and cannot be in the future; omit it to stamp now. A negative price is rejected. " +
+        "Zero is allowed. There is no price history.",
       inputSchema: z.object({
         holdingId: z.string().uuid(),
         price: z.number().nonnegative().optional(),

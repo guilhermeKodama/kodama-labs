@@ -4,8 +4,8 @@ import { prisma } from "@capital/server/lib/prisma";
 import { parseLocalDate } from "@capital/server/lib/date-utils";
 import { round } from "@capital/server/modules/ledger/lib/money";
 import { accountBalances } from "@capital/server/modules/ledger/services/accounts";
-import { withMutationSource } from "@capital/server/modules/ledger/services/mutations";
-import { replayPosition } from "@capital/server/modules/investments/lib/holding-position";
+import { undoBatch, withMutationSource } from "@capital/server/modules/ledger/services/mutations";
+import { recalculateAllHoldings, replayPosition } from "@capital/server/modules/investments/lib/holding-position";
 import { createLedgerFixture, deleteLedgerFixture, type LedgerFixture } from "@/test/ledger-fixtures";
 import { contributions } from "../contributions";
 import { recordInvestmentContribution, recordInvestmentRedemption, resolveCashflowMode } from "../holding-cashflow";
@@ -40,6 +40,7 @@ async function caixinha(opts: {
   name?: string;
   assetClass?: AssetClass;
   currency?: string;
+  ticker?: string | null;
   quantity?: number;
   cost?: number;
   price?: number | null;
@@ -52,6 +53,7 @@ async function caixinha(opts: {
     data: {
       accountId: opts.accountId,
       name: opts.name ?? "Caixinha Nubank PJ",
+      ticker: opts.ticker ?? null,
       assetClass: opts.assetClass ?? "fixed_income",
       currency: opts.currency ?? "BRL",
       currentQuantity: quantity,
@@ -90,16 +92,13 @@ async function replayMatches(holdingId: string) {
 }
 
 describe("resolveCashflowMode", () => {
-  const base = { assetClass: "stocks" as const, name: "PETR4", currentQuantity: 10 };
-
-  it("defaults a caixinha and fixed income to by_value, and a one-unit position when units are omitted", () => {
-    expect(resolveCashflowMode({ ...base, assetClass: "fixed_income", currentQuantity: 1 }, {})).toBe("by_value");
-    expect(resolveCashflowMode({ ...base, assetClass: "savings", currentQuantity: 4 }, {})).toBe("by_value");
-    expect(resolveCashflowMode({ ...base, name: "Caixinha Reserva" }, {})).toBe("by_value");
-    expect(resolveCashflowMode({ ...base, currentQuantity: 1 }, {})).toBe("by_value");
-    expect(resolveCashflowMode(base, {})).toBe("by_units");
-    expect(resolveCashflowMode({ ...base, currentQuantity: 1 }, { quantity: 1 })).toBe("by_units");
-    expect(resolveCashflowMode({ ...base, assetClass: "fixed_income" }, { mode: "by_units" })).toBe("by_units");
+  it("defaults fixed income, savings, and a caixinha name to by_value", () => {
+    expect(resolveCashflowMode({ assetClass: "fixed_income", name: "CDB" }, {})).toBe("by_value");
+    expect(resolveCashflowMode({ assetClass: "savings", name: "Poupança" }, {})).toBe("by_value");
+    expect(resolveCashflowMode({ assetClass: "stocks", name: "Caixinha Reserva" }, {})).toBe("by_value");
+    expect(resolveCashflowMode({ assetClass: "stocks", name: "PETR4" }, {})).toBe("by_units");
+    expect(resolveCashflowMode({ assetClass: "stocks", name: "PETR4" }, { mode: "by_value" })).toBe("by_value");
+    expect(resolveCashflowMode({ assetClass: "fixed_income", name: "CDB" }, { mode: "by_units" })).toBe("by_units");
   });
 });
 
@@ -169,8 +168,16 @@ describe("recordInvestmentContribution", () => {
       { holdingId: holding.id, cashAccountId: f.pfChecking, amount: APORTE, date: DAY, description: LABEL },
       prisma,
     );
+    expect(result.transferGroupIds).toHaveLength(2);
     const groups = await prisma.transferGroup.findMany({ where: { id: { in: result.transferGroupIds } } });
-    expect(groups.map((group) => group.direction).sort()).toEqual(["capital_injection", "investment_deposit"]);
+    const byId = new Map(groups.map((group) => [group.id, group.direction]));
+    expect(result.transferGroupIds.map((id) => byId.get(id))).toEqual(["capital_injection", "investment_deposit"]);
+    const again = await recordInvestmentContribution(
+      USER,
+      { holdingId: holding.id, cashAccountId: f.pfChecking, amount: APORTE, date: DAY, description: LABEL },
+      prisma,
+    );
+    expect(again).toMatchObject({ duplicate: true, operationId: result.operationId, transferGroupIds: result.transferGroupIds });
     const aportes = await contributions(USER, prisma, { months: 1, end: "2026-10", entityIds: [f.pjId] });
     expect(aportes.months[0].deposits).toBe(APORTE);
     expect(aportes.months[0].origins[0]).toMatchObject({ sourceEntityName: "PF", amount: APORTE });
@@ -258,6 +265,49 @@ describe("recordInvestmentContribution", () => {
       recordInvestmentContribution(OTHER, { holdingId: holding.id, cashAccountId: f.pfChecking, amount: APORTE, date: DAY }, prisma),
     ).rejects.toMatchObject({ status: 404, code: "holding.not_found" });
   });
+
+  it("refuses implicit by_value on a quoted ticker, keeps notes, and rejects an archived broker", async () => {
+    const quoted = await caixinha({ accountId: f.broker, assetClass: "stocks", name: "Caixinha PETR4", ticker: "PETR4" });
+    await expect(
+      recordInvestmentContribution(USER, { holdingId: quoted.id, cashAccountId: f.pfChecking, amount: APORTE, date: DAY }, prisma),
+    ).rejects.toMatchObject({ status: 422, code: "holding.quoted_by_value" });
+    const explicit = await recordInvestmentContribution(
+      USER,
+      { holdingId: quoted.id, cashAccountId: f.pfChecking, amount: APORTE, date: DAY, mode: "by_value", notes: "lote" },
+      prisma,
+    );
+    expect(explicit).toMatchObject({ mode: "by_value", quantity: 1 });
+    const buy = await prisma.investmentOperation.findUniqueOrThrow({ where: { id: explicit.operationId } });
+    expect(buy.notes).toBe("lote\nby_value");
+
+    await prisma.account.update({ where: { id: f.broker }, data: { archivedAt: new Date() } });
+    const closed = await caixinha({ accountId: f.broker, name: "Caixinha arquivada" });
+    await expect(
+      recordInvestmentContribution(USER, { holdingId: closed.id, cashAccountId: f.pfChecking, amount: APORTE, date: "2026-10-16" }, prisma),
+    ).rejects.toMatchObject({ status: 422, code: "account.archived" });
+  });
+
+  it("undoes a by_value contribution back to the price, cost, quantity, and balances", async () => {
+    const holding = await caixinha({ accountId: f.broker });
+    const before = await prisma.investmentHolding.findUniqueOrThrow({ where: { id: holding.id } });
+    const balancesBefore = await accountBalances(USER, prisma, [f.broker, f.pfChecking]);
+    const result = await recordInvestmentContribution(
+      USER,
+      { holdingId: holding.id, cashAccountId: f.pfChecking, amount: APORTE, date: DAY, description: LABEL },
+      prisma,
+    );
+    expect(result.currentPrice).toBeCloseTo(VALUE + APORTE, 2);
+    await undoBatch(USER, result.batchId!, prisma);
+    const after = await prisma.investmentHolding.findUniqueOrThrow({ where: { id: holding.id } });
+    expect(after.currentPrice).toBe(before.currentPrice);
+    expect(after.totalInvested).toBe(before.totalInvested);
+    expect(after.averageCost).toBe(before.averageCost);
+    expect(after.currentQuantity).toBe(before.currentQuantity);
+    const balances = await accountBalances(USER, prisma, [f.broker, f.pfChecking]);
+    expect(balances.get(f.broker) ?? 0).toBe(balancesBefore.get(f.broker) ?? 0);
+    expect(balances.get(f.pfChecking) ?? 0).toBe(balancesBefore.get(f.pfChecking) ?? 0);
+    expect((await recalculateAllHoldings(prisma, { userId: USER })).changed).toEqual([]);
+  });
 });
 
 describe("recordInvestmentRedemption", () => {
@@ -323,6 +373,32 @@ describe("recordInvestmentRedemption", () => {
     expect(replayed.closed).toBe(true);
     expect((await accountBalances(USER, prisma, [f.broker])).get(f.broker)).toBeCloseTo(0, 2);
     expect((await accountBalances(USER, prisma, [f.pfChecking])).get(f.pfChecking)).toBeCloseTo(VALUE, 2);
+
+    const again = await recordInvestmentRedemption(
+      USER,
+      { holdingId: holding.id, cashAccountId: f.pfChecking, amount: VALUE, date: DAY },
+      prisma,
+    );
+    expect(again).toMatchObject({ duplicate: true, operationId: result.operationId, batchId: null });
+    expect(await prisma.investmentOperation.count({ where: { holdingId: holding.id, type: "sell" } })).toBe(1);
+  });
+
+  it("reopens a fully redeemed by_value holding as one unit worth the new cash", async () => {
+    const holding = await caixinha({ accountId: f.broker });
+    await recordInvestmentRedemption(USER, { holdingId: holding.id, cashAccountId: f.pfChecking, amount: VALUE, date: DAY }, prisma);
+    const result = await recordInvestmentContribution(
+      USER,
+      { holdingId: holding.id, cashAccountId: f.pfChecking, amount: APORTE, date: "2026-10-16", description: LABEL },
+      prisma,
+    );
+    expect(result).toMatchObject({ duplicate: false, mode: "by_value", quantity: 1 });
+    expect(result.totalInvested).toBeCloseTo(APORTE, 2);
+    expect(result.averageCost).toBeCloseTo(APORTE, 2);
+    expect(result.currentPrice).toBeCloseTo(APORTE, 2);
+    const stored = await prisma.investmentHolding.findUniqueOrThrow({ where: { id: holding.id } });
+    expect(stored.isActive).toBe(true);
+    const buy = (await replayMatches(holding.id)).ops.find((op) => op.type === "buy");
+    expect(buy).toMatchObject({ quantity: 1, totalAmount: APORTE });
   });
 
   it("sends a PJ caixinha back to PF checking", async () => {
@@ -333,8 +409,16 @@ describe("recordInvestmentRedemption", () => {
       { holdingId: holding.id, cashAccountId: f.pfChecking, amount: APORTE, date: DAY, description: "Resgate" },
       prisma,
     );
+    expect(result.transferGroupIds).toHaveLength(2);
     const groups = await prisma.transferGroup.findMany({ where: { id: { in: result.transferGroupIds } } });
-    expect(groups.map((group) => group.direction).sort()).toEqual(["investment_withdrawal", "profit_distribution"]);
+    const byId = new Map(groups.map((group) => [group.id, group.direction]));
+    expect(result.transferGroupIds.map((id) => byId.get(id))).toEqual(["investment_withdrawal", "profit_distribution"]);
+    const again = await recordInvestmentRedemption(
+      USER,
+      { holdingId: holding.id, cashAccountId: f.pfChecking, amount: APORTE, date: DAY, description: "Resgate" },
+      prisma,
+    );
+    expect(again).toMatchObject({ duplicate: true, operationId: result.operationId, transferGroupIds: result.transferGroupIds });
     const withdrawal = groups.find((group) => group.direction === "investment_withdrawal")!;
     const legs = await prisma.ledgerEntry.findMany({ where: { transferGroupId: withdrawal.id } });
     expect(legs.every((leg) => (leg.metadata as { operationId?: string } | null)?.operationId === result.operationId)).toBe(true);
@@ -367,5 +451,27 @@ describe("recordInvestmentRedemption", () => {
     await expect(
       recordInvestmentRedemption(OTHER, { holdingId: holding.id, cashAccountId: f.pfChecking, amount: APORTE, date: DAY }, prisma),
     ).rejects.toMatchObject({ status: 404, code: "holding.not_found" });
+  });
+
+  it("undoes a by_value redemption back to the price, cost, quantity, and balances", async () => {
+    const holding = await caixinha({ accountId: f.broker });
+    const before = await prisma.investmentHolding.findUniqueOrThrow({ where: { id: holding.id } });
+    const balancesBefore = await accountBalances(USER, prisma, [f.broker, f.pfChecking]);
+    const result = await recordInvestmentRedemption(
+      USER,
+      { holdingId: holding.id, cashAccountId: f.pfChecking, amount: APORTE, date: DAY, description: "Resgate" },
+      prisma,
+    );
+    expect(result.currentPrice).toBeCloseTo(VALUE - APORTE, 2);
+    await undoBatch(USER, result.batchId!, prisma);
+    const after = await prisma.investmentHolding.findUniqueOrThrow({ where: { id: holding.id } });
+    expect(after.currentPrice).toBe(before.currentPrice);
+    expect(after.totalInvested).toBe(before.totalInvested);
+    expect(after.averageCost).toBe(before.averageCost);
+    expect(after.currentQuantity).toBe(before.currentQuantity);
+    const balances = await accountBalances(USER, prisma, [f.broker, f.pfChecking]);
+    expect(balances.get(f.broker) ?? 0).toBe(balancesBefore.get(f.broker) ?? 0);
+    expect(balances.get(f.pfChecking) ?? 0).toBe(balancesBefore.get(f.pfChecking) ?? 0);
+    expect((await recalculateAllHoldings(prisma, { userId: USER })).changed).toEqual([]);
   });
 });

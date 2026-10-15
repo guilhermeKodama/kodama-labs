@@ -62,7 +62,8 @@
     "from_account_not_found": "Source account not found.",
     "to_account_not_found": "Destination account not found.",
     "kind_change": "A transfer can't change type. Delete it and create it again.",
-    "account_type": "This transfer is only for checking, cash, and brokerage accounts."
+    "account_type": "This transfer is only for checking, cash, and brokerage accounts.",
+    "cross_entity_investment": "Moving a broker across entities is a contribution or a redemption. Use those instead."
   },
   "statement": {
     "not_found": "Statement not found.",
@@ -139,7 +140,9 @@
     "replay_mismatch": "This holding's saved quantity and cost don't match its operations, and a later operation exists.",
     "above_value": "The redemption of {amount} is larger than the position value of {value}.",
     "no_units": "A total value needs a quantity, so it can be split per unit.",
-    "price_choice": "Pass exactly one of price (per unit) or total value."
+    "price_choice": "Pass exactly one of price (per unit) or total value.",
+    "quoted_by_value": "This holding's price comes from the market. Pass mode by_value to change it by value anyway.",
+    "future_date": "The price date can't be in the future."
   },
   "operation": {
     "not_found": "Operation not found.",

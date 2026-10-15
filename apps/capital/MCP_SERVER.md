@@ -393,7 +393,9 @@ Checking, cash, and brokerage accounts. `list_accounts` returns entities; these 
 
 ### 12. `create_transfer`
 
-One transfer between two checking, cash, or brokerage accounts. Direction is inferred. Checking → broker is an `investment_deposit` and counts as an aporte of cash only; the holding does not change. Credit cards are rejected.
+One transfer between two checking, cash, or brokerage accounts. Direction is inferred. Checking → broker on the same entity is an `investment_deposit` and counts as an aporte of cash only; the holding does not change. Credit cards are rejected.
+
+A deposit or withdrawal that crosses entities (PF checking into a PJ broker, or the reverse) is rejected. Use `record_investment_contribution` or `record_investment_redemption`, which route the money through the broker entity's checking account.
 
 Do not use this to contribute to a holding. `record_investment_contribution` already books that cash transfer. A second `create_transfer` would move the money twice.
 
@@ -403,7 +405,7 @@ A repeat of the same accounts, date, amount, description, and `toAmount` returns
 
 ### 13. `list_transfers`
 
-One row per live transfer: date, direction, description, both accounts, both amounts and currencies. Filters: `dateFrom`, `dateTo`, `accountId`, `direction`, `entityId`.
+One row per live transfer: date, direction, description, both accounts, both amounts and currencies. Filters: `dateFrom`, `dateTo`, `accountId` (either leg), `direction`, `entityId` (either leg). `accountId` and `entityId` both apply. `limit` defaults to 100 and caps at 500; `offset` skips that many transfers.
 
 ### 14. `record_investment_contribution`
 
@@ -415,9 +417,11 @@ An aporte the way the Investments screen books it: cash into the broker and a bu
 
 **by_units** buys units (a stock or FII). Pass `quantity` and `price` (their product must match the amount the holding receives, within 0.01), or one of them, or neither when the holding has a current price.
 
-Default: `by_value` when the asset class is fixed income or savings, when the name contains "caixinha", or when quantity is 1 and `quantity` and `price` are omitted. Otherwise `by_units`. Pass `mode` to override.
+Default: `by_value` when the asset class is fixed income or savings, or when the name contains "caixinha". Otherwise `by_units`. Quantity 1 on its own does not select `by_value`. A holding whose ticker is repriced from the market stays `by_units` unless `mode` is `by_value` explicitly. Pass `mode` to override.
 
-`amount` is what leaves `cashAccountId`, in that account's currency. When the holding's currency differs, `toAmount` is what the holding receives. `description` is the Aportes text, for example `Aplicação Caixinha Nubank PJ (CDB)`. The same holding, date, and amount returns the existing operation (`duplicate: true`), including a parallel double-submit.
+A by-value buy on a live position is stored with quantity 0 so replaying the operations reproduces the cost. A fully redeemed position (quantity 0) is reopened as quantity 1 at the contribution amount. Deleting that quantity-0 buy in the Investments screen removes the cost and the cash and leaves `currentPrice` where this tool set it. Undo the batch to put the price back as well. `notes`, when passed, are kept and `by_value` is appended.
+
+`amount` is what leaves `cashAccountId`, in that account's currency. When the holding's currency differs, `toAmount` is what the holding receives. `description` is the Aportes text, for example `Aplicação Caixinha Nubank PJ (CDB)`. The same holding, date, and amount returns the existing operation (`duplicate: true`), including a parallel double-submit. A cross-entity duplicate lists every transfer group, including the hop. An archived broker is rejected.
 
 ### 15. `record_investment_redemption`
 
@@ -425,11 +429,11 @@ A resgate: the sell and the withdrawal back to a checking or cash account, one u
 
 `by_value` keeps the quantity, lowers the position value by `amount`, and removes cost in proportion to the value redeemed. On the caixinha above, redeeming R$10,000 leaves quantity 1 and value R$29,943.76, and removes `29883 × 10000 / 39943.76` from the cost basis. Realized gain is the amount minus that cost. A redemption larger than the current value is rejected. Paying out the whole value (within R$0.01) can zero the position. Do not pass `quantity` or `price`.
 
-`by_units` sells that many units. `amount` is what leaves the holding, in the holding's currency. When the cash account's currency differs, `toAmount` is what arrives there. The same holding, date, and amount returns the existing redemption.
+`by_units` sells that many units. `amount` is what leaves the holding, in the holding's currency. When the cash account's currency differs, `toAmount` is what arrives there. The same holding, date, and amount returns the existing redemption (`duplicate: true`), including a full payout retried after the position is already empty. A cross-entity duplicate lists every transfer group, including the hop. `notes`, when passed, are kept and `by_value` is appended. An archived broker is rejected.
 
 ### 16. `update_holding_price`
 
-Sets the current price and leaves average cost and total invested untouched. Pass exactly one of `price` (per unit) or `totalValue` (the whole position: price becomes `totalValue / quantity`). For the caixinha, `totalValue` is the new gross value. `totalValue` on a quantity of 0 is rejected. `date` is the day of the price; omit it to stamp now.
+Sets the current price and leaves average cost and total invested untouched. Pass exactly one of `price` (per unit) or `totalValue` (the whole position: price becomes `totalValue / quantity`). For the caixinha, `totalValue` is the new gross value. `totalValue` on a quantity of 0 is rejected. A negative price is rejected. Zero is allowed. `date` is the day of the price and cannot be in the future; omit it to stamp now.
 
 ## MCP Client Configuration
 

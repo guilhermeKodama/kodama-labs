@@ -62,7 +62,8 @@
     "from_account_not_found": "Conta de origem não encontrada.",
     "to_account_not_found": "Conta de destino não encontrada.",
     "kind_change": "Uma transferência não muda de tipo. Exclua e crie de novo.",
-    "account_type": "Essa transferência só vale para conta corrente, dinheiro ou corretora."
+    "account_type": "Essa transferência só vale para conta corrente, dinheiro ou corretora.",
+    "cross_entity_investment": "Movimentar a corretora entre entidades é um aporte ou um resgate. Use esses."
   },
   "statement": {
     "not_found": "Fatura não encontrada.",
@@ -139,7 +140,9 @@
     "replay_mismatch": "A quantidade e o custo salvos dessa posição não batem com as operações, e existe uma operação posterior.",
     "above_value": "O resgate de {amount} é maior que o valor da posição ({value}).",
     "no_units": "Um valor total precisa de quantidade para ser dividido por cota.",
-    "price_choice": "Informe exatamente um: preço por cota ou valor total."
+    "price_choice": "Informe exatamente um: preço por cota ou valor total.",
+    "quoted_by_value": "O preço dessa posição vem do mercado. Passe o modo by_value para alterá-la por valor mesmo assim.",
+    "future_date": "A data do preço não pode ser no futuro."
   },
   "operation": {
     "not_found": "Operação não encontrada.",

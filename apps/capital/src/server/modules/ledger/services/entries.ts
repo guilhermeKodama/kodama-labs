@@ -75,7 +75,7 @@ async function effectiveDateFor(account: Account, date: Date, db: DbClient, stat
   return { effectiveDate, cardStatementId: statement.id as string | null };
 }
 
-function inferDirection(from: Account & { entity: Entity }, to: Account & { entity: Entity }): TransferDirection {
+export function inferDirection(from: Account & { entity: Entity }, to: Account & { entity: Entity }): TransferDirection {
   if (to.type === "credit_card") return "card_payment";
   if (to.type === "brokerage" && from.type !== "brokerage") return "investment_deposit";
   if (from.type === "brokerage" && to.type !== "brokerage") return "investment_withdrawal";

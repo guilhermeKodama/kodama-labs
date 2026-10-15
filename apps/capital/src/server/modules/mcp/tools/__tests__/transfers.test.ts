@@ -64,6 +64,26 @@ describe("MCP transfers", () => {
     expect((await listTransfers(USER, { entityId: f.pjId }, prisma)).transfers).toHaveLength(0);
   });
 
+  it("rejects a broker transfer across entities and pages the list", async () => {
+    const pjBroker = await prisma.account.create({ data: { userId: USER, entityId: f.pjId, type: "brokerage", name: "Nubank PJ", currency: "BRL" } });
+    await expect(
+      createTransfer(USER, { fromAccountId: f.pfChecking, toAccountId: pjBroker.id, amount: 100, date: "2026-10-15" }, prisma),
+    ).rejects.toMatchObject({ status: 422, code: "transfer.cross_entity_investment" });
+    await expect(
+      createTransfer(USER, { fromAccountId: pjBroker.id, toAccountId: f.pfChecking, amount: 100, date: "2026-10-15" }, prisma),
+    ).rejects.toMatchObject({ status: 422, code: "transfer.cross_entity_investment" });
+
+    await createTransfer(USER, { fromAccountId: f.pfChecking, toAccountId: f.broker, amount: 10, date: "2026-10-14", description: "older" }, prisma);
+    const newer = await createTransfer(USER, { fromAccountId: f.pfChecking, toAccountId: f.broker, amount: 20, date: "2026-10-15", description: "newer" }, prisma);
+    const both = await listTransfers(USER, { accountId: f.pfChecking, entityId: f.pfId }, prisma);
+    expect(both.transfers.map((row) => row.id)).toContain(newer.transferGroupId);
+    expect((await listTransfers(USER, { accountId: f.pfChecking, entityId: f.pjId }, prisma)).transfers).toHaveLength(0);
+    const page = await listTransfers(USER, { limit: 1, offset: 1 }, prisma);
+    expect(page).toMatchObject({ limit: 1, offset: 1 });
+    expect(page.transfers).toHaveLength(1);
+    expect(page.transfers[0].description).toBe("older");
+  });
+
   it("rejects a card, a same-currency received amount, and another user's account", async () => {
     await expect(
       createTransfer(USER, { fromAccountId: f.pfChecking, toAccountId: f.card, amount: 100, date: "2026-10-15" }, prisma),

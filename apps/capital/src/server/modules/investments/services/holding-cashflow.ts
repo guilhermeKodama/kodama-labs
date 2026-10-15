@@ -1,5 +1,5 @@
 import type { DbClient } from "@capital/server/lib/prisma";
-import type { AssetClass, InvestmentTransactionType } from "@/generated/prisma";
+import { Prisma, type AssetClass, type InvestmentTransactionType, type TransferDirection } from "@/generated/prisma";
 import { parseLocalDate } from "@capital/server/lib/date-utils";
 import { LedgerError } from "@capital/server/modules/ledger/lib/errors";
 import { loadFx, type FxContext } from "@capital/server/modules/ledger/lib/fx";
@@ -10,6 +10,7 @@ import { advisoryLock } from "@capital/server/modules/ledger/lib/advisory-lock";
 import { inTransaction, recordMutation, snapshot, type MutationRecordInput } from "@capital/server/modules/ledger/services/mutations";
 import { recalculateHolding, replayPosition } from "../lib/holding-position";
 import { marketValue } from "../lib/holding-value";
+import { quoteSourceFor } from "../lib/quotes";
 import { convertAmount, fundBroker, withdrawFromBroker } from "./funding";
 import { getOwnedHolding, recordOperation, updateHolding } from "./portfolio";
 
@@ -34,6 +35,8 @@ export interface HoldingCashflowInput {
   quantity?: number | null;
   price?: number | null;
   mode?: CashflowMode | null;
+  /** Kept on the operation. by_value appends its marker instead of replacing this. */
+  notes?: string | null;
 }
 
 export interface HoldingCashflowResult {
@@ -55,19 +58,40 @@ export interface HoldingCashflowResult {
 type OwnedHolding = Awaited<ReturnType<typeof getOwnedHolding>>;
 
 /**
- * by_value for fixed income, savings, and a caixinha (by name), and for a
- * one-unit position when the caller did not pass quantity or price.
- * Anything else is by_units. An explicit mode wins.
+ * by_value for fixed income, savings, and a caixinha (by name). Anything else
+ * is by_units. An explicit mode wins. A one-unit stock is still by_units:
+ * quantity 1 is how a caixinha stores its whole value, not a signal on its own.
  */
 export function resolveCashflowMode(
-  holding: { assetClass: AssetClass; name: string; currentQuantity: number },
-  input: { mode?: CashflowMode | null; quantity?: number | null; price?: number | null },
+  holding: { assetClass: AssetClass; name: string },
+  input: { mode?: CashflowMode | null },
 ): CashflowMode {
   if (input.mode) return input.mode;
   if (VALUE_CLASSES.has(holding.assetClass) || /caixinha/i.test(holding.name)) return "by_value";
-  const unitsOmitted = input.quantity == null && input.price == null;
-  if (Math.abs(holding.currentQuantity - 1) <= EPS && unitsOmitted) return "by_value";
   return "by_units";
+}
+
+/** A ticker updateAllPrices would reprice cannot take implicit by_value; an explicit mode may. */
+function assertImplicitValue(holding: OwnedHolding, mode: CashflowMode, explicit: CashflowMode | null | undefined) {
+  if (mode !== "by_value" || explicit) return;
+  const ticker = holding.ticker?.trim();
+  if (ticker && quoteSourceFor(ticker, holding.assetClass)) {
+    throw new LedgerError("This holding's price is updated from the market, so a by-value change has to pass mode explicitly", 422, { code: "holding.quoted_by_value" });
+  }
+}
+
+function operationNotes(notes: string | null | undefined, mode: CashflowMode): string | null {
+  const text = notes?.trim() ?? "";
+  if (mode !== "by_value") return text || null;
+  if (!text) return "by_value";
+  if (/(^|\n)by_value$/.test(text)) return text;
+  return `${text}\nby_value`;
+}
+
+function assertBrokerOpen(holding: OwnedHolding) {
+  if (holding.account.archivedAt) {
+    throw new LedgerError(`Account "${holding.account.name}" is archived`, 422, { code: "account.archived", params: { name: holding.account.name } });
+  }
 }
 
 function assertModeArgs(mode: CashflowMode, input: HoldingCashflowInput) {
@@ -132,13 +156,41 @@ async function findDuplicate(tx: DbClient, holdingId: string, date: string, hold
   return ops.find((op) => Math.abs(op.totalAmount - holdingAmount) <= 0.01) ?? null;
 }
 
-async function groupsForOperation(tx: DbClient, userId: string, operationId: string, fundingGroupId: string | null) {
-  if (fundingGroupId) return [fundingGroupId];
+const INVEST_DIRECTIONS = new Set<TransferDirection>(["investment_deposit", "investment_withdrawal"]);
+
+/**
+ * Every live transfer created with the operation, including the cross-entity
+ * hop. A contribution lists the hop then the deposit; a redemption lists the
+ * withdrawal then the hop onward. That is the order fundBroker and
+ * withdrawFromBroker return.
+ */
+async function groupsForOperation(tx: DbClient, userId: string, operationId: string, fundingGroupId: string | null, flow: "contribution" | "redemption") {
+  const ids = new Set<string>();
+  if (fundingGroupId) ids.add(fundingGroupId);
+  const created = await tx.mutationRecord.findFirst({
+    where: { model: "InvestmentOperation", recordId: operationId, before: { equals: Prisma.DbNull } },
+    select: { batchId: true },
+  });
+  if (created) {
+    const rows = await tx.mutationRecord.findMany({
+      where: { batchId: created.batchId, model: "TransferGroup", before: { equals: Prisma.DbNull } },
+      select: { recordId: true },
+    });
+    for (const row of rows) ids.add(row.recordId);
+  }
   const legs = await tx.ledgerEntry.findMany({
     where: { userId, deletedAt: null, transferGroupId: { not: null }, metadata: { path: ["operationId"], equals: operationId } },
     select: { transferGroupId: true },
   });
-  return [...new Set(legs.map((leg) => leg.transferGroupId).filter((id): id is string => !!id))];
+  for (const leg of legs) if (leg.transferGroupId) ids.add(leg.transferGroupId);
+  if (!ids.size) return [];
+  const live = await tx.transferGroup.findMany({
+    where: { id: { in: [...ids] }, userId, deletedAt: null },
+    select: { id: true, direction: true },
+  });
+  const invest = live.filter((group) => INVEST_DIRECTIONS.has(group.direction));
+  const hops = live.filter((group) => !INVEST_DIRECTIONS.has(group.direction));
+  return (flow === "contribution" ? [...hops, ...invest] : [...invest, ...hops]).map((group) => group.id);
 }
 
 function resultOf(
@@ -227,9 +279,11 @@ async function orderCashflowAfterAnchor(tx: DbClient, holdingId: string, anchorC
 }
 
 async function applyValuePrice(userId: string, holding: OwnedHolding, holdingAmount: number, sign: 1 | -1, tx: DbClient, records: MutationRecordInput[]) {
-  if (!(holding.currentQuantity > EPS)) return holding.currentPrice;
-  const perUnit = holdingAmount / holding.currentQuantity;
-  const next = holding.currentPrice != null ? holding.currentPrice + sign * perUnit : (marketValue(holding) + sign * holdingAmount) / holding.currentQuantity;
+  // A closed by-value position is reopened as one unit, so the price is the whole value.
+  const qty = holding.currentQuantity > EPS ? holding.currentQuantity : 1;
+  const next = holding.currentQuantity > EPS && holding.currentPrice != null
+    ? holding.currentPrice + sign * (holdingAmount / qty)
+    : (marketValue(holding) + sign * holdingAmount) / qty;
   const updated = await updateHolding(userId, holding.id, { currentPrice: round(Math.max(0, next), 8) }, tx, { collect: records });
   return updated.currentPrice;
 }
@@ -253,10 +307,12 @@ export async function recordInvestmentContribution(userId: string, input: Holdin
     if (!(holdingAmount > 0)) throw new LedgerError("The amount must be positive", 422, { code: "rebalance.invalid_amount" });
     const existing = await findDuplicate(tx, holding.id, input.date, holdingAmount, ["buy", "deposit"]);
     if (existing) {
-      const ids = await groupsForOperation(tx, userId, existing.id, existing.fundingGroupId);
+      const ids = await groupsForOperation(tx, userId, existing.id, existing.fundingGroupId, "contribution");
       const current = await tx.investmentHolding.findUniqueOrThrow({ where: { id: holding.id } });
       return resultOf(true, null, existing.id, current, mode, holdingAmount, ids);
     }
+    assertImplicitValue(holding, mode, input.mode);
+    assertBrokerOpen(holding);
 
     const records: MutationRecordInput[] = [];
     const anchor = mode === "by_value" ? await anchorStoredPosition(tx, holding, input.date, records) : null;
@@ -276,7 +332,10 @@ export async function recordInvestmentContribution(userId: string, input: Holdin
       fx,
       records,
     );
-    const units = mode === "by_units" ? resolveUnits(holding.currentPrice, holdingAmount, input.quantity, input.price) : { quantity: 0, price: null as number | null };
+    // Quantity 0 keeps a live position. A closed one (quantity 0) comes back as a single unit
+    // worth the cash that just arrived, so price × quantity is the value again.
+    const reopen = mode === "by_value" && !(holding.currentQuantity > EPS);
+    const units = mode === "by_units" ? resolveUnits(holding.currentPrice, holdingAmount, input.quantity, input.price) : { quantity: reopen ? 1 : 0, price: null as number | null };
     const recorded = await recordOperation(
       userId,
       {
@@ -286,7 +345,7 @@ export async function recordInvestmentContribution(userId: string, input: Holdin
         pricePerUnit: units.price,
         totalAmount: holdingAmount,
         date: input.date,
-        notes: mode === "by_value" ? "by_value" : null,
+        notes: operationNotes(input.notes, mode),
       },
       tx,
       { collect: records, fundingGroupId: funded.depositGroupId },
@@ -318,6 +377,13 @@ export async function recordInvestmentRedemption(userId: string, input: HoldingC
     const fx = await loadFx(userId, tx);
     const holdingAmount = redemptionHoldingAmount(input, holding.currency, cash.currency);
     if (!(holdingAmount > 0)) throw new LedgerError("The amount must be positive", 422, { code: "rebalance.invalid_amount" });
+    // Before the value check: a retried full payout finds the sell while the position is already empty.
+    const existing = await findDuplicate(tx, holding.id, input.date, holdingAmount, ["sell", "withdrawal"]);
+    if (existing) {
+      const ids = await groupsForOperation(tx, userId, existing.id, existing.fundingGroupId, "redemption");
+      const current = await tx.investmentHolding.findUniqueOrThrow({ where: { id: holding.id } });
+      return resultOf(true, null, existing.id, current, mode, holdingAmount, ids);
+    }
     const value = marketValue(holding);
     if (mode === "by_value" && holdingAmount > value + 0.01) {
       throw new LedgerError(`The redemption ${holdingAmount} is larger than the position value ${value}`, 422, {
@@ -325,12 +391,8 @@ export async function recordInvestmentRedemption(userId: string, input: HoldingC
         params: { amount: round(holdingAmount, 2), value: round(value, 2) },
       });
     }
-    const existing = await findDuplicate(tx, holding.id, input.date, holdingAmount, ["sell", "withdrawal"]);
-    if (existing) {
-      const ids = await groupsForOperation(tx, userId, existing.id, existing.fundingGroupId);
-      const current = await tx.investmentHolding.findUniqueOrThrow({ where: { id: holding.id } });
-      return resultOf(true, null, existing.id, current, mode, holdingAmount, ids);
-    }
+    assertImplicitValue(holding, mode, input.mode);
+    assertBrokerOpen(holding);
 
     const records: MutationRecordInput[] = [];
     const anchor = mode === "by_value" ? await anchorStoredPosition(tx, holding, input.date, records) : null;
@@ -353,7 +415,7 @@ export async function recordInvestmentRedemption(userId: string, input: HoldingC
         pricePerUnit: sellPrice,
         totalAmount: holdingAmount,
         date: input.date,
-        notes: mode === "by_value" ? "by_value" : null,
+        notes: operationNotes(input.notes, mode),
       },
       tx,
       { collect: records },

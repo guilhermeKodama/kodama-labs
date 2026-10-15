@@ -1,12 +1,12 @@
 import type { DbClient } from "@capital/server/lib/prisma";
-import type { Account, Entity, TransferDirection } from "@/generated/prisma";
+import type { TransferDirection } from "@/generated/prisma";
 import { formatDateOnly, parseLocalDate } from "@capital/server/lib/date-utils";
 import { st } from "@capital/server/i18n";
 import { loadUserLocale } from "@capital/server/i18n/user-locale";
 import { LedgerError, notFound } from "@capital/server/modules/ledger/lib/errors";
 import { toNumber } from "@capital/server/modules/ledger/lib/money";
 import { advisoryLock } from "@capital/server/modules/ledger/lib/advisory-lock";
-import { createEntry } from "@capital/server/modules/ledger/services/entries";
+import { createEntry, inferDirection } from "@capital/server/modules/ledger/services/entries";
 import { inTransaction } from "@capital/server/modules/ledger/services/mutations";
 
 const CASH_TYPES = new Set(["checking", "cash", "brokerage"]);
@@ -36,19 +36,6 @@ export interface TransferRow {
   toEntityId: string;
   toAmount: number;
   toCurrency: string;
-}
-
-type AccountWithEntity = Account & { entity: Entity };
-
-function inferDirection(from: AccountWithEntity, to: AccountWithEntity): TransferDirection {
-  if (to.type === "credit_card") return "card_payment";
-  if (to.type === "brokerage" && from.type !== "brokerage") return "investment_deposit";
-  if (from.type === "brokerage" && to.type !== "brokerage") return "investment_withdrawal";
-  if (from.entityId !== to.entityId) {
-    if (from.entity.kind === "business" && to.entity.kind === "personal") return "profit_distribution";
-    if (from.entity.kind === "personal" && to.entity.kind === "business") return "capital_injection";
-  }
-  return "between_accounts";
 }
 
 async function owned(userId: string, accountId: string, tx: DbClient, missing: "transfer.from_account_not_found" | "transfer.to_account_not_found") {
@@ -86,6 +73,13 @@ export async function createTransfer(userId: string, input: CreateTransferInput,
     }
     const locale = await loadUserLocale(userId, tx);
     const direction = inferDirection(from, to);
+    if (from.entityId !== to.entityId && (direction === "investment_deposit" || direction === "investment_withdrawal")) {
+      throw new LedgerError(
+        "A broker transfer across entities is a contribution or a redemption. Use record_investment_contribution or record_investment_redemption, which route the money through the broker entity's checking account.",
+        422,
+        { code: "transfer.cross_entity_investment" },
+      );
+    }
     const description = input.description?.trim()
       || st(locale, "ledger.transferDescription", { direction: st(locale, `ledger.direction.${direction}`), from: from.name, to: to.name });
     const credited = sameCurrency ? input.amount : input.toAmount ?? null;
@@ -144,10 +138,19 @@ export interface ListTransfersInput {
   accountId?: string;
   direction?: TransferDirection;
   entityId?: string;
+  /** Defaults to 100. Values above 500 are capped. */
+  limit?: number;
+  offset?: number;
 }
 
-/** One row per live transfer group, both legs collapsed. */
-export async function listTransfers(userId: string, params: ListTransfersInput, db: DbClient): Promise<{ transfers: TransferRow[] }> {
+/** One row per live transfer group, both legs collapsed. accountId and entityId both apply. */
+export async function listTransfers(userId: string, params: ListTransfersInput, db: DbClient): Promise<{ transfers: TransferRow[]; limit: number; offset: number }> {
+  const limit = Math.min(500, Math.max(1, Math.trunc(params.limit ?? 100)));
+  const offset = Math.max(0, Math.trunc(params.offset ?? 0));
+  const legFilters = [
+    ...(params.accountId ? [{ legs: { some: { accountId: params.accountId, deletedAt: null } } }] : []),
+    ...(params.entityId ? [{ legs: { some: { entityId: params.entityId, deletedAt: null } } }] : []),
+  ];
   const groups = await db.transferGroup.findMany({
     where: {
       userId,
@@ -159,11 +162,12 @@ export async function listTransfers(userId: string, params: ListTransfersInput, 
           ...(params.dateTo && { lte: parseLocalDate(params.dateTo) }),
         },
       }),
-      ...(params.accountId && { legs: { some: { accountId: params.accountId, deletedAt: null } } }),
-      ...(params.entityId && { legs: { some: { entityId: params.entityId, deletedAt: null } } }),
+      ...(legFilters.length && { AND: legFilters }),
     },
     include: { legs: { where: { deletedAt: null }, include: { account: { select: { id: true, name: true, entityId: true } } } } },
     orderBy: [{ date: "desc" }, { createdAt: "desc" }],
+    take: limit,
+    skip: offset,
   });
   const transfers: TransferRow[] = [];
   for (const group of groups) {
@@ -187,7 +191,7 @@ export async function listTransfers(userId: string, params: ListTransfersInput, 
       toCurrency: to.currency,
     });
   }
-  return { transfers };
+  return { transfers, limit, offset };
 }
 
 /** Checking, cash, and brokerage accounts. These ids are not the entity ids from list_accounts. */

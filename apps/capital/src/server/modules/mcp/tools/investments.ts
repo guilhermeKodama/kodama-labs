@@ -1,6 +1,8 @@
 import type { DbClient } from "@capital/server/lib/prisma";
 import type { AssetClass } from "@/generated/prisma";
+import { formatDateOnly } from "@capital/server/lib/date-utils";
 import { LedgerError } from "@capital/server/modules/ledger/lib/errors";
+import { todayIn } from "@capital/server/modules/budgets/lib/today";
 import type { InvestmentPosition, AdjustPositionParams } from "../lib/types";
 import { holdingAllocationClass } from "../../investments/lib/allocation-class";
 import { adjustPosition as adjustHoldingPosition, createHolding, getOwnedHolding, listHoldings, updateHolding } from "../../investments/services/portfolio";
@@ -98,8 +100,15 @@ export async function updateHoldingPrice(
   } else {
     price = params.price ?? 0;
   }
-  if (!(price >= 0)) {
+  if (price < 0) {
     throw new LedgerError("Pass exactly one of price (per unit) or total value", 422, { code: "holding.price_choice" });
+  }
+  if (params.date) {
+    const user = await db.user.findUniqueOrThrow({ where: { id: userId }, select: { timezone: true } });
+    const day = formatDateOnly(new Date(params.date.includes("T") ? params.date : `${params.date}T12:00:00.000Z`));
+    if (day > todayIn(user.timezone).iso) {
+      throw new LedgerError("The price date cannot be in the future", 422, { code: "holding.future_date" });
+    }
   }
   const updated = await updateHolding(userId, holding.id, { currentPrice: price, ...(params.date ? { priceAsOf: params.date } : {}) }, db);
   return {

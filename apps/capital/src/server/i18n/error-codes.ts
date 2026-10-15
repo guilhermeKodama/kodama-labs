@@ -64,6 +64,7 @@ export const ERROR_CODES = {
   "transfer.to_account_not_found": "Destination account not found",
   "transfer.kind_change": "A transfer cannot change type; delete it and create it again",
   "transfer.account_type": "This transfer is only for checking, cash, and brokerage accounts",
+  "transfer.cross_entity_investment": "A broker transfer across entities is a contribution or a redemption",
 
   // Card statements
   "statement.not_found": "Statement not found",
@@ -141,6 +142,8 @@ export const ERROR_CODES = {
   "holding.above_value": "The redemption {amount} is larger than the position value {value}",
   "holding.no_units": "A total value needs a quantity so it can be split per unit",
   "holding.price_choice": "Pass exactly one of price (per unit) or total value",
+  "holding.quoted_by_value": "This holding's price is updated from the market, so a by-value change has to pass mode explicitly",
+  "holding.future_date": "The price date cannot be in the future",
   "operation.not_found": "Investment operation not found",
   "operation.income_only": "Only income operations can have an income type, tax withheld or a credit account",
   "operation.tax_exceeds_amount": "The tax withheld cannot exceed the gross amount",
