@@ -82,7 +82,7 @@ export async function createHolding(userId: string, input: HoldingInput, db: DbC
 export async function updateHolding(
   userId: string,
   holdingId: string,
-  patch: Partial<Omit<HoldingInput, "accountId">> & { isActive?: boolean },
+  patch: Partial<Omit<HoldingInput, "accountId">> & { isActive?: boolean; /** Calendar day stored as lastPriceUpdate. Omitted, a price change is stamped now. */ priceAsOf?: string | null },
   db: DbClient,
   opts: OperationWriteOptions = {}
 ) {
@@ -98,7 +98,10 @@ export async function updateHolding(
         ...(patch.ticker !== undefined && { ticker: patch.ticker ? patch.ticker.toUpperCase() : null }),
         ...(patch.name !== undefined && { name: patch.name }),
         ...(patch.currency !== undefined && { currency: patch.currency }),
-        ...(patch.currentPrice !== undefined && { currentPrice: patch.currentPrice, lastPriceUpdate: new Date() }),
+        ...(patch.currentPrice !== undefined && {
+          currentPrice: patch.currentPrice,
+          lastPriceUpdate: patch.priceAsOf ? parseLocalDate(patch.priceAsOf) : new Date(),
+        }),
         ...(patch.isActive !== undefined && { isActive: patch.isActive }),
       },
     });

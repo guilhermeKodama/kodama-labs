@@ -61,7 +61,8 @@
     "same_currency": "Uma transferência na mesma moeda tem um único valor.",
     "from_account_not_found": "Conta de origem não encontrada.",
     "to_account_not_found": "Conta de destino não encontrada.",
-    "kind_change": "Uma transferência não muda de tipo. Exclua e crie de novo."
+    "kind_change": "Uma transferência não muda de tipo. Exclua e crie de novo.",
+    "account_type": "Essa transferência só vale para conta corrente, dinheiro ou corretora."
   },
   "statement": {
     "not_found": "Fatura não encontrada.",
@@ -131,7 +132,14 @@
     "not_found": "Posição não encontrada.",
     "requires_brokerage": "Posições ficam em contas de corretora.",
     "oversell": "A venda é maior que a posição.",
-    "undo_oversell": "Desfazer deixaria uma venda de {holding} maior que a posição. Desfaça ou exclua essa venda primeiro."
+    "undo_oversell": "Desfazer deixaria uma venda de {holding} maior que a posição. Desfaça ou exclua essa venda primeiro.",
+    "value_mode": "Essa atualização é por valor, então quantidade e preço não entram. Para negociar cotas, use by_units.",
+    "amount_mismatch": "Quantidade vezes preço precisa bater com o valor, com tolerância de 0,01.",
+    "units_required": "Uma operação por cotas precisa de quantidade e preço, ou de um preço atual para derivá-los.",
+    "replay_mismatch": "A quantidade e o custo salvos dessa posição não batem com as operações, e existe uma operação posterior.",
+    "above_value": "O resgate de {amount} é maior que o valor da posição ({value}).",
+    "no_units": "Um valor total precisa de quantidade para ser dividido por cota.",
+    "price_choice": "Informe exatamente um: preço por cota ou valor total."
   },
   "operation": {
     "not_found": "Operação não encontrada.",

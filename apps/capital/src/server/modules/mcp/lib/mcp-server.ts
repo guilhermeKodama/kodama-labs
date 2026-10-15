@@ -32,7 +32,10 @@ import {
   listInvestmentPositions,
   adjustPosition,
   addInvestmentAsset,
+  updateHoldingPrice,
 } from "../tools/investments";
+import { recordInvestmentContribution, recordInvestmentRedemption } from "../../investments/services/holding-cashflow";
+import { createTransfer, listLedgerAccounts, listTransfers } from "../tools/transfers";
 import { getFirePlan, updateFirePhaseContribution } from "../tools/fire";
 import {
   attachReceipt,
@@ -492,13 +495,19 @@ export function createCapitalMcpServer(userId: string, db: DbClient, opts: { rea
     "list_investment_positions",
     {
       description:
-        "List all active investment positions with quantity, average cost, current " +
-        "value, and unrealized gain. Shows Brazilian FIIs like PMLL11, PVBI11, stocks, " +
-        "and other assets. Example: PMLL11 shows 164 cotas but broker has 174.",
-      inputSchema: z.object({}),
+        "List active investment positions with quantity, average cost, current value, " +
+        "unrealized gain, accountId, and entityId. accountName alone is not enough to " +
+        "book a transfer: account ids come from list_ledger_accounts, and list_accounts " +
+        "returns entities. Optional accountId limits the list to one brokerage account; " +
+        "optional entityId limits it to one entity (PF or PJ). Example: PMLL11 shows 164 cotas but broker has 174.",
+      inputSchema: z.object({
+        accountId: z.string().uuid().optional(),
+        entityId: z.string().uuid().optional(),
+      }),
+      annotations: { readOnlyHint: true },
     },
-    async () => {
-      const result = await listInvestmentPositions(userId, db);
+    async (params) => {
+      const result = await listInvestmentPositions(userId, db, params);
       return {
         content: [
           {
@@ -1274,6 +1283,173 @@ export function createCapitalMcpServer(userId: string, db: DbClient, opts: { rea
         ],
       };
     }
+  );
+
+  const cashflowFields = {
+    holdingId: z.string().uuid(),
+    cashAccountId: z.string().uuid().describe("Checking or cash account the money comes from (contribution) or goes back to (redemption). A ledger account id from list_ledger_accounts, not an entity id."),
+    amount: z.number().positive(),
+    date: DateStringSchema,
+    description: z.string().optional(),
+    toAmount: z.number().positive().optional(),
+    quantity: z.number().optional(),
+    price: z.number().optional(),
+    mode: z.enum(["by_value", "by_units"]).optional(),
+  };
+
+  server.registerTool(
+    "list_ledger_accounts",
+    {
+      description:
+        "List the user's checking, cash, and brokerage accounts (not credit cards, and not entities). " +
+        "list_accounts returns businesses and the personal entity; the ids here are the ledger accounts " +
+        "create_transfer, record_investment_contribution, and record_investment_redemption take as " +
+        "fromAccountId, toAccountId, and cashAccountId. Optional type filters to one of checking, cash, brokerage.",
+      inputSchema: z.object({
+        type: z.enum(["checking", "cash", "brokerage"]).optional(),
+      }),
+      annotations: { readOnlyHint: true },
+    },
+    async (params) => {
+      const result = await listLedgerAccounts(userId, params, db);
+      return { content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }] };
+    },
+  );
+
+  server.registerTool(
+    "create_transfer",
+    {
+      description:
+        "Move money between two of the user's checking, cash, or brokerage accounts. Direction is inferred: " +
+        "checking → broker is an investment_deposit and counts as an aporte of cash only (the holding is unchanged). " +
+        "Do not use this to contribute to a holding such as Caixinha Nubank PJ — record_investment_contribution " +
+        "already books that cash transfer and the buy. A second create_transfer would move the cash twice. " +
+        "Credit cards are rejected. Same currency: pass amount only (toAmount and exchangeRate are rejected). " +
+        "Different currencies: amount leaves the source account; toAmount is what arrives (or pass exchangeRate). " +
+        "A repeat of the same from account, to account, date, amount, description, and toAmount returns the existing " +
+        "transfer (duplicate: true) and writes nothing. Two identical same-day transfers need different descriptions. " +
+        "Idempotent under a parallel double-submit.",
+      inputSchema: z.object({
+        fromAccountId: z.string().uuid(),
+        toAccountId: z.string().uuid(),
+        amount: z.number().positive(),
+        date: DateStringSchema,
+        description: z.string().optional(),
+        toAmount: z.number().positive().optional(),
+        exchangeRate: z.number().positive().optional(),
+      }),
+    },
+    async (params) => {
+      const result = await createTransfer(userId, params, db);
+      return { content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }] };
+    },
+  );
+
+  server.registerTool(
+    "list_transfers",
+    {
+      description:
+        "List live transfers, one row per transfer (both legs collapsed): date, direction, description, " +
+        "the account money left and the account it arrived in, with amounts and currencies. " +
+        "Optional filters: dateFrom, dateTo, accountId (either leg), direction, entityId (either leg).",
+      inputSchema: z.object({
+        dateFrom: DateStringSchema.optional(),
+        dateTo: DateStringSchema.optional(),
+        accountId: z.string().uuid().optional(),
+        direction: z.enum([
+          "profit_distribution",
+          "capital_injection",
+          "reimbursement",
+          "investment_deposit",
+          "investment_withdrawal",
+          "card_payment",
+          "between_accounts",
+        ]).optional(),
+        entityId: z.string().uuid().optional(),
+      }),
+      annotations: { readOnlyHint: true },
+    },
+    async (params) => {
+      const result = await listTransfers(userId, params, db);
+      return { content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }] };
+    },
+  );
+
+  server.registerTool(
+    "record_investment_contribution",
+    {
+      description:
+        "Record an aporte into a holding the way the Investments screen does: the cash transfer into the broker " +
+        "and the buy, in one undo batch. This tool already books the cash transfer. Do not also call create_transfer " +
+        "or the money moves twice and Aportes counts it twice.\n\n" +
+        "mode is \"by_value\" or \"by_units\".\n\n" +
+        "by_value is for a caixinha or fixed income, which is stored as quantity 1 whose price is the whole position. " +
+        "Example: Caixinha Nubank PJ is quantity 1, average cost R$29,883, current gross value R$39,943.76. " +
+        "A R$10,000 contribution keeps quantity at 1, adds R$10,000 to the cost basis (average cost and total invested " +
+        "become R$39,883) and adds R$10,000 to the position value (current price becomes R$49,943.76). " +
+        "Buying new units would be wrong: quantity 1 at the current price would create a second unit and cut the average in half. " +
+        "Do not pass quantity or price in by_value; they are rejected.\n\n" +
+        "by_units buys new units (a stock or FII). Pass quantity and price (quantity × price must match the amount the holding " +
+        "receives, within 0.01), or one of them, or neither when the holding already has a current price " +
+        "(units = amount / current price).\n\n" +
+        "Default mode: by_value when the asset class is fixed income or savings, when the name contains \"caixinha\", " +
+        "or when quantity is 1 and you omit quantity and price. Otherwise by_units. Pass mode to override.\n\n" +
+        "amount is what leaves cashAccountId, in that account's currency. When the holding's currency differs, toAmount " +
+        "is what the holding receives in its currency. description is the text Aportes shows " +
+        "(for example \"Aplicação Caixinha Nubank PJ (CDB)\"). The same holding, date, and amount returns the existing " +
+        "operation (duplicate: true) instead of booking again, including a parallel double-submit.",
+      inputSchema: z.object(cashflowFields),
+    },
+    async (params) => {
+      const result = await recordInvestmentContribution(userId, params, db);
+      return { content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }] };
+    },
+  );
+
+  server.registerTool(
+    "record_investment_redemption",
+    {
+      description:
+        "Redeem a holding back to a checking or cash account: the sell and the withdrawal, in one undo batch. " +
+        "The withdrawal's metadata carries the sell operation id. Do not also call create_transfer.\n\n" +
+        "mode is \"by_value\" or \"by_units\", with the same default as record_investment_contribution.\n\n" +
+        "by_value (caixinha / fixed income, quantity 1 whose price is the whole value): quantity stays, the position " +
+        "value falls by the amount, and the cost basis falls in proportion to the value redeemed. " +
+        "Example: Caixinha Nubank PJ is quantity 1, cost R$29,883, value R$39,943.76. Redeeming R$10,000 keeps quantity at 1, " +
+        "sets the value to R$29,943.76, and removes cost × 10000 / 39943.76 from the cost basis. " +
+        "Realized gain is the amount minus the cost removed. A redemption larger than the current value is rejected. " +
+        "Paying out the whole value (within R$0.01) can zero the position. Do not pass quantity or price in by_value.\n\n" +
+        "by_units sells that many units at that price.\n\n" +
+        "amount is what leaves the holding, in the holding's currency. When the cash account's currency differs, toAmount " +
+        "is what arrives there. The same holding, date, and amount returns the existing redemption (duplicate: true).",
+      inputSchema: z.object(cashflowFields),
+    },
+    async (params) => {
+      const result = await recordInvestmentRedemption(userId, params, db);
+      return { content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }] };
+    },
+  );
+
+  server.registerTool(
+    "update_holding_price",
+    {
+      description:
+        "Set a holding's current price without touching its cost basis (average cost and total invested stay). " +
+        "Pass exactly one of price (per unit) or totalValue (the whole position: current price becomes totalValue / current quantity). " +
+        "For a caixinha stored as quantity 1, totalValue is the new gross value — Caixinha Nubank PJ at R$39,943.76 " +
+        "becomes current price 39943.76. totalValue on a position with quantity 0 is rejected. " +
+        "date (YYYY-MM-DD) is the day of the price; omit it to stamp now. There is no price history.",
+      inputSchema: z.object({
+        holdingId: z.string().uuid(),
+        price: z.number().nonnegative().optional(),
+        totalValue: z.number().nonnegative().optional(),
+        date: DateStringSchema.optional(),
+      }),
+    },
+    async (params) => {
+      const result = await updateHoldingPrice(userId, params, db);
+      return { content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }] };
+    },
   );
 
   return server;
