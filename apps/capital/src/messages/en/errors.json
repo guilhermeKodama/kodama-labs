@@ -61,7 +61,9 @@
     "same_currency": "A transfer in one currency has a single amount.",
     "from_account_not_found": "Source account not found.",
     "to_account_not_found": "Destination account not found.",
-    "kind_change": "A transfer can't change type. Delete it and create it again."
+    "kind_change": "A transfer can't change type. Delete it and create it again.",
+    "account_type": "This transfer is only for checking, cash, and brokerage accounts.",
+    "cross_entity_investment": "Moving a broker across entities is a contribution or a redemption. Use those instead."
   },
   "statement": {
     "not_found": "Statement not found.",
@@ -131,7 +133,16 @@
     "not_found": "Holding not found.",
     "requires_brokerage": "Holdings live in brokerage accounts.",
     "oversell": "The sale is larger than the position.",
-    "undo_oversell": "Undoing this would leave a sale of {holding} larger than the position. Undo or delete that sale first."
+    "undo_oversell": "Undoing this would leave a sale of {holding} larger than the position. Undo or delete that sale first.",
+    "value_mode": "This update is by value, so quantity and price are not accepted. Trade units with by_units.",
+    "amount_mismatch": "Quantity times price must match the cash amount within 0.01.",
+    "units_required": "A by-units trade needs a quantity and a price, or a current price to derive them.",
+    "replay_mismatch": "This holding's saved quantity and cost don't match its operations, and a later operation exists.",
+    "above_value": "The redemption of {amount} is larger than the position value of {value}.",
+    "no_units": "A total value needs a quantity, so it can be split per unit.",
+    "price_choice": "Pass exactly one of price (per unit) or total value.",
+    "quoted_by_value": "This holding's price comes from the market. Pass mode by_value to change it by value anyway.",
+    "future_date": "The price date can't be in the future."
   },
   "operation": {
     "not_found": "Operation not found.",

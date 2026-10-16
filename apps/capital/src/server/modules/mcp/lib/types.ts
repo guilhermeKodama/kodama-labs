@@ -65,7 +65,9 @@ export interface InvestmentPosition {
   currentValue: number | null;
   unrealizedGain: number | null;
   currency: string;
+  accountId: string;
   accountName: string;
+  entityId: string;
 }
 
 export interface AdjustPositionParams {
