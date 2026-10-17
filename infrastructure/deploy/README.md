@@ -9,7 +9,7 @@ Nothing listens on a public port. The runner is GitHub-hosted. There is no self-
 | `desktop-linux` | The live stack (`kodama-prod`). Deploys load images, migrate, and recreate here. |
 | `default` | Native engine. The deployer may only `docker build` and `docker save` here. The stale stack on this context is never started, stopped, or removed. |
 
-Images are built on `default` because the Docker Desktop VM runs out of memory. They are loaded into `desktop-linux` and only then tagged `:latest`. Compose commands pass `--no-build`.
+Images are built on `default` because the Docker Desktop VM runs out of memory. They are loaded into `desktop-linux` and only then tagged `:latest`. `compose up` passes `--no-build`. `compose run` does not: Compose v5 rejects that flag. The maintenance window checks that `kodama-monitoring:latest` is already loaded (`docker image inspect`) and then runs with `--pull never`.
 
 Smoke checks use container DNS (`http://capital-web:3000/api/health`). Capital also checks `https://capital.kodamalabs.ai/login` for a 302 to Cloudflare Access, and `POST /mcp` `tools/list`. The MCP bearer token is read inside the container and is not written to the log.
 

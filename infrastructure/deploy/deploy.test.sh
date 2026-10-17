@@ -163,6 +163,9 @@ mkdir -p "$mock_bin"
 cat >"${mock_bin}/docker" <<'EOF'
 #!/bin/bash
 echo "$*" >> "${DOCKER_LOG:?}"
+if [[ "${DOCKER_IMAGE_MISSING:-}" == 1 && "$*" == *" image inspect "* ]]; then
+  exit 1
+fi
 exit 0
 EOF
 chmod +x "${mock_bin}/docker"
@@ -251,6 +254,9 @@ printf '%s\n' "$dry" | grep -q "BUILD capital" || fail "dry-run did not select c
 printf '%s\n' "$dry" | grep -q "docker --context default build" || fail "dry-run missing native build"
 printf '%s\n' "$dry" | grep -q "docker --context desktop-linux" || fail "dry-run missing desktop-linux"
 printf '%s\n' "$dry" | grep -q -- "--no-build" || fail "dry-run missing --no-build"
+if printf '%s\n' "$dry" | grep -E 'compose .* run ' | grep -q -- '--no-build'; then
+  fail "dry-run passed --no-build to compose run"
+fi
 printf '%s\n' "$dry" | grep -q "api/health" || fail "dry-run missing health smoke"
 printf '%s\n' "$dry" | grep -q "cloudflareaccess.com" || fail "dry-run missing capital public smoke"
 printf '%s\n' "$dry" | grep -q "tools/list" || fail "dry-run missing MCP smoke"
@@ -268,6 +274,40 @@ printf '%s\n' "$dry" >"${TMP}/dry-run.txt"
 if [[ -n "${KODAMA_DRY_RUN_OUT:-}" ]]; then
   printf '%s\n' "$dry" >"$KODAMA_DRY_RUN_OUT"
 fi
+
+echo "compose run never receives --no-build"
+if grep -nE '^[^#]*--no-build' infrastructure/deploy/deploy.sh infrastructure/deploy/lib.sh infrastructure/deploy/rollback.sh \
+  | grep -E 'compose[[:space:]]+run|compose_run'; then
+  fail "a compose run invocation still passes --no-build"
+fi
+export REPO="$ROOT"
+: >"$DOCKER_LOG"
+unset DOCKER_IMAGE_MISSING || true
+PATH="${mock_bin}:${PATH}" compose_run_loaded kodama-monitoring:latest uptime-kuma-provision \
+  node dist/maintenance.js start 30
+run_line="$(grep ' run ' "$DOCKER_LOG" || true)"
+[[ -n "$run_line" ]] || fail "compose run was not invoked: $(cat "$DOCKER_LOG")"
+if printf '%s\n' "$run_line" | grep -q -- '--no-build'; then
+  fail "compose run received --no-build: ${run_line}"
+fi
+printf '%s\n' "$run_line" | grep -q -- '--pull never' || fail "compose run missing --pull never: ${run_line}"
+printf '%s\n' "$run_line" | grep -q 'uptime-kuma-provision node dist/maintenance.js start 30' \
+  || fail "compose run args: ${run_line}"
+grep -q ' image inspect kodama-monitoring:latest' "$DOCKER_LOG" || fail "did not inspect the image first: $(cat "$DOCKER_LOG")"
+
+: >"$DOCKER_LOG"
+set +e
+missing_err="$(DOCKER_IMAGE_MISSING=1 PATH="${mock_bin}:${PATH}" compose_run_loaded kodama-monitoring:latest \
+  uptime-kuma-provision node dist/maintenance.js clear 2>&1 >/dev/null)"
+missing_rc=$?
+set -e
+[[ "$missing_rc" -ne 0 ]] || fail "missing image should refuse compose run"
+printf '%s\n' "$missing_err" | grep -q 'not loaded in desktop-linux' || fail "missing image error: ${missing_err}"
+if grep -q ' run ' "$DOCKER_LOG"; then
+  fail "missing image still invoked compose run: $(cat "$DOCKER_LOG")"
+fi
+grep -q ' image inspect ' "$DOCKER_LOG" || fail "missing image skipped the inspect: $(cat "$DOCKER_LOG")"
+unset DOCKER_IMAGE_MISSING
 
 echo "install seed sha"
 install_home="${TMP}/install-home"

@@ -418,7 +418,7 @@ restore_latest_tag() {
 
 clear_maintenance() {
   if [[ "$MAINT" == 1 ]]; then
-    compose run --rm --no-build uptime-kuma-provision node dist/maintenance.js clear || true
+    compose_run_loaded kodama-monitoring:latest uptime-kuma-provision node dist/maintenance.js clear || true
     MAINT=0
   fi
 }
@@ -551,7 +551,7 @@ smoke_unit() {
 }
 
 open_maintenance() {
-  if compose run --rm --no-build uptime-kuma-provision node dist/maintenance.js start 30; then
+  if compose_run_loaded kodama-monitoring:latest uptime-kuma-provision node dist/maintenance.js start 30; then
     MAINT=1
   else
     echo "maintenance window was not opened; continuing"
