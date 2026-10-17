@@ -106,6 +106,30 @@ the ledger with the pre-migration snapshot, and `db:drop-legacy` removes the
 schema for good (it requires `CONFIRM_DROP_LEGACY=<database name>`; take a
 `pg_dump` first).
 
+## Data model changes
+
+- **Research first.** Before designing or changing a data model, look up how the
+  problem is solved in practice (for money: double-entry ledgers, Beancount,
+  portfolio accounting) and follow that. Don't invent a model.
+- **Keep it lean.** Add only what represents a real domain concept and what the
+  current flows and screens need. No caches (the only exception is persisted
+  market data such as price closes), no columns that patch other columns, no
+  diagnostic tables or tools in the product, no transition flags, no types that
+  exist only to accommodate bad data. Never store what can be derived from the
+  facts (balances, positions, totals).
+- **Fix bad data with one-off migration scripts** (backup, verify, reverse),
+  never with permanent structure.
+- **Show the diff as an ER diagram.** Any proposed data model change comes with a
+  complete ER diagram of the diff, before and after: every entity it touches,
+  with relations and the attributes that matter. Show what is added in green,
+  removed in red, and changed (type, rule or meaning) in amber.
+  - In chat, render it in a hand-drawn, Excalidraw-like style that keeps those
+    colors on every table, attribute and relation: lay it out with Mermaid's
+    classic look, color the rows, redraw the strokes with rough.js, and use a
+    handwritten font. Mermaid's own `handDrawn` look drops the colors.
+  - In a PR or design doc, use a Mermaid `erDiagram` with `look: handDrawn`,
+    `+`/`-`/`~` markers on changed attributes, and a table of enum changes.
+
 ## Postgres
 
 Shared Postgres 17 in Docker (port 5433), one DB per app — see
