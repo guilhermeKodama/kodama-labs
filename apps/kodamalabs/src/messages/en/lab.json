@@ -1,15 +1,5 @@
 {
   "title": "Smaller systems, same line.",
-  "triage": {
-    "title": "A filter that learns from my decisions",
-    "body": "Four layers sort a daily stream: fixed filters, a logistic regression with no ML library, Claude scoring, and weekly rule proposals I accept or reject. The day I switched the model on, it discarded 46 items in minutes. I restored all 46 from the audit trail. I added a threshold cap and a daily circuit breaker, and wrote the post-mortem.",
-    "status": {
-      "private": "Private, one user",
-      "built": "built August 2026",
-      "shadow": "in shadow mode today",
-      "active": "active today"
-    }
-  },
   "playbook": {
     "title": "Deciding what not to build",
     "body": "Borrowed from four books: one page naming the riskiest assumption, a 5-day prototype, two paid channels, kill criteria written before I spend, a verdict at week 4.",

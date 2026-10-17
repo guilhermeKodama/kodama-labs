@@ -11,7 +11,6 @@ import { DeployWide } from '../deploy/deploy-figure';
 import { LanesWide } from '../lanes/lanes-figure';
 import { PlaybookWide } from '../playbook/playbook-figure';
 import { SentinelWide } from '../sentinel/sentinel-figure';
-import { TriageWide } from '../triage/triage-figure';
 
 /** The wide drawing of each figure, rendered, beside the name of its drawing in the mockup. */
 const FIGURES = [
@@ -19,7 +18,6 @@ const FIGURES = [
   { name: 'capital', node: <CapitalWide /> },
   { name: 'sentinel', node: <SentinelWide /> },
   { name: 'cosmos', node: <CosmosWide /> },
-  { name: 'triage', node: <TriageWide /> },
   { name: 'playbook', node: <PlaybookWide verdict={unknown()} /> },
   { name: 'agents', node: <AgentsWide /> },
   { name: 'deploy', node: <DeployWide /> },

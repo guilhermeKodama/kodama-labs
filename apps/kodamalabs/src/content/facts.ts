@@ -34,8 +34,6 @@ export interface Facts {
   capitalInProductionSince: Fact<string>;
   /** Public address of Sentinel, once the site answers. */
   sentinelUrl: Fact<string>;
-  /** Whether the learning filter acts on its own today. */
-  triageMode: Fact<'shadow' | 'active'>;
   /** Outcome of the MilhasGrupo validation, with its date as "YYYY-MM-DD". */
   milhasVerdict: Fact<{ verdict: 'go' | 'pivot' | 'kill'; date: string }>;
   /** Short commit the page was built from. Set by the image build. */
@@ -50,7 +48,6 @@ export const FACTS: Facts = {
   cvUrl: unknown(),
   capitalInProductionSince: unknown(),
   sentinelUrl: unknown(),
-  triageMode: unknown(),
   milhasVerdict: unknown(),
   buildCommit: fromEnv('KODAMALABS_COMMIT'),
   builtAt: fromEnv('KODAMALABS_BUILT_AT'),

@@ -4,9 +4,6 @@
  * src/messages; facts only the owner has live in ./facts.
  */
 
-/** The learning filter is the owner's own tool; showing it is his call. */
-export const SHOW_LEARNING_FILTER = true;
-
 /** Merged pull requests listed under "With coding agents", newest first. */
 export const MERGED_PULL_REQUESTS = [
   { number: 85, date: '2026-10-10' },

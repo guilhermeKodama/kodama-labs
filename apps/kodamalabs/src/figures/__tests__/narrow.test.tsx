@@ -12,7 +12,6 @@ import { wrapLabel } from '../geometry/wrap';
 import { LanesNarrow } from '../lanes/lanes-narrow';
 import { PlaybookNarrow } from '../playbook/playbook-narrow';
 import { SentinelNarrow } from '../sentinel/sentinel-narrow';
-import { TriageNarrow } from '../triage/triage-narrow';
 
 /** The narrow drawing of each figure. There is no mockup of these; the rules below stand in for one. */
 const FIGURES = [
@@ -20,7 +19,6 @@ const FIGURES = [
   { name: 'capital', node: <CapitalNarrow /> },
   { name: 'sentinel', node: <SentinelNarrow /> },
   { name: 'cosmos', node: <CosmosNarrow /> },
-  { name: 'triage', node: <TriageNarrow /> },
   { name: 'playbook', node: <PlaybookNarrow verdict={unknown()} /> },
   { name: 'agents', node: <AgentsNarrow /> },
   { name: 'deploy', node: <DeployNarrow /> },

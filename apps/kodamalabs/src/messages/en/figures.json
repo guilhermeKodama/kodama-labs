@@ -205,52 +205,6 @@
       "sofar": "three draft pull requests so far, none merged yet"
     }
   },
-  "triage": {
-    "alt": "The learning filter. Left of the line, four dashed rows in shadow mode: what the model would discard. On the line, one gate: 95 percent cross-validated precision, then my switch. Right of the line, three solid rows really discarded, each with Revert. A loop runs back across the line: 46 restored from the audit trail. Items are numbered, never named.",
-    "heads": {
-      "shadow": "shadow mode: the model would discard",
-      "gate": "95% cross-validated precision, then my switch"
-    },
-    "shadow": {
-      "a": {
-        "score": "0.03",
-        "item": "Item 1182"
-      },
-      "b": {
-        "score": "0.05",
-        "item": "Item 1175"
-      },
-      "c": {
-        "score": "0.08",
-        "item": "Item 1169"
-      },
-      "d": {
-        "score": "0.11",
-        "item": "Item 1160"
-      }
-    },
-    "would": "would discard",
-    "kept": {
-      "a": {
-        "score": "0.02",
-        "item": "Item 1067"
-      },
-      "b": {
-        "score": "0.02",
-        "item": "Item 1041"
-      },
-      "c": {
-        "score": "0.04",
-        "item": "Item 1033"
-      }
-    },
-    "discarded": "discarded · Revert",
-    "limits": {
-      "threshold": "discard threshold capped at 0.15",
-      "daily": "at most 15 discards a day"
-    },
-    "restored": "46 restored from the audit trail"
-  },
   "playbook": {
     "alt": "The validation playbook on a time axis from day 0 to week 4, where the line is the go, pivot or kill decision. MilhasGrupo runs dashed from one page, through a prototype and paid traffic, and ends on the line in a hollow ring: its verdict is not recorded yet. FIRE-BR is a short dashed stroke: one page, June 2026.",
     "criteria": "kill criteria, written before I spend",

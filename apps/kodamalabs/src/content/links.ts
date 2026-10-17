@@ -17,7 +17,6 @@ export const SECTIONS = {
   sentinel: 'sentinel',
   cosmos: 'cosmos',
   lab: 'lab',
-  triage: 'triage',
   playbook: 'playbook',
   method: 'method',
   agents: 'agents',
