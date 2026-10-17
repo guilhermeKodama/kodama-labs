@@ -11,7 +11,7 @@ Nothing listens on a public port. The runner is GitHub-hosted. There is no self-
 
 Images are built on `default` because the Docker Desktop VM runs out of memory. They are loaded into `desktop-linux` and only then tagged `:latest`. `compose up` passes `--no-build`. `compose run` does not: Compose v5 rejects that flag. The maintenance window checks that `kodama-monitoring:latest` is already loaded (`docker image inspect`) and then runs with `--pull never`.
 
-Smoke checks use container DNS (`http://capital-web:3000/api/health`). Capital also checks `https://capital.kodamalabs.ai/login` for a 302 to Cloudflare Access, and `POST /mcp` `tools/list`. The MCP bearer token is read inside the container and is not written to the log.
+Smoke checks use container DNS (`http://capital-web:3000/api/health`). Capital also checks `https://capital.kodamalabs.ai/login` for a 302 to Cloudflare Access, and `POST /mcp` `tools/list`. The MCP bearer token is read inside the container and is not written to the log. After `cloudflared` is recreated, the deploy checks `https://status.kodamalabs.ai/`: `/` and `/api/status-page/kodama` must be 200, and `/dashboard`, `/socket.io/`, `/api/push/x`, `/metrics` and `/api/badge/1/status` must be 404. On failure it writes the previous `infrastructure/cloudflared/config.yml` back, recreates cloudflared, and records `build_failed`. That leaves a tracked change so a restart cannot republish the failed ingress; the next deploy refuses the dirty tree until the file is checked out. The CNAME has to exist before that deploy. `deploy.sh` on the server is the installed copy, so run `install.sh` again when that smoke script changes.
 
 `infrastructure/postgres` is never applied. A change is logged and left for a person.
 
