@@ -1,0 +1,12 @@
+[Unit]
+Description=Poll origin/main and deploy kodama-labs when CI is green
+
+[Service]
+Type=oneshot
+WorkingDirectory=/home/kodama/Documents/Github/kodama-labs
+ExecStart=/home/kodama/.local/lib/kodama-deploy/poll.sh
+TimeoutStartSec=7200
+Nice=10
+
+[Install]
+WantedBy=default.target

@@ -7,6 +7,10 @@ description: Como publicar mudanças de careers, attention, capital e sentinel n
 
 Só funciona a partir do **checkout principal** do repo no servidor (`/home/kodama/Documents/Github/kodama-labs`) — nunca de um worktree. É de lá que o `docker compose` lê o `docker-compose.yml`, o `Dockerfile` e os `.env.production` de cada app.
 
+## Deploy automático
+
+Um timer no servidor (`infrastructure/deploy/`) busca `origin/main` e publica quando o check do GitHub chamado `ci` fica verde. Não abre porta nenhuma. Instalação, `--dry-run`, pausa e rollback estão em `infrastructure/deploy/README.md`. O passo a passo manual abaixo continua valendo para um deploy feito à mão.
+
 ## Deploy completo (código mudou)
 
 ```bash

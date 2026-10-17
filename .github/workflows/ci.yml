@@ -1,0 +1,102 @@
+# The deploy poller waits for a check run whose name is exactly "ci".
+# That name is the aggregator job below. Add matrix jobs by making "ci"
+# need them; do not rename the aggregator.
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: root
+          POSTGRES_PASSWORD: root
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U root -d postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      HUSKY: "0"
+      TURBO_TELEMETRY_DISABLED: "1"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Deployer shell tests
+        run: bash infrastructure/deploy/deploy.test.sh
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: PostgreSQL client
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+
+      - name: Base SHA
+        id: base
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            echo "sha=${{ github.event.pull_request.base.sha }}" >> "$GITHUB_OUTPUT"
+          else
+            before="${{ github.event.before }}"
+            if [ -z "$before" ] || [ "$before" = "0000000000000000000000000000000000000000" ]; then
+              echo "sha=" >> "$GITHUB_OUTPUT"
+            else
+              echo "sha=$before" >> "$GITHUB_OUTPUT"
+            fi
+          fi
+
+      - name: Lint and typecheck
+        env:
+          NODE_OPTIONS: --max-old-space-size=4096
+        run: |
+          base="${{ steps.base.outputs.sha }}"
+          if [ -n "$base" ]; then
+            pnpm turbo run lint typecheck --filter="...[$base]"
+          else
+            pnpm turbo run lint typecheck
+          fi
+
+      - name: Test affected packages
+        run: bash infrastructure/deploy/ci-test.sh "${{ steps.base.outputs.sha }}"
+
+  ci:
+    name: ci
+    needs: [verify]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Require verify to succeed
+        run: |
+          result="${{ needs.verify.result }}"
+          echo "verify result: ${result}"
+          test "$result" = "success"
