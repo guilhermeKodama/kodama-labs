@@ -293,6 +293,16 @@ print_recreate_unit() {
   for svc in ${UNIT_SERVICES[$unit]}; do
     echo_compose up -d --no-deps --no-build --force-recreate "$svc"
   done
+  if [[ "$unit" == "cloudflared" ]]; then
+    echo "    smoke GET https://status.kodamalabs.ai/ expects 200 and Kodama Labs"
+    echo "    smoke GET https://status.kodamalabs.ai/api/status-page/kodama expects 200"
+    echo "    smoke GET https://status.kodamalabs.ai/dashboard expects 404"
+    echo "    smoke GET https://status.kodamalabs.ai/socket.io/?EIO=4&transport=polling expects 404"
+    echo "    smoke GET https://status.kodamalabs.ai/api/push/x expects 404"
+    echo "    smoke GET https://status.kodamalabs.ai/metrics expects 404"
+    echo "    smoke GET https://status.kodamalabs.ai/api/badge/1/status expects 404"
+    echo "    on status smoke failure: restore infrastructure/cloudflared/config.yml from the previous cloudflared sha and force-recreate cloudflared"
+  fi
 }
 
 blocked="no"
@@ -506,6 +516,70 @@ wait_services() {
   services_are_up "$@"
 }
 
+status_expect() {
+  local path="$1" expect="$2" needle="${3:-}" body code
+  body="$(mktemp)"
+  code="$(curl -sS --max-time 20 -o "$body" -w '%{http_code}' "https://status.kodamalabs.ai${path}" || true)"
+  if [[ "$code" != "$expect" ]]; then
+    echo "status smoke ${path} got ${code:-curl-failed}, expected ${expect}: $(head -c 120 "$body" | tr '\n' ' ')"
+    rm -f "$body"
+    return 1
+  fi
+  if [[ -n "$needle" ]] && ! grep -q "$needle" "$body"; then
+    echo "status smoke ${path} body missing ${needle}"
+    rm -f "$body"
+    return 1
+  fi
+  rm -f "$body"
+}
+
+status_page_smoke_once() {
+  status_expect "/" "200" "Kodama Labs" || return 1
+  status_expect "/api/status-page/kodama" "200" '"slug":"kodama"' || return 1
+  status_expect "/dashboard" "404" || return 1
+  status_expect "/socket.io/?EIO=4&transport=polling" "404" || return 1
+  status_expect "/api/push/x" "404" || return 1
+  status_expect "/metrics" "404" || return 1
+  status_expect "/api/badge/1/status" "404" || return 1
+}
+
+status_page_smoke() {
+  local attempt
+  for attempt in $(seq 1 15); do
+    if status_page_smoke_once; then
+      return 0
+    fi
+    sleep 2
+  done
+  return 1
+}
+
+# cloudflared has no image to roll back. Put the previous ingress file back
+# and recreate so a restart cannot republish a failed allowlist. The working
+# tree then differs from HEAD on purpose; the next deploy refuses a dirty
+# checkout until that file is checked out again.
+restore_cloudflared_ingress() {
+  local oldsha tmp
+  oldsha="$(status_py get "apps.cloudflared.sha")"
+  if [[ ! "$oldsha" =~ ^[0-9a-f]{40}$ ]]; then
+    echo "no previous cloudflared sha; ingress file left as deployed"
+    return 1
+  fi
+  if ! git cat-file -e "${oldsha}:infrastructure/cloudflared/config.yml" 2>/dev/null; then
+    echo "previous cloudflared config not found at ${oldsha}"
+    return 1
+  fi
+  tmp="$(mktemp)"
+  if ! git show "${oldsha}:infrastructure/cloudflared/config.yml" >"$tmp"; then
+    rm -f "$tmp"
+    return 1
+  fi
+  mv "$tmp" infrastructure/cloudflared/config.yml
+  echo "restored infrastructure/cloudflared/config.yml from ${oldsha}"
+  echo "checkout has that tracked change so a cloudflared restart stays fail-closed; the next deploy refuses a dirty tree until the file is checked out"
+  recreate_services cloudflared || echo "cloudflared recreate after ingress restore failed"
+}
+
 public_login_ok() {
   local hdr code loc
   hdr="$(mktemp)"
@@ -685,6 +759,12 @@ execute_recreate_unit() {
     fi
   elif ! wait_services "${services_array[@]}"; then
     record_failure "$unit" build_failed "${unit} did not stay up"
+  fi
+  if [[ "$unit" == "cloudflared" ]]; then
+    if ! status_page_smoke; then
+      restore_cloudflared_ingress || true
+      record_failure "$unit" build_failed "status page smoke failed; previous cloudflared ingress restored"
+    fi
   fi
   status_py set-app-success "$unit" "$TARGET"
 }
