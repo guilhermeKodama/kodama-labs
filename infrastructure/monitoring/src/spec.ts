@@ -85,6 +85,7 @@ const DEFAULT_PUBLIC: Array<{ name: string; url: string }> = [
   { name: "kodama/public-capital-login", url: "https://capital.kodamalabs.ai/login" },
   { name: "kodama/public-careers", url: "https://careers.kodamalabs.ai/" },
   { name: "kodama/public-attention", url: "https://attentio.dev/" },
+  { name: "kodama/public-status", url: "https://status.kodamalabs.ai/" },
 ];
 
 export interface SpecEnv {

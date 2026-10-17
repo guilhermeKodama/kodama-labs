@@ -14,6 +14,7 @@ import {
 } from "recharts";
 import { useTranslations } from "next-intl";
 import { useFmt } from "@/lib/format/provider";
+import { netWorthTooltipRows, type NetWorthTooltipKey } from "@/lib/invest/portfolio-history-view";
 import type { AllocationClass } from "@/lib/invest/types";
 import { CHART, CHART_AXIS, CHART_SERIES } from "@/lib/theme/chart-colors";
 import { textRole } from "@/lib/theme/type-scale";
@@ -36,10 +37,41 @@ export const CLASS_COLOR: Record<AllocationClass, string> = {
   cash: CHART_SERIES[9],
 };
 
+/** Patrimônio / Aportado / Posições iniciais. Strokes are the tooltip and legend marks too. */
+const NET_WORTH_SERIES = {
+  netWorth: { stroke: CHART.ink, fill: CHART.soft, fillOpacity: 0.2, dashed: false },
+  aportes: { stroke: CHART.accent, fill: CHART.accent, fillOpacity: 0.35, dashed: false },
+  initial: { stroke: CHART_SERIES[6], fill: CHART_SERIES[6], fillOpacity: 0.2, dashed: true },
+} as const;
+
+type NetWorthSeriesKey = keyof typeof NET_WORTH_SERIES;
+
+function seriesDot(stroke: string) {
+  return { r: 3.5, fill: stroke, stroke, strokeWidth: 0 };
+}
+
+/** Swatch shared by the legend and the tooltip. Posições iniciais stay dashed. */
+function SeriesMark({ series }: { series: NetWorthSeriesKey }) {
+  const { stroke, dashed } = NET_WORTH_SERIES[series];
+  return (
+    <span
+      aria-hidden
+      className="inline-block size-2 shrink-0 rounded-[2px]"
+      style={
+        dashed
+          ? { background: "transparent", border: `1px dashed ${stroke}` }
+          : { background: stroke }
+      }
+    />
+  );
+}
+
 /**
  * "Patrimônio vs total aportado": filled lines over 12 months, in thousands, not from zero. "Aportado" is
  * stacked from the aportes and, when there are any, the "posições iniciais" (holdings registered without
- * operations), so a portfolio typed in at once never reads as an aporte of that month.
+ * operations), so a portfolio typed in at once never reads as an aporte of that month. The three strokes
+ * use distinct chart tokens. The tooltip adds "Capital investido" (initial + aportes), which is the
+ * height of the aportes stroke — below the dashed line when net aportes are negative.
  */
 export function NetWorthChart({
   rows,
@@ -56,12 +88,6 @@ export function NetWorthChart({
     aportes: fmt.thousands(r.aportes),
     initial: fmt.thousands(r.initial),
   }));
-  const name = (key: unknown) =>
-    key === "netWorth"
-      ? t("netWorth")
-      : key === "initial"
-        ? t("initialPositions")
-        : t("contributed");
   return (
     <div className="flex flex-col gap-1.5">
       <div className="h-[180px]">
@@ -87,11 +113,15 @@ export function NetWorthChart({
               tickFormatter={(v) => fmt.number(Number(v), 0)}
             />
             <Tooltip
-              contentStyle={TOOLTIP_STYLE}
-              formatter={(v, key) => [
-                `${fmt.number(Number(v), { min: 0, max: 1 })}`,
-                name(key),
-              ]}
+              animationDuration={0}
+              content={(props) => (
+                <NetWorthTooltip
+                  active={props.active}
+                  label={props.label}
+                  point={props.payload?.[0]?.payload}
+                  showInitial={showInitial}
+                />
+              )}
             />
             {showInitial ? (
               <Area
@@ -99,12 +129,13 @@ export function NetWorthChart({
                 dataKey="initial"
                 name="initial"
                 stackId="contributed"
-                stroke={CHART.muted}
+                stroke={NET_WORTH_SERIES.initial.stroke}
                 strokeDasharray="3 3"
-                fill={CHART.soft}
-                fillOpacity={0.5}
-                strokeWidth={1}
+                fill={NET_WORTH_SERIES.initial.fill}
+                fillOpacity={NET_WORTH_SERIES.initial.fillOpacity}
+                strokeWidth={1.5}
                 dot={false}
+                activeDot={seriesDot(NET_WORTH_SERIES.initial.stroke)}
                 isAnimationActive={false}
               />
             ) : null}
@@ -113,58 +144,100 @@ export function NetWorthChart({
               dataKey="aportes"
               name="aportes"
               stackId="contributed"
-              stroke={CHART.muted}
-              fill={CHART.area}
-              fillOpacity={0.6}
+              stroke={NET_WORTH_SERIES.aportes.stroke}
+              fill={NET_WORTH_SERIES.aportes.fill}
+              fillOpacity={NET_WORTH_SERIES.aportes.fillOpacity}
               strokeWidth={1.5}
               dot={false}
+              activeDot={seriesDot(NET_WORTH_SERIES.aportes.stroke)}
               isAnimationActive={false}
             />
             <Area
               type="monotone"
               dataKey="netWorth"
               name="netWorth"
-              stroke={CHART.ink}
-              fill={CHART.soft}
-              fillOpacity={0.35}
+              stroke={NET_WORTH_SERIES.netWorth.stroke}
+              fill={NET_WORTH_SERIES.netWorth.fill}
+              fillOpacity={NET_WORTH_SERIES.netWorth.fillOpacity}
               strokeWidth={2}
               dot={false}
+              activeDot={seriesDot(NET_WORTH_SERIES.netWorth.stroke)}
               isAnimationActive={false}
             />
           </AreaChart>
         </ResponsiveContainer>
       </div>
-      {showInitial ? (
-        <div className="flex flex-wrap gap-x-3 gap-y-1 text-caption text-fg-3">
-          <span className="inline-flex items-center gap-1.5">
-            <span
-              aria-hidden
-              className="size-2 rounded-[2px]"
-              style={{ background: CHART.ink }}
-            />
-            {t("netWorth")}
-          </span>
-          <span className="inline-flex items-center gap-1.5">
-            <span
-              aria-hidden
-              className="size-2 rounded-[2px]"
-              style={{ background: CHART.area }}
-            />
-            {t("contributed")}
-          </span>
-          <span
-            className="inline-flex items-center gap-1.5"
-            title={t("initialPositionsHint")}
-          >
-            <span
-              aria-hidden
-              className="size-2 rounded-[2px] border border-dashed"
-              style={{ background: CHART.soft, borderColor: CHART.muted }}
-            />
+      <div className="flex flex-wrap gap-x-3 gap-y-1 text-caption text-fg-3">
+        <span className="inline-flex items-center gap-1.5">
+          <SeriesMark series="netWorth" />
+          {t("netWorth")}
+        </span>
+        <span className="inline-flex items-center gap-1.5">
+          <SeriesMark series="aportes" />
+          {t("contributed")}
+        </span>
+        {showInitial ? (
+          <span className="inline-flex items-center gap-1.5" title={t("initialPositionsHint")}>
+            <SeriesMark series="initial" />
             {t("initialPositions")}
           </span>
-        </div>
-      ) : null}
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+function tooltipLabel(key: NetWorthTooltipKey, t: (key: "netWorth" | "contributed" | "initialPositions" | "capitalInvested") => string): string {
+  if (key === "netWorth") return t("netWorth");
+  if (key === "initial") return t("initialPositions");
+  if (key === "capitalInvested") return t("capitalInvested");
+  return t("contributed");
+}
+
+/** Stack order, then the muted capital-investido total with no series mark. */
+function NetWorthTooltip({
+  active,
+  label,
+  point,
+  showInitial,
+}: {
+  active?: boolean;
+  label?: unknown;
+  point?: { netWorth?: unknown; aportes?: unknown; initial?: unknown };
+  showInitial: boolean;
+}) {
+  const t = useTranslations("invest.portfolio.history");
+  const fmt = useFmt();
+  if (!active || !point) return null;
+  if (typeof point.netWorth !== "number" || typeof point.aportes !== "number" || typeof point.initial !== "number") return null;
+  const rows = netWorthTooltipRows({ netWorth: point.netWorth, aportes: point.aportes, initial: point.initial }, showInitial);
+  return (
+    <div style={{ ...TOOLTIP_STYLE, padding: "8px 10px" }}>
+      <div style={{ marginBottom: 4 }}>{String(label ?? "")}</div>
+      {rows.map((row) => {
+        const series = row.key === "capitalInvested" ? null : row.key;
+        return (
+          <div
+            key={row.key}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 6,
+              paddingTop: row.derived ? 4 : 1,
+              marginTop: row.derived ? 4 : 0,
+              borderTop: row.derived ? "1px solid var(--cap-stroke-2)" : undefined,
+              color: row.derived ? "var(--cap-text-3)" : "var(--cap-text-1)",
+            }}
+          >
+            {series ? <SeriesMark series={series} /> : <span aria-hidden className="inline-block size-2 shrink-0" />}
+            <span>
+              {tooltipLabel(row.key, t)}
+              {" : "}
+              {fmt.number(row.value, { min: 0, max: 1 })}
+            </span>
+          </div>
+        );
+      })}
     </div>
   );
 }

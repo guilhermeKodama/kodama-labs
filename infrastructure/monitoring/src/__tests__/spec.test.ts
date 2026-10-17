@@ -61,6 +61,11 @@ describe("monitors", () => {
     });
     expect(byName.get("kodama/public-attention")?.maxredirects).toBe(0);
     expect(byName.get("kodama/public-careers")?.accepted_statuscodes).toEqual(["200-399"]);
+    expect(byName.get("kodama/public-status")).toMatchObject({
+      url: "https://status.kodamalabs.ai/",
+      maxredirects: 0,
+      accepted_statuscodes: ["200-399"],
+    });
     expect(byName.has("kodama/public-sentinel.kodamalabs.ai")).toBe(false);
     expect(byName.has("kodama/capital-mcp")).toBe(false);
     expect(byName.has("kodama/ollama")).toBe(false);

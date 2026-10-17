@@ -35,6 +35,8 @@ lerna-debug.log*
 # Testing
 coverage
 .nyc_output
+__pycache__/
+*.pyc
 
 # OS
 .DS_Store
