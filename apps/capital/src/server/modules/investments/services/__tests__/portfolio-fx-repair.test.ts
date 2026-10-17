@@ -1,7 +1,6 @@
-import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { Prisma } from "@/generated/prisma";
 import { prisma } from "@capital/server/lib/prisma";
 import { previousBusinessDayRate } from "@capital/server/modules/ledger/lib/fx";
@@ -10,6 +9,7 @@ import { replayPosition } from "@capital/server/modules/investments/lib/holding-
 import { portfolioFxReport } from "@capital/server/modules/investments/lib/portfolio-fx-report";
 import { portfolioSummary } from "@capital/server/modules/investments/services/portfolio";
 import { createLedgerFixture, deleteLedgerFixture, type LedgerFixture } from "@/test/ledger-fixtures";
+import { psql as runPsql, testDatabase, type PsqlResult } from "@/test/psql";
 
 const SELL_USER = "test-user-fx-repair-sell-001";
 const ADJ_USER = "test-user-fx-repair-adj-001";
@@ -20,14 +20,8 @@ function noon(day: string): Date {
   return new Date(`${day}T12:00:00.000Z`);
 }
 
-function psql(sql: string): { status: number; stdout: string; stderr: string } {
-  const url = new URL(process.env.DATABASE_URL ?? "");
-  const result = spawnSync(
-    "psql",
-    ["-h", url.hostname, "-p", url.port || "5432", "-U", decodeURIComponent(url.username), "-d", url.pathname.slice(1), "-v", "ON_ERROR_STOP=1", "-X", "-q"],
-    { encoding: "utf8", input: sql, env: { ...process.env, PGPASSWORD: decodeURIComponent(url.password) } },
-  );
-  return { status: result.status ?? 1, stdout: result.stdout ?? "", stderr: result.stderr ?? "" };
+function psql(sql: string): PsqlResult {
+  return runPsql(testDatabase(), ["-q"], sql);
 }
 
 function runMigration(): void {
@@ -423,6 +417,17 @@ describe("portfolio fx repair", () => {
     } finally {
       await prisma.$executeRaw`DELETE FROM legacy.investment_accounts WHERE id = ${avenueId}`;
       await deleteLedgerFixture(prisma, soloId);
+    }
+  });
+
+  it("reads everything in one snapshot", async () => {
+    const transaction = vi.spyOn(prisma, "$transaction");
+    try {
+      await portfolioFxReport(prisma, "precheck", { userId: SELL_USER });
+      expect(transaction).toHaveBeenCalledTimes(1);
+      expect(transaction.mock.calls[0][1]).toMatchObject({ isolationLevel: "RepeatableRead" });
+    } finally {
+      transaction.mockRestore();
     }
   });
 
