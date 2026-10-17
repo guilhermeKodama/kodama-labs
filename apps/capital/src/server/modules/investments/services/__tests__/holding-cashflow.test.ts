@@ -5,6 +5,7 @@ import { parseLocalDate } from "@capital/server/lib/date-utils";
 import { round } from "@capital/server/modules/ledger/lib/money";
 import { accountBalances } from "@capital/server/modules/ledger/services/accounts";
 import { undoBatch, withMutationSource } from "@capital/server/modules/ledger/services/mutations";
+import { updateTransactionTool } from "@capital/server/modules/mcp/tools/manage-transactions";
 import { recalculateAllHoldings, replayPosition } from "@capital/server/modules/investments/lib/holding-position";
 import { createLedgerFixture, deleteLedgerFixture, type LedgerFixture } from "@/test/ledger-fixtures";
 import { contributions } from "../contributions";
@@ -184,6 +185,14 @@ describe("recordInvestmentContribution", () => {
     expect((await accountBalances(USER, prisma, [pjBroker])).get(pjBroker)).toBeCloseTo(0, 2);
     expect(result.quantity).toBe(1);
     expect(result.totalInvested).toBeCloseTo(COST + APORTE, 2);
+    const deposit = groups.find((group) => group.direction === "investment_deposit")!;
+    const hop = groups.find((group) => group.direction === "capital_injection")!;
+    expect(deposit.description).toBe(LABEL);
+    expect(hop.description).not.toBe(LABEL);
+    const cash = await prisma.ledgerEntry.findUniqueOrThrow({
+      where: { id: (await prisma.investmentOperation.findUniqueOrThrow({ where: { id: result.operationId } })).cashEntryId! },
+    });
+    expect(cash.description).toBe(LABEL);
   });
 
   it("converts a BRL deposit into a USD caixinha at the amount given", async () => {
@@ -285,6 +294,98 @@ describe("recordInvestmentContribution", () => {
     await expect(
       recordInvestmentContribution(USER, { holdingId: closed.id, cashAccountId: f.pfChecking, amount: APORTE, date: "2026-10-16" }, prisma),
     ).rejects.toMatchObject({ status: 422, code: "account.archived" });
+  });
+
+  it("names the transfer and the buy verbatim, and falls back without a trailing space", async () => {
+    const named = await caixinha({ accountId: f.broker });
+    const verbatim = await recordInvestmentContribution(
+      USER,
+      {
+        holdingId: named.id,
+        cashAccountId: f.pfChecking,
+        amount: APORTE,
+        date: DAY,
+        description: "Aplicação Caixinha",
+        operationDescription: "Compra da caixinha",
+      },
+      prisma,
+    );
+    const group = await prisma.transferGroup.findUniqueOrThrow({ where: { id: verbatim.transferGroupId! } });
+    const transferLegs = await prisma.ledgerEntry.findMany({ where: { transferGroupId: group.id } });
+    expect(group.description).toBe("Aplicação Caixinha");
+    expect(transferLegs.every((leg) => leg.description === "Aplicação Caixinha" && leg.categoryId === null)).toBe(true);
+    const cash = await prisma.ledgerEntry.findUniqueOrThrow({
+      where: { id: (await prisma.investmentOperation.findUniqueOrThrow({ where: { id: verbatim.operationId } })).cashEntryId! },
+    });
+    expect(cash.description).toBe("Compra da caixinha");
+
+    const blank = await caixinha({ accountId: f.broker, name: "Caixinha Nubank PJ", ticker: "" });
+    const fallback = await recordInvestmentContribution(
+      USER,
+      { holdingId: blank.id, cashAccountId: f.pfChecking, amount: APORTE, date: "2026-10-16", description: "   " },
+      prisma,
+    );
+    const fallbackCash = await prisma.ledgerEntry.findUniqueOrThrow({
+      where: { id: (await prisma.investmentOperation.findUniqueOrThrow({ where: { id: fallback.operationId } })).cashEntryId! },
+    });
+    expect(fallbackCash.description).toBe("Aporte Caixinha Nubank PJ");
+    expect((await prisma.transferGroup.findUniqueOrThrow({ where: { id: fallback.transferGroupId! } })).description).toBe("Aporte Caixinha Nubank PJ");
+
+    const quoted = await caixinha({ accountId: f.broker, name: "CDB Banco", ticker: "CDB24", assetClass: "fixed_income" });
+    const byTicker = await recordInvestmentContribution(
+      USER,
+      { holdingId: quoted.id, cashAccountId: f.pfChecking, amount: 100, date: DAY },
+      prisma,
+    );
+    expect((await prisma.transferGroup.findUniqueOrThrow({ where: { id: byTicker.transferGroupId! } })).description).toBe("Aporte CDB24");
+  });
+
+  it("puts an investment category on the buy only, and an edit keeps the operation link", async () => {
+    const category = await prisma.category.create({ data: { userId: USER, name: "Caixinha", type: "investment" } });
+    const expense = await prisma.category.create({ data: { userId: USER, name: "Mercado", type: "expense" } });
+    const archived = await prisma.category.create({ data: { userId: USER, name: "Velha", type: "investment", isArchived: true } });
+    const foreign = await prisma.category.create({ data: { userId: OTHER, name: "Outra", type: "investment" } });
+    const holding = await caixinha({ accountId: f.broker });
+    const input = { holdingId: holding.id, cashAccountId: f.pfChecking, amount: APORTE, date: DAY };
+    await expect(recordInvestmentContribution(USER, { ...input, categoryId: expense.id }, prisma)).rejects.toMatchObject({ status: 422, code: "category.type_mismatch" });
+    await expect(recordInvestmentContribution(USER, { ...input, categoryId: archived.id }, prisma)).rejects.toMatchObject({ status: 422, code: "category.archived" });
+    await expect(recordInvestmentContribution(USER, { ...input, categoryId: foreign.id }, prisma)).rejects.toMatchObject({ status: 404, code: "category.not_found" });
+    await expect(recordInvestmentContribution(USER, { ...input, categoryId: "00000000-0000-4000-8000-000000000000" }, prisma)).rejects.toMatchObject({ status: 404, code: "category.not_found" });
+    expect(await prisma.investmentOperation.count({ where: { holdingId: holding.id, type: "buy" } })).toBe(0);
+
+    const result = await recordInvestmentContribution(USER, { ...input, description: "Aplicação Caixinha", categoryId: category.id }, prisma);
+    const operation = await prisma.investmentOperation.findUniqueOrThrow({ where: { id: result.operationId } });
+    const cash = await prisma.ledgerEntry.findUniqueOrThrow({ where: { id: operation.cashEntryId! } });
+    expect(cash).toMatchObject({ description: "Aplicação Caixinha", categoryId: category.id, transferGroupId: null });
+    expect(operation.fundingGroupId).toBe(result.transferGroupId);
+
+    const edited = await updateTransactionTool(USER, { id: cash.id, description: "Aporte Caixinha Nubank PJ", category: "Caixinha" }, prisma);
+    expect(edited).toMatchObject({ description: "Aporte Caixinha Nubank PJ", category: "Caixinha", transferGroupId: null });
+    const afterEdit = await prisma.investmentOperation.findUniqueOrThrow({ where: { id: result.operationId } });
+    expect(afterEdit.cashEntryId).toBe(cash.id);
+    expect(afterEdit.fundingGroupId).toBe(result.transferGroupId);
+    expect((await prisma.ledgerEntry.findUniqueOrThrow({ where: { id: cash.id } })).categoryId).toBe(category.id);
+
+    const editBatch = await prisma.mutationBatch.findFirstOrThrow({ where: { userId: USER, undoneAt: null }, orderBy: { createdAt: "desc" } });
+    await undoBatch(USER, editBatch.id, prisma);
+    expect(await prisma.ledgerEntry.findUniqueOrThrow({ where: { id: cash.id } })).toMatchObject({
+      description: "Aplicação Caixinha",
+      categoryId: category.id,
+    });
+
+    const transferLeg = await prisma.ledgerEntry.findFirstOrThrow({ where: { transferGroupId: result.transferGroupId!, amount: { lt: 0 } } });
+    await updateTransactionTool(USER, { id: transferLeg.id, description: "Novo aporte", category: "Caixinha" }, prisma);
+    const group = await prisma.transferGroup.findUniqueOrThrow({ where: { id: result.transferGroupId! } });
+    const legs = await prisma.ledgerEntry.findMany({ where: { transferGroupId: group.id } });
+    expect(group.description).toBe("Novo aporte");
+    expect(legs.every((leg) => leg.description === "Novo aporte" && leg.categoryId === null)).toBe(true);
+    expect(afterEdit.fundingGroupId).toBe(group.id);
+
+    const transferEdit = await prisma.mutationBatch.findFirstOrThrow({ where: { userId: USER, undoneAt: null }, orderBy: { createdAt: "desc" } });
+    await undoBatch(USER, transferEdit.id, prisma);
+    await undoBatch(USER, result.batchId!, prisma);
+    expect(await prisma.ledgerEntry.findUnique({ where: { id: cash.id } })).toBeNull();
+    expect(await prisma.transferGroup.findUnique({ where: { id: group.id } })).toBeNull();
   });
 
   it("undoes a by_value contribution back to the price, cost, quantity, and balances", async () => {
@@ -451,6 +552,32 @@ describe("recordInvestmentRedemption", () => {
     await expect(
       recordInvestmentRedemption(OTHER, { holdingId: holding.id, cashAccountId: f.pfChecking, amount: APORTE, date: DAY }, prisma),
     ).rejects.toMatchObject({ status: 404, code: "holding.not_found" });
+  });
+
+  it("names a redemption from the ticker or the holding name", async () => {
+    const named = await caixinha({ accountId: f.broker, ticker: "" });
+    const result = await recordInvestmentRedemption(
+      USER,
+      { holdingId: named.id, cashAccountId: f.pfChecking, amount: APORTE, date: DAY },
+      prisma,
+    );
+    expect((await prisma.transferGroup.findUniqueOrThrow({ where: { id: result.transferGroupId! } })).description).toBe("Resgate Caixinha Nubank PJ");
+    const cash = await prisma.ledgerEntry.findUniqueOrThrow({
+      where: { id: (await prisma.investmentOperation.findUniqueOrThrow({ where: { id: result.operationId } })).cashEntryId! },
+    });
+    expect(cash.description).toBe("Resgate Caixinha Nubank PJ");
+
+    const ticker = await caixinha({ accountId: f.broker, name: "CDB Banco", ticker: "CDB24" });
+    const byTicker = await recordInvestmentRedemption(
+      USER,
+      { holdingId: ticker.id, cashAccountId: f.pfChecking, amount: 100, date: "2026-10-16", operationDescription: "Saída da caixinha" },
+      prisma,
+    );
+    expect((await prisma.transferGroup.findUniqueOrThrow({ where: { id: byTicker.transferGroupId! } })).description).toBe("Resgate CDB24");
+    const tickerCash = await prisma.ledgerEntry.findUniqueOrThrow({
+      where: { id: (await prisma.investmentOperation.findUniqueOrThrow({ where: { id: byTicker.operationId } })).cashEntryId! },
+    });
+    expect(tickerCash.description).toBe("Saída da caixinha");
   });
 
   it("undoes a by_value redemption back to the price, cost, quantity, and balances", async () => {

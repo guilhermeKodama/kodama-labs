@@ -1,6 +1,7 @@
 import type { DbClient } from "@capital/server/lib/prisma";
 import { round } from "@capital/server/modules/ledger/lib/money";
 import { inTransaction, recordMutation, type MutationRecordInput } from "@capital/server/modules/ledger/services/mutations";
+import { operationSubject } from "@/lib/invest/operation-label";
 import type { NewHoldingInput } from "./aporte";
 import { createHolding, getOwnedHolding, recordOperation } from "./portfolio";
 
@@ -59,9 +60,10 @@ export async function recordOrders(userId: string, input: OrdersInput, db: DbCli
         { collect: records }
       );
       operations.push({ operationId: r.operation.id, holdingId: holding.id, cashEntryId: r.cashEntryId, fundingGroupId: r.fundingGroupId });
-      labels.push(holding.ticker ?? holding.name);
+      labels.push(operationSubject(holding.ticker, holding.name));
     }
-    const batchId = await recordMutation(tx, userId, "create", `Compra ${labels.join(", ")}`, records);
+    const names = labels.filter(Boolean);
+    const batchId = await recordMutation(tx, userId, "create", names.length ? `Compra ${names.join(", ")}` : "Compra", records);
     return { batchId, operations };
   });
 }

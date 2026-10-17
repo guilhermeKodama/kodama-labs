@@ -13,6 +13,7 @@ import { accountBalances, getOwnedAccount } from "@capital/server/modules/ledger
 import { createEntry, softDeleteEntries } from "@capital/server/modules/ledger/services/entries";
 import { getDefaultAccount } from "@capital/server/modules/ledger/services/entities";
 import { inTransaction, recordMutation, snapshot, type MutationRecordInput } from "@capital/server/modules/ledger/services/mutations";
+import { operationLabel } from "@/lib/invest/operation-label";
 import { benchmarks12m } from "./benchmarks";
 import { convertAmount, fundBroker, withdrawFromBroker } from "./funding";
 import { PORTFOLIO_BROKERS, portfolioHistory } from "./portfolio-history";
@@ -217,7 +218,7 @@ const INCOME_LABEL: Record<IncomeType, string> = {
 };
 
 const opLabel = (type: InvestmentTransactionType, holding: { ticker: string | null; name: string }, incomeType?: IncomeType | null) =>
-  `${incomeType && isIncomeOperation(type) ? INCOME_LABEL[incomeType] : OP_LABEL[type]} ${holding.ticker ?? holding.name}`;
+  operationLabel(incomeType && isIncomeOperation(type) ? INCOME_LABEL[incomeType] : OP_LABEL[type], holding.ticker, holding.name);
 
 export interface OperationInput {
   holdingId: string;
@@ -238,6 +239,10 @@ export interface OperationInput {
   creditToAccountId?: string | null;
   /** Pay a buy from a checking account: books an investment_deposit transfer first (across entities, through the broker entity's main checking; see fundBroker). */
   fundFromAccountId?: string | null;
+  /** Cash-leg text. Omitted, the leg is "Compra {ticker or name}". */
+  description?: string | null;
+  /** Investment category for the cash leg. Transfers stay uncategorized. */
+  categoryId?: string | null;
   /** With fundFromAccountId in another currency: the amount debited from it (default: converted at today's rate). */
   fundAmount?: number | null;
   importId?: string | null;
@@ -288,7 +293,8 @@ async function createCashLeg(
   date: Date,
   importId: string | null,
   fx: FxContext,
-  records: MutationRecordInput[]
+  records: MutationRecordInput[],
+  categoryId: string | null = null,
 ) {
   const rate = fx.rateFor(account.currency);
   const amount = round(convertAmount(impact, holding.currency, account.currency, fx), 4);
@@ -305,6 +311,7 @@ async function createCashLeg(
       date,
       effectiveDate: date,
       description: label,
+      categoryId,
       importId,
       metadata: { holdingId: holding.id },
     },
@@ -344,7 +351,7 @@ export async function recordOperation(userId: string, input: OperationInput, db:
     const date = parseLocalDate(input.date);
     const impact = cashImpact(input.type, input.totalAmount, fees, taxWithheld);
     const legAccount = input.creditToAccountId ? await creditAccount(userId, input.creditToAccountId, tx) : holding.account;
-    const label = opLabel(input.type, holding, incomeType);
+    const label = input.description?.trim() || opLabel(input.type, holding, incomeType);
     const oversoldBefore = input.importId ? null : await oversoldOperations(holding.id, tx);
 
     let fundingGroupId: string | null = opts.fundingGroupId ?? null;
@@ -366,7 +373,7 @@ export async function recordOperation(userId: string, input: OperationInput, db:
       fundingGroupId = funded.depositGroupId;
     }
 
-    const cashEntryId = impact !== 0 ? (await createCashLeg(tx, userId, holding, legAccount, label, impact, date, input.importId ?? null, fx, records)).id : null;
+    const cashEntryId = impact !== 0 ? (await createCashLeg(tx, userId, holding, legAccount, label, impact, date, input.importId ?? null, fx, records, input.categoryId ?? null)).id : null;
 
     const op = await tx.investmentOperation.create({
       data: {
@@ -423,10 +430,13 @@ export async function updateOperation(userId: string, operationId: string, patch
     assertIncomeFields(type, { taxWithheld: merged.taxWithheld, totalAmount });
     const fx = await loadFx(userId, tx);
     const impact = cashImpact(merged.type, merged.totalAmount, merged.fees, merged.taxWithheld);
-    const label = opLabel(merged.type, holding, merged.incomeType);
+    const previousLabel = opLabel(before.type, holding, before.incomeType);
+    const nextLabel = opLabel(merged.type, holding, merged.incomeType);
+    // A name the caller set (not the generated "Compra …") stays. The generated one follows a type change.
     const oversoldBefore = await oversoldOperations(holding.id, tx);
 
     const leg = before.cashEntryId ? await tx.ledgerEntry.findUnique({ where: { id: before.cashEntryId } }) : null;
+    const label = leg && leg.description !== previousLabel ? leg.description : nextLabel;
     // Where the cash lands: the account asked for, else where it is now; non-income always on the broker.
     const target = !income
       ? holding.account
