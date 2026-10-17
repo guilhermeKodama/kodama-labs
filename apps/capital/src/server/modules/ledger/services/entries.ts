@@ -686,8 +686,13 @@ async function updateTransferIn(tx: DbClient, userId: string, entry: LedgerEntry
         effectiveDate: date,
         ...(patch.description !== undefined && { description: patch.description }),
         ...(patch.notes !== undefined && { notes: patch.notes }),
-        ...(addressed && patch.categoryId !== undefined && patch.categoryId !== leg.categoryId && { categoryId: patch.categoryId, ...MANUAL_CATEGORY }),
-        ...(toTransfer && { categoryId: null, ...MANUAL_CATEGORY }),
+        // A transfer carries no category. A reimbursement (expense legs) can.
+        ...(legKind === "transfer"
+          ? leg.categoryId != null && { categoryId: null, ...MANUAL_CATEGORY }
+          : {
+              ...(toTransfer && { categoryId: null, ...MANUAL_CATEGORY }),
+              ...(addressed && patch.categoryId !== undefined && patch.categoryId !== leg.categoryId && { categoryId: patch.categoryId, ...MANUAL_CATEGORY }),
+            }),
         ...(addressed && patch.isTaxDeductible !== undefined && { isTaxDeductible: patch.isTaxDeductible }),
       },
     });

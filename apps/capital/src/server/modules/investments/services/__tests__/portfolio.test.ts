@@ -90,6 +90,18 @@ describe("cost basis", () => {
     expect(await holdingRow(h.id)).toMatchObject({ currentQuantity: 10, isActive: true });
   });
 
+  it("names a blank ticker from the holding and keeps a custom cash-leg description", async () => {
+    const h = await prisma.investmentHolding.create({
+      data: { accountId: f.broker, ticker: "", name: "Caixinha Nubank PJ", assetClass: "fixed_income", currency: "BRL" },
+    });
+    const buy = await recordOperation(USER, { holdingId: h.id, type: "buy", quantity: 1, pricePerUnit: 10, totalAmount: 10, date: "2026-10-15" }, prisma);
+    const leg = () => prisma.ledgerEntry.findUniqueOrThrow({ where: { id: buy.cashEntryId! } });
+    expect((await leg()).description).toBe("Compra Caixinha Nubank PJ");
+    await prisma.ledgerEntry.update({ where: { id: buy.cashEntryId! }, data: { description: "Aplicação Caixinha" } });
+    await updateOperation(USER, buy.operation.id, { notes: "kept" }, prisma);
+    expect((await leg()).description).toBe("Aplicação Caixinha");
+  });
+
   it("refuses an edit that makes a later sale exceed the position", async () => {
     const h = await petr4();
     const buy = await recordOperation(USER, { holdingId: h.id, type: "buy", quantity: 10, pricePerUnit: 30, totalAmount: 300, date: "2026-08-10" }, prisma);

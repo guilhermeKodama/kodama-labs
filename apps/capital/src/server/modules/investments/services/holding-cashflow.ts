@@ -11,6 +11,7 @@ import { inTransaction, recordMutation, snapshot, type MutationRecordInput } fro
 import { recalculateHolding, replayPosition } from "../lib/holding-position";
 import { marketValue } from "../lib/holding-value";
 import { quoteSourceFor } from "../lib/quotes";
+import { operationLabel } from "@/lib/invest/operation-label";
 import { convertAmount, fundBroker, withdrawFromBroker } from "./funding";
 import { getOwnedHolding, recordOperation, updateHolding } from "./portfolio";
 
@@ -25,6 +26,10 @@ export interface HoldingCashflowInput {
   /** Contribution: what leaves the cash account, in that account's currency. Redemption: what leaves the holding, in the holding's currency. */
   amount: number;
   date: string;
+  /**
+   * Verbatim text for the investment transfer (both legs and the group) and,
+   * unless operationDescription is set, the buy or sell cash leg. Blank is omitted.
+   */
   description?: string | null;
   /**
    * The other currency's amount. On a contribution, what the holding receives
@@ -37,6 +42,10 @@ export interface HoldingCashflowInput {
   mode?: CashflowMode | null;
   /** Kept on the operation. by_value appends its marker instead of replacing this. */
   notes?: string | null;
+  /** Verbatim text for the buy or sell cash leg only. Blank is omitted. */
+  operationDescription?: string | null;
+  /** Investment category for the buy or sell cash leg. Transfer legs stay uncategorized. */
+  categoryId?: string | null;
 }
 
 export interface HoldingCashflowResult {
@@ -86,6 +95,40 @@ function operationNotes(notes: string | null | undefined, mode: CashflowMode): s
   if (!text) return "by_value";
   if (/(^|\n)by_value$/.test(text)) return text;
   return `${text}\nby_value`;
+}
+
+function providedText(value: string | null | undefined) {
+  const text = value?.trim() ?? "";
+  return text || null;
+}
+
+function fallbackLabel(flow: "contribution" | "redemption", holding: { ticker: string | null; name: string }) {
+  return operationLabel(flow === "contribution" ? "Aporte" : "Resgate", holding.ticker, holding.name);
+}
+
+/** A blank description is omitted. The cash leg uses operationDescription, then description, then the fallback. */
+function cashflowTexts(flow: "contribution" | "redemption", holding: { ticker: string | null; name: string }, input: HoldingCashflowInput) {
+  const description = providedText(input.description);
+  const operationDescription = providedText(input.operationDescription);
+  const fallback = fallbackLabel(flow, holding);
+  return {
+    transfer: description ?? fallback,
+    operation: operationDescription ?? description ?? fallback,
+  };
+}
+
+async function assertInvestmentCategory(userId: string, categoryId: string | null | undefined, tx: DbClient) {
+  if (!categoryId) return null;
+  const category = await tx.category.findFirst({ where: { id: categoryId, userId } });
+  if (!category) throw new LedgerError("Category not found", 404, { code: "category.not_found" });
+  if (category.isArchived) throw new LedgerError(`Category "${category.name}" is archived and cannot be assigned`, 422, { code: "category.archived", params: { name: category.name } });
+  if (category.type !== "investment") {
+    throw new LedgerError(`Category "${category.name}" is a ${category.type} category and cannot be assigned to an investment`, 422, {
+      code: "category.type_mismatch",
+      params: { from: category.type, to: "investment" },
+    });
+  }
+  return category.id;
 }
 
 function assertBrokerOpen(holding: OwnedHolding) {
@@ -313,6 +356,8 @@ export async function recordInvestmentContribution(userId: string, input: Holdin
     }
     assertImplicitValue(holding, mode, input.mode);
     assertBrokerOpen(holding);
+    const texts = cashflowTexts("contribution", holding, input);
+    const categoryId = await assertInvestmentCategory(userId, input.categoryId, tx);
 
     const records: MutationRecordInput[] = [];
     const anchor = mode === "by_value" ? await anchorStoredPosition(tx, holding, input.date, records) : null;
@@ -327,7 +372,7 @@ export async function recordInvestmentContribution(userId: string, input: Holdin
         brokerAmount,
         fundAmount: cash.currency === broker.currency ? undefined : input.amount,
         date: input.date,
-        description: input.description,
+        description: texts.transfer,
       },
       fx,
       records,
@@ -346,6 +391,8 @@ export async function recordInvestmentContribution(userId: string, input: Holdin
         totalAmount: holdingAmount,
         date: input.date,
         notes: operationNotes(input.notes, mode),
+        description: texts.operation,
+        categoryId,
       },
       tx,
       { collect: records, fundingGroupId: funded.depositGroupId },
@@ -393,6 +440,8 @@ export async function recordInvestmentRedemption(userId: string, input: HoldingC
     }
     assertImplicitValue(holding, mode, input.mode);
     assertBrokerOpen(holding);
+    const texts = cashflowTexts("redemption", holding, input);
+    const categoryId = await assertInvestmentCategory(userId, input.categoryId, tx);
 
     const records: MutationRecordInput[] = [];
     const anchor = mode === "by_value" ? await anchorStoredPosition(tx, holding, input.date, records) : null;
@@ -416,6 +465,8 @@ export async function recordInvestmentRedemption(userId: string, input: HoldingC
         totalAmount: holdingAmount,
         date: input.date,
         notes: operationNotes(input.notes, mode),
+        description: texts.operation,
+        categoryId,
       },
       tx,
       { collect: records },
@@ -445,7 +496,7 @@ export async function recordInvestmentRedemption(userId: string, input: HoldingC
           amount: brokerProceeds,
           receivedAmount: arrival,
           date: input.date,
-          description: input.description,
+          description: texts.transfer,
           metadata,
         },
         fx,
@@ -462,7 +513,7 @@ export async function recordInvestmentRedemption(userId: string, input: HoldingC
           amount: brokerProceeds,
           date: input.date,
           direction: "investment_withdrawal",
-          ...(input.description && { description: input.description }),
+          description: texts.transfer,
           ...(arrival != null && { toAmount: arrival }),
         },
         tx,
@@ -471,7 +522,7 @@ export async function recordInvestmentRedemption(userId: string, input: HoldingC
       transferGroupIds = withdrawn.transferGroupId ? [withdrawn.transferGroupId] : [];
     }
     if (mode === "by_value" && !full) await applyValuePrice(userId, holding, holdingAmount, -1, tx, records);
-    const label = input.description?.trim() || `Resgate ${holding.ticker ?? holding.name}`;
+    const label = texts.transfer;
     const batchId = await recordMutation(tx, userId, "create", label, records);
     const current = await tx.investmentHolding.findUniqueOrThrow({ where: { id: holding.id } });
     return resultOf(false, batchId, recorded.operation.id, current, mode, holdingAmount, transferGroupIds);

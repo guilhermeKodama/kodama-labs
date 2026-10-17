@@ -30,6 +30,7 @@ import {
 import type { ContributionPhase } from "@/lib/fire/types";
 import { targetsPayload } from "@/lib/invest/allocation";
 import { useFxRates, useOperations, useTargets } from "@/lib/invest/api";
+import { operationLabel } from "@/lib/invest/operation-label";
 import { ordersPayload, type OrderDraft } from "@/lib/invest/rebalance-view";
 import {
   ALLOCATION_CLASSES,
@@ -51,7 +52,11 @@ const accountsOf = (
 export function useOpLabel() {
   const ti = useTranslations("invest");
   return (op: Pick<Operation, "type" | "incomeType" | "ticker" | "name">) =>
-    `${op.incomeType && (op.type === "dividend" || op.type === "yield_payment") ? ti(`incomeType.${op.incomeType}`) : ti(`opType.${op.type}`)} ${op.ticker ?? op.name ?? ""}`.trim();
+    operationLabel(
+      op.incomeType && (op.type === "dividend" || op.type === "yield_payment") ? ti(`incomeType.${op.incomeType}`) : ti(`opType.${op.type}`),
+      op.ticker,
+      op.name,
+    );
 }
 
 // ---------------------------------------------------------------------------

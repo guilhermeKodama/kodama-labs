@@ -232,6 +232,8 @@ Update an existing transaction by ID (one undoable batch). Changing `date` on a 
 - `id`: UUID (required)
 - `type`, `amount`, `currency`, `exchangeRate`, `description`, `category`, `date`, `isTaxDeductible`: (all optional)
 
+A description on a transfer updates both legs and the group. A category on a transfer is ignored; transfer legs stay uncategorized. An investment cash leg takes an investment category by name.
+
 **Returns:** Updated transaction object.
 
 ### 4. `delete_transaction`
@@ -421,7 +423,11 @@ Default: `by_value` when the asset class is fixed income or savings, or when the
 
 A by-value buy on a live position is stored with quantity 0 so replaying the operations reproduces the cost. A fully redeemed position (quantity 0) is reopened as quantity 1 at the contribution amount. Deleting that quantity-0 buy in the Investments screen removes the cost and the cash and leaves `currentPrice` where this tool set it. Undo the batch to put the price back as well. `notes`, when passed, are kept and `by_value` is appended.
 
-`amount` is what leaves `cashAccountId`, in that account's currency. When the holding's currency differs, `toAmount` is what the holding receives. `description` is the Aportes text, for example `Aplicação Caixinha Nubank PJ (CDB)`. The same holding, date, and amount returns the existing operation (`duplicate: true`), including a parallel double-submit. A cross-entity duplicate lists every transfer group, including the hop. An archived broker is rejected.
+`amount` is what leaves `cashAccountId`, in that account's currency. When the holding's currency differs, `toAmount` is what the holding receives.
+
+`description` is used verbatim on the investment transfer (both legs and the group) and on the buy cash leg, for example `Aplicação Caixinha Nubank PJ (CDB)`. `operationDescription` replaces only the buy cash leg. A blank value is omitted. With neither, both are `Aporte {ticker}`, or `Aporte {holding name}` when the ticker is blank. `categoryId` is an investment category for the buy cash leg only. Transfer legs stay uncategorized, the same as `create_transfer`. The cross-entity hop keeps its own default description.
+
+The same holding, date, and amount returns the existing operation (`duplicate: true`), including a parallel double-submit, and does not rewrite the text. A cross-entity duplicate lists every transfer group, including the hop. An archived broker is rejected. Rename or recategorize a leg afterwards with `update_transaction` (category by name). Editing the operation later keeps a custom cash-leg description.
 
 ### 15. `record_investment_redemption`
 
@@ -429,7 +435,11 @@ A resgate: the sell and the withdrawal back to a checking or cash account, one u
 
 `by_value` keeps the quantity, lowers the position value by `amount`, and removes cost in proportion to the value redeemed. On the caixinha above, redeeming R$10,000 leaves quantity 1 and value R$29,943.76, and removes `29883 × 10000 / 39943.76` from the cost basis. Realized gain is the amount minus that cost. A redemption larger than the current value is rejected. Paying out the whole value (within R$0.01) can zero the position. Do not pass `quantity` or `price`.
 
-`by_units` sells that many units. `amount` is what leaves the holding, in the holding's currency. When the cash account's currency differs, `toAmount` is what arrives there. The same holding, date, and amount returns the existing redemption (`duplicate: true`), including a full payout retried after the position is already empty. A cross-entity duplicate lists every transfer group, including the hop. `notes`, when passed, are kept and `by_value` is appended. An archived broker is rejected.
+`by_units` sells that many units. `amount` is what leaves the holding, in the holding's currency. When the cash account's currency differs, `toAmount` is what arrives there.
+
+`description` is used verbatim on the withdrawal and, unless `operationDescription` is set, on the sell cash leg. With neither, both are `Resgate {ticker or holding name}`. `categoryId` is an investment category for the sell cash leg only. `notes`, when passed, are kept and `by_value` is appended.
+
+The same holding, date, and amount returns the existing redemption (`duplicate: true`), including a full payout retried after the position is already empty, and does not rewrite the text. A cross-entity duplicate lists every transfer group, including the hop. An archived broker is rejected. Rename or recategorize a leg afterwards with `update_transaction`.
 
 ### 16. `update_holding_price`
 

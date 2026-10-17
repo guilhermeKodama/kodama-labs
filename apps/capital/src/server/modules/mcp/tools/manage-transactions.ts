@@ -46,7 +46,9 @@ export function toPatch(
     ...(params.date && { date: formatDateOnly(parseLocalDate(params.date)) }),
     ...(params.isTaxDeductible !== undefined && { isTaxDeductible: params.isTaxDeductible }),
   };
-  if (params.category) {
+  // A transfer carries no category. Looking the name up would use the leg's
+  // sign (income or expense) and reject an investment category.
+  if (params.category && existing.kind !== "transfer") {
     const category = resolver.resolve(params.category, type, existing.categoryId);
     if (category.id !== existing.categoryId) patch.categoryId = category.id;
   }

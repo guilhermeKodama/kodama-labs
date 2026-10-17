@@ -368,7 +368,10 @@ export function createCapitalMcpServer(userId: string, db: DbClient, opts: { rea
         "amount in place and keeps both legs' base amounts in agreement. Sending amount together " +
         "with toAmount sets the outflow and the inflow. amount alone still scales both legs. " +
         "A same-currency transfer returns 422 when toAmount is set or exchangeRate is not 1. " +
-        "The returned amount is signed: a refund or reversal is a negative expense.",
+        "The returned amount is signed: a refund or reversal is a negative expense. " +
+        "A description on a transfer updates both legs and the group. A category on a " +
+        "transfer is ignored; transfer legs stay uncategorized. An investment cash leg " +
+        "takes an investment category by name.",
       inputSchema: UpdateTransactionInputSchema,
     },
     async (params) => {
@@ -1296,6 +1299,8 @@ export function createCapitalMcpServer(userId: string, db: DbClient, opts: { rea
     price: z.number().optional(),
     mode: z.enum(["by_value", "by_units"]).optional(),
     notes: z.string().optional(),
+    operationDescription: z.string().optional(),
+    categoryId: z.string().uuid().optional(),
   };
 
   server.registerTool(
@@ -1407,10 +1412,14 @@ export function createCapitalMcpServer(userId: string, db: DbClient, opts: { rea
         "Deleting that quantity-0 buy in the Investments screen removes the cost and the cash, and leaves currentPrice where this tool set it. " +
         "Undo the batch to put the price back as well.\n\n" +
         "amount is what leaves cashAccountId, in that account's currency. When the holding's currency differs, toAmount " +
-        "is what the holding receives in its currency. description is the text Aportes shows " +
-        "(for example \"Aplicação Caixinha Nubank PJ (CDB)\"). notes, when passed, are kept and \"by_value\" is appended. " +
+        "is what the holding receives in its currency. description is used verbatim on the investment transfer (both legs and the group) " +
+        "and on the buy cash leg, for example \"Aplicação Caixinha Nubank PJ (CDB)\". operationDescription, when passed, " +
+        "replaces only the buy cash leg. A blank description is omitted. With neither, both legs are \"Aporte {ticker}\" " +
+        "or, when the ticker is blank, \"Aporte {holding name}\" — never \"Compra \". categoryId is an investment category " +
+        "for the buy cash leg only; transfer legs stay uncategorized, the same as create_transfer. notes, when passed, are kept and \"by_value\" is appended. " +
         "The same holding, date, and amount returns the existing operation (duplicate: true) instead of booking again, " +
-        "including a parallel double-submit. A cross-entity duplicate lists every transfer group, including the hop.",
+        "including a parallel double-submit, and does not rewrite the text. A cross-entity duplicate lists every transfer group, including the hop. " +
+        "The hop between entities keeps its own default description. Rename or recategorize a leg afterwards with update_transaction.",
       inputSchema: z.object(cashflowFields),
     },
     async (params) => {
@@ -1434,9 +1443,12 @@ export function createCapitalMcpServer(userId: string, db: DbClient, opts: { rea
         "Paying out the whole value (within R$0.01) can zero the position. Do not pass quantity or price in by_value.\n\n" +
         "by_units sells that many units at that price.\n\n" +
         "amount is what leaves the holding, in the holding's currency. When the cash account's currency differs, toAmount " +
-        "is what arrives there. notes, when passed, are kept and \"by_value\" is appended. " +
+        "is what arrives there. description is used verbatim on the investment withdrawal and, unless operationDescription is set, " +
+        "on the sell cash leg. With neither, both are \"Resgate {ticker or holding name}\". categoryId is an investment category " +
+        "for the sell cash leg only. notes, when passed, are kept and \"by_value\" is appended. " +
         "The same holding, date, and amount returns the existing redemption (duplicate: true), including a full payout " +
-        "retried after the position is already empty. A cross-entity duplicate lists every transfer group, including the hop.",
+        "retried after the position is already empty, and does not rewrite the text. A cross-entity duplicate lists every transfer group, including the hop. " +
+        "Rename or recategorize a leg afterwards with update_transaction.",
       inputSchema: z.object(cashflowFields),
     },
     async (params) => {
