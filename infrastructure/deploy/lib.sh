@@ -337,6 +337,20 @@ compose() {
   runtime_docker compose -p "$COMPOSE_PROJECT" -f "${REPO}/docker-compose.yml" --project-directory "$REPO" "$@"
 }
 
+# compose run has no --no-build flag (Compose v5.4 rejects it). Images are
+# built on the native engine and loaded into desktop-linux. A missing image
+# must not fall through to an implicit build inside the Desktop VM.
+compose_run_loaded() {
+  local image="$1"
+  local service="$2"
+  shift 2
+  if ! runtime_docker image inspect "$image" >/dev/null 2>&1; then
+    echo "image ${image} is not loaded in desktop-linux; not running ${service}" >&2
+    return 1
+  fi
+  compose run --rm --pull never "$service" "$@"
+}
+
 # --- build args (defaults match docker-compose.yml) ------------------------
 
 build_arg_lines() {
