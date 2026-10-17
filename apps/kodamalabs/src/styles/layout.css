@@ -1,0 +1,29 @@
+/*
+ * The page grid.
+ *
+ * Content is at most 1200px wide. From the `wide` breakpoint up, every row is
+ * laid on one five-track template:
+ *
+ *     32 | 2 | 23.5 | 2 | 40.5      (percent of the container)
+ *
+ * - A split row puts its main text on tracks 1-3 (57.5%) and its side column
+ *   on track 5 (40.5%).
+ * - A strip puts its text on track 1 (32%) and its figure on tracks 3-5 (66%).
+ * - The spine, the one accent line that runs down the page, is the centre of
+ *   track 4: 58.5% from the left. Wide figures draw their own spine at the
+ *   same x (702.5 of 1200, or 294.5 of the 792 a strip figure is wide), so
+ *   nothing except a figure crosses it.
+ */
+:root {
+  --kl-container: 75rem;
+  --kl-gutter: 1.5rem;
+  --kl-tracks: minmax(0, 32fr) minmax(0, 2fr) minmax(0, 23.5fr) minmax(0, 2fr) minmax(0, 40.5fr);
+  --kl-spine-x: 58.5%;
+}
+
+@utility kl-container {
+  box-sizing: content-box;
+  max-width: var(--kl-container);
+  margin-inline: auto;
+  padding-inline: var(--kl-gutter);
+}

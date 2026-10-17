@@ -1,0 +1,25 @@
+{
+  "title": "How I build it and keep it running.",
+  "habits": {
+    "incidents": "I write incidents down with their root cause.",
+    "migrations": "I rehearse risky migrations on a production dump.",
+    "conventions": "I turn each convention into a test."
+  },
+  "agents": {
+    "title": "With coding agents",
+    "body": "Agents write most first drafts. I set the plan, the data model and the rules, and I answer for what runs. They work in parallel git worktrees and have opened 64 of the 85 pull requests so far. A written contract comes first, then a local gate of lint, typecheck and tests, then my merge. What is missing: a CI server and a second reviewer.",
+    "merged": {
+      "label": "recently merged",
+      "pr85": "Fix the monthly budget view on a phone and keep the wide pace bar on desktop",
+      "pr67": "Move accounting onto a single ledger",
+      "pr68": "Add self-hosted Uptime Kuma monitoring and a log watcher",
+      "pr65": "Remove Vercel and run the stack on the home server",
+      "pr57": "Add MCP server for remote AI accounting access"
+    }
+  },
+  "production": {
+    "title": "On my own machine",
+    "body": "I am moving everything I run from Vercel onto one machine at home: 21 Docker Compose services behind a Cloudflare Tunnel, with no inbound ports. A new version starts only if its migration succeeds; otherwise the old one keeps running. One TypeScript spec generates the 53 uptime monitors.",
+    "limits": "Limits: one machine, no failover"
+  }
+}

@@ -1,0 +1,34 @@
+/*
+ * Colour tokens. This is the only file in src/ allowed to contain a colour
+ * literal (enforced by src/styles/__tests__/no-raw-styles.test.ts); everything
+ * else goes through the Tailwind names declared in theme.css.
+ *
+ * One ground, one ink, one accent. The accent means exactly one thing on the
+ * page: a gate, the place where a person or a fail-closed check decides.
+ * `soft` is for construction lines only; it does not pass contrast as text.
+ *
+ * The scheme follows the system. There is no toggle and no script.
+ */
+:root {
+  color-scheme: light dark;
+
+  --kl-ground: #f4f6f4;
+  --kl-panel: #ffffff;
+  --kl-ink: #0c1714;
+  --kl-muted: #55605b;
+  --kl-soft: #8a948e;
+  --kl-rule: #d3d9d5;
+  --kl-accent: #0b6b4f;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --kl-ground: #0c1714;
+    --kl-panel: #132019;
+    --kl-ink: #e8ece9;
+    --kl-muted: #9aa5a0;
+    --kl-soft: #6f7f78;
+    --kl-rule: #26332e;
+    --kl-accent: #10b981;
+  }
+}
