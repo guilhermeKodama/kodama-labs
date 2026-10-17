@@ -310,5 +310,39 @@ PATH="${mock_bin}:${PATH}" HOME="$install_home" KODAMA_ALLOW_OTHER_REPO=1 \
   bash infrastructure/deploy/install.sh --enable
 grep -q "enable --now kodama-deploy.timer" "$SYSTEMCTL_LOG" || fail "install --enable did not enable the timer: $(cat "$SYSTEMCTL_LOG")"
 
+echo "install seed sha"
+kept="$(status_py get apps.capital.sha)"
+seed_out="$(PATH="${mock_bin}:${PATH}" HOME="$install_home" KODAMA_ALLOW_OTHER_REPO=1 \
+  bash infrastructure/deploy/install.sh --seed-sha "$(git rev-parse origin/main)" 2>&1)"
+assert_eq "$(status_py get apps.capital.sha)" "$kept" "existing status must ignore --seed-sha"
+printf '%s\n' "$seed_out" | grep -q "ignored" || fail "missing ignored warning: ${seed_out}"
+
+rm -f "$KODAMA_STATUS"
+head_out="$(PATH="${mock_bin}:${PATH}" HOME="$install_home" KODAMA_ALLOW_OTHER_REPO=1 \
+  bash infrastructure/deploy/install.sh 2>&1)"
+assert_eq "$(status_py get apps.capital.sha)" "$(git rev-parse HEAD)" "default seed is HEAD"
+assert_eq "$(status_py get apps.monitoring.sha)" "$(git rev-parse HEAD)" "default seed covers every unit"
+printf '%s\n' "$head_out" | grep -q "WARNING:" || fail "HEAD seed was not loud: ${head_out}"
+printf '%s\n' "$head_out" | grep -q -- "--seed-sha" || fail "HEAD seed did not name --seed-sha"
+
+rm -f "$KODAMA_STATUS"
+good="$(git rev-parse origin/main)"
+PATH="${mock_bin}:${PATH}" HOME="$install_home" KODAMA_ALLOW_OTHER_REPO=1 \
+  bash infrastructure/deploy/install.sh --seed-sha "$good" >/dev/null
+assert_eq "$(status_py get apps.capital.sha)" "$good" "seed-sha writes origin/main"
+assert_eq "$(status_py get apps.careers.sha)" "$good" "seed-sha covers every unit"
+
+rm -f "$KODAMA_STATUS"
+orphan="$(git -c user.email=deploy-test@example.com -c user.name=deploy-test \
+  commit-tree "$(git rev-parse 'HEAD^{tree}')" -m 'deploy-test seed not on main')"
+set +e
+bad_out="$(PATH="${mock_bin}:${PATH}" HOME="$install_home" KODAMA_ALLOW_OTHER_REPO=1 \
+  bash infrastructure/deploy/install.sh --seed-sha "$orphan" 2>&1)"
+bad_rc=$?
+set -e
+[[ "$bad_rc" -ne 0 ]] || fail "seed sha off origin/main should fail"
+printf '%s\n' "$bad_out" | grep -q "not an ancestor of origin/main" || fail "missing ancestor error: ${bad_out}"
+[[ ! -f "$KODAMA_STATUS" ]] || fail "rejected seed wrote status.json"
+
 echo "deploy.test.sh ok"
 echo "DRY_RUN_SAVED ${TMP}/dry-run.txt"

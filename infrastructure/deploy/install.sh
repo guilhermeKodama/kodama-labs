@@ -10,15 +10,23 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/lib.sh"
 
 ENABLE=0
-for arg in "$@"; do
-  case "$arg" in
+SEED_SHA=""
+while [[ $# -gt 0 ]]; do
+  case "$1" in
     --enable) ENABLE=1 ;;
+    --seed-sha)
+      shift
+      SEED_SHA="${1:-}"
+      [[ -n "$SEED_SHA" ]] || die "--seed-sha needs the commit production is running"
+      ;;
     -h | --help)
-      echo "usage: install.sh [--enable]"
+      echo "usage: install.sh [--enable] [--seed-sha <sha>]"
+      echo "--seed-sha is the commit actually serving in production. It must be an ancestor of origin/main."
       exit 0
       ;;
-    *) die "unknown argument: $arg" ;;
+    *) die "unknown argument: $1" ;;
   esac
+  shift
 done
 
 if [[ "$(id -u)" -eq 0 ]]; then
@@ -82,11 +90,27 @@ install -m 644 "${SCRIPT_DIR}/kodama-deploy.timer" "${HOME}/.config/systemd/user
 systemctl --user daemon-reload
 
 if [[ ! -f "$KODAMA_STATUS" ]]; then
-  sha="$(git -C "$REPO" rev-parse HEAD)"
+  if [[ -n "$SEED_SHA" ]]; then
+    git -C "$REPO" fetch --prune origin main
+    sha="$(git -C "$REPO" rev-parse --verify "${SEED_SHA}^{commit}")"
+    git -C "$REPO" merge-base --is-ancestor "$sha" origin/main \
+      || die "seed sha ${sha} is not an ancestor of origin/main"
+  else
+    sha="$(git -C "$REPO" rev-parse HEAD)"
+  fi
   status_py init "$sha"
   echo "seeded ${KODAMA_STATUS} with ${sha} as already deployed"
+  if [[ -z "$SEED_SHA" ]]; then
+    echo "WARNING: no --seed-sha was given. Every app was recorded as already deployed at checkout HEAD ${sha}." >&2
+    echo "WARNING: that is wrong when main has commits that were never deployed." >&2
+    echo "WARNING: delete ${KODAMA_STATUS} and rerun with the commit production is actually running:" >&2
+    echo "WARNING:   install.sh --seed-sha <sha>" >&2
+  fi
 else
   echo "left existing ${KODAMA_STATUS} in place"
+  if [[ -n "$SEED_SHA" ]]; then
+    echo "WARNING: --seed-sha was ignored because ${KODAMA_STATUS} already exists." >&2
+  fi
 fi
 
 if [[ "$ENABLE" == 1 ]]; then

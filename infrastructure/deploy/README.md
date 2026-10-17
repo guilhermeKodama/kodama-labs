@@ -20,8 +20,13 @@ Smoke checks use container DNS (`http://capital-web:3000/api/health`), not the p
 Run this on kodama-ai as `kodama`, from the checkout at `~/Documents/Github/kodama-labs`. It does not enable the timer.
 
 ```bash
-infrastructure/deploy/install.sh
+git fetch origin main
+infrastructure/deploy/install.sh --seed-sha <sha production is running>
 ```
+
+`--seed-sha` is required for a correct first install. It must be an ancestor of `origin/main`, and it must be the commit that is actually serving, not whatever HEAD the checkout is on. Production was on `c0e48d221` when this deployer was added. If another PR merges before you install, seeding HEAD would mark that merge as already deployed and the timer would skip it.
+
+Omitting `--seed-sha` still seeds HEAD, and the script prints a warning. Delete `~/deploys/status.json` and rerun with the real SHA before enabling the timer. A later `install.sh` does not overwrite an existing status file.
 
 Linger has to already be on (`loginctl show-user kodama -p Linger` prints `Linger=yes`). If it is off, the script stops and prints the one root command: `sudo loginctl enable-linger kodama`. Nothing else needs root.
 
@@ -39,7 +44,7 @@ infrastructure/deploy/deploy.sh
 infrastructure/deploy/install.sh --enable
 ```
 
-The timer waits about two minutes, then polls. Re-running `install.sh` does not disable a timer you already enabled, and it does not reset `~/deploys/status.json` if that file exists. The first install records the current HEAD as already deployed for every unit, so it does not rebuild the world.
+The timer waits about two minutes, then polls. Re-running `install.sh` does not disable a timer you already enabled, and it does not reset `~/deploys/status.json` if that file exists. The seeded SHA is the last-good SHA for every unit, so the first real deploy builds only what changed after it.
 
 ## What a poll does
 
@@ -163,7 +168,7 @@ systemctl --user daemon-reload
 
 | Path | Role |
 |---|---|
-| `install.sh` | Copy units and seed status. `--enable` arms the timer. |
+| `install.sh` | Copy units and seed status. `--seed-sha` is the commit prod is running. `--enable` arms the timer. |
 | `poll.sh` | Timer entrypoint. |
 | `deploy.sh` | One SHA. |
 | `rollback.sh` | Image rollback, or an explicit database restore. |
