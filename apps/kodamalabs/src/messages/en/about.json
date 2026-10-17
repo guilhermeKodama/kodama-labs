@@ -1,0 +1,13 @@
+{
+  "title": "About",
+  "intro": "I have been a software engineer for 13 years and chose to stay an individual contributor. I build core systems; I don’t manage people.",
+  "current": "Today I work at {employer}.",
+  "path": "I started in 2013 with Android games, moved to iOS apps, spent 2015 to 2020 in applied machine learning, and now build full-stack TypeScript products around language models. Kodama Labs is my one-person company and the name I ship under.",
+  "earlier": {
+    "label": "earlier work",
+    "closetinn": "<head>Closetinn.</head> Weekly fashion recommendations by email: scrapers, recommenders, Kubernetes.",
+    "pandora": "<head>Pandora.</head> An ECG arrhythmia-detection MVP for ICU monitors, built with two co-creators.",
+    "wigic": "<head>Wigic.</head> An augmented-reality iPad app for children with cancer, built with two co-creators.",
+    "android": "Android games."
+  }
+}
