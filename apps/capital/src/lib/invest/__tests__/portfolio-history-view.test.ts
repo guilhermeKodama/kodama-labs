@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { netWorthChartRows } from "../portfolio-history-view";
+import { netWorthChartRows, netWorthTooltipRows } from "../portfolio-history-view";
 
 describe("netWorthChartRows", () => {
   it("splits Total aportado into aportes and posições iniciais (stacked, the top is still the total)", () => {
@@ -20,5 +20,29 @@ describe("netWorthChartRows", () => {
 
   it("has no posições iniciais series when every holding came with operations", () => {
     expect(netWorthChartRows([{ period: "2026-09", netWorth: 1, contributed: 1, initialPositions: 0 }]).hasInitial).toBe(false);
+  });
+});
+
+describe("netWorthTooltipRows", () => {
+  it("follows stack order and names capital investido when aportes are negative", () => {
+    // out/26, in R$ mil: the aportes stroke sits at 839.5 + (−151.3) = 688.2, under the dashed line.
+    expect(netWorthTooltipRows({ netWorth: 1115.3, aportes: -151.3, initial: 839.5 }, true)).toEqual([
+      { key: "initial", value: 839.5, derived: false },
+      { key: "aportes", value: -151.3, derived: false },
+      { key: "netWorth", value: 1115.3, derived: false },
+      { key: "capitalInvested", value: 688.2, derived: true },
+    ]);
+    expect(netWorthTooltipRows({ netWorth: 862.8, aportes: -176.7, initial: 839.5 }, true).at(-1)).toEqual({
+      key: "capitalInvested",
+      value: 662.8,
+      derived: true,
+    });
+  });
+
+  it("omits the opening book and the derived total when that series is hidden", () => {
+    expect(netWorthTooltipRows({ netWorth: 10, aportes: 8, initial: 0 }, false)).toEqual([
+      { key: "aportes", value: 8, derived: false },
+      { key: "netWorth", value: 10, derived: false },
+    ]);
   });
 });
