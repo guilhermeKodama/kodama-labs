@@ -1,5 +1,5 @@
 import type { DbClient } from "@capital/server/lib/prisma";
-import type { Account } from "@/generated/prisma";
+import { Prisma, type Account } from "@/generated/prisma";
 import { LedgerError } from "@capital/server/modules/ledger/lib/errors";
 import type { FxContext } from "@capital/server/modules/ledger/lib/fx";
 import { round, roundNative } from "@capital/server/modules/ledger/lib/money";
@@ -112,6 +112,8 @@ export interface WithdrawFromBrokerInput {
   date: string;
   /** Description of the investment withdrawal (default: the localized transfer description). */
   description?: string | null;
+  /** Written on the investment_withdrawal legs (the onward hop between entities is left alone). */
+  metadata?: Prisma.InputJsonValue | null;
 }
 
 /**
@@ -171,7 +173,7 @@ export async function withdrawFromBroker(tx: DbClient, userId: string, input: Wi
       ...(input.description && { description: input.description }),
     },
     tx,
-    { collect: records },
+    { collect: records, ...(input.metadata != null && { metadata: input.metadata }) },
   );
   const onward = await createEntry(
     userId,

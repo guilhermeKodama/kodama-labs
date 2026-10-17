@@ -90,7 +90,8 @@
       "caption": "Mês × {unit} · {range} · {scope}",
       "empty": "O histórico aparece a partir do segundo mês com posições.",
       "initialPositions": "Posições iniciais",
-      "initialPositionsHint": "Posições cadastradas sem operações (sem data de compra): entram no mês do cadastro como posições iniciais, não como aporte."
+      "initialPositionsHint": "Posições cadastradas sem operações (sem data de compra): entram no mês do cadastro como posições iniciais, não como aporte.",
+      "capitalInvested": "Capital investido"
     },
     "allocation": {
       "title": "Alocação atual vs alvo",

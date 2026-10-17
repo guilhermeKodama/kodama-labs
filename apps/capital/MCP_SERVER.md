@@ -83,6 +83,53 @@ Authorization: Bearer <MCP_API_KEY>
 
 ## Available Tools
 
+The server registers **42 tools**. Read-only API tokens receive only the read tools (`list_`, `get_`, `find_`, `search_`, or a tool marked read-only). Writes are undoable batches attributed to the MCP client.
+
+| Tool | Access | What it does |
+|---|---|---|
+| `bulk_create_transactions` | write | Create many income, expense, or investment rows, skipping duplicates |
+| `list_transactions` | read | List transactions and summaries |
+| `update_transaction` | write | Edit one transaction |
+| `delete_transaction` | write | Move one transaction to the trash |
+| `bulk_update_transactions` | write | Edit many transactions |
+| `list_categories` | read | List categories |
+| `create_category` | write | Create a category |
+| `update_category` | write | Rename, recolor, or archive a category |
+| `delete_category` | write | Delete a category, optionally reassigning its rows |
+| `merge_categories` | write | Merge one category into another |
+| `find_orphan_transactions` | read | Income and expense rows with no category or an archived one |
+| `list_accounts` | read | List entities (businesses and the personal entity), not ledger accounts |
+| `list_ledger_accounts` | read | List checking, cash, and brokerage accounts |
+| `get_valid_types` | read | `income`, `expense`, `investment` |
+| `create_transfer` | write | Move cash between checking, cash, or brokerage accounts |
+| `list_transfers` | read | List transfers, one row per transfer |
+| `list_investment_positions` | read | Active holdings, with account and entity ids |
+| `adjust_position` | write | Set a holding's quantity and average cost |
+| `add_investment_asset` | write | Open a new holding on a brokerage account |
+| `record_investment_contribution` | write | Aporte into a holding, including the cash transfer |
+| `record_investment_redemption` | write | Resgate out of a holding, including the cash transfer |
+| `update_holding_price` | write | Set the current price or total value; cost stays |
+| `get_fire_plan` | read | Read the FIRE plan and the current month's contribution |
+| `update_fire_phase_contribution` | write | Set one FIRE phase's monthly contribution |
+| `attach_receipt` | write | Attach a PDF or image to a transaction |
+| `list_attachments` | read | List a transaction's attachments |
+| `delete_attachment` | write | Delete an attachment |
+| `get_settings` | read | Read user settings |
+| `update_settings` | write | Update user settings |
+| `update_account` | write | Update an entity's settings (name and currency) |
+| `list_budgets` | read | List budgets |
+| `create_budget` | write | Create a budget |
+| `update_budget` | write | Update a budget |
+| `delete_budget` | write | Delete a budget |
+| `get_budget_status` | read | Budget vs. actual for a period |
+| `list_credit_cards` | read | List credit cards |
+| `create_credit_card` | write | Create a credit card |
+| `update_credit_card` | write | Update or archive a credit card |
+| `import_credit_card_statement` | write | Import a card statement |
+| `get_credit_card_statement` | read | Read one card statement |
+| `mark_transaction_as_card_settlement` | write | Turn a bank expense into a card-bill payment |
+| `unmark_transaction_as_card_settlement` | write | Turn a card-bill payment back into an expense |
+
 ### 1. `bulk_create_transactions`
 
 Bulk create Personal transactions with automatic duplicate detection.
@@ -258,7 +305,9 @@ List all active investment positions with quantity, average cost, and current va
 
 **Use case:** Check that PMLL11 shows 164 cotas but broker has 174.
 
-**Parameters:** None.
+**Parameters:**
+- `accountId`: UUID (optional). One brokerage account, from `list_ledger_accounts`.
+- `entityId`: UUID (optional). One entity, from `list_accounts`.
 
 **Returns:**
 ```json
@@ -276,7 +325,9 @@ List all active investment positions with quantity, average cost, and current va
       "currentValue": 17252.8,
       "unrealizedGain": 442.8,
       "currency": "BRL",
-      "accountName": "XP Investimentos"
+      "accountId": "uuid",
+      "accountName": "XP Investimentos",
+      "entityId": "uuid"
     }
   ]
 }
@@ -314,7 +365,7 @@ Add a new asset/position to an investment account.
 **Use case:** PVBI11 is missing from the system.
 
 **Parameters:**
-- `accountId`: UUID (required, from `list_accounts` or query directly)
+- `accountId`: UUID (required). A brokerage account from `list_ledger_accounts`, not an entity id from `list_accounts`.
 - `ticker`: String (optional, e.g., `"PVBI11"`)
 - `name`: String (required, e.g., `"Valora Brasil FII"`)
 - `assetClass`: Enum (required):
@@ -331,6 +382,58 @@ Add a new asset/position to an investment account.
   "currency": "BRL"
 }
 ```
+
+### 11. `list_ledger_accounts`
+
+Checking, cash, and brokerage accounts. `list_accounts` returns entities; these ids are what `create_transfer` and the investment cashflow tools take.
+
+**Parameters:** `type` optional, one of `checking`, `cash`, `brokerage`.
+
+**Returns:** `accounts[]` with `id`, `name`, `type`, `currency`, `entityId`, `entityName`, `entityKind`, `isDefault`. Credit cards are omitted.
+
+### 12. `create_transfer`
+
+One transfer between two checking, cash, or brokerage accounts. Direction is inferred. Checking → broker on the same entity is an `investment_deposit` and counts as an aporte of cash only; the holding does not change. Credit cards are rejected.
+
+A deposit or withdrawal that crosses entities (PF checking into a PJ broker, or the reverse) is rejected. Use `record_investment_contribution` or `record_investment_redemption`, which route the money through the broker entity's checking account.
+
+Do not use this to contribute to a holding. `record_investment_contribution` already books that cash transfer. A second `create_transfer` would move the money twice.
+
+Same currency: pass `amount` only (`toAmount` and `exchangeRate` are rejected). Different currencies: `amount` leaves the source; `toAmount` is what arrives.
+
+A repeat of the same accounts, date, amount, description, and `toAmount` returns the existing transfer (`duplicate: true`). Two identical same-day transfers need different descriptions. A parallel double-submit is serialized and also returns the first transfer.
+
+### 13. `list_transfers`
+
+One row per live transfer: date, direction, description, both accounts, both amounts and currencies. Filters: `dateFrom`, `dateTo`, `accountId` (either leg), `direction`, `entityId` (either leg). `accountId` and `entityId` both apply. `limit` defaults to 100 and caps at 500; `offset` skips that many transfers.
+
+### 14. `record_investment_contribution`
+
+An aporte the way the Investments screen books it: cash into the broker and a buy on the holding, one undo batch. This tool already books the cash transfer. Do not also call `create_transfer`.
+
+`mode` is `by_value` or `by_units`.
+
+**by_value** is a caixinha or fixed income stored as quantity 1 whose price is the whole position. Caixinha Nubank PJ is quantity 1, average cost R$29,883, current gross value R$39,943.76. A R$10,000 contribution keeps quantity at 1, adds R$10,000 to the cost basis (average cost and total invested become R$39,883) and adds R$10,000 to the value (current price becomes R$49,943.76). Buying a new unit would make it 2 units and halve the average. Do not pass `quantity` or `price` in this mode; they are rejected.
+
+**by_units** buys units (a stock or FII). Pass `quantity` and `price` (their product must match the amount the holding receives, within 0.01), or one of them, or neither when the holding has a current price.
+
+Default: `by_value` when the asset class is fixed income or savings, or when the name contains "caixinha". Otherwise `by_units`. Quantity 1 on its own does not select `by_value`. A holding whose ticker is repriced from the market stays `by_units` unless `mode` is `by_value` explicitly. Pass `mode` to override.
+
+A by-value buy on a live position is stored with quantity 0 so replaying the operations reproduces the cost. A fully redeemed position (quantity 0) is reopened as quantity 1 at the contribution amount. Deleting that quantity-0 buy in the Investments screen removes the cost and the cash and leaves `currentPrice` where this tool set it. Undo the batch to put the price back as well. `notes`, when passed, are kept and `by_value` is appended.
+
+`amount` is what leaves `cashAccountId`, in that account's currency. When the holding's currency differs, `toAmount` is what the holding receives. `description` is the Aportes text, for example `Aplicação Caixinha Nubank PJ (CDB)`. The same holding, date, and amount returns the existing operation (`duplicate: true`), including a parallel double-submit. A cross-entity duplicate lists every transfer group, including the hop. An archived broker is rejected.
+
+### 15. `record_investment_redemption`
+
+A resgate: the sell and the withdrawal back to a checking or cash account, one undo batch. The withdrawal's metadata carries the sell operation id. Do not also call `create_transfer`.
+
+`by_value` keeps the quantity, lowers the position value by `amount`, and removes cost in proportion to the value redeemed. On the caixinha above, redeeming R$10,000 leaves quantity 1 and value R$29,943.76, and removes `29883 × 10000 / 39943.76` from the cost basis. Realized gain is the amount minus that cost. A redemption larger than the current value is rejected. Paying out the whole value (within R$0.01) can zero the position. Do not pass `quantity` or `price`.
+
+`by_units` sells that many units. `amount` is what leaves the holding, in the holding's currency. When the cash account's currency differs, `toAmount` is what arrives there. The same holding, date, and amount returns the existing redemption (`duplicate: true`), including a full payout retried after the position is already empty. A cross-entity duplicate lists every transfer group, including the hop. `notes`, when passed, are kept and `by_value` is appended. An archived broker is rejected.
+
+### 16. `update_holding_price`
+
+Sets the current price and leaves average cost and total invested untouched. Pass exactly one of `price` (per unit) or `totalValue` (the whole position: price becomes `totalValue / quantity`). For the caixinha, `totalValue` is the new gross value. `totalValue` on a quantity of 0 is rejected. A negative price is rejected. Zero is allowed. `date` is the day of the price and cannot be in the future; omit it to stamp now.
 
 ## MCP Client Configuration
 

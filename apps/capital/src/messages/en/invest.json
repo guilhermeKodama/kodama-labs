@@ -90,7 +90,8 @@
       "caption": "Month × {unit} · {range} · {scope}",
       "empty": "History appears from the second month with positions.",
       "initialPositions": "Initial positions",
-      "initialPositionsHint": "Holdings registered without operations (no purchase date): they enter in the month they were registered as initial positions, not as a contribution."
+      "initialPositionsHint": "Holdings registered without operations (no purchase date): they enter in the month they were registered as initial positions, not as a contribution.",
+      "capitalInvested": "Invested capital"
     },
     "allocation": {
       "title": "Current allocation vs target",
