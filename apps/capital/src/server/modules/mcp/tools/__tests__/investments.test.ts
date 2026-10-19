@@ -56,6 +56,9 @@ describe("MCP investment tools", () => {
       currentQuantity: 0,
       closedAt: "2026-08-05",
     });
+    await recordOperation(USER, { holdingId: h.id, type: "dividend", totalAmount: 12, date: "2026-08-20" }, prisma);
+    const afterDividend = await listInvestmentPositions(USER, prisma, { ticker: "GOGL34", includeClosed: true });
+    expect(afterDividend.positions[0]).toMatchObject({ id: h.id, currentQuantity: 0, closedAt: "2026-08-05" });
     expect((await listInvestmentPositions(USER, prisma, { query: "gogl", includeClosed: true })).positions.map((p) => p.id)).toContain(h.id);
     expect((await listInvestmentPositions(OTHER, prisma, { ticker: "GOGL34", includeClosed: true })).positions).toEqual([]);
   });

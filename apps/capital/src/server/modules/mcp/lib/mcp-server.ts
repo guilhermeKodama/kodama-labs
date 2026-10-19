@@ -501,7 +501,8 @@ export function createCapitalMcpServer(userId: string, db: DbClient, opts: { rea
         "List investment positions with quantity, average cost, current value, " +
         "unrealized gain, assetClass, allocationClass, accountId, and entityId. " +
         "includeClosed defaults to false. Set it to include sold positions (quantity 0) with closedAt, " +
-        "the date of the last operation, so that holdingId can be passed to record_dividend or convert_income_to_dividend. " +
+        "the date of the sell, withdrawal or adjustment that closed the position (a later dividend does not move it), " +
+        "so that holdingId can be passed to record_dividend or convert_income_to_dividend. " +
         "ticker is a case-insensitive exact match and finds a closed holding only when includeClosed is true. " +
         "query matches ticker or name (contains). accountName alone is not enough to " +
         "book a transfer: account ids come from list_ledger_accounts, and list_accounts " +
@@ -1557,17 +1558,18 @@ export function createCapitalMcpServer(userId: string, db: DbClient, opts: { rea
         "operationId is the investment operation id returned by record_dividend or convert_income_to_dividend, including " +
         "a cash leg booked as kind investment. This does not change the cash balance and does not create entries: the cash " +
         "entry stays as it is. The net (gross − tax) stays the net already booked, so setting withholdingTax raises the " +
-        "gross by the same amount. withholdingTax is in the holding's currency and cannot exceed the operation's current " +
-        "gross (operation.tax_exceeds_amount). fii_income rejects withholdingTax greater than zero (dividend.fii_withholding), " +
-        "including a withholding already stored when incomeType becomes fii_income. origin (BR, BDR, EXTERIOR) applies only " +
-        "when the income type is dividend; otherwise it is cleared. Switching a dividend to fixed_income_interest stores it " +
-        "as a yield. Calling again with the same values writes nothing (duplicate: true, batchId null). " +
+        "gross by the same amount. withholdingTax is in the holding's currency: omit it to keep the current value, and 0 clears it. " +
+        "It cannot exceed the operation's current gross (operation.tax_exceeds_amount). fii_income rejects withholdingTax greater than zero " +
+        "(dividend.fii_withholding), including a withholding already stored when incomeType becomes fii_income, and a legacy dividend " +
+        "with no income type on an FII. origin (BR, BDR, EXTERIOR) is accepted only when the income type is dividend; any other income " +
+        "type is rejected (dividend.origin_not_dividend). Switching a dividend to fixed_income_interest stores it as a yield. " +
+        "Calling again with the same values writes nothing (duplicate: true, batchId null). " +
         "A buy, sale, transfer or any operation that is not income is rejected (dividend.not_income_operation).",
       inputSchema: z.object({
         operationId: z.string().uuid(),
         incomeType: dividendFields.incomeType.optional(),
-        withholdingTax: dividendFields.withholdingTax,
-        origin: dividendFields.origin,
+        withholdingTax: z.number().nonnegative().optional().describe("Tax withheld at source, in the holding's currency. Omit to keep the current value. 0 clears it."),
+        origin: z.enum(["BR", "BDR", "EXTERIOR"]).optional().describe("Dividend origin. Only when the income type is a dividend; any other income type is rejected."),
       }),
     },
     async (params) => {

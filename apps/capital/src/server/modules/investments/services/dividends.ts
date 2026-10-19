@@ -49,9 +49,9 @@ export interface ConvertIncomeInput {
 export interface UpdateDividendInput {
   operationId: string;
   incomeType?: PassiveIncomeType;
-  /** Withheld at source, in the holding's currency. Cannot exceed the operation's current gross. The cash entry is not changed. */
+  /** Withheld at source, in the holding's currency. Omit to keep the current value. 0 clears it. Cannot exceed the current gross. The cash entry is not changed. */
   withholdingTax?: number;
-  /** Dividends only. Ignored for every other income type. */
+  /** Dividends only. Rejected when the income type is not a dividend. */
   origin?: DividendOrigin;
 }
 
@@ -186,6 +186,8 @@ export async function convertIncomeToDividend(userId: string, input: ConvertInco
       throw new LedgerError("Only an income transaction can become a dividend", 422, { code: "dividend.not_income" });
     }
     const holding = await getOwnedHolding(userId, input.holdingId, tx);
+    // Entry lock first, then the holding, the same key recordDividend takes. updateDividend takes its operation lock, then this one.
+    await advisoryLock(tx, `holding:${holding.id}`);
     await getOwnedAccount(userId, entry.accountId, tx);
     const fx = await loadFx(userId, tx);
     const entity = await tx.entity.findUniqueOrThrow({ where: { id: holding.account.entityId }, select: { kind: true } });
@@ -267,6 +269,13 @@ export async function convertIncomeToDividend(userId: string, input: ConvertInco
 export async function updateDividend(userId: string, input: UpdateDividendInput, db: DbClient): Promise<DividendResult> {
   return inTransaction(db, async (tx) => {
     await advisoryLock(tx, `dividend-update:${input.operationId}`);
+    const located = await tx.investmentOperation.findFirst({
+      where: { id: input.operationId, holding: { account: { userId } } },
+      select: { holdingId: true },
+    });
+    if (!located) throw notFound("Investment operation", "operation.not_found");
+    // Operation lock first, then the holding key recordDividend takes up front and convert takes after its entry lock.
+    await advisoryLock(tx, `holding:${located.holdingId}`);
     const before = await tx.investmentOperation.findFirst({
       where: { id: input.operationId, holding: { account: { userId } } },
     });
@@ -279,12 +288,15 @@ export async function updateDividend(userId: string, input: UpdateDividendInput,
       );
     }
 
+    const holding = await getOwnedHolding(userId, before.holdingId, tx);
     const incomeType: IncomeType | null = input.incomeType !== undefined ? input.incomeType : before.incomeType;
+    // A legacy dividend on an FII often has no income type stored. The exemption still applies.
+    const exemptionType = incomeType ?? (holding.assetClass === "fii" ? "fii_income" : null);
     if (input.withholdingTax !== undefined && (!(input.withholdingTax >= 0) || input.withholdingTax > before.totalAmount + 1e-9)) {
       throw new LedgerError("The tax withheld cannot exceed the gross amount", 422, { code: "operation.tax_exceeds_amount" });
     }
     const withholding = input.withholdingTax !== undefined ? input.withholdingTax : before.taxWithheld;
-    if (incomeType === "fii_income") assertFiiExempt("fii_income", withholding);
+    if (exemptionType === "fii_income") assertFiiExempt("fii_income", withholding);
 
     const taxUnchanged = Math.abs(withholding - before.taxWithheld) <= 1e-9;
     const nextTax = taxUnchanged ? before.taxWithheld : round(withholding, 4);
@@ -294,8 +306,10 @@ export async function updateDividend(userId: string, input: UpdateDividendInput,
       throw new LedgerError("The tax withheld cannot exceed the gross amount", 422, { code: "operation.tax_exceeds_amount" });
     }
 
-    const holding = await getOwnedHolding(userId, before.holdingId, tx);
     const originApplies = incomeType === "dividend" || (incomeType == null && before.type === "dividend");
+    if (input.origin !== undefined && !originApplies) {
+      throw new LedgerError("origin applies only when the income type is a dividend", 422, { code: "dividend.origin_not_dividend" });
+    }
     let origin: DividendOrigin | null = null;
     if (originApplies) {
       if (input.origin !== undefined) origin = input.origin;

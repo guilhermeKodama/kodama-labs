@@ -389,6 +389,13 @@ describe("update_dividend", () => {
     });
 
     const buy = await recordOperation(USER, { holdingId: h.id, type: "buy", quantity: 2, pricePerUnit: 10, totalAmount: 20, date: "2026-08-01" }, prisma);
+    await expect(updateDividend(USER, { operationId: recorded.operationId, incomeType: "jcp", origin: "EXTERIOR" }, prisma)).rejects.toMatchObject({
+      code: "dividend.origin_not_dividend",
+    });
+    expect(await prisma.investmentOperation.findUniqueOrThrow({ where: { id: recorded.operationId } })).toMatchObject({
+      incomeType: "dividend",
+      dividendOrigin: "BR",
+    });
     await expect(updateDividend(USER, { operationId: buy.operation.id, origin: "BR" }, prisma)).rejects.toMatchObject({ code: "dividend.not_income_operation" });
     await expect(updateDividend(USER, { operationId: "00000000-0000-0000-0000-000000000000", origin: "BR" }, prisma)).rejects.toMatchObject({ code: "operation.not_found" });
 
@@ -425,5 +432,21 @@ describe("update_dividend", () => {
     expect(after.metadata).toEqual(before.metadata);
     expect(await balance(f.pfChecking)).toBeCloseTo(cash, 4);
     expect(await prisma.ledgerEntry.count({ where: { userId: USER } })).toBe(entries);
+  });
+
+  it("treats a legacy FII dividend with no income type as tax-exempt", async () => {
+    const fii = await createHolding(USER, { accountId: f.broker, assetClass: "fii", ticker: "MXRF11", name: "Maxi Renda" }, prisma);
+    const legacy = await recordOperation(USER, { holdingId: fii.id, type: "dividend", totalAmount: 50, date: "2026-08-05" }, prisma);
+    expect(legacy.operation.incomeType).toBeNull();
+    await expect(updateDividend(USER, { operationId: legacy.operation.id, withholdingTax: 1 }, prisma)).rejects.toMatchObject({ code: "dividend.fii_withholding" });
+    expect(await prisma.investmentOperation.findUniqueOrThrow({ where: { id: legacy.operation.id } })).toMatchObject({ incomeType: null, taxWithheld: 0 });
+
+    const taxed = await recordOperation(USER, { holdingId: fii.id, type: "dividend", totalAmount: 40, taxWithheld: 5, date: "2026-08-06" }, prisma);
+    await expect(updateDividend(USER, { operationId: taxed.operation.id, origin: "BR" }, prisma)).rejects.toMatchObject({ code: "dividend.fii_withholding" });
+
+    const stock = await petr4();
+    const plain = await recordOperation(USER, { holdingId: stock.id, type: "dividend", totalAmount: 20, taxWithheld: 2, date: "2026-08-07" }, prisma);
+    const updated = await updateDividend(USER, { operationId: plain.operation.id, origin: "BDR" }, prisma);
+    expect(updated).toMatchObject({ origin: "BDR", withholdingTax: 2 });
   });
 });

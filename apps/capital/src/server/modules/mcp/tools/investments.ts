@@ -19,6 +19,8 @@ export interface ListInvestmentPositionsParams {
 }
 
 const CLOSED_QUANTITY = 1e-9;
+/** A later dividend must not move closedAt. These are the operations that take the quantity to zero. */
+const CLOSING_OPERATION_TYPES = ["sell", "withdrawal", "adjustment"] as const;
 
 /** Active positions with current value and unrealized gain. includeClosed adds quantity 0. */
 export async function listInvestmentPositions(
@@ -37,7 +39,7 @@ export async function listInvestmentPositions(
   const lastOps = closedIds.length
     ? await db.investmentOperation.groupBy({
         by: ["holdingId"],
-        where: { holdingId: { in: closedIds } },
+        where: { holdingId: { in: closedIds }, type: { in: [...CLOSING_OPERATION_TYPES] } },
         _max: { date: true },
       })
     : [];
