@@ -2,6 +2,7 @@ import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { prisma } from "@capital/server/lib/prisma";
 import { createLedgerFixture, deleteLedgerFixture, type LedgerFixture } from "@/test/ledger-fixtures";
 import { formatDateOnly } from "@capital/server/lib/date-utils";
+import { createHolding, recordOperation } from "../../../investments/services/portfolio";
 import { addInvestmentAsset, adjustPosition, listInvestmentPositions, updateHoldingPrice } from "../investments";
 
 const USER = "test-user-mcp-investments-001";
@@ -27,13 +28,36 @@ describe("MCP investment tools", () => {
   it("lists positions with value and unrealized gain", async () => {
     const { positions } = await listInvestmentPositions(USER, prisma);
     expect(positions).toHaveLength(1);
-    expect(positions[0]).toMatchObject({ ticker: "PMLL11", currentQuantity: 164, accountName: "XP", accountId: f.broker, entityId: f.pfId });
+    expect(positions[0]).toMatchObject({ ticker: "PMLL11", currentQuantity: 164, accountName: "XP", accountId: f.broker, entityId: f.pfId, closedAt: null });
     const pjOnly = await listInvestmentPositions(USER, prisma, { entityId: f.pjId });
     expect(pjOnly.positions).toHaveLength(0);
     const onBroker = await listInvestmentPositions(USER, prisma, { accountId: f.broker });
     expect(onBroker.positions.map((p) => p.id)).toEqual([holdingId]);
     expect(positions[0].currentValue).toBeCloseTo(17252.8, 2);
     expect(positions[0].unrealizedGain).toBeCloseTo(442.8, 2);
+  });
+
+  it("finds a closed holding by ticker when includeClosed is set", async () => {
+    const h = await createHolding(USER, { accountId: f.broker, assetClass: "bdr", ticker: "GOGL34", name: "Alphabet" }, prisma);
+    await recordOperation(USER, { holdingId: h.id, type: "buy", quantity: 8, pricePerUnit: 50, totalAmount: 400, date: "2026-07-01" }, prisma);
+    await recordOperation(USER, { holdingId: h.id, type: "sell", quantity: 8, pricePerUnit: 55, totalAmount: 440, date: "2026-08-05" }, prisma);
+    expect(await prisma.investmentHolding.findUniqueOrThrow({ where: { id: h.id } })).toMatchObject({ currentQuantity: 0, isActive: false });
+
+    expect((await listInvestmentPositions(USER, prisma, { ticker: "GOGL34" })).positions).toEqual([]);
+    expect((await listInvestmentPositions(USER, prisma)).positions.map((p) => p.ticker)).not.toContain("GOGL34");
+
+    const found = await listInvestmentPositions(USER, prisma, { ticker: "gogl34", includeClosed: true });
+    expect(found.positions).toHaveLength(1);
+    expect(found.positions[0]).toMatchObject({
+      id: h.id,
+      ticker: "GOGL34",
+      assetClass: "bdr",
+      allocationClass: "international",
+      currentQuantity: 0,
+      closedAt: "2026-08-05",
+    });
+    expect((await listInvestmentPositions(USER, prisma, { query: "gogl", includeClosed: true })).positions.map((p) => p.id)).toContain(h.id);
+    expect((await listInvestmentPositions(OTHER, prisma, { ticker: "GOGL34", includeClosed: true })).positions).toEqual([]);
   });
 
   it("adjusts a position and records an adjustment operation", async () => {

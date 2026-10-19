@@ -117,12 +117,30 @@ export interface PortfolioScope {
   entityIds?: string[] | null;
 }
 
-export async function listHoldings(userId: string, db: DbClient, opts: PortfolioScope & { accountId?: string; includeInactive?: boolean; includeArchivedAccounts?: boolean } = {}) {
+export async function listHoldings(
+  userId: string,
+  db: DbClient,
+  opts: PortfolioScope & {
+    accountId?: string;
+    includeInactive?: boolean;
+    includeArchivedAccounts?: boolean;
+    /** Case-insensitive exact ticker. */
+    ticker?: string;
+    /** Case-insensitive contains on ticker or name. */
+    query?: string;
+  } = {},
+) {
+  const ticker = opts.ticker?.trim();
+  const query = opts.query?.trim();
   return db.investmentHolding.findMany({
     where: {
       account: { userId, ...entityScopeWhere(opts.entityIds ?? null), ...(opts.includeArchivedAccounts === false && { archivedAt: null }) },
       ...(opts.accountId && { accountId: opts.accountId }),
       ...(opts.includeInactive ? {} : { isActive: true }),
+      ...(ticker && { ticker: { equals: ticker, mode: "insensitive" } }),
+      ...(query && {
+        OR: [{ ticker: { contains: query, mode: "insensitive" } }, { name: { contains: query, mode: "insensitive" } }],
+      }),
     },
     include: { account: { select: { id: true, name: true, entityId: true, currency: true, institution: true } } },
     orderBy: [{ assetClass: "asc" }, { ticker: "asc" }, { name: "asc" }],

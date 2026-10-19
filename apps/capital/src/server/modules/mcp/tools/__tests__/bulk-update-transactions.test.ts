@@ -48,6 +48,7 @@ describe("findOrphanTransactions", () => {
     const r = await findOrphanTransactions(USER, prisma);
     expect(r.total).toBe(2);
     expect(r.transactions.map((t) => t.id).sort()).toEqual([none, old].sort());
+    expect(r.transactions.every((t) => t.accountId === f.pfChecking && t.accountName === "Conta principal")).toBe(true);
     expect(r.categories.map((c) => c.name).sort()).toEqual(["(none)", "Old"]);
   });
 });

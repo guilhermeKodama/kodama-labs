@@ -10,9 +10,17 @@ import { adjustPosition as adjustHoldingPosition, createHolding, getOwnedHolding
 export interface ListInvestmentPositionsParams {
   accountId?: string;
   entityId?: string;
+  /** Case-insensitive exact ticker. A closed holding matches only with includeClosed. */
+  ticker?: string;
+  /** Case-insensitive contains on ticker or name. */
+  query?: string;
+  /** Sold positions (quantity 0). Default false, so the open book stays as it is. */
+  includeClosed?: boolean;
 }
 
-/** Active positions with current value and unrealized gain. */
+const CLOSED_QUANTITY = 1e-9;
+
+/** Active positions with current value and unrealized gain. includeClosed adds quantity 0. */
 export async function listInvestmentPositions(
   userId: string,
   db: DbClient,
@@ -21,10 +29,23 @@ export async function listInvestmentPositions(
   const holdings = await listHoldings(userId, db, {
     ...(params.accountId && { accountId: params.accountId }),
     ...(params.entityId && { entityIds: [params.entityId] }),
+    ...(params.includeClosed && { includeInactive: true }),
+    ...(params.ticker && { ticker: params.ticker }),
+    ...(params.query && { query: params.query }),
   });
+  const closedIds = holdings.filter((h) => Math.abs(h.currentQuantity) <= CLOSED_QUANTITY).map((h) => h.id);
+  const lastOps = closedIds.length
+    ? await db.investmentOperation.groupBy({
+        by: ["holdingId"],
+        where: { holdingId: { in: closedIds } },
+        _max: { date: true },
+      })
+    : [];
+  const closedAt = new Map(lastOps.map((row) => [row.holdingId, row._max.date ? formatDateOnly(row._max.date) : null]));
   return {
     positions: holdings.map((h) => {
       const currentValue = h.currentPrice !== null ? h.currentQuantity * h.currentPrice : null;
+      const closed = Math.abs(h.currentQuantity) <= CLOSED_QUANTITY;
       return {
         id: h.id,
         ticker: h.ticker,
@@ -41,6 +62,7 @@ export async function listInvestmentPositions(
         accountId: h.accountId,
         accountName: h.account?.name ?? "Unknown",
         entityId: h.account?.entityId ?? "",
+        closedAt: closed ? closedAt.get(h.id) ?? null : null,
       };
     }),
   };

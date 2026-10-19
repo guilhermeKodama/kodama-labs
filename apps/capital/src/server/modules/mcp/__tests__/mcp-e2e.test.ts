@@ -227,7 +227,7 @@ describe("MCP Server End-to-End", () => {
       expect(data.id).toBe(2);
       expect(data.result).toHaveProperty("tools");
       expect(Array.isArray(data.result.tools)).toBe(true);
-      expect(data.result.tools.length).toBe(44); // 42 previous + record_dividend, convert_income_to_dividend
+      expect(data.result.tools.length).toBe(46); // 44 previous + list_account_balances, update_dividend
 
       // Check for expected tools
       const result = data.result as { tools: Array<{ name: string }> };
@@ -253,6 +253,8 @@ describe("MCP Server End-to-End", () => {
       expect(toolNames).toContain("update_holding_price");
       expect(toolNames).toContain("record_dividend");
       expect(toolNames).toContain("convert_income_to_dividend");
+      expect(toolNames).toContain("list_account_balances");
+      expect(toolNames).toContain("update_dividend");
     });
 
     it("should handle tools/call with bulk_create_transactions in dry-run mode", async () => {
@@ -428,7 +430,7 @@ describe("MCP Server End-to-End", () => {
 
       // List tools
       const tools = await client.listTools();
-      expect(tools.tools.length).toBe(44); // 42 previous + record_dividend, convert_income_to_dividend
+      expect(tools.tools.length).toBe(46); // 44 previous + list_account_balances, update_dividend
       const toolNames = tools.tools.map((tool) => tool.name);
       expect(toolNames).toContain("import_credit_card_statement");
       expect(toolNames).toContain("mark_transaction_as_card_settlement");
@@ -448,6 +450,8 @@ describe("MCP Server End-to-End", () => {
       expect(toolNames).toContain("update_holding_price");
       expect(toolNames).toContain("record_dividend");
       expect(toolNames).toContain("convert_income_to_dividend");
+      expect(toolNames).toContain("list_account_balances");
+      expect(toolNames).toContain("update_dividend");
 
       // Call a tool
       const result = await client.callTool({
