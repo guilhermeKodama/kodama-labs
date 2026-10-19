@@ -32,6 +32,8 @@ interface PluggyItemRow {
   consentExpiresAt: string | null;
   lastSyncAt: string | null;
   lastError: string | null;
+  syncing: boolean;
+  syncCutoff: string | null;
   incomeCategoryId: string | null;
   brokerageAccountId: string | null;
   accounts: PluggyAccountRow[];
@@ -63,7 +65,11 @@ const NONE = "";
 export function PluggyPage() {
   const t = useTranslations("settings.pluggy");
   const fmt = useFmt();
-  const overview = useQuery({ queryKey: keys.pluggy(), queryFn: () => apiGet<PluggyOverview>("/api/v2/pluggy") });
+  const overview = useQuery({
+    queryKey: keys.pluggy(),
+    queryFn: () => apiGet<PluggyOverview>("/api/v2/pluggy"),
+    refetchInterval: (query) => ((query.state.data?.items ?? []).some((item) => item.syncing) ? 1500 : false),
+  });
   const accounts = useAccounts();
   const entities = useEntities();
   const categories = useCategories();
@@ -72,6 +78,7 @@ export function PluggyPage() {
   const [entityKind, setEntityKind] = useState<EntityKind>("personal");
   const [drafts, setDrafts] = useState<Record<string, ItemDraft>>({});
   const [links, setLinks] = useState<Record<string, string>>({});
+  const [classes, setClasses] = useState<Record<string, { incomeType: string; origin: string }>>({});
   const [removing, setRemoving] = useState<PluggyItemRow | null>(null);
 
   const refresh = { event: "settings.write" as const };
@@ -98,7 +105,7 @@ export function PluggyPage() {
   });
   const patchItem = useAppMutation({
     ...refresh,
-    mutationFn: ({ id, body }: { id: string; body: { brokerageAccountId?: string | null; incomeCategoryId?: string | null } }) =>
+    mutationFn: ({ id, body }: { id: string; body: { brokerageAccountId?: string | null; incomeCategoryId?: string | null; syncCutoff?: string | null } }) =>
       apiPatch(`/api/v2/pluggy/items/${id}`, body),
   });
   const mapAccount = useAppMutation({
@@ -113,8 +120,8 @@ export function PluggyPage() {
   });
   const resolve = useAppMutation({
     ...refresh,
-    mutationFn: ({ id, action, ledgerEntryId }: { id: string; action: "ignore" | "link" | "confirm"; ledgerEntryId?: string }) =>
-      apiPost(`/api/v2/pluggy/reviews/${id}`, { action, ledgerEntryId: ledgerEntryId ?? null }),
+    mutationFn: ({ id, action, ledgerEntryId, incomeType, origin }: { id: string; action: "ignore" | "link" | "confirm"; ledgerEntryId?: string; incomeType?: string; origin?: string | null }) =>
+      apiPost(`/api/v2/pluggy/reviews/${id}`, { action, ledgerEntryId: ledgerEntryId ?? null, incomeType, origin }),
     onSuccess: (_data, variables) => {
       setLinks((prev) => {
         const next = { ...prev };
@@ -126,6 +133,7 @@ export function PluggyPage() {
 
   const data = overview.data;
   const enabled = data?.enabled ?? false;
+  const syncing = (data?.items ?? []).some((item) => item.syncing);
   const kindOf = (account: AccountRecord) => entities.data?.find((entity) => entity.id === account.entityId)?.kind ?? null;
   const accountOptions = (item: PluggyItemRow, link: PluggyAccountRow) => {
     const types = link.type === "CREDIT" ? ["credit_card"] : ["checking", "cash", "brokerage"];
@@ -151,8 +159,8 @@ export function PluggyPage() {
     <div className="flex max-w-[760px] flex-col gap-4">
       {data && !enabled ? <Callout tone="warning">{t("disabled")}</Callout> : null}
       <div className="flex flex-wrap items-center gap-2">
-        <Btn primary disabled={!enabled || sync.isPending || !data} onClick={() => sync.mutate()}>
-          {sync.isPending ? t("syncing") : t("sync")}
+        <Btn primary disabled={!enabled || sync.isPending || syncing || !data} onClick={() => sync.mutate()}>
+          {sync.isPending || syncing ? t("syncing") : t("sync")}
         </Btn>
       </div>
 
@@ -230,6 +238,16 @@ export function PluggyPage() {
                   ]}
                 />
               </Field>
+              <Field label={t("cutoff")}>
+                <TextInput
+                  aria-label={`${t("cutoff")} ${item.label}`}
+                  className="w-full"
+                  type="date"
+                  value={item.syncCutoff ?? ""}
+                  disabled={patchItem.isPending}
+                  onChange={(value) => patchItem.mutate({ id: item.id, body: { syncCutoff: value || null } })}
+                />
+              </Field>
               <Field label={t("brokerage")}>
                 <Select
                   aria-label={`${t("brokerage")} ${item.label}`}
@@ -303,6 +321,43 @@ export function PluggyPage() {
                 <span className="text-caption text-fg-3">{fmt.dateTime(review.createdAt)}</span>
               </div>
               {summary ? <p className="text-body-sm text-fg-2">{summary}</p> : null}
+              {review.kind === "low_confidence" && draft.event === "income" ? (
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                  <Field label={t("incomeType")}>
+                    <Select
+                      aria-label={t("incomeType")}
+                      className="w-full"
+                      value={classes[review.id]?.incomeType ?? (typeof draft.incomeType === "string" ? draft.incomeType : "fixed_income_interest")}
+                      onChange={(value) =>
+                        setClasses((prev) => ({
+                          ...prev,
+                          [review.id]: { incomeType: value, origin: prev[review.id]?.origin ?? (typeof draft.origin === "string" ? draft.origin : "BR") },
+                        }))
+                      }
+                      options={["dividend", "jcp", "fii_income", "fixed_income_interest"].map((value) => ({ value, label: t(`incomeTypes.${value}`) }))}
+                    />
+                  </Field>
+                  {(classes[review.id]?.incomeType ?? draft.incomeType) === "dividend" ? (
+                    <Field label={t("origin")}>
+                      <Select
+                        aria-label={t("origin")}
+                        className="w-full"
+                        value={classes[review.id]?.origin ?? (typeof draft.origin === "string" ? draft.origin : "BR")}
+                        onChange={(value) =>
+                          setClasses((prev) => ({
+                            ...prev,
+                            [review.id]: {
+                              incomeType: prev[review.id]?.incomeType ?? (typeof draft.incomeType === "string" ? draft.incomeType : "dividend"),
+                              origin: value,
+                            },
+                          }))
+                        }
+                        options={["BR", "BDR", "EXTERIOR"].map((value) => ({ value, label: t(`origins.${value}`) }))}
+                      />
+                    </Field>
+                  ) : null}
+                </div>
+              ) : null}
               {review.kind === "conflict" ? (
                 <Field label={t("entryId")}>
                   <TextInput
@@ -318,8 +373,18 @@ export function PluggyPage() {
                 <Btn ghost disabled={resolve.isPending} onClick={() => resolve.mutate({ id: review.id, action: "ignore" })}>
                   {t("ignore")}
                 </Btn>
-                {review.kind === "low_confidence" ? (
-                  <Btn disabled={resolve.isPending} onClick={() => resolve.mutate({ id: review.id, action: "confirm" })}>
+                {review.kind === "low_confidence" && draft.event === "income" ? (
+                  <Btn
+                    disabled={resolve.isPending}
+                    onClick={() =>
+                      resolve.mutate({
+                        id: review.id,
+                        action: "confirm",
+                        incomeType: classes[review.id]?.incomeType ?? (typeof draft.incomeType === "string" ? draft.incomeType : "fixed_income_interest"),
+                        origin: (classes[review.id]?.incomeType ?? draft.incomeType) === "dividend" ? classes[review.id]?.origin ?? (typeof draft.origin === "string" ? draft.origin : "BR") : null,
+                      })
+                    }
+                  >
                     {t("confirm")}
                   </Btn>
                 ) : null}

@@ -237,6 +237,7 @@
     "account_type": "That account type cannot be mapped here.",
     "link_not_found": "Pluggy account not found. Sync once so the accounts show up.",
     "review_not_found": "Review not found.",
-    "link_target": "Choose the existing entry to link."
+    "link_target": "Choose the existing entry to link.",
+    "not_income": "Amortization, a sale or a redemption is not income."
   }
 }

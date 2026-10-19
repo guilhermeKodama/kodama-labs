@@ -31,5 +31,6 @@ describe("mask", () => {
     expect(accountLabel("Conta", "001234567890")).not.toContain("1234567890");
     expect(redactNumbers("account 001234567890 failed")).toBe("account •••• failed");
     expect(redactNumbers("account 001234567890 failed")).not.toContain("123456");
+    expect(redactNumbers("cpf 123.456.789-00 cnpj 12.345.678/0001-90")).toBe("cpf •••• cnpj ••••");
   });
 });

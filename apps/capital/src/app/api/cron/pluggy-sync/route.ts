@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { env } from "@/env";
 import { prisma } from "@capital/server/lib/prisma";
 import { isPluggyConfigured } from "@capital/server/modules/pluggy/lib/config";
-import { createPluggyClient } from "@capital/server/modules/pluggy/lib/client";
+import { createPluggyClient, safeSyncError } from "@capital/server/modules/pluggy/lib/client";
 import { anthropicIncomeGuesser } from "@capital/server/modules/pluggy/lib/guesser";
 import { syncPluggy } from "@capital/server/modules/pluggy/services/sync";
 
@@ -28,7 +28,7 @@ export async function GET(request: NextRequest) {
     }
     return NextResponse.json({ success: true, status: results.length ? "ok" : "idle", users: results.length, processedAt: new Date().toISOString() });
   } catch (error) {
-    console.error("[Pluggy] Cron failed:", error instanceof Error ? error.message : "sync failed");
+    console.error("[Pluggy] Cron failed:", safeSyncError(error));
     return NextResponse.json({ success: false, error: "Pluggy sync failed", processedAt: new Date().toISOString() }, { status: 500 });
   }
 }

@@ -2,6 +2,7 @@ import type { Prisma, PrismaClient } from "@/generated/prisma";
 import { categorizeBillTransactions, categorizeStatementTransactions } from "@capital/server/lib/claude";
 import { BILL_LABEL_KEYS, STATEMENT_LABEL_KEYS } from "@capital/server/lib/category-prompt";
 import { normalizeDescription } from "@capital/server/modules/bank-statements/utils";
+import { redactForModel } from "@capital/server/modules/pluggy/lib/mask";
 import { getSystemCategory, getSystemCategoryNames } from "../lib/system-categories";
 
 export const AI_CATEGORIZE_CHUNK_SIZE = 50;
@@ -51,7 +52,13 @@ export async function categorizePendingEntries(db: PrismaClient, categorizers: A
   const card = chunk.filter((e) => e.account.type === "credit_card");
   const bankExpense = chunk.filter((e) => e.account.type !== "credit_card" && e.kind === "expense");
   const bankIncome = chunk.filter((e) => e.account.type !== "credit_card" && e.kind === "income");
-  const input = (rows: typeof chunk) => rows.map((e, index) => ({ index, description: e.description, merchantName: e.merchantName ?? undefined, amount: Math.abs(Number(e.amount)) }));
+  const input = (rows: typeof chunk) =>
+    rows.map((e, index) => ({
+      index,
+      description: redactForModel(e.description),
+      merchantName: e.merchantName ? redactForModel(e.merchantName) : undefined,
+      amount: Math.abs(Number(e.amount)),
+    }));
 
   const assignments: { entry: (typeof chunk)[number]; categoryId: string; isFallback: boolean }[] = [];
   const collect = (rows: typeof chunk, results: { index: number; category: string }[], type: "income" | "expense", fallbackId: string) => {

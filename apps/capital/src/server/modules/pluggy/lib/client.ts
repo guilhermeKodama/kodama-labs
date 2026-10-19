@@ -4,6 +4,7 @@ import type { Page, PluggyAccount, PluggyClient, PluggyInvestment, PluggyInvestm
 import { onOrAfter } from "./consent";
 
 const API = "https://api.pluggy.ai";
+const REQUEST_TIMEOUT_MS = 20_000;
 
 interface KeyCache {
   apiKey: string;
@@ -27,6 +28,7 @@ export function createPluggyClient(fetchImpl: typeof fetch = fetch): PluggyClien
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ clientId, clientSecret }),
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     });
     if (!response.ok) throw new Error(`Pluggy authentication failed (${response.status})`);
     const body = (await response.json()) as { apiKey?: string };
@@ -37,7 +39,7 @@ export function createPluggyClient(fetchImpl: typeof fetch = fetch): PluggyClien
 
   async function getJson<T>(path: string): Promise<T> {
     const key = await apiKey();
-    const response = await fetchImpl(`${API}${path}`, { headers: { "X-API-KEY": key } });
+    const response = await fetchImpl(`${API}${path}`, { headers: { "X-API-KEY": key }, signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) });
     if (!response.ok) throw new Error(`Pluggy request failed (${response.status})`);
     return (await response.json()) as T;
   }

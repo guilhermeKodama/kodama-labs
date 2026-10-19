@@ -101,18 +101,11 @@ enum IncomeType {
 }
 
 // Where a dividend was paid. Tax treatment follows the origin.
+// BDRs are the 32–35 ticker suffix; the classifier fills this in when the asset does not.
 enum DividendOrigin {
   BR
   BDR
   EXTERIOR
-}
-
-// Where a dividend was issued. BDRs are the 32–35 ticker suffix; the rest is
-// inferred from the asset or, when that is not enough, the classifier.
-enum DividendOrigin {
-  br
-  bdr
-  exterior
 }
 
 enum ClassificationSource {
@@ -876,8 +869,6 @@ model InvestmentOperation {
   // 20-dedup-rules.md) so re-uploading the same statement reconciles
   // cleanly instead of duplicating positions.
   externalId     String?
-  // Dividend only. Null on JCP, FII income and interest.
-  dividendOrigin            DividendOrigin?
   classificationSource      ClassificationSource?
   classificationConfidence  Float?
   // Set when a person edits the operation. Pluggy sync will not change it.
@@ -926,6 +917,9 @@ model PluggyItem {
   brokerageAccountId String?
   // Held while a sync is running. A lock older than 15 minutes is stale.
   syncingAt        DateTime?
+  // Transactions before this date are not imported. Defaults to the day the
+  // connection is added, so a first sync does not replay a year of history.
+  syncCutoff       DateTime?
   createdAt        DateTime         @default(now())
   updatedAt        DateTime         @updatedAt
 
@@ -950,6 +944,9 @@ model PluggyAccountLink {
   type             String
   subtype          String?
   currency         String?
+  // Last four digits of the institution account number. A renewed consent
+  // issues new Pluggy account ids; the mapping is copied when these match.
+  numberLast4      String?
   capitalAccountId String?
 
   item           PluggyItem @relation(fields: [itemRowId], references: [id], onDelete: Cascade)

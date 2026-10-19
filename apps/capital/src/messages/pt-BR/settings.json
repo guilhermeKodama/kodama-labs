@@ -323,6 +323,9 @@
     "business": "PJ",
     "sync": "Sincronizar agora",
     "syncing": "Sincronizando…",
+    "cutoff": "Importar a partir de",
+    "incomeType": "Tipo do rendimento",
+    "origin": "Origem",
     "remove": "Remover",
     "lastSync": "Última sync: {when}",
     "never": "ainda não",
@@ -354,6 +357,17 @@
       "conflict": "Conflito",
       "low_confidence": "Classificação incerta",
       "position": "Posição divergente"
+    },
+    "incomeTypes": {
+      "dividend": "Dividendo",
+      "jcp": "JCP",
+      "fii_income": "Rendimento de FII",
+      "fixed_income_interest": "Renda fixa"
+    },
+    "origins": {
+      "BR": "Brasil",
+      "BDR": "BDR",
+      "EXTERIOR": "Exterior"
     }
   }
 }

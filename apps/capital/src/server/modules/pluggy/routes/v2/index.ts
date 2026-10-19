@@ -6,7 +6,7 @@ import { isPluggyConfigured } from "../../lib/config";
 import { createPluggyClient } from "../../lib/client";
 import { anthropicIncomeGuesser } from "../../lib/guesser";
 import { createPluggyItem, deletePluggyItem, mapPluggyAccount, pluggyOverview, resolvePluggyReview, updatePluggyItem } from "../../services/items";
-import { syncPluggy } from "../../services/sync";
+import { startPluggySync } from "../../services/sync";
 
 const tags = ["Pluggy v2"];
 const entityKind = z.enum(["personal", "business"]);
@@ -24,7 +24,7 @@ const patchRoute = createRoute({
   method: "patch",
   path: "/v2/pluggy/items/{id}",
   tags,
-  summary: "Rename a connection, replace its item id, or set the brokerage and income category",
+  summary: "Rename a connection, replace its item id, or set the brokerage, income category and import cutoff",
   request: {
     params: idParams,
     ...jsonBody(
@@ -34,6 +34,7 @@ const patchRoute = createRoute({
         entityKind: entityKind.optional(),
         brokerageAccountId: z.string().nullable().optional(),
         incomeCategoryId: z.string().nullable().optional(),
+        syncCutoff: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
       }),
     ),
   },
@@ -52,7 +53,7 @@ const syncRoute = createRoute({
   method: "post",
   path: "/v2/pluggy/sync",
   tags,
-  summary: "Read the latest Meu Pluggy snapshot. No credentials means the sync is disabled.",
+  summary: "Start a sync and return the run id. The page polls status. No credentials means the sync is disabled.",
   request: jsonBody(z.object({ itemRowId: z.string().optional() })),
   responses: v2Responses,
 });
@@ -61,7 +62,17 @@ const reviewRoute = createRoute({
   path: "/v2/pluggy/reviews/{id}",
   tags,
   summary: "Ignore a review, link it to an existing entry, or confirm a classification",
-  request: { params: idParams, ...jsonBody(z.object({ action: z.enum(["ignore", "link", "confirm"]), ledgerEntryId: z.string().nullable().optional() })) },
+  request: {
+    params: idParams,
+    ...jsonBody(
+      z.object({
+        action: z.enum(["ignore", "link", "confirm"]),
+        ledgerEntryId: z.string().nullable().optional(),
+        incomeType: z.enum(["dividend", "jcp", "fii_income", "fixed_income_interest"]).optional(),
+        origin: z.enum(["BR", "BDR", "EXTERIOR"]).nullable().optional(),
+      }),
+    ),
+  },
   responses: v2Responses,
 });
 
@@ -78,8 +89,11 @@ export const v2Pluggy = createRouter()
     return { ok: true };
   }))
   .openapi(mapRoute, v2Handler(mapRoute, async (c, userId) => mapPluggyAccount(userId, c.req.valid("param").id, c.req.valid("json").capitalAccountId, prisma)))
-  .openapi(syncRoute, v2Handler(syncRoute, async (c, userId) => syncPluggy(userId, deps(), { trigger: "manual", itemRowId: c.req.valid("json").itemRowId })))
+  .openapi(syncRoute, v2Handler(syncRoute, async (c, userId) => startPluggySync(userId, deps(), { itemRowId: c.req.valid("json").itemRowId })))
   .openapi(reviewRoute, v2Handler(reviewRoute, async (c, userId) => {
     const body = c.req.valid("json");
-    return resolvePluggyReview(userId, c.req.valid("param").id, body.action, body.ledgerEntryId ?? null, prisma);
+    return resolvePluggyReview(userId, c.req.valid("param").id, body.action, body.ledgerEntryId ?? null, prisma, {
+      incomeType: body.incomeType,
+      origin: body.origin,
+    });
   }));

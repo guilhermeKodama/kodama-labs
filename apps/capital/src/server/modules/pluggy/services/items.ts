@@ -1,7 +1,10 @@
-import type { EntityType } from "@/generated/prisma";
+import type { DividendOrigin, EntityType } from "@/generated/prisma";
+import type { PassiveIncomeType } from "@/lib/invest/passive-income";
+import { formatDateOnly, parseLocalDate } from "@capital/server/lib/date-utils";
 import type { DbClient } from "@capital/server/lib/prisma";
 import { LedgerError } from "@capital/server/modules/ledger/lib/errors";
 import { isPluggyConfigured } from "../lib/config";
+import { bookConfirmedIncome } from "./sync";
 
 const ITEM_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -32,6 +35,8 @@ export async function pluggyOverview(userId: string, db: DbClient) {
       lastSyncAt: item.lastSyncAt?.toISOString() ?? null,
       lastSuccessAt: item.lastSuccessAt?.toISOString() ?? null,
       lastError: item.lastError,
+      syncing: item.syncingAt != null,
+      syncCutoff: item.syncCutoff ? formatDateOnly(item.syncCutoff) : null,
       incomeCategoryId: item.incomeCategoryId,
       brokerageAccountId: item.brokerageAccountId,
       accounts: item.accounts.map((account) => ({
@@ -71,13 +76,14 @@ export async function createPluggyItem(userId: string, input: { label: string; i
   const itemId = assertItemId(input.itemId);
   const label = input.label.trim();
   if (!label) throw new LedgerError("A label is required", 422, { code: "pluggy.label" });
-  return db.pluggyItem.create({ data: { userId, label, itemId, entityKind: input.entityKind } });
+  const syncCutoff = parseLocalDate(formatDateOnly(new Date()));
+  return db.pluggyItem.create({ data: { userId, label, itemId, entityKind: input.entityKind, syncCutoff } });
 }
 
 export async function updatePluggyItem(
   userId: string,
   id: string,
-  patch: { label?: string; itemId?: string; entityKind?: EntityType; brokerageAccountId?: string | null; incomeCategoryId?: string | null },
+  patch: { label?: string; itemId?: string; entityKind?: EntityType; brokerageAccountId?: string | null; incomeCategoryId?: string | null; syncCutoff?: string | null },
   db: DbClient,
 ) {
   const item = await ownedItem(userId, id, db);
@@ -88,6 +94,7 @@ export async function updatePluggyItem(
     entityKind?: EntityType;
     brokerageAccountId?: string | null;
     incomeCategoryId?: string | null;
+    syncCutoff?: Date | null;
     status?: "idle";
     lastError?: null;
   } = {};
@@ -116,6 +123,9 @@ export async function updatePluggyItem(
       data.brokerageAccountId = patch.brokerageAccountId;
     }
   }
+  if (patch.syncCutoff !== undefined) {
+    data.syncCutoff = patch.syncCutoff === null ? null : parseLocalDate(patch.syncCutoff);
+  }
   if (patch.incomeCategoryId !== undefined) {
     if (patch.incomeCategoryId === null) data.incomeCategoryId = null;
     else {
@@ -143,9 +153,17 @@ export async function mapPluggyAccount(userId: string, linkId: string, capitalAc
   return db.pluggyAccountLink.update({ where: { id: linkId }, data: { capitalAccountId } });
 }
 
-export async function resolvePluggyReview(userId: string, reviewId: string, action: "ignore" | "link" | "confirm", ledgerEntryId: string | null, db: DbClient) {
+export async function resolvePluggyReview(
+  userId: string,
+  reviewId: string,
+  action: "ignore" | "link" | "confirm",
+  ledgerEntryId: string | null,
+  db: DbClient,
+  patch: { incomeType?: PassiveIncomeType; origin?: DividendOrigin | null } = {},
+) {
   const review = await db.pluggyReview.findFirst({ where: { id: reviewId, userId } });
   if (!review) throw new LedgerError("Review not found", 404, { code: "pluggy.review_not_found" });
+  if (review.status !== "open") return review;
   if (action === "link") {
     if (!ledgerEntryId) throw new LedgerError("Choose the existing entry", 422, { code: "pluggy.link_target" });
     const entry = await db.ledgerEntry.findFirst({ where: { id: ledgerEntryId, userId, deletedAt: null } });
@@ -160,12 +178,20 @@ export async function resolvePluggyReview(userId: string, reviewId: string, acti
     }
   }
   if (action === "confirm") {
-    const draft = review.draft as { operationId?: string };
+    const draft = review.draft as { operationId?: string; event?: string };
+    if (draft.event === "amortization" || draft.event === "buy" || draft.event === "sell" || draft.event === "skip") {
+      throw new LedgerError("Amortization, a sale or a redemption is not income", 422, { code: "pluggy.not_income" });
+    }
+    if (review.kind !== "low_confidence") {
+      throw new LedgerError("Only an uncertain classification can be confirmed", 422, { code: "pluggy.not_income" });
+    }
     if (draft.operationId) {
       await db.investmentOperation.updateMany({
         where: { id: draft.operationId, holding: { account: { userId } } },
         data: { classificationSource: "manual", syncLocked: true },
       });
+    } else {
+      await bookConfirmedIncome(userId, review.draft, patch, db, review.itemRowId);
     }
   }
   return db.pluggyReview.update({

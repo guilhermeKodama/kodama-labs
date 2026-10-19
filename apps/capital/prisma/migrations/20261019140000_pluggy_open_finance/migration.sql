@@ -1,13 +1,11 @@
 -- Meu Pluggy connections. Item ids live here (they change when consent is
 -- renewed). Client id and secret stay in the environment.
 
-CREATE TYPE "DividendOrigin" AS ENUM ('br', 'bdr', 'exterior');
 CREATE TYPE "ClassificationSource" AS ENUM ('rule', 'llm', 'manual');
 CREATE TYPE "PluggyItemStatus" AS ENUM ('idle', 'ok', 'expiring', 'expired', 'error');
 CREATE TYPE "PluggyReviewStatus" AS ENUM ('open', 'resolved', 'ignored');
 
 ALTER TABLE "investment_operations"
-  ADD COLUMN "dividendOrigin" "DividendOrigin",
   ADD COLUMN "classificationSource" "ClassificationSource",
   ADD COLUMN "classificationConfidence" DOUBLE PRECISION,
   ADD COLUMN "syncLocked" BOOLEAN NOT NULL DEFAULT false;
@@ -26,6 +24,7 @@ CREATE TABLE "pluggy_items" (
   "incomeCategoryId" TEXT,
   "brokerageAccountId" TEXT,
   "syncingAt" TIMESTAMP(3),
+  "syncCutoff" TIMESTAMP(3),
   "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
   "updatedAt" TIMESTAMP(3) NOT NULL,
   CONSTRAINT "pluggy_items_pkey" PRIMARY KEY ("id")
@@ -39,6 +38,7 @@ CREATE TABLE "pluggy_account_links" (
   "type" TEXT NOT NULL,
   "subtype" TEXT,
   "currency" TEXT,
+  "numberLast4" TEXT,
   "capitalAccountId" TEXT,
   CONSTRAINT "pluggy_account_links_pkey" PRIMARY KEY ("id")
 );

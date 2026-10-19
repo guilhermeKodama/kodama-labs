@@ -1,3 +1,4 @@
+import { formatDateOnly } from "@capital/server/lib/date-utils";
 import type { PluggyItemPayload } from "./types";
 
 const DAY = 24 * 60 * 60 * 1000;
@@ -27,6 +28,14 @@ export function sinceDate(lastSuccess: Date | null, now: Date): string {
     ? new Date(lastSuccess.getTime() - OVERLAP_DAYS * DAY)
     : new Date(now.getTime() - FIRST_SYNC_DAYS * DAY);
   return from.toISOString().slice(0, 10);
+}
+
+/** The later of the overlap window and the connection's cutoff, as YYYY-MM-DD. */
+export function importSince(lastSuccess: Date | null, cutoff: Date | null, now: Date): string {
+  const since = sinceDate(lastSuccess, now);
+  if (!cutoff) return since;
+  const cut = formatDateOnly(cutoff);
+  return cut > since ? cut : since;
 }
 
 export function dayOf(iso: string): string {

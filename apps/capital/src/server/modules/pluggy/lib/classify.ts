@@ -1,6 +1,7 @@
 import type { DividendOrigin } from "@/generated/prisma";
+import type { PassiveIncomeType } from "@/lib/invest/passive-income";
 
-export type IncomeKind = "fii_income" | "dividend" | "jcp" | "interest";
+export type IncomeKind = PassiveIncomeType;
 
 export interface ClassifiedIncome {
   event: "income";
@@ -99,12 +100,12 @@ export function classifyByRule(input: ClassifyInput): Classification | null {
 
   const tax = Math.max(0, input.incomeTax ?? 0);
   if (isFii(input, ticker)) return income({ incomeType: "fii_income", origin: null, gross, taxWithheld: 0 });
-  if (isBdr(ticker)) return income({ incomeType: "dividend", origin: "bdr", gross, taxWithheld: tax });
+  if (isBdr(ticker)) return income({ incomeType: "dividend", origin: "BDR", gross, taxWithheld: tax });
   if (mentionsJcp(input.description) || (tax > 0 && isBrazilianStock(input, ticker))) {
     return income({ incomeType: "jcp", origin: null, gross, taxWithheld: tax });
   }
-  if (isBrazilianStock(input, ticker)) return income({ incomeType: "dividend", origin: "br", gross, taxWithheld: 0 });
-  if (isFixedIncome(input)) return income({ incomeType: "interest", origin: null, gross, taxWithheld: tax });
+  if (isBrazilianStock(input, ticker)) return income({ incomeType: "dividend", origin: "BR", gross, taxWithheld: 0 });
+  if (isFixedIncome(input)) return income({ incomeType: "fixed_income_interest", origin: null, gross, taxWithheld: tax });
   return null;
 }
 
@@ -112,9 +113,17 @@ export async function classifyInvestment(input: ClassifyInput, guess: IncomeGues
   const ruled = classifyByRule(input);
   if (ruled) return ruled;
   const gross = Math.abs(input.amount);
-  const guessed = guess ? await guess(input) : null;
+  const taxWithheld = Math.max(0, input.incomeTax ?? 0);
+  let guessed: IncomeGuess | null = null;
+  if (guess) {
+    try {
+      guessed = await guess(input);
+    } catch {
+      guessed = null;
+    }
+  }
   if (!guessed) {
-    return { event: "income", incomeType: "interest", origin: null, gross, taxWithheld: Math.max(0, input.incomeTax ?? 0), confidence: 0, source: "llm" };
+    return { event: "income", incomeType: "fixed_income_interest", origin: null, gross, taxWithheld, confidence: 0, source: "llm" };
   }
   const origin: DividendOrigin | null = guessed.incomeType === "dividend" ? guessed.origin : null;
   return {
@@ -122,7 +131,7 @@ export async function classifyInvestment(input: ClassifyInput, guess: IncomeGues
     incomeType: guessed.incomeType,
     origin,
     gross,
-    taxWithheld: Math.max(0, input.incomeTax ?? 0),
+    taxWithheld,
     confidence: Math.min(1, Math.max(0, guessed.confidence)),
     source: "llm",
   };

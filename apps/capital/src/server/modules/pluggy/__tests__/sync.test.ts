@@ -2,6 +2,7 @@ import { afterAll, describe, expect, it } from "vitest";
 import { prisma } from "@capital/server/lib/prisma";
 import { toNumber } from "@capital/server/modules/ledger/lib/money";
 import { createEntry } from "@capital/server/modules/ledger/services/entries";
+import { updateOperation } from "@capital/server/modules/investments/services/portfolio";
 import { proventos12m } from "@capital/server/modules/investments/services/proventos";
 import { createLedgerFixture, deleteLedgerFixture } from "@/test/ledger-fixtures";
 import snapshot from "./fixtures/pluggy-snapshot.json";
@@ -36,9 +37,9 @@ function fake(opts: {
       calls.accounts += 1;
       return opts.accounts ?? [];
     },
-    async getTransactions(_accountId, since) {
+    async getTransactions(accountId, since) {
       calls.since.push(since);
-      return (opts.transactions ?? []).filter((row) => onOrAfter(row.date, since));
+      return (opts.transactions ?? []).filter((row) => onOrAfter(row.date, since) && (!row.accountId || row.accountId === accountId));
     },
     async getInvestments() {
       calls.investments += 1;
@@ -226,7 +227,7 @@ describe("syncPluggy", () => {
     expect(cash.kind).toBe("investment");
     expect(toNumber(cash.amount)).toBeCloseTo(85);
     expect(ops.find((op) => op.incomeType === "fii_income")).toMatchObject({ taxWithheld: 0, totalAmount: 20 });
-    expect(ops.find((op) => op.dividendOrigin === "bdr")).toMatchObject({ incomeType: "dividend", totalAmount: 12 });
+    expect(ops.find((op) => op.dividendOrigin === "BDR")).toMatchObject({ incomeType: "dividend", totalAmount: 12 });
     expect(ops.some((op) => op.externalId === "itx-tax" || op.externalId === "itx-transfer")).toBe(false);
     const personal = await proventos12m(userId, prisma, [fixture.pfId]);
     expect(personal.total).toBeCloseTo(117);
@@ -250,18 +251,23 @@ describe("syncPluggy", () => {
     expect((await proventos12m(userId, prisma, [fixture.pfId])).total).toBe(0);
   });
 
-  it("books a low-confidence guess and keeps it in the review queue", async () => {
+  it("keeps a low-confidence guess unbooked until the review confirms it", async () => {
     const userId = "pluggy-llm";
-    await connect(userId);
-    const guesser: IncomeGuesser = async () => ({ incomeType: "dividend", origin: "exterior", confidence: 0.4 });
-    await run(userId, fake({ investments: assetById("inv-other"), investmentTransactions: txById("itx-guess") }).client, guesser);
-    const op = await prisma.investmentOperation.findFirstOrThrow({ where: { holding: { account: { userId } } } });
-    expect(op).toMatchObject({ incomeType: "dividend", dividendOrigin: "exterior", classificationSource: "llm", classificationConfidence: 0.4 });
+    const { fixture, item } = await connect(userId);
+    await mapChecking(item.id, fixture.pfChecking);
+    const guesser: IncomeGuesser = async () => ({ incomeType: "dividend", origin: "EXTERIOR", confidence: 0.4 });
+    const report = await run(userId, fake({ investments: assetById("inv-other"), investmentTransactions: txById("itx-guess") }).client, guesser);
+    expect(report.items[0]?.status).toBe("ok");
+    expect(await prisma.investmentOperation.count({ where: { holding: { account: { userId } } } })).toBe(0);
+    expect(await prisma.pluggyExternalRef.count({ where: { userId, pluggyId: "itx-guess" } })).toBe(0);
     const review = await prisma.pluggyReview.findFirstOrThrow({ where: { userId, kind: "low_confidence", status: "open" } });
-    await resolvePluggyReview(userId, review.id, "confirm", null, prisma);
-    const locked = await prisma.investmentOperation.findUniqueOrThrow({ where: { id: op.id } });
-    expect(locked.syncLocked).toBe(true);
-    expect(locked.classificationSource).toBe("manual");
+    expect(review.draft).toMatchObject({ event: "income", incomeType: "dividend", origin: "EXTERIOR", confidence: 0.4 });
+    await resolvePluggyReview(userId, review.id, "confirm", null, prisma, { incomeType: "jcp", origin: null });
+    const op = await prisma.investmentOperation.findFirstOrThrow({ where: { holding: { account: { userId } } } });
+    expect(op).toMatchObject({ incomeType: "jcp", dividendOrigin: null, classificationSource: "manual", syncLocked: true });
+    expect(await prisma.pluggyExternalRef.count({ where: { userId, pluggyId: "itx-guess" } })).toBe(1);
+    const stored = await prisma.pluggyItem.findFirstOrThrow({ where: { userId } });
+    expect(stored.lastSuccessAt).not.toBeNull();
   });
 
   it("books PJ caixinha interest on the business book, outside personal Renda Passiva", async () => {
@@ -275,13 +281,14 @@ describe("syncPluggy", () => {
     });
     await run(userId, fake({ accounts: [checking], investments: assetById("inv-cdb"), investmentTransactions: txById("itx-pj") }).client);
     const op = await prisma.investmentOperation.findFirstOrThrow({ where: { holding: { accountId: pjBroker.id } }, include: { holding: { include: { account: true } } } });
-    expect(op.incomeType).toBe("interest");
+    expect(op.incomeType).toBe("fixed_income_interest");
     expect(op.holding.account.entityId).toBe(fixture.pjId);
     const cash = await prisma.ledgerEntry.findUniqueOrThrow({ where: { id: op.cashEntryId! } });
+    expect(cash.accountId).toBe(pjBroker.id);
     expect(cash.categoryId).toBe(category.id);
     expect(cash.kind).toBe("investment");
     expect((await proventos12m(userId, prisma, [fixture.pfId])).rows).toEqual([]);
-    expect((await proventos12m(userId, prisma, [fixture.pjId])).total).toBeCloseTo(40);
+    expect((await proventos12m(userId, prisma, [fixture.pjId])).rows).toEqual([]);
   });
 
   it("writes nothing when the integration is disabled", async () => {
@@ -309,5 +316,176 @@ describe("syncPluggy", () => {
     const again = await prisma.ledgerEntry.findMany({ where: { userId, deletedAt: null } });
     expect(again).toHaveLength(1);
     expect(toNumber(again[0]!.amount)).toBeCloseTo(-1);
+  });
+
+  it("links a repeated dividend to the existing operation and keeps a manual edit", async () => {
+    const userId = "pluggy-op-fuzzy";
+    const { fixture, item } = await connect(userId);
+    await mapChecking(item.id, fixture.pfChecking);
+    await run(userId, fake({ investments: assetById("inv-petr4"), investmentTransactions: txById("itx-jcp") }).client);
+    const op = await prisma.investmentOperation.findFirstOrThrow({ where: { holding: { account: { userId } } } });
+    await updateOperation(userId, op.id, { notes: "edited" }, prisma);
+    const renewed = { ...txById("itx-jcp")[0]!, id: "itx-jcp-new", date: "2026-10-13T00:00:00.000Z", tradeDate: "2026-10-13T00:00:00.000Z" };
+    await run(userId, fake({ investments: assetById("inv-petr4"), investmentTransactions: [renewed] }).client);
+    const ops = await prisma.investmentOperation.findMany({ where: { holding: { account: { userId } } } });
+    expect(ops).toHaveLength(1);
+    expect(ops[0]?.notes).toBe("edited");
+    expect(ops[0]?.syncLocked).toBe(true);
+    expect(toNumber(ops[0]!.totalAmount)).toBeCloseTo(100);
+    const ref = await prisma.pluggyExternalRef.findUniqueOrThrow({ where: { userId_pluggyId: { userId, pluggyId: "itx-jcp-new" } } });
+    expect(ref.matchKind).toBe("linked");
+    expect(ref.operationId).toBe(op.id);
+  });
+
+  it("does not import transactions from before the connection cutoff", async () => {
+    const userId = "pluggy-cutoff";
+    const { fixture, item } = await connect(userId, { brokerageId: null });
+    await prisma.pluggyItem.update({ where: { id: item.id }, data: { syncCutoff: new Date("2026-10-12T12:00:00.000Z") } });
+    await mapChecking(item.id, fixture.pfChecking);
+    const { client, calls } = fake({ accounts: [checking], transactions: [debit, credit] });
+    const report = await run(userId, client);
+    expect(calls.since[0]).toBe("2026-10-12");
+    expect(report.items[0]?.stats?.created).toBe(1);
+    const rows = await prisma.ledgerEntry.findMany({ where: { userId, deletedAt: null } });
+    expect(rows.map((row) => row.description)).toEqual(["TED recebida"]);
+    expect(await prisma.pluggyExternalRef.count({ where: { userId, pluggyId: debit.id } })).toBe(0);
+  });
+
+  it("books money moving between mapped accounts as one transfer", async () => {
+    const userId = "pluggy-transfer";
+    const { fixture, item } = await connect(userId, { brokerageId: null });
+    const savings = await prisma.account.create({ data: { userId, entityId: fixture.pfId, type: "cash", name: "Reserva", currency: "BRL" } });
+    await mapChecking(item.id, fixture.pfChecking);
+    await prisma.pluggyAccountLink.create({ data: { itemRowId: item.id, pluggyAccountId: "acc-savings", name: "Reserva", type: "BANK", capitalAccountId: savings.id } });
+    const savingsAccount = { ...checking, id: "acc-savings", number: "009988776655", marketingName: "Reserva" };
+    const out = { id: "tx-out", description: "PIX enviado", amount: 80, date: "2026-10-16T12:00:00.000Z", type: "DEBIT" as const, status: "POSTED", accountId: checking.id, currencyCode: "BRL" };
+    const inn = { id: "tx-in", description: "PIX recebido", amount: 80, date: "2026-10-17T12:00:00.000Z", type: "CREDIT" as const, status: "POSTED", accountId: "acc-savings", currencyCode: "BRL" };
+    await run(userId, fake({ accounts: [checking, savingsAccount], transactions: [out, inn] }).client);
+    const entries = await prisma.ledgerEntry.findMany({ where: { userId, deletedAt: null } });
+    expect(entries).toHaveLength(2);
+    expect(entries.every((row) => row.kind === "transfer")).toBe(true);
+    expect((await prisma.transferGroup.findFirstOrThrow({ where: { userId } })).direction).toBe("between_accounts");
+    expect(await prisma.pluggyExternalRef.count({ where: { userId } })).toBe(2);
+  });
+
+  it("leaves an ambiguous pair of transfers in review and books neither", async () => {
+    const userId = "pluggy-ambiguous";
+    const { fixture, item } = await connect(userId, { brokerageId: null });
+    const savings = await prisma.account.create({ data: { userId, entityId: fixture.pfId, type: "cash", name: "Reserva", currency: "BRL" } });
+    await mapChecking(item.id, fixture.pfChecking);
+    await prisma.pluggyAccountLink.create({ data: { itemRowId: item.id, pluggyAccountId: "acc-savings", name: "Reserva", type: "BANK", capitalAccountId: savings.id } });
+    const savingsAccount = { ...checking, id: "acc-savings", number: "009988776655", marketingName: "Reserva" };
+    const out = { id: "tx-out-amb", description: "PIX enviado", amount: 80, date: "2026-10-16T12:00:00.000Z", type: "DEBIT" as const, status: "POSTED", accountId: checking.id, currencyCode: "BRL" };
+    const first = { id: "tx-in-a", description: "PIX recebido", amount: 80, date: "2026-10-16T12:00:00.000Z", type: "CREDIT" as const, status: "POSTED", accountId: "acc-savings", currencyCode: "BRL" };
+    const second = { id: "tx-in-b", description: "PIX recebido", amount: 80, date: "2026-10-17T12:00:00.000Z", type: "CREDIT" as const, status: "POSTED", accountId: "acc-savings", currencyCode: "BRL" };
+    await run(userId, fake({ accounts: [checking, savingsAccount], transactions: [out, first, second] }).client);
+    expect(await prisma.ledgerEntry.count({ where: { userId, deletedAt: null } })).toBe(0);
+    expect(await prisma.pluggyExternalRef.count({ where: { userId } })).toBe(0);
+    const review = await prisma.pluggyReview.findFirstOrThrow({ where: { userId, status: "open" } });
+    expect(review.draft).toMatchObject({ reason: "ambiguous" });
+  });
+
+  it("books a card bill payment as a transfer, skips pending, and does not book a card credit as income", async () => {
+    const userId = "pluggy-card";
+    const { fixture, item } = await connect(userId, { brokerageId: null });
+    await mapChecking(item.id, fixture.pfChecking);
+    const card = snapshot.accounts[1] as PluggyAccount;
+    await prisma.pluggyAccountLink.create({ data: { itemRowId: item.id, pluggyAccountId: card.id, name: "Cartão", type: "CREDIT", capitalAccountId: fixture.card } });
+    const billOut = { id: "tx-bill", description: "Pagamento fatura", amount: 320, date: "2026-10-16T12:00:00.000Z", type: "DEBIT" as const, status: "POSTED", accountId: checking.id, currencyCode: "BRL" };
+    const billIn = { id: "tx-bill-card", description: "Pagamento recebido", amount: 320, date: "2026-10-16T12:00:00.000Z", type: "CREDIT" as const, status: "POSTED", accountId: card.id, currencyCode: "BRL" };
+    const refund = { id: "tx-refund", description: "Estorno", amount: 15, date: "2026-10-16T12:00:00.000Z", type: "CREDIT" as const, status: "POSTED", accountId: card.id, currencyCode: "BRL" };
+    const pending = { id: "tx-pending", description: "Compra pendente", amount: 9, date: "2026-10-16T12:00:00.000Z", type: "DEBIT" as const, status: "PENDING", accountId: card.id, currencyCode: "BRL" };
+    await run(userId, fake({ accounts: [checking, card], transactions: [billOut, billIn, refund, pending] }).client);
+    const entries = await prisma.ledgerEntry.findMany({ where: { userId, deletedAt: null } });
+    expect(entries).toHaveLength(2);
+    expect(entries.every((row) => row.kind === "transfer")).toBe(true);
+    expect((await prisma.transferGroup.findFirstOrThrow({ where: { userId } })).direction).toBe("card_payment");
+    expect(await prisma.ledgerEntry.count({ where: { userId, kind: "income" } })).toBe(0);
+    const review = await prisma.pluggyReview.findFirstOrThrow({ where: { userId, status: "open" } });
+    expect(review.draft).toMatchObject({ pluggyId: refund.id, reason: "card_credit" });
+    expect(await prisma.pluggyExternalRef.count({ where: { userId, pluggyId: pending.id } })).toBe(0);
+  });
+
+  it("books a caixinha deposit as a transfer into the brokerage", async () => {
+    const userId = "pluggy-caixa";
+    const { fixture, item } = await connect(userId);
+    await mapChecking(item.id, fixture.pfChecking);
+    const apply = { id: "tx-caixa", description: "Aplicação caixinha", amount: 50, date: "2026-10-16T12:00:00.000Z", type: "DEBIT" as const, status: "POSTED", accountId: checking.id, currencyCode: "BRL" };
+    await run(userId, fake({ accounts: [checking], transactions: [apply] }).client);
+    const entries = await prisma.ledgerEntry.findMany({ where: { userId, deletedAt: null } });
+    expect(entries).toHaveLength(2);
+    expect(entries.every((row) => row.kind === "transfer")).toBe(true);
+    expect(entries.some((row) => row.accountId === fixture.broker)).toBe(true);
+    expect((await prisma.transferGroup.findFirstOrThrow({ where: { userId } })).direction).toBe("investment_deposit");
+  });
+
+  it("finishes the sync when one transaction fails and leaves the model failure unbooked", async () => {
+    const userId = "pluggy-partial";
+    const { item } = await connect(userId);
+    const guesser: IncomeGuesser = async () => {
+      throw new Error("haiku down");
+    };
+    const report = await run(
+      userId,
+      fake({
+        investments: assetById("inv-petr4", "inv-cdb", "inv-other"),
+        investmentTransactions: txById("itx-jcp", "itx-buy", "itx-guess"),
+      }).client,
+      guesser,
+    );
+    expect(report.items[0]?.status).toBe("ok");
+    const stored = await prisma.pluggyItem.findFirstOrThrow({ where: { id: item.id } });
+    expect(stored.lastSuccessAt).not.toBeNull();
+    const ops = await prisma.investmentOperation.findMany({ where: { holding: { account: { userId } } } });
+    expect(ops.map((op) => op.type)).toEqual(["buy"]);
+    expect(await prisma.pluggyExternalRef.count({ where: { userId, pluggyId: "itx-jcp" } })).toBe(0);
+    expect(await prisma.pluggyExternalRef.count({ where: { userId, pluggyId: "itx-guess" } })).toBe(0);
+    const failed = await prisma.pluggyReview.findFirstOrThrow({ where: { userId, draft: { path: ["pluggyId"], equals: "itx-jcp" } } });
+    expect(failed.kind).toBe("conflict");
+    const draft = await prisma.pluggyReview.findFirstOrThrow({ where: { userId, kind: "low_confidence" } });
+    expect(draft.draft).toMatchObject({ event: "income", pluggyId: "itx-guess", incomeType: "fixed_income_interest", confidence: 0 });
+  });
+
+  it("refuses to confirm a sale as income", async () => {
+    const userId = "pluggy-sale";
+    const { item } = await connect(userId);
+    const review = await prisma.pluggyReview.create({
+      data: { userId, itemRowId: item.id, kind: "low_confidence", draft: { event: "sell", pluggyId: "itx-sell", gross: 40 } },
+    });
+    await expect(resolvePluggyReview(userId, review.id, "confirm", null, prisma, { incomeType: "dividend" })).rejects.toThrow(/not income/);
+    expect(await prisma.investmentOperation.count({ where: { holding: { account: { userId } } } })).toBe(0);
+  });
+
+  it("matches a renewed item by the last four digits and links an entry that already has a ref", async () => {
+    const userId = "pluggy-renew";
+    const { fixture, item } = await connect(userId, { brokerageId: null });
+    await prisma.pluggyAccountLink.create({
+      data: { itemRowId: item.id, pluggyAccountId: "acc-old", name: "Conta ••••7890", type: "BANK", numberLast4: "7890", capitalAccountId: fixture.pfChecking },
+    });
+    const manual = await createEntry(userId, { kind: "expense", accountId: fixture.pfChecking, amount: 42.5, date: "2026-10-10", description: "Já lançado" }, prisma);
+    await prisma.pluggyExternalRef.create({ data: { userId, pluggyId: "tx-old-pluggy", ledgerEntryId: manual.entryIds[0], matchKind: "created" } });
+    const renewed = { ...checking, id: "acc-new" };
+    const renewedDebit = { ...debit, accountId: "acc-new" };
+    await run(userId, fake({ accounts: [renewed], transactions: [renewedDebit] }).client);
+    const link = await prisma.pluggyAccountLink.findFirstOrThrow({ where: { itemRowId: item.id, pluggyAccountId: "acc-new" } });
+    expect(link.capitalAccountId).toBe(fixture.pfChecking);
+    expect(link.numberLast4).toBe("7890");
+    const rows = await prisma.ledgerEntry.findMany({ where: { userId, deletedAt: null } });
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.description).toBe("Já lançado");
+    const ref = await prisma.pluggyExternalRef.findUniqueOrThrow({ where: { userId_pluggyId: { userId, pluggyId: debit.id } } });
+    expect(ref.matchKind).toBe("linked");
+    expect(ref.ledgerEntryId).toBe(manual.entryIds[0]);
+  });
+
+  it("records a skipped run when the item is already syncing", async () => {
+    const userId = "pluggy-busy";
+    const { item } = await connect(userId, { brokerageId: null });
+    await prisma.pluggyItem.update({ where: { id: item.id }, data: { syncingAt: NOW } });
+    const report = await run(userId, fake({ accounts: [checking], transactions: [debit] }).client);
+    expect(report.items[0]?.status).toBe("busy");
+    const runs = await prisma.pluggySyncRun.findMany({ where: { itemRowId: item.id } });
+    expect(runs.map((run) => run.status)).toEqual(["skipped"]);
+    expect(await prisma.ledgerEntry.count({ where: { userId } })).toBe(0);
   });
 });

@@ -323,6 +323,9 @@
     "business": "Business",
     "sync": "Sync now",
     "syncing": "Syncing…",
+    "cutoff": "Import from",
+    "incomeType": "Income type",
+    "origin": "Origin",
     "remove": "Remove",
     "lastSync": "Last sync: {when}",
     "never": "not yet",
@@ -354,6 +357,17 @@
       "conflict": "Conflict",
       "low_confidence": "Uncertain classification",
       "position": "Position mismatch"
+    },
+    "incomeTypes": {
+      "dividend": "Dividend",
+      "jcp": "JCP",
+      "fii_income": "FII income",
+      "fixed_income_interest": "Fixed income"
+    },
+    "origins": {
+      "BR": "Brazil",
+      "BDR": "BDR",
+      "EXTERIOR": "Abroad"
     }
   }
 }

@@ -12,7 +12,7 @@ describe("classifyByRule", () => {
     const jcp = classifyByRule(interest({ ticker: "PETR4", assetSubtype: "STOCK", incomeTax: 15, description: "provento" }));
     expect(jcp).toMatchObject({ event: "income", incomeType: "jcp", taxWithheld: 15, gross: 100, source: "rule", confidence: 1 });
     const dividend = classifyByRule(interest({ ticker: "PETR4", assetSubtype: "STOCK", incomeTax: 0 }));
-    expect(dividend).toMatchObject({ event: "income", incomeType: "dividend", origin: "br", taxWithheld: 0 });
+    expect(dividend).toMatchObject({ event: "income", incomeType: "dividend", origin: "BR", taxWithheld: 0 });
     expect(classifyByRule(interest({ description: "Juros sobre capital próprio", ticker: "ZZTOP" }))).toMatchObject({ incomeType: "jcp" });
   });
 
@@ -22,7 +22,7 @@ describe("classifyByRule", () => {
       taxWithheld: 0,
       origin: null,
     });
-    expect(classifyByRule(interest({ ticker: "AAPL34", incomeTax: 1 }))).toMatchObject({ incomeType: "dividend", origin: "bdr", taxWithheld: 1 });
+    expect(classifyByRule(interest({ ticker: "AAPL34", incomeTax: 1 }))).toMatchObject({ incomeType: "dividend", origin: "BDR", taxWithheld: 1 });
   });
 
   it("treats amortization as a cost-basis event and never as income", () => {
@@ -45,16 +45,21 @@ describe("classifyInvestment", () => {
   it("books the low-confidence guess and flags it for review", async () => {
     const result = await classifyInvestment(interest({ ticker: "ZZTOP", assetType: "OTHER", assetSubtype: "OTHER" }), async () => ({
       incomeType: "dividend",
-      origin: "exterior",
+      origin: "EXTERIOR",
       confidence: 0.4,
     }));
-    expect(result).toMatchObject({ event: "income", incomeType: "dividend", origin: "exterior", confidence: 0.4, source: "llm" });
+    expect(result).toMatchObject({ event: "income", incomeType: "dividend", origin: "EXTERIOR", confidence: 0.4, source: "llm" });
     expect(needsReview(result)).toBe(true);
   });
 
-  it("books a zero-confidence interest guess when the model is absent", async () => {
-    const result = await classifyInvestment(interest({ ticker: "ZZTOP", assetType: "OTHER" }), null);
-    expect(result).toMatchObject({ incomeType: "interest", confidence: 0, source: "llm" });
-    expect(needsReview(result)).toBe(true);
+  it("keeps a missing or failing model as an unbooked fixed-income draft", async () => {
+    const absent = await classifyInvestment(interest({ ticker: "ZZTOP", assetType: "OTHER" }), null);
+    expect(absent).toMatchObject({ incomeType: "fixed_income_interest", confidence: 0, source: "llm" });
+    expect(needsReview(absent)).toBe(true);
+    const failed = await classifyInvestment(interest({ ticker: "ZZTOP", assetType: "OTHER" }), async () => {
+      throw new Error("haiku down");
+    });
+    expect(failed).toMatchObject({ incomeType: "fixed_income_interest", confidence: 0, source: "llm" });
+    expect(needsReview(failed)).toBe(true);
   });
 });

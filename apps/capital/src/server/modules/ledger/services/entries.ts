@@ -526,6 +526,9 @@ async function updateSimpleIn(
     },
   });
   records.push({ model: "LedgerEntry", recordId: entry.id, before: snapshot(entry), after: snapshot(updated) });
+  // The cash leg of an investment operation: editing it by hand locks the
+  // operation so a later sync does not write over the change.
+  await tx.investmentOperation.updateMany({ where: { cashEntryId: entry.id }, data: { syncLocked: true } });
 }
 
 type AccountWithEntity = Account & { entity: Entity };
