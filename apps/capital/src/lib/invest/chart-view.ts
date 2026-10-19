@@ -7,7 +7,7 @@
 import type { LedgerGroup } from "@capital/server/modules/ledger/contracts";
 import { COUNT_KEY, SUM_KEY, type ChartType } from "@/lib/ledger/columns";
 import type { HoldingRow, HoldingsTable } from "./holdings-view";
-import { allocationSeriesKey, incomeBaseValue, incomeTypeKey, originKey, sortSeriesKeys } from "./passive-income";
+import { allocationSeriesKey, incomeTypeKey, originKey, sortSeriesKeys } from "./passive-income";
 import {
   monthsBetween,
   opBaseValue,

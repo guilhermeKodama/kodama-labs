@@ -155,7 +155,7 @@ export async function convertIncomeToDividend(userId: string, input: ConvertInco
       throw new LedgerError("Only an income transaction can become a dividend", 422, { code: "dividend.not_income" });
     }
     const holding = await getOwnedHolding(userId, input.holdingId, tx);
-    const cash = await getOwnedAccount(userId, entry.accountId, tx);
+    await getOwnedAccount(userId, entry.accountId, tx);
     const fx = await loadFx(userId, tx);
     const entity = await tx.entity.findUniqueOrThrow({ where: { id: holding.account.entityId }, select: { kind: true } });
     const passiveIncome = countsAsPassiveIncome({ entityKind: entity.kind, incomeType: input.incomeType });
