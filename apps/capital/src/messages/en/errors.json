@@ -150,6 +150,10 @@
     "tax_exceeds_amount": "The tax withheld can't exceed the gross amount.",
     "credit_account_invalid": "Income can only be credited to a checking or cash account."
   },
+  "dividend": {
+    "not_income": "Only an income transaction can become a dividend. Transfers, expenses and investment entries stay as they are.",
+    "currency": "The amount's currency must be the holding's currency or the cash account's currency."
+  },
   "aporte": {
     "broker_required": "A contribution has to go to a brokerage account.",
     "source_invalid": "The money for a contribution has to come from a checking or cash account.",

@@ -148,6 +148,8 @@ export const ERROR_CODES = {
   "operation.income_only": "Only income operations can have an income type, tax withheld or a credit account",
   "operation.tax_exceeds_amount": "The tax withheld cannot exceed the gross amount",
   "operation.credit_account_invalid": "Income can only be credited to a checking or cash account",
+  "dividend.not_income": "Only an income transaction can become a dividend; transfers, expenses and investment entries stay as they are",
+  "dividend.currency": "The amount's currency must be the holding's currency or the cash account's currency",
   "aporte.broker_required": "A contribution (aporte) goes to a brokerage account",
   "aporte.source_invalid": "The money of a contribution comes from a checking or cash account",
   "aporte.holding_mismatch": "The asset bought is not on the contribution's broker",

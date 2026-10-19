@@ -66,7 +66,7 @@ export function sellPreview(position: Position | null, trade: TradeInput): SellP
   };
 }
 
-/** Income: tax withheld at source by type (JCP 15%; dividends, FII income and fixed-income interest here exempt or net). */
-export function withheldTax(incomeType: "dividend" | "jcp" | "fii_income" | "interest", gross: number): number {
+/** Income: tax withheld at source by type (JCP 15%). Fixed-income interest is entered as withheld; the preview does not guess the regressive rate. */
+export function withheldTax(incomeType: "dividend" | "jcp" | "fii_income" | "interest" | "fixed_income_interest", gross: number): number {
   return incomeType === "jcp" ? Math.round(Math.max(0, finite(gross)) * 0.15 * 100) / 100 : 0;
 }

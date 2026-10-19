@@ -7,13 +7,14 @@
 import type { LedgerGroup } from "@capital/server/modules/ledger/contracts";
 import { COUNT_KEY, SUM_KEY, type ChartType } from "@/lib/ledger/columns";
 import type { HoldingRow, HoldingsTable } from "./holdings-view";
+import { allocationSeriesKey, incomeBaseValue, incomeTypeKey, originKey, sortSeriesKeys } from "./passive-income";
 import {
   monthsBetween,
   opBaseValue,
   opsPeriodRange,
   type OpsViewConfig,
 } from "./ops-view";
-import type { AllocationClass, Operation } from "./types";
+import type { Operation } from "./types";
 
 export const HOLDINGS_CHART_TYPES: readonly ChartType[] = [
   "bar",
@@ -33,7 +34,7 @@ export const HOLDINGS_METRICS = ["marketValue", "share", "result"] as const;
 export type HoldingsMetric = (typeof HOLDINGS_METRICS)[number];
 export const OPS_METRICS = ["sum", "count", "avg"] as const;
 export type OpsMetric = (typeof OPS_METRICS)[number];
-export const OPS_CHART_AXES = ["month", "type", "allocationClass"] as const;
+export const OPS_CHART_AXES = ["month", "type", "incomeType", "origin", "allocationClass"] as const;
 export type OpsChartAxis = (typeof OPS_CHART_AXES)[number];
 
 export interface InvestChart<M extends string> {
@@ -82,9 +83,7 @@ export function normalizeOpsChart(raw: unknown): InvestChart<OpsMetric> {
 
 /** The axis of an operations chart: the view's grouping, or the month (also for "none"). */
 export function opsChartAxis(groupBy: OpsViewConfig["groupBy"]): OpsChartAxis {
-  return groupBy === "type" || groupBy === "allocationClass"
-    ? groupBy
-    : "month";
+  return (OPS_CHART_AXES as readonly string[]).includes(groupBy) ? (groupBy as OpsChartAxis) : "month";
 }
 
 export interface HoldingsChartGroups {
@@ -156,20 +155,11 @@ export function holdingsChartGroups(
   };
 }
 
-const CLASS_ORDER: readonly AllocationClass[] = [
-  "fixed_income",
-  "br_stocks",
-  "fii",
-  "international",
-  "crypto",
-  "cash",
-];
-
 /**
  * Operations → chart groups on the view's axis (month zero-filled and
- * ascending; type and class by |Σ| descending), with the class as the
- * series when the view says so. Values are in the base currency (income net
- * of tax).
+ * ascending; other axes by |Σ| descending), with the chosen series stacked
+ * inside each category. Income uses the stored base amount. A row with no
+ * holding is "unlinked", not cash.
  */
 export function opsChartGroups(
   ops: readonly Operation[],
@@ -178,15 +168,23 @@ export function opsChartGroups(
   rateFor: (currency: string | null) => number,
 ): LedgerGroup[] {
   const axis = opsChartAxis(config.groupBy);
-  const bySeries =
-    config.series === "allocationClass" && axis !== "allocationClass";
-  const classOf = (op: Operation): string => op.allocationClass ?? "cash";
+  const seriesMode =
+    config.series === "incomeType" || config.series === "origin" || config.series === "allocationClass"
+      ? config.series
+      : null;
+  const bySeries = seriesMode !== null && seriesMode !== axis;
+  const seriesOf = (op: Operation): string =>
+    seriesMode === "incomeType" ? incomeTypeKey(op) : seriesMode === "origin" ? originKey(op) : allocationSeriesKey(op);
   const keyOf = (op: Operation): string =>
     axis === "month"
       ? op.date.slice(0, 7)
       : axis === "type"
         ? op.type
-        : classOf(op);
+        : axis === "incomeType"
+          ? incomeTypeKey(op)
+          : axis === "origin"
+            ? originKey(op)
+            : allocationSeriesKey(op);
 
   const acc = new Map<
     string,
@@ -207,14 +205,15 @@ export function opsChartGroups(
     const key = keyOf(op);
     if (axis === "month" && !acc.has(key)) continue;
     const a = acc.get(key) ?? { sum: 0, count: 0, series: new Map() };
-    const value = opBaseValue(op, rateFor);
+    const value = opBaseValue(op, rateFor, config.basis ?? "net");
     a.sum += value;
     a.count += 1;
     if (bySeries) {
-      const s = a.series.get(classOf(op)) ?? { sum: 0, count: 0 };
+      const seriesKey = seriesOf(op);
+      const s = a.series.get(seriesKey) ?? { sum: 0, count: 0 };
       s.sum += value;
       s.count += 1;
-      a.series.set(classOf(op), s);
+      a.series.set(seriesKey, s);
     }
     acc.set(key, a);
   }
@@ -223,17 +222,14 @@ export function opsChartGroups(
     count: a.count,
     values: { [SUM_KEY]: a.sum, [COUNT_KEY]: a.count },
     ...(bySeries && {
-      children: [...a.series.entries()]
-        .sort(
-          (x, y) =>
-            CLASS_ORDER.indexOf(x[0] as AllocationClass) -
-            CLASS_ORDER.indexOf(y[0] as AllocationClass),
-        )
-        .map(([k, s]) => ({
+      children: sortSeriesKeys([...a.series.keys()], seriesMode ?? "allocationClass").map((k) => {
+        const s = a.series.get(k)!;
+        return {
           key: k,
           count: s.count,
           values: { [SUM_KEY]: s.sum, [COUNT_KEY]: s.count },
-        })),
+        };
+      }),
     }),
   }));
   if (axis !== "month")

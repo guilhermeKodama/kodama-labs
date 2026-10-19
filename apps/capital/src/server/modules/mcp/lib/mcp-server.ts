@@ -35,6 +35,7 @@ import {
   updateHoldingPrice,
 } from "../tools/investments";
 import { recordInvestmentContribution, recordInvestmentRedemption } from "../../investments/services/holding-cashflow";
+import { convertIncomeToDividend, recordDividend } from "../../investments/services/dividends";
 import { createTransfer, listLedgerAccounts, listTransfers } from "../tools/transfers";
 import { getFirePlan, updateFirePhaseContribution } from "../tools/fire";
 import {
@@ -1441,6 +1442,71 @@ export function createCapitalMcpServer(userId: string, db: DbClient, opts: { rea
     },
     async (params) => {
       const result = await recordInvestmentRedemption(userId, params, db);
+      return { content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }] };
+    },
+  );
+
+  const dividendFields = {
+    holdingId: z.string().uuid(),
+    incomeType: z.enum(["fii_income", "dividend", "jcp", "fixed_income_interest"]).describe(
+      "fii_income is tax-exempt FII income. dividend is a dividend (origin BR, BDR or EXTERIOR). jcp withholds income tax at source. fixed_income_interest is caixinha, CDB or Tesouro interest realized on redemption, with income tax withheld. Interest on a PJ caixinha is recorded but is not personal passive income.",
+    ),
+    withholdingTax: z.number().nonnegative().optional().describe("Tax withheld at source, in the same currency as amount. The cash credited is amount minus this. Omit for zero."),
+    origin: z.enum(["BR", "BDR", "EXTERIOR"]).optional().describe("Dividend origin. Defaults from the asset class: stocks BR, BDR, international listings EXTERIOR. Ignored unless incomeType is dividend."),
+  };
+
+  server.registerTool(
+    "record_dividend",
+    {
+      description:
+        "Record a provento linked to a holding and credit the cash account, in one undo batch. " +
+        "This is the only way to attach income to a holding: a plain income in category Proventos shows as unlinked, not as the asset. " +
+        "Creates the same cash leg the ledger uses for dividends (kind investment, linked to the holding). " +
+        "Do not also call create_transaction or create_transfer — the cash is credited once.\n\n" +
+        "amount is the gross, in currency. currency must be the holding's currency or the cash account's. " +
+        "withholdingTax, in that same currency, is optional; the account receives the net (gross − tax). " +
+        "The cash leg stores the exchange rate of date, not today's rate. " +
+        "incomeType is fii_income (Rendimento FII, tax-exempt), dividend, jcp (IR withheld at source) or fixed_income_interest (Juros de caixinha/CDB/Tesouro). " +
+        "origin (BR, BDR, EXTERIOR) applies to dividends and defaults from the asset class. " +
+        "description defaults to \"Dividendo <ticker>\" (or JCP / Rendimento FII / Juros), using the holding name when it has no ticker.\n\n" +
+        "Proventos means fii_income + dividend + jcp. fixed_income_interest on a business entity (the PJ caixinha) is recorded and returned with passiveIncome false: it belongs in the PJ books, not in personal Renda passiva. " +
+        "Amortization, bonus shares, sales, redemptions and transfers are not income; do not use this tool for them.\n\n" +
+        "The same holding, date, income type, cash account and net amount returns the existing operation (duplicate: true) and writes nothing, including a parallel double-submit. " +
+        "To attach an income transaction that already exists, use convert_income_to_dividend instead of recording a second credit.",
+      inputSchema: z.object({
+        ...dividendFields,
+        cashAccountId: z.string().uuid().describe("Checking or cash account that receives the net. A ledger account id from list_ledger_accounts."),
+        amount: z.number().positive().describe("Gross amount, in currency."),
+        date: DateStringSchema,
+        currency: z.string().min(3).max(3),
+        description: z.string().optional(),
+      }),
+    },
+    async (params) => {
+      const result = await recordDividend(userId, { ...params, currency: params.currency.toUpperCase() }, db);
+      return { content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }] };
+    },
+  );
+
+  server.registerTool(
+    "convert_income_to_dividend",
+    {
+      description:
+        "Link an existing income transaction to a holding as a provento, without crediting the cash again. " +
+        "The income entry becomes the dividend's cash leg, so the chart counts it once, on the asset, at the amount and exchange rate already stored on the transaction. " +
+        "transactionId is the income's ledger entry id. incomeType is required (fii_income, dividend, jcp, fixed_income_interest). " +
+        "withholdingTax is optional, in the transaction's currency: the entry amount stays the net that was received, and gross is net + tax. " +
+        "origin defaults from the asset class for dividends.\n\n" +
+        "Transfers, expenses and investment entries are rejected. A transfer is not income. " +
+        "Calling again, or converting income that already matches a dividend of this holding (same amount within 0.01, within 7 days), returns that operation (duplicate: true) and does not create a second one. " +
+        "Use this to reclassify FII income that was booked as plain income in category Proventos.",
+      inputSchema: z.object({
+        transactionId: z.string().uuid(),
+        ...dividendFields,
+      }),
+    },
+    async (params) => {
+      const result = await convertIncomeToDividend(userId, params, db);
       return { content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }] };
     },
   );

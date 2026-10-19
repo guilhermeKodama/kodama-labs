@@ -23,6 +23,7 @@ import type {
 } from "@/lib/invest/holdings-view";
 import type { OpsViewConfig } from "@/lib/invest/ops-view";
 import type { AllocationClass, Operation } from "@/lib/invest/types";
+import { useIncomeSeriesLabel } from "./charts";
 import {
   buildChartData,
   type ChartCategory,
@@ -212,12 +213,16 @@ export function OpsChart({
   const fmt = useFmt();
   const chart = normalizeOpsChart(config.chart);
   const axis = opsChartAxis(config.groupBy);
+  const labelSeries = useIncomeSeriesLabel();
   const groups = useMemo(
     () => opsChartGroups(ops, config, today, rateFor),
     [ops, config, today, rateFor],
   );
-  const hasSeries =
-    config.series === "allocationClass" && axis !== "allocationClass";
+  const seriesMode =
+    config.series === "incomeType" || config.series === "origin" || config.series === "allocationClass"
+      ? config.series
+      : null;
+  const hasSeries = seriesMode !== null && seriesMode !== axis;
   const data = useMemo(
     () =>
       buildChartData(groups, {
@@ -233,9 +238,8 @@ export function OpsChart({
     if (cat.others) return tl("charts.others");
     const key = cat.key ?? "";
     if (axis === "month") return fmt.monthAbbr(Number(key.slice(5, 7)));
-    return axis === "type"
-      ? ti(`opType.${key as "buy"}`)
-      : ti(`allocationClass.${key as AllocationClass}`);
+    if (axis === "type") return ti(`opType.${key as "buy"}`);
+    return labelSeries(key);
   };
   const metricLabel =
     chart.metric === "count"
@@ -243,15 +247,20 @@ export function OpsChart({
       : chart.metric === "avg"
         ? tl("charts.metrics.avg")
         : t("ops.total");
-  const seriesLabel = (key: string | null) =>
-    hasSeries && key
-      ? ti(`allocationClass.${key as AllocationClass}`)
-      : metricLabel;
+  const seriesLabel = (key: string | null) => (hasSeries && key ? labelSeries(key) : metricLabel);
+  const seriesName =
+    seriesMode === "incomeType"
+      ? t("display.seriesType")
+      : seriesMode === "origin"
+        ? t("display.seriesOrigin")
+        : seriesMode === "allocationClass"
+          ? t("display.seriesClass")
+          : "";
   const value = (v: number) =>
     chart.metric === "count" ? fmt.number(v, 0) : fmt.money0(v, currency);
   const cumulative = chart.cumulative && CUMULATIVE_TYPES.includes(chart.type);
   const caption = [
-    `${t(`display.axis.${axis}`)}${hasSeries ? ` × ${t("display.seriesClass")}` : ""}`,
+    `${t(`display.axis.${axis}`)}${hasSeries && seriesName ? ` × ${seriesName}` : ""}`,
     metricLabel,
     ...(cumulative ? [tl("charts.cumulative")] : []),
     ...(chart.top && chart.type !== "line" && chart.type !== "area"

@@ -108,6 +108,8 @@ The server registers **42 tools**. Read-only API tokens receive only the read to
 | `add_investment_asset` | write | Open a new holding on a brokerage account |
 | `record_investment_contribution` | write | Aporte into a holding, including the cash transfer |
 | `record_investment_redemption` | write | Resgate out of a holding, including the cash transfer |
+| `record_dividend` | write | Record a provento on a holding and credit the cash once |
+| `convert_income_to_dividend` | write | Link an existing income row to a holding without a second credit |
 | `update_holding_price` | write | Set the current price or total value; cost stays |
 | `get_fire_plan` | read | Read the FIRE plan and the current month's contribution |
 | `update_fire_phase_contribution` | write | Set one FIRE phase's monthly contribution |
@@ -431,7 +433,25 @@ A resgate: the sell and the withdrawal back to a checking or cash account, one u
 
 `by_units` sells that many units. `amount` is what leaves the holding, in the holding's currency. When the cash account's currency differs, `toAmount` is what arrives there. The same holding, date, and amount returns the existing redemption (`duplicate: true`), including a full payout retried after the position is already empty. A cross-entity duplicate lists every transfer group, including the hop. `notes`, when passed, are kept and `by_value` is appended. An archived broker is rejected.
 
-### 16. `update_holding_price`
+### 16. `record_dividend`
+
+Records a provento linked to a holding and credits the cash account, in one undo batch. This is the only way to attach income to a holding: a plain income in category Proventos shows as unlinked, not as the asset. The cash leg is the same shape the ledger uses for dividends (kind `investment`, linked to the holding). Do not also call `create_transaction` or `create_transfer`.
+
+`amount` is the gross, in `currency`. `currency` must be the holding's currency or the cash account's. `withholdingTax`, in that same currency, is optional; the account receives the net. The cash leg stores the exchange rate of `date`, not today's rate.
+
+`incomeType` is `fii_income` (Rendimento FII, tax-exempt), `dividend`, `jcp` (income tax withheld at source) or `fixed_income_interest` (caixinha, CDB or Tesouro interest). `origin` (`BR`, `BDR`, `EXTERIOR`) applies to dividends and defaults from the asset class. `description` defaults to `Dividendo <ticker>` (or JCP / Rendimento FII / Juros), using the holding name when it has no ticker.
+
+Proventos means `fii_income` + `dividend` + `jcp`. `fixed_income_interest` on a business entity is recorded and returned with `passiveIncome: false`. Amortization, bonus shares, sales, redemptions and transfers are not income.
+
+The same holding, date, income type, cash account and net amount returns the existing operation (`duplicate: true`) and writes nothing.
+
+### 17. `convert_income_to_dividend`
+
+Links an existing income transaction to a holding as a provento without crediting the cash again. The income entry becomes the dividend's cash leg, so the chart counts it once, on the asset, at the amount and exchange rate already stored. `transactionId` is the income's ledger entry id. `incomeType` is required. `withholdingTax` is optional, in the transaction's currency: the entry amount stays the net, and gross is net + tax.
+
+Transfers, expenses and investment entries are rejected. Calling again, or converting income that already matches a dividend of this holding (same amount within 0.01, within 7 days), returns that operation (`duplicate: true`).
+
+### 18. `update_holding_price`
 
 Sets the current price and leaves average cost and total invested untouched. Pass exactly one of `price` (per unit) or `totalValue` (the whole position: price becomes `totalValue / quantity`). For the caixinha, `totalValue` is the new gross value. `totalValue` on a quantity of 0 is rejected. A negative price is rejected. Zero is allowed. `date` is the day of the price and cannot be in the future; omit it to stamp now.
 
