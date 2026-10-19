@@ -150,6 +150,14 @@
     "tax_exceeds_amount": "The tax withheld can't exceed the gross amount.",
     "credit_account_invalid": "Income can only be credited to a checking or cash account."
   },
+  "dividend": {
+    "not_income": "Only an income transaction can become a dividend. Transfers, expenses and investment entries stay as they are.",
+    "currency": "The amount's currency must be the holding's currency or the cash account's currency.",
+    "extra_cash": "This income matches dividend {operationId}, which already has a cash leg. Entry {transactionId} is extra cash and was not linked.",
+    "unlinked_income": "Income {transactionId} already has this net amount. Use convert_income_to_dividend with that transactionId instead of crediting again.",
+    "fii_withholding": "FII income is tax-exempt, so withholdingTax has to be zero.",
+    "entity_mismatch": "The cash account and the holding have to belong to the same entity."
+  },
   "aporte": {
     "broker_required": "A contribution has to go to a brokerage account.",
     "source_invalid": "The money for a contribution has to come from a checking or cash account.",

@@ -227,7 +227,7 @@ describe("MCP Server End-to-End", () => {
       expect(data.id).toBe(2);
       expect(data.result).toHaveProperty("tools");
       expect(Array.isArray(data.result.tools)).toBe(true);
-      expect(data.result.tools.length).toBe(42); // 36 previous + ledger accounts, transfers, contribution, redemption, holding price
+      expect(data.result.tools.length).toBe(44); // 42 previous + record_dividend, convert_income_to_dividend
 
       // Check for expected tools
       const result = data.result as { tools: Array<{ name: string }> };
@@ -251,6 +251,8 @@ describe("MCP Server End-to-End", () => {
       expect(toolNames).toContain("record_investment_contribution");
       expect(toolNames).toContain("record_investment_redemption");
       expect(toolNames).toContain("update_holding_price");
+      expect(toolNames).toContain("record_dividend");
+      expect(toolNames).toContain("convert_income_to_dividend");
     });
 
     it("should handle tools/call with bulk_create_transactions in dry-run mode", async () => {
@@ -426,7 +428,7 @@ describe("MCP Server End-to-End", () => {
 
       // List tools
       const tools = await client.listTools();
-      expect(tools.tools.length).toBe(42); // 36 previous + ledger accounts, transfers, contribution, redemption, holding price
+      expect(tools.tools.length).toBe(44); // 42 previous + record_dividend, convert_income_to_dividend
       const toolNames = tools.tools.map((tool) => tool.name);
       expect(toolNames).toContain("import_credit_card_statement");
       expect(toolNames).toContain("mark_transaction_as_card_settlement");
@@ -444,6 +446,8 @@ describe("MCP Server End-to-End", () => {
       expect(toolNames).toContain("record_investment_contribution");
       expect(toolNames).toContain("record_investment_redemption");
       expect(toolNames).toContain("update_holding_price");
+      expect(toolNames).toContain("record_dividend");
+      expect(toolNames).toContain("convert_income_to_dividend");
 
       // Call a tool
       const result = await client.callTool({

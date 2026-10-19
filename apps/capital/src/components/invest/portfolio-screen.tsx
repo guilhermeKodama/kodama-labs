@@ -45,6 +45,7 @@ import {
   INCOME_TYPES,
   isIncome,
   monthlyBars,
+  opBaseValue,
   opsPeriodRange,
   type OpsViewConfig,
 } from "@/lib/invest/ops-view";
@@ -664,8 +665,10 @@ function OpsView({
         holdingId: row.holdingId ?? "",
         ticker: row.ticker,
         name: row.name,
-        assetClass: null,
+        assetClass: row.assetClass,
         allocationClass: row.allocationClass,
+        dividendOrigin: row.dividendOrigin,
+        entityKind: row.entityKind,
         accountId: row.accountId,
         accountName: null,
         entityId: row.entityId,
@@ -677,6 +680,9 @@ function OpsView({
         totalAmount: row.totalAmount,
         fees: 0,
         taxWithheld: row.taxWithheld,
+        amountBase: row.amountBase,
+        grossBase: row.grossBase,
+        taxBase: row.taxBase,
         cashAmount: row.totalAmount - row.taxWithheld,
         date: row.date,
         notes: null,
@@ -726,7 +732,10 @@ function OpsView({
         <IncomeChart
           rows={bars.rows.map((r) => ({
             label: fmt.monthAbbr(Number(String(r.month).slice(5, 7))),
-            values: r as unknown as Record<string, number>,
+            total: r.total,
+            tax: r.tax,
+            values: r.values,
+            taxes: r.taxes,
           }))}
           series={bars.series}
         />
@@ -839,12 +848,7 @@ function OpsView({
           <span>{t("total")}</span>
           <span className={cn(MONO, "ml-auto")}>
             {fmt.money(
-              rows.reduce(
-                (sum, op) =>
-                  sum +
-                  (op.totalAmount - op.taxWithheld) * fx.rateFor(op.currency),
-                0,
-              ),
+              rows.reduce((sum, op) => sum + opBaseValue(op, fx.rateFor, config.basis), 0),
               fx.base,
             )}
           </span>

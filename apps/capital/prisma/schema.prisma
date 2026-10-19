@@ -90,11 +90,21 @@ enum AllocationClass {
 }
 
 // Kind of an income operation (dividend / yield_payment).
+// `fixed_income_interest` is interest realized on a caixinha, CDB or Tesouro.
+// `interest` is the same idea on rows written before that value existed.
 enum IncomeType {
   dividend
   jcp
   fii_income
   interest
+  fixed_income_interest
+}
+
+// Where a dividend was paid. Tax treatment follows the origin.
+enum DividendOrigin {
+  BR
+  BDR
+  EXTERIOR
 }
 
 enum FixedIncomeSubType {
@@ -815,9 +825,11 @@ model InvestmentOperation {
   totalAmount    Float // Total cash value of the transaction
   fees           Float                     @default(0) // Brokerage fees, taxes
   // Income operations: what kind of income, and the tax withheld at source
-  // (the cash leg is totalAmount - taxWithheld).
+  // (the cash leg is totalAmount - taxWithheld). Gross is totalAmount.
   incomeType     IncomeType?
   taxWithheld    Float                     @default(0)
+  // Set on dividends: Brazilian stock, BDR, or a foreign listing.
+  dividendOrigin DividendOrigin?
   date           DateTime
   notes          String?
   // Null means absolute (the quantity replaces the position). Legacy rows

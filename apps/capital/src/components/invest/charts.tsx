@@ -366,66 +366,173 @@ function ClassLegend({ classes }: { classes: AllocationClass[] }) {
   );
 }
 
-/** Proventos 12m: monthly bars (one series, or stacked by class). */
+const NAMED_SERIES_COLOR: Record<string, string> = {
+  total: CHART.bar,
+  fii_income: CHART_SERIES[3],
+  dividend: CHART_SERIES[1],
+  jcp: CHART_SERIES[2],
+  fixed_income_interest: CHART_SERIES[0],
+  interest: CHART_SERIES[0],
+  unlinked: CHART_SERIES[9],
+  br_stocks: CHART_SERIES[1],
+  bdr: CHART_SERIES[6],
+  exterior: CHART_SERIES[4],
+  fixed_income: CHART_SERIES[0],
+  fii: CHART_SERIES[3],
+  international: CHART_SERIES[4],
+  crypto: CHART_SERIES[5],
+  cash: CHART_SERIES[8],
+};
+
+/** Stable color for a passive-income segment. FII tickers take the next free swatch. */
+export function incomeSeriesColor(key: string, index: number): string {
+  return NAMED_SERIES_COLOR[key] ?? CHART_SERIES[index % CHART_SERIES.length];
+}
+
+/** Legend and tooltip name of one segment (type, origin, class, or a FII ticker). */
+export function useIncomeSeriesLabel() {
+  const ti = useTranslations("invest");
+  const t = useTranslations("invest.portfolio.ops");
+  return (key: string): string => {
+    if (key === "total") return t("total");
+    if (key === "unlinked") return t("unlinked");
+    if (key.startsWith("fii:")) return key.slice(4);
+    if (key === "fii_income" || key === "dividend" || key === "jcp" || key === "fixed_income_interest") return ti(`incomeType.${key}`);
+    if (key === "interest") return ti("incomeType.fixed_income_interest");
+    if (key === "bdr" || key === "exterior") return ti(`origin.${key}`);
+    if ((["fixed_income", "br_stocks", "fii", "international", "crypto", "cash"] as const).includes(key as AllocationClass)) {
+      return ti(`allocationClass.${key as AllocationClass}`);
+    }
+    return key;
+  };
+}
+
+export interface IncomeChartRow {
+  label: string;
+  total: number;
+  tax: number;
+  values: Record<string, number>;
+  taxes: Record<string, number>;
+}
+
+/**
+ * Proventos: one bar per month. Segments of a series (type, origin, class)
+ * stack into that month's total. The tooltip lists the total and each segment.
+ */
 export function IncomeChart({
   rows,
   series,
 }: {
-  rows: { label: string; values: Record<string, number> }[];
+  rows: IncomeChartRow[];
   series: string[];
 }) {
-  const ti = useTranslations("invest");
+  const t = useTranslations("invest.portfolio.ops");
   const fmt = useFmt();
+  const seriesLabel = useIncomeSeriesLabel();
+  const color = new Map(series.map((s, i) => [s, incomeSeriesColor(s, i)]));
   const data = rows.map((r) => ({
     label: r.label,
-    ...Object.fromEntries(
-      series.map((s) => [s, Math.round((r.values[s] ?? 0) * 100) / 100]),
-    ),
+    total: Math.round(r.total * 100) / 100,
+    tax: Math.round(r.tax * 100) / 100,
+    ...Object.fromEntries(series.map((s) => [s, Math.round((r.values[s] ?? 0) * 100) / 100])),
   }));
   return (
-    <div className="h-[200px]">
-      <ResponsiveContainer width="100%" height="100%">
-        <BarChart
-          data={data}
-          margin={{ top: 10, right: 4, left: 0, bottom: 0 }}
-        >
-          <CartesianGrid stroke={CHART.grid} vertical={false} />
-          <XAxis
-            dataKey="label"
-            tick={CHART_AXIS.tick}
-            stroke={CHART_AXIS.stroke}
-            tickLine={false}
-          />
-          <YAxis
-            tick={CHART_AXIS.tick}
-            stroke={CHART_AXIS.stroke}
-            tickLine={false}
-            axisLine={false}
-            width={52}
-            tickFormatter={(v) => fmt.number(Number(v), 0)}
-          />
-          <Tooltip
-            contentStyle={TOOLTIP_STYLE}
-            formatter={(v, name) => [
-              fmt.money(Number(v)),
-              name === "total"
-                ? ti("portfolio.ops.total")
-                : ti(`allocationClass.${name as AllocationClass}`),
-            ]}
-          />
-          {series.map((s) => (
-            <Bar
-              key={s}
-              dataKey={s}
-              stackId="a"
-              fill={
-                s === "total" ? CHART.bar : CLASS_COLOR[s as AllocationClass]
-              }
-              isAnimationActive={false}
+    <div className="flex flex-col gap-2">
+      <div className="h-[200px]">
+        <ResponsiveContainer width="100%" height="100%">
+          <BarChart data={data} margin={{ top: 10, right: 4, left: 0, bottom: 0 }}>
+            <CartesianGrid stroke={CHART.grid} vertical={false} />
+            <XAxis dataKey="label" tick={CHART_AXIS.tick} stroke={CHART_AXIS.stroke} tickLine={false} />
+            <YAxis
+              tick={CHART_AXIS.tick}
+              stroke={CHART_AXIS.stroke}
+              tickLine={false}
+              axisLine={false}
+              width={52}
+              tickFormatter={(v) => fmt.number(Number(v), 0)}
             />
+            <Tooltip
+              content={(props) => (
+                <IncomeTooltip
+                  active={props.active}
+                  label={props.label}
+                  payload={props.payload as IncomeTip[] | undefined}
+                  seriesLabel={seriesLabel}
+                  money={(v) => fmt.money(v)}
+                  totalLabel={t("tooltipTotal")}
+                  taxLabel={t("taxLabel")}
+                />
+              )}
+            />
+            {series.map((s) => (
+              <Bar key={s} dataKey={s} name={seriesLabel(s)} stackId="passive" fill={color.get(s)} isAnimationActive={false} />
+            ))}
+          </BarChart>
+        </ResponsiveContainer>
+      </div>
+      {series.length > 1 ? (
+        <div className="flex flex-wrap gap-x-3 gap-y-1 text-caption text-fg-3">
+          {series.map((s) => (
+            <span key={s} className="inline-flex items-center gap-1.5">
+              <span aria-hidden className="size-2 rounded-[2px]" style={{ background: color.get(s) }} />
+              {seriesLabel(s)}
+            </span>
           ))}
-        </BarChart>
-      </ResponsiveContainer>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+interface IncomeTip {
+  dataKey?: unknown;
+  value?: unknown;
+  color?: string;
+  payload?: { total?: number; tax?: number };
+}
+
+function IncomeTooltip({
+  active,
+  label,
+  payload,
+  seriesLabel,
+  money,
+  totalLabel,
+  taxLabel,
+}: {
+  active?: boolean;
+  label?: string | number;
+  payload?: IncomeTip[];
+  seriesLabel: (key: string) => string;
+  money: (v: number) => string;
+  totalLabel: string;
+  taxLabel: string;
+}) {
+  if (!active || !payload?.length) return null;
+  const row = payload[0]?.payload;
+  const segments = payload.filter((item) => Number(item.value) !== 0 && String(item.dataKey) !== "total");
+  return (
+    <div style={TOOLTIP_STYLE} className="flex min-w-[160px] flex-col gap-1 px-2.5 py-2">
+      <div className="font-medium">{label}</div>
+      <div className="flex items-center justify-between gap-4">
+        <span>{totalLabel}</span>
+        <span>{money(Number(row?.total ?? 0))}</span>
+      </div>
+      {segments.map((item) => (
+        <div key={String(item.dataKey)} className="flex items-center justify-between gap-4">
+          <span className="inline-flex items-center gap-1.5">
+            <span aria-hidden className="size-2 rounded-[2px]" style={{ background: item.color }} />
+            {seriesLabel(String(item.dataKey))}
+          </span>
+          <span>{money(Number(item.value))}</span>
+        </div>
+      ))}
+      {Number(row?.tax ?? 0) > 0 ? (
+        <div className="flex items-center justify-between gap-4 text-fg-3">
+          <span>{taxLabel}</span>
+          <span>{money(Number(row?.tax))}</span>
+        </div>
+      ) : null}
     </div>
   );
 }

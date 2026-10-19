@@ -142,8 +142,9 @@ describe("ops views", () => {
     expect(income.map((o) => o.id)).toEqual(["a", "b"]);
     const bars = monthlyBars(income, INCOME_12M_CONFIG, "2026-09-22", (c) => (c === "USD" ? 5 : 1));
     expect(bars.months).toHaveLength(12);
-    expect(bars.rows.at(-1)).toEqual({ month: "2026-09", total: 85 });
-    expect(bars.rows.at(-2)).toEqual({ month: "2026-08", total: 50 });
+    expect(bars.series).toEqual(["br_stocks"]);
+    expect(bars.rows.at(-1)).toMatchObject({ month: "2026-09", total: 85, values: { br_stocks: 85 }, tax: 15 });
+    expect(bars.rows.at(-2)).toMatchObject({ month: "2026-08", total: 50, values: { br_stocks: 50 } });
     expect(bars.total).toBe(135);
     expect(filterOps(ops, OPERATIONS_CONFIG, "2026-09-22").map((o) => o.id)).toEqual(["d", "a", "b", "c"]);
   });
