@@ -1472,7 +1472,10 @@ export function createCapitalMcpServer(userId: string, db: DbClient, opts: { rea
         "Proventos means fii_income + dividend + jcp. fixed_income_interest on a business entity (the PJ caixinha) is recorded and returned with passiveIncome false: it belongs in the PJ books, not in personal Renda passiva. " +
         "Amortization, bonus shares, sales, redemptions and transfers are not income; do not use this tool for them.\n\n" +
         "The same holding, date, income type, cash account and net amount returns the existing operation (duplicate: true) and writes nothing, including a parallel double-submit. " +
-        "To attach an income transaction that already exists, use convert_income_to_dividend instead of recording a second credit.",
+        "The cash account and the holding must belong to the same entity (PF or PJ). " +
+        "fii_income is tax-exempt: withholdingTax greater than zero is rejected. " +
+        "Before crediting, an unlinked income on that same cash account within 3 days, with the same net within 0.02, in category Proventos (or the dividends category) or whose description contains the ticker, is refused. " +
+        "The error dividend.unlinked_income names that transactionId. Use convert_income_to_dividend with it instead of recording a second credit.",
       inputSchema: z.object({
         ...dividendFields,
         cashAccountId: z.string().uuid().describe("Checking or cash account that receives the net. A ledger account id from list_ledger_accounts."),
@@ -1498,7 +1501,11 @@ export function createCapitalMcpServer(userId: string, db: DbClient, opts: { rea
         "withholdingTax is optional, in the transaction's currency: the entry amount stays the net that was received, and gross is net + tax. " +
         "origin defaults from the asset class for dividends.\n\n" +
         "Transfers, expenses and investment entries are rejected. A transfer is not income. " +
-        "Calling again, or converting income that already matches a dividend of this holding (same amount within 0.01, within 7 days), returns that operation (duplicate: true) and does not create a second one. " +
+        "withholdingTax cannot exceed the gross (the entry is the net, gross is net + tax). fii_income rejects withholdingTax greater than zero. " +
+        "Calling again on the same entry returns that operation (duplicate: true). " +
+        "An existing dividend of this holding within 7 days and 0.01, compared in the base currency (amountBase), is not reported as a duplicate of someone else's cash leg. " +
+        "If that operation has no cash leg, this income is attached as its leg. If it already has a leg, the call fails with dividend.extra_cash (matchedExisting, extra cash is this transactionId) and links nothing. " +
+        "Deleting or editing the operation afterwards unlinks this income and turns it back into plain income; the original transaction is not deleted. " +
         "Use this to reclassify FII income that was booked as plain income in category Proventos.",
       inputSchema: z.object({
         transactionId: z.string().uuid(),

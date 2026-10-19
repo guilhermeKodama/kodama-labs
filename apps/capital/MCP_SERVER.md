@@ -443,13 +443,21 @@ Records a provento linked to a holding and credits the cash account, in one undo
 
 Proventos means `fii_income` + `dividend` + `jcp`. `fixed_income_interest` on a business entity is recorded and returned with `passiveIncome: false`. Amortization, bonus shares, sales, redemptions and transfers are not income.
 
+The cash account and the holding have to belong to the same entity (PF or PJ). `fii_income` rejects `withholdingTax` greater than zero.
+
 The same holding, date, income type, cash account and net amount returns the existing operation (`duplicate: true`) and writes nothing.
+
+If an unlinked income already exists on that cash account within 3 days, with the same net within 0.02, and its category is Proventos (or the system dividends category) or its description contains the ticker, the call fails with `dividend.unlinked_income` and does not credit again. The error names that `transactionId`. Pass it to `convert_income_to_dividend`.
 
 ### 17. `convert_income_to_dividend`
 
-Links an existing income transaction to a holding as a provento without crediting the cash again. The income entry becomes the dividend's cash leg, so the chart counts it once, on the asset, at the amount and exchange rate already stored. `transactionId` is the income's ledger entry id. `incomeType` is required. `withholdingTax` is optional, in the transaction's currency: the entry amount stays the net, and gross is net + tax.
+Links an existing income transaction to a holding as a provento without crediting the cash again. The income entry becomes the dividend's cash leg, so the chart counts it once, on the asset, at the amount and exchange rate already stored. `transactionId` is the income's ledger entry id. `incomeType` is required. `withholdingTax` is optional, in the transaction's currency: the entry amount stays the net, and gross is net + tax. The tax cannot exceed that gross. `fii_income` rejects `withholdingTax` greater than zero.
 
-Transfers, expenses and investment entries are rejected. Calling again, or converting income that already matches a dividend of this holding (same amount within 0.01, within 7 days), returns that operation (`duplicate: true`).
+Transfers, expenses and investment entries are rejected. Calling again on the same entry returns that operation (`duplicate: true`).
+
+An existing dividend of this holding within 7 days is matched in the base currency (`amountBase`, within 0.01), not by comparing the holding's currency with the entry's. If that operation has no cash leg, this income is attached as its leg and no second operation is created. If it already has a leg, the call fails with `dividend.extra_cash` and links nothing: the entry is extra cash (`transactionId`), and the existing dividend is `operationId`. That is not a success and not `duplicate: true`.
+
+Deleting or editing the operation afterwards unlinks this income and leaves it as plain income. The original transaction is not deleted and its amount is not rewritten.
 
 ### 18. `update_holding_price`
 

@@ -333,6 +333,29 @@ async function trashCashLeg(tx: DbClient, userId: string, entryId: string, recor
   records.push({ model: "LedgerEntry", recordId: leg.id, before: snapshot(leg), after: snapshot(trashed) });
 }
 
+/**
+ * Income adopted by convertIncomeToDividend stays kind "income". Dropping or
+ * editing that operation must not delete it or rewrite its amount: unlink it
+ * and leave a plain income row. A new cash leg here would credit the money twice.
+ */
+async function releaseAdoptedIncome(tx: DbClient, userId: string, entryId: string, records: MutationRecordInput[]) {
+  const leg = await tx.ledgerEntry.findFirst({ where: { id: entryId, userId, deletedAt: null } });
+  if (!leg || leg.kind !== "income") return false;
+  const released = await tx.ledgerEntry.update({ where: { id: leg.id }, data: { metadata: plainIncomeMetadata(leg.metadata) } });
+  records.push({ model: "LedgerEntry", recordId: leg.id, before: snapshot(leg), after: snapshot(released) });
+  return true;
+}
+
+function plainIncomeMetadata(metadata: Prisma.JsonValue | null): Prisma.InputJsonValue | typeof Prisma.DbNull {
+  if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) return Prisma.DbNull;
+  const rest: Record<string, Prisma.JsonValue> = {};
+  for (const [key, value] of Object.entries(metadata)) {
+    if (key === "holdingId" || key === "investmentOperationId" || value === undefined) continue;
+    rest[key] = value;
+  }
+  return Object.keys(rest).length > 0 ? rest : Prisma.DbNull;
+}
+
 export interface RecordOperationOptions extends OperationWriteOptions {
   /** An investment_deposit the caller already booked for this buy (POST /v2/investments/aporte). */
   fundingGroupId?: string | null;
@@ -411,8 +434,10 @@ export type OperationPatch = Partial<Omit<OperationInput, "holdingId" | "fundFro
 /**
  * Updates an operation and keeps its cash leg in step: moved (to another
  * amount, date, or account for an income credited elsewhere), created, or
- * trashed when it no longer moves cash. An edit that makes a sale exceed
- * the position is refused (422 holding.oversell).
+ * trashed when it no longer moves cash. Income adopted by
+ * convertIncomeToDividend is unlinked and left as plain income instead of
+ * being rewritten or trashed. An edit that makes a sale exceed the
+ * position is refused (422 holding.oversell).
  */
 export async function updateOperation(userId: string, operationId: string, patch: OperationPatch, db: DbClient, opts: OperationWriteOptions = {}) {
   return inTransaction(db, async (tx) => {
@@ -452,7 +477,10 @@ export async function updateOperation(userId: string, operationId: string, patch
           : holding.account;
 
     let cashEntryId = before.cashEntryId;
-    if (cashEntryId && impact === 0) {
+    if (leg && leg.kind === "income" && !leg.deletedAt) {
+      await releaseAdoptedIncome(tx, userId, leg.id, records);
+      cashEntryId = null;
+    } else if (cashEntryId && impact === 0) {
       await trashCashLeg(tx, userId, cashEntryId, records);
       cashEntryId = null;
     } else if (leg) {
@@ -510,7 +538,9 @@ export interface DeleteOperationOptions extends OperationWriteOptions {
  * Deletes an operation in one undo batch: the row is removed (undo
  * re-creates it from its snapshot), its cash leg goes to the trash, and so
  * does its funding transfer with `withFunding` unless that deposit brought
- * more than the operation spends (a larger aporte stays). The holding is
+ * more than the operation spends (a larger aporte stays). Income that
+ * convertIncomeToDividend adopted is not trashed: the link is removed and
+ * the original transaction stays plain income. The holding is
  * recalculated; a standalone delete that would leave a later sale above the
  * position is refused (422 holding.oversell).
  */
@@ -527,7 +557,10 @@ export async function deleteOperation(userId: string, operationId: string, db: D
 
     await tx.investmentOperation.delete({ where: { id: op.id } });
     records.push({ model: "InvestmentOperation", recordId: op.id, before: snapshot(op), after: null });
-    if (op.cashEntryId) await trashCashLeg(tx, userId, op.cashEntryId, records);
+    if (op.cashEntryId) {
+      const released = await releaseAdoptedIncome(tx, userId, op.cashEntryId, records);
+      if (!released) await trashCashLeg(tx, userId, op.cashEntryId, records);
+    }
 
     let fundingGroupId: string | null = null;
     if (opts.withFunding && op.fundingGroupId) {
