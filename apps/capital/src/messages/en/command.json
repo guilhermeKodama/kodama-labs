@@ -32,6 +32,7 @@
     "rules": "Categorization rules",
     "fx": "Currencies and exchange",
     "imports": "Imports",
+    "pluggy": "Open Finance",
     "api": "Integrations and API"
   },
   "views": {

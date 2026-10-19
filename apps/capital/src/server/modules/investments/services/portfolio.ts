@@ -519,6 +519,8 @@ export async function updateOperation(userId: string, operationId: string, patch
         ...(patch.pricePerUnit !== undefined && { pricePerUnit: patch.pricePerUnit }),
         ...(patch.notes !== undefined && { notes: patch.notes }),
         ...(patch.externalId !== undefined && { externalId: patch.externalId }),
+        // A person's edit wins over the next Pluggy sync.
+        syncLocked: true,
       },
     });
     records.push({ model: "InvestmentOperation", recordId: before.id, before: snapshot(before), after: snapshot(updated) });

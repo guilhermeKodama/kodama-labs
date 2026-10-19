@@ -212,6 +212,17 @@ export const ERROR_CODES = {
   "assistant.image_too_large": "The image exceeds the maximum size of {maxBytes} bytes",
   "assistant.file_type_unsupported": "Only OFX, CSV, PDF and image files are allowed",
 
+  // Open Finance (Meu Pluggy)
+  "pluggy.item_id": "The Pluggy item id is not a UUID",
+  "pluggy.label": "A label is required",
+  "pluggy.not_found": "Connection not found",
+  "pluggy.entity_mismatch": "That account belongs to the other entity",
+  "pluggy.account_type": "That account cannot be used here",
+  "pluggy.link_not_found": "Account link not found",
+  "pluggy.review_not_found": "Review not found",
+  "pluggy.link_target": "Choose the existing entry",
+  "pluggy.not_income": "Amortization, a sale or a redemption is not income",
+
   // FIRE (v1)
   "fire.no_plan": "Set up the FIRE plan first",
   "fire.goal_incomplete": "A new FIRE plan needs the income target, withdrawal rate, expected return, inflation, planning mode and contribution phases",

@@ -89,7 +89,7 @@ export async function recordDividend(userId: string, input: RecordDividendInput,
   return inTransaction(db, async (tx) => {
     await advisoryLock(tx, `holding:${input.holdingId}`);
     const holding = await getOwnedHolding(userId, input.holdingId, tx);
-    const cash = await cashAccount(userId, input.cashAccountId, tx);
+    const cash = await cashAccount(userId, input.cashAccountId, tx, input.incomeType === "fixed_income_interest" ? holding.accountId : null);
     if (holding.account.entityId !== cash.entityId) {
       throw new LedgerError("The cash account and the holding have to belong to the same entity", 422, { code: "dividend.entity_mismatch" });
     }
@@ -140,7 +140,9 @@ export async function recordDividend(userId: string, input: RecordDividendInput,
         totalAmount,
         taxWithheld,
         date: input.date,
-        creditToAccountId: cash.id,
+        // The holding's own brokerage is the cash leg already. Passing it as
+        // creditToAccountId is rejected: that field is checking or cash only.
+        creditToAccountId: cash.id === holding.accountId ? null : cash.id,
         description,
         cashCredit: { amount: cashAmount, exchangeRate: cashRate },
       },
@@ -352,9 +354,12 @@ async function attachLegacyLeg(
   return resultOf(operation, false, batchId, fx, input.incomeType, origin, description, grossNative, withholding, entry.currency, passiveIncome);
 }
 
-async function cashAccount(userId: string, accountId: string, db: DbClient) {
+async function cashAccount(userId: string, accountId: string, db: DbClient, caixinhaAccountId: string | null) {
   const account = await getOwnedAccount(userId, accountId, db);
-  if (account.type !== "checking" && account.type !== "cash") {
+  // Caixinha and CDB interest stays on the holding's brokerage. Every other
+  // provento is cash that landed in checking.
+  const caixinha = caixinhaAccountId != null && account.id === caixinhaAccountId && account.type === "brokerage";
+  if (!caixinha && account.type !== "checking" && account.type !== "cash") {
     throw new LedgerError("Income can only be credited to a checking or cash account", 422, { code: "operation.credit_account_invalid" });
   }
   if (account.archivedAt) throw new LedgerError(`Account "${account.name}" is archived`, 422, { code: "account.archived", params: { name: account.name } });

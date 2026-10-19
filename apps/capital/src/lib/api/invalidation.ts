@@ -65,7 +65,7 @@ const EVENT_ROOTS: Record<MutationEvent, readonly QueryRoot[]> = {
   // Imports book entries, learn rules and create the import's view.
   "imports.write": ["views", ...LEDGER_DERIVED],
   // Base currency, timezone and FX rates change how amounts and periods are computed.
-  "settings.write": ["me", "entities", "currencies", "targets", ...LEDGER_DERIVED],
+  "settings.write": ["me", "entities", "currencies", "targets", "pluggy", ...LEDGER_DERIVED],
   // Name, theme, language, display formats: only the session.
   "me.write": ["me"],
   "notifications.write": ["notifications"],

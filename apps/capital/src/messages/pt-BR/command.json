@@ -32,6 +32,7 @@
     "rules": "Regras de categorização",
     "fx": "Moedas e câmbio",
     "imports": "Importações",
+    "pluggy": "Open Finance",
     "api": "Integrações e API"
   },
   "views": {
