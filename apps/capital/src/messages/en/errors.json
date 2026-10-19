@@ -228,5 +228,15 @@
   },
   "tokens": {
     "not_found": "API token not found"
+  },
+  "pluggy": {
+    "item_id": "The item id is not a UUID. Copy it again from the Pluggy Dashboard.",
+    "label": "Give the connection a name.",
+    "not_found": "Connection not found.",
+    "entity_mismatch": "That account belongs to the other entity (personal or business).",
+    "account_type": "That account type cannot be mapped here.",
+    "link_not_found": "Pluggy account not found. Sync once so the accounts show up.",
+    "review_not_found": "Review not found.",
+    "link_target": "Choose the existing entry to link."
   }
 }

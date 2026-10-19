@@ -228,5 +228,15 @@
   },
   "tokens": {
     "not_found": "Token de API não encontrado"
+  },
+  "pluggy": {
+    "item_id": "O item id não é um UUID. Copie de novo no Dashboard da Pluggy.",
+    "label": "Dê um nome à conexão.",
+    "not_found": "Conexão não encontrada.",
+    "entity_mismatch": "Essa conta é da outra entidade (PF ou PJ).",
+    "account_type": "Esse tipo de conta não pode ser mapeado aqui.",
+    "link_not_found": "Conta da Pluggy não encontrada. Sincronize uma vez para ela aparecer.",
+    "review_not_found": "Revisão não encontrada.",
+    "link_target": "Escolha o lançamento existente para vincular."
   }
 }

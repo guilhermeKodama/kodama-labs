@@ -17,6 +17,7 @@ import { v2Imports } from "./modules/bank-statements/routes/v2";
 import { v2Investments } from "./modules/investments/routes/v2";
 import { v2InvestmentsExtra } from "./modules/investments/routes/v2/extra";
 import { v2Notifications } from "./modules/notifications/routes/v2";
+import { v2Pluggy } from "./modules/pluggy/routes/v2";
 import { v2Recurring } from "./modules/recurring/routes/v2";
 
 export function registerRoutes<T extends AppOpenAPI>(app: T) {
@@ -38,5 +39,6 @@ export function registerRoutes<T extends AppOpenAPI>(app: T) {
     .route("/", v2InvestmentsExtra)
     .route("/", v2Recurring)
     .route("/", v2Notifications)
-    .route("/", v2ApiTokens);
+    .route("/", v2ApiTokens)
+    .route("/", v2Pluggy);
 }

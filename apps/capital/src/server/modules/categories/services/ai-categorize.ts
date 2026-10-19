@@ -13,7 +13,7 @@ const pendingWhere = (userId?: string): Prisma.LedgerEntryWhereInput => ({
   deletedAt: null,
   transferGroupId: null,
   kind: { in: ["income", "expense"] },
-  OR: [{ importId: { not: null } }, { cardStatementId: { not: null } }],
+  OR: [{ importId: { not: null } }, { cardStatementId: { not: null } }, { metadata: { path: ["source"], equals: "pluggy" } }],
 });
 
 export interface AiCategorizers {

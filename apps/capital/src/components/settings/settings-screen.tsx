@@ -16,6 +16,7 @@ import { EntitiesPage } from "./entities-page";
 import { FxPage } from "./fx-page";
 import { ImportsPage } from "./imports";
 import { NotificationsPage } from "./notifications-page";
+import { PluggyPage } from "./pluggy-page";
 import { PrefsPage } from "./prefs-page";
 import { RulesPage } from "./rules-page";
 
@@ -35,17 +36,17 @@ export function SettingsScreen() {
   useShortcut("escape", () => router.push(backHref), { scope: "screen" });
 
   return (
-    <div className="grid h-dvh grid-cols-[220px_minmax(0,1fr)] bg-editor text-fg-1">
-      <nav className="flex flex-col gap-0.5 overflow-y-auto border-r border-stroke-3 bg-chrome p-2.5">
-        <Link href={backHref} className="flex h-[30px] items-center gap-1.5 rounded-[6px] px-2 text-control text-fg-3 outline-none hover:text-fg-strong focus-visible:ring-2 focus-visible:ring-fg-3/40">
+    <div className="grid h-dvh grid-cols-1 bg-editor text-fg-1 md:grid-cols-[220px_minmax(0,1fr)]">
+      <nav className="flex gap-1 overflow-x-auto border-b border-stroke-3 bg-chrome p-2 md:flex-col md:gap-0.5 md:overflow-y-auto md:border-r md:border-b-0 md:p-2.5">
+        <Link href={backHref} className="flex h-[30px] shrink-0 items-center gap-1.5 rounded-[6px] px-2 text-control text-fg-3 outline-none hover:text-fg-strong focus-visible:ring-2 focus-visible:ring-fg-3/40">
           {t("back")}
-          <span className="flex-1" />
-          <Kbd>Esc</Kbd>
+          <span className="hidden flex-1 md:block" />
+          <Kbd className="hidden md:inline-flex">Esc</Kbd>
         </Link>
-        <span className="px-2 pt-1.5 pb-1 text-title-sm font-semibold">{t("title")}</span>
+        <span className="hidden px-2 pt-1.5 pb-1 text-title-sm font-semibold md:block">{t("title")}</span>
         {SETTINGS_SECTIONS.map((section) => (
-          <div key={section.section} className="flex flex-col gap-0.5">
-            <span className="px-2 pt-3 pb-1 text-caption text-fg-3">{t(`sections.${section.section}`)}</span>
+          <div key={section.section} className="flex shrink-0 flex-row gap-1 md:flex-col md:gap-0.5">
+            <span className="hidden px-2 pt-3 pb-1 text-caption text-fg-3 md:block">{t(`sections.${section.section}`)}</span>
             {section.pages.map((key) => (
               <button
                 key={key}
@@ -53,7 +54,7 @@ export function SettingsScreen() {
                 aria-current={key === page ? "page" : undefined}
                 onClick={() => void setParams({ page: key, id: null })}
                 className={cn(
-                  "flex h-(--cap-menu-row-h) items-center rounded-[6px] px-2 text-left text-control outline-none focus-visible:ring-2 focus-visible:ring-fg-3/40",
+                  "flex h-(--cap-menu-row-h) shrink-0 items-center whitespace-nowrap rounded-[6px] px-2 text-left text-control outline-none focus-visible:ring-2 focus-visible:ring-fg-3/40",
                   key === page ? "bg-fill-2/80 font-medium text-fg-1" : "text-fg-2 hover:bg-fill-3",
                 )}
               >
@@ -63,7 +64,7 @@ export function SettingsScreen() {
           </div>
         ))}
       </nav>
-      <main className="flex min-w-0 flex-col gap-3.5 overflow-y-auto px-6 py-5">
+      <main className="flex min-w-0 flex-col gap-3.5 overflow-y-auto px-4 py-4 md:px-6 md:py-5">
         <div className="flex flex-col gap-[3px]">
           <h1 className="text-heading font-semibold">{t(`nav.${page}.title`)}</h1>
           <span className="text-body text-fg-3">{t(`nav.${page}.desc`)}</span>
@@ -94,6 +95,8 @@ function SettingsContent({ page }: { page: SettingsPage }) {
       return <FxPage />;
     case "imports":
       return <ImportsContent />;
+    case "pluggy":
+      return <PluggyPage />;
     case "api":
       return <ApiPage />;
   }

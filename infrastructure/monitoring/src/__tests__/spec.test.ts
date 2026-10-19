@@ -81,7 +81,7 @@ describe("monitors", () => {
 
   it("gives every scheduled cron a push monitor that requires two misses", () => {
     const crons = cronPushMonitors(schedules);
-    expect(crons).toHaveLength(25);
+    expect(crons).toHaveLength(26);
     for (const monitor of crons) {
       expect(monitor.type).toBe("push");
       expect(monitor.maxretries).toBe(1);

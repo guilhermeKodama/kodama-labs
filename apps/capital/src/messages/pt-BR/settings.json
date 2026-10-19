@@ -47,6 +47,10 @@
       "title": "Importações",
       "desc": "Histórico de extratos importados; cada um pode ser desfeito."
     },
+    "pluggy": {
+      "title": "Open Finance",
+      "desc": "Meu Pluggy: status, última sync, sincronizar agora e o mapeamento das contas."
+    },
     "api": {
       "title": "Integrações e API",
       "desc": "Servidor MCP, tokens e documentação da API."
@@ -307,5 +311,49 @@
       "confirm": "Revogar token"
     },
     "toastRevoked": "Token …{last4} revogado"
+  },
+  "pluggy": {
+    "disabled": "A sincronização fica desligada até o servidor ter PLUGGY_CLIENT_ID e PLUGGY_CLIENT_SECRET. O resto do Capital segue igual.",
+    "empty": "Nenhuma conexão. No Dashboard da Pluggy, abra o Demo, conecte MeuPluggy e cole o item id aqui.",
+    "add": "Adicionar conexão",
+    "label": "Nome",
+    "itemId": "Item id",
+    "entity": "Entidade",
+    "personal": "PF",
+    "business": "PJ",
+    "sync": "Sincronizar agora",
+    "syncing": "Sincronizando…",
+    "remove": "Remover",
+    "lastSync": "Última sync: {when}",
+    "never": "ainda não",
+    "consent": "Consentimento até {when}",
+    "noConsent": "Sem data de consentimento",
+    "renew": "Para renovar, entre de novo em MeuPluggy no Demo. Se o item id mudar, cole o novo aqui. Os lançamentos já gravados ficam.",
+    "brokerage": "Corretora dos investimentos",
+    "none": "Nenhuma",
+    "incomeCategory": "Categoria do rendimento na PJ",
+    "accounts": "Contas desta conexão",
+    "noAccounts": "As contas aparecem depois da primeira sync.",
+    "reviews": "Para revisar",
+    "emptyReviews": "Nada pendente.",
+    "ignore": "Ignorar",
+    "confirm": "Confirmar classificação",
+    "link": "Vincular ao lançamento",
+    "entryId": "Id do lançamento",
+    "save": "Salvar",
+    "removeTitle": "Remover {label}?",
+    "removeDesc": "Os lançamentos já gravados ficam. A conexão e o mapeamento saem.",
+    "status": {
+      "idle": "Ainda não sincronizou",
+      "ok": "Em dia",
+      "expiring": "Consentimento expira em breve",
+      "expired": "Consentimento expirado",
+      "error": "Erro na última sync"
+    },
+    "reviewKind": {
+      "conflict": "Conflito",
+      "low_confidence": "Classificação incerta",
+      "position": "Posição divergente"
+    }
   }
 }
