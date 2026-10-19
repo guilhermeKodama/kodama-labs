@@ -239,6 +239,7 @@ export async function findOrphanTransactions(userId: string, db: DbClient) {
       type: t.kind,
       accountId: t.accountId,
       accountName: t.account.name,
+      operationId: t.investmentOperation?.id ?? null,
     })),
   };
 }

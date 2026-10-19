@@ -141,7 +141,7 @@ describe("getCreditCardStatement", () => {
     );
     const byMonth = await getCreditCardStatement(USER, { creditCardId: f.card, month: "2026-09" }, prisma);
     expect(byMonth.statement.id).toBe(statementId);
-    expect(byMonth.purchases.every((p) => p.accountId === f.card && p.accountName === "Nubank")).toBe(true);
+    expect(byMonth.purchases.every((p) => p.accountId === f.card && p.accountName === "Nubank" && p.operationId === null)).toBe(true);
     expect(byMonth.purchases.map((p) => [p.description, p.amount, p.currency, p.date.slice(0, 10)])).toEqual([
       ["Coffee", 100, "BRL", "2026-08-10"],
       ["GitHub", 10, "USD", "2026-08-15"],
@@ -158,6 +158,7 @@ describe("getCreditCardStatement", () => {
       accountName: "Conta principal",
       counterpartAccountId: f.card,
       counterpartAccountName: "Nubank",
+      operationId: null,
     });
     expect(byId.reconciliation).toMatchObject({ paymentAmount: 150, difference: 0, isReconciled: true });
     await expect(getCreditCardStatement(USER, {}, prisma)).rejects.toThrow(/Must provide/);

@@ -14,6 +14,8 @@ import { LEGACY_ENTRY_INCLUDE, legacyType, toLegacyTransaction } from "../lib/le
  * expenses and investments only. Dates filter on the effective date, so card
  * purchases fall in the month their statement closes. A refund is an expense
  * with a negative amount; the category total nets it, the same way the budget does.
+ * operationId is set when the entry is an operation's cash leg or a leg of the
+ * transfer that funded it, and null otherwise.
  */
 export async function listTransactions(userId: string, params: ListTransactionsParams, db: DbClient) {
   const user = await db.user.findUnique({ where: { id: userId }, select: { baseCurrency: true } });
@@ -80,6 +82,7 @@ export async function listTransactions(userId: string, params: ListTransactionsP
         counterpartCurrency: t.counterpartCurrency,
         counterpartAccountId: t.counterpartAccountId,
         counterpartAccountName: t.counterpartAccountName,
+        operationId: t.operationId,
       };
     }),
     summaries: [...summaryMap.values()],
