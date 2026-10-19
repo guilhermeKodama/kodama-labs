@@ -260,28 +260,69 @@ export async function convertIncomeToDividend(userId: string, input: ConvertInco
   });
 }
 
+const INCOME_OPERATION_TYPES = ["dividend", "yield_payment"] as const;
+
+/**
+ * `id` is an operation id when this user owns that operation, otherwise the
+ * cash entry id of one of their dividends or yields. An entry that exists
+ * but is not that cash leg is a distinct error from a missing id.
+ */
+async function resolveDividendOperation(tx: DbClient, userId: string, id: string): Promise<{ operationId: string; via: "operation" | "entry" }> {
+  const owned = await tx.investmentOperation.findFirst({
+    where: { id, holding: { account: { userId } } },
+    select: { id: true },
+  });
+  if (owned) return { operationId: owned.id, via: "operation" };
+
+  const entry = await tx.ledgerEntry.findFirst({ where: { id, userId }, select: { id: true } });
+  if (!entry) throw notFound("Investment operation", "operation.not_found");
+
+  const linked = await tx.investmentOperation.findFirst({
+    where: { cashEntryId: entry.id, holding: { account: { userId } }, type: { in: [...INCOME_OPERATION_TYPES] } },
+    select: { id: true },
+  });
+  if (!linked) {
+    throw new LedgerError(`Entry ${entry.id} is not linked to a dividend`, 422, {
+      code: "dividend.entry_not_dividend",
+      params: { transactionId: entry.id },
+    });
+  }
+  return { operationId: linked.id, via: "entry" };
+}
+
 /**
  * Sets origin, income type and withholding on an income operation
  * (dividend or yield, including a cash leg booked as kind investment).
- * The cash entry is not rewritten and no entry is created: the net
+ * `operationId` may be that operation or its cash entry: an owned operation
+ * is used first, otherwise the entry must be the cash leg of a dividend or
+ * yield. The cash entry is not rewritten and no entry is created: the net
  * (gross − tax) stays the net already booked, so a higher withholding
  * raises the gross by the same amount. The same values write nothing.
- * A buy, sale, transfer or expense is rejected.
+ * A buy, sale, transfer or expense is rejected. A closed holding is updated
+ * the same way as an open one.
  */
 export async function updateDividend(userId: string, input: UpdateDividendInput, db: DbClient): Promise<DividendResult> {
   return inTransaction(db, async (tx) => {
-    await advisoryLock(tx, `dividend-update:${input.operationId}`);
+    const resolved = await resolveDividendOperation(tx, userId, input.operationId);
+    // Same operation key whether the caller passed the operation or its cash entry,
+    // then the holding key recordDividend takes up front and convert takes after its entry lock.
+    await advisoryLock(tx, `dividend-update:${resolved.operationId}`);
     const located = await tx.investmentOperation.findFirst({
-      where: { id: input.operationId, holding: { account: { userId } } },
+      where: { id: resolved.operationId, holding: { account: { userId } } },
       select: { holdingId: true },
     });
     if (!located) throw notFound("Investment operation", "operation.not_found");
-    // Operation lock first, then the holding key recordDividend takes up front and convert takes after its entry lock.
     await advisoryLock(tx, `holding:${located.holdingId}`);
     const before = await tx.investmentOperation.findFirst({
-      where: { id: input.operationId, holding: { account: { userId } } },
+      where: { id: resolved.operationId, holding: { account: { userId } } },
     });
     if (!before) throw notFound("Investment operation", "operation.not_found");
+    if (resolved.via === "entry" && (before.cashEntryId !== input.operationId || !isIncomeOperation(before.type))) {
+      throw new LedgerError(`Entry ${input.operationId} is not linked to a dividend`, 422, {
+        code: "dividend.entry_not_dividend",
+        params: { transactionId: input.operationId },
+      });
+    }
     if (!isIncomeOperation(before.type)) {
       throw new LedgerError(
         "Only an income operation (a dividend or a yield) can have its origin, income type or withholding changed",

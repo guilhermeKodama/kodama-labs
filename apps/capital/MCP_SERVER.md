@@ -204,6 +204,8 @@ List and search transactions by date range, type, and category.
 - `businessId`: UUID (optional)
 - `personalAccountId`: UUID (optional)
 
+Each transaction includes `operationId`. It is the investment operation id when the row is that operation's cash leg, or a leg of the transfer that funded it, and `null` otherwise. A dividend cash entry's `id` and its `operationId` both work as `update_dividend`'s `operationId`.
+
 **Returns:**
 ```json
 {
@@ -217,6 +219,7 @@ List and search transactions by date range, type, and category.
       "description": "...",
       "category": "Dividends",
       "date": "2026-09-15T00:00:00.000Z",
+      "operationId": null,
       ...
     }
   ],
@@ -459,7 +462,13 @@ An existing dividend of this holding within 7 days is matched in the base curren
 
 Deleting or editing the operation afterwards unlinks this income and leaves it as plain income. The original transaction is not deleted and its amount is not rewritten.
 
-### 18. `update_holding_price`
+### 18. `update_dividend`
+
+Sets `origin`, `incomeType` and `withholdingTax` on an existing dividend or yield. It does not rewrite the cash entry and does not create entries. The net already booked stays the net, so a higher withholding raises the gross by the same amount. The same values return `duplicate: true` and write nothing.
+
+`operationId` is the investment operation id, or the cash entry id of that dividend (the `id` from `list_transactions`; that row's `operationId` is the same operation). The id is resolved as an operation this user owns first. Otherwise it is resolved as a ledger entry id, and the entry must be the cash leg of a dividend or yield. An entry that is not that cash leg fails with `dividend.entry_not_dividend`. An id that is neither an owned operation nor an owned entry is `operation.not_found`. A buy, sale or other non-income operation id is `dividend.not_income_operation`. A closed holding (quantity 0, `closedAt` set) is updated the same way as an open one.
+
+### 19. `update_holding_price`
 
 Sets the current price and leaves average cost and total invested untouched. Pass exactly one of `price` (per unit) or `totalValue` (the whole position: price becomes `totalValue / quantity`). For the caixinha, `totalValue` is the new gross value. `totalValue` on a quantity of 0 is rejected. A negative price is rejected. Zero is allowed. `date` is the day of the price and cannot be in the future; omit it to stamp now.
 

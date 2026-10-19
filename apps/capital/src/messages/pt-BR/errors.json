@@ -158,6 +158,7 @@
     "fii_withholding": "Rendimento de FII é isento, então withholdingTax tem que ser zero.",
     "entity_mismatch": "A conta de caixa e o ativo precisam ser da mesma entidade (PF ou PJ).",
     "not_income_operation": "Só um provento (dividendo ou rendimento) pode ter origem, tipo ou IR retido alterados.",
+    "entry_not_dividend": "O lançamento {transactionId} não está vinculado a um provento.",
     "origin_not_dividend": "A origem só vale quando o tipo é dividendo."
   },
   "aporte": {

@@ -22,6 +22,8 @@ export interface BulkCreateResult {
     date: string;
     accountId?: string;
     accountName?: string;
+    /** Null: a newly created income or expense is not an investment-operation leg. */
+    operationId?: string | null;
   }>;
   duplicates: Array<{
     description: string;

@@ -82,6 +82,7 @@ describe("listTransactions", () => {
       accountName: "Conta principal",
       counterpartAccountId: null,
       counterpartAccountName: null,
+      operationId: null,
     });
     expect(
       r.transactions.every(

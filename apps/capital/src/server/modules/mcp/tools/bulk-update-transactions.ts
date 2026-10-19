@@ -3,7 +3,7 @@ import type { TransactionType } from "@/generated/prisma";
 import { displayAmount } from "../../ledger/lib/money";
 import { updateEntry, type InternalPatch } from "../../ledger/services/entries";
 import { inTransaction, recordMutation, type MutationRecordInput } from "../../ledger/services/mutations";
-import { categoryResolver, LEGACY_ENTRY_INCLUDE } from "../lib/ledger-adapter";
+import { categoryResolver, entryOperationId, LEGACY_ENTRY_INCLUDE } from "../lib/ledger-adapter";
 import { toPatch } from "./manage-transactions";
 
 export interface BulkUpdateTransactionItem {
@@ -21,7 +21,7 @@ export interface BulkUpdateTransactionItem {
 }
 
 export interface BulkUpdateResult {
-  updated: Array<{ id: string; description: string; category?: string; amount?: number }>;
+  updated: Array<{ id: string; description: string; category?: string; amount?: number; operationId: string | null }>;
   errors: Array<{ id: string; error: string }>;
   batchId?: string | null;
 }
@@ -62,7 +62,13 @@ export async function bulkUpdateTransactions(userId: string, updates: BulkUpdate
       const entry = byId.get(u.id)!;
       // The amount the caller sent is already the signed user-facing one; otherwise show the stored row.
       const amount = u.amount !== undefined ? u.amount : displayAmount(entry.kind, entry.amount);
-      result.updated.push({ id: u.id, description: u.description ?? "(unchanged)", category: p.categoryId ? resolver.nameOf(p.categoryId) ?? undefined : u.category, amount });
+      result.updated.push({
+        id: u.id,
+        description: u.description ?? "(unchanged)",
+        category: p.categoryId ? resolver.nameOf(p.categoryId) ?? undefined : u.category,
+        amount,
+        operationId: entryOperationId(entry),
+      });
     }
     return result;
   }
@@ -72,7 +78,13 @@ export async function bulkUpdateTransactions(userId: string, updates: BulkUpdate
       const records: MutationRecordInput[] = [];
       for (const u of updates) {
         const { raw } = await updateEntry(userId, u.id, patches.get(u.id)!, tx, { collect: records });
-        result.updated.push({ id: raw.id, description: raw.description, category: resolver.nameOf(raw.categoryId) ?? undefined, amount: displayAmount(raw.kind, raw.amount) });
+        result.updated.push({
+          id: raw.id,
+          description: raw.description,
+          category: resolver.nameOf(raw.categoryId) ?? undefined,
+          amount: displayAmount(raw.kind, raw.amount),
+          operationId: entryOperationId(byId.get(u.id)!),
+        });
       }
       return recordMutation(tx, userId, "update", `${updates.length} transactions (MCP)`, records);
     });

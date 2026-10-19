@@ -1,6 +1,7 @@
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { prisma } from "@capital/server/lib/prisma";
 import { createLedgerFixture, deleteLedgerFixture, type LedgerFixture } from "@/test/ledger-fixtures";
+import { listInvestmentPositions } from "@capital/server/modules/mcp/tools/investments";
 import { loadFx } from "@capital/server/modules/ledger/lib/fx";
 import { toNumber } from "@capital/server/modules/ledger/lib/money";
 import { accountBalances } from "@capital/server/modules/ledger/services/accounts";
@@ -448,5 +449,105 @@ describe("update_dividend", () => {
     const plain = await recordOperation(USER, { holdingId: stock.id, type: "dividend", totalAmount: 20, taxWithheld: 2, date: "2026-08-07" }, prisma);
     const updated = await updateDividend(USER, { operationId: plain.operation.id, origin: "BDR" }, prisma);
     expect(updated).toMatchObject({ origin: "BDR", withholdingTax: 2 });
+  });
+
+  it("accepts the cash entry id of a dividend on a closed holding and rejects an entry that is not one", async () => {
+    const h = await petr4();
+    await recordOperation(USER, { holdingId: h.id, type: "buy", quantity: 8, pricePerUnit: 40, totalAmount: 320, date: "2026-07-01" }, prisma);
+    await recordOperation(USER, { holdingId: h.id, type: "sell", quantity: 8, pricePerUnit: 42, totalAmount: 336, date: "2026-08-05" }, prisma);
+    const recorded = await recordDividend(
+      USER,
+      { holdingId: h.id, cashAccountId: f.pfChecking, amount: 25, date: "2026-08-20", currency: "BRL", incomeType: "dividend" },
+      prisma,
+    );
+    expect((await listInvestmentPositions(USER, prisma, { ticker: "PETR4", includeClosed: true })).positions[0]).toMatchObject({
+      id: h.id,
+      currentQuantity: 0,
+      closedAt: "2026-08-05",
+    });
+
+    const cashBefore = await balance(f.pfChecking);
+    const legBefore = await prisma.ledgerEntry.findUniqueOrThrow({ where: { id: recorded.cashEntryId! } });
+    const updated = await updateDividend(USER, { operationId: recorded.cashEntryId!, origin: "BDR", withholdingTax: 5 }, prisma);
+    expect(updated).toMatchObject({
+      duplicate: false,
+      operationId: recorded.operationId,
+      origin: "BDR",
+      withholdingTax: 5,
+      gross: 30,
+      net: 25,
+      batchId: expect.any(String),
+    });
+    const legAfter = await prisma.ledgerEntry.findUniqueOrThrow({ where: { id: recorded.cashEntryId! } });
+    expect(legAfter.kind).toBe("investment");
+    expect(toNumber(legAfter.amount)).toBe(toNumber(legBefore.amount));
+    expect(toNumber(legAfter.amountBase)).toBe(toNumber(legBefore.amountBase));
+    expect(legAfter.updatedAt).toEqual(legBefore.updatedAt);
+    expect(await balance(f.pfChecking)).toBeCloseTo(cashBefore, 4);
+    expect((await listInvestmentPositions(USER, prisma, { ticker: "PETR4", includeClosed: true })).positions[0]).toMatchObject({
+      id: h.id,
+      currentQuantity: 0,
+      closedAt: "2026-08-05",
+    });
+
+    const again = await updateDividend(USER, { operationId: recorded.cashEntryId!, origin: "BDR", withholdingTax: 5 }, prisma);
+    expect(again).toMatchObject({ duplicate: true, batchId: null, operationId: recorded.operationId, gross: 30 });
+
+    await expect(updateDividend(USER, { operationId: recorded.cashEntryId!, withholdingTax: 30.01 }, prisma)).rejects.toMatchObject({
+      code: "operation.tax_exceeds_amount",
+    });
+    await expect(updateDividend(USER, { operationId: recorded.cashEntryId!, incomeType: "jcp", origin: "EXTERIOR" }, prisma)).rejects.toMatchObject({
+      code: "dividend.origin_not_dividend",
+    });
+
+    const salary = (await createEntry(USER, { kind: "income", accountId: f.pfChecking, amount: 10, date: "2026-08-21", description: "Salário" }, prisma)).entryIds[0];
+    await expect(updateDividend(USER, { operationId: salary, origin: "BR" }, prisma)).rejects.toMatchObject({
+      code: "dividend.entry_not_dividend",
+      params: { transactionId: salary },
+    });
+
+    const buy = await recordOperation(
+      USER,
+      { holdingId: h.id, type: "buy", quantity: 1, pricePerUnit: 10, totalAmount: 10, date: "2026-08-22", fundFromAccountId: f.pfChecking },
+      prisma,
+    );
+    await expect(updateDividend(USER, { operationId: buy.cashEntryId!, origin: "BR" }, prisma)).rejects.toMatchObject({
+      code: "dividend.entry_not_dividend",
+      params: { transactionId: buy.cashEntryId },
+    });
+    const fundingLeg = await prisma.ledgerEntry.findFirstOrThrow({ where: { transferGroupId: buy.fundingGroupId!, userId: USER } });
+    await expect(updateDividend(USER, { operationId: fundingLeg.id, origin: "BR" }, prisma)).rejects.toMatchObject({
+      code: "dividend.entry_not_dividend",
+      params: { transactionId: fundingLeg.id },
+    });
+    await expect(updateDividend(USER, { operationId: buy.operation.id, origin: "BR" }, prisma)).rejects.toMatchObject({
+      code: "dividend.not_income_operation",
+    });
+
+    const linked = await convertIncomeToDividend(
+      USER,
+      { transactionId: salary, holdingId: h.id, incomeType: "dividend", withholdingTax: 2 },
+      prisma,
+    );
+    const fromIncome = await updateDividend(USER, { operationId: salary, origin: "EXTERIOR" }, prisma);
+    expect(fromIncome).toMatchObject({ duplicate: false, operationId: linked.operationId, origin: "EXTERIOR", withholdingTax: 2, net: 10 });
+    expect((await prisma.ledgerEntry.findUniqueOrThrow({ where: { id: salary } })).kind).toBe("income");
+
+    const other = "test-user-investments-dividends-002";
+    await createLedgerFixture(prisma, other);
+    try {
+      await expect(updateDividend(other, { operationId: recorded.operationId, origin: "EXTERIOR" }, prisma)).rejects.toMatchObject({ code: "operation.not_found" });
+      await expect(updateDividend(other, { operationId: recorded.cashEntryId!, origin: "EXTERIOR" }, prisma)).rejects.toMatchObject({ code: "operation.not_found" });
+      await expect(updateDividend(other, { operationId: salary, origin: "EXTERIOR" }, prisma)).rejects.toMatchObject({ code: "operation.not_found" });
+    } finally {
+      await deleteLedgerFixture(prisma, other);
+    }
+
+    expect(await prisma.investmentOperation.findUniqueOrThrow({ where: { id: recorded.operationId } })).toMatchObject({
+      dividendOrigin: "BDR",
+      taxWithheld: 5,
+      totalAmount: 30,
+      cashEntryId: recorded.cashEntryId,
+    });
   });
 });

@@ -338,7 +338,9 @@ export function createCapitalMcpServer(userId: string, db: DbClient, opts: { rea
         "List and search transactions by date range, type, and category. Returns " +
         "individual transactions plus totals grouped by type and category. " +
         "Amounts are signed: a charge is a positive expense, and a refund or reversal is a negative expense. " +
-        "Without a type filter, transfer legs are included. Each entry has accountId and accountName. " +
+        "Without a type filter, transfer legs are included. Each entry has accountId, accountName and operationId. " +
+        "operationId is the investment operation when this entry is its cash leg or a leg of the transfer that funded it, and null otherwise. " +
+        "A dividend's operationId, or that cash entry's id, is what update_dividend accepts. " +
         "A transfer leg also has transferGroupId, counterpartAmount (the other leg, signed), counterpartCurrency, " +
         "counterpartAccountId and counterpartAccountName, so a USD to BRL " +
         "resgate can be found and then corrected with update_transaction (toAmount or exchangeRate). " +
@@ -393,6 +395,7 @@ export function createCapitalMcpServer(userId: string, db: DbClient, opts: { rea
                 transferGroupId: result.transferGroupId,
                 counterpartAmount: result.counterpartAmount,
                 counterpartCurrency: result.counterpartCurrency,
+                operationId: result.operationId,
               },
               null,
               2
@@ -1555,8 +1558,14 @@ export function createCapitalMcpServer(userId: string, db: DbClient, opts: { rea
     {
       description:
         "Set origin, incomeType and withholdingTax on an existing income operation (type dividend or yield_payment). " +
-        "operationId is the investment operation id returned by record_dividend or convert_income_to_dividend, including " +
-        "a cash leg booked as kind investment. This does not change the cash balance and does not create entries: the cash " +
+        "operationId is the investment operation id returned by record_dividend or convert_income_to_dividend, or the cash " +
+        "entry id of that dividend (the id from list_transactions; that row's operationId is the same operation). " +
+        "The id is resolved as an operation id first. When it is not an operation this user owns, it is resolved as a ledger " +
+        "entry id: the entry must be the cash leg of a dividend or yield (cashEntryId), including a leg booked as kind investment " +
+        "and an income row linked by convert_income_to_dividend. An entry that exists but is not that cash leg fails with " +
+        "dividend.entry_not_dividend and changes nothing. An id that is neither an owned operation nor an owned entry is " +
+        "operation.not_found. Another user's operation or entry is not found. A closed holding (quantity 0, closedAt set) is updated " +
+        "the same way as an open one. This does not change the cash balance and does not create entries: the cash " +
         "entry stays as it is. The net (gross − tax) stays the net already booked, so setting withholdingTax raises the " +
         "gross by the same amount. withholdingTax is in the holding's currency: omit it to keep the current value, and 0 clears it. " +
         "It cannot exceed the operation's current gross (operation.tax_exceeds_amount). fii_income rejects withholdingTax greater than zero " +
@@ -1566,7 +1575,9 @@ export function createCapitalMcpServer(userId: string, db: DbClient, opts: { rea
         "Calling again with the same values writes nothing (duplicate: true, batchId null). " +
         "A buy, sale, transfer or any operation that is not income is rejected (dividend.not_income_operation).",
       inputSchema: z.object({
-        operationId: z.string().uuid(),
+        operationId: z.string().uuid().describe(
+          "Investment operation id, or the cash entry id of that dividend (list_transactions id). An operation id is tried first.",
+        ),
         incomeType: dividendFields.incomeType.optional(),
         withholdingTax: z.number().nonnegative().optional().describe("Tax withheld at source, in the holding's currency. Omit to keep the current value. 0 clears it."),
         origin: z.enum(["BR", "BDR", "EXTERIOR"]).optional().describe("Dividend origin. Only when the income type is a dividend; any other income type is rejected."),
