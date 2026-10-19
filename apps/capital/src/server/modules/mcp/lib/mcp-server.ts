@@ -35,7 +35,8 @@ import {
   updateHoldingPrice,
 } from "../tools/investments";
 import { recordInvestmentContribution, recordInvestmentRedemption } from "../../investments/services/holding-cashflow";
-import { convertIncomeToDividend, recordDividend } from "../../investments/services/dividends";
+import { convertIncomeToDividend, recordDividend, updateDividend } from "../../investments/services/dividends";
+import { listAccountBalances } from "../tools/balances";
 import { createTransfer, listLedgerAccounts, listTransfers } from "../tools/transfers";
 import { getFirePlan, updateFirePhaseContribution } from "../tools/fire";
 import {
@@ -337,8 +338,9 @@ export function createCapitalMcpServer(userId: string, db: DbClient, opts: { rea
         "List and search transactions by date range, type, and category. Returns " +
         "individual transactions plus totals grouped by type and category. " +
         "Amounts are signed: a charge is a positive expense, and a refund or reversal is a negative expense. " +
-        "Without a type filter, transfer legs are included. Each one has transferGroupId, " +
-        "counterpartAmount (the other leg, signed) and counterpartCurrency, so a USD to BRL " +
+        "Without a type filter, transfer legs are included. Each entry has accountId and accountName. " +
+        "A transfer leg also has transferGroupId, counterpartAmount (the other leg, signed), counterpartCurrency, " +
+        "counterpartAccountId and counterpartAccountName, so a USD to BRL " +
         "resgate can be found and then corrected with update_transaction (toAmount or exchangeRate). " +
         "Transfer legs are left out of the type/category totals. " +
         "Example: List all Income/Dividends transactions in September 2026.",
@@ -496,14 +498,23 @@ export function createCapitalMcpServer(userId: string, db: DbClient, opts: { rea
     "list_investment_positions",
     {
       description:
-        "List active investment positions with quantity, average cost, current value, " +
-        "unrealized gain, accountId, and entityId. accountName alone is not enough to " +
+        "List investment positions with quantity, average cost, current value, " +
+        "unrealized gain, assetClass, allocationClass, accountId, and entityId. " +
+        "includeClosed defaults to false. Set it to include sold positions (quantity 0) with closedAt, " +
+        "the date of the sell, withdrawal or adjustment that closed the position (a later dividend does not move it), " +
+        "so that holdingId can be passed to record_dividend or convert_income_to_dividend. " +
+        "ticker is a case-insensitive exact match and finds a closed holding only when includeClosed is true. " +
+        "query matches ticker or name (contains). accountName alone is not enough to " +
         "book a transfer: account ids come from list_ledger_accounts, and list_accounts " +
         "returns entities. Optional accountId limits the list to one brokerage account; " +
-        "optional entityId limits it to one entity (PF or PJ). Example: PMLL11 shows 164 cotas but broker has 174.",
+        "optional entityId limits it to one entity (PF or PJ). Example: PMLL11 shows 164 cotas but broker has 174. " +
+        "GOGL34 sold on 2026-08-05 is hidden until includeClosed is true.",
       inputSchema: z.object({
         accountId: z.string().uuid().optional(),
         entityId: z.string().uuid().optional(),
+        ticker: z.string().min(1).optional(),
+        query: z.string().min(1).optional(),
+        includeClosed: z.boolean().optional(),
       }),
       annotations: { readOnlyHint: true },
     },
@@ -1300,6 +1311,27 @@ export function createCapitalMcpServer(userId: string, db: DbClient, opts: { rea
   };
 
   server.registerTool(
+    "list_account_balances",
+    {
+      description:
+        "Balance of each checking, cash and brokerage account (not credit cards, not archived accounts, not entities). " +
+        "id, name, type, entity (PF or PJ), entityId, entityName, currency, balance (the account's currency) and " +
+        "balanceBase (the user's base currency, BRL). balance is the accounts screen number (initial balance plus every " +
+        "live entry). balanceBase uses today's rate, the same conversion the portfolio uses for broker cash. " +
+        "asOf (YYYY-MM-DD) is the balance at the end of that calendar day: later entries are left out, and balanceBase " +
+        "uses the rate of that date. Omit asOf for the current balance.",
+      inputSchema: z.object({
+        asOf: DateStringSchema.optional(),
+      }),
+      annotations: { readOnlyHint: true },
+    },
+    async (params) => {
+      const result = await listAccountBalances(userId, params, db);
+      return { content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }] };
+    },
+  );
+
+  server.registerTool(
     "list_ledger_accounts",
     {
       description:
@@ -1514,6 +1546,34 @@ export function createCapitalMcpServer(userId: string, db: DbClient, opts: { rea
     },
     async (params) => {
       const result = await convertIncomeToDividend(userId, params, db);
+      return { content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }] };
+    },
+  );
+
+  server.registerTool(
+    "update_dividend",
+    {
+      description:
+        "Set origin, incomeType and withholdingTax on an existing income operation (type dividend or yield_payment). " +
+        "operationId is the investment operation id returned by record_dividend or convert_income_to_dividend, including " +
+        "a cash leg booked as kind investment. This does not change the cash balance and does not create entries: the cash " +
+        "entry stays as it is. The net (gross − tax) stays the net already booked, so setting withholdingTax raises the " +
+        "gross by the same amount. withholdingTax is in the holding's currency: omit it to keep the current value, and 0 clears it. " +
+        "It cannot exceed the operation's current gross (operation.tax_exceeds_amount). fii_income rejects withholdingTax greater than zero " +
+        "(dividend.fii_withholding), including a withholding already stored when incomeType becomes fii_income, and a legacy dividend " +
+        "with no income type on an FII. origin (BR, BDR, EXTERIOR) is accepted only when the income type is dividend; any other income " +
+        "type is rejected (dividend.origin_not_dividend). Switching a dividend to fixed_income_interest stores it as a yield. " +
+        "Calling again with the same values writes nothing (duplicate: true, batchId null). " +
+        "A buy, sale, transfer or any operation that is not income is rejected (dividend.not_income_operation).",
+      inputSchema: z.object({
+        operationId: z.string().uuid(),
+        incomeType: dividendFields.incomeType.optional(),
+        withholdingTax: z.number().nonnegative().optional().describe("Tax withheld at source, in the holding's currency. Omit to keep the current value. 0 clears it."),
+        origin: z.enum(["BR", "BDR", "EXTERIOR"]).optional().describe("Dividend origin. Only when the income type is a dividend; any other income type is rejected."),
+      }),
+    },
+    async (params) => {
+      const result = await updateDividend(userId, params, db);
       return { content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }] };
     },
   );

@@ -20,6 +20,8 @@ export interface BulkCreateResult {
     description: string;
     amount: number;
     date: string;
+    accountId?: string;
+    accountName?: string;
   }>;
   duplicates: Array<{
     description: string;
@@ -68,6 +70,8 @@ export interface InvestmentPosition {
   accountId: string;
   accountName: string;
   entityId: string;
+  /** Date of the last operation when quantity is 0. Null while the position is open. */
+  closedAt: string | null;
 }
 
 export interface AdjustPositionParams {

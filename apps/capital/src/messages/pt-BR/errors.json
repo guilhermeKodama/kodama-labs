@@ -156,7 +156,9 @@
     "extra_cash": "Esta receita bate com o provento {operationId}, que já tem lançamento de caixa. O lançamento {transactionId} é caixa a mais e não foi vinculado.",
     "unlinked_income": "Já existe a receita {transactionId} com esse valor líquido. Use convert_income_to_dividend com esse transactionId em vez de creditar de novo.",
     "fii_withholding": "Rendimento de FII é isento, então withholdingTax tem que ser zero.",
-    "entity_mismatch": "A conta de caixa e o ativo precisam ser da mesma entidade (PF ou PJ)."
+    "entity_mismatch": "A conta de caixa e o ativo precisam ser da mesma entidade (PF ou PJ).",
+    "not_income_operation": "Só um provento (dividendo ou rendimento) pode ter origem, tipo ou IR retido alterados.",
+    "origin_not_dividend": "A origem só vale quando o tipo é dividendo."
   },
   "aporte": {
     "broker_required": "O aporte precisa ir para uma corretora.",

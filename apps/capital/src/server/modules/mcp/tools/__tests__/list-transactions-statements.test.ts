@@ -67,6 +67,22 @@ describe("listTransactions", () => {
     expect(
       payments.map((t) => t.counterpartAmount).sort((a, b) => a! - b!),
     ).toEqual([-550, 550]);
+    expect(payments.find((t) => t.accountId === f.pfChecking)).toMatchObject({
+      accountName: "Conta principal",
+      counterpartAccountId: f.card,
+      counterpartAccountName: "Nubank",
+    });
+    expect(payments.find((t) => t.accountId === f.card)).toMatchObject({
+      accountName: "Nubank",
+      counterpartAccountId: f.pfChecking,
+      counterpartAccountName: "Conta principal",
+    });
+    expect(r.transactions.find((t) => t.description === "Salário")).toMatchObject({
+      accountId: f.pfChecking,
+      accountName: "Conta principal",
+      counterpartAccountId: null,
+      counterpartAccountName: null,
+    });
     expect(
       r.transactions.every(
         (t) => t.personalAccountId === f.pfId && t.amount > 0,
@@ -111,11 +127,19 @@ describe("listTransactions", () => {
       new Set([created.transferGroupId]),
     );
     expect(legs.find((t) => t.currency === "USD")).toMatchObject({
+      accountId: usd.id,
+      accountName: "Crypto Wallet",
+      counterpartAccountId: f.pfChecking,
+      counterpartAccountName: "Conta principal",
       counterpartAmount: 33721.17,
       counterpartCurrency: "BRL",
       exchangeRate: 4.98999963,
     });
     expect(legs.find((t) => t.currency === "BRL")).toMatchObject({
+      accountId: f.pfChecking,
+      accountName: "Conta principal",
+      counterpartAccountId: usd.id,
+      counterpartAccountName: "Crypto Wallet",
       counterpartAmount: -6757.75,
       counterpartCurrency: "USD",
       amount: 33721.17,

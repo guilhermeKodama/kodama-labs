@@ -5,9 +5,10 @@ import { loadFx } from "@capital/server/modules/ledger/lib/fx";
 import { toNumber } from "@capital/server/modules/ledger/lib/money";
 import { accountBalances } from "@capital/server/modules/ledger/services/accounts";
 import { createEntry } from "@capital/server/modules/ledger/services/entries";
-import { createHolding, deleteOperation, updateOperation } from "../portfolio";
+import { undoBatch } from "@capital/server/modules/ledger/services/mutations";
+import { createHolding, deleteOperation, recordOperation, updateOperation } from "../portfolio";
 import { proventos12m } from "../proventos";
-import { convertIncomeToDividend, recordDividend } from "../dividends";
+import { convertIncomeToDividend, recordDividend, updateDividend } from "../dividends";
 
 const USER = "test-user-investments-dividends-001";
 let f: LedgerFixture;
@@ -321,5 +322,131 @@ describe("convert_income_to_dividend", () => {
     expect((await prisma.investmentOperation.findUniqueOrThrow({ where: { id: second.operationId } })).cashEntryId).toBeNull();
     expect(await balance(f.pfChecking)).toBeCloseTo(cash2, 4);
     expect(await prisma.ledgerEntry.count({ where: { userId: USER, accountId: f.pfChecking, deletedAt: null, kind: "investment" } })).toBe(0);
+  });
+});
+
+describe("update_dividend", () => {
+  it("sets origin and withholding on a kind-investment cash leg without moving the balance, and a repeat writes nothing", async () => {
+    const h = await petr4();
+    const recorded = await recordDividend(
+      USER,
+      { holdingId: h.id, cashAccountId: f.pfChecking, amount: 100, date: "2026-08-05", currency: "BRL", incomeType: "dividend" },
+      prisma,
+    );
+    const legBefore = await prisma.ledgerEntry.findUniqueOrThrow({ where: { id: recorded.cashEntryId! } });
+    const cash = await balance(f.pfChecking);
+    const entries = await prisma.ledgerEntry.count({ where: { userId: USER } });
+    const batches = await prisma.mutationBatch.count({ where: { userId: USER } });
+
+    const updated = await updateDividend(USER, { operationId: recorded.operationId, origin: "BDR", incomeType: "dividend", withholdingTax: 15 }, prisma);
+    expect(updated).toMatchObject({ duplicate: false, origin: "BDR", incomeType: "dividend", withholdingTax: 15, gross: 115, net: 100, amountBase: 100 });
+    expect(updated.batchId).toEqual(expect.any(String));
+    const op = await prisma.investmentOperation.findUniqueOrThrow({ where: { id: recorded.operationId } });
+    expect(op).toMatchObject({ type: "dividend", incomeType: "dividend", dividendOrigin: "BDR", taxWithheld: 15, totalAmount: 115, cashEntryId: recorded.cashEntryId });
+    const legAfter = await prisma.ledgerEntry.findUniqueOrThrow({ where: { id: recorded.cashEntryId! } });
+    expect(legAfter.kind).toBe("investment");
+    expect(toNumber(legAfter.amount)).toBe(toNumber(legBefore.amount));
+    expect(toNumber(legAfter.amountBase)).toBe(toNumber(legBefore.amountBase));
+    expect(legAfter.updatedAt).toEqual(legBefore.updatedAt);
+    expect(await balance(f.pfChecking)).toBeCloseTo(cash, 4);
+    expect(await prisma.ledgerEntry.count({ where: { userId: USER } })).toBe(entries);
+    expect(await prisma.mutationBatch.count({ where: { userId: USER } })).toBe(batches + 1);
+
+    const again = await updateDividend(USER, { operationId: recorded.operationId, origin: "BDR", incomeType: "dividend", withholdingTax: 15 }, prisma);
+    expect(again).toMatchObject({ duplicate: true, batchId: null, operationId: recorded.operationId, gross: 115 });
+    expect(await prisma.mutationBatch.count({ where: { userId: USER } })).toBe(batches + 1);
+    expect((await prisma.investmentOperation.findUniqueOrThrow({ where: { id: recorded.operationId } })).totalAmount).toBe(115);
+
+    await undoBatch(USER, updated.batchId!, prisma);
+    expect(await prisma.investmentOperation.findUniqueOrThrow({ where: { id: recorded.operationId } })).toMatchObject({
+      dividendOrigin: "BR",
+      taxWithheld: 0,
+      totalAmount: 100,
+    });
+    expect(await balance(f.pfChecking)).toBeCloseTo(cash, 4);
+    expect(toNumber((await prisma.ledgerEntry.findUniqueOrThrow({ where: { id: recorded.cashEntryId! } })).amount)).toBe(100);
+  });
+
+  it("rejects a buy, withholding above the gross, and withholding on fii income", async () => {
+    const h = await petr4();
+    const recorded = await recordDividend(
+      USER,
+      { holdingId: h.id, cashAccountId: f.pfChecking, amount: 100, date: "2026-08-05", currency: "BRL", incomeType: "dividend" },
+      prisma,
+    );
+    const cash = await balance(f.pfChecking);
+    const entries = await prisma.ledgerEntry.count({ where: { userId: USER } });
+
+    await expect(updateDividend(USER, { operationId: recorded.operationId, withholdingTax: 100.01 }, prisma)).rejects.toMatchObject({ code: "operation.tax_exceeds_amount" });
+    await expect(updateDividend(USER, { operationId: recorded.operationId, incomeType: "fii_income", withholdingTax: 1 }, prisma)).rejects.toMatchObject({
+      code: "dividend.fii_withholding",
+    });
+    expect(await prisma.investmentOperation.findUniqueOrThrow({ where: { id: recorded.operationId } })).toMatchObject({
+      incomeType: "dividend",
+      taxWithheld: 0,
+      totalAmount: 100,
+      dividendOrigin: "BR",
+    });
+
+    const buy = await recordOperation(USER, { holdingId: h.id, type: "buy", quantity: 2, pricePerUnit: 10, totalAmount: 20, date: "2026-08-01" }, prisma);
+    await expect(updateDividend(USER, { operationId: recorded.operationId, incomeType: "jcp", origin: "EXTERIOR" }, prisma)).rejects.toMatchObject({
+      code: "dividend.origin_not_dividend",
+    });
+    expect(await prisma.investmentOperation.findUniqueOrThrow({ where: { id: recorded.operationId } })).toMatchObject({
+      incomeType: "dividend",
+      dividendOrigin: "BR",
+    });
+    await expect(updateDividend(USER, { operationId: buy.operation.id, origin: "BR" }, prisma)).rejects.toMatchObject({ code: "dividend.not_income_operation" });
+    await expect(updateDividend(USER, { operationId: "00000000-0000-0000-0000-000000000000", origin: "BR" }, prisma)).rejects.toMatchObject({ code: "operation.not_found" });
+
+    const asYield = await updateDividend(USER, { operationId: recorded.operationId, incomeType: "fixed_income_interest", withholdingTax: 10 }, prisma);
+    expect(asYield).toMatchObject({ duplicate: false, incomeType: "fixed_income_interest", origin: null, withholdingTax: 10, gross: 110, net: 100 });
+    expect(await prisma.investmentOperation.findUniqueOrThrow({ where: { id: recorded.operationId } })).toMatchObject({
+      type: "yield_payment",
+      dividendOrigin: null,
+      taxWithheld: 10,
+      totalAmount: 110,
+    });
+    const cleared = await updateDividend(USER, { operationId: recorded.operationId, incomeType: "fii_income", withholdingTax: 0 }, prisma);
+    expect(cleared).toMatchObject({ incomeType: "fii_income", withholdingTax: 0, origin: null, gross: 100, net: 100 });
+
+    expect(await balance(f.pfChecking)).toBeCloseTo(cash, 4);
+    expect(await prisma.ledgerEntry.count({ where: { userId: USER } })).toBe(entries + 1);
+  });
+
+  it("does not rewrite an income entry that was linked with convert_income_to_dividend", async () => {
+    const h = await petr4();
+    const created = await createEntry(USER, { kind: "income", accountId: f.pfChecking, amount: 40, date: "2026-08-05", description: "PETR4" }, prisma);
+    const linked = await convertIncomeToDividend(USER, { transactionId: created.entryIds[0], holdingId: h.id, incomeType: "dividend" }, prisma);
+    const before = await prisma.ledgerEntry.findUniqueOrThrow({ where: { id: created.entryIds[0] } });
+    const cash = await balance(f.pfChecking);
+    const entries = await prisma.ledgerEntry.count({ where: { userId: USER } });
+
+    const updated = await updateDividend(USER, { operationId: linked.operationId, origin: "EXTERIOR", withholdingTax: 5 }, prisma);
+    expect(updated).toMatchObject({ duplicate: false, origin: "EXTERIOR", withholdingTax: 5, gross: 45, net: 40 });
+    const after = await prisma.ledgerEntry.findUniqueOrThrow({ where: { id: created.entryIds[0] } });
+    expect(after.kind).toBe("income");
+    expect(toNumber(after.amount)).toBe(toNumber(before.amount));
+    expect(toNumber(after.amountBase)).toBe(toNumber(before.amountBase));
+    expect(after.updatedAt).toEqual(before.updatedAt);
+    expect(after.metadata).toEqual(before.metadata);
+    expect(await balance(f.pfChecking)).toBeCloseTo(cash, 4);
+    expect(await prisma.ledgerEntry.count({ where: { userId: USER } })).toBe(entries);
+  });
+
+  it("treats a legacy FII dividend with no income type as tax-exempt", async () => {
+    const fii = await createHolding(USER, { accountId: f.broker, assetClass: "fii", ticker: "MXRF11", name: "Maxi Renda" }, prisma);
+    const legacy = await recordOperation(USER, { holdingId: fii.id, type: "dividend", totalAmount: 50, date: "2026-08-05" }, prisma);
+    expect(legacy.operation.incomeType).toBeNull();
+    await expect(updateDividend(USER, { operationId: legacy.operation.id, withholdingTax: 1 }, prisma)).rejects.toMatchObject({ code: "dividend.fii_withholding" });
+    expect(await prisma.investmentOperation.findUniqueOrThrow({ where: { id: legacy.operation.id } })).toMatchObject({ incomeType: null, taxWithheld: 0 });
+
+    const taxed = await recordOperation(USER, { holdingId: fii.id, type: "dividend", totalAmount: 40, taxWithheld: 5, date: "2026-08-06" }, prisma);
+    await expect(updateDividend(USER, { operationId: taxed.operation.id, origin: "BR" }, prisma)).rejects.toMatchObject({ code: "dividend.fii_withholding" });
+
+    const stock = await petr4();
+    const plain = await recordOperation(USER, { holdingId: stock.id, type: "dividend", totalAmount: 20, taxWithheld: 2, date: "2026-08-07" }, prisma);
+    const updated = await updateDividend(USER, { operationId: plain.operation.id, origin: "BDR" }, prisma);
+    expect(updated).toMatchObject({ origin: "BDR", withholdingTax: 2 });
   });
 });

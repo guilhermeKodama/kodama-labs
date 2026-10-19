@@ -154,6 +154,8 @@ export const ERROR_CODES = {
   "dividend.unlinked_income": "Income {transactionId} already has this net amount. Use convert_income_to_dividend with that transactionId instead of crediting again",
   "dividend.fii_withholding": "FII income is tax-exempt, so withholdingTax has to be zero",
   "dividend.entity_mismatch": "The cash account and the holding have to belong to the same entity",
+  "dividend.not_income_operation": "Only an income operation (a dividend or a yield) can have its origin, income type or withholding changed",
+  "dividend.origin_not_dividend": "origin applies only when the income type is a dividend",
   "aporte.broker_required": "A contribution (aporte) goes to a brokerage account",
   "aporte.source_invalid": "The money of a contribution comes from a checking or cash account",
   "aporte.holding_mismatch": "The asset bought is not on the contribution's broker",

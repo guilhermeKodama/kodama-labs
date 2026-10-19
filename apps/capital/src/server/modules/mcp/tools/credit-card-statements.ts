@@ -77,7 +77,7 @@ export async function getCreditCardStatement(userId: string, params: { statement
     include: {
       account: { select: { id: true, institution: true, name: true, externalId: true, currency: true } },
       entries: { where: { deletedAt: null }, include: { category: { select: { name: true } } }, orderBy: { date: "asc" } },
-      paymentGroup: { include: { legs: true } },
+      paymentGroup: { include: { legs: { include: { account: { select: { id: true, name: true } } } } } },
     },
   });
   if (!statement) throw new Error("Statement not found or access denied");
@@ -107,6 +107,8 @@ export async function getCreditCardStatement(userId: string, params: { statement
       const total = (e.metadata as { totalInstallments?: number } | null)?.totalInstallments;
       return {
         id: e.id,
+        accountId: statement.account.id,
+        accountName: statement.account.name,
         category: e.category?.name ?? null,
         date: e.date.toISOString(),
         description: e.description,
@@ -116,7 +118,17 @@ export async function getCreditCardStatement(userId: string, params: { statement
       };
     }),
     billPayment: paymentLeg
-      ? { id: paymentLeg.id, amount: Math.abs(toNumber(paymentLeg.amount)), currency: paymentLeg.currency, date: paymentLeg.date.toISOString(), description: paymentLeg.description }
+      ? {
+          id: paymentLeg.id,
+          accountId: paymentLeg.accountId,
+          accountName: paymentLeg.account.name,
+          counterpartAccountId: statement.account.id,
+          counterpartAccountName: statement.account.name,
+          amount: Math.abs(toNumber(paymentLeg.amount)),
+          currency: paymentLeg.currency,
+          date: paymentLeg.date.toISOString(),
+          description: paymentLeg.description,
+        }
       : null,
     reconciliation: {
       currency: user?.baseCurrency ?? "USD",

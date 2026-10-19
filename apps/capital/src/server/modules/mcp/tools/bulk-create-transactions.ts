@@ -79,8 +79,15 @@ export async function bulkCreateTransactions(userId: string, items: BulkCreateTr
           tx,
           { collect: records, kind: item.type, skipRules: true }
         );
-        const row = await tx.ledgerEntry.findUniqueOrThrow({ where: { id: created.entryIds[0] } });
-        result.created.push({ id: row.id, description: row.description, amount: item.amount, date: row.date.toISOString() });
+        const row = await tx.ledgerEntry.findUniqueOrThrow({ where: { id: created.entryIds[0] }, include: { account: { select: { id: true, name: true } } } });
+        result.created.push({
+          id: row.id,
+          description: row.description,
+          amount: item.amount,
+          date: row.date.toISOString(),
+          accountId: row.account.id,
+          accountName: row.account.name,
+        });
       } catch (error) {
         result.errors.push({ item, error: error instanceof Error ? error.message : String(error) });
       }

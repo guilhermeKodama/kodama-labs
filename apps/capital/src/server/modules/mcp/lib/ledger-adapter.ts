@@ -14,13 +14,20 @@ import { formatCategoryValidationError, matchCategoryName } from "./category-val
 export const LEGACY_ENTRY_INCLUDE = {
   category: { select: { name: true } },
   entity: { select: { id: true, kind: true } },
-  transferGroup: { select: { id: true, legs: { select: { id: true, amount: true, currency: true } } } },
+  account: { select: { id: true, name: true } },
+  transferGroup: {
+    select: {
+      id: true,
+      legs: { select: { id: true, accountId: true, amount: true, currency: true, account: { select: { id: true, name: true } } } },
+    },
+  },
 } satisfies Prisma.LedgerEntryInclude;
 
 type LegacyEntry = LedgerEntry & {
   category: Pick<Category, "name"> | null;
   entity: Pick<Entity, "id" | "kind">;
-  transferGroup?: { id: string; legs: { id: string; amount: Prisma.Decimal; currency: string }[] } | null;
+  account: { id: string; name: string };
+  transferGroup?: { id: string; legs: { id: string; accountId: string; amount: Prisma.Decimal; currency: string; account: { id: string; name: string } }[] } | null;
 };
 
 export function legacyType(entry: Pick<LedgerEntry, "kind" | "amount">): TransactionType {
@@ -44,11 +51,14 @@ export function toLegacyTransaction(e: LegacyEntry) {
     businessId: ref.businessId,
     personalAccountId: ref.personalAccountId,
     accountId: e.accountId,
+    accountName: e.account.name,
     createdAt: e.createdAt.toISOString(),
     /** Set on a transfer leg: the pair, and the other leg's signed amount and currency. */
     transferGroupId: e.transferGroupId,
     counterpartAmount: counterpartAmount(e),
     counterpartCurrency: counterpartCurrency(e),
+    counterpartAccountId: counterpartLeg(e)?.accountId ?? null,
+    counterpartAccountName: counterpartLeg(e)?.account.name ?? null,
   };
 }
 

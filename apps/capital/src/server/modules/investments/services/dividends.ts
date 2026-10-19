@@ -15,7 +15,7 @@ import { round, toNumber } from "@capital/server/modules/ledger/lib/money";
 import { getOwnedAccount } from "@capital/server/modules/ledger/services/accounts";
 import { inTransaction, recordMutation, snapshot, type MutationRecordInput } from "@capital/server/modules/ledger/services/mutations";
 import { recalculateHoldingDetailed } from "../lib/holding-position";
-import { getOwnedHolding, incomeOperationType, recordOperation } from "./portfolio";
+import { getOwnedHolding, incomeOperationType, isIncomeOperation, recordOperation } from "./portfolio";
 
 const EPS = 0.02;
 const DAY_MS = 86_400_000;
@@ -43,6 +43,15 @@ export interface ConvertIncomeInput {
   incomeType: PassiveIncomeType;
   /** Withheld at source, in the transaction's currency. The cash entry is the net and is not changed. */
   withholdingTax?: number;
+  origin?: DividendOrigin;
+}
+
+export interface UpdateDividendInput {
+  operationId: string;
+  incomeType?: PassiveIncomeType;
+  /** Withheld at source, in the holding's currency. Omit to keep the current value. 0 clears it. Cannot exceed the current gross. The cash entry is not changed. */
+  withholdingTax?: number;
+  /** Dividends only. Rejected when the income type is not a dividend. */
   origin?: DividendOrigin;
 }
 
@@ -179,6 +188,8 @@ export async function convertIncomeToDividend(userId: string, input: ConvertInco
       throw new LedgerError("Only an income transaction can become a dividend", 422, { code: "dividend.not_income" });
     }
     const holding = await getOwnedHolding(userId, input.holdingId, tx);
+    // Entry lock first, then the holding, the same key recordDividend takes. updateDividend takes its operation lock, then this one.
+    await advisoryLock(tx, `holding:${holding.id}`);
     await getOwnedAccount(userId, entry.accountId, tx);
     const fx = await loadFx(userId, tx);
     const entity = await tx.entity.findUniqueOrThrow({ where: { id: holding.account.entityId }, select: { kind: true } });
@@ -246,6 +257,96 @@ export async function convertIncomeToDividend(userId: string, input: ConvertInco
     const batchId = await recordMutation(tx, userId, "create", description, records);
     const operation = await tx.investmentOperation.findUniqueOrThrow({ where: { id: op.id }, include: { cashEntry: true } });
     return resultOf(operation, false, batchId, fx, input.incomeType, origin, description, grossNative, withholding, entry.currency, passiveIncome);
+  });
+}
+
+/**
+ * Sets origin, income type and withholding on an income operation
+ * (dividend or yield, including a cash leg booked as kind investment).
+ * The cash entry is not rewritten and no entry is created: the net
+ * (gross − tax) stays the net already booked, so a higher withholding
+ * raises the gross by the same amount. The same values write nothing.
+ * A buy, sale, transfer or expense is rejected.
+ */
+export async function updateDividend(userId: string, input: UpdateDividendInput, db: DbClient): Promise<DividendResult> {
+  return inTransaction(db, async (tx) => {
+    await advisoryLock(tx, `dividend-update:${input.operationId}`);
+    const located = await tx.investmentOperation.findFirst({
+      where: { id: input.operationId, holding: { account: { userId } } },
+      select: { holdingId: true },
+    });
+    if (!located) throw notFound("Investment operation", "operation.not_found");
+    // Operation lock first, then the holding key recordDividend takes up front and convert takes after its entry lock.
+    await advisoryLock(tx, `holding:${located.holdingId}`);
+    const before = await tx.investmentOperation.findFirst({
+      where: { id: input.operationId, holding: { account: { userId } } },
+    });
+    if (!before) throw notFound("Investment operation", "operation.not_found");
+    if (!isIncomeOperation(before.type)) {
+      throw new LedgerError(
+        "Only an income operation (a dividend or a yield) can have its origin, income type or withholding changed",
+        422,
+        { code: "dividend.not_income_operation" },
+      );
+    }
+
+    const holding = await getOwnedHolding(userId, before.holdingId, tx);
+    const incomeType: IncomeType | null = input.incomeType !== undefined ? input.incomeType : before.incomeType;
+    // A legacy dividend on an FII often has no income type stored. The exemption still applies.
+    const exemptionType = incomeType ?? (holding.assetClass === "fii" ? "fii_income" : null);
+    if (input.withholdingTax !== undefined && (!(input.withholdingTax >= 0) || input.withholdingTax > before.totalAmount + 1e-9)) {
+      throw new LedgerError("The tax withheld cannot exceed the gross amount", 422, { code: "operation.tax_exceeds_amount" });
+    }
+    const withholding = input.withholdingTax !== undefined ? input.withholdingTax : before.taxWithheld;
+    if (exemptionType === "fii_income") assertFiiExempt("fii_income", withholding);
+
+    const taxUnchanged = Math.abs(withholding - before.taxWithheld) <= 1e-9;
+    const nextTax = taxUnchanged ? before.taxWithheld : round(withholding, 4);
+    const net = round(before.totalAmount - before.taxWithheld, 4);
+    const nextTotal = taxUnchanged ? before.totalAmount : round(net + nextTax, 4);
+    if (nextTax < 0 || nextTax > nextTotal + 1e-9) {
+      throw new LedgerError("The tax withheld cannot exceed the gross amount", 422, { code: "operation.tax_exceeds_amount" });
+    }
+
+    const originApplies = incomeType === "dividend" || (incomeType == null && before.type === "dividend");
+    if (input.origin !== undefined && !originApplies) {
+      throw new LedgerError("origin applies only when the income type is a dividend", 422, { code: "dividend.origin_not_dividend" });
+    }
+    let origin: DividendOrigin | null = null;
+    if (originApplies) {
+      if (input.origin !== undefined) origin = input.origin;
+      else if (input.incomeType === "dividend" && before.incomeType !== "dividend") origin = before.dividendOrigin ?? defaultDividendOrigin(holding.assetClass, holding.currency);
+      else origin = before.dividendOrigin;
+    }
+    const nextType = incomeType ? incomeOperationType(incomeType) : before.type;
+    const unchanged =
+      nextType === before.type &&
+      incomeType === before.incomeType &&
+      origin === (before.dividendOrigin ?? null) &&
+      nextTax === before.taxWithheld &&
+      nextTotal === before.totalAmount;
+
+    const cashEntry = before.cashEntryId ? await tx.ledgerEntry.findUnique({ where: { id: before.cashEntryId } }) : null;
+    const [fx, entity] = await Promise.all([
+      loadFx(userId, tx),
+      tx.entity.findUniqueOrThrow({ where: { id: holding.account.entityId }, select: { kind: true } }),
+    ]);
+    const passiveIncome = countsAsPassiveIncome({ entityKind: entity.kind, incomeType });
+    const description = cashEntry && !cashEntry.deletedAt ? cashEntry.description : dividendDescription(incomeType ?? "dividend", holding);
+    const reportedType = (incomeType ?? "dividend") as IncomeType;
+
+    if (unchanged) {
+      return resultOf({ ...before, cashEntry }, true, null, fx, reportedType, origin, description, before.totalAmount, before.taxWithheld, holding.currency, passiveIncome);
+    }
+
+    const updated = await tx.investmentOperation.update({
+      where: { id: before.id },
+      data: { type: nextType, incomeType, dividendOrigin: origin, taxWithheld: nextTax, totalAmount: nextTotal },
+    });
+    const batchId = await recordMutation(tx, userId, "update", description, [
+      { model: "InvestmentOperation", recordId: before.id, before: snapshot(before), after: snapshot(updated) },
+    ]);
+    return resultOf({ ...updated, cashEntry }, false, batchId, fx, reportedType, updated.dividendOrigin, description, updated.totalAmount, updated.taxWithheld, holding.currency, passiveIncome);
   });
 }
 
