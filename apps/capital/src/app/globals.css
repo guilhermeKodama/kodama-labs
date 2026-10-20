@@ -115,6 +115,11 @@
   --color-sidebar-primary: var(--sidebar-primary);
   --color-sidebar-foreground: var(--sidebar-foreground);
   --color-sidebar: var(--sidebar);
+  --color-chart-10: var(--cap-chart-10);
+  --color-chart-9: var(--cap-chart-9);
+  --color-chart-8: var(--cap-chart-8);
+  --color-chart-7: var(--cap-chart-7);
+  --color-chart-6: var(--cap-chart-6);
   --color-chart-5: var(--chart-5);
   --color-chart-4: var(--chart-4);
   --color-chart-3: var(--chart-3);
@@ -215,29 +220,33 @@
   --cap-cat-orange: #c2410c;
   --cap-cat-red: #dc2626;
 
-  /* Charts. Series 1 is the brand gold; the rest are bronze, warm gray,
-     muted teal and copper, separated from gain green and loss red. */
+  /* Charts. One gold-family scale, same roles in both modes:
+     gold, soft gold, bronze, deep amber, warm taupe, warm gray,
+     one muted cool accent, honey, ivory gray, deep ochre.
+     #E6C976 on ivory is 1.5:1, so the light soft-gold fill is the
+     deeper sandy gold #C49858 (still black-text AA). Dark mode uses
+     #E6C976 itself. Gain green and loss red are not series colors. */
   --cap-chart-grid: #efe6d6;
   --cap-chart-axis: #e4d7c4;
   --cap-chart-muted: #6e675c;
-  --cap-chart-ink: #1c1914;
+  --cap-chart-ink: #c9a227;
   --cap-chart-bar: #c9a227;
   --cap-chart-label: #4a453c;
-  --cap-chart-soft: #d9cdb8;
-  --cap-chart-area: #efe6d6;
-  --cap-chart-accent: #14665e;
-  --cap-chart-accent-soft: #d5ebe6;
+  --cap-chart-soft: #c49858;
+  --cap-chart-area: #c9a227;
+  --cap-chart-accent: #5e706a;
+  --cap-chart-accent-soft: #dce5e2;
   --cap-chart-warn: #9a3412;
   --cap-chart-1: #c9a227;
-  --cap-chart-2: #5c3a22;
-  --cap-chart-3: #6a645c;
-  --cap-chart-4: #14665e;
-  --cap-chart-5: #c46a28;
-  --cap-chart-6: #3e5c34;
-  --cap-chart-7: #8c7044;
-  --cap-chart-8: #a33d58;
-  --cap-chart-9: #243e3a;
-  --cap-chart-10: #7a4e32;
+  --cap-chart-2: #c49858;
+  --cap-chart-3: #8c6a2f;
+  --cap-chart-4: #d07010;
+  --cap-chart-5: #6e5844;
+  --cap-chart-6: #8a7b68;
+  --cap-chart-7: #5e706a;
+  --cap-chart-8: #a8842a;
+  --cap-chart-9: #a6a082;
+  --cap-chart-10: #944610;
   /* Heatmap cells mix --cap-heat with transparent by intensity. */
   --cap-heat: #1c1914;
   --cap-heat-over: #f0d0cb;
@@ -338,24 +347,25 @@
   --cap-chart-grid: oklch(93% 0.02 85 / 8%);
   --cap-chart-axis: oklch(93% 0.02 85 / 16%);
   --cap-chart-muted: #a89880;
-  --cap-chart-ink: #faf7f0;
+  --cap-chart-ink: #c9a227;
   --cap-chart-bar: #c9a227;
   --cap-chart-label: #e7e0d4;
-  --cap-chart-soft: #3a342c;
-  --cap-chart-area: oklch(93% 0.02 85 / 14%);
-  --cap-chart-accent: #4ebeb4;
-  --cap-chart-accent-soft: #1a3330;
+  --cap-chart-soft: #e6c976;
+  --cap-chart-area: #c9a227;
+  --cap-chart-accent: #7a96a0;
+  --cap-chart-accent-soft: #243033;
   --cap-chart-warn: #e07050;
   --cap-chart-1: #c9a227;
   --cap-chart-2: #e6c976;
-  --cap-chart-3: #d9cfc0;
-  --cap-chart-4: #4ebeb4;
-  --cap-chart-5: #e0a04a;
-  --cap-chart-6: #b0a090;
-  --cap-chart-7: #f2c8a8;
-  --cap-chart-8: #d4a0b8;
-  --cap-chart-9: #c46a48;
-  --cap-chart-10: #8a7860;
+  --cap-chart-3: #8c6a2f;
+  --cap-chart-4: #c6681e;
+  --cap-chart-5: #9e9280;
+  --cap-chart-6: #c8b49a;
+  --cap-chart-7: #7a96a0;
+  --cap-chart-8: #d8a060;
+  --cap-chart-9: #f2e6c8;
+  --cap-chart-10: #b28050;
+  /* Series fills stay in the gold family in dark mode too. */
   --cap-heat: #faf7f0;
   --cap-heat-over: #5c2420;
 

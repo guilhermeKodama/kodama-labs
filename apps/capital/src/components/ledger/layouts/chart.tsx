@@ -21,7 +21,14 @@ const TOOLTIP_STYLE = {
   contentStyle: { background: "var(--cap-bg-editor)", border: "1px solid var(--cap-stroke-1)", borderRadius: 8, fontSize: textRole("body-sm") },
   labelStyle: { color: "var(--cap-text-2)" },
 } as const;
-const SHADE = { 1: "bg-fill-1", 2: "bg-fill-2", 3: "bg-fill-3", 4: "bg-fill-4" } as const;
+/* Rank shades on the gold scale. Black text on gold, soft gold and warm
+   gray; ivory text on bronze, which is too dark for near-black labels. */
+const TILE = {
+  1: "bg-chart-1 text-primary-foreground",
+  2: "bg-chart-2 text-primary-foreground",
+  3: "bg-chart-3 text-on-accent",
+  4: "bg-chart-6 text-primary-foreground",
+} as const;
 const color = (index: number) => CHART_SERIES[index % CHART_SERIES.length];
 
 /** Chart types above the chart (mockup 2925–2950): icon and label, the hint as title. */
@@ -165,7 +172,7 @@ export function CartesianBody({
   const height = horizontal ? Math.max(200, data.categories.length * 28) : 260;
   const stacked = data.hasSeries;
   const tick = (v: number) => value(Number(v));
-  const legend = data.hasSeries ? <Legend iconSize={8} wrapperStyle={{ fontSize: textRole("caption") }} /> : null;
+  const legend = data.hasSeries ? <Legend iconSize={8} wrapperStyle={{ fontSize: textRole("caption"), color: "var(--cap-text-2)" }} /> : null;
   const tooltip = <Tooltip {...TOOLTIP_STYLE} formatter={(v) => tick(Number(v))} />;
   const seriesColor = (j: number) => (data.hasSeries ? color(j) : CHART.bar);
   const many = data.categories.length > 8;
@@ -183,9 +190,9 @@ export function CartesianBody({
             {legend}
             {data.series.map((s, j) =>
               type === "line" ? (
-                <Line key={j} dataKey={`s${j}`} name={seriesLabel(s.key)} stroke={data.hasSeries ? color(j) : CHART.ink} strokeWidth={2} dot={false} className="cursor-pointer" />
+                <Line key={j} dataKey={`s${j}`} name={seriesLabel(s.key)} stroke={seriesColor(j)} strokeWidth={2} dot={false} className="cursor-pointer" />
               ) : (
-                <Area key={j} dataKey={`s${j}`} name={seriesLabel(s.key)} stroke={data.hasSeries ? color(j) : CHART.ink} fill={data.hasSeries ? color(j) : CHART.area} fillOpacity={data.hasSeries ? 0.15 : 1} className="cursor-pointer" />
+                <Area key={j} dataKey={`s${j}`} name={seriesLabel(s.key)} stroke={seriesColor(j)} fill={seriesColor(j)} fillOpacity={0.22} className="cursor-pointer" />
               ),
             )}
           </Chart>
@@ -307,12 +314,12 @@ export function TreemapBody({ data, catLabel, onTile, value }: { data: ChartData
           className="absolute box-border p-0.5 text-left"
           style={{ left: `${(r.x / TREEMAP_W) * 100}%`, top: `${(r.y / TREEMAP_H) * 100}%`, width: `${(r.w / TREEMAP_W) * 100}%`, height: `${(r.h / TREEMAP_H) * 100}%` }}
         >
-          <span className={cn("box-border flex h-full flex-col gap-0.5 overflow-hidden rounded-[5px] p-2 hover:opacity-90", SHADE[treemapShade(r.rank)])}>
+          <span className={cn("box-border flex h-full flex-col gap-0.5 overflow-hidden rounded-[5px] p-2 hover:opacity-90", TILE[treemapShade(r.rank)])}>
             {showsTreemapLabel(r) ? (
               <>
                 <span className="truncate text-body-sm font-semibold">{catLabel(r.data.category)}</span>
-                <span className="font-mono text-caption text-fg-2 tabular-nums">{value ? value(r.value) : fmt.money0(r.value)}</span>
-                <span className="font-mono text-hint text-fg-3 tabular-nums">{fmt.pct(total ? r.value / total : 0, 0)}</span>
+                <span className="font-mono text-caption tabular-nums">{value ? value(r.value) : fmt.money0(r.value)}</span>
+                <span className="font-mono text-hint tabular-nums">{fmt.pct(total ? r.value / total : 0, 0)}</span>
               </>
             ) : null}
           </span>
@@ -358,7 +365,10 @@ function WaterfallBody({
                 {fmt.k(step.value)}
               </span>
               <span
-                className={cn("absolute right-[12%] left-[12%] rounded-[3px]", step.kind === "pos" ? "bg-pos" : step.kind === "neg" ? "bg-fg-3" : "bg-fg-1")}
+                className={cn(
+                  "absolute right-[12%] left-[12%] rounded-[3px]",
+                  step.kind === "pos" ? "bg-chart-1" : step.kind === "neg" ? (i % 2 === 0 ? "bg-chart-3" : "bg-chart-5") : "box-border border-2 border-gold-line bg-chart-2",
+                )}
                 style={{ top: bar.top, height: bar.height }}
               />
             </button>

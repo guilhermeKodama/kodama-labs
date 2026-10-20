@@ -27,21 +27,21 @@ const TOOLTIP_STYLE = {
   color: "var(--cap-text-1)",
 } as const;
 
-/** Series colors of the six classes (stable, so a class keeps its color in every chart). */
+/** Series colors of the six classes. Gold scale, with the cool accent only on crypto so the warms stay apart. */
 export const CLASS_COLOR: Record<AllocationClass, string> = {
   fixed_income: CHART_SERIES[0],
   br_stocks: CHART_SERIES[1],
-  fii: CHART_SERIES[3],
-  international: CHART_SERIES[4],
-  crypto: CHART_SERIES[5],
-  cash: CHART_SERIES[9],
+  fii: CHART_SERIES[2],
+  international: CHART_SERIES[3],
+  crypto: CHART_SERIES[6],
+  cash: CHART_SERIES[5],
 };
 
 /** Patrimônio / Aportado / Posições iniciais. Strokes are the tooltip and legend marks too. */
 const NET_WORTH_SERIES = {
-  netWorth: { stroke: CHART.ink, fill: CHART.soft, fillOpacity: 0.2, dashed: false },
-  aportes: { stroke: CHART.accent, fill: CHART.accent, fillOpacity: 0.35, dashed: false },
-  initial: { stroke: CHART_SERIES[6], fill: CHART_SERIES[6], fillOpacity: 0.2, dashed: true },
+  netWorth: { stroke: CHART.bar, fill: CHART.bar, fillOpacity: 0.2, dashed: false },
+  aportes: { stroke: CHART_SERIES[1], fill: CHART_SERIES[1], fillOpacity: 0.35, dashed: false },
+  initial: { stroke: CHART_SERIES[4], fill: CHART_SERIES[4], fillOpacity: 0.2, dashed: true },
 } as const;
 
 type NetWorthSeriesKey = keyof typeof NET_WORTH_SERIES;

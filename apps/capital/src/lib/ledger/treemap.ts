@@ -53,7 +53,7 @@ export function layoutTreemap<T>(items: readonly TreemapItem<T>[], width = TREEM
   return out;
 }
 
-/** Shade step of a tile by rank: 1 (fill-1) for the largest, 2, 3 for ranks 2–3, 4 for the rest. */
+/** Shade step of a tile by rank: 1 for the largest, 2, 3 for ranks 2–3, 4 for the rest. */
 export function treemapShade(rank: number): 1 | 2 | 3 | 4 {
   return rank === 0 ? 1 : rank === 1 ? 2 : rank <= 3 ? 3 : 4;
 }

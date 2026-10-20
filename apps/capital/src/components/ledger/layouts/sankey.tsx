@@ -14,28 +14,28 @@ import { useFmt } from "@/lib/format/provider";
 import type { DrillCell } from "@/lib/ledger/drill";
 import { expandOthers, type SankeyNode } from "@/lib/ledger/sankey";
 import { flowsQuery } from "@/lib/ledger/view-query";
-import { CHART } from "@/lib/theme/chart-colors";
+import { CHART, CHART_SERIES } from "@/lib/theme/chart-colors";
 import { textRole } from "@/lib/theme/type-scale";
 
 const HEIGHT = 440;
 type Node = SankeyNode & { name: string };
 type Link = { source: number; target: number; value: number };
 
-/** Node color by role: income in the accent, entities in ink, outputs muted, surplus in the accent again. */
+/** Node color by role, all on the gold scale: income gold, entities bronze, surplus soft gold, outflows taupe. */
 function nodeColor(node: SankeyNode): string {
   switch (node.kind) {
     case "category":
     case "reserves":
     case "prior_balance":
     case "transfer_in":
-      return CHART.accent;
+      return CHART_SERIES[0];
     case "business":
     case "personal":
-      return CHART.bar;
+      return CHART_SERIES[2];
     case "surplus":
-      return CHART.accent;
+      return CHART_SERIES[1];
     default:
-      return CHART.muted;
+      return CHART_SERIES[4];
   }
 }
 
@@ -145,7 +145,7 @@ export function SankeyView({
               const source = link.source as D3Node<Node, Link>;
               const target = link.target as D3Node<Node, Link>;
               return (
-                <path key={i} d={path(link) ?? ""} fill="none" stroke={CHART.muted} strokeOpacity={0.35} strokeWidth={Math.max(1, link.width ?? 1)}>
+                <path key={i} d={path(link) ?? ""} fill="none" stroke={CHART_SERIES[1]} strokeOpacity={0.55} strokeWidth={Math.max(1, link.width ?? 1)}>
                   <title>{`${nameOf(source)} → ${nameOf(target)} · ${fmt.money0(link.value)}`}</title>
                 </path>
               );
