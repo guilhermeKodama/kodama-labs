@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { APP_ICON, BRAND, BRAND_COLORS, MARK_SIMPLE, markSvg, THEME_COLOR } from "@/lib/brand";
+import { APP_ICON, BRAND, BRAND_COLORS, ICONS, MARK_SIMPLE, markSvg, THEME_COLOR } from "@/lib/brand";
 
 const APP = path.resolve(__dirname, "../../..");
 const css = fs.readFileSync(path.join(APP, "src/app/globals.css"), "utf8");
@@ -28,6 +28,20 @@ describe("brand", () => {
     expect(token(".dark", "cap-brand")).toBe(BRAND_COLORS.sapwood);
     expect(token(".dark", "cap-bg-editor")).toBe(BRAND_COLORS.charcoal);
     expect(THEME_COLOR).toEqual({ light: BRAND_COLORS.paper, dark: BRAND_COLORS.charcoal });
+  });
+
+  it("serves every icon under a name of its own, from the manifest, the service worker and the layout", () => {
+    for (const url of Object.values(ICONS)) {
+      expect(url).toMatch(/^\/icons\/cerne-[a-z0-9-]+\.png$/);
+      expect(fs.existsSync(path.join(APP, "public", url))).toBe(true);
+    }
+    const users = ["src/app/manifest.webmanifest/route.ts", "src/app/sw.js/route.ts", "src/app/[locale]/layout.tsx"].map((file) =>
+      fs.readFileSync(path.join(APP, file), "utf8"),
+    );
+    for (const source of users) {
+      expect(source).toContain("ICONS.");
+      expect(source).not.toMatch(/\/(icon-\d+|icon-maskable-\d+|badge-\d+|apple-icon)\.png/);
+    }
   });
 
   it("serves the icon.svg that scripts/brand-icons.ts writes", () => {
