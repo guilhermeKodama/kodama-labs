@@ -51,6 +51,7 @@ Answer these before writing code. The answers become the app's `proof/` files.
   helpers.ts             app-specific helpers for flows; starts empty
   flows/                 the suite that always runs
   once/                  proofs of a single change
+  package/               the validation-package tour: every screen, every theme
   tsconfig.json          so the folder is typechecked on its own
 ```
 
@@ -76,7 +77,7 @@ export default defineProofConfig({
 
 | Option | Meaning |
 |---|---|
-| `dir` | The proof folder. Flows in `dir/flows`, one-off proofs in `dir/once`, results in `dir/out`. |
+| `dir` | The proof folder. Flows in `dir/flows`, one-off proofs in `dir/once`, the validation-package tour in `dir/package`, results in `dir/out`. |
 | `outDir` | Another results folder, for example one per agent slot. |
 | `webServer` | How Playwright starts the app, or attaches to one already running. |
 | `globalSetup` | A file that prepares data and the session. It may return a function that cleans up. |
@@ -97,6 +98,7 @@ Package scripts:
 "proof": "playwright test -c proof/playwright.config.ts",
 "proof:record": "PROOF_RECORD=1 playwright test -c proof/playwright.config.ts",
 "proof:once": "PROOF_ONCE=1 PROOF_RECORD=1 playwright test -c proof/playwright.config.ts",
+"proof:package": "PROOF_PACKAGE=1 PROOF_RECORD=1 playwright test -c proof/playwright.config.ts",
 "proof:server": "tsx proof/server.ts"
 ```
 
