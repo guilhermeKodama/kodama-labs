@@ -1,3 +1,5 @@
+import fs from "node:fs";
+import path from "node:path";
 import { createElement, type ComponentProps, type ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { NextIntlClientProvider } from "next-intl";
@@ -24,14 +26,25 @@ function render(locale: "pt-BR" | "en"): string {
 describe("HomePage", () => {
   const html = render("pt-BR");
 
-  it("leads with the canvas headline and a screenshot of the app in each theme", () => {
+  it("leads with the canvas headline and the rings screen in each theme", () => {
     expect(html).toContain("Patrimônio se faz em anéis.");
-    expect(html).toMatch(/<img[^>]*alt="A tela de transações do Cerne"[^>]*app-claro\.webp/);
-    expect(html).toMatch(/<img[^>]*app-escuro\.webp/);
+    expect(html).toMatch(/<img[^>]*alt="A tela de Liberdade financeira do Cerne[^"]*"[^>]*aneis-claro\.webp/);
+    expect(html).toMatch(/<img[^>]*aneis-escuro\.webp/);
+  });
+
+  it("explains PF + PJ next to the transactions screen, and shows the real freedom panel", () => {
+    expect(html).toContain("Duas contas, um patrimônio.");
+    expect(html).toMatch(/<img[^>]*alt="A tela de transações do Cerne[^"]*"[^>]*livro-claro\.webp/);
+    expect(html).toMatch(/<img[^>]*alt="O painel da Liberdade financeira[^"]*"[^>]*painel-claro\.webp/);
+    for (const name of ["aneis", "aneis-corte", "livro", "painel"]) {
+      for (const theme of ["claro", "escuro"]) {
+        expect(fs.existsSync(path.resolve(__dirname, `../../../../public/home/${name}-${theme}.webp`))).toBe(true);
+      }
+    }
   });
 
   it("has a section for every anchor the header links to", () => {
-    for (const id of ["como", "recursos", "liberdade", "controle", "acesso"]) {
+    for (const id of ["juntos", "como", "recursos", "liberdade", "controle", "acesso"]) {
       expect(html).toContain(`href="#${id}"`);
       expect(html).toContain(`id="${id}"`);
     }

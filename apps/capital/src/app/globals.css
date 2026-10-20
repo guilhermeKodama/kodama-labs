@@ -121,8 +121,6 @@
   --color-home-band-ink: var(--cap-home-band-ink);
   --color-home-band-muted: var(--cap-home-band-muted);
   --color-home-band-body: var(--cap-home-band-body);
-  --color-home-ring-track: var(--cap-home-ring-track);
-  --color-home-ring: var(--cap-home-ring);
   --color-home-footer: var(--cap-home-footer);
   --color-home-footer-ink: var(--cap-home-footer-ink);
   --color-home-footer-text: var(--cap-home-footer-text);
@@ -151,7 +149,6 @@
   --text-home-h4: calc(18px * var(--cap-text-scale));
   --text-home-large: calc(18px * var(--cap-text-scale));
   --text-home-large--line-height: 1.6;
-  --text-home-pct: calc(34px * var(--cap-text-scale));
   --color-pos: var(--cap-pos);
   --color-pos-ink: var(--cap-pos-ink);
   --color-pos-soft: var(--cap-pos-soft);
@@ -349,7 +346,6 @@
   --cap-home-band-ink: #f2ebdd;
   --cap-home-band-muted: #e3d3bc;
   --cap-home-band-body: #eaddc8;
-  --cap-home-ring-track: #7a4a36;
   --cap-home-ring: #e0a04a;
   --cap-home-footer: #1f1a17;
   --cap-home-footer-ink: #f2ebdd;
@@ -500,7 +496,6 @@
   --cap-home-band-ink: #f2ebdd;
   --cap-home-band-muted: #cdbfa9;
   --cap-home-band-body: #e3d3bc;
-  --cap-home-ring-track: #4c3b2e;
   --cap-home-ring: #e0a04a;
   --cap-home-footer: #120f0d;
   --cap-home-footer-ink: #f2ebdd;
