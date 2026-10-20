@@ -285,6 +285,7 @@ function SidebarContent({ rail, onNavigate }: { rail: boolean; onNavigate?: () =
       {section(t("investments"))}
       {nav("/investments", t("portfolio"), <Briefcase className="size-3.5" />)}
       {nav("/investments/contributions", t("contributions"), <PiggyBank className="size-3.5" />)}
+      {nav("/investments/fire", t("fire"), <Mark tone="current" className="size-3.5" />)}
       <div className="flex-1" />
       {rail ? (
         <UserMenu

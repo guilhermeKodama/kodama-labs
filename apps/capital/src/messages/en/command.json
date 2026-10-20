@@ -19,7 +19,8 @@
     "trash": "Trash",
     "imports": "Imports",
     "settings": "Settings",
-    "settingsPage": "Settings › {page}"
+    "settingsPage": "Settings › {page}",
+    "fire": "Financial freedom"
   },
   "settingsPages": {
     "prefs": "Profile and preferences",

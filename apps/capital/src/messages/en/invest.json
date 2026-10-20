@@ -2,7 +2,8 @@
   "crumbs": {
     "investments": "Investments",
     "portfolio": "Portfolio",
-    "contributions": "Contributions"
+    "contributions": "Contributions",
+    "fire": "Financial freedom"
   },
   "loading": "Loading…",
   "monthShort": "{month} ’{year}",
@@ -418,20 +419,6 @@
       "originOut": "withdrawal: {origin}",
       "caption": "Click a source to see its transfers in Transactions ↗"
     },
-    "fire": {
-      "title": "Financial independence",
-      "number": "FIRE number",
-      "numberSub": "{income}/month · SWR {swr}",
-      "progress": "Progress",
-      "projection": "Projection: {date} at {amount}/month.",
-      "alt": " With {amount}/month: {date}.",
-      "altUnreachable": " With {amount}/month: out of reach.",
-      "reached": "Goal reached.",
-      "unreachable": "At the current contribution, the goal is out of reach.",
-      "noPlan": "No FIRE plan. Today: {invested} invested and {expenses}/month in expenses.",
-      "edit": "Edit goal",
-      "define": "Set goal"
-    },
     "tabs": {
       "summary": "Summary",
       "all": "All contributions"
@@ -504,7 +491,7 @@
     "done": "{count, plural, one {# order recorded} other {# orders recorded}}"
   },
   "fireGoal": {
-    "title": "Financial independence goal",
+    "title": "Financial freedom goal",
     "desc": "How much you want to receive each month from your investments and how much you contribute to get there.",
     "income": "Desired monthly income",
     "contribution": "Monthly contribution",
@@ -524,5 +511,119 @@
     "age": "Current age (optional)",
     "save": "Save goal",
     "saved": "Goal saved"
+  },
+  "rings": {
+    "title": "Financial freedom",
+    "editGoal": "Edit goal",
+    "defineGoal": "Set a goal",
+    "register": "Record contribution",
+    "trunkLabel": "Cross-section of the trunk: the core from {coreYear} and one ring per year up to today, with {today} invested.",
+    "trunkEmpty": "There is no invested net worth yet to draw the trunk.",
+    "core": "core",
+    "coreSince": "{value} · {date}",
+    "now": "today",
+    "goalLabel": "financial freedom · {value}",
+    "legend": {
+      "core": "core: what you had when you started",
+      "ring": "one ring per year",
+      "now": "this year's ring",
+      "future": "projected rings",
+      "goal": "financial freedom"
+    },
+    "hero": {
+      "label": "Your tree today",
+      "progress": "{pct} of the {target} goal",
+      "noGoal": "Set a goal to see the way there"
+    },
+    "passive": {
+      "label": "Already pays per month",
+      "sub": "without touching the principal, at {swr} a year"
+    },
+    "arrival": {
+      "label": "Arrival",
+      "reached": "Goal reached",
+      "never": "Not reached",
+      "pace": "contributing {amount}/month",
+      "range": "between {from} and {to} in 80% of scenarios",
+      "rangeOpen": "from {from} on in 80% of scenarios",
+      "rangeSame": "in {year} in 80% of scenarios",
+      "needAge": "add your age in Edit goal to see the range",
+      "unreachable": "not reached at the current pace"
+    },
+    "forming": {
+      "label": "{year} ring · forming",
+      "detail": "Through {month}: {aportes} contributed and {rendimento} earned"
+    },
+    "whatIf": {
+      "label": "What if I contribute per month",
+      "result": "Freedom arrives in {year}, {delta}.",
+      "sooner": "{years, plural, one {a year sooner} other {# years sooner}}",
+      "later": "{years, plural, one {a year later} other {# years later}}",
+      "same": "the same year",
+      "never": "At that pace the goal is not reached.",
+      "resultPlain": "Freedom arrives in {year}."
+    },
+    "table": {
+      "title": "One ring per year",
+      "aportes": "contributions",
+      "rendimento": "earnings",
+      "loss": "loss",
+      "projection": "projection",
+      "coreTag": "core",
+      "coreNote": "what you had when you started",
+      "ringTag": "ring",
+      "thinTag": "thin ring: a losing year",
+      "estimatedTag": "ring estimated at cost",
+      "formingTag": "forming, through {month}",
+      "projectedTag": "projection",
+      "more": "{count, plural, one {# more projected ring} other {# more projected rings}}",
+      "arrivalTag": "financial freedom",
+      "arrivalNote": "{amount} a month, for good",
+      "unreachableTag": "still far",
+      "unreachableNote": "not reached at the current pace"
+    },
+    "milestones": {
+      "title": "Milestones on the way",
+      "add": "+ Milestone",
+      "done": "done",
+      "remove": "Remove the milestone “{name}”",
+      "removed": "Milestone “{name}” removed",
+      "empty": "No milestones yet.",
+      "goal": "Freedom · {amount} a month"
+    },
+    "milestoneDialog": {
+      "title": "New milestone",
+      "desc": "A point on the way to financial freedom.",
+      "name": "Name",
+      "namePlaceholder": "E.g. First million",
+      "type": "Type",
+      "types": {
+        "net_worth_absolute": "Net worth",
+        "passive_income_absolute": "Monthly income",
+        "net_worth_x_expenses": "Multiple of expenses"
+      },
+      "value": "Value",
+      "valueHint": {
+        "net_worth_absolute": "Invested net worth, in {currency}",
+        "passive_income_absolute": "Monthly income the portfolio pays, in {currency}",
+        "net_worth_x_expenses": "How many years of expenses"
+      },
+      "save": "Add",
+      "saved": "Milestone “{name}” added"
+    },
+    "caption": "Past rings in the money of their time; the projection in today's money.",
+    "estimatedNote": "Rings marked as estimated use cost: they come from months before the monthly snapshots with prices.",
+    "card": {
+      "title": "Financial freedom",
+      "link": "See the rings →",
+      "target": "goal {target}",
+      "passiveOf": "of {target} wanted",
+      "arrival": "Arrival in <b>{year}</b> contributing {amount} a month.",
+      "unreachable": "At the current pace the goal is not reached.",
+      "reached": "Goal reached.",
+      "alt": "With {amount}, in {year}.",
+      "altNever": "With {amount}, still not reached.",
+      "noPlan": "No plan yet. Today: {invested} invested and {expenses}/month in expenses."
+    }
   }
 }

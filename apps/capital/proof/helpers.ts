@@ -189,7 +189,7 @@ export function valueOf(scope: Page | Locator, label: string): Locator {
   return scope.locator(`div:has(> span:first-child:text-is(${JSON.stringify(label)})) > span:nth-child(2)`).first();
 }
 
-/** A panel (the bordered box with a title bar: "Alocação atual vs alvo", "Independência financeira"), found by its title. */
+/** A panel (the bordered box with a title bar: "Alocação atual vs alvo", "Liberdade financeira"), found by its title. */
 export function panel(page: Page, title: string): Locator {
   return page.locator("section").filter({ has: page.locator("header", { hasText: title }) });
 }

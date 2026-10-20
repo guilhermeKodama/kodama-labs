@@ -26,6 +26,7 @@ const MEDIO_PX: Record<(typeof TEXT_ROLES)[number], number> = {
   heading: 17,
   kpi: 17,
   display: 22,
+  hero: 30,
 };
 
 const DENSITY_PX = { "control-h": 26, "menu-row-h": 28, "row-h": 34, "table-row-h": 36 };
@@ -62,7 +63,7 @@ describe("type scale (src/app/theme.css)", () => {
   it("renders Médio exactly as the text-[Npx] classes did", () => {
     expect(scaleOf("md")).toBe(1);
     for (const role of TEXT_ROLES) expect(rendered(role, "md"), role).toBe(MEDIO_PX[role]);
-    expect(new Set(Object.values(MEDIO_PX))).toEqual(new Set([10, 10.5, 11, 11.5, 12, 12.5, 13, 14, 15, 17, 22]));
+    expect(new Set(Object.values(MEDIO_PX))).toEqual(new Set([10, 10.5, 11, 11.5, 12, 12.5, 13, 14, 15, 17, 22, 30]));
   });
 
   it("Pequeno and Grande only change the scale", () => {

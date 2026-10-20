@@ -27,7 +27,6 @@ import {
   useRebalance,
 } from "@/lib/invest/api";
 import {
-  alternativeContribution,
   clampEnd,
   contributionSeries,
   purchaseSeries,
@@ -48,9 +47,9 @@ import { buildTransactionsHref } from "@/lib/ledger/view-draft";
 import { cn } from "@/lib/utils";
 import { AllContributions } from "./all-contributions";
 import { ContributionsChart, PurchasesChart } from "./charts";
+import { FireRingsCard } from "./fire/fire-rings-card";
 import {
   MONO,
-  useCompactMoney,
   useMonthRange,
   useMonthShort,
   useScopeParam,
@@ -89,7 +88,6 @@ export function ContributionsScreen() {
   const end = clampEnd(endParam, thisMonth);
   const short = useMonthShort();
   const range = useMonthRange();
-  const compact = useCompactMoney();
   const fx = useFxRates();
 
   const flows = useContributions(end, scope);
@@ -99,11 +97,8 @@ export function ContributionsScreen() {
     null | "aporte" | "goal" | "targets" | "orders"
   >(null);
 
-  const fireBase = useFireSummary(null);
-  const goal = fireBase.data?.currentMonthContribution ?? null;
-  const alt = alternativeContribution(goal);
-  const fireAlt = useFireSummary(alt);
-  const fire = fireAlt.data ?? fireBase.data;
+  const fire = useFireSummary(null).data;
+  const goal = fire?.currentMonthContribution ?? null;
 
   // "Vou aportar R$": prefilled with the month's goal until the user types.
   const amount =
@@ -462,80 +457,7 @@ export function ContributionsScreen() {
                 </EmptyRow>
               ) : null}
             </Panel>
-            <Panel
-              title={t("fire.title")}
-              trailing={
-                fire ? (
-                  <Btn ghost onClick={() => setDialog("goal")}>
-                    {fire.goal ? t("fire.edit") : t("fire.define")}
-                  </Btn>
-                ) : null
-              }
-            >
-              {fire?.result && fire.goal ? (
-                <div className="flex flex-col gap-2.5">
-                  <div className="flex gap-6">
-                    <Kpi
-                      label={t("fire.number")}
-                      value={compact(fire.result.fireNumber, cur)}
-                      sub={t("fire.numberSub", {
-                        income: fmt.money0(fire.goal.targetMonthlyIncome, cur),
-                        swr: fmt.pct(fire.goal.safeWithdrawalRate, 1),
-                      })}
-                    />
-                    <Kpi
-                      label={t("fire.progress")}
-                      value={fmt.pct(fire.result.progress, 1)}
-                    />
-                  </div>
-                  <span className="relative h-1.5 rounded-[3px] bg-fill-3">
-                    <span
-                      className="absolute inset-y-0 left-0 rounded-[3px] bg-fg-1"
-                      style={{
-                        width: `${Math.min(Math.max(fire.result.progress, 0), 1) * 100}%`,
-                      }}
-                    />
-                  </span>
-                  <span className="text-caption text-fg-3">
-                    {fire.result.reached
-                      ? t("fire.reached")
-                      : fire.result.projectedFireDate
-                        ? t("fire.projection", {
-                            date: fmt.monthLabel(
-                              fire.result.projectedFireDate.slice(0, 10),
-                            ),
-                            amount: fmt.money0(goal ?? 0, cur),
-                          })
-                        : t("fire.unreachable")}
-                    {!fire.result.reached && alt !== null && fire.altProjection
-                      ? fire.altProjection.projectedFireDate
-                        ? t("fire.alt", {
-                            amount: fmt.money0(alt, cur),
-                            date: fmt.monthLabel(
-                              fire.altProjection.projectedFireDate.slice(0, 10),
-                            ),
-                          })
-                        : t("fire.altUnreachable", {
-                            amount: fmt.money0(alt, cur),
-                          })
-                      : null}
-                  </span>
-                </div>
-              ) : (
-                <span className="text-body text-fg-2">
-                  {t("fire.noPlan", {
-                    invested: fmt.money0(
-                      fire?.suggestedDefaults.currentInvested ?? 0,
-                      cur,
-                    ),
-                    expenses: fmt.money0(
-                      fire?.suggestedDefaults.currentMonthlyExpenses ?? 0,
-                      cur,
-                    ),
-                  })}
-                </span>
-              )}
-            </Panel>
+            <FireRingsCard onEditGoal={() => setDialog("goal")} />
           </div>
         </>
       )}

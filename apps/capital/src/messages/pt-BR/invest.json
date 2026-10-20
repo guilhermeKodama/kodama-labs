@@ -2,7 +2,8 @@
   "crumbs": {
     "investments": "Investimentos",
     "portfolio": "Carteira",
-    "contributions": "Aportes"
+    "contributions": "Aportes",
+    "fire": "Liberdade financeira"
   },
   "loading": "Carregando…",
   "monthShort": "{month}/{year}",
@@ -418,20 +419,6 @@
       "originOut": "resgate: {origin}",
       "caption": "Clique na origem para ver as transferências em Transações ↗"
     },
-    "fire": {
-      "title": "Independência financeira",
-      "number": "Número FIRE",
-      "numberSub": "{income}/mês · SWR {swr}",
-      "progress": "Progresso",
-      "projection": "Projeção: {date} mantendo {amount}/mês.",
-      "alt": " Com {amount}/mês: {date}.",
-      "altUnreachable": " Com {amount}/mês: não atinge.",
-      "reached": "Meta atingida.",
-      "unreachable": "Com o aporte atual a meta não é atingida.",
-      "noPlan": "Sem plano FIRE. Hoje: {invested} investidos e {expenses}/mês de gastos.",
-      "edit": "Editar meta",
-      "define": "Definir meta"
-    },
     "tabs": {
       "summary": "Resumo",
       "all": "Todos os aportes"
@@ -504,7 +491,7 @@
     "done": "{count, plural, one {# ordem registrada} other {# ordens registradas}}"
   },
   "fireGoal": {
-    "title": "Meta de independência financeira",
+    "title": "Meta de liberdade financeira",
     "desc": "Quanto você quer receber por mês dos investimentos e quanto aporta para chegar lá.",
     "income": "Renda mensal desejada",
     "contribution": "Aporte mensal",
@@ -524,5 +511,119 @@
     "age": "Idade atual (opcional)",
     "save": "Salvar meta",
     "saved": "Meta salva"
+  },
+  "rings": {
+    "title": "Liberdade financeira",
+    "editGoal": "Editar meta",
+    "defineGoal": "Definir meta",
+    "register": "Registrar aporte",
+    "trunkLabel": "Corte do tronco: o cerne de {coreYear} e um anel por ano até hoje, com {today} investidos.",
+    "trunkEmpty": "Ainda não há patrimônio investido para desenhar o tronco.",
+    "core": "cerne",
+    "coreSince": "{value} · {date}",
+    "now": "hoje",
+    "goalLabel": "liberdade financeira · {value}",
+    "legend": {
+      "core": "cerne: o que você tinha ao começar",
+      "ring": "um anel por ano",
+      "now": "anel deste ano",
+      "future": "anéis projetados",
+      "goal": "liberdade financeira"
+    },
+    "hero": {
+      "label": "Sua árvore hoje",
+      "progress": "{pct} da meta de {target}",
+      "noGoal": "Defina uma meta para ver o caminho"
+    },
+    "passive": {
+      "label": "Já dá por mês",
+      "sub": "sem tocar no principal, a {swr} ao ano"
+    },
+    "arrival": {
+      "label": "Chegada",
+      "reached": "Meta atingida",
+      "never": "Não chega",
+      "pace": "aportando {amount}/mês",
+      "range": "entre {from} e {to} em 80% dos cenários",
+      "rangeOpen": "a partir de {from} em 80% dos cenários",
+      "rangeSame": "em {year} em 80% dos cenários",
+      "needAge": "informe sua idade em Editar meta para ver a faixa",
+      "unreachable": "não chega no ritmo atual"
+    },
+    "forming": {
+      "label": "Anel de {year} · em formação",
+      "detail": "Até {month}: {aportes} de aportes e {rendimento} de rendimento"
+    },
+    "whatIf": {
+      "label": "E se eu aportar por mês",
+      "result": "A liberdade chega em {year}, {delta}.",
+      "sooner": "{years, plural, one {um ano antes} other {# anos antes}}",
+      "later": "{years, plural, one {um ano depois} other {# anos depois}}",
+      "same": "no mesmo ano",
+      "never": "Nesse ritmo a meta não chega.",
+      "resultPlain": "A liberdade chega em {year}."
+    },
+    "table": {
+      "title": "Um anel por ano",
+      "aportes": "aportes",
+      "rendimento": "rendimento",
+      "loss": "perda",
+      "projection": "projeção",
+      "coreTag": "cerne",
+      "coreNote": "o que você tinha ao começar",
+      "ringTag": "anel",
+      "thinTag": "anel fino: ano de perda",
+      "estimatedTag": "anel estimado pelo custo",
+      "formingTag": "em formação, até {month}",
+      "projectedTag": "projeção",
+      "more": "{count, plural, one {mais # anel projetado} other {mais # anéis projetados}}",
+      "arrivalTag": "liberdade financeira",
+      "arrivalNote": "{amount} por mês, para sempre",
+      "unreachableTag": "ainda longe",
+      "unreachableNote": "não chega no ritmo atual"
+    },
+    "milestones": {
+      "title": "Marcos no caminho",
+      "add": "+ Marco",
+      "done": "feito",
+      "remove": "Remover o marco “{name}”",
+      "removed": "Marco “{name}” removido",
+      "empty": "Nenhum marco ainda.",
+      "goal": "Liberdade · {amount} por mês"
+    },
+    "milestoneDialog": {
+      "title": "Novo marco",
+      "desc": "Um ponto no caminho até a liberdade financeira.",
+      "name": "Nome",
+      "namePlaceholder": "Ex.: Primeiro milhão",
+      "type": "Tipo",
+      "types": {
+        "net_worth_absolute": "Patrimônio",
+        "passive_income_absolute": "Renda por mês",
+        "net_worth_x_expenses": "Múltiplo dos gastos"
+      },
+      "value": "Valor",
+      "valueHint": {
+        "net_worth_absolute": "Patrimônio investido, em {currency}",
+        "passive_income_absolute": "Renda mensal que o patrimônio paga, em {currency}",
+        "net_worth_x_expenses": "Quantas vezes os gastos de um ano"
+      },
+      "save": "Adicionar",
+      "saved": "Marco “{name}” adicionado"
+    },
+    "caption": "Anéis passados em reais da época; a projeção, em reais de hoje.",
+    "estimatedNote": "Anéis marcados como estimados usam o custo: são de meses anteriores às fotos mensais com cotações.",
+    "card": {
+      "title": "Liberdade financeira",
+      "link": "Ver os anéis →",
+      "target": "meta {target}",
+      "passiveOf": "de {target} desejados",
+      "arrival": "Chegada em <b>{year}</b> aportando {amount} por mês.",
+      "unreachable": "No ritmo atual a meta não chega.",
+      "reached": "Meta atingida.",
+      "alt": "Com {amount}, em {year}.",
+      "altNever": "Com {amount}, ainda não chega.",
+      "noPlan": "Sem plano ainda. Hoje: {invested} investidos e {expenses}/mês de gastos."
+    }
   }
 }

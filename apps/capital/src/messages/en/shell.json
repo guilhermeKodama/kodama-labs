@@ -13,7 +13,8 @@
     "contributions": "Contributions",
     "settings": "Settings",
     "accountHint": "Settings · Theme",
-    "railSearch": "Search or run ({shortcut})"
+    "railSearch": "Search or run ({shortcut})",
+    "fire": "Financial freedom"
   },
   "sidebar": {
     "collapse": "Collapse the sidebar",

@@ -35,6 +35,7 @@
   --cap-font-heading: calc(17px * var(--cap-text-scale)); /* page headings (Ajustes, 404) */
   --cap-font-kpi: calc(17px * var(--cap-text-scale)); /* KPI values */
   --cap-font-display: calc(22px * var(--cap-text-scale)); /* a holding's market value */
+  --cap-font-hero: calc(30px * var(--cap-text-scale)); /* the headline value of Liberdade financeira ("Sua árvore hoje") */
 
   /* Density tied to text (base height at Médio). */
   --cap-control-h: calc(26px * var(--cap-text-scale)); /* buttons, inputs, selects (cap CONTROL, Btn) */
@@ -51,7 +52,7 @@
   --cap-text-scale: 1.14;
 }
 
-/* The roles as Tailwind utilities: text-micro … text-display. */
+/* The roles as Tailwind utilities: text-micro … text-hero. */
 @theme inline {
   --text-micro: var(--cap-font-micro);
   --text-hint: var(--cap-font-hint);
@@ -68,4 +69,5 @@
   --text-heading: var(--cap-font-heading);
   --text-kpi: var(--cap-font-kpi);
   --text-display: var(--cap-font-display);
+  --text-hero: var(--cap-font-hero);
 }
