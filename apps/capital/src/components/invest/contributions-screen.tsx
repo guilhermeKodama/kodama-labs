@@ -436,7 +436,7 @@ export function ContributionsScreen() {
                         className={cn(
                           "ml-auto shrink-0 text-body-sm",
                           row.status === "below"
-                            ? "text-cat-yellow"
+                            ? "text-warn"
                             : "text-fg-3",
                         )}
                       >

@@ -210,7 +210,7 @@ function AccountDetail({
             <span className="text-fg-3">{t("usageShare", { share: fmt.pct(share, 0) })}</span>
           </div>
           <span role="meter" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(Math.min(1, share) * 100)} className="relative block h-1.5 rounded-full bg-fill-2">
-            <span className="absolute inset-y-0 left-0 rounded-full bg-cat-blue" style={{ width: `${Math.min(1, share) * 100}%` }} />
+            <span className="absolute inset-y-0 left-0 rounded-full bg-brand" style={{ width: `${Math.min(1, share) * 100}%` }} />
           </span>
         </div>
       ) : null}

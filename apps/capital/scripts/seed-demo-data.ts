@@ -96,25 +96,25 @@ const floorTo = (v: number, digits: number) => {
 // Master data
 // ---------------------------------------------------------------------------
 
-/** The settings color picker's palette (settings-screen.tsx COLORS), in the mockup's category order. */
+/** The settings color picker's palette (src/lib/settings/palette.ts), in its order. */
 export const PALETTE = {
-  gray: "#737373",
-  purple: "#7c3aed",
-  green: "#16a34a",
-  yellow: "#ca8a04",
-  cyan: "#0891b2",
-  pink: "#db2777",
-  blue: "#2563eb",
-  orange: "#ea580c",
-  red: "#dc2626",
+  casca: "#8c7b68",
+  jacaranda: "#6e4a5e",
+  musgo: "#3d5a36",
+  ipe: "#c9a227",
+  salvia: "#8a9a7b",
+  argila: "#b07a5a",
+  ardosia: "#4f6470",
+  resina: "#c4862b",
+  urucum: "#7a3b26",
 } as const;
 
 export type EntityKey = "pf" | "ltda" | "llc";
 
 export const DEMO_ENTITIES: Record<EntityKey, { name: string; description: string; currency: string; taxRate: number; color: string }> = {
-  pf: { name: "PF", description: "Finanças pessoais", currency: "BRL", taxRate: 0, color: PALETTE.gray },
-  ltda: { name: "Kodama LTDA", description: "Simples Nacional, anexo III", currency: "BRL", taxRate: 0.06, color: PALETTE.blue },
-  llc: { name: "Kodama LLC", description: "Recebe dos clientes internacionais", currency: "USD", taxRate: 0, color: PALETTE.purple },
+  pf: { name: "PF", description: "Finanças pessoais", currency: "BRL", taxRate: 0, color: PALETTE.casca },
+  ltda: { name: "Kodama LTDA", description: "Simples Nacional, anexo III", currency: "BRL", taxRate: 0.06, color: PALETTE.ardosia },
+  llc: { name: "Kodama LLC", description: "Recebe dos clientes internacionais", currency: "USD", taxRate: 0, color: PALETTE.jacaranda },
 };
 
 export type AccountKey =
@@ -190,26 +190,26 @@ export type CategoryKey =
  * pt-BR); the others are created.
  */
 export const DEMO_CATEGORIES: Record<CategoryKey, { systemKey?: string; name?: string; type?: "income" | "expense" | "investment"; color: string }> = {
-  moradia: { name: "Moradia", type: "expense", color: PALETTE.blue },
-  mercado: { systemKey: "groceries", color: PALETTE.green },
-  restaurantes: { systemKey: "restaurants_dining", color: PALETTE.orange },
-  saude: { systemKey: "health_pharmacy", color: PALETTE.red },
-  software: { systemKey: "software_tools", color: PALETTE.purple },
-  impostos: { systemKey: "taxes", color: PALETTE.gray },
-  delivery: { name: "Delivery", type: "expense", color: PALETTE.pink },
-  receita: { systemKey: "client_payment", color: PALETTE.green },
-  rendimentos: { systemKey: "interest", color: PALETTE.cyan },
-  transporte: { systemKey: "transportation", color: PALETTE.yellow },
-  lazer: { systemKey: "entertainment", color: PALETTE.cyan },
-  contabilidade: { systemKey: "legal_accounting", color: PALETTE.blue },
-  assinaturas: { systemKey: "subscriptions", color: PALETTE.purple },
-  casa: { systemKey: "home", color: PALETTE.orange },
-  eletronicos: { name: "Eletrônicos", type: "expense", color: PALETTE.yellow },
-  pets: { name: "Pets", type: "expense", color: PALETTE.green },
-  investimentos: { name: "Investimentos", type: "investment", color: PALETTE.gray },
-  viagens: { systemKey: "travel_default", color: PALETTE.blue },
-  equipamentos: { systemKey: "hardware", color: PALETTE.gray },
-  ipvaIptu: { name: "IPVA + IPTU", type: "expense", color: PALETTE.red },
+  moradia: { name: "Moradia", type: "expense", color: PALETTE.ardosia },
+  mercado: { systemKey: "groceries", color: PALETTE.musgo },
+  restaurantes: { systemKey: "restaurants_dining", color: PALETTE.resina },
+  saude: { systemKey: "health_pharmacy", color: PALETTE.urucum },
+  software: { systemKey: "software_tools", color: PALETTE.jacaranda },
+  impostos: { systemKey: "taxes", color: PALETTE.casca },
+  delivery: { name: "Delivery", type: "expense", color: PALETTE.argila },
+  receita: { systemKey: "client_payment", color: PALETTE.musgo },
+  rendimentos: { systemKey: "interest", color: PALETTE.salvia },
+  transporte: { systemKey: "transportation", color: PALETTE.ipe },
+  lazer: { systemKey: "entertainment", color: PALETTE.salvia },
+  contabilidade: { systemKey: "legal_accounting", color: PALETTE.ardosia },
+  assinaturas: { systemKey: "subscriptions", color: PALETTE.jacaranda },
+  casa: { systemKey: "home", color: PALETTE.resina },
+  eletronicos: { name: "Eletrônicos", type: "expense", color: PALETTE.ipe },
+  pets: { name: "Pets", type: "expense", color: PALETTE.musgo },
+  investimentos: { name: "Investimentos", type: "investment", color: PALETTE.casca },
+  viagens: { systemKey: "travel_default", color: PALETTE.ardosia },
+  equipamentos: { systemKey: "hardware", color: PALETTE.casca },
+  ipvaIptu: { name: "IPVA + IPTU", type: "expense", color: PALETTE.urucum },
 };
 
 /** Mockup RULES (4154): "contains" rules, as suggestCategory matches them. */

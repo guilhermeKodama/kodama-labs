@@ -52,7 +52,8 @@
      bg-resin-*         assistant proposals and highlights (wash, line, ink)
      text-wordmark      the "cerne" wordmark
      text-pos/neg/warn  money in / out / attention, plus -ink -soft -wash -solid
-     bg-cat-*           category hues (mockup category.*)
+     bg-cat-*           the swatches of categories, entities and accounts
+                        (never a status: status is pos, neg, warn or resin)
 
    Every token generates every color utility. Inline styles and SVG
    attributes (Recharts) use var(--cap-*) directly; chart colors live only
@@ -61,8 +62,10 @@
    The palette is the Cerne brand (warm wood): light is sapwood and ink,
    dark is charcoal and sapwood. In the light theme the brand is the
    heartwood brown of the logo's rings; in the dark theme the rings turn
-   sapwood, so the brand is sapwood and the indicator is resin. Category
-   hues keep their values: categories store the light hex. Dark fills and
+   sapwood, so the brand is sapwood and the indicator is resin. Charts and
+   swatches take the Cerne hues (canvas board CerneCharts): cerne, resina,
+   musgo, ipê, jacarandá, ardósia, sálvia, casca, argila, alburno, urucum.
+   Categories store the light hex of their swatch. Dark fills and
    strokes are translucent sapwood so they composite over both the editor
    and the chrome surfaces. */
 
@@ -164,15 +167,15 @@
   --color-warn-ink: var(--cap-warn-ink);
   --color-warn-soft: var(--cap-warn-soft);
   --color-warn-wash: var(--cap-warn-wash);
-  --color-cat-gray: var(--cap-cat-gray);
-  --color-cat-purple: var(--cap-cat-purple);
-  --color-cat-green: var(--cap-cat-green);
-  --color-cat-yellow: var(--cap-cat-yellow);
-  --color-cat-cyan: var(--cap-cat-cyan);
-  --color-cat-pink: var(--cap-cat-pink);
-  --color-cat-blue: var(--cap-cat-blue);
-  --color-cat-orange: var(--cap-cat-orange);
-  --color-cat-red: var(--cap-cat-red);
+  --color-cat-casca: var(--cap-cat-casca);
+  --color-cat-jacaranda: var(--cap-cat-jacaranda);
+  --color-cat-musgo: var(--cap-cat-musgo);
+  --color-cat-ipe: var(--cap-cat-ipe);
+  --color-cat-salvia: var(--cap-cat-salvia);
+  --color-cat-argila: var(--cap-cat-argila);
+  --color-cat-ardosia: var(--cap-cat-ardosia);
+  --color-cat-resina: var(--cap-cat-resina);
+  --color-cat-urucum: var(--cap-cat-urucum);
 
   /* Font families: next/font/local defines the variables (src/app/fonts.ts). */
   --font-sans: var(--font-geist-sans);
@@ -281,41 +284,42 @@
 
   /* Category hues, in the mockup's category order. Same values as the
      category color picker in Ajustes (those are stored per category). */
-  --cap-cat-gray: #737373;
-  --cap-cat-purple: #7c3aed;
-  --cap-cat-green: #16a34a;
-  --cap-cat-yellow: #ca8a04;
-  --cap-cat-cyan: #0891b2;
-  --cap-cat-pink: #db2777;
-  --cap-cat-blue: #2563eb;
-  --cap-cat-orange: #ea580c;
-  --cap-cat-red: #dc2626;
+  --cap-cat-casca: #8c7b68;
+  --cap-cat-jacaranda: #6e4a5e;
+  --cap-cat-musgo: #3d5a36;
+  --cap-cat-ipe: #c9a227;
+  --cap-cat-salvia: #8a9a7b;
+  --cap-cat-argila: #b07a5a;
+  --cap-cat-ardosia: #4f6470;
+  --cap-cat-resina: #c4862b;
+  --cap-cat-urucum: #7a3b26;
 
   /* Charts (Recharts / SVG attributes take var() directly). */
   --cap-chart-grid: #eee6d6;
   --cap-chart-axis: #e6dcc8;
   --cap-chart-muted: #9c8d7a; /* ticks, secondary lines, sankey links */
-  --cap-chart-ink: #1f1a17; /* primary line / area stroke */
-  --cap-chart-bar: #2e2620; /* single-series bars, sankey nodes */
+  --cap-chart-ink: #5b2e1f; /* primary line / area stroke: heartwood */
+  --cap-chart-bar: #5b2e1f; /* single-series bars, sankey nodes: heartwood */
   --cap-chart-label: #4e4237;
   --cap-chart-soft: #d6c9b2; /* projections, ideal pace */
   --cap-chart-area: #e6dcc8;
   --cap-chart-accent: #3d5a36;
   --cap-chart-accent-soft: #dce6d5;
   --cap-chart-warn: #896e1b; /* reference lines (Meta, Orçado): the ipê of --cap-warn */
-  --cap-chart-1: #1f1a17;
-  --cap-chart-2: #5a4d41;
-  --cap-chart-3: #7d6e5d;
-  --cap-chart-4: #a99a85;
-  --cap-chart-5: #3d5a36;
-  --cap-chart-6: #b45309;
-  --cap-chart-7: #1d4ed8;
-  --cap-chart-8: #be123c;
-  --cap-chart-9: #7c3aed;
-  --cap-chart-10: #d6c9b2;
+  /* The series, in the order charts use them (canvas board CerneCharts). */
+  --cap-chart-1: #5b2e1f; /* cerne */
+  --cap-chart-2: #c4862b; /* resina */
+  --cap-chart-3: #3d5a36; /* musgo */
+  --cap-chart-4: #c9a227; /* ipê */
+  --cap-chart-5: #6e4a5e; /* jacarandá */
+  --cap-chart-6: #4f6470; /* ardósia */
+  --cap-chart-7: #8a9a7b; /* sálvia */
+  --cap-chart-8: #8c7b68; /* casca */
+  --cap-chart-9: #b07a5a; /* argila */
+  --cap-chart-10: #d6c9b2; /* alburno */
   /* Heatmap cells mix --cap-heat with transparent by intensity. */
-  --cap-heat: #1f1a17;
-  --cap-heat-over: #fecaca;
+  --cap-heat: #5b2e1f;
+  --cap-heat-over: #f3d9d1;
 
   /* Liberdade financeira: the trunk (components/invest/fire/trunk.tsx). */
   --cap-trunk-bg: #f7f0e3;
@@ -372,11 +376,11 @@
   --border: var(--cap-stroke-2);
   --input: var(--cap-stroke-2);
   --ring: var(--cap-text-3);
-  --chart-1: oklch(0.646 0.222 41.116);
-  --chart-2: oklch(0.6 0.118 184.704);
-  --chart-3: oklch(0.398 0.07 227.392);
-  --chart-4: oklch(0.828 0.189 84.429);
-  --chart-5: oklch(0.769 0.188 70.08);
+  --chart-1: var(--cap-chart-1);
+  --chart-2: var(--cap-chart-2);
+  --chart-3: var(--cap-chart-3);
+  --chart-4: var(--cap-chart-4);
+  --chart-5: var(--cap-chart-5);
   --sidebar: var(--cap-bg-chrome);
   --sidebar-foreground: var(--cap-text-1);
   --sidebar-primary: var(--cap-brand);
@@ -439,15 +443,15 @@
   --cap-warn-soft: rgb(233 200 74 / 35%);
   --cap-warn-wash: rgb(233 200 74 / 10%);
 
-  --cap-cat-gray: #a3a3a3;
-  --cap-cat-purple: #a78bfa;
-  --cap-cat-green: #4ade80;
-  --cap-cat-yellow: #facc15;
-  --cap-cat-cyan: #22d3ee;
-  --cap-cat-pink: #f472b6;
-  --cap-cat-blue: #60a5fa;
-  --cap-cat-orange: #fb923c;
-  --cap-cat-red: #f87171;
+  --cap-cat-casca: #b3a592;
+  --cap-cat-jacaranda: #b88fa6;
+  --cap-cat-musgo: #9cc08c;
+  --cap-cat-ipe: #e9c84a;
+  --cap-cat-salvia: #b7c4a8;
+  --cap-cat-argila: #d9a07e;
+  --cap-cat-ardosia: #8fa7b4;
+  --cap-cat-resina: #e0a04a;
+  --cap-cat-urucum: #d9a487;
 
   --cap-chart-grid: rgb(242 235 221 / 7%);
   --cap-chart-axis: rgb(242 235 221 / 14%);
@@ -461,17 +465,17 @@
   --cap-chart-accent-soft: #2f3b2a;
   --cap-chart-warn: #e9c84a;
   --cap-chart-1: #e8dfcf;
-  --cap-chart-2: #b3a592;
-  --cap-chart-3: #918370;
-  --cap-chart-4: #64584b;
-  --cap-chart-5: #9cc08c;
-  --cap-chart-6: #fbbf24;
-  --cap-chart-7: #60a5fa;
-  --cap-chart-8: #fb7185;
-  --cap-chart-9: #a78bfa;
-  --cap-chart-10: #463c33;
+  --cap-chart-2: #e0a04a;
+  --cap-chart-3: #9cc08c;
+  --cap-chart-4: #e9c84a;
+  --cap-chart-5: #b88fa6;
+  --cap-chart-6: #8fa7b4;
+  --cap-chart-7: #b7c4a8;
+  --cap-chart-8: #b3a592;
+  --cap-chart-9: #d9a07e;
+  --cap-chart-10: #5a4a3e;
   --cap-heat: #f2ebdd;
-  --cap-heat-over: #7f1d1d;
+  --cap-heat-over: #5a2a20;
 
   --cap-trunk-bg: #231d19;
   --cap-trunk-wood-a: #4c3b2e;
@@ -503,11 +507,11 @@
   --cap-home-footer-text: #a99a85;
   --cap-home-shadow: rgb(0 0 0 / 45%);
 
-  --chart-1: oklch(0.488 0.243 264.376);
-  --chart-2: oklch(0.696 0.17 162.48);
-  --chart-3: oklch(0.769 0.188 70.08);
-  --chart-4: oklch(0.627 0.265 303.9);
-  --chart-5: oklch(0.645 0.246 16.439);
+  --chart-1: var(--cap-chart-1);
+  --chart-2: var(--cap-chart-2);
+  --chart-3: var(--cap-chart-3);
+  --chart-4: var(--cap-chart-4);
+  --chart-5: var(--cap-chart-5);
   --input: var(--cap-stroke-1);
 }
 

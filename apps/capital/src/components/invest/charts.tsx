@@ -16,7 +16,7 @@ import { useTranslations } from "next-intl";
 import { useFmt } from "@/lib/format/provider";
 import { netWorthTooltipRows, type NetWorthTooltipKey } from "@/lib/invest/portfolio-history-view";
 import type { AllocationClass } from "@/lib/invest/types";
-import { CHART, CHART_AXIS, CHART_SERIES } from "@/lib/theme/chart-colors";
+import { CHART, CHART_AXIS, CHART_SERIES, SERIES } from "@/lib/theme/chart-colors";
 import { textRole } from "@/lib/theme/type-scale";
 
 const TOOLTIP_STYLE = {
@@ -29,19 +29,20 @@ const TOOLTIP_STYLE = {
 
 /** Series colors of the six classes (stable, so a class keeps its color in every chart). */
 export const CLASS_COLOR: Record<AllocationClass, string> = {
-  fixed_income: CHART_SERIES[0],
-  br_stocks: CHART_SERIES[1],
-  fii: CHART_SERIES[3],
-  international: CHART_SERIES[4],
-  crypto: CHART_SERIES[5],
-  cash: CHART_SERIES[9],
+  fixed_income: SERIES.cerne,
+  br_stocks: SERIES.argila,
+  fii: SERIES.resina,
+  international: SERIES.ardosia,
+  crypto: SERIES.ipe,
+  cash: SERIES.alburno,
 };
 
 /** Patrimônio / Aportado / Posições iniciais. Strokes are the tooltip and legend marks too. */
 const NET_WORTH_SERIES = {
-  netWorth: { stroke: CHART.ink, fill: CHART.soft, fillOpacity: 0.2, dashed: false },
-  aportes: { stroke: CHART.accent, fill: CHART.accent, fillOpacity: 0.35, dashed: false },
-  initial: { stroke: CHART_SERIES[6], fill: CHART_SERIES[6], fillOpacity: 0.2, dashed: true },
+  netWorth: { stroke: CHART.ink, fill: CHART.ink, fillOpacity: 0.1, dashed: false },
+  // A line: the patrimônio's heartwood area is the only fill (canvas board CerneCharts).
+  aportes: { stroke: CHART.accent, fill: CHART.accent, fillOpacity: 0, dashed: false },
+  initial: { stroke: CHART.ink, fill: SERIES.alburno, fillOpacity: 0.45, dashed: true },
 } as const;
 
 type NetWorthSeriesKey = keyof typeof NET_WORTH_SERIES;
@@ -52,14 +53,14 @@ function seriesDot(stroke: string) {
 
 /** Swatch shared by the legend and the tooltip. Posições iniciais stay dashed. */
 function SeriesMark({ series }: { series: NetWorthSeriesKey }) {
-  const { stroke, dashed } = NET_WORTH_SERIES[series];
+  const { stroke, fill, dashed } = NET_WORTH_SERIES[series];
   return (
     <span
       aria-hidden
       className="inline-block size-2 shrink-0 rounded-[2px]"
       style={
         dashed
-          ? { background: "transparent", border: `1px dashed ${stroke}` }
+          ? { background: fill, border: `1px dashed ${stroke}` }
           : { background: stroke }
       }
     />
@@ -368,20 +369,20 @@ function ClassLegend({ classes }: { classes: AllocationClass[] }) {
 
 const NAMED_SERIES_COLOR: Record<string, string> = {
   total: CHART.bar,
-  fii_income: CHART_SERIES[3],
-  dividend: CHART_SERIES[1],
-  jcp: CHART_SERIES[2],
-  fixed_income_interest: CHART_SERIES[0],
-  interest: CHART_SERIES[0],
-  unlinked: CHART_SERIES[9],
-  br_stocks: CHART_SERIES[1],
-  bdr: CHART_SERIES[6],
-  exterior: CHART_SERIES[4],
-  fixed_income: CHART_SERIES[0],
-  fii: CHART_SERIES[3],
-  international: CHART_SERIES[4],
-  crypto: CHART_SERIES[5],
-  cash: CHART_SERIES[8],
+  fii_income: SERIES.resina,
+  dividend: SERIES.argila,
+  jcp: SERIES.casca,
+  fixed_income_interest: SERIES.cerne,
+  interest: SERIES.cerne,
+  unlinked: SERIES.alburno,
+  br_stocks: SERIES.argila,
+  bdr: SERIES.jacaranda,
+  exterior: SERIES.ardosia,
+  fixed_income: SERIES.cerne,
+  fii: SERIES.resina,
+  international: SERIES.ardosia,
+  crypto: SERIES.ipe,
+  cash: SERIES.alburno,
 };
 
 /** Stable color for a passive-income segment. FII tickers take the next free swatch. */

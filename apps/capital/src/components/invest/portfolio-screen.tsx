@@ -58,7 +58,7 @@ import type {
 } from "@/lib/invest/types";
 import { openAssistant } from "@/lib/shell/assistant-bridge";
 import { cn } from "@/lib/utils";
-import { IncomeChart, NetWorthChart } from "./charts";
+import { CLASS_COLOR, IncomeChart, NetWorthChart } from "./charts";
 import { HoldingsChart, OpsChart } from "./invest-chart";
 import {
   MONO,
@@ -413,8 +413,8 @@ function AllocationPanel({
           </span>
           <span className="relative h-2 rounded-[4px] bg-fill-3">
             <span
-              className="absolute inset-y-0 left-0 rounded-[4px] bg-fg-2"
-              style={{ width: `${bar.barWidth}%` }}
+              className="absolute inset-y-0 left-0 rounded-[4px]"
+              style={{ width: `${bar.barWidth}%`, background: CLASS_COLOR[bar.allocationClass] }}
             />
             {bar.tickLeft !== null ? (
               <span
@@ -426,7 +426,7 @@ function AllocationPanel({
           <span className={cn(MONO, "text-right text-label")}>
             {fmt.pct(bar.share, 0)}
             {bar.diffLabel !== null ? (
-              <span className={bar.highlight ? "text-cat-yellow" : "text-fg-4"}>
+              <span className={bar.highlight ? "text-warn" : "text-fg-4"}>
                 {" "}
                 {bar.diffLabel}
               </span>
@@ -554,8 +554,8 @@ function HoldingsTable({
               !row.result
                 ? "text-fg-3"
                 : row.result > 0
-                  ? "text-cat-green"
-                  : "text-cat-red",
+                  ? "text-pos"
+                  : "text-neg",
             )}
           >
             {!row.result
