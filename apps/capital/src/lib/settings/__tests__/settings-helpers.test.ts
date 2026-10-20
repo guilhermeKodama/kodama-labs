@@ -24,11 +24,11 @@ describe("settings navigation", () => {
 
 describe("palette", () => {
   it("maps stored hex values to theme tokens", () => {
-    expect(paletteName("#2563EB")).toBe("blue");
-    expect(paletteName("blue")).toBe("blue");
+    expect(paletteName("#4F6470")).toBe("ardosia");
+    expect(paletteName("ardosia")).toBe("ardosia");
     expect(paletteName("#123456")).toBeNull();
-    expect(paletteHex("purple")).toBe("#7c3aed");
-    expect(swatchColor("#2563eb")).toBe("var(--cap-cat-blue)");
+    expect(paletteHex("jacaranda")).toBe("#6e4a5e");
+    expect(swatchColor("#4f6470")).toBe("var(--cap-cat-ardosia)");
     expect(swatchColor("#123456")).toBe("#123456");
     expect(swatchColor(null)).toBe("var(--cap-text-4)");
   });

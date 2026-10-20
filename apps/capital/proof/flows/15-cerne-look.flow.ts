@@ -13,6 +13,21 @@ const PANEL = "rgb(255, 255, 255)";
 // Ipê-amarelo, the alerts: the text tone of each theme.
 const IPE_TEXT = "rgb(137, 110, 27)";
 const IPE_DARK = "rgb(233, 200, 74)";
+// The chart palette (canvas board CerneCharts).
+const ARDOSIA = "rgb(79, 100, 112)";
+const IPE_SOLID = "rgb(201, 162, 39)";
+const NEG = "rgb(166, 58, 38)";
+const NEG_DARK = "rgb(230, 138, 114)";
+
+/** The fill of the pace bar in the Orçamentos row whose status reads `status`. */
+const paceFill = (page: Page, status: string) =>
+  page
+    .getByText(status, { exact: true })
+    .first()
+    .locator("xpath=ancestor::div[contains(concat(' ', normalize-space(@class), ' '), ' grid ')][1]")
+    .getByRole("meter")
+    .locator("span")
+    .first();
 
 /** Opens + Operação in Carteira as a sale of more BOVA11 than the position holds; returns the dialog. */
 async function oversell(page: Page, type: (target: Locator, text: string) => Promise<void>) {
@@ -26,7 +41,7 @@ async function oversell(page: Page, type: (target: Locator, text: string) => Pro
   return op;
 }
 
-flow("Cerne look: warm palette, brand color, fonts and the ipê alerts, in light and dark", async ({ page, scene, say, check, type }) => {
+flow("Cerne look: warm palette, brand color, fonts, the ipê alerts and the chart palette, in light and dark", async ({ page, scene, say, check, type }) => {
   await page.goto("/transactions");
   const body = page.locator("body");
   const primary = page.getByRole("button", { name: "+ Nova transação" });
@@ -85,6 +100,24 @@ flow("Cerne look: warm palette, brand color, fonts and the ipê alerts, in light
   await page.keyboard.press("Escape");
   await expect(op).toBeHidden();
 
+  await scene("Gráficos na paleta Cerne", "Every chart takes the brand's hues: heartwood for one series, a hue per class");
+  await page.goto("/investments/contributions");
+  await check("Aportes por mês is drawn in heartwood, not charcoal", async () => {
+    await expect(page.locator(".recharts-bar-rectangle path").first()).toHaveCSS("fill", HEARTWOOD);
+  });
+  await page.goto("/investments");
+  const allocation = (name: string) => page.locator(`div.grid:has(> span:text-is(${JSON.stringify(name)}))`).locator("span.relative > span").first();
+  await check("Carteira gives each class its hue: renda fixa in cerne, internacional in ardósia", async () => {
+    await expect(allocation("Renda fixa")).toHaveCSS("background-color", HEARTWOOD);
+    await expect(allocation("Internacional")).toHaveCSS("background-color", ARDOSIA);
+  });
+  await page.goto("/transactions/budgets");
+  await check("Orçamentos: no ritmo in heartwood, acima do ritmo in ipê, estourado in the brand's red", async () => {
+    await expect(paceFill(page, "No ritmo")).toHaveCSS("background-color", HEARTWOOD);
+    await expect(paceFill(page, "Acima do ritmo")).toHaveCSS("background-color", IPE_SOLID);
+    await expect(paceFill(page, "Estourado")).toHaveCSS("background-color", NEG);
+  });
+
   await scene("Tema escuro", "Charcoal page; the brand turns sapwood and the indicator resin");
   await page.goto("/settings");
   const theme = page.getByRole("radiogroup", { name: "Tema" });
@@ -99,6 +132,11 @@ flow("Cerne look: warm palette, brand color, fonts and the ipê alerts, in light
     await expect(primary).toHaveCSS("background-color", SAPWOOD);
     await expect(primary).toHaveCSS("color", CHARCOAL);
     await expect(activeRow).toHaveCSS("box-shadow", new RegExp(RESIN_DARK.replace(/[()]/g, "\\$&")));
+  });
+
+  await page.goto("/transactions/budgets");
+  await check("In the dark theme an estourado budget is the brand's light red", async () => {
+    await expect(paceFill(page, "Estourado")).toHaveCSS("background-color", NEG_DARK);
   });
 
   op = await oversell(page, type);

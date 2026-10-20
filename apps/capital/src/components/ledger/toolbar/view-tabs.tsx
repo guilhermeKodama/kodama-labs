@@ -55,7 +55,7 @@ function ViewTab({ view, on, dirty, onPick, actions }: { view: LedgerView; on: b
             <LayoutIcon layout={view.config.layout} />
             {view.name}
             {view.isBuiltin ? <span className="text-micro text-fg-4">{t("fixed")}</span> : null}
-            {on && dirty ? <span title={t("modified")} className="size-1.5 rounded-full bg-cat-yellow" /> : null}
+            {on && dirty ? <span title={t("modified")} className="size-1.5 rounded-full bg-resin" /> : null}
           </button>
           {editable ? <DeleteViewButton name={view.name} visible={on} onDelete={() => actions.remove(view)} /> : null}
           {editable ? (

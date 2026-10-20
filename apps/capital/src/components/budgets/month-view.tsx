@@ -156,7 +156,7 @@ export function MonthBody({ data, actions, onOpenRule, onAllRules }: { data: Mon
                   <span className="text-caption font-normal text-fg-3 md:hidden">{t("month.table.spent")}</span>
                   {fmt.money0(row.spent)}
                 </DrillLink>
-                <DrillLink draft={spent} className={cn(STAT_CELL, "order-6 font-mono whitespace-nowrap tabular-nums md:order-0", row.remaining < 0 ? "text-cat-red" : "text-fg-2")}>
+                <DrillLink draft={spent} className={cn(STAT_CELL, "order-6 font-mono whitespace-nowrap tabular-nums md:order-0", row.remaining < 0 ? "text-neg" : "text-fg-2")}>
                   <span className="text-caption font-normal text-fg-3 md:hidden">{t("month.table.remaining")}</span>
                   {fmt.money0(row.remaining)}
                 </DrillLink>
@@ -274,7 +274,7 @@ function UpcomingLine({ item, names, onOpenRule }: { item: UpcomingItem; names: 
     "flex h-8 w-full items-center gap-2 border-t border-stroke-3 px-3 text-left text-control outline-none first:border-t-0 hover:bg-fill-4 focus-visible:bg-fill-4";
   const content = (
     <>
-      <span className={cn("w-[38px] shrink-0 font-mono text-label", item.overdue ? "text-cat-red" : "text-fg-3")} title={item.overdue ? t("month.upcoming.overdue") : undefined}>
+      <span className={cn("w-[38px] shrink-0 font-mono text-label", item.overdue ? "text-neg" : "text-fg-3")} title={item.overdue ? t("month.upcoming.overdue") : undefined}>
         {fmt.date(item.dueDate)}
       </span>
       <span className="min-w-0 truncate">{description}</span>

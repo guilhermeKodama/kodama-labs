@@ -9,7 +9,7 @@ const TONE_DOT: Record<TableRowTone, string> = {
   success: "bg-pos",
   danger: "bg-neg-solid",
   warning: "bg-warn-solid",
-  info: "bg-cat-blue",
+  info: "bg-resin",
   neutral: "bg-fg-3",
 };
 

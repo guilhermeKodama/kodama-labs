@@ -25,7 +25,7 @@ const HEAT_COLS = "grid grid-cols-[minmax(0,1.1fr)_repeat(12,minmax(0,1fr))_92px
 const MONTHS = Array.from({ length: 12 }, (_, i) => i + 1);
 
 const HEAT_CLASS: Record<HeatLevel, string> = {
-  over: "bg-fill-1 font-semibold text-cat-red",
+  over: "bg-fill-1 font-semibold text-neg",
   high: "bg-fill-2 text-fg-2",
   mid: "bg-fill-3 text-fg-2",
   low: "bg-fill-4 text-fg-2",
@@ -171,7 +171,7 @@ function YearBody({ data, today, onOpenMonth, actions }: { data: YearOverview; t
                 <span
                   className={cn(
                     "text-right font-mono text-label",
-                    trend.kind === "up" ? "text-cat-yellow" : trend.kind === "down" ? "text-cat-green" : trend.kind === "stable" ? "text-fg-3" : "text-fg-4",
+                    trend.kind === "up" ? "text-warn" : trend.kind === "down" ? "text-pos" : trend.kind === "stable" ? "text-fg-3" : "text-fg-4",
                   )}
                 >
                   {trend.kind === "none" ? "—" : t(`year.heatmap.trend_${trend.kind}`, { pct: trend.pct })}
@@ -188,7 +188,7 @@ function YearBody({ data, today, onOpenMonth, actions }: { data: YearOverview; t
                   <DrillLink
                     key={i}
                     draft={totals(totalLabel, monthRange(i + 1), fmt.monthLabel({ year: data.year, month: i + 1 }))}
-                    className={cn("text-center font-mono text-hint tabular-nums", tone === "projected" ? "text-fg-4" : tone === "over" ? "text-cat-red" : "text-fg-1")}
+                    className={cn("text-center font-mono text-hint tabular-nums", tone === "projected" ? "text-fg-4" : tone === "over" ? "text-neg" : "text-fg-1")}
                   >
                     {fmt.k(total, { minDigits: 1 })}
                   </DrillLink>

@@ -19,8 +19,34 @@ export const CHART = {
   warn: "var(--cap-chart-warn)",
 } as const;
 
+/**
+ * The Cerne hues the owner approved on the canvas (board CerneCharts),
+ * light and dark. Every chart series and every category/entity swatch in
+ * src/app/globals.css is one of them (src/lib/__tests__/palette.test.ts).
+ */
+export const CERNE_HUES = {
+  cerne: { light: "#5b2e1f", dark: "#e8dfcf" },
+  resina: { light: "#c4862b", dark: "#e0a04a" },
+  musgo: { light: "#3d5a36", dark: "#9cc08c" },
+  ipe: { light: "#c9a227", dark: "#e9c84a" },
+  jacaranda: { light: "#6e4a5e", dark: "#b88fa6" },
+  ardosia: { light: "#4f6470", dark: "#8fa7b4" },
+  salvia: { light: "#8a9a7b", dark: "#b7c4a8" },
+  casca: { light: "#8c7b68", dark: "#b3a592" },
+  argila: { light: "#b07a5a", dark: "#d9a07e" },
+  alburno: { light: "#d6c9b2", dark: "#5a4a3e" },
+  urucum: { light: "#7a3b26", dark: "#d9a487" },
+} as const;
+
+/** The Cerne hues, in the order charts hand them out (canvas board CerneCharts). */
+export const SERIES_NAMES = ["cerne", "resina", "musgo", "ipe", "jacaranda", "ardosia", "salvia", "casca", "argila", "alburno"] as const;
+export type SeriesName = (typeof SERIES_NAMES)[number];
+
 /** Categorical series colors, in assignment order. */
-export const CHART_SERIES = Array.from({ length: 10 }, (_, i) => `var(--cap-chart-${i + 1})`);
+export const CHART_SERIES = SERIES_NAMES.map((_, i) => `var(--cap-chart-${i + 1})`);
+
+/** A series by its hue, for charts that give a meaning a fixed color (a class, an income type). */
+export const SERIES = Object.fromEntries(SERIES_NAMES.map((name, i) => [name, CHART_SERIES[i]])) as Record<SeriesName, string>;
 
 /** Axis props shared by every cartesian chart. */
 export const CHART_AXIS = { tick: { fontSize: textRole("caption"), fill: CHART.muted }, stroke: CHART.axis } as const;

@@ -15,8 +15,8 @@ import { cn } from "@/lib/utils";
 import type { EditableBudget } from "./budget-dialog";
 
 /** Text color of a pace tone (mockup: category red / yellow, else tertiary). */
-export const TONE_TEXT: Record<PaceTone, string> = { over: "text-cat-red", ahead: "text-cat-yellow", normal: "text-fg-3" };
-const TONE_FILL: Record<PaceTone | "warn", string> = { over: "bg-cat-red", ahead: "bg-cat-yellow", warn: "bg-cat-yellow", normal: "bg-fg-2" };
+export const TONE_TEXT: Record<PaceTone, string> = { over: "text-neg", ahead: "text-warn", normal: "text-fg-3" };
+const TONE_FILL: Record<PaceTone | "warn", string> = { over: "bg-neg", ahead: "bg-warn-solid", warn: "bg-warn-solid", normal: "bg-brand" };
 
 /**
  * 6px bar of spent / budget with a 1px mark (today, or where the year
