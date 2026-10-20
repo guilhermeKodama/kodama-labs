@@ -142,9 +142,11 @@ describe("Middleware", () => {
       expect(location(res)).toBe("/login?redirect=%2Ftransactions%3Fview%3Dseed%3Air");
     });
 
-    it("sends / to the app or to login", async () => {
+    it("shows / (the homepage) to visitors and sends a signed-in user into the app", async () => {
       expect(location(await run("/", { session: true }))).toBe("/transactions");
-      expect(location(await run("/"))).toBe("/login");
+      const visitor = await run("/");
+      expect(location(visitor)).toBeNull();
+      expect(toIntl(visitor)).toBe(true);
     });
 
     it("sends a signed-in user away from login and signup", async () => {

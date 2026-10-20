@@ -1,8 +1,17 @@
-import { redirect } from 'next/navigation';
+import type { Metadata } from "next";
+import { getTranslations, setRequestLocale } from "next-intl/server";
+import { HomePage } from "@/components/home/home-page";
+import { isLocale, routing } from "@/i18n/routing";
 
-// The middleware already sends "/" to /transactions or /login; this only
-// covers a request that reaches the page anyway. Without a session the
-// middleware sends /transactions on to /login.
-export default function HomePage() {
-  redirect('/transactions');
+export async function generateMetadata({ params }: { params: Promise<{ locale: string }> }): Promise<Metadata> {
+  const { locale } = await params;
+  const t = await getTranslations({ locale: isLocale(locale) ? locale : routing.defaultLocale, namespace: "home.meta" });
+  return { title: t("title"), description: t("description") };
+}
+
+/** `/` without a session (the middleware sends a signed-in visitor on to /transactions). */
+export default async function Home({ params }: { params: Promise<{ locale: string }> }) {
+  const { locale } = await params;
+  setRequestLocale(isLocale(locale) ? locale : routing.defaultLocale);
+  return <HomePage />;
 }

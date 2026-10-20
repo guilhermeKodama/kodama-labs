@@ -3,7 +3,7 @@ import createIntlMiddleware from "next-intl/middleware";
 import { routing } from "./i18n/routing";
 import { isExcludedPath, loginPath, stripLocalePrefix } from "./lib/middleware-helpers";
 
-// Public routes that don't require authentication
+// Public routes that don't require authentication (the homepage, "/", is handled on its own below)
 const publicRoutes = ["/login", "/signup"];
 
 // Cookie name must match the one used in auth routes
@@ -49,8 +49,9 @@ export default async function middleware(request: NextRequest) {
 
   const hasSession = !!request.cookies.get(SESSION_COOKIE_NAME)?.value;
 
+  // "/" is the homepage for visitors; a signed-in user goes straight into the app.
   if (path === "/") {
-    return NextResponse.redirect(new URL(hasSession ? "/transactions" : "/login", request.url));
+    return hasSession ? NextResponse.redirect(new URL("/transactions", request.url)) : intlMiddleware(withDefaultLanguage(request));
   }
 
   // An authenticated user on login/signup goes into the app

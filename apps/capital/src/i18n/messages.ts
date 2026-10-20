@@ -8,7 +8,8 @@
  * per server error code, src/server/i18n/error-codes.ts) are shared; shell,
  * command, assistant and auth belong to the shell and ⌘K; ledger to views
  * and the table; entry to creating, editing and deleting transactions;
- * import, budgets, invest, settings and notifications to their screens.
+ * import, budgets, invest, settings and notifications to their screens;
+ * home to the public homepage.
  *
  * pt-BR is the source language and every locale has the same keys and ICU
  * placeholders (src/lib/__tests__/i18n-parity.test.ts).
@@ -28,6 +29,7 @@ export const NAMESPACES = [
   "invest",
   "settings",
   "notifications",
+  "home",
 ] as const;
 
 export type Namespace = (typeof NAMESPACES)[number];

@@ -262,7 +262,7 @@ print_build() {
     echo "    smoke GET http://$(svc_host_for "$unit"):${UNIT_PORT[$unit]}/api/health expects db=${UNIT_SMOKE_DB[$unit]}"
   fi
   if [[ "$unit" == "capital" ]]; then
-    echo "    smoke GET https://capital.kodamalabs.ai/login expects 200 with the sign-in form, /transactions a redirect to /login"
+    echo "    smoke GET https://capital.kodamalabs.ai/login expects 200 with the sign-in form, /transactions a redirect to /login, / the homepage"
     echo "    smoke POST tools/list on capital-web:3000/mcp (bearer token is read inside the container and not logged)"
   fi
   if [[ "$unit" == "monitoring" ]]; then
@@ -594,8 +594,16 @@ public_login_ok() {
   fi
   code="$(curl -sS --max-time 20 -o /dev/null -D "$hdr" -w '%{http_code}' "https://capital.kodamalabs.ai/transactions" || true)"
   loc="$(awk 'tolower($1)=="location:" { print $2 }' "$hdr" | tr -d '\r' | head -n 1)"
+  if [[ ! "$code" =~ ^30[1278]$ || "$loc" != */login* ]]; then
+    rm -f "$body" "$hdr"
+    return 1
+  fi
+  # And the homepage is public at "/".
+  code="$(curl -sS --max-time 20 -o "$body" -w '%{http_code}' "https://capital.kodamalabs.ai/" || true)"
+  local home=1
+  [[ "$code" == "200" ]] && grep -q 'id="cerne-home"' "$body" && home=0
   rm -f "$body" "$hdr"
-  [[ "$code" =~ ^30[1278]$ && "$loc" == */login* ]]
+  return "$home"
 }
 
 mcp_ok() {
