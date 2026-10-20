@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <!--
+    Capital app icon: a coin, straight on, monochrome on #0a0a0a.
+    Outer ring outer diameter 600, stroke 45. Inner ring stroke 18,
+    with a 30px black groove between the rings. The C is Geist Bold
+    (weight 700) at cap height 280, converted to a path so the file
+    does not depend on a font.
+
+    The groove and inner stroke are a little heavier than the nominal
+    18/14. At those widths the black groove antialiases away below
+    about 60px and the two rings fuse into one circle, which reads as
+    a copyright mark. 30/18 is the smallest pair that still leaves a
+    black groove and a solid inner ring at 48px.
+
+    Reeded ticks are omitted. Ticks small enough to stay subtle
+    disappear at 48px; ticks large enough to survive read as a gear.
+  -->
+  <title>Capital</title>
+  <rect width="1024" height="1024" fill="#0a0a0a"/>
+  <circle cx="512" cy="512" r="277.5" fill="none" stroke="#ffffff" stroke-width="45"/>
+  <circle cx="512" cy="512" r="216" fill="none" stroke="#ffffff" stroke-width="18"/>
+  <path fill="#ffffff" d="M514.17 658.31 Q475.92 658.31 446.34 640.96 Q416.76 623.61 399.80 590.87 Q382.85 558.14 382.85 512.39 Q382.85 467.83 399.21 434.90 Q415.58 401.97 445.35 383.83 Q475.13 365.69 515.35 365.69 Q570.17 365.69 600.54 392.70 Q630.90 419.72 639.97 469.80 L577.66 472.17 Q572.93 445.75 557.15 430.96 Q541.38 416.17 515.35 416.17 Q481.83 416.17 463.30 442.39 Q444.76 468.62 444.76 512.39 Q444.76 556.56 463.69 582.20 Q482.62 607.83 514.96 607.83 Q542.96 607.83 558.73 591.86 Q574.51 575.89 578.45 547.49 L641.15 549.86 Q632.48 601.13 600.73 629.72 Q568.99 658.31 514.17 658.31 Z"/>
+</svg>

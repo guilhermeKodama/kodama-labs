@@ -23,9 +23,10 @@ export function GET() {
         // ?v=N busts every cache layer (browser HTTP cache, Cloudflare edge)
         // at once — same-named icon files otherwise get served stale at
         // reinstall time and the launcher keeps the old artwork. Bump when
-        // the artwork changes.
-        { src: "/icon-192.png?v=2", sizes: "192x192", type: "image/png" },
-        { src: "/icon-512.png?v=2", sizes: "512x512", type: "image/png" },
+        // the artwork changes (metadata icons and sw.js use the same query).
+        { src: "/icon-192.png?v=3", sizes: "192x192", type: "image/png", purpose: "any" },
+        { src: "/icon-512.png?v=3", sizes: "512x512", type: "image/png", purpose: "any" },
+        { src: "/icon-maskable-512.png?v=3", sizes: "512x512", type: "image/png", purpose: "maskable" },
       ],
     },
     {
