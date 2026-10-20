@@ -4,16 +4,16 @@ import { expect, flow } from "@repo/proof-video";
 flow.use({ storageState: { cookies: [], origins: [] } });
 
 flow("Validation package: the way in", async ({ page, scene, check, type, typeSecret }) => {
-  await scene("Entrada", "Sign-in and sign-up, before any session");
+  await scene("Entrada", "Sign-in, and sign-up while it is closed, before any session");
   await page.goto("/login");
   await check("Entrar · claro", async () => {
     await expect(page.getByRole("heading", { name: "Entrar" })).toBeVisible();
   });
-  await page.getByRole("link", { name: "Criar uma conta" }).click();
-  await check("Criar conta · claro", async () => {
-    await expect(page.getByRole("heading", { name: "Criar conta" })).toBeVisible();
+  await page.goto("/signup");
+  await check("Cadastro fechado · claro", async () => {
+    await expect(page.getByRole("heading", { name: "O Cerne ainda não está aberto" })).toBeVisible();
   });
-  await page.getByRole("link", { name: "Entrar" }).click();
+  await page.getByRole("link", { name: "Já tem conta? Entrar" }).click();
   await expect(page).toHaveURL(/\/login/);
   await expect(page.getByRole("heading", { name: "Entrar" })).toBeVisible();
   await type(page.locator("#auth-email"), process.env.PROOF_DEMO_EMAIL ?? "");

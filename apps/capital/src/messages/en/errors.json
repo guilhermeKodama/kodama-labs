@@ -21,7 +21,9 @@
     "required": "Sign in to continue.",
     "session_invalid": "Your session expired. Sign in again.",
     "invalid_credentials": "Wrong email or password.",
-    "email_taken": "There is already an account with this email."
+    "email_taken": "There is already an account with this email.",
+    "signup_closed": "Cerne is not open to new accounts yet.",
+    "too_many_attempts": "Too many wrong attempts. Try again in {minutes} minutes."
   },
   "user": {
     "not_found": "User not found.",

@@ -258,7 +258,7 @@ if printf '%s\n' "$dry" | grep -E 'compose .* run ' | grep -q -- '--no-build'; t
   fail "dry-run passed --no-build to compose run"
 fi
 printf '%s\n' "$dry" | grep -q "api/health" || fail "dry-run missing health smoke"
-printf '%s\n' "$dry" | grep -q "cloudflareaccess.com" || fail "dry-run missing capital public smoke"
+printf '%s\n' "$dry" | grep -q "capital.kodamalabs.ai/login expects 200" || fail "dry-run missing capital public smoke"
 printf '%s\n' "$dry" | grep -q "tools/list" || fail "dry-run missing MCP smoke"
 root_sha="$(git rev-list --max-parents=0 HEAD | head -n 1)"
 status_py set-app-success cloudflared "$root_sha"

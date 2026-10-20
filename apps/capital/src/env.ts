@@ -36,6 +36,10 @@ export const env = createEnv({
     // `pnpm exec web-push generate-vapid-keys`. Absent = push sends no-op.
     VAPID_PRIVATE_KEY: z.string().min(1).optional(),
     VAPID_SUBJECT: z.string().default("mailto:guilherme.kodama@gmail.com"),
+    // Whether anyone may create an account. Closed by default: Cerne is not
+    // open yet, and the app is on the internet without Cloudflare Access.
+    // Accounts come from the seeds and scripts meanwhile.
+    SIGNUP_OPEN: z.enum(["true", "false"]).default("false"),
   },
   client: {
     NEXT_PUBLIC_APP_URL: z.string().url().optional(),
@@ -58,6 +62,7 @@ export const env = createEnv({
     ASSISTANT_MAX_TURN_COST_USD: process.env.ASSISTANT_MAX_TURN_COST_USD,
     VAPID_PRIVATE_KEY: process.env.VAPID_PRIVATE_KEY,
     VAPID_SUBJECT: process.env.VAPID_SUBJECT,
+    SIGNUP_OPEN: process.env.SIGNUP_OPEN,
     NEXT_PUBLIC_VAPID_PUBLIC_KEY: process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY,
   },
   skipValidation: !!process.env.SKIP_ENV_VALIDATION,

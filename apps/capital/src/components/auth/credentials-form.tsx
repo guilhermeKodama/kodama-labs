@@ -27,9 +27,10 @@ const noSubscribe = () => () => {};
  * the chrome background, Field labels, 26px inputs and buttons). After
  * signing in the app returns to `?redirect` when it is a path of this app;
  * the link to the other page keeps it. Errors come from the server's code
- * (errors.<code>), never its English message.
+ * (errors.<code>), never its English message. While sign-up is closed
+ * (SIGNUP_OPEN), the login card does not offer it.
  */
-export function CredentialsForm({ mode }: { mode: AuthMode }) {
+export function CredentialsForm({ mode, signupOpen = true }: { mode: AuthMode; signupOpen?: boolean }) {
   const t = useTranslations("auth");
   const errorText = useErrorMessage();
   const locale = useLocale();
@@ -133,12 +134,14 @@ export function CredentialsForm({ mode }: { mode: AuthMode }) {
         <Btn primary type="submit" disabled={pending} className="w-full">
           {pending ? t(`${mode}.pending`) : t(`${mode}.submit`)}
         </Btn>
-        <p className="text-body-sm text-fg-3">
-          {t(`${mode}.switchPrompt`)}{" "}
-          <Link href={authSwitchHref(mode === "login" ? "signup" : "login", search)} className="font-medium text-fg-1 underline-offset-2 hover:underline">
-            {t(`${mode}.switch`)}
-          </Link>
-        </p>
+        {mode === "signup" || signupOpen ? (
+          <p className="text-body-sm text-fg-3">
+            {t(`${mode}.switchPrompt`)}{" "}
+            <Link href={authSwitchHref(mode === "login" ? "signup" : "login", search)} className="font-medium text-fg-1 underline-offset-2 hover:underline">
+              {t(`${mode}.switch`)}
+            </Link>
+          </p>
+        ) : null}
       </form>
     </main>
   );
