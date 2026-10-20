@@ -111,6 +111,44 @@
   --color-trunk-hero: var(--cap-trunk-hero);
   --color-trunk-hero-ink: var(--cap-trunk-hero-ink);
   --color-trunk-hero-muted: var(--cap-trunk-hero-muted);
+  --color-home-band: var(--cap-home-band);
+  --color-home-rings: var(--cap-home-rings);
+  --color-home-outline: var(--cap-home-outline);
+  --color-home-band-strong: var(--cap-home-band-strong);
+  --color-home-band-ink: var(--cap-home-band-ink);
+  --color-home-band-muted: var(--cap-home-band-muted);
+  --color-home-band-body: var(--cap-home-band-body);
+  --color-home-ring-track: var(--cap-home-ring-track);
+  --color-home-ring: var(--cap-home-ring);
+  --color-home-footer: var(--cap-home-footer);
+  --color-home-footer-ink: var(--cap-home-footer-ink);
+  --color-home-footer-text: var(--cap-home-footer-text);
+  /* The homepage's own sizes: fluid with the viewport (it is public, and
+     visitors have no Tamanho da letra yet), still scaled by it when set. */
+  --text-home-display: calc(clamp(46px, 7vw, 92px) * var(--cap-text-scale));
+  --text-home-display--line-height: 0.98;
+  --text-home-h2: calc(clamp(34px, 4.2vw, 52px) * var(--cap-text-scale));
+  --text-home-h2--line-height: 1.05;
+  --text-home-cta: calc(clamp(38px, 5vw, 64px) * var(--cap-text-scale));
+  --text-home-cta--line-height: 1;
+  --text-home-lead: calc(clamp(17px, 1.6vw, 20px) * var(--cap-text-scale));
+  --text-home-lead--line-height: 1.55;
+  --text-home-body: calc(16px * var(--cap-text-scale));
+  --text-home-body--line-height: 1.55;
+  --text-home-small: calc(14.5px * var(--cap-text-scale));
+  --text-home-tag: calc(22px * var(--cap-text-scale));
+  --text-home-h3: calc(20px * var(--cap-text-scale));
+  --text-home-wordmark: calc(26px * var(--cap-text-scale));
+  --text-home-eyebrow: calc(13px * var(--cap-text-scale));
+  --text-home-note: calc(12.5px * var(--cap-text-scale));
+  --text-home-row: calc(14px * var(--cap-text-scale));
+  --text-home-step: calc(15px * var(--cap-text-scale));
+  --text-home-feature: calc(15.5px * var(--cap-text-scale));
+  --text-home-feature--line-height: 1.55;
+  --text-home-h4: calc(18px * var(--cap-text-scale));
+  --text-home-large: calc(18px * var(--cap-text-scale));
+  --text-home-large--line-height: 1.6;
+  --text-home-pct: calc(34px * var(--cap-text-scale));
   --color-pos: var(--cap-pos);
   --color-pos-ink: var(--cap-pos-ink);
   --color-pos-soft: var(--cap-pos-soft);
@@ -298,6 +336,22 @@
   --cap-trunk-hero-ink: #f2ebdd;
   --cap-trunk-hero-muted: #e3d3bc;
 
+  /* The homepage (components/home): sapwood bands, ring decorations, the
+     heartwood Liberdade financeira band and the charcoal footer. */
+  --cap-home-band: #f2ebdd;
+  --cap-home-rings: #e5d8bf;
+  --cap-home-outline: #cdbda0;
+  --cap-home-band-strong: #5b2e1f;
+  --cap-home-band-ink: #f2ebdd;
+  --cap-home-band-muted: #e3d3bc;
+  --cap-home-band-body: #eaddc8;
+  --cap-home-ring-track: #7a4a36;
+  --cap-home-ring: #e0a04a;
+  --cap-home-footer: #1f1a17;
+  --cap-home-footer-ink: #f2ebdd;
+  --cap-home-footer-text: #cdbfa9;
+  --cap-home-shadow: rgb(91 46 31 / 16%);
+
   /* shadcn tokens on top of the Cerne ones. */
   --radius: 0.625rem;
   --background: var(--cap-bg-editor);
@@ -434,6 +488,20 @@
   --cap-trunk-hero: #2e2621;
   --cap-trunk-hero-ink: #f2ebdd;
   --cap-trunk-hero-muted: #cdbfa9;
+
+  --cap-home-band: #171310;
+  --cap-home-rings: #2e2621;
+  --cap-home-outline: #3d332b;
+  --cap-home-band-strong: #2e2621;
+  --cap-home-band-ink: #f2ebdd;
+  --cap-home-band-muted: #cdbfa9;
+  --cap-home-band-body: #e3d3bc;
+  --cap-home-ring-track: #4c3b2e;
+  --cap-home-ring: #e0a04a;
+  --cap-home-footer: #120f0d;
+  --cap-home-footer-ink: #f2ebdd;
+  --cap-home-footer-text: #a99a85;
+  --cap-home-shadow: rgb(0 0 0 / 45%);
 
   --chart-1: oklch(0.488 0.243 264.376);
   --chart-2: oklch(0.696 0.17 162.48);

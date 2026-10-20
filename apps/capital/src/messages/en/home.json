@@ -1,0 +1,142 @@
+{
+  "meta": {
+    "title": "Cerne — personal and business finances",
+    "description": "Your accounts, your company's and your investments in one ledger, in many currencies, with a plan to reach financial freedom."
+  },
+  "nav": {
+    "label": "Sections",
+    "how": "How it works",
+    "features": "Features",
+    "freedom": "Financial freedom",
+    "control": "Control",
+    "signIn": "Sign in",
+    "access": "Ask for access"
+  },
+  "hero": {
+    "eyebrow": "Personal and business finances",
+    "title": "Wealth grows in rings.",
+    "lead": "Cerne brings your accounts, your company's and your investments into one ledger. In many currencies, with a plan to reach financial freedom.",
+    "primary": "Ask for early access",
+    "secondary": "See how it works",
+    "shot": "Cerne's transactions screen"
+  },
+  "who": {
+    "eyebrow": "Who it is for",
+    "title": "For people whose company and life share one pocket.",
+    "abroad": {
+      "tag": "US$ → R$",
+      "title": "Paid from abroad",
+      "text": "The client pays in dollars into the company's account. Cerne keeps the original amount and what it was worth in reais that day."
+    },
+    "business": {
+      "tag": "PJ → PF",
+      "title": "A company and a personal account",
+      "text": "Profit distributions leave the company and reach you, with both sides recorded. Nothing gets lost on the way."
+    },
+    "goal": {
+      "tag": "2037",
+      "title": "Wants to get there",
+      "text": "Contributions, portfolio and an income goal for financial freedom, in the same place as the month's spending."
+    }
+  },
+  "how": {
+    "eyebrow": "How it works",
+    "title": "Connect, check, grow.",
+    "connect": {
+      "title": "Connect",
+      "text": "Sync your accounts through Open Finance, or send the statement as a PDF or a screenshot."
+    },
+    "check": {
+      "title": "Check",
+      "text": "The assistant reads and proposes the transactions. Nothing enters your ledger without your confirmation, and everything can be undone later."
+    },
+    "grow": {
+      "title": "Grow",
+      "text": "Watch each month's surplus turn into wealth. One ring a year, thicker in good years, but always a ring."
+    },
+    "proposal": {
+      "label": "The assistant's proposal, with illustrative data",
+      "source": "assistant's proposal · October statement",
+      "status": "nothing saved · valid 30 min",
+      "rows": {
+        "pharmacy": "Pharmacy · Health",
+        "restaurant": "Restaurant · Food",
+        "pix": "Pix received · Services"
+      },
+      "more": "+ 39 transactions",
+      "confirm": "Confirm import",
+      "illustrative": "Illustrative data."
+    }
+  },
+  "features": {
+    "eyebrow": "Features",
+    "title": "Everything money does, recorded the right way.",
+    "ledger": {
+      "title": "One ledger",
+      "text": "You and your companies, with accounts, cards, brokerage and cash in the same place."
+    },
+    "currencies": {
+      "title": "Many currencies",
+      "text": "Each transaction keeps the original amount and the amount in reais, fixed on the day it came in."
+    },
+    "cards": {
+      "title": "Cards on the right date",
+      "text": "A purchase counts when the statement closes, and paying the bill is a transfer, not a second expense."
+    },
+    "investments": {
+      "title": "Investments",
+      "text": "Portfolio by asset class, contributions and income, next to the rest of your accounts."
+    },
+    "budgets": {
+      "title": "Budgets and views",
+      "text": "Goals per category for the month and the year. Table, pivot, chart, board and calendar, with saved filters."
+    },
+    "claude": {
+      "title": "Works with Claude",
+      "text": "Ask and record through Claude: Cerne has an MCP server with the same rules as the app."
+    }
+  },
+  "freedom": {
+    "eyebrow": "Financial freedom",
+    "title": "A plan, not just a chart.",
+    "text": "Say how much income you want each month. Cerne works out what is missing, simulates thousands of market scenarios and shows the year you get there at your current pace. And how much an extra contribution brings it closer.",
+    "ring": "Progress ring: 38 percent of the way, arrival expected in 2037",
+    "pct": "38%",
+    "arrival": "arrival in 2037",
+    "milestones": {
+      "reserve": "Emergency fund · done",
+      "million": "R$ 1 million · 2025",
+      "income": "Income of R$ 10,000 a month · 2037"
+    },
+    "illustrative": "Illustrative data."
+  },
+  "control": {
+    "eyebrow": "Control",
+    "title": "You decide.",
+    "confirm": {
+      "title": "Nothing goes in without you",
+      "text": "The assistant can read a statement, but it does not import on its own. The proposal waits for your click and expires in 30 minutes."
+    },
+    "undo": {
+      "title": "Everything can be undone",
+      "text": "Any change can be undone, whoever made it. What you delete stays 30 days in the trash."
+    },
+    "export": {
+      "title": "Your data leaves with you",
+      "text": "Export any view as CSV whenever you want. The ledger is yours."
+    }
+  },
+  "access": {
+    "title": "Start the first ring.",
+    "text": "Cerne is opening little by little. Write to us and we will let you know when it is your turn.",
+    "button": "Ask for early access",
+    "subject": "Early access to Cerne",
+    "or": "or write to"
+  },
+  "footer": {
+    "label": "Footer",
+    "tagline": "A Kodama Labs tool",
+    "signIn": "Sign in",
+    "labs": "kodamalabs.ai"
+  }
+}
