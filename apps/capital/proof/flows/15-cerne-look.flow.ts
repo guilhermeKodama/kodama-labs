@@ -1,4 +1,6 @@
+import type { Locator, Page } from "@playwright/test";
 import { expect, flow } from "@repo/proof-video";
+import { dialog, field, valueOf } from "../helpers";
 
 // The Cerne palette, as the browser computes it (rgb of the tokens in globals.css).
 const PAPER = "rgb(251, 248, 242)";
@@ -8,8 +10,23 @@ const SAPWOOD = "rgb(242, 235, 221)";
 const NAV_ON = "rgb(224, 211, 186)";
 const RESIN_DARK = "rgb(224, 160, 74)";
 const PANEL = "rgb(255, 255, 255)";
+// Ipê-amarelo, the alerts: the text tone of each theme.
+const IPE_TEXT = "rgb(137, 110, 27)";
+const IPE_DARK = "rgb(233, 200, 74)";
 
-flow("Cerne look: warm palette, brand color and fonts, in light and dark", async ({ page, scene, say, check }) => {
+/** Opens + Operação in Carteira as a sale of more BOVA11 than the position holds; returns the dialog. */
+async function oversell(page: Page, type: (target: Locator, text: string) => Promise<void>) {
+  await page.goto("/investments");
+  await page.getByRole("button", { name: "+ Operação" }).click();
+  const op = dialog(page, "Nova operação");
+  await op.getByRole("radio", { name: "Venda" }).click();
+  await expect(field(op, "Corretora").getByRole("combobox")).not.toHaveText("Nenhuma corretora");
+  await op.getByRole("button", { name: /^BOVA11 / }).click();
+  await type(field(op, "Quantidade").locator("input"), "999999");
+  return op;
+}
+
+flow("Cerne look: warm palette, brand color, fonts and the ipê alerts, in light and dark", async ({ page, scene, say, check, type }) => {
   await page.goto("/transactions");
   const body = page.locator("body");
   const primary = page.getByRole("button", { name: "+ Nova transação" });
@@ -50,13 +67,23 @@ flow("Cerne look: warm palette, brand color and fonts, in light and dark", async
   await page.goto("/transactions");
   await say("Dialogs open on a white panel above the sapwood page");
   await primary.click();
-  const dialog = page.getByRole("dialog");
+  const entry = page.getByRole("dialog");
   await check("The new-transaction dialog is a white panel with a Fraunces title", async () => {
-    await expect(dialog).toHaveCSS("background-color", PANEL);
-    await expect(dialog.getByRole("heading").first()).toHaveCSS("font-family", /fraunces/i);
+    await expect(entry).toHaveCSS("background-color", PANEL);
+    await expect(entry.getByRole("heading").first()).toHaveCSS("font-family", /fraunces/i);
   });
   await page.keyboard.press("Escape");
-  await expect(dialog).toBeHidden();
+  await expect(entry).toBeHidden();
+
+  await scene("Alertas em ipê", "Warnings take the yellow of the ipê, darkened to read on cream");
+  await say("Selling more than the position holds is a warning");
+  let op = await oversell(page, type);
+  await check("The oversold result is in ipê", async () => {
+    await expect(op.getByText(/^mais que a posição/)).toBeVisible();
+    await expect(valueOf(op, "Resultado estimado")).toHaveCSS("color", IPE_TEXT);
+  });
+  await page.keyboard.press("Escape");
+  await expect(op).toBeHidden();
 
   await scene("Tema escuro", "Charcoal page; the brand turns sapwood and the indicator resin");
   await page.goto("/settings");
@@ -73,6 +100,13 @@ flow("Cerne look: warm palette, brand color and fonts, in light and dark", async
     await expect(primary).toHaveCSS("color", CHARCOAL);
     await expect(activeRow).toHaveCSS("box-shadow", new RegExp(RESIN_DARK.replace(/[()]/g, "\\$&")));
   });
+
+  op = await oversell(page, type);
+  await check("In the dark theme the warning is the canvas ipê", async () => {
+    await expect(valueOf(op, "Resultado estimado")).toHaveCSS("color", IPE_DARK);
+  });
+  await page.keyboard.press("Escape");
+  await expect(op).toBeHidden();
 
   await say("Back to Claro, the theme the other flows expect");
   await page.goto("/settings");
