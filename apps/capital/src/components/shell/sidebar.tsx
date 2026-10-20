@@ -5,7 +5,7 @@ import { useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { Dialog as DialogPrimitive } from "radix-ui";
 import { Briefcase, PiggyBank, Plus, Search, Target } from "lucide-react";
-import { Kbd } from "@/components/cap";
+import { Kbd, Mark, Wordmark } from "@/components/cap";
 import { BACKDROP, NAV_OFF, NAV_ON } from "@/components/cap/styles";
 import { LayoutIcon } from "@/components/ledger/toolbar/layout-icon";
 import { DeleteViewButton } from "@/components/ledger/toolbar/delete-view";
@@ -13,6 +13,7 @@ import { RenameInput, useViewMenu, ViewMenu, ViewMenuTarget } from "@/components
 import { Link, usePathname } from "@/i18n/navigation";
 import { useSession } from "@/lib/api/session";
 import { useLedgerViewActions, useLedgerViews, useNewView, type LedgerView } from "@/lib/ledger/use-views";
+import { BRAND } from "@/lib/brand";
 import { buildTransactionsHref } from "@/lib/ledger/view-draft";
 import { openCommandMenu } from "@/lib/shell/command-menu";
 import { SHELL_SHORTCUTS, TRANSACTIONS_PATH } from "@/lib/shell/shortcuts";
@@ -237,10 +238,7 @@ function SidebarContent({ rail, onNavigate }: { rail: boolean; onNavigate?: () =
   return (
     <>
       <div className={cn("flex shrink-0 items-center gap-2", rail ? "justify-center pt-1 pb-2" : "px-1.5 pt-1 pb-2")}>
-        <span aria-hidden className="inline-flex size-6 shrink-0 items-center justify-center rounded-[6px] bg-fg-1 text-body-sm font-bold text-editor">
-          C
-        </span>
-        {rail ? null : <span className="text-body font-semibold">Capital</span>}
+        {rail ? <Mark className="size-6" /> : <Wordmark />}
       </div>
       {rail ? (
         <button
@@ -367,7 +365,7 @@ export function SidebarDrawer() {
           aria-describedby={undefined}
           className="fixed inset-y-0 left-0 z-50 flex w-[240px] max-w-[85vw] flex-col gap-0.5 overflow-y-auto border-r border-stroke-1 bg-chrome p-2 text-fg-1 outline-none data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:slide-in-from-left-4 md:hidden"
         >
-          <DialogPrimitive.Title className="sr-only">Capital</DialogPrimitive.Title>
+          <DialogPrimitive.Title className="sr-only">{BRAND}</DialogPrimitive.Title>
           <OverlayScope id={overlayId}>
             <SidebarContent rail={false} onNavigate={close} />
           </OverlayScope>

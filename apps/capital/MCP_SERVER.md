@@ -1,6 +1,6 @@
 # MCP Server for Remote AI Accounting Access
 
-The Capital app exposes an MCP (Model Context Protocol) server at `/mcp` that allows external AI assistants (like Contador) to directly read and write accounting data through a standardized tool-calling interface.
+The Cerne app exposes an MCP (Model Context Protocol) server at `/mcp` that allows external AI assistants (like Contador) to directly read and write accounting data through a standardized tool-calling interface.
 
 ## Overview
 
@@ -515,7 +515,7 @@ The server implements the MCP Streamable HTTP transport specification:
 
 - **Initialization**: Handles `initialize` request with protocol version negotiation (supports `2024-11-05`)
 - **Capabilities**: Advertises `tools` capability
-- **Server Info**: Returns `capital-accounting` v1.0.0
+- **Server Info**: Returns `cerne` v1.0.0
 - **Notifications**: Handles `notifications/initialized` (HTTP 202, no body)
 - **Tools**: `tools/list` and `tools/call` with proper error handling
 - **Error Handling**: Tool errors returned as `isError` results, not transport errors

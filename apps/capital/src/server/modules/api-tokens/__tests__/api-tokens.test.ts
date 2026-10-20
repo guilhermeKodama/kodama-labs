@@ -112,7 +112,7 @@ describe("MCP authentication with API tokens", () => {
     const { token, apiToken } = (await call("/v2/api-tokens", { method: "POST", body: {} })).body;
     const init = await initialize(token);
     expect(init.status).toBe(200);
-    expect(init.json.result.serverInfo.name).toBe("capital-accounting");
+    expect(init.json.result.serverInfo.name).toBe("cerne");
     const tools = await mcp(token, "tools/list");
     const names: string[] = tools.json.result.tools.map((t: { name: string }) => t.name);
     expect(names).toContain("delete_transaction");

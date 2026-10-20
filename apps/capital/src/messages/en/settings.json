@@ -49,7 +49,7 @@
     },
     "pluggy": {
       "title": "Open Finance",
-      "desc": "Meu Pluggy: status, last sync, sync now, and how accounts map into Capital."
+      "desc": "Meu Pluggy: status, last sync, sync now, and how accounts map into Cerne."
     },
     "api": {
       "title": "Integrations and API",
@@ -307,13 +307,13 @@
     "empty": "No connected clients. Generate a token and use it as the Bearer token in the MCP client.",
     "revokeDialog": {
       "title": "Revoke token …{last4}?",
-      "desc": "{count, plural, =0 {No client uses this token yet.} one {# client loses access to Capital right away.} other {# clients lose access to Capital right away.}}",
+      "desc": "{count, plural, =0 {No client uses this token yet.} one {# client loses access to Cerne right away.} other {# clients lose access to Cerne right away.}}",
       "confirm": "Revoke token"
     },
     "toastRevoked": "Token …{last4} revoked"
   },
   "pluggy": {
-    "disabled": "Sync stays off until the server has PLUGGY_CLIENT_ID and PLUGGY_CLIENT_SECRET. The rest of Capital is unchanged.",
+    "disabled": "Sync stays off until the server has PLUGGY_CLIENT_ID and PLUGGY_CLIENT_SECRET. The rest of Cerne is unchanged.",
     "empty": "No connections yet. In the Pluggy Dashboard, open Demo, connect MeuPluggy and paste the item id here.",
     "add": "Add connection",
     "label": "Name",

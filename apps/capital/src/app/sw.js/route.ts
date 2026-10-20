@@ -1,3 +1,4 @@
+import { BRAND } from "@/lib/brand";
 import { getBuildId } from "@/lib/build-id";
 import { REMINDER_PUSH_URL } from "@capital/server/modules/push/constants";
 
@@ -30,7 +31,7 @@ self.addEventListener("push", (event) => {
 });
 
 async function handlePush(event) {
-  let payload = { title: "Capital", body: "Nova notificação", tag: null, url: ${JSON.stringify(REMINDER_PUSH_URL)} };
+  let payload = { title: ${JSON.stringify(BRAND)}, body: "Nova notificação", tag: null, url: ${JSON.stringify(REMINDER_PUSH_URL)} };
   if (event.data) {
     try {
       payload = { ...payload, ...event.data.json() };
@@ -42,8 +43,8 @@ async function handlePush(event) {
   await self.registration.showNotification(payload.title, {
     body: payload.body,
     tag: payload.tag ?? undefined,
-    icon: "/icon-192.png",
-    badge: "/icon-192.png",
+    icon: "/icon-192.png?v=3",
+    badge: "/badge-96.png",
     data: { url: payload.url ?? ${JSON.stringify(REMINDER_PUSH_URL)} },
   });
 }

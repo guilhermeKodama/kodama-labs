@@ -307,13 +307,13 @@
     "empty": "Nenhum cliente conectado. Gere um token e use-o como Bearer no cliente MCP.",
     "revokeDialog": {
       "title": "Revogar o token …{last4}?",
-      "desc": "{count, plural, =0 {Nenhum cliente usa este token ainda.} one {# cliente para de acessar o Capital na hora.} other {# clientes param de acessar o Capital na hora.}}",
+      "desc": "{count, plural, =0 {Nenhum cliente usa este token ainda.} one {# cliente para de acessar o Cerne na hora.} other {# clientes param de acessar o Cerne na hora.}}",
       "confirm": "Revogar token"
     },
     "toastRevoked": "Token …{last4} revogado"
   },
   "pluggy": {
-    "disabled": "A sincronização fica desligada até o servidor ter PLUGGY_CLIENT_ID e PLUGGY_CLIENT_SECRET. O resto do Capital segue igual.",
+    "disabled": "A sincronização fica desligada até o servidor ter PLUGGY_CLIENT_ID e PLUGGY_CLIENT_SECRET. O resto do Cerne segue igual.",
     "empty": "Nenhuma conexão. No Dashboard da Pluggy, abra o Demo, conecte MeuPluggy e cole o item id aqui.",
     "add": "Adicionar conexão",
     "label": "Nome",
