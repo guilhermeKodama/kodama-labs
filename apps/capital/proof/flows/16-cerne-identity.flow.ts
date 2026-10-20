@@ -12,9 +12,13 @@ flow("Cerne identity: the name, the rings, the icons under their own names and t
   });
 
   await scene("O ícone", "The app icon and the installable app carry the rings, under file names of their own");
-  await say("The iPhone takes its home-screen icon from this link, now a file named after the artwork");
-  await check("The page points iOS at /icons/cerne-apple-180.png", async () => {
-    await expect(page.locator('head link[rel="apple-touch-icon"]')).toHaveAttribute("href", "/icons/cerne-apple-180.png");
+  await say("The iPhone takes its home-screen icon from the page's apple-touch-icon link, now a file named after the artwork");
+  const appleIcon = await page.locator('head link[rel="apple-touch-icon"]').getAttribute("href");
+  await page.goto(appleIcon ?? "/");
+  await check("iOS gets its icon from /icons/cerne-apple-180.png", async () => {
+    expect(appleIcon).toBe("/icons/cerne-apple-180.png");
+    const size = await page.locator("img").evaluate((img: HTMLImageElement) => [img.naturalWidth, img.naturalHeight]);
+    expect(size).toEqual([180, 180]);
   });
   await say("The icon the phone shows on the home screen");
   await page.goto("/icons/cerne-512.png");
@@ -32,10 +36,10 @@ flow("Cerne identity: the name, the rings, the icons under their own names and t
     await expect(body).toContainText('"src":"/icons/cerne-maskable-512.png","sizes":"512x512","type":"image/png","purpose":"maskable"');
     await expect(body).not.toContainText("?v=");
   });
-  await say("The old names are gone");
-  const old = await page.request.get("/icon-512.png?v=3");
-  await check("/icon-512.png no longer answers with the icon", async () => {
-    expect(old.status()).toBe(404);
+  await say("The old name is gone");
+  const old = await page.goto("/icon-512.png?v=3");
+  await check("/icon-512.png?v=3 no longer answers with the icon", async () => {
+    expect(old?.status()).toBe(404);
   });
 
   await scene("O export", "A CSV export downloads as a Cerne file");
