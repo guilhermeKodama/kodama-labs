@@ -1,10 +1,11 @@
 {
   "meta": {
     "title": "Cerne — finanças pessoais e da sua empresa",
-    "description": "Suas contas, as da sua empresa e seus investimentos num livro só, em várias moedas, com um plano para chegar à liberdade financeira."
+    "description": "Suas finanças pessoais e as da sua empresa consolidadas num livro só, para controlar melhor o dinheiro e chegar à liberdade financeira."
   },
   "nav": {
     "label": "Seções",
+    "together": "PF + PJ",
     "how": "Como funciona",
     "features": "Recursos",
     "freedom": "Liberdade financeira",
@@ -15,10 +16,27 @@
   "hero": {
     "eyebrow": "Finanças pessoais e da sua empresa",
     "title": "Patrimônio se faz em anéis.",
-    "lead": "O Cerne junta suas contas, as da sua empresa e seus investimentos num livro só. Em várias moedas, com um plano para chegar à liberdade financeira.",
+    "lead": "Sua empresa e sua vida pessoal num livro só. Com tudo consolidado, você enxerga quanto realmente sobra, controla melhor e vê em que ano chega à liberdade financeira.",
     "primary": "Pedir acesso antecipado",
     "secondary": "Ver como funciona",
-    "shot": "A tela de transações do Cerne"
+    "shot": "A tela de Liberdade financeira do Cerne: um anel de patrimônio por ano, até a meta"
+  },
+  "together": {
+    "eyebrow": "Por que juntar",
+    "title": "Duas contas, um patrimônio.",
+    "apart": {
+      "title": "Separado, o dinheiro some no caminho",
+      "text": "Pró-labore, distribuição de lucros e despesas que a empresa paga por você ficam em lugares diferentes. Nenhum deles mostra quanto você poupa de verdade."
+    },
+    "joined": {
+      "title": "Junto, tudo fecha",
+      "text": "Cada transferência da empresa para você tem os dois lados anotados. Você vê um patrimônio e uma taxa de poupança, e ainda pode olhar só PF ou só PJ."
+    },
+    "plan": {
+      "title": "E o plano usa o todo",
+      "text": "A liberdade financeira é calculada sobre o patrimônio inteiro, não só sobre a conta pessoal."
+    },
+    "shot": "A tela de transações do Cerne, com lançamentos da pessoa física e da empresa, e uma distribuição de lucros da empresa para a PF"
   },
   "who": {
     "eyebrow": "Para quem",
@@ -100,15 +118,8 @@
     "eyebrow": "Liberdade financeira",
     "title": "Um plano, não só um gráfico.",
     "text": "Diga quanto quer de renda por mês. O Cerne calcula quanto falta, simula milhares de cenários de mercado e mostra em que ano, no ritmo atual, você chega lá. E quanto um aporte a mais adianta.",
-    "ring": "Anel de progresso: 38 por cento do caminho, chegada prevista em 2037",
-    "pct": "38%",
-    "arrival": "chegada em 2037",
-    "milestones": {
-      "reserve": "Reserva de emergência · feito",
-      "million": "R$ 1 milhão · 2025",
-      "income": "Renda de R$ 10.000 por mês · 2037"
-    },
-    "illustrative": "Dados ilustrativos."
+    "shot": "O painel da Liberdade financeira: o patrimônio de hoje, o ano previsto de chegada e quanto um aporte maior adianta",
+    "demo": "Tela real, com dados de demonstração."
   },
   "control": {
     "eyebrow": "Controle",

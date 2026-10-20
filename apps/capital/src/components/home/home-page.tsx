@@ -1,4 +1,4 @@
-import type { CSSProperties, ReactNode } from "react";
+import type { CSSProperties } from "react";
 import Image from "next/image";
 import { useTranslations } from "next-intl";
 import { Mark } from "@/components/cap";
@@ -107,12 +107,13 @@ function Rule({ title, text }: { title: string; text: string }) {
   );
 }
 
-function Milestone({ done, children }: { done?: boolean; children: ReactNode }) {
+/** A screenshot of the app in the active theme (one image per theme, as webp at twice the size it shows). */
+function Shot({ name, alt, width, height, priority }: { name: string; alt: string; width: number; height: number; priority?: boolean }) {
   return (
-    <li className="flex items-center gap-2.5">
-      <span aria-hidden className={cn("size-2.5 rounded-full", done ? "bg-home-ring" : "border-2 border-home-ring")} />
-      {children}
-    </li>
+    <>
+      <Image src={`/home/${name}-claro.webp`} alt={alt} width={width} height={height} priority={priority} className="h-auto w-full dark:hidden" />
+      <Image src={`/home/${name}-escuro.webp`} alt={alt} width={width} height={height} className="hidden h-auto w-full dark:block" />
+    </>
   );
 }
 
@@ -131,6 +132,7 @@ export function HomePage() {
             <span className="font-title text-home-wordmark font-semibold tracking-[-0.02em]">cerne</span>
           </Link>
           <nav aria-label={t("nav.label")} className="flex flex-wrap gap-x-[22px] gap-y-1 text-home-small">
+            <a href="#juntos" className="text-fg-2 no-underline hover:text-fg-1">{t("nav.together")}</a>
             <a href="#como" className="text-fg-2 no-underline hover:text-fg-1">{t("nav.how")}</a>
             <a href="#recursos" className="text-fg-2 no-underline hover:text-fg-1">{t("nav.features")}</a>
             <a href="#liberdade" className="text-fg-2 no-underline hover:text-fg-1">{t("nav.freedom")}</a>
@@ -159,9 +161,30 @@ export function HomePage() {
               {t("hero.secondary")}
             </a>
           </div>
-          <div className="mt-9 h-[min(620px,52vw)] overflow-hidden rounded-t-[18px] border border-b-0 border-stroke-1 shadow-[0_30px_80px_var(--cap-home-shadow)]">
-            <Image src="/home/app-claro.webp" alt={t("hero.shot")} width={2880} height={1800} priority className="h-auto w-full dark:hidden" />
-            <Image src="/home/app-escuro.webp" alt={t("hero.shot")} width={2880} height={1800} className="hidden h-auto w-full dark:block" />
+          <div className="mt-9 overflow-hidden rounded-t-[18px] border border-b-0 border-stroke-1 shadow-[0_30px_80px_var(--cap-home-shadow)] sm:h-[min(620px,52vw)]">
+            {/* The whole screen from sm up; on a phone it would be too small, so the trunk alone. */}
+            <div className="hidden sm:block">
+              <Shot name="aneis" alt={t("hero.shot")} width={2880} height={1800} priority />
+            </div>
+            <div className="sm:hidden">
+              <Shot name="aneis-corte" alt={t("hero.shot")} width={1120} height={1160} />
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="juntos" className="border-b border-stroke-2">
+        <div className={cn(CONTAINER, "flex flex-col gap-11 pt-[104px] pb-24")}>
+          <SectionHead eyebrow={t("together.eyebrow")} title={t("together.title")} />
+          <div className="flex flex-wrap items-start gap-12">
+            <div className="flex flex-[1_1_300px] flex-col gap-8">
+              {(["apart", "joined", "plan"] as const).map((key) => (
+                <Rule key={key} title={t(`together.${key}.title`)} text={t(`together.${key}.text`)} />
+              ))}
+            </div>
+            <figure className="m-0 min-w-0 flex-[1.7_1_520px] overflow-hidden rounded-[18px] border border-stroke-1 shadow-[0_30px_80px_var(--cap-home-shadow)]">
+              <Shot name="livro" alt={t("together.shot")} width={2160} height={1240} />
+            </figure>
           </div>
         </div>
       </section>
@@ -233,26 +256,13 @@ export function HomePage() {
             <h2 className={H2}>{t("freedom.title")}</h2>
             <p className="m-0 text-home-large text-home-band-body">{t("freedom.text")}</p>
           </div>
-          <div className="flex flex-[1_1_380px] flex-wrap items-center gap-8">
-            <figure className="relative m-0 size-[220px] shrink-0">
-              <svg viewBox="0 0 200 200" role="img" aria-label={t("freedom.ring")} className="size-full">
-                <circle cx="100" cy="100" r="84" fill="none" stroke="var(--cap-home-ring-track)" strokeWidth="14" />
-                <circle cx="100" cy="100" r="84" fill="none" stroke="var(--cap-home-ring)" strokeWidth="14" strokeLinecap="round" strokeDasharray="200.6 527.8" transform="rotate(-90 100 100)" />
-                <circle cx="96" cy="104" r="56" fill="none" stroke="var(--cap-home-ring-track)" strokeWidth="3" />
-                <circle cx="92" cy="108" r="30" fill="none" stroke="var(--cap-home-ring-track)" strokeWidth="3" />
-              </svg>
-              <figcaption aria-hidden className="absolute inset-0 flex flex-col items-center justify-center gap-1">
-                <span className="font-mono text-home-pct leading-none">{t("freedom.pct")}</span>
-                <span className="text-home-row text-home-band-muted">{t("freedom.arrival")}</span>
-              </figcaption>
-            </figure>
-            <ul className="m-0 flex list-none flex-col gap-3.5 p-0 text-home-body">
-              <Milestone done>{t("freedom.milestones.reserve")}</Milestone>
-              <Milestone done>{t("freedom.milestones.million")}</Milestone>
-              <Milestone>{t("freedom.milestones.income")}</Milestone>
-              <li className="text-home-note text-home-band-muted">{t("freedom.illustrative")}</li>
-            </ul>
-          </div>
+          <figure className="m-0 flex max-w-[492px] flex-[1_1_380px] flex-col gap-3">
+            {/* On the app's own surface, so its heartwood card does not melt into the band. */}
+            <div className="rounded-[20px] bg-editor p-3 shadow-[0_30px_80px_var(--cap-home-shadow)] sm:p-4">
+              <Shot name="painel" alt={t("freedom.shot")} width={984} height={940} />
+            </div>
+            <figcaption className="text-home-note text-home-band-muted">{t("freedom.demo")}</figcaption>
+          </figure>
         </div>
       </section>
 

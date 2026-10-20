@@ -1,10 +1,11 @@
 {
   "meta": {
     "title": "Cerne — personal and business finances",
-    "description": "Your accounts, your company's and your investments in one ledger, in many currencies, with a plan to reach financial freedom."
+    "description": "Your personal and business finances consolidated in one ledger, to keep your money under control and reach financial freedom."
   },
   "nav": {
     "label": "Sections",
+    "together": "Personal + business",
     "how": "How it works",
     "features": "Features",
     "freedom": "Financial freedom",
@@ -15,10 +16,27 @@
   "hero": {
     "eyebrow": "Personal and business finances",
     "title": "Wealth grows in rings.",
-    "lead": "Cerne brings your accounts, your company's and your investments into one ledger. In many currencies, with a plan to reach financial freedom.",
+    "lead": "Your company and your personal life in one ledger. With everything consolidated you see what is really left over, stay in control and see the year you reach financial freedom.",
     "primary": "Ask for early access",
     "secondary": "See how it works",
-    "shot": "Cerne's transactions screen"
+    "shot": "Cerne's financial freedom screen: one ring of wealth per year, up to the goal"
+  },
+  "together": {
+    "eyebrow": "Why bring them together",
+    "title": "Two sets of accounts, one net worth.",
+    "apart": {
+      "title": "Kept apart, money gets lost on the way",
+      "text": "Owner's pay, profit distributions and expenses the company pays for you sit in different places. None of them shows how much you really save."
+    },
+    "joined": {
+      "title": "Together, it all adds up",
+      "text": "Every transfer from the company to you has both sides recorded. You see one net worth and one savings rate, and can still look at just personal or just business."
+    },
+    "plan": {
+      "title": "And the plan uses the whole",
+      "text": "Financial freedom is worked out on your entire net worth, not just your personal account."
+    },
+    "shot": "Cerne's transactions screen, with personal and company entries and a profit distribution from the company to the owner"
   },
   "who": {
     "eyebrow": "Who it is for",
@@ -100,15 +118,8 @@
     "eyebrow": "Financial freedom",
     "title": "A plan, not just a chart.",
     "text": "Say how much income you want each month. Cerne works out what is missing, simulates thousands of market scenarios and shows the year you get there at your current pace. And how much an extra contribution brings it closer.",
-    "ring": "Progress ring: 38 percent of the way, arrival expected in 2037",
-    "pct": "38%",
-    "arrival": "arrival in 2037",
-    "milestones": {
-      "reserve": "Emergency fund · done",
-      "million": "R$ 1 million · 2025",
-      "income": "Income of R$ 10,000 a month · 2037"
-    },
-    "illustrative": "Illustrative data."
+    "shot": "The financial freedom panel: today's net worth, the expected year of arrival and how much a larger contribution brings it forward",
+    "demo": "The real screen, with demo data."
   },
   "control": {
     "eyebrow": "Control",
