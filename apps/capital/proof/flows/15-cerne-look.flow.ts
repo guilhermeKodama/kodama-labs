@@ -40,6 +40,14 @@ flow("Cerne look: warm palette, brand color and fonts, in light and dark", async
   await check("The page title is set in Fraunces", async () => {
     await expect(page.locator("header").getByText("Todas", { exact: true })).toHaveCSS("font-family", /fraunces/i);
   });
+  await say("Panels on every screen carry their titles in Fraunces too");
+  await page.goto("/investments");
+  await check("Panel titles in Carteira are set in Fraunces, their buttons in Geist", async () => {
+    const title = page.getByText("Patrimônio vs total aportado", { exact: true });
+    await expect(title).toHaveCSS("font-family", /fraunces/i);
+    await expect(page.getByRole("button", { name: "Editar alvos" })).toHaveCSS("font-family", /geist/i);
+  });
+  await page.goto("/transactions");
   await say("Dialogs open on a white panel above the sapwood page");
   await primary.click();
   const dialog = page.getByRole("dialog");

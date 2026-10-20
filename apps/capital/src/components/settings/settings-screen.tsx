@@ -44,7 +44,7 @@ export function SettingsScreen() {
           <span className="hidden flex-1 md:block" />
           <Kbd className="hidden md:inline-flex">Esc</Kbd>
         </Link>
-        <span className="hidden px-2 pt-1.5 pb-1 text-title-sm font-semibold md:block">{t("title")}</span>
+        <span className="hidden px-2 pt-1.5 pb-1 font-title text-title-sm font-semibold md:block">{t("title")}</span>
         {SETTINGS_SECTIONS.map((section) => (
           <div key={section.section} className="flex shrink-0 flex-row gap-1 md:flex-col md:gap-0.5">
             <span className="hidden px-2 pt-3 pb-1 text-caption text-fg-3 md:block">{t(`sections.${section.section}`)}</span>
