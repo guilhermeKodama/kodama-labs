@@ -232,12 +232,14 @@
   --cap-neg-ink: #7a2a1b;
   --cap-neg-soft: #eac5bb;
   --cap-neg-wash: #f9ece8;
-  --cap-warn: oklch(66.6% 0.179 58.318); /* amber-600 */
-  --cap-warn-strong: oklch(55.5% 0.163 48.998); /* amber-700 */
-  --cap-warn-solid: oklch(76.9% 0.188 70.08); /* amber-500 */
-  --cap-warn-ink: oklch(47.3% 0.137 46.201); /* amber-800 */
-  --cap-warn-soft: oklch(92.4% 0.12 95.746); /* amber-200 */
-  --cap-warn-wash: oklch(98.7% 0.022 95.277); /* amber-50 */
+  /* Ipê-amarelo (the yellow ipê): the alerts. The canvas swatch #c9a227 is
+     the fill; text takes darker ipês that read on cream (≥ 4.5:1). */
+  --cap-warn: #896e1b;
+  --cap-warn-strong: #735d16;
+  --cap-warn-solid: #c9a227;
+  --cap-warn-ink: #5e4c12;
+  --cap-warn-soft: #ebdda0;
+  --cap-warn-wash: #f8f1d8;
 
   /* Category hues, in the mockup's category order. Same values as the
      category color picker in Ajustes (those are stored per category). */
@@ -262,7 +264,7 @@
   --cap-chart-area: #e6dcc8;
   --cap-chart-accent: #3d5a36;
   --cap-chart-accent-soft: #dce6d5;
-  --cap-chart-warn: #b45309; /* reference lines (Meta, Orçado) */
+  --cap-chart-warn: #896e1b; /* reference lines (Meta, Orçado): the ipê of --cap-warn */
   --cap-chart-1: #1f1a17;
   --cap-chart-2: #5a4d41;
   --cap-chart-3: #7d6e5d;
@@ -375,12 +377,13 @@
   --cap-neg-ink: #f5c9bc;
   --cap-neg-soft: rgb(230 138 114 / 35%);
   --cap-neg-wash: rgb(230 138 114 / 10%);
-  --cap-warn: oklch(82.8% 0.189 84.429); /* amber-400 */
-  --cap-warn-strong: oklch(87.9% 0.169 91.605); /* amber-300 */
-  --cap-warn-solid: oklch(76.9% 0.188 70.08); /* amber-500 */
-  --cap-warn-ink: oklch(92.4% 0.12 95.746); /* amber-200 */
-  --cap-warn-soft: oklch(76.9% 0.188 70.08 / 35%);
-  --cap-warn-wash: oklch(76.9% 0.188 70.08 / 10%);
+  /* Ipê-amarelo: the canvas swatch #e9c84a reads on charcoal as it is. */
+  --cap-warn: #e9c84a;
+  --cap-warn-strong: #f2d873;
+  --cap-warn-solid: #c9a227;
+  --cap-warn-ink: #f5e3a0;
+  --cap-warn-soft: rgb(233 200 74 / 35%);
+  --cap-warn-wash: rgb(233 200 74 / 10%);
 
   --cap-cat-gray: #a3a3a3;
   --cap-cat-purple: #a78bfa;
@@ -402,7 +405,7 @@
   --cap-chart-area: rgb(242 235 221 / 14%);
   --cap-chart-accent: #9cc08c;
   --cap-chart-accent-soft: #2f3b2a;
-  --cap-chart-warn: #fbbf24;
+  --cap-chart-warn: #e9c84a;
   --cap-chart-1: #e8dfcf;
   --cap-chart-2: #b3a592;
   --cap-chart-3: #918370;
