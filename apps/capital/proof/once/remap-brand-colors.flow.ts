@@ -33,8 +33,12 @@ flow("remap-brand-colors moves stored colors to the Cerne swatches, with a backu
   await page.goto("/settings");
   await settingsNav(page, "Categorias").click();
   await page.getByRole("main").getByRole("button", { name: /^Moradia/ }).first().click();
+  const ardosia = page.getByRole("radio", { name: "Ardósia" });
+  // Moradia sits low in the list, so the page scrolls past the swatch picker: bring it back into view.
+  await ardosia.scrollIntoViewIfNeeded();
   await check("In Ajustes › Categorias, Moradia now shows the Ardósia swatch", async () => {
-    await expect(page.getByRole("radio", { name: "Ardósia" })).toHaveAttribute("aria-checked", "true");
+    await expect(ardosia).toHaveAttribute("aria-checked", "true");
+    await expect(ardosia).toBeInViewport();
   });
 
   await scene("The way back", "--reverse puts the backed-up color back");
