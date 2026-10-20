@@ -35,3 +35,23 @@ export function heatColor(alpha: number): string {
 }
 
 export const HEAT_OVER = "var(--cap-heat-over)";
+
+/** The Liberdade financeira trunk (components/invest/fire/trunk.tsx). */
+export const TRUNK_COLORS = {
+  bg: "var(--cap-trunk-bg)",
+  woodA: "var(--cap-trunk-wood-a)",
+  woodB: "var(--cap-trunk-wood-b)",
+  late: "var(--cap-trunk-late)",
+  heart: "var(--cap-trunk-heart)",
+  heartInk: "var(--cap-trunk-heart-ink)",
+  heartMuted: "var(--cap-trunk-heart-muted)",
+  future: "var(--cap-trunk-future)",
+  goal: "var(--cap-trunk-goal)",
+  ray: "var(--cap-trunk-ray)",
+  /** The ring of the year in progress. */
+  now: "var(--cap-resin)",
+  /** "hoje" and the goal's label. */
+  resinInk: "var(--cap-resin-ink)",
+  text: "var(--cap-text-1)",
+  muted: "var(--cap-text-2)",
+} as const;

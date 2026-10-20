@@ -19,7 +19,8 @@
     "trash": "Lixeira",
     "imports": "Importações",
     "settings": "Ajustes",
-    "settingsPage": "Ajustes › {page}"
+    "settingsPage": "Ajustes › {page}",
+    "fire": "Liberdade financeira"
   },
   "settingsPages": {
     "prefs": "Perfil e preferências",

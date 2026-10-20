@@ -20,7 +20,7 @@ const LEGACY_PAGES: [source: string, destination: string][] = [
   ["/tax", "/transactions?view=seed:ir"],
   ["/credit-cards", "/transactions?view=seed:board"],
   ["/recurring", "/transactions/budgets"],
-  ["/fire", "/investments/contributions"],
+  ["/fire", "/investments/fire"],
   ["/assistant", "/transactions?assistant=1"],
 ];
 

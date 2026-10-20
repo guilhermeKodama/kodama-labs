@@ -96,6 +96,21 @@
   --color-resin-line: var(--cap-resin-line);
   --color-resin-ink: var(--cap-resin-ink);
   --color-wordmark: var(--cap-wordmark);
+  --color-trunk-bg: var(--cap-trunk-bg);
+  --color-trunk-wood-a: var(--cap-trunk-wood-a);
+  --color-trunk-wood-b: var(--cap-trunk-wood-b);
+  --color-trunk-late: var(--cap-trunk-late);
+  --color-trunk-heart: var(--cap-trunk-heart);
+  --color-trunk-heart-ink: var(--cap-trunk-heart-ink);
+  --color-trunk-heart-muted: var(--cap-trunk-heart-muted);
+  --color-trunk-future: var(--cap-trunk-future);
+  --color-trunk-goal: var(--cap-trunk-goal);
+  --color-trunk-ray: var(--cap-trunk-ray);
+  --color-trunk-aportes: var(--cap-trunk-aportes);
+  --color-trunk-track: var(--cap-trunk-track);
+  --color-trunk-hero: var(--cap-trunk-hero);
+  --color-trunk-hero-ink: var(--cap-trunk-hero-ink);
+  --color-trunk-hero-muted: var(--cap-trunk-hero-muted);
   --color-pos: var(--cap-pos);
   --color-pos-ink: var(--cap-pos-ink);
   --color-pos-soft: var(--cap-pos-soft);
@@ -262,6 +277,25 @@
   --cap-heat: #1f1a17;
   --cap-heat-over: #fecaca;
 
+  /* Liberdade financeira: the trunk (components/invest/fire/trunk.tsx). */
+  --cap-trunk-bg: #f7f0e3;
+  --cap-trunk-wood-a: #e8d5b0;
+  --cap-trunk-wood-b: #dcc398;
+  --cap-trunk-late: #a0714a;
+  --cap-trunk-heart: #5b2e1f;
+  --cap-trunk-heart-ink: #f2ebdd;
+  --cap-trunk-heart-muted: #e3d3bc;
+  --cap-trunk-future: #b9a283;
+  --cap-trunk-goal: var(--cap-resin);
+  --cap-trunk-ray: #a0714a;
+  /* The aportes part of a ring's bar, on its track. */
+  --cap-trunk-aportes: #5b2e1f;
+  --cap-trunk-track: #eee6d6;
+  /* "Sua árvore hoje". */
+  --cap-trunk-hero: #5b2e1f;
+  --cap-trunk-hero-ink: #f2ebdd;
+  --cap-trunk-hero-muted: #e3d3bc;
+
   /* shadcn tokens on top of the Cerne ones. */
   --radius: 0.625rem;
   --background: var(--cap-bg-editor);
@@ -381,6 +415,22 @@
   --cap-chart-10: #463c33;
   --cap-heat: #f2ebdd;
   --cap-heat-over: #7f1d1d;
+
+  --cap-trunk-bg: #231d19;
+  --cap-trunk-wood-a: #4c3b2e;
+  --cap-trunk-wood-b: #413226;
+  --cap-trunk-late: #b88a60;
+  --cap-trunk-heart: #8a4a30;
+  --cap-trunk-heart-ink: #f2ebdd;
+  --cap-trunk-heart-muted: #e8c9a8;
+  --cap-trunk-future: #7a6856;
+  --cap-trunk-goal: var(--cap-resin);
+  --cap-trunk-ray: #8a7a66;
+  --cap-trunk-aportes: #d7a07a;
+  --cap-trunk-track: #2e2621;
+  --cap-trunk-hero: #2e2621;
+  --cap-trunk-hero-ink: #f2ebdd;
+  --cap-trunk-hero-muted: #cdbfa9;
 
   --chart-1: oklch(0.488 0.243 264.376);
   --chart-2: oklch(0.696 0.17 162.48);
