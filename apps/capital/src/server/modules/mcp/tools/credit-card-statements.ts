@@ -2,6 +2,7 @@ import type { DbClient } from "@capital/server/lib/prisma";
 import { formatDateOnly, parseLocalDate } from "@capital/server/lib/date-utils";
 import { importCardStatement, isProjected } from "@capital/server/modules/credit-cards/services/import-card-statement";
 import { toNumber } from "@capital/server/modules/ledger/lib/money";
+import { entryOperationId } from "../lib/ledger-adapter";
 import { markStatementPayment, unmarkStatementPayment } from "@capital/server/modules/ledger/services/statements";
 
 interface StatementRow {
@@ -76,8 +77,17 @@ export async function getCreditCardStatement(userId: string, params: { statement
     where,
     include: {
       account: { select: { id: true, institution: true, name: true, externalId: true, currency: true } },
-      entries: { where: { deletedAt: null }, include: { category: { select: { name: true } } }, orderBy: { date: "asc" } },
-      paymentGroup: { include: { legs: true } },
+      entries: {
+        where: { deletedAt: null },
+        include: { category: { select: { name: true } }, investmentOperation: { select: { id: true } } },
+        orderBy: { date: "asc" },
+      },
+      paymentGroup: {
+        include: {
+          fundedOperation: { select: { id: true } },
+          legs: { include: { account: { select: { id: true, name: true } }, investmentOperation: { select: { id: true } } } },
+        },
+      },
     },
   });
   if (!statement) throw new Error("Statement not found or access denied");
@@ -107,16 +117,30 @@ export async function getCreditCardStatement(userId: string, params: { statement
       const total = (e.metadata as { totalInstallments?: number } | null)?.totalInstallments;
       return {
         id: e.id,
+        accountId: statement.account.id,
+        accountName: statement.account.name,
         category: e.category?.name ?? null,
         date: e.date.toISOString(),
         description: e.description,
         amount: -toNumber(e.amount),
         currency: e.currency,
         installment: e.installmentNumber && total ? { number: e.installmentNumber, total } : null,
+        operationId: entryOperationId(e),
       };
     }),
     billPayment: paymentLeg
-      ? { id: paymentLeg.id, amount: Math.abs(toNumber(paymentLeg.amount)), currency: paymentLeg.currency, date: paymentLeg.date.toISOString(), description: paymentLeg.description }
+      ? {
+          id: paymentLeg.id,
+          accountId: paymentLeg.accountId,
+          accountName: paymentLeg.account.name,
+          counterpartAccountId: statement.account.id,
+          counterpartAccountName: statement.account.name,
+          amount: Math.abs(toNumber(paymentLeg.amount)),
+          currency: paymentLeg.currency,
+          date: paymentLeg.date.toISOString(),
+          description: paymentLeg.description,
+          operationId: entryOperationId({ investmentOperation: paymentLeg.investmentOperation, transferGroup: statement.paymentGroup }),
+        }
       : null,
     reconciliation: {
       currency: user?.baseCurrency ?? "USD",

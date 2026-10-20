@@ -147,7 +147,9 @@ export function investmentSeeds(): ViewSeed[] {
         period: { preset: "last_12m", offset: 0 },
         filters: [{ field: "type", op: "in", values: [...INCOME_OPERATION_TYPES] }],
         groupBy: "month",
-        chart: { type: "bar" },
+        series: "origin",
+        basis: "net",
+        chart: { type: "bar", cumulative: false },
       }),
     },
     {

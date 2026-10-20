@@ -18,7 +18,7 @@
     "db:reset": "node scripts/assert-dev-db.mjs 'prisma migrate reset' && prisma migrate reset --force",
     "db:drop-legacy": "node scripts/drop-legacy.mjs",
     "db:reconcile-ledger": "tsx scripts/ledger-reconcile.ts",
-    "test": "vitest run",
+    "test": "vitest run && vitest run --config vitest.fx.config.ts",
     "proof": "playwright test -c proof/playwright.config.ts",
     "proof:record": "PROOF_RECORD=1 playwright test -c proof/playwright.config.ts",
     "proof:once": "PROOF_ONCE=1 PROOF_RECORD=1 playwright test -c proof/playwright.config.ts",

@@ -52,7 +52,7 @@ export async function bulkCreateTransactions(userId: string, items: BulkCreateTr
       result.duplicates.push({ description: item.description, amount: item.amount, date: item.date, existingId });
       return;
     }
-    if (dryRun) result.created.push({ id: "dry-run", description: item.description, amount: item.amount, date: item.date });
+    if (dryRun) result.created.push({ id: "dry-run", description: item.description, amount: item.amount, date: item.date, operationId: null });
     else toCreate.push({ item, categoryId: categoryIds[i]! });
   });
   if (dryRun || toCreate.length === 0) return result;
@@ -79,8 +79,16 @@ export async function bulkCreateTransactions(userId: string, items: BulkCreateTr
           tx,
           { collect: records, kind: item.type, skipRules: true }
         );
-        const row = await tx.ledgerEntry.findUniqueOrThrow({ where: { id: created.entryIds[0] } });
-        result.created.push({ id: row.id, description: row.description, amount: item.amount, date: row.date.toISOString() });
+        const row = await tx.ledgerEntry.findUniqueOrThrow({ where: { id: created.entryIds[0] }, include: { account: { select: { id: true, name: true } } } });
+        result.created.push({
+          id: row.id,
+          description: row.description,
+          amount: item.amount,
+          date: row.date.toISOString(),
+          accountId: row.account.id,
+          accountName: row.account.name,
+          operationId: null,
+        });
       } catch (error) {
         result.errors.push({ item, error: error instanceof Error ? error.message : String(error) });
       }

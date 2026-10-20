@@ -32,7 +32,12 @@ import {
   listInvestmentPositions,
   adjustPosition,
   addInvestmentAsset,
+  updateHoldingPrice,
 } from "../tools/investments";
+import { recordInvestmentContribution, recordInvestmentRedemption } from "../../investments/services/holding-cashflow";
+import { convertIncomeToDividend, recordDividend, updateDividend } from "../../investments/services/dividends";
+import { listAccountBalances } from "../tools/balances";
+import { createTransfer, listLedgerAccounts, listTransfers } from "../tools/transfers";
 import { getFirePlan, updateFirePhaseContribution } from "../tools/fire";
 import {
   attachReceipt,
@@ -333,8 +338,11 @@ export function createCapitalMcpServer(userId: string, db: DbClient, opts: { rea
         "List and search transactions by date range, type, and category. Returns " +
         "individual transactions plus totals grouped by type and category. " +
         "Amounts are signed: a charge is a positive expense, and a refund or reversal is a negative expense. " +
-        "Without a type filter, transfer legs are included. Each one has transferGroupId, " +
-        "counterpartAmount (the other leg, signed) and counterpartCurrency, so a USD to BRL " +
+        "Without a type filter, transfer legs are included. Each entry has accountId, accountName and operationId. " +
+        "operationId is the investment operation when this entry is its cash leg or a leg of the transfer that funded it, and null otherwise. " +
+        "A dividend's operationId, or that cash entry's id, is what update_dividend accepts. " +
+        "A transfer leg also has transferGroupId, counterpartAmount (the other leg, signed), counterpartCurrency, " +
+        "counterpartAccountId and counterpartAccountName, so a USD to BRL " +
         "resgate can be found and then corrected with update_transaction (toAmount or exchangeRate). " +
         "Transfer legs are left out of the type/category totals. " +
         "Example: List all Income/Dividends transactions in September 2026.",
@@ -387,6 +395,7 @@ export function createCapitalMcpServer(userId: string, db: DbClient, opts: { rea
                 transferGroupId: result.transferGroupId,
                 counterpartAmount: result.counterpartAmount,
                 counterpartCurrency: result.counterpartCurrency,
+                operationId: result.operationId,
               },
               null,
               2
@@ -492,13 +501,28 @@ export function createCapitalMcpServer(userId: string, db: DbClient, opts: { rea
     "list_investment_positions",
     {
       description:
-        "List all active investment positions with quantity, average cost, current " +
-        "value, and unrealized gain. Shows Brazilian FIIs like PMLL11, PVBI11, stocks, " +
-        "and other assets. Example: PMLL11 shows 164 cotas but broker has 174.",
-      inputSchema: z.object({}),
+        "List investment positions with quantity, average cost, current value, " +
+        "unrealized gain, assetClass, allocationClass, accountId, and entityId. " +
+        "includeClosed defaults to false. Set it to include sold positions (quantity 0) with closedAt, " +
+        "the date of the sell, withdrawal or adjustment that closed the position (a later dividend does not move it), " +
+        "so that holdingId can be passed to record_dividend or convert_income_to_dividend. " +
+        "ticker is a case-insensitive exact match and finds a closed holding only when includeClosed is true. " +
+        "query matches ticker or name (contains). accountName alone is not enough to " +
+        "book a transfer: account ids come from list_ledger_accounts, and list_accounts " +
+        "returns entities. Optional accountId limits the list to one brokerage account; " +
+        "optional entityId limits it to one entity (PF or PJ). Example: PMLL11 shows 164 cotas but broker has 174. " +
+        "GOGL34 sold on 2026-08-05 is hidden until includeClosed is true.",
+      inputSchema: z.object({
+        accountId: z.string().uuid().optional(),
+        entityId: z.string().uuid().optional(),
+        ticker: z.string().min(1).optional(),
+        query: z.string().min(1).optional(),
+        includeClosed: z.boolean().optional(),
+      }),
+      annotations: { readOnlyHint: true },
     },
-    async () => {
-      const result = await listInvestmentPositions(userId, db);
+    async (params) => {
+      const result = await listInvestmentPositions(userId, db, params);
       return {
         content: [
           {
@@ -1274,6 +1298,318 @@ export function createCapitalMcpServer(userId: string, db: DbClient, opts: { rea
         ],
       };
     }
+  );
+
+  const cashflowFields = {
+    holdingId: z.string().uuid(),
+    cashAccountId: z.string().uuid().describe("Checking or cash account the money comes from (contribution) or goes back to (redemption). A ledger account id from list_ledger_accounts, not an entity id."),
+    amount: z.number().positive(),
+    date: DateStringSchema,
+    description: z.string().optional(),
+    toAmount: z.number().positive().optional(),
+    quantity: z.number().optional(),
+    price: z.number().optional(),
+    mode: z.enum(["by_value", "by_units"]).optional(),
+    notes: z.string().optional(),
+  };
+
+  server.registerTool(
+    "list_account_balances",
+    {
+      description:
+        "Balance of each checking, cash and brokerage account (not credit cards, not archived accounts, not entities). " +
+        "id, name, type, entity (PF or PJ), entityId, entityName, currency, balance (the account's currency) and " +
+        "balanceBase (the user's base currency, BRL). balance is the accounts screen number (initial balance plus every " +
+        "live entry). balanceBase uses today's rate, the same conversion the portfolio uses for broker cash. " +
+        "asOf (YYYY-MM-DD) is the balance at the end of that calendar day: later entries are left out, and balanceBase " +
+        "uses the rate of that date. Omit asOf for the current balance.",
+      inputSchema: z.object({
+        asOf: DateStringSchema.optional(),
+      }),
+      annotations: { readOnlyHint: true },
+    },
+    async (params) => {
+      const result = await listAccountBalances(userId, params, db);
+      return { content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }] };
+    },
+  );
+
+  server.registerTool(
+    "list_ledger_accounts",
+    {
+      description:
+        "List the user's checking, cash, and brokerage accounts (not credit cards, and not entities). " +
+        "list_accounts returns businesses and the personal entity; the ids here are the ledger accounts " +
+        "create_transfer, record_investment_contribution, and record_investment_redemption take as " +
+        "fromAccountId, toAccountId, and cashAccountId. Optional type filters to one of checking, cash, brokerage.",
+      inputSchema: z.object({
+        type: z.enum(["checking", "cash", "brokerage"]).optional(),
+      }),
+      annotations: { readOnlyHint: true },
+    },
+    async (params) => {
+      const result = await listLedgerAccounts(userId, params, db);
+      return { content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }] };
+    },
+  );
+
+  server.registerTool(
+    "create_transfer",
+    {
+      description:
+        "Move money between two of the user's checking, cash, or brokerage accounts. Direction is inferred: " +
+        "checking → broker is an investment_deposit and counts as an aporte of cash only (the holding is unchanged). " +
+        "Do not use this to contribute to a holding such as Caixinha Nubank PJ — record_investment_contribution " +
+        "already books that cash transfer and the buy. A second create_transfer would move the cash twice. " +
+        "A deposit or withdrawal that crosses entities (PF checking into a PJ broker, or the reverse) is rejected: " +
+        "use record_investment_contribution or record_investment_redemption, which route through the broker entity's checking account. " +
+        "Same-entity checking ↔ broker is allowed and does not change a holding. " +
+        "Credit cards are rejected. Same currency: pass amount only (toAmount and exchangeRate are rejected). " +
+        "Different currencies: amount leaves the source account; toAmount is what arrives (or pass exchangeRate). " +
+        "A repeat of the same from account, to account, date, amount, description, and toAmount returns the existing " +
+        "transfer (duplicate: true) and writes nothing. Two identical same-day transfers need different descriptions. " +
+        "Idempotent under a parallel double-submit.",
+      inputSchema: z.object({
+        fromAccountId: z.string().uuid(),
+        toAccountId: z.string().uuid(),
+        amount: z.number().positive(),
+        date: DateStringSchema,
+        description: z.string().optional(),
+        toAmount: z.number().positive().optional(),
+        exchangeRate: z.number().positive().optional(),
+      }),
+    },
+    async (params) => {
+      const result = await createTransfer(userId, params, db);
+      return { content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }] };
+    },
+  );
+
+  server.registerTool(
+    "list_transfers",
+    {
+      description:
+        "List live transfers, one row per transfer (both legs collapsed): date, direction, description, " +
+        "the account money left and the account it arrived in, with amounts and currencies. " +
+        "Optional filters: dateFrom, dateTo, accountId (either leg), direction, entityId (either leg). " +
+        "accountId and entityId both apply. limit defaults to 100 and caps at 500; offset skips that many transfers.",
+      inputSchema: z.object({
+        dateFrom: DateStringSchema.optional(),
+        dateTo: DateStringSchema.optional(),
+        accountId: z.string().uuid().optional(),
+        direction: z.enum([
+          "profit_distribution",
+          "capital_injection",
+          "reimbursement",
+          "investment_deposit",
+          "investment_withdrawal",
+          "card_payment",
+          "between_accounts",
+        ]).optional(),
+        entityId: z.string().uuid().optional(),
+        limit: z.number().int().min(1).max(500).optional(),
+        offset: z.number().int().min(0).optional(),
+      }),
+      annotations: { readOnlyHint: true },
+    },
+    async (params) => {
+      const result = await listTransfers(userId, params, db);
+      return { content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }] };
+    },
+  );
+
+  server.registerTool(
+    "record_investment_contribution",
+    {
+      description:
+        "Record an aporte into a holding the way the Investments screen does: the cash transfer into the broker " +
+        "and the buy, in one undo batch. This tool already books the cash transfer. Do not also call create_transfer " +
+        "or the money moves twice and Aportes counts it twice.\n\n" +
+        "mode is \"by_value\" or \"by_units\".\n\n" +
+        "by_value is for a caixinha or fixed income, which is stored as quantity 1 whose price is the whole position. " +
+        "Example: Caixinha Nubank PJ is quantity 1, average cost R$29,883, current gross value R$39,943.76. " +
+        "A R$10,000 contribution keeps quantity at 1, adds R$10,000 to the cost basis (average cost and total invested " +
+        "become R$39,883) and adds R$10,000 to the position value (current price becomes R$49,943.76). " +
+        "Buying new units would be wrong: quantity 1 at the current price would create a second unit and cut the average in half. " +
+        "Do not pass quantity or price in by_value; they are rejected.\n\n" +
+        "by_units buys new units (a stock or FII). Pass quantity and price (quantity × price must match the amount the holding " +
+        "receives, within 0.01), or one of them, or neither when the holding already has a current price " +
+        "(units = amount / current price).\n\n" +
+        "Default mode: by_value when the asset class is fixed income or savings, or when the name contains \"caixinha\". " +
+        "Otherwise by_units. Quantity 1 on its own does not select by_value. A holding whose ticker is repriced from the " +
+        "market (updateAllPrices) stays by_units unless you pass mode by_value explicitly.\n\n" +
+        "A by_value buy on a live position is stored with quantity 0 so replaying the operations reproduces the cost. " +
+        "A fully redeemed position (quantity 0) is reopened as quantity 1 at the contribution amount, so price times quantity is the value again. " +
+        "Deleting that quantity-0 buy in the Investments screen removes the cost and the cash, and leaves currentPrice where this tool set it. " +
+        "Undo the batch to put the price back as well.\n\n" +
+        "amount is what leaves cashAccountId, in that account's currency. When the holding's currency differs, toAmount " +
+        "is what the holding receives in its currency. description is the text Aportes shows " +
+        "(for example \"Aplicação Caixinha Nubank PJ (CDB)\"). notes, when passed, are kept and \"by_value\" is appended. " +
+        "The same holding, date, and amount returns the existing operation (duplicate: true) instead of booking again, " +
+        "including a parallel double-submit. A cross-entity duplicate lists every transfer group, including the hop.",
+      inputSchema: z.object(cashflowFields),
+    },
+    async (params) => {
+      const result = await recordInvestmentContribution(userId, params, db);
+      return { content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }] };
+    },
+  );
+
+  server.registerTool(
+    "record_investment_redemption",
+    {
+      description:
+        "Redeem a holding back to a checking or cash account: the sell and the withdrawal, in one undo batch. " +
+        "The withdrawal's metadata carries the sell operation id. Do not also call create_transfer.\n\n" +
+        "mode is \"by_value\" or \"by_units\", with the same default as record_investment_contribution.\n\n" +
+        "by_value (caixinha / fixed income, quantity 1 whose price is the whole value): quantity stays, the position " +
+        "value falls by the amount, and the cost basis falls in proportion to the value redeemed. " +
+        "Example: Caixinha Nubank PJ is quantity 1, cost R$29,883, value R$39,943.76. Redeeming R$10,000 keeps quantity at 1, " +
+        "sets the value to R$29,943.76, and removes cost × 10000 / 39943.76 from the cost basis. " +
+        "Realized gain is the amount minus the cost removed. A redemption larger than the current value is rejected. " +
+        "Paying out the whole value (within R$0.01) can zero the position. Do not pass quantity or price in by_value.\n\n" +
+        "by_units sells that many units at that price.\n\n" +
+        "amount is what leaves the holding, in the holding's currency. When the cash account's currency differs, toAmount " +
+        "is what arrives there. notes, when passed, are kept and \"by_value\" is appended. " +
+        "The same holding, date, and amount returns the existing redemption (duplicate: true), including a full payout " +
+        "retried after the position is already empty. A cross-entity duplicate lists every transfer group, including the hop.",
+      inputSchema: z.object(cashflowFields),
+    },
+    async (params) => {
+      const result = await recordInvestmentRedemption(userId, params, db);
+      return { content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }] };
+    },
+  );
+
+  const dividendFields = {
+    holdingId: z.string().uuid(),
+    incomeType: z.enum(["fii_income", "dividend", "jcp", "fixed_income_interest"]).describe(
+      "fii_income is tax-exempt FII income. dividend is a dividend (origin BR, BDR or EXTERIOR). jcp withholds income tax at source. fixed_income_interest is caixinha, CDB or Tesouro interest realized on redemption, with income tax withheld. Interest on a PJ caixinha is recorded but is not personal passive income.",
+    ),
+    withholdingTax: z.number().nonnegative().optional().describe("Tax withheld at source, in the same currency as amount. The cash credited is amount minus this. Omit for zero."),
+    origin: z.enum(["BR", "BDR", "EXTERIOR"]).optional().describe("Dividend origin. Defaults from the asset class: stocks BR, BDR, international listings EXTERIOR. Ignored unless incomeType is dividend."),
+  };
+
+  server.registerTool(
+    "record_dividend",
+    {
+      description:
+        "Record a provento linked to a holding and credit the cash account, in one undo batch. " +
+        "This is the only way to attach income to a holding: a plain income in category Proventos shows as unlinked, not as the asset. " +
+        "Creates the same cash leg the ledger uses for dividends (kind investment, linked to the holding). " +
+        "Do not also call create_transaction or create_transfer — the cash is credited once.\n\n" +
+        "amount is the gross, in currency. currency must be the holding's currency or the cash account's. " +
+        "withholdingTax, in that same currency, is optional; the account receives the net (gross − tax). " +
+        "The cash leg stores the exchange rate of date, not today's rate. " +
+        "incomeType is fii_income (Rendimento FII, tax-exempt), dividend, jcp (IR withheld at source) or fixed_income_interest (Juros de caixinha/CDB/Tesouro). " +
+        "origin (BR, BDR, EXTERIOR) applies to dividends and defaults from the asset class. " +
+        "description defaults to \"Dividendo <ticker>\" (or JCP / Rendimento FII / Juros), using the holding name when it has no ticker.\n\n" +
+        "Proventos means fii_income + dividend + jcp. fixed_income_interest on a business entity (the PJ caixinha) is recorded and returned with passiveIncome false: it belongs in the PJ books, not in personal Renda passiva. " +
+        "Amortization, bonus shares, sales, redemptions and transfers are not income; do not use this tool for them.\n\n" +
+        "The same holding, date, income type, cash account and net amount returns the existing operation (duplicate: true) and writes nothing, including a parallel double-submit. " +
+        "The cash account and the holding must belong to the same entity (PF or PJ). " +
+        "fii_income is tax-exempt: withholdingTax greater than zero is rejected. " +
+        "Before crediting, an unlinked income on that same cash account within 3 days, with the same net within 0.02, in category Proventos (or the dividends category) or whose description contains the ticker, is refused. " +
+        "The error dividend.unlinked_income names that transactionId. Use convert_income_to_dividend with it instead of recording a second credit.",
+      inputSchema: z.object({
+        ...dividendFields,
+        cashAccountId: z.string().uuid().describe("Checking or cash account that receives the net. A ledger account id from list_ledger_accounts."),
+        amount: z.number().positive().describe("Gross amount, in currency."),
+        date: DateStringSchema,
+        currency: z.string().min(3).max(3),
+        description: z.string().optional(),
+      }),
+    },
+    async (params) => {
+      const result = await recordDividend(userId, { ...params, currency: params.currency.toUpperCase() }, db);
+      return { content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }] };
+    },
+  );
+
+  server.registerTool(
+    "convert_income_to_dividend",
+    {
+      description:
+        "Link an existing income transaction to a holding as a provento, without crediting the cash again. " +
+        "The income entry becomes the dividend's cash leg, so the chart counts it once, on the asset, at the amount and exchange rate already stored on the transaction. " +
+        "transactionId is the income's ledger entry id. incomeType is required (fii_income, dividend, jcp, fixed_income_interest). " +
+        "withholdingTax is optional, in the transaction's currency: the entry amount stays the net that was received, and gross is net + tax. " +
+        "origin defaults from the asset class for dividends.\n\n" +
+        "Transfers, expenses and investment entries are rejected. A transfer is not income. " +
+        "withholdingTax cannot exceed the gross (the entry is the net, gross is net + tax). fii_income rejects withholdingTax greater than zero. " +
+        "Calling again on the same entry returns that operation (duplicate: true). " +
+        "An existing dividend of this holding within 7 days and 0.01, compared in the base currency (amountBase), is not reported as a duplicate of someone else's cash leg. " +
+        "If that operation has no cash leg, this income is attached as its leg. If it already has a leg, the call fails with dividend.extra_cash (matchedExisting, extra cash is this transactionId) and links nothing. " +
+        "Deleting or editing the operation afterwards unlinks this income and turns it back into plain income; the original transaction is not deleted. " +
+        "Use this to reclassify FII income that was booked as plain income in category Proventos.",
+      inputSchema: z.object({
+        transactionId: z.string().uuid(),
+        ...dividendFields,
+      }),
+    },
+    async (params) => {
+      const result = await convertIncomeToDividend(userId, params, db);
+      return { content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }] };
+    },
+  );
+
+  server.registerTool(
+    "update_dividend",
+    {
+      description:
+        "Set origin, incomeType and withholdingTax on an existing income operation (type dividend or yield_payment). " +
+        "operationId is the investment operation id returned by record_dividend or convert_income_to_dividend, or the cash " +
+        "entry id of that dividend (the id from list_transactions; that row's operationId is the same operation). " +
+        "The id is resolved as an operation id first. When it is not an operation this user owns, it is resolved as a ledger " +
+        "entry id: the entry must be the cash leg of a dividend or yield (cashEntryId), including a leg booked as kind investment " +
+        "and an income row linked by convert_income_to_dividend. An entry that exists but is not that cash leg fails with " +
+        "dividend.entry_not_dividend and changes nothing. An id that is neither an owned operation nor an owned entry is " +
+        "operation.not_found. Another user's operation or entry is not found. A closed holding (quantity 0, closedAt set) is updated " +
+        "the same way as an open one. This does not change the cash balance and does not create entries: the cash " +
+        "entry stays as it is. The net (gross − tax) stays the net already booked, so setting withholdingTax raises the " +
+        "gross by the same amount. withholdingTax is in the holding's currency: omit it to keep the current value, and 0 clears it. " +
+        "It cannot exceed the operation's current gross (operation.tax_exceeds_amount). fii_income rejects withholdingTax greater than zero " +
+        "(dividend.fii_withholding), including a withholding already stored when incomeType becomes fii_income, and a legacy dividend " +
+        "with no income type on an FII. origin (BR, BDR, EXTERIOR) is accepted only when the income type is dividend; any other income " +
+        "type is rejected (dividend.origin_not_dividend). Switching a dividend to fixed_income_interest stores it as a yield. " +
+        "Calling again with the same values writes nothing (duplicate: true, batchId null). " +
+        "A buy, sale, transfer or any operation that is not income is rejected (dividend.not_income_operation).",
+      inputSchema: z.object({
+        operationId: z.string().uuid().describe(
+          "Investment operation id, or the cash entry id of that dividend (list_transactions id). An operation id is tried first.",
+        ),
+        incomeType: dividendFields.incomeType.optional(),
+        withholdingTax: z.number().nonnegative().optional().describe("Tax withheld at source, in the holding's currency. Omit to keep the current value. 0 clears it."),
+        origin: z.enum(["BR", "BDR", "EXTERIOR"]).optional().describe("Dividend origin. Only when the income type is a dividend; any other income type is rejected."),
+      }),
+    },
+    async (params) => {
+      const result = await updateDividend(userId, params, db);
+      return { content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }] };
+    },
+  );
+
+  server.registerTool(
+    "update_holding_price",
+    {
+      description:
+        "Set a holding's current price without touching its cost basis (average cost and total invested stay). " +
+        "Pass exactly one of price (per unit) or totalValue (the whole position: current price becomes totalValue / current quantity). " +
+        "For a caixinha stored as quantity 1, totalValue is the new gross value — Caixinha Nubank PJ at R$39,943.76 " +
+        "becomes current price 39943.76. totalValue on a position with quantity 0 is rejected. " +
+        "date (YYYY-MM-DD) is the day of the price and cannot be in the future; omit it to stamp now. A negative price is rejected. " +
+        "Zero is allowed. There is no price history.",
+      inputSchema: z.object({
+        holdingId: z.string().uuid(),
+        price: z.number().nonnegative().optional(),
+        totalValue: z.number().nonnegative().optional(),
+        date: DateStringSchema.optional(),
+      }),
+    },
+    async (params) => {
+      const result = await updateHoldingPrice(userId, params, db);
+      return { content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }] };
+    },
   );
 
   return server;

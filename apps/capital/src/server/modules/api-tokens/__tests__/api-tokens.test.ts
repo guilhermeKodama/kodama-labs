@@ -130,6 +130,12 @@ describe("MCP authentication with API tokens", () => {
     const names: string[] = (await mcp(token, "tools/list")).json.result.tools.map((t: { name: string }) => t.name);
     expect(names.length).toBeGreaterThan(5);
     expect(names.every((n) => /^(list|get|find|search)_/.test(n))).toBe(true);
+    expect(names).toContain("list_ledger_accounts");
+    expect(names).toContain("list_transfers");
+    expect(names).toContain("list_investment_positions");
+    for (const write of ["create_transfer", "record_investment_contribution", "record_investment_redemption", "update_holding_price"]) {
+      expect(names).not.toContain(write);
+    }
     const write = await mcp(token, "tools/call", { name: "delete_transaction", arguments: { id: "x" } });
     expect(write.json.error ?? write.json.result?.isError).toBeTruthy();
   });

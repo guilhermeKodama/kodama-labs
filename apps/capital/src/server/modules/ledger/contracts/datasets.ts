@@ -88,7 +88,7 @@ export const OPERATION_TYPE_VALUES = [
 /** Operation types that pay income (Proventos). */
 export const INCOME_OPERATION_TYPES = ["dividend", "yield_payment"] as const satisfies readonly InvestmentTransactionType[];
 
-export const OPS_GROUP_KEYS = ["month", "type", "allocationClass", "holdingId", "accountId", "none"] as const;
+export const OPS_GROUP_KEYS = ["month", "type", "incomeType", "origin", "allocationClass", "holdingId", "accountId", "none"] as const;
 export const OPS_FILTER_FIELDS = ["type", "incomeType", "accountId", "holdingId", "entityId", "allocationClass"] as const;
 export const OPS_COLUMNS = ["date", "type", "holdingId", "accountId", "quantity", "pricePerUnit", "totalAmount"] as const;
 export const OPS_SORT_FIELDS = ["date", "totalAmount"] as const;
@@ -109,6 +109,8 @@ export const opsViewConfigSchema = z.object({
   series: z.enum(OPS_GROUP_KEYS).default("none"),
   columns: z.array(z.string()).default([...OPS_COLUMNS]),
   sort: z.object({ field: z.enum(OPS_SORT_FIELDS), dir: sortDir }).default({ field: "date", dir: "desc" }),
+  /** Net is what landed; gross adds the tax withheld back. */
+  basis: z.enum(["net", "gross"]).default("net"),
   chart: datasetChartSchema,
 });
 export type OpsViewConfig = z.infer<typeof opsViewConfigSchema>;

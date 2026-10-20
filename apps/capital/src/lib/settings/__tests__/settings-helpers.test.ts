@@ -14,7 +14,7 @@ const parse = (s: string) => fmt.parseNumber(s);
 
 describe("settings navigation", () => {
   it("lists the mockup pages in order and falls back to Perfil", () => {
-    expect(SETTINGS_PAGES).toEqual(["prefs", "notif", "ent", "bank", "card", "broker", "cat", "rules", "fx", "imports", "api"]);
+    expect(SETTINGS_PAGES).toEqual(["prefs", "notif", "ent", "bank", "card", "broker", "cat", "rules", "fx", "imports", "pluggy", "api"]);
     expect(resolveSettingsPage("cat")).toBe("cat");
     expect(resolveSettingsPage("trash")).toBe(DEFAULT_SETTINGS_PAGE);
     expect(resolveSettingsPage(null)).toBe("prefs");

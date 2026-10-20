@@ -47,6 +47,21 @@ describe("replayPosition", () => {
     expect(replayPosition([op("buy", { totalAmount: 1000 }), op("withdrawal", { totalAmount: 1100 })])).toMatchObject({ cost: 0, closed: true, realizedGain: 100 });
   });
 
+  it("keeps quantity on a by-value buy and redemption, and still takes an amount-based sell from cost", () => {
+    const open = op("adjustment", { quantity: 1, pricePerUnit: 29883, totalAmount: 29883, adjustmentMode: "absolute" });
+    const bought = replayPosition([open, op("buy", { quantity: 0, totalAmount: 10000 })]);
+    expect(bought).toMatchObject({ quantity: 1, cost: 39883, averageCost: 39883, realizedGain: 0, closed: false });
+    const costRemoved = 29883 * (10000 / 39943.76);
+    const redeemed = replayPosition([open, op("sell", { quantity: 0, pricePerUnit: costRemoved, totalAmount: 10000 })]);
+    expect(redeemed.quantity).toBe(1);
+    expect(redeemed.cost).toBeCloseTo(29883 - costRemoved, 6);
+    expect(redeemed.realizedGain).toBeCloseTo(10000 - costRemoved, 6);
+    expect(redeemed.closed).toBe(false);
+    expect(replayPosition([open, op("sell", { quantity: 1, totalAmount: 39943.76 })])).toMatchObject({ quantity: 0, cost: 0, closed: true });
+    // quantity null stays on the amount path: a sell below cost takes the cash out of the cost and realizes nothing.
+    expect(replayPosition([op("buy", { totalAmount: 29883 }), op("sell", { totalAmount: 10000 })]).realizedGain).toBe(0);
+  });
+
   it("uses quantity x price when a buy has no amount, splits without touching the cost, and resets on a priced adjustment", () => {
     const p = replayPosition([op("buy", { quantity: 10, pricePerUnit: 20 }), op("split", { quantity: 10 })]);
     expect(p).toMatchObject({ quantity: 20, cost: 200, averageCost: 10 });

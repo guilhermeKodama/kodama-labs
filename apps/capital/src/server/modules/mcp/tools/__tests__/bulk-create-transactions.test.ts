@@ -40,6 +40,12 @@ describe("MCP bulk create transactions", () => {
     const r = await bulkCreateTransactions(USER, [dividend(), dividend({ entityType: "business", personalAccountId: undefined, businessId: f.pjId, type: "expense", category: "Software", description: "Figma", amount: 80 })], false, prisma);
     expect(r.created).toHaveLength(2);
     expect(r.errors).toEqual([]);
+    expect(r.created.map((row) => [row.accountId, row.accountName]).sort()).toEqual(
+      [
+        [f.pfChecking, "Conta principal"],
+        [f.pjChecking, "Conta principal"],
+      ].sort(),
+    );
     const rows = await entries();
     // Both rows share a date, so the order they come back in is not fixed.
     expect(rows.map((e) => [e.accountId, Number(e.amount), e.kind]).sort()).toEqual(

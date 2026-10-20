@@ -14,14 +14,36 @@ import { formatCategoryValidationError, matchCategoryName } from "./category-val
 export const LEGACY_ENTRY_INCLUDE = {
   category: { select: { name: true } },
   entity: { select: { id: true, kind: true } },
-  transferGroup: { select: { id: true, legs: { select: { id: true, amount: true, currency: true } } } },
+  account: { select: { id: true, name: true } },
+  investmentOperation: { select: { id: true } },
+  transferGroup: {
+    select: {
+      id: true,
+      fundedOperation: { select: { id: true } },
+      legs: { select: { id: true, accountId: true, amount: true, currency: true, account: { select: { id: true, name: true } } } },
+    },
+  },
 } satisfies Prisma.LedgerEntryInclude;
 
 type LegacyEntry = LedgerEntry & {
   category: Pick<Category, "name"> | null;
   entity: Pick<Entity, "id" | "kind">;
-  transferGroup?: { id: string; legs: { id: string; amount: Prisma.Decimal; currency: string }[] } | null;
+  account: { id: string; name: string };
+  investmentOperation?: { id: string } | null;
+  transferGroup?: {
+    id: string;
+    fundedOperation?: { id: string } | null;
+    legs: { id: string; accountId: string; amount: Prisma.Decimal; currency: string; account: { id: string; name: string } }[];
+  } | null;
 };
+
+/** Cash leg of an operation, or either leg of the transfer that funded one. Null for every other entry. */
+export function entryOperationId(entry: {
+  investmentOperation?: { id: string } | null;
+  transferGroup?: { fundedOperation?: { id: string } | null } | null;
+}): string | null {
+  return entry.transferGroup?.fundedOperation?.id ?? entry.investmentOperation?.id ?? null;
+}
 
 export function legacyType(entry: Pick<LedgerEntry, "kind" | "amount">): TransactionType {
   if (entry.kind === "transfer") return toNumber(entry.amount) >= 0 ? "income" : "expense";
@@ -44,11 +66,16 @@ export function toLegacyTransaction(e: LegacyEntry) {
     businessId: ref.businessId,
     personalAccountId: ref.personalAccountId,
     accountId: e.accountId,
+    accountName: e.account.name,
     createdAt: e.createdAt.toISOString(),
     /** Set on a transfer leg: the pair, and the other leg's signed amount and currency. */
     transferGroupId: e.transferGroupId,
     counterpartAmount: counterpartAmount(e),
     counterpartCurrency: counterpartCurrency(e),
+    counterpartAccountId: counterpartLeg(e)?.accountId ?? null,
+    counterpartAccountName: counterpartLeg(e)?.account.name ?? null,
+    /** Investment operation this entry belongs to (cash leg or a funding-transfer leg). */
+    operationId: entryOperationId(e),
   };
 }
 

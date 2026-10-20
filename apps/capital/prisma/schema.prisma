@@ -90,11 +90,43 @@ enum AllocationClass {
 }
 
 // Kind of an income operation (dividend / yield_payment).
+// `fixed_income_interest` is interest realized on a caixinha, CDB or Tesouro.
+// `interest` is the same idea on rows written before that value existed.
 enum IncomeType {
   dividend
   jcp
   fii_income
   interest
+  fixed_income_interest
+}
+
+// Where a dividend was paid. Tax treatment follows the origin.
+// BDRs are the 32–35 ticker suffix; the classifier fills this in when the asset does not.
+enum DividendOrigin {
+  BR
+  BDR
+  EXTERIOR
+}
+
+enum ClassificationSource {
+  rule
+  llm
+  manual
+}
+
+// Last outcome of a Meu Pluggy item. `idle` is a row that has never synced.
+enum PluggyItemStatus {
+  idle
+  ok
+  expiring
+  expired
+  error
+}
+
+enum PluggyReviewStatus {
+  open
+  resolved
+  ignored
 }
 
 enum FixedIncomeSubType {
@@ -210,6 +242,10 @@ model User {
   notificationSettings   NotificationSettings?
   notificationDispatches NotificationDispatch[]
   apiTokens              ApiToken[]
+  pluggyItems            PluggyItem[]
+  pluggyReviews          PluggyReview[]
+  pluggyExternalRefs     PluggyExternalRef[]
+  pluggyInvestmentLinks  PluggyInvestmentLink[]
 
   @@map("users")
 }
@@ -492,6 +528,8 @@ model Account {
   recurringTargets RecurringRule[]     @relation("RecurringRuleToAccount")
   imports          Import[]
   holdings         InvestmentHolding[]
+  pluggyLinks      PluggyAccountLink[]
+  pluggyBrokerage  PluggyItem[]        @relation("PluggyItemBrokerage")
 
   @@index([userId])
   @@index([entityId])
@@ -798,6 +836,7 @@ model InvestmentHolding {
 
   account    Account               @relation(fields: [accountId], references: [id], onDelete: Cascade)
   operations InvestmentOperation[]
+  pluggyLinks PluggyInvestmentLink[]
 
   @@index([accountId])
   @@index([assetClass])
@@ -815,9 +854,11 @@ model InvestmentOperation {
   totalAmount    Float // Total cash value of the transaction
   fees           Float                     @default(0) // Brokerage fees, taxes
   // Income operations: what kind of income, and the tax withheld at source
-  // (the cash leg is totalAmount - taxWithheld).
+  // (the cash leg is totalAmount - taxWithheld). Gross is totalAmount.
   incomeType     IncomeType?
   taxWithheld    Float                     @default(0)
+  // Set on dividends: Brazilian stock, BDR, or a foreign listing.
+  dividendOrigin DividendOrigin?
   date           DateTime
   notes          String?
   // Null means absolute (the quantity replaces the position). Legacy rows
@@ -828,6 +869,10 @@ model InvestmentOperation {
   // 20-dedup-rules.md) so re-uploading the same statement reconciles
   // cleanly instead of duplicating positions.
   externalId     String?
+  classificationSource      ClassificationSource?
+  classificationConfidence  Float?
+  // Set when a person edits the operation. Pluggy sync will not change it.
+  syncLocked     Boolean                   @default(false)
   // Cash leg of the operation on the brokerage account (buy/sell/income).
   cashEntryId    String?                   @unique
   // investment_deposit transfer that brought the cash for this operation.
@@ -845,6 +890,141 @@ model InvestmentOperation {
   @@index([date])
   @@index([externalId])
   @@map("investment_operations")
+}
+
+// ============================================
+// OPEN FINANCE (MEU PLUGGY)
+// ============================================
+
+// One Meu Pluggy item. The item id is editable because a consent renewal
+// can issue a new one. Credentials stay in the environment, not here.
+model PluggyItem {
+  id               String           @id @default(uuid())
+  userId           String
+  label            String
+  itemId           String
+  entityKind       EntityType
+  status           PluggyItemStatus @default(idle)
+  consentExpiresAt DateTime?
+  lastSyncAt       DateTime?
+  lastSuccessAt    DateTime?
+  lastError        String?
+  // Optional income category for fixed-income interest on a business item
+  // (caixinha → "Renda financeira PJ"). Not used for personal proventos.
+  incomeCategoryId String?
+  // Capital brokerage that receives this item's positions. Bank accounts
+  // are mapped per Pluggy account; investments are not an account of their own.
+  brokerageAccountId String?
+  // Held while a sync is running. A lock older than 15 minutes is stale.
+  syncingAt        DateTime?
+  // Transactions before this date are not imported. Defaults to the day the
+  // connection is added, so a first sync does not replay a year of history.
+  syncCutoff       DateTime?
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  user      User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  brokerage Account?            @relation("PluggyItemBrokerage", fields: [brokerageAccountId], references: [id], onDelete: SetNull)
+  accounts  PluggyAccountLink[]
+  runs      PluggySyncRun[]
+  reviews   PluggyReview[]
+
+  @@unique([userId, itemId])
+  @@index([userId])
+  @@map("pluggy_items")
+}
+
+// A Pluggy account discovered on an item, mapped to a Capital account.
+// `name` is already masked: full account numbers are never stored.
+model PluggyAccountLink {
+  id               String  @id @default(uuid())
+  itemRowId        String
+  pluggyAccountId  String
+  name             String
+  type             String
+  subtype          String?
+  currency         String?
+  // Last four digits of the institution account number. A renewed consent
+  // issues new Pluggy account ids; the mapping is copied when these match.
+  numberLast4      String?
+  capitalAccountId String?
+
+  item           PluggyItem @relation(fields: [itemRowId], references: [id], onDelete: Cascade)
+  capitalAccount Account?   @relation(fields: [capitalAccountId], references: [id], onDelete: SetNull)
+
+  @@unique([itemRowId, pluggyAccountId])
+  @@index([capitalAccountId])
+  @@map("pluggy_account_links")
+}
+
+model PluggyInvestmentLink {
+  id                  String @id @default(uuid())
+  userId              String
+  pluggyInvestmentId  String
+  holdingId           String
+
+  user    User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  holding InvestmentHolding @relation(fields: [holdingId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, pluggyInvestmentId])
+  @@index([holdingId])
+  @@map("pluggy_investment_links")
+}
+
+// Idempotency key. Pluggy ids stay off LedgerEntry.externalId, which OFX
+// FITIDs already use.
+model PluggyExternalRef {
+  id            String   @id @default(uuid())
+  userId        String
+  pluggyId      String
+  ledgerEntryId String?
+  operationId   String?
+  // created | linked
+  matchKind     String
+  createdAt     DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, pluggyId])
+  @@index([ledgerEntryId])
+  @@index([operationId])
+  @@map("pluggy_external_refs")
+}
+
+model PluggySyncRun {
+  id         String    @id @default(uuid())
+  itemRowId  String
+  // cron | manual
+  trigger    String
+  // ok | error | skipped
+  status     String
+  startedAt  DateTime  @default(now())
+  finishedAt DateTime?
+  stats      Json?
+  error      String?
+
+  item PluggyItem @relation(fields: [itemRowId], references: [id], onDelete: Cascade)
+
+  @@index([itemRowId, startedAt])
+  @@map("pluggy_sync_runs")
+}
+
+model PluggyReview {
+  id         String             @id @default(uuid())
+  userId     String
+  itemRowId  String?
+  // conflict | low_confidence | position
+  kind       String
+  status     PluggyReviewStatus @default(open)
+  draft      Json
+  createdAt  DateTime           @default(now())
+  resolvedAt DateTime?
+
+  user User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  item PluggyItem? @relation(fields: [itemRowId], references: [id], onDelete: Cascade)
+
+  @@index([userId, status])
+  @@map("pluggy_reviews")
 }
 
 model PortfolioTarget {

@@ -490,7 +490,7 @@ export function DisplayPopover({
           </Field>
           {view.config.layout === "chart" ? (
             <>
-              <Field label={t("axis")}>
+              <Field label={t("axisLabel")}>
                 <Select
                   value={opsChartAxis(view.config.groupBy)}
                   onChange={(groupBy) =>
@@ -515,19 +515,40 @@ export function DisplayPopover({
                 }
               />
               <Field label={t("series")}>
-                <Segmented
+                <Select
                   value={
-                    view.config.series === "allocationClass"
-                      ? "allocationClass"
+                    view.config.series === "incomeType" || view.config.series === "origin" || view.config.series === "allocationClass"
+                      ? view.config.series
                       : "none"
                   }
-                  options={[
-                    { v: "none", l: t("seriesTotal") },
-                    { v: "allocationClass", l: t("seriesClass") },
-                  ]}
                   onChange={(series) =>
-                    save({ ...(view.config as OpsViewConfig), series })
+                    save({
+                      ...(view.config as OpsViewConfig),
+                      series: series as OpsViewConfig["series"],
+                    })
                   }
+                  options={[
+                    { value: "none", label: t("seriesTotal") },
+                    { value: "incomeType", label: t("seriesType") },
+                    { value: "origin", label: t("seriesOrigin") },
+                    { value: "allocationClass", label: t("seriesClass") },
+                  ]}
+                />
+              </Field>
+              <Field label={t("basis")}>
+                <Segmented
+                  value={view.config.basis ?? "net"}
+                  options={[
+                    { v: "net", l: t("basisNet") },
+                    { v: "gross", l: t("basisGross") },
+                  ]}
+                  onChange={(basis) =>
+                    save({
+                      ...(view.config as OpsViewConfig),
+                      basis: basis as OpsViewConfig["basis"],
+                    })
+                  }
+                  aria-label={t("basis")}
                 />
               </Field>
             </>

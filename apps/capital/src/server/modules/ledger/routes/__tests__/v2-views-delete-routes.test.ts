@@ -88,7 +88,10 @@ afterAll(async () => {
 
 describe("deleted views never come back", () => {
   it("a user seeded with a business keeps only Todas after deleting everything, also after a new business", async () => {
-    const seeded = await Promise.all(DATASETS.map((dataset) => list(withBusiness, dataset)));
+    // One dataset at a time. The first access creates Todas; three parallel
+    // lists used to lose that insert and return 409.
+    const seeded = [];
+    for (const dataset of DATASETS) seeded.push(await list(withBusiness, dataset));
     expect(seeded[0].map((v) => v.seedKey)).toEqual(expect.arrayContaining(["pj", "subs", "ir"]));
     expect(seeded[1].length).toBeGreaterThan(0);
     expect(seeded[2].length).toBeGreaterThan(0);
@@ -123,6 +126,7 @@ describe("deleted views never come back", () => {
   });
 
   it("a view the user creates after clearing everything is the only one besides Todas", async () => {
+    await deleteEverything(withBusiness);
     const created = await call(withBusiness, "POST", "/v2/views", { dataset: "holdings", config: {} });
     expect(created.status).toBe(200);
     expect((await list(withBusiness, "holdings")).map((v) => v.id)).toEqual([(created.json as ViewRow).id]);

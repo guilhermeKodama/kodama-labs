@@ -61,7 +61,9 @@
     "same_currency": "Uma transferência na mesma moeda tem um único valor.",
     "from_account_not_found": "Conta de origem não encontrada.",
     "to_account_not_found": "Conta de destino não encontrada.",
-    "kind_change": "Uma transferência não muda de tipo. Exclua e crie de novo."
+    "kind_change": "Uma transferência não muda de tipo. Exclua e crie de novo.",
+    "account_type": "Essa transferência só vale para conta corrente, dinheiro ou corretora.",
+    "cross_entity_investment": "Movimentar a corretora entre entidades é um aporte ou um resgate. Use esses."
   },
   "statement": {
     "not_found": "Fatura não encontrada.",
@@ -131,13 +133,33 @@
     "not_found": "Posição não encontrada.",
     "requires_brokerage": "Posições ficam em contas de corretora.",
     "oversell": "A venda é maior que a posição.",
-    "undo_oversell": "Desfazer deixaria uma venda de {holding} maior que a posição. Desfaça ou exclua essa venda primeiro."
+    "undo_oversell": "Desfazer deixaria uma venda de {holding} maior que a posição. Desfaça ou exclua essa venda primeiro.",
+    "value_mode": "Essa atualização é por valor, então quantidade e preço não entram. Para negociar cotas, use by_units.",
+    "amount_mismatch": "Quantidade vezes preço precisa bater com o valor, com tolerância de 0,01.",
+    "units_required": "Uma operação por cotas precisa de quantidade e preço, ou de um preço atual para derivá-los.",
+    "replay_mismatch": "A quantidade e o custo salvos dessa posição não batem com as operações, e existe uma operação posterior.",
+    "above_value": "O resgate de {amount} é maior que o valor da posição ({value}).",
+    "no_units": "Um valor total precisa de quantidade para ser dividido por cota.",
+    "price_choice": "Informe exatamente um: preço por cota ou valor total.",
+    "quoted_by_value": "O preço dessa posição vem do mercado. Passe o modo by_value para alterá-la por valor mesmo assim.",
+    "future_date": "A data do preço não pode ser no futuro."
   },
   "operation": {
     "not_found": "Operação não encontrada.",
     "income_only": "Só proventos têm tipo de provento, IR retido ou conta de crédito.",
     "tax_exceeds_amount": "O IR retido não pode passar do valor bruto.",
     "credit_account_invalid": "Proventos só podem ser creditados numa conta corrente ou em dinheiro."
+  },
+  "dividend": {
+    "not_income": "Só uma receita pode virar provento. Transferências, despesas e lançamentos de investimento continuam como estão.",
+    "currency": "A moeda do valor precisa ser a do ativo ou a da conta de caixa.",
+    "extra_cash": "Esta receita bate com o provento {operationId}, que já tem lançamento de caixa. O lançamento {transactionId} é caixa a mais e não foi vinculado.",
+    "unlinked_income": "Já existe a receita {transactionId} com esse valor líquido. Use convert_income_to_dividend com esse transactionId em vez de creditar de novo.",
+    "fii_withholding": "Rendimento de FII é isento, então withholdingTax tem que ser zero.",
+    "entity_mismatch": "A conta de caixa e o ativo precisam ser da mesma entidade (PF ou PJ).",
+    "not_income_operation": "Só um provento (dividendo ou rendimento) pode ter origem, tipo ou IR retido alterados.",
+    "entry_not_dividend": "O lançamento {transactionId} não está vinculado a um provento.",
+    "origin_not_dividend": "A origem só vale quando o tipo é dividendo."
   },
   "aporte": {
     "broker_required": "O aporte precisa ir para uma corretora.",
@@ -209,5 +231,16 @@
   },
   "tokens": {
     "not_found": "Token de API não encontrado"
+  },
+  "pluggy": {
+    "item_id": "O item id não é um UUID. Copie de novo no Dashboard da Pluggy.",
+    "label": "Dê um nome à conexão.",
+    "not_found": "Conexão não encontrada.",
+    "entity_mismatch": "Essa conta é da outra entidade (PF ou PJ).",
+    "account_type": "Esse tipo de conta não pode ser mapeado aqui.",
+    "link_not_found": "Conta da Pluggy não encontrada. Sincronize uma vez para ela aparecer.",
+    "review_not_found": "Revisão não encontrada.",
+    "link_target": "Escolha o lançamento existente para vincular.",
+    "not_income": "Amortização, venda ou resgate não é rendimento."
   }
 }

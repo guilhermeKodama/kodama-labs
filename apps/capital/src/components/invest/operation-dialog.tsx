@@ -60,6 +60,7 @@ const INCOME_TYPES: IncomeType[] = [
   "jcp",
   "fii_income",
   "interest",
+  "fixed_income_interest",
 ];
 
 /** The asset of a buy/sell/income: one of the user's holdings, a market result or a new asset typed by hand. */
@@ -495,7 +496,7 @@ function OperationForm({
         "/api/v2/investment-operations",
         {
           holdingId: target!.id,
-          type: incomeType === "interest" ? "yield_payment" : "dividend",
+          type: incomeType === "interest" || incomeType === "fixed_income_interest" ? "yield_payment" : "dividend",
           incomeType,
           totalAmount: grossValue,
           taxWithheld: taxValue,
@@ -782,7 +783,11 @@ function OperationForm({
           <Field
             label={t("income.tax")}
             hint={
-              incomeType === "jcp" ? t("income.taxJcp") : t("income.taxExempt")
+              incomeType === "jcp"
+                ? t("income.taxJcp")
+                : incomeType === "interest" || incomeType === "fixed_income_interest"
+                  ? t("income.taxWithheld")
+                  : t("income.taxExempt")
             }
           >
             <TextInput

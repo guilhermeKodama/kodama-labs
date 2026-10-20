@@ -48,6 +48,7 @@ describe("findOrphanTransactions", () => {
     const r = await findOrphanTransactions(USER, prisma);
     expect(r.total).toBe(2);
     expect(r.transactions.map((t) => t.id).sort()).toEqual([none, old].sort());
+    expect(r.transactions.every((t) => t.accountId === f.pfChecking && t.accountName === "Conta principal" && t.operationId === null)).toBe(true);
     expect(r.categories.map((c) => c.name).sort()).toEqual(["(none)", "Old"]);
   });
 });
@@ -59,8 +60,8 @@ describe("bulkUpdateTransactions", () => {
     const r = await bulkUpdateTransactions(USER, [{ id: a, category: "Restaurants" }, { id: b, amount: 25, description: "B!" }], false, prisma);
     expect(r.errors).toEqual([]);
     expect(r.updated).toEqual([
-      { id: a, description: "a", category: "Restaurants", amount: 10 },
-      { id: b, description: "B!", category: "Groceries", amount: 25 },
+      { id: a, description: "a", category: "Restaurants", amount: 10, operationId: null },
+      { id: b, description: "B!", category: "Groceries", amount: 25, operationId: null },
     ]);
     await undoBatch(USER, r.batchId!, prisma);
     const back = await prisma.ledgerEntry.findUniqueOrThrow({ where: { id: b } });
@@ -100,7 +101,7 @@ describe("update_transaction / delete_transaction", () => {
   it("returns the legacy shape, keeps an archived category already set, and rejects assigning one", async () => {
     const a = await expense("a");
     const t = await updateTransactionTool(USER, { id: a, type: "income", category: "Salary", amount: 99 }, prisma);
-    expect(t).toMatchObject({ id: a, type: "income", amount: 99, category: "Salary", personalAccountId: f.pfId, businessId: null });
+    expect(t).toMatchObject({ id: a, type: "income", amount: 99, category: "Salary", personalAccountId: f.pfId, businessId: null, operationId: null });
 
     await prisma.category.update({ where: { id: f.categories.Salary }, data: { isArchived: true } });
     await expect(updateTransactionTool(USER, { id: a, category: "Salary", description: "kept" }, prisma)).resolves.toMatchObject({ description: "kept" });

@@ -83,6 +83,55 @@ Authorization: Bearer <MCP_API_KEY>
 
 ## Available Tools
 
+The server registers **42 tools**. Read-only API tokens receive only the read tools (`list_`, `get_`, `find_`, `search_`, or a tool marked read-only). Writes are undoable batches attributed to the MCP client.
+
+| Tool | Access | What it does |
+|---|---|---|
+| `bulk_create_transactions` | write | Create many income, expense, or investment rows, skipping duplicates |
+| `list_transactions` | read | List transactions and summaries |
+| `update_transaction` | write | Edit one transaction |
+| `delete_transaction` | write | Move one transaction to the trash |
+| `bulk_update_transactions` | write | Edit many transactions |
+| `list_categories` | read | List categories |
+| `create_category` | write | Create a category |
+| `update_category` | write | Rename, recolor, or archive a category |
+| `delete_category` | write | Delete a category, optionally reassigning its rows |
+| `merge_categories` | write | Merge one category into another |
+| `find_orphan_transactions` | read | Income and expense rows with no category or an archived one |
+| `list_accounts` | read | List entities (businesses and the personal entity), not ledger accounts |
+| `list_ledger_accounts` | read | List checking, cash, and brokerage accounts |
+| `get_valid_types` | read | `income`, `expense`, `investment` |
+| `create_transfer` | write | Move cash between checking, cash, or brokerage accounts |
+| `list_transfers` | read | List transfers, one row per transfer |
+| `list_investment_positions` | read | Active holdings, with account and entity ids |
+| `adjust_position` | write | Set a holding's quantity and average cost |
+| `add_investment_asset` | write | Open a new holding on a brokerage account |
+| `record_investment_contribution` | write | Aporte into a holding, including the cash transfer |
+| `record_investment_redemption` | write | Resgate out of a holding, including the cash transfer |
+| `record_dividend` | write | Record a provento on a holding and credit the cash once |
+| `convert_income_to_dividend` | write | Link an existing income row to a holding without a second credit |
+| `update_holding_price` | write | Set the current price or total value; cost stays |
+| `get_fire_plan` | read | Read the FIRE plan and the current month's contribution |
+| `update_fire_phase_contribution` | write | Set one FIRE phase's monthly contribution |
+| `attach_receipt` | write | Attach a PDF or image to a transaction |
+| `list_attachments` | read | List a transaction's attachments |
+| `delete_attachment` | write | Delete an attachment |
+| `get_settings` | read | Read user settings |
+| `update_settings` | write | Update user settings |
+| `update_account` | write | Update an entity's settings (name and currency) |
+| `list_budgets` | read | List budgets |
+| `create_budget` | write | Create a budget |
+| `update_budget` | write | Update a budget |
+| `delete_budget` | write | Delete a budget |
+| `get_budget_status` | read | Budget vs. actual for a period |
+| `list_credit_cards` | read | List credit cards |
+| `create_credit_card` | write | Create a credit card |
+| `update_credit_card` | write | Update or archive a credit card |
+| `import_credit_card_statement` | write | Import a card statement |
+| `get_credit_card_statement` | read | Read one card statement |
+| `mark_transaction_as_card_settlement` | write | Turn a bank expense into a card-bill payment |
+| `unmark_transaction_as_card_settlement` | write | Turn a card-bill payment back into an expense |
+
 ### 1. `bulk_create_transactions`
 
 Bulk create Personal transactions with automatic duplicate detection.
@@ -155,6 +204,8 @@ List and search transactions by date range, type, and category.
 - `businessId`: UUID (optional)
 - `personalAccountId`: UUID (optional)
 
+Each transaction includes `operationId`. It is the investment operation id when the row is that operation's cash leg, or a leg of the transfer that funded it, and `null` otherwise. A dividend cash entry's `id` and its `operationId` both work as `update_dividend`'s `operationId`.
+
 **Returns:**
 ```json
 {
@@ -168,6 +219,7 @@ List and search transactions by date range, type, and category.
       "description": "...",
       "category": "Dividends",
       "date": "2026-09-15T00:00:00.000Z",
+      "operationId": null,
       ...
     }
   ],
@@ -258,7 +310,9 @@ List all active investment positions with quantity, average cost, and current va
 
 **Use case:** Check that PMLL11 shows 164 cotas but broker has 174.
 
-**Parameters:** None.
+**Parameters:**
+- `accountId`: UUID (optional). One brokerage account, from `list_ledger_accounts`.
+- `entityId`: UUID (optional). One entity, from `list_accounts`.
 
 **Returns:**
 ```json
@@ -276,7 +330,9 @@ List all active investment positions with quantity, average cost, and current va
       "currentValue": 17252.8,
       "unrealizedGain": 442.8,
       "currency": "BRL",
-      "accountName": "XP Investimentos"
+      "accountId": "uuid",
+      "accountName": "XP Investimentos",
+      "entityId": "uuid"
     }
   ]
 }
@@ -314,7 +370,7 @@ Add a new asset/position to an investment account.
 **Use case:** PVBI11 is missing from the system.
 
 **Parameters:**
-- `accountId`: UUID (required, from `list_accounts` or query directly)
+- `accountId`: UUID (required). A brokerage account from `list_ledger_accounts`, not an entity id from `list_accounts`.
 - `ticker`: String (optional, e.g., `"PVBI11"`)
 - `name`: String (required, e.g., `"Valora Brasil FII"`)
 - `assetClass`: Enum (required):
@@ -331,6 +387,90 @@ Add a new asset/position to an investment account.
   "currency": "BRL"
 }
 ```
+
+### 11. `list_ledger_accounts`
+
+Checking, cash, and brokerage accounts. `list_accounts` returns entities; these ids are what `create_transfer` and the investment cashflow tools take.
+
+**Parameters:** `type` optional, one of `checking`, `cash`, `brokerage`.
+
+**Returns:** `accounts[]` with `id`, `name`, `type`, `currency`, `entityId`, `entityName`, `entityKind`, `isDefault`. Credit cards are omitted.
+
+### 12. `create_transfer`
+
+One transfer between two checking, cash, or brokerage accounts. Direction is inferred. Checking → broker on the same entity is an `investment_deposit` and counts as an aporte of cash only; the holding does not change. Credit cards are rejected.
+
+A deposit or withdrawal that crosses entities (PF checking into a PJ broker, or the reverse) is rejected. Use `record_investment_contribution` or `record_investment_redemption`, which route the money through the broker entity's checking account.
+
+Do not use this to contribute to a holding. `record_investment_contribution` already books that cash transfer. A second `create_transfer` would move the money twice.
+
+Same currency: pass `amount` only (`toAmount` and `exchangeRate` are rejected). Different currencies: `amount` leaves the source; `toAmount` is what arrives.
+
+A repeat of the same accounts, date, amount, description, and `toAmount` returns the existing transfer (`duplicate: true`). Two identical same-day transfers need different descriptions. A parallel double-submit is serialized and also returns the first transfer.
+
+### 13. `list_transfers`
+
+One row per live transfer: date, direction, description, both accounts, both amounts and currencies. Filters: `dateFrom`, `dateTo`, `accountId` (either leg), `direction`, `entityId` (either leg). `accountId` and `entityId` both apply. `limit` defaults to 100 and caps at 500; `offset` skips that many transfers.
+
+### 14. `record_investment_contribution`
+
+An aporte the way the Investments screen books it: cash into the broker and a buy on the holding, one undo batch. This tool already books the cash transfer. Do not also call `create_transfer`.
+
+`mode` is `by_value` or `by_units`.
+
+**by_value** is a caixinha or fixed income stored as quantity 1 whose price is the whole position. Caixinha Nubank PJ is quantity 1, average cost R$29,883, current gross value R$39,943.76. A R$10,000 contribution keeps quantity at 1, adds R$10,000 to the cost basis (average cost and total invested become R$39,883) and adds R$10,000 to the value (current price becomes R$49,943.76). Buying a new unit would make it 2 units and halve the average. Do not pass `quantity` or `price` in this mode; they are rejected.
+
+**by_units** buys units (a stock or FII). Pass `quantity` and `price` (their product must match the amount the holding receives, within 0.01), or one of them, or neither when the holding has a current price.
+
+Default: `by_value` when the asset class is fixed income or savings, or when the name contains "caixinha". Otherwise `by_units`. Quantity 1 on its own does not select `by_value`. A holding whose ticker is repriced from the market stays `by_units` unless `mode` is `by_value` explicitly. Pass `mode` to override.
+
+A by-value buy on a live position is stored with quantity 0 so replaying the operations reproduces the cost. A fully redeemed position (quantity 0) is reopened as quantity 1 at the contribution amount. Deleting that quantity-0 buy in the Investments screen removes the cost and the cash and leaves `currentPrice` where this tool set it. Undo the batch to put the price back as well. `notes`, when passed, are kept and `by_value` is appended.
+
+`amount` is what leaves `cashAccountId`, in that account's currency. When the holding's currency differs, `toAmount` is what the holding receives. `description` is the Aportes text, for example `Aplicação Caixinha Nubank PJ (CDB)`. The same holding, date, and amount returns the existing operation (`duplicate: true`), including a parallel double-submit. A cross-entity duplicate lists every transfer group, including the hop. An archived broker is rejected.
+
+### 15. `record_investment_redemption`
+
+A resgate: the sell and the withdrawal back to a checking or cash account, one undo batch. The withdrawal's metadata carries the sell operation id. Do not also call `create_transfer`.
+
+`by_value` keeps the quantity, lowers the position value by `amount`, and removes cost in proportion to the value redeemed. On the caixinha above, redeeming R$10,000 leaves quantity 1 and value R$29,943.76, and removes `29883 × 10000 / 39943.76` from the cost basis. Realized gain is the amount minus that cost. A redemption larger than the current value is rejected. Paying out the whole value (within R$0.01) can zero the position. Do not pass `quantity` or `price`.
+
+`by_units` sells that many units. `amount` is what leaves the holding, in the holding's currency. When the cash account's currency differs, `toAmount` is what arrives there. The same holding, date, and amount returns the existing redemption (`duplicate: true`), including a full payout retried after the position is already empty. A cross-entity duplicate lists every transfer group, including the hop. `notes`, when passed, are kept and `by_value` is appended. An archived broker is rejected.
+
+### 16. `record_dividend`
+
+Records a provento linked to a holding and credits the cash account, in one undo batch. This is the only way to attach income to a holding: a plain income in category Proventos shows as unlinked, not as the asset. The cash leg is the same shape the ledger uses for dividends (kind `investment`, linked to the holding). Do not also call `create_transaction` or `create_transfer`.
+
+`amount` is the gross, in `currency`. `currency` must be the holding's currency or the cash account's. `withholdingTax`, in that same currency, is optional; the account receives the net. The cash leg stores the exchange rate of `date`, not today's rate.
+
+`incomeType` is `fii_income` (Rendimento FII, tax-exempt), `dividend`, `jcp` (income tax withheld at source) or `fixed_income_interest` (caixinha, CDB or Tesouro interest). `origin` (`BR`, `BDR`, `EXTERIOR`) applies to dividends and defaults from the asset class. `description` defaults to `Dividendo <ticker>` (or JCP / Rendimento FII / Juros), using the holding name when it has no ticker.
+
+Proventos means `fii_income` + `dividend` + `jcp`. `fixed_income_interest` on a business entity is recorded and returned with `passiveIncome: false`. Amortization, bonus shares, sales, redemptions and transfers are not income.
+
+The cash account and the holding have to belong to the same entity (PF or PJ). `fii_income` rejects `withholdingTax` greater than zero.
+
+The same holding, date, income type, cash account and net amount returns the existing operation (`duplicate: true`) and writes nothing.
+
+If an unlinked income already exists on that cash account within 3 days, with the same net within 0.02, and its category is Proventos (or the system dividends category) or its description contains the ticker, the call fails with `dividend.unlinked_income` and does not credit again. The error names that `transactionId`. Pass it to `convert_income_to_dividend`.
+
+### 17. `convert_income_to_dividend`
+
+Links an existing income transaction to a holding as a provento without crediting the cash again. The income entry becomes the dividend's cash leg, so the chart counts it once, on the asset, at the amount and exchange rate already stored. `transactionId` is the income's ledger entry id. `incomeType` is required. `withholdingTax` is optional, in the transaction's currency: the entry amount stays the net, and gross is net + tax. The tax cannot exceed that gross. `fii_income` rejects `withholdingTax` greater than zero.
+
+Transfers, expenses and investment entries are rejected. Calling again on the same entry returns that operation (`duplicate: true`).
+
+An existing dividend of this holding within 7 days is matched in the base currency (`amountBase`, within 0.01), not by comparing the holding's currency with the entry's. If that operation has no cash leg, this income is attached as its leg and no second operation is created. If it already has a leg, the call fails with `dividend.extra_cash` and links nothing: the entry is extra cash (`transactionId`), and the existing dividend is `operationId`. That is not a success and not `duplicate: true`.
+
+Deleting or editing the operation afterwards unlinks this income and leaves it as plain income. The original transaction is not deleted and its amount is not rewritten.
+
+### 18. `update_dividend`
+
+Sets `origin`, `incomeType` and `withholdingTax` on an existing dividend or yield. It does not rewrite the cash entry and does not create entries. The net already booked stays the net, so a higher withholding raises the gross by the same amount. The same values return `duplicate: true` and write nothing.
+
+`operationId` is the investment operation id, or the cash entry id of that dividend (the `id` from `list_transactions`; that row's `operationId` is the same operation). The id is resolved as an operation this user owns first. Otherwise it is resolved as a ledger entry id, and the entry must be the cash leg of a dividend or yield. An entry that is not that cash leg fails with `dividend.entry_not_dividend`. An id that is neither an owned operation nor an owned entry is `operation.not_found`. A buy, sale or other non-income operation id is `dividend.not_income_operation`. A closed holding (quantity 0, `closedAt` set) is updated the same way as an open one.
+
+### 19. `update_holding_price`
+
+Sets the current price and leaves average cost and total invested untouched. Pass exactly one of `price` (per unit) or `totalValue` (the whole position: price becomes `totalValue / quantity`). For the caixinha, `totalValue` is the new gross value. `totalValue` on a quantity of 0 is rejected. A negative price is rejected. Zero is allowed. `date` is the day of the price and cannot be in the future; omit it to stamp now.
 
 ## MCP Client Configuration
 

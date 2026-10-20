@@ -45,7 +45,12 @@
     "dividend": "Dividend",
     "jcp": "Interest on equity (JCP)",
     "fii_income": "REIT income",
-    "interest": "Interest (fixed income)"
+    "interest": "Interest (fixed income)",
+    "fixed_income_interest": "Fixed-income interest"
+  },
+  "origin": {
+    "bdr": "BDR",
+    "exterior": "Foreign"
   },
   "scope": {
     "all": "Consolidated",
@@ -90,7 +95,8 @@
       "caption": "Month × {unit} · {range} · {scope}",
       "empty": "History appears from the second month with positions.",
       "initialPositions": "Initial positions",
-      "initialPositionsHint": "Holdings registered without operations (no purchase date): they enter in the month they were registered as initial positions, not as a contribution."
+      "initialPositionsHint": "Holdings registered without operations (no purchase date): they enter in the month they were registered as initial positions, not as a contribution.",
+      "capitalInvested": "Invested capital"
     },
     "allocation": {
       "title": "Current allocation vs target",
@@ -155,7 +161,13 @@
       },
       "series": "Series",
       "seriesTotal": "Total",
+      "seriesType": "By type",
+      "seriesOrigin": "By origin",
       "seriesClass": "By class",
+      "basis": "Basis",
+      "basisNet": "Net",
+      "basisGross": "Gross",
+      "axisLabel": "Group by",
       "deleted": "View “{name}” deleted",
       "metrics": {
         "marketValue": "Market value",
@@ -168,6 +180,8 @@
       "axis": {
         "month": "Month",
         "type": "Type",
+        "incomeType": "Income type",
+        "origin": "Origin",
         "allocationClass": "Class"
       }
     },
@@ -202,7 +216,11 @@
       "emptyIncome": "No income in this period.",
       "total": "Total",
       "totalValue": "Total {amount}",
-      "chartCaption": "Month × {unit} · {range}"
+      "chartCaption": "Month × {unit} · {range}",
+      "unlinked": "Unlinked",
+      "tooltipTotal": "Total",
+      "taxLabel": "Tax",
+      "tax": "Tax {amount}"
     },
     "importNoteHint": "Reads the note with the assistant and shows the operations for you to confirm."
   },
@@ -305,6 +323,7 @@
       "tax": "Tax withheld",
       "taxJcp": "15% withheld at source",
       "taxExempt": "exempt",
+      "taxWithheld": "withheld at source",
       "creditTo": "Credit to",
       "creditCash": "Broker balance",
       "creditAccount": "{account} (creates an entry in Transactions)"

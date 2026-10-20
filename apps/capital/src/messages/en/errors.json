@@ -61,7 +61,9 @@
     "same_currency": "A transfer in one currency has a single amount.",
     "from_account_not_found": "Source account not found.",
     "to_account_not_found": "Destination account not found.",
-    "kind_change": "A transfer can't change type. Delete it and create it again."
+    "kind_change": "A transfer can't change type. Delete it and create it again.",
+    "account_type": "This transfer is only for checking, cash, and brokerage accounts.",
+    "cross_entity_investment": "Moving a broker across entities is a contribution or a redemption. Use those instead."
   },
   "statement": {
     "not_found": "Statement not found.",
@@ -131,13 +133,33 @@
     "not_found": "Holding not found.",
     "requires_brokerage": "Holdings live in brokerage accounts.",
     "oversell": "The sale is larger than the position.",
-    "undo_oversell": "Undoing this would leave a sale of {holding} larger than the position. Undo or delete that sale first."
+    "undo_oversell": "Undoing this would leave a sale of {holding} larger than the position. Undo or delete that sale first.",
+    "value_mode": "This update is by value, so quantity and price are not accepted. Trade units with by_units.",
+    "amount_mismatch": "Quantity times price must match the cash amount within 0.01.",
+    "units_required": "A by-units trade needs a quantity and a price, or a current price to derive them.",
+    "replay_mismatch": "This holding's saved quantity and cost don't match its operations, and a later operation exists.",
+    "above_value": "The redemption of {amount} is larger than the position value of {value}.",
+    "no_units": "A total value needs a quantity, so it can be split per unit.",
+    "price_choice": "Pass exactly one of price (per unit) or total value.",
+    "quoted_by_value": "This holding's price comes from the market. Pass mode by_value to change it by value anyway.",
+    "future_date": "The price date can't be in the future."
   },
   "operation": {
     "not_found": "Operation not found.",
     "income_only": "Only income can have an income type, tax withheld or a credit account.",
     "tax_exceeds_amount": "The tax withheld can't exceed the gross amount.",
     "credit_account_invalid": "Income can only be credited to a checking or cash account."
+  },
+  "dividend": {
+    "not_income": "Only an income transaction can become a dividend. Transfers, expenses and investment entries stay as they are.",
+    "currency": "The amount's currency must be the holding's currency or the cash account's currency.",
+    "extra_cash": "This income matches dividend {operationId}, which already has a cash leg. Entry {transactionId} is extra cash and was not linked.",
+    "unlinked_income": "Income {transactionId} already has this net amount. Use convert_income_to_dividend with that transactionId instead of crediting again.",
+    "fii_withholding": "FII income is tax-exempt, so withholdingTax has to be zero.",
+    "entity_mismatch": "The cash account and the holding have to belong to the same entity.",
+    "not_income_operation": "Only an income operation (a dividend or a yield) can have its origin, income type or withholding changed.",
+    "entry_not_dividend": "Entry {transactionId} is not linked to a dividend.",
+    "origin_not_dividend": "origin applies only when the income type is a dividend."
   },
   "aporte": {
     "broker_required": "A contribution has to go to a brokerage account.",
@@ -209,5 +231,16 @@
   },
   "tokens": {
     "not_found": "API token not found"
+  },
+  "pluggy": {
+    "item_id": "The item id is not a UUID. Copy it again from the Pluggy Dashboard.",
+    "label": "Give the connection a name.",
+    "not_found": "Connection not found.",
+    "entity_mismatch": "That account belongs to the other entity (personal or business).",
+    "account_type": "That account type cannot be mapped here.",
+    "link_not_found": "Pluggy account not found. Sync once so the accounts show up.",
+    "review_not_found": "Review not found.",
+    "link_target": "Choose the existing entry to link.",
+    "not_income": "Amortization, a sale or a redemption is not income."
   }
 }

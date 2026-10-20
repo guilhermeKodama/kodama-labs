@@ -385,6 +385,28 @@ pnpm build
 pnpm lint
 ```
 
+### Open Finance (Meu Pluggy)
+
+Daily sync of bank, card and investment activity through [Meu Pluggy](https://meu.pluggy.ai). It stays off until both of these are set (see `.env.example`). Item ids are not environment variables: a consent renewal can issue a new one, so each connection is saved in **Settings → Open Finance**.
+
+| Variable | Where |
+| --- | --- |
+| `PLUGGY_CLIENT_ID` | Server env only. Dashboard → your application. |
+| `PLUGGY_CLIENT_SECRET` | Server env only. Shown once when the application is created. |
+
+Nothing else from Pluggy belongs in the environment. The API key is minted in memory and is not stored. Account numbers are masked to the last four digits before they are saved or shown. Do not log the client secret or a full account number.
+
+Setup:
+
+1. Create an account at [meu.pluggy.ai](https://meu.pluggy.ai) and connect each institution there (its own approval): Nubank PF, Nubank Empresas, XP, Inter Empresas. Confirm the two business institutions appear in the picker. If one does not, keep file import for that account.
+2. On [dashboard.pluggy.ai](https://dashboard.pluggy.ai), same account, one application. Put the client id and secret in 1Password (`kodama-labs-capital-dev`, and the production env) and in the server environment. Never commit them.
+3. In the Dashboard, open **Demo → Connect an account** and choose the connector **MeuPluggy** (Personal → Direct), once per bank. Copy each item id from Connected Items. `GET /items` is not available on this plan.
+4. Deploy the env. In Capital, **Settings → Open Finance**, add each item (name, item id, PF or PJ). The import cutoff defaults to today, so history before that day is not imported; change the date before the first sync if you want it. Map each discovered account to a Capital account of that entity. Pick the brokerage that receives investments. For a PJ connection, pick the income category (Renda financeira PJ). **Sync now** starts the run and the page follows it. The cron `0 8 * * *` `/api/cron/pluggy-sync` repeats it.
+5. The first sync of each PJ item should be checked: Nubank Empresas is documented for CDB investments (caixinhas); checking and card are not guaranteed. Inter Empresas does not return FII, BDR, ETF or Tesouro. History is about 12 months. Items refresh on their own (~24h); this job does not force a bank update.
+6. Consent lasts about a year. The page shows the date. When it expires, reads come back empty and the next update is `LOGIN_ERROR` / `USER_AUTHORIZATION_EXPIRED`. Sign in through Demo → MeuPluggy again. If the item id changed, replace it on the same connection. Entries already booked stay.
+
+With the two variables unset, `/api/cron/pluggy-sync` returns `{ "success": true, "status": "disabled" }` and writes nothing.
+
 ### Demo data
 
 `pnpm --filter @wallex/capital db:seed:demo` builds a demo user with the

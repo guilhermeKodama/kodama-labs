@@ -75,7 +75,7 @@ async function effectiveDateFor(account: Account, date: Date, db: DbClient, stat
   return { effectiveDate, cardStatementId: statement.id as string | null };
 }
 
-function inferDirection(from: Account & { entity: Entity }, to: Account & { entity: Entity }): TransferDirection {
+export function inferDirection(from: Account & { entity: Entity }, to: Account & { entity: Entity }): TransferDirection {
   if (to.type === "credit_card") return "card_payment";
   if (to.type === "brokerage" && from.type !== "brokerage") return "investment_deposit";
   if (from.type === "brokerage" && to.type !== "brokerage") return "investment_withdrawal";
@@ -526,6 +526,9 @@ async function updateSimpleIn(
     },
   });
   records.push({ model: "LedgerEntry", recordId: entry.id, before: snapshot(entry), after: snapshot(updated) });
+  // The cash leg of an investment operation: editing it by hand locks the
+  // operation so a later sync does not write over the change.
+  await tx.investmentOperation.updateMany({ where: { cashEntryId: entry.id }, data: { syncLocked: true } });
 }
 
 type AccountWithEntity = Account & { entity: Entity };

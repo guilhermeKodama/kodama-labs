@@ -45,7 +45,12 @@
     "dividend": "Dividendo",
     "jcp": "JCP",
     "fii_income": "Rendimento FII",
-    "interest": "Juros (renda fixa)"
+    "interest": "Juros (renda fixa)",
+    "fixed_income_interest": "Juros renda fixa"
+  },
+  "origin": {
+    "bdr": "BDR",
+    "exterior": "Exterior"
   },
   "scope": {
     "all": "Consolidado",
@@ -90,7 +95,8 @@
       "caption": "Mês × {unit} · {range} · {scope}",
       "empty": "O histórico aparece a partir do segundo mês com posições.",
       "initialPositions": "Posições iniciais",
-      "initialPositionsHint": "Posições cadastradas sem operações (sem data de compra): entram no mês do cadastro como posições iniciais, não como aporte."
+      "initialPositionsHint": "Posições cadastradas sem operações (sem data de compra): entram no mês do cadastro como posições iniciais, não como aporte.",
+      "capitalInvested": "Capital investido"
     },
     "allocation": {
       "title": "Alocação atual vs alvo",
@@ -155,7 +161,13 @@
       },
       "series": "Séries",
       "seriesTotal": "Total",
+      "seriesType": "Por tipo",
+      "seriesOrigin": "Por origem",
       "seriesClass": "Por classe",
+      "basis": "Base",
+      "basisNet": "Líquido",
+      "basisGross": "Bruto",
+      "axisLabel": "Agrupar por",
       "deleted": "View “{name}” excluída",
       "metrics": {
         "marketValue": "Valor de mercado",
@@ -168,6 +180,8 @@
       "axis": {
         "month": "Mês",
         "type": "Tipo",
+        "incomeType": "Tipo de renda",
+        "origin": "Origem",
         "allocationClass": "Classe"
       }
     },
@@ -202,7 +216,11 @@
       "emptyIncome": "Nenhum provento no período.",
       "total": "Total",
       "totalValue": "Total {amount}",
-      "chartCaption": "Mês × {unit} · {range}"
+      "chartCaption": "Mês × {unit} · {range}",
+      "unlinked": "Não vinculado",
+      "tooltipTotal": "Total",
+      "taxLabel": "IR",
+      "tax": "IR {amount}"
     },
     "importNoteHint": "Lê a nota com o assistente e mostra as operações para você confirmar."
   },
@@ -305,6 +323,7 @@
       "tax": "IR retido",
       "taxJcp": "15% retido na fonte",
       "taxExempt": "isento",
+      "taxWithheld": "retido na fonte",
       "creditTo": "Creditar em",
       "creditCash": "Saldo na corretora",
       "creditAccount": "{account} (cria entrada em Transações)"
