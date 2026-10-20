@@ -1,4 +1,4 @@
-import { BRAND } from "@/lib/brand";
+import { BRAND, ICONS } from "@/lib/brand";
 import { getBuildId } from "@/lib/build-id";
 import { REMINDER_PUSH_URL } from "@capital/server/modules/push/constants";
 
@@ -43,8 +43,8 @@ async function handlePush(event) {
   await self.registration.showNotification(payload.title, {
     body: payload.body,
     tag: payload.tag ?? undefined,
-    icon: "/icon-192.png?v=3",
-    badge: "/badge-96.png",
+    icon: ${JSON.stringify(ICONS.app192)},
+    badge: ${JSON.stringify(ICONS.badge)},
     data: { url: payload.url ?? ${JSON.stringify(REMINDER_PUSH_URL)} },
   });
 }

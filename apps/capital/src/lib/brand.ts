@@ -114,3 +114,16 @@ export const APP_ICON = {
   core: BRAND_COLORS.resinBright,
   background: BRAND_COLORS.heartwood,
 } as const;
+
+/**
+ * Where the icon files are served (written by scripts/brand-icons.ts). New
+ * artwork gets new names: launchers, the browser and Cloudflare cache an
+ * icon by its URL, and a query string does not always get past them.
+ */
+export const ICONS = {
+  apple: "/icons/cerne-apple-180.png",
+  app192: "/icons/cerne-192.png",
+  app512: "/icons/cerne-512.png",
+  maskable512: "/icons/cerne-maskable-512.png",
+  badge: "/icons/cerne-badge-96.png",
+} as const;

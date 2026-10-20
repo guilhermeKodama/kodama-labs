@@ -1,25 +1,26 @@
 /**
  * Writes every icon file of the app from the mark in src/lib/brand.ts:
  *
- *   src/app/icon.svg               browser tab (Next file convention)
- *   src/app/favicon.ico            16, 32 and 48 px, for agents that ignore SVG
- *   src/app/apple-icon.png         180 px, full bleed (iOS rounds it)
- *   public/icon-192.png            manifest, rounded square
- *   public/icon-512.png            manifest, rounded square
- *   public/icon-maskable-512.png   manifest "maskable": full bleed, mark in the safe zone
- *   public/badge-96.png            notification badge: white mark on transparent
+ *   src/app/icon.svg                     browser tab (Next file convention)
+ *   src/app/favicon.ico                  16, 32 and 48 px, for agents that ignore SVG
+ *   public/icons/cerne-apple-180.png     home screen on iOS, full bleed (iOS rounds it)
+ *   public/icons/cerne-192.png           manifest, rounded square
+ *   public/icons/cerne-512.png           manifest, rounded square
+ *   public/icons/cerne-maskable-512.png  manifest "maskable": full bleed, mark in the safe zone
+ *   public/icons/cerne-badge-96.png      notification badge: white mark on transparent
  *
  *   pnpm exec tsx scripts/brand-icons.ts
  *
- * Run it after changing the mark or its colors, bump the ?v= of the
- * manifest and service-worker icon URLs, and commit the files. sharp is
- * taken from Next (its optional dependency, already installed) so the app
- * does not carry a dependency used only here.
+ * New artwork gets new file names (ICONS in src/lib/brand.ts): launchers,
+ * the browser and Cloudflare cache an icon by its URL, and a query string
+ * does not always get past them. sharp is taken from Next (its optional
+ * dependency, already installed) so the app does not carry a dependency
+ * used only here.
  */
 import fs from "node:fs";
 import { createRequire } from "node:module";
 import path from "node:path";
-import { APP_ICON, MARK_FULL, MARK_SIMPLE, MARK_TINY, markSvg, type MarkShape } from "../src/lib/brand";
+import { APP_ICON, ICONS, MARK_FULL, MARK_SIMPLE, MARK_TINY, markSvg, type MarkShape } from "../src/lib/brand";
 
 const require = createRequire(import.meta.url);
 /** The part of sharp used here (SVG in, PNG out). */
@@ -75,15 +76,15 @@ async function main() {
     ]),
   );
 
-  write("src/app/apple-icon.png", await appIcon(180, MARK_FULL, { radius: 0, scale: 0.72 }));
-  write("public/icon-192.png", await appIcon(192, MARK_FULL, { radius: 14, scale: 0.75 }));
-  write("public/icon-512.png", await appIcon(512, MARK_FULL, { radius: 14, scale: 0.75 }));
+  write(`public${ICONS.apple}`, await appIcon(180, MARK_FULL, { radius: 0, scale: 0.72 }));
+  write(`public${ICONS.app192}`, await appIcon(192, MARK_FULL, { radius: 14, scale: 0.75 }));
+  write(`public${ICONS.app512}`, await appIcon(512, MARK_FULL, { radius: 14, scale: 0.75 }));
   // Maskable: the launcher crops to its own shape inside the central 80%
   // circle, so the mark spans 60% of a full-bleed square.
-  write("public/icon-maskable-512.png", await appIcon(512, MARK_FULL, { radius: 0, scale: 0.6 }));
+  write(`public${ICONS.maskable512}`, await appIcon(512, MARK_FULL, { radius: 0, scale: 0.6 }));
 
   const badge = markSvg({ shape: MARK_SIMPLE, rings: "#fff", core: "#fff", scale: 0.9, size: 96 });
-  write("public/badge-96.png", await sharp(Buffer.from(badge)).png().toBuffer());
+  write(`public${ICONS.badge}`, await sharp(Buffer.from(badge)).png().toBuffer());
 }
 
 void main();
