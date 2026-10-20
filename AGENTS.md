@@ -16,4 +16,8 @@ Every pull request carries a video, recorded by the agent that made the change, 
 
 When you delegate work, pass this rule on.
 
-Apps with a proof setup so far: `apps/capital` (`pnpm --filter @wallex/capital proof`, `proof:record`, `proof:once`). A change to another app starts by adding its `proof/` folder: see `packages/proof-video/references/new-project.md`.
+Apps with a proof setup so far: `apps/capital` (`pnpm --filter @wallex/capital proof`, `proof:record`, `proof:once`, `proof:package`). A change to another app starts by adding its `proof/` folder: see `packages/proof-video/references/new-project.md`.
+
+## Validation package
+
+At the end of every piece of work the owner asks for, after its pull requests, hand over a **validation-package** (the owner's term): one video that tours the whole product, from the way in through every user screen in light and dark, and a full-resolution screenshot of every screen. It comes from the app's `proof/package/` suite (`pnpm --filter <app> proof:package`); see "Validation package" in `packages/proof-video/SKILL.md`, whose current definition is the one to follow. A screen the work adds joins the tour in the same work. Send the video and the screenshots to the owner in the conversation.

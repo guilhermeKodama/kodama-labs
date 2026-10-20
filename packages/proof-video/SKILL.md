@@ -13,7 +13,7 @@ Each video comes from **flows**: Playwright tests with a narrator. Run a flow pl
 
 The tool only records. Each project decides when a video is required, what it must show and where it goes. Look for a "Proof video" rule in the project's `AGENTS.md` or `CLAUDE.md` and follow it.
 
-Find the app's `proof/` folder and its package scripts (`proof`, `proof:record`, `proof:once`). If the project has neither, set them up first: read `references/new-project.md`.
+Find the app's `proof/` folder and its package scripts (`proof`, `proof:record`, `proof:once`, `proof:package`). If the project has neither, set them up first: read `references/new-project.md`.
 
 ## The routine
 
@@ -85,6 +85,23 @@ What makes a flow count as proof:
 - **Use data the flow made itself**, with names that cannot collide ("Café da prova"). Do not assert on dates, totals or counts that depend on the seed or on today.
 - **Wait with `expect`**, which retries until the page settles. `pause(ms)` exists only to give the viewer time and does nothing when the flow runs as a test.
 - **Keep each flow independent.** It starts from a known page and does not rely on another flow having run.
+
+## Validation package
+
+A proof video shows one change. The **validation-package** shows the whole product after a piece of work, for the owner's final review. "validation-package" is the owner's term: use it as is.
+
+- **When:** at the end of a piece of work the owner asked for, after its pull requests, before reporting it done. Once per piece of work, not per pull request.
+- **What it holds** (a first definition, refined with the owner as it is used):
+  1. One video that tours the product: the way in (the homepage, or sign-in when the app has none), then every screen a user reaches, in every theme the app has.
+  2. A full-resolution screenshot of every screen in every theme (`proof/out/package/screenshots/`).
+  3. The list of screens with their time in the video (`proof/out/package/proof.md`).
+- **How:** the app's `proof/package/` suite is the tour. Every screen is one `check` whose claim names the screen and the theme ("Carteira · escuro"), so it leaves a frame and a screenshot. Keep it current: a screen, view or dialog the work added joins the tour in the same work. Record at the final commit:
+
+  ```bash
+  pnpm --filter <app> proof:package
+  ```
+
+- **Hand it over:** read the frames as in step 5, then send the owner the video and the screenshots in the conversation, and say which screens the work changed. A screen that fails to load is a finding to report, not one to drop from the tour.
 
 ## When a check fails
 

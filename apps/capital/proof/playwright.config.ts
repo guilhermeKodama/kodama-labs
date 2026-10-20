@@ -1,5 +1,5 @@
 import path from "node:path";
-import { defineProofConfig } from "@repo/proof-video";
+import { defineProofConfig, proofSuite } from "@repo/proof-video";
 import { appDir, proofEnv } from "./env";
 
 const env = proofEnv();
@@ -29,5 +29,5 @@ export default defineProofConfig({
     secrets: env.secrets,
   },
   meta: { app: "capital", database: env.databaseName },
-  rerun: `pnpm --filter @wallex/capital ${process.env.PROOF_ONCE === "1" ? "proof:once" : "proof:record"}`,
+  rerun: `pnpm --filter @wallex/capital ${{ flows: "proof:record", once: "proof:once", package: "proof:package" }[proofSuite()]}`,
 });

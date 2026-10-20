@@ -22,6 +22,7 @@
     "proof": "playwright test -c proof/playwright.config.ts",
     "proof:record": "PROOF_RECORD=1 playwright test -c proof/playwright.config.ts",
     "proof:once": "PROOF_ONCE=1 PROOF_RECORD=1 playwright test -c proof/playwright.config.ts",
+    "proof:package": "PROOF_PACKAGE=1 PROOF_RECORD=1 playwright test -c proof/playwright.config.ts",
     "proof:server": "tsx proof/server.ts"
   },
   "dependencies": {

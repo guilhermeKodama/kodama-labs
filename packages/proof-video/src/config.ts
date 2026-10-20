@@ -11,7 +11,7 @@ interface ProofUse {
 type Use = NonNullable<PlaywrightTestConfig<ProofUse>["use"]>;
 
 export interface ProofConfig {
-  /** The app's proof folder: flows live in `<dir>/flows`, one-off proofs in `<dir>/once`, results in `<dir>/out`. */
+  /** The app's proof folder: flows live in `<dir>/flows`, one-off proofs in `<dir>/once`, the validation-package tour in `<dir>/package`, results in `<dir>/out`. */
   dir: string;
   /** Where results go when `<dir>/out` is shared, e.g. one folder per agent recording in parallel. */
   outDir?: string;
@@ -49,13 +49,22 @@ export interface ProofConfig {
  * trace off, because the recorder makes the clip and a trace would keep
  * typed secrets.
  */
+/** Which suite of `<dir>` this run plays: PROOF_ONCE=1 picks `once`, PROOF_PACKAGE=1 `package`. */
+export function proofSuite(): "flows" | "once" | "package" {
+  if (process.env.PROOF_ONCE === "1") return "once";
+  if (process.env.PROOF_PACKAGE === "1") return "package";
+  return "flows";
+}
+
 export function defineProofConfig(config: ProofConfig): PlaywrightTestConfig<ProofUse> {
   const recording = isRecording();
   // `flows/` is the suite that always runs. `once/` holds proofs of a
-  // single change (a migration, a script) that cannot be replayed later;
-  // they run only when asked for, and keep their results apart.
-  const once = process.env.PROOF_ONCE === "1";
-  const outDir = path.join(config.outDir ?? path.join(config.dir, "out"), ...(once ? ["once"] : []));
+  // single change (a migration, a script) that cannot be replayed later.
+  // `package/` is the validation-package: a tour of every screen of the
+  // app, recorded at the end of a piece of work. The last two run only
+  // when asked for, and keep their results apart.
+  const suite = proofSuite();
+  const outDir = path.join(config.outDir ?? path.join(config.dir, "out"), ...(suite === "flows" ? [] : [suite]));
   const reporterOptions: ReporterOptions = {
     outDir,
     size: config.viewport ?? { width: 1280, height: 720 },
@@ -65,7 +74,7 @@ export function defineProofConfig(config: ProofConfig): PlaywrightTestConfig<Pro
   };
 
   return defineConfig<ProofUse>({
-    testDir: path.join(config.dir, once ? "once" : "flows"),
+    testDir: path.join(config.dir, suite),
     testMatch: "**/*.flow.ts",
     outputDir: path.join(outDir, "runs"),
     workers: 1,
