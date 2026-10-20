@@ -1,4 +1,4 @@
-# Como investimentos funcionam no Capital
+# Como investimentos funcionam no Cerne
 
 ## Hierarquia
 

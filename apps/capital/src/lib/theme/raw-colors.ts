@@ -163,13 +163,7 @@ export function findColorLiterals(source: string): RawColorMatch[] {
  * Deliberate color literals. Each entry allows literals on lines of one
  * file (path relative to src/) that contain `line`.
  */
-export const ALLOWED_COLOR_LITERALS: { file: string; line: string; reason: string }[] = [
-  {
-    file: "app/[locale]/layout.tsx",
-    line: "themeColor: '#ffffff'",
-    reason: "the browser's toolbar color in the viewport metadata, where CSS variables do not apply",
-  },
-];
+export const ALLOWED_COLOR_LITERALS: { file: string; line: string; reason: string }[] = [];
 
 export function isAllowedColorLiteral(file: string, lineText: string): boolean {
   return ALLOWED_COLOR_LITERALS.some((entry) => entry.file === file && lineText.includes(entry.line));

@@ -183,7 +183,7 @@ describe("MCP Server End-to-End", () => {
       const result = data.result as {
         serverInfo: { name: string; version: string };
       };
-      expect(result.serverInfo.name).toBe("capital-accounting");
+      expect(result.serverInfo.name).toBe("cerne");
       expect(result.serverInfo.version).toBe("1.0.0");
     });
 

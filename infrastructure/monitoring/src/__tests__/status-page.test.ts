@@ -20,7 +20,7 @@ import {
 describe("status page monitors", () => {
   it("uses friendly names and does not take over kodama/ monitors", () => {
     const names = statusPageMonitors().map((monitor) => monitor.name);
-    expect(names).toEqual(["Capital", "Careers", "Attentio"]);
+    expect(names).toEqual(["Cerne", "Careers", "Attentio"]);
     for (const name of names) {
       expect(name.startsWith("kodama/")).toBe(false);
     }
@@ -40,14 +40,14 @@ describe("status page monitors", () => {
   it("removes retired rows and duplicate names, keeping the first owned copy", () => {
     const remove = statusMonitorsToRemove(
       [
-        { id: 1, name: "Capital", description: "statuspage:aaa" },
-        { id: 2, name: "Capital", description: "statuspage:bbb" },
+        { id: 1, name: "Cerne", description: "statuspage:aaa" },
+        { id: 2, name: "Cerne", description: "statuspage:bbb" },
         { id: 3, name: "Careers", description: "statuspage:ccc" },
         { id: 4, name: "Old", description: "statuspage:ddd" },
         { id: 5, name: "kodama/public-capital-login", description: "managed:eee" },
         { id: 6, name: "Attentio", description: "" },
       ],
-      new Set(["Capital", "Careers", "Attentio"]),
+      new Set(["Cerne", "Careers", "Attentio"]),
     );
     expect(remove).toEqual([2, 4]);
   });

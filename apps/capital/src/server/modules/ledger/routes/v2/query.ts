@@ -45,7 +45,7 @@ export const ledgerQueryRoutes = createRouter()
       else target = ledgerSelectionQuerySchema.parse(body.query);
       const csv = await exportLedgerCsv(userId, target, prisma);
       return new Response(csv, {
-        headers: { "Content-Type": "text/csv; charset=utf-8", "Content-Disposition": `attachment; filename="capital-export.csv"` },
+        headers: { "Content-Type": "text/csv; charset=utf-8", "Content-Disposition": `attachment; filename="cerne-export.csv"` },
       });
     })
   );

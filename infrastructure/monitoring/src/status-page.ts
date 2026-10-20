@@ -39,7 +39,7 @@ export interface StatusService {
  */
 export function statusPageMonitors(): StatusService[] {
   return [
-    { name: "Capital", url: "https://capital.kodamalabs.ai/login" },
+    { name: "Cerne", url: "https://capital.kodamalabs.ai/login" },
     { name: "Careers", url: "https://careers.kodamalabs.ai/" },
     { name: "Attentio", url: "https://attentio.dev/" },
   ];
