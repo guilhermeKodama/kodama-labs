@@ -6,16 +6,17 @@ flow.use({ storageState: { cookies: [], origins: [] } });
 flow("The homepage: the rings up front, PF + PJ in one net worth, and the way in", async ({ page, scene, say, check }) => {
   await scene("The homepage", "Cerne's address now opens on the product, not on a sign-in form");
   await page.goto("/");
-  await check("/ shows the homepage to a visitor, with the rings screen under the headline", async () => {
+  await check("/ shows the homepage to a visitor, and the lead talks about consolidating PF and PJ", async () => {
     await expect(page).toHaveURL(/\/$/);
     await expect(page.getByRole("heading", { level: 1 })).toHaveText("Patrimônio se faz em anéis.");
-    const rings = page.getByRole("img", { name: /^A tela de Liberdade financeira do Cerne/ });
-    await expect(rings.first()).toBeVisible();
-    await expect(rings.first()).toHaveAttribute("src", /aneis-claro\.webp/);
-  });
-  await say("The lead says what Cerne is for: company and personal life in one ledger, to reach financial freedom");
-  await check("The lead talks about consolidating PF and PJ", async () => {
     await expect(page.getByText(/^Sua empresa e sua vida pessoal num livro só\./)).toBeVisible();
+  });
+  await say("Under the headline, the screen that makes people curious: one ring of wealth per year");
+  const rings = page.getByRole("img", { name: /^A tela de Liberdade financeira do Cerne/ }).first();
+  await rings.scrollIntoViewIfNeeded();
+  await check("The hero shows the real rings screen", async () => {
+    await expect(rings).toHaveAttribute("src", /aneis-claro\.webp/);
+    await expect(rings).toBeInViewport({ ratio: 0.5 });
   });
 
   await scene("PF + PJ", "Why bring the company and the person together");
