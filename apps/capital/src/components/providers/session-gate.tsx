@@ -28,7 +28,7 @@ export function SessionGate({ children }: { children: ReactNode }) {
   if (session.data) return children;
   if (session.isError && !isSessionExpired(session.error)) {
     return (
-      <div className="flex min-h-dvh flex-col items-center justify-center gap-2 bg-editor px-4 text-center text-fg-1">
+      <div className="flex min-h-dvh flex-col items-center justify-center gap-2 bg-background px-4 text-center text-fg-1">
         <span className="text-body-lg font-medium">{t("loadFailed")}</span>
         <span className="text-body text-fg-3">{errorText(session.error)}</span>
         <Btn className="mt-1" disabled={session.isFetching} onClick={() => void session.refetch()}>

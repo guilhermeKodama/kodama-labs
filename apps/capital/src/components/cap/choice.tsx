@@ -33,10 +33,10 @@ export function Choice<T extends string>({
           key={option.v}
           value={option.v}
           disabled={option.disabled}
-          className="group flex cursor-pointer items-start gap-2.5 rounded-[8px] border border-stroke-2 px-2.5 py-[9px] text-left outline-none focus-visible:ring-2 focus-visible:ring-fg-3/40 disabled:cursor-not-allowed disabled:opacity-40 data-[state=checked]:border-fg-1"
+          className="group flex cursor-pointer items-start gap-2.5 rounded-[8px] border border-stroke-2 px-2.5 py-[9px] text-left outline-none focus-visible:ring-2 focus-visible:ring-gold-line/80 disabled:cursor-not-allowed disabled:opacity-40 data-[state=checked]:border-gold-line"
         >
           <span className="mt-px inline-flex size-3.5 shrink-0 items-center justify-center rounded-full border border-stroke-1 group-data-[state=checked]:border-fg-1">
-            <RadioGroup.Indicator className="block size-[7px] rounded-full bg-fg-1" />
+            <RadioGroup.Indicator className="block size-[7px] rounded-full bg-gold" />
           </span>
           <span className="flex min-w-0 flex-col gap-0.5">
             <span className="text-body font-medium">{option.l}</span>

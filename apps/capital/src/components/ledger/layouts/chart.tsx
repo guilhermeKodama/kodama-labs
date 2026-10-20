@@ -37,7 +37,7 @@ export function ChartTypeStrip({ type, onType }: { type: ChartType; onType: (typ
           onClick={() => onType(meta.type)}
           className={cn(
             "inline-flex h-6 items-center gap-[5px] rounded-[6px] border px-2 text-label",
-            type === meta.type ? "border-stroke-1 bg-fill-2 text-fg-1" : "border-transparent text-fg-3 hover:text-fg-strong",
+            type === meta.type ? "border-gold-line bg-gold-wash text-fg-1" : "border-transparent text-fg-3 hover:text-fg-strong",
           )}
         >
           <meta.icon aria-hidden className="size-3.5 shrink-0" />

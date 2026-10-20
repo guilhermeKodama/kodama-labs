@@ -106,7 +106,7 @@ export function CredentialsForm({ mode }: { mode: AuthMode }) {
     <main className="flex min-h-dvh items-start justify-center bg-chrome px-4 pt-[12vh] pb-10 text-fg-1">
       <form noValidate onSubmit={onSubmit} aria-busy={pending} className="flex w-full max-w-[360px] flex-col gap-3.5 rounded-[12px] border border-stroke-1 bg-editor p-[18px]">
         <div className="flex items-center gap-2">
-          <span aria-hidden className="inline-flex size-6 shrink-0 items-center justify-center rounded-[6px] bg-fg-1 text-body-sm font-bold text-editor">
+          <span aria-hidden className="inline-flex size-6 shrink-0 items-center justify-center rounded-[6px] bg-gold text-body-sm font-bold text-primary-foreground">
             C
           </span>
           <span className="text-body font-semibold">Capital</span>

@@ -98,9 +98,9 @@ export function SidebarTrigger() {
 // ---------------------------------------------------------------------------
 
 /** 28px row, radius 6, 12.5px; the active one on fill.secondary in the primary ink. */
-const ITEM = "flex h-(--cap-menu-row-h) shrink-0 items-center gap-2 rounded-[6px] px-2 text-control outline-none focus-visible:ring-2 focus-visible:ring-fg-3/40";
-const RAIL_ITEM = "flex size-8 shrink-0 items-center justify-center rounded-[6px] text-control outline-none focus-visible:ring-2 focus-visible:ring-fg-3/40";
-const ON = "bg-fill-2 font-medium text-fg-1";
+const ITEM = "flex h-(--cap-menu-row-h) shrink-0 items-center gap-2 rounded-[6px] px-2 text-control outline-none focus-visible:ring-2 focus-visible:ring-gold-line/80";
+const RAIL_ITEM = "flex size-8 shrink-0 items-center justify-center rounded-[6px] text-control outline-none focus-visible:ring-2 focus-visible:ring-gold-line/80";
+const ON = "bg-gold-wash font-medium text-fg-1";
 const OFF = "text-fg-2 hover:bg-fill-3";
 
 /**
@@ -236,7 +236,7 @@ function SidebarContent({ rail, onNavigate }: { rail: boolean; onNavigate?: () =
   return (
     <>
       <div className={cn("flex shrink-0 items-center gap-2", rail ? "justify-center pt-1 pb-2" : "px-1.5 pt-1 pb-2")}>
-        <span aria-hidden className="inline-flex size-6 shrink-0 items-center justify-center rounded-[6px] bg-fg-1 text-body-sm font-bold text-editor">
+        <span aria-hidden className="inline-flex size-6 shrink-0 items-center justify-center rounded-[6px] bg-gold text-body-sm font-bold text-primary-foreground">
           C
         </span>
         {rail ? null : <span className="text-body font-semibold">Capital</span>}
@@ -255,7 +255,7 @@ function SidebarContent({ rail, onNavigate }: { rail: boolean; onNavigate?: () =
         <button
           type="button"
           onClick={openCommand}
-          className="mb-1 flex h-7 shrink-0 items-center gap-1.5 rounded-[6px] border border-stroke-2 px-2 text-button text-fg-3 outline-none hover:text-fg-2 focus-visible:ring-2 focus-visible:ring-fg-3/40"
+          className="mb-1 flex h-7 shrink-0 items-center gap-1.5 rounded-[6px] border border-stroke-2 px-2 text-button text-fg-3 outline-none hover:text-fg-2 focus-visible:ring-2 focus-visible:ring-gold-line/80"
         >
           <span className="flex-1 truncate text-left">{t("search")}</span>
           <Kbd>{searchLabel}</Kbd>
@@ -319,7 +319,7 @@ function SidebarContent({ rail, onNavigate }: { rail: boolean; onNavigate?: () =
 
 /** The footer block as the user menu's trigger (Radix passes ref and props). */
 function FooterButton({ className, ...props }: ComponentProps<"button">) {
-  return <button type="button" {...props} className={cn("flex shrink-0 items-center outline-none focus-visible:ring-2 focus-visible:ring-fg-3/40", className)} />;
+  return <button type="button" {...props} className={cn("flex shrink-0 items-center outline-none focus-visible:ring-2 focus-visible:ring-gold-line/80", className)} />;
 }
 
 // ---------------------------------------------------------------------------

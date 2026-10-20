@@ -31,10 +31,10 @@ export async function generateMetadata({ params }: Pick<LocaleLayoutProps, 'para
     // favicon.ico is picked up from app/favicon.ico. ?v= matches the manifest.
     icons: {
       icon: [
-        { url: '/icon.svg?v=3', type: 'image/svg+xml', sizes: 'any' },
-        { url: '/favicon-32.png?v=3', type: 'image/png', sizes: '32x32' },
+        { url: '/icon.svg?v=4', type: 'image/svg+xml', sizes: 'any' },
+        { url: '/favicon-32.png?v=4', type: 'image/png', sizes: '32x32' },
       ],
-      apple: [{ url: '/apple-touch-icon.png?v=3', sizes: '180x180', type: 'image/png' }],
+      apple: [{ url: '/apple-touch-icon.png?v=4', sizes: '180x180', type: 'image/png' }],
     },
     // No `manifest` field here — Next's Metadata API only accepts a string/URL
     // for it, with no way to set crossOrigin. See the <link> below instead.
@@ -45,7 +45,10 @@ export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
   viewportFit: 'cover',
-  themeColor: '#ffffff',
+  themeColor: [
+    { media: '(prefers-color-scheme: light)', color: '#FAF7F0' },
+    { media: '(prefers-color-scheme: dark)', color: '#0B0B0C' },
+  ],
 };
 
 /**

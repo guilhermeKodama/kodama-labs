@@ -2,7 +2,7 @@ import type { ComponentProps } from "react";
 import { cn } from "@/lib/utils";
 
 export type BtnProps = Omit<ComponentProps<"button">, "type"> & {
-  /** Filled with the primary ink (Salvar, Aplicar, Excluir in confirmations). */
+  /** Filled with the brand gold (Salvar, Aplicar, Excluir in confirmations). */
   primary?: boolean;
   /** Dashed outline (adders like "+ Nova regra"). */
   dashed?: boolean;
@@ -22,9 +22,9 @@ export function Btn({ primary, dashed, ghost, danger, icon, type = "button", cla
       type={type}
       {...props}
       className={cn(
-        "inline-flex h-(--cap-control-h) shrink-0 items-center justify-center gap-1.5 rounded-[6px] border text-button font-medium whitespace-nowrap outline-none focus-visible:ring-2 focus-visible:ring-fg-3/40 disabled:cursor-not-allowed disabled:opacity-40",
+        "inline-flex h-(--cap-control-h) shrink-0 items-center justify-center gap-1.5 rounded-[6px] border text-button font-medium whitespace-nowrap outline-none focus-visible:ring-2 focus-visible:ring-gold-line/80 disabled:cursor-not-allowed disabled:opacity-40",
         icon ? "w-(--cap-control-h) px-0" : "px-2.5",
-        primary && "border-fg-1 bg-fg-1 text-editor hover:bg-fg-1/90",
+        primary && "border-gold-line bg-gold text-primary-foreground hover:bg-gold/90",
         !primary && !ghost && "border-stroke-1 text-fg-1 hover:bg-fill-4 data-[state=open]:bg-fill-3",
         dashed && "border-dashed",
         ghost && "border-transparent text-fg-2 hover:bg-fill-3 data-[state=open]:bg-fill-3",

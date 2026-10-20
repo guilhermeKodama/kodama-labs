@@ -39,7 +39,7 @@ export function Btn({
       disabled={disabled}
       className={cn(
         "inline-flex h-(--cap-control-h) shrink-0 items-center gap-1.5 rounded-[6px] px-2.5 text-button font-medium whitespace-nowrap disabled:cursor-not-allowed disabled:opacity-40",
-        primary && "border border-fg-1 bg-fg-1 text-editor",
+        primary && "border border-gold-line bg-gold text-primary-foreground",
         !primary && !ghost && "border border-stroke-1 bg-editor text-fg-1 hover:bg-fill-4",
         dashed && "border-dashed",
         ghost && "border border-transparent text-fg-muted hover:bg-fill-3",
@@ -88,7 +88,7 @@ export function SelectInput({
       value={value}
       required={required}
       onChange={(event) => onChange(event.target.value)}
-      className={cn("h-(--cap-control-h) min-w-0 rounded-[6px] border border-stroke-1 bg-editor px-1.5 text-control outline-none focus:border-fg-muted", className)}
+      className={cn("h-(--cap-control-h) min-w-0 rounded-[6px] border border-stroke-1 bg-editor px-1.5 text-control outline-none focus:border-gold-line", className)}
     >
       {placeholder !== undefined ? <option value="">{placeholder}</option> : null}
       {options.map((option) => (

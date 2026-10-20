@@ -137,7 +137,7 @@ export function Combobox({
           data-invalid={invalid || undefined}
           aria-haspopup="listbox"
           onKeyDown={onTriggerKey}
-          className={cn(CONTROL, "inline-flex items-center justify-between gap-1.5 text-left text-fg-1 data-[invalid]:border-neg data-[state=open]:border-fg-muted", className)}
+          className={cn(CONTROL, "inline-flex items-center justify-between gap-1.5 text-left text-fg-1 data-[invalid]:border-neg data-[state=open]:border-gold-line", className)}
         >
           <span className={cn("truncate", !selected && "text-fg-3")}>{selected ? selected.label : (placeholder ?? t("select"))}</span>
           <ChevronDownIcon className="size-3.5 shrink-0 text-fg-3" />

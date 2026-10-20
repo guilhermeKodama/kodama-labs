@@ -284,8 +284,8 @@ function DuplicateCard({ card, controller }: { card: DuplicateReviewCard; contro
                     aria-pressed={chosen === decision}
                     onClick={() => setDecisions((current) => ({ ...current, [pair.pairId]: decision }))}
                     className={cn(
-                      "h-[22px] rounded-[5px] border px-2 text-label outline-none focus-visible:ring-2 focus-visible:ring-fg-3/40 disabled:cursor-not-allowed",
-                      chosen === decision ? "border-fg-1 bg-fg-1 text-editor" : "border-stroke-1 text-fg-1 hover:bg-fill-3 disabled:opacity-50",
+                      "h-[22px] rounded-[5px] border px-2 text-label outline-none focus-visible:ring-2 focus-visible:ring-gold-line/80 disabled:cursor-not-allowed",
+                      chosen === decision ? "border-gold-line bg-gold text-primary-foreground" : "border-stroke-1 text-fg-1 hover:bg-fill-3 disabled:opacity-50",
                     )}
                   >
                     {t(`card.decisions.${decision}`)}
@@ -328,7 +328,7 @@ function BtnLink({ href, onNavigate, children }: { href: string; onNavigate: () 
     <Link
       href={href}
       onClick={onNavigate}
-      className="inline-flex h-(--cap-control-h) shrink-0 items-center justify-center rounded-[6px] border border-stroke-1 px-2.5 text-button font-medium whitespace-nowrap text-fg-1 outline-none hover:bg-fill-4 focus-visible:ring-2 focus-visible:ring-fg-3/40"
+      className="inline-flex h-(--cap-control-h) shrink-0 items-center justify-center rounded-[6px] border border-stroke-1 px-2.5 text-button font-medium whitespace-nowrap text-fg-1 outline-none hover:bg-fill-4 focus-visible:ring-2 focus-visible:ring-gold-line/80"
     >
       {children}
     </Link>

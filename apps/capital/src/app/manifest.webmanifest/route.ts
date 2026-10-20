@@ -17,16 +17,16 @@ export function GET() {
       start_url: "/transactions",
       scope: "/",
       display: "standalone",
-      background_color: "#0a0a0a",
-      theme_color: "#0a0a0a",
+      background_color: "#0B0B0C",
+      theme_color: "#0B0B0C",
       icons: [
         // ?v=N busts every cache layer (browser HTTP cache, Cloudflare edge)
         // at once — same-named icon files otherwise get served stale at
         // reinstall time and the launcher keeps the old artwork. Bump when
         // the artwork changes (metadata icons and sw.js use the same query).
-        { src: "/icon-192.png?v=3", sizes: "192x192", type: "image/png", purpose: "any" },
-        { src: "/icon-512.png?v=3", sizes: "512x512", type: "image/png", purpose: "any" },
-        { src: "/icon-maskable-512.png?v=3", sizes: "512x512", type: "image/png", purpose: "maskable" },
+        { src: "/icon-192.png?v=4", sizes: "192x192", type: "image/png", purpose: "any" },
+        { src: "/icon-512.png?v=4", sizes: "512x512", type: "image/png", purpose: "any" },
+        { src: "/icon-maskable-512.png?v=4", sizes: "512x512", type: "image/png", purpose: "maskable" },
       ],
     },
     {

@@ -44,6 +44,14 @@ export default async function middleware(request: NextRequest) {
   // land in pt-BR.)
   const { locale, path } = stripLocalePrefix(pathname, routing.locales);
   if (locale) {
+    // next-intl rewrites /login to /pt-BR/login and Next runs this middleware
+    // again on that internal request. The rewrite stamps X-NEXT-INTL-LOCALE.
+    // Sending it back through next-intl would redirect to /login (localePrefix
+    // "never") and the two would chase each other. A typed /pt-BR or /en URL
+    // has no such header and still redirects to the unprefixed path.
+    if (request.headers.get("x-next-intl-locale")) {
+      return NextResponse.next();
+    }
     return intlMiddleware(withDefaultLanguage(request));
   }
 

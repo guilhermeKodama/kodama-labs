@@ -127,7 +127,7 @@ export function FxPage() {
               type="button"
               title={t("editRate", { code: row.code, base: baseCode })}
               onClick={() => setEditing({ code: row.code, text: rateText(row) })}
-              className="rounded-[4px] px-1 font-mono tabular-nums outline-none hover:bg-fill-3 focus-visible:ring-2 focus-visible:ring-fg-3/40"
+              className="rounded-[4px] px-1 font-mono tabular-nums outline-none hover:bg-fill-3 focus-visible:ring-2 focus-visible:ring-gold-line/80"
             >
               {rateText(row)}
             </button>

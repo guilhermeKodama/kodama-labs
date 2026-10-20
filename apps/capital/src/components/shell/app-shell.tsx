@@ -21,7 +21,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   return (
     <>
-      <div className="flex h-dvh bg-editor text-fg-1">
+      <div className="flex h-dvh bg-background text-fg-1">
         <Sidebar />
         <main className="relative flex min-w-0 flex-1 flex-col overflow-hidden">{children}</main>
       </div>

@@ -161,7 +161,7 @@ function Conversations({ controller }: { controller: AssistantController }) {
                 onClick={() => controller.open(conversation.id)}
                 className={cn(
                   "flex h-(--cap-menu-row-h) w-full items-center gap-2 rounded-[5px] px-2 text-left text-control outline-none hover:bg-fill-3 focus-visible:bg-fill-3",
-                  conversation.id === controller.state.conversationId && "bg-fill-2 font-medium",
+                  conversation.id === controller.state.conversationId && "bg-gold-wash font-medium",
                 )}
               >
                 <span className="min-w-0 flex-1 truncate">{conversation.title || t("untitled")}</span>
@@ -258,7 +258,7 @@ function Composer({ controller }: { controller: AssistantController }) {
           onPaste={onPaste}
           placeholder={t("composer.placeholder")}
           aria-label={t("composer.placeholder")}
-          className="min-h-(--cap-control-h) flex-1 resize-none rounded-[6px] border border-stroke-1 bg-editor px-2 py-[5px] text-control leading-[1.25] outline-none placeholder:text-fg-3 focus:border-fg-muted"
+          className="min-h-(--cap-control-h) flex-1 resize-none rounded-[6px] border border-stroke-1 bg-editor px-2 py-[5px] text-control leading-[1.25] outline-none placeholder:text-fg-3 focus:border-gold-line"
         />
         {controller.busy ? (
           <Btn onClick={controller.stop}>{t("composer.stop")}</Btn>

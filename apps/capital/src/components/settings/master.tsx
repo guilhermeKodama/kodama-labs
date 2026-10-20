@@ -32,8 +32,8 @@ export function ListItem({ on, onClick, left, right, faded }: { on: boolean; onC
       onClick={onClick}
       aria-current={on || undefined}
       className={cn(
-        "flex h-(--cap-row-h) items-center gap-2 rounded-[6px] px-2.5 text-left text-control outline-none focus-visible:ring-2 focus-visible:ring-fg-3/40",
-        on ? "bg-fill-2/80" : "hover:bg-fill-4",
+        "flex h-(--cap-row-h) items-center gap-2 rounded-[6px] px-2.5 text-left text-control outline-none focus-visible:ring-2 focus-visible:ring-gold-line/80",
+        on ? "bg-gold-wash" : "hover:bg-fill-4",
         faded && "opacity-50",
       )}
     >
@@ -49,7 +49,7 @@ export function AddRow({ on, onClick, children }: { on?: boolean; onClick: () =>
     <button
       type="button"
       onClick={onClick}
-      className={cn("rounded-[6px] px-2.5 py-2 text-left text-control outline-none hover:text-fg-strong focus-visible:ring-2 focus-visible:ring-fg-3/40", on ? "bg-fill-2/80 text-fg-1" : "text-fg-3")}
+      className={cn("rounded-[6px] px-2.5 py-2 text-left text-control outline-none hover:text-fg-strong focus-visible:ring-2 focus-visible:ring-gold-line/80", on ? "bg-gold-wash text-fg-1" : "text-fg-3")}
     >
       {children}
     </button>

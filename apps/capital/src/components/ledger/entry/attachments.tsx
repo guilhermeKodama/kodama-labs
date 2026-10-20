@@ -71,7 +71,7 @@ export function Dropzone({ onFiles, items, disabled }: { onFiles: (files: File[]
           if (files.length) onFiles(files);
         }}
         className={cn(
-          "flex h-11 items-center justify-center rounded-[8px] border border-dashed border-stroke-1 text-body-sm text-fg-3 outline-none hover:border-fg-3 focus-visible:border-fg-muted disabled:opacity-40",
+          "flex h-11 items-center justify-center rounded-[8px] border border-dashed border-stroke-1 text-body-sm text-fg-3 outline-none hover:border-fg-3 focus-visible:border-gold-line disabled:opacity-40",
           over && "border-fg-muted bg-fill-4",
         )}
       >

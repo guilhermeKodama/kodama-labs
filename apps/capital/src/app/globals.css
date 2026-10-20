@@ -41,14 +41,16 @@
      bg-cat-*           category hues (mockup category.*)
 
    Every token generates every color utility (bg-fg-1 is the inverted
-   primary button, border-fg-1 a selected card). Inline styles and SVG
-   attributes (Recharts) use var(--cap-*) directly; chart colors live only
-   there (--cap-chart-*).
+   toast and the ink of data marks; bg-gold is the primary button). Inline
+   styles and SVG attributes (Recharts) use var(--cap-*) directly; chart
+   colors live only there (--cap-chart-*).
 
-   Light values are exactly the Tailwind shades the screens rendered before
-   the tokens existed, so the light UI is unchanged. The dark values follow
-   shadcn's neutral dark palette; fills and strokes are translucent there so
-   they composite over both the editor and the chrome surfaces. */
+   Ouro Clássico. Neutrals are warm (yellow hue, low chroma), never blue.
+   The page is --cap-bg-canvas (ivory / #0B0B0C); cards, inputs and dialogs
+   are --cap-bg-editor (white / a slightly lighter warm black); the sidebar
+   is --cap-bg-chrome. Gold fills are #C9A227 with near-black text. Gold
+   used as text or as a hairline is --cap-gold-ink / --cap-gold-line, a
+   darker gold in light mode so it clears WCAG AA on ivory. */
 
 @theme inline {
   --color-fg-1: var(--cap-text-1);
@@ -94,6 +96,11 @@
   --color-cat-blue: var(--cap-cat-blue);
   --color-cat-orange: var(--cap-cat-orange);
   --color-cat-red: var(--cap-cat-red);
+  --color-gold: var(--cap-gold);
+  --color-gold-soft: var(--cap-gold-soft);
+  --color-gold-ink: var(--cap-gold-ink);
+  --color-gold-line: var(--cap-gold-line);
+  --color-gold-wash: var(--cap-gold-wash);
 
   /* shadcn names, kept for src/components/ui and third-party styles. */
   --color-background: var(--background);
@@ -139,163 +146,184 @@
 }
 
 :root {
-  /* Text. */
-  --cap-text-1: oklch(14.5% 0 0); /* neutral-950 */
-  --cap-text-ink: oklch(20.5% 0 0); /* neutral-900 */
-  --cap-text-strong: oklch(37.1% 0 0); /* neutral-700 */
-  --cap-text-2: oklch(43.9% 0 0); /* neutral-600 */
-  --cap-text-muted: oklch(55.6% 0 0); /* neutral-500 */
-  --cap-text-3: oklch(70.8% 0 0); /* neutral-400 */
-  --cap-text-4: oklch(87% 0 0); /* neutral-300 */
+  /* Text. Each step clears 4.5:1 on ivory #FAF7F0. */
+  --cap-text-1: #0b0b0c;
+  --cap-text-ink: #1c1914;
+  --cap-text-strong: #3f3a32;
+  --cap-text-2: #4a453c;
+  --cap-text-muted: #6a6358;
+  --cap-text-3: #6e675c;
+  --cap-text-4: #7a7060;
 
-  /* Fills, strongest first. */
-  --cap-fill-1: oklch(87% 0 0); /* neutral-300 */
-  --cap-fill-2: oklch(92.2% 0 0); /* neutral-200 */
-  --cap-fill-3: oklch(97% 0 0); /* neutral-100 */
-  --cap-fill-4: oklch(98.5% 0 0); /* neutral-50 */
+  /* Fills, strongest first. Warm, not gold — gold selection is --cap-gold-wash. */
+  --cap-fill-1: #e4d7c4;
+  --cap-fill-2: #efe6d6;
+  --cap-fill-3: #f4eee4;
+  --cap-fill-4: #f7f3eb;
 
   /* Strokes: 1 for inputs, buttons and overlays; 2 for small controls
      (segmented, kbd, badge); 3 for panels and table rows. */
-  --cap-stroke-1: oklch(87% 0 0); /* neutral-300 */
-  --cap-stroke-2: oklch(92.2% 0 0); /* neutral-200 */
-  --cap-stroke-3: oklch(92.2% 0 0); /* neutral-200 */
+  --cap-stroke-1: #b7a78e;
+  --cap-stroke-2: #d9cdb8;
+  --cap-stroke-3: #e6dcc8;
 
-  /* Surfaces. */
-  --cap-bg-editor: #fff;
-  --cap-bg-chrome: oklch(98.5% 0 0); /* neutral-50 */
-  --cap-scrim: #000;
-  --cap-backdrop: oklch(14.5% 0 0); /* neutral-950 */
-  --cap-on-accent: #fff;
+  /* Surfaces. Canvas is the page; editor is cards, inputs and dialogs. */
+  --cap-bg-canvas: #faf7f0;
+  --cap-bg-editor: #ffffff;
+  --cap-bg-chrome: #f0e9db;
+  --cap-scrim: #0b0b0c;
+  --cap-backdrop: #0b0b0c;
+  --cap-on-accent: #faf7f0;
 
-  /* Tones. */
-  --cap-pos: oklch(50.8% 0.118 165.612); /* emerald-700 */
-  --cap-pos-ink: oklch(43.2% 0.095 166.913); /* emerald-800 */
-  --cap-pos-soft: oklch(90.5% 0.093 164.15); /* emerald-200 */
-  --cap-pos-wash: oklch(97.9% 0.021 166.113); /* emerald-50 */
-  --cap-neg: oklch(57.7% 0.245 27.325); /* red-600 */
-  --cap-neg-solid: oklch(63.7% 0.237 25.331); /* red-500 */
-  --cap-neg-ink: oklch(44.4% 0.177 26.899); /* red-800 */
-  --cap-neg-soft: oklch(88.5% 0.062 18.334); /* red-200 */
-  --cap-neg-wash: oklch(97.1% 0.013 17.38); /* red-50 */
-  --cap-warn: oklch(66.6% 0.179 58.318); /* amber-600 */
-  --cap-warn-strong: oklch(55.5% 0.163 48.998); /* amber-700 */
-  --cap-warn-solid: oklch(76.9% 0.188 70.08); /* amber-500 */
-  --cap-warn-ink: oklch(47.3% 0.137 46.201); /* amber-800 */
-  --cap-warn-soft: oklch(92.4% 0.12 95.746); /* amber-200 */
-  --cap-warn-wash: oklch(98.7% 0.022 95.277); /* amber-50 */
+  /* Brand gold. Fills stay #C9A227 (near-black text, 8.1:1). Text and
+     hairlines use #8A6D12 (4.6:1 on ivory); #C9A227 as text is 2.3:1. */
+  --cap-gold: #c9a227;
+  --cap-gold-soft: #e6c976;
+  --cap-gold-ink: #8a6d12;
+  --cap-gold-line: #8a6d12;
+  --cap-gold-wash: #f3e6c4;
+
+  /* Gain / loss stay green and red, away from the brand gold. Warn is a
+     rust orange so it does not read as gold. */
+  --cap-pos: #047857;
+  --cap-pos-ink: #065f46;
+  --cap-pos-soft: #c8e6d6;
+  --cap-pos-wash: #e7f5ee;
+  --cap-neg: #b42318;
+  --cap-neg-solid: #b42318;
+  --cap-neg-ink: #8e1b14;
+  --cap-neg-soft: #f0d0cb;
+  --cap-neg-wash: #fbedec;
+  --cap-warn: #c2410c;
+  --cap-warn-strong: #9a3412;
+  --cap-warn-solid: #c2410c;
+  --cap-warn-ink: #9a3412;
+  --cap-warn-soft: #f3d5c4;
+  --cap-warn-wash: #fbf1ea;
 
   /* Category hues, in the mockup's category order. Same values as the
      category color picker in Ajustes (those are stored per category). */
-  --cap-cat-gray: #737373;
+  /* Darker than the stored palette hex so the same hue clears 4.5:1
+     as text on ivory. swatchColor still maps the stored hex to this token. */
+  --cap-cat-gray: #6a6358;
   --cap-cat-purple: #7c3aed;
-  --cap-cat-green: #16a34a;
-  --cap-cat-yellow: #ca8a04;
-  --cap-cat-cyan: #0891b2;
-  --cap-cat-pink: #db2777;
+  --cap-cat-green: #047857;
+  --cap-cat-yellow: #8a6d12;
+  --cap-cat-cyan: #0e7490;
+  --cap-cat-pink: #c2185b;
   --cap-cat-blue: #2563eb;
-  --cap-cat-orange: #ea580c;
+  --cap-cat-orange: #c2410c;
   --cap-cat-red: #dc2626;
 
-  /* Charts (Recharts / SVG attributes take var() directly). */
-  --cap-chart-grid: #f0f0f0;
-  --cap-chart-axis: #e5e5e5;
-  --cap-chart-muted: #a3a3a3; /* ticks, secondary lines, sankey links */
-  --cap-chart-ink: #171717; /* primary line / area stroke */
-  --cap-chart-bar: #262626; /* single-series bars, sankey nodes */
-  --cap-chart-label: #404040;
-  --cap-chart-soft: #d4d4d4; /* projections, ideal pace */
-  --cap-chart-area: #e5e5e5;
-  --cap-chart-accent: #0f766e;
-  --cap-chart-accent-soft: #ccfbf1;
-  --cap-chart-warn: #b45309; /* reference lines (Meta, Orçado) */
-  --cap-chart-1: #171717;
-  --cap-chart-2: #525252;
-  --cap-chart-3: #737373;
-  --cap-chart-4: #a3a3a3;
-  --cap-chart-5: #0f766e;
-  --cap-chart-6: #b45309;
-  --cap-chart-7: #1d4ed8;
-  --cap-chart-8: #be123c;
-  --cap-chart-9: #7c3aed;
-  --cap-chart-10: #d4d4d4;
+  /* Charts. Series 1 is the brand gold; the rest are bronze, warm gray,
+     muted teal and copper, separated from gain green and loss red. */
+  --cap-chart-grid: #efe6d6;
+  --cap-chart-axis: #e4d7c4;
+  --cap-chart-muted: #6e675c;
+  --cap-chart-ink: #1c1914;
+  --cap-chart-bar: #c9a227;
+  --cap-chart-label: #4a453c;
+  --cap-chart-soft: #d9cdb8;
+  --cap-chart-area: #efe6d6;
+  --cap-chart-accent: #14665e;
+  --cap-chart-accent-soft: #d5ebe6;
+  --cap-chart-warn: #9a3412;
+  --cap-chart-1: #c9a227;
+  --cap-chart-2: #5c3a22;
+  --cap-chart-3: #6a645c;
+  --cap-chart-4: #14665e;
+  --cap-chart-5: #c46a28;
+  --cap-chart-6: #3e5c34;
+  --cap-chart-7: #8c7044;
+  --cap-chart-8: #a33d58;
+  --cap-chart-9: #243e3a;
+  --cap-chart-10: #7a4e32;
   /* Heatmap cells mix --cap-heat with transparent by intensity. */
-  --cap-heat: #171717;
-  --cap-heat-over: #fecaca;
+  --cap-heat: #1c1914;
+  --cap-heat-over: #f0d0cb;
 
   /* shadcn tokens on top of the Capital ones. */
   --radius: 0.625rem;
-  --background: var(--cap-bg-editor);
+  --background: var(--cap-bg-canvas);
   --foreground: var(--cap-text-1);
   --card: var(--cap-bg-editor);
   --card-foreground: var(--cap-text-1);
   --popover: var(--cap-bg-editor);
   --popover-foreground: var(--cap-text-1);
-  --primary: var(--cap-text-ink);
-  --primary-foreground: var(--cap-bg-chrome);
+  --primary: var(--cap-gold);
+  --primary-foreground: #0b0b0c;
   --secondary: var(--cap-fill-3);
   --secondary-foreground: var(--cap-text-ink);
   --muted: var(--cap-fill-3);
   --muted-foreground: var(--cap-text-muted);
-  --accent: var(--cap-fill-3);
+  --accent: var(--cap-gold-wash);
   --accent-foreground: var(--cap-text-ink);
-  --destructive: var(--cap-neg);
+  --destructive: var(--cap-neg-solid);
   --border: var(--cap-stroke-2);
-  --input: var(--cap-stroke-2);
-  --ring: var(--cap-text-3);
-  --chart-1: oklch(0.646 0.222 41.116);
-  --chart-2: oklch(0.6 0.118 184.704);
-  --chart-3: oklch(0.398 0.07 227.392);
-  --chart-4: oklch(0.828 0.189 84.429);
-  --chart-5: oklch(0.769 0.188 70.08);
+  --input: var(--cap-stroke-1);
+  --ring: var(--cap-gold-line);
+  --chart-1: var(--cap-chart-1);
+  --chart-2: var(--cap-chart-2);
+  --chart-3: var(--cap-chart-3);
+  --chart-4: var(--cap-chart-4);
+  --chart-5: var(--cap-chart-5);
   --sidebar: var(--cap-bg-chrome);
   --sidebar-foreground: var(--cap-text-1);
-  --sidebar-primary: var(--cap-text-ink);
-  --sidebar-primary-foreground: var(--cap-bg-chrome);
-  --sidebar-accent: var(--cap-fill-3);
+  --sidebar-primary: var(--cap-gold);
+  --sidebar-primary-foreground: #0b0b0c;
+  --sidebar-accent: var(--cap-gold-wash);
   --sidebar-accent-foreground: var(--cap-text-ink);
   --sidebar-border: var(--cap-stroke-2);
-  --sidebar-ring: var(--cap-text-3);
+  --sidebar-ring: var(--cap-gold-line);
 }
 
 .dark {
-  --cap-text-1: oklch(98.5% 0 0);
-  --cap-text-ink: oklch(97% 0 0);
-  --cap-text-strong: oklch(87% 0 0);
-  --cap-text-2: oklch(70.8% 0 0);
-  --cap-text-muted: oklch(62% 0 0);
-  --cap-text-3: oklch(55.6% 0 0);
-  --cap-text-4: oklch(43.9% 0 0);
+  --cap-text-1: #faf7f0;
+  --cap-text-ink: #f3eee4;
+  --cap-text-strong: #e4dccf;
+  --cap-text-2: #d9d0c2;
+  --cap-text-muted: #c4b8a6;
+  --cap-text-3: #a89f90;
+  --cap-text-4: #8a8176;
 
-  --cap-fill-1: oklch(100% 0 0 / 18%);
-  --cap-fill-2: oklch(100% 0 0 / 12%);
-  --cap-fill-3: oklch(100% 0 0 / 7%);
-  --cap-fill-4: oklch(100% 0 0 / 4%);
+  --cap-fill-1: oklch(93% 0.02 85 / 16%);
+  --cap-fill-2: oklch(93% 0.02 85 / 11%);
+  --cap-fill-3: oklch(93% 0.02 85 / 7%);
+  --cap-fill-4: oklch(93% 0.02 85 / 4%);
 
-  --cap-stroke-1: oklch(100% 0 0 / 15%);
-  --cap-stroke-2: oklch(100% 0 0 / 10%);
-  --cap-stroke-3: oklch(100% 0 0 / 8%);
+  --cap-stroke-1: #6e6458;
+  --cap-stroke-2: #3a342c;
+  --cap-stroke-3: #2e2a26;
 
-  --cap-bg-editor: oklch(14.5% 0 0);
-  --cap-bg-chrome: oklch(20.5% 0 0);
-  --cap-scrim: #000;
-  --cap-backdrop: #000;
-  --cap-on-accent: #fff;
+  --cap-bg-canvas: #0b0b0c;
+  --cap-bg-editor: #141311;
+  --cap-bg-chrome: #1c1916;
+  --cap-scrim: #000000;
+  --cap-backdrop: #000000;
+  --cap-on-accent: #faf7f0;
 
-  --cap-pos: oklch(76.5% 0.177 163.223); /* emerald-400 */
-  --cap-pos-ink: oklch(90.5% 0.093 164.15); /* emerald-200 */
-  --cap-pos-soft: oklch(69.6% 0.17 162.48 / 35%);
-  --cap-pos-wash: oklch(69.6% 0.17 162.48 / 10%);
-  --cap-neg: oklch(70.4% 0.191 22.216); /* red-400 */
-  --cap-neg-solid: oklch(63.7% 0.237 25.331); /* red-500 */
-  --cap-neg-ink: oklch(88.5% 0.062 18.334); /* red-200 */
-  --cap-neg-soft: oklch(63.7% 0.237 25.331 / 35%);
-  --cap-neg-wash: oklch(63.7% 0.237 25.331 / 10%);
-  --cap-warn: oklch(82.8% 0.189 84.429); /* amber-400 */
-  --cap-warn-strong: oklch(87.9% 0.169 91.605); /* amber-300 */
-  --cap-warn-solid: oklch(76.9% 0.188 70.08); /* amber-500 */
-  --cap-warn-ink: oklch(92.4% 0.12 95.746); /* amber-200 */
-  --cap-warn-soft: oklch(76.9% 0.188 70.08 / 35%);
-  --cap-warn-wash: oklch(76.9% 0.188 70.08 / 10%);
+  /* #C9A227 on #0B0B0C is 8.1:1, so dark mode can use the brand gold as text. */
+  --cap-gold: #c9a227;
+  --cap-gold-soft: #e6c976;
+  --cap-gold-ink: #e6c976;
+  --cap-gold-line: #c9a227;
+  --cap-gold-wash: #3a3018;
+
+  --cap-pos: #8fcbaa;
+  --cap-pos-ink: #c8e6d6;
+  --cap-pos-soft: oklch(78% 0.08 160 / 35%);
+  --cap-pos-wash: oklch(78% 0.08 160 / 12%);
+  --cap-neg: #e7a097;
+  --cap-neg-solid: #8e2f28;
+  --cap-neg-ink: #f4d0c8;
+  --cap-neg-soft: oklch(70% 0.12 25 / 35%);
+  --cap-neg-wash: oklch(70% 0.12 25 / 12%);
+  --cap-warn: #e08a62;
+  --cap-warn-strong: #f0b090;
+  --cap-warn-solid: #a34e28;
+  --cap-warn-ink: #f3d5c4;
+  --cap-warn-soft: oklch(72% 0.12 50 / 35%);
+  --cap-warn-wash: oklch(72% 0.12 50 / 12%);
 
   --cap-cat-gray: #a3a3a3;
   --cap-cat-purple: #a78bfa;
@@ -307,35 +335,30 @@
   --cap-cat-orange: #fb923c;
   --cap-cat-red: #f87171;
 
-  --cap-chart-grid: oklch(100% 0 0 / 7%);
-  --cap-chart-axis: oklch(100% 0 0 / 14%);
-  --cap-chart-muted: #737373;
-  --cap-chart-ink: #e5e5e5;
-  --cap-chart-bar: #d4d4d4;
-  --cap-chart-label: #d4d4d4;
-  --cap-chart-soft: #404040;
-  --cap-chart-area: oklch(100% 0 0 / 14%);
-  --cap-chart-accent: #2dd4bf;
-  --cap-chart-accent-soft: #134e4a;
-  --cap-chart-warn: #fbbf24;
-  --cap-chart-1: #e5e5e5;
-  --cap-chart-2: #a3a3a3;
-  --cap-chart-3: #8a8a8a;
-  --cap-chart-4: #5c5c5c;
-  --cap-chart-5: #2dd4bf;
-  --cap-chart-6: #fbbf24;
-  --cap-chart-7: #60a5fa;
-  --cap-chart-8: #fb7185;
-  --cap-chart-9: #a78bfa;
-  --cap-chart-10: #404040;
-  --cap-heat: #fafafa;
-  --cap-heat-over: #7f1d1d;
+  --cap-chart-grid: oklch(93% 0.02 85 / 8%);
+  --cap-chart-axis: oklch(93% 0.02 85 / 16%);
+  --cap-chart-muted: #a89880;
+  --cap-chart-ink: #faf7f0;
+  --cap-chart-bar: #c9a227;
+  --cap-chart-label: #e7e0d4;
+  --cap-chart-soft: #3a342c;
+  --cap-chart-area: oklch(93% 0.02 85 / 14%);
+  --cap-chart-accent: #4ebeb4;
+  --cap-chart-accent-soft: #1a3330;
+  --cap-chart-warn: #e07050;
+  --cap-chart-1: #c9a227;
+  --cap-chart-2: #e6c976;
+  --cap-chart-3: #d9cfc0;
+  --cap-chart-4: #4ebeb4;
+  --cap-chart-5: #e0a04a;
+  --cap-chart-6: #b0a090;
+  --cap-chart-7: #f2c8a8;
+  --cap-chart-8: #d4a0b8;
+  --cap-chart-9: #c46a48;
+  --cap-chart-10: #8a7860;
+  --cap-heat: #faf7f0;
+  --cap-heat-over: #5c2420;
 
-  --chart-1: oklch(0.488 0.243 264.376);
-  --chart-2: oklch(0.696 0.17 162.48);
-  --chart-3: oklch(0.769 0.188 70.08);
-  --chart-4: oklch(0.627 0.265 303.9);
-  --chart-5: oklch(0.645 0.246 16.439);
   --input: var(--cap-stroke-1);
 }
 

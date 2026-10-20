@@ -10,7 +10,7 @@
  * Writes:
  *   public/icon-192.png            purpose "any"
  *   public/icon-512.png            purpose "any"
- *   public/icon-maskable-512.png   coin inside the 80% maskable safe zone, full-bleed #0a0a0a
+ *   public/icon-maskable-512.png   coin inside the 80% maskable safe zone, full-bleed #0B0B0C
  *   public/favicon-32.png
  *   public/apple-touch-icon.png    180
  *   src/app/favicon.ico            16 and 32
@@ -29,7 +29,7 @@ const require = createRequire(import.meta.url);
 const appDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const masterPath = path.join(appDir, "public/icon.svg");
 
-const BLACK = { r: 0x0a, g: 0x0a, b: 0x0a };
+const FIELD = { r: 0x0b, g: 0x0b, b: 0x0c };
 // Coin outer diameter in the 1024 master. Maskable art stays inside the
 // central 80% circle; 76% leaves a margin for the mask antialiasing.
 const COIN_DIAMETER = 600;
@@ -54,7 +54,7 @@ function render(svg, size) {
     fitTo: { mode: "width", value: size },
     shapeRendering: 2,
     font: { loadSystemFonts: false },
-    background: "#0a0a0a",
+    background: "#0B0B0C",
   });
   const image = resvg.render();
   if (image.width !== size || image.height !== size) {
@@ -69,7 +69,7 @@ function pixel(image, x, y) {
   return { r: p[i], g: p[i + 1], b: p[i + 2], a: p[i + 3] };
 }
 
-function assertFullBleedBlack(image, label) {
+function assertFullBleedField(image, label) {
   const corners = [
     [0, 0],
     [image.width - 1, 0],
@@ -78,21 +78,25 @@ function assertFullBleedBlack(image, label) {
   ];
   for (const [x, y] of corners) {
     const p = pixel(image, x, y);
-    if (p.r !== BLACK.r || p.g !== BLACK.g || p.b !== BLACK.b || p.a !== 255) {
-      throw new Error(`${label} corner ${x},${y} is ${JSON.stringify(p)}, expected opaque #0a0a0a`);
+    if (p.r !== FIELD.r || p.g !== FIELD.g || p.b !== FIELD.b || p.a !== 255) {
+      throw new Error(`${label} corner ${x},${y} is ${JSON.stringify(p)}, expected opaque #0B0B0C`);
     }
   }
 }
 
+// Gold (including the soft-gold inner ring) stays warmer than the field
+// even after 16px antialiasing. A near-black pixel fails this.
+function isGold(r, g, b, a) {
+  return a === 255 && r > 70 && r > b + 25 && g > b + 10;
+}
+
 function assertHasMark(image, label) {
-  let white = 0;
+  let gold = 0;
   const p = image.pixels;
   for (let i = 0; i < p.length; i += 4) {
-    // 16px antialiases the rings under a hard 200 cutoff; 128 still
-    // rejects an empty or near-black render.
-    if (p[i] > 128 && p[i + 3] === 255) white++;
+    if (isGold(p[i], p[i + 1], p[i + 2], p[i + 3])) gold++;
   }
-  if (white < image.width) throw new Error(`${label} has almost no white pixels (${white})`);
+  if (gold < image.width) throw new Error(`${label} has almost no gold pixels (${gold})`);
 }
 
 function assertInsideSafeZone(image, label) {
@@ -104,14 +108,15 @@ function assertInsideSafeZone(image, label) {
   for (let y = 0; y < image.height; y++) {
     for (let x = 0; x < image.width; x++) {
       const i = (y * image.width + x) * 4;
-      if (p[i] > 200) {
+      // Ignore the antialiased fringe; the solid ring is the safe-zone edge.
+      if (p[i] > 140 && p[i] > p[i + 2] + 40) {
         const d = Math.hypot(x - cx, y - cy);
         if (d > max) max = d;
       }
     }
   }
   if (max > limit + 0.5) {
-    throw new Error(`${label} white pixel at radius ${max.toFixed(1)} exceeds safe zone ${limit.toFixed(1)}`);
+    throw new Error(`${label} gold pixel at radius ${max.toFixed(1)} exceeds safe zone ${limit.toFixed(1)}`);
   }
   if (max < limit * 0.85) {
     throw new Error(`${label} coin radius ${max.toFixed(1)} does not fill the safe zone (limit ${limit.toFixed(1)})`);
@@ -168,7 +173,7 @@ for (const [label, image] of [
   ["favicon-32", fav32],
   ["favicon-16", fav16],
 ]) {
-  assertFullBleedBlack(image, label);
+  assertFullBleedField(image, label);
   assertHasMark(image, label);
 }
 assertInsideSafeZone(maskable, "maskable-512");

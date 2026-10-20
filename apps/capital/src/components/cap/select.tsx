@@ -63,7 +63,7 @@ export function Select({
         aria-invalid={invalid || undefined}
         className={cn(
           CONTROL,
-          "inline-flex items-center justify-between gap-1.5 text-left text-fg-1 data-[placeholder]:text-fg-3 data-[state=open]:border-fg-muted [&>span]:truncate",
+          "inline-flex items-center justify-between gap-1.5 text-left text-fg-1 data-[placeholder]:text-fg-3 data-[state=open]:border-gold-line [&>span]:truncate",
           className,
         )}
       >

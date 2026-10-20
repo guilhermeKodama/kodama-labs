@@ -36,9 +36,9 @@ export function SettingsScreen() {
   useShortcut("escape", () => router.push(backHref), { scope: "screen" });
 
   return (
-    <div className="grid h-dvh grid-cols-1 bg-editor text-fg-1 md:grid-cols-[220px_minmax(0,1fr)]">
+    <div className="grid h-dvh grid-cols-1 bg-background text-fg-1 md:grid-cols-[220px_minmax(0,1fr)]">
       <nav className="flex gap-1 overflow-x-auto border-b border-stroke-3 bg-chrome p-2 md:flex-col md:gap-0.5 md:overflow-y-auto md:border-r md:border-b-0 md:p-2.5">
-        <Link href={backHref} className="flex h-[30px] shrink-0 items-center gap-1.5 rounded-[6px] px-2 text-control text-fg-3 outline-none hover:text-fg-strong focus-visible:ring-2 focus-visible:ring-fg-3/40">
+        <Link href={backHref} className="flex h-[30px] shrink-0 items-center gap-1.5 rounded-[6px] px-2 text-control text-fg-3 outline-none hover:text-fg-strong focus-visible:ring-2 focus-visible:ring-gold-line/80">
           {t("back")}
           <span className="hidden flex-1 md:block" />
           <Kbd className="hidden md:inline-flex">Esc</Kbd>
@@ -54,8 +54,8 @@ export function SettingsScreen() {
                 aria-current={key === page ? "page" : undefined}
                 onClick={() => void setParams({ page: key, id: null })}
                 className={cn(
-                  "flex h-(--cap-menu-row-h) shrink-0 items-center whitespace-nowrap rounded-[6px] px-2 text-left text-control outline-none focus-visible:ring-2 focus-visible:ring-fg-3/40",
-                  key === page ? "bg-fill-2/80 font-medium text-fg-1" : "text-fg-2 hover:bg-fill-3",
+                  "flex h-(--cap-menu-row-h) shrink-0 items-center whitespace-nowrap rounded-[6px] px-2 text-left text-control outline-none focus-visible:ring-2 focus-visible:ring-gold-line/80",
+                  key === page ? "bg-gold-wash font-medium text-fg-1" : "text-fg-2 hover:bg-fill-3",
                 )}
               >
                 {t(`nav.${key}.title`)}

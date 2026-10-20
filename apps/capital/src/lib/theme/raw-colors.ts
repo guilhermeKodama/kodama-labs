@@ -165,8 +165,13 @@ export function findColorLiterals(source: string): RawColorMatch[] {
 export const ALLOWED_COLOR_LITERALS: { file: string; line: string; reason: string }[] = [
   {
     file: "app/[locale]/layout.tsx",
-    line: "themeColor: '#ffffff'",
-    reason: "the browser's toolbar color in the viewport metadata, where CSS variables do not apply",
+    line: "color: '#FAF7F0'",
+    reason: "light toolbar color in the viewport metadata, where CSS variables do not apply",
+  },
+  {
+    file: "app/[locale]/layout.tsx",
+    line: "color: '#0B0B0C'",
+    reason: "dark toolbar color in the viewport metadata, where CSS variables do not apply",
   },
 ];
 

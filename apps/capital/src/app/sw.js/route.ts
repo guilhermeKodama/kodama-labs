@@ -42,8 +42,8 @@ async function handlePush(event) {
   await self.registration.showNotification(payload.title, {
     body: payload.body,
     tag: payload.tag ?? undefined,
-    icon: "/icon-192.png?v=3",
-    badge: "/icon-192.png?v=3",
+    icon: "/icon-192.png?v=4",
+    badge: "/icon-192.png?v=4",
     data: { url: payload.url ?? ${JSON.stringify(REMINDER_PUSH_URL)} },
   });
 }

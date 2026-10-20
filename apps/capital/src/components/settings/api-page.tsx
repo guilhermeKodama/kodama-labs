@@ -82,7 +82,7 @@ export function ApiPage() {
         <Btn onClick={generate} disabled={create.isPending}>
           {t("generate")}
         </Btn>
-        <a href="/api/reference" target="_blank" rel="noreferrer" className="inline-flex h-(--cap-control-h) items-center rounded-[6px] px-2.5 text-button font-medium text-fg-2 outline-none hover:bg-fill-3 focus-visible:ring-2 focus-visible:ring-fg-3/40">
+        <a href="/api/reference" target="_blank" rel="noreferrer" className="inline-flex h-(--cap-control-h) items-center rounded-[6px] px-2.5 text-button font-medium text-fg-2 outline-none hover:bg-fill-3 focus-visible:ring-2 focus-visible:ring-gold-line/80">
           {t("docs")}
         </a>
       </div>
