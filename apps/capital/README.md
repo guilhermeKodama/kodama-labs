@@ -1,8 +1,8 @@
-# Capital
+# Cerne
 
 **Financial Management for International Service Providers**
 
-Capital is a comprehensive financial management application designed for freelancers and contractors who provide services to clients in other countries. It enables users to track money flow between their business entities and personal finances, supporting multiple currencies and profit distribution.
+Cerne (formerly Capital; the app still lives in `apps/capital`) is a comprehensive financial management application designed for freelancers and contractors who provide services to clients in other countries. It enables users to track money flow between their business entities and personal finances, supporting multiple currencies and profit distribution.
 
 ---
 

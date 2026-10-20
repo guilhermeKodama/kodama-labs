@@ -45,7 +45,7 @@ const mapRoute = createRoute({
   method: "patch",
   path: "/v2/pluggy/links/{id}",
   tags,
-  summary: "Map a Pluggy account to a Capital account of the connection's entity",
+  summary: "Map a Pluggy account to a Cerne account of the connection's entity",
   request: { params: idParams, ...jsonBody(z.object({ capitalAccountId: z.string().nullable() })) },
   responses: v2Responses,
 });

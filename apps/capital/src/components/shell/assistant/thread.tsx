@@ -285,7 +285,7 @@ function DuplicateCard({ card, controller }: { card: DuplicateReviewCard; contro
                     onClick={() => setDecisions((current) => ({ ...current, [pair.pairId]: decision }))}
                     className={cn(
                       "h-[22px] rounded-[5px] border px-2 text-label outline-none focus-visible:ring-2 focus-visible:ring-fg-3/40 disabled:cursor-not-allowed",
-                      chosen === decision ? "border-fg-1 bg-fg-1 text-editor" : "border-stroke-1 text-fg-1 hover:bg-fill-3 disabled:opacity-50",
+                      chosen === decision ? "border-brand bg-brand text-on-brand" : "border-stroke-1 text-fg-1 hover:bg-fill-3 disabled:opacity-50",
                     )}
                   >
                     {t(`card.decisions.${decision}`)}

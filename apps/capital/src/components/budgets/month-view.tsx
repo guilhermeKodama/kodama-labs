@@ -108,7 +108,7 @@ export function MonthBody({ data, actions, onOpenRule, onAllRules }: { data: Mon
       {/* Side by side only once the month body is wide enough for a 2.2fr name and a 1.8fr bar. At a 1280px window the sidebar leaves ~1050px, and the 1.7fr pane would ellipsize Contas de Consumo. */}
       <div className="@container">
         <div className="grid items-start gap-3 @min-[1280px]:grid-cols-[minmax(0,1.7fr)_minmax(0,1fr)]">
-        <div className="min-w-0 overflow-x-auto rounded-[8px] border border-stroke-3">
+        <div className="min-w-0 overflow-x-auto rounded-[8px] border border-stroke-3 bg-panel">
           <div className={cn("hidden md:grid", COLS, "h-(--cap-row-h) text-label text-fg-3")}>
             <span>{t("month.table.category")}</span>
             <span className="truncate">{t(bar.key, bar.values)}</span>

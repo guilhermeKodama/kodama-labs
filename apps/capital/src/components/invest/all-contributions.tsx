@@ -271,7 +271,7 @@ export function AllContributions() {
       );
       const link = document.createElement("a");
       link.href = url;
-      link.download = "capital-aportes.csv";
+      link.download = "cerne-aportes.csv";
       link.click();
       URL.revokeObjectURL(url);
     },
@@ -378,7 +378,7 @@ export function AllContributions() {
       {pages.isError ? (
         <p className="text-body text-neg">{errorText(pages.error)}</p>
       ) : null}
-      <div className="overflow-hidden rounded-[8px] border border-stroke-3">
+      <div className="overflow-hidden rounded-[8px] border border-stroke-3 bg-panel">
         <div
           className="grid h-(--cap-row-h) items-center gap-2.5 px-3 text-label text-fg-3"
           style={{ gridTemplateColumns: grid }}

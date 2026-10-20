@@ -283,7 +283,7 @@ const GetBudgetStatusInputSchema = z.object({
 export function createCapitalMcpServer(userId: string, db: DbClient, opts: { readOnly?: boolean } = {}) {
   const server = new McpServer(
     {
-      name: "capital-accounting",
+      name: "cerne",
       version: "1.0.0",
     },
     {

@@ -40,7 +40,7 @@ export function Check({
         event.stopPropagation();
       }}
       className={cn(
-        "inline-flex size-3.5 shrink-0 items-center justify-center rounded-[4px] border border-stroke-1 bg-editor text-editor outline-none focus-visible:ring-2 focus-visible:ring-fg-3/40 disabled:cursor-not-allowed disabled:opacity-40 data-[state=checked]:border-fg-1 data-[state=checked]:bg-fg-1 data-[state=indeterminate]:border-fg-1 data-[state=indeterminate]:bg-fg-1",
+        "inline-flex size-3.5 shrink-0 items-center justify-center rounded-[4px] border border-stroke-1 bg-panel text-on-brand outline-none focus-visible:ring-2 focus-visible:ring-fg-3/40 disabled:cursor-not-allowed disabled:opacity-40 data-[state=checked]:border-brand data-[state=checked]:bg-brand data-[state=indeterminate]:border-brand data-[state=indeterminate]:bg-brand",
         !label && className,
       )}
     >

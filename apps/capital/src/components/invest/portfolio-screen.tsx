@@ -566,7 +566,7 @@ function HoldingsTable({
     }
   };
   return (
-    <div className="overflow-hidden rounded-[8px] border border-stroke-3">
+    <div className="overflow-hidden rounded-[8px] border border-stroke-3 bg-panel">
       <div
         className="grid h-(--cap-row-h) items-center gap-2.5 px-3 text-label text-fg-3"
         style={{ gridTemplateColumns: grid }}
@@ -728,7 +728,7 @@ function OpsView({
   if (config.layout === "chart") {
     const bars = monthlyBars(rows, config, today, fx.rateFor);
     return (
-      <div className="flex flex-col gap-2 rounded-[8px] border border-stroke-3 p-3">
+      <div className="flex flex-col gap-2 rounded-[8px] border border-stroke-3 bg-panel p-3">
         <IncomeChart
           rows={bars.rows.map((r) => ({
             label: fmt.monthAbbr(Number(String(r.month).slice(5, 7))),
@@ -761,7 +761,7 @@ function OpsView({
   const grid = "64px minmax(0,2fr) 120px 90px 120px 28px";
   const incomeTable = rows.length > 0 && rows.every(isIncome);
   return (
-    <div className="overflow-hidden rounded-[8px] border border-stroke-3">
+    <div className="overflow-hidden rounded-[8px] border border-stroke-3 bg-panel">
       <div
         className="grid h-(--cap-row-h) items-center gap-2.5 px-3 text-label text-fg-3"
         style={{ gridTemplateColumns: grid }}

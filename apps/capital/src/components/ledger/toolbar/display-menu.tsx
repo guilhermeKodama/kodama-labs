@@ -138,7 +138,7 @@ export function DisplayMenu({
                   className={cn(
                     "flex h-14 flex-col items-center justify-center gap-1 rounded-[8px] border text-label outline-none focus-visible:ring-2 focus-visible:ring-fg-3/40",
                     on
-                      ? "border-fg-1 bg-fill-2 font-medium text-fg-1"
+                      ? "border-brand bg-fill-2 font-medium text-fg-1"
                       : "border-stroke-2 text-fg-3 hover:bg-fill-4 hover:text-fg-strong",
                   )}
                 >
@@ -203,7 +203,7 @@ export function DisplayMenu({
                   className={cn(
                     "flex items-center gap-1.5 rounded-[6px] border px-2 py-[5px] text-label",
                     chart.type === type
-                      ? "border-fg-1 bg-fill-2 text-fg-1"
+                      ? "border-brand bg-fill-2 text-fg-1"
                       : "border-stroke-2 text-fg-3 hover:text-fg-strong",
                   )}
                 >

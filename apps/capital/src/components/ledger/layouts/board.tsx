@@ -47,7 +47,7 @@ export function BoardView({
   const badges = visibleColumns(config).filter((id) => id !== groupProp && id !== "description" && id !== "amountBase" && id !== "date");
   if (!groups.length) {
     return (
-      <div className="rounded-[8px] border border-stroke-3">
+      <div className="rounded-[8px] border border-stroke-3 bg-panel">
         <EmptyRow>{loading ? t("table.loading") : t("charts.empty")}</EmptyRow>
       </div>
     );

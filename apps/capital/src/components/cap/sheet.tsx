@@ -39,7 +39,7 @@ export function Sheet({
           onCloseAutoFocus={returnFocus}
           style={{ width }}
           className={cn(
-            "fixed inset-y-0 right-0 z-50 flex max-w-full flex-col gap-3.5 overflow-y-auto border-l border-stroke-1 bg-editor p-[18px] text-fg-1 outline-none data-[state=open]:animate-in data-[state=open]:slide-in-from-right-4 data-[state=open]:fade-in-0",
+            "fixed inset-y-0 right-0 z-50 flex max-w-full flex-col gap-3.5 overflow-y-auto border-l border-stroke-1 bg-panel p-[18px] text-fg-1 outline-none data-[state=open]:animate-in data-[state=open]:slide-in-from-right-4 data-[state=open]:fade-in-0",
             className,
           )}
         >

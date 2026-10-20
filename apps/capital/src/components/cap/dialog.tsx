@@ -49,7 +49,7 @@ export function Dialog({
           onCloseAutoFocus={returnFocus}
           style={{ width }}
           className={cn(
-            "fixed top-7 left-1/2 z-50 flex max-h-[calc(100dvh-56px)] max-w-[94vw] -translate-x-1/2 flex-col gap-3.5 overflow-y-auto rounded-[12px] border border-stroke-1 bg-editor p-[18px] text-fg-1 outline-none data-[state=open]:animate-in data-[state=open]:fade-in-0",
+            "fixed top-7 left-1/2 z-50 flex max-h-[calc(100dvh-56px)] max-w-[94vw] -translate-x-1/2 flex-col gap-3.5 overflow-y-auto rounded-[12px] border border-stroke-1 bg-panel p-[18px] text-fg-1 outline-none data-[state=open]:animate-in data-[state=open]:fade-in-0",
             className,
           )}
         >
@@ -94,7 +94,7 @@ export function DialogHead({ title, desc, onClose = true }: { title: ReactNode; 
   return (
     <div className="flex items-start gap-2">
       <div className="flex min-w-0 flex-1 flex-col gap-[3px]">
-        <DialogPrimitive.Title className="text-title font-semibold">{title}</DialogPrimitive.Title>
+        <DialogPrimitive.Title className="font-title text-title font-medium">{title}</DialogPrimitive.Title>
         {desc ? <DialogPrimitive.Description className="text-body-sm text-fg-3">{desc}</DialogPrimitive.Description> : null}
       </div>
       {onClose === false ? null : typeof onClose === "function" ? close : <DialogPrimitive.Close asChild>{close}</DialogPrimitive.Close>}

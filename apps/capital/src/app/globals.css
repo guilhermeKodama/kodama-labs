@@ -21,7 +21,15 @@
   padding-bottom: calc(4rem + env(safe-area-inset-bottom, 0px));
 }
 
-/* Capital color tokens.
+/* Titles in the brand serif (Fraunces, soft axis on): the top bar title,
+   dialog and sign-in titles, page headings and the wordmark. Sizes still
+   come from the text roles (text-title, text-heading, ...). */
+@utility font-title {
+  font-family: var(--font-fraunces), Georgia, serif;
+  font-variation-settings: "SOFT" 100;
+}
+
+/* Cerne color tokens.
 
    Every color the app renders comes from a --cap-* variable, so the theme
    (Sistema / Claro / Escuro, applied as the `dark` class by next-themes)
@@ -35,20 +43,28 @@
      text-fg-muted      between fg-2 and fg-3
      bg-fill-1..4       mockup fill.primary..quaternary, strongest first
      border-stroke-1..3 mockup stroke.primary..tertiary
-     bg-editor          page / panel surface (also text-editor on inverted bg)
+     bg-editor          page surface (also text-editor on an ink fill)
      bg-chrome          sidebar, subheaders, dialog backdrop
+     bg-panel           cards, tables, dialogs and popovers on the page
+     bg-nav-on          the selected item of a navigation list on the chrome
+     bg-brand           primary actions and checked controls, with text-on-brand
+     border-indicator   the active tab underline and the selected nav bar
+     bg-resin-*         assistant proposals and highlights (wash, line, ink)
+     text-wordmark      the "cerne" wordmark
      text-pos/neg/warn  money in / out / attention, plus -ink -soft -wash -solid
      bg-cat-*           category hues (mockup category.*)
 
-   Every token generates every color utility (bg-fg-1 is the inverted
-   primary button, border-fg-1 a selected card). Inline styles and SVG
+   Every token generates every color utility. Inline styles and SVG
    attributes (Recharts) use var(--cap-*) directly; chart colors live only
    there (--cap-chart-*).
 
-   Light values are exactly the Tailwind shades the screens rendered before
-   the tokens existed, so the light UI is unchanged. The dark values follow
-   shadcn's neutral dark palette; fills and strokes are translucent there so
-   they composite over both the editor and the chrome surfaces. */
+   The palette is the Cerne brand (warm wood): light is sapwood and ink,
+   dark is charcoal and sapwood. In the light theme the brand is the
+   heartwood brown of the logo's rings; in the dark theme the rings turn
+   sapwood, so the brand is sapwood and the indicator is resin. Category
+   hues keep their values: categories store the light hex. Dark fills and
+   strokes are translucent sapwood so they composite over both the editor
+   and the chrome surfaces. */
 
 @theme inline {
   --color-fg-1: var(--cap-text-1);
@@ -67,9 +83,19 @@
   --color-stroke-3: var(--cap-stroke-3);
   --color-editor: var(--cap-bg-editor);
   --color-chrome: var(--cap-bg-chrome);
+  --color-panel: var(--cap-bg-panel);
+  --color-nav-on: var(--cap-nav-on);
   --color-scrim: var(--cap-scrim);
   --color-backdrop: var(--cap-backdrop);
   --color-on-accent: var(--cap-on-accent);
+  --color-brand: var(--cap-brand);
+  --color-on-brand: var(--cap-on-brand);
+  --color-indicator: var(--cap-indicator);
+  --color-resin: var(--cap-resin);
+  --color-resin-wash: var(--cap-resin-wash);
+  --color-resin-line: var(--cap-resin-line);
+  --color-resin-ink: var(--cap-resin-ink);
+  --color-wordmark: var(--cap-wordmark);
   --color-pos: var(--cap-pos);
   --color-pos-ink: var(--cap-pos-ink);
   --color-pos-soft: var(--cap-pos-soft);
@@ -95,11 +121,13 @@
   --color-cat-orange: var(--cap-cat-orange);
   --color-cat-red: var(--cap-cat-red);
 
+  /* Font families: next/font/local defines the variables (src/app/fonts.ts). */
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+
   /* shadcn names, kept for src/components/ui and third-party styles. */
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -139,44 +167,56 @@
 }
 
 :root {
-  /* Text. */
-  --cap-text-1: oklch(14.5% 0 0); /* neutral-950 */
-  --cap-text-ink: oklch(20.5% 0 0); /* neutral-900 */
-  --cap-text-strong: oklch(37.1% 0 0); /* neutral-700 */
-  --cap-text-2: oklch(43.9% 0 0); /* neutral-600 */
-  --cap-text-muted: oklch(55.6% 0 0); /* neutral-500 */
-  --cap-text-3: oklch(70.8% 0 0); /* neutral-400 */
-  --cap-text-4: oklch(87% 0 0); /* neutral-300 */
+  /* Text: carvão (charcoal) to sapwood. */
+  --cap-text-1: #1f1a17;
+  --cap-text-ink: #28221d;
+  --cap-text-strong: #42382f;
+  --cap-text-2: #4e4237;
+  --cap-text-muted: #66584a;
+  --cap-text-3: #9c8d7a;
+  --cap-text-4: #cfc1a8;
 
   /* Fills, strongest first. */
-  --cap-fill-1: oklch(87% 0 0); /* neutral-300 */
-  --cap-fill-2: oklch(92.2% 0 0); /* neutral-200 */
-  --cap-fill-3: oklch(97% 0 0); /* neutral-100 */
-  --cap-fill-4: oklch(98.5% 0 0); /* neutral-50 */
+  --cap-fill-1: #ddd0b8;
+  --cap-fill-2: #e6dcc8;
+  --cap-fill-3: #efe7d8;
+  --cap-fill-4: #f6f0e4;
 
   /* Strokes: 1 for inputs, buttons and overlays; 2 for small controls
      (segmented, kbd, badge); 3 for panels and table rows. */
-  --cap-stroke-1: oklch(87% 0 0); /* neutral-300 */
-  --cap-stroke-2: oklch(92.2% 0 0); /* neutral-200 */
-  --cap-stroke-3: oklch(92.2% 0 0); /* neutral-200 */
+  --cap-stroke-1: #ddd0b8;
+  --cap-stroke-2: #e6dcc8;
+  --cap-stroke-3: #eee6d6;
 
   /* Surfaces. */
-  --cap-bg-editor: #fff;
-  --cap-bg-chrome: oklch(98.5% 0 0); /* neutral-50 */
-  --cap-scrim: #000;
-  --cap-backdrop: oklch(14.5% 0 0); /* neutral-950 */
+  --cap-bg-editor: #fbf8f2;
+  --cap-bg-chrome: #eee5d3; /* alburno (sapwood) */
+  --cap-bg-panel: #fff;
+  --cap-nav-on: #e0d3ba;
+  --cap-scrim: #1f1a17;
+  --cap-backdrop: #1f1a17;
   --cap-on-accent: #fff;
 
-  /* Tones. */
-  --cap-pos: oklch(50.8% 0.118 165.612); /* emerald-700 */
-  --cap-pos-ink: oklch(43.2% 0.095 166.913); /* emerald-800 */
-  --cap-pos-soft: oklch(90.5% 0.093 164.15); /* emerald-200 */
-  --cap-pos-wash: oklch(97.9% 0.021 166.113); /* emerald-50 */
-  --cap-neg: oklch(57.7% 0.245 27.325); /* red-600 */
-  --cap-neg-solid: oklch(63.7% 0.237 25.331); /* red-500 */
-  --cap-neg-ink: oklch(44.4% 0.177 26.899); /* red-800 */
-  --cap-neg-soft: oklch(88.5% 0.062 18.334); /* red-200 */
-  --cap-neg-wash: oklch(97.1% 0.013 17.38); /* red-50 */
+  /* Brand. */
+  --cap-brand: #5b2e1f; /* cerne (heartwood) */
+  --cap-on-brand: var(--cap-bg-editor);
+  --cap-indicator: var(--cap-brand);
+  --cap-resin: #c4862b;
+  --cap-resin-wash: #f7ebd3;
+  --cap-resin-line: #d9a75a;
+  --cap-resin-ink: #6e4510;
+  --cap-wordmark: #2a1a12;
+
+  /* Tones: musgo (moss) in, brasa (ember) out. */
+  --cap-pos: #3d5a36;
+  --cap-pos-ink: #2c4327;
+  --cap-pos-soft: #c9d6c0;
+  --cap-pos-wash: #eef3ea;
+  --cap-neg: #a63a26;
+  --cap-neg-solid: #bf4a32;
+  --cap-neg-ink: #7a2a1b;
+  --cap-neg-soft: #eac5bb;
+  --cap-neg-wash: #f9ece8;
   --cap-warn: oklch(66.6% 0.179 58.318); /* amber-600 */
   --cap-warn-strong: oklch(55.5% 0.163 48.998); /* amber-700 */
   --cap-warn-solid: oklch(76.9% 0.188 70.08); /* amber-500 */
@@ -197,41 +237,41 @@
   --cap-cat-red: #dc2626;
 
   /* Charts (Recharts / SVG attributes take var() directly). */
-  --cap-chart-grid: #f0f0f0;
-  --cap-chart-axis: #e5e5e5;
-  --cap-chart-muted: #a3a3a3; /* ticks, secondary lines, sankey links */
-  --cap-chart-ink: #171717; /* primary line / area stroke */
-  --cap-chart-bar: #262626; /* single-series bars, sankey nodes */
-  --cap-chart-label: #404040;
-  --cap-chart-soft: #d4d4d4; /* projections, ideal pace */
-  --cap-chart-area: #e5e5e5;
-  --cap-chart-accent: #0f766e;
-  --cap-chart-accent-soft: #ccfbf1;
+  --cap-chart-grid: #eee6d6;
+  --cap-chart-axis: #e6dcc8;
+  --cap-chart-muted: #9c8d7a; /* ticks, secondary lines, sankey links */
+  --cap-chart-ink: #1f1a17; /* primary line / area stroke */
+  --cap-chart-bar: #2e2620; /* single-series bars, sankey nodes */
+  --cap-chart-label: #4e4237;
+  --cap-chart-soft: #d6c9b2; /* projections, ideal pace */
+  --cap-chart-area: #e6dcc8;
+  --cap-chart-accent: #3d5a36;
+  --cap-chart-accent-soft: #dce6d5;
   --cap-chart-warn: #b45309; /* reference lines (Meta, Orçado) */
-  --cap-chart-1: #171717;
-  --cap-chart-2: #525252;
-  --cap-chart-3: #737373;
-  --cap-chart-4: #a3a3a3;
-  --cap-chart-5: #0f766e;
+  --cap-chart-1: #1f1a17;
+  --cap-chart-2: #5a4d41;
+  --cap-chart-3: #7d6e5d;
+  --cap-chart-4: #a99a85;
+  --cap-chart-5: #3d5a36;
   --cap-chart-6: #b45309;
   --cap-chart-7: #1d4ed8;
   --cap-chart-8: #be123c;
   --cap-chart-9: #7c3aed;
-  --cap-chart-10: #d4d4d4;
+  --cap-chart-10: #d6c9b2;
   /* Heatmap cells mix --cap-heat with transparent by intensity. */
-  --cap-heat: #171717;
+  --cap-heat: #1f1a17;
   --cap-heat-over: #fecaca;
 
-  /* shadcn tokens on top of the Capital ones. */
+  /* shadcn tokens on top of the Cerne ones. */
   --radius: 0.625rem;
   --background: var(--cap-bg-editor);
   --foreground: var(--cap-text-1);
-  --card: var(--cap-bg-editor);
+  --card: var(--cap-bg-panel);
   --card-foreground: var(--cap-text-1);
-  --popover: var(--cap-bg-editor);
+  --popover: var(--cap-bg-panel);
   --popover-foreground: var(--cap-text-1);
-  --primary: var(--cap-text-ink);
-  --primary-foreground: var(--cap-bg-chrome);
+  --primary: var(--cap-brand);
+  --primary-foreground: var(--cap-on-brand);
   --secondary: var(--cap-fill-3);
   --secondary-foreground: var(--cap-text-ink);
   --muted: var(--cap-fill-3);
@@ -249,47 +289,58 @@
   --chart-5: oklch(0.769 0.188 70.08);
   --sidebar: var(--cap-bg-chrome);
   --sidebar-foreground: var(--cap-text-1);
-  --sidebar-primary: var(--cap-text-ink);
-  --sidebar-primary-foreground: var(--cap-bg-chrome);
-  --sidebar-accent: var(--cap-fill-3);
+  --sidebar-primary: var(--cap-brand);
+  --sidebar-primary-foreground: var(--cap-on-brand);
+  --sidebar-accent: var(--cap-nav-on);
   --sidebar-accent-foreground: var(--cap-text-ink);
   --sidebar-border: var(--cap-stroke-2);
   --sidebar-ring: var(--cap-text-3);
 }
 
 .dark {
-  --cap-text-1: oklch(98.5% 0 0);
-  --cap-text-ink: oklch(97% 0 0);
-  --cap-text-strong: oklch(87% 0 0);
-  --cap-text-2: oklch(70.8% 0 0);
-  --cap-text-muted: oklch(62% 0 0);
-  --cap-text-3: oklch(55.6% 0 0);
-  --cap-text-4: oklch(43.9% 0 0);
+  --cap-text-1: #f2ebdd;
+  --cap-text-ink: #f0e8da;
+  --cap-text-strong: #e3d9c8;
+  --cap-text-2: #cdbfa9;
+  --cap-text-muted: #a99a85;
+  --cap-text-3: #8b7d6a;
+  --cap-text-4: #6b5f51;
 
-  --cap-fill-1: oklch(100% 0 0 / 18%);
-  --cap-fill-2: oklch(100% 0 0 / 12%);
-  --cap-fill-3: oklch(100% 0 0 / 7%);
-  --cap-fill-4: oklch(100% 0 0 / 4%);
+  --cap-fill-1: rgb(242 235 221 / 18%);
+  --cap-fill-2: rgb(242 235 221 / 12%);
+  --cap-fill-3: rgb(242 235 221 / 7%);
+  --cap-fill-4: rgb(242 235 221 / 4%);
 
-  --cap-stroke-1: oklch(100% 0 0 / 15%);
-  --cap-stroke-2: oklch(100% 0 0 / 10%);
-  --cap-stroke-3: oklch(100% 0 0 / 8%);
+  --cap-stroke-1: rgb(242 235 221 / 15%);
+  --cap-stroke-2: rgb(242 235 221 / 10%);
+  --cap-stroke-3: rgb(242 235 221 / 7%);
 
-  --cap-bg-editor: oklch(14.5% 0 0);
-  --cap-bg-chrome: oklch(20.5% 0 0);
+  --cap-bg-editor: #1f1a17; /* carvão */
+  --cap-bg-chrome: #171310;
+  --cap-bg-panel: #26201c;
+  --cap-nav-on: #2e2621;
   --cap-scrim: #000;
   --cap-backdrop: #000;
   --cap-on-accent: #fff;
 
-  --cap-pos: oklch(76.5% 0.177 163.223); /* emerald-400 */
-  --cap-pos-ink: oklch(90.5% 0.093 164.15); /* emerald-200 */
-  --cap-pos-soft: oklch(69.6% 0.17 162.48 / 35%);
-  --cap-pos-wash: oklch(69.6% 0.17 162.48 / 10%);
-  --cap-neg: oklch(70.4% 0.191 22.216); /* red-400 */
-  --cap-neg-solid: oklch(63.7% 0.237 25.331); /* red-500 */
-  --cap-neg-ink: oklch(88.5% 0.062 18.334); /* red-200 */
-  --cap-neg-soft: oklch(63.7% 0.237 25.331 / 35%);
-  --cap-neg-wash: oklch(63.7% 0.237 25.331 / 10%);
+  --cap-brand: #f2ebdd;
+  --cap-on-brand: var(--cap-bg-editor);
+  --cap-indicator: var(--cap-resin);
+  --cap-resin: #e0a04a;
+  --cap-resin-wash: #2b2216;
+  --cap-resin-line: #8a6630;
+  --cap-resin-ink: #f0c27f;
+  --cap-wordmark: var(--cap-text-1);
+
+  --cap-pos: #9cc08c;
+  --cap-pos-ink: #cfe2c5;
+  --cap-pos-soft: rgb(156 192 140 / 35%);
+  --cap-pos-wash: rgb(156 192 140 / 10%);
+  --cap-neg: #e68a72;
+  --cap-neg-solid: #d4664d;
+  --cap-neg-ink: #f5c9bc;
+  --cap-neg-soft: rgb(230 138 114 / 35%);
+  --cap-neg-wash: rgb(230 138 114 / 10%);
   --cap-warn: oklch(82.8% 0.189 84.429); /* amber-400 */
   --cap-warn-strong: oklch(87.9% 0.169 91.605); /* amber-300 */
   --cap-warn-solid: oklch(76.9% 0.188 70.08); /* amber-500 */
@@ -307,28 +358,28 @@
   --cap-cat-orange: #fb923c;
   --cap-cat-red: #f87171;
 
-  --cap-chart-grid: oklch(100% 0 0 / 7%);
-  --cap-chart-axis: oklch(100% 0 0 / 14%);
-  --cap-chart-muted: #737373;
-  --cap-chart-ink: #e5e5e5;
-  --cap-chart-bar: #d4d4d4;
-  --cap-chart-label: #d4d4d4;
-  --cap-chart-soft: #404040;
-  --cap-chart-area: oklch(100% 0 0 / 14%);
-  --cap-chart-accent: #2dd4bf;
-  --cap-chart-accent-soft: #134e4a;
+  --cap-chart-grid: rgb(242 235 221 / 7%);
+  --cap-chart-axis: rgb(242 235 221 / 14%);
+  --cap-chart-muted: #7d6f5e;
+  --cap-chart-ink: #e8dfcf;
+  --cap-chart-bar: #d6cbb8;
+  --cap-chart-label: #cdbfa9;
+  --cap-chart-soft: #463c33;
+  --cap-chart-area: rgb(242 235 221 / 14%);
+  --cap-chart-accent: #9cc08c;
+  --cap-chart-accent-soft: #2f3b2a;
   --cap-chart-warn: #fbbf24;
-  --cap-chart-1: #e5e5e5;
-  --cap-chart-2: #a3a3a3;
-  --cap-chart-3: #8a8a8a;
-  --cap-chart-4: #5c5c5c;
-  --cap-chart-5: #2dd4bf;
+  --cap-chart-1: #e8dfcf;
+  --cap-chart-2: #b3a592;
+  --cap-chart-3: #918370;
+  --cap-chart-4: #64584b;
+  --cap-chart-5: #9cc08c;
   --cap-chart-6: #fbbf24;
   --cap-chart-7: #60a5fa;
   --cap-chart-8: #fb7185;
   --cap-chart-9: #a78bfa;
-  --cap-chart-10: #404040;
-  --cap-heat: #fafafa;
+  --cap-chart-10: #463c33;
+  --cap-heat: #f2ebdd;
   --cap-heat-over: #7f1d1d;
 
   --chart-1: oklch(0.488 0.243 264.376);

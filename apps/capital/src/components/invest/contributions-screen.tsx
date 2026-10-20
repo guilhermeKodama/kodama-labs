@@ -248,7 +248,7 @@ export function ContributionsScreen() {
             className={cn(
               "inline-flex h-(--cap-row-h) items-center border-b-2 px-2 text-control",
               tab === key
-                ? "border-fg-1 font-medium text-fg-1"
+                ? "border-indicator font-medium text-fg-1"
                 : "border-transparent text-fg-3 hover:text-fg-strong",
             )}
           >

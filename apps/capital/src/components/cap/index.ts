@@ -1,5 +1,5 @@
 /**
- * Capital UI primitives, ported from the mockup (sizes and copy there).
+ * Cerne UI primitives, ported from the mockup (sizes and copy there).
  * Colors come only from the theme tokens in src/app/globals.css.
  */
 export { Badge } from "./badge";
@@ -13,6 +13,7 @@ export { EmptyRow } from "./empty-row";
 export { Field } from "./field";
 export { Kbd } from "./kbd";
 export { Kpi, KpiStrip, type KpiTone } from "./kpi";
+export { Mark, Wordmark } from "./logo";
 export { Menu, MenuCheckItem, MenuItem, MenuLabel, MenuSep } from "./menu";
 export { Panel } from "./panel";
 export { Pill } from "./pill";

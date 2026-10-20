@@ -3,7 +3,7 @@
 import { useState, useSyncExternalStore, type FormEvent } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useLocale, useTranslations } from "next-intl";
-import { Btn, Field, TextInput } from "@/components/cap";
+import { Btn, Field, TextInput, Wordmark } from "@/components/cap";
 import { Link, useRouter } from "@/i18n/navigation";
 import { ApiError, apiPost } from "@/lib/api/client";
 import { useAppMutation, useErrorMessage } from "@/lib/api/use-app-mutation";
@@ -104,15 +104,10 @@ export function CredentialsForm({ mode }: { mode: AuthMode }) {
 
   return (
     <main className="flex min-h-dvh items-start justify-center bg-chrome px-4 pt-[12vh] pb-10 text-fg-1">
-      <form noValidate onSubmit={onSubmit} aria-busy={pending} className="flex w-full max-w-[360px] flex-col gap-3.5 rounded-[12px] border border-stroke-1 bg-editor p-[18px]">
-        <div className="flex items-center gap-2">
-          <span aria-hidden className="inline-flex size-6 shrink-0 items-center justify-center rounded-[6px] bg-fg-1 text-body-sm font-bold text-editor">
-            C
-          </span>
-          <span className="text-body font-semibold">Capital</span>
-        </div>
+      <form noValidate onSubmit={onSubmit} aria-busy={pending} className="flex w-full max-w-[360px] flex-col gap-3.5 rounded-[12px] border border-stroke-1 bg-panel p-[18px]">
+        <Wordmark className="self-start" markClassName="size-7" />
         <div className="flex flex-col gap-[3px]">
-          <h1 className="text-title font-semibold">{t(`${mode}.title`)}</h1>
+          <h1 className="font-title text-title font-medium">{t(`${mode}.title`)}</h1>
           <p className="text-body-sm text-fg-3">{t(`${mode}.description`)}</p>
         </div>
         {mode === "signup" ? (

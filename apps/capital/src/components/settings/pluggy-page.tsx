@@ -203,7 +203,7 @@ export function PluggyPage() {
         const draft = drafts[item.id] ?? { label: item.label, itemId: item.itemId, entityKind: item.entityKind };
         const dirty = draft.label !== item.label || draft.itemId !== item.itemId || draft.entityKind !== item.entityKind;
         return (
-          <section key={item.id} className="flex flex-col gap-3 rounded-[8px] border border-stroke-2 p-3">
+          <section key={item.id} className="flex flex-col gap-3 rounded-[8px] border border-stroke-2 bg-panel p-3">
             <div className="flex flex-wrap items-baseline justify-between gap-2">
               <h2 className="text-body font-medium">{item.label}</h2>
               <span className="text-body-sm text-fg-3">{t(`status.${item.status}`)}</span>
@@ -315,7 +315,7 @@ export function PluggyPage() {
           const summary = reviewText(draft);
           const entryId = links[review.id] ?? "";
           return (
-            <div key={review.id} className="flex flex-col gap-2 rounded-[8px] border border-stroke-2 p-3">
+            <div key={review.id} className="flex flex-col gap-2 rounded-[8px] border border-stroke-2 bg-panel p-3">
               <div className="flex flex-wrap items-baseline justify-between gap-2">
                 <span className="text-body-sm font-medium">{review.kind === "conflict" || review.kind === "low_confidence" || review.kind === "position" ? t(`reviewKind.${review.kind}`) : review.kind}</span>
                 <span className="text-caption text-fg-3">{fmt.dateTime(review.createdAt)}</span>

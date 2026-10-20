@@ -37,7 +37,7 @@ export function Page({
               {crumb} /{" "}
             </span>
           ))}
-          <span className="font-medium text-fg-1">{current}</span>
+          <span className="font-title text-heading font-medium text-fg-1">{current}</span>
         </span>
         <div className="ml-auto flex items-center gap-1.5">{actions}</div>
       </header>
