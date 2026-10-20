@@ -32,7 +32,7 @@ export const flow = base.extend<FlowFixtures>({
 
   recorder: [
     async ({ page, context, baseURL, proofOptions }, run, testInfo) => {
-      const recorder = new Recorder(page, proofOptions, isRecording());
+      const recorder = new Recorder(page, proofOptions, isRecording(), testInfo.outputPath("shots"));
       await recorder.guard(context, baseURL);
       await recorder.start(testInfo.outputPath("clip.webm"));
 

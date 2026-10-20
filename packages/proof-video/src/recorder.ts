@@ -1,3 +1,5 @@
+import fs from "node:fs";
+import path from "node:path";
 import type { BrowserContext, Locator, Page } from "@playwright/test";
 import type { FlowPayload, ProofEvent, ProofOptions } from "./types";
 
@@ -77,6 +79,8 @@ export class Recorder {
     private readonly page: Page,
     private readonly options: ProofOptions,
     readonly recording: boolean,
+    /** Where the full-resolution screenshots of the checks go, when recording. */
+    private readonly shotDir: string | null = null,
   ) {}
 
   get failures(): ProofEvent[] {
@@ -217,12 +221,35 @@ export class Recorder {
       detail = summary(error) || "The check failed";
     }
     const passed = detail === undefined;
-    this.events.push({ kind: "check", text: claim, atMs: this.at(), passed, detail });
+    const shot = await this.screenshot();
+    this.events.push({ kind: "check", text: claim, atMs: this.at(), passed, detail, shot });
     await this.show(
       banner(`${passed ? "✓" : "✗"} ${claim}`, passed ? "#0a7d33" : "#b42318", this.options.captions),
       passed ? PASS_HOLD_MS : FAIL_HOLD_MS,
       false,
     );
+  }
+
+  /**
+   * The page as the check left it, at the context's full pixel density and
+   * without the banner: the screenshot a reviewer zooms into, where a frame
+   * of the compressed video would blur. Only when recording.
+   */
+  private async screenshot(): Promise<string | undefined> {
+    if (!this.recording || !this.shotDir || this.page.isClosed()) return undefined;
+    fs.mkdirSync(this.shotDir, { recursive: true });
+    const file = path.join(this.shotDir, `${this.events.filter((event) => event.kind === "check").length + 1}.png`);
+    // The caption would cover the product, and the pointer too: the check banner replaces the caption next anyway.
+    await this.clearCaption();
+    await this.page.screencast.hideActions().catch(() => undefined);
+    try {
+      await this.page.screenshot({ path: file, type: "png" });
+      return file;
+    } catch {
+      return undefined;
+    } finally {
+      await this.showActions().catch(() => undefined);
+    }
   }
 
   /** Something went wrong that no check was watching for. */

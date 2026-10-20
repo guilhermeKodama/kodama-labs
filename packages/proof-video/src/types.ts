@@ -26,6 +26,12 @@ export interface ProofEvent {
   passed?: boolean;
   /** Why a check failed, or what the problem was. */
   detail?: string;
+  /**
+   * Checks only, when recording: a full-resolution PNG of the page taken
+   * right after the assertion (an absolute path; the reporter copies it
+   * to `screenshots/`).
+   */
+  shot?: string;
 }
 
 /** What one flow hands to the reporter. */

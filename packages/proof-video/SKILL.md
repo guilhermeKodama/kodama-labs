@@ -35,7 +35,7 @@ Find the app's `proof/` folder and its package scripts (`proof`, `proof:record`,
 
    That records every flow in `flows/`. Pass file paths to record only some. A one-off proof records with `proof:once`.
 
-5. **Open the frames before you hand the video over.** The run writes one frame per check into `proof/out/frames/`, taken from the finished video. Read every one. This step exists because a run can pass while the video shows the wrong thing. Reject the recording if a frame shows:
+5. **Open the frames before you hand the video over.** The run writes one frame per check into `proof/out/frames/`, taken from the finished video, and a full-resolution PNG of the page at the same moment into `proof/out/screenshots/` (at the context's pixel density, 2× by default, without the caption). Read every frame; send the screenshots when the reviewer needs to look closely. This step exists because a run can pass while the video shows the wrong thing. Reject the recording if a frame shows:
    - a blank page, a spinner, a sign-in page or a 404 where the product should be;
    - the thing being checked hidden, off screen or covered;
    - an error message nobody asked for;
