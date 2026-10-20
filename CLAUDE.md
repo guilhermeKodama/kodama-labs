@@ -1,5 +1,7 @@
 # kodama-labs monorepo
 
+Rules shared with every other agent, starting with the proof video each pull request needs: @AGENTS.md
+
 ## Local secrets for a new worktree — READ THIS BEFORE RUNNING ANY APP
 
 Every app's `.env` is gitignored and **not present in a fresh worktree checkout**.

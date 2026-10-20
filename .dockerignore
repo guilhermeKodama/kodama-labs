@@ -10,3 +10,4 @@ apps/*/cloudflared/config.yml
 .turbo
 **/.turbo
 infrastructure/postgres/backups
+**/proof/out
