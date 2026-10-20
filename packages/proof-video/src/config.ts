@@ -26,6 +26,12 @@ export interface ProofConfig {
   locale?: string;
   timezoneId?: string;
   viewport?: { width: number; height: number };
+  /**
+   * Pixel density of the page, which sets the resolution of the screenshot
+   * taken at each check (2 = a retina screenshot, twice the viewport). The
+   * video keeps the viewport size. Default: 2.
+   */
+  deviceScaleFactor?: number;
   proof?: Partial<ProofOptions>;
   /** Shown in the manifest and the PR text, e.g. which database was used. */
   meta?: Record<string, string>;
@@ -76,6 +82,7 @@ export function defineProofConfig(config: ProofConfig): PlaywrightTestConfig<Pro
     use: {
       baseURL: config.baseURL,
       viewport: reporterOptions.size,
+      deviceScaleFactor: config.deviceScaleFactor ?? 2,
       storageState: config.storageState,
       locale: config.locale,
       timezoneId: config.timezoneId,

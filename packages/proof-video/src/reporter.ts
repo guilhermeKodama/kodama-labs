@@ -31,6 +31,8 @@ export interface ManifestEvent extends ProofEvent {
   videoMs: number;
   /** Checks and problems only: the frame taken from the video at that moment. */
   frame?: string;
+  /** Checks only: the full-resolution screenshot of the page at that moment. */
+  screenshot?: string;
 }
 
 export interface Manifest {
@@ -273,7 +275,8 @@ export default class ProofReporter implements Reporter {
     const { outDir, size } = this.options;
     const maxBytes = this.options.maxVideoBytes ?? DEFAULT_MAX_BYTES;
     const framesDir = path.join(outDir, "frames");
-    for (const stale of ["proof.mp4", "FAILED-proof.mp4", "proof.json", "proof.md", "frames"]) {
+    const screenshotsDir = path.join(outDir, "screenshots");
+    for (const stale of ["proof.mp4", "FAILED-proof.mp4", "proof.json", "proof.md", "frames", "screenshots"]) {
       fs.rmSync(path.join(outDir, stale), { recursive: true, force: true });
     }
     fs.mkdirSync(framesDir, { recursive: true });
@@ -351,6 +354,14 @@ export default class ProofReporter implements Reporter {
           const frame = `${String(index).padStart(2, "0")}-${clock(at).replace(":", "m")}s-${event.passed === false || event.kind === "problem" ? "FAILED-" : ""}${slug(event.text)}.jpg`;
           await run("ffmpeg", ["-y", "-v", "error", "-ss", (at / 1000).toFixed(2), "-i", target, "-frames:v", "1", "-q:v", "3", path.join(framesDir, frame)]);
           event.frame = `frames/${frame}`;
+          if (event.shot && fs.existsSync(event.shot)) {
+            const screenshot = frame.replace(/\.jpg$/, ".png");
+            fs.mkdirSync(screenshotsDir, { recursive: true });
+            fs.copyFileSync(event.shot, path.join(screenshotsDir, screenshot));
+            event.screenshot = `screenshots/${screenshot}`;
+          }
+          // The manifest travels with the PR text: no absolute paths of this machine.
+          delete event.shot;
         }
       }
     }
@@ -366,6 +377,7 @@ export default class ProofReporter implements Reporter {
         ? [`  video     ${where}/${manifest.video.file} (${(manifest.video.bytes / 1024 / 1024).toFixed(1)} MB, ${length(manifest.video.durationMs)})`]
         : ["  video     none: no flow produced a clip"]),
       `  frames    ${where}/frames/  <- open these before attaching the video`,
+      `  shots     ${where}/screenshots/  full-resolution PNG of the page at each check`,
       `  PR text   ${where}/proof.md`,
       `  manifest  ${where}/proof.json`,
       ...(manifest.video?.overLimit ? ["  The video is over the upload limit: record fewer flows at a time."] : []),
