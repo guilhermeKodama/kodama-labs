@@ -21,7 +21,9 @@
     "required": "Entre para continuar.",
     "session_invalid": "Sua sessão expirou. Entre de novo.",
     "invalid_credentials": "E-mail ou senha incorretos.",
-    "email_taken": "Já existe uma conta com esse e-mail."
+    "email_taken": "Já existe uma conta com esse e-mail.",
+    "signup_closed": "O Cerne ainda não está aberto para novas contas.",
+    "too_many_attempts": "Muitas tentativas erradas. Tente de novo em {minutes} minutos."
   },
   "user": {
     "not_found": "Usuário não encontrado.",

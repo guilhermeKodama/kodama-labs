@@ -11,6 +11,9 @@
 
 export const BRAND = "Cerne";
 
+/** Where people ask for access and write to the team (the homepage, the closed sign-up page). */
+export const CONTACT_EMAIL = "contato@kodamavending.com.br";
+
 export interface Ring {
   cx: number;
   cy: number;

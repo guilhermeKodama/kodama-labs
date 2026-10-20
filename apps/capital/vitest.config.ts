@@ -20,6 +20,11 @@ const testBlobDir = path.join(os.tmpdir(), 'capital-vitest-blob');
 fs.mkdirSync(testBlobDir, { recursive: true });
 process.env.CAPITAL_BLOB_DIR = testBlobDir;
 
+// Sign-up is closed by default (SIGNUP_OPEN). The route tests create their
+// users through it, so tests run with it open; auth-closed.test.ts checks
+// the closed default.
+process.env.SIGNUP_OPEN = 'true';
+
 export default defineConfig({
   test: {
     globals: true,

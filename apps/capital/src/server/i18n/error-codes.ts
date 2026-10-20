@@ -25,6 +25,8 @@ export const ERROR_CODES = {
   "auth.session_invalid": "Your session expired or is invalid; log in again",
   "auth.invalid_credentials": "Invalid email or password",
   "auth.email_taken": "An account with this email already exists",
+  "auth.signup_closed": "Sign-up is closed: Cerne is not open yet",
+  "auth.too_many_attempts": "Too many failed sign-in attempts; try again in {minutes} minutes",
 
   // User and preferences
   "user.not_found": "User not found",

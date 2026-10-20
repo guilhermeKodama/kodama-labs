@@ -262,7 +262,7 @@ print_build() {
     echo "    smoke GET http://$(svc_host_for "$unit"):${UNIT_PORT[$unit]}/api/health expects db=${UNIT_SMOKE_DB[$unit]}"
   fi
   if [[ "$unit" == "capital" ]]; then
-    echo "    smoke GET https://capital.kodamalabs.ai/login expects 302 to cloudflareaccess.com"
+    echo "    smoke GET https://capital.kodamalabs.ai/login expects 200 with the sign-in form, /transactions a redirect to /login"
     echo "    smoke POST tools/list on capital-web:3000/mcp (bearer token is read inside the container and not logged)"
   fi
   if [[ "$unit" == "monitoring" ]]; then
@@ -580,13 +580,22 @@ restore_cloudflared_ingress() {
   recreate_services cloudflared || echo "cloudflared recreate after ingress restore failed"
 }
 
+# Capital is on the internet without Cloudflare Access: its own sign-in is
+# the protection. The sign-in page must answer with its form, and a page of
+# the app without a session must send the visitor to it.
 public_login_ok() {
-  local hdr code loc
+  local body code hdr loc
+  body="$(mktemp)"
   hdr="$(mktemp)"
-  code="$(curl -sS --max-time 20 -o /dev/null -D "$hdr" -w '%{http_code}' "https://capital.kodamalabs.ai/login" || true)"
+  code="$(curl -sS --max-time 20 -o "$body" -w '%{http_code}' "https://capital.kodamalabs.ai/login" || true)"
+  if [[ "$code" != "200" ]] || ! grep -q 'id="auth-password"' "$body"; then
+    rm -f "$body" "$hdr"
+    return 1
+  fi
+  code="$(curl -sS --max-time 20 -o /dev/null -D "$hdr" -w '%{http_code}' "https://capital.kodamalabs.ai/transactions" || true)"
   loc="$(awk 'tolower($1)=="location:" { print $2 }' "$hdr" | tr -d '\r' | head -n 1)"
-  rm -f "$hdr"
-  [[ "$code" == "302" && "$loc" == *cloudflareaccess.com* ]]
+  rm -f "$body" "$hdr"
+  [[ "$code" =~ ^30[1278]$ && "$loc" == */login* ]]
 }
 
 mcp_ok() {
