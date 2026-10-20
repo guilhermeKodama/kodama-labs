@@ -6,7 +6,7 @@ import { useTranslations } from "next-intl";
 import { Dialog as DialogPrimitive } from "radix-ui";
 import { Briefcase, PiggyBank, Plus, Search, Target } from "lucide-react";
 import { Kbd } from "@/components/cap";
-import { BACKDROP } from "@/components/cap/styles";
+import { BACKDROP, NAV_OFF, NAV_ON } from "@/components/cap/styles";
 import { LayoutIcon } from "@/components/ledger/toolbar/layout-icon";
 import { DeleteViewButton } from "@/components/ledger/toolbar/delete-view";
 import { RenameInput, useViewMenu, ViewMenu, ViewMenuTarget } from "@/components/ledger/toolbar/view-menu";
@@ -100,8 +100,8 @@ export function SidebarTrigger() {
 /** 28px row, radius 6, 12.5px; the active one on fill.secondary in the primary ink. */
 const ITEM = "flex h-(--cap-menu-row-h) shrink-0 items-center gap-2 rounded-[6px] px-2 text-control outline-none focus-visible:ring-2 focus-visible:ring-fg-3/40";
 const RAIL_ITEM = "flex size-8 shrink-0 items-center justify-center rounded-[6px] text-control outline-none focus-visible:ring-2 focus-visible:ring-fg-3/40";
-const ON = "bg-fill-2 font-medium text-fg-1";
-const OFF = "text-fg-2 hover:bg-fill-3";
+const ON = NAV_ON;
+const OFF = NAV_OFF;
 
 /**
  * A favorite view in the sidebar: layout icon and name, "×" to delete it
@@ -216,6 +216,7 @@ function SidebarContent({ rail, onNavigate }: { rail: boolean; onNavigate?: () =
       </Link>
     ) : (
       <Link href={href} aria-current={on ? "page" : undefined} onClick={onNavigate} className={cn(ITEM, on ? ON : OFF)}>
+        {icon}
         {label}
       </Link>
     );
@@ -228,7 +229,7 @@ function SidebarContent({ rail, onNavigate }: { rail: boolean; onNavigate?: () =
   };
   const accountName = firstName(user?.name, user?.email);
   const avatar = (
-    <span aria-hidden className="inline-flex size-6 shrink-0 items-center justify-center rounded-full bg-fill-2 text-micro font-semibold text-fg-1">
+    <span aria-hidden className="inline-flex size-6 shrink-0 items-center justify-center rounded-full bg-nav-on text-micro font-semibold text-fg-1">
       {initials(user?.name, user?.email)}
     </span>
   );
@@ -247,7 +248,7 @@ function SidebarContent({ rail, onNavigate }: { rail: boolean; onNavigate?: () =
           onClick={openCommand}
           title={t("railSearch", { shortcut: searchLabel })}
           aria-label={t("search")}
-          className={cn(RAIL_ITEM, "mb-1 text-fg-3 hover:bg-fill-3")}
+          className={cn(RAIL_ITEM, "mb-1 text-fg-3 hover:bg-nav-on/60")}
         >
           <Search className="size-3.5" />
         </button>
@@ -255,7 +256,7 @@ function SidebarContent({ rail, onNavigate }: { rail: boolean; onNavigate?: () =
         <button
           type="button"
           onClick={openCommand}
-          className="mb-1 flex h-7 shrink-0 items-center gap-1.5 rounded-[6px] border border-stroke-2 px-2 text-button text-fg-3 outline-none hover:text-fg-2 focus-visible:ring-2 focus-visible:ring-fg-3/40"
+          className="mb-1 flex h-7 shrink-0 items-center gap-1.5 rounded-[6px] border border-stroke-2 bg-editor px-2 text-button text-fg-3 outline-none hover:text-fg-2 focus-visible:ring-2 focus-visible:ring-fg-3/40"
         >
           <span className="flex-1 truncate text-left">{t("search")}</span>
           <Kbd>{searchLabel}</Kbd>
@@ -271,7 +272,7 @@ function SidebarContent({ rail, onNavigate }: { rail: boolean; onNavigate?: () =
         onClick={() => newView.mutate()}
         title={rail ? t("newView") : undefined}
         aria-label={rail ? t("newView") : undefined}
-        className={cn(rail ? RAIL_ITEM : ITEM, "text-left text-fg-3 hover:bg-fill-3 disabled:cursor-progress")}
+        className={cn(rail ? RAIL_ITEM : ITEM, "text-left text-fg-3 hover:bg-nav-on/60 disabled:cursor-progress")}
       >
         {rail ? (
           <Plus className="size-3.5" />
@@ -302,7 +303,7 @@ function SidebarContent({ rail, onNavigate }: { rail: boolean; onNavigate?: () =
           <UserMenu
             onNavigate={onNavigate}
             trigger={
-              <FooterButton className="w-full gap-2 rounded-[6px] px-1.5 py-2 text-left hover:bg-fill-3 data-[state=open]:bg-fill-3">
+              <FooterButton className="w-full gap-2 rounded-[6px] px-1.5 py-2 text-left hover:bg-nav-on/60 data-[state=open]:bg-nav-on">
                 {avatar}
                 <span className="flex min-w-0 flex-col">
                   <span className="truncate text-body-sm text-fg-1">{accountName}</span>

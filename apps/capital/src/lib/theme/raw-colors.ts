@@ -38,7 +38,8 @@ const FAMILY: Record<string, Family> = {
   accent: "accent",
 };
 
-/** Palette color → token, per utility family. The light values are identical. */
+/** Palette color → token, per utility family: the token that plays the role the
+ * shade played before the tokens existed (the values themselves are the Cerne palette). */
 const TOKENS: Record<Family, Record<string, string>> = {
   text: {
     "neutral-950": "fg-1",

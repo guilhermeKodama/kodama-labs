@@ -88,7 +88,7 @@ export function CommandMenu() {
         <DialogPrimitive.Content
           aria-describedby={undefined}
           style={{ width: mode === "assistant" ? 640 : 560 }}
-          className="fixed top-7 left-1/2 z-50 flex max-w-[94vw] -translate-x-1/2 flex-col overflow-hidden rounded-[12px] border border-stroke-1 bg-editor text-fg-1 shadow-lg outline-none data-[state=open]:animate-in data-[state=open]:fade-in-0"
+          className="fixed top-7 left-1/2 z-50 flex max-w-[94vw] -translate-x-1/2 flex-col overflow-hidden rounded-[12px] border border-stroke-1 bg-panel text-fg-1 shadow-lg outline-none data-[state=open]:animate-in data-[state=open]:fade-in-0"
         >
           <OverlayScope id={overlayId}>
             <CloseOnCommandKey onClose={close} />

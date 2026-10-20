@@ -25,7 +25,7 @@ function ViewTab({ view, on, dirty, onPick, actions }: { view: LedgerView; on: b
   return (
     <ViewMenuTarget
       onContextMenu={editable && !renaming ? menu.onContextMenu : undefined}
-      className={cn("inline-flex h-[38px] shrink-0 items-center gap-0.5 border-b-2", on ? "border-fg-1" : "border-transparent")}
+      className={cn("inline-flex h-[38px] shrink-0 items-center gap-0.5 border-b-2", on ? "border-indicator" : "border-transparent")}
     >
       {renaming ? (
         // The menu is unmounted while renaming, so closing it cannot take the focus back from the field.

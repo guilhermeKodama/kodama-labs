@@ -1,12 +1,12 @@
 /**
  * Rewrites Tailwind palette classes (text-neutral-400, bg-white,
  * border-amber-200, ...) into the theme token utilities from
- * src/app/globals.css, keeping every light value identical. Run it after
- * merging code written before the tokens existed, then review the diff:
- * the mapping is by shade, so a bg-neutral-50 that is a sidebar surface
- * still has to become bg-chrome by hand. Classes with no token of the same
- * light value, and color literals (hex, rgb()) outside ALLOWED_COLOR_LITERALS,
- * are listed for manual work.
+ * src/app/globals.css, by the role each shade played. Run it after merging
+ * code written before the tokens existed, then review the diff: the mapping
+ * is by shade, so a bg-neutral-50 that is a sidebar surface still has to
+ * become bg-chrome by hand. Classes with no token for their shade, and color
+ * literals (hex, rgb()) outside ALLOWED_COLOR_LITERALS, are listed for
+ * manual work.
  *
  *   pnpm exec tsx scripts/codemod-color-tokens.ts [--check] [dir ...]
  *

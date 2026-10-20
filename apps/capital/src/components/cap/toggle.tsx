@@ -29,7 +29,7 @@ export function Toggle({
       disabled={disabled}
       aria-label={ariaLabel}
       className={cn(
-        "inline-flex shrink-0 cursor-pointer items-center rounded-full bg-fill-1 p-0.5 transition-colors outline-none focus-visible:ring-2 focus-visible:ring-fg-3/40 disabled:cursor-not-allowed disabled:opacity-40 data-[state=checked]:bg-fg-1",
+        "inline-flex shrink-0 cursor-pointer items-center rounded-full bg-fill-1 p-0.5 transition-colors outline-none focus-visible:ring-2 focus-visible:ring-fg-3/40 disabled:cursor-not-allowed disabled:opacity-40 data-[state=checked]:bg-brand",
         size === "md" ? "h-4 w-7" : "h-3.5 w-6",
         className,
       )}

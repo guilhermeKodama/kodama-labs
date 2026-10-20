@@ -104,7 +104,7 @@ export function CredentialsForm({ mode }: { mode: AuthMode }) {
 
   return (
     <main className="flex min-h-dvh items-start justify-center bg-chrome px-4 pt-[12vh] pb-10 text-fg-1">
-      <form noValidate onSubmit={onSubmit} aria-busy={pending} className="flex w-full max-w-[360px] flex-col gap-3.5 rounded-[12px] border border-stroke-1 bg-editor p-[18px]">
+      <form noValidate onSubmit={onSubmit} aria-busy={pending} className="flex w-full max-w-[360px] flex-col gap-3.5 rounded-[12px] border border-stroke-1 bg-panel p-[18px]">
         <div className="flex items-center gap-2">
           <span aria-hidden className="inline-flex size-6 shrink-0 items-center justify-center rounded-[6px] bg-fg-1 text-body-sm font-bold text-editor">
             C
@@ -112,7 +112,7 @@ export function CredentialsForm({ mode }: { mode: AuthMode }) {
           <span className="text-body font-semibold">Capital</span>
         </div>
         <div className="flex flex-col gap-[3px]">
-          <h1 className="text-title font-semibold">{t(`${mode}.title`)}</h1>
+          <h1 className="font-title text-title font-medium">{t(`${mode}.title`)}</h1>
           <p className="text-body-sm text-fg-3">{t(`${mode}.description`)}</p>
         </div>
         {mode === "signup" ? (

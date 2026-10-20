@@ -18,7 +18,7 @@ import { cn } from "@/lib/utils";
 import type { LedgerLabels } from "../fields";
 
 const TOOLTIP_STYLE = {
-  contentStyle: { background: "var(--cap-bg-editor)", border: "1px solid var(--cap-stroke-1)", borderRadius: 8, fontSize: textRole("body-sm") },
+  contentStyle: { background: "var(--cap-bg-panel)", border: "1px solid var(--cap-stroke-1)", borderRadius: 8, fontSize: textRole("body-sm") },
   labelStyle: { color: "var(--cap-text-2)" },
 } as const;
 const SHADE = { 1: "bg-fill-1", 2: "bg-fill-2", 3: "bg-fill-3", 4: "bg-fill-4" } as const;

@@ -123,7 +123,7 @@ function YearBody({ data, today, onOpenMonth, actions }: { data: YearOverview; t
         <Kpi label={t("year.kpi.overMonths")} value={<DrillLink draft={totals(totalLabel, ytdRange)}>{String(summary.overBudgetMonths)}</DrillLink>} sub={t("year.kpi.overMonthsSub", { count: summary.budgetedCells })} />
       </KpiStrip>
 
-      <div className="overflow-x-auto rounded-[8px] border border-stroke-3">
+      <div className="overflow-x-auto rounded-[8px] border border-stroke-3 bg-panel">
         <div className="min-w-[860px]">
           <div className={cn(HEAT_COLS, "h-(--cap-row-h) text-label text-fg-3")}>
             <span>{t("year.heatmap.category")}</span>

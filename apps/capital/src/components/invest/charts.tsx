@@ -23,7 +23,7 @@ const TOOLTIP_STYLE = {
   fontSize: textRole("body-sm"),
   borderRadius: 8,
   border: `1px solid var(--cap-stroke-1)`,
-  background: "var(--cap-bg-editor)",
+  background: "var(--cap-bg-panel)",
   color: "var(--cap-text-1)",
 } as const;
 

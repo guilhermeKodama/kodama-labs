@@ -3,6 +3,7 @@
 import { parseAsString, useQueryStates } from "nuqs";
 import { useTranslations } from "next-intl";
 import { Kbd } from "@/components/cap";
+import { NAV_OFF, NAV_ON } from "@/components/cap/styles";
 import { Link, useRouter } from "@/i18n/navigation";
 import { useNames } from "@/lib/api/catalog";
 import { resolveSettingsPage, SETTINGS_SECTIONS, type SettingsPage } from "@/lib/settings/nav";
@@ -55,7 +56,7 @@ export function SettingsScreen() {
                 onClick={() => void setParams({ page: key, id: null })}
                 className={cn(
                   "flex h-(--cap-menu-row-h) shrink-0 items-center whitespace-nowrap rounded-[6px] px-2 text-left text-control outline-none focus-visible:ring-2 focus-visible:ring-fg-3/40",
-                  key === page ? "bg-fill-2/80 font-medium text-fg-1" : "text-fg-2 hover:bg-fill-3",
+                  key === page ? NAV_ON : NAV_OFF,
                 )}
               >
                 {t(`nav.${key}.title`)}
@@ -66,7 +67,7 @@ export function SettingsScreen() {
       </nav>
       <main className="flex min-w-0 flex-col gap-3.5 overflow-y-auto px-4 py-4 md:px-6 md:py-5">
         <div className="flex flex-col gap-[3px]">
-          <h1 className="text-heading font-semibold">{t(`nav.${page}.title`)}</h1>
+          <h1 className="font-title text-heading font-medium">{t(`nav.${page}.title`)}</h1>
           <span className="text-body text-fg-3">{t(`nav.${page}.desc`)}</span>
         </div>
         <SettingsContent key={page} page={page} />

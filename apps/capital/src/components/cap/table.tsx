@@ -58,7 +58,7 @@ export function Table({
             <th
               key={column}
               scope="col"
-              className={cn("px-3 text-label font-normal whitespace-nowrap text-fg-3", align(column), stickyHeader && "sticky top-0 z-[1] bg-editor")}
+              className={cn("px-3 text-label font-normal whitespace-nowrap text-fg-3", align(column), stickyHeader && "sticky top-0 z-[1] bg-panel")}
             >
               {header}
             </th>
@@ -111,5 +111,5 @@ export function Table({
     </table>
   );
   if (!framed) return <div className={cn("min-w-0", className)}>{table}</div>;
-  return <div className={cn("min-w-0 overflow-auto rounded-[8px] border border-stroke-3", className)}>{table}</div>;
+  return <div className={cn("min-w-0 overflow-auto rounded-[8px] border border-stroke-3 bg-panel", className)}>{table}</div>;
 }

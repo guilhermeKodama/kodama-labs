@@ -90,7 +90,7 @@ export function ScopeBar({ scope, onScope, children }: { scope: BudgetsScope; on
 export function PeriodNav({ label, onPrev, onNext, prevLabel, nextLabel }: { label: string; onPrev: () => void; onNext: () => void; prevLabel: string; nextLabel: string }) {
   const arrow = "inline-flex h-full items-center px-1.5 text-fg-2 outline-none hover:text-fg-1 focus-visible:text-fg-1";
   return (
-    <span className="inline-flex h-(--cap-control-h) shrink-0 items-center rounded-[6px] border border-stroke-1 text-button font-medium whitespace-nowrap">
+    <span className="inline-flex h-(--cap-control-h) shrink-0 items-center rounded-[6px] border border-stroke-1 bg-panel text-button font-medium whitespace-nowrap">
       <button type="button" aria-label={prevLabel} title={prevLabel} onClick={onPrev} className={cn(arrow, "pl-2.5")}>
         ‹
       </button>
@@ -144,7 +144,7 @@ export interface BudgetActions {
 
 /** Recharts tooltip in the theme tokens. */
 export const TOOLTIP_STYLE = {
-  contentStyle: { background: "var(--cap-bg-editor)", border: "1px solid var(--cap-stroke-1)", borderRadius: 6, fontSize: textRole("body-sm"), padding: "6px 8px" },
+  contentStyle: { background: "var(--cap-bg-panel)", border: "1px solid var(--cap-stroke-1)", borderRadius: 6, fontSize: textRole("body-sm"), padding: "6px 8px" },
   labelStyle: { color: "var(--cap-text-3)", marginBottom: 2 },
   itemStyle: { color: "var(--cap-text-1)", padding: 0 },
 } as const;
