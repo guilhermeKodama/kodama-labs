@@ -538,6 +538,50 @@ const BR_STOCK_ROTATION: HoldingKey[] = ["BOVA11", "ITUB4", "WEGE3"];
 const FII_ROTATION: HoldingKey[] = ["HGLG11", "KNRI11"];
 
 export const OPENING = { k: -12, day: 5 };
+
+/**
+ * The years before the twelve months, for the trunk of Liberdade financeira:
+ * part of each opening position is bought in yearly lots before M-12, each
+ * paid by a deposit into the broker the day before (from the bank that
+ * funds its aportes; Inter Invest from Inter PJ, IBKR from Mercury). The
+ * rest stays at M-12, paid from the broker's opening cash. Every balance
+ * from M-12 on is the same as without the lots.
+ */
+export const HISTORY_LOTS: readonly { k: number; weight: number }[] = [
+  { k: -72, weight: 0.3 },
+  { k: -60, weight: 0.1 },
+  { k: -48, weight: 0.1 },
+  { k: -36, weight: 0.1 },
+  { k: -24, weight: 0.1 },
+];
+const LOT_SOURCE: Partial<Record<AccountKey, AccountKey>> = { xp: "nubank", tesouro: "nubank", avenue: "nubank", binance: "nubank", interInvest: "inter", ibkr: "mercury" };
+
+/**
+ * Market value over cost of the holdings, k months from M0, between these
+ * anchors (and today's prices at M0): the seed turns the cost-valued
+ * monthly snapshots into market values with it, so the history has years
+ * that gained and, three years back, one that lost.
+ */
+export const MARKET_RATIO: readonly { k: number; ratio: number }[] = [
+  { k: -72, ratio: 1 },
+  { k: -60, ratio: 1.06 },
+  { k: -48, ratio: 1.11 },
+  { k: -36, ratio: 0.97 },
+  { k: -24, ratio: 1.06 },
+  { k: -12, ratio: 1.11 },
+];
+
+/** MARKET_RATIO at month k, linear between the anchors; `live` is today's ratio (M0). */
+export function marketRatio(k: number, live: number): number {
+  const anchors = [...MARKET_RATIO, { k: 0, ratio: live }];
+  if (k <= anchors[0].k) return anchors[0].ratio;
+  for (let i = 1; i < anchors.length; i++) {
+    const a = anchors[i - 1];
+    const b = anchors[i];
+    if (k <= b.k) return a.ratio + ((k - a.k) / (b.k - a.k)) * (b.ratio - a.ratio);
+  }
+  return live;
+}
 export const DEPOSIT_DAY = 16;
 export const BUY_DAY = 17;
 
@@ -687,7 +731,7 @@ function planHolding(spec: HoldingSpec, amounts: number[], usdRate: number): Hol
     if (!(q0 > 0)) throw new Error(`${spec.key}: monthly buys exceed the target cost`);
     opening = { holding: spec.key, k: OPENING.k, day: OPENING.day, quantity: q0, price: spec.startPrice, amount: round(q0 * spec.startPrice, 2), opening: true };
   }
-  const all = [opening, ...buys];
+  const all = [...historyLots(opening, spec.qtyDecimals), ...buys];
   const quantity = round(all.reduce((s, b) => s + b.quantity, 0), spec.qtyDecimals);
   return {
     spec,
@@ -697,6 +741,42 @@ function planHolding(spec: HoldingSpec, amounts: number[], usdRate: number): Hol
     value: round(quantity * finalPrice, 2),
     cost: round(all.reduce((s, b) => s + b.amount, 0), 2),
   };
+}
+
+/** The opening position as the yearly HISTORY_LOTS plus what is left at M-12, all at the opening price. */
+function historyLots(opening: PlannedBuy, qtyDecimals: number): PlannedBuy[] {
+  const lots: PlannedBuy[] = [];
+  for (const lot of HISTORY_LOTS) {
+    const quantity = floorTo(opening.quantity * lot.weight, qtyDecimals);
+    if (quantity > 0) lots.push({ ...opening, k: lot.k, quantity, amount: round(quantity * opening.price, 2) });
+  }
+  const rest = round(opening.quantity - lots.reduce((s, b) => s + b.quantity, 0), qtyDecimals);
+  return [...lots, { ...opening, quantity: rest, amount: round(rest * opening.price, 2) }];
+}
+
+/** One deposit per broker and lot, the day before the lots are bought. */
+function lotDeposits(holdings: HoldingPlan[], usdRate: number): PlannedDeposit[] {
+  const deposits: PlannedDeposit[] = [];
+  for (const { k } of HISTORY_LOTS) {
+    const byBroker = new Map<AccountKey, number>();
+    for (const h of holdings) {
+      for (const b of h.buys) if (b.opening && b.k === k) byBroker.set(h.spec.account, (byBroker.get(h.spec.account) ?? 0) + b.amount);
+    }
+    for (const [broker, amount] of byBroker) {
+      const from = LOT_SOURCE[broker];
+      if (!from) throw new Error(`no deposit source for ${broker}`);
+      const sameCurrency = DEMO_ACCOUNTS[from].currency === DEMO_ACCOUNTS[broker].currency;
+      deposits.push({
+        broker,
+        from,
+        k,
+        day: OPENING.day - 1,
+        amount: round(sameCurrency ? amount : amount * usdRate, 2),
+        ...(sameCurrency ? {} : { toAmount: round(amount, 2) }),
+      });
+    }
+  }
+  return deposits;
 }
 
 /** Units held at the start of `day` in month `k` (buys on that day come after). */
@@ -719,7 +799,7 @@ export function planInvestments(usdRate: number): InvestmentPlan {
       income.push({ holding: rule.holding, k, day: rule.day, incomeType: rule.incomeType, gross, taxWithheld: round(gross * rule.tax, 2) });
     }
   }
-  return { holdings, deposits, income };
+  return { holdings, deposits: [...lotDeposits(holdings, usdRate), ...deposits], income };
 }
 
 /** Mockup FIRE card (4086-4100): R$ 12.250/mês at SWR 3,5% (R$ 4,2 mi), R$ 15.000/mês of aportes. */
@@ -735,4 +815,10 @@ export const FIRE_GOAL = {
   includeBusinessInvestments: true,
   currency: "BRL",
   currentAge: 34,
+  /** Marcos no caminho (Liberdade financeira): one passed, two ahead. */
+  milestones: [
+    { id: "demo-primeiro-milhao", name: "Primeiro milhão", type: "net_worth_absolute" as const, value: 1_000_000 },
+    { id: "demo-renda-5-mil", name: "Renda de R$ 5 mil por mês", type: "passive_income_absolute" as const, value: 5_000 },
+    { id: "demo-metade", name: "Metade do caminho", type: "net_worth_absolute" as const, value: 2_100_000 },
+  ],
 };

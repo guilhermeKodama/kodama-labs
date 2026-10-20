@@ -45,6 +45,7 @@ import {
   updateHolding,
   type OperationInput,
 } from "../src/server/modules/investments/services/portfolio";
+import { backfillSnapshots } from "../src/server/modules/investments/services/portfolio-history";
 import { loadFx } from "../src/server/modules/ledger/lib/fx";
 import { accountBalances, createAccount, updateAccount } from "../src/server/modules/ledger/services/accounts";
 import { createEntity, getDefaultAccount, getPersonalEntity, updateEntity } from "../src/server/modules/ledger/services/entities";
@@ -69,6 +70,7 @@ import {
   FIRE_GOAL,
   HISTORY_FROM,
   LLC_DISTRIBUTION,
+  marketRatio,
   MOCK_ENTRIES,
   MOCK_MONTHS,
   monthIndex,
@@ -403,7 +405,7 @@ async function seedInvestments(ctx: Ctx, plan: InvestmentPlan) {
     counts.transfers++;
   }
 
-  // Opening positions (M-12, paid from the brokers' opening cash) and the monthly buys, oldest first.
+  // The opening positions (yearly lots from M-72, paid by the lot deposits above, and the rest at M-12, paid from the brokers' opening cash) and the monthly buys, oldest first.
   const buys = plan.holdings.flatMap((h) => h.buys).sort((a, b) => a.k - b.k || a.day - b.day);
   for (const b of buys) {
     await recordOperation(userId, { holdingId: holdingIds[b.holding], type: "buy", quantity: b.quantity, pricePerUnit: b.price, totalAmount: b.amount, date: ctx.date(b.k, b.day) }, db);
@@ -536,6 +538,30 @@ async function seedFire(ctx: Ctx) {
   await upsertFireGoal(ctx.userId, FireGoalInputSchema.parse(FIRE_GOAL), ctx.db);
 }
 
+/**
+ * The monthly portfolio snapshots, as the daily cron would have left them:
+ * the backfill closes every past month at cost, then MARKET_RATIO turns
+ * each month's holdings into a market value (cash stays as it was), ending
+ * at today's prices. Without it every past month is an estimate at cost.
+ */
+async function seedSnapshots(ctx: Ctx) {
+  const { db, userId, m0 } = ctx;
+  await backfillSnapshots(db, { userId });
+  const current = m0.year * 100 + m0.month;
+  const rows = await db.portfolioSnapshot.findMany({ where: { userId } });
+  const live = new Map(rows.filter((r) => r.period === current).map((r) => [r.entityId, Number(r.costBasisBase) > 0 ? Number(r.marketValueBase) / Number(r.costBasisBase) : 1]));
+  let updated = 0;
+  for (const row of rows) {
+    if (row.period >= current) continue;
+    const k = monthIndex({ year: Math.floor(row.period / 100), month: row.period % 100 }) - monthIndex(m0);
+    const ratio = marketRatio(k, live.get(row.entityId) ?? 1);
+    const byClass = Object.fromEntries(Object.entries(row.byClass as Record<string, number>).map(([c, v]) => [c, c === "cash" ? v : round(v * ratio, 4)]));
+    await db.portfolioSnapshot.update({ where: { id: row.id }, data: { marketValueBase: round(Number(row.marketValueBase) * ratio, 4), byClass, estimated: false } });
+    updated++;
+  }
+  log(`${updated} monthly portfolio snapshots at market value`);
+}
+
 // ---------------------------------------------------------------------------
 // Run
 // ---------------------------------------------------------------------------
@@ -626,6 +652,7 @@ async function seed(db: Db, today: string, email: string, password: string) {
   await distributeLlcSurplus(ctx);
   await setOpeningBalances(ctx);
   await seedFire(ctx);
+  await seedSnapshots(ctx);
 
   log(`booked ${counts.entries} entries, ${counts.transfers} transfers, ${counts.operations} investment operations, ${counts.bills} card bill payments in ${((Date.now() - started) / 1000).toFixed(1)}s`);
   await report(ctx);
