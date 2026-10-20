@@ -4,11 +4,15 @@ import { expect, flow } from "@repo/proof-video";
 flow.use({ storageState: { cookies: [], origins: [] } });
 
 flow("Sign in and sign out", async ({ page, scene, say, check, type, typeSecret }) => {
-  await scene("Sign in", "Capital shows nothing without a session");
+  await scene("Sign in", "Cerne shows nothing without a session");
   await page.goto("/transactions");
   await check("Without a session, the app sends you to the sign-in page", async () => {
     await expect(page).toHaveURL(/\/login\?redirect=/);
     await expect(page.getByRole("heading", { name: "Entrar" })).toBeVisible();
+  });
+  await check("The sign-in card carries the Cerne rings and name", async () => {
+    await expect(page).toHaveTitle("Entrar · Cerne");
+    await expect(page.locator("form").getByText("cerne", { exact: true })).toBeVisible();
   });
 
   await say("Sign in as the demo user");
