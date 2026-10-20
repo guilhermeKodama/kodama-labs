@@ -131,7 +131,8 @@ export const SCREENS: Screen[] = [
     open: async (page) => {
       await page.goto("/investments/contributions");
     },
-    ready: (page) => page.getByText("Onde aportar este mês", { exact: true }),
+    // The suggestion table, not the panel title: the title shows while the suggestion is still loading.
+    ready: (page) => page.getByRole("columnheader", { name: "Depois", exact: true }),
   },
   {
     group: "Investimentos",
