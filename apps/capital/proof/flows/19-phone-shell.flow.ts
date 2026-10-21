@@ -61,7 +61,11 @@ flow("The app on a phone: one bar on top, the main action as a floating button, 
     expect(HEIGHT - IPHONE_HOME_INDICATOR - (box.y + box.height)).toBeGreaterThanOrEqual(16);
   });
   await say("Scrolling the list shrinks it to the +, and it grows back");
-  await page.getByRole("main").locator("div.overflow-auto").first().evaluate((el) => el.scrollBy(0, 300));
+  // A slow scroll of 2.5 s, like a thumb reading down the list, so the video catches the button shrunk.
+  await page.getByRole("main").locator("div.overflow-auto").first().evaluate((el) => {
+    const timer = setInterval(() => el.scrollBy(0, 12), 50);
+    setTimeout(() => clearInterval(timer), 2500);
+  });
   await check("It shrinks to the + while the list scrolls", async () => {
     await expect.poll(async () => (await fab.boundingBox())!.width).toBeLessThanOrEqual(60);
   });
