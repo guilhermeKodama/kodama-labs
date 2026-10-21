@@ -122,7 +122,7 @@ export function Page({
       {subheader}
       {/* Children keep their height (shrink-0) and the body scrolls: a tall table with overflow-hidden is never squeezed and clipped.
           On a phone with a floating button, the end of the body clears it. */}
-      <div ref={body} className={cn("flex min-h-0 flex-1 flex-col gap-3 overflow-auto p-3.5 [&>*]:shrink-0", primary && "max-md:pb-24")}>
+      <div ref={body} className={cn("flex min-h-0 flex-1 flex-col gap-3 overflow-auto p-3.5 [&>*]:shrink-0", primary && "max-md:pb-28")}>
         {children}
       </div>
       {primary && !primary.hideFab ? <PageFab label={primary.label} onSelect={primary.onSelect} scroller={body} /> : null}

@@ -22,14 +22,15 @@ import { useMonthOverview, type BudgetRow, type MonthOverview, type UpcomingItem
  * the widest flexible column (2.2fr) and truncates only past that, the
  * pace bar takes 1.8fr, and Orçado / Gasto / Restante / Status / ⋯ stay
  * fixed. Below md the fixed tracks are wider than the screen, so each row
- * stacks instead: name + badge, the bar full width, then the four figures.
+ * stacks instead: name + badge, the bar full width, then the four figures
+ * two by two, read from the left like the KPIs above them.
  */
 const COLS =
   "grid-cols-4 gap-x-2 gap-y-1 px-2.5 md:grid-cols-[minmax(0,2.2fr)_minmax(0,1.8fr)_80px_80px_80px_110px_28px] md:items-center md:gap-2";
 const NAME_CELL = "order-1 col-span-3 flex min-w-0 items-center gap-1.5 overflow-hidden md:order-0 md:col-span-1";
 const BAR_CELL = "order-3 col-span-4 flex min-w-0 items-center gap-2 md:order-0 md:col-span-1";
 const MENU_CELL = "order-2 col-span-1 flex items-center justify-end md:order-0 md:col-span-1 md:justify-center";
-const STAT_CELL = "col-span-2 flex flex-col items-end gap-0.5 text-right md:col-span-1 md:block";
+const STAT_CELL = "col-span-2 flex flex-col items-start gap-0.5 text-left md:col-span-1 md:block md:text-right";
 
 /** Mensal: Todas / PF / PJ and today, KPIs, the budget table, the month's pace chart and Contas fixas. */
 export function MonthView({

@@ -646,7 +646,7 @@ function OperationForm({
 
       {isTrade ? (
         <>
-          <div className="grid grid-cols-4 gap-2.5">
+          <div className="grid grid-cols-2 gap-2.5 md:grid-cols-4">
             <Field label={t("quantity")}>
               <TextInput
                 value={qty}
@@ -761,7 +761,7 @@ function OperationForm({
       ) : null}
 
       {kind === "income" ? (
-        <div className="grid grid-cols-3 gap-2.5">
+        <div className="grid grid-cols-2 gap-2.5 md:grid-cols-3">
           <Field label={t("income.type")}>
             <Select
               value={incomeType}
@@ -824,7 +824,7 @@ function OperationForm({
       ) : null}
 
       {kind === "deposit" || kind === "withdraw" ? (
-        <div className="grid grid-cols-3 gap-2.5">
+        <div className="grid grid-cols-2 gap-2.5 md:grid-cols-3">
           <Field
             label={
               cashCurrencyLabel

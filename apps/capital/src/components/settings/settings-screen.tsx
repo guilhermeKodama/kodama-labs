@@ -3,6 +3,7 @@
 import { parseAsString, useQueryStates } from "nuqs";
 import { useTranslations } from "next-intl";
 import { Kbd } from "@/components/cap";
+import { StatusBarStrip } from "@/components/shell/status-bar-strip";
 import { NAV_OFF, NAV_ON } from "@/components/cap/styles";
 import { Link, useRouter } from "@/i18n/navigation";
 import { useNames } from "@/lib/api/catalog";
@@ -38,6 +39,8 @@ export function SettingsScreen() {
 
   return (
     <div className="grid h-dvh grid-cols-1 bg-editor px-safe pt-safe pb-safe text-fg-1 standalone:h-screen md:grid-cols-[220px_minmax(0,1fr)]">
+      {/* On a phone the section nav (chrome) is what sits under the status bar. */}
+      <StatusBarStrip className="bg-chrome md:bg-editor" />
       <nav className="flex gap-1 overflow-x-auto border-b border-stroke-3 bg-chrome p-2 md:flex-col md:gap-0.5 md:overflow-y-auto md:border-r md:border-b-0 md:p-2.5">
         <Link href={backHref} className="flex h-[30px] shrink-0 items-center gap-1.5 rounded-[6px] px-2 text-control text-fg-3 outline-none hover:text-fg-strong focus-visible:ring-2 focus-visible:ring-fg-3/40">
           {t("back")}

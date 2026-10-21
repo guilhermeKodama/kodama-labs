@@ -2,6 +2,7 @@ import type { CSSProperties } from "react";
 import Image from "next/image";
 import { useTranslations } from "next-intl";
 import { Mark } from "@/components/cap";
+import { StatusBarStrip } from "@/components/shell/status-bar-strip";
 import { Link } from "@/i18n/navigation";
 import { CONTACT_EMAIL } from "@/lib/brand";
 import { cn } from "@/lib/utils";
@@ -125,6 +126,7 @@ export function HomePage() {
 
   return (
     <div id="cerne-home" className="min-h-dvh bg-editor text-fg-1">
+      <StatusBarStrip className="bg-home-band" />
       <header className="relative z-[2] border-b border-stroke-2 bg-home-band pt-safe">
         <div className={cn(CONTAINER, "flex flex-wrap items-center justify-between gap-4 py-4")}>
           <Link href="/" className="inline-flex items-center gap-2.5 text-wordmark no-underline">

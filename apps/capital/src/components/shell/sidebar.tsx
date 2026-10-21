@@ -87,13 +87,13 @@ export function SidebarTrigger() {
       onClick={toggleSidebar}
       title={`${label} (${shortcut})`}
       aria-label={label}
-      // The mockup's ▤ on a desktop; on a touch screen a 44px button with a 24px menu icon.
-      className="inline-flex items-center justify-center text-body-lg text-fg-3 outline-none hover:text-fg-strong focus-visible:text-fg-strong pointer-coarse:-ml-2.5 pointer-coarse:size-11 pointer-coarse:text-fg-1"
+      // The mockup's ▤ on a wide screen with a mouse; with the phone layout (below md) or on a touch screen, a 44px button with a 24px menu icon.
+      className="inline-flex items-center justify-center text-body-lg text-fg-3 outline-none hover:text-fg-strong focus-visible:text-fg-strong max-md:size-11 max-md:text-fg-1 pointer-coarse:size-11 pointer-coarse:text-fg-1 md:pointer-coarse:-ml-2.5"
     >
-      <span aria-hidden className="pointer-coarse:hidden">
+      <span aria-hidden className="max-md:hidden pointer-coarse:hidden">
         ▤
       </span>
-      <Menu aria-hidden className="hidden size-6 pointer-coarse:block" strokeWidth={1.75} />
+      <Menu aria-hidden className="hidden size-6 max-md:block pointer-coarse:block" strokeWidth={1.75} />
     </button>
   );
 }

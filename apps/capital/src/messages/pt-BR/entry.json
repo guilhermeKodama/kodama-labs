@@ -238,6 +238,7 @@
     "duplicate": "Duplicar",
     "export": "Exportar",
     "delete": "Excluir",
+    "more": "Mais ações",
     "categoryTitle": "Mudar categoria de {count}",
     "categoryGroup": {
       "expense": "Despesas",
