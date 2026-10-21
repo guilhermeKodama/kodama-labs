@@ -120,7 +120,7 @@ export function FileStep({
 
       {analysis && kind && !viaAssistant ? (
         <>
-          <div className="grid grid-cols-4 gap-2.5">
+          <div className="grid grid-cols-2 gap-2.5 md:grid-cols-4">
             {(
               [
                 ["bank", analysis.bank ?? "—"],

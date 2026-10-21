@@ -1,7 +1,8 @@
 "use client";
 
-import { Fragment, useState } from "react";
+import { Fragment, useState, type ReactNode } from "react";
 import { useTranslations } from "next-intl";
+import { Ellipsis, Trash2, X } from "lucide-react";
 import type { LedgerSelectionQuery } from "@capital/server/modules/ledger/contracts";
 import { Menu, MenuItem, MenuLabel } from "@/components/cap";
 import { api, apiPost } from "@/lib/api/client";
@@ -47,13 +48,18 @@ export interface BulkBarProps {
 /**
  * Lifts the bottom-center toaster (ui/sonner.tsx, 16px offset) over the
  * bar while it is up, so result toasts stack above it (mockup BulkBar toast
- * slot 4410) instead of covering it: 40px of bar + 8px gap. Sonner places
- * the toaster with a zero-specificity :where() rule (and a 2-attribute one
- * under 600px), which this outranks.
+ * slot 4410) instead of covering it. From md up: 40px of bar + 8px gap,
+ * over Sonner's zero-specificity :where() rule. Below md the bar is the
+ * phone one, fixed at the bottom: --bulk-clearance, which the toaster's
+ * offset adds.
  */
 const TOASTS_ABOVE_BAR =
-  ':root [data-sonner-toaster][data-y-position="bottom"]{bottom:calc(var(--offset-bottom, 16px) + 48px)}' +
-  '@media (max-width:600px){:root [data-sonner-toaster][data-y-position="bottom"]{bottom:calc(var(--mobile-offset-bottom, 16px) + 48px)}}';
+  '@media (min-width:768px){:root [data-sonner-toaster][data-y-position="bottom"]{bottom:calc(var(--offset-bottom, 16px) + 48px)}}' +
+  "@media (max-width:767.98px){:root{--bulk-clearance:112px}}";
+
+/** A 44px action of the phone bar, on the inverted surface of the toasts. */
+const PHONE_ACTION =
+  "inline-flex h-11 min-w-0 items-center justify-center gap-1.5 rounded-[10px] px-2 text-button font-medium whitespace-nowrap text-editor outline-none hover:bg-editor/10 focus-visible:bg-editor/15 disabled:opacity-40 data-[state=open]:bg-editor/15";
 
 interface BulkRequest {
   body: Record<string, unknown>;
@@ -69,6 +75,12 @@ interface BulkRequest {
  * /v2/ledger/bulk whose toast stacks above the bar; the selection stays
  * except after Excluir (deleteMode "undo": no confirmation). Esc clears,
  * ⌫ deletes and ⌘D duplicates the selection.
+ *
+ * On a phone (below md) it is a bar of its own, fixed at the bottom of the
+ * screen like iOS's selection toolbar and Material's contextual bar: on the
+ * inverted surface of the toasts so it reads as a layer over the table,
+ * "✕ N selecionadas" and Σ on top, then Categoria, Entidade, Excluir and ⋯
+ * (Editar…, Marcar IR, Duplicar, Exportar). Nothing scrolls sideways.
  */
 export function BulkBar({ selection, stats, names, allInView, totalInView, onClear, rows, totalSumInView }: BulkBarProps) {
   const t = useTranslations("entry.bulk");
@@ -121,73 +133,125 @@ export function BulkBar({ selection, stats, names, allInView, totalInView, onCle
     </button>
   );
   const categoryGroups = bulkCategoryGroups(names.categories);
+  const selectedLabel = allInView ? t("selectedAll", { count }) : t("selected", { count });
+  const sum = allInView ? totalSumInView : stats.sum;
+  const tax = () => run({ op: "update", patch: { toggleTaxDeductible: true } }, (affected) => t("toast.tax", { count: affected }));
+  const categoryMenu = (trigger: ReactNode) => (
+    <Menu side="top" align="center" width={220} trigger={trigger}>
+      <MenuLabel>{t("categoryTitle", { count })}</MenuLabel>
+      <div className="max-h-[220px] overflow-y-auto">
+        {categoryGroups.map((group) => (
+          <Fragment key={group.type}>
+            <MenuLabel>{t(`categoryGroup.${group.type}`)}</MenuLabel>
+            {group.categories.map((category) => (
+              <MenuItem
+                key={category.id}
+                label={category.name}
+                onSelect={() => run({ op: "update", patch: { categoryId: category.id } }, (affected) => t("toast.category", { count: affected, category: category.name }))}
+              />
+            ))}
+          </Fragment>
+        ))}
+      </div>
+    </Menu>
+  );
+  const entityMenu = (trigger: ReactNode) => (
+    <Menu side="top" align="center" width={220} trigger={trigger}>
+      <MenuLabel>{t("entityTitle", { count })}</MenuLabel>
+      {names.entities.map((entity) => (
+        <MenuItem
+          key={entity.id}
+          label={names.entity.get(entity.id)}
+          onSelect={() => run({ op: "update", patch: { entityId: entity.id } }, (affected) => t("toast.entity", { count: affected, entity: names.entity.get(entity.id) ?? "" }))}
+        />
+      ))}
+    </Menu>
+  );
 
   return (
-    <div className="pointer-events-none sticky bottom-4 z-[35] mt-2 flex flex-col items-center gap-2">
+    <>
       <style>{TOASTS_ABOVE_BAR}</style>
-      <div className="pointer-events-auto relative flex flex-wrap items-center justify-center gap-1 rounded-[12px] border border-stroke-1 bg-chrome p-[5px] text-button">
-        <span className="inline-flex h-7 items-center gap-2 rounded-[7px] border border-dashed border-stroke-1 pr-1.5 pl-2.5 font-semibold whitespace-nowrap">
-          {allInView ? t("selectedAll", { count }) : t("selected", { count })}
-          <button type="button" title={t("clear")} aria-label={t("clear")} className="cursor-pointer font-normal text-fg-3 outline-none hover:text-fg-1" onClick={onClear}>
-            ✕
-          </button>
-        </span>
-        <span className="inline-flex gap-3 px-2.5">
-          {allInView ? (
-            totalSumInView !== undefined ? stat(t("sum"), totalSumInView) : null
-          ) : (
-            <>
-              {stat(t("sum"), stats.sum)}
-              {stats.count > 1 ? stat(t("avg"), stats.avg) : null}
-              {stats.count > 1 ? stat(t("min"), stats.min) : null}
-              {stats.count > 1 ? stat(t("max"), stats.max) : null}
-            </>
-          )}
-        </span>
-        <span className="h-5 w-px bg-stroke-2" />
-        {btn(t("edit"), () => setEditing(true))}
-        <Menu side="top" align="center" width={220} trigger={<button type="button" className={btnClass()}>{t("category")}</button>}>
-          <MenuLabel>{t("categoryTitle", { count })}</MenuLabel>
-          <div className="max-h-[220px] overflow-y-auto">
-            {categoryGroups.map((group) => (
-              <Fragment key={group.type}>
-                <MenuLabel>{t(`categoryGroup.${group.type}`)}</MenuLabel>
-                {group.categories.map((category) => (
-                  <MenuItem
-                    key={category.id}
-                    label={category.name}
-                    onSelect={() => run({ op: "update", patch: { categoryId: category.id } }, (affected) => t("toast.category", { count: affected, category: category.name }))}
-                  />
-                ))}
-              </Fragment>
-            ))}
-          </div>
-        </Menu>
-        <Menu side="top" align="center" width={220} trigger={<button type="button" className={btnClass()}>{t("entity")}</button>}>
-          <MenuLabel>{t("entityTitle", { count })}</MenuLabel>
-          {names.entities.map((entity) => (
-            <MenuItem
-              key={entity.id}
-              label={names.entity.get(entity.id)}
-              onSelect={() => run({ op: "update", patch: { entityId: entity.id } }, (affected) => t("toast.entity", { count: affected, entity: names.entity.get(entity.id) ?? "" }))}
-            />
-          ))}
-        </Menu>
-        {btn(t("tax"), () => run({ op: "update", patch: { toggleTaxDeductible: true } }, (affected) => t("toast.tax", { count: affected })))}
-        {btn(t("duplicate"), duplicate)}
-        {btn(t("export"), () => exportCsv.mutate())}
-        <span className="h-5 w-px bg-stroke-2" />
-        {btn(t("delete"), remove, true)}
+      <div className="pointer-events-none sticky bottom-4 z-[35] mt-2 flex flex-col items-center gap-2 max-md:hidden">
+        <div className="pointer-events-auto relative flex flex-wrap items-center justify-center gap-1 rounded-[12px] border border-stroke-1 bg-chrome p-[5px] text-button">
+          <span className="inline-flex h-7 items-center gap-2 rounded-[7px] border border-dashed border-stroke-1 pr-1.5 pl-2.5 font-semibold whitespace-nowrap">
+            {selectedLabel}
+            <button type="button" title={t("clear")} aria-label={t("clear")} className="cursor-pointer font-normal text-fg-3 outline-none hover:text-fg-1" onClick={onClear}>
+              ✕
+            </button>
+          </span>
+          <span className="inline-flex gap-3 px-2.5">
+            {allInView ? (
+              totalSumInView !== undefined ? stat(t("sum"), totalSumInView) : null
+            ) : (
+              <>
+                {stat(t("sum"), stats.sum)}
+                {stats.count > 1 ? stat(t("avg"), stats.avg) : null}
+                {stats.count > 1 ? stat(t("min"), stats.min) : null}
+                {stats.count > 1 ? stat(t("max"), stats.max) : null}
+              </>
+            )}
+          </span>
+          <span className="h-5 w-px bg-stroke-2" />
+          {btn(t("edit"), () => setEditing(true))}
+          {categoryMenu(<button type="button" className={btnClass()}>{t("category")}</button>)}
+          {entityMenu(<button type="button" className={btnClass()}>{t("entity")}</button>)}
+          {btn(t("tax"), tax)}
+          {btn(t("duplicate"), duplicate)}
+          {btn(t("export"), () => exportCsv.mutate())}
+          <span className="h-5 w-px bg-stroke-2" />
+          {btn(t("delete"), remove, true)}
+        </div>
       </div>
-      <BulkEditDialog
-        open={editing}
-        onOpenChange={setEditing}
-        selection={selection}
-        count={count}
-        names={names}
-        rows={rows}
-        sum={allInView ? totalSumInView : stats.sum}
-      />
-    </div>
+      <div
+        role="toolbar"
+        aria-label={selectedLabel}
+        data-bulk-bar="phone"
+        className="fixed inset-x-0 bottom-[calc(-1*var(--screen-below-viewport,0px))] z-[35] flex flex-col gap-1 rounded-t-[16px] bg-fg-1 px-3 pt-1.5 pb-[calc(8px+var(--safe-bottom))] text-editor shadow-lg md:hidden"
+      >
+        <div className="flex h-11 items-center gap-1">
+          <button type="button" aria-label={t("clear")} onClick={onClear} className={cn(PHONE_ACTION, "-ml-1 w-11 shrink-0 px-0")}>
+            <X aria-hidden className="size-5" />
+          </button>
+          <span className="min-w-0 truncate text-body font-semibold">{selectedLabel}</span>
+          {sum !== undefined ? (
+            <span className="ml-auto shrink-0 pl-2 font-mono text-body tabular-nums">
+              <span className="text-editor/60">{t("sum")}</span> {fmt.money(sum, cur)}
+            </span>
+          ) : null}
+        </div>
+        <div className="grid grid-cols-[1fr_1fr_1fr_auto] gap-1">
+          {categoryMenu(
+            <button type="button" disabled={bulk.isPending} className={PHONE_ACTION}>
+              {t("category")}
+            </button>,
+          )}
+          {entityMenu(
+            <button type="button" disabled={bulk.isPending} className={PHONE_ACTION}>
+              {t("entity")}
+            </button>,
+          )}
+          <button type="button" onClick={remove} disabled={bulk.isPending} className={PHONE_ACTION}>
+            <Trash2 aria-hidden className="size-4 shrink-0" />
+            {t("delete")}
+          </button>
+          <Menu
+            side="top"
+            align="end"
+            width={200}
+            trigger={
+              <button type="button" aria-label={t("more")} title={t("more")} disabled={bulk.isPending} className={cn(PHONE_ACTION, "w-11 px-0")}>
+                <Ellipsis aria-hidden className="size-5" />
+              </button>
+            }
+          >
+            <MenuItem label={t("edit")} onSelect={() => setEditing(true)} />
+            <MenuItem label={t("tax")} onSelect={tax} />
+            <MenuItem label={t("duplicate")} onSelect={duplicate} />
+            <MenuItem label={t("export")} onSelect={() => exportCsv.mutate()} />
+          </Menu>
+        </div>
+      </div>
+      <BulkEditDialog open={editing} onOpenChange={setEditing} selection={selection} count={count} names={names} rows={rows} sum={sum} />
+    </>
   );
 }

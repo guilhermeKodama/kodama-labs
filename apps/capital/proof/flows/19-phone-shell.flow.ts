@@ -99,7 +99,7 @@ flow("The app on a phone: one bar on top, the main action as a floating button, 
   await say("Selecting rows: the bulk bar takes the button's place");
   await page.getByRole("checkbox", { name: "Selecionar linha" }).first().tap();
   await check("The button steps aside for the bulk bar", async () => {
-    await expect(page.getByText(/^1 selecionada/)).toBeVisible();
+    await expect(page.locator('[data-bulk-bar="phone"]')).toContainText("1 selecionada");
     await expect(fab).toBeHidden();
   });
   await page.keyboard.press("Escape");
@@ -108,9 +108,9 @@ flow("The app on a phone: one bar on top, the main action as a floating button, 
   await scene("Nova transação", "A tap on the button opens the form");
   await fab.tap();
   const form = dialog(page, "Nova transação");
-  await check("The form opens below the status bar", async () => {
+  await check("The form's title is below the status bar", async () => {
     await expect(form).toBeVisible();
-    expect((await form.boundingBox())!.y).toBeGreaterThanOrEqual(IPHONE_STATUS_BAR);
+    expect((await form.getByRole("heading", { name: "Nova transação" }).boundingBox())!.y).toBeGreaterThanOrEqual(IPHONE_STATUS_BAR);
   });
   const date = field(form, "Data").locator("input");
   await check("16px fields; the date fits", async () => {

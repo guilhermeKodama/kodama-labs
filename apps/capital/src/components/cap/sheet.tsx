@@ -9,7 +9,7 @@ import { BACKDROP } from "./styles";
 
 /**
  * Right-side panel over the page (Editar transação, holding detail): full
- * height, 440px (320 for narrow details), padding 18, 14px gap, same
+ * height, 440px (320 for narrow details; the whole width on a phone), padding 18, 14px gap, same
  * backdrop as Dialog. Start it with <DialogHead>. An overlay while open
  * that gives focus back on close, like Dialog.
  */
@@ -39,7 +39,7 @@ export function Sheet({
           onCloseAutoFocus={returnFocus}
           style={{ width }}
           className={cn(
-            "fixed inset-y-0 right-0 z-50 flex max-w-full standalone:bottom-auto standalone:h-screen flex-col gap-3.5 overflow-y-auto border-l border-stroke-1 bg-panel p-[18px] pt-[calc(18px+var(--safe-top))] pr-[calc(18px+var(--safe-right))] pb-[calc(18px+var(--safe-bottom))] text-fg-1 outline-none data-[state=open]:animate-in data-[state=open]:slide-in-from-right-4 data-[state=open]:fade-in-0",
+            "fixed inset-y-0 right-0 z-50 flex max-w-full standalone:bottom-auto standalone:h-screen max-md:w-full! max-md:border-l-0 max-md:overflow-x-hidden flex-col gap-3.5 overflow-y-auto border-l border-stroke-1 bg-panel p-[18px] pt-[calc(18px+var(--safe-top))] pr-[calc(18px+var(--safe-right))] pb-[calc(18px+var(--safe-bottom))] text-fg-1 outline-none data-[state=open]:animate-in data-[state=open]:slide-in-from-right-4 data-[state=open]:fade-in-0",
             className,
           )}
         >
