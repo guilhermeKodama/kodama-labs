@@ -62,9 +62,12 @@ flow("The app on a phone: one bar on top, the main action as a floating button, 
   });
   await say("Scrolling the list shrinks it to the +, and it grows back");
   await page.getByRole("main").locator("div.overflow-auto").first().evaluate((el) => el.scrollBy(0, 300));
-  await check("It shrinks while the list scrolls", async () => {
+  await check("It shrinks to the + while the list scrolls", async () => {
     await expect.poll(async () => (await fab.boundingBox())!.width).toBeLessThanOrEqual(60);
+  });
+  await check("It grows back when the scroll stops", async () => {
     await expect.poll(async () => (await fab.boundingBox())!.width).toBeGreaterThan(120);
+    await expect(fab).toHaveText("Nova transação");
   });
 
   await say("Delete an expense: the undo toast sits above the button");
