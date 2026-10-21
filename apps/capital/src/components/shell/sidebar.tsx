@@ -4,7 +4,7 @@ import { useEffect, useState, useSyncExternalStore, type ComponentProps, type Re
 import { useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { Dialog as DialogPrimitive } from "radix-ui";
-import { Briefcase, PiggyBank, Plus, Search, Target } from "lucide-react";
+import { Briefcase, Menu, PiggyBank, Plus, Search, Target } from "lucide-react";
 import { Kbd, Mark, Wordmark } from "@/components/cap";
 import { BACKDROP, NAV_OFF, NAV_ON } from "@/components/cap/styles";
 import { LayoutIcon } from "@/components/ledger/toolbar/layout-icon";
@@ -87,10 +87,13 @@ export function SidebarTrigger() {
       onClick={toggleSidebar}
       title={`${label} (${shortcut})`}
       aria-label={label}
-      // The ::before widens the tap target to about 40px without moving the glyph.
-      className="relative text-body-lg text-fg-3 outline-none before:absolute before:-inset-3 hover:text-fg-strong focus-visible:text-fg-strong"
+      // The mockup's ▤ on a desktop; on a touch screen a 44px button with a 24px menu icon.
+      className="inline-flex items-center justify-center text-body-lg text-fg-3 outline-none hover:text-fg-strong focus-visible:text-fg-strong pointer-coarse:-ml-2.5 pointer-coarse:size-11 pointer-coarse:text-fg-1"
     >
-      ▤
+      <span aria-hidden className="pointer-coarse:hidden">
+        ▤
+      </span>
+      <Menu aria-hidden className="hidden size-6 pointer-coarse:block" strokeWidth={1.75} />
     </button>
   );
 }

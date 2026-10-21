@@ -31,6 +31,12 @@ const MEDIO_PX: Record<(typeof TEXT_ROLES)[number], number> = {
 
 const DENSITY_PX = { "control-h": 26, "menu-row-h": 28, "row-h": 34, "table-row-h": 36 };
 
+/** On a touch screen: tap targets in Apple's 44 pt and Android's 48 dp range, and the text on them. */
+const TOUCH_PX = { "control-h": 40, "menu-row-h": 44, "row-h": 44, "table-row-h": 48, "font-button": 14, "font-control": 15 };
+
+/** The body of the `@media (pointer: coarse) { :root { … } }` block of theme.css. */
+const touchBlock = /@media \(pointer: coarse\) \{\s*:root \{([^}]*)\}/.exec(theme)?.[1] ?? "";
+
 /** `--name: calc(<n>px * var(--cap-text-scale))` in theme.css → n. */
 function basePx(name: string): number | null {
   const match = new RegExp(`--${name}:\\s*calc\\(([\\d.]+)px \\* var\\(--cap-text-scale\\)\\);`).exec(theme);
@@ -55,7 +61,7 @@ describe("type scale (src/app/theme.css)", () => {
   });
 
   it("defines every role of TEXT_ROLES, scaled by --cap-text-scale, and nothing else", () => {
-    const defined = [...theme.matchAll(/--cap-font-([a-z-]+):/g)].map((m) => m[1]);
+    const defined = [...theme.replace(touchBlock, "").matchAll(/--cap-font-([a-z-]+):/g)].map((m) => m[1]);
     expect(defined).toEqual([...TEXT_ROLES]);
     for (const role of TEXT_ROLES) expect(basePx(`cap-font-${role}`), role).not.toBeNull();
   });
@@ -82,6 +88,11 @@ describe("type scale (src/app/theme.css)", () => {
     for (const [name, px] of Object.entries(DENSITY_PX)) {
       expect(basePx(`cap-${name}`), name).toBe(px);
     }
+  });
+
+  it("on a touch screen, grows the tap targets and their text, and nothing else", () => {
+    const overridden = Object.fromEntries([...touchBlock.matchAll(/--cap-([a-z-]+):\s*calc\(([\d.]+)px \* var\(--cap-text-scale\)\);/g)].map((m) => [m[1], Number(m[2])]));
+    expect(overridden).toEqual(TOUCH_PX);
   });
 
   it("exposes each role as a Tailwind utility with the inherited line-height", () => {

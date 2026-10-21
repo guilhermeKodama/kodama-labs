@@ -52,6 +52,22 @@
   --cap-text-scale: 1.14;
 }
 
+/* Touch screens (a phone, a tablet): the desktop density is too small for a
+   finger. Apple asks for 44 pt tap targets and Android for 48 dp, so the
+   controls, menu rows, tab bars and table rows grow to that range and the
+   button and control text grows with them. Every control reads these
+   tokens, so every screen follows. */
+@media (pointer: coarse) {
+  :root {
+    --cap-font-button: calc(14px * var(--cap-text-scale));
+    --cap-font-control: calc(15px * var(--cap-text-scale));
+    --cap-control-h: calc(40px * var(--cap-text-scale));
+    --cap-menu-row-h: calc(44px * var(--cap-text-scale));
+    --cap-row-h: calc(44px * var(--cap-text-scale));
+    --cap-table-row-h: calc(48px * var(--cap-text-scale));
+  }
+}
+
 /* iOS zooms into a focused field whose text is under 16px and stays zoomed
    in, which leaves the installed app cut off on the right. On touch screens
    text fields are at least 16px. Unlayered, so it wins over the role

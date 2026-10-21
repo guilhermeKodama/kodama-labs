@@ -46,16 +46,17 @@ flow("The app on a phone: the top bar clear of the status bar, every action on s
       await expect(header.getByRole("button", { name })).toBeInViewport({ ratio: 1 });
     }
   });
-  await check("No N shortcut hint on a phone", async () => {
+  await check("No keyboard hints on a phone", async () => {
     await expect(header.getByText("N", { exact: true })).toBeHidden();
   });
 
   const trigger = header.getByRole("button", { name: "Abrir o menu" });
-  await say("A touch 8 px beside the ▤ glyph still lands on it");
-  await check("▤ has a finger-sized tap area", async () => {
-    const box = (await trigger.boundingBox())!;
-    const hit = await page.evaluate(({ x, y }) => document.elementFromPoint(x, y)?.getAttribute("aria-label"), { x: box.x - 8, y: box.y + box.height / 2 });
-    expect(hit).toBe("Abrir o menu");
+  await say("▤ and the buttons are sized for a finger, not a mouse");
+  await check("▤ and buttons are finger-sized", async () => {
+    const menu = (await trigger.boundingBox())!;
+    expect(Math.min(menu.width, menu.height)).toBeGreaterThanOrEqual(44);
+    const create = (await header.getByRole("button", { name: "+ Nova transação" }).boundingBox())!;
+    expect(create.height).toBeGreaterThanOrEqual(40);
   });
 
   await say("The menu opens below the status bar too");
