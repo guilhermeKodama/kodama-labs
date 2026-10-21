@@ -21,7 +21,8 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   return (
     <>
-      <div className="flex h-dvh bg-editor text-fg-1">
+      {/* Clear of the status bar and the home indicator in the installed app (globals.css, safe areas). */}
+      <div className="flex h-dvh bg-editor px-safe pt-safe pb-safe text-fg-1 standalone:h-screen">
         <Sidebar />
         <main className="relative flex min-w-0 flex-1 flex-col overflow-hidden">{children}</main>
       </div>

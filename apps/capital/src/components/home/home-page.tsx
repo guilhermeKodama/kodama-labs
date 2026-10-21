@@ -125,7 +125,7 @@ export function HomePage() {
 
   return (
     <div id="cerne-home" className="min-h-dvh bg-editor text-fg-1">
-      <header className="relative z-[2] border-b border-stroke-2 bg-home-band">
+      <header className="relative z-[2] border-b border-stroke-2 bg-home-band pt-safe">
         <div className={cn(CONTAINER, "flex flex-wrap items-center justify-between gap-4 py-4")}>
           <Link href="/" className="inline-flex items-center gap-2.5 text-wordmark no-underline">
             <Mark detail="full" className="size-7" />

@@ -109,7 +109,8 @@ export function TxFormBody({ form, up, ctx, accounts, mode, lockedKinds = [], in
   ) : null;
 
   const amountRow = !isInvest ? (
-    <div className="grid grid-cols-[minmax(0,1.4fr)_90px_minmax(0,1fr)] items-end gap-2.5">
+    // On a phone the fields are 16px (theme.css), so the date gets as much room as the amount.
+    <div className="grid grid-cols-[minmax(0,1.4fr)_90px_minmax(0,1fr)] items-end gap-2.5 max-sm:grid-cols-[minmax(0,1fr)_76px_minmax(0,1fr)]">
       <Field label={t("amount")}>
         <TextInput value={form.amount} onChange={(value) => up({ amount: value })} placeholder="0,00" mono className="text-amount" invalid={invalid === "amount"} />
       </Field>

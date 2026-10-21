@@ -49,7 +49,7 @@ export function Dialog({
           onCloseAutoFocus={returnFocus}
           style={{ width }}
           className={cn(
-            "fixed top-7 left-1/2 z-50 flex max-h-[calc(100dvh-56px)] max-w-[94vw] -translate-x-1/2 flex-col gap-3.5 overflow-y-auto rounded-[12px] border border-stroke-1 bg-panel p-[18px] text-fg-1 outline-none data-[state=open]:animate-in data-[state=open]:fade-in-0",
+            "fixed top-[calc(1.75rem+var(--safe-top))] left-1/2 z-50 flex max-h-[calc(100dvh-56px-var(--safe-top)-var(--safe-bottom))] max-w-[94vw] -translate-x-1/2 flex-col gap-3.5 overflow-y-auto rounded-[12px] border border-stroke-1 bg-panel p-[18px] text-fg-1 outline-none data-[state=open]:animate-in data-[state=open]:fade-in-0",
             className,
           )}
         >

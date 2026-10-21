@@ -37,7 +37,7 @@ export function SettingsScreen() {
   useShortcut("escape", () => router.push(backHref), { scope: "screen" });
 
   return (
-    <div className="grid h-dvh grid-cols-1 bg-editor text-fg-1 md:grid-cols-[220px_minmax(0,1fr)]">
+    <div className="grid h-dvh grid-cols-1 bg-editor px-safe pt-safe pb-safe text-fg-1 standalone:h-screen md:grid-cols-[220px_minmax(0,1fr)]">
       <nav className="flex gap-1 overflow-x-auto border-b border-stroke-3 bg-chrome p-2 md:flex-col md:gap-0.5 md:overflow-y-auto md:border-r md:border-b-0 md:p-2.5">
         <Link href={backHref} className="flex h-[30px] shrink-0 items-center gap-1.5 rounded-[6px] px-2 text-control text-fg-3 outline-none hover:text-fg-strong focus-visible:ring-2 focus-visible:ring-fg-3/40">
           {t("back")}

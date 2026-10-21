@@ -4,21 +4,43 @@
 @import "./theme.css";
 
 @custom-variant dark (&:is(.dark *));
+/* The installed app (added to the home screen): no browser bars around the page. */
+@custom-variant standalone (@media (display-mode: standalone));
 
-/* Safe-area utilities for iOS notch/home-indicator devices. The app opts
-   into drawing under the status bar / home indicator via viewportFit:
-   "cover" (see src/app/layout.tsx), so anything fixed to a screen edge
-   needs one of these to avoid sitting under system UI. */
+/* Safe areas for iOS notch / home-indicator devices. The app opts into
+   drawing under the status bar and the home indicator (viewportFit "cover"
+   and the black-translucent status bar in src/app/[locale]/layout.tsx), so
+   anything placed against a screen edge clears them with these: the app
+   shell and Ajustes pad by them, and the fixed overlays (drawer, sheets,
+   dialogs, the ⌘K palette, toasts) add them to their own offsets. They are
+   0 in a browser tab.
+
+   In the installed app on iOS the page starts under the status bar, but
+   100dvh (and innerHeight) stop that much short of the bottom of the
+   screen. There 100vh is the whole screen (no browser bars come and go),
+   so what fills the screen uses h-dvh standalone:h-screen; a fixed overlay
+   that spans it, standalone:h-screen standalone:bottom-auto. On html, not
+   :root, so the color tokens' :root block below stays the first one. */
+html {
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-right: env(safe-area-inset-right, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left: env(safe-area-inset-left, 0px);
+}
 @utility pt-safe {
-  padding-top: env(safe-area-inset-top, 0px);
+  padding-top: var(--safe-top);
 }
 @utility pb-safe {
-  padding-bottom: env(safe-area-inset-bottom, 0px);
+  padding-bottom: var(--safe-bottom);
+}
+@utility px-safe {
+  padding-left: var(--safe-left);
+  padding-right: var(--safe-right);
 }
 /* For content that scrolls behind the fixed bottom nav (h-16): reserves
    the bar's height plus whatever inset the device adds on top of it. */
 @utility pb-safe-nav {
-  padding-bottom: calc(4rem + env(safe-area-inset-bottom, 0px));
+  padding-bottom: calc(4rem + var(--safe-bottom));
 }
 
 /* Titles in the brand serif (Fraunces, soft axis on): the top bar title,
