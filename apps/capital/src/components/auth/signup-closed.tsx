@@ -6,8 +6,9 @@ import { CONTACT_EMAIL } from "@/lib/brand";
 /** /signup while sign-up is closed (SIGNUP_OPEN): the same card as the forms, with the contact address instead of fields. */
 export function SignupClosed() {
   const t = useTranslations("auth.closed");
+  // Centered on a phone (clear of the status bar and home indicator); 12% from the top on a desktop, as in the mockup.
   return (
-    <main className="flex min-h-dvh items-start justify-center bg-chrome px-4 pt-[12vh] pb-10 text-fg-1">
+    <main className="flex min-h-dvh items-center justify-center bg-chrome px-4 pt-[calc(2.5rem+var(--safe-top))] pb-[calc(2.5rem+var(--safe-bottom))] text-fg-1 standalone:min-h-screen sm:items-start sm:pt-[12vh]">
       <section className="flex w-full max-w-[360px] flex-col gap-3.5 rounded-[12px] border border-stroke-1 bg-panel p-[18px]">
         <Wordmark className="self-start" markClassName="size-7" />
         <div className="flex flex-col gap-[3px]">
