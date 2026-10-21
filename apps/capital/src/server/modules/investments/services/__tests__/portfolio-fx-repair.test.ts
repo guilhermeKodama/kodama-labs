@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { Prisma } from "@/generated/prisma";
 import { prisma } from "@capital/server/lib/prisma";
 import { previousBusinessDayRate } from "@capital/server/modules/ledger/lib/fx";
@@ -417,6 +417,17 @@ describe("portfolio fx repair", () => {
     } finally {
       await prisma.$executeRaw`DELETE FROM legacy.investment_accounts WHERE id = ${avenueId}`;
       await deleteLedgerFixture(prisma, soloId);
+    }
+  });
+
+  it("reads everything in one snapshot", async () => {
+    const transaction = vi.spyOn(prisma, "$transaction");
+    try {
+      await portfolioFxReport(prisma, "precheck", { userId: SELL_USER });
+      expect(transaction).toHaveBeenCalledTimes(1);
+      expect(transaction.mock.calls[0][1]).toMatchObject({ isolationLevel: "RepeatableRead" });
+    } finally {
+      transaction.mockRestore();
     }
   });
 
