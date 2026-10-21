@@ -23,30 +23,7 @@ flow("The app on a phone: the top bar clear of the status bar, every action on s
   await openTransactions(page);
   const header = page.getByRole("main").locator("header").first();
 
-  await scene("Na largura de um celular", "With something in the trash, the top bar ran off the screen");
-  await say("Put an expense in the trash, so the header shows Lixeira · 1");
-  await ledgerRow(page, NAME).actions.first().click();
-  await page.getByRole("menuitem", { name: "Excluir" }).click();
-  await expect(toast(page, `“${NAME}” excluída`)).toBeVisible();
-  await check("The breadcrumb and all three actions fit on screen", async () => {
-    await expect(header.getByText("Todas", { exact: true })).toBeInViewport({ ratio: 1 });
-    for (const name of [/^Lixeira · \d+$/, "Importar extrato", "+ Nova transação"]) {
-      await expect(header.getByRole("button", { name })).toBeInViewport({ ratio: 1 });
-    }
-  });
-  await check("The N shortcut hint is gone on a phone", async () => {
-    await expect(header.getByText("N", { exact: true })).toBeHidden();
-  });
-
-  const trigger = header.getByRole("button", { name: "Abrir o menu" });
-  await say("▤ answers a finger: a touch 8 px beside the glyph still lands on it");
-  await check("▤ has a tap area wider than its glyph", async () => {
-    const box = (await trigger.boundingBox())!;
-    const hit = await page.evaluate(({ x, y }) => document.elementFromPoint(x, y)?.getAttribute("aria-label"), { x: box.x - 8, y: box.y + box.height / 2 });
-    expect(hit).toBe("Abrir o menu");
-  });
-
-  await scene("No app instalado", "Simulating the iPhone's status bar (62 pt) and home indicator");
+  await scene("No app instalado num iPhone", "The iPhone's status bar (62 pt) and home indicator, simulated");
   await page.addStyleTag({ content: SIMULATED_IPHONE });
   await page.evaluate(() => {
     const bar = document.createElement("div");
@@ -54,14 +31,37 @@ flow("The app on a phone: the top bar clear of the status bar, every action on s
     bar.textContent = "barra de status do iPhone (simulada)";
     document.body.appendChild(bar);
   });
-  await check("The top bar starts below the status bar", async () => {
+  await check("Top bar is below the status bar", async () => {
     expect((await header.boundingBox())!.y).toBeGreaterThanOrEqual(IPHONE_STATUS_BAR);
+  });
+
+  await scene("Na largura de um celular", "With something in the trash, the top bar ran off the screen");
+  await say("Put an expense in the trash, so the header shows Lixeira · 1");
+  await ledgerRow(page, NAME).actions.first().click();
+  await page.getByRole("menuitem", { name: "Excluir" }).click();
+  await expect(toast(page, `“${NAME}” excluída`)).toBeVisible();
+  await check("Breadcrumb and actions fit", async () => {
+    await expect(header.getByText("Todas", { exact: true })).toBeInViewport({ ratio: 1 });
+    for (const name of [/^Lixeira · \d+$/, "Importar extrato", "+ Nova transação"]) {
+      await expect(header.getByRole("button", { name })).toBeInViewport({ ratio: 1 });
+    }
+  });
+  await check("No N shortcut hint on a phone", async () => {
+    await expect(header.getByText("N", { exact: true })).toBeHidden();
+  });
+
+  const trigger = header.getByRole("button", { name: "Abrir o menu" });
+  await say("A touch 8 px beside the ▤ glyph still lands on it");
+  await check("▤ has a finger-sized tap area", async () => {
+    const box = (await trigger.boundingBox())!;
+    const hit = await page.evaluate(({ x, y }) => document.elementFromPoint(x, y)?.getAttribute("aria-label"), { x: box.x - 8, y: box.y + box.height / 2 });
+    expect(hit).toBe("Abrir o menu");
   });
 
   await say("The menu opens below the status bar too");
   await trigger.tap();
   const drawer = page.getByRole("dialog", { name: "Cerne" });
-  await check("The menu's top, the cerne logo, is below the status bar", async () => {
+  await check("Menu starts below the status bar", async () => {
     await expect(drawer.getByRole("link", { name: "Orçamentos" })).toBeVisible();
     expect((await drawer.getByText("cerne", { exact: true }).boundingBox())!.y).toBeGreaterThanOrEqual(IPHONE_STATUS_BAR);
   });
@@ -71,14 +71,14 @@ flow("The app on a phone: the top bar clear of the status bar, every action on s
   await say("And so does a dialog");
   await header.getByRole("button", { name: "+ Nova transação" }).tap();
   const form = dialog(page, "Nova transação");
-  await check("Nova transação opens below the status bar", async () => {
+  await check("Dialog opens below the status bar", async () => {
     await expect(form).toBeVisible();
     expect((await form.boundingBox())!.y).toBeGreaterThanOrEqual(IPHONE_STATUS_BAR);
   });
 
   await scene("Campos de 16px", "iOS zooms into a field under 16px and stays zoomed in");
   const date = field(form, "Data").locator("input");
-  await check("Fields are 16px on a touch screen, and the date fits", async () => {
+  await check("16px fields; the date fits", async () => {
     expect(await date.evaluate((input) => parseFloat(getComputedStyle(input).fontSize))).toBeGreaterThanOrEqual(16);
     expect(await date.evaluate((input: HTMLInputElement) => input.scrollWidth <= input.clientWidth)).toBe(true);
   });
