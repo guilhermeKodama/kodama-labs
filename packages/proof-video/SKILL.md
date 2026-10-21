@@ -91,7 +91,8 @@ What makes a flow count as proof:
 A proof video shows one change. The **validation-package** shows the whole product after a piece of work, for the owner's final review. "validation-package" is the owner's term: use it as is.
 
 - **When:** at the end of a piece of work the owner asked for, after its pull requests, before reporting it done. Once per piece of work, not per pull request.
-- **What it holds** (a first definition, refined with the owner as it is used):
+- **Scope:** only the areas the work affected. A change to a few screens hands over the proof video of its pull requests plus screenshots of those screens (light and dark, and at phone size when the work is about the phone). The full tour below is for work that changes every screen (the theme, the shell, the fonts) or when the owner asks for it.
+- **What the full tour holds:**
   1. One video that tours the product: the way in (the homepage, or sign-in when the app has none), then every screen a user reaches, in every theme the app has.
   2. A full-resolution screenshot of every screen in every theme (`proof/out/package/screenshots/`).
   3. The list of screens with their time in the video (`proof/out/package/proof.md`).

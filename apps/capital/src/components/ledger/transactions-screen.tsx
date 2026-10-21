@@ -221,30 +221,33 @@ function ViewScreen({
     <div className="relative flex flex-wrap items-center gap-1.5">
       <PeriodControl period={config.period} rangeLabel={rangeLabel} onChange={(period) => update({ period })} />
       <FilterChips config={config} names={names} labels={labels} onChange={(filters) => update({ filters })} />
-      <span className="flex-1" />
-      <TextInput
-        value={searchText}
-        placeholder={t("search")}
-        aria-label={t("search")}
-        className="w-[170px]"
-        onChange={(text) => {
-          setSearchText(text);
-          void setParams({ q: text || null });
-        }}
-      />
-      <DisplayMenu
-        open={overlays.displayOpen}
-        onOpenChange={overlays.setDisplayOpen}
-        name={view.name}
-        isBuiltin={view.isBuiltin}
-        isFavorite={view.isFavorite}
-        config={config}
-        labels={labels}
-        onRename={(name) => saveView(view.id, { name })}
-        onFavorite={(isFavorite) => saveView(view.id, { isFavorite })}
-        onConfig={update}
-        onDuplicate={() => duplicate.mutate()}
-      />
+      <span className="flex-1 max-md:hidden" />
+      {/* On a phone the search takes a row of its own and fills it, with Exibição at its end. */}
+      <div className="flex min-w-0 items-center gap-1.5 max-md:basis-full">
+        <TextInput
+          value={searchText}
+          placeholder={t("search")}
+          aria-label={t("search")}
+          className="min-w-0 max-md:flex-1 md:w-[170px]"
+          onChange={(text) => {
+            setSearchText(text);
+            void setParams({ q: text || null });
+          }}
+        />
+        <DisplayMenu
+          open={overlays.displayOpen}
+          onOpenChange={overlays.setDisplayOpen}
+          name={view.name}
+          isBuiltin={view.isBuiltin}
+          isFavorite={view.isFavorite}
+          config={config}
+          labels={labels}
+          onRename={(name) => saveView(view.id, { name })}
+          onFavorite={(isFavorite) => saveView(view.id, { isFavorite })}
+          onConfig={update}
+          onDuplicate={() => duplicate.mutate()}
+        />
+      </div>
       {dirty ? (
         <>
           <Btn ghost onClick={() => setDraft(null)}>

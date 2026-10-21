@@ -29,6 +29,21 @@ html {
   --safe-bottom: env(safe-area-inset-bottom, 0px);
   --safe-left: env(safe-area-inset-left, 0px);
 }
+/* The installed app on iOS 26 and later (iOS Safari: -webkit-touch-callout;
+   26: anchor positioning). iOS draws a soft blur from the top edge down to
+   about 40pt below the status bar, over whatever the page shows there, and
+   the page cannot turn it off: WebKit only swaps it for a solid fill when
+   the browser has its own bar above the page (Safari's toolbar, an
+   obscured inset), which an installed app does not. So the top clearance
+   adds that band, and the top bar sits below the blur. 40pt is how far
+   the page had to be pulled down for the bar to read sharp. */
+@media (display-mode: standalone) {
+  @supports (-webkit-touch-callout: none) and (anchor-name: --a) {
+    html {
+      --safe-top: calc(env(safe-area-inset-top, 0px) + 40px);
+    }
+  }
+}
 @media (display-mode: standalone) {
   html {
     --screen-below-viewport: calc(100vh - 100dvh);

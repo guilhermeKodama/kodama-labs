@@ -8,7 +8,6 @@ import { rememberAppUrl, sessionStore } from "@/lib/shell/last-app-url";
 import { useShellShortcut } from "@/lib/shell/use-shell-shortcut";
 import { GlobalOverlays } from "./global-overlays";
 import { Sidebar, SidebarDrawer, toggleSidebar } from "./sidebar";
-import { StatusBarStrip } from "./status-bar-strip";
 
 /**
  * The signed-in app around every screen of the (app) layout. It stays
@@ -27,7 +26,6 @@ export function AppShell({ children }: { children: ReactNode }) {
         <Sidebar />
         <main className="relative flex min-w-0 flex-1 flex-col overflow-hidden">{children}</main>
       </div>
-      <StatusBarStrip />
       <SidebarDrawer />
       <CommandMenu />
       <GlobalOverlays />
