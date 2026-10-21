@@ -39,14 +39,8 @@ export function FireScreen() {
   return (
     <Page
       crumbs={[ti("crumbs.investments"), ti("crumbs.fire")]}
-      actions={
-        <>
-          {summary ? <Btn onClick={() => setDialog("goal")}>{summary.goal ? t("editGoal") : t("defineGoal")}</Btn> : null}
-          <Btn primary onClick={() => setDialog("aporte")}>
-            {t("register")}
-          </Btn>
-        </>
-      }
+      secondary={summary ? [{ label: summary.goal ? t("editGoal") : t("defineGoal"), onSelect: () => setDialog("goal") }] : []}
+      primary={{ label: t("register"), onSelect: () => setDialog("aporte") }}
     >
       {summary && view ? (
         <FireBody summary={summary} view={view} onMilestone={() => setDialog("milestone")} />

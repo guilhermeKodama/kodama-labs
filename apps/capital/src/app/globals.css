@@ -19,13 +19,20 @@
    100dvh (and innerHeight) stop that much short of the bottom of the
    screen. There 100vh is the whole screen (no browser bars come and go),
    so what fills the screen uses h-dvh standalone:h-screen; a fixed overlay
-   that spans it, standalone:h-screen standalone:bottom-auto. On html, not
-   :root, so the color tokens' :root block below stays the first one. */
+   that spans it, standalone:h-screen standalone:bottom-auto; and what is
+   fixed to the bottom subtracts --screen-below-viewport (the part of the
+   screen under the viewport: 0 everywhere else). On html, not :root, so the
+   color tokens' :root block below stays the first one. */
 html {
   --safe-top: env(safe-area-inset-top, 0px);
   --safe-right: env(safe-area-inset-right, 0px);
   --safe-bottom: env(safe-area-inset-bottom, 0px);
   --safe-left: env(safe-area-inset-left, 0px);
+}
+@media (display-mode: standalone) {
+  html {
+    --screen-below-viewport: calc(100vh - 100dvh);
+  }
 }
 @utility pt-safe {
   padding-top: var(--safe-top);

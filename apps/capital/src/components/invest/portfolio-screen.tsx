@@ -180,33 +180,36 @@ export function PortfolioScreen() {
   return (
     <Page
       crumbs={[ti("crumbs.investments"), ti("crumbs.portfolio")]}
-      actions={
-        <>
-          <Btn disabled={refresh.isPending} onClick={() => refresh.mutate()}>
-            {refresh.isPending ? t("refreshing") : t("refreshPrices")}
-          </Btn>
-          <Btn
-            title={t("importNoteHint")}
-            onClick={() => fileInput.current?.click()}
-          >
-            {t("importNote")}
-          </Btn>
-          <input
-            ref={fileInput}
-            type="file"
-            accept={NOTE_FILE_ACCEPT}
-            className="hidden"
-            onChange={(event) => {
-              const files = [...(event.target.files ?? [])];
-              event.target.value = "";
-              if (files.length)
-                openAssistant({ files, prompt: t("importNotePrompt") });
-            }}
-          />
-          <Btn primary onClick={() => setOpOpen({ holdingId: null })}>
-            {t("newOperation")}
-          </Btn>
-        </>
+      secondary={[
+        {
+          label: refresh.isPending ? t("refreshing") : t("refreshPrices"),
+          onSelect: () => refresh.mutate(),
+          disabled: refresh.isPending,
+        },
+        {
+          label: t("importNote"),
+          title: t("importNoteHint"),
+          onSelect: () => fileInput.current?.click(),
+        },
+      ]}
+      primary={{
+        label: t("newOperation"),
+        onSelect: () => setOpOpen({ holdingId: null }),
+      }}
+      overlay={
+        // Opened by "Importar nota" (a header button, or the ⋯ menu on a phone).
+        <input
+          ref={fileInput}
+          type="file"
+          accept={NOTE_FILE_ACCEPT}
+          className="hidden"
+          onChange={(event) => {
+            const files = [...(event.target.files ?? [])];
+            event.target.value = "";
+            if (files.length)
+              openAssistant({ files, prompt: t("importNotePrompt") });
+          }}
+        />
       }
     >
       <div className="flex items-center gap-2">

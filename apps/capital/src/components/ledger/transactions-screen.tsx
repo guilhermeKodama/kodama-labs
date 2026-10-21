@@ -22,7 +22,7 @@ import { boardColumnQuery, boardKey, calendarQuery, calendarRowsQuery, isPagedLa
 import { planViewUpdate } from "@/lib/ledger/view-update";
 import { BulkBar } from "./bulk-bar";
 import { useImportLabels, useLedgerLabels } from "./fields";
-import { TransactionsHeaderActions } from "./header-actions";
+import { useTransactionsHeader } from "./header-actions";
 import { BoardView, CalendarView, ChartView, PivotView, SankeyView } from "./layouts";
 import { LedgerOverlays, useLedgerOverlays } from "./overlays";
 import type { DisplayRow } from "./rows";
@@ -136,6 +136,7 @@ function ViewScreen({
   const current = selection.key === selectionKey;
   const selected = current ? selection.ids : EMPTY_SELECTION;
   const allInView = current && selection.all;
+  const header = useTransactionsHeader({ selecting: selected.size > 0 || allInView });
   const setSelected = useCallback(
     (ids: ReadonlySet<string>) => setSelection((s) => ({ key: selectionKey, ids, all: s.key === selectionKey && s.all })),
     [selectionKey],
@@ -350,7 +351,7 @@ function ViewScreen({
   }
 
   return (
-    <Page crumbs={[t("crumb"), view.name]} subheader={tabs} actions={<TransactionsHeaderActions />} overlay={<LedgerOverlays names={names} rows={rows} />}>
+    <Page crumbs={[t("crumb"), view.name]} subheader={tabs} {...header} overlay={<LedgerOverlays names={names} rows={rows} />}>
       {filterBar}
       {draft?.label ? (
         <p className="text-body-sm text-fg-3">

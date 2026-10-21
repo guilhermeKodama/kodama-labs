@@ -119,7 +119,7 @@ export function ContributionsScreen() {
   return (
     <Page
       crumbs={[ti("crumbs.investments"), ti("crumbs.contributions")]}
-      actions={
+      controls={
         <>
           <Segmented
             value={scope}
@@ -152,11 +152,9 @@ export function ContributionsScreen() {
               ›
             </button>
           </span>
-          <Btn primary onClick={() => setDialog("aporte")}>
-            {t("register")}
-          </Btn>
         </>
       }
+      primary={{ label: t("register"), onSelect: () => setDialog("aporte") }}
     >
       <KpiStrip>
         <Kpi
