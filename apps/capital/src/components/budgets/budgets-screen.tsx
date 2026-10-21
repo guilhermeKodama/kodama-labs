@@ -3,7 +3,7 @@
 import { useCallback, useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
 import { parseAsString, useQueryStates } from "nuqs";
-import { Btn, Segmented } from "@/components/cap";
+import { Segmented } from "@/components/cap";
 import { Page } from "@/components/shell/page";
 import { todayIn } from "@/lib/budgets/period";
 import { budgetsParams, openMonth, resolveBudgetsView, stepView, switchMode, type BudgetsMode, type BudgetsView } from "@/lib/budgets/url";
@@ -47,7 +47,7 @@ export function BudgetsScreen() {
   return (
     <Page
       crumbs={[t("crumbs.transactions"), t("crumbs.budgets")]}
-      actions={
+      controls={
         <>
           <Segmented<BudgetsMode>
             aria-label={t("mode.label")}
@@ -65,11 +65,9 @@ export function BudgetsScreen() {
             prevLabel={t(isYear ? "nav.prevYear" : "nav.prevMonth")}
             nextLabel={t(isYear ? "nav.nextYear" : "nav.nextMonth")}
           />
-          <Btn primary onClick={() => setDialog({ kind: "create", month: actionMonth, scope: view.scope })}>
-            {t("newBudget")}
-          </Btn>
         </>
       }
+      primary={{ label: t("newBudget"), onSelect: () => setDialog({ kind: "create", month: actionMonth, scope: view.scope }) }}
     >
       {isYear ? (
         <YearView view={view} today={today} onScope={(scope) => go({ ...view, scope })} onOpenMonth={(month) => go(openMonth(view, month))} actions={actions} />

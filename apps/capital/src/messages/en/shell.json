@@ -21,6 +21,9 @@
     "expand": "Expand the sidebar",
     "openMenu": "Open the menu"
   },
+  "page": {
+    "more": "More actions"
+  },
   "session": {
     "loadFailed": "Your account could not be loaded."
   },

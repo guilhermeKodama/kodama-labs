@@ -21,6 +21,9 @@
     "expand": "Expandir a barra lateral",
     "openMenu": "Abrir o menu"
   },
+  "page": {
+    "more": "Mais ações"
+  },
   "session": {
     "loadFailed": "Não deu para carregar sua conta."
   },
