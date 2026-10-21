@@ -17,9 +17,9 @@ export const FLOATING =
 export const MENU_ROW =
   "flex h-(--cap-menu-row-h) w-full cursor-pointer items-center gap-2 rounded-[5px] px-2 text-left text-control outline-none select-none data-[disabled]:cursor-not-allowed data-[disabled]:opacity-40 data-[highlighted]:bg-fill-3";
 
-/** Dimmed page behind dialogs and sheets: the chrome color at 72%. */
+/** Dimmed page behind dialogs and sheets: the chrome color at 72%, over the whole screen in the installed app too (globals.css, safe areas). */
 export const BACKDROP =
-  "fixed inset-0 z-50 bg-chrome/72 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0";
+  "fixed inset-0 z-50 bg-chrome/72 standalone:bottom-auto standalone:h-screen data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0";
 
 /** Selected item of a navigation list on the chrome (sidebar, Ajustes): the
  * nav-on fill with the indicator bar on its leading edge. */

@@ -16,8 +16,9 @@ const Toaster = ({ ...props }: ToasterProps) => {
     <Sonner
       theme={theme as ToasterProps["theme"]}
       position="bottom-center"
-      offset={16}
-      mobileOffset={16}
+      // 16px above the home indicator in the installed app (globals.css, safe areas).
+      offset={{ bottom: "calc(16px + var(--safe-bottom))" }}
+      mobileOffset={{ bottom: "calc(16px + var(--safe-bottom))" }}
       gap={8}
       className="toaster group"
       style={{ "--width": "560px" } as React.CSSProperties}

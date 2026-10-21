@@ -33,7 +33,8 @@ export function TransactionsHeaderActions() {
         </Btn>
       ) : null}
       <Btn onClick={() => overlays.openImport()}>{tImport("action")}</Btn>
-      <Kbd>N</Kbd>
+      {/* A keyboard hint: no use on a phone, where it only takes room from the buttons. */}
+      <Kbd className="max-md:hidden">N</Kbd>
       <Btn primary onClick={() => overlays.openCreate()}>
         {t("create")}
       </Btn>

@@ -52,6 +52,18 @@
   --cap-text-scale: 1.14;
 }
 
+/* iOS zooms into a focused field whose text is under 16px and stays zoomed
+   in, which leaves the installed app cut off on the right. On touch screens
+   text fields are at least 16px. Unlayered, so it wins over the role
+   utilities (Tailwind's layer) on the same element. */
+@media (pointer: coarse) {
+  input:not([type="checkbox"], [type="radio"], [type="range"], [type="color"]),
+  select,
+  textarea {
+    font-size: max(16px, 1em);
+  }
+}
+
 /* The roles as Tailwind utilities: text-micro … text-hero. */
 @theme inline {
   --text-micro: var(--cap-font-micro);

@@ -87,7 +87,8 @@ export function SidebarTrigger() {
       onClick={toggleSidebar}
       title={`${label} (${shortcut})`}
       aria-label={label}
-      className="text-body-lg text-fg-3 outline-none hover:text-fg-strong focus-visible:text-fg-strong"
+      // The ::before widens the tap target to about 40px without moving the glyph.
+      className="relative text-body-lg text-fg-3 outline-none before:absolute before:-inset-3 hover:text-fg-strong focus-visible:text-fg-strong"
     >
       ▤
     </button>
@@ -333,7 +334,7 @@ export function Sidebar() {
   return (
     <aside
       className={cn(
-        "hidden h-dvh min-h-0 shrink-0 flex-col gap-0.5 overflow-y-auto border-r border-stroke-3 bg-chrome md:flex",
+        "hidden h-full min-h-0 shrink-0 flex-col gap-0.5 overflow-y-auto border-r border-stroke-3 bg-chrome md:flex",
         rail ? "w-12 items-center px-1.5 py-2" : "w-[200px] p-2",
       )}
     >
@@ -364,7 +365,7 @@ export function SidebarDrawer() {
         <DialogPrimitive.Overlay className={cn(BACKDROP, "md:hidden")} />
         <DialogPrimitive.Content
           aria-describedby={undefined}
-          className="fixed inset-y-0 left-0 z-50 flex w-[240px] max-w-[85vw] flex-col gap-0.5 overflow-y-auto border-r border-stroke-1 bg-chrome p-2 text-fg-1 outline-none data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:slide-in-from-left-4 md:hidden"
+          className="fixed inset-y-0 left-0 z-50 flex w-[240px] standalone:bottom-auto standalone:h-screen max-w-[85vw] flex-col gap-0.5 overflow-y-auto border-r border-stroke-1 bg-chrome p-2 pt-[calc(0.5rem+var(--safe-top))] pb-[calc(0.5rem+var(--safe-bottom))] pl-[calc(0.5rem+var(--safe-left))] text-fg-1 outline-none data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:slide-in-from-left-4 md:hidden"
         >
           <DialogPrimitive.Title className="sr-only">{BRAND}</DialogPrimitive.Title>
           <OverlayScope id={overlayId}>
