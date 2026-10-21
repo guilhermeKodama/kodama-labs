@@ -36,23 +36,20 @@ async function colorOf(page: import("@playwright/test").Page, classes: string) {
   }, classes);
 }
 
-flow("The app on a phone, polished: no blur under the status bar, a selection bar that fits, full-screen forms, budgets read from the left", async ({ page, scene, say, check }) => {
+flow("The app on a phone, polished: a full-width search, a selection bar that fits, full-screen forms, budgets read from the left", async ({ page, scene, say, check }) => {
   await openTransactions(page);
   await simulateIphone(page);
 
-  await scene("Sem desfoque no topo", "iOS 26 blurs the top of an installed app unless a fixed, opaque bar sits there");
-  const strip = page.locator("[data-status-bar-strip]");
-  await check("An opaque strip fills the status bar area", async () => {
-    const box = await strip.evaluate((el) => {
-      const style = getComputedStyle(el);
-      const rect = el.getBoundingClientRect();
-      return { position: style.position, top: rect.top, height: rect.height, width: rect.width, background: style.backgroundColor };
-    });
-    expect(box.position).toBe("fixed");
-    expect(box.top).toBe(0);
-    expect(box.height).toBe(62);
-    expect(box.width).toBe(WIDTH);
-    expect(box.background).toBe(await colorOf(page, "bg-editor"));
+  await scene("Busca", "On a phone the search fills its row, with Exibição at its end");
+  const search = page.getByRole("textbox", { name: "Buscar nesta view…" });
+  const display = page.getByRole("main").getByRole("button", { name: "Exibição" });
+  await check("Search and Exibição fill the row", async () => {
+    const field = (await search.boundingBox())!;
+    const button = (await display.boundingBox())!;
+    expect(Math.abs(field.y - button.y)).toBeLessThanOrEqual(2);
+    expect(button.x - (field.x + field.width)).toBeLessThanOrEqual(8);
+    expect(Math.round(WIDTH - (button.x + button.width))).toBeLessThanOrEqual(16);
+    expect(field.width).toBeGreaterThan(220);
   });
 
   await scene("Barra de seleção", "Selecting rows on a phone");
