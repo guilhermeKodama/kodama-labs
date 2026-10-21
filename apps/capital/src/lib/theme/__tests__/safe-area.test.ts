@@ -18,9 +18,9 @@ describe("safe areas (src/app/globals.css)", () => {
     for (const side of ["top", "right", "bottom", "left"]) expect(base).toContain(`--safe-${side}: env(safe-area-inset-${side}, 0px);`);
   });
 
-  it("keeps the top bar below iOS 26's edge blur in the installed app: 40pt more top clearance", () => {
+  it("keeps the top bar's icons below iOS 26's edge blur in the installed app: 12pt more top clearance", () => {
     const rule = "@media (display-mode: standalone) {\n  @supports (-webkit-touch-callout: none) and (anchor-name: --a) {";
     expect(globals).toContain(rule);
-    expect(blockAfter(rule, "html")).toContain("--safe-top: calc(env(safe-area-inset-top, 0px) + 40px);");
+    expect(blockAfter(rule, "html")).toContain("--safe-top: calc(env(safe-area-inset-top, 0px) + 12px);");
   });
 });
