@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { budgetFor, excludedEntities, mean, stillToCome, suggestedBudget, typical } from "../assign";
-import { resolveEffective } from "../effective-budgets";
-import { todayIn } from "../today";
+import { budgetFor, excludedEntities, mean, slotKey, stillToCome, suggestedBudget, typical } from "../assign";
+import { chainKey, normalizeToMonthStart, resolveEffective, yearMonth } from "../effective-budgets";
+import { DAY_MS, todayIn } from "../today";
 
 const month = (ym: string, hour = 12) => new Date(`${ym}-01T${String(hour).padStart(2, "0")}:00:00.000Z`);
 const v = (id: string, from: string, extra: Partial<{ entityId: string | null; categoryId: string; period: "monthly" | "yearly"; isTombstone: boolean }> = {}) => ({
@@ -33,6 +33,27 @@ describe("resolveEffective", () => {
   it("compares by year-month, so a legacy midnight version resolves like a noon one", () => {
     const rows = [{ ...v("legacy", "2026-01"), effectiveFrom: month("2026-03", 0) }];
     expect(resolveEffective(rows, month("2026-03")).map((b) => b.id)).toEqual(["legacy"]);
+  });
+});
+
+describe("normalizeToMonthStart / yearMonth / chainKey", () => {
+  it("moves any instant of a month to the first day at noon UTC", () => {
+    expect(normalizeToMonthStart(new Date("2026-09-22T15:00:00Z")).toISOString()).toBe("2026-09-01T12:00:00.000Z");
+    expect(normalizeToMonthStart(new Date("2026-03-01T00:00:00Z")).toISOString()).toBe("2026-03-01T12:00:00.000Z");
+    expect(normalizeToMonthStart(new Date("2026-12-31T23:59:59.999Z")).toISOString()).toBe("2026-12-01T12:00:00.000Z");
+  });
+
+  it("orders year-months as numbers, months 0-based", () => {
+    expect(yearMonth(new Date("2026-01-15T12:00:00Z"))).toBe(202600);
+    expect(yearMonth(new Date("2026-09-01T00:00:00Z"))).toBe(202608);
+    expect(yearMonth(new Date("2025-12-31T23:59:59Z"))).toBeLessThan(yearMonth(new Date("2026-01-01T00:00:00Z")));
+    expect(yearMonth(month("2026-03", 0))).toBe(yearMonth(month("2026-03")));
+  });
+
+  it("keys a chain by entity (or every entity), category and period", () => {
+    expect(chainKey({ entityId: null, categoryId: "food", period: "monthly" })).toBe("*|food|monthly");
+    expect(chainKey({ entityId: "pf", categoryId: "food", period: "yearly" })).toBe("pf|food|yearly");
+    expect(chainKey({ entityId: "pf", categoryId: "food", period: "monthly" })).not.toBe(chainKey({ entityId: "pf", categoryId: "food", period: "yearly" }));
   });
 });
 
@@ -93,6 +114,30 @@ describe("helpers", () => {
   it("keeps the usual remainder when spent-to-date matches the historical early amount", () => {
     // Groceries: 600 by today and 600 after. 600 is already spent.
     expect(stillToCome([1200, 1200, 1200], [600, 600, 600], 600)).toBe(600);
+  });
+
+  it("keys a slot by entity and category, with markers for every entity and no category", () => {
+    expect(slotKey("pf", "food")).toBe("pf|food");
+    expect(slotKey(null, "food")).toBe("*|food");
+    expect(slotKey("pf", null)).toBe("pf|-");
+    expect(slotKey(null, null)).toBe("*|-");
+  });
+
+  it("handles empty and odd series", () => {
+    expect(stillToCome([], [], 100)).toBe(0);
+    expect(stillToCome([1000, 1000, 1000], [900, 900, 900], -50)).toBe(900);
+    expect(stillToCome([1000], [1000], 0)).toBe(1000);
+    expect(budgetFor([], "pf", "food")).toBeUndefined();
+    expect(typical([0, 0, 0])).toBe(0);
+  });
+
+  it("flips the day and the year by timezone", () => {
+    const newYear = new Date("2026-01-01T02:00:00Z");
+    expect(todayIn("America/Sao_Paulo", newYear)).toMatchObject({ y: 2025, m: 12, d: 31, iso: "2025-12-31" });
+    expect(todayIn("Asia/Tokyo", new Date("2025-12-31T16:00:00Z"))).toMatchObject({ y: 2026, m: 1, d: 1, iso: "2026-01-01" });
+    const t = todayIn("UTC", new Date("2026-10-01T02:00:00Z"));
+    expect(t.start.toISOString()).toBe("2026-10-01T00:00:00.000Z");
+    expect(t.end.getTime() - t.start.getTime()).toBe(DAY_MS - 1);
   });
 
   it("reads today in the user's timezone", () => {
