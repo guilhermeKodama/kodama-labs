@@ -811,12 +811,10 @@ function OperationForm({
                 ...accounts
                   .filter((a) => {
                     if (a.archivedAt) return false;
+                    // The cash leg and the holding have to share an entity.
+                    if (broker && a.entityId !== broker.entityId) return false;
                     if (a.type === "checking" || a.type === "cash") return true;
-                    return (
-                      a.type === "brokerage" &&
-                      a.id !== brokerId &&
-                      (!broker || a.entityId === broker.entityId)
-                    );
+                    return a.type === "brokerage" && a.id !== brokerId;
                   })
                   .map((a) => ({
                     value: a.id,

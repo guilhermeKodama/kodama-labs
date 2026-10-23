@@ -28,6 +28,8 @@ flow("A provento is credited to the brokerage's cash balance", async ({ page, sc
   await credit.click();
   await check("Avenue can receive the provento", async () => {
     await expect(page.getByRole("option", { name: /Avenue/ })).toBeVisible();
+    await expect(page.getByRole("option", { name: /Inter PJ/ })).toHaveCount(0);
+    await expect(page.getByRole("option", { name: /Mercury/ })).toHaveCount(0);
   });
   await page.keyboard.press("Escape");
 
