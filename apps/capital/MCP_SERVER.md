@@ -440,6 +440,8 @@ A resgate: the sell and the withdrawal back to a checking or cash account, one u
 
 Records a provento linked to a holding and credits the cash account, in one undo batch. This is the only way to attach income to a holding: a plain income in category Proventos shows as unlinked, not as the asset. The cash leg is the same shape the ledger uses for dividends (kind `investment`, linked to the holding). Do not also call `create_transaction` or `create_transfer`.
 
+`cashAccountId` is a checking, cash, or brokerage account. A brokerage account already carries cash: buys, sells and aportes are ledger entries on that same account, and `list_account_balances` sums them. FII rendimentos land in that balance (saldo em conta). Omit `cashAccountId` to credit the brokerage the holding belongs to. A credit card is rejected. A separate cash sub-account is not created: it would count the same money twice beside those legs.
+
 `amount` is the gross, in `currency`. `currency` must be the holding's currency or the cash account's. `withholdingTax`, in that same currency, is optional; the account receives the net. The cash leg stores the exchange rate of `date`, not today's rate.
 
 `incomeType` is `fii_income` (Rendimento FII, tax-exempt), `dividend`, `jcp` (income tax withheld at source) or `fixed_income_interest` (caixinha, CDB or Tesouro interest). `origin` (`BR`, `BDR`, `EXTERIOR`) applies to dividends and defaults from the asset class. `description` defaults to `Dividendo <ticker>` (or JCP / Rendimento FII / Juros), using the holding name when it has no ticker.
@@ -456,7 +458,7 @@ If an unlinked income already exists on that cash account within 3 days, with th
 
 Links an existing income transaction to a holding as a provento without crediting the cash again. The income entry becomes the dividend's cash leg, so the chart counts it once, on the asset, at the amount and exchange rate already stored. `transactionId` is the income's ledger entry id. `incomeType` is required. `withholdingTax` is optional, in the transaction's currency: the entry amount stays the net, and gross is net + tax. The tax cannot exceed that gross. `fii_income` rejects `withholdingTax` greater than zero.
 
-Transfers, expenses and investment entries are rejected. Calling again on the same entry returns that operation (`duplicate: true`).
+The income may already sit on a checking, cash, or brokerage account. A credit card is rejected. Transfers, expenses and investment entries are rejected. Calling again on the same entry returns that operation (`duplicate: true`).
 
 An existing dividend of this holding within 7 days is matched in the base currency (`amountBase`, within 0.01), not by comparing the holding's currency with the entry's. If that operation has no cash leg, this income is attached as its leg and no second operation is created. If it already has a leg, the call fails with `dividend.extra_cash` and links nothing: the entry is extra cash (`transactionId`), and the existing dividend is `operationId`. That is not a success and not `duplicate: true`.
 
@@ -464,7 +466,9 @@ Deleting or editing the operation afterwards unlinks this income and leaves it a
 
 ### 18. `update_dividend`
 
-Sets `origin`, `incomeType` and `withholdingTax` on an existing dividend or yield. It does not rewrite the cash entry and does not create entries. The net already booked stays the net, so a higher withholding raises the gross by the same amount. The same values return `duplicate: true` and write nothing.
+Sets `origin`, `incomeType` and `withholdingTax` on an existing dividend or yield. Omit `cashAccountId` and the cash entry is not rewritten and no entry is created. The net already booked stays the net, so a higher withholding raises the gross by the same amount. The same values return `duplicate: true` and write nothing.
+
+`cashAccountId` moves the cash leg to another checking, cash, or brokerage account of the same user and the same entity as the holding. Amounts, date, description and kind stay (when the currencies differ, the base-currency value stays and the native amount is re-expressed at the entry's date). Balances of both accounts update. A credit card, an archived account, another user's account, or a different entity is rejected. A provento with no cash leg fails with `dividend.no_cash_leg`. `syncLocked` does not block the move: the lock stops the next Pluggy sync from rewriting classification, and the move sets the lock so the sync keeps the account. Pass the operation id or the cash entry id, as for the other fields.
 
 `operationId` is the investment operation id, or the cash entry id of that dividend (the `id` from `list_transactions`; that row's `operationId` is the same operation). The id is resolved as an operation this user owns first. Otherwise it is resolved as a ledger entry id, and the entry must be the cash leg of a dividend or yield. An entry that is not that cash leg fails with `dividend.entry_not_dividend`. An id that is neither an owned operation nor an owned entry is `operation.not_found`. A buy, sale or other non-income operation id is `dividend.not_income_operation`. A closed holding (quantity 0, `closedAt` set) is updated the same way as an open one.
 

@@ -327,6 +327,7 @@
       "taxWithheld": "retido na fonte",
       "creditTo": "Creditar em",
       "creditCash": "Saldo na corretora",
+      "creditCashOn": "Saldo na corretora ({account})",
       "creditAccount": "{account} (cria entrada em Transações)"
     },
     "cash": {

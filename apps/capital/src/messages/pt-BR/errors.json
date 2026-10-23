@@ -150,7 +150,7 @@
     "not_found": "Operação não encontrada.",
     "income_only": "Só proventos têm tipo de provento, IR retido ou conta de crédito.",
     "tax_exceeds_amount": "O IR retido não pode passar do valor bruto.",
-    "credit_account_invalid": "Proventos só podem ser creditados numa conta corrente ou em dinheiro."
+    "credit_account_invalid": "Proventos só podem ser creditados numa conta corrente, em dinheiro ou numa corretora."
   },
   "dividend": {
     "not_income": "Só uma receita pode virar provento. Transferências, despesas e lançamentos de investimento continuam como estão.",
@@ -161,7 +161,8 @@
     "entity_mismatch": "A conta de caixa e o ativo precisam ser da mesma entidade (PF ou PJ).",
     "not_income_operation": "Só um provento (dividendo ou rendimento) pode ter origem, tipo ou IR retido alterados.",
     "entry_not_dividend": "O lançamento {transactionId} não está vinculado a um provento.",
-    "origin_not_dividend": "A origem só vale quando o tipo é dividendo."
+    "origin_not_dividend": "A origem só vale quando o tipo é dividendo.",
+    "no_cash_leg": "Esse provento não tem lançamento de caixa para mover."
   },
   "aporte": {
     "broker_required": "O aporte precisa ir para uma corretora.",

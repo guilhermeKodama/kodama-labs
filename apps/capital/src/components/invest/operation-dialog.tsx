@@ -500,7 +500,7 @@ function OperationForm({
           incomeType,
           totalAmount: grossValue,
           taxWithheld: taxValue,
-          creditToAccountId: creditTo === "cash" ? null : creditTo,
+          creditToAccountId: creditTo === "cash" ? target!.accountId : creditTo,
           date,
         },
       );
@@ -802,13 +802,26 @@ function OperationForm({
               value={creditTo}
               onChange={setCreditTo}
               options={[
-                { value: "cash", label: t("income.creditCash") },
-                ...cashAccounts.map((a) => ({
-                  value: a.id,
-                  label: t("income.creditAccount", {
-                    account: accountLabel(a),
-                  }),
-                })),
+                {
+                  value: "cash",
+                  label: broker
+                    ? t("income.creditCashOn", { account: broker.name })
+                    : t("income.creditCash"),
+                },
+                ...accounts
+                  .filter((a) => {
+                    if (a.archivedAt) return false;
+                    // The cash leg and the holding have to share an entity.
+                    if (broker && a.entityId !== broker.entityId) return false;
+                    if (a.type === "checking" || a.type === "cash") return true;
+                    return a.type === "brokerage" && a.id !== brokerId;
+                  })
+                  .map((a) => ({
+                    value: a.id,
+                    label: t("income.creditAccount", {
+                      account: accountLabel(a),
+                    }),
+                  })),
               ]}
             />
           </Field>
