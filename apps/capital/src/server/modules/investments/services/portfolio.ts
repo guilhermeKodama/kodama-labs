@@ -253,7 +253,12 @@ export interface OperationInput {
   incomeType?: IncomeType | null;
   /** Income only: tax withheld at source; the cash credited is totalAmount - taxWithheld. */
   taxWithheld?: number;
-  /** Income only: credit the cash to this checking or cash account (an entry in Transações) instead of the broker. */
+  /**
+   * Income only: credit the cash to this checking, cash, or brokerage account
+   * instead of leaving it on the holding's broker. A brokerage is that
+   * broker's cash balance (saldo em conta): the same ledger account buys,
+   * sells and aportes already move.
+   */
   creditToAccountId?: string | null;
   /** Dividends only. Ignored for every other income type. */
   dividendOrigin?: DividendOrigin | null;
@@ -281,12 +286,26 @@ export interface OperationWriteOptions {
 
 type HoldingWithAccount = Awaited<ReturnType<typeof getOwnedHolding>>;
 
-/** The checking or cash account an income operation is credited to. */
-async function creditAccount(userId: string, accountId: string, db: DbClient) {
-  const account = await getOwnedAccount(userId, accountId, db);
-  if (account.type !== "checking" && account.type !== "cash") {
-    throw new LedgerError("Income can only be credited to a checking or cash account", 422, { code: "operation.credit_account_invalid" });
+const INCOME_ACCOUNT_TYPES = new Set(["checking", "cash", "brokerage"]);
+
+/**
+ * A provento is credited to a checking account, a cash account, or a
+ * brokerage. The brokerage already holds cash: its balance is the sum of
+ * its ledger entries (buys debit it, sells and aportes credit it), and
+ * list_account_balances reports that sum. FII rendimentos land in that
+ * balance (saldo em conta). A dedicated cash sub-account would sit beside
+ * those legs and count the same money twice.
+ */
+export function assertIncomeAccountType(account: { type: string }) {
+  if (!INCOME_ACCOUNT_TYPES.has(account.type)) {
+    throw new LedgerError("Income can only be credited to a checking, cash, or brokerage account", 422, { code: "operation.credit_account_invalid" });
   }
+}
+
+/** The account an income operation is credited to. Archived accounts are refused; the type check is assertIncomeAccountType. */
+export async function incomeCreditAccount(userId: string, accountId: string, db: DbClient) {
+  const account = await getOwnedAccount(userId, accountId, db);
+  assertIncomeAccountType(account);
   if (account.archivedAt) throw new LedgerError(`Account "${account.name}" is archived`, 422, { code: "account.archived", params: { name: account.name } });
   return account;
 }
@@ -396,7 +415,7 @@ export async function recordOperation(userId: string, input: OperationInput, db:
     const fx = await loadFx(userId, tx);
     const date = parseLocalDate(input.date);
     const impact = cashImpact(input.type, input.totalAmount, fees, taxWithheld);
-    const legAccount = input.creditToAccountId ? await creditAccount(userId, input.creditToAccountId, tx) : holding.account;
+    const legAccount = input.creditToAccountId ? await incomeCreditAccount(userId, input.creditToAccountId, tx) : holding.account;
     const label = input.description?.trim() || opLabel(input.type, holding, incomeType);
     const oversoldBefore = input.importId ? null : await oversoldOperations(holding.id, tx);
 
@@ -488,7 +507,7 @@ export async function updateOperation(userId: string, operationId: string, patch
       ? holding.account
       : patch.creditToAccountId !== undefined
         ? patch.creditToAccountId
-          ? await creditAccount(userId, patch.creditToAccountId, tx)
+          ? await incomeCreditAccount(userId, patch.creditToAccountId, tx)
           : holding.account
         : leg && leg.accountId !== holding.accountId
           ? await getOwnedAccount(userId, leg.accountId, tx)
@@ -695,7 +714,7 @@ export function serializeOperation(op: SerializableOperation) {
     notes: op.notes,
     externalId: op.externalId,
     cashEntryId: op.cashEntryId,
-    /** The checking or cash account an income was credited to; null when the cash is on the broker. */
+    /** A checking, cash, or other brokerage an income was credited to; null when the cash is on the holding's broker. */
     creditToAccountId: cashAccountId && accountId && cashAccountId !== accountId ? cashAccountId : null,
     fundingGroupId: op.fundingGroupId,
   };

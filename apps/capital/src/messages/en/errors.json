@@ -150,7 +150,7 @@
     "not_found": "Operation not found.",
     "income_only": "Only income can have an income type, tax withheld or a credit account.",
     "tax_exceeds_amount": "The tax withheld can't exceed the gross amount.",
-    "credit_account_invalid": "Income can only be credited to a checking or cash account."
+    "credit_account_invalid": "Income can only be credited to a checking, cash, or brokerage account."
   },
   "dividend": {
     "not_income": "Only an income transaction can become a dividend. Transfers, expenses and investment entries stay as they are.",
@@ -161,7 +161,8 @@
     "entity_mismatch": "The cash account and the holding have to belong to the same entity.",
     "not_income_operation": "Only an income operation (a dividend or a yield) can have its origin, income type or withholding changed.",
     "entry_not_dividend": "Entry {transactionId} is not linked to a dividend.",
-    "origin_not_dividend": "origin applies only when the income type is a dividend."
+    "origin_not_dividend": "origin applies only when the income type is a dividend.",
+    "no_cash_leg": "This provento has no cash leg to move."
   },
   "aporte": {
     "broker_required": "A contribution has to go to a brokerage account.",

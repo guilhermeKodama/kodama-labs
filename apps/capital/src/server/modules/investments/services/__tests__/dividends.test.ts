@@ -5,6 +5,7 @@ import { listInvestmentPositions } from "@capital/server/modules/mcp/tools/inves
 import { loadFx } from "@capital/server/modules/ledger/lib/fx";
 import { toNumber } from "@capital/server/modules/ledger/lib/money";
 import { accountBalances } from "@capital/server/modules/ledger/services/accounts";
+import { listAccountBalances } from "@capital/server/modules/mcp/tools/balances";
 import { createEntry } from "@capital/server/modules/ledger/services/entries";
 import { undoBatch } from "@capital/server/modules/ledger/services/mutations";
 import { createHolding, deleteOperation, recordOperation, updateOperation } from "../portfolio";
@@ -156,6 +157,61 @@ describe("record_dividend", () => {
     expect(result.passiveIncome).toBe(false);
     expect(result.description).toBe("Juros Caixinha");
     expect((await proventos12m(USER, prisma)).total).toBe(0);
+  });
+
+  it("credits a brokerage account's cash balance, including when the account is omitted", async () => {
+    const h = await petr4();
+    const brokerBefore = await balance(f.broker);
+    const checkingBefore = await balance(f.pfChecking);
+    const result = await recordDividend(
+      USER,
+      { holdingId: h.id, cashAccountId: f.broker, amount: 40, date: "2026-08-05", currency: "BRL", incomeType: "fii_income" },
+      prisma,
+    );
+    expect(result).toMatchObject({ cashAccountId: f.broker, net: 40, duplicate: false });
+    const leg = await prisma.ledgerEntry.findUniqueOrThrow({ where: { id: result.cashEntryId! } });
+    expect(leg).toMatchObject({ accountId: f.broker, kind: "investment" });
+    expect(toNumber(leg.amount)).toBe(40);
+    expect(await balance(f.broker)).toBeCloseTo(brokerBefore + 40, 4);
+    expect(await balance(f.pfChecking)).toBeCloseTo(checkingBefore, 4);
+
+    const listed = await listAccountBalances(USER, {}, prisma);
+    const row = listed.accounts.find((account) => account.id === f.broker);
+    expect(row).toMatchObject({ type: "brokerage", name: "XP" });
+    expect(row?.balance).toBeCloseTo(brokerBefore + 40, 2);
+
+    const omitted = await recordDividend(
+      USER,
+      { holdingId: h.id, amount: 12, date: "2026-08-06", currency: "BRL", incomeType: "dividend" },
+      prisma,
+    );
+    expect(omitted.cashAccountId).toBe(f.broker);
+    expect(await balance(f.broker)).toBeCloseTo(brokerBefore + 52, 4);
+    expect(await balance(f.pfChecking)).toBeCloseTo(checkingBefore, 4);
+  });
+
+  it("rejects a credit card and another user's brokerage", async () => {
+    const h = await petr4();
+    const before = await prisma.ledgerEntry.count({ where: { userId: USER, deletedAt: null } });
+    await expect(
+      recordDividend(USER, { holdingId: h.id, cashAccountId: f.card, amount: 10, date: "2026-08-05", currency: "BRL", incomeType: "dividend" }, prisma),
+    ).rejects.toMatchObject({ code: "operation.credit_account_invalid" });
+    expect(await prisma.investmentOperation.count({ where: { holdingId: h.id } })).toBe(0);
+    expect(await prisma.ledgerEntry.count({ where: { userId: USER, deletedAt: null } })).toBe(before);
+
+    const other = "test-user-investments-dividends-broker-002";
+    const otherFixture = await createLedgerFixture(prisma, other);
+    try {
+      await expect(
+        recordDividend(other, { holdingId: h.id, cashAccountId: otherFixture.broker, amount: 10, date: "2026-08-05", currency: "BRL", incomeType: "dividend" }, prisma),
+      ).rejects.toMatchObject({ code: "holding.not_found" });
+      await expect(
+        recordDividend(USER, { holdingId: h.id, cashAccountId: otherFixture.broker, amount: 10, date: "2026-08-05", currency: "BRL", incomeType: "dividend" }, prisma),
+      ).rejects.toMatchObject({ code: "account.not_found" });
+      expect(await prisma.investmentOperation.count({ where: { holdingId: h.id } })).toBe(0);
+    } finally {
+      await deleteLedgerFixture(prisma, other);
+    }
   });
 });
 
@@ -323,6 +379,22 @@ describe("convert_income_to_dividend", () => {
     expect((await prisma.investmentOperation.findUniqueOrThrow({ where: { id: second.operationId } })).cashEntryId).toBeNull();
     expect(await balance(f.pfChecking)).toBeCloseTo(cash2, 4);
     expect(await prisma.ledgerEntry.count({ where: { userId: USER, accountId: f.pfChecking, deletedAt: null, kind: "investment" } })).toBe(0);
+  });
+
+  it("links income already on a brokerage and rejects income on a credit card", async () => {
+    const h = await petr4();
+    const onBroker = await createEntry(USER, { kind: "income", accountId: f.broker, amount: 18, date: "2026-08-09", description: "MXRF11" }, prisma);
+    const brokerBefore = await balance(f.broker);
+    const linked = await convertIncomeToDividend(USER, { transactionId: onBroker.entryIds[0], holdingId: h.id, incomeType: "fii_income" }, prisma);
+    expect(linked).toMatchObject({ cashAccountId: f.broker, cashEntryId: onBroker.entryIds[0], net: 18, duplicate: false });
+    expect(await balance(f.broker)).toBeCloseTo(brokerBefore, 4);
+    expect((await prisma.ledgerEntry.findUniqueOrThrow({ where: { id: onBroker.entryIds[0] } })).kind).toBe("income");
+
+    const onCard = await createEntry(USER, { kind: "income", accountId: f.card, amount: 9, date: "2026-08-09", description: "rendimento" }, prisma);
+    await expect(
+      convertIncomeToDividend(USER, { transactionId: onCard.entryIds[0], holdingId: h.id, incomeType: "dividend" }, prisma),
+    ).rejects.toMatchObject({ code: "operation.credit_account_invalid" });
+    expect(await prisma.investmentOperation.count({ where: { cashEntryId: onCard.entryIds[0] } })).toBe(0);
   });
 });
 
@@ -548,6 +620,121 @@ describe("update_dividend", () => {
       taxWithheld: 5,
       totalAmount: 30,
       cashEntryId: recorded.cashEntryId,
+    });
+  });
+
+  it("moves the cash leg from checking to the brokerage and back, and keeps the amounts", async () => {
+    const h = await petr4();
+    const recorded = await recordDividend(
+      USER,
+      { holdingId: h.id, cashAccountId: f.pfChecking, amount: 80, date: "2026-08-05", currency: "BRL", incomeType: "fii_income" },
+      prisma,
+    );
+    const legBefore = await prisma.ledgerEntry.findUniqueOrThrow({ where: { id: recorded.cashEntryId! } });
+    const checkingBefore = await balance(f.pfChecking);
+    const brokerBefore = await balance(f.broker);
+
+    const moved = await updateDividend(USER, { operationId: recorded.operationId, cashAccountId: f.broker }, prisma);
+    expect(moved).toMatchObject({
+      duplicate: false,
+      operationId: recorded.operationId,
+      cashAccountId: f.broker,
+      gross: 80,
+      withholdingTax: 0,
+      net: 80,
+      origin: null,
+      incomeType: "fii_income",
+      date: "2026-08-05",
+    });
+    const onBroker = await prisma.ledgerEntry.findUniqueOrThrow({ where: { id: recorded.cashEntryId! } });
+    expect(onBroker).toMatchObject({ accountId: f.broker, kind: "investment", description: legBefore.description, currency: "BRL" });
+    expect(onBroker.date).toEqual(legBefore.date);
+    expect(toNumber(onBroker.amount)).toBe(toNumber(legBefore.amount));
+    expect(toNumber(onBroker.amountBase)).toBe(toNumber(legBefore.amountBase));
+    expect(await balance(f.pfChecking)).toBeCloseTo(checkingBefore - 80, 4);
+    expect(await balance(f.broker)).toBeCloseTo(brokerBefore + 80, 4);
+    expect(await prisma.investmentOperation.findUniqueOrThrow({ where: { id: recorded.operationId } })).toMatchObject({
+      totalAmount: 80,
+      taxWithheld: 0,
+      incomeType: "fii_income",
+      dividendOrigin: null,
+      syncLocked: true,
+      cashEntryId: recorded.cashEntryId,
+    });
+
+    const again = await updateDividend(USER, { operationId: recorded.cashEntryId!, cashAccountId: f.broker }, prisma);
+    expect(again).toMatchObject({ duplicate: true, batchId: null, cashAccountId: f.broker });
+
+    const back = await updateDividend(USER, { operationId: recorded.cashEntryId!, cashAccountId: f.pfChecking }, prisma);
+    expect(back.cashAccountId).toBe(f.pfChecking);
+    const restored = await prisma.ledgerEntry.findUniqueOrThrow({ where: { id: recorded.cashEntryId! } });
+    expect(restored.accountId).toBe(f.pfChecking);
+    expect(toNumber(restored.amount)).toBe(80);
+    expect(restored.date).toEqual(legBefore.date);
+    expect(await balance(f.pfChecking)).toBeCloseTo(checkingBefore, 4);
+    expect(await balance(f.broker)).toBeCloseTo(brokerBefore, 4);
+
+    await undoBatch(USER, back.batchId!, prisma);
+    expect((await prisma.ledgerEntry.findUniqueOrThrow({ where: { id: recorded.cashEntryId! } })).accountId).toBe(f.broker);
+    expect(await balance(f.broker)).toBeCloseTo(brokerBefore + 80, 4);
+    expect(await balance(f.pfChecking)).toBeCloseTo(checkingBefore - 80, 4);
+  });
+
+  it("moves an adopted income without rewriting its amount, and rejects a card, another user, and a missing leg", async () => {
+    const h = await petr4();
+    const created = await createEntry(USER, { kind: "income", accountId: f.pfChecking, amount: 33, date: "2026-08-11", description: "HGLG11 rendimento" }, prisma);
+    const linked = await convertIncomeToDividend(USER, { transactionId: created.entryIds[0], holdingId: h.id, incomeType: "fii_income" }, prisma);
+    const before = await prisma.ledgerEntry.findUniqueOrThrow({ where: { id: created.entryIds[0] } });
+    const checkingBefore = await balance(f.pfChecking);
+    const brokerBefore = await balance(f.broker);
+
+    const moved = await updateDividend(USER, { operationId: created.entryIds[0], cashAccountId: f.broker }, prisma);
+    expect(moved).toMatchObject({ cashAccountId: f.broker, net: 33, gross: 33, incomeType: "fii_income" });
+    const after = await prisma.ledgerEntry.findUniqueOrThrow({ where: { id: created.entryIds[0] } });
+    expect(after.kind).toBe("income");
+    expect(after.accountId).toBe(f.broker);
+    expect(toNumber(after.amount)).toBe(toNumber(before.amount));
+    expect(toNumber(after.amountBase)).toBe(toNumber(before.amountBase));
+    expect(after.date).toEqual(before.date);
+    expect(after.description).toBe(before.description);
+    expect(after.metadata).toEqual(before.metadata);
+    expect(await balance(f.pfChecking)).toBeCloseTo(checkingBefore - 33, 4);
+    expect(await balance(f.broker)).toBeCloseTo(brokerBefore + 33, 4);
+
+    await expect(updateDividend(USER, { operationId: linked.operationId, cashAccountId: f.card }, prisma)).rejects.toMatchObject({
+      code: "operation.credit_account_invalid",
+    });
+    await expect(updateDividend(USER, { operationId: linked.operationId, cashAccountId: f.pjChecking }, prisma)).rejects.toMatchObject({
+      code: "dividend.entity_mismatch",
+    });
+    expect((await prisma.ledgerEntry.findUniqueOrThrow({ where: { id: created.entryIds[0] } })).accountId).toBe(f.broker);
+
+    const legacy = await recordOperation(USER, { holdingId: h.id, type: "dividend", totalAmount: 10, taxWithheld: 10, date: "2026-08-12" }, prisma);
+    expect(legacy.cashEntryId).toBeNull();
+    await expect(updateDividend(USER, { operationId: legacy.operation.id, cashAccountId: f.broker }, prisma)).rejects.toMatchObject({
+      code: "dividend.no_cash_leg",
+    });
+
+    const other = "test-user-investments-dividends-move-002";
+    const otherFixture = await createLedgerFixture(prisma, other);
+    try {
+      await expect(updateDividend(other, { operationId: linked.operationId, cashAccountId: otherFixture.broker }, prisma)).rejects.toMatchObject({
+        code: "operation.not_found",
+      });
+      await expect(updateDividend(other, { operationId: created.entryIds[0], cashAccountId: otherFixture.broker }, prisma)).rejects.toMatchObject({
+        code: "operation.not_found",
+      });
+      await expect(updateDividend(USER, { operationId: linked.operationId, cashAccountId: otherFixture.broker }, prisma)).rejects.toMatchObject({
+        code: "account.not_found",
+      });
+    } finally {
+      await deleteLedgerFixture(prisma, other);
+    }
+    expect((await prisma.ledgerEntry.findUniqueOrThrow({ where: { id: created.entryIds[0] } })).accountId).toBe(f.broker);
+    expect(await prisma.investmentOperation.findUniqueOrThrow({ where: { id: linked.operationId } })).toMatchObject({
+      totalAmount: 33,
+      taxWithheld: 0,
+      incomeType: "fii_income",
     });
   });
 });

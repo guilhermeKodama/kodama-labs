@@ -327,6 +327,7 @@
       "taxWithheld": "withheld at source",
       "creditTo": "Credit to",
       "creditCash": "Broker balance",
+      "creditCashOn": "Broker balance ({account})",
       "creditAccount": "{account} (creates an entry in Transactions)"
     },
     "cash": {

@@ -1504,6 +1504,10 @@ export function createCapitalMcpServer(userId: string, db: DbClient, opts: { rea
         "incomeType is fii_income (Rendimento FII, tax-exempt), dividend, jcp (IR withheld at source) or fixed_income_interest (Juros de caixinha/CDB/Tesouro). " +
         "origin (BR, BDR, EXTERIOR) applies to dividends and defaults from the asset class. " +
         "description defaults to \"Dividendo <ticker>\" (or JCP / Rendimento FII / Juros), using the holding name when it has no ticker.\n\n" +
+        "cashAccountId is a checking, cash, or brokerage account. A brokerage account's balance is its cash (saldo em conta): " +
+        "buys, sells and aportes already post on that same account, and list_account_balances includes it. " +
+        "FII rendimentos land there. Omit cashAccountId to credit the brokerage the holding belongs to. " +
+        "A credit card is rejected.\n\n" +
         "Proventos means fii_income + dividend + jcp. fixed_income_interest on a business entity (the PJ caixinha) is recorded and returned with passiveIncome false: it belongs in the PJ books, not in personal Renda passiva. " +
         "Amortization, bonus shares, sales, redemptions and transfers are not income; do not use this tool for them.\n\n" +
         "The same holding, date, income type, cash account and net amount returns the existing operation (duplicate: true) and writes nothing, including a parallel double-submit. " +
@@ -1513,7 +1517,9 @@ export function createCapitalMcpServer(userId: string, db: DbClient, opts: { rea
         "The error dividend.unlinked_income names that transactionId. Use convert_income_to_dividend with it instead of recording a second credit.",
       inputSchema: z.object({
         ...dividendFields,
-        cashAccountId: z.string().uuid().describe("Checking or cash account that receives the net. A ledger account id from list_ledger_accounts."),
+        cashAccountId: z.string().uuid().optional().describe(
+          "Checking, cash, or brokerage account that receives the net. Omit to credit the brokerage the holding belongs to (its cash balance). A ledger account id from list_ledger_accounts. A credit card is rejected.",
+        ),
         amount: z.number().positive().describe("Gross amount, in currency."),
         date: DateStringSchema,
         currency: z.string().min(3).max(3),
@@ -1535,6 +1541,7 @@ export function createCapitalMcpServer(userId: string, db: DbClient, opts: { rea
         "transactionId is the income's ledger entry id. incomeType is required (fii_income, dividend, jcp, fixed_income_interest). " +
         "withholdingTax is optional, in the transaction's currency: the entry amount stays the net that was received, and gross is net + tax. " +
         "origin defaults from the asset class for dividends.\n\n" +
+        "The income may already sit on a checking, cash, or brokerage account. A credit card is rejected. " +
         "Transfers, expenses and investment entries are rejected. A transfer is not income. " +
         "withholdingTax cannot exceed the gross (the entry is the net, gross is net + tax). fii_income rejects withholdingTax greater than zero. " +
         "Calling again on the same entry returns that operation (duplicate: true). " +
@@ -1565,8 +1572,13 @@ export function createCapitalMcpServer(userId: string, db: DbClient, opts: { rea
         "and an income row linked by convert_income_to_dividend. An entry that exists but is not that cash leg fails with " +
         "dividend.entry_not_dividend and changes nothing. An id that is neither an owned operation nor an owned entry is " +
         "operation.not_found. Another user's operation or entry is not found. A closed holding (quantity 0, closedAt set) is updated " +
-        "the same way as an open one. This does not change the cash balance and does not create entries: the cash " +
-        "entry stays as it is. The net (gross − tax) stays the net already booked, so setting withholdingTax raises the " +
+        "the same way as an open one. Omit cashAccountId and the cash entry stays as it is: the balance does not change and no entry is created. " +
+        "Pass cashAccountId to move that cash leg to another checking, cash, or brokerage account of the same user and the same entity. " +
+        "The move keeps the entry's amount, date, description and kind (and, when the currencies differ, the base-currency value). " +
+        "Origin, income type and withholding change only when those fields are also sent. Balances of both accounts update. " +
+        "A credit card, an archived account, another user's account, or a different entity is rejected. A provento with no cash leg is dividend.no_cash_leg. " +
+        "syncLocked does not block the move: the lock stops the next Pluggy sync from rewriting classification, and the move sets it so the sync keeps the account. " +
+        "The net (gross − tax) stays the net already booked, so setting withholdingTax raises the " +
         "gross by the same amount. withholdingTax is in the holding's currency: omit it to keep the current value, and 0 clears it. " +
         "It cannot exceed the operation's current gross (operation.tax_exceeds_amount). fii_income rejects withholdingTax greater than zero " +
         "(dividend.fii_withholding), including a withholding already stored when incomeType becomes fii_income, and a legacy dividend " +
@@ -1581,6 +1593,9 @@ export function createCapitalMcpServer(userId: string, db: DbClient, opts: { rea
         incomeType: dividendFields.incomeType.optional(),
         withholdingTax: z.number().nonnegative().optional().describe("Tax withheld at source, in the holding's currency. Omit to keep the current value. 0 clears it."),
         origin: z.enum(["BR", "BDR", "EXTERIOR"]).optional().describe("Dividend origin. Only when the income type is a dividend; any other income type is rejected."),
+        cashAccountId: z.string().uuid().optional().describe(
+          "Move the cash leg to this checking, cash, or brokerage account. Same user and same entity as the holding. Omit to leave the cash where it is. Amounts, date, origin, income type and withholding are preserved unless those fields are also sent.",
+        ),
       }),
     },
     async (params) => {

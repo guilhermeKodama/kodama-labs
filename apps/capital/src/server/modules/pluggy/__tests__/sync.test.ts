@@ -225,7 +225,11 @@ describe("syncPluggy", () => {
     expect(jcp).toMatchObject({ taxWithheld: 15, classificationSource: "rule", totalAmount: 100 });
     const cash = await prisma.ledgerEntry.findUniqueOrThrow({ where: { id: jcp!.cashEntryId! } });
     expect(cash.kind).toBe("investment");
+    expect(cash.accountId).toBe(fixture.broker);
     expect(toNumber(cash.amount)).toBeCloseTo(85);
+    const fii = ops.find((op) => op.incomeType === "fii_income");
+    const fiiCash = await prisma.ledgerEntry.findUniqueOrThrow({ where: { id: fii!.cashEntryId! } });
+    expect(fiiCash.accountId).toBe(fixture.broker);
     expect(ops.find((op) => op.incomeType === "fii_income")).toMatchObject({ taxWithheld: 0, totalAmount: 20 });
     expect(ops.find((op) => op.dividendOrigin === "BDR")).toMatchObject({ incomeType: "dividend", totalAmount: 12 });
     expect(ops.some((op) => op.externalId === "itx-tax" || op.externalId === "itx-transfer")).toBe(false);
@@ -261,10 +265,11 @@ describe("syncPluggy", () => {
     expect(await prisma.investmentOperation.count({ where: { holding: { account: { userId } } } })).toBe(0);
     expect(await prisma.pluggyExternalRef.count({ where: { userId, pluggyId: "itx-guess" } })).toBe(0);
     const review = await prisma.pluggyReview.findFirstOrThrow({ where: { userId, kind: "low_confidence", status: "open" } });
-    expect(review.draft).toMatchObject({ event: "income", incomeType: "dividend", origin: "EXTERIOR", confidence: 0.4 });
+    expect(review.draft).toMatchObject({ event: "income", incomeType: "dividend", origin: "EXTERIOR", confidence: 0.4, cashAccountId: fixture.broker });
     await resolvePluggyReview(userId, review.id, "confirm", null, prisma, { incomeType: "jcp", origin: null });
     const op = await prisma.investmentOperation.findFirstOrThrow({ where: { holding: { account: { userId } } } });
     expect(op).toMatchObject({ incomeType: "jcp", dividendOrigin: null, classificationSource: "manual", syncLocked: true });
+    expect((await prisma.ledgerEntry.findUniqueOrThrow({ where: { id: op.cashEntryId! } })).accountId).toBe(fixture.broker);
     expect(await prisma.pluggyExternalRef.count({ where: { userId, pluggyId: "itx-guess" } })).toBe(1);
     const stored = await prisma.pluggyItem.findFirstOrThrow({ where: { userId } });
     expect(stored.lastSuccessAt).not.toBeNull();
@@ -419,9 +424,9 @@ describe("syncPluggy", () => {
     expect((await prisma.transferGroup.findFirstOrThrow({ where: { userId } })).direction).toBe("investment_deposit");
   });
 
-  it("finishes the sync when one transaction fails and leaves the model failure unbooked", async () => {
+  it("finishes the sync when the model fails, booking rule income on the brokerage", async () => {
     const userId = "pluggy-partial";
-    const { item } = await connect(userId);
+    const { fixture, item } = await connect(userId);
     const guesser: IncomeGuesser = async () => {
       throw new Error("haiku down");
     };
@@ -437,13 +442,14 @@ describe("syncPluggy", () => {
     const stored = await prisma.pluggyItem.findFirstOrThrow({ where: { id: item.id } });
     expect(stored.lastSuccessAt).not.toBeNull();
     const ops = await prisma.investmentOperation.findMany({ where: { holding: { account: { userId } } } });
-    expect(ops.map((op) => op.type)).toEqual(["buy"]);
-    expect(await prisma.pluggyExternalRef.count({ where: { userId, pluggyId: "itx-jcp" } })).toBe(0);
+    expect(ops.map((op) => op.type).sort()).toEqual(["buy", "dividend"]);
+    const jcp = ops.find((op) => op.incomeType === "jcp");
+    expect(jcp?.cashEntryId).toBeTruthy();
+    expect((await prisma.ledgerEntry.findUniqueOrThrow({ where: { id: jcp!.cashEntryId! } })).accountId).toBe(fixture.broker);
+    expect(await prisma.pluggyExternalRef.count({ where: { userId, pluggyId: "itx-jcp" } })).toBe(1);
     expect(await prisma.pluggyExternalRef.count({ where: { userId, pluggyId: "itx-guess" } })).toBe(0);
-    const failed = await prisma.pluggyReview.findFirstOrThrow({ where: { userId, draft: { path: ["pluggyId"], equals: "itx-jcp" } } });
-    expect(failed.kind).toBe("conflict");
     const draft = await prisma.pluggyReview.findFirstOrThrow({ where: { userId, kind: "low_confidence" } });
-    expect(draft.draft).toMatchObject({ event: "income", pluggyId: "itx-guess", incomeType: "fixed_income_interest", confidence: 0 });
+    expect(draft.draft).toMatchObject({ event: "income", pluggyId: "itx-guess", incomeType: "fixed_income_interest", confidence: 0, cashAccountId: fixture.broker });
   });
 
   it("refuses to confirm a sale as income", async () => {

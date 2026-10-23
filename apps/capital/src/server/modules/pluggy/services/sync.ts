@@ -397,7 +397,7 @@ async function bookInvestmentTx(
         currency: holding.currency,
         confidence: classification.confidence,
         ticker: investment.code ?? null,
-        cashAccountId: classification.incomeType === "fixed_income_interest" ? holding.accountId : creditTo,
+        cashAccountId: holding.accountId,
       });
       return;
     }
@@ -406,7 +406,7 @@ async function bookInvestmentTx(
     } else if (classification.event === "buy" || classification.event === "sell") {
       await bookTrade(item, holdingId, tx, classification.event, classification.gross, date, deps.db);
     } else if (classification.event === "income") {
-      await bookIncome(item, holdingId, tx, classification, date, creditTo, deps.db);
+      await bookIncome(item, holdingId, tx, classification, date, deps.db);
     }
     stats.created += 1;
   } catch (error) {
@@ -440,12 +440,13 @@ async function bookIncome(
   tx: PluggyInvestmentTransaction,
   classification: Extract<Classification, { event: "income" }>,
   date: string,
-  creditTo: string | null,
   db: DbClient,
 ) {
   const holding = await db.investmentHolding.findUniqueOrThrow({ where: { id: holdingId }, select: { accountId: true, currency: true } });
-  const cashAccountId = classification.incomeType === "fixed_income_interest" ? holding.accountId : creditTo;
-  if (!cashAccountId) throw new Error("No mapped cash account for this income");
+  // Proventos land in the brokerage cash the holding belongs to (saldo em conta),
+  // the same account buys and sells already move. A mapped checking account is
+  // the bank feed, not where an FII rendimento is paid.
+  const cashAccountId = holding.accountId;
   const description = clip(tx.description);
   await inTransaction(db, async (client) => {
     const booked = await creditDividend(item.userId, client, {
@@ -996,8 +997,7 @@ export async function bookConfirmedIncome(userId: string, draft: Prisma.JsonValu
       where: { id: body.holdingId, account: { userId } },
       select: { id: true, accountId: true, currency: true },
     });
-    const cashAccountId = incomeType === "fixed_income_interest" ? holding.accountId : body.cashAccountId;
-    if (!cashAccountId) throw new Error("No mapped cash account for this income");
+    const cashAccountId = incomeType === "fixed_income_interest" ? holding.accountId : body.cashAccountId || holding.accountId;
     const booked = await creditDividend(userId, client, {
       holdingId: holding.id,
       cashAccountId,

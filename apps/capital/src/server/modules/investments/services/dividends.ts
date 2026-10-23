@@ -15,7 +15,7 @@ import { round, toNumber } from "@capital/server/modules/ledger/lib/money";
 import { getOwnedAccount } from "@capital/server/modules/ledger/services/accounts";
 import { inTransaction, recordMutation, snapshot, type MutationRecordInput } from "@capital/server/modules/ledger/services/mutations";
 import { recalculateHoldingDetailed } from "../lib/holding-position";
-import { getOwnedHolding, incomeOperationType, isIncomeOperation, recordOperation } from "./portfolio";
+import { assertIncomeAccountType, getOwnedHolding, incomeCreditAccount, incomeOperationType, isIncomeOperation, recordOperation } from "./portfolio";
 
 const EPS = 0.02;
 const DAY_MS = 86_400_000;
@@ -23,7 +23,11 @@ const MATCH_EPS = 0.01;
 
 export interface RecordDividendInput {
   holdingId: string;
-  cashAccountId: string;
+  /**
+   * Checking, cash, or brokerage account that receives the net.
+   * Omit to credit the brokerage the holding belongs to (its cash balance).
+   */
+  cashAccountId?: string;
   /** Gross amount, in `currency`. */
   amount: number;
   date: string;
@@ -53,6 +57,12 @@ export interface UpdateDividendInput {
   withholdingTax?: number;
   /** Dividends only. Rejected when the income type is not a dividend. */
   origin?: DividendOrigin;
+  /**
+   * Move the cash leg to this checking, cash, or brokerage account.
+   * Amounts, date, origin, income type and withholding stay as they are.
+   * Omit to leave the cash where it is.
+   */
+  cashAccountId?: string;
 }
 
 export interface DividendResult {
@@ -72,16 +82,22 @@ export interface DividendResult {
   amountBase: number;
   date: string;
   description: string;
+  /** Account the net cash sits on. Null when the operation has no live cash leg. */
+  cashAccountId: string | null;
   /** False for fixed-income interest inside a business entity: it stays out of personal passive income. */
   passiveIncome: boolean;
   batchId: string | null;
 }
 
 /**
- * Books a provento: an income operation on the holding and one cash credit
- * on the checking or cash account, the same shape as the ledger v2 cash
- * legs (kind investment, linked by cashEntryId). Gross is `amount`, the
- * cash credited is the net, and the leg stores the rate of `date`.
+ * Books a provento: an income operation on the holding and one cash credit,
+ * the same shape as the ledger v2 cash legs (kind investment, linked by
+ * cashEntryId). The credit lands on `cashAccountId` — a checking, cash, or
+ * brokerage account — or, when that is omitted, on the brokerage the holding
+ * belongs to. That brokerage balance is the saldo em conta: buys, sells and
+ * aportes already post there, and list_account_balances sums those entries.
+ * Gross is `amount`, the cash credited is the net, and the leg stores the
+ * rate of `date`.
  * The same holding, day, income type, cash account and net amount returns
  * the existing operation. An unlinked income of that net on the same cash
  * account (within 3 days, category Proventos or a description that names
@@ -98,7 +114,7 @@ export async function recordDividend(userId: string, input: RecordDividendInput,
   return inTransaction(db, async (tx) => {
     await advisoryLock(tx, `holding:${input.holdingId}`);
     const holding = await getOwnedHolding(userId, input.holdingId, tx);
-    const cash = await cashAccount(userId, input.cashAccountId, tx, input.incomeType === "fixed_income_interest" ? holding.accountId : null);
+    const cash = await incomeCreditAccount(userId, input.cashAccountId ?? holding.accountId, tx);
     if (holding.account.entityId !== cash.entityId) {
       throw new LedgerError("The cash account and the holding have to belong to the same entity", 422, { code: "dividend.entity_mismatch" });
     }
@@ -149,9 +165,7 @@ export async function recordDividend(userId: string, input: RecordDividendInput,
         totalAmount,
         taxWithheld,
         date: input.date,
-        // The holding's own brokerage is the cash leg already. Passing it as
-        // creditToAccountId is rejected: that field is checking or cash only.
-        creditToAccountId: cash.id === holding.accountId ? null : cash.id,
+        creditToAccountId: cash.id,
         description,
         cashCredit: { amount: cashAmount, exchangeRate: cashRate },
       },
@@ -190,7 +204,11 @@ export async function convertIncomeToDividend(userId: string, input: ConvertInco
     const holding = await getOwnedHolding(userId, input.holdingId, tx);
     // Entry lock first, then the holding, the same key recordDividend takes. updateDividend takes its operation lock, then this one.
     await advisoryLock(tx, `holding:${holding.id}`);
-    await getOwnedAccount(userId, entry.accountId, tx);
+    const destination = await getOwnedAccount(userId, entry.accountId, tx);
+    // The income is already booked. Linking it accepts the same destinations
+    // as a new credit, including the brokerage's cash, and still refuses a card.
+    // An archived account keeps the entry it already holds.
+    assertIncomeAccountType(destination);
     const fx = await loadFx(userId, tx);
     const entity = await tx.entity.findUniqueOrThrow({ where: { id: holding.account.entityId }, select: { kind: true } });
     const passiveIncome = countsAsPassiveIncome({ entityKind: entity.kind, incomeType: input.incomeType });
@@ -295,11 +313,20 @@ async function resolveDividendOperation(tx: DbClient, userId: string, id: string
  * (dividend or yield, including a cash leg booked as kind investment).
  * `operationId` may be that operation or its cash entry: an owned operation
  * is used first, otherwise the entry must be the cash leg of a dividend or
- * yield. The cash entry is not rewritten and no entry is created: the net
- * (gross − tax) stays the net already booked, so a higher withholding
- * raises the gross by the same amount. The same values write nothing.
+ * yield. Without `cashAccountId` the cash entry is not rewritten and no
+ * entry is created: the net (gross − tax) stays the net already booked, so
+ * a higher withholding raises the gross by the same amount. With
+ * `cashAccountId` the cash leg moves to that checking, cash, or brokerage
+ * account. Amounts, date, origin, income type and withholding are kept
+ * unless those fields are also sent. The same values write nothing.
  * A buy, sale, transfer or expense is rejected. A closed holding is updated
  * the same way as an open one.
+ *
+ * `syncLocked` stops the next Pluggy sync from rewriting classification.
+ * It does not freeze the cash account, so a move is allowed on a locked
+ * operation and the move itself sets the lock. A credit card, another
+ * user's account, an archived account, a different entity, or a provento
+ * with no cash leg is rejected.
  */
 export async function updateDividend(userId: string, input: UpdateDividendInput, db: DbClient): Promise<DividendResult> {
   return inTransaction(db, async (tx) => {
@@ -376,18 +403,43 @@ export async function updateDividend(userId: string, input: UpdateDividendInput,
     const description = cashEntry && !cashEntry.deletedAt ? cashEntry.description : dividendDescription(incomeType ?? "dividend", holding);
     const reportedType = (incomeType ?? "dividend") as IncomeType;
 
-    if (unchanged) {
+    const records: MutationRecordInput[] = [];
+    let nextCash = cashEntry;
+    let movedAccount = false;
+    if (input.cashAccountId !== undefined) {
+      const target = await incomeCreditAccount(userId, input.cashAccountId, tx);
+      if (target.entityId !== holding.account.entityId) {
+        throw new LedgerError("The cash account and the holding have to belong to the same entity", 422, { code: "dividend.entity_mismatch" });
+      }
+      const live = liveCash(cashEntry);
+      if (!live) throw new LedgerError("This provento has no cash leg to move", 422, { code: "dividend.no_cash_leg" });
+      if (target.id !== live.accountId) {
+        movedAccount = true;
+        nextCash = await tx.ledgerEntry.update({ where: { id: live.id }, data: cashLegMove(live, target, fx) });
+        records.push({ model: "LedgerEntry", recordId: live.id, before: snapshot(live), after: snapshot(nextCash) });
+      }
+    }
+
+    if (unchanged && !movedAccount) {
       return resultOf({ ...before, cashEntry }, true, null, fx, reportedType, origin, description, before.totalAmount, before.taxWithheld, holding.currency, passiveIncome);
     }
 
     const updated = await tx.investmentOperation.update({
       where: { id: before.id },
-      data: { type: nextType, incomeType, dividendOrigin: origin, taxWithheld: nextTax, totalAmount: nextTotal },
+      data: {
+        type: nextType,
+        incomeType,
+        dividendOrigin: origin,
+        taxWithheld: nextTax,
+        totalAmount: nextTotal,
+        // The move is a person's edit of the cash leg. The lock keeps the next
+        // Pluggy sync from writing over it. Classification-only edits stay unlocked.
+        ...(movedAccount ? { syncLocked: true } : {}),
+      },
     });
-    const batchId = await recordMutation(tx, userId, "update", description, [
-      { model: "InvestmentOperation", recordId: before.id, before: snapshot(before), after: snapshot(updated) },
-    ]);
-    return resultOf({ ...updated, cashEntry }, false, batchId, fx, reportedType, updated.dividendOrigin, description, updated.totalAmount, updated.taxWithheld, holding.currency, passiveIncome);
+    records.push({ model: "InvestmentOperation", recordId: before.id, before: snapshot(before), after: snapshot(updated) });
+    const batchId = await recordMutation(tx, userId, "update", description, records);
+    return resultOf({ ...updated, cashEntry: nextCash }, false, batchId, fx, reportedType, updated.dividendOrigin, description, updated.totalAmount, updated.taxWithheld, holding.currency, passiveIncome);
   });
 }
 
@@ -496,16 +548,27 @@ async function attachLegacyLeg(
   return resultOf(operation, false, batchId, fx, input.incomeType, origin, description, grossNative, withholding, entry.currency, passiveIncome);
 }
 
-async function cashAccount(userId: string, accountId: string, db: DbClient, caixinhaAccountId: string | null) {
-  const account = await getOwnedAccount(userId, accountId, db);
-  // Caixinha and CDB interest stays on the holding's brokerage. Every other
-  // provento is cash that landed in checking.
-  const caixinha = caixinhaAccountId != null && account.id === caixinhaAccountId && account.type === "brokerage";
-  if (!caixinha && account.type !== "checking" && account.type !== "cash") {
-    throw new LedgerError("Income can only be credited to a checking or cash account", 422, { code: "operation.credit_account_invalid" });
-  }
-  if (account.archivedAt) throw new LedgerError(`Account "${account.name}" is archived`, 422, { code: "account.archived", params: { name: account.name } });
-  return account;
+/**
+ * Moves a cash leg onto `target` without changing the provento's amounts.
+ * Same currency: only the account changes, so both balances move by the
+ * stored amount. Another currency keeps the base-currency value and
+ * re-expresses the native amount at the rate of the entry's date.
+ */
+function cashLegMove(entry: LedgerEntry, target: { id: string; entityId: string; currency: string }, fx: FxContext) {
+  const sameCurrency = target.currency.toUpperCase() === entry.currency.toUpperCase();
+  if (sameCurrency) return { accountId: target.id, entityId: target.entityId };
+  const amountBase = toNumber(entry.amountBase);
+  const destRate = target.currency.toUpperCase() === fx.baseCurrency ? 1 : fx.rateOn(target.currency, entry.date);
+  const amount = destRate > 0 ? round(amountBase / destRate, 4) : toNumber(entry.amount);
+  const rate = destRate > 0 ? destRate : toNumber(entry.exchangeRate);
+  return {
+    accountId: target.id,
+    entityId: target.entityId,
+    currency: target.currency,
+    exchangeRate: rate,
+    amount,
+    amountBase: round(amount * rate, 4),
+  };
 }
 
 function convertOn(fx: FxContext, amount: number, from: string, to: string, date: Date): number {
@@ -516,7 +579,15 @@ function convertOn(fx: FxContext, amount: number, from: string, to: string, date
 }
 
 function resultOf(
-  operation: { id: string; holdingId: string; cashEntryId: string | null; incomeType: IncomeType | null; dividendOrigin: DividendOrigin | null; date: Date; cashEntry?: { amountBase: { toString(): string } | number; description: string; deletedAt: Date | null } | null },
+  operation: {
+    id: string;
+    holdingId: string;
+    cashEntryId: string | null;
+    incomeType: IncomeType | null;
+    dividendOrigin: DividendOrigin | null;
+    date: Date;
+    cashEntry?: { accountId?: string; amountBase: { toString(): string } | number; description: string; deletedAt: Date | null } | null;
+  },
   duplicate: boolean,
   batchId: string | null,
   fx: FxContext,
@@ -544,6 +615,7 @@ function resultOf(
     amountBase: round(amountBase, 4),
     date: formatDateOnly(operation.date),
     description: leg?.description ?? description,
+    cashAccountId: leg?.accountId ?? null,
     passiveIncome,
     batchId,
   };
