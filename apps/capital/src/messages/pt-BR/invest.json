@@ -418,6 +418,8 @@
       "flows": "+{deposits} aportes · −{withdrawals} resgates",
       "originIn": "{origin}",
       "originOut": "resgate: {origin}",
+      "brokeragePurchase": "Compra {asset} · caixa da corretora",
+      "brokerageNote": "Uma compra paga com o caixa da corretora entra no líquido. O provento em si não entra, e o dinheiro que já chegou por transferência não entra de novo.",
       "caption": "Clique na origem para ver as transferências em Transações ↗"
     },
     "tabs": {

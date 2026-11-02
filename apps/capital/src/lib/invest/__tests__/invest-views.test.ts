@@ -9,6 +9,7 @@ import {
   goalStatus,
   historyRows,
   originLabel,
+  originOf,
   originParts,
   shiftMonth,
 } from "../contributions-view";
@@ -297,6 +298,16 @@ describe("contributions view", () => {
     expect(row.origins).toEqual({ deposits: "Salário PF", withdrawals: "XP → Nubank" });
     expect(originParts([origin({ description: "Bônus", amount: 100 })])).toEqual({ deposits: "Bônus", withdrawals: null });
     expect(originParts([origin({ description: "A", amount: -100 }), origin({ description: "B", amount: -900 })])).toEqual({ deposits: null, withdrawals: "B + A" });
+  });
+
+  it("names a purchase paid with broker cash as that purchase, not as a provento", () => {
+    const bought = origin({ description: "HGLG11", amount: 2400, brokerageCash: true, standalone: true, counterpartAccountName: null });
+    const label = (asset: string) => `Compra ${asset} · caixa da corretora`;
+    expect(originOf(bought, label)).toBe("Compra HGLG11 · caixa da corretora");
+    const [row] = historyRows([month("2026-10", 27800, [origin({ description: "Aporte outubro", amount: 25400 }), bought])], null, label);
+    expect(row.origins.deposits).toBe("Aporte outubro + Compra HGLG11 · caixa da corretora");
+    expect(row.brokerageCash).toBe(true);
+    expect(row.transferGroupIds).toEqual(["g1"]);
   });
 
   it("plots net new money, and keeps purchases by class apart", () => {

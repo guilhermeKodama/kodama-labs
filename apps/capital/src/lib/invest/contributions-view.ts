@@ -68,8 +68,11 @@ export function goalStatus(net: number, goal: number | null): GoalStatus | null 
 
 type OriginFields = Pick<
   ContributionOrigin,
-  "amount" | "description" | "defaultDescription" | "sourceDescription" | "sourceEntityName" | "brokerEntityName" | "brokerAccountName" | "counterpartAccountName"
+  "amount" | "description" | "defaultDescription" | "sourceDescription" | "sourceEntityName" | "brokerEntityName" | "brokerAccountName" | "counterpartAccountName" | "brokerageCash"
 >;
+
+/** How a purchase paid with provento cash at the broker is named. The asset is the ticker, or the holding name. */
+export type BrokerageCashLabel = (asset: string) => string;
 
 /**
  * One transfer's origin (mockup "Distribuição LTDA → PF", "Salário PF"): the
@@ -79,7 +82,11 @@ type OriginFields = Pick<
  * resgate); else "conta de origem → corretora". The text a transfer gets
  * when none is typed ("Aporte em investimento: …") is never shown.
  */
-export function originOf(o: OriginFields): string {
+export function originOf(o: OriginFields, brokerageLabel?: BrokerageCashLabel): string {
+  if (o.brokerageCash) {
+    const asset = o.description?.trim() || o.brokerAccountName;
+    return brokerageLabel ? brokerageLabel(asset) : asset;
+  }
   const typed = !o.defaultDescription ? o.description?.trim() : null;
   if (typed) return typed;
   if (o.sourceDescription?.trim()) return o.sourceDescription.trim();
@@ -89,9 +96,9 @@ export function originOf(o: OriginFields): string {
 }
 
 /** Where the money of the month came from: the largest inflows first (see originOf), each label once. */
-export function originLabel(origins: readonly OriginFields[]): string {
+export function originLabel(origins: readonly OriginFields[], brokerageLabel?: BrokerageCashLabel): string {
   const inflows = origins.filter((o) => o.amount > 0).sort((a, b) => b.amount - a.amount);
-  const list = (inflows.length ? inflows : origins).map(originOf);
+  const list = (inflows.length ? inflows : origins).map((o) => originOf(o, brokerageLabel));
   return [...new Set(list)].join(" + ");
 }
 
@@ -100,8 +107,9 @@ export function originLabel(origins: readonly OriginFields[]): string {
  * resgates went, largest first, each label once (null when the month has
  * none of that side).
  */
-export function originParts(origins: readonly OriginFields[]): { deposits: string | null; withdrawals: string | null } {
-  const side = (list: OriginFields[]) => (list.length ? [...new Set(list.sort((a, b) => Math.abs(b.amount) - Math.abs(a.amount)).map(originOf))].join(" + ") : null);
+export function originParts(origins: readonly OriginFields[], brokerageLabel?: BrokerageCashLabel): { deposits: string | null; withdrawals: string | null } {
+  const side = (list: OriginFields[]) =>
+    list.length ? [...new Set(list.sort((a, b) => Math.abs(b.amount) - Math.abs(a.amount)).map((o) => originOf(o, brokerageLabel)))].join(" + ") : null;
   return { deposits: side(origins.filter((o) => o.amount > 0)), withdrawals: side(origins.filter((o) => o.amount < 0)) };
 }
 
@@ -116,6 +124,8 @@ export interface HistoryRow {
   status: GoalStatus | null;
   /** The month's transfers (aportes and, across entities, the transfer that fed them), for the Transações drill. */
   transferGroupIds: string[];
+  /** A purchase paid with provento cash at the broker is part of this month's aportes. */
+  brokerageCash: boolean;
 }
 
 /**
@@ -123,7 +133,7 @@ export interface HistoryRow {
  * aportes"): aportes and resgates apart ("+X aportes · −Y resgates"), so a
  * month with a negative net never reads as an aporte.
  */
-export function historyRows(months: readonly ContributionMonth[], goal: number | null): HistoryRow[] {
+export function historyRows(months: readonly ContributionMonth[], goal: number | null, brokerageLabel?: BrokerageCashLabel): HistoryRow[] {
   return months
     .filter((m) => m.origins.length > 0)
     .map((m) => ({
@@ -131,9 +141,10 @@ export function historyRows(months: readonly ContributionMonth[], goal: number |
       deposits: m.deposits,
       withdrawals: m.withdrawals,
       net: m.net,
-      origins: originParts(m.origins),
+      origins: originParts(m.origins, brokerageLabel),
       status: goalStatus(m.net, goal),
       transferGroupIds: [...new Set(m.origins.filter((o) => !o.standalone).flatMap((o) => (o.sourceTransferGroupId ? [o.transferGroupId, o.sourceTransferGroupId] : [o.transferGroupId])))],
+      brokerageCash: m.origins.some((o) => o.brokerageCash),
     }))
     .reverse();
 }

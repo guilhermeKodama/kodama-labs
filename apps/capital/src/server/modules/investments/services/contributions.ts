@@ -1,6 +1,7 @@
 import type { DbClient } from "@capital/server/lib/prisma";
 import { Prisma } from "@/generated/prisma";
 import type { AllocationClass, AssetClass, TransferDirection } from "@/generated/prisma";
+import { formatDateOnly } from "@capital/server/lib/date-utils";
 import { entityScopeSql } from "@capital/server/lib/entity-scope";
 import { LOCALES, st } from "@capital/server/i18n";
 import { LedgerError } from "@capital/server/modules/ledger/lib/errors";
@@ -10,6 +11,7 @@ import { round, toNumber } from "@capital/server/modules/ledger/lib/money";
 import { holdingAllocationClass } from "../lib/allocation-class";
 import { addMonths, monthEnd, monthStart, parsePeriod, periodLabel, periodOf, periodRange } from "../lib/portfolio-timeline";
 import { currentPeriod } from "./portfolio-history";
+import { brokerageCashAportes, type BrokerageCashAporte } from "./provento-funded";
 
 /**
  * Aportes (GET /v2/contributions): money moved into and out of the brokers
@@ -20,10 +22,14 @@ import { currentPeriod } from "./portfolio-history";
  *   kind=investment rows on checking or cash with no transfer and no
  *   operation cash leg, unless a brokerage leg in the same entity matches
  *   the base amount within R$ 0.01 and the date within 3 days (money that
- *   left the bank is an aporte, money that arrived is a resgate). Those
- *   rows are only this chart and the savings rate. A caixinha balance is
- *   not a brokerage account, so it is not in Carteira Patrimônio, and the
- *   row is not in Total aportado or Resultado;
+ *   left the bank is an aporte, money that arrived is a resgate). A purchase
+ *   paid with provento cash already at the broker (FII rendimento, dividend,
+ *   JCP, yield) is an aporte in the month of the purchase: the provento
+ *   itself is not one, and a purchase paid by a transfer already counted is
+ *   not counted again (lib/provento-funded.ts). Those rows are only this
+ *   chart and the savings rate. A caixinha balance is not a brokerage
+ *   account, so it is not in Carteira Patrimônio, and the row is not in
+ *   Total aportado or Resultado;
  * - byAllocationClass: buys of the month by class (gross amount + fees, at
  *   the rate on the buy's date), excluding a no-cash first operation of the
  *   holding (the same opening-lot rule as the portfolio timeline); the chart
@@ -66,10 +72,16 @@ export interface ContributionOrigin {
   /** The description typed on that transfer; null when it has the default one. */
   sourceDescription: string | null;
   /**
-   * A checking or cash investment row with no transfer. It counts in the
-   * month's net, and it is not a transfer group the Transações drill can open.
+   * A checking or cash investment row with no transfer, or a purchase paid
+   * with provento cash at the broker. It counts in the month's net, and it
+   * is not a transfer group the Transações drill can open.
    */
   standalone?: boolean;
+  /**
+   * A purchase paid with cash that arrived at the broker as a provento.
+   * The description is the ticker (or the holding name). Not a provento inflow.
+   */
+  brokerageCash?: boolean;
 }
 
 export interface ContributionMonth {
@@ -164,7 +176,16 @@ export async function contributions(userId: string, db: DbClient, opts: Contribu
         ORDER BY dep."recordId", src."createdAt"`
     : [];
   const sourceOf = new Map(sources.map((s) => [s.deposit_group, s]));
-  const bankInvestments = await unlinkedBankInvestments(userId, db, entityIds, from, to);
+  const [bankInvestments, cashAportes] = await Promise.all([
+    unlinkedBankInvestments(userId, db, entityIds, from, to),
+    brokerageCashAportes(userId, db, entityIds, to),
+  ]);
+  const cashByPeriod = new Map<string, BrokerageCashAporte[]>();
+  for (const aporte of cashAportes) {
+    const list = cashByPeriod.get(aporte.period) ?? [];
+    list.push(aporte);
+    cashByPeriod.set(aporte.period, list);
+  }
 
   // Buys by holding class; totalAmount and fees are in the holding's currency.
   // A no-cash first operation of the holding is an opening lot (posição inicial), not a purchase of that month.
@@ -186,12 +207,14 @@ export async function contributions(userId: string, db: DbClient, opts: Contribu
   const months: ContributionMonth[] = periodRange(window.from, window.to).map((period) => {
       const inMonth = legs.filter((l) => periodOf(l.date) === period);
       const bankInMonth = bankInvestments.filter((r) => periodOf(r.date) === period);
+      const cashInMonth = cashByPeriod.get(periodLabel(period)) ?? [];
       let deposits = inMonth.reduce((s, l) => s + Math.max(0, toNumber(l.amountBase)), 0);
       let withdrawals = inMonth.reduce((s, l) => s + Math.max(0, -toNumber(l.amountBase)), 0);
       for (const row of bankInMonth) {
         if (row.amountBase < 0) deposits += -row.amountBase;
         else withdrawals += row.amountBase;
       }
+      for (const aporte of cashInMonth) deposits += aporte.amount;
       const byAssetClass: Partial<Record<AssetClass, number>> = {};
       const byAllocationClass: Partial<Record<AllocationClass, number>> = {};
       for (const b of buys) {
@@ -230,6 +253,7 @@ export async function contributions(userId: string, db: DbClient, opts: Contribu
               sourceEntityName: source?.source_entity ?? null,
               sourceTransferGroupId: source?.source_group ?? null,
               sourceDescription: source && !isDefaultTransferDescription(source.source_description, source.source_direction) ? source.source_description?.trim() || null : null,
+              brokerageCash: false,
             };
           }),
           ...bankInMonth.map((row) => ({
@@ -249,6 +273,26 @@ export async function contributions(userId: string, db: DbClient, opts: Contribu
             sourceTransferGroupId: null,
             sourceDescription: null,
             standalone: true,
+            brokerageCash: false,
+          })),
+          ...cashInMonth.map((aporte) => ({
+            transferGroupId: aporte.id,
+            entryId: aporte.id,
+            date: aporte.date,
+            amount: aporte.amount,
+            direction: "investment_deposit" as const,
+            description: aporte.label,
+            defaultDescription: false,
+            brokerAccountId: aporte.accountId,
+            brokerAccountName: aporte.accountName,
+            brokerEntityName: aporte.entityName,
+            counterpartAccountName: null,
+            counterpartEntityName: null,
+            sourceEntityName: null,
+            sourceTransferGroupId: null,
+            sourceDescription: null,
+            standalone: true,
+            brokerageCash: true,
           })),
         ].sort((a, b) => b.date.localeCompare(a.date) || b.entryId.localeCompare(a.entryId)),
       };
@@ -263,12 +307,30 @@ export async function contributions(userId: string, db: DbClient, opts: Contribu
     months,
     totalNet: round(totalNet, 2),
     averageMonthly: round(totalNet / months.length, 2),
-    savingsRate: await savingsRate(userId, db, pfIds, from, to),
+    savingsRate: await savingsRate(userId, db, pfIds, from, to, await pfBrokerageAportes(userId, db, entityIds, pfIds, cashAportes, from, to)),
   };
 }
 
+/** Provento-funded purchases of every PF entity inside the window. The page's scope may be PJ, and the savings rate is always PF. */
+async function pfBrokerageAportes(
+  userId: string,
+  db: DbClient,
+  entityIds: string[] | null,
+  pfIds: string[],
+  scoped: readonly BrokerageCashAporte[],
+  from: Date,
+  to: Date,
+): Promise<number> {
+  if (!pfIds.length) return 0;
+  const coversPf = entityIds === null || pfIds.every((id) => entityIds.includes(id));
+  const rows = coversPf ? scoped : await brokerageCashAportes(userId, db, pfIds, to);
+  const start = formatDateOnly(from);
+  const end = formatDateOnly(to);
+  return rows.reduce((sum, row) => (pfIds.includes(row.entityId) && row.date >= start && row.date < end ? sum + row.amount : sum), 0);
+}
+
 /** PF aportes ÷ PF Entradas between two instants (see the module comment). */
-export async function savingsRate(userId: string, db: DbClient, pfIds: string[], from: Date, to: Date) {
+export async function savingsRate(userId: string, db: DbClient, pfIds: string[], from: Date, to: Date, brokerageAportes = 0) {
   if (!pfIds.length) return { aportes: 0, income: 0, rate: null };
   const [row] = await db.$queryRaw<{ aportes: Prisma.Decimal | null; income: Prisma.Decimal | null }[]>`
     WITH sel AS (
@@ -286,7 +348,7 @@ export async function savingsRate(userId: string, db: DbClient, pfIds: string[],
       sum("amountBase") FILTER (WHERE flow_kind <> 'invest' AND "amountBase" > 0 AND ("transferGroupId" IS NULL OR legs = 1)) AS income
     FROM counted`;
   const bank = await unlinkedBankInvestments(userId, db, pfIds, from, to);
-  const aportes = toNumber(row?.aportes ?? 0) + bank.reduce((s, r) => s + -r.amountBase, 0);
+  const aportes = toNumber(row?.aportes ?? 0) + bank.reduce((s, r) => s + -r.amountBase, 0) + brokerageAportes;
   const income = toNumber(row?.income ?? 0);
   return { aportes: round(aportes, 2), income: round(income, 2), rate: income > 0 ? round(aportes / income, 4) : null };
 }

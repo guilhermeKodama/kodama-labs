@@ -70,9 +70,13 @@ function transfersHref(transferGroupIds: string[]): string {
   return buildTransactionsHref({ draft });
 }
 
-/** Histórico de aportes: Mês · Aportes · Resgates · Líquido · Origem. */
+/**
+ * Histórico de aportes: Mês · Aportes · Resgates · Líquido · Origem.
+ * Below md the origin wraps onto its own line so it stays readable at 390px.
+ */
 const HISTORY_GRID =
-  "grid grid-cols-[46px_88px_88px_88px_minmax(0,1fr)] items-center gap-2.5 px-3";
+  "grid grid-cols-[46px_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)] items-center gap-x-2 gap-y-0.5 px-3 md:grid-cols-[46px_88px_88px_88px_minmax(0,1fr)] md:gap-2.5";
+const ORIGIN_CELL = "col-span-4 min-w-0 md:col-span-1";
 
 /** Investimentos › Aportes (mockup ContributionsScreen): trailing 12 months ending at ?end=YYYY-MM. */
 export function ContributionsScreen() {
@@ -113,7 +117,7 @@ export function ContributionsScreen() {
   const savings = savingsRateKpi(data?.savingsRate.rate);
   const series = contributionSeries(months);
   const purchases = purchaseSeries(months);
-  const history = historyRows(months, goal);
+  const history = historyRows(months, goal, (asset) => t("history.brokeragePurchase", { asset }));
   const year = parseMonth(end).year;
 
   return (
@@ -351,7 +355,7 @@ export function ContributionsScreen() {
                 <div
                   className={cn(
                     HISTORY_GRID,
-                    "h-[30px] text-caption text-fg-3",
+                    "h-auto py-1 text-caption text-fg-3 md:h-[30px] md:py-0",
                   )}
                 >
                   <span>{t("history.columns.month")}</span>
@@ -362,7 +366,7 @@ export function ContributionsScreen() {
                     {t("history.columns.withdrawals")}
                   </span>
                   <span className="text-right">{t("history.columns.net")}</span>
-                  <span>{t("history.columns.origin")}</span>
+                  <span className={ORIGIN_CELL}>{t("history.columns.origin")}</span>
                 </div>
               ) : null}
               {history.map((row) => (
@@ -409,26 +413,37 @@ export function ContributionsScreen() {
                   >
                     {fmt.money0(row.net, cur)}
                   </span>
-                  <span className="flex min-w-0 items-center gap-2">
-                    <Link
-                      href={transfersHref(row.transferGroupIds)}
-                      className="flex min-w-0 flex-col text-fg-2 hover:text-fg-1"
-                    >
-                      {row.origins.deposits ? (
-                        <span className="truncate">
-                          {t("history.originIn", {
-                            origin: row.origins.deposits,
-                          })}
-                        </span>
-                      ) : null}
-                      {row.origins.withdrawals ? (
-                        <span className="truncate">
-                          {t("history.originOut", {
-                            origin: row.origins.withdrawals,
-                          })}
-                        </span>
-                      ) : null}
-                    </Link>
+                  <span className={cn(ORIGIN_CELL, "flex min-w-0 items-center gap-2")}>
+                    {row.transferGroupIds.length ? (
+                      <Link
+                        href={transfersHref(row.transferGroupIds)}
+                        className="flex min-w-0 flex-col text-fg-2 hover:text-fg-1"
+                      >
+                        {row.origins.deposits ? (
+                          <span className="min-w-0 whitespace-normal break-words">
+                            {t("history.originIn", { origin: row.origins.deposits })}
+                          </span>
+                        ) : null}
+                        {row.origins.withdrawals ? (
+                          <span className="min-w-0 whitespace-normal break-words">
+                            {t("history.originOut", { origin: row.origins.withdrawals })}
+                          </span>
+                        ) : null}
+                      </Link>
+                    ) : (
+                      <span className="flex min-w-0 flex-col text-fg-2">
+                        {row.origins.deposits ? (
+                          <span className="min-w-0 whitespace-normal break-words">
+                            {t("history.originIn", { origin: row.origins.deposits })}
+                          </span>
+                        ) : null}
+                        {row.origins.withdrawals ? (
+                          <span className="min-w-0 whitespace-normal break-words">
+                            {t("history.originOut", { origin: row.origins.withdrawals })}
+                          </span>
+                        ) : null}
+                      </span>
+                    )}
                     {row.status ? (
                       <span
                         className={cn(
@@ -446,7 +461,10 @@ export function ContributionsScreen() {
               ))}
               {history.length ? (
                 <div className="border-t border-stroke-3 px-3 py-1.5 text-caption text-fg-4">
-                  {t("history.caption")}
+                  <span className="block">{t("history.caption")}</span>
+                  {history.some((row) => row.brokerageCash) ? (
+                    <span className="mt-0.5 block">{t("history.brokerageNote")}</span>
+                  ) : null}
                 </div>
               ) : null}
               {!history.length ? (

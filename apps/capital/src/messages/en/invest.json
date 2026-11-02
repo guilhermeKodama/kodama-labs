@@ -418,6 +418,8 @@
       "flows": "+{deposits} contributions · −{withdrawals} withdrawals",
       "originIn": "{origin}",
       "originOut": "withdrawal: {origin}",
+      "brokeragePurchase": "Buy {asset} · broker cash",
+      "brokerageNote": "A purchase paid with cash at the broker counts in the net. The dividend itself does not, and money that already arrived as a transfer is not counted again.",
       "caption": "Click a source to see its transfers in Transactions ↗"
     },
     "tabs": {
