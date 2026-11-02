@@ -149,6 +149,89 @@ describe("contributions", () => {
     expect(proventos.total).not.toBeCloseTo(50, 2);
   });
 
+  it("counts a purchase paid with provento cash once, on the owner's scope, and not the provento itself", async () => {
+    const fii = await createHolding(USER, { accountId: f.broker, assetClass: "fii", ticker: "HGLG11", name: "CSHG Logística" }, prisma);
+    await recordOperation(USER, { holdingId: fii.id, type: "dividend", incomeType: "fii_income", totalAmount: 2400, date: "2026-09-15" }, prisma);
+    // Received in September and not yet spent: the provento is not an aporte.
+    const september = await contributions(USER, prisma, { months: 1, end: "2026-09" });
+    expect(september.months[0]).toMatchObject({ deposits: 0, withdrawals: 0, net: 0, origins: [] });
+
+    await transfer(f.pfChecking, f.broker, 25400, "2026-10-10", "Aporte outubro");
+    await recordOperation(USER, { holdingId: fii.id, type: "buy", quantity: 24, pricePerUnit: 100, totalAmount: 2400, fees: 0, date: "2026-10-27" }, prisma);
+    // The provento cash is gone, so a second buy of the same broker is not another aporte.
+    await recordOperation(USER, { holdingId: fii.id, type: "buy", quantity: 10, pricePerUnit: 100, totalAmount: 1000, fees: 0, date: "2026-10-28" }, prisma);
+
+    const pjBroker = (await prisma.account.create({ data: { userId: USER, entityId: f.pjId, type: "brokerage", name: "BTG", currency: "BRL" } })).id;
+    const pjFii = await createHolding(USER, { accountId: pjBroker, assetClass: "fii", ticker: "KNRI11", name: "Kinea" }, prisma);
+    await recordOperation(USER, { holdingId: pjFii.id, type: "dividend", incomeType: "fii_income", totalAmount: 800, date: "2026-10-06" }, prisma);
+    await recordOperation(USER, { holdingId: pjFii.id, type: "buy", quantity: 8, pricePerUnit: 100, totalAmount: 800, fees: 0, date: "2026-10-20" }, prisma);
+
+    const all = await contributions(USER, prisma, { months: 1, end: "2026-10" });
+    expect(all.months[0]).toMatchObject({ deposits: 28600, withdrawals: 0, net: 28600 });
+    expect(all.months[0].byAllocationClass.fii).toBe(4200);
+    expect(all.months[0].origins.filter((o) => o.brokerageCash).map((o) => [o.description, o.amount]).sort()).toEqual([
+      ["HGLG11", 2400],
+      ["KNRI11", 800],
+    ]);
+    expect(all.months[0].origins.find((o) => o.amount === 25400)).toMatchObject({ brokerageCash: false, description: "Aporte outubro" });
+
+    const pf = await contributions(USER, prisma, { months: 1, end: "2026-10", entityIds: [f.pfId] });
+    const pj = await contributions(USER, prisma, { months: 1, end: "2026-10", entityIds: [f.pjId] });
+    expect(pf.months[0]).toMatchObject({ deposits: 27800, withdrawals: 0, net: 27800 });
+    expect(pf.months[0].origins.filter((o) => o.brokerageCash).map((o) => o.description)).toEqual(["HGLG11"]);
+    expect(pj.months[0]).toMatchObject({ deposits: 800, withdrawals: 0, net: 800 });
+    expect(pj.months[0].origins.filter((o) => o.brokerageCash).map((o) => o.description)).toEqual(["KNRI11"]);
+    expect(pf.months[0].net + pj.months[0].net).toBe(all.months[0].net);
+    // The savings rate stays PF on every scope: the R$25.4k transfer plus the R$2.4k purchase. The provento is not income.
+    expect(pf.savingsRate).toEqual({ aportes: 27800, income: 0, rate: null });
+    expect(pj.savingsRate).toEqual(pf.savingsRate);
+    expect(all.savingsRate).toEqual(pf.savingsRate);
+  });
+
+  it("does not count a transfer and the buy it paid for twice, and a withdrawal still reduces the net", async () => {
+    const petr = await createHolding(USER, { accountId: f.broker, assetClass: "stocks", ticker: "PETR4", name: "Petrobras" }, prisma);
+    await recordOperation(USER, { holdingId: petr.id, type: "buy", quantity: 50, pricePerUnit: 40, totalAmount: 2000, fees: 10, date: "2026-10-03", fundFromAccountId: f.pfChecking }, prisma);
+    await recordOperation(USER, { holdingId: petr.id, type: "dividend", incomeType: "jcp", totalAmount: 1000, taxWithheld: 150, date: "2026-10-04" }, prisma);
+    const fii = await createHolding(USER, { accountId: f.broker, assetClass: "fii", ticker: "HGLG11", name: "CSHG Logística" }, prisma);
+    // JCP lands net of tax (850). The funded PETR4 buy must not consume it.
+    await recordOperation(USER, { holdingId: fii.id, type: "buy", quantity: 8, pricePerUnit: 100, totalAmount: 850, fees: 0, date: "2026-10-05" }, prisma);
+    await transfer(f.broker, f.pfChecking, 200, "2026-10-06");
+    const c = await contributions(USER, prisma, { months: 1, end: "2026-10" });
+    expect(c.months[0]).toMatchObject({ deposits: 2860, withdrawals: 200, net: 2660 });
+    expect(c.months[0].origins.filter((o) => o.brokerageCash)).toEqual([expect.objectContaining({ description: "HGLG11", amount: 850 })]);
+  });
+
+  it("does not treat a dividend paid into the bank as cash already at the broker", async () => {
+    const fii = await createHolding(USER, { accountId: f.broker, assetClass: "fii", ticker: "HGLG11", name: "CSHG Logística" }, prisma);
+    await recordOperation(
+      USER,
+      { holdingId: fii.id, type: "dividend", incomeType: "fii_income", totalAmount: 400, date: "2026-10-01", creditToAccountId: f.pfChecking },
+      prisma,
+    );
+    await transfer(f.pfChecking, f.broker, 400, "2026-10-02", "Levou o rendimento ao XP");
+    await recordOperation(USER, { holdingId: fii.id, type: "buy", quantity: 4, pricePerUnit: 100, totalAmount: 400, fees: 0, date: "2026-10-03" }, prisma);
+    const c = await contributions(USER, prisma, { months: 1, end: "2026-10" });
+    expect(c.months[0]).toMatchObject({ deposits: 400, withdrawals: 0, net: 400 });
+    expect(c.months[0].origins.filter((o) => o.brokerageCash)).toEqual([]);
+  });
+
+  it("counts Proventos income booked on the broker, and ignores a sale that is bought again", async () => {
+    const category = await prisma.category.create({ data: { userId: USER, name: "Proventos", type: "income" } });
+    await createEntry(USER, { kind: "income", accountId: f.broker, amount: 300, date: "2026-11-02", description: "Rendimento em conta", categoryId: category.id }, prisma);
+    const fii = await createHolding(USER, { accountId: f.broker, assetClass: "fii", ticker: "MXRF11", name: "Maxi Renda" }, prisma);
+    await recordOperation(USER, { holdingId: fii.id, type: "buy", quantity: 30, pricePerUnit: 10, totalAmount: 300, fees: 0, date: "2026-11-10" }, prisma);
+
+    const petr = await createHolding(USER, { accountId: f.broker, assetClass: "stocks", ticker: "PETR4", name: "Petrobras" }, prisma);
+    await recordOperation(USER, { holdingId: petr.id, type: "buy", quantity: 10, pricePerUnit: 100, totalAmount: 1000, fees: 0, date: "2026-11-03", fundFromAccountId: f.pfChecking }, prisma);
+    await recordOperation(USER, { holdingId: petr.id, type: "sell", quantity: 10, pricePerUnit: 100, totalAmount: 1000, fees: 0, date: "2026-11-12" }, prisma);
+    await recordOperation(USER, { holdingId: petr.id, type: "buy", quantity: 10, pricePerUnit: 100, totalAmount: 1000, fees: 0, date: "2026-11-13" }, prisma);
+
+    const c = await contributions(USER, prisma, { months: 1, end: "2026-11" });
+    // The R$1,000 round trip is the original transfer only. The R$300 buy is the ledger provento.
+    expect(c.months[0]).toMatchObject({ deposits: 1300, withdrawals: 0, net: 1300 });
+    expect(c.months[0].origins.filter((o) => o.brokerageCash).map((o) => [o.description, o.amount])).toEqual([["MXRF11", 300]]);
+  });
+
   it("has no savings rate without PF income", async () => {
     await transfer(f.pfChecking, f.broker, 1000, "2026-03-02");
     const c = await contributions(USER, prisma, { months: 1, end: "2026-03" });

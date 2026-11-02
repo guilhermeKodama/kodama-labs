@@ -194,6 +194,17 @@ export function panel(page: Page, title: string): Locator {
   return page.locator("section").filter({ has: page.locator("header", { hasText: title }) });
 }
 
+/**
+ * The history row of the month the líquido KPI names ("Aportado em nov/26
+ * (líquido)"). Several months can mention the same purchase.
+ */
+export async function contributionMonthRow(page: Page): Promise<Locator> {
+  const heading = page.locator('span:text-matches("^Aportado em .+ \\\\(líquido\\\\)$")');
+  const month = (await heading.innerText()).replace(/^Aportado em /, "").replace(/ \(líquido\)$/, "");
+  // The month label's own row, not an ancestor grid that holds every month.
+  return page.locator(`span:text-is(${JSON.stringify(month)})`).locator("xpath=..");
+}
+
 /** The first number in a text, read as Capital writes it in pt-BR: "R$ 1.234,56" is 1234.56 and "−5pp" is -5. */
 export function readNumber(text: string): number {
   const match = /[-−]?\d[\d.]*(?:,\d+)?/.exec(text);
