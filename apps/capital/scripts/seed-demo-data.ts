@@ -443,17 +443,20 @@ export function dayToDayPurchases(spec: (typeof DAY_TO_DAY)[number], k: number, 
 // Budgets (mockup BUDGETS 3207-3216, YEARLY_BUDGETS 3233-3237)
 // ---------------------------------------------------------------------------
 
-/** `null` entity = every entity: the mockup's "Software · PJ" row adds LTDA (Figma) and LLC (AWS, Cursor) spend, 1.557 in September. */
-export const MONTHLY_BUDGETS: { category: CategoryKey; entity: EntityKey | null; amount: number }[] = [
-  { category: "moradia", entity: "pf", amount: 4500 },
+/**
+ * `null` entity = every entity: the mockup's "Software · PJ" row adds LTDA (Figma) and LLC (AWS, Cursor) spend, 1.557 in September.
+ * Rent, the software subscriptions and the accountant are fixo, so the month's pace chart has a visible fixed band (the rent alone is R$ 4.200 on day 5). Day-to-day categories and DAS stay variável.
+ */
+export const MONTHLY_BUDGETS: { category: CategoryKey; entity: EntityKey | null; amount: number; kind?: "fixo" | "variavel" }[] = [
+  { category: "moradia", entity: "pf", amount: 4500, kind: "fixo" },
   { category: "mercado", entity: "pf", amount: 2000 },
   { category: "restaurantes", entity: "pf", amount: 800 },
   { category: "saude", entity: "pf", amount: 1800 },
   { category: "lazer", entity: "pf", amount: 1000 },
   { category: "transporte", entity: "pf", amount: 400 },
   { category: "impostos", entity: "ltda", amount: 3500 },
-  { category: "software", entity: null, amount: 2500 },
-  { category: "contabilidade", entity: "ltda", amount: 300 },
+  { category: "software", entity: null, amount: 2500, kind: "fixo" },
+  { category: "contabilidade", entity: "ltda", amount: 300, kind: "fixo" },
 ];
 
 export const YEARLY_BUDGETS: { category: CategoryKey; entity: EntityKey; amount: number; notes: string }[] = [

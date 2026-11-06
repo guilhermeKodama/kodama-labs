@@ -1,5 +1,5 @@
 import { expect, flow } from "@repo/proof-video";
-import { createInList, dialog, field, openBudgets, openTransactions, panel, pickFromList, readNumber, swatchColor, toast } from "../helpers";
+import { budgetRow, createInList, dialog, field, openBudgets, openTransactions, panel, pickFromList, readNumber, swatchColor, toast } from "../helpers";
 
 // Its own category, so a shared proof run does not collide with Plano prova / Plano reembolso / Plano celular.
 const CATEGORY = "Plano totais";
@@ -39,6 +39,13 @@ flow("Gastos fixos and Gastos variáveis follow the filter, and the pace chart s
   const legend = chart.locator("[data-budget-legend]");
 
   await scene("Two cards", "Gastos fixos and Gastos variáveis sit with the other totals");
+  await say("Aluguel, the subscriptions and the accountant are fixo");
+  await check("Moradia, Software and Contabilidade are fixo", async () => {
+    await expect(budgetRow(page, "Moradia").row).toContainText("Fixo");
+    await expect(budgetRow(page, "Software").row).toContainText("Fixo");
+    await expect(budgetRow(page, "Contabilidade").row).toContainText("Fixo");
+    await expect(budgetRow(page, "Mercado").row).toContainText("Variável");
+  });
   await say("+ Orçamento, a new category marked Fixo");
   await page.getByRole("button", { name: "+ Orçamento" }).click();
   const create = dialog(page, "Novo orçamento");
