@@ -72,7 +72,6 @@ infrastructure/postgres/backups/**
 !infrastructure/postgres/backups/.gitkeep
 
 # Misc
-.vercel
 .netlify
 .eslintcache
 *.tsbuildinfo
@@ -81,7 +80,7 @@ infrastructure/postgres/backups/**
 package-lock.json
 yarn.lock
 
-# Local blob storage (dev fallback when BLOB_READ_WRITE_TOKEN is not set)
+# Local blob storage
 .local-blob
 
 # WhatsApp session data (grants full account access — never commit)
@@ -92,7 +91,7 @@ yarn.lock
 apps/attention/cloudflared/config.yml
 apps/careers/cloudflared/config.yml
 
-# Local blob fallback (resumes, context docs) when BLOB_READ_WRITE_TOKEN is unset
+# Local blob storage (resumes, context docs)
 apps/careers/.local-blob
 
 # Agentic Coding
