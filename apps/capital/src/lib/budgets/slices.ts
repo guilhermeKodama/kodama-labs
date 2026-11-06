@@ -57,6 +57,42 @@ export interface PacePoint {
 
 const cents = (n: number) => Math.round(n * 100) / 100;
 
+export interface YearFilterRow {
+  kind: string | null | undefined;
+  isBudgeted?: boolean;
+  months: readonly { spent: number; budget: number | null }[];
+  overMonths: number;
+  budgetedMonths: number;
+}
+
+/**
+ * Year KPIs, the heatmap Total and the monthly chart, from the rows that
+ * survive the kind filter. Scope and year are already applied to `rows`.
+ * Null kind counts as variável. A null filter is Todos.
+ */
+export function filteredYearFigures<T extends YearFilterRow>(rows: readonly T[], filter: BudgetKindName | null, nElapsed: number) {
+  const visible = rows.filter((row) => showsBudgetKind(row, filter));
+  const sumMonth = (pick: (cell: YearFilterRow["months"][number] | undefined) => number) =>
+    Array.from({ length: 12 }, (_, index) => cents(visible.reduce((sum, row) => sum + pick(row.months[index]), 0)));
+  const monthTotals = sumMonth((cell) => cell?.spent ?? 0);
+  const monthBudgets = sumMonth((cell) => cell?.budget ?? 0);
+  const elapsed = Math.max(0, Math.min(12, nElapsed));
+  const add = (list: readonly number[]) => cents(list.reduce((sum, value) => sum + value, 0));
+  return {
+    rows: visible,
+    monthTotals,
+    monthBudgets,
+    summary: {
+      spentToDate: add(monthTotals.slice(0, elapsed)),
+      budgetToDate: add(monthBudgets.slice(0, elapsed)),
+      projectedYear: add(monthTotals),
+      budgetYear: add(monthBudgets),
+      overBudgetMonths: visible.reduce((sum, row) => sum + row.overMonths, 0),
+      budgetedCells: visible.reduce((sum, row) => sum + row.budgetedMonths, 0),
+    },
+  };
+}
+
 /**
  * The pace chart for the active kind filter. The stacked areas are the
  * cumulative líquido of each kind; the cumulative line is their sum, and

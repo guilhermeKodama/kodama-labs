@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { filteredKindTotals, paceForKind, type SliceRow } from "../slices";
+import { filteredKindTotals, filteredYearFigures, paceForKind, type SliceRow, type YearFilterRow } from "../slices";
 
 function row(partial: {
   kind: SliceRow["kind"];
@@ -49,6 +49,43 @@ describe("filtered kind totals", () => {
     expect(variavel.fixo.net).toBe(0);
     expect(variavel.variavel.net).toBe(140);
     expect(variavel.total.net).toBe(140);
+  });
+});
+
+describe("filtered year figures", () => {
+  const cell = (spent: number, budget: number | null) => ({ spent, budget });
+  const blank = cell(0, null);
+  const yearRow = (kind: YearFilterRow["kind"], january: { spent: number; budget: number | null }, february: { spent: number; budget: number | null }, overMonths: number): YearFilterRow => ({
+    kind,
+    isBudgeted: true,
+    months: [january, february, ...Array.from({ length: 10 }, () => blank)],
+    overMonths,
+    budgetedMonths: 2,
+  });
+  const rows = [
+    yearRow("fixo", cell(100, 400), cell(100, 400), 0),
+    yearRow(null, cell(50, 200), cell(80, 200), 1),
+  ];
+
+  it("keeps every row when the filter is Todos, and a null kind stays in variável", () => {
+    const all = filteredYearFigures(rows, null, 2);
+    expect(all.rows).toHaveLength(2);
+    expect(all.monthTotals.slice(0, 2)).toEqual([150, 180]);
+    expect(all.monthBudgets.slice(0, 2)).toEqual([600, 600]);
+    expect(all.summary).toMatchObject({ spentToDate: 330, budgetToDate: 1200, projectedYear: 330, budgetYear: 1200, overBudgetMonths: 1, budgetedCells: 4 });
+  });
+
+  it("recomputes the year total, the chart and the budget from the matching kind only", () => {
+    const fixo = filteredYearFigures(rows, "fixo", 2);
+    expect(fixo.rows).toHaveLength(1);
+    expect(fixo.monthTotals[0]).toBe(100);
+    expect(fixo.monthBudgets[0]).toBe(400);
+    expect(fixo.summary).toMatchObject({ spentToDate: 200, budgetToDate: 800, projectedYear: 200, budgetYear: 800, overBudgetMonths: 0, budgetedCells: 2 });
+
+    const variavel = filteredYearFigures(rows, "variavel", 2);
+    expect(variavel.monthTotals.slice(0, 2)).toEqual([50, 80]);
+    expect(variavel.summary.spentToDate).toBe(130);
+    expect(variavel.summary.budgetToDate).toBe(400);
   });
 });
 

@@ -285,7 +285,7 @@ export function MonthBody({
           )}
         </div>
         <div className="flex min-w-0 flex-col gap-3">
-          <PaceChart data={data} monthLabel={monthLabel} kind={kind ?? null} />
+          <PaceChart data={data} budgets={budgets} monthLabel={monthLabel} kind={kind ?? null} />
           <Panel
             title={t("month.upcoming.title")}
             pad={false}
@@ -307,11 +307,11 @@ export function MonthBody({
   );
 }
 
-function PaceChart({ data, monthLabel, kind }: { data: MonthOverview; monthLabel: string; kind: BudgetsView["kind"] }) {
+function PaceChart({ data, budgets, monthLabel, kind }: { data: MonthOverview; budgets: MonthOverview["budgets"]; monthLabel: string; kind: BudgetsView["kind"] }) {
   const t = useTranslations("budgets");
   const fmt = useFmt();
   const unit = fmt.kUnit();
-  const { series, period, budgets } = data;
+  const { series, period } = data;
   const points = paceForKind(series, budgets, kind, period.daysInMonth);
   const available = filteredKindTotals(budgets, kind).total.available;
   const empty = !budgets.length ? t("month.chart.empty") : !series.length ? t("month.chart.notStarted") : null;
@@ -350,8 +350,8 @@ function PaceChart({ data, monthLabel, kind }: { data: MonthOverview; monthLabel
                     label={{ value: names.budget, position: "insideTopRight", fontSize: textRole("micro"), fill: PACE_COLOR.budget }}
                   />
                 ) : null}
-                {showFixo ? <Area dataKey="fixo" name={names.fixed} stackId="kind" stroke={PACE_COLOR.fixo} fill={PACE_COLOR.fixo} fillOpacity={0.45} strokeWidth={1.5} dot={false} isAnimationActive={false} /> : null}
-                {showVariavel ? <Area dataKey="variavel" name={names.variable} stackId="kind" stroke={PACE_COLOR.variavel} fill={PACE_COLOR.variavel} fillOpacity={0.55} strokeWidth={1.5} dot={false} isAnimationActive={false} /> : null}
+                {showFixo ? <Area type="monotone" dataKey="fixo" name={names.fixed} stackId="kind" stroke={PACE_COLOR.fixo} fill={PACE_COLOR.fixo} fillOpacity={0.8} strokeWidth={1.5} dot={false} isAnimationActive={false} /> : null}
+                {showVariavel ? <Area type="monotone" dataKey="variavel" name={names.variable} stackId="kind" stroke={PACE_COLOR.variavel} fill={PACE_COLOR.variavel} fillOpacity={0.8} strokeWidth={1.5} dot={false} isAnimationActive={false} /> : null}
                 <Line dataKey="ideal" name={names.ideal} stroke={PACE_COLOR.ideal} strokeWidth={2} dot={false} isAnimationActive={false} />
                 <Line dataKey="cumulative" name={names.cumulative} stroke={PACE_COLOR.cumulative} strokeWidth={2} dot={false} isAnimationActive={false} />
               </ComposedChart>

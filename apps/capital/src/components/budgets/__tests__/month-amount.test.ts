@@ -230,25 +230,52 @@ describe("fixo and variável in the month summary", () => {
   });
 
   it("follows the kind filter in the cards, the footer and the chart", () => {
-    const html = render("pt-BR", createElement(MonthBody, { data: withSeries, kind: "fixo", actions, onOpenRule: noop, onAllRules: noop }));
-    const card = (id: string) => {
+    const card = (html: string, id: string) => {
       const start = html.indexOf(`data-budget-kpi="${id}"`);
-      return html.slice(start, html.indexOf("data-budget-kpi=", start + 1));
+      const end = html.indexOf("data-budget-kpi=", start + 1);
+      return html.slice(start, end === -1 ? undefined : end);
     };
-    expect(card("fixo")).toContain(">R$ 350<");
-    expect(card("variavel")).toContain(">R$ 0<");
-    expect(card("spent")).toContain(">R$ 350<");
-    const legend = html.slice(html.indexOf("budget-pace-chart"));
-    expect(legend).toContain(">Gastos fixos<");
-    expect(legend).not.toContain(">Gastos variáveis<");
-    expect(legend).toContain("Gasto acumulado");
-    expect(legend).toContain('stroke="var(--cap-chart-3)"');
-    expect(legend).not.toContain('stroke="var(--cap-chart-2)"');
-    expect(legend).toContain('stroke="var(--cap-chart-ink)"');
-    const variavelAt = html.indexOf('data-budget-subtotal="variavel"');
-    const totalAt = html.indexOf('data-budget-subtotal="total"');
-    expect(html.slice(variavelAt, totalAt)).toContain(">R$ 0<");
-    expect(html.slice(totalAt)).toContain(">R$ 400<");
+    const headlines = (kind: "fixo" | "variavel" | null) => {
+      const html = render("pt-BR", createElement(MonthBody, { data: withSeries, kind, actions, onOpenRule: noop, onAllRules: noop }));
+      return {
+        html,
+        budget: card(html, "budget"),
+        spent: card(html, "spent"),
+        projection: card(html, "projection"),
+      };
+    };
+
+    const all = headlines(null);
+    expect(all.budget).toContain(">R$ 2.200<");
+    expect(all.spent).toContain(">R$ 750<");
+    expect(all.projection).toContain(">R$ 1.985<");
+
+    const fixo = headlines("fixo");
+    expect(fixo.budget).toContain(">R$ 400<");
+    expect(fixo.spent).toContain(">R$ 350<");
+    expect(fixo.projection).toContain(">R$ 1.085<");
+    expect(card(fixo.html, "fixo")).toContain(">R$ 350<");
+    expect(card(fixo.html, "variavel")).toContain(">R$ 0<");
+    const fixoLegend = fixo.html.slice(fixo.html.indexOf("budget-pace-chart"));
+    expect(fixoLegend).toContain(">Gastos fixos<");
+    expect(fixoLegend).not.toContain(">Gastos variáveis<");
+    expect(fixoLegend).toContain("Gasto acumulado");
+    expect(fixoLegend).toContain('stroke="var(--cap-chart-3)"');
+    expect(fixoLegend).not.toContain('stroke="var(--cap-chart-2)"');
+    expect(fixoLegend).toContain('stroke="var(--cap-chart-ink)"');
+    const variavelAt = fixo.html.indexOf('data-budget-subtotal="variavel"');
+    const totalAt = fixo.html.indexOf('data-budget-subtotal="total"');
+    expect(fixo.html.slice(variavelAt, totalAt)).toContain(">R$ 0<");
+    expect(fixo.html.slice(totalAt)).toContain(">R$ 400<");
+
+    const variavel = headlines("variavel");
+    expect(variavel.budget).toContain(">R$ 1.800<");
+    expect(variavel.spent).toContain(">R$ 400<");
+    expect(variavel.projection).toContain(">R$ 900<");
+    expect(card(variavel.html, "fixo")).toContain(">R$ 0<");
+    const variavelLegend = variavel.html.slice(variavel.html.indexOf("budget-pace-chart"));
+    expect(variavelLegend).not.toContain(">Gastos fixos<");
+    expect(variavelLegend).toContain(">Gastos variáveis<");
   });
 });
 
