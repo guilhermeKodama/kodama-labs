@@ -498,9 +498,16 @@ export async function monthOverview(userId: string, year: number, month: number,
             AND ${entityScopeSql(Prisma.sql`le."entityId"`, entityIds)}
           GROUP BY 1, 2, 3`
       : [];
-  const byDay = new Map<number, number>();
+  const byDay = new Map<number, { fixo: number; variavel: number }>();
+  const addDay = (day: number, kind: string | null, amount: number) => {
+    const slot = byDay.get(day) ?? { fixo: 0, variavel: 0 };
+    if (kind === "fixo") slot.fixo += amount;
+    else slot.variavel += amount;
+    byDay.set(day, slot);
+  };
   for (const d of daily) {
-    if (budgetFor(budgets, d.entity_id, d.category_id)) byDay.set(d.day, (byDay.get(d.day) ?? 0) + toNumber(d.spent));
+    const budget = budgetFor(budgets, d.entity_id, d.category_id);
+    if (budget) addDay(d.day, budget.kind, toNumber(d.spent));
   }
   const offsetDaily =
     daysElapsed > 0 && budgets.length
@@ -517,12 +524,22 @@ export async function monthOverview(userId: string, year: number, month: number,
           GROUP BY 1, 2, 3`
       : [];
   for (const d of offsetDaily) {
-    if (budgetFor(budgets, d.entity_id, d.category_id)) byDay.set(d.day, (byDay.get(d.day) ?? 0) - toNumber(d.amount));
+    const budget = budgetFor(budgets, d.entity_id, d.category_id);
+    if (budget) addDay(d.day, budget.kind, -toNumber(d.amount));
   }
-  let acc = 0;
+  let fixo = 0;
+  let variavel = 0;
   const series = Array.from({ length: daysElapsed }, (_, i) => {
-    acc += byDay.get(i + 1) ?? 0;
-    return { day: i + 1, cumulative: round(acc, 2), ideal: round((totalBudget * (i + 1)) / daysInMonth, 2) };
+    const day = byDay.get(i + 1);
+    fixo += day?.fixo ?? 0;
+    variavel += day?.variavel ?? 0;
+    return {
+      day: i + 1,
+      cumulative: round(fixo + variavel, 2),
+      fixo: round(fixo, 2),
+      variavel: round(variavel, 2),
+      ideal: round((totalBudget * (i + 1)) / daysInMonth, 2),
+    };
   });
 
   const upcoming = await upcomingBills(db, userId, today, entityIds);

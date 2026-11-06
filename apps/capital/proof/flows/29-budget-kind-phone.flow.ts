@@ -28,7 +28,7 @@ flow("Budgets on a phone: kind, filter and a reimbursement", async ({ page, scen
     await expect(budget.amount).toHaveText(/R\$\s*500$/);
   });
 
-  await scene("The filter", "Variável hides it; Fixo shows it and the subtotals");
+  await scene("The filter", "Variável hides it; Fixo keeps only the fixo total");
   const kindFilter = page.getByRole("radiogroup", { name: "Tipo" });
   await kindFilter.scrollIntoViewIfNeeded();
   await kindFilter.getByRole("radio", { name: "Variável" }).click();
@@ -40,6 +40,7 @@ flow("Budgets on a phone: kind, filter and a reimbursement", async ({ page, scen
   await check("Fixo shows the row and Fixo, Variável, Total", async () => {
     await expect(budget.row).toBeVisible();
     expect(readNumber(await fixo.innerText()) - fixoBefore).toBe(500);
+    expect(readNumber(await page.locator('[data-budget-subtotal="variavel"]').innerText())).toBe(0);
     await expect(page.locator('[data-budget-subtotal="variavel"]')).toContainText("Variável");
     await expect(page.locator('[data-budget-subtotal="total"]')).toContainText("Total");
   });

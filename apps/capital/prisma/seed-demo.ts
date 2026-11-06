@@ -208,7 +208,7 @@ async function seedBudgets(ctx: Ctx) {
   // Monthly budgets run from January of the mockup's July (M-2), so the year's heatmap has its budget line.
   const monthlyFrom = `${addMonths(m0, -2).year}-01`;
   for (const b of MONTHLY_BUDGETS) {
-    await createBudget(userId, { entityId: b.entity ? ctx.entities[b.entity] : null, categoryId: ctx.categories[b.category], amount: b.amount, period: "monthly", effectiveFrom: monthlyFrom }, db);
+    await createBudget(userId, { entityId: b.entity ? ctx.entities[b.entity] : null, categoryId: ctx.categories[b.category], amount: b.amount, period: "monthly", effectiveFrom: monthlyFrom, kind: b.kind ?? null }, db);
   }
   for (const b of YEARLY_BUDGETS) {
     const input: Parameters<typeof createBudget>[1] & { notes?: string } = {

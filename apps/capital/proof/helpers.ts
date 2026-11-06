@@ -205,6 +205,22 @@ export async function contributionMonthRow(page: Page): Promise<Locator> {
   return page.locator(`span:text-is(${JSON.stringify(month)})`).locator("xpath=..");
 }
 
+/**
+ * The painted color of a legend or card swatch named `label`. Resolving the
+ * token catches two different variables that are the same hue.
+ */
+export async function swatchColor(scope: Locator, label: string | RegExp): Promise<string> {
+  const mark = scope.getByText(label, { exact: typeof label === "string" }).locator("line");
+  return mark.evaluate((el) => {
+    const probe = document.createElement("span");
+    probe.style.color = el.getAttribute("stroke") ?? "";
+    document.body.appendChild(probe);
+    const color = getComputedStyle(probe).color;
+    probe.remove();
+    return color;
+  });
+}
+
 /** The first number in a text, read as Capital writes it in pt-BR: "R$ 1.234,56" is 1234.56 and "−5pp" is -5. */
 export function readNumber(text: string): number {
   const match = /[-−]?\d[\d.]*(?:,\d+)?/.exec(text);

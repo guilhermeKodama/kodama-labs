@@ -197,6 +197,88 @@ describe("the Orçado column", () => {
   });
 });
 
+describe("fixo and variável in the month summary", () => {
+  const withSeries = {
+    ...overview,
+    series: [
+      { day: 1, cumulative: 80, fixo: 30, variavel: 50, ideal: 70 },
+      { day: 10, cumulative: 750, fixo: 350, variavel: 400, ideal: 709.68 },
+    ],
+  } as MonthOverview;
+
+  it("adds Gastos fixos and Gastos variáveis and stacks both under the pace line", () => {
+    const html = render("pt-BR", createElement(MonthBody, { data: withSeries, actions, onOpenRule: noop, onAllRules: noop }));
+    expect(html).toContain('data-budget-kpi="fixo"');
+    expect(html).toContain("Gastos fixos");
+    expect(html).toContain("Gastos variáveis");
+    expect(html).toContain(">R$ 350<");
+    expect(html).toContain(">R$ 400<");
+    const legend = html.slice(html.indexOf("budget-pace-chart"));
+    expect(legend).toContain(">Gastos fixos<");
+    expect(legend).toContain(">Gastos variáveis<");
+    expect(legend).toContain("Gasto acumulado");
+    // Musgo, resina, heartwood ink, jacarandá, ipê. Five tokens, none repeated, and the cards use the same two.
+    const strokes = [...legend.matchAll(/stroke="([^"]+)"/g)].map((match) => match[1]);
+    expect(strokes).toEqual(["var(--cap-chart-3)", "var(--cap-chart-2)", "var(--cap-chart-ink)", "var(--cap-chart-5)", "var(--cap-chart-warn)"]);
+    expect(new Set(strokes).size).toBe(strokes.length);
+    expect(html.slice(html.indexOf('data-budget-kpi="fixo"'), html.indexOf('data-budget-kpi="variavel"'))).toContain('stroke="var(--cap-chart-3)"');
+    expect(html.slice(html.indexOf('data-budget-kpi="variavel"'), html.indexOf('data-budget-kpi="remaining"'))).toContain('stroke="var(--cap-chart-2)"');
+    const fixoAt = html.indexOf('data-budget-subtotal="fixo"');
+    const variavelAt = html.indexOf('data-budget-subtotal="variavel"');
+    expect(html.slice(fixoAt, variavelAt)).toContain(">R$ 400<");
+    expect(html.slice(variavelAt, html.indexOf('data-budget-subtotal="total"'))).toContain(">R$ 1.800<");
+  });
+
+  it("follows the kind filter in the cards, the footer and the chart", () => {
+    const card = (html: string, id: string) => {
+      const start = html.indexOf(`data-budget-kpi="${id}"`);
+      const end = html.indexOf("data-budget-kpi=", start + 1);
+      return html.slice(start, end === -1 ? undefined : end);
+    };
+    const headlines = (kind: "fixo" | "variavel" | null) => {
+      const html = render("pt-BR", createElement(MonthBody, { data: withSeries, kind, actions, onOpenRule: noop, onAllRules: noop }));
+      return {
+        html,
+        budget: card(html, "budget"),
+        spent: card(html, "spent"),
+        projection: card(html, "projection"),
+      };
+    };
+
+    const all = headlines(null);
+    expect(all.budget).toContain(">R$ 2.200<");
+    expect(all.spent).toContain(">R$ 750<");
+    expect(all.projection).toContain(">R$ 1.985<");
+
+    const fixo = headlines("fixo");
+    expect(fixo.budget).toContain(">R$ 400<");
+    expect(fixo.spent).toContain(">R$ 350<");
+    expect(fixo.projection).toContain(">R$ 1.085<");
+    expect(card(fixo.html, "fixo")).toContain(">R$ 350<");
+    expect(card(fixo.html, "variavel")).toContain(">R$ 0<");
+    const fixoLegend = fixo.html.slice(fixo.html.indexOf("budget-pace-chart"));
+    expect(fixoLegend).toContain(">Gastos fixos<");
+    expect(fixoLegend).not.toContain(">Gastos variáveis<");
+    expect(fixoLegend).toContain("Gasto acumulado");
+    expect(fixoLegend).toContain('stroke="var(--cap-chart-3)"');
+    expect(fixoLegend).not.toContain('stroke="var(--cap-chart-2)"');
+    expect(fixoLegend).toContain('stroke="var(--cap-chart-ink)"');
+    const variavelAt = fixo.html.indexOf('data-budget-subtotal="variavel"');
+    const totalAt = fixo.html.indexOf('data-budget-subtotal="total"');
+    expect(fixo.html.slice(variavelAt, totalAt)).toContain(">R$ 0<");
+    expect(fixo.html.slice(totalAt)).toContain(">R$ 400<");
+
+    const variavel = headlines("variavel");
+    expect(variavel.budget).toContain(">R$ 1.800<");
+    expect(variavel.spent).toContain(">R$ 400<");
+    expect(variavel.projection).toContain(">R$ 900<");
+    expect(card(variavel.html, "fixo")).toContain(">R$ 0<");
+    const variavelLegend = variavel.html.slice(variavel.html.indexOf("budget-pace-chart"));
+    expect(variavelLegend).not.toContain(">Gastos fixos<");
+    expect(variavelLegend).toContain(">Gastos variáveis<");
+  });
+});
+
 describe("the edit form", () => {
   it("sends the amount in the base currency from the month on screen, and focuses the amount", () => {
     expect(editBudgetBody(2000, "BRL", "  feira ", "2026-10", "variavel")).toEqual({ amount: 2000, currency: "BRL", notes: "feira", applyFrom: "2026-10", kind: "variavel" });
