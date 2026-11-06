@@ -83,6 +83,7 @@ export async function listTransactions(userId: string, params: ListTransactionsP
         counterpartAccountId: t.counterpartAccountId,
         counterpartAccountName: t.counterpartAccountName,
         operationId: t.operationId,
+        reimbursesCategory: t.reimbursesCategory,
       };
     }),
     summaries: [...summaryMap.values()],

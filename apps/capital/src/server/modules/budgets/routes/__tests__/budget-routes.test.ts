@@ -105,6 +105,51 @@ describe("budget routes", () => {
   });
 });
 
+describe("kind, composition and reimbursement", () => {
+  it("saves kind, refuses a second budget, and reduces the budget when an income reimburses the category", async () => {
+    const created = await json("POST", "/v2/budgets", { entityId: f.pfId, categoryId: f.categories.Mercado, amount: 500, effectiveFrom: "2026-09", kind: "fixo" });
+    expect(created.kind).toBe("fixo");
+    const listed = await json("GET", "/v2/budgets");
+    expect(listed.budgets[0].kind).toBe("fixo");
+    await json("POST", "/v2/budgets", { entityId: f.pfId, categoryId: f.categories.Mercado, amount: 100, effectiveFrom: "2026-09", kind: "variavel" }, 409);
+
+    await json("POST", "/v2/ledger/entries", {
+      kind: "expense",
+      accountId: f.pfChecking,
+      amount: 200,
+      date: "2026-09-10",
+      description: "Plano",
+      categoryId: f.categories.Mercado,
+    });
+    const plain = await json("POST", "/v2/ledger/entries", {
+      kind: "income",
+      accountId: f.pfChecking,
+      amount: 40,
+      date: "2026-09-11",
+      description: "Sem vínculo",
+      categoryId: f.categories.Salário,
+    });
+    const incomeId = plain.entryIds[0] as string;
+    let overview = await json("GET", "/v2/budgets/overview?month=2026-09&scope=pf");
+    expect(overview.budgets[0]).toMatchObject({ spent: 200, reimbursed: 0, net: 200 });
+
+    await json("PATCH", `/v2/ledger/entries/${incomeId}`, { reimbursesCategoryId: f.categories.Salário }, 422);
+    const linked = await json("PATCH", `/v2/ledger/entries/${incomeId}`, { reimbursesCategoryId: f.categories.Mercado });
+    expect(linked.entry.reimbursesCategoryId).toBe(f.categories.Mercado);
+    overview = await json("GET", "/v2/budgets/overview?month=2026-09&scope=pf");
+    expect(overview.budgets[0]).toMatchObject({ spent: 200, reimbursed: 40, net: 160 });
+
+    await json("PATCH", `/v2/ledger/entries/${incomeId}`, { reimbursesCategoryId: null });
+    overview = await json("GET", "/v2/budgets/overview?month=2026-09&scope=pf");
+    expect(overview.budgets[0]).toMatchObject({ reimbursed: 0, net: 200 });
+
+    const composition = await json("GET", "/v2/budgets/composition?from=2026-09&to=2026-09&scope=pf");
+    expect(composition.months[0].fixo).toMatchObject({ budgeted: 500, gross: 200, reimbursed: 0, net: 200 });
+    expect(composition.months[0].variavel.net).toBe(0);
+    await json("GET", "/v2/budgets/composition?from=2026-10&to=2026-09", undefined, 400);
+  });
+});
+
 describe("recurring routes", () => {
   it("creates a rule that books what is due, lists it with its entity, and pays and skips undoably", async () => {
     const created = await json("POST", "/v2/recurring", {

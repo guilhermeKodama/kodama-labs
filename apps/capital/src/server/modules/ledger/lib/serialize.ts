@@ -25,6 +25,7 @@ export function serializeEntry(entry: EntryWithContext): LedgerRow {
     accountId: entry.accountId,
     accountType: entry.account.type,
     categoryId: entry.categoryId,
+    reimbursesCategoryId: entry.reimbursesCategoryId,
     isTaxDeductible: entry.isTaxDeductible,
     isRecurring: entry.recurringRuleId !== null,
     transferGroupId: entry.transferGroupId,

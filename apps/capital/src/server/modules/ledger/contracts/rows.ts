@@ -20,6 +20,8 @@ export const ledgerRowSchema = z.object({
   accountId: z.string(),
   accountType: accountTypeSchema,
   categoryId: z.string().nullable(),
+  /** Expense category this income reimburses. Null when it does not. */
+  reimbursesCategoryId: z.string().nullable(),
   isTaxDeductible: z.boolean(),
   isRecurring: z.boolean(),
   transferGroupId: z.string().nullable(),

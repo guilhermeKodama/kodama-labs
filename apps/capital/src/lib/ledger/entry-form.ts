@@ -31,6 +31,8 @@ export interface EntryFormState {
   entityId: string;
   accountId: string;
   categoryId: string;
+  /** Expense category this income reimburses. "" means none. */
+  reimbursesCategoryId: string;
   recurring: boolean;
   frequency: Frequency;
   /** "Lançar automaticamente" (true) or "Só lembrar (push no dia)". */
@@ -154,6 +156,7 @@ export function blankForm(ctx: FormContext): EntryFormState {
     entityId: account?.entityId ?? entityId,
     accountId: account?.id ?? "",
     categoryId: "",
+    reimbursesCategoryId: "",
     recurring: false,
     frequency: "monthly",
     autoGenerate: true,
@@ -566,6 +569,7 @@ export function buildCreateRequest(form: EntryFormState, ctx: FormContext, extra
         date: form.date,
         description,
         categoryId,
+        ...(form.kind === "income" && form.reimbursesCategoryId && { reimbursesCategoryId: form.reimbursesCategoryId }),
         ...(form.deductible && { isTaxDeductible: true }),
         ...(installments && { installments }),
         ...money,
@@ -607,6 +611,8 @@ export interface EditableEntry {
   accountId: string;
   entityId: string;
   categoryId: string | null;
+  /** Expense category this income reimburses. Absent on older payloads. */
+  reimbursesCategoryId?: string | null;
   isTaxDeductible: boolean;
   isRecurring: boolean;
   installmentPlanId: string | null;
@@ -676,6 +682,7 @@ export function formFromEntry(entry: EditableEntry, ctx: FormContext, formatAmou
     entityId: entry.entityId,
     accountId: entry.accountId,
     categoryId: entry.categoryId ?? "",
+    reimbursesCategoryId: entry.reimbursesCategoryId ?? "",
   };
 }
 
@@ -764,6 +771,9 @@ export function buildEditPatch(entry: EditableEntry, initial: EntryFormState, fo
   if (form.accountId && form.accountId !== initial.accountId) patch.accountId = form.accountId;
   else if (form.entityId && form.entityId !== initial.entityId) patch.entityId = form.entityId;
   if (form.categoryId !== initial.categoryId) patch.categoryId = form.categoryId || null;
+  if (form.reimbursesCategoryId !== initial.reimbursesCategoryId) {
+    patch.reimbursesCategoryId = form.kind === "income" && form.reimbursesCategoryId ? form.reimbursesCategoryId : null;
+  }
   if (form.deductible !== initial.deductible) patch.isTaxDeductible = form.deductible;
   const currency = form.currency || entry.currency;
   if (currency !== (initial.currency || entry.currency)) patch.currency = currency;

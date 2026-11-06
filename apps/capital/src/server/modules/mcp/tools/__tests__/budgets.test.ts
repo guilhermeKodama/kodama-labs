@@ -6,7 +6,7 @@ import { monthOverview } from "@capital/server/modules/budgets/services/budget-o
 import { createEntry } from "@capital/server/modules/ledger/services/entries";
 import { markStatementPayment } from "@capital/server/modules/ledger/services/statements";
 import { importCardStatement } from "@capital/server/modules/credit-cards/services/import-card-statement";
-import { createBudget, deleteBudget, getBudgetStatus, listBudgets, updateBudget } from "../budgets";
+import { createBudget, deleteBudget, getBudgetComposition, getBudgetStatus, listBudgets, updateBudget } from "../budgets";
 
 const USER = "test-user-mcp-budgets-001";
 const OTHER = "test-user-mcp-budgets-002";
@@ -168,6 +168,19 @@ describe("get_budget_status", () => {
     expect(r.categories.find((c) => c.category === "Shopping")?.actual).toBe(6400);
     const overview = await monthOverview(USER, 2026, 10, prisma, { entityIds: [f.pfId] });
     expect(overview.budgets.find((b) => b.category === "Shopping")?.committed).toBe(6400);
+  });
+
+  it("stores, lists and updates kind, and returns fixed versus variable totals", async () => {
+    const listed = await listBudgets(USER, { category: "Shopping", effectiveDate: "2026-10" }, prisma);
+    expect(listed[0].kind).toBeNull();
+    const changed = await updateBudget(USER, { budgetId: listed[0].id, kind: "fixo" }, prisma);
+    expect(changed.kind).toBe("fixo");
+    const cleared = await updateBudget(USER, { budgetId: listed[0].id, kind: null }, prisma);
+    expect(cleared.kind).toBeNull();
+    await updateBudget(USER, { budgetId: listed[0].id, kind: "fixo" }, prisma);
+    const composition = await getBudgetComposition(USER, { from: "2026-10", to: "2026-10" }, prisma);
+    expect(composition.months[0].fixo.budgeted).toBe(2800);
+    expect(composition.months[0].variavel.budgeted).toBe(1500);
   });
 
   it("an app-created budget and an MCP one for the same month collide", async () => {

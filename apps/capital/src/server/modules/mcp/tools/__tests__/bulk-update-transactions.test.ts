@@ -28,6 +28,21 @@ afterAll(async () => {
 const expense = async (description: string, categoryId: string | null = f.categories.Groceries) =>
   (await createEntry(USER, { kind: "expense", accountId: f.pfChecking, amount: 10, date: "2026-09-10", description, categoryId }, prisma, { skipRules: true })).entryIds[0];
 
+describe("reimbursesCategory", () => {
+  it("sets and clears the expense category on an income", async () => {
+    const id = (
+      await createEntry(USER, { kind: "income", accountId: f.pfChecking, amount: 30, date: "2026-09-10", description: "Pix", categoryId: f.categories.Salary }, prisma, { skipRules: true })
+    ).entryIds[0];
+    const set = await updateTransactionTool(USER, { id, reimbursesCategory: "Groceries" }, prisma);
+    expect(set.reimbursesCategory).toBe("Groceries");
+    await expect(updateTransactionTool(USER, { id, reimbursesCategory: "Salary" }, prisma)).rejects.toThrow(/type: expense/);
+    const cleared = await bulkUpdateTransactions(USER, [{ id, reimbursesCategory: null }], false, prisma);
+    expect(cleared.errors).toEqual([]);
+    const listed = await listTransactions(USER, { dateFrom: "2026-09-10", dateTo: "2026-09-10" }, prisma);
+    expect(listed.transactions.find((row) => row.id === id)?.reimbursesCategory).toBeNull();
+  });
+});
+
 describe("validateCategory", () => {
   it("accepts existing names and suggests close matches for unknown ones", async () => {
     expect((await validateCategory(USER, "Groceries", "expense", prisma)).valid).toBe(true);

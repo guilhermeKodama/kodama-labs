@@ -53,7 +53,19 @@ const actions: BudgetActions = { onEdit: noop, onDelete: noop };
 const overview = {
   period: { year: 2026, month: 10, daysElapsed: 10, daysInMonth: 31, today: "2026-10-10", isCurrent: true, isPast: false },
   scope: { entityIds: ["pf"] },
-  summary: { totalBudget: 1800, totalSpent: 400, totalCommitted: 400, totalRoom: 1400, projectedTotal: 900 },
+  summary: {
+    totalBudget: 1800,
+    totalSpent: 400,
+    totalReimbursed: 0,
+    totalNet: 400,
+    totalCommitted: 400,
+    totalRoom: 1400,
+    projectedTotal: 900,
+    byKind: {
+      fixo: { budget: 0, spent: 0, reimbursed: 0, net: 0, remaining: 0 },
+      variavel: { budget: 1800, spent: 400, reimbursed: 0, net: 400, remaining: 1400 },
+    },
+  },
   budgets: [
     {
       id: "b1",
@@ -67,10 +79,15 @@ const overview = {
       rollover: false,
       notes: null,
       excludeEntityIds: [],
+      kind: null,
       carry: 0,
       available: 1800,
       spent: 400,
       committed: 400,
+      reimbursed: 0,
+      reimbursedCommitted: 0,
+      net: 400,
+      netCommitted: 400,
       remaining: 1400,
       percentUsed: 22,
       isOverBudget: false,
@@ -89,10 +106,15 @@ const overview = {
       rollover: false,
       notes: null,
       excludeEntityIds: [],
+      kind: "fixo" as const,
       carry: 0,
       available: 400,
       spent: 350,
       committed: 350,
+      reimbursed: 0,
+      reimbursedCommitted: 0,
+      net: 350,
+      netCommitted: 350,
       remaining: 50,
       percentUsed: 88,
       isOverBudget: false,
@@ -116,6 +138,7 @@ const budget: EditableBudget = {
   notes: null,
   effectiveFrom: "2026-01-01",
   period: "monthly",
+  kind: null,
 };
 
 describe("the Orçado column", () => {
@@ -176,8 +199,8 @@ describe("the Orçado column", () => {
 
 describe("the edit form", () => {
   it("sends the amount in the base currency from the month on screen, and focuses the amount", () => {
-    expect(editBudgetBody(2000, "BRL", "  feira ", "2026-10")).toEqual({ amount: 2000, currency: "BRL", notes: "feira", applyFrom: "2026-10" });
-    expect(editBudgetBody(2000, "BRL", "   ", "2026-10").notes).toBeNull();
+    expect(editBudgetBody(2000, "BRL", "  feira ", "2026-10", "variavel")).toEqual({ amount: 2000, currency: "BRL", notes: "feira", applyFrom: "2026-10", kind: "variavel" });
+    expect(editBudgetBody(2000, "BRL", "   ", "2026-10", null).notes).toBeNull();
 
     const html = render(
       "pt-BR",

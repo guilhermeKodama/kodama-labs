@@ -67,8 +67,20 @@ export function useEntityNames(): { names: Map<string, string>; kinds: Map<strin
   };
 }
 
-/** First row of both views: Todas / PF / PJ, then the period text on the right. */
-export function ScopeBar({ scope, onScope, children }: { scope: BudgetsScope; onScope: (scope: BudgetsScope) => void; children?: ReactNode }) {
+/** First row of both views: Todas / PF / PJ, then Fixo / Variável / Todos, then the period text on the right. */
+export function ScopeBar({
+  scope,
+  onScope,
+  kind,
+  onKind,
+  children,
+}: {
+  scope: BudgetsScope;
+  onScope: (scope: BudgetsScope) => void;
+  kind?: "fixo" | "variavel" | null;
+  onKind?: (kind: "fixo" | "variavel" | null) => void;
+  children?: ReactNode;
+}) {
   const t = useTranslations("budgets");
   const { names, hasBusiness } = useEntityNames();
   const options: { v: BudgetsScope; l: string }[] = [
@@ -81,6 +93,18 @@ export function ScopeBar({ scope, onScope, children }: { scope: BudgetsScope; on
   return (
     <div className="flex min-h-(--cap-menu-row-h) flex-wrap items-center gap-2">
       <Segmented aria-label={t("scope.label")} value={scope} options={options} onChange={onScope} />
+      {onKind ? (
+        <Segmented
+          aria-label={t("kind.label")}
+          value={kind ?? "all"}
+          options={[
+            { v: "all" as const, l: t("kind.all") },
+            { v: "fixo" as const, l: t("kind.fixo") },
+            { v: "variavel" as const, l: t("kind.variavel") },
+          ]}
+          onChange={(next) => onKind(next === "all" ? null : next)}
+        />
+      ) : null}
       <span className="ml-auto text-body-sm text-fg-3">{children}</span>
     </div>
   );

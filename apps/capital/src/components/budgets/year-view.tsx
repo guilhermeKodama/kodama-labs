@@ -6,6 +6,7 @@ import { EmptyRow, Kpi, KpiStrip, Panel } from "@/components/cap";
 import { apiPatch } from "@/lib/api/client";
 import { useAppMutation, useErrorMessage } from "@/lib/api/use-app-mutation";
 import { budgetDrill, budgetsDrill, monthPeriod } from "@/lib/budgets/drill";
+import { budgetKind, showsBudgetKind } from "@/lib/budgets/kind";
 import { columnTense, flatMonthlyBudget, heatLevel, heatPercent, isClickable, monthlyBars, totalTone, trendOf, type HeatLevel } from "@/lib/budgets/heatmap";
 import { heatmapLegend, insightCopy, trendBasis, yearHeader, yearToDateMonth } from "@/lib/budgets/labels";
 import { percent, projectionVsBudget, usage, yearlyTone } from "@/lib/budgets/pace";
@@ -38,12 +39,14 @@ export function YearView({
   view,
   today,
   onScope,
+  onKind,
   onOpenMonth,
   actions,
 }: {
   view: BudgetsView;
   today: YearMonth;
   onScope: (scope: BudgetsScope) => void;
+  onKind: (kind: BudgetsView["kind"]) => void;
   onOpenMonth: (month: number) => void;
   actions: BudgetActions;
 }) {
@@ -55,12 +58,12 @@ export function YearView({
   const header = data ? yearHeader(data.period, fmt.monthAbbr) : null;
   return (
     <>
-      <ScopeBar scope={view.scope} onScope={onScope}>
+      <ScopeBar scope={view.scope} onScope={onScope} kind={view.kind} onKind={onKind}>
         {header ? t(header.key, header.values) : null}
       </ScopeBar>
       {data ? (
         <div className={cn("flex flex-col gap-3 transition-opacity", overview.isPlaceholderData && "opacity-60")}>
-          <YearBody data={data} today={today} onOpenMonth={onOpenMonth} actions={actions} />
+          <YearBody data={data} today={today} kind={view.kind} onOpenMonth={onOpenMonth} actions={actions} />
         </div>
       ) : (
         <ViewState error={overview.isError ? errorText(overview.error) : null} onRetry={() => void overview.refetch()} />
@@ -69,11 +72,14 @@ export function YearView({
   );
 }
 
-function YearBody({ data, today, onOpenMonth, actions }: { data: YearOverview; today: YearMonth; onOpenMonth: (month: number) => void; actions: BudgetActions }) {
+function YearBody({ data, today, kind, onOpenMonth, actions }: { data: YearOverview; today: YearMonth; kind: BudgetsView["kind"]; onOpenMonth: (month: number) => void; actions: BudgetActions }) {
   const t = useTranslations("budgets");
   const fmt = useFmt();
   const { kinds } = useEntityNames();
   const { period, summary } = data;
+  const categories = data.categories.filter((row) => showsBudgetKind(row, kind));
+  const yearlyBudgets = data.yearlyBudgets.filter((row) => showsBudgetKind(row, kind));
+  const monthTotals = kind ? data.monthTotals.map((_, index) => categories.reduce((sum, row) => sum + row.months[index].spent, 0)) : data.monthTotals;
   const ytd = yearToDateMonth(period);
   const ytdAbbr = ytd ? fmt.monthAbbr(ytd) : null;
   const projection = projectionVsBudget(summary.projectedYear, summary.budgetYear);
@@ -136,7 +142,7 @@ function YearBody({ data, today, onOpenMonth, actions }: { data: YearOverview; t
             <span className="text-right">{t("year.heatmap.yearTotal")}</span>
             <span className="text-right">{t("year.heatmap.trend")}</span>
           </div>
-          {data.categories.map((row) => {
+          {categories.map((row) => {
             const category = row.category ?? t("uncategorized");
             const trend = trendOf(row.trend);
             return (
@@ -145,6 +151,7 @@ function YearBody({ data, today, onOpenMonth, actions }: { data: YearOverview; t
                   <DrillLink draft={drill(row, category)} title={category} className="min-w-0 truncate">
                     {category}
                   </DrillLink>
+                  {row.isBudgeted ? <span className="shrink-0 text-caption text-fg-3">{t(`kind.${budgetKind(row.kind)}`)}</span> : null}
                   <BudgetEntityBadge entityId={row.entityId} kinds={kinds} />
                 </span>
                 {row.months.map((cell) => {
@@ -179,10 +186,10 @@ function YearBody({ data, today, onOpenMonth, actions }: { data: YearOverview; t
               </div>
             );
           })}
-          {data.categories.length ? (
+          {categories.length ? (
             <div className={cn(HEAT_COLS, "h-9 border-t border-stroke-2 bg-fill-4 text-body-sm font-semibold")}>
               <span>{t("year.heatmap.total")}</span>
-              {data.monthTotals.map((total, i) => {
+              {monthTotals.map((total, i) => {
                 const tone = totalTone(total, data.monthBudgets[i] ?? 0, tense(i + 1) === "projected");
                 return (
                   <DrillLink
@@ -211,11 +218,12 @@ function YearBody({ data, today, onOpenMonth, actions }: { data: YearOverview; t
         <Insights data={data} today={today} />
       </div>
 
-      {data.yearlyBudgets.length ? (
+      {yearlyBudgets.length ? (
         <Panel title={t("year.yearly.title")} pad={false}>
-          {data.yearlyBudgets.map((b) => {
-            const ratio = usage(b.spent, b.amount);
-            const editable: EditableBudget = { id: b.id, category: b.category, entityId: b.entityId, amount: b.amount, notes: b.notes, effectiveFrom: b.effectiveFrom, period: "yearly" };
+          {yearlyBudgets.map((b) => {
+            const cost = b.net ?? b.spent;
+            const ratio = usage(cost, b.amount);
+            const editable: EditableBudget = { id: b.id, category: b.category, entityId: b.entityId, amount: b.amount, notes: b.notes, effectiveFrom: b.effectiveFrom, period: "yearly", kind: b.kind ?? null };
             return (
               <div key={b.id} className="group grid h-10 grid-cols-[minmax(0,1.2fr)_minmax(0,2fr)_96px_96px] items-center gap-3 border-t border-stroke-3 px-3 text-body first:border-t-0">
                 <span className="flex min-w-0 items-center gap-1.5">
@@ -229,7 +237,7 @@ function YearBody({ data, today, onOpenMonth, actions }: { data: YearOverview; t
                   <span className="w-[34px] shrink-0 text-right font-mono text-caption text-fg-3 tabular-nums">{percent(ratio)}%</span>
                 </span>
                 <DrillLink draft={drill(b, b.category)} className="text-right font-mono tabular-nums">
-                  {fmt.money0(b.spent)}
+                  {fmt.money0(cost)}
                 </DrillLink>
                 <span className="text-right font-mono text-fg-2 tabular-nums">{t("year.yearly.of", { amount: fmt.money0(b.amount) })}</span>
               </div>

@@ -14,7 +14,7 @@ import { PeriodNav, type BudgetActions } from "./parts";
 import { RuleDialog, RulesSheet } from "./rule-dialog";
 import { YearView } from "./year-view";
 
-const URL_PARAMS = { mode: parseAsString, m: parseAsString, y: parseAsString, scope: parseAsString };
+const URL_PARAMS = { mode: parseAsString, m: parseAsString, y: parseAsString, scope: parseAsString, k: parseAsString };
 
 /**
  * Transações › Orçamentos (mockup BudgetsScreen / AnnualBudget). Mensal:
@@ -70,9 +70,9 @@ export function BudgetsScreen() {
       primary={{ label: t("newBudget"), onSelect: () => setDialog({ kind: "create", month: actionMonth, scope: view.scope }) }}
     >
       {isYear ? (
-        <YearView view={view} today={today} onScope={(scope) => go({ ...view, scope })} onOpenMonth={(month) => go(openMonth(view, month))} actions={actions} />
+        <YearView view={view} today={today} onScope={(scope) => go({ ...view, scope })} onKind={(kind) => go({ ...view, kind })} onOpenMonth={(month) => go(openMonth(view, month))} actions={actions} />
       ) : (
-        <MonthView view={view} onScope={(scope) => go({ ...view, scope })} actions={actions} onOpenRule={setRuleId} onAllRules={() => setRulesOpen(true)} />
+        <MonthView view={view} onScope={(scope) => go({ ...view, scope })} onKind={(kind) => go({ ...view, kind })} actions={actions} onOpenRule={setRuleId} onAllRules={() => setRulesOpen(true)} />
       )}
       <BudgetDialogs state={dialog} onChange={setDialog} />
       <RulesSheet open={rulesOpen} onOpenChange={setRulesOpen} scope={view.scope} onOpenRule={setRuleId} />

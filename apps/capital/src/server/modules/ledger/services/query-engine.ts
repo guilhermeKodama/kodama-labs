@@ -255,7 +255,7 @@ const SEL_COLUMNS = Prisma.sql`
   le.id AS "id", le.date AS "date", le."effectiveDate" AS "effectiveDate", le.description AS "description", le.notes AS "notes",
   le.kind::text AS "kind", le.amount AS "amount", le.currency AS "currency", le."exchangeRate" AS "exchangeRate",
   le."amountBase" AS "amountBase", le."entityId" AS "entityId", e.kind::text AS "entityKind", le."accountId" AS "accountId", a.type::text AS "accountType",
-  le."categoryId" AS "categoryId", le."isTaxDeductible" AS "isTaxDeductible", (le."recurringRuleId" IS NOT NULL) AS "isRecurring",
+  le."categoryId" AS "categoryId", le."reimbursesCategoryId" AS "reimbursesCategoryId", le."isTaxDeductible" AS "isTaxDeductible", (le."recurringRuleId" IS NOT NULL) AS "isRecurring",
   tg.direction::text AS "transferDirection", le."cardStatementId" AS "cardStatementId", le."importId" AS "importId",
   ${flowKindSql()} AS "flowKind", le."transferGroupId" AS "transferGroupId", le."recurringRuleId" AS "recurringRuleId",
   le."installmentPlanId" AS "installmentPlanId", le."installmentNumber" AS "installmentNumber", le."deletedAt" AS "deletedAt",
@@ -502,6 +502,7 @@ interface RawRow {
   accountId: string;
   accountType: LedgerRow["accountType"];
   categoryId: string | null;
+  reimbursesCategoryId: string | null;
   isTaxDeductible: boolean;
   recurringRuleId: string | null;
   transferGroupId: string | null;
@@ -543,6 +544,7 @@ function toRow(r: RawRow): LedgerRow {
     accountId: r.accountId,
     accountType: r.accountType,
     categoryId: r.categoryId,
+    reimbursesCategoryId: r.reimbursesCategoryId,
     isTaxDeductible: r.isTaxDeductible,
     isRecurring: r.recurringRuleId !== null,
     transferGroupId: r.transferGroupId,

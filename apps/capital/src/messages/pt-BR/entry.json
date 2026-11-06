@@ -32,6 +32,9 @@
     "transferType": "Tipo:",
     "detected": "detectado pelas pontas",
     "reimbursement": "É reembolso",
+    "reimburses": "Reembolsa",
+    "reimbursesHint": "Uma entrada nesta categoria de despesa reduz o orçamento dela. Em branco, não reduz nenhum.",
+    "reimbursesClear": "Limpar",
     "direction": {
       "profit_distribution": "Distribuição de lucros",
       "capital_injection": "Aporte de capital",

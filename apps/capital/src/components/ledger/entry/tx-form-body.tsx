@@ -3,7 +3,7 @@
 import type { ReactNode } from "react";
 import { useTranslations } from "next-intl";
 import type { CategorySuggestion } from "@capital/server/modules/ledger/services/rules";
-import { Badge, Callout, Check, Field, Select, TextInput } from "@/components/cap";
+import { Badge, Btn, Callout, Check, Field, Select, TextInput } from "@/components/cap";
 import { AccountCombobox, CategoryCombobox, EntitySelect } from "@/components/pickers";
 import type { AccountRecord } from "@/lib/api/catalog";
 import { entityLabel } from "@/lib/pickers/options";
@@ -214,6 +214,24 @@ export function TxFormBody({ form, up, ctx, accounts, mode, lockedKinds = [], in
             className="w-full"
           />
         </Field>
+        {form.kind === "income" && !form.recurring ? (
+          <Field label={t("reimburses")} span={2} hint={t("reimbursesHint")}>
+            <div className="flex items-center gap-2">
+              <CategoryCombobox
+                value={form.reimbursesCategoryId || null}
+                onChange={(reimbursesCategoryId) => up({ reimbursesCategoryId })}
+                type="expense"
+                allowCreate={false}
+                className="min-w-0 flex-1"
+              />
+              {form.reimbursesCategoryId ? (
+                <Btn ghost type="button" onClick={() => up({ reimbursesCategoryId: "" })}>
+                  {t("reimbursesClear")}
+                </Btn>
+              ) : null}
+            </div>
+          </Field>
+        ) : null}
         {foreign ? (
           <Field label={t("date")}>
             <DateInput value={form.date} onChange={(date) => up({ date })} today={ctx.today} invalid={invalid === "date"} />
@@ -284,7 +302,7 @@ export function TxFormBody({ form, up, ctx, accounts, mode, lockedKinds = [], in
       <KindSegmented
         value={form.kind}
         options={KINDS.map((kind) => ({ v: kind, l: t(`kind.${kind}`), disabled: lockedKinds.includes(kind) }))}
-        onChange={(kind) => up({ kind, categoryId: kind === form.kind ? form.categoryId : "", rate: "" })}
+        onChange={(kind) => up({ kind, categoryId: kind === form.kind ? form.categoryId : "", rate: "", ...(kind !== "income" ? { reimbursesCategoryId: "" } : {}) })}
       />
       {transfer}
       {isInvest ? <InvestBlock form={form} up={up} ctx={ctx} accounts={accounts} mode={mode} invalid={invalid} entityName={entityName} /> : null}

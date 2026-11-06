@@ -1,4 +1,5 @@
 import { compareMonths, monthKey, parseMonthKey, parseYear, sameMonth, type YearMonth } from "./period";
+import type { BudgetKindName } from "./kind";
 
 /**
  * URL state of /transactions/budgets: `mode` (month | year), `m`
@@ -17,6 +18,7 @@ export interface BudgetsUrlParams {
   m: string | null;
   y: string | null;
   scope: string | null;
+  k?: string | null;
 }
 
 export interface BudgetsView {
@@ -26,6 +28,8 @@ export interface BudgetsView {
   /** Year of the Anual view. */
   year: number;
   scope: BudgetsScope;
+  /** Todos when null. */
+  kind: BudgetKindName | null;
 }
 
 const ENTITY_ID = /^[A-Za-z0-9_-]{1,64}$/;
@@ -40,7 +44,8 @@ export function resolveBudgetsView(params: BudgetsUrlParams, today: YearMonth): 
   const mode: BudgetsMode = params.mode === "year" ? "year" : "month";
   const month = parseMonthKey(params.m) ?? { year: today.year, month: today.month };
   const year = parseYear(params.y) ?? (params.m && parseMonthKey(params.m) ? month.year : today.year);
-  return { mode, month, year, scope: parseScope(params.scope) };
+  const kind: BudgetKindName | null = params.k === "fixo" || params.k === "variavel" ? params.k : null;
+  return { mode, month, year, scope: parseScope(params.scope), kind };
 }
 
 /** URL params for a view, defaults left out (null removes the param). */
@@ -50,6 +55,7 @@ export function budgetsParams(view: BudgetsView, today: YearMonth): BudgetsUrlPa
     m: sameMonth(view.month, today) ? null : monthKey(view.month),
     y: view.mode === "year" && view.year !== today.year ? String(view.year) : null,
     scope: view.scope === "all" ? null : view.scope,
+    k: view.kind,
   };
 }
 

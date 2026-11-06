@@ -58,6 +58,8 @@ export const ERROR_CODES = {
   "entry.scope_unavailable": "This transaction is not part of a recurrence or an installment plan, so only it can be deleted",
   "entry.kind_locked": "The type of an investment operation's cash cannot change; edit the operation instead",
   "entry.not_transfer": "Only a transfer has a source and a destination account",
+  "entry.reimbursement_income_only": "Only an income can reimburse an expense category",
+  "entry.reimbursement_expense_category": "A reimbursement points at an expense category",
   "transfer.same_account": "A transfer needs two different accounts",
   "transfer.fx_required": "A transfer between different currencies needs an exchange rate",
   "transfer.fx_mismatch": "The exchange rate and the received amount disagree by more than 0.01",
@@ -126,6 +128,7 @@ export const ERROR_CODES = {
   "budget.clash": "A budget for {category} already starts in that month; change the amount in that row's budget column",
   "budget.overview_period_required": "Choose a month (YYYY-MM) or a year (YYYY)",
   "budget.apply_before_start": "The change can only apply from the month the budget starts",
+  "budget.composition_range": "The range must be from an earlier month to a later one, and at most 36 months",
 
   // Recurring rules
   "recurring.not_found": "Recurring rule not found",

@@ -92,6 +92,36 @@ function assigned(list: readonly Spend[], budgets: readonly Budget[], b: Budget,
   return list.filter((s) => budgetFor(budgets, s.entityId, s.categoryId)?.id === b.id).reduce((sum, s) => sum + s[key], 0);
 }
 
+interface Offset {
+  entityId: string;
+  categoryId: string;
+  amount: number;
+  toDate: number;
+}
+
+/**
+ * Income assigned to an expense category (`reimbursesCategoryId`). The
+ * category alone picks the budget, the same way an expense does. The sum
+ * is positive (income amountBase); a budget's net is spent minus this.
+ */
+async function offsetsBySlot(db: DbClient, userId: string, range: { from: Date; to: Date }, asOf: Date, entityIds: string[] | null): Promise<Offset[]> {
+  const rows = await db.$queryRaw<{ entity_id: string; category_id: string; amount: Prisma.Decimal; to_date: Prisma.Decimal }[]>`
+    SELECT le."entityId" AS entity_id, le."reimbursesCategoryId" AS category_id,
+           coalesce(sum(le."amountBase"), 0) AS amount,
+           coalesce(sum(le."amountBase") FILTER (WHERE ${spentToDateSql("le", asOf)}), 0) AS to_date
+    FROM ledger_entries le
+    WHERE le."userId" = ${userId} AND le."deletedAt" IS NULL AND le.kind = 'income'
+      AND le."reimbursesCategoryId" IS NOT NULL AND le."transferGroupId" IS NULL
+      AND le."effectiveDate" BETWEEN ${range.from} AND ${range.to}
+      AND ${entityScopeSql(Prisma.sql`le."entityId"`, entityIds)}
+    GROUP BY 1, 2`;
+  return rows.map((row) => ({ entityId: row.entity_id, categoryId: row.category_id, amount: toNumber(row.amount), toDate: toNumber(row.to_date) }));
+}
+
+function assignedOffset(list: readonly Offset[], budgets: readonly Budget[], b: Budget, key: "amount" | "toDate") {
+  return list.filter((row) => budgetFor(budgets, row.entityId, row.categoryId)?.id === b.id).reduce((sum, row) => sum + row[key], 0);
+}
+
 /** Display order of budget rows: every-entity budgets, then the personal entity, then businesses; categories by name. */
 async function rowOrder(db: DbClient, userId: string) {
   const entities = await db.entity.findMany({ where: { userId }, select: { id: true, kind: true }, orderBy: { createdAt: "asc" } });
@@ -118,22 +148,38 @@ function yearPaceOf(year: number, today: UserToday) {
 }
 
 /** Yearly budgets with what they spent this year (to date and committed), from spend of the whole year. */
-function yearlyRows(yearly: readonly Budget[], yearSpend: readonly Spend[], name: (id: string | null) => string | null, yearPace: number, entityIds: string[] | null, fx: FxContext) {
+function yearlyRows(
+  yearly: readonly Budget[],
+  yearSpend: readonly Spend[],
+  offsets: readonly Offset[],
+  name: (id: string | null) => string | null,
+  yearPace: number,
+  entityIds: string[] | null,
+  fx: FxContext,
+) {
   return yearly.map((b) => {
     const amount = baseAmount(fx, b);
-    const spent = assigned(yearSpend, yearly, b, "spentToDate");
-    const committed = assigned(yearSpend, yearly, b, "spent");
+    const spent = round(assigned(yearSpend, yearly, b, "spentToDate"), 2);
+    const committed = round(assigned(yearSpend, yearly, b, "spent"), 2);
+    const reimbursed = round(assignedOffset(offsets, yearly, b, "toDate"), 2);
+    const reimbursedCommitted = round(assignedOffset(offsets, yearly, b, "amount"), 2);
+    const net = round(spent - reimbursed, 2);
     return {
       id: b.id,
       entityId: b.entityId,
       categoryId: b.categoryId,
       category: name(b.categoryId) ?? "?",
+      kind: b.kind,
       amount,
       budgetAmount: toNumber(b.amount),
       currency: b.currency,
-      spent: round(spent, 2),
-      committed: round(committed, 2),
-      percentUsed: round(amount > 0 ? (spent / amount) * 100 : 0, 2),
+      spent,
+      committed,
+      reimbursed,
+      reimbursedCommitted,
+      net,
+      netCommitted: round(committed - reimbursedCommitted, 2),
+      percentUsed: round(amount > 0 ? (net / amount) * 100 : 0, 2),
       yearPace,
       notes: b.notes,
       effectiveFrom: formatDateOnly(b.effectiveFrom),
@@ -311,10 +357,12 @@ export async function monthOverview(userId: string, year: number, month: number,
   const order = await rowOrder(db, userId);
 
   const spend = await spendBySlot(db, userId, bounds, asOf, entityIds);
+  const offsets = budgets.length ? await offsetsBySlot(db, userId, bounds, asOf, entityIds) : [];
   const prevYear = month === 1 ? year - 1 : year;
   const prevMonth = month === 1 ? 12 : month - 1;
   const prevBounds = monthBounds(prevYear, prevMonth);
   const prevSpend = await spendBySlot(db, userId, prevBounds, prevBounds.to, entityIds);
+  const prevOffsets = budgets.some((b) => b.rollover) ? await offsetsBySlot(db, userId, prevBounds, prevBounds.to, entityIds) : [];
   const prevBudgets = (await getEffectiveBudgetsForMonth(db, userId, new Date(Date.UTC(prevYear, prevMonth - 1, 1, 12))))
     .filter(budgetInScope(entityIds))
     .filter((b) => b.period === "monthly");
@@ -328,11 +376,18 @@ export async function monthOverview(userId: string, year: number, month: number,
       let carry = 0;
       if (b.rollover) {
         const prev = prevBudgets.find((p) => p.categoryId === b.categoryId && p.entityId === b.entityId);
-        if (prev) carry = Math.max(0, baseAmount(fx, prev) - assigned(prevSpend, prevBudgets, prev, "spent"));
+        if (prev) {
+          const prevNet = assigned(prevSpend, prevBudgets, prev, "spent") - assignedOffset(prevOffsets, prevBudgets, prev, "amount");
+          carry = Math.max(0, baseAmount(fx, prev) - prevNet);
+        }
       }
       const available = amount + carry;
-      const committed = assigned(spend, budgets, b, "spent");
-      const spent = assigned(spend, budgets, b, "spentToDate");
+      const committed = round(assigned(spend, budgets, b, "spent"), 2);
+      const spent = round(assigned(spend, budgets, b, "spentToDate"), 2);
+      const reimbursed = round(assignedOffset(offsets, budgets, b, "toDate"), 2);
+      const reimbursedCommitted = round(assignedOffset(offsets, budgets, b, "amount"), 2);
+      const net = round(spent - reimbursed, 2);
+      const netCommitted = round(committed - reimbursedCommitted, 2);
       const dailySpendRate = daysElapsed > 0 ? spent / daysElapsed : 0;
       const allowedDailyRate = available / daysInMonth;
       const past = history.filter((h) => budgetFor(budgets, h.entityId, h.categoryId)?.id === b.id);
@@ -350,14 +405,15 @@ export async function monthOverview(userId: string, year: number, month: number,
       // already imported is not forecast a second time off its closing day.
       const bookedAfterToday = Math.max(0, committed - spent);
       const projectedTotal = daysElapsed > 0 ? committed + Math.max(0, restOfMonth - bookedAfterToday) : committed;
-      const percentUsed = available > 0 ? (spent / available) * 100 : 0;
+      const percentUsed = available > 0 ? (net / available) * 100 : 0;
       const pacePercent = (daysElapsed / daysInMonth) * 100;
-      const status = spent > available ? "over" : percentUsed > pacePercent + 12 ? "ahead_of_pace" : "on_track";
+      const status = net > available ? "over" : percentUsed > pacePercent + 12 ? "ahead_of_pace" : "on_track";
       return {
         id: b.id,
         entityId: b.entityId,
         categoryId: b.categoryId,
         category: name(b.categoryId) ?? "?",
+        kind: b.kind,
         amount,
         budgetAmount: toNumber(b.amount),
         currency: b.currency,
@@ -367,11 +423,15 @@ export async function monthOverview(userId: string, year: number, month: number,
         excludeEntityIds: excludedEntities(budgets, b),
         carry: round(carry, 2),
         available: round(available, 2),
-        spent: round(spent, 2),
-        committed: round(committed, 2),
-        remaining: round(available - spent, 2),
+        spent,
+        committed,
+        reimbursed,
+        reimbursedCommitted,
+        net,
+        netCommitted,
+        remaining: round(available - net, 2),
         percentUsed: round(percentUsed, 2),
-        isOverBudget: spent > available,
+        isOverBudget: net > available,
         status,
         pace: {
           dailySpendRate: round(dailySpendRate, 2),
@@ -442,6 +502,23 @@ export async function monthOverview(userId: string, year: number, month: number,
   for (const d of daily) {
     if (budgetFor(budgets, d.entity_id, d.category_id)) byDay.set(d.day, (byDay.get(d.day) ?? 0) + toNumber(d.spent));
   }
+  const offsetDaily =
+    daysElapsed > 0 && budgets.length
+      ? await db.$queryRaw<{ day: number; entity_id: string; category_id: string; amount: Prisma.Decimal }[]>`
+          SELECT ${paceDaySql("le", bounds.from)} AS day, le."entityId" AS entity_id, le."reimbursesCategoryId" AS category_id,
+                 coalesce(sum(le."amountBase"), 0) AS amount
+          FROM ledger_entries le
+          WHERE le."userId" = ${userId} AND le."deletedAt" IS NULL AND le.kind = 'income'
+            AND le."reimbursesCategoryId" IS NOT NULL AND le."transferGroupId" IS NULL
+            AND le."effectiveDate" BETWEEN ${bounds.from} AND ${bounds.to}
+            AND ${spentToDateSql("le", asOf)}
+            AND le."reimbursesCategoryId" IN (${Prisma.join([...new Set(budgets.map((b) => b.categoryId))])})
+            AND ${entityScopeSql(Prisma.sql`le."entityId"`, entityIds)}
+          GROUP BY 1, 2, 3`
+      : [];
+  for (const d of offsetDaily) {
+    if (budgetFor(budgets, d.entity_id, d.category_id)) byDay.set(d.day, (byDay.get(d.day) ?? 0) - toNumber(d.amount));
+  }
   let acc = 0;
   const series = Array.from({ length: daysElapsed }, (_, i) => {
     acc += byDay.get(i + 1) ?? 0;
@@ -451,19 +528,35 @@ export async function monthOverview(userId: string, year: number, month: number,
   const upcoming = await upcomingBills(db, userId, today, entityIds);
 
   const yearBounds = { from: new Date(Date.UTC(year, 0, 1)), to: new Date(Date.UTC(year, 11, 31, 23, 59, 59, 999)) };
-  const yearSpend = yearly.length ? await spendBySlot(db, userId, yearBounds, new Date(Math.min(today.end.getTime(), yearBounds.to.getTime())), entityIds) : [];
-  const yearlyBudgets = yearlyRows(yearly, yearSpend, name, yearPaceOf(year, today), entityIds, fx).sort(order);
+  const yearAsOf = new Date(Math.min(today.end.getTime(), yearBounds.to.getTime()));
+  const yearSpend = yearly.length ? await spendBySlot(db, userId, yearBounds, yearAsOf, entityIds) : [];
+  const yearOffsets = yearly.length ? await offsetsBySlot(db, userId, yearBounds, yearAsOf, entityIds) : [];
+  const yearlyBudgets = yearlyRows(yearly, yearSpend, yearOffsets, name, yearPaceOf(year, today), entityIds, fx).sort(order);
 
   const totalSpent = rows.reduce((s, r) => s + r.spent, 0);
+  const totalNet = rows.reduce((s, r) => s + r.net, 0);
+  const totalReimbursed = rows.reduce((s, r) => s + r.reimbursed, 0);
+  const bucket = (kind: "fixo" | "variavel") => {
+    const list = rows.filter((row) => (row.kind === "fixo" ? "fixo" : "variavel") === kind);
+    const budget = round(list.reduce((s, row) => s + row.amount, 0), 2);
+    const spent = round(list.reduce((s, row) => s + row.spent, 0), 2);
+    const reimbursed = round(list.reduce((s, row) => s + row.reimbursed, 0), 2);
+    const net = round(list.reduce((s, row) => s + row.net, 0), 2);
+    const available = list.reduce((s, row) => s + row.available, 0);
+    return { budget, spent, reimbursed, net, remaining: round(available - net, 2) };
+  };
   return {
     period: { year, month, daysElapsed, daysInMonth, today: today.iso, isCurrent, isPast },
     scope: { entityIds },
     summary: {
       totalBudget: round(totalBudget, 2),
       totalSpent: round(totalSpent, 2),
+      totalReimbursed: round(totalReimbursed, 2),
+      totalNet: round(totalNet, 2),
       totalCommitted: round(rows.reduce((s, r) => s + r.committed, 0), 2),
-      totalRoom: round(totalBudget - totalSpent, 2),
+      totalRoom: round(totalBudget - totalNet, 2),
       projectedTotal: round(rows.reduce((s, r) => s + r.pace.projectedTotal, 0), 2),
+      byKind: { fixo: bucket("fixo"), variavel: bucket("variavel") },
     },
     budgets: rows,
     yearlyBudgets,
@@ -637,6 +730,7 @@ export async function yearOverview(userId: string, year: number, db: DbClient, o
       category: name(slot.categoryId),
       isBudgeted: slot.budgeted,
       budgetId: ref?.id ?? null,
+      kind: slot.budgeted ? (ref?.kind ?? null) : null,
       budget: ref ? baseAmount(fx, ref) : null,
       excludeEntityIds: ref && refIndex !== undefined ? excludedEntities(monthly[refIndex], ref) : [],
       months,
@@ -654,7 +748,8 @@ export async function yearOverview(userId: string, year: number, db: DbClient, o
   const monthTotals = Array.from({ length: 12 }, (_, i) => round(matrix.reduce((s, r) => s + r.months[i].spent, 0), 2));
   const monthBudgets = monthly.map((bs) => round(bs.reduce((s, b) => s + baseAmount(fx, b), 0), 2));
   const yearPace = yearPaceOf(year, today);
-  const yearlyBudgets = yearlyRows(yearly, spend, name, yearPace, entityIds, fx).sort(order);
+  const yearOffsets = yearly.length ? await offsetsBySlot(db, userId, yearBounds, today.end, entityIds) : [];
+  const yearlyBudgets = yearlyRows(yearly, spend, yearOffsets, name, yearPace, entityIds, fx).sort(order);
 
   return {
     year,
