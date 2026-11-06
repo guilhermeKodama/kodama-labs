@@ -1,6 +1,7 @@
 # kodama-labs monorepo
 
 Rules shared with every other agent, starting with the proof video each pull request needs: @AGENTS.md
+Cerne (`apps/capital`) colors, type, the mark and screen patterns: `apps/capital/BRAND.md`.
 
 ## Local secrets for a new worktree — READ THIS BEFORE RUNNING ANY APP
 
