@@ -217,11 +217,11 @@ describe("fixo and variável in the month summary", () => {
     expect(legend).toContain(">Gastos fixos<");
     expect(legend).toContain(">Gastos variáveis<");
     expect(legend).toContain("Gasto acumulado");
-    // Ardósia, resina, heartwood ink, jacarandá, ipê. Five tokens, none repeated, and the cards use the same two.
+    // Musgo, resina, heartwood ink, jacarandá, ipê. Five tokens, none repeated, and the cards use the same two.
     const strokes = [...legend.matchAll(/stroke="([^"]+)"/g)].map((match) => match[1]);
-    expect(strokes).toEqual(["var(--cap-chart-6)", "var(--cap-chart-2)", "var(--cap-chart-ink)", "var(--cap-chart-5)", "var(--cap-chart-warn)"]);
+    expect(strokes).toEqual(["var(--cap-chart-3)", "var(--cap-chart-2)", "var(--cap-chart-ink)", "var(--cap-chart-5)", "var(--cap-chart-warn)"]);
     expect(new Set(strokes).size).toBe(strokes.length);
-    expect(html.slice(html.indexOf('data-budget-kpi="fixo"'), html.indexOf('data-budget-kpi="variavel"'))).toContain('stroke="var(--cap-chart-6)"');
+    expect(html.slice(html.indexOf('data-budget-kpi="fixo"'), html.indexOf('data-budget-kpi="variavel"'))).toContain('stroke="var(--cap-chart-3)"');
     expect(html.slice(html.indexOf('data-budget-kpi="variavel"'), html.indexOf('data-budget-kpi="remaining"'))).toContain('stroke="var(--cap-chart-2)"');
     const fixoAt = html.indexOf('data-budget-subtotal="fixo"');
     const variavelAt = html.indexOf('data-budget-subtotal="variavel"');
@@ -242,7 +242,7 @@ describe("fixo and variável in the month summary", () => {
     expect(legend).toContain(">Gastos fixos<");
     expect(legend).not.toContain(">Gastos variáveis<");
     expect(legend).toContain("Gasto acumulado");
-    expect(legend).toContain('stroke="var(--cap-chart-6)"');
+    expect(legend).toContain('stroke="var(--cap-chart-3)"');
     expect(legend).not.toContain('stroke="var(--cap-chart-2)"');
     expect(legend).toContain('stroke="var(--cap-chart-ink)"');
     const variavelAt = html.indexOf('data-budget-subtotal="variavel"');

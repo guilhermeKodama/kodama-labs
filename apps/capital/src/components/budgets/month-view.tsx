@@ -35,15 +35,14 @@ const MENU_CELL = "order-2 col-span-1 flex items-center justify-end md:order-0 m
 const STAT_CELL = "col-span-2 flex flex-col items-start gap-0.5 text-left md:col-span-1 md:block md:text-right";
 
 /**
- * One hue each, from the Cerne chart tokens. Heartwood stays the cumulative
- * line (it is the primary ink). Fixo is ardósia and variável is resina, so
- * neither repeats that ink. The ideal pace is jacarandá, which still reads
- * on charcoal; the pale projection tone does not. Orçado is the ipê already
- * reserved for reference marks, drawn dashed. Moss and ember stay with gain
- * and loss.
+ * One hue each, from the Cerne chart board. Heartwood stays the cumulative
+ * line (it is the primary ink). Fixo is musgo, the green in the series;
+ * ardósia reads as blue on the wood paper. Variável is resina. The ideal
+ * pace is jacarandá, which still reads on charcoal. Orçado is the ipê
+ * already reserved for reference marks, drawn dashed. Ember stays with loss.
  */
 const PACE_COLOR = {
-  fixo: SERIES.ardosia,
+  fixo: SERIES.musgo,
   variavel: SERIES.resina,
   cumulative: CHART.ink,
   ideal: SERIES.jacaranda,
