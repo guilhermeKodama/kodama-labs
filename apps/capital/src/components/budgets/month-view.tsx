@@ -169,13 +169,20 @@ export function MonthBody({
               kind: row.kind ?? null,
             };
             return (
-              <div key={row.id} className={cn("grid", COLS, "group border-t border-stroke-3 py-2 text-body md:h-10 md:py-0")}>
-                <span className={NAME_CELL}>
+              <div key={row.id} className={cn("grid", COLS, "group border-t border-stroke-3 py-2 text-body md:py-0", showOffset ? "md:h-auto md:min-h-10 md:py-1" : "md:h-10")}>
+                <span className={cn(NAME_CELL, showOffset && "md:flex-wrap md:py-1")}>
                   <DrillLink draft={drill(row, wholeMonth)} title={row.category} className="min-w-0 truncate">
                     {row.category}
                   </DrillLink>
                   <span className="shrink-0 text-caption text-fg-3">{t(`kind.${budgetKind(row.kind)}`)}</span>
                   <BudgetEntityBadge entityId={row.entityId} kinds={kinds} />
+                  {showOffset ? (
+                    <span className="hidden basis-full text-caption font-normal text-fg-3 md:block">
+                      <DrillLink draft={spent}>{t("month.table.gross", { amount: fmt.money0(row.spent) })}</DrillLink>
+                      {" · "}
+                      {t("month.table.reimbursed", { amount: fmt.money0(reimbursed) })}
+                    </span>
+                  ) : null}
                 </span>
                 <span className={BAR_CELL}>
                   <PaceBar ratio={ratio} tone={tone} marker={pace} label={row.category} />
@@ -194,7 +201,7 @@ export function MonthBody({
                   <span className="text-caption font-normal text-fg-3 md:hidden">{t("month.table.spent")}</span>
                   <DrillLink draft={showOffset ? null : spent}>{fmt.money0(net)}</DrillLink>
                   {showOffset ? (
-                    <span className="text-caption font-normal text-fg-3">
+                    <span className="text-caption font-normal text-fg-3 md:hidden">
                       <DrillLink draft={spent}>{t("month.table.gross", { amount: fmt.money0(row.spent) })}</DrillLink>
                       {" · "}
                       {t("month.table.reimbursed", { amount: fmt.money0(reimbursed) })}
