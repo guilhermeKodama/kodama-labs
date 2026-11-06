@@ -3,7 +3,7 @@ import { prisma } from "@capital/server/lib/prisma";
 import { createLedgerFixture, deleteLedgerFixture, type LedgerFixture } from "@/test/ledger-fixtures";
 import { createEntry } from "@capital/server/modules/ledger/services/entries";
 import { undoBatch } from "@capital/server/modules/ledger/services/mutations";
-import { createBudget, deleteBudgetChain, endBudgetFrom, listBudgets, updateBudget } from "../budget-crud";
+import { createBudget, deleteBudgetChain, endBudgetFrom, listBudgets, serializeBudget, updateBudget } from "../budget-crud";
 import { monthOverview, yearOverview } from "../budget-overview";
 
 const USER = "test-user-s5-budget-versions-001";
@@ -140,5 +140,20 @@ describe("monthly and yearly budgets", () => {
     const after = await monthOverview(USER, 2026, 2, prisma);
     expect(after.budgets.map((b) => b.id)).toEqual([monthly.id]);
     expect(after.yearlyBudgets).toEqual([]);
+  });
+});
+
+describe("kind", () => {
+  it("stores null when omitted, copies it onto a new version, and still rejects a second budget", async () => {
+    const created = await createBudget(USER, { entityId: f.pfId, categoryId: mercado, amount: 500, effectiveFrom: "2026-01" }, prisma);
+    expect(serializeBudget(created).kind).toBeNull();
+    const version = await updateBudget(USER, created.id, { amount: 700, applyFrom: "2026-09" }, prisma);
+    expect(version.kind).toBeNull();
+    const fixo = await updateBudget(USER, version.id, { kind: "fixo" }, prisma);
+    expect(serializeBudget(fixo).kind).toBe("fixo");
+    await expect(createBudget(USER, { entityId: f.pfId, categoryId: mercado, amount: 100, effectiveFrom: "2026-09", kind: "variavel" }, prisma)).rejects.toMatchObject({
+      status: 409,
+      code: "budget.clash",
+    });
   });
 });

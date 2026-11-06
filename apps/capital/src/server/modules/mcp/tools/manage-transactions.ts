@@ -21,6 +21,8 @@ export interface UpdateTransactionParams {
   category?: string;
   date?: string;
   isTaxDeductible?: boolean;
+  /** Expense category this income reimburses. Null clears it. Omit to leave it. */
+  reimbursesCategory?: string | null;
 }
 
 type Resolver = Awaited<ReturnType<typeof categoryResolver>>;
@@ -49,6 +51,9 @@ export function toPatch(
   if (params.category) {
     const category = resolver.resolve(params.category, type, existing.categoryId);
     if (category.id !== existing.categoryId) patch.categoryId = category.id;
+  }
+  if (params.reimbursesCategory !== undefined) {
+    patch.reimbursesCategoryId = params.reimbursesCategory === null ? null : resolver.resolve(params.reimbursesCategory, "expense").id;
   }
   return patch;
 }

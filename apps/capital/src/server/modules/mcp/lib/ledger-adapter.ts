@@ -13,6 +13,7 @@ import { formatCategoryValidationError, matchCategoryName } from "./category-val
 
 export const LEGACY_ENTRY_INCLUDE = {
   category: { select: { name: true } },
+  reimbursesCategory: { select: { name: true } },
   entity: { select: { id: true, kind: true } },
   account: { select: { id: true, name: true } },
   investmentOperation: { select: { id: true } },
@@ -27,6 +28,7 @@ export const LEGACY_ENTRY_INCLUDE = {
 
 type LegacyEntry = LedgerEntry & {
   category: Pick<Category, "name"> | null;
+  reimbursesCategory: Pick<Category, "name"> | null;
   entity: Pick<Entity, "id" | "kind">;
   account: { id: string; name: string };
   investmentOperation?: { id: string } | null;
@@ -61,6 +63,8 @@ export function toLegacyTransaction(e: LegacyEntry) {
     exchangeRate: toNumber(e.exchangeRate),
     description: e.description,
     category: e.category?.name ?? null,
+    /** Expense category this income reimburses. Null when it does not. */
+    reimbursesCategory: e.reimbursesCategory?.name ?? null,
     date: e.date.toISOString(),
     isTaxDeductible: e.isTaxDeductible,
     businessId: ref.businessId,

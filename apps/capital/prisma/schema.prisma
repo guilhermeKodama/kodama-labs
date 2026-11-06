@@ -65,6 +65,12 @@ enum BudgetPeriod {
   yearly
 }
 
+/// Fixed or variable cost. Null on a budget means variável.
+enum BudgetKind {
+  fixo
+  variavel
+}
+
 enum AssetClass {
   stocks
   fii
@@ -557,6 +563,10 @@ model LedgerEntry {
   notes               String?
   merchantName        String?
   categoryId          String?
+  // Income only: this entry reimburses an expense category. The category
+  // alone picks the budget (the same rule as an expense). Null leaves
+  // every budget number unchanged.
+  reimbursesCategoryId String?
   isTaxDeductible     Boolean    @default(false)
   isAutoCategorized   Boolean    @default(false)
   // The categorization rule that assigned categoryId, when one did.
@@ -577,6 +587,7 @@ model LedgerEntry {
   entity              Entity               @relation(fields: [entityId], references: [id], onDelete: Cascade)
   account             Account              @relation(fields: [accountId], references: [id], onDelete: Cascade)
   category            Category?            @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  reimbursesCategory  Category?            @relation("EntryReimburses", fields: [reimbursesCategoryId], references: [id], onDelete: SetNull)
   transferGroup       TransferGroup?       @relation(fields: [transferGroupId], references: [id], onDelete: Cascade)
   cardStatement       CardStatement?       @relation(fields: [cardStatementId], references: [id], onDelete: SetNull)
   installmentPlan     InstallmentPlan?     @relation(fields: [installmentPlanId], references: [id], onDelete: SetNull)
@@ -592,6 +603,7 @@ model LedgerEntry {
   @@index([accountId, date])
   @@index([entityId])
   @@index([categoryId])
+  @@index([reimbursesCategoryId])
   @@index([transferGroupId])
   @@index([cardStatementId])
   @@index([installmentPlanId])
@@ -739,6 +751,9 @@ model Budget {
   // A version that ends the chain from effectiveFrom on ("delete from month").
   isTombstone   Boolean      @default(false)
   notes         String?
+  // Null means variável. Not part of the unique key: one budget per
+  // category, period and scope, the same as before.
+  kind          BudgetKind?
   createdAt     DateTime     @default(now())
   updatedAt     DateTime     @updatedAt
 
@@ -774,6 +789,7 @@ model Category {
 
   user                User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
   ledgerEntries       LedgerEntry[]
+  reimbursedEntries   LedgerEntry[]        @relation("EntryReimburses")
   budgets             Budget[]
   categorizationRules CategorizationRule[]
   recurringRules      RecurringRule[]

@@ -18,6 +18,8 @@ export interface BulkUpdateTransactionItem {
   category?: string;
   date?: string;
   isTaxDeductible?: boolean;
+  /** Expense category this income reimburses. Null clears it. Omit to leave it. */
+  reimbursesCategory?: string | null;
 }
 
 export interface BulkUpdateResult {

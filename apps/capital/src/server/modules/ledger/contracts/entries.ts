@@ -23,6 +23,8 @@ export const createEntrySchema = z.discriminatedUnion("kind", [
     /** Positive number; the sign comes from `kind` (expense = outflow). Negative expense = refund. */
     amount: money,
     categoryId: z.string().nullish(),
+    /** Expense category this income reimburses. Ignored when unset. Only valid on income. */
+    reimbursesCategoryId: z.string().nullish(),
     isTaxDeductible: z.boolean().optional(),
     installments: z.number().int().min(2).max(72).optional(),
     externalId: z.string().max(200).optional(),
@@ -51,6 +53,8 @@ export const entryPatchSchema = z
     currency: z.string().length(3),
     exchangeRate: z.number().positive(),
     categoryId: z.string().nullable(),
+    /** Expense category this income reimburses. Null clears it. Only valid on income. */
+    reimbursesCategoryId: z.string().nullable(),
     accountId: z.string(),
     entityId: z.string(),
     isTaxDeductible: z.boolean(),

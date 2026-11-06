@@ -50,6 +50,7 @@ import {
   updateBudget,
   deleteBudget,
   getBudgetStatus,
+  getBudgetComposition,
 } from "../tools/budgets";
 import {
   MAX_FILE_SIZE_BYTES,
@@ -120,6 +121,12 @@ const UpdateTransactionInputSchema = z.object({
   category: z.string().min(1).optional(),
   date: DateStringSchema.optional(),
   isTaxDeductible: z.boolean().optional(),
+  reimbursesCategory: z
+    .string()
+    .min(1)
+    .nullable()
+    .optional()
+    .describe("Expense category this income reimburses. Null clears it. Omit to leave it. Only valid on an income."),
 });
 
 const DeleteTransactionInputSchema = z.object({
@@ -170,6 +177,7 @@ const BulkUpdateTransactionsInputSchema = z.object({
       category: z.string().min(1).optional(),
       date: DateStringSchema.optional(),
       isTaxDeductible: z.boolean().optional(),
+      reimbursesCategory: z.string().min(1).nullable().optional().describe("Expense category this income reimburses. Null clears it. Omit to leave it."),
     })
   ),
   dryRun: z.boolean().default(false),
@@ -242,12 +250,15 @@ const ListBudgetsInputSchema = z.object({
   effectiveDate: z.string().optional(), // YYYY-MM or YYYY-MM-DD
 });
 
+const budgetKind = z.enum(["fixo", "variavel"]).nullish().describe("fixo or variavel. Omit or null stores null, which counts as variável.");
+
 const CreateBudgetInputSchema = z.object({
   accountId: z.string().uuid(),
   category: z.string().min(1),
   amount: z.number().nonnegative(),
   currency: z.string().length(3),
   effectiveFrom: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), // YYYY-MM-DD
+  kind: budgetKind,
 });
 
 const UpdateBudgetInputSchema = z.object({
@@ -256,6 +267,7 @@ const UpdateBudgetInputSchema = z.object({
   currency: z.string().length(3).optional(),
   effectiveFrom: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(), // YYYY-MM-DD
   isActive: z.boolean().optional(),
+  kind: budgetKind.describe("fixo or variavel. Null stores null (counts as variável). Omit to leave it unchanged."),
   applyFrom: z
     .string()
     .regex(/^\d{4}-\d{2}$/)
@@ -270,6 +282,13 @@ const DeleteBudgetInputSchema = z.object({
 const GetBudgetStatusInputSchema = z.object({
   month: z.string().regex(/^\d{4}-\d{2}$/), // YYYY-MM
   accountId: z.string().uuid().optional(),
+});
+
+const GetBudgetCompositionInputSchema = z.object({
+  from: z.string().regex(/^\d{4}-\d{2}$/),
+  to: z.string().regex(/^\d{4}-\d{2}$/),
+  accountId: z.string().uuid().optional(),
+  limit: z.number().int().min(1).max(20).optional(),
 });
 
 /**
@@ -345,6 +364,7 @@ export function createCapitalMcpServer(userId: string, db: DbClient, opts: { rea
         "counterpartAccountId and counterpartAccountName, so a USD to BRL " +
         "resgate can be found and then corrected with update_transaction (toAmount or exchangeRate). " +
         "Transfer legs are left out of the type/category totals. " +
+        "reimbursesCategory is the expense category an income counts against, or null. " +
         "Example: List all Income/Dividends transactions in September 2026.",
       inputSchema: ListTransactionsInputSchema,
     },
@@ -373,6 +393,7 @@ export function createCapitalMcpServer(userId: string, db: DbClient, opts: { rea
         "amount in place and keeps both legs' base amounts in agreement. Sending amount together " +
         "with toAmount sets the outflow and the inflow. amount alone still scales both legs. " +
         "A same-currency transfer returns 422 when toAmount is set or exchangeRate is not 1. " +
+        "reimbursesCategory names the expense category an income reimburses; null clears it. Only an income accepts it. " +
         "The returned amount is signed: a refund or reversal is a negative expense.",
       inputSchema: UpdateTransactionInputSchema,
     },
@@ -391,6 +412,7 @@ export function createCapitalMcpServer(userId: string, db: DbClient, opts: { rea
                 exchangeRate: result.exchangeRate,
                 description: result.description,
                 category: result.category,
+                reimbursesCategory: result.reimbursesCategory,
                 date: result.date,
                 transferGroupId: result.transferGroupId,
                 counterpartAmount: result.counterpartAmount,
@@ -952,6 +974,7 @@ export function createCapitalMcpServer(userId: string, db: DbClient, opts: { rea
         "(the most recent budget with effectiveFrom <= effectiveDate for each category). " +
         "Otherwise, returns all active budgets. Budgets support effective dating: multiple budgets can exist " +
         "for the same category with different effective dates, e.g., Shopping 2,800 BRL from Oct 2026, " +
+        "Each budget has one kind, fixo or variavel (null counts as variável). There is still one budget per category, period and account. " +
         "2,000 BRL from Dec 2026, 1,500 BRL from Jan 2027.",
       inputSchema: ListBudgetsInputSchema,
     },
@@ -977,7 +1000,8 @@ export function createCapitalMcpServer(userId: string, db: DbClient, opts: { rea
         "The budget will apply to all months from effectiveFrom onwards until a newer budget " +
         "with a later effectiveFrom is created for the same category. Currency should typically be BRL. " +
         "Amount must be non-negative. Multiple budgets can exist for the same category with different " +
-        "effective dates to handle budget changes over time.",
+        "effective dates to handle budget changes over time. kind is fixo or variavel; omit it to store null, which counts as variável. " +
+        "A category still has one budget per period and account: kind does not create a second budget.",
       inputSchema: CreateBudgetInputSchema,
     },
     async (params) => {
@@ -1001,7 +1025,7 @@ export function createCapitalMcpServer(userId: string, db: DbClient, opts: { rea
         "Update an existing budget. Can change amount, currency, effectiveFrom date, or isActive status. " +
         "Two modes for the amount. Omit applyFrom to edit this version in place: the new amount applies to every month this version covers, past months included. " +
         "Pass applyFrom (YYYY-MM) to keep earlier months and apply the change from that month on: a new version of the same category and entity, or an in-place edit when this version already starts in that month. Yearly budgets version by year, so any month of a year means its January. " +
-        "applyFrom cannot be combined with effectiveFrom or isActive. " +
+        "applyFrom cannot be combined with effectiveFrom or isActive. kind (fixo or variavel, or null) can change in place or travel with applyFrom. Omit kind to leave it unchanged. " +
         "Changing effectiveFrom (without applyFrom) updates when this version takes effect. Setting isActive=false soft-deletes the budget. " +
         "Amount must be non-negative if provided.",
       inputSchema: UpdateBudgetInputSchema,
@@ -1051,11 +1075,36 @@ export function createCapitalMcpServer(userId: string, db: DbClient, opts: { rea
         "Budgets are in BRL. Actual spending includes only expenses (not transfers or income) and is converted " +
         "to BRL using transaction exchange rates. For each category, returns the effective budget for that month " +
         "(most recent budget with effectiveFrom <= month start) and compares it to actual spending. " +
-        "Categories are sorted by percentUsed descending (most over-budget first).",
+        "Categories are sorted by percentUsed descending (most over-budget first). " +
+        "actual and gross are the committed expense total. reimbursed is income assigned to that expense category, and net is gross minus reimbursed. " +
+        "kind is fixo, variavel, or null (null counts as variável).",
       inputSchema: GetBudgetStatusInputSchema,
     },
     async (params) => {
       const result = await getBudgetStatus(userId, params, db);
+      return {
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify(result, null, 2),
+          },
+        ],
+      };
+    }
+  );
+
+  server.registerTool(
+    "get_budget_composition",
+    {
+      description:
+        "Fixed vs variable budget totals for each month from `from` to `to` (YYYY-MM, at most 36 months), " +
+        "plus the top variable categories by net cost (limit, default 5). A budget with no kind counts as variável. " +
+        "Figures are the whole month in the base currency: budgeted, gross expenses, reimbursed (income assigned to that expense category) and net. " +
+        "The category alone picks the budget. accountId is the entity; omit it for the personal entity.",
+      inputSchema: GetBudgetCompositionInputSchema,
+    },
+    async (params) => {
+      const result = await getBudgetComposition(userId, params, db);
       return {
         content: [
           {

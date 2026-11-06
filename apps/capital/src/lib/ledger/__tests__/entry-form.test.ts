@@ -439,6 +439,50 @@ describe("investedIn", () => {
   });
 });
 
+describe("reimbursing an expense category", () => {
+  const income = form({ kind: "income", amount: "50", description: "Pix", accountId: "nubank", entityId: "pf", categoryId: "salary", reimbursesCategoryId: "health" });
+
+  it("sends the expense category only on an income", () => {
+    const created = buildCreateRequest(income, ctx, { investDescription: () => "" });
+    expect(created.ok && created.request.body).toMatchObject({ kind: "income", reimbursesCategoryId: "health" });
+    const expense = buildCreateRequest({ ...income, kind: "expense", reimbursesCategoryId: "health" }, ctx, { investDescription: () => "" });
+    expect(expense.ok && expense.request.body).not.toHaveProperty("reimbursesCategoryId");
+  });
+
+  it("sets and clears the assignment, and leaves an unchanged form empty", () => {
+    const entry: EditableEntry = {
+      id: "e1",
+      kind: "income",
+      description: "Pix",
+      date: "2026-09-21",
+      amount: 50,
+      currency: "BRL",
+      exchangeRate: 1,
+      accountId: "nubank",
+      entityId: "pf",
+      categoryId: "salary",
+      reimbursesCategoryId: null,
+      isTaxDeductible: false,
+      isRecurring: false,
+      installmentPlanId: null,
+      transferGroupId: null,
+      transferDirection: null,
+      counterpartAccountId: null,
+    };
+    const initial = formFromEntry(entry, ctx, brl);
+    expect(buildEditPatch(entry, initial, initial, ctx)).toEqual({ ok: true, patch: {} });
+    expect(buildEditPatch(entry, initial, { ...initial, reimbursesCategoryId: "health" }, ctx).ok && buildEditPatch(entry, initial, { ...initial, reimbursesCategoryId: "health" }, ctx)).toEqual({
+      ok: true,
+      patch: { reimbursesCategoryId: "health" },
+    });
+    const set = formFromEntry({ ...entry, reimbursesCategoryId: "health" }, ctx, brl);
+    expect(buildEditPatch({ ...entry, reimbursesCategoryId: "health" }, set, { ...set, reimbursesCategoryId: "" }, ctx)).toEqual({
+      ok: true,
+      patch: { reimbursesCategoryId: null },
+    });
+  });
+});
+
 describe("rateFieldText", () => {
   it("shows the default rate filled in while untouched", () => {
     expect(rateFieldText("", "5,41", null)).toBe("5,41");

@@ -1,5 +1,5 @@
 import type { DbClient } from "@capital/server/lib/prisma";
-import type { Budget, BudgetPeriod, Category } from "@/generated/prisma";
+import type { Budget, BudgetKind, BudgetPeriod, Category } from "@/generated/prisma";
 import { parseLocalDate } from "@capital/server/lib/date-utils";
 import { LedgerError, notFound } from "@capital/server/modules/ledger/lib/errors";
 import { toNumber } from "@capital/server/modules/ledger/lib/money";
@@ -16,6 +16,8 @@ export interface BudgetInput {
   effectiveFrom: string;
   rollover?: boolean;
   notes?: string | null;
+  /** Omit to store null, which the app treats as variável. */
+  kind?: BudgetKind | null;
 }
 
 export interface BudgetPatch {
@@ -26,6 +28,8 @@ export interface BudgetPatch {
   rollover?: boolean;
   isActive?: boolean;
   notes?: string | null;
+  /** Null stores null (treated as variável). Omit to leave the kind unchanged. */
+  kind?: BudgetKind | null;
   /**
    * YYYY-MM: the change applies from this month on and earlier months keep
    * their amount (a new version), unless it is the month the edited version
@@ -118,6 +122,7 @@ export async function createBudget(userId: string, input: BudgetInput, db: DbCli
           ...(input.currency && { currency: input.currency }),
           ...(input.rollover !== undefined && { rollover: input.rollover }),
           ...(input.notes !== undefined && { notes: input.notes }),
+          ...(input.kind !== undefined && { kind: input.kind }),
           isActive: true,
           isTombstone: false,
         },
@@ -139,6 +144,7 @@ export async function createBudget(userId: string, input: BudgetInput, db: DbCli
           effectiveFrom,
           rollover: input.rollover ?? false,
           notes: input.notes ?? null,
+          kind: input.kind ?? null,
         },
         include: { category: true },
       });
@@ -180,6 +186,7 @@ export async function updateBudget(userId: string, budgetId: string, patch: Budg
           currency: patch.currency ?? budget.currency,
           rollover: patch.rollover ?? budget.rollover,
           notes: patch.notes !== undefined ? patch.notes : budget.notes,
+          kind: patch.kind !== undefined ? patch.kind : budget.kind,
         };
         const existing = await rowAtMonth(tx, budget, target);
         if (existing) {
@@ -204,7 +211,7 @@ export async function updateBudget(userId: string, budgetId: string, patch: Budg
         return finish(created, "update");
       }
       // The version starts in that month (or year): it changes in place, its start and period stay.
-      change = { amount: patch.amount, currency: patch.currency, rollover: patch.rollover, notes: patch.notes };
+      change = { amount: patch.amount, currency: patch.currency, rollover: patch.rollover, notes: patch.notes, kind: patch.kind };
     }
 
     const effectiveFrom = change.effectiveFrom ? effectiveDate(change.effectiveFrom) : undefined;
@@ -229,6 +236,7 @@ export async function updateBudget(userId: string, budgetId: string, patch: Budg
         ...(change.rollover !== undefined && { rollover: change.rollover }),
         ...(change.isActive !== undefined && { isActive: change.isActive }),
         ...(change.notes !== undefined && { notes: change.notes }),
+        ...(change.kind !== undefined && { kind: change.kind }),
         ...((effectiveFrom || period !== budget.period) && {
           effectiveFrom: start,
           year: start.getUTCFullYear(),
@@ -369,5 +377,6 @@ export function serializeBudget(b: Budget & { category: Category }) {
     isActive: b.isActive,
     isTombstone: b.isTombstone,
     notes: b.notes,
+    kind: b.kind,
   };
 }

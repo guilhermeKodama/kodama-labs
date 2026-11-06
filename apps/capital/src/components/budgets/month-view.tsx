@@ -5,6 +5,7 @@ import { CartesianGrid, Line, LineChart, ReferenceLine, ResponsiveContainer, Too
 import { EmptyRow, Kpi, KpiStrip, Panel } from "@/components/cap";
 import { useErrorMessage } from "@/lib/api/use-app-mutation";
 import { budgetDrill, budgetsDrill, monthPeriod } from "@/lib/budgets/drill";
+import { budgetKind, showsBudgetKind } from "@/lib/budgets/kind";
 import { barHeader, monthHeader, resetsLabel } from "@/lib/budgets/labels";
 import { monthPace, paceTone, percent, projectionVsBudget, STATUS_KEY, usage } from "@/lib/budgets/pace";
 import type { BudgetsScope, BudgetsView } from "@/lib/budgets/url";
@@ -36,12 +37,14 @@ const STAT_CELL = "col-span-2 flex flex-col items-start gap-0.5 text-left md:col
 export function MonthView({
   view,
   onScope,
+  onKind,
   actions,
   onOpenRule,
   onAllRules,
 }: {
   view: BudgetsView;
   onScope: (scope: BudgetsScope) => void;
+  onKind: (kind: BudgetsView["kind"]) => void;
   actions: BudgetActions;
   onOpenRule: (id: string) => void;
   onAllRules: () => void;
@@ -54,12 +57,12 @@ export function MonthView({
   const header = data ? monthHeader(data.period, fmt.monthAbbr) : null;
   return (
     <>
-      <ScopeBar scope={view.scope} onScope={onScope}>
+      <ScopeBar scope={view.scope} onScope={onScope} kind={view.kind} onKind={onKind}>
         {header ? t(header.key, header.values) : null}
       </ScopeBar>
       {data ? (
         <div className={cn("flex flex-col gap-3 transition-opacity", overview.isPlaceholderData && "opacity-60")}>
-          <MonthBody data={data} actions={actions} onOpenRule={onOpenRule} onAllRules={onAllRules} />
+          <MonthBody data={data} kind={view.kind} actions={actions} onOpenRule={onOpenRule} onAllRules={onAllRules} />
         </div>
       ) : (
         <ViewState error={overview.isError ? errorText(overview.error) : null} onRetry={() => void overview.refetch()} />
@@ -68,11 +71,34 @@ export function MonthView({
   );
 }
 
-export function MonthBody({ data, actions, onOpenRule, onAllRules }: { data: MonthOverview; actions: BudgetActions; onOpenRule: (id: string) => void; onAllRules: () => void }) {
+export function MonthBody({
+  data,
+  kind = null,
+  actions,
+  onOpenRule,
+  onAllRules,
+}: {
+  data: MonthOverview;
+  kind?: BudgetsView["kind"];
+  actions: BudgetActions;
+  onOpenRule: (id: string) => void;
+  onAllRules: () => void;
+}) {
   const t = useTranslations("budgets");
   const fmt = useFmt();
   const { names, kinds } = useEntityNames();
-  const { period, summary, budgets } = data;
+  const { period, summary, budgets: allBudgets } = data;
+  const budgets = allBudgets.filter((row) => showsBudgetKind(row, kind));
+  const gasto = summary.totalNet ?? summary.totalSpent;
+  const reimbursedTotal = summary.totalReimbursed ?? 0;
+  const subtotalOf = (filter: "fixo" | "variavel" | null) => {
+    const list = filter ? allBudgets.filter((row) => budgetKind(row.kind) === filter) : allBudgets;
+    return {
+      budget: list.reduce((sum, row) => sum + row.amount, 0),
+      net: list.reduce((sum, row) => sum + (row.net ?? row.spent), 0),
+      remaining: list.reduce((sum, row) => sum + row.remaining, 0),
+    };
+  };
   const pace = monthPace(period);
   const monthLabel = fmt.monthLabel({ year: period.year, month: period.month });
   const projection = projectionVsBudget(summary.projectedTotal, summary.totalBudget);
@@ -85,7 +111,7 @@ export function MonthBody({ data, actions, onOpenRule, onAllRules }: { data: Mon
     range ? { label: t("drillLabel", { category: row.category, period: monthLabel }), ...budgetDrill(row, data.scope.entityIds, range) } : null;
   // KPIs and the Total row: every budgeted category at once ("todo número leva à tabela filtrada").
   const totals = (label: string, range: ReturnType<typeof monthPeriod> | null): ViewDraft | null => {
-    const found = range ? budgetsDrill(budgets, data.scope.entityIds, range) : null;
+    const found = range ? budgetsDrill(allBudgets, data.scope.entityIds, range) : null;
     return found ? { label: t("drillLabel", { category: label, period: monthLabel }), ...found } : null;
   };
 
@@ -95,8 +121,14 @@ export function MonthBody({ data, actions, onOpenRule, onAllRules }: { data: Mon
         <Kpi label={t("month.kpi.budget")} value={<DrillLink draft={totals(t("month.kpi.budget"), wholeMonth)}>{fmt.money0(summary.totalBudget)}</DrillLink>} />
         <Kpi
           label={t("month.kpi.spent")}
-          value={<DrillLink draft={totals(t("month.kpi.spent"), spentPeriod)}>{fmt.money0(summary.totalSpent)}</DrillLink>}
-          sub={summary.totalBudget > 0 ? t("month.kpi.spentSub", { pct: percent(summary.totalSpent / summary.totalBudget) }) : undefined}
+          value={<DrillLink draft={totals(t("month.kpi.spent"), spentPeriod)}>{fmt.money0(gasto)}</DrillLink>}
+          sub={
+            reimbursedTotal > 0
+              ? t("month.kpi.spentNet", { amount: fmt.money0(reimbursedTotal) })
+              : summary.totalBudget > 0
+                ? t("month.kpi.spentSub", { pct: percent(gasto / summary.totalBudget) })
+                : undefined
+          }
         />
         <Kpi label={t("month.kpi.remaining")} value={<DrillLink draft={totals(t("month.kpi.remaining"), spentPeriod)}>{fmt.money0(summary.totalRoom)}</DrillLink>} />
         <Kpi
@@ -120,9 +152,12 @@ export function MonthBody({ data, actions, onOpenRule, onAllRules }: { data: Mon
             <span />
           </div>
           {budgets.map((row) => {
-            const ratio = usage(row.spent, row.available);
+            const net = row.net ?? row.spent;
+            const reimbursed = row.reimbursed ?? 0;
+            const ratio = usage(net, row.available);
             const tone = paceTone(row.status);
             const spent = drill(row, spentPeriod);
+            const showOffset = reimbursed !== 0;
             const editable: EditableBudget = {
               id: row.id,
               category: row.category,
@@ -131,14 +166,23 @@ export function MonthBody({ data, actions, onOpenRule, onAllRules }: { data: Mon
               notes: row.notes,
               effectiveFrom: row.effectiveFrom,
               period: "monthly",
+              kind: row.kind ?? null,
             };
             return (
-              <div key={row.id} className={cn("grid", COLS, "group border-t border-stroke-3 py-2 text-body md:h-10 md:py-0")}>
-                <span className={NAME_CELL}>
+              <div key={row.id} className={cn("grid", COLS, "group border-t border-stroke-3 py-2 text-body md:py-0", showOffset ? "md:h-auto md:min-h-10 md:py-1" : "md:h-10")}>
+                <span className={cn(NAME_CELL, showOffset && "md:flex-wrap md:py-1")}>
                   <DrillLink draft={drill(row, wholeMonth)} title={row.category} className="min-w-0 truncate">
                     {row.category}
                   </DrillLink>
+                  <span className="shrink-0 text-caption text-fg-3">{t(`kind.${budgetKind(row.kind)}`)}</span>
                   <BudgetEntityBadge entityId={row.entityId} kinds={kinds} />
+                  {showOffset ? (
+                    <span className="hidden basis-full text-caption font-normal text-fg-3 md:block">
+                      <DrillLink draft={spent}>{t("month.table.gross", { amount: fmt.money0(row.spent) })}</DrillLink>
+                      {" · "}
+                      {t("month.table.reimbursed", { amount: fmt.money0(reimbursed) })}
+                    </span>
+                  ) : null}
                 </span>
                 <span className={BAR_CELL}>
                   <PaceBar ratio={ratio} tone={tone} marker={pace} label={row.category} />
@@ -153,10 +197,17 @@ export function MonthBody({ data, actions, onOpenRule, onAllRules }: { data: Mon
                   <span className="text-caption font-normal text-fg-3 md:hidden">{t("month.table.budgeted")}</span>
                   {fmt.money0(row.amount)}
                 </button>
-                <DrillLink draft={spent} className={cn(STAT_CELL, "order-5 font-mono whitespace-nowrap tabular-nums md:order-0")}>
+                <span className={cn(STAT_CELL, "order-5 font-mono whitespace-nowrap tabular-nums md:order-0")}>
                   <span className="text-caption font-normal text-fg-3 md:hidden">{t("month.table.spent")}</span>
-                  {fmt.money0(row.spent)}
-                </DrillLink>
+                  <DrillLink draft={showOffset ? null : spent}>{fmt.money0(net)}</DrillLink>
+                  {showOffset ? (
+                    <span className="text-caption font-normal text-fg-3 md:hidden">
+                      <DrillLink draft={spent}>{t("month.table.gross", { amount: fmt.money0(row.spent) })}</DrillLink>
+                      {" · "}
+                      {t("month.table.reimbursed", { amount: fmt.money0(reimbursed) })}
+                    </span>
+                  ) : null}
+                </span>
                 <DrillLink draft={spent} className={cn(STAT_CELL, "order-6 font-mono whitespace-nowrap tabular-nums md:order-0", row.remaining < 0 ? "text-neg" : "text-fg-2")}>
                   <span className="text-caption font-normal text-fg-3 md:hidden">{t("month.table.remaining")}</span>
                   {fmt.money0(row.remaining)}
@@ -171,22 +222,31 @@ export function MonthBody({ data, actions, onOpenRule, onAllRules }: { data: Mon
               </div>
             );
           })}
-          {budgets.length ? (
-            <div className={cn("grid", COLS, "border-t border-stroke-2 bg-fill-4 py-2 text-body font-semibold md:h-9 md:py-0")}>
-              <span className="order-1 col-span-4 md:order-0 md:col-span-1">{t("month.table.total")}</span>
-              <span className="order-2 col-span-4 truncate text-label font-normal text-fg-3 md:order-0 md:col-span-1">{t(resets.key, resets.values)}</span>
-              <span className="hidden md:block" />
-              <DrillLink draft={totals(t("month.table.total"), spentPeriod)} className={cn(STAT_CELL, "order-3 font-mono whitespace-nowrap tabular-nums md:order-0")}>
-                <span className="text-caption font-normal text-fg-3 md:hidden">{t("month.table.spent")}</span>
-                {fmt.money0(summary.totalSpent)}
-              </DrillLink>
-              <DrillLink draft={totals(t("month.table.total"), spentPeriod)} className={cn(STAT_CELL, "order-4 font-mono whitespace-nowrap tabular-nums md:order-0")}>
-                <span className="text-caption font-normal text-fg-3 md:hidden">{t("month.table.remaining")}</span>
-                {fmt.money0(summary.totalRoom)}
-              </DrillLink>
-              <span className="hidden md:block" />
-              <span className="hidden md:block" />
-            </div>
+          {allBudgets.length ? (
+            (["fixo", "variavel", null] as const).map((filter) => {
+              const slice = subtotalOf(filter);
+              const id = filter ?? "total";
+              return (
+                <div key={id} data-budget-subtotal={id} className={cn("grid", COLS, "border-t border-stroke-2 bg-fill-4 py-2 text-body font-semibold md:h-9 md:py-0")}>
+                  <span className="order-1 col-span-4 md:order-0 md:col-span-1">{filter ? t(`kind.${filter}`) : t("month.table.total")}</span>
+                  <span className="order-2 col-span-4 truncate text-label font-normal text-fg-3 md:order-0 md:col-span-1">{filter ? null : t(resets.key, resets.values)}</span>
+                  <span className={cn(STAT_CELL, "order-3 font-mono whitespace-nowrap tabular-nums md:order-0")}>
+                    <span className="text-caption font-normal text-fg-3 md:hidden">{t("month.table.budgeted")}</span>
+                    {fmt.money0(slice.budget)}
+                  </span>
+                  <DrillLink draft={totals(t("month.table.total"), spentPeriod)} className={cn(STAT_CELL, "order-4 font-mono whitespace-nowrap tabular-nums md:order-0")}>
+                    <span className="text-caption font-normal text-fg-3 md:hidden">{t("month.table.spent")}</span>
+                    {fmt.money0(slice.net)}
+                  </DrillLink>
+                  <span className={cn(STAT_CELL, "order-5 font-mono whitespace-nowrap tabular-nums md:order-0", slice.remaining < 0 ? "text-neg" : undefined)}>
+                    <span className="text-caption font-normal text-fg-3 md:hidden">{t("month.table.remaining")}</span>
+                    {fmt.money0(slice.remaining)}
+                  </span>
+                  <span className="hidden md:block" />
+                  <span className="hidden md:block" />
+                </div>
+              );
+            })
           ) : (
             <EmptyRow>{t("month.table.empty", { month: monthLabel })}</EmptyRow>
           )}

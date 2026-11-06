@@ -227,7 +227,7 @@ describe("MCP Server End-to-End", () => {
       expect(data.id).toBe(2);
       expect(data.result).toHaveProperty("tools");
       expect(Array.isArray(data.result.tools)).toBe(true);
-      expect(data.result.tools.length).toBe(46); // 44 previous + list_account_balances, update_dividend
+      expect(data.result.tools.length).toBe(47); // 44 previous + list_account_balances, update_dividend, get_budget_composition
 
       // Check for expected tools
       const result = data.result as { tools: Array<{ name: string }> };
@@ -240,6 +240,7 @@ describe("MCP Server End-to-End", () => {
       expect(toolNames).toContain("get_credit_card_statement");
       expect(toolNames).toContain("unmark_transaction_as_card_settlement");
       expect(toolNames).toContain("create_category");
+      expect(toolNames).toContain("get_budget_composition");
       expect(toolNames).toContain("list_credit_cards");
       expect(toolNames).toContain("create_credit_card");
       expect(toolNames).toContain("update_credit_card");
@@ -430,13 +431,14 @@ describe("MCP Server End-to-End", () => {
 
       // List tools
       const tools = await client.listTools();
-      expect(tools.tools.length).toBe(46); // 44 previous + list_account_balances, update_dividend
+      expect(tools.tools.length).toBe(47); // 44 previous + list_account_balances, update_dividend, get_budget_composition
       const toolNames = tools.tools.map((tool) => tool.name);
       expect(toolNames).toContain("import_credit_card_statement");
       expect(toolNames).toContain("mark_transaction_as_card_settlement");
       expect(toolNames).toContain("get_credit_card_statement");
       expect(toolNames).toContain("unmark_transaction_as_card_settlement");
       expect(toolNames).toContain("create_category");
+      expect(toolNames).toContain("get_budget_composition");
       expect(toolNames).toContain("list_credit_cards");
       expect(toolNames).toContain("create_credit_card");
       expect(toolNames).toContain("update_credit_card");
