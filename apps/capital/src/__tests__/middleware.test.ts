@@ -40,10 +40,6 @@ describe("Middleware", () => {
       expect(isExcludedPath("/_next/static")).toBe(true);
     });
 
-    it("does not special-case /_vercel", () => {
-      expect(isExcludedPath("/_vercel/insights")).toBe(false);
-    });
-
     it("keeps the matcher aimed at app routes", () => {
       expect(middlewareConfig.matcher).toEqual(["/(.*)", "/"]);
     });

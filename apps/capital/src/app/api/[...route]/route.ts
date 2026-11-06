@@ -1,6 +1,6 @@
 import app from "@capital/server/app";
 
-// Same adapter hono/vercel shipped: Next route handlers already speak Fetch.
+// Next.js route handlers speak Fetch, so the Hono app is called directly.
 const handle = (honoApp: { fetch: (req: Request) => Response | Promise<Response> }) =>
   (req: Request) => honoApp.fetch(req);
 
