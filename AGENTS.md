@@ -2,6 +2,10 @@
 
 The rest of the repository's rules (local secrets, builds and migrations, the Capital data model, ports) are in `CLAUDE.md`. Read it too.
 
+## Cerne brand
+
+When building or changing `apps/capital` (Cerne), follow `apps/capital/BRAND.md` for colors, type, the mark and screen patterns. Do not invent hues, use Tailwind palette classes, or put raw hex in components.
+
 ## Proof video
 
 Every pull request carries a video, recorded by the agent that made the change, showing the change working in the running product and proving that it works. The owner reviews from the video.
