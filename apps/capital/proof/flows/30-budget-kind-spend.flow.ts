@@ -1,9 +1,23 @@
 import { expect, flow } from "@repo/proof-video";
-import { createInList, dialog, field, openBudgets, openTransactions, panel, pickFromList, readNumber, toast } from "../helpers";
+import { createInList, dialog, field, openBudgets, openTransactions, panel, pickFromList, readNumber, swatchColor, toast } from "../helpers";
 
 // Its own category, so a shared proof run does not collide with Plano prova / Plano reembolso / Plano celular.
 const CATEGORY = "Plano totais";
 const SPEND = "Gasto do plano";
+
+/** Fixo, variável, the cumulative line, the ideal pace and the orçado mark, each a different painted color. The two cards use the chart's fixo and variável. */
+async function expectDistinctPaceColors(legend: import("@playwright/test").Locator, fixoCard: import("@playwright/test").Locator, variavelCard: import("@playwright/test").Locator) {
+  const [fixo, variavel, cumulative, ideal, budget] = await Promise.all([
+    swatchColor(legend, "Gastos fixos"),
+    swatchColor(legend, "Gastos variáveis"),
+    swatchColor(legend, /Gasto acumulado/),
+    swatchColor(legend, /Ritmo ideal/),
+    swatchColor(legend, "Orçado"),
+  ]);
+  expect(new Set([fixo, variavel, cumulative, ideal, budget]).size).toBe(5);
+  expect(await swatchColor(fixoCard, "Gastos fixos")).toBe(fixo);
+  expect(await swatchColor(variavelCard, "Gastos variáveis")).toBe(variavel);
+}
 
 /** The first amount on a card, keeping the minus in "−R$ 80". */
 function cardMoney(text: string): number {
@@ -65,6 +79,7 @@ flow("Gastos fixos and Gastos variáveis follow the filter, and the pace chart s
     await expect(legend.getByText("Gasto acumulado", { exact: false })).toBeVisible();
     await expect(chart.locator(".recharts-tooltip-wrapper")).toContainText("Gastos fixos");
     await expect(chart.locator(".recharts-tooltip-wrapper")).toContainText(/R\$/);
+    await expectDistinctPaceColors(legend, fixoCard, variavelCard);
   });
 
   await scene("The filter", "Variável hides the fixo spend; Fixo hides the variável spend");
@@ -100,6 +115,7 @@ flow("Gastos fixos and Gastos variáveis follow the filter, and the pace chart s
     await expect(fixoCard).toContainText("Gastos fixos");
     await expect(legend.getByText("Gastos fixos", { exact: true })).toBeVisible();
     await expect(legend.getByText("Gastos variáveis", { exact: true })).toBeVisible();
+    await expectDistinctPaceColors(legend, fixoCard, variavelCard);
   });
   await page.goto("/settings");
   await page.getByRole("radiogroup", { name: "Tema" }).getByRole("radio", { name: "Claro" }).click();

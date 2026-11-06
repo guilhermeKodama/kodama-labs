@@ -1,8 +1,22 @@
 import { expect, flow } from "@repo/proof-video";
-import { createInList, dialog, field, openBudgets, panel, pickFromList, readNumber, toast } from "../helpers";
+import { createInList, dialog, field, openBudgets, panel, pickFromList, readNumber, swatchColor, toast } from "../helpers";
 
 const CATEGORY = "Plano totais cel";
 const SPEND = "Gasto do plano cel";
+
+/** Fixo, variável, the cumulative line, the ideal pace and the orçado mark, each a different painted color. The two cards use the chart's fixo and variável. */
+async function expectDistinctPaceColors(legend: import("@playwright/test").Locator, fixoCard: import("@playwright/test").Locator, variavelCard: import("@playwright/test").Locator) {
+  const [fixo, variavel, cumulative, ideal, budget] = await Promise.all([
+    swatchColor(legend, "Gastos fixos"),
+    swatchColor(legend, "Gastos variáveis"),
+    swatchColor(legend, /Gasto acumulado/),
+    swatchColor(legend, /Ritmo ideal/),
+    swatchColor(legend, "Orçado"),
+  ]);
+  expect(new Set([fixo, variavel, cumulative, ideal, budget]).size).toBe(5);
+  expect(await swatchColor(fixoCard, "Gastos fixos")).toBe(fixo);
+  expect(await swatchColor(variavelCard, "Gastos variáveis")).toBe(variavel);
+}
 
 /** The first amount on a card, keeping the minus in "−R$ 80". */
 function cardMoney(text: string): number {
@@ -59,6 +73,7 @@ flow("On a phone, Gastos fixos and Gastos variáveis follow the filter", async (
     await expect(chart).toBeInViewport();
     await expect(legend.getByText("Gastos fixos", { exact: true })).toBeVisible();
     await expect(legend.getByText("Gastos variáveis", { exact: true })).toBeVisible();
+    await expectDistinctPaceColors(legend, fixoCard, variavelCard);
   });
   const kindFilter = page.getByRole("radiogroup", { name: "Tipo" });
   await kindFilter.scrollIntoViewIfNeeded();
@@ -78,6 +93,7 @@ flow("On a phone, Gastos fixos and Gastos variáveis follow the filter", async (
     await expect(page.locator("html")).toHaveClass(/\bdark\b/);
     await expect(legend.getByText("Gastos fixos", { exact: true })).toBeVisible();
     await expect(legend.getByText("Gastos variáveis", { exact: true })).toBeVisible();
+    await expectDistinctPaceColors(legend, fixoCard, variavelCard);
   });
   await page.goto("/settings");
   await page.getByRole("radiogroup", { name: "Tema" }).getByRole("radio", { name: "Claro" }).click();

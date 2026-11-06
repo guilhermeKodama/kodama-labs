@@ -16,7 +16,7 @@ import { CHART, CHART_AXIS, SERIES } from "@/lib/theme/chart-colors";
 import { textRole } from "@/lib/theme/type-scale";
 import { cn } from "@/lib/utils";
 import type { EditableBudget } from "./budget-dialog";
-import { BudgetEntityBadge, ChartCaption, ChartLegend, DrillLink, EntityBadge, PaceBar, RowMenu, ScopeBar, TONE_TEXT, TOOLTIP_STYLE, useEntityNames, ViewState, type BudgetActions } from "./parts";
+import { BudgetEntityBadge, ChartCaption, ChartLegend, DrillLink, EntityBadge, PaceBar, RowMenu, ScopeBar, SeriesMark, TONE_TEXT, TOOLTIP_STYLE, useEntityNames, ViewState, type BudgetActions } from "./parts";
 import { useMonthOverview, type BudgetRow, type MonthOverview, type UpcomingItem } from "./use-budgets";
 
 /**
@@ -33,6 +33,31 @@ const NAME_CELL = "order-1 col-span-3 flex min-w-0 items-center gap-1.5 overflow
 const BAR_CELL = "order-3 col-span-4 flex min-w-0 items-center gap-2 md:order-0 md:col-span-1";
 const MENU_CELL = "order-2 col-span-1 flex items-center justify-end md:order-0 md:col-span-1 md:justify-center";
 const STAT_CELL = "col-span-2 flex flex-col items-start gap-0.5 text-left md:col-span-1 md:block md:text-right";
+
+/**
+ * One hue each, from the Cerne chart tokens. Heartwood stays the cumulative
+ * line (it is the primary ink). Fixo is ardósia and variável is resina, so
+ * neither repeats that ink. The ideal pace is jacarandá, which still reads
+ * on charcoal; the pale projection tone does not. Orçado is the ipê already
+ * reserved for reference marks, drawn dashed. Moss and ember stay with gain
+ * and loss.
+ */
+const PACE_COLOR = {
+  fixo: SERIES.ardosia,
+  variavel: SERIES.resina,
+  cumulative: CHART.ink,
+  ideal: SERIES.jacaranda,
+  budget: CHART.warn,
+} as const;
+
+function kindLabel(text: string, color: string) {
+  return (
+    <span className="inline-flex items-center gap-1.5">
+      <SeriesMark color={color} />
+      {text}
+    </span>
+  );
+}
 
 /** Mensal: Todas / PF / PJ and today, KPIs, the budget table, the month's pace chart and Contas fixas. */
 export function MonthView({
@@ -123,14 +148,14 @@ export function MonthBody({
         </div>
         <div data-budget-kpi="fixo">
           <Kpi
-            label={t("month.kpi.fixed")}
+            label={kindLabel(t("month.kpi.fixed"), PACE_COLOR.fixo)}
             value={<DrillLink draft={totals(t("month.kpi.fixed"), spentPeriod, rowsOf("fixo"))}>{fmt.money0(slices.fixo.net)}</DrillLink>}
             sub={spentSub(slices.fixo.net, slices.fixo.reimbursed, slices.fixo.available)}
           />
         </div>
         <div data-budget-kpi="variavel">
           <Kpi
-            label={t("month.kpi.variable")}
+            label={kindLabel(t("month.kpi.variable"), PACE_COLOR.variavel)}
             value={<DrillLink draft={totals(t("month.kpi.variable"), spentPeriod, rowsOf("variavel"))}>{fmt.money0(slices.variavel.net)}</DrillLink>}
             sub={spentSub(slices.variavel.net, slices.variavel.reimbursed, slices.variavel.available)}
           />
@@ -320,26 +345,26 @@ function PaceChart({ data, monthLabel, kind }: { data: MonthOverview; monthLabel
                 {available > 0 ? (
                   <ReferenceLine
                     y={available}
-                    stroke={CHART.muted}
+                    stroke={PACE_COLOR.budget}
                     strokeDasharray="4 4"
                     ifOverflow="extendDomain"
-                    label={{ value: names.budget, position: "insideTopRight", fontSize: textRole("micro"), fill: CHART.muted }}
+                    label={{ value: names.budget, position: "insideTopRight", fontSize: textRole("micro"), fill: PACE_COLOR.budget }}
                   />
                 ) : null}
-                {showFixo ? <Area dataKey="fixo" name={names.fixed} stackId="kind" stroke={SERIES.cerne} fill={SERIES.cerne} fillOpacity={0.45} strokeWidth={1} dot={false} isAnimationActive={false} /> : null}
-                {showVariavel ? <Area dataKey="variavel" name={names.variable} stackId="kind" stroke={SERIES.resina} fill={SERIES.resina} fillOpacity={0.55} strokeWidth={1} dot={false} isAnimationActive={false} /> : null}
-                <Line dataKey="ideal" name={names.ideal} stroke={CHART.soft} strokeWidth={2} dot={false} isAnimationActive={false} />
-                <Line dataKey="cumulative" name={names.cumulative} stroke={CHART.ink} strokeWidth={2} dot={false} isAnimationActive={false} />
+                {showFixo ? <Area dataKey="fixo" name={names.fixed} stackId="kind" stroke={PACE_COLOR.fixo} fill={PACE_COLOR.fixo} fillOpacity={0.45} strokeWidth={1.5} dot={false} isAnimationActive={false} /> : null}
+                {showVariavel ? <Area dataKey="variavel" name={names.variable} stackId="kind" stroke={PACE_COLOR.variavel} fill={PACE_COLOR.variavel} fillOpacity={0.55} strokeWidth={1.5} dot={false} isAnimationActive={false} /> : null}
+                <Line dataKey="ideal" name={names.ideal} stroke={PACE_COLOR.ideal} strokeWidth={2} dot={false} isAnimationActive={false} />
+                <Line dataKey="cumulative" name={names.cumulative} stroke={PACE_COLOR.cumulative} strokeWidth={2} dot={false} isAnimationActive={false} />
               </ComposedChart>
             </ResponsiveContainer>
           </div>
           <ChartLegend
             items={[
-              ...(showFixo ? [{ label: names.fixed, color: SERIES.cerne }] : []),
-              ...(showVariavel ? [{ label: names.variable, color: SERIES.resina }] : []),
-              { label: names.cumulative, color: CHART.ink },
-              { label: names.ideal, color: CHART.soft },
-              { label: names.budget, color: CHART.muted, dashed: true },
+              ...(showFixo ? [{ label: names.fixed, color: PACE_COLOR.fixo }] : []),
+              ...(showVariavel ? [{ label: names.variable, color: PACE_COLOR.variavel }] : []),
+              { label: names.cumulative, color: PACE_COLOR.cumulative },
+              { label: names.ideal, color: PACE_COLOR.ideal },
+              { label: names.budget, color: PACE_COLOR.budget, dashed: true },
             ]}
           />
           <ChartCaption>{t("month.chart.caption", { unit, month: monthLabel })}</ChartCaption>

@@ -126,15 +126,22 @@ export function PeriodNav({ label, onPrev, onNext, prevLabel, nextLabel }: { lab
   );
 }
 
+/** The short mark a chart legend and a matching summary card share. */
+export function SeriesMark({ color, dashed }: { color: string; dashed?: boolean }) {
+  return (
+    <svg width="14" height="8" aria-hidden className="shrink-0">
+      <line x1="0" y1="4" x2="14" y2="4" stroke={color} strokeWidth="2" strokeDasharray={dashed ? "3 2" : undefined} />
+    </svg>
+  );
+}
+
 /** Series names under a chart: a short swatch (solid or dashed) and the name. */
 export function ChartLegend({ items }: { items: { label: string; color: string; dashed?: boolean }[] }) {
   return (
     <div data-budget-legend className="flex flex-wrap items-center gap-x-3.5 gap-y-1 text-caption text-fg-3">
       {items.map((item) => (
         <span key={item.label} className="inline-flex items-center gap-1.5">
-          <svg width="14" height="8" aria-hidden className="shrink-0">
-            <line x1="0" y1="4" x2="14" y2="4" stroke={item.color} strokeWidth="2" strokeDasharray={item.dashed ? "3 2" : undefined} />
-          </svg>
+          <SeriesMark color={item.color} dashed={item.dashed} />
           {item.label}
         </span>
       ))}
