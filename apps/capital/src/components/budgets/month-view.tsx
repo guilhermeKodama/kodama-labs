@@ -1,17 +1,18 @@
 "use client";
 
 import { useTranslations } from "next-intl";
-import { CartesianGrid, Line, LineChart, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { Area, CartesianGrid, ComposedChart, Line, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { EmptyRow, Kpi, KpiStrip, Panel } from "@/components/cap";
 import { useErrorMessage } from "@/lib/api/use-app-mutation";
 import { budgetDrill, budgetsDrill, monthPeriod } from "@/lib/budgets/drill";
-import { budgetKind, showsBudgetKind } from "@/lib/budgets/kind";
+import { budgetKind } from "@/lib/budgets/kind";
+import { filteredKindTotals, paceForKind } from "@/lib/budgets/slices";
 import { barHeader, monthHeader, resetsLabel } from "@/lib/budgets/labels";
 import { monthPace, paceTone, percent, projectionVsBudget, STATUS_KEY, usage } from "@/lib/budgets/pace";
 import type { BudgetsScope, BudgetsView } from "@/lib/budgets/url";
 import { useFmt } from "@/lib/format/provider";
 import type { ViewDraft } from "@/lib/ledger/view-draft";
-import { CHART, CHART_AXIS } from "@/lib/theme/chart-colors";
+import { CHART, CHART_AXIS, SERIES } from "@/lib/theme/chart-colors";
 import { textRole } from "@/lib/theme/type-scale";
 import { cn } from "@/lib/utils";
 import type { EditableBudget } from "./budget-dialog";
@@ -87,21 +88,14 @@ export function MonthBody({
   const t = useTranslations("budgets");
   const fmt = useFmt();
   const { names, kinds } = useEntityNames();
-  const { period, summary, budgets: allBudgets } = data;
-  const budgets = allBudgets.filter((row) => showsBudgetKind(row, kind));
-  const gasto = summary.totalNet ?? summary.totalSpent;
-  const reimbursedTotal = summary.totalReimbursed ?? 0;
-  const subtotalOf = (filter: "fixo" | "variavel" | null) => {
-    const list = filter ? allBudgets.filter((row) => budgetKind(row.kind) === filter) : allBudgets;
-    return {
-      budget: list.reduce((sum, row) => sum + row.amount, 0),
-      net: list.reduce((sum, row) => sum + (row.net ?? row.spent), 0),
-      remaining: list.reduce((sum, row) => sum + row.remaining, 0),
-    };
-  };
+  const { period, budgets: allBudgets } = data;
+  const slices = filteredKindTotals(allBudgets, kind ?? null);
+  const budgets = slices.rows;
+  const { total } = slices;
+  const gasto = total.net;
   const pace = monthPace(period);
   const monthLabel = fmt.monthLabel({ year: period.year, month: period.month });
-  const projection = projectionVsBudget(summary.projectedTotal, summary.totalBudget);
+  const projection = projectionVsBudget(total.projected, total.available);
   const bar = barHeader(period);
   const resets = resetsLabel(period.month, fmt.monthAbbr);
   // "Gasto" is spend to date (card purchases by purchase date). The drill widens the month so a statement that closes later still matches. The whole month is the committed spend.
@@ -109,34 +103,49 @@ export function MonthBody({
   const wholeMonth = monthPeriod(period.year, period.month);
   const drill = (row: BudgetRow, range: ReturnType<typeof monthPeriod> | null): ViewDraft | null =>
     range ? { label: t("drillLabel", { category: row.category, period: monthLabel }), ...budgetDrill(row, data.scope.entityIds, range) } : null;
-  // KPIs and the Total row: every budgeted category at once ("todo número leva à tabela filtrada").
-  const totals = (label: string, range: ReturnType<typeof monthPeriod> | null): ViewDraft | null => {
-    const found = range ? budgetsDrill(allBudgets, data.scope.entityIds, range) : null;
+  // KPIs and the footer: the rows that survive the active filters ("todo número leva à tabela filtrada").
+  const totals = (label: string, range: ReturnType<typeof monthPeriod> | null, rows: BudgetRow[]): ViewDraft | null => {
+    const found = range ? budgetsDrill(rows, data.scope.entityIds, range) : null;
     return found ? { label: t("drillLabel", { category: label, period: monthLabel }), ...found } : null;
   };
+  const rowsOf = (filter: "fixo" | "variavel" | null) => (filter ? budgets.filter((row) => budgetKind(row.kind) === filter) : budgets);
+  const spentSub = (net: number, reimbursed: number, available: number) =>
+    reimbursed > 0 ? t("month.kpi.spentNet", { amount: fmt.money0(reimbursed) }) : available > 0 ? t("month.kpi.spentSub", { pct: percent(net / available) }) : undefined;
 
   return (
     <>
       <KpiStrip>
-        <Kpi label={t("month.kpi.budget")} value={<DrillLink draft={totals(t("month.kpi.budget"), wholeMonth)}>{fmt.money0(summary.totalBudget)}</DrillLink>} />
-        <Kpi
-          label={t("month.kpi.spent")}
-          value={<DrillLink draft={totals(t("month.kpi.spent"), spentPeriod)}>{fmt.money0(gasto)}</DrillLink>}
-          sub={
-            reimbursedTotal > 0
-              ? t("month.kpi.spentNet", { amount: fmt.money0(reimbursedTotal) })
-              : summary.totalBudget > 0
-                ? t("month.kpi.spentSub", { pct: percent(gasto / summary.totalBudget) })
-                : undefined
-          }
-        />
-        <Kpi label={t("month.kpi.remaining")} value={<DrillLink draft={totals(t("month.kpi.remaining"), spentPeriod)}>{fmt.money0(summary.totalRoom)}</DrillLink>} />
-        <Kpi
-          label={t("month.kpi.projection")}
-          value={<DrillLink draft={totals(t("month.kpi.projection"), wholeMonth)}>{fmt.money0(summary.projectedTotal)}</DrillLink>}
-          sub={projection ? t(`month.kpi.${projection.kind}`, { amount: fmt.money0(projection.amount) }) : undefined}
-          tone={projection?.kind === "over" ? "warn" : undefined}
-        />
+        <div data-budget-kpi="budget">
+          <Kpi label={t("month.kpi.budget")} value={<DrillLink draft={totals(t("month.kpi.budget"), wholeMonth, budgets)}>{fmt.money0(total.available)}</DrillLink>} />
+        </div>
+        <div data-budget-kpi="spent">
+          <Kpi label={t("month.kpi.spent")} value={<DrillLink draft={totals(t("month.kpi.spent"), spentPeriod, budgets)}>{fmt.money0(gasto)}</DrillLink>} sub={spentSub(gasto, total.reimbursed, total.available)} />
+        </div>
+        <div data-budget-kpi="fixo">
+          <Kpi
+            label={t("month.kpi.fixed")}
+            value={<DrillLink draft={totals(t("month.kpi.fixed"), spentPeriod, rowsOf("fixo"))}>{fmt.money0(slices.fixo.net)}</DrillLink>}
+            sub={spentSub(slices.fixo.net, slices.fixo.reimbursed, slices.fixo.available)}
+          />
+        </div>
+        <div data-budget-kpi="variavel">
+          <Kpi
+            label={t("month.kpi.variable")}
+            value={<DrillLink draft={totals(t("month.kpi.variable"), spentPeriod, rowsOf("variavel"))}>{fmt.money0(slices.variavel.net)}</DrillLink>}
+            sub={spentSub(slices.variavel.net, slices.variavel.reimbursed, slices.variavel.available)}
+          />
+        </div>
+        <div data-budget-kpi="remaining">
+          <Kpi label={t("month.kpi.remaining")} value={<DrillLink draft={totals(t("month.kpi.remaining"), spentPeriod, budgets)}>{fmt.money0(total.remaining)}</DrillLink>} />
+        </div>
+        <div data-budget-kpi="projection">
+          <Kpi
+            label={t("month.kpi.projection")}
+            value={<DrillLink draft={totals(t("month.kpi.projection"), wholeMonth, budgets)}>{fmt.money0(total.projected)}</DrillLink>}
+            sub={projection ? t(`month.kpi.${projection.kind}`, { amount: fmt.money0(projection.amount) }) : undefined}
+            tone={projection?.kind === "over" ? "warn" : undefined}
+          />
+        </div>
       </KpiStrip>
       {/* Side by side only once the month body is wide enough for a 2.2fr name and a 1.8fr bar. At a 1280px window the sidebar leaves ~1050px, and the 1.7fr pane would ellipsize Contas de Consumo. */}
       <div className="@container">
@@ -224,7 +233,7 @@ export function MonthBody({
           })}
           {allBudgets.length ? (
             (["fixo", "variavel", null] as const).map((filter) => {
-              const slice = subtotalOf(filter);
+              const slice = filter ? slices[filter] : slices.total;
               const id = filter ?? "total";
               return (
                 <div key={id} data-budget-subtotal={id} className={cn("grid", COLS, "border-t border-stroke-2 bg-fill-4 py-2 text-body font-semibold md:h-9 md:py-0")}>
@@ -234,7 +243,7 @@ export function MonthBody({
                     <span className="text-caption font-normal text-fg-3 md:hidden">{t("month.table.budgeted")}</span>
                     {fmt.money0(slice.budget)}
                   </span>
-                  <DrillLink draft={totals(t("month.table.total"), spentPeriod)} className={cn(STAT_CELL, "order-4 font-mono whitespace-nowrap tabular-nums md:order-0")}>
+                  <DrillLink draft={totals(t("month.table.total"), spentPeriod, rowsOf(filter))} className={cn(STAT_CELL, "order-4 font-mono whitespace-nowrap tabular-nums md:order-0")}>
                     <span className="text-caption font-normal text-fg-3 md:hidden">{t("month.table.spent")}</span>
                     {fmt.money0(slice.net)}
                   </DrillLink>
@@ -252,7 +261,7 @@ export function MonthBody({
           )}
         </div>
         <div className="flex min-w-0 flex-col gap-3">
-          <PaceChart data={data} monthLabel={monthLabel} />
+          <PaceChart data={data} monthLabel={monthLabel} kind={kind ?? null} />
           <Panel
             title={t("month.upcoming.title")}
             pad={false}
@@ -274,22 +283,32 @@ export function MonthBody({
   );
 }
 
-function PaceChart({ data, monthLabel }: { data: MonthOverview; monthLabel: string }) {
+function PaceChart({ data, monthLabel, kind }: { data: MonthOverview; monthLabel: string; kind: BudgetsView["kind"] }) {
   const t = useTranslations("budgets");
   const fmt = useFmt();
   const unit = fmt.kUnit();
-  const { series, summary, period, budgets } = data;
+  const { series, period, budgets } = data;
+  const points = paceForKind(series, budgets, kind, period.daysInMonth);
+  const available = filteredKindTotals(budgets, kind).total.available;
   const empty = !budgets.length ? t("month.chart.empty") : !series.length ? t("month.chart.notStarted") : null;
-  const names = { cumulative: t("month.chart.cumulative", { unit }), ideal: t("month.chart.ideal", { unit }), budget: t("month.chart.budget") };
+  const showFixo = kind !== "variavel";
+  const showVariavel = kind !== "fixo";
+  const names = {
+    fixed: t("month.kpi.fixed"),
+    variable: t("month.kpi.variable"),
+    cumulative: t("month.chart.cumulative", { unit }),
+    ideal: t("month.chart.ideal", { unit }),
+    budget: t("month.chart.budget"),
+  };
   return (
-    <Panel title={t("month.chart.title")}>
+    <Panel title={t("month.chart.title")} className="budget-pace-chart">
       {empty ? (
         <p className="py-6 text-center text-body-sm text-fg-3">{empty}</p>
       ) : (
         <>
           <div className="h-[150px]">
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={series} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
+            <ResponsiveContainer width="100%" height="100%" minWidth={0}>
+              <ComposedChart data={points} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
                 <CartesianGrid stroke={CHART.grid} vertical={false} />
                 <XAxis dataKey="day" tickFormatter={(day: number) => String(day).padStart(2, "0")} tick={CHART_AXIS.tick} stroke={CHART_AXIS.stroke} tickLine={false} minTickGap={12} />
                 <YAxis tickFormatter={(v: number) => fmt.number(v / 1000, { min: 0, max: 1 })} tick={CHART_AXIS.tick} stroke={CHART_AXIS.stroke} tickLine={false} width={34} />
@@ -298,22 +317,26 @@ function PaceChart({ data, monthLabel }: { data: MonthOverview; monthLabel: stri
                   formatter={(value) => fmt.money0(Number(value))}
                   labelFormatter={(day) => t("month.chart.day", { day: String(day).padStart(2, "0"), month: fmt.monthAbbr(period.month) })}
                 />
-                {summary.totalBudget > 0 ? (
+                {available > 0 ? (
                   <ReferenceLine
-                    y={summary.totalBudget}
+                    y={available}
                     stroke={CHART.muted}
                     strokeDasharray="4 4"
                     ifOverflow="extendDomain"
                     label={{ value: names.budget, position: "insideTopRight", fontSize: textRole("micro"), fill: CHART.muted }}
                   />
                 ) : null}
+                {showFixo ? <Area dataKey="fixo" name={names.fixed} stackId="kind" stroke={SERIES.cerne} fill={SERIES.cerne} fillOpacity={0.45} strokeWidth={1} dot={false} isAnimationActive={false} /> : null}
+                {showVariavel ? <Area dataKey="variavel" name={names.variable} stackId="kind" stroke={SERIES.resina} fill={SERIES.resina} fillOpacity={0.55} strokeWidth={1} dot={false} isAnimationActive={false} /> : null}
                 <Line dataKey="ideal" name={names.ideal} stroke={CHART.soft} strokeWidth={2} dot={false} isAnimationActive={false} />
                 <Line dataKey="cumulative" name={names.cumulative} stroke={CHART.ink} strokeWidth={2} dot={false} isAnimationActive={false} />
-              </LineChart>
+              </ComposedChart>
             </ResponsiveContainer>
           </div>
           <ChartLegend
             items={[
+              ...(showFixo ? [{ label: names.fixed, color: SERIES.cerne }] : []),
+              ...(showVariavel ? [{ label: names.variable, color: SERIES.resina }] : []),
               { label: names.cumulative, color: CHART.ink },
               { label: names.ideal, color: CHART.soft },
               { label: names.budget, color: CHART.muted, dashed: true },

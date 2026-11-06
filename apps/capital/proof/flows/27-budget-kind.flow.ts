@@ -27,14 +27,14 @@ flow("A budget is fixo or variável, and the month can show one kind", async ({ 
     await expect(budget.amount).toHaveText(/R\$\s*500$/);
   });
 
-  await scene("Filter and subtotals", "Todos, Fixo or Variável; the three totals stay the whole month");
+  await scene("Filter and subtotals", "Todos, Fixo or Variável; the totals follow the filter");
   await say("Variável hides a budget marked Fixo");
   await kindFilter.getByRole("radio", { name: "Variável" }).click();
   await check("Variável hides Plano prova", async () => {
     await expect(page).toHaveURL(/[?&]k=variavel/);
     await expect(budget.row).toHaveCount(0);
   });
-  await say("Fixo brings it back, and the month still totals both kinds");
+  await say("Fixo brings it back, and Variável drops out of the month");
   await kindFilter.getByRole("radio", { name: "Fixo" }).click();
   const variavel = page.locator('[data-budget-subtotal="variavel"]');
   const total = page.locator('[data-budget-subtotal="total"]');
@@ -44,6 +44,7 @@ flow("A budget is fixo or variável, and the month can show one kind", async ({ 
     await expect(budget.row).toContainText("Fixo");
     await expect(fixo).toContainText("Fixo");
     expect(readNumber(await fixo.innerText()) - fixoBefore).toBe(500);
+    expect(readNumber(await variavel.innerText())).toBe(0);
     await expect(variavel).toContainText("Variável");
     await expect(total).toContainText("Total");
   });
@@ -60,6 +61,7 @@ flow("A budget is fixo or variável, and the month can show one kind", async ({ 
     await expect(page.locator("html")).toHaveClass(/\bdark\b/);
     await expect(budget.row).toContainText("Fixo");
     expect(readNumber(await fixo.innerText()) - fixoBefore).toBe(500);
+    expect(readNumber(await page.locator('[data-budget-subtotal="variavel"]').innerText())).toBe(0);
   });
   await page.goto("/settings");
   await page.getByRole("radiogroup", { name: "Tema" }).getByRole("radio", { name: "Claro" }).click();

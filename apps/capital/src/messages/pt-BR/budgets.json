@@ -42,6 +42,8 @@
     "kpi": {
       "budget": "Orçado",
       "spent": "Gasto",
+      "fixed": "Gastos fixos",
+      "variable": "Gastos variáveis",
       "spentSub": "{pct}% do orçado",
       "spentNet": "líquido · reembolsado {amount}",
       "remaining": "Restante",

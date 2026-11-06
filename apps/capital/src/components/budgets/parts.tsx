@@ -129,7 +129,7 @@ export function PeriodNav({ label, onPrev, onNext, prevLabel, nextLabel }: { lab
 /** Series names under a chart: a short swatch (solid or dashed) and the name. */
 export function ChartLegend({ items }: { items: { label: string; color: string; dashed?: boolean }[] }) {
   return (
-    <div className="flex flex-wrap items-center gap-x-3.5 gap-y-1 text-caption text-fg-3">
+    <div data-budget-legend className="flex flex-wrap items-center gap-x-3.5 gap-y-1 text-caption text-fg-3">
       {items.map((item) => (
         <span key={item.label} className="inline-flex items-center gap-1.5">
           <svg width="14" height="8" aria-hidden className="shrink-0">

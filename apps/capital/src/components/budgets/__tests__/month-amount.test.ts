@@ -197,6 +197,52 @@ describe("the Orçado column", () => {
   });
 });
 
+describe("fixo and variável in the month summary", () => {
+  const withSeries = {
+    ...overview,
+    series: [
+      { day: 1, cumulative: 80, fixo: 30, variavel: 50, ideal: 70 },
+      { day: 10, cumulative: 750, fixo: 350, variavel: 400, ideal: 709.68 },
+    ],
+  } as MonthOverview;
+
+  it("adds Gastos fixos and Gastos variáveis and stacks both under the pace line", () => {
+    const html = render("pt-BR", createElement(MonthBody, { data: withSeries, actions, onOpenRule: noop, onAllRules: noop }));
+    expect(html).toContain('data-budget-kpi="fixo"');
+    expect(html).toContain("Gastos fixos");
+    expect(html).toContain("Gastos variáveis");
+    expect(html).toContain(">R$ 350<");
+    expect(html).toContain(">R$ 400<");
+    const legend = html.slice(html.indexOf("budget-pace-chart"));
+    expect(legend).toContain(">Gastos fixos<");
+    expect(legend).toContain(">Gastos variáveis<");
+    expect(legend).toContain("Gasto acumulado");
+    const fixoAt = html.indexOf('data-budget-subtotal="fixo"');
+    const variavelAt = html.indexOf('data-budget-subtotal="variavel"');
+    expect(html.slice(fixoAt, variavelAt)).toContain(">R$ 400<");
+    expect(html.slice(variavelAt, html.indexOf('data-budget-subtotal="total"'))).toContain(">R$ 1.800<");
+  });
+
+  it("follows the kind filter in the cards, the footer and the chart", () => {
+    const html = render("pt-BR", createElement(MonthBody, { data: withSeries, kind: "fixo", actions, onOpenRule: noop, onAllRules: noop }));
+    const card = (id: string) => {
+      const start = html.indexOf(`data-budget-kpi="${id}"`);
+      return html.slice(start, html.indexOf("data-budget-kpi=", start + 1));
+    };
+    expect(card("fixo")).toContain(">R$ 350<");
+    expect(card("variavel")).toContain(">R$ 0<");
+    expect(card("spent")).toContain(">R$ 350<");
+    const legend = html.slice(html.indexOf("budget-pace-chart"));
+    expect(legend).toContain(">Gastos fixos<");
+    expect(legend).not.toContain(">Gastos variáveis<");
+    expect(legend).toContain("Gasto acumulado");
+    const variavelAt = html.indexOf('data-budget-subtotal="variavel"');
+    const totalAt = html.indexOf('data-budget-subtotal="total"');
+    expect(html.slice(variavelAt, totalAt)).toContain(">R$ 0<");
+    expect(html.slice(totalAt)).toContain(">R$ 400<");
+  });
+});
+
 describe("the edit form", () => {
   it("sends the amount in the base currency from the month on screen, and focuses the amount", () => {
     expect(editBudgetBody(2000, "BRL", "  feira ", "2026-10", "variavel")).toEqual({ amount: 2000, currency: "BRL", notes: "feira", applyFrom: "2026-10", kind: "variavel" });

@@ -60,16 +60,16 @@ describe("scope", () => {
     expect(pf.unbudgeted).toEqual([]);
     // The series stops today, so the purchase on the 25th is not in it.
     expect(pf.series).toHaveLength(22);
-    expect(pf.series.at(-1)).toMatchObject({ day: 22, cumulative: 100 });
+    expect(pf.series.at(-1)).toMatchObject({ day: 22, cumulative: 100, fixo: 0, variavel: 100 });
 
     const pj = await monthOverview(USER, 2026, 9, prisma, { entityIds: [f.pjId] });
     expect(Object.fromEntries(pj.budgets.map((b) => [b.categoryId, b.spent]))).toEqual({ [c.Mercado]: 50, [c.Software]: 70 });
     expect(pj.yearlyBudgets).toEqual([]);
-    expect(pj.series.at(-1)!.cumulative).toBe(120);
+    expect(pj.series.at(-1)).toMatchObject({ cumulative: 120, fixo: 0, variavel: 120 });
 
     const all = await monthOverview(USER, 2026, 9, prisma);
     expect(all.budgets.find((b) => b.categoryId === c.Mercado)!.spent).toBe(150);
-    expect(all.series.at(-1)!.cumulative).toBe(220);
+    expect(all.series.at(-1)).toMatchObject({ cumulative: 220, fixo: 0, variavel: 220 });
     expect(all.scope.entityIds).toBeNull();
 
     const yPf = await yearOverview(USER, 2026, prisma, { entityIds: [f.pfId] });
@@ -513,6 +513,7 @@ describe("kind and reimbursement", () => {
     expect(month.budgets.find((b) => b.categoryId === c.Moradia)).toMatchObject({ kind: "fixo", spent: 200, net: 200 });
     expect(month.summary.byKind.variavel).toMatchObject({ budget: 400, net: 100 });
     expect(month.summary.byKind.fixo).toMatchObject({ budget: 900, net: 200 });
+    expect(month.series.at(-1)).toMatchObject({ fixo: 200, variavel: 100, cumulative: 300 });
     expect(month.summary.totalNet).toBe(month.summary.totalSpent);
   });
 
@@ -528,7 +529,7 @@ describe("kind and reimbursement", () => {
     month = await monthOverview(USER, 2026, 9, prisma, { entityIds: [f.pfId] });
     expect(month.budgets[0]).toMatchObject({ spent: 300, reimbursed: 80, net: 220, remaining: 280, netCommitted: 220 });
     expect(month.summary).toMatchObject({ totalSpent: 300, totalReimbursed: 80, totalNet: 220, totalRoom: 280 });
-    expect(month.series.at(-1)).toMatchObject({ cumulative: 220 });
+    expect(month.series.at(-1)).toMatchObject({ cumulative: 220, fixo: 220, variavel: 0 });
     expect(month.yearlyBudgets[0]).toMatchObject({ spent: 300, reimbursed: 80, net: 220 });
 
     const composition = await budgetComposition(USER, "2026-08", "2026-09", prisma, { entityIds: [f.pfId], limit: 5 });

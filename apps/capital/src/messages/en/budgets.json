@@ -42,6 +42,8 @@
     "kpi": {
       "budget": "Budgeted",
       "spent": "Spent",
+      "fixed": "Fixed spending",
+      "variable": "Variable spending",
       "spentSub": "{pct}% of budget",
       "spentNet": "net · reimbursed {amount}",
       "remaining": "Remaining",
