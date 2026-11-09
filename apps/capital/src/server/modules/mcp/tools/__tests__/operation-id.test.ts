@@ -74,7 +74,8 @@ describe("operationId on MCP entries", () => {
 
     const orphans = await findOrphanTransactions(USER, prisma);
     expect(orphans.transactions.find((row) => row.id === salary)?.operationId).toBeNull();
-    expect(orphans.transactions.find((row) => row.id === incomeId)?.operationId).toBe(linked.operationId);
+    // convert_income_to_dividend files the cash leg as Dividendos, so it is no longer uncategorized.
+    expect(orphans.transactions.find((row) => row.id === incomeId)).toBeUndefined();
 
     const preview = await bulkUpdateTransactions(USER, [{ id: dividend.cashEntryId!, description: "Dividendo PETR4" }], true, prisma);
     expect(preview.updated[0]?.operationId).toBe(dividend.operationId);

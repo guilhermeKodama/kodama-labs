@@ -27,6 +27,7 @@ import {
 import { FLOW_CATEGORY_KEYS, isFlowCategoryKey, type FlowCategoryKey } from "@/lib/ledger/flow-category";
 import { LedgerError } from "../lib/errors";
 import { flowKindJoins, flowKindSql, type FlowKind } from "../lib/flow-sql";
+import { effectiveCategoryIdSql } from "../lib/income-cash-category";
 import { spentToDateSql } from "../lib/spend-as-of";
 import { toNumber } from "../lib/money";
 
@@ -46,6 +47,11 @@ import { toNumber } from "../lib/money";
  *   | investment_deposit / investment_withdrawal  | yes    | − into the broker |
  *   | broker buy/sell/... cash leg                | no     | signed            |
  *   | dividend / yield cash leg, everything else  | yes    | signed            |
+ *
+ * A dividend or yield cash leg with no stored category reads as Proventos
+ * (fii_income, dividend, jcp) or Rendimentos (fixed-income interest) in
+ * display mode: filters, groups, the sankey and search. The stored id is
+ * what isNull matches, and what legs mode returns. See effectiveCategoryIdSql.
  *
  * Both modes build the same CTE chain (sel → dr → src), so they share
  * column names: legs mode is display mode where every row counts and
@@ -92,8 +98,8 @@ const FROM = Prisma.sql`
   FROM ledger_entries le
   JOIN accounts a ON a.id = le."accountId"
   JOIN entities e ON e.id = le."entityId"
-  LEFT JOIN categories c ON c.id = le."categoryId"
-  ${flowKindJoins()}`;
+  ${flowKindJoins()}
+  LEFT JOIN categories c ON c.id = ${effectiveCategoryIdSql()}`;
 
 /** Key of a date bucket, as text (see TIME_BUCKETS). */
 function bucketSql(bucket: TimeBucket, col: Prisma.Sql): Prisma.Sql {
@@ -161,14 +167,16 @@ const flowOfCategoryKey = (key: FlowCategoryKey): FlowKind => (key === FLOW_CATE
  * In display mode a categoryId `in`/`nin` value set matches like the
  * categoryId group keys: null is "Sem categoria" (empty category, neither
  * an aporte nor a transfer) and FLOW_CATEGORY_KEYS select the
- * uncategorized aportes and transfers. `isNull` matches every empty
- * category, and legs mode (MCP, assistant) keeps null as any empty one.
+ * uncategorized aportes and transfers. A dividend or yield cash leg with
+ * no stored category matches Proventos or Rendimentos, not Sem categoria.
+ * `isNull` matches every stored empty category, and legs mode (MCP,
+ * assistant) keeps null as any empty one.
  */
 function filterSql(f: LedgerFilter, display: boolean): Prisma.Sql {
   switch (f.op) {
     case "in":
     case "nin": {
-      const col = RAW_CATEGORICAL[f.field];
+      const col = display && f.field === "categoryId" ? effectiveCategoryIdSql() : RAW_CATEGORICAL[f.field];
       const isCategory = display && f.field === "categoryId";
       const flowKeys = isCategory ? f.values.filter(isFlowCategoryKey) : [];
       const nonNull = f.values.filter((v) => v !== null && !flowKeys.includes(v as FlowCategoryKey));
@@ -251,15 +259,19 @@ export function buildWhere(
 // Source rows: sel (selected legs) → dr (rows of the mode) → src (scope)
 // ---------------------------------------------------------------------------
 
-const SEL_COLUMNS = Prisma.sql`
+/** Display mode reports the cash-flow category; legs mode reports the stored one. */
+function selColumns(display: boolean): Prisma.Sql {
+  const category = display ? effectiveCategoryIdSql() : Prisma.sql`le."categoryId"`;
+  return Prisma.sql`
   le.id AS "id", le.date AS "date", le."effectiveDate" AS "effectiveDate", le.description AS "description", le.notes AS "notes",
   le.kind::text AS "kind", le.amount AS "amount", le.currency AS "currency", le."exchangeRate" AS "exchangeRate",
   le."amountBase" AS "amountBase", le."entityId" AS "entityId", e.kind::text AS "entityKind", le."accountId" AS "accountId", a.type::text AS "accountType",
-  le."categoryId" AS "categoryId", le."reimbursesCategoryId" AS "reimbursesCategoryId", le."isTaxDeductible" AS "isTaxDeductible", (le."recurringRuleId" IS NOT NULL) AS "isRecurring",
+  ${category} AS "categoryId", le."reimbursesCategoryId" AS "reimbursesCategoryId", le."isTaxDeductible" AS "isTaxDeductible", (le."recurringRuleId" IS NOT NULL) AS "isRecurring",
   tg.direction::text AS "transferDirection", le."cardStatementId" AS "cardStatementId", le."importId" AS "importId",
   ${flowKindSql()} AS "flowKind", le."transferGroupId" AS "transferGroupId", le."recurringRuleId" AS "recurringRuleId",
   le."installmentPlanId" AS "installmentPlanId", le."installmentNumber" AS "installmentNumber", le."deletedAt" AS "deletedAt",
   le."createdAt" AS "createdAt", io.id AS op_id, io.type::text AS op_type`;
+}
 
 /** The transfer's other leg (r is the row's alias). */
 const COUNTERPART = Prisma.sql`LEFT JOIN LATERAL (
@@ -273,8 +285,9 @@ const INCOME_OPERATIONS = Prisma.sql`('dividend', 'yield_payment')`;
 /** `WITH sel, dr, src`: src holds the rows every read of a query works on. */
 function sourceCte(where: Prisma.Sql, q: Pick<LedgerQuery, "semantics" | "rowsScope">): Prisma.Sql {
   const scope = q.rowsScope === "counted" ? Prisma.sql`WHERE dr.counts` : Prisma.empty;
+  const columns = selColumns(q.semantics === "display");
   if (q.semantics === "legs") {
-    return Prisma.sql`WITH sel AS (SELECT ${SEL_COLUMNS} ${FROM} ${where}),
+    return Prisma.sql`WITH sel AS (SELECT ${columns} ${FROM} ${where}),
       dr AS (
         SELECT r.*, ARRAY[r.id] AS leg_ids, cp."accountId" AS cp_account, cp."entityId" AS cp_entity,
           true AS counts, false AS neutral, r."amountBase" AS display_amount, r.amount AS display_amount_orig
@@ -282,7 +295,7 @@ function sourceCte(where: Prisma.Sql, q: Pick<LedgerQuery, "semantics" | "rowsSc
       src AS (SELECT * FROM dr ${scope})`;
   }
   // One row per transfer: the outflow leg stands for the pair, never the broker leg.
-  return Prisma.sql`WITH sel AS MATERIALIZED (SELECT ${SEL_COLUMNS} ${FROM} ${where}),
+  return Prisma.sql`WITH sel AS MATERIALIZED (SELECT ${columns} ${FROM} ${where}),
     ranked AS (
       SELECT s.*,
         count(*) OVER (PARTITION BY coalesce(s."transferGroupId", s.id)) AS legs_in_sel,

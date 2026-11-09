@@ -14,6 +14,7 @@ import { loadFx, type FxContext } from "@capital/server/modules/ledger/lib/fx";
 import { round, toNumber } from "@capital/server/modules/ledger/lib/money";
 import { getOwnedAccount } from "@capital/server/modules/ledger/services/accounts";
 import { inTransaction, recordMutation, snapshot, type MutationRecordInput } from "@capital/server/modules/ledger/services/mutations";
+import { resolveIncomeCashCategory } from "../lib/income-cash-category";
 import { recalculateHoldingDetailed } from "../lib/holding-position";
 import { assertIncomeAccountType, getOwnedHolding, incomeCreditAccount, incomeOperationType, isIncomeOperation, recordOperation } from "./portfolio";
 
@@ -269,7 +270,8 @@ export async function convertIncomeToDividend(userId: string, input: ConvertInco
     });
     records.push({ model: "InvestmentOperation", recordId: op.id, before: null, after: snapshot(op) });
     const metadata = { ...(entry.metadata && typeof entry.metadata === "object" && !Array.isArray(entry.metadata) ? entry.metadata : {}), holdingId: holding.id, investmentOperationId: op.id };
-    const updated = await tx.ledgerEntry.update({ where: { id: entry.id }, data: { metadata } });
+    const categoryId = await missingIncomeCategory(tx, userId, entry, input.incomeType);
+    const updated = await tx.ledgerEntry.update({ where: { id: entry.id }, data: { metadata, ...(categoryId && { categoryId }) } });
     records.push({ model: "LedgerEntry", recordId: entry.id, before: snapshot(entry), after: snapshot(updated) });
     await recalculateHoldingDetailed(holding.id, tx);
     const batchId = await recordMutation(tx, userId, "create", description, records);
@@ -443,6 +445,13 @@ export async function updateDividend(userId: string, input: UpdateDividendInput,
   });
 }
 
+/** Category id to store when the cash leg has none. A category already set is kept. */
+async function missingIncomeCategory(tx: DbClient, userId: string, entry: { categoryId: string | null }, incomeType: PassiveIncomeType): Promise<string | null> {
+  if (entry.categoryId) return null;
+  const category = await resolveIncomeCashCategory(userId, incomeType, incomeOperationType(incomeType), tx);
+  return category?.id ?? null;
+}
+
 function assertFiiExempt(incomeType: PassiveIncomeType, withholding: number) {
   if (incomeType === "fii_income" && withholding > 0) {
     throw new LedgerError("FII income is tax-exempt, so withholdingTax has to be zero", 422, { code: "dividend.fii_withholding" });
@@ -540,7 +549,8 @@ async function attachLegacyLeg(
     holdingId: holding.id,
     investmentOperationId: op.id,
   };
-  const updated = await tx.ledgerEntry.update({ where: { id: entry.id }, data: { metadata } });
+  const categoryId = await missingIncomeCategory(tx, userId, entry, input.incomeType);
+  const updated = await tx.ledgerEntry.update({ where: { id: entry.id }, data: { metadata, ...(categoryId && { categoryId }) } });
   records.push({ model: "LedgerEntry", recordId: entry.id, before: snapshot(entry), after: snapshot(updated) });
   await recalculateHoldingDetailed(holding.id, tx);
   const batchId = await recordMutation(tx, userId, "update", description, records);
