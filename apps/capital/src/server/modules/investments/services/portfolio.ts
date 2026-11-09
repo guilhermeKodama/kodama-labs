@@ -13,6 +13,7 @@ import { accountBalances, getOwnedAccount } from "@capital/server/modules/ledger
 import { createEntry, softDeleteEntries } from "@capital/server/modules/ledger/services/entries";
 import { getDefaultAccount } from "@capital/server/modules/ledger/services/entities";
 import { inTransaction, recordMutation, snapshot, type MutationRecordInput } from "@capital/server/modules/ledger/services/mutations";
+import { resolveIncomeCashCategory } from "../lib/income-cash-category";
 import { benchmarks12m } from "./benchmarks";
 import { convertAmount, fundBroker, withdrawFromBroker } from "./funding";
 import { PORTFOLIO_BROKERS, portfolioHistory } from "./portfolio-history";
@@ -338,6 +339,7 @@ async function createCashLeg(
   fx: FxContext,
   records: MutationRecordInput[],
   cashCredit?: { amount: number; exchangeRate: number } | null,
+  categoryId?: string | null,
 ) {
   const rate = cashCredit?.exchangeRate ?? fx.rateFor(account.currency);
   const amount = cashCredit ? round(cashCredit.amount, 4) : round(convertAmount(impact, holding.currency, account.currency, fx), 4);
@@ -355,6 +357,7 @@ async function createCashLeg(
       effectiveDate: date,
       description: label,
       importId,
+      categoryId: categoryId ?? null,
       metadata: { holdingId: holding.id },
     },
   });
@@ -438,7 +441,11 @@ export async function recordOperation(userId: string, input: OperationInput, db:
       fundingGroupId = funded.depositGroupId;
     }
 
-    const cashEntryId = impact !== 0 ? (await createCashLeg(tx, userId, holding, legAccount, label, impact, date, input.importId ?? null, fx, records, input.cashCredit)).id : null;
+    // Income cash is still kind investment (one leg, linked by cashEntryId).
+    // The category is what Fluxo de Caixa groups: Proventos or Rendimentos,
+    // never "Sem categoria". Buys and sales stay uncategorized.
+    const cashCategory = await resolveIncomeCashCategory(userId, incomeType, input.type, tx);
+    const cashEntryId = impact !== 0 ? (await createCashLeg(tx, userId, holding, legAccount, label, impact, date, input.importId ?? null, fx, records, input.cashCredit, cashCategory?.id ?? null)).id : null;
 
     const op = await tx.investmentOperation.create({
       data: {
@@ -525,6 +532,9 @@ export async function updateOperation(userId: string, operationId: string, patch
       const currency = moving ? target.currency : leg.currency;
       const rate = moving ? fx.rateFor(target.currency) : toNumber(leg.exchangeRate);
       const amount = round(convertAmount(impact, holding.currency, currency, fx), 4);
+      // Fill a missing category only. A category already on the leg stays,
+      // including one the user chose that is not Proventos.
+      const cashCategory = income && !leg.categoryId ? await resolveIncomeCashCategory(userId, merged.incomeType, merged.type, tx) : null;
       const moved = await tx.ledgerEntry.update({
         where: { id: leg.id },
         data: {
@@ -533,13 +543,15 @@ export async function updateOperation(userId: string, operationId: string, patch
           date: merged.date,
           effectiveDate: merged.date,
           description: label,
+          ...(cashCategory && { categoryId: cashCategory.id }),
           ...(moving && { accountId: target.id, entityId: target.entityId, currency, exchangeRate: rate }),
         },
       });
       records.push({ model: "LedgerEntry", recordId: leg.id, before: snapshot(leg), after: snapshot(moved) });
     } else if (impact !== 0 && cashImpact(before.type, before.totalAmount, before.fees, before.taxWithheld) === 0) {
       // Only an operation that starts moving cash gets a leg; one recorded without a leg stays without.
-      cashEntryId = (await createCashLeg(tx, userId, holding, target, label, impact, merged.date, null, fx, records)).id;
+      const cashCategory = await resolveIncomeCashCategory(userId, merged.incomeType, merged.type, tx);
+      cashEntryId = (await createCashLeg(tx, userId, holding, target, label, impact, merged.date, null, fx, records, null, cashCategory?.id ?? null)).id;
     }
 
     const updated = await tx.investmentOperation.update({

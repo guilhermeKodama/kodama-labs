@@ -48,7 +48,10 @@ describe("cash-flow sankey", () => {
     expect(linkValue(r, pj, pf)).toBe(2000);
     expect(linkValue(r, pj, `expense::${f.categories.Software}`)).toBe(50);
     expect(linkValue(r, pj, `surplus::${f.pjId}`)).toBe(7950);
-    expect(linkValue(r, "income::none", pf)).toBe(50);
+    // The dividend is income under the proventos category (seeded as Dividendos), not Sem categoria.
+    const proventos = await prisma.category.findFirstOrThrow({ where: { userId: USER, systemKey: "dividends" } });
+    expect(linkValue(r, `income::${proventos.id}`, pf)).toBe(50);
+    expect(r.nodes.some((n) => n.id === "income::none")).toBe(false);
     expect(linkValue(r, pf, `expense::${f.categories.Groceries}`)).toBe(300);
     expect(linkValue(r, pf, "output::investments")).toBe(1000);
     expect(linkValue(r, pf, `surplus::${f.pfId}`)).toBe(750);
