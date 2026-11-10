@@ -1,0 +1,21 @@
+[Unit]
+Description=Claude Code Remote Control for kodama-labs (control from the phone or claude.ai/code)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/Documents/Github/kodama-labs
+Environment=PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin
+# Every session gets its own git worktree. No session works in the checkout
+# itself: deploys run from it and refuse tracked changes.
+ExecStart=%h/.local/bin/claude remote-control --name kodama-ai --spawn worktree --no-create-session-in-dir --capacity 8 --permission-mode auto
+# The status screen redraws every second; keep it out of the journal, keep errors.
+StandardOutput=null
+StandardError=journal
+# Remote Control exits after about 10 minutes without network; come back on its own.
+Restart=always
+RestartSec=30
+
+[Install]
+WantedBy=default.target
