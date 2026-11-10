@@ -31,7 +31,7 @@ flow(
     await say("GET /api/health/market-data checks IntegrationRun, the run log, not just whether the route answered");
     const before = await terminal("curl", ["-s", `${BASE}/api/health/market-data`]);
     const beforeBody = JSON.parse(before.output) as MarketDataHealth;
-    await check("No cron has run yet in this environment: every job is down, and the endpoint itself answers 503", () => {
+    await check("No cron has run yet in this environment: every job is down, and the endpoint itself answers 503", async () => {
       expect(before.code).toBe(0);
       expect(beforeBody.status).toBe("down");
       for (const job of ["update-prices", "update-rates", "benchmarks", "pluggy-sync"]) {
@@ -45,14 +45,14 @@ flow(
       "-c",
       `psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "UPDATE investment_holdings SET \\"lastPriceUpdate\\" = now() - interval '${STALE_HOURS} hours' WHERE ticker = '${STALE_TICKER}';"`,
     ]);
-    await check(`${STALE_TICKER}'s price timestamp moved back`, () => {
+    await check(`${STALE_TICKER}'s price timestamp moved back`, async () => {
       expect(backdate.code).toBe(0);
       expect(backdate.output).toContain("UPDATE 1");
     });
 
     const after = await terminal("curl", ["-s", `${BASE}/api/health/market-data`]);
     const afterBody = JSON.parse(after.output) as MarketDataHealth;
-    await check("The health endpoint's holdings count picks it up at once, independent of any cron", () => {
+    await check("The health endpoint's holdings count picks it up at once, independent of any cron", async () => {
       expect(afterBody.holdings.stale).toBe(beforeBody.holdings.stale + 1);
     });
 
