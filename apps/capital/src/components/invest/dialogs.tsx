@@ -114,7 +114,10 @@ export function HoldingSheet({
     ],
     [
       t("priceAt"),
-      holding.lastPriceUpdate ? fmt.dateTime(holding.lastPriceUpdate) : "—",
+      (holding.lastPriceUpdate ? fmt.dateTime(holding.lastPriceUpdate) : "—") +
+        (holding.priceStatus === "fresh"
+          ? ""
+          : ` · ${t(`priceStatus.${holding.priceStatus}`)}`),
     ],
   ];
   return (

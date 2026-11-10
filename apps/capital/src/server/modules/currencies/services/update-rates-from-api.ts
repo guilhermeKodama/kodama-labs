@@ -4,6 +4,8 @@ import { autoSourceFor } from "../lib/fx-source";
 
 export interface UpdateRatesResult {
   usersProcessed: number;
+  /** Distinct (base, code) pairs a provider was asked to quote this run. */
+  ratesRequested: number;
   /** Rows whose rate, source or quote time changed. */
   ratesUpdated: number;
   /** Rows already holding the latest quote. */
@@ -36,7 +38,7 @@ const sameRate = (a: number, b: number) => Math.abs(a - b) <= Math.abs(b) * 1e-1
 export async function updateAllCurrencyRates(db: DbClient, opts: UpdateRatesOptions = {}): Promise<UpdateRatesResult> {
   const now = opts.now ?? new Date();
   const fetcher: FetchLike = opts.fetch ?? ((url, init) => fetch(url, init));
-  const result: UpdateRatesResult = { usersProcessed: 0, ratesUpdated: 0, ratesUnchanged: 0, manualSkipped: 0, errors: 0 };
+  const result: UpdateRatesResult = { usersProcessed: 0, ratesRequested: 0, ratesUpdated: 0, ratesUnchanged: 0, manualSkipped: 0, errors: 0 };
 
   const users = await db.user.findMany({
     where: { fxAutoUpdate: true, ...(opts.userIds && { id: { in: opts.userIds } }) },
@@ -61,6 +63,8 @@ export async function updateAllCurrencyRates(db: DbClient, opts: UpdateRatesOpti
       else ecbCodesByBase.set(user.baseCurrency, (ecbCodesByBase.get(user.baseCurrency) ?? new Set<string>()).add(c.code));
     }
   }
+
+  result.ratesRequested = ptaxCodes.size + [...ecbCodesByBase.values()].reduce((sum, codes) => sum + codes.size, 0);
 
   const quotes = new Map<string, FxQuote>(); // `${base}:${code}`
   for (const code of ptaxCodes) {

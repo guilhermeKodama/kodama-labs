@@ -267,12 +267,16 @@ async function syncInvestments(item: ItemRow, deps: SyncDeps, since: string, sta
   const investments = await deps.client.getInvestments(item.itemId);
   for (const investment of investments) {
     const holdingId = await ensureHolding(item, investment, broker, deps.db);
-    await comparePosition(item, investment, holdingId, deps.db);
     const txs = await deps.client.getInvestmentTransactions(investment.id, since);
     const ordered = [...txs].sort((a, b) => (a.tradeDate ?? a.date).localeCompare(b.tradeDate ?? b.date));
     for (const tx of ordered) {
       await bookInvestmentTx(item, investment, holdingId, tx, creditTo, deps, stats);
     }
+    // After this run's own transactions are booked: comparing first (as
+    // this used to) checks the pre-sync quantity against Pluggy's current
+    // one and raises a false "position" review for every buy or sell this
+    // very run just booked.
+    await comparePosition(item, investment, holdingId, deps.db);
   }
 }
 
@@ -309,7 +313,15 @@ async function comparePosition(item: ItemRow, investment: PluggyInvestment, hold
   if (investment.quantity == null) return;
   const holding = await db.investmentHolding.findUnique({ where: { id: holdingId }, select: { currentQuantity: true, ticker: true } });
   if (!holding) return;
-  if (Math.abs(holding.currentQuantity - investment.quantity) <= QTY_EPS) return;
+  if (Math.abs(holding.currentQuantity - investment.quantity) <= QTY_EPS) {
+    // The mismatch that opened (or last updated) a review is gone: close it
+    // instead of leaving it to nag about a position that has reconciled.
+    await db.pluggyReview.updateMany({
+      where: { userId: item.userId, status: "open", kind: "position", draft: { path: ["holdingId"], equals: holdingId } },
+      data: { status: "resolved", resolvedAt: new Date() },
+    });
+    return;
+  }
   await openReview(db, item, "position", {
     holdingId,
     ticker: holding.ticker,
@@ -929,6 +941,18 @@ async function openReview(db: DbClient, item: ItemRow, kind: string, draft: Pris
     const open = await db.pluggyReview.findFirst({ where: { userId: item.userId, status: "open", kind, draft: { path: ["pluggyId"], equals: pluggyId } } });
     if (open) return;
   }
+  // A "position" review has no pluggyId to dedup on (it is not about one
+  // transaction): dedup by holdingId instead, one open review per holding,
+  // refreshed with the latest quantities rather than skipped — a mismatch
+  // that keeps drifting should not pile up a new review every sync.
+  const holdingId = kind === "position" && typeof draft.holdingId === "string" ? draft.holdingId : null;
+  if (holdingId) {
+    const open = await db.pluggyReview.findFirst({ where: { userId: item.userId, status: "open", kind: "position", draft: { path: ["holdingId"], equals: holdingId } } });
+    if (open) {
+      await db.pluggyReview.update({ where: { id: open.id }, data: { draft } });
+      return;
+    }
+  }
   await db.pluggyReview.create({ data: { userId: item.userId, itemRowId: item.id, kind, draft } });
 }
 
@@ -952,7 +976,13 @@ function assetClassOf(investment: PluggyInvestment): AssetClass {
   if (/3[2-5]$/.test(ticker) || subtype === "BDR") return "bdr";
   if (subtype === "REAL_ESTATE_FUND") return "fii";
   if (type === "ETF" || subtype === "ETF") return "etf";
-  if (type === "FIXED_INCOME") return "fixed_income";
+  // Investment funds (multimarket, stock funds, bond funds, …) have no
+  // AssetClass of their own yet (planned: a "fund" class priced from the
+  // CVM's daily NAV). Until then, fixed_income is the closest fit: it is
+  // never auto-quoted (see quotes.ts quoteSourceFor), so this stays at cost
+  // instead of what MUTUAL_FUND fell through to before — "stocks", which
+  // would try to price a fund's internal code as a B3 ticker.
+  if (type === "FIXED_INCOME" || type === "MUTUAL_FUND") return "fixed_income";
   return "stocks";
 }
 

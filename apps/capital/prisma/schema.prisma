@@ -1135,6 +1135,48 @@ model CurrencyRateDay {
 }
 
 // ============================================
+// INTEGRATIONS (cron / market-data run log)
+// ============================================
+
+// One row per run of a scheduled integration (market prices, FX rates,
+// benchmarks, Pluggy). Global, not per user: these jobs serve every user at
+// once. withCron (src/server/lib/cron.ts) writes it so a job that "ran" but
+// fetched nothing is visible to GET /api/health/market-data and to the data
+// health panel, instead of only ever showing green on the cron heartbeat.
+model IntegrationRun {
+  id        String    @id @default(uuid())
+  // Stable key for the job, e.g. "update-prices", "update-rates", "benchmarks", "pluggy-sync".
+  job       String
+  // Provider within the job, when the job fans out to more than one
+  // (e.g. "brapi", "yahoo", "coingecko" inside update-prices). Null when
+  // the job has a single source or reports an aggregate.
+  provider  String?
+  // cron | manual (the "Atualizar agora" button or similar)
+  trigger   String
+  // ok | partial | failed | skipped
+  status    String
+  startedAt DateTime  @default(now())
+  finishedAt DateTime?
+  durationMs Int?
+  // How many items the job considered, and the outcome split. Missing stays
+  // optional: not every job (e.g. benchmarks) has a per-item count.
+  requested Int?
+  succeeded Int?
+  missing   Int?
+  rejected  Int?
+  // The newest date the provider actually returned, when relevant (e.g. the
+  // latest B3 close), to tell "nothing changed because the market is closed"
+  // from "nothing changed because the source is broken".
+  providerLatestDate DateTime?
+  error     String?
+  // Free-form breakdown (e.g. per-ticker reasons), capped by the caller.
+  stats     Json?
+
+  @@index([job, startedAt])
+  @@map("integration_runs")
+}
+
+// ============================================
 // IMPORT (bulk import job tracker)
 // ============================================
 

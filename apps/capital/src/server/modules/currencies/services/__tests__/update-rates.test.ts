@@ -82,7 +82,7 @@ describe("updateAllCurrencyRates", () => {
     const seeded = await prisma.currencyRateDay.findUnique({ where: { code_date: { code: "USD", date: closeDay } } });
     const seededAbertura = await prisma.currencyRateDay.findUnique({ where: { code_date: { code: "USD", date: aberturaDay } } });
     const result = await updateAllCurrencyRates(prisma, { now: NOW, fetch: providers, userIds: USERS });
-    expect(result).toEqual({ usersProcessed: 2, ratesUpdated: 4, ratesUnchanged: 0, manualSkipped: 1, errors: 0 });
+    expect(result).toEqual({ usersProcessed: 2, ratesRequested: 4, ratesUpdated: 4, ratesUnchanged: 0, manualSkipped: 1, errors: 0 });
 
     // A Float column round-trips to within an ulp.
     const usd = await rateOf(BRL_USER, "USD");

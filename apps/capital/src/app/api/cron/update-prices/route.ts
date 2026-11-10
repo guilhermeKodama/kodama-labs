@@ -1,40 +1,30 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import { prisma } from "@capital/server/lib/prisma";
-import { env } from "@/env";
+import { withCron, type CronRunResult } from "@capital/server/lib/cron";
 import { updateAllPrices } from "@capital/server/modules/investments/services/update-prices";
 
 /**
- * Cron endpoint that fetches current market prices for all ticker-based holdings.
+ * Fetches current market prices for all ticker-based holdings.
  * Uses CoinGecko (crypto), brapi.dev (Brazilian B3), and Yahoo Finance (international).
- * Runs once daily at noon UTC.
  */
 export async function GET(request: NextRequest) {
-  const authHeader = request.headers.get("authorization");
-  const cronSecret = env.CRON_SECRET;
-
-  if (cronSecret && authHeader !== `Bearer ${cronSecret}`) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
-  try {
+  return withCron(request, { job: "update-prices" }, async (): Promise<CronRunResult> => {
     const result = await updateAllPrices(prisma);
-
-    return NextResponse.json({
-      success: true,
-      message: `Updated prices for ${result.updated}/${result.totalHoldings} holdings`,
-      ...result,
-      processedAt: new Date().toISOString(),
-    });
-  } catch (error) {
-    console.error("[PriceUpdate] Cron failed:", error);
-
-    return NextResponse.json(
-      {
-        success: false,
-        error: error instanceof Error ? error.message : "Unknown error",
-        processedAt: new Date().toISOString(),
-      },
-      { status: 500 }
-    );
-  }
+    // Holdings with no ticker or whose class no source prices yet (fixed income, savings)
+    // were never attempted, so a portfolio that is entirely those is "skipped", not "failed".
+    const unattempted = result.issues.filter((i) => i.reason === "no_ticker" || i.reason === "no_source").length;
+    const attempted = result.totalHoldings - unattempted;
+    const status: CronRunResult["status"] =
+      attempted === 0 ? "skipped" : result.updated === 0 ? "failed" : result.missing.length > 0 || result.failed > 0 ? "partial" : "ok";
+    return {
+      status,
+      requested: attempted,
+      succeeded: result.updated,
+      missing: result.missing.length,
+      rejected: result.failed,
+      providerLatestDate: result.latestQuoteAt ? new Date(result.latestQuoteAt) : null,
+      stats: { bySource: result.bySource, issues: result.issues },
+      body: { message: `Updated prices for ${result.updated}/${result.totalHoldings} holdings`, ...result },
+    };
+  });
 }

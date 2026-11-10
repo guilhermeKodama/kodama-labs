@@ -342,6 +342,7 @@
     "ignore": "Ignore",
     "confirm": "Confirm classification",
     "link": "Link to entry",
+    "applyPosition": "Apply the broker's quantity",
     "entryId": "Entry id",
     "save": "Save",
     "removeTitle": "Remove {label}?",

@@ -224,6 +224,11 @@ export function PortfolioScreen() {
         <span className="ml-auto truncate text-body-sm text-fg-3">
           {quotesText}
         </span>
+        {s && s.staleHoldings.length > 0 ? (
+          <Badge tone="warn">
+            {t("staleQuotes", { count: s.staleHoldings.length })}
+          </Badge>
+        ) : null}
       </div>
       <KpiStrip>
         <Kpi

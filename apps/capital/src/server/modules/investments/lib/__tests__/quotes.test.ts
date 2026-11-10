@@ -25,13 +25,13 @@ vi.mock("yahoo-finance2", () => ({
   },
 }));
 
-import { brapiAssetClass, fetchQuotes, quoteSourceFor, searchAssets } from "../quotes";
+import { brapiAssetClass, fetchQuotes, fetchQuotesDetailed, quoteSourceFor, searchAssets } from "../quotes";
 
 function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
 }
 
-const fetchMock = vi.fn(async (input: string | URL | Request) => {
+async function defaultFetchImpl(input: string | URL | Request): Promise<Response> {
   const url = String(input instanceof Request ? input.url : input);
   if (url.startsWith("https://brapi.dev/api/quote/list")) {
     return json({
@@ -51,10 +51,15 @@ const fetchMock = vi.fn(async (input: string | URL | Request) => {
     return json({ bitcoin: { brl: 342100, last_updated_at: 1791222720 } });
   }
   return json({}, 404);
-});
+}
+
+const fetchMock = vi.fn(defaultFetchImpl);
 
 beforeEach(() => {
   vi.stubGlobal("fetch", fetchMock);
+  // A test that overrides the implementation (not just mockImplementationOnce)
+  // must not leak into the next one.
+  fetchMock.mockImplementation(defaultFetchImpl);
   fetchMock.mockClear();
 });
 
@@ -88,13 +93,41 @@ describe("fetchQuotes", () => {
     expect(quotes.NOPE3).toBeUndefined();
   });
 
-  it("returns what it got when a source fails", async () => {
-    fetchMock.mockImplementationOnce(async () => {
-      throw new Error("network down");
+  it("returns what it got when a source is down for every attempt (retries do not mask a sustained outage)", async () => {
+    fetchMock.mockImplementation(async (input) => {
+      const url = String(input instanceof Request ? input.url : input);
+      if (url.startsWith("https://brapi.dev/api/quote/")) throw new Error("network down");
+      return json({}, 404);
     });
     const quotes = await fetchQuotes([{ ticker: "PETR4" }, { ticker: "VOO" }]);
     expect(quotes.PETR4).toBeUndefined();
     expect(quotes.VOO).toMatchObject({ price: 500.5 });
+  });
+
+  it("retries a one-off failure and still prices the ticker", async () => {
+    fetchMock.mockImplementationOnce(async () => {
+      throw new Error("network blip");
+    });
+    const quotes = await fetchQuotes([{ ticker: "PETR4" }]);
+    expect(quotes.PETR4).toMatchObject({ price: 38.2, source: "brapi" });
+  });
+});
+
+describe("fetchQuotesDetailed", () => {
+  it("reports why a ticker has no price: no source, not found, and a down provider", async () => {
+    fetchMock.mockImplementation(async (input) => {
+      const url = String(input instanceof Request ? input.url : input);
+      if (url.startsWith("https://brapi.dev/api/quote/")) throw new Error("network down");
+      return json({}, 404);
+    });
+    const { quotes, attempts } = await fetchQuotesDetailed([{ ticker: "CDB", assetClass: "fixed_income" }, { ticker: "PETR4" }]);
+    expect(quotes).toEqual({});
+    expect(attempts).toEqual(
+      expect.arrayContaining([
+        { ticker: "CDB", source: null, outcome: "no_source" },
+        expect.objectContaining({ ticker: "PETR4", source: "yahoo", outcome: "not_found" }),
+      ]),
+    );
   });
 });
 

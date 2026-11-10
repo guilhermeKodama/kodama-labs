@@ -342,6 +342,7 @@
     "ignore": "Ignorar",
     "confirm": "Confirmar classificação",
     "link": "Vincular ao lançamento",
+    "applyPosition": "Aplicar quantidade da corretora",
     "entryId": "Id do lançamento",
     "save": "Salvar",
     "removeTitle": "Remover {label}?",

@@ -75,6 +75,10 @@ export const DOCKER_SERVICES = [
 
 const INTERNAL_HTTP: Array<{ name: string; url: string }> = [
   { name: "kodama/capital-web", url: "http://capital-web:3000/api/health" },
+  // Catches a cron that answers 200 but priced or refreshed nothing (see
+  // src/server/lib/cron.ts): this returns 503 when a job is overdue or its
+  // holdings have gone stale, independent of the cron's own heartbeat.
+  { name: "kodama/capital-market-data", url: "http://capital-web:3000/api/health/market-data" },
   { name: "kodama/sentinel-web", url: "http://sentinel-web:3002/api/health" },
   { name: "kodama/careers-web", url: "http://careers-web:3006/api/health" },
   { name: "kodama/attention-web", url: "http://attention-web:3005/api/health" },
