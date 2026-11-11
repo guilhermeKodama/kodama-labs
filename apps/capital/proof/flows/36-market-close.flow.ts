@@ -80,17 +80,18 @@ flow("Market close: one cron call runs the three stages in order, every cron nee
     expect(notify.output).toMatch(/^notify (ok|skipped|partial|failed)$/m);
   });
 
+  // The run log is shared: 33-market-data-health.flow.ts expects a database where no cron has run yet, and the
+  // cron route tests below count a job's rows, so the rows made above go before anything else reads them.
+  const cleanup = await terminal("sh", ["-c", `psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "DELETE FROM integration_runs WHERE \\"startedAt\\" >= '${startedAt}';"`]);
+  await check("Tidy up: the rows made above are removed, so neither another flow nor the tests below see them", async () => {
+    expect(cleanup.code).toBe(0);
+  });
+
   await scene("Everything else F1.1 changed runs in its tests", "Session calendar, same-day suspect prices, brapi's 401, currency mismatch, relink on edit, the pipeline itself");
   const tests = await terminal("pnpm", ["exec", "vitest", "run", ...F1_1_TESTS], { timeoutMs: 240_000 });
   await check("Every one of those test files passes", async () => {
     expect(tests.code).toBe(0);
     expect(tests.output).toMatch(new RegExp(`Test Files\\s+${F1_1_TESTS.length} passed`));
-    expect(tests.output).not.toMatch(/\d+ failed/);
-  });
-
-  // 33-market-data-health.flow.ts expects a database where no cron has run yet.
-  const cleanup = await terminal("sh", ["-c", `psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "DELETE FROM integration_runs WHERE \\"startedAt\\" >= '${startedAt}';"`]);
-  await check("Tidy up: this flow's runs don't leak into another flow", async () => {
-    expect(cleanup.code).toBe(0);
+    expect(tests.output).toMatch(/Tests\s+\d+ passed \(\d+\)/); // vitest only prints "N passed (N)" when nothing failed or was skipped
   });
 });

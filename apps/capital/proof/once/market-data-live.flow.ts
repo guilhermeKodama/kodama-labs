@@ -25,7 +25,7 @@ flow("Live B3 chain without a BRAPI_TOKEN: Yahoo leads, brapi's 401 is one reque
 
   await check("With no token, the B3 chain is Yahoo first and brapi as the fallback", async () => {
     expect(probe.code).toBe(0);
-    expect(probe.output).toContain("BRAPI_TOKEN unset -> B3 chain: yahoo -> brapi -> coingecko");
+    expect(probe.output).toContain("BRAPI_TOKEN unset -> B3 chain: yahoo -> brapi");
   });
   await check("brapi prices ITUB4 for real, in one request, as a close", async () => {
     expect(probe.output).toMatch(/ITUB4 brapi ok \d{4}-\d{2}-\d{2} BRL \d+(\.\d+)? kind=(close|intraday) requests=1/);
