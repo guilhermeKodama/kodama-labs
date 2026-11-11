@@ -109,4 +109,15 @@ flow("Saúde dos dados: per-class coverage, and the backfill script linking a ho
     expect(refs.output).toContain(`brapi|${LINKABLE}`);
     expect(refs.output).toContain(`yahoo|${LINKABLE}.SA`);
   });
+
+  // IntegrationRun has no per-test namespace (same reason market-data-crons.test.ts
+  // cleans it up in afterEach): 33-market-data-health.flow.ts expects a database with
+  // no cron run at all yet, and the two flows don't run in any guaranteed order.
+  const cleanup = await terminal("sh", [
+    "-c",
+    `psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "DELETE FROM integration_runs WHERE job = ANY(ARRAY['sync-prices','update-prices','update-rates','benchmarks','pluggy-sync']);"`,
+  ]);
+  await check("Tidy up: the jobs marked ok for this flow don't leak into another flow's own run", async () => {
+    expect(cleanup.code).toBe(0);
+  });
 });
