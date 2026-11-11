@@ -46,6 +46,9 @@ flow(
       }
     });
 
+    const staleHolding = page.getByRole("button", { name: new RegExp(`^${STALE_TICKER} `) });
+    const staleSheet = dialog(page, new RegExp(`^${STALE_TICKER} `));
+
     await scene("One missed close is not stale", "Freshness is counted in B3 trading sessions, not hours");
     // The opening of the session before the latest close that should be in by now: one close
     // missed, and always more than 30 hours ago (the old limit), whatever time the flow runs.
@@ -64,6 +67,19 @@ flow(
       expect(ageHours).toBeGreaterThan(30);
       expect(oneSessionHealth.holdings.stale).toBe(beforeBody.holdings.stale);
     });
+
+    await say("Carteira agrees: no badge on the header, and the holding's own sheet shows the quote's date with no warning");
+    await page.goto("/investments");
+    await check("No \"desatualizada\" badge on the Carteira header, though the quote is more than 30 hours old", async () => {
+      await expect(page.getByRole("button", { name: "Atualizar cotações" })).toBeVisible();
+      await expect(page.getByText(/\d+ desatualizadas?/)).toHaveCount(0);
+    });
+    await staleHolding.click();
+    await check(`${STALE_TICKER}'s sheet shows the quote's date and does not call it "desatualizada"`, async () => {
+      await expect(valueOf(staleSheet, "Cotação em")).toContainText(/\d{2}\/\d{2}/);
+      await expect(valueOf(staleSheet, "Cotação em")).not.toContainText("desatualizada");
+    });
+    await staleSheet.getByRole("button", { name: "Fechar" }).click();
 
     await scene("A stale price no longer hides behind a fresh one", `${STALE_TICKER}'s quote is set back ${STALE_DAYS} days`);
     await say(`${STALE_DAYS} days back is at least two missed B3 closes: that is stale`);
@@ -89,8 +105,6 @@ flow(
       await expect(page.getByText("1 desatualizada", { exact: true })).toBeVisible();
     });
 
-    const staleHolding = page.getByRole("button", { name: new RegExp(`^${STALE_TICKER} `) });
-    const staleSheet = dialog(page, new RegExp(`^${STALE_TICKER} `));
     await staleHolding.click();
     await check(`${STALE_TICKER}'s sheet names the quote "desatualizada"`, async () => {
       await expect(valueOf(staleSheet, "Cotação em")).toContainText("desatualizada");
