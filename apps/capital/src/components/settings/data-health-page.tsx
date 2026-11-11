@@ -51,6 +51,14 @@ export function DataHealthPage() {
         <Kpi label={t("kpi.oldest")} value={data?.holdings.oldestPriceAt ? fmt.relative(data.holdings.oldestPriceAt) : t("never")} />
       </KpiStrip>
 
+      {data?.notices.length ? (
+        <div className="flex flex-wrap gap-2">
+          {data.notices.map((notice) => (
+            <Badge key={notice}>{t(`notice.${notice}`)}</Badge>
+          ))}
+        </div>
+      ) : null}
+
       <div className="flex flex-col gap-2">
         <h2 className="text-body-sm font-medium text-fg-2">{t("jobsTitle")}</h2>
         <Table
@@ -74,7 +82,7 @@ export function DataHealthPage() {
       </div>
 
       {data && data.holdings.stale > 0 ? (
-        <Badge tone="warn">{t("staleBadge", { count: data.holdings.stale, hours: data.holdings.staleAfterHours })}</Badge>
+        <Badge tone="warn">{t("staleBadge", { count: data.holdings.stale, sessions: data.holdings.staleAfterSessions })}</Badge>
       ) : null}
     </div>
   );

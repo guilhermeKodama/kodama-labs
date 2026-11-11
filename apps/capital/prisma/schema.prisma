@@ -936,7 +936,13 @@ model Asset {
   id         String     @id @default(uuid())
   // Canonical ticker as Cerne displays it (e.g. "PETR4", "VOO", "BTC"). Upper-case.
   symbol     String
+  // The class the first holding gave it. Two holdings may disagree (BOVA11 as
+  // "etf" or "stocks"); both link here, since @@unique is on market, not class.
   assetClass AssetClass
+  // "B3" | "US" | "CRYPTO" (market-data/lib/calendar.ts Market). Free text so
+  // a new market (Tesouro, CVM funds) needs no enum migration. Decides the
+  // trading calendar a price's freshness is measured against.
+  market     String
   currency   String
   name       String?
   isActive   Boolean    @default(true)
@@ -947,9 +953,10 @@ model Asset {
   prices     AssetPrice[]
   holdings   InvestmentHolding[]
 
-  // The same coin priced in two currencies (a BRL holding and a USD
-  // holding of the same crypto) is legitimately two Assets.
-  @@unique([symbol, assetClass, currency])
+  // One instrument per market and currency. The same coin priced in two
+  // currencies (a BRL holding and a USD holding of the same crypto) is
+  // legitimately two Assets.
+  @@unique([market, symbol, currency])
   @@map("assets")
 }
 
@@ -990,6 +997,14 @@ model AssetPrice {
   // reads the latest status="ok" row) until a later day's close confirms
   // the level and promotes it.
   status    String   @default("ok")
+  // "close" | "intraday": an intraday row is a live quote taken before the
+  // session closed ("Atualizar cotações" during trading). The day's close
+  // overwrites it (same assetId+date); history (F2) may replace it too.
+  kind      String   @default("close")
+  // The provider's own timestamp for the quote, when it gives one. This is
+  // what InvestmentHolding.lastPriceUpdate copies, so "Atualizado às" shows
+  // when the market set the price, not midnight of the trading date.
+  asOf      DateTime?
   createdAt DateTime @default(now())
 
   @@unique([assetId, date])

@@ -1,12 +1,13 @@
 import type { DbClient } from "@capital/server/lib/prisma";
 import { Prisma } from "@/generated/prisma";
-import type { Account, AllocationClass, AssetClass, DividendOrigin, FixedIncomeSubType, IncomeType, InvestmentOperation, InvestmentTransactionType } from "@/generated/prisma";
+import type { Account, AllocationClass, AssetClass, DividendOrigin, FixedIncomeSubType, IncomeType, InvestmentHolding, InvestmentOperation, InvestmentTransactionType } from "@/generated/prisma";
 import { formatDateOnly, parseLocalDate } from "@capital/server/lib/date-utils";
 import { entityScopeWhere } from "@capital/server/lib/entity-scope";
 import { ALLOCATION_CLASSES, dominantEtfCurrency, holdingAllocationClass, toAllocationTargets, type TargetInput } from "@capital/server/modules/investments/lib/allocation-class";
 import { oversoldOperations, recalculateHolding, recalculateHoldingDetailed } from "@capital/server/modules/investments/lib/holding-position";
 import { marketValue } from "@capital/server/modules/investments/lib/holding-value";
 import { holdingPriceStatus, type PriceStatus } from "@capital/server/modules/investments/lib/quotes";
+import { resolveAsset } from "@capital/server/modules/market-data/services/resolve-asset";
 import { LedgerError, notFound } from "@capital/server/modules/ledger/lib/errors";
 import { loadFx, type FxContext } from "@capital/server/modules/ledger/lib/fx";
 import { round, toNumber } from "@capital/server/modules/ledger/lib/money";
@@ -107,10 +108,35 @@ export async function updateHolding(
         ...(patch.isActive !== undefined && { isActive: patch.isActive }),
       },
     });
+    const relinked = await relinkIfIdentityChanged(tx, before, updated);
     const records = opts.collect ?? [];
-    records.push({ model: "InvestmentHolding", recordId: holdingId, before: snapshot(before), after: snapshot(updated) });
+    records.push({ model: "InvestmentHolding", recordId: holdingId, before: snapshot(before), after: snapshot(relinked) });
     const batchId = opts.record === false || opts.collect ? null : await recordMutation(tx, userId, "update", updated.ticker ?? updated.name, records);
-    return Object.assign(updated, { batchId });
+    return Object.assign(relinked, { batchId });
+  });
+}
+
+/**
+ * A holding whose ticker, class or currency changed may now be another
+ * instrument (or the same one on another market): the old Asset link is
+ * dropped and resolve-asset runs again on the new identity, so the next
+ * price refresh prices what the user now says they hold — never the old
+ * ticker's price under the new name. A holding that stops matching anything
+ * goes back to a manual price.
+ */
+async function relinkIfIdentityChanged(
+  tx: DbClient,
+  before: { ticker: string | null; assetClass: AssetClass; currency: string; assetId: string | null },
+  after: InvestmentHolding,
+): Promise<InvestmentHolding> {
+  const changed = before.ticker !== after.ticker || before.assetClass !== after.assetClass || before.currency !== after.currency;
+  if (!changed) return after;
+  const resolved = await resolveAsset(tx, { ticker: after.ticker, assetClass: after.assetClass, currency: after.currency });
+  const assetId = resolved.linked ? resolved.assetId : null;
+  if (assetId === after.assetId) return after;
+  return tx.investmentHolding.update({
+    where: { id: after.id },
+    data: { assetId, priceSource: assetId ? "auto" : "manual" },
   });
 }
 
@@ -916,7 +942,7 @@ export async function portfolioSummary(userId: string, db: DbClient, opts: Portf
   // on one ticker used to hide a stale one on another (see F0 plan — "why
   // does my portfolio never move"). Null until at least one holding has a
   // price. staleHoldings lists what still needs a cron fix or a fetch: a
-  // holding past PRICE_STALE_HOURS, or priceable but never priced yet.
+  // holding PRICE_STALE_AFTER_SESSIONS closes behind, or priceable but never priced yet.
   // Fixed income/savings (no source today) and manual entries with no
   // ticker are expected to have neither, so they are left out.
   let oldestPriceAt: Date | null = null;

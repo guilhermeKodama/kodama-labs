@@ -400,6 +400,7 @@
     "job": {
       "sync-prices": "Sincronizar cotações",
       "update-prices": "Atualizar cache de preços",
+      "portfolio-snapshot": "Snapshot da carteira",
       "update-rates": "Atualizar câmbio",
       "benchmarks": "Benchmarks",
       "pluggy-sync": "Sincronização Open Finance"
@@ -409,6 +410,9 @@
       "partial": "Parcial",
       "failed": "Falhou",
       "skipped": "Nada a fazer"
+    },
+    "notice": {
+      "brapi_no_token": "brapi sem token: a B3 é cotada pelo Yahoo, com a brapi de reserva"
     },
     "classesTitle": "Cobertura por classe",
     "classesHeaders": {
@@ -424,7 +428,7 @@
       "yahoo": "Yahoo Finance",
       "coingecko": "CoinGecko"
     },
-    "staleBadge": "{count, plural, one {# posição desatualizada} other {# posições desatualizadas}} (mais de {hours}h sem preço)",
+    "staleBadge": "{count, plural, one {# posição desatualizada} other {# posições desatualizadas}} ({sessions} pregões ou mais sem preço)",
     "loadError": "Não foi possível carregar o status dos dados de mercado."
   }
 }

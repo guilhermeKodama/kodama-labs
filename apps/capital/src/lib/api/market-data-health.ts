@@ -25,6 +25,8 @@ export interface AssetClassHealth {
 export interface MarketDataHealth {
   status: "ok" | "degraded" | "down";
   jobs: JobHealth[];
+  /** Configuration facts, not failures (health/routes/market-data.ts MarketDataNotice). */
+  notices: "brapi_no_token"[];
   holdings: {
     total: number;
     priceable: number;
@@ -32,7 +34,8 @@ export interface MarketDataHealth {
     byStatus: Record<string, number>;
     byAssetClass: Record<string, AssetClassHealth>;
     oldestPriceAt: string | null;
-    staleAfterHours: number;
+    /** Missed closes before a holding counts as stale (quotes.ts PRICE_STALE_AFTER_SESSIONS). */
+    staleAfterSessions: number;
   };
 }
 

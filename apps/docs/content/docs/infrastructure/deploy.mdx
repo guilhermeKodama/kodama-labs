@@ -87,7 +87,11 @@ Migrate deve aparecer como `Exited (0)`; web/workers como `Up`.
 
 Cada app tem um `apps/<app>/.env.production` no checkout principal — nunca commitado, nunca copiado pra dentro da imagem (o `.dockerignore` exclui todo `.env*` do build context de propósito; os containers recebem essas variáveis via `env_file:` do compose, injetadas no processo em tempo de execução, não gravadas em nenhuma camada da imagem).
 
-Se um secret mudar (rotacionar uma API key, por exemplo), edita o `.env.production` do app e roda `compose restart <app>-web` (ou os workers relevantes) — não precisa rebuild, já que o valor não está na imagem.
+Se um secret mudar (rotacionar uma API key, por exemplo), edita o `.env.production` do app e recria o container com `compose up -d --no-deps <app>-web` (ou os workers relevantes) — não precisa rebuild, já que o valor não está na imagem. `compose restart` **não** serve: ele reinicia o mesmo container, com o ambiente lido quando ele foi criado, e a variável nova não entra.
+
+```bash
+docker --context desktop-linux compose -p kodama-prod -f docker-compose.yml up -d --no-deps capital-web
+```
 
 `capital` e `sentinel` usam os mesmos `apps/<app>/.env.production` (`CRON_SECRET`, `ANTHROPIC_API_KEY`, e o resto). Nada disso é lido de um painel externo.
 

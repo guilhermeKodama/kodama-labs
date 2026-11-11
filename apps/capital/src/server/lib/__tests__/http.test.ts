@@ -29,6 +29,15 @@ describe("fetchJson", () => {
     expect(fetcher).toHaveBeenCalledTimes(1);
   });
 
+  it("maps 401 and 403 to unauthorized without retrying", async () => {
+    for (const status of [401, 403]) {
+      const fetcher = vi.fn(async () => json({ error: "token required" }, status));
+      const result = await fetchJson("https://x.test/q", { fetcher, retries: 2, backoffMs: 1 });
+      expect(result).toEqual({ outcome: "unauthorized", status });
+      expect(fetcher).toHaveBeenCalledTimes(1);
+    }
+  });
+
   it("maps 404 to not_found without retrying", async () => {
     const fetcher = vi.fn(async () => json({}, 404));
     const result = await fetchJson("https://x/1", { fetcher, backoffMs: 1 });

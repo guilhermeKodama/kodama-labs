@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { FetchOutcome } from "@capital/server/lib/http";
 import { prisma } from "@capital/server/lib/prisma";
+import { marketFor } from "../../lib/calendar";
 import type { MarketDataProvider, PricePoint } from "../../lib/provider";
 
 const registryMock = vi.hoisted(() => ({ chainFor: vi.fn<(assetClass: string) => MarketDataProvider[]>() }));
@@ -25,7 +26,7 @@ function stubProvider(id: string, markets: string[], impl: Partial<MarketDataPro
 }
 
 async function createAsset(symbol: string, assetClass: string, currency: string, refs: { source: string; externalId: string }[]) {
-  const asset = await prisma.asset.create({ data: { symbol, assetClass: assetClass as never, currency } });
+  const asset = await prisma.asset.create({ data: { symbol, assetClass: assetClass as never, market: marketFor(assetClass as never, symbol) ?? "B3", currency } });
   for (const r of refs) await prisma.assetSourceRef.create({ data: { assetId: asset.id, source: r.source, externalId: r.externalId } });
   return asset;
 }
@@ -119,6 +120,39 @@ describe("syncPrices", () => {
     const day2 = await syncPrices(prisma, { assetIds: [asset.id] });
     expect(day2).toMatchObject({ priced: 1, suspect: 0 });
     expect((await prisma.assetPrice.findFirstOrThrow({ where: { id: day1Row.id } })).status).toBe("ok");
+  });
+
+  it("judges a point against an earlier day's close, so a same-day intraday quote can't confirm a suspect close", async () => {
+    const fetchPrices = vi.fn(async () => ok({ date: "2026-11-10", close: 61, currency: "BRL", asOf: "2026-11-10T16:55:00Z" }));
+    registryMock.chainFor.mockReturnValue([stubProvider("fixtureA", ["stocks"], { fetchPrices })]);
+
+    const asset = await createAsset(`${SYMBOL_PREFIX}K`, "stocks", "BRL", [{ source: "fixtureA", externalId: "k" }]);
+    await prisma.assetPrice.create({ data: { assetId: asset.id, date: new Date("2026-11-09T00:00:00Z"), close: 38, source: "fixtureA", status: "ok" } });
+    await prisma.assetPrice.create({ data: { assetId: asset.id, date: new Date("2026-11-10T00:00:00Z"), close: 60, source: "fixtureA", status: "suspect" } });
+
+    // 14:00 in São Paulo: the session is still open.
+    const result = await syncPrices(prisma, { assetIds: [asset.id], now: new Date("2026-11-10T17:00:00Z") });
+
+    expect(result).toMatchObject({ priced: 0, suspect: 1 });
+    const row = await prisma.assetPrice.findFirstOrThrow({ where: { assetId: asset.id, date: new Date("2026-11-10T00:00:00Z") } });
+    expect(row).toMatchObject({ status: "suspect", kind: "intraday", asOf: new Date("2026-11-10T16:55:00Z") });
+    expect(Number(row.close)).toBe(61);
+  });
+
+  it("writes a quote taken after the session's close as that day's close, replacing the intraday row", async () => {
+    const fetchPrices = vi.fn(async () => ok({ date: "2026-11-10", close: 39.5, currency: "BRL", asOf: "2026-11-10T16:55:00Z" }));
+    registryMock.chainFor.mockReturnValue([stubProvider("fixtureA", ["stocks"], { fetchPrices })]);
+
+    const asset = await createAsset(`${SYMBOL_PREFIX}L`, "stocks", "BRL", [{ source: "fixtureA", externalId: "l" }]);
+    await syncPrices(prisma, { assetIds: [asset.id], now: new Date("2026-11-10T17:00:00Z") });
+    expect(await prisma.assetPrice.findFirstOrThrow({ where: { assetId: asset.id } })).toMatchObject({ kind: "intraday" });
+
+    fetchPrices.mockResolvedValueOnce(ok({ date: "2026-11-10", close: 39.8, currency: "BRL", asOf: "2026-11-10T20:07:00Z" }));
+    // The market-close pipeline at 22:30Z (19:30 in São Paulo).
+    await syncPrices(prisma, { assetIds: [asset.id], now: new Date("2026-11-10T22:30:00Z") });
+    const rows = await prisma.assetPrice.findMany({ where: { assetId: asset.id } });
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ kind: "close", status: "ok", asOf: new Date("2026-11-10T20:07:00Z") });
   });
 
   it("prices a whole class in one call through a bulk fetchAllPrices leader, falling the rest through the chain", async () => {

@@ -400,6 +400,7 @@
     "job": {
       "sync-prices": "Sync quotes",
       "update-prices": "Refresh price cache",
+      "portfolio-snapshot": "Portfolio snapshot",
       "update-rates": "Update FX rates",
       "benchmarks": "Benchmarks",
       "pluggy-sync": "Open Finance sync"
@@ -409,6 +410,9 @@
       "partial": "Partial",
       "failed": "Failed",
       "skipped": "Nothing to do"
+    },
+    "notice": {
+      "brapi_no_token": "brapi has no token: B3 is priced by Yahoo, with brapi as the fallback"
     },
     "classesTitle": "Coverage by class",
     "classesHeaders": {
@@ -424,7 +428,7 @@
       "yahoo": "Yahoo Finance",
       "coingecko": "CoinGecko"
     },
-    "staleBadge": "{count, plural, one {# stale position} other {# stale positions}} (no price for over {hours}h)",
+    "staleBadge": "{count, plural, one {# stale position} other {# stale positions}} ({sessions} or more missed closes)",
     "loadError": "Couldn't load market data status."
   }
 }

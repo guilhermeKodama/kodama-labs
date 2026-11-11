@@ -2,8 +2,8 @@ import type { AssetClass } from "@/generated/prisma";
 import { createRouter } from "@capital/server/lib/router";
 import { prisma } from "@capital/server/lib/prisma";
 import { ASSET_CLASSES } from "@capital/server/modules/investments/lib/allocation-class";
-import { holdingPriceStatus, PRICE_STALE_HOURS, type PriceStatus } from "@capital/server/modules/investments/lib/quotes";
-import { activeProviderFor } from "@capital/server/modules/market-data/lib/registry";
+import { holdingPriceStatus, PRICE_STALE_AFTER_SESSIONS, type PriceStatus } from "@capital/server/modules/investments/lib/quotes";
+import { activeProviderFor, activeProviders, brapiHasToken } from "@capital/server/modules/market-data/lib/registry";
 
 /**
  * GET /health/market-data: the one place a cron that "ran but changed
@@ -25,10 +25,11 @@ interface JobTarget {
   targetHours: number;
 }
 
-/** Schedules: infrastructure/cronjobs/schedules/capital.json. */
+/** Schedules: infrastructure/cronjobs/schedules/capital.json. The first three are stages of the one daily market-close pipeline (22:30 UTC), so they share its target. */
 const JOBS: JobTarget[] = [
-  { job: "sync-prices", targetHours: 30 }, // daily
-  { job: "update-prices", targetHours: 4 }, // daily, 30min after sync-prices; a DB-only cache refresh, so it should be fast
+  { job: "sync-prices", targetHours: 26 }, // daily, market-close stage 1
+  { job: "update-prices", targetHours: 26 }, // daily, market-close stage 2
+  { job: "portfolio-snapshot", targetHours: 26 }, // daily, market-close stage 3
   { job: "update-rates", targetHours: 3 }, // hourly
   { job: "benchmarks", targetHours: 30 }, // daily
   { job: "pluggy-sync", targetHours: 30 }, // daily
@@ -88,6 +89,20 @@ export interface AssetClassHealth {
   activeProvider: string | null;
 }
 
+/**
+ * Configuration facts worth a line on the panel, not a degraded status: a
+ * source running without its credential still prices through the rest of the
+ * chain. "brapi_no_token": brapi is in the chain without BRAPI_TOKEN, so B3
+ * goes to Yahoo first and brapi only answers its demo tickers.
+ */
+export type MarketDataNotice = "brapi_no_token";
+
+export function marketDataNotices(): MarketDataNotice[] {
+  const notices: MarketDataNotice[] = [];
+  if (!brapiHasToken() && activeProviders().some((p) => p.id === "brapi")) notices.push("brapi_no_token");
+  return notices;
+}
+
 function emptyClassHealth(assetClass: AssetClass): AssetClassHealth {
   return { total: 0, priceable: 0, fresh: 0, stale: 0, unpriced: 0, unsupported: 0, noTicker: 0, activeProvider: activeProviderFor(assetClass)?.id ?? null };
 }
@@ -97,7 +112,8 @@ router.get("/health/market-data", async (c) => {
 
   const jobs: JobHealth[] = await Promise.all(
     JOBS.map(async ({ job, targetHours }) => {
-      const last = await prisma.integrationRun.findFirst({ where: { job }, orderBy: { startedAt: "desc" } });
+      // Scheduled runs only: a manual "Atualizar cotações" (trigger "manual") for one user's assets says nothing about the daily job.
+      const last = await prisma.integrationRun.findFirst({ where: { job, trigger: "cron" }, orderBy: { startedAt: "desc" } });
       const { status, ageHours } = evaluateJobStatus(last, targetHours, now);
       return {
         job,
@@ -136,6 +152,7 @@ router.get("/health/market-data", async (c) => {
     {
       status: overall,
       jobs,
+      notices: marketDataNotices(),
       holdings: {
         total: holdings.length,
         priceable,
@@ -143,7 +160,7 @@ router.get("/health/market-data", async (c) => {
         byStatus,
         byAssetClass: Object.fromEntries(byAssetClass),
         oldestPriceAt: oldestPriceAt?.toISOString() ?? null,
-        staleAfterHours: PRICE_STALE_HOURS,
+        staleAfterSessions: PRICE_STALE_AFTER_SESSIONS,
       },
     },
     overall === "down" ? 503 : 200,

@@ -15,7 +15,8 @@ import { settingsNav } from "../helpers";
  */
 
 const STALE_FII = "KNRI11";
-const STALE_HOURS = 60;
+// Ten calendar days back is always at least two missed B3 sessions, whatever day the flow runs.
+const STALE_DAYS = 10;
 // A B3 stock: the backfill script should link it to brapi/Yahoo.
 const LINKABLE = "WEGE3";
 // Fixed income has no automatic source yet — the backfill script must leave it alone.
@@ -35,33 +36,38 @@ flow("Saúde dos dados: per-class coverage, and the backfill script linking a ho
     `psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "
       INSERT INTO integration_runs (id, job, trigger, status, \\"startedAt\\", \\"finishedAt\\", \\"durationMs\\")
       SELECT gen_random_uuid(), job, 'cron', 'ok', now(), now(), 100
-      FROM unnest(ARRAY['sync-prices','update-prices','update-rates','benchmarks','pluggy-sync']) AS job;
+      FROM unnest(ARRAY['sync-prices','update-prices','portfolio-snapshot','update-rates','benchmarks','pluggy-sync']) AS job;
     "`,
   ]);
   await check("Every job has a run on record, so the panel itself is reachable", async () => {
     expect(markJobsOk.code).toBe(0);
-    expect(markJobsOk.output).toContain("INSERT 0 5");
+    expect(markJobsOk.output).toContain("INSERT 0 6");
   });
 
   await page.goto("/settings");
   await settingsNav(page, "Saúde dos dados").click();
-  await check("Every class names the registry's active source, or none for classes with no automatic source", async () => {
-    await expect(row(page, "Ações").getByRole("cell", { name: "brapi.dev" })).toBeVisible();
+  await check("Without BRAPI_TOKEN, Yahoo leads for B3 (brapi stays as the fallback); every other class names its source, or none", async () => {
+    await expect(row(page, "Ações").getByRole("cell", { name: "Yahoo Finance" })).toBeVisible();
+    await expect(row(page, "FIIs").getByRole("cell", { name: "Yahoo Finance" })).toBeVisible();
     await expect(row(page, "Ações internacionais").getByRole("cell", { name: "Yahoo Finance" })).toBeVisible();
     await expect(row(page, "Cripto").getByRole("cell", { name: "CoinGecko" })).toBeVisible();
     await expect(row(page, "Renda fixa").getByRole("cell", { name: "—", exact: true })).toBeVisible();
   });
-  await check("sync-prices, the new daily job, is listed alongside the others", async () => {
+  await check("The panel says why: brapi has no token here", async () => {
+    await expect(page.getByText("brapi sem token: a B3 é cotada pelo Yahoo, com a brapi de reserva")).toBeVisible();
+  });
+  await check("Every stage of the daily market-close pipeline is listed: sync-prices, update-prices and the portfolio snapshot", async () => {
     await expect(row(page, "Sincronizar cotações").getByRole("cell", { name: "Ok" })).toBeVisible();
+    await expect(row(page, "Snapshot da carteira").getByRole("cell", { name: "Ok" })).toBeVisible();
   });
 
-  await scene("A FII goes stale", `${STALE_FII}'s cotação is set back ${STALE_HOURS}h`);
+  await scene("A FII goes stale", `${STALE_FII}'s cotação is set back ${STALE_DAYS} days, two or more missed B3 closes`);
   await say(`${STALE_FII} was priced moments ago by the demo seed; backdating it is the fastest way to show a FII going stale`);
   await expect(row(page, "FIIs")).toBeVisible();
   const before = await row(page, "FIIs").getByRole("cell").allTextContents();
   const backdate = await terminal("sh", [
     "-c",
-    `psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "UPDATE investment_holdings SET \\"lastPriceUpdate\\" = now() - interval '${STALE_HOURS} hours' WHERE ticker = '${STALE_FII}';"`,
+    `psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "UPDATE investment_holdings SET \\"lastPriceUpdate\\" = now() - interval '${STALE_DAYS} days' WHERE ticker = '${STALE_FII}';"`,
   ]);
   await check(`${STALE_FII}'s price timestamp moved back`, async () => {
     expect(backdate.code).toBe(0);
@@ -115,7 +121,7 @@ flow("Saúde dos dados: per-class coverage, and the backfill script linking a ho
   // no cron run at all yet, and the two flows don't run in any guaranteed order.
   const cleanup = await terminal("sh", [
     "-c",
-    `psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "DELETE FROM integration_runs WHERE job = ANY(ARRAY['sync-prices','update-prices','update-rates','benchmarks','pluggy-sync']);"`,
+    `psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "DELETE FROM integration_runs WHERE job = ANY(ARRAY['sync-prices','update-prices','portfolio-snapshot','update-rates','benchmarks','pluggy-sync']);"`,
   ]);
   await check("Tidy up: the jobs marked ok for this flow don't leak into another flow's own run", async () => {
     expect(cleanup.code).toBe(0);

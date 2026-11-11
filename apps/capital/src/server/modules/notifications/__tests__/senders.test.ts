@@ -122,15 +122,18 @@ describe("sendAssetStale", () => {
 
   async function linkedHolding(symbol: string, lastPriceUpdate: Date | null) {
     const holding = await createHolding(USER, { accountId: f.broker, assetClass: "stocks", ticker: symbol, name: symbol, currency: "BRL" }, prisma);
-    const asset = await prisma.asset.create({ data: { symbol, assetClass: "stocks", currency: "BRL" } });
+    const asset = await prisma.asset.create({ data: { symbol, assetClass: "stocks", market: "B3", currency: "BRL" } });
     await prisma.investmentHolding.update({ where: { id: holding.id }, data: { assetId: asset.id, priceSource: "auto", currentPrice: lastPriceUpdate ? 10 : null, lastPriceUpdate } });
     return holding;
   }
 
   it("pushes once per stale or never-priced linked holding, never for a manual one", async () => {
     await updateNotificationSettings(USER, { billClosedEnabled: false, budgetEnabled: false }, prisma);
-    const stale = await linkedHolding("ZZSENDERSSTALE", new Date(TUESDAY_1PM.getTime() - 50 * 3_600_000));
+    // Thursday's close at Tuesday 13:00 (São Paulo): Friday's and Monday's are both missing.
+    const stale = await linkedHolding("ZZSENDERSSTALE", new Date("2026-10-01T20:10:00Z"));
     const never = await linkedHolding("ZZSENDERSNEVER", null);
+    // Monday's close on Tuesday afternoon is the newest one there is: no push, all day.
+    await linkedHolding("ZZSENDERSFRESH", new Date("2026-10-05T20:10:00Z"));
     const manual = await createHolding(USER, { accountId: f.broker, assetClass: "fixed_income", ticker: "ZZSENDERSCDB", name: "CDB", currency: "BRL" }, prisma);
 
     const result = await run();
@@ -150,7 +153,7 @@ describe("sendAssetStale", () => {
 
   it("stays quiet when assetStaleEnabled is off", async () => {
     await updateNotificationSettings(USER, { assetStaleEnabled: false }, prisma);
-    await linkedHolding("ZZSENDERSOFF", new Date(TUESDAY_1PM.getTime() - 50 * 3_600_000));
+    await linkedHolding("ZZSENDERSOFF", new Date("2026-10-01T20:10:00Z"));
     expect((await run()).claimed.asset_stale).toBe(0);
   });
 });

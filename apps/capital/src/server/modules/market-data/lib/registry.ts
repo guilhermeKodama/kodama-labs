@@ -10,8 +10,20 @@ import type { MarketDataProvider } from "./provider";
  * (MARKET_DATA_CHAIN / MARKET_DATA_DISABLED) that reorder or drop a source
  * with one line and a restart — no deploy, no migration. This file is the
  * entire cost of trading one source for another; see provider.ts.
+ *
+ * brapi leads for B3 only when BRAPI_TOKEN is set: without one, brapi.dev
+ * refuses all but a handful of demo tickers (401), so Yahoo's "<ticker>.SA"
+ * goes first and brapi stays in the chain as the fallback. brapi stays at
+ * all because Yahoo is unofficial (no SLA, a scraping library) and because
+ * the B3 asset search already comes from brapi's list.
  */
-const ALL_PROVIDERS: readonly MarketDataProvider[] = [brapiProvider, yahooProvider, coingeckoProvider];
+const WITH_BRAPI_TOKEN: readonly MarketDataProvider[] = [brapiProvider, yahooProvider, coingeckoProvider];
+const WITHOUT_BRAPI_TOKEN: readonly MarketDataProvider[] = [yahooProvider, brapiProvider, coingeckoProvider];
+
+/** Whether brapi has a credential. Read by the health panel ("brapi sem token") as well as the default order. */
+export function brapiHasToken(): boolean {
+  return !!env.BRAPI_TOKEN?.trim();
+}
 
 function parseIdList(value: string | undefined): string[] | null {
   if (!value) return null;
@@ -25,7 +37,7 @@ function parseIdList(value: string | undefined): string[] | null {
 /** Every provider, after MARKET_DATA_DISABLED removes some and MARKET_DATA_CHAIN reorders the rest. An id MARKET_DATA_CHAIN doesn't recognize is ignored, not an error. */
 export function activeProviders(): MarketDataProvider[] {
   const disabled = new Set(parseIdList(env.MARKET_DATA_DISABLED) ?? []);
-  const enabled = ALL_PROVIDERS.filter((p) => !disabled.has(p.id));
+  const enabled = (brapiHasToken() ? WITH_BRAPI_TOKEN : WITHOUT_BRAPI_TOKEN).filter((p) => !disabled.has(p.id));
   const order = parseIdList(env.MARKET_DATA_CHAIN);
   if (!order) return enabled;
   const byId = new Map(enabled.map((p) => [p.id, p] as const));

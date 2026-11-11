@@ -8,10 +8,10 @@ import type { FetchOutcome } from "@capital/server/lib/http";
  * registry.ts's chainFor(); a vendor name shows up nowhere outside
  * providers/*.ts and the `source` column on AssetSourceRef/AssetPrice.
  * Adding or swapping a source is one adapter file, one line in registry.ts's
- * ALL_PROVIDERS, and one fixture — never a migration, never a change here.
+ * provider lists, and one fixture — never a migration, never a change here.
  *
  * Nothing in this contract may throw. A provider that can't answer returns a
- * FetchOutcome describing why (not_found, rate_limited, provider_down,
+ * FetchOutcome describing why (not_found, unauthorized, rate_limited, provider_down,
  * schema_changed) so the registry's chain can fail over and sync-prices can
  * tell "the market didn't move" from "the source is broken".
  */

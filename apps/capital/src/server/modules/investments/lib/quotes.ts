@@ -5,6 +5,7 @@ import { brapiAssetClass } from "@capital/server/modules/market-data/providers/b
 import { CRYPTO_NAMES, CRYPTO_SYMBOL_TO_COINGECKO_ID } from "@capital/server/modules/market-data/providers/coingecko";
 import { isBrazilianTicker } from "@capital/server/modules/market-data/lib/ticker";
 import type { MarketDataProvider } from "@capital/server/modules/market-data/lib/provider";
+import { expectedLatestSession, marketDate, marketFor, sessionsBehind } from "@capital/server/modules/market-data/lib/calendar";
 
 /**
  * Market data fetchers shared by the price-refresh cron (services/update-prices.ts),
@@ -57,7 +58,7 @@ export interface AssetSearchResult {
 }
 
 /** Why a ticker did not come back with a price. "ok" means it did. */
-export type QuoteOutcome = "ok" | "no_source" | "not_found" | "rate_limited" | "provider_down" | "schema_changed";
+export type QuoteOutcome = "ok" | "no_source" | "not_found" | "unauthorized" | "rate_limited" | "provider_down" | "schema_changed";
 
 export interface QuoteAttempt {
   /** Upper-cased, as requested. */
@@ -112,16 +113,28 @@ function today(): { from: string; to: string } {
 
 // ---------------------------------------------------------------------------
 // Price staleness (also read by services/portfolio.ts for the per-holding
-// badge, and by health/routes/market-data.ts for the holdings aggregate —
-// one threshold, shared, so the two never drift apart).
+// badge, by notifications/services/notify.ts for the asset_stale push, and by
+// health/routes/market-data.ts for the holdings aggregate — one rule, shared,
+// so they never drift apart).
 // ---------------------------------------------------------------------------
 
-/** How long a price is trusted before a holding counts as stale. update-prices is now a daily cache-refresh (sync-prices writes AssetPrice once a day), so this is a day plus slack — 8h from the old every-6h schedule would flag almost every holding stale for most of the day. */
-export const PRICE_STALE_HOURS = 30;
+/**
+ * How many closes a price may miss and still count as fresh. One, not zero:
+ * a holiday the calendar tables don't know, or a pipeline run that hasn't
+ * finished yet, must not flag every holding. Two missed closes is a real
+ * gap — that is "stale", and what the asset_stale push waits for.
+ */
+export const PRICE_STALE_AFTER_SESSIONS = 2;
 
 export type PriceStatus = "fresh" | "stale" | "unpriced" | "unsupported" | "no_ticker";
 
-/** What a holding's own fields say about its price, with no DB access: usable from a single row or a list. */
+/**
+ * What a holding's own fields say about its price, with no DB access: usable
+ * from a single row or a list. Freshness is counted in trading sessions on
+ * the holding's market (see market-data/lib/calendar.ts): lastPriceUpdate is
+ * the quote's own instant (AssetPrice.asOf), so its date in the market's time
+ * zone is the session it belongs to.
+ */
 export function holdingPriceStatus(
   h: { ticker: string | null; assetClass: AssetClass; currentPrice: number | null; lastPriceUpdate: Date | null },
   now: Date = new Date(),
@@ -129,8 +142,14 @@ export function holdingPriceStatus(
   if (!h.ticker) return "no_ticker";
   if (!quoteSourceFor(h.ticker, h.assetClass)) return "unsupported";
   if (h.currentPrice === null || h.lastPriceUpdate === null) return "unpriced";
-  const ageHours = (now.getTime() - h.lastPriceUpdate.getTime()) / 3_600_000;
-  return ageHours <= PRICE_STALE_HOURS ? "fresh" : "stale";
+  return sessionsMissed(h.ticker, h.assetClass, h.lastPriceUpdate, now) < PRICE_STALE_AFTER_SESSIONS ? "fresh" : "stale";
+}
+
+/** Closes missed since `priceAt` on the holding's market; 0 for a class with no market (never reached for those: quoteSourceFor rules them out first). */
+export function sessionsMissed(ticker: string, assetClass: AssetClass, priceAt: Date, now: Date = new Date()): number {
+  const market = marketFor(assetClass, ticker);
+  if (!market) return 0;
+  return sessionsBehind(market, marketDate(market, priceAt), expectedLatestSession(market, now));
 }
 
 // ---------------------------------------------------------------------------

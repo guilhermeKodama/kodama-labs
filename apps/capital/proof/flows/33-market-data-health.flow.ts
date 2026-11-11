@@ -1,11 +1,16 @@
 import { expect, flow } from "@repo/proof-video";
 import { dialog, valueOf } from "../helpers";
 import { proofEnv } from "../env";
+import { expectedLatestSession, previousSession, zonedInstant } from "../../src/server/modules/market-data/lib/calendar";
 
 /**
  * F0: a cron that answers 200 but prices or refreshes nothing is no longer
  * invisible, and a holding that cannot be auto-priced (or hasn't been in a
  * while) says so instead of hiding behind a fresher one.
+ *
+ * F1.1: "stale" is counted in B3 trading sessions, not hours. One missed
+ * close is still fresh (the old 30-hour rule flagged it every morning);
+ * two or more is stale.
  */
 
 const BASE = proofEnv().baseURL;
@@ -16,12 +21,14 @@ const STALE_TICKER = "WEGE3";
 // LCA (fixed income, XP, PF): no automatic source exists for this class
 // yet, so it needs no setup to show "sem fonte automática".
 const UNSUPPORTED_TICKER = "LCA";
-const STALE_HOURS = 50;
+// Ten calendar days back is always at least two missed B3 sessions, whatever day the flow runs.
+const STALE_DAYS = 10;
+const B3_TZ = "America/Sao_Paulo";
 
 interface MarketDataHealth {
   status: string;
   jobs: { job: string; status: string; lastRunAt: string | null }[];
-  holdings: { total: number; priceable: number; stale: number };
+  holdings: { total: number; priceable: number; stale: number; staleAfterSessions: number };
 }
 
 flow(
@@ -34,16 +41,35 @@ flow(
     await check("No cron has run yet in this environment: every job is down, and the endpoint itself answers 503", async () => {
       expect(before.code).toBe(0);
       expect(beforeBody.status).toBe("down");
-      for (const job of ["update-prices", "update-rates", "benchmarks", "pluggy-sync"]) {
+      for (const job of ["sync-prices", "update-prices", "portfolio-snapshot", "update-rates", "benchmarks", "pluggy-sync"]) {
         expect(beforeBody.jobs.find((j) => j.job === job)).toMatchObject({ status: "down", lastRunAt: null });
       }
     });
 
-    await scene("A stale price no longer hides behind a fresh one", `${STALE_TICKER}'s quote is set back ${STALE_HOURS}h`);
-    await say(`${STALE_TICKER} was priced moments ago by the demo seed; setting its quote back ${STALE_HOURS}h is the fastest way to show one going stale`);
+    await scene("One missed close is not stale", "Freshness is counted in B3 trading sessions, not hours");
+    // The opening of the session before the latest close that should be in by now: one close
+    // missed, and always more than 30 hours ago (the old limit), whatever time the flow runs.
+    const latest = expectedLatestSession("B3");
+    const oneBehind = previousSession("B3", latest);
+    const oneBehindAt = zonedInstant(B3_TZ, oneBehind, 10, 0);
+    const ageHours = Math.floor((Date.now() - oneBehindAt.getTime()) / 3_600_000);
+    await say(`${STALE_TICKER}'s quote is set to the ${oneBehind} session, ${ageHours}h ago: the ${latest} close is the only one it missed`);
+    const oneSession = await terminal("sh", [
+      "-c",
+      `psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "UPDATE investment_holdings SET \\"lastPriceUpdate\\" = '${oneBehindAt.toISOString()}' WHERE ticker = '${STALE_TICKER}';"`,
+    ]);
+    const oneSessionHealth = JSON.parse((await terminal("curl", ["-s", `${BASE}/api/health/market-data`])).output) as MarketDataHealth;
+    await check(`A quote ${ageHours}h old (more than the old 30h limit) but only one close behind still counts as fresh`, async () => {
+      expect(oneSession.output).toContain("UPDATE 1");
+      expect(ageHours).toBeGreaterThan(30);
+      expect(oneSessionHealth.holdings.stale).toBe(beforeBody.holdings.stale);
+    });
+
+    await scene("A stale price no longer hides behind a fresh one", `${STALE_TICKER}'s quote is set back ${STALE_DAYS} days`);
+    await say(`${STALE_DAYS} days back is at least two missed B3 closes: that is stale`);
     const backdate = await terminal("sh", [
       "-c",
-      `psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "UPDATE investment_holdings SET \\"lastPriceUpdate\\" = now() - interval '${STALE_HOURS} hours' WHERE ticker = '${STALE_TICKER}';"`,
+      `psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "UPDATE investment_holdings SET \\"lastPriceUpdate\\" = now() - interval '${STALE_DAYS} days' WHERE ticker = '${STALE_TICKER}';"`,
     ]);
     await check(`${STALE_TICKER}'s price timestamp moved back`, async () => {
       expect(backdate.code).toBe(0);
@@ -54,6 +80,7 @@ flow(
     const afterBody = JSON.parse(after.output) as MarketDataHealth;
     await check("The health endpoint's holdings count picks it up at once, independent of any cron", async () => {
       expect(afterBody.holdings.stale).toBe(beforeBody.holdings.stale + 1);
+      expect(afterBody.holdings.staleAfterSessions).toBe(2);
     });
 
     await say("Carteira shows the same thing: a badge on the header, and a note on the holding itself");

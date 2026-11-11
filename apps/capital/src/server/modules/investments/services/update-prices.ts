@@ -1,6 +1,9 @@
 import type { AssetClass } from "@/generated/prisma";
 import type { DbClient } from "@capital/server/lib/prisma";
-import { resolveAsset } from "@capital/server/modules/market-data/services/resolve-asset";
+import { closeReadyAt, type Market } from "@capital/server/modules/market-data/lib/calendar";
+import { resolveAsset, type ResolveAssetResult } from "@capital/server/modules/market-data/services/resolve-asset";
+import { runStage } from "@capital/server/lib/cron";
+import { syncRunResult } from "@capital/server/modules/market-data/lib/sync-run-result";
 import { syncPrices } from "@capital/server/modules/market-data/services/sync-prices";
 import { quoteSourceFor } from "../lib/quotes";
 
@@ -10,14 +13,24 @@ import { quoteSourceFor } from "../lib/quotes";
  * since the last backfill run — or ever, since nothing else does this —
  * still ends up auto-priced: linked here today, priced by the next
  * sync-prices run (daily, or right away when the caller is
- * refreshPricesLive). Returns the Asset id on success, null when nothing
- * matches (resolveAsset's own "no_ticker"/"no_source"/"unmatched").
+ * refreshPricesLive). Returns resolveAsset's own answer, so a caller can tell
+ * "nothing prices this" from "this holding's currency isn't the market's".
  */
-async function linkHolding(db: DbClient, h: { id: string; ticker: string; assetClass: AssetClass; currency: string }): Promise<string | null> {
+async function linkHolding(db: DbClient, h: { id: string; ticker: string; assetClass: AssetClass; currency: string }): Promise<ResolveAssetResult> {
   const resolved = await resolveAsset(db, { ticker: h.ticker, assetClass: h.assetClass, currency: h.currency });
-  if (!resolved.linked) return null;
-  await db.investmentHolding.update({ where: { id: h.id }, data: { assetId: resolved.assetId, priceSource: "auto" } });
-  return resolved.assetId;
+  if (resolved.linked) await db.investmentHolding.update({ where: { id: h.id }, data: { assetId: resolved.assetId, priceSource: "auto" } });
+  return resolved;
+}
+
+/**
+ * What InvestmentHolding.lastPriceUpdate gets: the quote's own instant when
+ * the provider gave one, else the moment that session's close counts as
+ * available — never midnight UTC of the trading date, which reads as the
+ * previous evening in São Paulo and made every close look a day older.
+ */
+export function priceInstant(price: { date: Date; asOf: Date | null }, market: string): Date {
+  if (price.asOf) return price.asOf;
+  return closeReadyAt(market as Market, price.date.toISOString().slice(0, 10));
 }
 
 /** Why a holding did not get a fresh price this run. */
@@ -41,7 +54,7 @@ export interface PriceUpdateResult {
   bySource: Record<string, number>;
   /** One entry per holding that did not get a fresh price this run, with why. */
   issues: HoldingPriceIssue[];
-  /** The newest AssetPrice date among the prices actually applied, in ISO; null if none were. */
+  /** The newest quote instant (see priceInstant) among the prices actually applied, in ISO; null if none were. */
   latestQuoteAt: string | null;
 }
 
@@ -75,7 +88,7 @@ export async function updateAllPrices(db: DbClient, opts: { userId?: string } = 
       ticker: true,
       assetClass: true,
       currency: true,
-      asset: { select: { currency: true, prices: { where: { status: "ok" }, orderBy: { date: "desc" }, take: 1 } } },
+      asset: { select: { currency: true, market: true, prices: { where: { status: "ok" }, orderBy: { date: "desc" }, take: 1 } } },
     },
   });
   result.totalHoldings = holdings.length;
@@ -95,7 +108,13 @@ export async function updateAllPrices(db: DbClient, opts: { userId?: string } = 
     }
     const price = h.asset?.prices[0];
     if (!h.asset || !price) {
-      if (!h.asset) await linkHolding(db, { id: h.id, ticker, assetClass: h.assetClass, currency: h.currency });
+      if (!h.asset) {
+        const linked = await linkHolding(db, { id: h.id, ticker, assetClass: h.assetClass, currency: h.currency });
+        if (!linked.linked && linked.reason === "currency_mismatch") {
+          result.issues.push({ holdingId: h.id, ticker, reason: "currency_mismatch", quotedCurrency: linked.marketCurrency });
+          continue;
+        }
+      }
       result.missing.push(ticker);
       result.issues.push({ holdingId: h.id, ticker, reason: "no_price_cached" });
       continue;
@@ -105,12 +124,12 @@ export async function updateAllPrices(db: DbClient, opts: { userId?: string } = 
       continue;
     }
     result.bySource[price.source] = (result.bySource[price.source] ?? 0) + 1;
-    if (!latestQuoteAt || price.date > latestQuoteAt) latestQuoteAt = price.date;
     const close = Number(price.close.toString());
-    const date = price.date;
+    const at = priceInstant(price, h.asset.market);
+    if (!latestQuoteAt || at > latestQuoteAt) latestQuoteAt = at;
     updates.push(
       db.investmentHolding
-        .update({ where: { id: h.id }, data: { currentPrice: close, lastPriceUpdate: date } })
+        .update({ where: { id: h.id }, data: { currentPrice: close, lastPriceUpdate: at } })
         .then(() => {
           result.updated++;
         })
@@ -147,10 +166,15 @@ export async function refreshPricesLive(db: DbClient, userId: string): Promise<P
   const assetIds = new Set<string>();
   for (const h of holdings) {
     const ticker = h.ticker?.trim().toUpperCase();
-    const assetId = h.assetId ?? (ticker ? await linkHolding(db, { id: h.id, ticker, assetClass: h.assetClass, currency: h.currency }) : null);
+    let assetId = h.assetId;
+    if (!assetId && ticker) {
+      const linked = await linkHolding(db, { id: h.id, ticker, assetClass: h.assetClass, currency: h.currency });
+      if (linked.linked) assetId = linked.assetId;
+    }
     if (assetId) assetIds.add(assetId);
   }
 
-  if (assetIds.size) await syncPrices(db, { assetIds: [...assetIds] });
+  // Recorded like the scheduled run (job "sync-prices"), but trigger "manual": the health panel's job status reads cron runs only, so a user's partial refresh never masks or fakes the daily one.
+  if (assetIds.size) await runStage("sync-prices", async () => syncRunResult(await syncPrices(db, { assetIds: [...assetIds] })), { trigger: "manual" });
   return updateAllPrices(db, { userId });
 }

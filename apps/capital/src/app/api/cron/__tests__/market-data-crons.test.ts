@@ -5,16 +5,19 @@ const services = vi.hoisted(() => ({
   updateAllPrices: vi.fn(),
   updateAllCurrencyRates: vi.fn(),
   syncPrices: vi.fn(),
+  runPortfolioSnapshots: vi.fn(async () => ({ users: 1, live: 1, closed: 0, errors: [] as { userId: string; error: string }[] })),
 }));
 vi.mock("@capital/server/modules/investments/services/update-prices", () => ({ updateAllPrices: services.updateAllPrices }));
 vi.mock("@capital/server/modules/currencies/services/update-rates-from-api", () => ({ updateAllCurrencyRates: services.updateAllCurrencyRates }));
 vi.mock("@capital/server/modules/market-data/services/sync-prices", () => ({ syncPrices: services.syncPrices }));
+vi.mock("@capital/server/modules/investments/services/portfolio-history", () => ({ runPortfolioSnapshots: services.runPortfolioSnapshots }));
 
 import { env } from "@/env";
 import { prisma } from "@capital/server/lib/prisma";
 import { GET as updatePrices } from "../update-prices/route";
 import { GET as updateRates } from "../update-rates/route";
 import { GET as syncPrices } from "../sync-prices/route";
+import { GET as marketClose } from "../market-close/route";
 
 /**
  * update-prices, update-rates and sync-prices now go through withCron,
@@ -23,7 +26,7 @@ import { GET as syncPrices } from "../sync-prices/route";
  * latest one, so this must not leave rows behind for other test files to
  * trip over.
  */
-const JOBS = ["update-prices", "update-rates", "sync-prices"];
+const JOBS = ["update-prices", "update-rates", "sync-prices", "portfolio-snapshot"];
 afterEach(async () => {
   await prisma.integrationRun.deleteMany({ where: { job: { in: JOBS } } });
 });
@@ -204,3 +207,44 @@ describe("sync-prices cron", () => {
     expect(await prisma.integrationRun.findFirstOrThrow({ where: { job: "sync-prices" } })).toMatchObject({ status: "ok", requested: 2, succeeded: 2 });
   });
 });
+
+describe("market-close pipeline", () => {
+  const syncOk = { requested: 2, priced: 2, suspect: 0, missing: 0, bySource: { yahoo: 2 }, providerLatestDate: new Date("2026-11-10T00:00:00Z"), issues: [] };
+  const updateOk = { totalHoldings: 2, updated: 2, failed: 0, missing: [], bySource: { yahoo: 2 }, issues: [], latestQuoteAt: "2026-11-10T20:07:00.000Z" };
+
+  it("refuses a request without the secret, running no stage", async () => {
+    services.syncPrices.mockClear();
+    expect((await marketClose(request("market-close"))).status).toBe(401);
+    expect(services.syncPrices).not.toHaveBeenCalled();
+    expect(await prisma.integrationRun.count({ where: { job: { in: JOBS } } })).toBe(0);
+  });
+
+  it("runs sync-prices, update-prices and portfolio-snapshot in that order, one IntegrationRun each", async () => {
+    const order: string[] = [];
+    services.syncPrices.mockImplementationOnce(async () => (order.push("sync"), syncOk));
+    services.updateAllPrices.mockImplementationOnce(async () => (order.push("update"), updateOk));
+    services.runPortfolioSnapshots.mockImplementationOnce(async () => (order.push("snapshot"), { users: 1, live: 1, closed: 0, errors: [] }));
+
+    const res = await marketClose(request("market-close", env.CRON_SECRET));
+    expect(res.status).toBe(200);
+    expect(order).toEqual(["sync", "update", "snapshot"]);
+    expect(await res.json()).toMatchObject({ status: "ok", stages: [{ job: "sync-prices", status: "ok" }, { job: "update-prices", status: "ok" }, { job: "portfolio-snapshot", status: "ok" }] });
+    const runs = await prisma.integrationRun.findMany({ where: { job: { in: JOBS } }, orderBy: { startedAt: "asc" } });
+    expect(runs.map((r) => [r.job, r.trigger, r.status])).toEqual([
+      ["sync-prices", "cron", "ok"],
+      ["update-prices", "cron", "ok"],
+      ["portfolio-snapshot", "cron", "ok"],
+    ]);
+  });
+
+  it("keeps going after a failed stage and answers 503 with the worst status", async () => {
+    services.syncPrices.mockResolvedValueOnce({ ...syncOk, priced: 0, missing: 2, issues: [{ assetId: "a", symbol: "X", outcome: "provider_down", source: "yahoo" }] });
+    services.updateAllPrices.mockResolvedValueOnce(updateOk);
+    const res = await marketClose(request("market-close", env.CRON_SECRET));
+    expect(res.status).toBe(503);
+    expect(await res.json()).toMatchObject({ status: "failed", error: "failed: sync-prices" });
+    expect(services.runPortfolioSnapshots).toHaveBeenCalled();
+    expect(await prisma.integrationRun.count({ where: { job: "portfolio-snapshot" } })).toBe(1);
+  });
+});
+

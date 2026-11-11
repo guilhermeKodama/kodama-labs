@@ -16,7 +16,8 @@ vi.mock("@capital/server/modules/market-data/services/sync-prices", () => ({ syn
 
 import { prisma } from "@capital/server/lib/prisma";
 import { createLedgerFixture, deleteLedgerFixture, type LedgerFixture } from "@/test/ledger-fixtures";
-import { createHolding } from "../portfolio";
+import { createHolding, updateHolding } from "../portfolio";
+import { marketFor } from "@capital/server/modules/market-data/lib/calendar";
 import { refreshPricesLive, updateAllPrices } from "../update-prices";
 
 const USER = "test-user-update-prices-001";
@@ -40,7 +41,7 @@ async function holding(input: Omit<Parameters<typeof createHolding>[1], "account
 
 /** Links a holding to a freshly-created Asset and gives it a cached "ok" AssetPrice, the same end state the backfill script + sync-prices cron leave behind. */
 async function linkAndPrice(holdingId: string, symbol: string, assetClass: string, currency: string, close: number, date: string, source = "brapi") {
-  const asset = await prisma.asset.create({ data: { symbol, assetClass: assetClass as never, currency } });
+  const asset = await prisma.asset.create({ data: { symbol, assetClass: assetClass as never, market: marketFor(assetClass as never, symbol) ?? "B3", currency } });
   await prisma.assetPrice.create({ data: { assetId: asset.id, date: new Date(`${date}T00:00:00Z`), close, source, status: "ok" } });
   await prisma.investmentHolding.update({ where: { id: holdingId }, data: { assetId: asset.id, priceSource: "auto" } });
   return asset;
@@ -61,11 +62,16 @@ describe("refreshPricesLive", () => {
       return { requested: 1, priced: 1, suspect: 0, missing: 0, bySource: { brapi: 1 }, providerLatestDate: new Date("2026-11-10T00:00:00Z"), issues: [] };
     });
 
+    const startedAt = new Date();
     await refreshPricesLive(prisma, USER);
 
     expect(syncPricesMock).toHaveBeenCalledOnce();
     expect(syncPricesMock.mock.calls[0]?.[1]).toEqual({ assetIds: [asset.id] });
     expect((await prisma.investmentHolding.findUniqueOrThrow({ where: { id: stock.id } })).currentPrice).toBe(13.5);
+    // The button's live fetch is on record, as a manual run the health panel's daily-job status ignores.
+    const run = await prisma.integrationRun.findFirstOrThrow({ where: { job: "sync-prices", trigger: "manual", startedAt: { gte: startedAt } } });
+    expect(run).toMatchObject({ status: "ok", requested: 1, succeeded: 1 });
+    await prisma.integrationRun.delete({ where: { id: run.id } });
   });
 
   it("links a holding that isn't linked yet before syncing — the button catches up what the backfill script missed", async () => {
@@ -119,18 +125,35 @@ describe("updateAllPrices", () => {
 
     const stockRow = await prisma.investmentHolding.findUniqueOrThrow({ where: { id: stock.id } });
     expect(stockRow.currentPrice).toBe(40.5);
-    expect(stockRow.lastPriceUpdate).toEqual(new Date("2026-11-09T00:00:00Z"));
+    // No quote time on file: the moment that B3 session's close counts as available (19:00 in São Paulo), not midnight UTC.
+    expect(stockRow.lastPriceUpdate).toEqual(new Date("2026-11-09T22:00:00Z"));
 
     const mismatchedRow = await prisma.investmentHolding.findUniqueOrThrow({ where: { id: mismatched.id } });
     expect(mismatchedRow.currentPrice).toBeNull();
 
-    // The newer of the two applied prices: coingecko's 2026-11-10 (BTC), after brapi's 2026-11-09 (PETR4).
-    expect(result.latestQuoteAt).toBe("2026-11-10T00:00:00.000Z");
+    // The newer of the two applied prices: coingecko's 2026-11-10 (BTC, the end of that UTC day), after brapi's 2026-11-09 (PETR4).
+    expect(result.latestQuoteAt).toBe("2026-11-11T00:00:00.000Z");
+  });
+
+  it("stamps lastPriceUpdate with the quote's own time when the provider gave one", async () => {
+    const stock = await holding({ assetClass: "stocks", ticker: "ZZUPDITUB4", name: "Itaú", currency: "BRL" });
+    const asset = await linkAndPrice(stock.id, "ZZUPDITUB4", "stocks", "BRL", 33.1, "2026-11-10", "brapi");
+    await prisma.assetPrice.updateMany({ where: { assetId: asset.id }, data: { asOf: new Date("2026-11-10T20:07:00Z") } });
+    await updateAllPrices(prisma, { userId: USER });
+    const row = await prisma.investmentHolding.findUniqueOrThrow({ where: { id: stock.id } });
+    expect(row.lastPriceUpdate).toEqual(new Date("2026-11-10T20:07:00Z"));
+  });
+
+  it("reports a holding whose currency isn't its market's as currency_mismatch, without linking it", async () => {
+    const usdB3 = await holding({ assetClass: "stocks", ticker: "ZZUPDBBAS3", name: "BB em USD", currency: "USD" });
+    const result = await updateAllPrices(prisma, { userId: USER });
+    expect(result.issues.find((i) => i.holdingId === usdB3.id)).toMatchObject({ reason: "currency_mismatch", quotedCurrency: "BRL" });
+    expect((await prisma.investmentHolding.findUniqueOrThrow({ where: { id: usdB3.id } })).assetId).toBeNull();
   });
 
   it("ignores a 'suspect' AssetPrice: a holding only has a usable price once one is confirmed ok", async () => {
     const stock = await holding({ assetClass: "stocks", ticker: "ZZUPDWEGE3", name: "WEG", currency: "BRL" });
-    const asset = await prisma.asset.create({ data: { symbol: "ZZUPDWEGE3", assetClass: "stocks", currency: "BRL" } });
+    const asset = await prisma.asset.create({ data: { symbol: "ZZUPDWEGE3", assetClass: "stocks", market: "B3", currency: "BRL" } });
     await prisma.assetPrice.create({ data: { assetId: asset.id, date: new Date("2026-11-10T00:00:00Z"), close: 60, source: "brapi", status: "suspect" } });
     await prisma.investmentHolding.update({ where: { id: stock.id }, data: { assetId: asset.id, priceSource: "auto" } });
 
@@ -159,5 +182,27 @@ describe("updateAllPrices", () => {
     } finally {
       await deleteLedgerFixture(prisma, other);
     }
+  });
+});
+
+describe("updateHolding relinks when the holding's identity changes", () => {
+  it("drops the old Asset and links the new ticker; a change to an unpriceable class goes manual", async () => {
+    const h = await holding({ assetClass: "stocks", ticker: "ZZUPDOLD3", name: "Antiga", currency: "BRL" });
+    const old = await linkAndPrice(h.id, "ZZUPDOLD3", "stocks", "BRL", 10, "2026-11-09");
+
+    const renamed = await updateHolding(USER, h.id, { ticker: "ZZUPDNEW3" }, prisma);
+    expect(renamed.assetId).not.toBe(old.id);
+    expect(renamed.priceSource).toBe("auto");
+    expect(await prisma.asset.findUniqueOrThrow({ where: { id: renamed.assetId! } })).toMatchObject({ symbol: "ZZUPDNEW3", market: "B3" });
+
+    const asFixedIncome = await updateHolding(USER, h.id, { assetClass: "fixed_income" }, prisma);
+    expect(asFixedIncome).toMatchObject({ assetId: null, priceSource: "manual" });
+  });
+
+  it("leaves the link alone when only the name changes", async () => {
+    const h = await holding({ assetClass: "stocks", ticker: "ZZUPDKEEP3", name: "Mantém", currency: "BRL" });
+    const asset = await linkAndPrice(h.id, "ZZUPDKEEP3", "stocks", "BRL", 10, "2026-11-09");
+    const renamed = await updateHolding(USER, h.id, { name: "Outro nome" }, prisma);
+    expect(renamed.assetId).toBe(asset.id);
   });
 });

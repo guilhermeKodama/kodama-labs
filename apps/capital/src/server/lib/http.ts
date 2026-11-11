@@ -17,6 +17,8 @@ export type FetchLike = (url: string, init?: RequestInit) => Promise<Response>;
 export type FetchOutcome<T> =
   | { outcome: "ok"; data: T; status: number }
   | { outcome: "not_found"; status: number }
+  /** 401/403: the request needs a credential it doesn't have (a missing or revoked API token). Never retried — the next attempt would be refused the same way. */
+  | { outcome: "unauthorized"; status: number }
   | { outcome: "rate_limited"; status: number; retryAfterMs: number | null }
   | { outcome: "provider_down"; status: number | null; error: string }
   | { outcome: "schema_changed"; status: number; error: string };
@@ -97,6 +99,10 @@ export async function fetchJson<T = unknown>(url: string, opts: FetchJsonOptions
     }
 
     if (res.status === 404) return { outcome: "not_found", status: res.status };
+    if (res.status === 401 || res.status === 403) {
+      console.warn(`[http] ${label}: refused (HTTP ${res.status}) — missing or invalid credential`);
+      return { outcome: "unauthorized", status: res.status };
+    }
 
     if (res.status === 429) {
       const wait = retryAfterMs(res.headers.get("retry-after"));

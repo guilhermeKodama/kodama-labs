@@ -3,6 +3,7 @@ import { createApp } from "@capital/server/lib/create-app";
 import { prisma } from "@capital/server/lib/prisma";
 import { createLedgerFixture, deleteLedgerFixture, type LedgerFixture } from "@/test/ledger-fixtures";
 import { createHolding } from "@capital/server/modules/investments/services/portfolio";
+import { brapiHasToken } from "@capital/server/modules/market-data/lib/registry";
 import { evaluateJobStatus, overallStatus } from "../market-data";
 
 const NOW = new Date("2026-01-10T00:00:00Z").getTime();
@@ -69,13 +70,15 @@ describe("GET /api/health/market-data", () => {
   it("breaks holdings down by asset class, with the registry's active provider for each", async () => {
     const res = await app.request("/api/health/market-data");
     const body = await res.json();
+    // B3 leads with brapi only when BRAPI_TOKEN is set (registry.ts); the panel says so when it isn't.
     expect(body.holdings.byAssetClass).toMatchObject({
-      stocks: { activeProvider: "brapi" },
+      stocks: { activeProvider: brapiHasToken() ? "brapi" : "yahoo" },
       international_stocks: { activeProvider: "yahoo" },
       crypto: { activeProvider: "coingecko" },
       fixed_income: { activeProvider: null },
       savings: { activeProvider: null },
     });
+    expect(body.notices).toEqual(brapiHasToken() ? [] : ["brapi_no_token"]);
     for (const assetClass of Object.keys(body.holdings.byAssetClass)) {
       expect(body.holdings.byAssetClass[assetClass]).toMatchObject({ total: expect.any(Number), priceable: expect.any(Number) });
     }

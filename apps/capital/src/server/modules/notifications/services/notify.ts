@@ -218,7 +218,10 @@ async function sendWeeklySummary(db: PrismaClient, ctx: UserContext, result: Not
  * "Ativo sem cotação": a holding linked to the market-data layer
  * (priceSource="auto", from resolve-asset.ts) that's gone stale or was
  * never priced — never a manual holding or one whose class has no
- * automatic source, since that's expected, not an alarm. Claimed by
+ * automatic source, since that's expected, not an alarm. "Stale" is
+ * holdingPriceStatus's: two or more closes missed on the holding's market
+ * calendar, so a weekend, a holiday or the hours before tonight's close
+ * never page anyone. Claimed by
  * `${holdingId}:${lastPriceUpdate ?? "never"}`, so a holding gets exactly
  * one push per episode of being stale: the clock only restarts once
  * sync-prices writes it a fresh price (lastPriceUpdate changes) or

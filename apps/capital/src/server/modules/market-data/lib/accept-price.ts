@@ -23,7 +23,7 @@ export interface AcceptPriceInput {
   point: PricePoint;
   /** Only this asset's currency and class matter here. */
   asset: { currency: string; assetClass: AssetClass };
-  /** The most recent AssetPrice already on file for this asset (any status), if any. */
+  /** The most recent AssetPrice of an earlier date than the point (any status), if any — never the same day's row, which the point replaces. */
   previous?: { close: number; status: string } | null;
   now?: Date;
 }

@@ -1,6 +1,7 @@
 import type { Asset, AssetClass, AssetSourceRef, Prisma, PrismaClient } from "@/generated/prisma";
 import { mapWithConcurrency } from "@capital/server/lib/concurrency";
 import { acceptPrice } from "../lib/accept-price";
+import { quoteKind, type Market } from "../lib/calendar";
 import type { PricePoint } from "../lib/provider";
 import { chainFor } from "../lib/registry";
 
@@ -34,9 +35,11 @@ type AssetWithRefs = Asset & { sourceRefs: AssetSourceRef[] };
 export interface SyncPricesScope {
   /** Limits the sync to these Asset ids. Omitted syncs every active Asset with a source ref. */
   assetIds?: string[];
+  /** The clock: decides whether a quote is the day's close or intraday. Tests pin it. */
+  now?: Date;
 }
 
-export type SyncIssueOutcome = "not_found" | "rate_limited" | "provider_down" | "schema_changed" | "rejected" | "no_source";
+export type SyncIssueOutcome = "not_found" | "unauthorized" | "rate_limited" | "provider_down" | "schema_changed" | "rejected" | "no_source";
 
 export interface SyncPricesIssue {
   assetId: string;
@@ -59,29 +62,40 @@ export interface SyncPricesResult {
 /** A handful of providers answering in parallel is plenty; stays well under each one's own per-minute limit (brapi's Free plan in particular). */
 const CONCURRENCY = 6;
 
-function todayIso(): string {
-  return new Date().toISOString().slice(0, 10);
-}
 
 type WriteOutcome = { status: "ok" | "suspect"; date: Date } | { status: "rejected"; reason: string };
 
-/** acceptPrice()'s verdict, then the write it implies: an ok/suspect point is upserted; a fresh ok that lands near a prior "suspect" row promotes that row to "ok" too (the jump was real, confirmed a day late) — see accept-price.ts. A rejected point is never written. */
-async function writePoint(db: Db, asset: AssetWithRefs, source: string, point: PricePoint): Promise<WriteOutcome> {
-  const previous = await db.assetPrice.findFirst({ where: { assetId: asset.id }, orderBy: { date: "desc" } });
+/**
+ * acceptPrice()'s verdict, then the write it implies: an ok/suspect point is
+ * upserted; a fresh ok that lands near a prior "suspect" row promotes that
+ * row to "ok" too (the jump was real, confirmed a day late) — see
+ * accept-price.ts. A rejected point is never written.
+ *
+ * The point is judged against the newest row of an *earlier* date, never
+ * the same day's: an intraday quote taken after a suspect close must not
+ * "confirm" that close by being near it, and a re-sync of today must not
+ * compare today with itself. The same day's row is just overwritten (the
+ * close replaces an intraday quote; a later close replaces an earlier one).
+ */
+async function writePoint(db: Db, asset: AssetWithRefs, source: string, point: PricePoint, now: Date = new Date()): Promise<WriteOutcome> {
+  const date = new Date(`${point.date}T00:00:00Z`);
+  const previous = await db.assetPrice.findFirst({ where: { assetId: asset.id, date: { lt: date } }, orderBy: { date: "desc" } });
   const verdict = acceptPrice({
     point,
     asset: { currency: asset.currency, assetClass: asset.assetClass },
     previous: previous ? { close: Number(previous.close.toString()), status: previous.status } : null,
+    now,
   });
   if (verdict.status === "rejected") return { status: "rejected", reason: verdict.reason };
 
-  const date = new Date(`${point.date}T00:00:00Z`);
+  const kind = quoteKind(asset.market as Market, point.date, now);
+  const asOf = point.asOf ? new Date(point.asOf) : null;
   await db.assetPrice.upsert({
     where: { assetId_date: { assetId: asset.id, date } },
-    create: { assetId: asset.id, date, close: point.close, source, status: verdict.status },
-    update: { close: point.close, source, status: verdict.status },
+    create: { assetId: asset.id, date, close: point.close, source, status: verdict.status, kind, asOf },
+    update: { close: point.close, source, status: verdict.status, kind, asOf },
   });
-  if (verdict.status === "ok" && previous?.status === "suspect" && previous.date.getTime() !== date.getTime()) {
+  if (verdict.status === "ok" && previous?.status === "suspect") {
     await db.assetPrice.update({ where: { id: previous.id }, data: { status: "ok" } });
   }
   return { status: verdict.status, date };
@@ -89,7 +103,7 @@ async function writePoint(db: Db, asset: AssetWithRefs, source: string, point: P
 
 type AssetOutcome = { status: "ok" | "suspect"; source: string; date: Date } | { status: "missing"; issue: SyncPricesIssue };
 
-async function syncOneAsset(db: Db, asset: AssetWithRefs, range: { from: string; to: string }): Promise<AssetOutcome> {
+async function syncOneAsset(db: Db, asset: AssetWithRefs, range: { from: string; to: string }, now: Date): Promise<AssetOutcome> {
   const refsBySource = new Map(asset.sourceRefs.map((r) => [r.source, r.externalId]));
   let lastIssue: SyncPricesIssue | undefined;
   for (const provider of chainFor(asset.assetClass)) {
@@ -106,7 +120,7 @@ async function syncOneAsset(db: Db, asset: AssetWithRefs, range: { from: string;
       lastIssue = { assetId: asset.id, symbol: asset.symbol, outcome: "not_found", source: provider.id };
       continue;
     }
-    const written = await writePoint(db, asset, provider.id, point);
+    const written = await writePoint(db, asset, provider.id, point, now);
     if (written.status === "rejected") {
       lastIssue = { assetId: asset.id, symbol: asset.symbol, outcome: "rejected", source: provider.id, error: written.reason };
       continue;
@@ -136,7 +150,9 @@ export async function syncPrices(db: Db, scope: SyncPricesScope = {}): Promise<S
   const result: SyncPricesResult = { requested: assets.length, priced: 0, suspect: 0, missing: 0, bySource: {}, providerLatestDate: null, issues: [] };
   if (!assets.length) return result;
 
-  const range = { from: todayIso(), to: todayIso() };
+  const now = scope.now ?? new Date();
+  const today = now.toISOString().slice(0, 10);
+  const range = { from: today, to: today };
   const byClass = new Map<AssetClass, AssetWithRefs[]>();
   for (const asset of assets) byClass.set(asset.assetClass, [...(byClass.get(asset.assetClass) ?? []), asset]);
 
@@ -160,12 +176,12 @@ export async function syncPrices(db: Db, scope: SyncPricesScope = {}): Promise<S
         remaining.push(asset);
         continue;
       }
-      const written = await writePoint(db, asset, leader.id, point);
+      const written = await writePoint(db, asset, leader.id, point, now);
       record(result, written.status === "rejected" ? { status: "missing", issue: { assetId: asset.id, symbol: asset.symbol, outcome: "rejected", source: leader.id, error: written.reason } } : { status: written.status, source: leader.id, date: written.date });
     }
   }
 
-  const outcomes = await mapWithConcurrency(remaining, CONCURRENCY, (asset) => syncOneAsset(db, asset, range));
+  const outcomes = await mapWithConcurrency(remaining, CONCURRENCY, (asset) => syncOneAsset(db, asset, range, now));
   for (const outcome of outcomes) record(result, outcome);
 
   return result;
