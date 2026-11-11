@@ -54,6 +54,10 @@
     "api": {
       "title": "Integrations and API",
       "desc": "MCP server, tokens and API documentation."
+    },
+    "health": {
+      "title": "Data health",
+      "desc": "Price and FX crons, and quote coverage per asset class."
     }
   },
   "save": "Save",
@@ -370,5 +374,57 @@
       "BDR": "BDR",
       "EXTERIOR": "Abroad"
     }
+  },
+  "dataHealth": {
+    "kpi": {
+      "status": "Overall status",
+      "priceable": "Priceable positions",
+      "stale": "Stale",
+      "oldest": "Oldest quote"
+    },
+    "status": {
+      "ok": "Healthy",
+      "degraded": "Degraded",
+      "down": "Down"
+    },
+    "never": "never",
+    "noSource": "—",
+    "jobsTitle": "Runs",
+    "jobsEmpty": "No run yet.",
+    "jobsHeaders": {
+      "job": "Job",
+      "status": "Status",
+      "last": "Last run",
+      "lastStatus": "Result"
+    },
+    "job": {
+      "sync-prices": "Sync quotes",
+      "update-prices": "Refresh price cache",
+      "update-rates": "Update FX rates",
+      "benchmarks": "Benchmarks",
+      "pluggy-sync": "Open Finance sync"
+    },
+    "runStatus": {
+      "ok": "Ok",
+      "partial": "Partial",
+      "failed": "Failed",
+      "skipped": "Nothing to do"
+    },
+    "classesTitle": "Coverage by class",
+    "classesHeaders": {
+      "class": "Class",
+      "source": "Active source",
+      "priceable": "Priceable",
+      "fresh": "Priced today",
+      "stale": "Stale",
+      "unsupported": "No source"
+    },
+    "source": {
+      "brapi": "brapi.dev",
+      "yahoo": "Yahoo Finance",
+      "coingecko": "CoinGecko"
+    },
+    "staleBadge": "{count, plural, one {# stale position} other {# stale positions}} (no price for over {hours}h)",
+    "loadError": "Couldn't load market data status."
   }
 }

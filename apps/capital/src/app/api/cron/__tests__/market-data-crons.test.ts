@@ -4,22 +4,26 @@ import { NextRequest } from "next/server";
 const services = vi.hoisted(() => ({
   updateAllPrices: vi.fn(),
   updateAllCurrencyRates: vi.fn(),
+  syncPrices: vi.fn(),
 }));
 vi.mock("@capital/server/modules/investments/services/update-prices", () => ({ updateAllPrices: services.updateAllPrices }));
 vi.mock("@capital/server/modules/currencies/services/update-rates-from-api", () => ({ updateAllCurrencyRates: services.updateAllCurrencyRates }));
+vi.mock("@capital/server/modules/market-data/services/sync-prices", () => ({ syncPrices: services.syncPrices }));
 
 import { env } from "@/env";
 import { prisma } from "@capital/server/lib/prisma";
 import { GET as updatePrices } from "../update-prices/route";
 import { GET as updateRates } from "../update-rates/route";
+import { GET as syncPrices } from "../sync-prices/route";
 
 /**
- * update-prices and update-rates now go through withCron, which writes a
- * real, global IntegrationRun row (job="update-prices" | "update-rates").
- * GET /api/health/market-data reads the latest one, so this must not leave
- * rows behind for other test files to trip over.
+ * update-prices, update-rates and sync-prices now go through withCron,
+ * which writes a real, global IntegrationRun row (job="update-prices" |
+ * "update-rates" | "sync-prices"). GET /api/health/market-data reads the
+ * latest one, so this must not leave rows behind for other test files to
+ * trip over.
  */
-const JOBS = ["update-prices", "update-rates"];
+const JOBS = ["update-prices", "update-rates", "sync-prices"];
 afterEach(async () => {
   await prisma.integrationRun.deleteMany({ where: { job: { in: JOBS } } });
 });
@@ -134,5 +138,69 @@ describe("update-rates cron", () => {
     const res = await updateRates(request("update-rates", env.CRON_SECRET));
     expect(res.status).toBe(200);
     expect(await res.json()).toMatchObject({ success: true, status: "ok" });
+  });
+});
+
+describe("sync-prices cron", () => {
+  it("refuses a request with no or a wrong secret, without running the job", async () => {
+    expect((await syncPrices(request("sync-prices"))).status).toBe(401);
+    expect((await syncPrices(request("sync-prices", "wrong"))).status).toBe(401);
+    expect(services.syncPrices).not.toHaveBeenCalled();
+    expect(await prisma.integrationRun.count({ where: { job: "sync-prices" } })).toBe(0);
+  });
+
+  it("is skipped (not failed) when there is nothing to sync yet", async () => {
+    services.syncPrices.mockResolvedValueOnce({ requested: 0, priced: 0, suspect: 0, missing: 0, bySource: {}, providerLatestDate: null, issues: [] });
+    const res = await syncPrices(request("sync-prices", env.CRON_SECRET));
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ success: true, status: "skipped" });
+    expect(await prisma.integrationRun.findFirstOrThrow({ where: { job: "sync-prices" } })).toMatchObject({ status: "skipped", requested: 0, succeeded: 0 });
+  });
+
+  it("is failed (503) when something was requested but nothing priced", async () => {
+    services.syncPrices.mockResolvedValueOnce({
+      requested: 1,
+      priced: 0,
+      suspect: 0,
+      missing: 1,
+      bySource: {},
+      providerLatestDate: null,
+      issues: [{ assetId: "a1", symbol: "ZZZZ9", outcome: "not_found", source: "brapi" }],
+    });
+    const res = await syncPrices(request("sync-prices", env.CRON_SECRET));
+    expect(res.status).toBe(503);
+    expect(await res.json()).toMatchObject({ success: false, status: "failed" });
+  });
+
+  it("is partial (still 200) when some assets are missing but others were priced", async () => {
+    services.syncPrices.mockResolvedValueOnce({
+      requested: 2,
+      priced: 1,
+      suspect: 0,
+      missing: 1,
+      bySource: { brapi: 1 },
+      providerLatestDate: new Date("2026-11-10T00:00:00Z"),
+      issues: [{ assetId: "a2", symbol: "ZZZZ9", outcome: "not_found", source: "brapi" }],
+    });
+    const res = await syncPrices(request("sync-prices", env.CRON_SECRET));
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ success: false, status: "partial" });
+    expect(await prisma.integrationRun.findFirstOrThrow({ where: { job: "sync-prices" } })).toMatchObject({ status: "partial", providerLatestDate: new Date("2026-11-10T00:00:00Z") });
+  });
+
+  it("is ok (200) when everything requested was priced, suspect prices counting as succeeded", async () => {
+    services.syncPrices.mockResolvedValueOnce({
+      requested: 2,
+      priced: 1,
+      suspect: 1,
+      missing: 0,
+      bySource: { brapi: 1, yahoo: 1 },
+      providerLatestDate: new Date("2026-11-10T00:00:00Z"),
+      issues: [],
+    });
+    const res = await syncPrices(request("sync-prices", env.CRON_SECRET));
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ success: true, status: "ok" });
+    expect(await prisma.integrationRun.findFirstOrThrow({ where: { job: "sync-prices" } })).toMatchObject({ status: "ok", requested: 2, succeeded: 2 });
   });
 });

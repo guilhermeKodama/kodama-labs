@@ -31,6 +31,11 @@ export const notifications = defineDictionary(
       title: "Resumo semanal",
       body: "{from} a {to}: {expense} em saídas · {income} em entradas",
     },
+    staleHoldings: {
+      title: "{ticker} sem cotação atualizada",
+      body: "Última cotação em {date} — veja Ajustes › Dados › Saúde dos dados",
+      bodyNever: "Nunca foi cotado automaticamente — veja Ajustes › Dados › Saúde dos dados",
+    },
   },
   {
     reminder: {
@@ -56,6 +61,11 @@ export const notifications = defineDictionary(
     weekly: {
       title: "Weekly summary",
       body: "{from} to {to}: {expense} out · {income} in",
+    },
+    staleHoldings: {
+      title: "{ticker} has no fresh quote",
+      body: "Last priced {date} — see Settings › Data › Data health",
+      bodyNever: "Never auto-priced yet — see Settings › Data › Data health",
     },
   }
 );

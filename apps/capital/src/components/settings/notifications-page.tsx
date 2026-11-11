@@ -11,7 +11,7 @@ import { useFmt } from "@/lib/format/provider";
 import { parseDeviceLabel } from "@/lib/settings/device";
 import { hourLabel } from "@/lib/settings/time";
 
-type ToggleField = "dueEnabled" | "overdueEnabled" | "billClosedEnabled" | "budgetEnabled" | "weeklyEnabled";
+type ToggleField = "dueEnabled" | "overdueEnabled" | "billClosedEnabled" | "budgetEnabled" | "weeklyEnabled" | "assetStaleEnabled";
 
 /** Notificações: which pushes the user gets, and the devices that get them. */
 export function NotificationsPage() {
@@ -38,6 +38,8 @@ export function NotificationsPage() {
         return t("budget", { threshold: fmt.pct(prefs.budgetThreshold, 0) });
       case "weeklyEnabled":
         return t("weekly", { day: t(`weekday.${String(prefs.weeklyDow) as "1"}`), time: hourLabel(prefs.weeklyHour, locale) });
+      case "assetStaleEnabled":
+        return t("assetStale");
     }
   };
 
@@ -85,7 +87,7 @@ export function NotificationsPage() {
   return (
     <div className="flex max-w-[640px] flex-col gap-3.5">
       <div className="flex flex-col gap-2">
-        {(["dueEnabled", "overdueEnabled", "billClosedEnabled", "budgetEnabled", "weeklyEnabled"] as const).map((field) => (
+        {(["dueEnabled", "overdueEnabled", "billClosedEnabled", "budgetEnabled", "weeklyEnabled", "assetStaleEnabled"] as const).map((field) => (
           <div key={field} className="flex items-center gap-2">
             <label htmlFor={`notif-${field}`} className="text-control">
               {s ? label(field, s) : "…"}

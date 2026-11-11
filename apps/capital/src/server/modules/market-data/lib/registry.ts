@@ -1,0 +1,45 @@
+import type { AssetClass } from "@/generated/prisma";
+import { env } from "@/env";
+import { brapiProvider } from "../providers/brapi";
+import { coingeckoProvider } from "../providers/coingecko";
+import { yahooProvider } from "../providers/yahoo";
+import type { MarketDataProvider } from "./provider";
+
+/**
+ * The default chain, in priority order, and the two env overrides
+ * (MARKET_DATA_CHAIN / MARKET_DATA_DISABLED) that reorder or drop a source
+ * with one line and a restart — no deploy, no migration. This file is the
+ * entire cost of trading one source for another; see provider.ts.
+ */
+const ALL_PROVIDERS: readonly MarketDataProvider[] = [brapiProvider, yahooProvider, coingeckoProvider];
+
+function parseIdList(value: string | undefined): string[] | null {
+  if (!value) return null;
+  const ids = value
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+  return ids.length ? ids : null;
+}
+
+/** Every provider, after MARKET_DATA_DISABLED removes some and MARKET_DATA_CHAIN reorders the rest. An id MARKET_DATA_CHAIN doesn't recognize is ignored, not an error. */
+export function activeProviders(): MarketDataProvider[] {
+  const disabled = new Set(parseIdList(env.MARKET_DATA_DISABLED) ?? []);
+  const enabled = ALL_PROVIDERS.filter((p) => !disabled.has(p.id));
+  const order = parseIdList(env.MARKET_DATA_CHAIN);
+  if (!order) return enabled;
+  const byId = new Map(enabled.map((p) => [p.id, p] as const));
+  const ordered = order.map((id) => byId.get(id)).filter((p): p is MarketDataProvider => !!p);
+  const rest = enabled.filter((p) => !order.includes(p.id));
+  return [...ordered, ...rest];
+}
+
+/** The chain for one asset class, in priority order — the only thing sync-prices/resolve-asset/quotes.ts call to find a source. Empty for a class with no automatic source (fixed_income, savings). */
+export function chainFor(assetClass: AssetClass): MarketDataProvider[] {
+  return activeProviders().filter((p) => p.markets.includes(assetClass));
+}
+
+/** The provider the health panel shows as a class's "fonte ativa" — the chain's first entry, or null. Pure read of the registry; never hits the network. */
+export function activeProviderFor(assetClass: AssetClass): MarketDataProvider | null {
+  return chainFor(assetClass)[0] ?? null;
+}

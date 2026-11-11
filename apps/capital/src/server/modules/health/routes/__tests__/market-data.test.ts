@@ -61,9 +61,52 @@ describe("GET /api/health/market-data", () => {
     const body = await res.json();
     expect(["ok", "degraded", "down"]).toContain(body.status);
     expect(body.jobs).toEqual(
-      expect.arrayContaining(["update-prices", "update-rates", "benchmarks", "pluggy-sync"].map((job) => expect.objectContaining({ job }))),
+      expect.arrayContaining(["sync-prices", "update-prices", "update-rates", "benchmarks", "pluggy-sync"].map((job) => expect.objectContaining({ job }))),
     );
     expect(body.holdings).toMatchObject({ total: expect.any(Number), priceable: expect.any(Number), stale: expect.any(Number) });
+  });
+
+  it("breaks holdings down by asset class, with the registry's active provider for each", async () => {
+    const res = await app.request("/api/health/market-data");
+    const body = await res.json();
+    expect(body.holdings.byAssetClass).toMatchObject({
+      stocks: { activeProvider: "brapi" },
+      international_stocks: { activeProvider: "yahoo" },
+      crypto: { activeProvider: "coingecko" },
+      fixed_income: { activeProvider: null },
+      savings: { activeProvider: null },
+    });
+    for (const assetClass of Object.keys(body.holdings.byAssetClass)) {
+      expect(body.holdings.byAssetClass[assetClass]).toMatchObject({ total: expect.any(Number), priceable: expect.any(Number) });
+    }
+  });
+
+  it("counts a stale, a no-ticker and an unsupported-class holding under their own asset class", async () => {
+    const userId = "test-user-health-market-data-byclass-001";
+    const f: LedgerFixture = await createLedgerFixture(prisma, userId);
+    try {
+      const before = (await (await app.request("/api/health/market-data")).json()).holdings.byAssetClass.stocks;
+      const beforeFixed = (await (await app.request("/api/health/market-data")).json()).holdings.byAssetClass.fixed_income;
+
+      const stale = await createHolding(userId, { accountId: f.broker, assetClass: "stocks", ticker: "ZZZZ8", name: "Stale Co" }, prisma);
+      await prisma.investmentHolding.update({ where: { id: stale.id }, data: { currentPrice: 10, lastPriceUpdate: new Date(NOW - 100 * HOUR) } });
+      await createHolding(userId, { accountId: f.broker, assetClass: "stocks", name: "Sem ticker" }, prisma);
+      await createHolding(userId, { accountId: f.broker, assetClass: "fixed_income", ticker: "CDB999", name: "CDB" }, prisma);
+
+      const body = await (await app.request("/api/health/market-data")).json();
+      expect(body.holdings.byAssetClass.stocks).toMatchObject({
+        total: before.total + 2,
+        stale: before.stale + 1,
+        noTicker: before.noTicker + 1,
+      });
+      expect(body.holdings.byAssetClass.fixed_income).toMatchObject({
+        total: beforeFixed.total + 1,
+        unsupported: beforeFixed.unsupported + 1,
+        priceable: beforeFixed.priceable,
+      });
+    } finally {
+      await deleteLedgerFixture(prisma, userId);
+    }
   });
 
   it("reports a holding stuck without a fresh price, independent of the jobs' own status", async () => {

@@ -45,6 +45,7 @@ const SAMPLE_KEYS: readonly (readonly unknown[])[] = [
   keys.apiClients(),
   keys.assistantConversations(),
   keys.assistantConversation("c1"),
+  keys.marketDataHealth(),
 ];
 
 describe("keys", () => {
@@ -107,7 +108,8 @@ describe("invalidationPrefixes", () => {
   it("invalidates every root except market data through some event", () => {
     const covered = new Set<QueryRoot>(MUTATION_EVENTS.flatMap((event) => roots(event)));
     const uncovered = QUERY_ROOTS.filter((root) => !covered.has(root));
-    expect(uncovered.sort()).toEqual(["assets", "quotes"]);
+    // assets/quotes: live market lookups, re-fetched on their own. marketDataHealth: read-only health panel, nothing in this app writes to it.
+    expect(uncovered.sort()).toEqual(["assets", "marketDataHealth", "quotes"]);
   });
 
   it("only names known roots", () => {

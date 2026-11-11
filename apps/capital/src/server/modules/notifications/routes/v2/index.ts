@@ -20,6 +20,7 @@ const settingsPatch = z
     weeklyEnabled: z.boolean(),
     weeklyDow: z.number().int().min(0).max(6),
     weeklyHour: z.number().int().min(0).max(23),
+    assetStaleEnabled: z.boolean(),
   })
   .partial()
   .strict();

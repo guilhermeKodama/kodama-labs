@@ -23,6 +23,8 @@ export const NOTIFICATION_DEFAULTS = {
   weeklyEnabled: false,
   weeklyDow: 1,
   weeklyHour: 8,
+  /** A linked holding (priceSource="auto") has gone stale or never priced. */
+  assetStaleEnabled: true,
 } as const;
 
 export type NotificationPrefs = { -readonly [K in keyof typeof NOTIFICATION_DEFAULTS]: (typeof NOTIFICATION_DEFAULTS)[K] extends boolean ? boolean : number };
@@ -41,6 +43,7 @@ function toPrefs(row: NotificationSettings | null | undefined): NotificationPref
     weeklyEnabled: row.weeklyEnabled,
     weeklyDow: row.weeklyDow,
     weeklyHour: row.weeklyHour,
+    assetStaleEnabled: row.assetStaleEnabled,
   };
 }
 

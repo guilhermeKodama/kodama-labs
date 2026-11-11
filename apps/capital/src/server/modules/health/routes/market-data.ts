@@ -1,6 +1,9 @@
+import type { AssetClass } from "@/generated/prisma";
 import { createRouter } from "@capital/server/lib/router";
 import { prisma } from "@capital/server/lib/prisma";
+import { ASSET_CLASSES } from "@capital/server/modules/investments/lib/allocation-class";
 import { holdingPriceStatus, PRICE_STALE_HOURS, type PriceStatus } from "@capital/server/modules/investments/lib/quotes";
+import { activeProviderFor } from "@capital/server/modules/market-data/lib/registry";
 
 /**
  * GET /health/market-data: the one place a cron that "ran but changed
@@ -24,7 +27,8 @@ interface JobTarget {
 
 /** Schedules: infrastructure/cronjobs/schedules/capital.json. */
 const JOBS: JobTarget[] = [
-  { job: "update-prices", targetHours: 8 }, // every 6h
+  { job: "sync-prices", targetHours: 30 }, // daily
+  { job: "update-prices", targetHours: 4 }, // daily, 30min after sync-prices; a DB-only cache refresh, so it should be fast
   { job: "update-rates", targetHours: 3 }, // hourly
   { job: "benchmarks", targetHours: 30 }, // daily
   { job: "pluggy-sync", targetHours: 30 }, // daily
@@ -72,6 +76,22 @@ export function overallStatus(jobs: { status: JobStatus }[]): JobStatus {
   return "ok";
 }
 
+export interface AssetClassHealth {
+  total: number;
+  priceable: number;
+  fresh: number;
+  stale: number;
+  unpriced: number;
+  unsupported: number;
+  noTicker: number;
+  /** The registry's current pick for this class (chainFor()[0].id), or null when nothing prices it. Pure read, no network call. */
+  activeProvider: string | null;
+}
+
+function emptyClassHealth(assetClass: AssetClass): AssetClassHealth {
+  return { total: 0, priceable: 0, fresh: 0, stale: 0, unpriced: 0, unsupported: 0, noTicker: 0, activeProvider: activeProviderFor(assetClass)?.id ?? null };
+}
+
 router.get("/health/market-data", async (c) => {
   const now = Date.now();
 
@@ -96,9 +116,16 @@ router.get("/health/market-data", async (c) => {
   });
   const nowDate = new Date(now);
   const byStatus: Record<PriceStatus, number> = { fresh: 0, stale: 0, unpriced: 0, unsupported: 0, no_ticker: 0 };
+  const byAssetClass = new Map<AssetClass, AssetClassHealth>(ASSET_CLASSES.map((ac) => [ac, emptyClassHealth(ac)]));
   let oldestPriceAt: Date | null = null;
   for (const h of holdings) {
-    byStatus[holdingPriceStatus(h, nowDate)]++;
+    const status = holdingPriceStatus(h, nowDate);
+    byStatus[status]++;
+    const classHealth = byAssetClass.get(h.assetClass)!;
+    classHealth.total++;
+    if (status === "no_ticker") classHealth.noTicker++;
+    else classHealth[status]++;
+    if (status !== "no_ticker" && status !== "unsupported") classHealth.priceable++;
     if (h.lastPriceUpdate && (!oldestPriceAt || h.lastPriceUpdate < oldestPriceAt)) oldestPriceAt = h.lastPriceUpdate;
   }
   // "Priceable" is what a source could price today, whatever its ticker or class.
@@ -114,6 +141,7 @@ router.get("/health/market-data", async (c) => {
         priceable,
         stale: byStatus.stale,
         byStatus,
+        byAssetClass: Object.fromEntries(byAssetClass),
         oldestPriceAt: oldestPriceAt?.toISOString() ?? null,
         staleAfterHours: PRICE_STALE_HOURS,
       },

@@ -35,6 +35,7 @@ export const QUERY_ROOTS = [
   "notifications",
   "tokens",
   "assistant",
+  "marketDataHealth",
 ] as const;
 
 export type QueryRoot = (typeof QUERY_ROOTS)[number];
@@ -110,4 +111,6 @@ export const keys = {
   apiClients: () => ["tokens", "clients"] as const,
   assistantConversations: () => ["assistant", "conversations"] as const,
   assistantConversation: (id: string) => ["assistant", "conversation", id] as const,
+  /** GET /health/market-data: Ajustes › Dados › Saúde dos dados. Public, no write in this app invalidates it. */
+  marketDataHealth: () => ["marketDataHealth"] as const,
 };

@@ -4,6 +4,7 @@
   "bill": "Fatura do cartão fechou",
   "budget": "Orçamento passou de {threshold}",
   "weekly": "Resumo semanal ({day}, {time})",
+  "assetStale": "Ativo sem cotação atualizada",
   "weekday": {
     "0": "domingo",
     "1": "segunda",

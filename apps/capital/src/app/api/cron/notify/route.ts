@@ -5,9 +5,9 @@ import { env } from "@/env";
 
 /**
  * Every 15 minutes: sends the notifications that are due in each user's
- * timezone (card bill closed, budget threshold, weekly summary), once per
- * NotificationDispatch key. Recurring-bill reminders have their own cron
- * (/api/cron/send-reminders).
+ * timezone (card bill closed, budget threshold, weekly summary, a linked
+ * holding gone stale), once per NotificationDispatch key. Recurring-bill
+ * reminders have their own cron (/api/cron/send-reminders).
  */
 export async function GET(request: NextRequest) {
   const authHeader = request.headers.get("authorization");

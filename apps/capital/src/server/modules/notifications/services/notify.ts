@@ -3,6 +3,7 @@ import type { PrismaClient } from "@/generated/prisma";
 import { Prisma } from "@/generated/prisma";
 import { createFormatter, type Formatter } from "@/lib/format";
 import { buildTransactionsHref } from "@/lib/ledger/view-draft";
+import { settingsHref } from "@/lib/settings/nav";
 import { formatDateOnly, parseLocalDate } from "@capital/server/lib/date-utils";
 import { isPushConfigured, sendToSubscriptions, type PushPayload, type PushSubscriptionTarget } from "@capital/server/lib/web-push";
 import { resolveLocale, st, type Locale } from "@capital/server/i18n";
@@ -10,16 +11,19 @@ import { getEffectiveBudgetsForMonth } from "@capital/server/modules/budgets/lib
 import { loadFx } from "@capital/server/modules/ledger/lib/fx";
 import { spentToDateSql } from "@capital/server/modules/ledger/lib/spend-as-of";
 import { closingDateFor, dueDateFor, statementMonthFor } from "@capital/server/modules/ledger/services/statements";
+import { holdingPriceStatus } from "@capital/server/modules/investments/lib/quotes";
 import { REMINDER_PUSH_URL } from "@capital/server/modules/push/constants";
 import { addDays, BILL_CLOSED_GRACE_DAYS, billJustClosed, inAlertHours, localNow, weeklySummaryWindow, type LocalNow } from "../lib/schedule";
 import { notificationSettingsFor, type NotificationPrefs } from "./settings";
 
-/** NotificationDispatch.kind values; dedupe keys are the statement id, "<entity|*>:<category>:<YYYY-MM>" and the ISO week. */
-export const NOTIFICATION_KINDS = ["bill_closed", "budget_threshold", "weekly_summary"] as const;
+/** NotificationDispatch.kind values; dedupe keys are the statement id, "<entity|*>:<category>:<YYYY-MM>", the ISO week and "<holdingId>:<lastPriceUpdate|never>". */
+export const NOTIFICATION_KINDS = ["bill_closed", "budget_threshold", "weekly_summary", "asset_stale"] as const;
 export type NotificationKind = (typeof NOTIFICATION_KINDS)[number];
 
 /** Where a budget alert opens (Orçamentos). */
 export const BUDGETS_PUSH_URL = REMINDER_PUSH_URL;
+/** Where an "ativo sem cotação" push opens: the coverage panel, not just the one holding. */
+export const ASSET_STALE_PUSH_URL = settingsHref("health");
 
 export interface NotifyResult {
   users: number;
@@ -37,13 +41,15 @@ interface UserContext {
   locale: Locale;
   fmt: Formatter;
   local: LocalNow;
+  /** The instant runNotifications was called with — for a staleness check (hours, not calendar days). */
+  now: Date;
   prefs: NotificationPrefs;
   subs: PushSubscriptionTarget[];
 }
 
 const emptyResult = (): NotifyResult => ({
   users: 0,
-  claimed: { bill_closed: 0, budget_threshold: 0, weekly_summary: 0 },
+  claimed: { bill_closed: 0, budget_threshold: 0, weekly_summary: 0, asset_stale: 0 },
   alreadySent: 0,
   sent: 0,
   failed: 0,
@@ -208,10 +214,43 @@ async function sendWeeklySummary(db: PrismaClient, ctx: UserContext, result: Not
   }, result);
 }
 
+/**
+ * "Ativo sem cotação": a holding linked to the market-data layer
+ * (priceSource="auto", from resolve-asset.ts) that's gone stale or was
+ * never priced — never a manual holding or one whose class has no
+ * automatic source, since that's expected, not an alarm. Claimed by
+ * `${holdingId}:${lastPriceUpdate ?? "never"}`, so a holding gets exactly
+ * one push per episode of being stale: the clock only restarts once
+ * sync-prices writes it a fresh price (lastPriceUpdate changes) or
+ * priceAsOf is set manually.
+ */
+async function sendAssetStale(db: PrismaClient, ctx: UserContext, result: NotifyResult) {
+  if (!inAlertHours(ctx.local)) return;
+  const holdings = await db.investmentHolding.findMany({
+    where: { isActive: true, priceSource: "auto", assetId: { not: null }, account: { userId: ctx.userId } },
+    select: { id: true, ticker: true, name: true, assetClass: true, currentPrice: true, lastPriceUpdate: true },
+  });
+  for (const h of holdings) {
+    const status = holdingPriceStatus(h, ctx.now);
+    if (status !== "stale" && status !== "unpriced") continue;
+    const dispatchId = await claim(db, ctx.userId, "asset_stale", `${h.id}:${h.lastPriceUpdate?.toISOString() ?? "never"}`, result);
+    if (!dispatchId) continue;
+    await deliver(db, dispatchId, ctx, {
+      title: st(ctx.locale, "notifications.staleHoldings.title", { ticker: h.ticker ?? h.name }),
+      body: h.lastPriceUpdate
+        ? st(ctx.locale, "notifications.staleHoldings.body", { date: ctx.fmt.date(h.lastPriceUpdate) })
+        : st(ctx.locale, "notifications.staleHoldings.bodyNever"),
+      tag: `asset-stale-${h.id}`,
+      url: ASSET_STALE_PUSH_URL,
+    }, result);
+  }
+}
+
 const SENDERS: { kind: NotificationKind; enabled: (p: NotificationPrefs) => boolean; send: typeof sendBillClosed }[] = [
   { kind: "bill_closed", enabled: (p) => p.billClosedEnabled, send: sendBillClosed },
   { kind: "budget_threshold", enabled: (p) => p.budgetEnabled, send: sendBudgetThreshold },
   { kind: "weekly_summary", enabled: (p) => p.weeklyEnabled, send: sendWeeklySummary },
+  { kind: "asset_stale", enabled: (p) => p.assetStaleEnabled, send: sendAssetStale },
 ];
 
 /**
@@ -247,6 +286,7 @@ export async function runNotifications(db: PrismaClient, now: Date = new Date(),
       locale,
       fmt: createFormatter({ numberFormat: user.numberFormat, dateFormat: user.dateFormat, timezone: user.timezone, baseCurrency: user.baseCurrency, locale }),
       local: localNow(now, user.timezone),
+      now,
       prefs,
       subs: subsByUser.get(user.id) ?? [],
     };

@@ -248,7 +248,11 @@ describe("market data", () => {
     return new Response(JSON.stringify(body), { status: 200, headers: { "content-type": "application/json" } });
   });
   beforeEach(() => vi.stubGlobal("fetch", fetchMock));
-  afterEach(() => vi.unstubAllGlobals());
+  afterEach(async () => {
+    vi.unstubAllGlobals();
+    // refresh-prices links a holding to a global Asset on the fly now (see refreshPricesLive); PETR4 is shared with other test files, so clean it up rather than leave it in capital_dev/capital_test.
+    await prisma.asset.deleteMany({ where: { symbol: "PETR4" } });
+  });
 
   it("GET /v2/quotes prices B3, international and crypto tickers (crypto in the base currency)", async () => {
     const r = await json("GET", "/v2/quotes?tickers=PETR4,voo,BTC,NOPE3");

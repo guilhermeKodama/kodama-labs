@@ -312,6 +312,10 @@ model NotificationSettings {
   weeklyEnabled     Boolean  @default(false)
   weeklyDow         Int      @default(1) // 0 = Sunday
   weeklyHour        Int      @default(8)
+  // F1: a linked holding (priceSource="auto") has gone stale or never priced.
+  // On by default, like billClosedEnabled — this is the push the whole F1
+  // monitoring work exists to send when a cron silently stops pricing things.
+  assetStaleEnabled Boolean  @default(true)
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
 
@@ -847,10 +851,20 @@ model InvestmentHolding {
   currentPrice    Float? // Latest market price per unit
   lastPriceUpdate DateTime? // When the price was last fetched
   isActive        Boolean             @default(true)
+  // F1: the global instrument this holding's ticker resolved to, and
+  // whether its price is kept up to date automatically from AssetPrice
+  // ("auto") or only by a person ("manual", the default — a holding with
+  // no ticker or whose class has no source yet is always manual).
+  // Invariant: priceSource="auto" implies assetId is set; the reverse is
+  // not required, so a future "stop auto-pricing this" toggle can flip a
+  // holding to manual without losing the match. See scripts/backfill-asset-links.ts.
+  assetId         String?
+  priceSource     String              @default("manual")
   createdAt       DateTime            @default(now())
   updatedAt       DateTime            @updatedAt
 
   account    Account               @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  asset      Asset?                @relation(fields: [assetId], references: [id], onDelete: SetNull)
   operations InvestmentOperation[]
   pluggyLinks PluggyInvestmentLink[]
 
@@ -858,6 +872,7 @@ model InvestmentHolding {
   @@index([assetClass])
   @@index([ticker])
   @@index([isActive])
+  @@index([assetId])
   @@map("investment_holdings")
 }
 
@@ -906,6 +921,80 @@ model InvestmentOperation {
   @@index([date])
   @@index([externalId])
   @@map("investment_operations")
+}
+
+// ============================================
+// MARKET DATA (F1): global instrument master and daily closes, vendor-
+// agnostic. A holding links to one Asset (InvestmentHolding.assetId); the
+// vendor ids that price that Asset live on AssetSourceRef, never on Asset
+// itself, so adding or swapping a provider is one adapter file + one
+// registry line + one fixture, never a migration. See
+// src/server/modules/market-data/lib/{provider,registry}.ts.
+// ============================================
+
+model Asset {
+  id         String     @id @default(uuid())
+  // Canonical ticker as Cerne displays it (e.g. "PETR4", "VOO", "BTC"). Upper-case.
+  symbol     String
+  assetClass AssetClass
+  currency   String
+  name       String?
+  isActive   Boolean    @default(true)
+  createdAt  DateTime   @default(now())
+  updatedAt  DateTime   @updatedAt
+
+  sourceRefs AssetSourceRef[]
+  prices     AssetPrice[]
+  holdings   InvestmentHolding[]
+
+  // The same coin priced in two currencies (a BRL holding and a USD
+  // holding of the same crypto) is legitimately two Assets.
+  @@unique([symbol, assetClass, currency])
+  @@map("assets")
+}
+
+// Vendor ids for an Asset. Never columns on Asset itself - see module header.
+model AssetSourceRef {
+  id         String   @id @default(uuid())
+  assetId    String
+  asset      Asset    @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  // "brapi" | "yahoo" | "coingecko" - free text, like IntegrationRun.provider,
+  // so a new provider needs no enum migration.
+  source     String
+  // The vendor's own id/symbol: brapi "PETR4", yahoo "PETR4.SA" or "VOO",
+  // coingecko "bitcoin".
+  externalId String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  // One ref per source per asset.
+  @@unique([assetId, source])
+  // Not unique: the same coingecko id legitimately backs two Assets (one
+  // per currency the coin is held in).
+  @@index([source, externalId])
+  @@map("asset_source_refs")
+}
+
+// One row per asset per day, unadjusted close. Decimal(18,8), matching the
+// other daily time series (MarketIndexValue.value, CurrencyRateDay.brlPerUnit).
+model AssetPrice {
+  id        String   @id @default(uuid())
+  assetId   String
+  asset     Asset    @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  date      DateTime @db.Date
+  close     Decimal  @db.Decimal(18, 8)
+  // Which provider produced this row.
+  source    String
+  // "ok" | "suspect" - acceptPrice()'s sanity gate. A suspect row is stored
+  // but excluded from the holding-cache refresh (update-prices only ever
+  // reads the latest status="ok" row) until a later day's close confirms
+  // the level and promotes it.
+  status    String   @default("ok")
+  createdAt DateTime @default(now())
+
+  @@unique([assetId, date])
+  @@index([date])
+  @@map("asset_prices")
 }
 
 // ============================================
