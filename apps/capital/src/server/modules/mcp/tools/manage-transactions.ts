@@ -4,6 +4,7 @@ import { parseLocalDate, formatDateOnly } from "@capital/server/lib/date-utils";
 import { softDeleteEntries, updateEntry, type InternalPatch } from "../../ledger/services/entries";
 import type { MutationRecordInput } from "../../ledger/services/mutations";
 import { categoryResolver, LEGACY_ENTRY_INCLUDE, legacyType, toLegacyTransaction } from "../lib/ledger-adapter";
+import { assertAccountReceives, assertMovableEntry, ownedAccount } from "./account-target";
 
 export interface UpdateTransactionParams {
   id: string;
@@ -23,6 +24,8 @@ export interface UpdateTransactionParams {
   isTaxDeductible?: boolean;
   /** Expense category this income reimburses. Null clears it. Omit to leave it. */
   reimbursesCategory?: string | null;
+  /** Move the transaction onto this account of the same entity. Omit to leave it. */
+  accountId?: string;
 }
 
 type Resolver = Awaited<ReturnType<typeof categoryResolver>>;
@@ -47,6 +50,7 @@ export function toPatch(
     ...(params.description && { description: params.description }),
     ...(params.date && { date: formatDateOnly(parseLocalDate(params.date)) }),
     ...(params.isTaxDeductible !== undefined && { isTaxDeductible: params.isTaxDeductible }),
+    ...(params.accountId && { accountId: params.accountId }),
   };
   if (params.category) {
     const category = resolver.resolve(params.category, type, existing.categoryId);
@@ -63,6 +67,11 @@ export async function updateTransactionTool(userId: string, params: UpdateTransa
   const existing = await findOwnedEntry(userId, params.id, db);
   if (!existing) throw new Error("Transaction not found or access denied");
   const { id, ...fields } = params;
+  if (params.accountId && params.accountId !== existing.accountId) {
+    const target = await ownedAccount(userId, params.accountId, db);
+    assertAccountReceives(target, existing.entityId);
+    await assertMovableEntry(userId, existing, target, db);
+  }
   const patch = toPatch(fields, existing, await categoryResolver(userId, db));
   await updateEntry(userId, id, patch, db, opts);
   const updated = await db.ledgerEntry.findUniqueOrThrow({ where: { id }, include: LEGACY_ENTRY_INCLUDE });

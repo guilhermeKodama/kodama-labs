@@ -1,8 +1,11 @@
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { prisma } from "@capital/server/lib/prisma";
 import { createLedgerFixture, deleteLedgerFixture, type LedgerFixture } from "@/test/ledger-fixtures";
+import { accountBalances } from "@capital/server/modules/ledger/services/accounts";
 import { createEntry } from "@capital/server/modules/ledger/services/entries";
 import { undoBatch } from "@capital/server/modules/ledger/services/mutations";
+import { createHolding, recordOperation } from "@capital/server/modules/investments/services/portfolio";
+import { recordDividend } from "@capital/server/modules/investments/services/dividends";
 import { findOrphanTransactions, validateCategory } from "../../lib/category-validation";
 import { bulkUpdateTransactions } from "../bulk-update-transactions";
 import { listTransactions } from "../list-transactions";
@@ -88,6 +91,23 @@ describe("bulkUpdateTransactions", () => {
     const r = await bulkUpdateTransactions(USER, [{ id: a, category: "restaurants" }], true, prisma);
     expect(r.updated[0].category).toBe("Restaurants");
     expect((await prisma.ledgerEntry.findUniqueOrThrow({ where: { id: a } })).categoryId).toBe(f.categories.Groceries);
+  });
+
+  it("moves every row or none when one account is refused", async () => {
+    const a = await expense("a");
+    const b = await expense("b");
+    const nubank = await prisma.account.create({ data: { userId: USER, entityId: f.pfId, type: "checking", name: "Nubank PF", currency: "BRL" } });
+    await expect(
+      bulkUpdateTransactions(USER, [{ id: a, accountId: nubank.id }, { id: b, accountId: f.pjChecking }], false, prisma),
+    ).rejects.toThrow(/different entity/);
+    expect(await prisma.ledgerEntry.count({ where: { userId: USER, accountId: nubank.id } })).toBe(0);
+    const dry = await bulkUpdateTransactions(USER, [{ id: a, accountId: nubank.id, description: "movida" }], true, prisma);
+    expect(dry.updated[0]).toMatchObject({ accountId: nubank.id, description: "movida" });
+    expect((await prisma.ledgerEntry.findUniqueOrThrow({ where: { id: a } })).accountId).toBe(f.pfChecking);
+    const applied = await bulkUpdateTransactions(USER, [{ id: a, accountId: nubank.id }, { id: b, description: "b2" }], false, prisma);
+    expect(applied.errors).toEqual([]);
+    expect(applied.updated.map((row) => row.accountId)).toEqual([nubank.id, undefined]);
+    expect((await prisma.ledgerEntry.findUniqueOrThrow({ where: { id: a } })).accountId).toBe(nubank.id);
   });
 
   it("is all-or-nothing on validation", async () => {
@@ -193,6 +213,81 @@ describe("update_transaction / delete_transaction", () => {
       amount: 480,
     });
     expect(listed.summaries.every((s) => s.category !== "Resgate")).toBe(true);
+  });
+
+  it("moves a transaction to another account of the same entity and the balances follow", async () => {
+    const inter = await prisma.account.create({ data: { userId: USER, entityId: f.pjId, type: "checking", name: "Inter PJ", currency: "BRL", initialBalance: 500 } });
+    const nu = await prisma.account.create({ data: { userId: USER, entityId: f.pjId, type: "checking", name: "Nu Empresas", currency: "BRL", initialBalance: 200 } });
+    const id = (
+      await createEntry(USER, { kind: "expense", accountId: inter.id, amount: 80, date: "2026-10-02", description: "Fornecedor", categoryId: f.categories.Groceries }, prisma, { skipRules: true })
+    ).entryIds[0];
+    const balance = async (accountId: string) => (await accountBalances(USER, prisma, [accountId])).get(accountId);
+
+    expect(await balance(inter.id)).toBe(420);
+    expect(await balance(nu.id)).toBe(200);
+
+    const moved = await updateTransactionTool(USER, { id, accountId: nu.id }, prisma);
+    expect(moved).toMatchObject({ id, accountId: nu.id, accountName: "Nu Empresas", businessId: f.pjId });
+    expect(await balance(inter.id)).toBe(500);
+    expect(await balance(nu.id)).toBe(120);
+    expect(await prisma.account.findUniqueOrThrow({ where: { id: inter.id } })).toMatchObject({ initialBalance: expect.anything() });
+    expect(Number((await prisma.account.findUniqueOrThrow({ where: { id: inter.id } })).initialBalance)).toBe(500);
+    expect(Number((await prisma.account.findUniqueOrThrow({ where: { id: nu.id } })).initialBalance)).toBe(200);
+
+    const batch = await prisma.mutationBatch.findFirstOrThrow({ where: { userId: USER, op: "update" }, orderBy: { createdAt: "desc" } });
+    await undoBatch(USER, batch.id, prisma);
+    expect((await prisma.ledgerEntry.findUniqueOrThrow({ where: { id } })).accountId).toBe(inter.id);
+    expect(await balance(inter.id)).toBe(420);
+    expect(await balance(nu.id)).toBe(200);
+  });
+
+  it("moves one leg of a same-entity transfer and leaves the other leg", async () => {
+    const inter = await prisma.account.create({ data: { userId: USER, entityId: f.pjId, type: "checking", name: "Inter PJ", currency: "BRL", initialBalance: 500 } });
+    const nu = await prisma.account.create({ data: { userId: USER, entityId: f.pjId, type: "checking", name: "Nu Empresas", currency: "BRL", initialBalance: 200 } });
+    const created = await createEntry(
+      USER,
+      { kind: "transfer", fromAccountId: inter.id, toAccountId: nu.id, amount: 40, date: "2026-10-03", description: "Entre contas" },
+      prisma,
+    );
+    const fromLeg = await prisma.ledgerEntry.findFirstOrThrow({ where: { transferGroupId: created.transferGroupId!, accountId: inter.id } });
+    await updateTransactionTool(USER, { id: fromLeg.id, accountId: f.pjChecking }, prisma);
+    const balance = async (accountId: string) => (await accountBalances(USER, prisma, [accountId])).get(accountId);
+    expect(await balance(inter.id)).toBe(500);
+    expect(await balance(nu.id)).toBe(240);
+    expect(await balance(f.pjChecking)).toBe(-40);
+    expect((await prisma.ledgerEntry.findFirstOrThrow({ where: { transferGroupId: created.transferGroupId!, amount: { gt: 0 } } })).accountId).toBe(nu.id);
+  });
+
+  it("refuses another entity, an archived account, a different currency, and an investment leg", async () => {
+    const id = await expense("mercado");
+    const archived = await prisma.account.create({
+      data: { userId: USER, entityId: f.pfId, type: "checking", name: "Antiga", currency: "BRL", archivedAt: new Date() },
+    });
+    const usd = await prisma.account.create({ data: { userId: USER, entityId: f.pfId, type: "cash", name: "Dólar", currency: "USD" } });
+    await expect(updateTransactionTool(USER, { id, accountId: f.pjChecking }, prisma)).rejects.toThrow(/different entity/);
+    await expect(updateTransactionTool(USER, { id, accountId: archived.id }, prisma)).rejects.toThrow(/archived/);
+    await expect(updateTransactionTool(USER, { id, accountId: usd.id }, prisma)).rejects.toThrow(/Dólar/);
+    await expect(updateTransactionTool(USER, { id, accountId: "00000000-0000-0000-0000-000000000000" }, prisma)).rejects.toThrow(/not found or access denied/);
+    expect((await prisma.ledgerEntry.findUniqueOrThrow({ where: { id } })).accountId).toBe(f.pfChecking);
+
+    const holding = await createHolding(USER, { accountId: f.broker, assetClass: "stocks", ticker: "PETR4", name: "Petrobras" }, prisma);
+    const buy = await recordOperation(USER, { holdingId: holding.id, type: "buy", quantity: 1, pricePerUnit: 30, totalAmount: 30, date: "2026-09-01" }, prisma);
+    await expect(updateTransactionTool(USER, { id: buy.cashEntryId!, accountId: f.pfChecking }, prisma)).rejects.toThrow(/PETR4/);
+    expect((await prisma.ledgerEntry.findUniqueOrThrow({ where: { id: buy.cashEntryId! } })).accountId).toBe(f.broker);
+
+    const dividend = await recordDividend(
+      USER,
+      { holdingId: holding.id, cashAccountId: f.pfChecking, amount: 12, date: "2026-09-20", currency: "BRL", incomeType: "dividend" },
+      prisma,
+    );
+    const nubank = await prisma.account.create({ data: { userId: USER, entityId: f.pfId, type: "checking", name: "Nubank PF", currency: "BRL" } });
+    await expect(updateTransactionTool(USER, { id: dividend.cashEntryId!, accountId: nubank.id }, prisma)).rejects.toThrow(/update_dividend/);
+    expect((await prisma.ledgerEntry.findUniqueOrThrow({ where: { id: dividend.cashEntryId! } })).accountId).toBe(f.pfChecking);
+
+    const loose = (
+      await createEntry(USER, { kind: "expense", accountId: f.pfChecking, amount: 10, date: "2026-09-11", description: "Aporte avulso" }, prisma, { kind: "investment", skipRules: true })
+    ).entryIds[0];
+    expect(await updateTransactionTool(USER, { id: loose, accountId: nubank.id }, prisma)).toMatchObject({ accountId: nubank.id, type: "investment" });
   });
 
   it("delete moves the entry to the trash", async () => {

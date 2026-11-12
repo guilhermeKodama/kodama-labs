@@ -83,7 +83,7 @@ Authorization: Bearer <MCP_API_KEY>
 
 ## Available Tools
 
-The server registers **42 tools**. Read-only API tokens receive only the read tools (`list_`, `get_`, `find_`, `search_`, or a tool marked read-only). Writes are undoable batches attributed to the MCP client.
+The server registers **49 tools**. Read-only API tokens receive only the read tools (`list_`, `get_`, `find_`, `search_`, or a tool marked read-only). Writes are undoable batches attributed to the MCP client.
 
 | Tool | Access | What it does |
 |---|---|---|
@@ -98,8 +98,10 @@ The server registers **42 tools**. Read-only API tokens receive only the read to
 | `delete_category` | write | Delete a category, optionally reassigning its rows |
 | `merge_categories` | write | Merge one category into another |
 | `find_orphan_transactions` | read | Income and expense rows with no category or an archived one |
-| `list_accounts` | read | List entities (businesses and the personal entity), not ledger accounts |
+| `list_accounts` | read | List entities and their ledger accounts (id, archived) |
 | `list_ledger_accounts` | read | List checking, cash, and brokerage accounts |
+| `create_account` | write | Create a checking, cash, brokerage, or credit-card account |
+| `archive_account` | write | Soft-archive a ledger account |
 | `get_valid_types` | read | `income`, `expense`, `investment` |
 | `create_transfer` | write | Move cash between checking, cash, or brokerage accounts |
 | `list_transfers` | read | List transfers, one row per transfer |
@@ -153,7 +155,10 @@ Bulk create Personal transactions with automatic duplicate detection.
   - `isTaxDeductible`: Boolean (optional)
   - `businessId`: UUID (required if `entityType: "business"`)
   - `personalAccountId`: UUID (required if `entityType: "personal"`)
+  - `accountId`: UUID (optional). Ledger account from `list_accounts` or `list_ledger_accounts`. Omit to use the entity's main account. Must exist, not be archived, and belong to that entity. A bad account is an error on that item.
 - `dryRun`: Boolean (default `false`). If `true`, simulates without writing to DB.
+
+Without `accountId`, a duplicate is the same date, amount, and description on any account. With `accountId`, it is a duplicate only on that account, so two bank accounts can carry the same row.
 
 **Returns:**
 ```json
@@ -235,7 +240,9 @@ Update an existing transaction by ID (one undoable batch). Changing `date` on a 
 
 **Parameters:**
 - `id`: UUID (required)
-- `type`, `amount`, `currency`, `exchangeRate`, `description`, `category`, `date`, `isTaxDeductible`: (all optional)
+- `type`, `amount`, `currency`, `exchangeRate`, `description`, `category`, `date`, `isTaxDeductible`, `accountId`: (all optional)
+
+`accountId` moves the transaction onto another ledger account of the same entity. The balance of each account is its opening balance plus its live entries, so both accounts change in that write. An archived account, a different entity, a different currency on a non-transfer, or an investment cash leg (or a transfer that funded a position) is rejected. Move a provento with `update_dividend` `cashAccountId`.
 
 **Returns:** Updated transaction object.
 
@@ -274,24 +281,46 @@ List all available categories, optionally filtered by type.
 
 ### 6. `list_accounts`
 
-List all accounts (businesses and personal account) that can receive transactions.
+List businesses and the personal entity, each with its ledger accounts.
 
-**Parameters:** None.
+**Parameters:**
+- `includeArchived`: Boolean (optional). Archived ledger accounts are hidden unless this is true. Each account has `archived`.
 
 **Returns:**
 ```json
 {
   "businesses": [
-    { "id": "uuid", "name": "My Company", "defaultCurrency": "USD", "entityType": "business" }
+    {
+      "id": "uuid",
+      "name": "My Company",
+      "defaultCurrency": "BRL",
+      "entityType": "business",
+      "accounts": [
+        { "id": "uuid", "name": "Inter PJ", "type": "checking", "currency": "BRL", "isDefault": false, "archived": false }
+      ]
+    }
   ],
   "personalAccount": {
     "id": "uuid",
     "name": "Personal",
     "defaultCurrency": "BRL",
-    "entityType": "personal"
+    "entityType": "personal",
+    "accounts": [
+      { "id": "uuid", "name": "Conta principal", "type": "checking", "currency": "BRL", "isDefault": true, "archived": false }
+    ]
   }
 }
 ```
+
+Entity ids are `businessId` / `personalAccountId`. Account ids are `accountId` on `bulk_create_transactions`, `update_transaction`, and `bulk_update_transactions`.
+
+### 6b. `create_account`
+
+Create a checking, cash, brokerage, or credit-card account on the PF entity or a business. `initialBalance` is stored as the account's opening balance (`Account.initialBalance`), the same field the accounts screen writes. It counts in every balance. `date` is accepted and not stored: the ledger has no opening-balance date, and the response says so. A credit card also needs `creditLimit`, `closingDay`, and `dueDay`. Undoable (`batchId`).
+
+### 6c. `archive_account`
+
+Soft-archive a ledger account. Refused while its balance (opening balance plus live entries) is not zero, unless `force` is true, which archives it and returns a warning. The entity's main account cannot be archived. Archived accounts are hidden from the default lists and rejected for new transactions.
 
 ### 7. `get_valid_types`
 

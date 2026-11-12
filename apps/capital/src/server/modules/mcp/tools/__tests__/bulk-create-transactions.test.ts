@@ -93,6 +93,76 @@ describe("MCP bulk create transactions", () => {
     const [e] = await entries();
     expect([e.kind, Number(e.amount)]).toEqual(["investment", -1000]);
   });
+
+  it("books a row on the given account and leaves the main account alone", async () => {
+    const inter = await prisma.account.create({ data: { userId: USER, entityId: f.pjId, type: "checking", name: "Inter PJ", currency: "BRL" } });
+    const nu = await prisma.account.create({ data: { userId: USER, entityId: f.pjId, type: "checking", name: "Nu Empresas", currency: "BRL" } });
+    const r = await bulkCreateTransactions(
+      USER,
+      [
+        dividend({ entityType: "business", personalAccountId: undefined, businessId: f.pjId, type: "expense", category: "Software", description: "Tarifa Inter", amount: 15, accountId: inter.id }),
+        dividend({ entityType: "business", personalAccountId: undefined, businessId: f.pjId, type: "expense", category: "Software", description: "Tarifa Nu", amount: 15, accountId: nu.id }),
+        dividend({ description: "Sem conta" }),
+      ],
+      false,
+      prisma,
+    );
+    expect(r.errors).toEqual([]);
+    expect(r.created.map((row) => [row.description, row.accountId, row.accountName]).sort()).toEqual(
+      [
+        ["Sem conta", f.pfChecking, "Conta principal"],
+        ["Tarifa Inter", inter.id, "Inter PJ"],
+        ["Tarifa Nu", nu.id, "Nu Empresas"],
+      ].sort(),
+    );
+    expect(await prisma.ledgerEntry.count({ where: { accountId: f.pjChecking } })).toBe(0);
+  });
+
+  it("rejects a missing, archived, or other-entity account on that item only", async () => {
+    const archived = await prisma.account.create({
+      data: { userId: USER, entityId: f.pjId, type: "checking", name: "Antiga", currency: "BRL", archivedAt: new Date() },
+    });
+    const r = await bulkCreateTransactions(
+      USER,
+      [
+        dividend({ entityType: "business", personalAccountId: undefined, businessId: f.pjId, description: "Sumiu", accountId: "00000000-0000-0000-0000-000000000000" }),
+        dividend({ entityType: "business", personalAccountId: undefined, businessId: f.pjId, description: "Arquivada", accountId: archived.id }),
+        dividend({ entityType: "business", personalAccountId: undefined, businessId: f.pjId, description: "Outra entidade", accountId: f.pfChecking }),
+        dividend({ description: "ok" }),
+      ],
+      false,
+      prisma,
+    );
+    expect(r.created.map((row) => row.description)).toEqual(["ok"]);
+    expect(r.errors.map((row) => row.error)).toEqual([
+      "Account not found or access denied",
+      'Account "Antiga" is archived and cannot receive transactions',
+      'Account "Conta principal" belongs to a different entity than this transaction',
+    ]);
+    expect(await prisma.ledgerEntry.count({ where: { accountId: { in: [archived.id, f.pfChecking] } } })).toBe(1);
+  });
+
+  it("dedupes an explicit account only against that account", async () => {
+    const inter = await prisma.account.create({ data: { userId: USER, entityId: f.pjId, type: "checking", name: "Inter PJ", currency: "BRL" } });
+    const nu = await prisma.account.create({ data: { userId: USER, entityId: f.pjId, type: "checking", name: "Nu Empresas", currency: "BRL" } });
+    const first = await bulkCreateTransactions(
+      USER,
+      [dividend({ entityType: "business", personalAccountId: undefined, businessId: f.pjId, type: "expense", category: "Software", description: "Tarifa", amount: 10, accountId: inter.id })],
+      false,
+      prisma,
+    );
+    const second = await bulkCreateTransactions(
+      USER,
+      [
+        dividend({ entityType: "business", personalAccountId: undefined, businessId: f.pjId, type: "expense", category: "Software", description: "Tarifa", amount: 10, accountId: inter.id }),
+        dividend({ entityType: "business", personalAccountId: undefined, businessId: f.pjId, type: "expense", category: "Software", description: "Tarifa", amount: 10, accountId: nu.id }),
+      ],
+      false,
+      prisma,
+    );
+    expect(second.duplicates.map((row) => row.existingId)).toEqual([first.created[0].id]);
+    expect(second.created.map((row) => row.accountId)).toEqual([nu.id]);
+  });
 });
 
 describe("MCP bulk create edge cases", () => {
