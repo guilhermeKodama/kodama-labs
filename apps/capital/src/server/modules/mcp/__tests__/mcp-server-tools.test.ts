@@ -62,6 +62,8 @@ const fns = vi.hoisted(() => {
     listCreditCardsForMcp: f(),
     createCreditCardTool: f(),
     updateCreditCardTool: f(),
+    createLedgerAccount: f(),
+    archiveLedgerAccount: f(),
   };
 });
 
@@ -105,6 +107,7 @@ vi.mock("../../investments/services/dividends", () => ({
   updateDividend: fns.updateDividend,
 }));
 vi.mock("../tools/balances", () => ({ listAccountBalances: fns.listAccountBalances }));
+vi.mock("../tools/ledger-accounts", () => ({ createLedgerAccount: fns.createLedgerAccount, archiveLedgerAccount: fns.archiveLedgerAccount }));
 vi.mock("../tools/transfers", () => ({
   createTransfer: fns.createTransfer,
   listLedgerAccounts: fns.listLedgerAccounts,
@@ -229,7 +232,10 @@ const cases: ToolCase[] = [
     expected: [USER, "expense", db, true],
     readOnly: true,
   },
-  { tool: "list_accounts", fn: fns.listAccounts, args: {}, expected: [USER, db], readOnly: true },
+  // includeArchived is always passed on: the service decides nothing from its absence.
+  { tool: "list_accounts", fn: fns.listAccounts, args: {}, expected: [USER, db, { includeArchived: false }], readOnly: true },
+  { tool: "create_account", fn: fns.createLedgerAccount, args: { name: "Inter PJ", type: "checking", entityType: "business", businessId: ID }, expected: [USER, { name: "Inter PJ", type: "checking", entityType: "business", businessId: ID }, db], readOnly: false },
+  { tool: "archive_account", fn: fns.archiveLedgerAccount, args: { accountId: ID, force: true }, expected: [USER, { accountId: ID, force: true }, db], readOnly: false },
   { tool: "get_valid_types", fn: fns.getValidTypes, args: {}, expected: [], readOnly: true, sync: true },
   {
     tool: "list_investment_positions",
@@ -567,11 +573,11 @@ async function call(client: Client, name: string, args: Record<string, unknown>)
 }
 
 describe("MCP server tool wiring", () => {
-  it("registers exactly the 47 documented tools", async () => {
+  it("registers exactly the 49 documented tools", async () => {
     const { client, close } = await connect();
     const names = (await client.listTools()).tools.map((t) => t.name).sort();
     await close();
-    expect(cases).toHaveLength(47);
+    expect(cases).toHaveLength(49);
     expect(names).toEqual(cases.map((c) => c.tool).sort());
   });
 
@@ -612,7 +618,7 @@ describe("MCP server tool wiring", () => {
     expect(blockedMessage).toMatch(/not found/i);
     expect(writeTool.fn).not.toHaveBeenCalled();
     expect(allowed.isError).toBeFalsy();
-    expect(readTool.fn).toHaveBeenCalledWith(USER, db);
+    expect(readTool.fn).toHaveBeenCalledWith(USER, db, { includeArchived: false });
   });
 
   it("a token with full access sees the write tools too", async () => {
@@ -651,7 +657,8 @@ describe("MCP server tool wiring", () => {
       counterpartAmount: null,
       counterpartCurrency: null,
       operationId: null,
-      accountId: "internal-only",
+      accountId: ID,
+      accountName: "Inter PJ",
       amountBase: 99,
     });
     const { client, close } = await connect();
@@ -673,8 +680,18 @@ describe("MCP server tool wiring", () => {
       transferGroupId: null,
       counterpartAmount: null,
       counterpartCurrency: null,
+      accountId: ID,
+      accountName: "Inter PJ",
       operationId: null,
     });
+  });
+
+  it("list_accounts passes includeArchived on to the service", async () => {
+    fns.listAccounts.mockResolvedValue({ businesses: [], personalAccount: null });
+    const { client, close } = await connect();
+    await call(client, "list_accounts", { includeArchived: true });
+    await close();
+    expect(fns.listAccounts).toHaveBeenCalledWith(USER, db, { includeArchived: true });
   });
 
   it("get_valid_types returns the service payload without arguments", async () => {

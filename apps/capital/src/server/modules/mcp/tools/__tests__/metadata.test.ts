@@ -88,7 +88,19 @@ describe("listAccounts", () => {
   it("lists the businesses and the personal entity the transaction tools take ids from", async () => {
     const r = await listAccounts(USER, prisma);
     expect(r.businesses).toEqual([expect.objectContaining({ id: f.pjId, name: "Kodama LTDA", description: null, defaultCurrency: "BRL", entityType: "business" })]);
-    expect(r.personalAccount).toEqual({ id: f.pfId, name: "Personal", defaultCurrency: "BRL", entityType: "personal" });
+    expect(r.personalAccount).toEqual({ id: f.pfId, name: "Personal", defaultCurrency: "BRL", entityType: "personal", accounts: expect.any(Array) });
+    // Each entity carries the ledger accounts a transaction can be booked on, with its main account flagged.
+    expect(r.personalAccount!.accounts).toContainEqual({ id: f.pfChecking, name: "Conta principal", type: "checking", currency: "BRL", isDefault: true, archived: false });
+  });
+
+  it("hides an archived ledger account unless includeArchived is set, and flags it", async () => {
+    await prisma.account.update({ where: { id: f.broker }, data: { archivedAt: new Date() } });
+
+    const hidden = await listAccounts(USER, prisma);
+    expect(hidden.personalAccount!.accounts.map((a) => a.id)).not.toContain(f.broker);
+
+    const shown = await listAccounts(USER, prisma, { includeArchived: true });
+    expect(shown.personalAccount!.accounts).toContainEqual(expect.objectContaining({ id: f.broker, archived: true }));
   });
 
   it("leaves out an archived business, and lists several in the order they were created", async () => {
