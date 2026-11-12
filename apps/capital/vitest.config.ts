@@ -25,6 +25,11 @@ process.env.CAPITAL_BLOB_DIR = testBlobDir;
 // the closed default.
 process.env.SIGNUP_OPEN = 'true';
 
+// The cron routes fail closed: with no CRON_SECRET they answer 401 to everyone
+// (src/server/lib/cron.ts). CI has no .env, and a developer's .env holds the
+// real secret, so tests always run with a fixed one of their own.
+process.env.CRON_SECRET = 'test-cron-secret';
+
 export default defineConfig({
   test: {
     globals: true,
