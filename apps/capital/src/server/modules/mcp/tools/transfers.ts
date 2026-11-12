@@ -194,12 +194,12 @@ export async function listTransfers(userId: string, params: ListTransfersInput, 
   return { transfers, limit, offset };
 }
 
-/** Checking, cash, and brokerage accounts. These ids are not the entity ids from list_accounts. */
-export async function listLedgerAccounts(userId: string, params: { type?: "checking" | "cash" | "brokerage" }, db: DbClient) {
+/** Checking, cash, and brokerage accounts. These ids are not the entity ids from list_accounts. Archived accounts are hidden unless includeArchived is set. */
+export async function listLedgerAccounts(userId: string, params: { type?: "checking" | "cash" | "brokerage"; includeArchived?: boolean }, db: DbClient) {
   const accounts = await db.account.findMany({
     where: {
       userId,
-      archivedAt: null,
+      ...(params.includeArchived ? {} : { archivedAt: null }),
       type: params.type ?? { in: ["checking", "cash", "brokerage"] },
     },
     include: { entity: { select: { id: true, name: true, kind: true } } },
@@ -215,6 +215,7 @@ export async function listLedgerAccounts(userId: string, params: { type?: "check
       entityName: account.entity.name,
       entityKind: account.entity.kind,
       isDefault: account.isDefault,
+      archived: account.archivedAt !== null,
     })),
   };
 }

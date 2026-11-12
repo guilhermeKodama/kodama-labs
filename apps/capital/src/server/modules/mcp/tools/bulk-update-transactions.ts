@@ -4,6 +4,7 @@ import { displayAmount } from "../../ledger/lib/money";
 import { updateEntry, type InternalPatch } from "../../ledger/services/entries";
 import { inTransaction, recordMutation, type MutationRecordInput } from "../../ledger/services/mutations";
 import { categoryResolver, entryOperationId, LEGACY_ENTRY_INCLUDE } from "../lib/ledger-adapter";
+import { assertAccountReceives, assertMovableEntry, ownedAccount } from "./account-target";
 import { toPatch } from "./manage-transactions";
 
 export interface BulkUpdateTransactionItem {
@@ -20,10 +21,12 @@ export interface BulkUpdateTransactionItem {
   isTaxDeductible?: boolean;
   /** Expense category this income reimburses. Null clears it. Omit to leave it. */
   reimbursesCategory?: string | null;
+  /** Move the transaction onto this account of the same entity. Omit to leave it. */
+  accountId?: string;
 }
 
 export interface BulkUpdateResult {
-  updated: Array<{ id: string; description: string; category?: string; amount?: number; operationId: string | null }>;
+  updated: Array<{ id: string; description: string; category?: string; amount?: number; accountId?: string; operationId: string | null }>;
   errors: Array<{ id: string; error: string }>;
   batchId?: string | null;
 }
@@ -48,6 +51,11 @@ export async function bulkUpdateTransactions(userId: string, updates: BulkUpdate
       continue;
     }
     try {
+      if (u.accountId && u.accountId !== entry.accountId) {
+        const target = await ownedAccount(userId, u.accountId, db);
+        assertAccountReceives(target, entry.entityId);
+        await assertMovableEntry(userId, entry, target, db);
+      }
       const { id, ...fields } = u;
       patches.set(id, toPatch(fields, entry, resolver));
     } catch (err) {
@@ -69,6 +77,7 @@ export async function bulkUpdateTransactions(userId: string, updates: BulkUpdate
         description: u.description ?? "(unchanged)",
         category: p.categoryId ? resolver.nameOf(p.categoryId) ?? undefined : u.category,
         amount,
+        ...(u.accountId ? { accountId: p.accountId ?? entry.accountId } : {}),
         operationId: entryOperationId(entry),
       });
     }
@@ -85,6 +94,7 @@ export async function bulkUpdateTransactions(userId: string, updates: BulkUpdate
           description: raw.description,
           category: resolver.nameOf(raw.categoryId) ?? undefined,
           amount: displayAmount(raw.kind, raw.amount),
+          ...(u.accountId ? { accountId: raw.accountId } : {}),
           operationId: entryOperationId(byId.get(u.id)!),
         });
       }
