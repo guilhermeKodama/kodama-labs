@@ -48,6 +48,24 @@ export default defineConfig({
     // Hard-fails the run before any test body executes if DATABASE_URL
     // does not point at a dev/test database. See src/test/db-guard.setup.ts.
     setupFiles: ['src/test/db-guard.setup.ts'],
+    // Backend coverage (`pnpm test:coverage`): the server layer and the API
+    // routes. The UI (components, pages, hooks) is covered by the proof
+    // videos, not by unit tests, so it is not counted.
+    coverage: {
+      provider: 'v8',
+      include: ['src/server/**/*.ts', 'src/app/api/**/*.ts'],
+      exclude: [
+        '**/__tests__/**',
+        '**/*.test.ts',
+        '**/*.d.ts',
+        'src/test/**',
+        'src/generated/**',
+      ],
+      // One folder per run (coverage/main, coverage/fx): scripts/check-coverage.mjs
+      // adds them up and enforces the 90% gate.
+      reporter: ['text-summary', 'json'],
+      reportsDirectory: 'coverage/main',
+    },
   },
   resolve: {
     alias: {
