@@ -6,16 +6,20 @@ import { createEntry } from "../../ledger/services/entries";
 import { getDefaultAccount, resolveLegacyEntity } from "../../ledger/services/entities";
 import { inTransaction, recordMutation, type MutationRecordInput } from "../../ledger/services/mutations";
 import { categoryResolver } from "../lib/ledger-adapter";
+import { accountOnEntity } from "./account-target";
 
-/** date + amount + description, the same key statement imports dedupe on. */
-function dedupeKey(date: Date, amount: number, description: string): string {
-  return `${date.toISOString().split("T")[0]}|${amount.toFixed(2)}|${description.toLowerCase().trim()}`;
+/** date + amount + description, the same key statement imports dedupe on. An account id makes it per account. */
+function dedupeKey(date: Date, amount: number, description: string, accountId?: string): string {
+  const base = `${date.toISOString().split("T")[0]}|${amount.toFixed(2)}|${description.toLowerCase().trim()}`;
+  return accountId ? `${base}|${accountId}` : base;
 }
 
 /**
  * Bulk create transactions with duplicate detection against existing
- * entries (not transfers) and within the batch. Categories are validated
- * up front; the created entries form one undoable batch.
+ * entries (not transfers) and within the batch. A row with accountId is
+ * compared only with that account; a row without one keeps the old key
+ * (any account). Categories are validated up front; the created entries
+ * form one undoable batch. A bad account is an error on that item.
  */
 export async function bulkCreateTransactions(userId: string, items: BulkCreateTransactionItem[], dryRun: boolean, db: DbClient): Promise<BulkCreateResult> {
   const result: BulkCreateResult = { created: [], duplicates: [], errors: [] };
@@ -38,23 +42,45 @@ export async function bulkCreateTransactions(userId: string, items: BulkCreateTr
   const range = parseDateRangeFilter(minDate, maxDate);
   const existing = await db.ledgerEntry.findMany({
     where: { userId, deletedAt: null, transferGroupId: null, date: { gte: range.dateFrom, lte: range.dateTo } },
-    select: { id: true, date: true, amount: true, description: true },
+    select: { id: true, accountId: true, date: true, amount: true, description: true },
   });
-  const existingMap = new Map(existing.map((e) => [dedupeKey(e.date, Math.abs(Number(e.amount)), e.description), e.id]));
-  const seen = new Set<string>();
+  const existingGlobal = new Map<string, string>();
+  const existingByAccount = new Map<string, string>();
+  for (const entry of existing) {
+    const base = dedupeKey(entry.date, Math.abs(Number(entry.amount)), entry.description);
+    if (!existingGlobal.has(base)) existingGlobal.set(base, entry.id);
+    existingByAccount.set(dedupeKey(entry.date, Math.abs(Number(entry.amount)), entry.description, entry.accountId), entry.id);
+  }
+  const seenGlobal = new Set<string>();
+  const seenAccount = new Set<string>();
 
   const toCreate: { item: BulkCreateTransactionItem; categoryId: string }[] = [];
-  items.forEach((item, i) => {
-    const key = dedupeKey(parseLocalDate(item.date), item.amount, item.description);
-    const existingId = existingMap.get(key) ?? (seen.has(key) ? "within-batch" : undefined);
-    seen.add(key);
+  for (let i = 0; i < items.length; i++) {
+    const item = items[i];
+    if (item.accountId) {
+      try {
+        const entity = await resolveLegacyEntity(userId, item, db);
+        await accountOnEntity(userId, item.accountId, entity.id, db);
+      } catch (error) {
+        result.errors.push({ item, error: error instanceof Error ? error.message : String(error) });
+        continue;
+      }
+    }
+    const base = dedupeKey(parseLocalDate(item.date), item.amount, item.description);
+    const key = item.accountId ? dedupeKey(parseLocalDate(item.date), item.amount, item.description, item.accountId) : base;
+    const existingId = item.accountId
+      ? (existingByAccount.get(key) ?? (seenAccount.has(key) ? "within-batch" : undefined))
+      : (existingGlobal.get(base) ?? (seenGlobal.has(base) ? "within-batch" : undefined));
+    seenGlobal.add(base);
+    if (item.accountId) seenAccount.add(key);
     if (existingId) {
       result.duplicates.push({ description: item.description, amount: item.amount, date: item.date, existingId });
-      return;
+      continue;
     }
-    if (dryRun) result.created.push({ id: "dry-run", description: item.description, amount: item.amount, date: item.date, operationId: null });
-    else toCreate.push({ item, categoryId: categoryIds[i]! });
-  });
+    if (dryRun) {
+      result.created.push({ id: "dry-run", description: item.description, amount: item.amount, date: item.date, accountId: item.accountId, operationId: null });
+    } else toCreate.push({ item, categoryId: categoryIds[i]! });
+  }
   if (dryRun || toCreate.length === 0) return result;
 
   await inTransaction(db, async (tx) => {
@@ -62,7 +88,7 @@ export async function bulkCreateTransactions(userId: string, items: BulkCreateTr
     for (const { item, categoryId } of toCreate) {
       try {
         const entity = await resolveLegacyEntity(userId, item, tx);
-        const account = await getDefaultAccount(entity, tx);
+        const account = item.accountId ? await accountOnEntity(userId, item.accountId, entity.id, tx) : await getDefaultAccount(entity, tx);
         const created = await createEntry(
           userId,
           {

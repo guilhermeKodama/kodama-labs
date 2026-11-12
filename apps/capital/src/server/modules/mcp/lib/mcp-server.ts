@@ -38,6 +38,7 @@ import { recordInvestmentContribution, recordInvestmentRedemption } from "../../
 import { convertIncomeToDividend, recordDividend, updateDividend } from "../../investments/services/dividends";
 import { listAccountBalances } from "../tools/balances";
 import { createTransfer, listLedgerAccounts, listTransfers } from "../tools/transfers";
+import { archiveLedgerAccount, createLedgerAccount } from "../tools/ledger-accounts";
 import { getFirePlan, updateFirePhaseContribution } from "../tools/fire";
 import {
   attachReceipt,
@@ -95,6 +96,13 @@ const BulkCreateTransactionsInputSchema = z.object({
       isTaxDeductible: z.boolean().optional(),
       businessId: z.string().uuid().optional(),
       personalAccountId: z.string().uuid().optional(),
+      accountId: z
+        .string()
+        .uuid()
+        .optional()
+        .describe(
+          "Ledger account that receives this row (from list_accounts or list_ledger_accounts). Omit to use the entity's main account. Must exist, not be archived, and belong to the same entity.",
+        ),
     })
   ),
   dryRun: z.boolean().default(false),
@@ -127,6 +135,13 @@ const UpdateTransactionInputSchema = z.object({
     .nullable()
     .optional()
     .describe("Expense category this income reimburses. Null clears it. Omit to leave it. Only valid on an income."),
+  accountId: z
+    .string()
+    .uuid()
+    .optional()
+    .describe(
+      "Move the transaction onto this ledger account of the same entity. Must exist and not be archived. A different currency is rejected unless the row is a transfer. An investment cash leg is rejected.",
+    ),
 });
 
 const DeleteTransactionInputSchema = z.object({
@@ -178,6 +193,11 @@ const BulkUpdateTransactionsInputSchema = z.object({
       date: DateStringSchema.optional(),
       isTaxDeductible: z.boolean().optional(),
       reimbursesCategory: z.string().min(1).nullable().optional().describe("Expense category this income reimburses. Null clears it. Omit to leave it."),
+      accountId: z
+        .string()
+        .uuid()
+        .optional()
+        .describe("Move the transaction onto this ledger account of the same entity. Same rules as update_transaction."),
     })
   ),
   dryRun: z.boolean().default(false),
@@ -324,9 +344,15 @@ export function createCapitalMcpServer(userId: string, db: DbClient, opts: { rea
     "bulk_create_transactions",
     {
       description:
-        "Bulk create Personal transactions with automatic duplicate detection. " +
-        "Duplicates are detected by matching date + amount + description against existing " +
-        "transactions and within the batch. Supports dry-run mode to preview what would " +
+        "Bulk create personal or business transactions with automatic duplicate detection. " +
+        "Without accountId, duplicates match date + amount + description against any existing " +
+        "transaction and within the batch, and the row lands on the entity's main account. " +
+        "accountId (a ledger account id from list_accounts or list_ledger_accounts) books that " +
+        "row on that account, for example Inter PJ instead of the business's Conta principal. " +
+        "A row with accountId is a duplicate only of the same date, amount and description on that " +
+        "same account. The account must exist, not be archived, and belong to the same entity " +
+        "(the personal entity for PF, the businessId for PJ). A bad account is an error on that " +
+        "item; the other items are still created. Supports dry-run mode to preview what would " +
         "be created without writing to the database. Example: Create 15 dividend payments " +
         "from XP Investimentos statement.",
       inputSchema: BulkCreateTransactionsInputSchema,
@@ -394,6 +420,10 @@ export function createCapitalMcpServer(userId: string, db: DbClient, opts: { rea
         "with toAmount sets the outflow and the inflow. amount alone still scales both legs. " +
         "A same-currency transfer returns 422 when toAmount is set or exchangeRate is not 1. " +
         "reimbursesCategory names the expense category an income reimburses; null clears it. Only an income accepts it. " +
+        "accountId moves the transaction onto another account of the same entity. Balances are the ledger total " +
+        "(opening balance plus every live entry on the account), so both accounts change in that same write and no stored balance is edited. " +
+        "The account must exist, not be archived, and belong to the same entity. A non-transfer in a different currency than the account is rejected. " +
+        "An investment cash leg, or a transfer that funded a position, is rejected: use update_dividend with cashAccountId for a provento, and edit the operation for a buy or sell. " +
         "The returned amount is signed: a refund or reversal is a negative expense.",
       inputSchema: UpdateTransactionInputSchema,
     },
@@ -417,6 +447,8 @@ export function createCapitalMcpServer(userId: string, db: DbClient, opts: { rea
                 transferGroupId: result.transferGroupId,
                 counterpartAmount: result.counterpartAmount,
                 counterpartCurrency: result.counterpartCurrency,
+                accountId: result.accountId,
+                accountName: result.accountName,
                 operationId: result.operationId,
               },
               null,
@@ -478,13 +510,17 @@ export function createCapitalMcpServer(userId: string, db: DbClient, opts: { rea
     "list_accounts",
     {
       description:
-        "List all accounts (businesses and personal account) that can receive " +
-        "transactions. Returns business entities with their names and the personal " +
-        "account. Use the returned IDs when creating transactions.",
-      inputSchema: z.object({}),
+        "List businesses and the personal entity, each with the ledger accounts that can receive transactions. " +
+        "Entity ids are the businessId and personalAccountId other tools take. Each account has id, name, type, " +
+        "currency, isDefault and archived. Use an account id as accountId on bulk_create_transactions, " +
+        "update_transaction and bulk_update_transactions (for example Inter PJ and Nu Empresas under one business). " +
+        "Archived accounts are hidden unless includeArchived is true. Archived entities stay hidden.",
+      inputSchema: z.object({
+        includeArchived: z.boolean().optional().describe("Include archived ledger accounts. Default false; they stay hidden. Each account still has archived."),
+      }),
     },
-    async () => {
-      const result = await listAccounts(userId, db);
+    async ({ includeArchived }) => {
+      const result = await listAccounts(userId, db, { includeArchived: includeArchived ?? false });
       return {
         content: [
           {
@@ -873,7 +909,8 @@ export function createCapitalMcpServer(userId: string, db: DbClient, opts: { rea
         "Bulk update transactions with all-or-nothing validation. Validates all updates " +
         "(ownership, categories) first, then applies changes in a database transaction. " +
         "Supports updating type, amount, currency, exchange rate, description, category, " +
-        "date, and tax deductible status. Dates are normalized to noon UTC via parseLocalDate. " +
+        "date, tax deductible status, and accountId (move onto another account of the same entity, " +
+        "with the same checks as update_transaction). Dates are normalized to noon UTC via parseLocalDate. " +
         "Returns per-transaction results. Amounts are signed: a refund or reversal is a negative expense. " +
         "On a transfer, toAmount and exchangeRate restate a cross-currency pair the same way as update_transaction. " +
         "A same-currency transfer returns 422 when toAmount is set or exchangeRate is not 1. " +
@@ -962,6 +999,61 @@ export function createCapitalMcpServer(userId: string, db: DbClient, opts: { rea
         ],
       };
     }
+  );
+
+  server.registerTool(
+    "create_account",
+    {
+      description:
+        "Create a ledger account on the personal entity or a business: checking, cash, brokerage, or credit_card. " +
+        "entityType personal uses the user's PF entity (personalAccountId is optional). entityType business requires businessId. " +
+        "currency defaults to the entity's currency. initialBalance is the opening balance, stored as Account.initialBalance, " +
+        "the same number the accounts screen saves. It counts in every balance, including asOf. " +
+        "date is the day that balance was observed. The ledger has no opening-balance date, so date is not stored and the response says so. " +
+        "A credit card also requires creditLimit (positive) and closingDay and dueDay (1-31); the bill is paid from payFromAccountId or the entity's main account. " +
+        "The new account is not the entity's main account. An archived entity is rejected. Undoable (batchId).",
+      inputSchema: z.object({
+        name: z.string().min(1),
+        type: z.enum(["checking", "cash", "brokerage", "credit_card"]),
+        entityType: z.enum(["personal", "business"]),
+        businessId: z.string().uuid().optional().describe("Required when entityType is business. An entity id from list_accounts."),
+        personalAccountId: z.string().uuid().optional().describe("The personal entity id. Omit to use the user's PF entity."),
+        currency: z.string().length(3).optional(),
+        initialBalance: z.number().finite().optional().describe("Opening balance, stored as Account.initialBalance."),
+        date: DateStringSchema.optional().describe(
+          "Day the opening balance was observed. Not stored: the amount counts in every balance.",
+        ),
+        creditLimit: z.number().positive().optional().describe("Required for credit_card."),
+        closingDay: z.number().int().min(1).max(31).optional().describe("Required for credit_card."),
+        dueDay: z.number().int().min(1).max(31).optional().describe("Required for credit_card."),
+        payFromAccountId: z.string().uuid().optional().describe("Checking account that pays a credit card. Defaults to the entity's main account."),
+      }),
+    },
+    async (params) => {
+      const result = await createLedgerAccount(userId, params, db);
+      return { content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }] };
+    },
+  );
+
+  server.registerTool(
+    "archive_account",
+    {
+      description:
+        "Soft-archive a ledger account (sets archivedAt). It disappears from list_accounts and list_ledger_accounts " +
+        "unless includeArchived is true, and bulk_create_transactions, update_transaction and bulk_update_transactions reject it. " +
+        "Refused when the balance is not zero. The balance is the accounts-screen number: opening balance plus every live entry. " +
+        "Pass force: true to archive anyway; the response then includes a warning. Without force, nothing is archived. " +
+        "The entity's main account cannot be archived, even with force. Already archived is a no-op (batchId null). " +
+        "Another user's account is not found. Undoable when something changed.",
+      inputSchema: z.object({
+        accountId: z.string().uuid().describe("Ledger account id from list_accounts or list_ledger_accounts."),
+        force: z.boolean().optional().describe("Archive even when the balance is not zero. The response includes a warning."),
+      }),
+    },
+    async (params) => {
+      const result = await archiveLedgerAccount(userId, params, db);
+      return { content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }] };
+    },
   );
 
   // Register tool: list_budgets
@@ -1388,11 +1480,13 @@ export function createCapitalMcpServer(userId: string, db: DbClient, opts: { rea
     {
       description:
         "List the user's checking, cash, and brokerage accounts (not credit cards, and not entities). " +
-        "list_accounts returns businesses and the personal entity; the ids here are the ledger accounts " +
-        "create_transfer, record_investment_contribution, and record_investment_redemption take as " +
-        "fromAccountId, toAccountId, and cashAccountId. Optional type filters to one of checking, cash, brokerage.",
+        "list_accounts returns businesses and the personal entity, each with these ledger accounts; the ids here are what " +
+        "create_transfer, record_investment_contribution, record_investment_redemption, and accountId on " +
+        "bulk_create_transactions and update_transaction take. Optional type filters to one of checking, cash, brokerage. " +
+        "Each row has archived. Archived accounts are hidden unless includeArchived is true. Credit cards are not listed.",
       inputSchema: z.object({
         type: z.enum(["checking", "cash", "brokerage"]).optional(),
+        includeArchived: z.boolean().optional().describe("Include archived accounts. Default false."),
       }),
       annotations: { readOnlyHint: true },
     },

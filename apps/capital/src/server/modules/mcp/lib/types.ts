@@ -12,6 +12,8 @@ export interface BulkCreateTransactionItem {
   isTaxDeductible?: boolean;
   businessId?: string;
   personalAccountId?: string;
+  /** Ledger account that receives the cash. Omit for the entity's main account. */
+  accountId?: string;
 }
 
 export interface BulkCreateResult {
