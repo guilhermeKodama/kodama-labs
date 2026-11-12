@@ -164,3 +164,82 @@ describe("getCreditCardStatement", () => {
     await expect(getCreditCardStatement(USER, {}, prisma)).rejects.toThrow(/Must provide/);
   });
 });
+
+describe("getCreditCardStatement details", () => {
+  const statementOf = async (statement: { month: string; closingDate?: string; dueDate?: string; total?: number }, rows: Parameters<typeof importCreditCardStatement>[1]["rows"] = []) =>
+    (await importCreditCardStatement(USER, { creditCardId: f.card, statement, rows }, prisma)).statementId;
+
+  it("answers the dates as ISO timestamps and the declared total, or nulls when there are none", async () => {
+    const full = await statementOf({ month: "2026-09", closingDate: "2026-09-03", dueDate: "2026-09-10", total: 321.5 });
+    const bare = await statementOf({ month: "2026-10" });
+    // Without dates in the file the card's closing day (5) and due day (12) fill them in.
+    expect(await getCreditCardStatement(USER, { statementId: bare }, prisma)).toMatchObject({
+      statement: { closingDate: "2026-10-05T12:00:00.000Z", dueDate: "2026-10-12T12:00:00.000Z", totalAmount: null },
+    });
+    await prisma.cardStatement.update({ where: { id: bare }, data: { closingDate: null, dueDate: null } });
+
+    const withDates = await getCreditCardStatement(USER, { statementId: full }, prisma);
+    expect(withDates.statement).toMatchObject({
+      id: full,
+      month: "2026-09",
+      closingDate: "2026-09-03T12:00:00.000Z",
+      dueDate: "2026-09-10T12:00:00.000Z",
+      totalAmount: 321.5,
+      creditCard: { id: f.card, bankName: "Nubank", lastFourDigits: "1234", currency: "BRL" },
+    });
+    const withoutDates = await getCreditCardStatement(USER, { statementId: bare }, prisma);
+    expect(withoutDates.statement).toMatchObject({ month: "2026-10", closingDate: null, dueDate: null, totalAmount: null });
+    expect(withoutDates.purchases).toEqual([]);
+    expect(withoutDates.reconciliation).toMatchObject({ paymentAmount: null, difference: null, isReconciled: false });
+    expect(withoutDates.reconciliation.purchasesTotal).toBeCloseTo(0, 10);
+  });
+
+  it("shows the installment of a purchase and a purchase with no category", async () => {
+    const id = await statementOf({ month: "2026-09" }, [
+      { date: "2026-08-10", description: "TV", amount: 300, installment: { number: 2, total: 5 }, category: "Shopping" },
+      { date: "2026-08-11", description: "Avulso", amount: 20 },
+    ]);
+    await prisma.ledgerEntry.updateMany({ where: { cardStatementId: id, description: "Avulso" }, data: { categoryId: null } });
+
+    const r = await getCreditCardStatement(USER, { statementId: id }, prisma);
+
+    const tv = r.purchases.find((p) => p.description.startsWith("TV"))!;
+    expect(tv).toMatchObject({ installment: { number: 2, total: 5 }, category: "Shopping", amount: 300 });
+    expect(r.purchases.find((p) => p.description === "Avulso")).toMatchObject({ installment: null, category: null, amount: 20 });
+  });
+
+  it("does not count the projected installments of later months as purchases", async () => {
+    const id = await statementOf({ month: "2026-09" }, [{ date: "2026-08-10", description: "Geladeira", amount: 100, installment: { number: 1, total: 3 } }]);
+    const next = await prisma.cardStatement.findFirst({ where: { accountId: f.card, month: "2026-10" } });
+    expect(next).not.toBeNull();
+
+    const first = await getCreditCardStatement(USER, { statementId: id }, prisma);
+    const later = await getCreditCardStatement(USER, { statementId: next!.id }, prisma);
+
+    expect(first.purchases).toHaveLength(1);
+    expect(first.reconciliation.purchasesTotal).toBe(100);
+    expect(later.purchases).toEqual([]);
+    expect(later.reconciliation.purchasesTotal).toBeCloseTo(0, 10);
+  });
+
+  it("reports a payment that differs from the purchases as not reconciled, with the difference", async () => {
+    const id = await statementOf({ month: "2026-09" }, [{ date: "2026-08-10", description: "Coffee", amount: 150, category: "Food" }]);
+    const payment = (await createEntry(USER, { kind: "expense", accountId: f.pfChecking, amount: 160.25, date: "2026-09-12", description: "Pagamento" }, prisma)).entryIds[0];
+    await markTransactionAsCardSettlement(USER, { transactionId: payment, statementId: id }, prisma);
+
+    const r = await getCreditCardStatement(USER, { statementId: id }, prisma);
+
+    expect(r.reconciliation).toMatchObject({ purchasesTotal: 150, paymentAmount: 160.25, difference: 10.25, isReconciled: false });
+    expect(r.billPayment).toMatchObject({ amount: 160.25 });
+  });
+
+  it("hides a statement from another user, and one that does not exist", async () => {
+    const id = await statementOf({ month: "2026-09" });
+    await createLedgerFixture(prisma, OTHER);
+    await expect(getCreditCardStatement(OTHER, { statementId: id }, prisma)).rejects.toThrow(/Statement not found/);
+    await expect(getCreditCardStatement(OTHER, { creditCardId: f.card, month: "2026-09" }, prisma)).rejects.toThrow(/Statement not found/);
+    await expect(getCreditCardStatement(USER, { statementId: "00000000-0000-4000-8000-000000000000" }, prisma)).rejects.toThrow(/Statement not found/);
+    await expect(getCreditCardStatement(USER, { creditCardId: f.card, month: "2030-01" }, prisma)).rejects.toThrow(/Statement not found/);
+    await expect(getCreditCardStatement(USER, { creditCardId: f.card }, prisma)).rejects.toThrow(/Must provide/);
+  });
+});

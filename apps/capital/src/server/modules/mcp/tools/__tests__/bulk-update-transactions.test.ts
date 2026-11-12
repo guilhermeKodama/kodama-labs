@@ -202,3 +202,48 @@ describe("update_transaction / delete_transaction", () => {
     await expect(deleteTransactionTool(USER, a, prisma)).rejects.toThrow(/not found/);
   });
 });
+
+describe("bulkUpdateTransactions edge cases", () => {
+  it("does nothing for an empty list", async () => {
+    expect(await bulkUpdateTransactions(USER, [], false, prisma)).toEqual({ updated: [], errors: [] });
+    expect(await prisma.mutationBatch.count({ where: { userId: USER } })).toBe(0);
+  });
+
+  it("dry-run shows the amount sent, the stored one otherwise, and the category as typed when it does not change", async () => {
+    const a = await expense("a");
+    const b = await expense("b");
+    const batchesBefore = await prisma.mutationBatch.count({ where: { userId: USER } });
+    const r = await bulkUpdateTransactions(USER, [{ id: a, amount: 77 }, { id: b, category: "Groceries", description: "B!" }], true, prisma);
+    expect(r.errors).toEqual([]);
+    expect(r.updated).toEqual([
+      { id: a, description: "(unchanged)", category: undefined, amount: 77, operationId: null },
+      { id: b, description: "B!", category: "Groceries", amount: 10, operationId: null },
+    ]);
+    expect(r.batchId).toBeUndefined();
+    expect(await prisma.mutationBatch.count({ where: { userId: USER } })).toBe(batchesBefore);
+  });
+
+  it("reports a failure while writing as a batch error, with no partial update and no batch", async () => {
+    const a = await expense("a");
+    const checking2 = await prisma.account.create({ data: { userId: USER, entityId: f.pfId, type: "checking", name: "Segunda", currency: "BRL" } });
+    const transfer = await createEntry(USER, { kind: "transfer", fromAccountId: f.pfChecking, toAccountId: checking2.id, amount: 50, date: "2026-09-10", description: "entre contas" }, prisma, { skipRules: true });
+    const batchesBefore = await prisma.mutationBatch.count({ where: { userId: USER } });
+    // The transfer passes validation, but a same-currency transfer has one amount: updateEntry refuses toAmount.
+    const r = await bulkUpdateTransactions(USER, [{ id: a, description: "changed" }, { id: transfer.entryIds[0], toAmount: 10 }], false, prisma);
+
+    expect(r.updated).toEqual([]);
+    expect(r.errors).toHaveLength(1);
+    expect(r.errors[0].id).toBe("batch");
+    expect(r.errors[0].error.length).toBeGreaterThan(0);
+    expect(r.batchId).toBeUndefined();
+    expect((await prisma.ledgerEntry.findUniqueOrThrow({ where: { id: a } })).description).toBe("a");
+    expect(await prisma.mutationBatch.count({ where: { userId: USER } })).toBe(batchesBefore);
+  });
+
+  it("updates an uncategorized entry without inventing a category in the answer", async () => {
+    const a = await expense("sem categoria", null);
+    const r = await bulkUpdateTransactions(USER, [{ id: a, description: "ainda sem" }], false, prisma);
+    expect(r.errors).toEqual([]);
+    expect(r.updated).toEqual([{ id: a, description: "ainda sem", category: undefined, amount: 10, operationId: null }]);
+  });
+});

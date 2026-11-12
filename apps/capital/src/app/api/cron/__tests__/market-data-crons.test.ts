@@ -18,6 +18,7 @@ import { GET as updatePrices } from "../update-prices/route";
 import { GET as updateRates } from "../update-rates/route";
 import { GET as syncPrices } from "../sync-prices/route";
 import { GET as marketClose } from "../market-close/route";
+import { GET as portfolioSnapshot } from "../portfolio-snapshot/route";
 
 /**
  * update-prices, update-rates and sync-prices now go through withCron,
@@ -205,6 +206,20 @@ describe("sync-prices cron", () => {
     expect(res.status).toBe(200);
     expect(await res.json()).toMatchObject({ success: true, status: "ok" });
     expect(await prisma.integrationRun.findFirstOrThrow({ where: { job: "sync-prices" } })).toMatchObject({ status: "ok", requested: 2, succeeded: 2 });
+  });
+});
+
+describe("portfolio-snapshot cron", () => {
+  it("runs the snapshots and reports failed users", async () => {
+    services.runPortfolioSnapshots.mockResolvedValueOnce({ users: 2, live: 3, closed: 1, errors: [] });
+    const ok = await portfolioSnapshot(request("portfolio-snapshot", env.CRON_SECRET));
+    expect(ok.status).toBe(200);
+    expect(await ok.json()).toMatchObject({ success: true, users: 2, live: 3, closed: 1 });
+    services.runPortfolioSnapshots.mockResolvedValueOnce({ users: 1, live: 0, closed: 0, errors: [{ userId: "u", error: "boom" }] });
+    const failed = await portfolioSnapshot(request("portfolio-snapshot", env.CRON_SECRET));
+    expect(failed.status).toBe(503);
+    expect(await failed.json()).toMatchObject({ success: false, status: "failed", errors: [{ userId: "u" }] });
+    expect(await prisma.integrationRun.count({ where: { job: "portfolio-snapshot" } })).toBe(2);
   });
 });
 

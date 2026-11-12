@@ -72,3 +72,74 @@ describe("MCP credit card tools", () => {
     expect((await listCreditCardsForMcp(USER_A, {}, prisma)).creditCards[0].isActive).toBe(false);
   });
 });
+
+describe("MCP credit card tools: cards without optional data", () => {
+  const bare = (over: Record<string, unknown> = {}) =>
+    prisma.account.create({
+      data: { userId: USER_A, entityId: a.pfId, type: "credit_card", name: "Cartão antigo", currency: "BRL", ...over },
+    });
+
+  it("reads a card with no issuer, last 4, limit or days with safe defaults", async () => {
+    const old = await bare();
+    const { creditCards } = await listCreditCardsForMcp(USER_A, {}, prisma);
+    expect(creditCards).toEqual([
+      expect.objectContaining({
+        id: old.id,
+        bankName: "Cartão antigo",
+        nickname: "Cartão antigo",
+        lastFourDigits: "",
+        creditLimit: 0,
+        closingDay: 1,
+        dueDay: 1,
+        isActive: true,
+        ownerName: "Personal",
+        latestStatementMonth: null,
+      }),
+    ]);
+  });
+
+  it("shows no nickname when the name is the default '<bank> ****<last 4>'", async () => {
+    const c = await createCreditCardTool(USER_A, card({ bankName: "Itaú", lastFourDigits: "0042" }), prisma);
+    expect(c.nickname).toBeNull();
+    const row = await prisma.account.findUniqueOrThrow({ where: { id: c.id } });
+    expect(row.name).toBe("Itaú ****0042");
+  });
+
+  it("requires businessId for a business card, and a card to be a credit card of the user", async () => {
+    await expect(createCreditCardTool(USER_A, card({ entityType: "business", personalAccountId: undefined }), prisma)).rejects.toThrow(/businessId is required/);
+    await expect(updateCreditCardTool(USER_A, { id: a.pfChecking, closingDay: 5 }, prisma)).rejects.toThrow(/Credit card not found/);
+    await expect(updateCreditCardTool(USER_A, { id: "00000000-0000-4000-8000-000000000000", closingDay: 5 }, prisma)).rejects.toThrow(/Credit card not found/);
+  });
+
+  it("rejects a malformed last 4 on update", async () => {
+    const c = await createCreditCardTool(USER_A, card(), prisma);
+    await expect(updateCreditCardTool(USER_A, { id: c.id, lastFourDigits: "12a4" }, prisma)).rejects.toThrow(/exactly 4 digits/);
+    expect((await prisma.account.findUniqueOrThrow({ where: { id: c.id } })).externalId).toBe("3308");
+  });
+
+  it("keeps a custom nickname when the bank or last 4 change, sets a new one, and resets it when blank", async () => {
+    const c = await createCreditCardTool(USER_A, card({ nickname: "Viagens" }), prisma);
+
+    const moved = await updateCreditCardTool(USER_A, { id: c.id, bankName: "Inter", lastFourDigits: "9999", dueDay: 20 }, prisma);
+    expect(moved).toMatchObject({ nickname: "Viagens", bankName: "Inter", lastFourDigits: "9999", dueDay: 20, closingDay: 3 });
+
+    const renamed = await updateCreditCardTool(USER_A, { id: c.id, nickname: "  Dia a dia  " }, prisma);
+    expect(renamed.nickname).toBe("Dia a dia");
+
+    const reset = await updateCreditCardTool(USER_A, { id: c.id, nickname: "   " }, prisma);
+    expect(reset.nickname).toBeNull();
+    expect((await prisma.account.findUniqueOrThrow({ where: { id: c.id } })).name).toBe("Inter ****9999");
+  });
+
+  it("fills in issuer and last 4 on a legacy card without changing its name or reactivating it", async () => {
+    const old = await bare({ institution: null, externalId: null, closingDay: 5, dueDay: 10, creditLimit: 1000 });
+    const r = await updateCreditCardTool(USER_A, { id: old.id, closingDay: 12, isActive: false }, prisma);
+    expect(r).toMatchObject({ id: old.id, bankName: "Cartão antigo", nickname: "Cartão antigo", closingDay: 12, isActive: false });
+    const row = await prisma.account.findUniqueOrThrow({ where: { id: old.id } });
+    expect([row.name, row.institution, row.externalId, row.closingDay]).toEqual(["Cartão antigo", "Cartão antigo", "", 12]);
+    expect(row.archivedAt).not.toBeNull();
+
+    const back = await updateCreditCardTool(USER_A, { id: old.id, isActive: true }, prisma);
+    expect(back.isActive).toBe(true);
+  });
+});
