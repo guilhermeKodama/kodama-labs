@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { FetchOutcome } from "@capital/server/lib/http";
 import { prisma } from "@capital/server/lib/prisma";
+import type { PrismaClient } from "@/generated/prisma";
 import { marketFor } from "../../lib/calendar";
 import type { MarketDataProvider, PricePoint } from "../../lib/provider";
 
@@ -185,5 +186,106 @@ describe("syncPrices", () => {
     expect(result.requested).toBe(1);
     expect(await prisma.assetPrice.findFirst({ where: { assetId: included.id } })).not.toBeNull();
     expect(await prisma.assetPrice.findFirst({ where: { assetId: excluded.id } })).toBeNull();
+  });
+  it("treats an ok answer with no points as not_found and tries the next provider", async () => {
+    const empty = stubProvider("fixtureA", ["stocks"], { fetchPrices: vi.fn(async (): Promise<FetchOutcome<PricePoint[]>> => ({ outcome: "ok", status: 200, data: [] })) });
+    const second = stubProvider("fixtureB", ["stocks"], { fetchPrices: vi.fn(async () => ok({ date: "2026-11-10", close: 12, currency: "BRL" })) });
+
+    const asset = await createAsset(`${SYMBOL_PREFIX}M`, "stocks", "BRL", [
+      { source: "fixtureA", externalId: "m" },
+      { source: "fixtureB", externalId: "m" },
+    ]);
+    registryMock.chainFor.mockReturnValue([empty, second]);
+    expect(await syncPrices(prisma, { assetIds: [asset.id] })).toMatchObject({ priced: 1, missing: 0, bySource: { fixtureB: 1 } });
+
+    registryMock.chainFor.mockReturnValue([empty]);
+    const alone = await syncPrices(prisma, { assetIds: [asset.id] });
+    expect(alone).toMatchObject({ priced: 0, missing: 1 });
+    expect(alone.issues).toEqual([{ assetId: asset.id, symbol: `${SYMBOL_PREFIX}M`, outcome: "not_found", source: "fixtureA" }]);
+  });
+
+  it("skips a provider with no fetchPrices and reports the last provider's failure when several fail", async () => {
+    const bulkOnly = stubProvider("bulkOnly", ["stocks"], { capabilities: ["bulk-prices"] });
+    const down = stubProvider("fixtureA", ["stocks"], { fetchPrices: vi.fn(async () => providerDown("first down")) });
+    const limited = stubProvider("fixtureB", ["stocks"], { fetchPrices: vi.fn(async (): Promise<FetchOutcome<PricePoint[]>> => ({ outcome: "rate_limited", status: 429, retryAfterMs: null })) });
+    registryMock.chainFor.mockReturnValue([bulkOnly, down, limited]);
+
+    const asset = await createAsset(`${SYMBOL_PREFIX}N`, "stocks", "BRL", [
+      { source: "bulkOnly", externalId: "n" },
+      { source: "fixtureA", externalId: "n" },
+      { source: "fixtureB", externalId: "n" },
+    ]);
+    const result = await syncPrices(prisma, { assetIds: [asset.id] });
+    expect(result.issues).toEqual([{ assetId: asset.id, symbol: `${SYMBOL_PREFIX}N`, outcome: "rate_limited", source: "fixtureB", error: undefined }]);
+  });
+
+  it("requests nothing for an empty assetIds scope and never asks a provider", async () => {
+    const providerA = stubProvider("fixtureA", ["stocks"], { fetchPrices: vi.fn(async () => ok({ date: "2026-11-10", close: 10, currency: "BRL" })) });
+    registryMock.chainFor.mockReturnValue([providerA]);
+    expect(await syncPrices(prisma, { assetIds: [] })).toEqual({ requested: 0, priced: 0, suspect: 0, missing: 0, bySource: {}, providerLatestDate: null, issues: [] });
+    expect(providerA.fetchPrices).not.toHaveBeenCalled();
+  });
+
+  it("without a scope syncs the active assets and leaves inactive ones alone", async () => {
+    const providerA = stubProvider("fixtureA", ["stocks"], { fetchPrices: vi.fn(async () => ok({ date: "2026-11-10", close: 10, currency: "BRL" })) });
+    registryMock.chainFor.mockReturnValue([providerA]);
+    const active = await createAsset(`${SYMBOL_PREFIX}O`, "stocks", "BRL", [{ source: "fixtureA", externalId: "o" }]);
+    const inactive = await createAsset(`${SYMBOL_PREFIX}P`, "stocks", "BRL", [{ source: "fixtureA", externalId: "p" }]);
+    await prisma.asset.update({ where: { id: inactive.id }, data: { isActive: false } });
+
+    // The dev database holds other assets: confine the unscoped query to this test's own.
+    const confined = new Proxy(prisma, {
+      get(target, prop) {
+        if (prop !== "asset") return Reflect.get(target, prop);
+        return { findMany: (args: Parameters<typeof prisma.asset.findMany>[0]) => target.asset.findMany({ ...args, where: { ...args?.where, symbol: { startsWith: SYMBOL_PREFIX } } }) };
+      },
+    }) as PrismaClient;
+
+    const result = await syncPrices(confined);
+
+    expect(result).toMatchObject({ requested: 1, priced: 1 });
+    expect(await prisma.assetPrice.count({ where: { assetId: active.id } })).toBe(1);
+    expect(await prisma.assetPrice.count({ where: { assetId: inactive.id } })).toBe(0);
+  });
+
+  it("falls a whole class back to the per-asset chain when its bulk leader is down", async () => {
+    const bulkLeader = stubProvider("bulkLeader", ["fii"], {
+      fetchAllPrices: vi.fn(async (): Promise<FetchOutcome<Map<string, PricePoint>>> => ({ outcome: "provider_down", status: 503, error: "bulk down" })),
+      fetchPrices: vi.fn(async () => ok({ date: "2026-11-10", close: 130, currency: "BRL" })),
+    });
+    registryMock.chainFor.mockReturnValue([bulkLeader]);
+
+    const asset = await createAsset(`${SYMBOL_PREFIX}Q`, "fii", "BRL", [{ source: "bulkLeader", externalId: "q" }]);
+    const result = await syncPrices(prisma, { assetIds: [asset.id], now: new Date("2026-11-12T12:00:00Z") });
+
+    expect(bulkLeader.fetchAllPrices).toHaveBeenCalledWith("2026-11-12");
+    expect(bulkLeader.fetchPrices).toHaveBeenCalledOnce();
+    expect(result).toMatchObject({ priced: 1, bySource: { bulkLeader: 1 } });
+  });
+
+  it("reports a bulk point acceptPrice refuses as a rejected issue and writes nothing", async () => {
+    const bulkPoints = new Map([["q", { date: "2026-11-10", close: 128.4, currency: "USD" }]]);
+    const bulkLeader = stubProvider("bulkLeader", ["fii"], { fetchAllPrices: vi.fn(async () => ({ outcome: "ok" as const, status: 200, data: bulkPoints })) });
+    registryMock.chainFor.mockReturnValue([bulkLeader]);
+
+    const asset = await createAsset(`${SYMBOL_PREFIX}R`, "fii", "BRL", [{ source: "bulkLeader", externalId: "q" }]);
+    const result = await syncPrices(prisma, { assetIds: [asset.id] });
+
+    expect(result).toMatchObject({ requested: 1, priced: 0, missing: 1 });
+    expect(result.issues).toEqual([
+      { assetId: asset.id, symbol: `${SYMBOL_PREFIX}R`, outcome: "rejected", source: "bulkLeader", error: "moeda USD não corresponde à moeda do ativo (BRL)" },
+    ]);
+    expect(await prisma.assetPrice.count({ where: { assetId: asset.id } })).toBe(0);
+  });
+
+  it("tracks the newest date it priced across assets as the provider's latest", async () => {
+    const dates = ["2026-11-09", "2026-11-10"];
+    const fetchPrices = vi.fn(async () => ok({ date: dates.shift() ?? "2026-11-10", close: 10, currency: "BRL" }));
+    registryMock.chainFor.mockReturnValue([stubProvider("fixtureA", ["stocks"], { fetchPrices })]);
+    const first = await createAsset(`${SYMBOL_PREFIX}S`, "stocks", "BRL", [{ source: "fixtureA", externalId: "s" }]);
+    const second = await createAsset(`${SYMBOL_PREFIX}T`, "stocks", "BRL", [{ source: "fixtureA", externalId: "t" }]);
+    const result = await syncPrices(prisma, { assetIds: [first.id, second.id] });
+    expect(result.priced).toBe(2);
+    expect(result.providerLatestDate).toEqual(new Date("2026-11-10T00:00:00Z"));
   });
 });

@@ -36,6 +36,17 @@ describe("activeProviders", () => {
     expect(activeProviders().map((p) => p.id)).toEqual(["yahoo", "brapi", "coingecko"]);
   });
 
+  it("treats a MARKET_DATA_CHAIN or MARKET_DATA_DISABLED made only of separators and blanks as unset", () => {
+    envMock.MARKET_DATA_CHAIN = " , ,";
+    envMock.MARKET_DATA_DISABLED = ",  ,";
+    expect(activeProviders().map((p) => p.id)).toEqual(["yahoo", "brapi", "coingecko"]);
+  });
+
+  it("trims the ids of a comma-separated list", () => {
+    envMock.MARKET_DATA_DISABLED = " yahoo , coingecko ";
+    expect(activeProviders().map((p) => p.id)).toEqual(["brapi"]);
+  });
+
   it("applies MARKET_DATA_DISABLED before MARKET_DATA_CHAIN's reorder", () => {
     envMock.MARKET_DATA_DISABLED = "brapi";
     envMock.MARKET_DATA_CHAIN = "brapi,yahoo,coingecko";

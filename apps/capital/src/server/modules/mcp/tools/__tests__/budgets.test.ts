@@ -188,3 +188,46 @@ describe("get_budget_status", () => {
     await expect(createBudget(USER, budget({ category: "Food", effectiveFrom: "2027-01-01" }), prisma)).rejects.toThrow(/already starts/);
   });
 });
+
+describe("budget edge cases", () => {
+  it("lists nothing for a category name the user does not have, and filters by a known one", async () => {
+    await createBudget(USER, budget(), prisma);
+    await createBudget(USER, budget({ category: "Food", amount: 900 }), prisma);
+    expect(await listBudgets(USER, { category: "Nope" }, prisma)).toEqual([]);
+    const shopping = await listBudgets(USER, { category: "Shopping" }, prisma);
+    expect(shopping.map((b) => [b.category, b.amount])).toEqual([["Shopping", 2800]]);
+    expect((await listBudgets(USER, {}, prisma)).map((b) => b.category).sort()).toEqual(["Food", "Shopping"]);
+  });
+
+  it("stores the kind the caller names on create: fixo, variavel, null, or nothing", async () => {
+    const fixo = await createBudget(USER, budget({ kind: "fixo" }), prisma);
+    const variavel = await createBudget(USER, budget({ category: "Food", kind: "variavel" }), prisma);
+    expect([fixo.kind, variavel.kind]).toEqual(["fixo", "variavel"]);
+
+    const explicitNull = await createBudget(USER, budget({ category: "Food", effectiveFrom: "2026-12-01", kind: null }), prisma);
+    const omitted = await createBudget(USER, budget({ effectiveFrom: "2026-12-01" }), prisma);
+    expect(explicitNull.kind).toBeNull();
+    expect(omitted.kind).toBeNull();
+  });
+
+  it("reports 0% used for a budget of zero, and sorts the categories by how much of the budget is used", async () => {
+    await createBudget(USER, budget({ amount: 0 }), prisma);
+    await createBudget(USER, budget({ category: "Food", amount: 1000 }), prisma);
+    await expense(300, "2026-10-10", f.categories.Food);
+    await expense(50, "2026-10-11", f.categories.Shopping);
+
+    const status = await getBudgetStatus(USER, { month: "2026-10" }, prisma);
+
+    const byCategory = new Map(status.categories.map((c) => [c.category, c]));
+    expect(byCategory.get("Shopping")).toMatchObject({ budgeted: 0, actual: 50, percentUsed: 0, isOverBudget: true, remaining: -50 });
+    expect(byCategory.get("Food")).toMatchObject({ budgeted: 1000, actual: 300, percentUsed: 30, isOverBudget: false, remaining: 700 });
+    expect(status.categories.map((c) => c.category)).toEqual(["Food", "Shopping"]);
+  });
+
+  it("rejects an impossible month and an account that is not the user's", async () => {
+    await expect(getBudgetStatus(USER, { month: "2026-13" }, prisma)).rejects.toThrow(/Invalid month format/);
+    await expect(getBudgetStatus(USER, { month: "2026-00" }, prisma)).rejects.toThrow(/Invalid month format/);
+    await expect(getBudgetStatus(USER, { month: "2026-10", accountId: other.pfId }, prisma)).rejects.toThrow(/Account not found or access denied/);
+    await expect(listBudgets(USER, { accountId: other.pfId }, prisma)).rejects.toThrow(/Account not found or access denied/);
+  });
+});

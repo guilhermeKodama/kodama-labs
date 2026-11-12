@@ -18,3 +18,24 @@ describe("unmatchedProventos", () => {
     expect(unmatchedProventos(operations, [op("near", "2026-08-08", 100.009)])).toEqual([]);
   });
 });
+
+describe("unmatchedProventos ordering", () => {
+  it("breaks ties between operations on the same instant by id, so the same row is matched whatever the input order", () => {
+    const operations = [op("op-b", "2026-08-10", 100), op("op-a", "2026-08-10", 100)];
+    const entries = [op("e1", "2026-08-10", 100), op("e2", "2026-08-10", 100), op("e3", "2026-08-10", 100)];
+    // Two operations absorb two of the three rows; the last row in id order is left over.
+    expect(unmatchedProventos(operations, entries)).toEqual(["e3"]);
+    expect(unmatchedProventos([...operations].reverse(), [...entries].reverse())).toEqual(["e3"]);
+  });
+
+  it("matches an entry with the closest operation in time when several fit", () => {
+    const operations = [op("early", "2026-08-01", 100), op("close", "2026-08-09", 100)];
+    expect(unmatchedProventos(operations, [op("e", "2026-08-10", 100)])).toEqual([]);
+    // "close" was taken, so a second row can only use "early", 9 days away: too far.
+    expect(unmatchedProventos(operations, [op("e1", "2026-08-10", 100), op("e2", "2026-08-10", 100)])).toEqual(["e2"]);
+  });
+
+  it("returns every row when there are no operations", () => {
+    expect(unmatchedProventos([], [op("a", "2026-08-10", 1), op("b", "2026-08-11", 2)])).toEqual(["a", "b"]);
+  });
+});

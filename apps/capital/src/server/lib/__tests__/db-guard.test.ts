@@ -81,3 +81,10 @@ describe("assertNonProductionDatabase", () => {
     expect(() => assertNonProductionDatabase(PROD, "test")).toThrow(/Refusing to connect/);
   });
 });
+
+describe("a url with no database name", () => {
+  it("has no name, so it is refused as unparseable outside production", () => {
+    expect(databaseNameFromUrl("postgresql://root:root@localhost:5433/")).toBeNull();
+    expect(() => assertNonProductionDatabase("postgresql://root:root@localhost:5433/", "test")).toThrow(/resolved the database "<unparseable>"/);
+  });
+});

@@ -153,3 +153,34 @@ describe("listTransactions", () => {
     expect(r.transactions.map((t) => t.description).sort()).toEqual(["GitHub", "Notebook"]);
   });
 });
+
+describe("listTransactions filters", () => {
+  it("narrows by entity: the business id, the personal id and the entity type", async () => {
+    await createEntry(USER, { kind: "expense", accountId: f.pjChecking, amount: 80, date: "2026-10-03", description: "Figma", categoryId: f.categories.Software }, prisma);
+
+    const business = await listTransactions(USER, { businessId: f.pjId, dateFrom: "2026-10-01", dateTo: "2026-10-31" }, prisma);
+    expect(business.transactions.map((t) => t.description)).toEqual(["Figma"]);
+    expect(business.transactions[0]).toMatchObject({ entityType: "business", businessId: f.pjId, personalAccountId: null, amount: 80 });
+
+    const personal = await listTransactions(USER, { personalAccountId: f.pfId, dateFrom: "2026-10-01", dateTo: "2026-10-31" }, prisma);
+    expect(personal.transactions.map((t) => t.description)).not.toContain("Figma");
+    expect(personal.transactions.map((t) => t.description)).toContain("Salário");
+
+    const byType = await listTransactions(USER, { entityType: "business", dateFrom: "2026-10-01", dateTo: "2026-10-31" }, prisma);
+    expect(byType.transactions.map((t) => t.description)).toEqual(["Figma"]);
+  });
+
+  it("narrows by category name and by type, leaving transfers out of a typed list", async () => {
+    const software = await listTransactions(USER, { category: "Software", dateFrom: "2026-10-01", dateTo: "2026-10-31" }, prisma);
+    expect(software.transactions.length).toBeGreaterThan(0);
+    expect(software.transactions.every((t) => t.category === "Software")).toBe(true);
+
+    const incomes = await listTransactions(USER, { type: "income", dateFrom: "2026-10-01", dateTo: "2026-10-31" }, prisma);
+    expect(incomes.transactions.map((t) => t.description)).toEqual(["Salário"]);
+    expect(incomes.transactions.every((t) => t.transferGroupId === null)).toBe(true);
+  });
+
+  it("refuses a user that does not exist", async () => {
+    await expect(listTransactions("test-user-mcp-list-nobody", {}, prisma)).rejects.toThrow("User not found");
+  });
+});

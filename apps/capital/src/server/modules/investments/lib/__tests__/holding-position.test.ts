@@ -156,3 +156,87 @@ describe("undo guard", () => {
     ).not.toThrow();
   });
 });
+
+describe("replayPosition edge cases", () => {
+  it("treats a missing fee as zero on a buy and on a sale", () => {
+    const noFees = (o: PositionOperation) => ({ ...o, fees: undefined as unknown as number });
+    const p = replayPosition([
+      noFees(op("buy", { quantity: 10, pricePerUnit: 10, totalAmount: 100 })),
+      noFees(op("sell", { quantity: 5, pricePerUnit: 12, totalAmount: 60 })),
+    ]);
+    expect(p).toMatchObject({ quantity: 5, cost: 50, realizedGain: 10 });
+  });
+
+  it("proceeds a sale with no amount as quantity x price", () => {
+    const p = replayPosition([op("buy", { quantity: 10, pricePerUnit: 10, totalAmount: 100 }), op("sell", { quantity: 4, pricePerUnit: 15 })]);
+    // 4 x 15 = 60 against 4/10 of the 100 cost.
+    expect(p).toMatchObject({ quantity: 6, cost: 60, realizedGain: 20 });
+  });
+
+  it("proceeds a clamped oversale only for the part that was held", () => {
+    const sell = op("sell", { quantity: 20, pricePerUnit: 15, totalAmount: 300 });
+    const p = replayPosition([op("buy", { quantity: 10, pricePerUnit: 10, totalAmount: 100 }), sell]);
+    // Half of the 300 proceeds (10 of the 20 asked) against the whole 100 cost.
+    expect(p.realizedGain).toBe(50);
+    expect(p.oversold).toEqual([sell.id]);
+  });
+
+  it("starts a delta adjustment on an empty position at zero cost, and closes it when the delta empties the position", () => {
+    const fromEmpty = replayPosition([op("adjustment", { quantity: 3, pricePerUnit: 10, totalAmount: 0, adjustmentMode: "delta" })]);
+    expect(fromEmpty).toMatchObject({ quantity: 3, cost: 0, closed: false });
+    const emptied = replayPosition([op("buy", { quantity: 10, pricePerUnit: 10, totalAmount: 100 }), op("adjustment", { quantity: -10, pricePerUnit: 10, totalAmount: 0, adjustmentMode: "delta" })]);
+    expect(emptied).toMatchObject({ quantity: 0, cost: 0, closed: true });
+  });
+
+  it("moves only the cost basis for an adjustment with an amount and no quantity, never below zero", () => {
+    const buy = op("buy", { quantity: 10, pricePerUnit: 10, totalAmount: 100 });
+    expect(replayPosition([buy, op("adjustment", { totalAmount: 25 })])).toMatchObject({ quantity: 10, cost: 125, closed: false });
+    expect(replayPosition([buy, op("adjustment", { totalAmount: -500 })])).toMatchObject({ quantity: 10, cost: 0 });
+  });
+
+  it("ignores an operation type it does not know", () => {
+    const p = replayPosition([op("buy", { quantity: 1, pricePerUnit: 10, totalAmount: 10 }), op("transfer" as PositionOperation["type"], { totalAmount: 99 })]);
+    expect(p).toMatchObject({ quantity: 1, cost: 10 });
+  });
+});
+
+describe("operationsBeforeUndo with odd snapshots", () => {
+  const snapshotOf = (fields: Record<string, unknown>) => ({ id: "snap", holdingId: "h1", type: "buy", date: "2026-09-10T00:00:00.000Z", ...fields });
+  const record = (after: unknown) => ({ model: "InvestmentOperation", recordId: "snap", before: null, after });
+
+  it("fills a snapshot's missing numbers and creation time, and reads numeric strings", () => {
+    const [rebuilt] = operationsBeforeUndo("h1", [], [record(snapshotOf({ quantity: "2.5", pricePerUnit: null, totalAmount: null }))]);
+    expect(rebuilt).toMatchObject({ id: "snap", type: "buy", quantity: 2.5, pricePerUnit: null, totalAmount: 0, fees: 0 });
+    expect(rebuilt).toMatchObject({ createdAt: new Date("2026-09-10T00:00:00.000Z") });
+  });
+
+  it("drops snapshots that are not an operation of the holding", () => {
+    const rebuilt = operationsBeforeUndo("h1", [], [
+      record("not an object"),
+      record(null),
+      record(snapshotOf({ id: 7 })),
+      record(snapshotOf({ holdingId: undefined })),
+      record(snapshotOf({ type: undefined })),
+      record(snapshotOf({ holdingId: "another-holding" })),
+    ]);
+    expect(rebuilt).toEqual([]);
+  });
+
+  it("breaks a tie on the same date by creation time", () => {
+    const rebuilt = operationsBeforeUndo("h1", [], [
+      { model: "InvestmentOperation", recordId: "late", before: null, after: snapshotOf({ id: "late", createdAt: "2026-09-10T15:00:00.000Z" }) },
+      { model: "InvestmentOperation", recordId: "early", before: null, after: snapshotOf({ id: "early", createdAt: "2026-09-10T08:00:00.000Z" }) },
+    ]);
+    expect(rebuilt.map((o) => o.id)).toEqual(["early", "late"]);
+  });
+});
+
+describe("assertUndoKeepsPosition", () => {
+  const at = (day: string) => ({ date: new Date(`2026-09-${day}T00:00:00Z`), createdAt: new Date(`2026-09-${day}T12:00:00Z`) });
+
+  it("lets an undo through when nothing is oversold, and ignores oversold sales that came from an import", () => {
+    expect(() => assertUndoKeepsPosition({ holdingId: "h1", label: "X", ops: [], position: replayPosition([]), undone: [] })).not.toThrow();
+    const importedSale = { ...op("sell", { quantity: 5, pricePerUnit: 10, totalAmount: 50 }), ...at("01"), externalId: "nota-1" };
+    expect(() => assertUndoKeepsPosition({ holdingId: "h1", label: "X", ops: [importedSale], position: replayPosition([importedSale]), undone: [] })).not.toThrow();
+  });
+});

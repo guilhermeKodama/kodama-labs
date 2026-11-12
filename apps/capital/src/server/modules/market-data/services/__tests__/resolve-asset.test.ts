@@ -97,4 +97,44 @@ describe("resolveAsset", () => {
     const count = await prisma.asset.count({ where: { symbol: ticker } });
     expect(count).toBe(1);
   });
+
+  it("prices a crypto in USD when the holding names no currency", async () => {
+    // Only the real "ETH" symbol is supported: remove the row afterwards only if this test created it.
+    const existed = !!(await prisma.asset.findFirst({ where: { market: "CRYPTO", symbol: "ETH", currency: "USD" } }));
+    const result = await resolveAsset(prisma, { ticker: "ETH", assetClass: "crypto", currency: "  " });
+    expect(result).toMatchObject({ linked: true });
+    if (!result.linked) throw new Error("expected linked");
+    try {
+      const asset = await prisma.asset.findUniqueOrThrow({ where: { id: result.assetId }, include: { sourceRefs: true } });
+      expect(asset).toMatchObject({ symbol: "ETH", market: "CRYPTO", currency: "USD" });
+      expect(asset.sourceRefs).toEqual([expect.objectContaining({ source: "coingecko", externalId: "ethereum:usd" })]);
+    } finally {
+      if (!existed) await prisma.asset.delete({ where: { id: result.assetId } });
+    }
+  });
+
+  it("defaults a US listing held without a currency to USD, and a B3 one to BRL", async () => {
+    const us = await resolveAsset(prisma, { ticker: `${SYMBOL_PREFIX}MSFT`, assetClass: "international_stocks", currency: "" });
+    if (!us.linked) throw new Error("expected linked");
+    expect(await prisma.asset.findUniqueOrThrow({ where: { id: us.assetId } })).toMatchObject({ market: "US", currency: "USD" });
+
+    const br = await resolveAsset(prisma, { ticker: `${SYMBOL_PREFIX}ITUB4`, assetClass: "stocks", currency: "" });
+    if (!br.linked) throw new Error("expected linked");
+    expect(await prisma.asset.findUniqueOrThrow({ where: { id: br.assetId } })).toMatchObject({ market: "B3", currency: "BRL" });
+  });
+
+  it("updates a source ref's external id when the same instrument is resolved again", async () => {
+    const ticker = `${SYMBOL_PREFIX}WEGE3`;
+    const first = await resolveAsset(prisma, { ticker, assetClass: "stocks", currency: "BRL" });
+    if (!first.linked) throw new Error("expected linked");
+    await prisma.assetSourceRef.update({ where: { assetId_source: { assetId: first.assetId, source: "yahoo" } }, data: { externalId: "stale" } });
+    await resolveAsset(prisma, { ticker, assetClass: "stocks", currency: "BRL" });
+    expect(await prisma.assetSourceRef.findUniqueOrThrow({ where: { assetId_source: { assetId: first.assetId, source: "yahoo" } } })).toMatchObject({ externalId: `${ticker}.SA` });
+  });
+
+  it("leaves a class this resolver does not know unmatched", async () => {
+    const result = await resolveAsset(prisma, { ticker: `${SYMBOL_PREFIX}X`, assetClass: "commodity" as never, currency: "BRL" });
+    expect(result).toEqual({ linked: false, reason: "unmatched" });
+    expect(await prisma.asset.count({ where: { symbol: `${SYMBOL_PREFIX}X` } })).toBe(0);
+  });
 });

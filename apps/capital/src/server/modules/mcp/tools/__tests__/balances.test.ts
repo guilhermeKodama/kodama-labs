@@ -70,3 +70,17 @@ describe("listAccountBalances", () => {
     expect(asOf.accounts.find((account) => account.id === usd.id)?.balanceBase).toBe(round(10 * fx.rateOn("USD", endOfDay("2026-08-15")), 2));
   });
 });
+
+describe("listAccountBalances with nothing to list", () => {
+  it("answers an empty list, with the base currency, for a user who has no cash accounts", async () => {
+    const bare = "test-user-mcp-balances-bare";
+    await prisma.user.deleteMany({ where: { id: bare } });
+    await prisma.user.create({ data: { id: bare, email: `${bare}@example.com`, passwordHash: "x", name: bare, baseCurrency: "EUR" } });
+    try {
+      expect(await listAccountBalances(bare, {}, prisma)).toEqual({ baseCurrency: "EUR", asOf: null, accounts: [] });
+      expect(await listAccountBalances(bare, { asOf: "2026-10-01" }, prisma)).toEqual({ baseCurrency: "EUR", asOf: "2026-10-01", accounts: [] });
+    } finally {
+      await prisma.user.deleteMany({ where: { id: bare } });
+    }
+  });
+});

@@ -29,6 +29,31 @@ describe("isSession", () => {
   });
 });
 
+describe("isSession across years", () => {
+  it("only closes B3 on Consciência Negra from 2024", () => {
+    expect(isSession("B3", "2023-11-20")).toBe(true); // Monday, not yet a national holiday
+    expect(isSession("B3", "2024-11-20")).toBe(false);
+  });
+
+  it("only closes NYSE on Juneteenth from 2022", () => {
+    expect(isSession("US", "2021-06-18")).toBe(true); // Friday before the 19th, which fell on a Saturday
+    expect(isSession("US", "2022-06-20")).toBe(false); // the 19th was a Sunday: observed Monday
+    expect(isSession("US", "2024-06-19")).toBe(false);
+  });
+
+  it("observes a Sunday holiday on Monday and keeps the Monday after a Saturday New Year's Day open", () => {
+    expect(isSession("US", "2023-01-02")).toBe(false); // New Year's Day on a Sunday
+    expect(isSession("US", "2022-01-03")).toBe(true); // New Year's Day on a Saturday is not observed
+    expect(isSession("US", "2022-12-26")).toBe(false); // Christmas on a Sunday
+  });
+
+  it("finds the last Monday of May and the fourth Thursday of November in other years", () => {
+    expect(isSession("US", "2027-05-31")).toBe(false); // Memorial Day
+    expect(isSession("US", "2027-05-24")).toBe(true);
+    expect(isSession("US", "2027-11-25")).toBe(false); // Thanksgiving
+  });
+});
+
 describe("expectedLatestSession", () => {
   it("is the previous session until today's close is ready, then today (B3)", () => {
     // Tuesday 2026-11-10: 13:00 in São Paulo is 16:00Z; 19:00 there is 22:00Z.

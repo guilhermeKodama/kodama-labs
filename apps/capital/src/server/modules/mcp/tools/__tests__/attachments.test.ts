@@ -50,6 +50,12 @@ describe("attach_receipt", () => {
     await expect(attachReceipt(USER, receipt({ mimeType: "text/plain" }), prisma)).rejects.toThrow(/not allowed/);
     await expect(attachReceipt(USER, receipt({ contentBase64: "not base64!!" }), prisma)).rejects.toThrow(/Invalid base64/);
   });
+
+  it("rejects content whose decoded size does not match its encoded length, and stores nothing", async () => {
+    // "AA==" is valid base64 for a single byte, far fewer than the three bytes four characters promise.
+    await expect(attachReceipt(USER, receipt({ contentBase64: "AA==" }), prisma)).rejects.toThrow("Invalid base64 content");
+    expect(await prisma.attachment.count({ where: { ledgerEntryId: transactionId } })).toBe(0);
+  });
 });
 
 describe("list_attachments / delete_attachment", () => {

@@ -163,6 +163,29 @@ export interface ToolExecutionResult {
 }
 
 /**
+ * The import plan a write tool call is about, so its audit row carries
+ * `planId`. Two readers depend on it: commit_plan replays the stored result
+ * of a plan that was already committed, and propose_revert_plan looks up what
+ * an agent import created (cards, statements, the import itself), both by
+ * reading agent_actions by planId.
+ *
+ * A tool names its plan through `planId` in its output (propose_import_plan,
+ * update_import_plan, propose_revert_plan and commit_plan all return it) or,
+ * when it failed before returning, in its input. The id is recorded only when
+ * it is a plan of this user: the column is a foreign key, and an id the model
+ * made up must not make the audit insert itself fail.
+ */
+async function planIdOf(ctx: ToolContext, ...sources: unknown[]): Promise<string | undefined> {
+  for (const source of sources) {
+    const id = (source as { planId?: unknown } | null | undefined)?.planId;
+    if (typeof id !== "string" || id === "") continue;
+    const plan = await ctx.db.importPlan.findFirst({ where: { id, userId: ctx.userId }, select: { id: true } });
+    if (plan) return plan.id;
+  }
+  return undefined;
+}
+
+/**
  * The complete allowlist enforcement point: unknown tool names and
  * schema-invalid input both come back as a tool_result with is_error
  * (the model self-corrects on the next turn) rather than throwing past
@@ -213,6 +236,7 @@ export async function executeTool(
           userId: ctx.userId,
           conversationId: ctx.conversationId,
           turnId: ctx.turnId,
+          planId: await planIdOf(ctx, output, parsed.data),
           toolName: def.name,
           input: parsed.data,
           output,
@@ -233,6 +257,7 @@ export async function executeTool(
           userId: ctx.userId,
           conversationId: ctx.conversationId,
           turnId: ctx.turnId,
+          planId: await planIdOf(ctx, parsed.data),
           toolName: def.name,
           input: parsed.data,
           status: "error",
