@@ -56,3 +56,29 @@ Caveats:
   `infrastructure/postgres/backups/`).
 - With `restart: always`, a service stopped by hand comes back on the next
   engine restart. To keep one down, comment it out of the compose file.
+
+## Claude Code Remote Control
+
+`claude-remote-control.service` keeps Claude Code agents running on this host. The phone (Claude app, Code tab) and the Mac (claude.ai/code) only control them. Nothing runs on those devices. It needs no inbound port: the process only makes outbound HTTPS calls to Anthropic.
+
+Each session started from the phone or the web gets its own git worktree under `.claude/worktrees/` (gitignored). No session works in the checkout itself, because deploys run from it and refuse tracked changes. At most 8 sessions run at once, in `auto` permission mode.
+
+Set up once, as `kodama`:
+
+```bash
+claude auth login            # full claude.ai login; a setup-token is not enough
+cd ~/Documents/Github/kodama-labs
+claude remote-control        # answer "Enable Remote Control? y", then Ctrl+C
+cp infrastructure/systemd/claude-remote-control.service ~/.config/systemd/user/
+systemctl --user daemon-reload
+systemctl --user enable --now claude-remote-control.service
+```
+
+Check: `systemctl --user status claude-remote-control`. The status screen goes to `/dev/null`; errors go to the journal (`journalctl --user -u claude-remote-control`).
+
+Caveats:
+
+- A clean stop or restart comes back at once. After a hard crash, Anthropic still holds the old registration for a few minutes and the new process exits with "This folder is already served". `Restart=always` retries every 30 seconds, and it was back in about 3 minutes in testing.
+- The process exits after about 10 minutes without network; systemd starts it again.
+- Agents that run the apps or tests need the Postgres on port 5433, which only comes up after a desktop login (see the Docker Desktop caveat above).
+- Update Claude Code with `claude update`, then `systemctl --user restart claude-remote-control`.
