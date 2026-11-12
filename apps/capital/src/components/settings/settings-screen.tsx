@@ -13,6 +13,7 @@ import { cn } from "@/lib/utils";
 import { AccountsPage } from "./accounts-page";
 import { ApiPage } from "./api-page";
 import { CategoriesPage } from "./categories-page";
+import { DataHealthPage } from "./data-health-page";
 import { EntitiesPage } from "./entities-page";
 import { FxPage } from "./fx-page";
 import { ImportsPage } from "./imports";
@@ -100,6 +101,8 @@ function SettingsContent({ page }: { page: SettingsPage }) {
       return <PluggyPage />;
     case "api":
       return <ApiPage />;
+    case "health":
+      return <DataHealthPage />;
   }
 }
 

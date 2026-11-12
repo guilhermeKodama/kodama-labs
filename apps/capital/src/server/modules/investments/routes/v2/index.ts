@@ -25,7 +25,7 @@ import {
   updateOperation,
 } from "../../services/portfolio";
 import { contributions } from "../../services/contributions";
-import { updateAllPrices } from "../../services/update-prices";
+import { refreshPricesLive } from "../../services/update-prices";
 import { ALLOCATION_CLASSES, ASSET_CLASSES } from "../../lib/allocation-class";
 
 const tags = ["Investments v2"];
@@ -264,7 +264,7 @@ export const v2Investments = createRouter()
   }))
   .openapi(deleteOpRoute, v2Handler(deleteOpRoute, async (c, userId) => deleteOperation(userId, c.req.valid("param").id, prisma, { withFunding: c.req.valid("query").withFunding })))
   .openapi(cashRoute, v2Handler(cashRoute, async (c, userId) => moveBrokerageCash(userId, c.req.valid("json"), prisma)))
-  .openapi(refreshPricesRoute, v2Handler(refreshPricesRoute, async (_c, userId) => updateAllPrices(prisma, { userId })))
+  .openapi(refreshPricesRoute, v2Handler(refreshPricesRoute, async (_c, userId) => refreshPricesLive(prisma, userId)))
   .openapi(summaryRoute, v2Handler(summaryRoute, async (c, userId) => portfolioSummary(userId, prisma, { entityIds: await resolveScopeQuery(userId, c.req.valid("query"), prisma) })))
   .openapi(getTargetsRoute, v2Handler(getTargetsRoute, async (_c, userId) => ({ targets: await getTargets(userId, prisma) })))
   .openapi(putTargetsRoute, v2Handler(putTargetsRoute, async (c, userId) => ({ targets: await setTargets(userId, c.req.valid("json").targets, prisma) })))

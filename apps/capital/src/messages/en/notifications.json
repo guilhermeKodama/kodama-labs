@@ -4,6 +4,7 @@
   "bill": "Card statement closed",
   "budget": "Budget went over {threshold}",
   "weekly": "Weekly summary ({day}, {time})",
+  "assetStale": "Asset has no fresh quote",
   "weekday": {
     "0": "Sunday",
     "1": "Monday",

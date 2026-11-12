@@ -1,7 +1,10 @@
 #!/usr/bin/env bash
-# Run unit tests for packages changed since the base SHA. Capital's
-# portfolio-fx repair test rewrites rows across the database, so it runs
-# alone against capital_fx_test after the rest of the suite.
+# Run unit tests for packages changed since the base SHA. Two of Capital's
+# tests cannot share the database with the parallel suite (the portfolio-fx
+# repair rewrites rows across it; the market-data health test counts every
+# user's holdings), so they run alone against capital_fx_test after the rest. Both capital runs
+# write coverage (coverage/main, coverage/fx) and the last step fails the job
+# when the backend is under 90% (apps/capital/scripts/check-coverage.mjs).
 set -euo pipefail
 
 base="${1:-}"
@@ -76,11 +79,12 @@ if want "@wallex/capital"; then
     pnpm --filter @wallex/capital exec prisma migrate deploy
   DATABASE_URL="postgresql://root:root@127.0.0.1:5432/capital_test" \
     DIRECT_URL="postgresql://root:root@127.0.0.1:5432/capital_test" \
-    pnpm --filter @wallex/capital exec vitest run
+    pnpm --filter @wallex/capital exec vitest run --coverage
   DATABASE_URL="postgresql://root:root@127.0.0.1:5432/capital_fx_test" \
     DIRECT_URL="postgresql://root:root@127.0.0.1:5432/capital_fx_test" \
     pnpm --filter @wallex/capital exec prisma migrate deploy
   DATABASE_URL="postgresql://root:root@127.0.0.1:5432/capital_fx_test" \
     DIRECT_URL="postgresql://root:root@127.0.0.1:5432/capital_fx_test" \
-    pnpm --filter @wallex/capital exec vitest run --config vitest.fx.config.ts
+    pnpm --filter @wallex/capital exec vitest run --config vitest.fx.config.ts --coverage --coverage.reportsDirectory=coverage/fx
+  pnpm --filter @wallex/capital exec node scripts/check-coverage.mjs
 fi

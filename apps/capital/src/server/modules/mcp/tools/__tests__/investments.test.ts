@@ -113,3 +113,47 @@ describe("MCP investment tools", () => {
     expect(priced.totalInvested).toBe(0);
   });
 });
+
+describe("MCP investment tools: edge cases", () => {
+  it("lists a sold-out position with no closing operation as closed with no closedAt", async () => {
+    const empty = await createHolding(USER, { accountId: f.broker, assetClass: "stocks", ticker: "VAZIO3", name: "Nunca operada" }, prisma);
+
+    const { positions } = await listInvestmentPositions(USER, prisma, { ticker: "VAZIO3", includeClosed: true });
+
+    expect(positions).toHaveLength(1);
+    expect(positions[0]).toMatchObject({ id: empty.id, currentQuantity: 0, closedAt: null, currentValue: null, unrealizedGain: null });
+  });
+
+  it("reports the latest closing operation, not an older one, as closedAt", async () => {
+    const h = await createHolding(USER, { accountId: f.broker, assetClass: "stocks", ticker: "GIRO3", name: "Gira" }, prisma);
+    await recordOperation(USER, { holdingId: h.id, type: "buy", quantity: 10, pricePerUnit: 10, totalAmount: 100, date: "2026-06-01" }, prisma);
+    await recordOperation(USER, { holdingId: h.id, type: "sell", quantity: 10, pricePerUnit: 11, totalAmount: 110, date: "2026-06-15" }, prisma);
+    await recordOperation(USER, { holdingId: h.id, type: "buy", quantity: 5, pricePerUnit: 10, totalAmount: 50, date: "2026-07-01" }, prisma);
+    await recordOperation(USER, { holdingId: h.id, type: "sell", quantity: 5, pricePerUnit: 12, totalAmount: 60, date: "2026-07-20" }, prisma);
+
+    const { positions } = await listInvestmentPositions(USER, prisma, { ticker: "GIRO3", includeClosed: true });
+
+    expect(positions[0]).toMatchObject({ currentQuantity: 0, closedAt: "2026-07-20" });
+  });
+
+  it("keeps the notes the caller gives an adjustment instead of the default text", async () => {
+    await adjustPosition(USER, { holdingId, currentQuantity: 170, averageCost: 100, notes: "conferido com a corretora" }, prisma);
+    const op = await prisma.investmentOperation.findFirstOrThrow({ where: { holdingId } });
+    expect(op.notes).toBe("conferido com a corretora");
+  });
+
+  it("takes the account currency for a new asset unless one is given", async () => {
+    const usdBroker = await prisma.account.create({ data: { userId: USER, entityId: f.pfId, type: "brokerage", name: "Avenue", currency: "USD" } });
+    const inherited = await addInvestmentAsset(USER, { accountId: usdBroker.id, ticker: "VOO", name: "Vanguard S&P 500", assetClass: "international_etf" }, prisma);
+    expect(inherited.currency).toBe("USD");
+    const explicit = await addInvestmentAsset(USER, { accountId: usdBroker.id, ticker: "IVVB11", name: "iShares S&P 500", assetClass: "etf", currency: "BRL" }, prisma);
+    expect(explicit.currency).toBe("BRL");
+  });
+
+  it("accepts the price date as a full ISO timestamp too", async () => {
+    const priced = await updateHoldingPrice(USER, { holdingId, price: 111, date: "2026-10-15T18:30:00.000Z" }, prisma);
+    expect(priced.currentPrice).toBe(111);
+    expect(formatDateOnly(new Date(priced.lastPriceUpdate!))).toBe("2026-10-15");
+    await expect(updateHoldingPrice(USER, { holdingId, price: 1, date: "2099-01-01T00:00:00.000Z" }, prisma)).rejects.toMatchObject({ code: "holding.future_date" });
+  });
+});

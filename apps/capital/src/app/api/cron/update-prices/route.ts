@@ -1,40 +1,14 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import { prisma } from "@capital/server/lib/prisma";
-import { env } from "@/env";
-import { updateAllPrices } from "@capital/server/modules/investments/services/update-prices";
+import { withCron } from "@capital/server/lib/cron";
+import { updatePricesStage } from "@capital/server/modules/market-data/services/market-close";
 
 /**
- * Cron endpoint that fetches current market prices for all ticker-based holdings.
- * Uses CoinGecko (crypto), brapi.dev (Brazilian B3), and Yahoo Finance (international).
- * Runs once daily at noon UTC.
+ * The market-close pipeline's second stage on its own, for a manual rerun.
+ * Not scheduled: /api/cron/market-close runs it daily, right after
+ * sync-prices. Refreshes every holding's cached price from AssetPrice — no
+ * provider call.
  */
 export async function GET(request: NextRequest) {
-  const authHeader = request.headers.get("authorization");
-  const cronSecret = env.CRON_SECRET;
-
-  if (cronSecret && authHeader !== `Bearer ${cronSecret}`) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
-  try {
-    const result = await updateAllPrices(prisma);
-
-    return NextResponse.json({
-      success: true,
-      message: `Updated prices for ${result.updated}/${result.totalHoldings} holdings`,
-      ...result,
-      processedAt: new Date().toISOString(),
-    });
-  } catch (error) {
-    console.error("[PriceUpdate] Cron failed:", error);
-
-    return NextResponse.json(
-      {
-        success: false,
-        error: error instanceof Error ? error.message : "Unknown error",
-        processedAt: new Date().toISOString(),
-      },
-      { status: 500 }
-    );
-  }
+  return withCron(request, { job: "update-prices" }, () => updatePricesStage(prisma));
 }

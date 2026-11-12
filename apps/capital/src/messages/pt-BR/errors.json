@@ -247,6 +247,7 @@
     "link_not_found": "Conta da Pluggy não encontrada. Sincronize uma vez para ela aparecer.",
     "review_not_found": "Revisão não encontrada.",
     "link_target": "Escolha o lançamento existente para vincular.",
-    "not_income": "Amortização, venda ou resgate não é rendimento."
+    "not_income": "Amortização, venda ou resgate não é rendimento.",
+    "malformed_review": "Essa revisão está sem os dados necessários para ser aplicada."
   }
 }

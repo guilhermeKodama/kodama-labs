@@ -20,6 +20,12 @@ export const env = createEnv({
     CRON_SECRET: z.string().optional(),
     ANTHROPIC_API_KEY: z.string().optional(),
     BRAPI_TOKEN: z.string().optional(),
+    // market-data registry overrides (src/server/modules/market-data/lib/registry.ts):
+    // comma-separated provider ids, e.g. "yahoo,brapi". Reorders or disables a
+    // source with one restart, no deploy — see the F1 plan's "agnóstica de
+    // fonte" requirement. Unknown ids in MARKET_DATA_CHAIN are ignored.
+    MARKET_DATA_CHAIN: z.string().optional(),
+    MARKET_DATA_DISABLED: z.string().optional(),
     // Meu Pluggy. Both must be set or the Open Finance sync stays off and
     // the daily cron returns without reading anything. Item ids are not
     // env vars: they change when consent is renewed and live on PluggyItem.
@@ -53,6 +59,8 @@ export const env = createEnv({
     CRON_SECRET: process.env.CRON_SECRET,
     ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY,
     BRAPI_TOKEN: process.env.BRAPI_TOKEN,
+    MARKET_DATA_CHAIN: process.env.MARKET_DATA_CHAIN,
+    MARKET_DATA_DISABLED: process.env.MARKET_DATA_DISABLED,
     PLUGGY_CLIENT_ID: process.env.PLUGGY_CLIENT_ID,
     PLUGGY_CLIENT_SECRET: process.env.PLUGGY_CLIENT_SECRET,
     CAPITAL_BLOB_DIR: process.env.CAPITAL_BLOB_DIR,

@@ -81,7 +81,7 @@ describe("monitors", () => {
 
   it("gives every scheduled cron a push monitor that requires two misses", () => {
     const crons = cronPushMonitors(schedules);
-    expect(crons).toHaveLength(26);
+    expect(crons).toHaveLength(25);
     for (const monitor of crons) {
       expect(monitor.type).toBe("push");
       expect(monitor.maxretries).toBe(1);
@@ -98,7 +98,8 @@ describe("monitors", () => {
       interval: 960,
       retryInterval: 900,
     });
-    expect(byName.get("kodama/cron-capital-api-cron-portfolio-snapshot")).toMatchObject({
+    expect(byName.has("kodama/cron-capital-api-cron-portfolio-snapshot")).toBe(false);
+    expect(byName.get("kodama/cron-capital-api-cron-market-close")).toMatchObject({
       interval: 26 * 3600 + 60,
       retryInterval: 26 * 3600,
     });

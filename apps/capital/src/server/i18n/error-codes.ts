@@ -231,6 +231,7 @@ export const ERROR_CODES = {
   "pluggy.review_not_found": "Review not found",
   "pluggy.link_target": "Choose the existing entry",
   "pluggy.not_income": "Amortization, a sale or a redemption is not income",
+  "pluggy.malformed_review": "This review is missing the data needed to apply it",
 
   // FIRE (v1)
   "fire.no_plan": "Set up the FIRE plan first",

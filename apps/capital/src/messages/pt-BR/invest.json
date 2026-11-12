@@ -74,6 +74,7 @@
     "quotesToday": "Cotações de hoje {time}",
     "quotesOn": "Cotações de {date} {time}",
     "noQuotes": "Sem cotações automáticas ainda",
+    "staleQuotes": "{count, plural, one {# desatualizada} other {# desatualizadas}}",
     "fxRate": "{currency} {rate}",
     "kpi": {
       "netWorth": "Patrimônio",
@@ -234,6 +235,12 @@
     "invested": "Investido",
     "result": "Resultado",
     "priceAt": "Cotação em",
+    "priceStatus": {
+      "stale": "desatualizada",
+      "unpriced": "sem cotação ainda",
+      "unsupported": "sem fonte automática",
+      "no_ticker": "manual"
+    },
     "price": "Cotação atual",
     "update": "Atualizar",
     "adjust": "Ajustar",

@@ -494,4 +494,74 @@ describe("syncPluggy", () => {
     expect(runs.map((run) => run.status)).toEqual(["skipped"]);
     expect(await prisma.ledgerEntry.count({ where: { userId } })).toBe(0);
   });
+
+  it("classifies a mutual fund as fixed_income instead of falling through to stocks", async () => {
+    const userId = "pluggy-mutual-fund";
+    await connect(userId);
+    const fund: PluggyInvestment = { id: "inv-fund", type: "MUTUAL_FUND", subtype: "MULTIMARKET", name: "XYZ FIC FIM", code: "XYZ001", quantity: 10, value: 100, amount: 1000, currencyCode: "BRL" };
+    await run(userId, fake({ investments: [fund] }).client);
+    const holding = await prisma.investmentHolding.findFirstOrThrow({ where: { account: { userId }, ticker: "XYZ001" } });
+    expect(holding.assetClass).toBe("fixed_income");
+  });
+
+  it("does not raise a false position mismatch for a buy this same run just booked", async () => {
+    const userId = "pluggy-position-order";
+    await connect(userId);
+    const inv: PluggyInvestment = { id: "inv-new-buy", type: "EQUITY", subtype: "STOCK", name: "WEGE3", code: "WEGE3", quantity: 10, value: 40, amount: 400, currencyCode: "BRL" };
+    const buyTx: FixtureInvestmentTx = {
+      id: "itx-new-buy",
+      investmentId: "inv-new-buy",
+      type: "BUY",
+      description: "Compra",
+      amount: 400,
+      quantity: 10,
+      value: 40,
+      date: "2026-10-16T00:00:00.000Z",
+      tradeDate: "2026-10-16T00:00:00.000Z",
+      expenses: { brokerageFee: 0 },
+    };
+    await run(userId, fake({ investments: [inv], investmentTransactions: [buyTx] }).client);
+    const holding = await prisma.investmentHolding.findFirstOrThrow({ where: { account: { userId }, ticker: "WEGE3" } });
+    expect(holding.currentQuantity).toBe(10);
+    expect(await prisma.pluggyReview.count({ where: { userId, kind: "position", status: "open" } })).toBe(0);
+  });
+
+  it("updates an open position review in place instead of duplicating it, and resolves it once the position reconciles", async () => {
+    const userId = "pluggy-position-dedup";
+    await connect(userId);
+    const investmentAt = (quantity: number): PluggyInvestment => ({ id: "inv-dedup", type: "EQUITY", subtype: "STOCK", name: "VALE3", code: "VALE3", quantity, value: 60, amount: quantity * 60, currencyCode: "BRL" });
+
+    await run(userId, fake({ investments: [investmentAt(10)] }).client);
+    let reviews = await prisma.pluggyReview.findMany({ where: { userId, kind: "position" } });
+    expect(reviews).toHaveLength(1);
+    expect(reviews[0]).toMatchObject({ status: "open" });
+    expect(reviews[0]?.draft).toMatchObject({ pluggyQuantity: 10, capitalQuantity: 0 });
+
+    // The mismatch drifts further: the same review is updated, not duplicated.
+    await run(userId, fake({ investments: [investmentAt(15)] }).client);
+    reviews = await prisma.pluggyReview.findMany({ where: { userId, kind: "position" } });
+    expect(reviews).toHaveLength(1);
+    expect(reviews[0]).toMatchObject({ status: "open" });
+    expect(reviews[0]?.draft).toMatchObject({ pluggyQuantity: 15, capitalQuantity: 0 });
+
+    // The broker now reports what Capital already has: the review closes itself.
+    await run(userId, fake({ investments: [investmentAt(0)] }).client);
+    reviews = await prisma.pluggyReview.findMany({ where: { userId, kind: "position" } });
+    expect(reviews).toHaveLength(1);
+    expect(reviews[0]?.status).toBe("resolved");
+  });
+
+  it("applies the broker's quantity and resolves the review when a position review is confirmed", async () => {
+    const userId = "pluggy-position-apply";
+    await connect(userId);
+    const inv: PluggyInvestment = { id: "inv-apply", type: "EQUITY", subtype: "STOCK", name: "ITUB4", code: "ITUB4", quantity: 25, value: 30, amount: 750, currencyCode: "BRL" };
+    await run(userId, fake({ investments: [inv] }).client);
+    const review = await prisma.pluggyReview.findFirstOrThrow({ where: { userId, kind: "position", status: "open" } });
+    const draft = review.draft as { holdingId: string };
+    await resolvePluggyReview(userId, review.id, "confirm", null, prisma);
+    const holding = await prisma.investmentHolding.findUniqueOrThrow({ where: { id: draft.holdingId } });
+    expect(holding.currentQuantity).toBe(25);
+    const resolved = await prisma.pluggyReview.findUniqueOrThrow({ where: { id: review.id } });
+    expect(resolved.status).toBe("resolved");
+  });
 });

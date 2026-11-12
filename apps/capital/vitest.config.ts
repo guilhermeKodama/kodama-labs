@@ -25,13 +25,23 @@ process.env.CAPITAL_BLOB_DIR = testBlobDir;
 // the closed default.
 process.env.SIGNUP_OPEN = 'true';
 
+// The cron routes fail closed: with no CRON_SECRET they answer 401 to everyone
+// (src/server/lib/cron.ts). CI has no .env, and a developer's .env holds the
+// real secret, so tests always run with a fixed one of their own.
+process.env.CRON_SECRET = 'test-cron-secret';
+
 export default defineConfig({
   test: {
     globals: true,
     include: ['src/**/__tests__/**/*.test.ts'],
-    // portfolio-fx-repair.test.ts applies a migration that rewrites rows
-    // across the database. It flakes when other files run in parallel, so
-    // the package test script runs it afterwards via vitest.fx.config.ts.
+    // Two files cannot share the database with the parallel run, so they are
+    // left out here and the package test script runs them afterwards, alone,
+    // via vitest.fx.config.ts:
+    //  - portfolio-fx-repair.test.ts applies a migration that rewrites rows
+    //    across the database;
+    //  - health/routes/__tests__/market-data.test.ts reads totals over every
+    //    user's holdings and job runs, so any other file creating a holding
+    //    while it runs shifts its counts.
     exclude: [
       '**/node_modules/**',
       '**/dist/**',
@@ -39,10 +49,29 @@ export default defineConfig({
       '**/.{idea,git,cache,output,temp}/**',
       '**/{karma,rollup,webpack,vite,vitest,jest,ava,babel,nyc,cypress,tsup,build,eslint,prettier}.config.*',
       '**/portfolio-fx-repair.test.ts',
+      '**/health/routes/__tests__/market-data.test.ts',
     ],
     // Hard-fails the run before any test body executes if DATABASE_URL
     // does not point at a dev/test database. See src/test/db-guard.setup.ts.
     setupFiles: ['src/test/db-guard.setup.ts'],
+    // Backend coverage (`pnpm test:coverage`): the server layer and the API
+    // routes. The UI (components, pages, hooks) is covered by the proof
+    // videos, not by unit tests, so it is not counted.
+    coverage: {
+      provider: 'v8',
+      include: ['src/server/**/*.ts', 'src/app/api/**/*.ts'],
+      exclude: [
+        '**/__tests__/**',
+        '**/*.test.ts',
+        '**/*.d.ts',
+        'src/test/**',
+        'src/generated/**',
+      ],
+      // One folder per run (coverage/main, coverage/fx): scripts/check-coverage.mjs
+      // adds them up and enforces the 90% gate.
+      reporter: ['text-summary', 'json'],
+      reportsDirectory: 'coverage/main',
+    },
   },
   resolve: {
     alias: {

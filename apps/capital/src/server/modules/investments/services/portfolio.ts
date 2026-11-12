@@ -1,11 +1,13 @@
 import type { DbClient } from "@capital/server/lib/prisma";
 import { Prisma } from "@/generated/prisma";
-import type { Account, AllocationClass, AssetClass, DividendOrigin, FixedIncomeSubType, IncomeType, InvestmentOperation, InvestmentTransactionType } from "@/generated/prisma";
+import type { Account, AllocationClass, AssetClass, DividendOrigin, FixedIncomeSubType, IncomeType, InvestmentHolding, InvestmentOperation, InvestmentTransactionType } from "@/generated/prisma";
 import { formatDateOnly, parseLocalDate } from "@capital/server/lib/date-utils";
 import { entityScopeWhere } from "@capital/server/lib/entity-scope";
 import { ALLOCATION_CLASSES, dominantEtfCurrency, holdingAllocationClass, toAllocationTargets, type TargetInput } from "@capital/server/modules/investments/lib/allocation-class";
 import { oversoldOperations, recalculateHolding, recalculateHoldingDetailed } from "@capital/server/modules/investments/lib/holding-position";
 import { marketValue } from "@capital/server/modules/investments/lib/holding-value";
+import { holdingPriceStatus, type PriceStatus } from "@capital/server/modules/investments/lib/quotes";
+import { resolveAsset } from "@capital/server/modules/market-data/services/resolve-asset";
 import { LedgerError, notFound } from "@capital/server/modules/ledger/lib/errors";
 import { loadFx, type FxContext } from "@capital/server/modules/ledger/lib/fx";
 import { round, toNumber } from "@capital/server/modules/ledger/lib/money";
@@ -106,10 +108,35 @@ export async function updateHolding(
         ...(patch.isActive !== undefined && { isActive: patch.isActive }),
       },
     });
+    const relinked = await relinkIfIdentityChanged(tx, before, updated);
     const records = opts.collect ?? [];
-    records.push({ model: "InvestmentHolding", recordId: holdingId, before: snapshot(before), after: snapshot(updated) });
+    records.push({ model: "InvestmentHolding", recordId: holdingId, before: snapshot(before), after: snapshot(relinked) });
     const batchId = opts.record === false || opts.collect ? null : await recordMutation(tx, userId, "update", updated.ticker ?? updated.name, records);
-    return Object.assign(updated, { batchId });
+    return Object.assign(relinked, { batchId });
+  });
+}
+
+/**
+ * A holding whose ticker, class or currency changed may now be another
+ * instrument (or the same one on another market): the old Asset link is
+ * dropped and resolve-asset runs again on the new identity, so the next
+ * price refresh prices what the user now says they hold — never the old
+ * ticker's price under the new name. A holding that stops matching anything
+ * goes back to a manual price.
+ */
+async function relinkIfIdentityChanged(
+  tx: DbClient,
+  before: { ticker: string | null; assetClass: AssetClass; currency: string; assetId: string | null },
+  after: InvestmentHolding,
+): Promise<InvestmentHolding> {
+  const changed = before.ticker !== after.ticker || before.assetClass !== after.assetClass || before.currency !== after.currency;
+  if (!changed) return after;
+  const resolved = await resolveAsset(tx, { ticker: after.ticker, assetClass: after.assetClass, currency: after.currency });
+  const assetId = resolved.linked ? resolved.assetId : null;
+  if (assetId === after.assetId) return after;
+  return tx.investmentHolding.update({
+    where: { id: after.id },
+    data: { assetId, priceSource: assetId ? "auto" : "manual" },
   });
 }
 
@@ -169,6 +196,7 @@ export function serializeHolding(h: Awaited<ReturnType<typeof listHoldings>>[num
     totalInvested: h.totalInvested,
     currentPrice: h.currentPrice,
     lastPriceUpdate: h.lastPriceUpdate?.toISOString() ?? null,
+    priceStatus: holdingPriceStatus(h),
     marketValue: round(value, 2),
     unrealizedGain: round(value - h.totalInvested, 2),
     unrealizedGainPercent: h.totalInvested > 0 ? round((value - h.totalInvested) / h.totalInvested, 4) : null,
@@ -910,7 +938,15 @@ export async function portfolioSummary(userId: string, db: DbClient, opts: Portf
   const byClass = new Map<AllocationClass, { marketValue: number; invested: number; count: number }>(ALLOCATION_CLASSES.map((c) => [c, { marketValue: 0, invested: 0, count: 0 }]));
   let marketTotal = 0;
   let investedTotal = 0;
-  let pricesUpdatedAt: Date | null = null;
+  // The oldest price among priced holdings, not the newest: a fresh quote
+  // on one ticker used to hide a stale one on another (see F0 plan — "why
+  // does my portfolio never move"). Null until at least one holding has a
+  // price. staleHoldings lists what still needs a cron fix or a fetch: a
+  // holding PRICE_STALE_AFTER_SESSIONS closes behind, or priceable but never priced yet.
+  // Fixed income/savings (no source today) and manual entries with no
+  // ticker are expected to have neither, so they are left out.
+  let oldestPriceAt: Date | null = null;
+  const staleHoldings: { id: string; ticker: string | null; name: string; priceStatus: PriceStatus; lastPriceUpdate: string | null }[] = [];
   for (const h of holdings) {
     const rate = fx.rateFor(h.currency);
     const value = marketValue(h) * rate;
@@ -921,7 +957,11 @@ export async function portfolioSummary(userId: string, db: DbClient, opts: Portf
     c.marketValue += value;
     c.invested += invested;
     c.count++;
-    if (h.lastPriceUpdate && (!pricesUpdatedAt || h.lastPriceUpdate > pricesUpdatedAt)) pricesUpdatedAt = h.lastPriceUpdate;
+    const priceStatus = holdingPriceStatus(h);
+    if (h.lastPriceUpdate && priceStatus !== "no_ticker" && priceStatus !== "unsupported" && (!oldestPriceAt || h.lastPriceUpdate < oldestPriceAt)) oldestPriceAt = h.lastPriceUpdate;
+    if (priceStatus === "stale" || priceStatus === "unpriced") {
+      staleHoldings.push({ id: h.id, ticker: h.ticker, name: h.name, priceStatus, lastPriceUpdate: h.lastPriceUpdate?.toISOString() ?? null });
+    }
   }
   const cash = brokers.map((b) => ({ accountId: b.id, name: b.name, entityId: b.entityId, currency: b.currency, cash: round(balances.get(b.id) ?? 0, 2), cashBase: round((balances.get(b.id) ?? 0) * fx.rateFor(b.currency), 2) }));
   const cashTotal = cash.reduce((s, c) => s + c.cashBase, 0);
@@ -975,8 +1015,10 @@ export async function portfolioSummary(userId: string, db: DbClient, opts: Portf
     incomeEvents: income.rows,
     holdingsCount: holdings.length,
     accountsCount: brokers.length,
-    /** Latest price refresh among the holdings. */
-    pricesUpdatedAt: pricesUpdatedAt?.toISOString() ?? null,
+    /** The OLDEST price among priced holdings (a stale one no longer hides behind a fresh one). Null until at least one has a price. */
+    pricesUpdatedAt: oldestPriceAt?.toISOString() ?? null,
+    /** Priceable holdings that are stale or have never been priced; see the loop above for what's left out. */
+    staleHoldings,
     allocation: ALLOCATION_CLASSES.filter((cls) => {
       const c = byClass.get(cls)!;
       return c.count > 0 || Math.abs(c.marketValue) >= 0.005 || targetOf.has(cls);

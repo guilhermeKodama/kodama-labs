@@ -393,6 +393,11 @@ export function PluggyPage() {
                     {t("link")}
                   </Btn>
                 ) : null}
+                {review.kind === "position" ? (
+                  <Btn primary disabled={resolve.isPending} onClick={() => resolve.mutate({ id: review.id, action: "confirm" })}>
+                    {t("applyPosition")}
+                  </Btn>
+                ) : null}
               </div>
             </div>
           );
@@ -425,5 +430,8 @@ function reviewText(draft: Record<string, unknown>): string {
   }
   if (typeof draft.amount === "number") parts.push(String(draft.amount));
   if (typeof draft.confidence === "number") parts.push(String(draft.confidence));
+  if (typeof draft.capitalQuantity === "number" && typeof draft.pluggyQuantity === "number") {
+    parts.push(`${draft.capitalQuantity} → ${draft.pluggyQuantity}`);
+  }
   return parts.join(" · ");
 }

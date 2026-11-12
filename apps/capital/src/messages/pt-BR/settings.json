@@ -54,6 +54,10 @@
     "api": {
       "title": "Integrações e API",
       "desc": "Servidor MCP, tokens e documentação da API."
+    },
+    "health": {
+      "title": "Saúde dos dados",
+      "desc": "Crons de preço e câmbio, e cobertura de cotação por classe de ativo."
     }
   },
   "save": "Salvar",
@@ -342,6 +346,7 @@
     "ignore": "Ignorar",
     "confirm": "Confirmar classificação",
     "link": "Vincular ao lançamento",
+    "applyPosition": "Aplicar quantidade da corretora",
     "entryId": "Id do lançamento",
     "save": "Salvar",
     "removeTitle": "Remover {label}?",
@@ -369,5 +374,61 @@
       "BDR": "BDR",
       "EXTERIOR": "Exterior"
     }
+  },
+  "dataHealth": {
+    "kpi": {
+      "status": "Status geral",
+      "priceable": "Posições preciáveis",
+      "stale": "Desatualizadas",
+      "oldest": "Cotação mais antiga"
+    },
+    "status": {
+      "ok": "Em dia",
+      "degraded": "Degradado",
+      "down": "Fora do ar"
+    },
+    "never": "nunca",
+    "noSource": "—",
+    "jobsTitle": "Execuções",
+    "jobsEmpty": "Nenhuma execução ainda.",
+    "jobsHeaders": {
+      "job": "Job",
+      "status": "Status",
+      "last": "Última execução",
+      "lastStatus": "Resultado"
+    },
+    "job": {
+      "sync-prices": "Sincronizar cotações",
+      "update-prices": "Atualizar cache de preços",
+      "portfolio-snapshot": "Snapshot da carteira",
+      "update-rates": "Atualizar câmbio",
+      "benchmarks": "Benchmarks",
+      "pluggy-sync": "Sincronização Open Finance"
+    },
+    "runStatus": {
+      "ok": "Ok",
+      "partial": "Parcial",
+      "failed": "Falhou",
+      "skipped": "Nada a fazer"
+    },
+    "notice": {
+      "brapi_no_token": "brapi sem token: a B3 é cotada pelo Yahoo, com a brapi de reserva"
+    },
+    "classesTitle": "Cobertura por classe",
+    "classesHeaders": {
+      "class": "Classe",
+      "source": "Fonte ativa",
+      "priceable": "Preciáveis",
+      "fresh": "Com preço hoje",
+      "stale": "Desatualizados",
+      "unsupported": "Sem fonte"
+    },
+    "source": {
+      "brapi": "brapi.dev",
+      "yahoo": "Yahoo Finance",
+      "coingecko": "CoinGecko"
+    },
+    "staleBadge": "{count, plural, one {# posição desatualizada} other {# posições desatualizadas}} ({sessions} pregões ou mais sem preço)",
+    "loadError": "Não foi possível carregar o status dos dados de mercado."
   }
 }

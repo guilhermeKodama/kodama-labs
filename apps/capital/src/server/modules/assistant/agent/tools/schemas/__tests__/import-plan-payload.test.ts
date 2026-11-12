@@ -165,3 +165,49 @@ describe("computePlanSummary transfer totals", () => {
     expect(summary.transferCount).toBe(4);
   });
 });
+
+describe("computePlanSummary card bill and payments", () => {
+  const plan = (overrides: Record<string, unknown>) =>
+    ImportPlanPayloadSchema.parse({ entityType: "personal", entityId: "pa_1", currency: "BRL", ...overrides });
+
+  it("counts the bill rows, their net total (refunds negative) and the rules they would teach", () => {
+    const summary = computePlanSummary(
+      plan({
+        transactions: [
+          { externalId: "a", date: "2026-03-01", description: "Mercado", amount: 30, type: "expense", categoryId: "cat_1", createRule: true },
+          { externalId: "b", date: "2026-03-02", description: "Padaria", amount: 10, type: "expense", createRule: true },
+        ],
+        cardPayments: [{ externalId: "p1", date: "2026-03-10", amount: 300, cardAccountId: "card_1" }],
+        cardStatement: {
+          month: "2026-03",
+          rows: [
+            { date: "2026-02-20", description: "LOJA", amount: 100.1, categoryId: "cat_2", createRule: true },
+            { date: "2026-02-21", description: "ESTORNO", amount: -20.05 },
+            { date: "2026-02-22", description: "CINEMA", amount: 40, categoryId: "cat_3" },
+          ],
+        },
+      })
+    );
+    expect(summary).toMatchObject({ cardPaymentCount: 1, cardRowCount: 3, cardRowTotal: 120.05 });
+    // A rule needs both createRule and a category: the "Padaria" row and the cinema row teach nothing.
+    expect(summary.rulesToCreate).toBe(2);
+  });
+
+  it("counts none of it for a plan that has no card statement or payments", () => {
+    const summary = computePlanSummary(plan({}));
+    expect(summary).toMatchObject({ cardPaymentCount: 0, cardRowCount: 0, cardRowTotal: 0, rulesToCreate: 0, billCount: 0 });
+  });
+
+  it("previews the bills a plan would import", () => {
+    const summary = computePlanSummary(
+      plan({
+        bills: [
+          { fileId: "f1", creditCardId: "card_1", closingDate: "2026-03-05", dueDate: "2026-03-12", previewTotalAmount: 100.505, previewTransactionCount: 3 },
+          { fileId: "f2", newCreditCard: { bankName: "Inter", lastFourDigits: "1234", closingDay: 5, dueDay: 12, currency: "BRL" }, closingDate: "2026-03-05", dueDate: "2026-03-12", previewTotalAmount: 50, previewTransactionCount: 2 },
+        ],
+        creditCards: [{ bankName: "Inter", lastFourDigits: "1234", closingDay: 5, dueDay: 12, currency: "BRL" }],
+      })
+    );
+    expect(summary).toMatchObject({ billCount: 2, billTransactionPreviewCount: 5, billTotalPreviewAmount: 150.51, creditCardCount: 1 });
+  });
+});

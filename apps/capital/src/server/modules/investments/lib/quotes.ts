@@ -1,17 +1,31 @@
 import type { AssetClass } from "@/generated/prisma";
+import { mapWithConcurrency } from "@capital/server/lib/concurrency";
+import { activeProviders } from "@capital/server/modules/market-data/lib/registry";
+import { brapiAssetClass } from "@capital/server/modules/market-data/providers/brapi";
+import { CRYPTO_NAMES, CRYPTO_SYMBOL_TO_COINGECKO_ID } from "@capital/server/modules/market-data/providers/coingecko";
+import { isBrazilianTicker } from "@capital/server/modules/market-data/lib/ticker";
+import type { MarketDataProvider } from "@capital/server/modules/market-data/lib/provider";
+import { expectedLatestSession, marketDate, marketFor, sessionsBehind } from "@capital/server/modules/market-data/lib/calendar";
 
 /**
  * Market data fetchers shared by the price-refresh cron (services/update-prices.ts),
- * GET /v2/quotes and GET /v2/assets/search:
+ * GET /v2/quotes and GET /v2/assets/search.
  *
- * - CoinGecko for crypto (only the symbols in CRYPTO_SYMBOL_TO_COINGECKO_ID,
- *   the ones the cron can keep up to date);
- * - brapi.dev for B3 tickers (stocks, FIIs, ETFs, BDRs), with Yahoo's
- *   "<ticker>.SA" as fallback;
- * - Yahoo Finance for everything else (international stocks and ETFs).
+ * The actual HTTP calls to brapi, Yahoo and CoinGecko live in
+ * src/server/modules/market-data/providers/*.ts — one implementation per
+ * source, shared with sync-prices.ts's global AssetPrice sync. This file is
+ * what's left: routing a raw ticker to a source (quoteSourceFor, unchanged —
+ * it decides by the holding's asset class or, failing that, the ticker's
+ * own shape, which a resolved Asset doesn't need), the B3→Yahoo ".SA"
+ * fallback and batching, and translating a PricePoint/InstrumentMatch into
+ * this module's Quote/AssetSearchResult shape. providerById() reads the
+ * registry (respecting MARKET_DATA_CHAIN/MARKET_DATA_DISABLED) rather than
+ * importing a provider module directly, so disabling a source for
+ * sync-prices disables it here too.
  *
- * Every fetcher swallows network and API errors and returns what it got:
- * a missing ticker means "no quote", never an exception.
+ * Nothing throws: a missing ticker is "no quote", same as before, but every
+ * attempt is also recorded with a reason (see QuoteAttempt) so a caller that
+ * wants to know *why* can ask fetchQuotesDetailed instead of fetchQuotes.
  */
 
 export type QuoteSource = "coingecko" | "brapi" | "yahoo";
@@ -43,94 +57,40 @@ export interface AssetSearchResult {
   source: QuoteSource;
 }
 
-const REQUEST_TIMEOUT_MS = 5000;
+/** Why a ticker did not come back with a price. "ok" means it did. */
+export type QuoteOutcome = "ok" | "no_source" | "not_found" | "unauthorized" | "rate_limited" | "provider_down" | "schema_changed";
 
-const timeout = () => (typeof AbortSignal !== "undefined" && "timeout" in AbortSignal ? AbortSignal.timeout(REQUEST_TIMEOUT_MS) : undefined);
-
-async function getJson<T>(url: string, label: string): Promise<T | null> {
-  try {
-    const res = await fetch(url, { signal: timeout() });
-    if (!res.ok) {
-      console.error(`[Quotes] ${label} error: ${res.status}`);
-      return null;
-    }
-    return (await res.json()) as T;
-  } catch (error) {
-    console.error(`[Quotes] ${label} fetch failed:`, error);
-    return null;
-  }
+export interface QuoteAttempt {
+  /** Upper-cased, as requested. */
+  ticker: string;
+  /** Null when no provider covers this ticker's class at all (quoteSourceFor returned null). */
+  source: QuoteSource | null;
+  outcome: QuoteOutcome;
+  error?: string;
 }
 
-const isoOrNull = (value: unknown): string | null => {
-  if (value instanceof Date) return Number.isNaN(value.getTime()) ? null : value.toISOString();
-  if (typeof value === "number") return new Date(value > 1e12 ? value : value * 1000).toISOString();
-  if (typeof value === "string" && value) {
-    const d = new Date(value);
-    return Number.isNaN(d.getTime()) ? null : d.toISOString();
-  }
-  return null;
-};
+export interface QuoteBatchResult {
+  quotes: Record<string, Quote>;
+  attempts: QuoteAttempt[];
+}
+
+/** How fetchQuotes/update-prices key a request: crypto by ticker+currency (the same coin can be priced in two currencies in one batch), everything else by ticker. */
+export function quoteRequestKey(req: QuoteRequest): string {
+  return req.assetClass === "crypto" ? `${req.ticker.toUpperCase()}:${(req.currency ?? "USD").toUpperCase()}` : req.ticker.toUpperCase();
+}
 
 // ---------------------------------------------------------------------------
 // Routing
 // ---------------------------------------------------------------------------
 
-export const CRYPTO_SYMBOL_TO_COINGECKO_ID: Record<string, string> = {
-  BTC: "bitcoin",
-  ETH: "ethereum",
-  BNB: "binancecoin",
-  ADA: "cardano",
-  SOL: "solana",
-  DOT: "polkadot",
-  DOGE: "dogecoin",
-  AVAX: "avalanche-2",
-  MATIC: "matic-network",
-  LINK: "chainlink",
-  XRP: "ripple",
-  USDT: "tether",
-  USDC: "usd-coin",
-  UNI: "uniswap",
-  AAVE: "aave",
-  ATOM: "cosmos",
-  NEAR: "near",
-  APT: "aptos",
-  ARB: "arbitrum",
-  OP: "optimism",
-};
-
-/** Display names of the supported coins, for the asset search. */
-const CRYPTO_NAMES: Record<string, string> = {
-  BTC: "Bitcoin",
-  ETH: "Ethereum",
-  BNB: "BNB",
-  ADA: "Cardano",
-  SOL: "Solana",
-  DOT: "Polkadot",
-  DOGE: "Dogecoin",
-  AVAX: "Avalanche",
-  MATIC: "Polygon",
-  LINK: "Chainlink",
-  XRP: "XRP",
-  USDT: "Tether",
-  USDC: "USD Coin",
-  UNI: "Uniswap",
-  AAVE: "Aave",
-  ATOM: "Cosmos",
-  NEAR: "NEAR Protocol",
-  APT: "Aptos",
-  ARB: "Arbitrum",
-  OP: "Optimism",
-};
+export { CRYPTO_SYMBOL_TO_COINGECKO_ID };
 
 const BRAZILIAN_ASSET_CLASSES: readonly AssetClass[] = ["stocks", "fii", "bdr"];
 const INTERNATIONAL_ASSET_CLASSES: readonly AssetClass[] = ["international_stocks", "international_etf"];
 
-/** B3 tickers end with a digit (PETR4, VALE3, HGLG11, BOVA11). */
-export function isBrazilianTicker(ticker: string): boolean {
-  return /\d$/.test(ticker);
-}
+export { isBrazilianTicker };
 
-/** Where a ticker is priced: its holding's asset class decides, else the ticker's shape. */
+/** Where a ticker is priced: its holding's asset class decides, else the ticker's shape. Null when nothing prices this class today (fixed income, savings). */
 export function quoteSourceFor(ticker: string, assetClass?: AssetClass | null): QuoteSource | null {
   const t = ticker.toUpperCase();
   if (assetClass === "crypto") return CRYPTO_SYMBOL_TO_COINGECKO_ID[t] ? "coingecko" : null;
@@ -141,174 +101,169 @@ export function quoteSourceFor(ticker: string, assetClass?: AssetClass | null): 
   return isBrazilianTicker(t) ? "brapi" : "yahoo";
 }
 
+/** The registry's instance for a source, or undefined when it's off (MARKET_DATA_DISABLED). Reading the registry each call, not a module-level provider import, is what lets one env var turn a source off for this file too. */
+function providerById(id: QuoteSource): MarketDataProvider | undefined {
+  return activeProviders().find((p) => p.id === id);
+}
+
+function today(): { from: string; to: string } {
+  const d = new Date().toISOString().slice(0, 10);
+  return { from: d, to: d };
+}
+
+// ---------------------------------------------------------------------------
+// Price staleness (also read by services/portfolio.ts for the per-holding
+// badge, by notifications/services/notify.ts for the asset_stale push, and by
+// health/routes/market-data.ts for the holdings aggregate — one rule, shared,
+// so they never drift apart).
+// ---------------------------------------------------------------------------
+
+/**
+ * How many closes a price may miss and still count as fresh. One, not zero:
+ * a holiday the calendar tables don't know, or a pipeline run that hasn't
+ * finished yet, must not flag every holding. Two missed closes is a real
+ * gap — that is "stale", and what the asset_stale push waits for.
+ */
+export const PRICE_STALE_AFTER_SESSIONS = 2;
+
+export type PriceStatus = "fresh" | "stale" | "unpriced" | "unsupported" | "no_ticker";
+
+/**
+ * What a holding's own fields say about its price, with no DB access: usable
+ * from a single row or a list. Freshness is counted in trading sessions on
+ * the holding's market (see market-data/lib/calendar.ts): lastPriceUpdate is
+ * the quote's own instant (AssetPrice.asOf), so its date in the market's time
+ * zone is the session it belongs to.
+ */
+export function holdingPriceStatus(
+  h: { ticker: string | null; assetClass: AssetClass; currentPrice: number | null; lastPriceUpdate: Date | null },
+  now: Date = new Date(),
+): PriceStatus {
+  if (!h.ticker) return "no_ticker";
+  if (!quoteSourceFor(h.ticker, h.assetClass)) return "unsupported";
+  if (h.currentPrice === null || h.lastPriceUpdate === null) return "unpriced";
+  return sessionsMissed(h.ticker, h.assetClass, h.lastPriceUpdate, now) < PRICE_STALE_AFTER_SESSIONS ? "fresh" : "stale";
+}
+
+/** Closes missed since `priceAt` on the holding's market; 0 for a class with no market (never reached for those: quoteSourceFor rules them out first). */
+export function sessionsMissed(ticker: string, assetClass: AssetClass, priceAt: Date, now: Date = new Date()): number {
+  const market = marketFor(assetClass, ticker);
+  if (!market) return 0;
+  return sessionsBehind(market, marketDate(market, priceAt), expectedLatestSession(market, now));
+}
+
 // ---------------------------------------------------------------------------
 // CoinGecko
 // ---------------------------------------------------------------------------
 
-const COINGECKO_API = "https://api.coingecko.com/api/v3/simple/price";
+/** A handful of crypto holdings at most; one request each is plenty. */
+const CRYPTO_CONCURRENCY = 4;
+
+async function fetchOneCryptoQuote(symbol: string, currency: string): Promise<QuoteAttempt & { quote?: Quote }> {
+  const coinId = CRYPTO_SYMBOL_TO_COINGECKO_ID[symbol];
+  if (!coinId) return { ticker: symbol, source: "coingecko", outcome: "not_found" };
+  const provider = providerById("coingecko");
+  if (!provider?.fetchPrices) return { ticker: symbol, source: "coingecko", outcome: "provider_down", error: "coingecko disabled via MARKET_DATA_DISABLED" };
+  const result = await provider.fetchPrices(`${coinId}:${currency.toLowerCase()}`, today());
+  if (result.outcome !== "ok") return { ticker: symbol, source: "coingecko", outcome: result.outcome, error: "error" in result ? result.error : undefined };
+  const point = result.data[0];
+  if (!point) return { ticker: symbol, source: "coingecko", outcome: "not_found" };
+  return { ticker: symbol, source: "coingecko", outcome: "ok", quote: { ticker: symbol, price: point.close, currency: point.currency, source: "coingecko", asOf: point.asOf ?? null } };
+}
+
+/** Crypto prices in `currency`, keyed by upper-case symbol, plus one attempt per requested symbol. */
+async function fetchCryptoQuotesDetailed(tickers: string[], currency = "usd"): Promise<QuoteBatchResult> {
+  const symbols = [...new Set(tickers.map((t) => t.toUpperCase()))].filter((t) => CRYPTO_SYMBOL_TO_COINGECKO_ID[t]);
+  if (!symbols.length) return { quotes: {}, attempts: [] };
+  const attempts = await mapWithConcurrency(symbols, CRYPTO_CONCURRENCY, (s) => fetchOneCryptoQuote(s, currency));
+  const quotes: Record<string, Quote> = {};
+  for (const a of attempts) if (a.quote) quotes[a.ticker] = a.quote;
+  return { quotes, attempts: attempts.map((a): QuoteAttempt => ({ ticker: a.ticker, source: a.source, outcome: a.outcome, error: a.error })) };
+}
 
 /** Crypto prices in `currency`, keyed by upper-case symbol. */
 export async function fetchCryptoQuotes(tickers: string[], currency = "usd"): Promise<Record<string, Quote>> {
-  const symbols = [...new Set(tickers.map((t) => t.toUpperCase()))].filter((t) => CRYPTO_SYMBOL_TO_COINGECKO_ID[t]);
-  if (!symbols.length) return {};
-  const vs = currency.toLowerCase();
-  const ids = symbols.map((s) => CRYPTO_SYMBOL_TO_COINGECKO_ID[s]).join(",");
-  const data = await getJson<Record<string, Record<string, number>>>(`${COINGECKO_API}?ids=${ids}&vs_currencies=${vs}&include_last_updated_at=true`, "CoinGecko");
-  if (!data) return {};
-  const quotes: Record<string, Quote> = {};
-  for (const symbol of symbols) {
-    const row = data[CRYPTO_SYMBOL_TO_COINGECKO_ID[symbol]];
-    const price = row?.[vs];
-    if (typeof price === "number" && price > 0) {
-      quotes[symbol] = { ticker: symbol, price, currency: vs.toUpperCase(), source: "coingecko", asOf: isoOrNull(row.last_updated_at) };
-    }
-  }
-  return quotes;
+  return (await fetchCryptoQuotesDetailed(tickers, currency)).quotes;
 }
 
 // ---------------------------------------------------------------------------
 // brapi.dev
 // ---------------------------------------------------------------------------
 
-const BRAPI_API = "https://brapi.dev/api";
+/** The Free plan prices one ticker per call; a few in flight at once is plenty and stays well under its per-minute limit. */
+const BRAPI_CONCURRENCY = 4;
 
-const withToken = (url: string, token?: string) => (token ? `${url}${url.includes("?") ? "&" : "?"}token=${encodeURIComponent(token)}` : url);
+async function fetchOneBrazilianQuote(ticker: string): Promise<QuoteAttempt & { quote?: Quote }> {
+  const provider = providerById("brapi");
+  if (!provider?.fetchPrices) return { ticker, source: "brapi", outcome: "provider_down", error: "brapi disabled via MARKET_DATA_DISABLED" };
+  const result = await provider.fetchPrices(ticker, today());
+  if (result.outcome !== "ok") return { ticker, source: "brapi", outcome: result.outcome, error: "error" in result ? result.error : undefined };
+  const point = result.data[0];
+  if (!point) return { ticker, source: "brapi", outcome: "not_found" };
+  return { ticker, source: "brapi", outcome: "ok", quote: { ticker, price: point.close, currency: point.currency, source: "brapi", asOf: point.asOf ?? null } };
+}
 
-/** B3 quotes keyed by upper-case ticker. */
-export async function fetchBrazilianQuotes(tickers: string[], token?: string): Promise<Record<string, Quote>> {
+async function fetchBrazilianQuotesDetailed(tickers: string[]): Promise<QuoteBatchResult> {
   const list = [...new Set(tickers.map((t) => t.toUpperCase()))];
-  if (!list.length) return {};
-  const data = await getJson<{ results?: { symbol?: string; regularMarketPrice?: number; currency?: string; regularMarketTime?: string }[] }>(
-    withToken(`${BRAPI_API}/quote/${list.map(encodeURIComponent).join(",")}`, token),
-    "brapi.dev"
-  );
+  if (!list.length) return { quotes: {}, attempts: [] };
+  const attempts = await mapWithConcurrency(list, BRAPI_CONCURRENCY, (ticker) => fetchOneBrazilianQuote(ticker));
   const quotes: Record<string, Quote> = {};
-  for (const r of data?.results ?? []) {
-    if (!r.symbol || !r.regularMarketPrice) continue;
-    const ticker = r.symbol.toUpperCase();
-    quotes[ticker] = { ticker, price: r.regularMarketPrice, currency: (r.currency ?? "BRL").toUpperCase(), source: "brapi", asOf: isoOrNull(r.regularMarketTime) };
-  }
-  return quotes;
+  for (const a of attempts) if (a.quote) quotes[a.ticker] = a.quote;
+  return { quotes, attempts: attempts.map((a): QuoteAttempt => ({ ticker: a.ticker, source: a.source, outcome: a.outcome, error: a.error })) };
 }
 
-interface BrapiListItem {
-  stock?: string;
-  name?: string;
-  close?: number | null;
-  type?: string;
+/** B3 quotes keyed by upper-case ticker, one request per ticker (the Free plan does not accept more). `token` is accepted for API compatibility; every caller passes env.BRAPI_TOKEN, which is exactly what the brapi provider itself reads. */
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+export async function fetchBrazilianQuotes(tickers: string[], _token?: string): Promise<Record<string, Quote>> {
+  return (await fetchBrazilianQuotesDetailed(tickers)).quotes;
 }
 
-const ETF_NAME = /\b(ETF|ISHARES|[IÍ]NDICE|IT NOW|TREND|HASHDEX)\b/i;
+export { brapiAssetClass };
 
-/** brapi's stock / fund / bdr, mapped to an asset class (a "fund" is an ETF when its name says so, else a FII). */
-export function brapiAssetClass(type: string | undefined, name: string): AssetClass {
-  if (type === "bdr") return "bdr";
-  if (type === "fund") return ETF_NAME.test(name) ? "etf" : "fii";
-  return "stocks";
-}
-
-async function searchBrapi(q: string, token?: string, limit = 8): Promise<AssetSearchResult[]> {
-  const data = await getJson<{ stocks?: BrapiListItem[] }>(withToken(`${BRAPI_API}/quote/list?search=${encodeURIComponent(q)}&limit=${limit}`, token), "brapi.dev search");
-  return (data?.stocks ?? [])
-    .filter((s): s is BrapiListItem & { stock: string } => !!s.stock)
-    .map((s) => ({
-      ticker: s.stock.toUpperCase(),
-      name: s.name ?? s.stock,
-      assetClass: brapiAssetClass(s.type, s.name ?? ""),
-      currency: "BRL",
-      price: typeof s.close === "number" && s.close > 0 ? s.close : null,
-      source: "brapi" as const,
-    }));
+async function searchBrapi(q: string): Promise<AssetSearchResult[]> {
+  const provider = providerById("brapi");
+  if (!provider?.lookup) return [];
+  const result = await provider.lookup(q);
+  if (result.outcome !== "ok") return [];
+  return result.data.map((m) => ({ ticker: m.symbol, name: m.name, assetClass: m.assetClass, currency: m.currency, price: m.price ?? null, source: "brapi" as const }));
 }
 
 // ---------------------------------------------------------------------------
 // Yahoo Finance
 // ---------------------------------------------------------------------------
 
-interface YahooQuoteResult {
-  symbol?: string;
-  regularMarketPrice?: number;
-  currency?: string;
-  regularMarketTime?: Date | number | string;
+const YAHOO_CONCURRENCY = 20;
+
+async function fetchOneYahooQuote(ticker: string): Promise<QuoteAttempt & { quote?: Quote }> {
+  const provider = providerById("yahoo");
+  if (!provider?.fetchPrices) return { ticker, source: "yahoo", outcome: "provider_down", error: "yahoo disabled via MARKET_DATA_DISABLED" };
+  const result = await provider.fetchPrices(ticker, today());
+  if (result.outcome !== "ok") return { ticker, source: "yahoo", outcome: result.outcome, error: "error" in result ? result.error : undefined };
+  const point = result.data[0];
+  if (!point) return { ticker, source: "yahoo", outcome: "not_found" };
+  return { ticker, source: "yahoo", outcome: "ok", quote: { ticker, price: point.close, currency: point.currency, source: "yahoo", asOf: point.asOf ?? null } };
 }
 
-interface YahooSearchQuote {
-  symbol?: string;
-  shortname?: string;
-  longname?: string;
-  quoteType?: string;
-  isYahooFinance?: boolean;
-}
-
-interface YahooClient {
-  quote(ticker: string): Promise<YahooQuoteResult | null | undefined>;
-  search(query: string, options?: Record<string, unknown>): Promise<{ quotes?: YahooSearchQuote[] }>;
-}
-
-let yahoo: YahooClient | null = null;
-
-async function yahooClient(): Promise<YahooClient> {
-  if (yahoo) return yahoo;
-  // Dynamic import keeps the library out of client bundles and SSR of pages.
-  const { default: YahooFinance } = await import("yahoo-finance2");
-  yahoo = new (YahooFinance as unknown as new (opts?: Record<string, unknown>) => YahooClient)({ suppressNotices: ["yahooSurvey"] });
-  return yahoo;
+async function fetchYahooQuotesDetailed(tickers: string[]): Promise<QuoteBatchResult> {
+  const list = [...new Set(tickers.map((t) => t.toUpperCase()))];
+  if (!list.length) return { quotes: {}, attempts: [] };
+  const attempts = await mapWithConcurrency(list, YAHOO_CONCURRENCY, (ticker) => fetchOneYahooQuote(ticker));
+  const quotes: Record<string, Quote> = {};
+  for (const a of attempts) if (a.quote) quotes[a.ticker] = a.quote;
+  return { quotes, attempts: attempts.map((a): QuoteAttempt => ({ ticker: a.ticker, source: a.source, outcome: a.outcome, error: a.error })) };
 }
 
 /** Yahoo quotes keyed by upper-case ticker as requested (e.g. "VOO", "PETR4.SA"). */
 export async function fetchYahooQuotes(tickers: string[]): Promise<Record<string, Quote>> {
-  const list = [...new Set(tickers.map((t) => t.toUpperCase()))];
-  if (!list.length) return {};
-  const quotes: Record<string, Quote> = {};
-  try {
-    const yf = await yahooClient();
-    const batchSize = 20;
-    for (let i = 0; i < list.length; i += batchSize) {
-      await Promise.all(
-        list.slice(i, i + batchSize).map(async (ticker) => {
-          try {
-            const q = await yf.quote(ticker);
-            if (q?.regularMarketPrice) {
-              quotes[ticker] = { ticker, price: q.regularMarketPrice, currency: (q.currency ?? "USD").toUpperCase(), source: "yahoo", asOf: isoOrNull(q.regularMarketTime) };
-            }
-          } catch (err) {
-            console.error(`[Quotes] Yahoo Finance error for ${ticker}:`, err);
-          }
-        })
-      );
-    }
-  } catch (error) {
-    console.error("[Quotes] Yahoo Finance failed:", error);
-  }
-  return quotes;
+  return (await fetchYahooQuotesDetailed(tickers)).quotes;
 }
 
-async function searchYahoo(q: string, limit = 6): Promise<AssetSearchResult[]> {
-  let found: YahooSearchQuote[] = [];
-  try {
-    const yf = await yahooClient();
-    found = (await yf.search(q, { quotesCount: limit, newsCount: 0 })).quotes ?? [];
-  } catch (error) {
-    console.error("[Quotes] Yahoo Finance search failed:", error);
-    return [];
-  }
-  const picked = found
-    .filter((r): r is YahooSearchQuote & { symbol: string } => !!r.symbol && (r.quoteType === "EQUITY" || r.quoteType === "ETF"))
-    // B3 tickers come from brapi.
-    .filter((r) => !r.symbol.toUpperCase().endsWith(".SA"))
-    .slice(0, 4);
-  const prices = await fetchYahooQuotes(picked.map((r) => r.symbol));
-  return picked.map((r) => {
-    const ticker = r.symbol.toUpperCase();
-    return {
-      ticker,
-      name: r.longname ?? r.shortname ?? ticker,
-      assetClass: r.quoteType === "ETF" ? ("international_etf" as const) : ("international_stocks" as const),
-      currency: prices[ticker]?.currency ?? "USD",
-      price: prices[ticker]?.price ?? null,
-      source: "yahoo" as const,
-    };
-  });
+async function searchYahoo(q: string): Promise<AssetSearchResult[]> {
+  const provider = providerById("yahoo");
+  if (!provider?.lookup) return [];
+  const result = await provider.lookup(q);
+  if (result.outcome !== "ok") return [];
+  return result.data.map((m) => ({ ticker: m.symbol, name: m.name, assetClass: m.assetClass, currency: m.currency, price: m.price ?? null, source: "yahoo" as const }));
 }
 
 // ---------------------------------------------------------------------------
@@ -321,15 +276,22 @@ export interface QuoteOptions {
   cryptoCurrency?: string;
 }
 
+function mergeAttempts(...batches: QuoteAttempt[][]): QuoteAttempt[] {
+  return batches.flat();
+}
+
 /**
- * Quotes for the requested tickers, keyed by upper-case ticker. B3 tickers
- * brapi misses are retried on Yahoo as "<ticker>.SA". Crypto is priced per
- * requested currency.
+ * Quotes for the requested tickers, keyed by upper-case ticker, plus one
+ * attempt per ticker recording why it does or doesn't have a price. B3
+ * tickers brapi misses are retried on Yahoo as "<ticker>.SA" (that retry's
+ * attempt is reported as "yahoo", since that's the source whose result
+ * actually decided the outcome). Crypto is priced per requested currency.
  */
-export async function fetchQuotes(requests: QuoteRequest[], opts: QuoteOptions = {}): Promise<Record<string, Quote>> {
+export async function fetchQuotesDetailed(requests: QuoteRequest[], opts: QuoteOptions = {}): Promise<QuoteBatchResult> {
   const brazilian = new Set<string>();
   const international = new Set<string>();
   const cryptoByCurrency = new Map<string, Set<string>>();
+  const noSource: QuoteAttempt[] = [];
   for (const r of requests) {
     const ticker = r.ticker.trim().toUpperCase();
     if (!ticker) continue;
@@ -339,23 +301,43 @@ export async function fetchQuotes(requests: QuoteRequest[], opts: QuoteOptions =
     else if (source === "coingecko") {
       const cur = (r.currency ?? opts.cryptoCurrency ?? "USD").toUpperCase();
       cryptoByCurrency.set(cur, (cryptoByCurrency.get(cur) ?? new Set()).add(ticker));
+    } else {
+      noSource.push({ ticker, source: null, outcome: "no_source" });
     }
   }
   const [br, intl, ...crypto] = await Promise.all([
-    fetchBrazilianQuotes([...brazilian], opts.brapiToken),
-    fetchYahooQuotes([...international]),
-    ...[...cryptoByCurrency].map(([cur, tickers]) => fetchCryptoQuotes([...tickers], cur)),
+    fetchBrazilianQuotesDetailed([...brazilian]),
+    fetchYahooQuotesDetailed([...international]),
+    ...[...cryptoByCurrency].map(([cur, tickers]) => fetchCryptoQuotesDetailed([...tickers], cur)),
   ]);
-  const missing = [...brazilian].filter((t) => !br[t]);
-  const fallback: Record<string, Quote> = {};
+  const missing = [...brazilian].filter((t) => !br.quotes[t]);
+  let fallback: QuoteBatchResult = { quotes: {}, attempts: [] };
   if (missing.length) {
-    const sa = await fetchYahooQuotes(missing.map((t) => `${t}.SA`));
-    for (const [key, quote] of Object.entries(sa)) {
+    const sa = await fetchYahooQuotesDetailed(missing.map((t) => `${t}.SA`));
+    const quotes: Record<string, Quote> = {};
+    for (const [key, quote] of Object.entries(sa.quotes)) {
       const ticker = key.replace(/\.SA$/i, "");
-      fallback[ticker] = { ...quote, ticker };
+      quotes[ticker] = { ...quote, ticker };
     }
+    const attempts = sa.attempts.map((a) => ({ ...a, ticker: a.ticker.replace(/\.SA$/i, "") }));
+    fallback = { quotes, attempts };
   }
-  return Object.assign({}, ...crypto, br, fallback, intl);
+  // The B3 attempt for a ticker brapi missed is replaced by the fallback's, so one attempt speaks for each ticker.
+  const fallbackTickers = new Set(fallback.attempts.map((a) => a.ticker));
+  const brAttempts = br.attempts.filter((a) => !fallbackTickers.has(a.ticker));
+  return {
+    quotes: { ...Object.fromEntries(crypto.flatMap((c) => Object.entries(c.quotes))), ...br.quotes, ...fallback.quotes, ...intl.quotes },
+    attempts: mergeAttempts(noSource, crypto.flatMap((c) => c.attempts), brAttempts, fallback.attempts, intl.attempts),
+  };
+}
+
+/**
+ * Quotes for the requested tickers, keyed by upper-case ticker. B3 tickers
+ * brapi misses are retried on Yahoo as "<ticker>.SA". Crypto is priced per
+ * requested currency. See fetchQuotesDetailed for *why* a ticker is missing.
+ */
+export async function fetchQuotes(requests: QuoteRequest[], opts: QuoteOptions = {}): Promise<Record<string, Quote>> {
+  return (await fetchQuotesDetailed(requests, opts)).quotes;
 }
 
 /**
@@ -367,17 +349,13 @@ export async function searchAssets(q: string, opts: QuoteOptions & { limit?: num
   if (query.length < 2) return [];
   const upper = query.toUpperCase();
   const coins = Object.keys(CRYPTO_SYMBOL_TO_COINGECKO_ID).filter(
-    (s) => s.startsWith(upper) || CRYPTO_NAMES[s].toUpperCase().includes(upper) || CRYPTO_SYMBOL_TO_COINGECKO_ID[s].toUpperCase().includes(upper)
+    (s) => s.startsWith(upper) || CRYPTO_NAMES[s]!.toUpperCase().includes(upper) || CRYPTO_SYMBOL_TO_COINGECKO_ID[s]!.toUpperCase().includes(upper),
   );
   const cryptoCurrency = (opts.cryptoCurrency ?? "USD").toUpperCase();
-  const [b3, intl, coinPrices] = await Promise.all([
-    searchBrapi(query, opts.brapiToken),
-    searchYahoo(query),
-    fetchCryptoQuotes(coins, cryptoCurrency),
-  ]);
+  const [b3, intl, coinPrices] = await Promise.all([searchBrapi(query), searchYahoo(query), fetchCryptoQuotes(coins, cryptoCurrency)]);
   const crypto: AssetSearchResult[] = coins.map((s) => ({
     ticker: s,
-    name: CRYPTO_NAMES[s],
+    name: CRYPTO_NAMES[s]!,
     assetClass: "crypto",
     currency: cryptoCurrency,
     price: coinPrices[s]?.price ?? null,

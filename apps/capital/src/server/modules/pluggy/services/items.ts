@@ -3,6 +3,7 @@ import type { PassiveIncomeType } from "@/lib/invest/passive-income";
 import { formatDateOnly, parseLocalDate } from "@capital/server/lib/date-utils";
 import type { DbClient } from "@capital/server/lib/prisma";
 import { LedgerError } from "@capital/server/modules/ledger/lib/errors";
+import { adjustPosition, getOwnedHolding } from "@capital/server/modules/investments/services/portfolio";
 import { isPluggyConfigured } from "../lib/config";
 import { bookConfirmedIncome } from "./sync";
 
@@ -178,14 +179,22 @@ export async function resolvePluggyReview(
     }
   }
   if (action === "confirm") {
-    const draft = review.draft as { operationId?: string; event?: string };
+    const draft = review.draft as { operationId?: string; event?: string; holdingId?: string; pluggyQuantity?: number };
     if (draft.event === "amortization" || draft.event === "buy" || draft.event === "sell" || draft.event === "skip") {
       throw new LedgerError("Amortization, a sale or a redemption is not income", 422, { code: "pluggy.not_income" });
     }
-    if (review.kind !== "low_confidence") {
+    if (review.kind === "position") {
+      // Confirming a position review means "the broker is right": apply its
+      // quantity, keeping the average cost already on the holding (the
+      // broker snapshot has no cost basis to replace it with).
+      if (typeof draft.holdingId !== "string" || typeof draft.pluggyQuantity !== "number") {
+        throw new LedgerError("Malformed position review", 422, { code: "pluggy.malformed_review" });
+      }
+      const holding = await getOwnedHolding(userId, draft.holdingId, db);
+      await adjustPosition(userId, { holdingId: draft.holdingId, currentQuantity: draft.pluggyQuantity, averageCost: holding.averageCost, notes: "Pluggy: quantidade informada pela corretora" }, db);
+    } else if (review.kind !== "low_confidence") {
       throw new LedgerError("Only an uncertain classification can be confirmed", 422, { code: "pluggy.not_income" });
-    }
-    if (draft.operationId) {
+    } else if (draft.operationId) {
       await db.investmentOperation.updateMany({
         where: { id: draft.operationId, holding: { account: { userId } } },
         data: { classificationSource: "manual", syncLocked: true },

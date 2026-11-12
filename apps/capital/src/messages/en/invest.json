@@ -74,6 +74,7 @@
     "quotesToday": "Today's quotes {time}",
     "quotesOn": "Quotes from {date} {time}",
     "noQuotes": "No automatic quotes yet",
+    "staleQuotes": "{count, plural, one {# stale} other {# stale}}",
     "fxRate": "{currency} {rate}",
     "kpi": {
       "netWorth": "Net worth",
@@ -234,6 +235,12 @@
     "invested": "Invested",
     "result": "Result",
     "priceAt": "Quoted on",
+    "priceStatus": {
+      "stale": "stale",
+      "unpriced": "not priced yet",
+      "unsupported": "no automatic source",
+      "no_ticker": "manual"
+    },
     "price": "Current quote",
     "update": "Update",
     "adjust": "Adjust",

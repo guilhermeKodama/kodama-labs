@@ -80,6 +80,27 @@ sentinel, attention, and careers) or, in production, the compose
 `*-migrate` services. Create new migrations with `pnpm --filter <app>
 db:migrate:dev`.
 
+## Tests and coverage
+
+Capital's backend (`src/server/**` and `src/app/api/**`) must stay at or above
+**90%** coverage of statements, branches, functions and lines. CI enforces it:
+`infrastructure/deploy/ci-test.sh` runs the main suite and the isolated run
+(`vitest.fx.config.ts`: the files that cannot share the database with the
+parallel suite) with coverage, then
+`apps/capital/scripts/check-coverage.mjs` adds the two up (vitest cannot merge
+them) and fails the job under the threshold. The UI (components, pages, hooks)
+is not counted; the proof videos cover it.
+
+```bash
+pnpm --filter @wallex/capital test:coverage   # both runs, then the 90% gate
+pnpm --filter @wallex/capital coverage:check  # the gate alone, on the last runs
+```
+
+A failing gate prints the least covered files. Add unit tests for pure logic
+and integration tests (real Postgres, real services) for anything that
+writes. Tests that call a cron route use the fixed `CRON_SECRET` that
+`vitest.config.ts` sets. Do not lower the threshold to get green.
+
 ## Capital data model (ledger)
 
 Capital's data lives in a single ledger (`apps/capital/prisma/schema.prisma`):

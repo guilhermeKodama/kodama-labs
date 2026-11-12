@@ -164,3 +164,19 @@ describe("MCP bulk create transactions", () => {
     expect(second.created.map((row) => row.accountId)).toEqual([nu.id]);
   });
 });
+
+describe("MCP bulk create edge cases", () => {
+  it("does nothing for an empty list", async () => {
+    expect(await bulkCreateTransactions(USER, [], false, prisma)).toEqual({ created: [], duplicates: [], errors: [] });
+    expect(await prisma.mutationBatch.count({ where: { userId: USER } })).toBe(0);
+  });
+
+  it("writes nothing when every row is a duplicate", async () => {
+    await bulkCreateTransactions(USER, [dividend()], false, prisma);
+    const batchesBefore = await prisma.mutationBatch.count({ where: { userId: USER } });
+    const r = await bulkCreateTransactions(USER, [dividend()], false, prisma);
+    expect(r.created).toEqual([]);
+    expect(r.duplicates).toHaveLength(1);
+    expect(await prisma.mutationBatch.count({ where: { userId: USER } })).toBe(batchesBefore);
+  });
+});

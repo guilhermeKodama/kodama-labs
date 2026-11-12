@@ -115,3 +115,46 @@ describe("proventoFundedPurchases", () => {
     ).toEqual([["buy", "2026-10", 2400, "pf"]]);
   });
 });
+
+describe("proventoFundedPurchases ordering and labels", () => {
+  it("skips events of zero or negative amount", () => {
+    const events = [
+      ev({ id: "div", kind: "income", amount: 100, date: "2026-10-01" }),
+      ev({ id: "dust", kind: "purchase", amount: 0, date: "2026-10-02", label: "ZERO" }),
+      ev({ id: "refund", kind: "purchase", amount: -50, date: "2026-10-03", label: "NEG" }),
+      ev({ id: "buy", kind: "purchase", amount: 60, date: "2026-10-04", label: "REAL" }),
+    ];
+    expect(amounts(events)).toEqual([["buy", "2026-10", 60, "pf"]]);
+  });
+
+  it("orders same-day events of the same kind by id, so the cash is spent the same way whatever the input order", () => {
+    const income = ev({ id: "div", kind: "income", amount: 100, date: "2026-10-01" });
+    const a = ev({ id: "a-buy", kind: "purchase", amount: 100, date: "2026-10-05", label: "A" });
+    const b = ev({ id: "b-buy", kind: "purchase", amount: 100, date: "2026-10-05", label: "B" });
+    expect(proventoFundedPurchases([b, a, income]).map((row) => row.id)).toEqual(["a-buy"]);
+    expect(proventoFundedPurchases([income, a, b]).map((row) => row.id)).toEqual(["a-buy"]);
+  });
+
+  it("falls back to the account id for a purchase with no label, and to a null entity", () => {
+    const events: AporteCashEvent[] = [
+      { id: "div", accountId: "xp", date: "2026-10-01", amount: 100, kind: "income" },
+      { id: "buy", accountId: "xp", date: "2026-10-02", amount: 100, kind: "purchase", label: "   " },
+    ];
+    expect(proventoFundedPurchases(events)).toEqual([
+      { id: "buy", accountId: "xp", entityId: null, date: "2026-10-02", period: "2026-10", amount: 100, label: "xp" },
+    ]);
+  });
+
+  it("takes a withdrawal out of external cash first and provento cash after, and never mixes brokers", () => {
+    const events = [
+      ev({ id: "div", kind: "income", amount: 100, date: "2026-10-01" }),
+      ev({ id: "in", kind: "deposit", amount: 100, date: "2026-10-01" }),
+      ev({ id: "out", kind: "withdrawal", amount: 150, date: "2026-10-02" }),
+      // 50 of provento cash is left on xp.
+      ev({ id: "buy", kind: "purchase", amount: 80, date: "2026-10-03", label: "PETR4" }),
+      // Another broker holds no provento: its purchase is not funded by xp's.
+      ev({ id: "other", kind: "purchase", amount: 80, date: "2026-10-03", accountId: "btg", label: "VALE3" }),
+    ];
+    expect(amounts(events)).toEqual([["buy", "2026-10", 50, "pf"]]);
+  });
+});

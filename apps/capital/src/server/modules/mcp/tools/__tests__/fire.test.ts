@@ -177,3 +177,18 @@ describe("FIRE MCP tools", () => {
     expect(updated.batchId).toEqual(expect.any(String));
   });
 });
+
+describe("FIRE MCP tools: plans without phases", () => {
+  it("refuses to set a phase contribution on a plan whose phases are empty, and changes nothing", async () => {
+    await upsertFireGoal(USER, PLAN, prisma);
+    await prisma.fireGoal.updateMany({ where: { userId: USER }, data: { phases: [] } });
+
+    await expect(updateFirePhaseContribution(USER, { monthlyContribution: 100 }, prisma)).rejects.toThrow("The FIRE plan has no contribution phases.");
+
+    expect((await prisma.fireGoal.findFirstOrThrow({ where: { userId: USER } })).phases).toEqual([]);
+  });
+
+  it("refuses when the user has no plan at all", async () => {
+    await expect(updateFirePhaseContribution(USER, { monthlyContribution: 100 }, prisma)).rejects.toThrow("No FIRE plan");
+  });
+});

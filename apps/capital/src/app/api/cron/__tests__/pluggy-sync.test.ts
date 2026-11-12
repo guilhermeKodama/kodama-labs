@@ -1,11 +1,18 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import { NextRequest } from "next/server";
 import { env } from "@/env";
+import { prisma } from "@capital/server/lib/prisma";
 import { isPluggyConfigured } from "@capital/server/modules/pluggy/lib/config";
 import { GET } from "../pluggy-sync/route";
 
 const request = (secret?: string) =>
   new NextRequest("http://localhost/api/cron/pluggy-sync", { headers: secret ? { authorization: `Bearer ${secret}` } : {} });
+
+// pluggy-sync now goes through withCron, which writes a real, global
+// IntegrationRun row (job="pluggy-sync") on every call it authorizes.
+afterEach(async () => {
+  await prisma.integrationRun.deleteMany({ where: { job: "pluggy-sync" } });
+});
 
 describe("pluggy-sync cron", () => {
   it("rejects a missing or wrong secret before any sync", async () => {
@@ -19,6 +26,6 @@ describe("pluggy-sync cron", () => {
     if (isPluggyConfigured() || !env.CRON_SECRET) return;
     const res = await GET(request(env.CRON_SECRET));
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ success: true, status: "disabled", message: "Pluggy is not configured" });
+    expect(await res.json()).toMatchObject({ success: true, status: "disabled", message: "Pluggy is not configured" });
   });
 });

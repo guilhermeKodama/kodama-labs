@@ -247,6 +247,7 @@
     "link_not_found": "Pluggy account not found. Sync once so the accounts show up.",
     "review_not_found": "Review not found.",
     "link_target": "Choose the existing entry to link.",
-    "not_income": "Amortization, a sale or a redemption is not income."
+    "not_income": "Amortization, a sale or a redemption is not income.",
+    "malformed_review": "This review is missing the data needed to apply it."
   }
 }
