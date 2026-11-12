@@ -3,6 +3,12 @@ import { expect, flow } from "@repo/proof-video";
 
 const repo = path.resolve(__dirname, "../../../..");
 
+// The app logs every SQL statement in development. On a recording each
+// line is drawn onto the page, so the passing test names scroll away and
+// the video blows past the upload limit. test keeps the errors and the
+// vitest lines.
+const quiet = { cwd: repo, env: { NODE_ENV: "test" } };
+
 // Three vitest runs, each starting its own worker. The default 90s test
 // limit is tight once pnpm has to boot them.
 flow.setTimeout(360_000);
@@ -16,7 +22,7 @@ flow("MCP tools can target one bank account of a PJ", async ({ scene, say, check
   const created = await terminal(
     "pnpm",
     ["--filter", "@wallex/capital", "exec", "vitest", "run", "src/server/modules/mcp/tools/__tests__/bulk-create-transactions.test.ts", "--reporter=verbose"],
-    { cwd: repo, timeoutMs: 120_000 },
+    { ...quiet, timeoutMs: 120_000 },
   );
   await check("A PJ expense lands on Inter PJ, and a row with no account stays on the main account", async () => {
     expect(created.code).toBe(0);
@@ -31,7 +37,7 @@ flow("MCP tools can target one bank account of a PJ", async ({ scene, say, check
   const moved = await terminal(
     "pnpm",
     ["--filter", "@wallex/capital", "exec", "vitest", "run", "src/server/modules/mcp/tools/__tests__/bulk-update-transactions.test.ts", "--reporter=verbose"],
-    { cwd: repo, timeoutMs: 180_000 },
+    { ...quiet, timeoutMs: 180_000 },
   );
   await check("Moving an expense from Inter PJ to Nu Empresas moves the balance and undo puts it back", async () => {
     expect(moved.code).toBe(0);
@@ -46,7 +52,7 @@ flow("MCP tools can target one bank account of a PJ", async ({ scene, say, check
   const accounts = await terminal(
     "pnpm",
     ["--filter", "@wallex/capital", "exec", "vitest", "run", "src/server/modules/mcp/tools/__tests__/ledger-accounts.test.ts", "--reporter=verbose"],
-    { cwd: repo, timeoutMs: 120_000 },
+    { ...quiet, timeoutMs: 120_000 },
   );
   await check("The opening balance is the account's initial balance, with no ledger entry and no stored date", async () => {
     expect(accounts.code).toBe(0);
