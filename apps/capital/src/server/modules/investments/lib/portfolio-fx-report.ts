@@ -728,7 +728,25 @@ function beforeFromBackup(source: PortfolioTimelineSource, rows: Row[], backup: 
   return recomputeOpenedAt({ ...source.input, accounts, holdings, entries: restored.map(asEntry) }, source);
 }
 
+/**
+ * The report reads every user's rows in many separate queries. It runs in one
+ * read-only snapshot, so rows written or deleted while it runs (a live app,
+ * another test file) cannot leave it with half of a relation.
+ */
 export async function portfolioFxReport(db: DbClient, mode: "precheck" | "verify", opts: { userId?: string; expectTargets?: boolean } = {}): Promise<PortfolioFxReport> {
+  if ("$transaction" in db && typeof db.$transaction === "function") {
+    return db.$transaction(
+      async (tx) => {
+        await tx.$executeRaw`SET TRANSACTION READ ONLY`;
+        return buildReport(tx, mode, opts);
+      },
+      { isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead, timeout: 120_000, maxWait: 20_000 },
+    );
+  }
+  return buildReport(db, mode, opts);
+}
+
+async function buildReport(db: DbClient, mode: "precheck" | "verify", opts: { userId?: string; expectTargets?: boolean }): Promise<PortfolioFxReport> {
   const issues: string[] = [];
   const closes = await loadCloses(db);
   const plan = await planRepair(db, closes);
