@@ -46,7 +46,8 @@ describe("GET /health", () => {
     let release: () => void = () => {};
     queryRaw.mockImplementationOnce(() => new Promise<void>((resolve) => (release = resolve)));
 
-    const pending = get();
+    // Hono's request() is typed Response | Promise<Response>; Promise.resolve gives `.then`.
+    const pending = Promise.resolve(get());
     await vi.advanceTimersByTimeAsync(2_999);
     let settled = false;
     void pending.then(() => (settled = true));
