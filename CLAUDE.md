@@ -84,8 +84,9 @@ db:migrate:dev`.
 
 Capital's backend (`src/server/**` and `src/app/api/**`) must stay at or above
 **90%** coverage of statements, branches, functions and lines. CI enforces it:
-`infrastructure/deploy/ci-test.sh` runs the main suite and the isolated
-`portfolio-fx-repair` run with coverage, then
+`infrastructure/deploy/ci-test.sh` runs the main suite and the isolated run
+(`vitest.fx.config.ts`: the files that cannot share the database with the
+parallel suite) with coverage, then
 `apps/capital/scripts/check-coverage.mjs` adds the two up (vitest cannot merge
 them) and fails the job under the threshold. The UI (components, pages, hooks)
 is not counted; the proof videos cover it.

@@ -34,9 +34,14 @@ export default defineConfig({
   test: {
     globals: true,
     include: ['src/**/__tests__/**/*.test.ts'],
-    // portfolio-fx-repair.test.ts applies a migration that rewrites rows
-    // across the database. It flakes when other files run in parallel, so
-    // the package test script runs it afterwards via vitest.fx.config.ts.
+    // Two files cannot share the database with the parallel run, so they are
+    // left out here and the package test script runs them afterwards, alone,
+    // via vitest.fx.config.ts:
+    //  - portfolio-fx-repair.test.ts applies a migration that rewrites rows
+    //    across the database;
+    //  - health/routes/__tests__/market-data.test.ts reads totals over every
+    //    user's holdings and job runs, so any other file creating a holding
+    //    while it runs shifts its counts.
     exclude: [
       '**/node_modules/**',
       '**/dist/**',
@@ -44,6 +49,7 @@ export default defineConfig({
       '**/.{idea,git,cache,output,temp}/**',
       '**/{karma,rollup,webpack,vite,vitest,jest,ava,babel,nyc,cypress,tsup,build,eslint,prettier}.config.*',
       '**/portfolio-fx-repair.test.ts',
+      '**/health/routes/__tests__/market-data.test.ts',
     ],
     // Hard-fails the run before any test body executes if DATABASE_URL
     // does not point at a dev/test database. See src/test/db-guard.setup.ts.
