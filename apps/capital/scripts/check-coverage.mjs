@@ -41,6 +41,13 @@ function addCounts(a, b) {
   return out;
 }
 
+const sameShape = (a, b) =>
+  Object.keys(a.s).length === Object.keys(b.s).length &&
+  Object.keys(a.f).length === Object.keys(b.f).length &&
+  Object.keys(a.b).length === Object.keys(b.b).length &&
+  Object.entries(a.b).every(([id, hits]) => b.b[id]?.length === hits.length);
+const coveredStatements = (cov) => Object.values(cov.s).filter((n) => n > 0).length;
+
 const files = new Map();
 for (const run of runs) {
   const data = JSON.parse(fs.readFileSync(path.join(dir, run, "coverage-final.json"), "utf8"));
@@ -48,11 +55,15 @@ for (const run of runs) {
     const seen = files.get(file);
     if (!seen) {
       files.set(file, structuredClone(cov));
-      continue;
+    } else if (sameShape(seen, cov)) {
+      seen.s = addCounts(seen.s, cov.s);
+      seen.f = addCounts(seen.f, cov.f);
+      seen.b = addCounts(seen.b, cov.b);
+    } else if (coveredStatements(cov) > coveredStatements(seen)) {
+      // A run that never loaded a file reports an empty placeholder whose maps
+      // can differ from the real ones; keep the run that actually ran it.
+      files.set(file, structuredClone(cov));
     }
-    seen.s = addCounts(seen.s, cov.s);
-    seen.f = addCounts(seen.f, cov.f);
-    seen.b = addCounts(seen.b, cov.b);
   }
 }
 
