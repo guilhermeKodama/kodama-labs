@@ -209,6 +209,21 @@ describe("ops chart", () => {
     );
   });
 
+  it("keeps a stored base amount instead of converting again at today's rate", () => {
+    const usd = {
+      ...op("u", "2026-08-12", "dividend", 10, "international"),
+      currency: "USD",
+      amountBase: 51.29,
+      holdingId: "h",
+      assetClass: "international_etf",
+      incomeType: "dividend",
+      dividendOrigin: "EXTERIOR",
+    } as Operation;
+    const groups = opsChartGroups([usd], { ...cfg, series: "origin" }, "2026-10-07", () => 5);
+    expect(groups[0].values[SUM_KEY]).toBeCloseTo(51.29, 2);
+    expect(groups[0].children?.[0].key).toBe("exterior");
+  });
+
   it("keeps the Proventos 12m seed on its own bars", () => {
     expect(
       usesLegacyIncomeChart(
@@ -239,6 +254,8 @@ describe("chart config", () => {
       top: 5,
     });
     expect(normalizeHoldingsChart({ type: "waterfall" }).type).toBe("bar");
+    expect(normalizeOpsChart({}).cumulative).toBe(false);
+    expect(normalizeOpsChart({ type: "bar" }).cumulative).toBe(false);
     expect(
       normalizeOpsChart({
         type: "area",

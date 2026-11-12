@@ -8,7 +8,7 @@ export default function configureOpenAPI(app: OpenAPIHono<AppBindings>) {
     openapi: "3.0.0",
     info: {
       version: "1.0.0",
-      title: "Capital API",
+      title: "Cerne API",
       description:
         "Financial management API for international service providers",
     },
@@ -20,8 +20,8 @@ export default function configureOpenAPI(app: OpenAPIHono<AppBindings>) {
       theme: "kepler",
       layout: "modern",
       metaData: {
-        title: "Capital API Reference",
-        description: "API documentation for Capital financial management",
+        title: "Cerne API Reference",
+        description: "API documentation for Cerne financial management",
       },
       defaultHttpClient: {
         targetKey: "js",
@@ -38,9 +38,9 @@ export default function configureOpenAPI(app: OpenAPIHono<AppBindings>) {
     if (accept && accept.includes("text/html")) {
       return c.html(`
       <html>
-        <head><title>Capital API</title></head>
+        <head><title>Cerne API</title></head>
         <body style="font-family: system-ui, sans-serif; max-width: 600px; margin: 50px auto; padding: 20px;">
-          <h1>💰 Capital API</h1>
+          <h1>Cerne API</h1>
           <p>Financial management API for international service providers</p>
           <ul>
             <li><a href="/api/doc">📄 OpenAPI Documentation (JSON)</a></li>
@@ -52,7 +52,7 @@ export default function configureOpenAPI(app: OpenAPIHono<AppBindings>) {
     `);
     }
     return c.json({
-      message: "Welcome to Capital API",
+      message: "Welcome to Cerne API",
       description:
         "Financial management API for international service providers",
       version: "1.0.0",

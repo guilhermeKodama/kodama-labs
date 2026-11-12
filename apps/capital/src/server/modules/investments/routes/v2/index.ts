@@ -197,7 +197,7 @@ const contributionsRoute = createRoute({
   path: "/v2/contributions",
   tags,
   summary:
-    "Monthly aportes into the brokers (deposits, withdrawals, buys by class, origin of each transfer) and the PF savings rate: the trailing `months` (default 12) ending in `end` (YYYY-MM, default the current month), or a calendar `year`; scope = all | pf | pj | <entityId>",
+    "Monthly aportes (transfers into brokers, withdrawals, and purchases paid with provento cash already at the broker — the provento itself is not an aporte, and a purchase paid by a transfer already counted is not counted again), buys by class, origin of each movement, and the PF savings rate: the trailing `months` (default 12) ending in `end` (YYYY-MM, default the current month), or a calendar `year`; scope = all | pf | pj | <entityId>",
   request: {
     query: z.object({
       year: z.coerce.number().int().min(2000).max(2100).optional(),

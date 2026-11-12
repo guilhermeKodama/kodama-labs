@@ -10,6 +10,7 @@ import { getBudgetStatus } from "@capital/server/modules/mcp/tools/budgets";
 import { listTransactions } from "@capital/server/modules/mcp/tools/list-transactions";
 import { createRecurringRule } from "@capital/server/modules/recurring/services/recurring-rules";
 import { createBudget } from "../budget-crud";
+import { budgetComposition } from "../budget-composition";
 import { monthOverview, yearOverview } from "../budget-overview";
 
 const USER = "test-user-s5-budget-overview-001";
@@ -59,16 +60,16 @@ describe("scope", () => {
     expect(pf.unbudgeted).toEqual([]);
     // The series stops today, so the purchase on the 25th is not in it.
     expect(pf.series).toHaveLength(22);
-    expect(pf.series.at(-1)).toMatchObject({ day: 22, cumulative: 100 });
+    expect(pf.series.at(-1)).toMatchObject({ day: 22, cumulative: 100, fixo: 0, variavel: 100 });
 
     const pj = await monthOverview(USER, 2026, 9, prisma, { entityIds: [f.pjId] });
     expect(Object.fromEntries(pj.budgets.map((b) => [b.categoryId, b.spent]))).toEqual({ [c.Mercado]: 50, [c.Software]: 70 });
     expect(pj.yearlyBudgets).toEqual([]);
-    expect(pj.series.at(-1)!.cumulative).toBe(120);
+    expect(pj.series.at(-1)).toMatchObject({ cumulative: 120, fixo: 0, variavel: 120 });
 
     const all = await monthOverview(USER, 2026, 9, prisma);
     expect(all.budgets.find((b) => b.categoryId === c.Mercado)!.spent).toBe(150);
-    expect(all.series.at(-1)!.cumulative).toBe(220);
+    expect(all.series.at(-1)).toMatchObject({ cumulative: 220, fixo: 0, variavel: 220 });
     expect(all.scope.entityIds).toBeNull();
 
     const yPf = await yearOverview(USER, 2026, prisma, { entityIds: [f.pfId] });
@@ -481,5 +482,75 @@ describe("open card statement", () => {
     // 450 already booked + (900 usually after the 7th − 50 already booked). The whole historical bill of 1,000 is not the forecast.
     expect(row.pace.projectedTotal).toBe(1300);
     expect(o.summary.projectedTotal).toBe(1300);
+  });
+});
+
+describe("kind and reimbursement", () => {
+  const income = (amount: number, categoryId: string | null, reimbursesCategoryId: string | null, entity: "pf" | "pj" = "pf") =>
+    createEntry(
+      USER,
+      {
+        kind: "income",
+        accountId: entity === "pf" ? f.pfChecking : f.pjChecking,
+        amount,
+        date: "2026-09-12",
+        description: "Pix",
+        categoryId,
+        ...(reimbursesCategoryId && { reimbursesCategoryId }),
+      },
+      prisma,
+      { skipRules: true },
+    );
+
+  it("treats a budget with no kind as variável and keeps a fixo budget separate", async () => {
+    await createBudget(USER, { entityId: f.pfId, categoryId: c.Mercado, amount: 400, effectiveFrom: "2026-01" }, prisma);
+    await createBudget(USER, { entityId: f.pfId, categoryId: c.Moradia, amount: 900, effectiveFrom: "2026-01", kind: "fixo" }, prisma);
+    await spend(f.pfChecking, c.Mercado, 100, "2026-09-10");
+    await spend(f.pfChecking, c.Moradia, 200, "2026-09-10");
+
+    const month = await monthOverview(USER, 2026, 9, prisma, { entityIds: [f.pfId] });
+    expect(month.budgets.find((b) => b.categoryId === c.Mercado)).toMatchObject({ kind: null, spent: 100, reimbursed: 0, net: 100 });
+    expect(month.budgets.find((b) => b.categoryId === c.Moradia)).toMatchObject({ kind: "fixo", spent: 200, net: 200 });
+    expect(month.summary.byKind.variavel).toMatchObject({ budget: 400, net: 100 });
+    expect(month.summary.byKind.fixo).toMatchObject({ budget: 900, net: 200 });
+    expect(month.series.at(-1)).toMatchObject({ fixo: 200, variavel: 100, cumulative: 300 });
+    expect(month.summary.totalNet).toBe(month.summary.totalSpent);
+  });
+
+  it("counts an income assigned to an expense category as a negative in that budget, and ignores one that is not", async () => {
+    await createBudget(USER, { entityId: f.pfId, categoryId: c.Saúde, amount: 500, effectiveFrom: "2026-01", kind: "fixo" }, prisma);
+    await createBudget(USER, { entityId: f.pfId, categoryId: c.Saúde, amount: 4000, effectiveFrom: "2026-01", period: "yearly" }, prisma);
+    await spend(f.pfChecking, c.Saúde, 300, "2026-09-10");
+    await income(80, c.Salário, null);
+    let month = await monthOverview(USER, 2026, 9, prisma, { entityIds: [f.pfId] });
+    expect(month.budgets[0]).toMatchObject({ spent: 300, reimbursed: 0, net: 300, remaining: 200 });
+
+    await income(80, c.Salário, c.Saúde);
+    month = await monthOverview(USER, 2026, 9, prisma, { entityIds: [f.pfId] });
+    expect(month.budgets[0]).toMatchObject({ spent: 300, reimbursed: 80, net: 220, remaining: 280, netCommitted: 220 });
+    expect(month.summary).toMatchObject({ totalSpent: 300, totalReimbursed: 80, totalNet: 220, totalRoom: 280 });
+    expect(month.series.at(-1)).toMatchObject({ cumulative: 220, fixo: 220, variavel: 0 });
+    expect(month.yearlyBudgets[0]).toMatchObject({ spent: 300, reimbursed: 80, net: 220 });
+
+    const composition = await budgetComposition(USER, "2026-08", "2026-09", prisma, { entityIds: [f.pfId], limit: 5 });
+    const september = composition.months[1];
+    expect(september.fixo).toMatchObject({ budgeted: 500, gross: 300, reimbursed: 80, net: 220 });
+    expect(september.variavel).toMatchObject({ budgeted: 0, gross: 0, reimbursed: 0, net: 0 });
+    expect(september.topVariable).toEqual([]);
+    expect(september.total.net).toBe(220);
+  });
+
+  it("uses the entity's own budget, else the budget for every entity", async () => {
+    await createBudget(USER, { categoryId: c.Mercado, amount: 1000, effectiveFrom: "2026-01" }, prisma);
+    await createBudget(USER, { entityId: f.pfId, categoryId: c.Mercado, amount: 200, effectiveFrom: "2026-01", kind: "variavel" }, prisma);
+    await spend(f.pfChecking, c.Mercado, 40, "2026-09-10");
+    await spend(f.pjChecking, c.Mercado, 25, "2026-09-10");
+    await income(10, c.Salário, c.Mercado, "pf");
+    await income(5, c.Salário, c.Mercado, "pj");
+    const all = await monthOverview(USER, 2026, 9, prisma);
+    const pf = all.budgets.find((b) => b.entityId === f.pfId)!;
+    const shared = all.budgets.find((b) => b.entityId === null)!;
+    expect(pf).toMatchObject({ spent: 40, reimbursed: 10, net: 30 });
+    expect(shared).toMatchObject({ spent: 25, reimbursed: 5, net: 20 });
   });
 });

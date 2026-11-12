@@ -270,7 +270,12 @@ export async function findUncategorized(userId: string, db: DbClient, opts: { li
       where,
       orderBy: { date: "desc" },
       take: Math.min(opts.limit ?? 100, 500),
-      include: { category: { select: { name: true, isArchived: true } }, entity: { select: { name: true, kind: true } } },
+      include: {
+        category: { select: { name: true, isArchived: true } },
+        entity: { select: { name: true, kind: true } },
+        account: { select: { id: true, name: true } },
+        investmentOperation: { select: { id: true } },
+      },
     }),
   ]);
   return { total, rows };

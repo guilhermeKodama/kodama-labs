@@ -322,7 +322,7 @@ export function LedgerTable(props: LedgerTableProps) {
   };
 
   return (
-    <div ref={rootRef} className="rounded-[8px] border border-stroke-3">
+    <div ref={rootRef} className="rounded-[8px] border border-stroke-3 bg-panel">
       <div className="grid h-(--cap-row-h) items-center gap-2 px-2.5 text-label text-fg-3" style={{ gridTemplateColumns: template }}>
         <Check
           checked={hasRows && everyVisible}

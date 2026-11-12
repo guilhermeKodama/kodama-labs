@@ -20,6 +20,11 @@ export const env = createEnv({
     CRON_SECRET: z.string().optional(),
     ANTHROPIC_API_KEY: z.string().optional(),
     BRAPI_TOKEN: z.string().optional(),
+    // Meu Pluggy. Both must be set or the Open Finance sync stays off and
+    // the daily cron returns without reading anything. Item ids are not
+    // env vars: they change when consent is renewed and live on PluggyItem.
+    PLUGGY_CLIENT_ID: z.string().min(1).optional(),
+    PLUGGY_CLIENT_SECRET: z.string().min(1).optional(),
     CAPITAL_BLOB_DIR: z.string().optional(),
     // Runtime origin for blob URLs. Overrides the inlined NEXT_PUBLIC_APP_URL
     // without a rebuild. Compose sets it from CAPITAL_PUBLIC_URL.
@@ -31,6 +36,10 @@ export const env = createEnv({
     // `pnpm exec web-push generate-vapid-keys`. Absent = push sends no-op.
     VAPID_PRIVATE_KEY: z.string().min(1).optional(),
     VAPID_SUBJECT: z.string().default("mailto:guilherme.kodama@gmail.com"),
+    // Whether anyone may create an account. Closed by default: Cerne is not
+    // open yet, and the app is on the internet without Cloudflare Access.
+    // Accounts come from the seeds and scripts meanwhile.
+    SIGNUP_OPEN: z.enum(["true", "false"]).default("false"),
   },
   client: {
     NEXT_PUBLIC_APP_URL: z.string().url().optional(),
@@ -44,6 +53,8 @@ export const env = createEnv({
     CRON_SECRET: process.env.CRON_SECRET,
     ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY,
     BRAPI_TOKEN: process.env.BRAPI_TOKEN,
+    PLUGGY_CLIENT_ID: process.env.PLUGGY_CLIENT_ID,
+    PLUGGY_CLIENT_SECRET: process.env.PLUGGY_CLIENT_SECRET,
     CAPITAL_BLOB_DIR: process.env.CAPITAL_BLOB_DIR,
     APP_URL: process.env.APP_URL,
     CAPITAL_AGENT_MODEL: process.env.CAPITAL_AGENT_MODEL,
@@ -51,6 +62,7 @@ export const env = createEnv({
     ASSISTANT_MAX_TURN_COST_USD: process.env.ASSISTANT_MAX_TURN_COST_USD,
     VAPID_PRIVATE_KEY: process.env.VAPID_PRIVATE_KEY,
     VAPID_SUBJECT: process.env.VAPID_SUBJECT,
+    SIGNUP_OPEN: process.env.SIGNUP_OPEN,
     NEXT_PUBLIC_VAPID_PUBLIC_KEY: process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY,
   },
   skipValidation: !!process.env.SKIP_ENV_VALIDATION,

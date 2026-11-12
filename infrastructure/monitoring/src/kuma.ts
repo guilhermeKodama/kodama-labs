@@ -3,6 +3,21 @@ import { dirname } from "node:path";
 import { io, type Socket } from "socket.io-client";
 import { KUMA_WEBHOOK_BODY } from "./kuma-body.js";
 import { MANAGED_PREFIX, managedHash, type MonitorDesired } from "./spec.js";
+import {
+  STATUS_PAGE_SLUG,
+  STATUS_PAGE_TITLE,
+  classifyStatusMonitor,
+  statusGroupPayload,
+  statusLogoArgument,
+  statusMonitorDescription,
+  statusMonitorDesired,
+  statusMonitorsToRemove,
+  statusPageIsCurrent,
+  statusPageMonitors,
+  statusPageSaveConfig,
+  type StatusGroupSnapshot,
+  type StatusPageSnapshot,
+} from "./status-page.js";
 import { pushToken } from "./push-token.js";
 import { webhookFromProcess, type ResolvedWebhook } from "./webhook.js";
 
@@ -115,6 +130,121 @@ export async function provisionMonitors(session: KumaSession, monitors: MonitorD
 
   await writeTokenOverrides(tokenMismatches);
   return dockerHostId !== null || !monitors.some((monitor) => monitor.type === "docker");
+}
+
+/**
+ * Public status page and its display monitors. Call this after
+ * `provisionMonitors`. Throws on failure; the caller logs and sets a
+ * non-zero exit without rolling back the `kodama/` monitors.
+ *
+ * Re-runs update the same slug and the same monitor names. They do not
+ * create a second page or a second display monitor.
+ */
+export async function provisionStatusPage(session: KumaSession): Promise<void> {
+  const ids = await upsertStatusMonitors(session);
+  await ensureSearchEnginesDiscouraged(session);
+  await upsertKodamaStatusPage(session, ids);
+}
+
+async function upsertStatusMonitors(session: KumaSession): Promise<Map<string, number>> {
+  const desired = statusPageMonitors().map(statusMonitorDesired);
+  const desiredNames = new Set(desired.map((monitor) => monitor.name));
+  const ids = new Map<string, number>();
+
+  for (const monitor of desired) {
+    const description = statusMonitorDescription(monitor);
+    const sameName = session.monitors.filter((item) => item.name === monitor.name);
+    const owned = sameName.filter((item) => item.description.startsWith("statuspage:"));
+    const foreign = sameName.filter((item) => !item.description.startsWith("statuspage:"));
+    if (owned.length === 0) {
+      classifyStatusMonitor(foreign[0], description);
+      const added = await ack<{ monitorID: number }>(
+        session.socket,
+        "add",
+        kumaMonitorPayload(monitor, description, {}),
+      );
+      ids.set(monitor.name, added.monitorID);
+      console.log(`[provision] status monitor added ${monitor.name}`);
+      continue;
+    }
+    const keep = owned[0];
+    if (!keep) continue;
+    const action = classifyStatusMonitor(keep, description);
+    if (action === "update") {
+      await ack(session.socket, "editMonitor", {
+        ...kumaMonitorPayload(monitor, description, {}),
+        id: keep.id,
+      });
+      console.log(`[provision] status monitor updated ${monitor.name}`);
+    } else {
+      console.log(`[provision] status monitor unchanged ${monitor.name}`);
+    }
+    ids.set(monitor.name, keep.id);
+  }
+
+  for (const id of statusMonitorsToRemove(session.monitors, desiredNames)) {
+    await ack(session.socket, "deleteMonitor", id, true);
+    console.log(`[provision] status monitor removed #${id}`);
+  }
+  return ids;
+}
+
+async function ensureSearchEnginesDiscouraged(session: KumaSession): Promise<void> {
+  const current = await ack<{ data?: Record<string, unknown> }>(session.socket, "getSettings");
+  const data = current.data ?? {};
+  if (data.searchEngineIndex !== true) {
+    console.log("[provision] searchEngineIndex already off");
+    return;
+  }
+  await ack(session.socket, "setSettings", { ...data, searchEngineIndex: false }, null);
+  console.log("[provision] searchEngineIndex set to false");
+}
+
+async function upsertKodamaStatusPage(session: KumaSession, ids: Map<string, number>): Promise<void> {
+  let config = await readStatusConfig(session);
+  if (!config) {
+    await ack(session.socket, "addStatusPage", STATUS_PAGE_TITLE, STATUS_PAGE_SLUG);
+    config = await readStatusConfig(session);
+    if (!config) throw new Error("status page kodama was not created");
+    console.log("[provision] status page created");
+  }
+  if (config.published === false) {
+    throw new Error("status page kodama is unpublished; Kuma 2.5.3 cannot set published from saveStatusPage");
+  }
+  const groups = await readStatusGroups();
+  if (statusPageIsCurrent(config, groups, ids)) {
+    console.log("[provision] status page unchanged");
+    return;
+  }
+  await ack(
+    session.socket,
+    "saveStatusPage",
+    STATUS_PAGE_SLUG,
+    statusPageSaveConfig(),
+    statusLogoArgument(config),
+    statusGroupPayload(groups, ids),
+  );
+  console.log("[provision] status page saved");
+}
+
+async function readStatusConfig(session: KumaSession): Promise<StatusPageSnapshot | null> {
+  try {
+    const result = await ack<{ config?: StatusPageSnapshot }>(session.socket, "getStatusPage", STATUS_PAGE_SLUG);
+    return result.config ?? null;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (message.includes("No slug")) return null;
+    throw error;
+  }
+}
+
+async function readStatusGroups(): Promise<StatusGroupSnapshot[]> {
+  const base = (process.env.KUMA_URL?.trim() || "http://uptime-kuma:3001").replace(/\/$/, "");
+  const response = await fetch(`${base}/api/status-page/${STATUS_PAGE_SLUG}`);
+  if (response.status === 404) return [];
+  if (!response.ok) throw new Error(`status page api returned ${response.status}`);
+  const body = (await response.json()) as { publicGroupList?: StatusGroupSnapshot[] };
+  return Array.isArray(body.publicGroupList) ? body.publicGroupList : [];
 }
 
 export async function startMaintenance(session: KumaSession, minutes: number): Promise<void> {

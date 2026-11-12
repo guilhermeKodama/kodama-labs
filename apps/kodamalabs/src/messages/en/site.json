@@ -1,0 +1,34 @@
+{
+  "meta": {
+    "title": "Guilherme Kodama · Kodama Labs",
+    "description": "Software engineer in São Paulo. I build software that puts language models next to things that must not go wrong, and I run it myself.",
+    "siteName": "Kodama Labs",
+    "shareAlt": "Guilherme Kodama, software engineer. A dashed line runs to a green vertical line, stops at a dot on it, and continues solid."
+  },
+  "brand": "Kodama Labs",
+  "skip": "Skip to content",
+  "nav": {
+    "label": "Sections",
+    "work": "Work",
+    "lab": "Lab",
+    "method": "Method",
+    "about": "About"
+  },
+  "footer": {
+    "place": "Kodama Labs · São Paulo",
+    "note": "The drawings on this page use invented rows, names and amounts, because the real screens show real ones. The limits and counts are real.",
+    "commit": "main @ {commit}",
+    "updated": "updated {date}"
+  },
+  "notFound": {
+    "title": "Nothing here.",
+    "back": "Back to the homepage"
+  },
+  "controls": {
+    "replay": "replay",
+    "copy": "copy",
+    "copied": "copied",
+    "motionOn": "motion: on",
+    "motionOff": "motion: off"
+  }
+}

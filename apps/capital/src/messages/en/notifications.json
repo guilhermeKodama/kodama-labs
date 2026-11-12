@@ -42,7 +42,7 @@
   "push": {
     "notConfigured": "The server is not set up to send push yet.",
     "unsupported": "This browser cannot receive push notifications.",
-    "iosInstall": "On iPhone, add Capital to the Home Screen to get alerts.",
+    "iosInstall": "On iPhone, add Cerne to the Home Screen to get alerts.",
     "denied": "Notifications are blocked in this browser; allow them in the site's permissions.",
     "off": "This device isn't receiving alerts yet.",
     "error": "Couldn't turn on alerts for this device: {message}",

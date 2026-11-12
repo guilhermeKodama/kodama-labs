@@ -10,6 +10,7 @@ import { PwaRegister } from '@/components/pwa-register';
 import { ThemeProvider } from '@/components/theme-provider';
 import { Toaster } from '@/components/ui/sonner';
 import { isLocale, routing } from '@/i18n/routing';
+import { BRAND, ICONS, THEME_COLOR } from '@/lib/brand';
 import { TEXT_SIZE_SCRIPT } from '@/lib/theme/text-size';
 
 export function generateStaticParams() {
@@ -27,7 +28,9 @@ export async function generateMetadata({ params }: Pick<LocaleLayoutProps, 'para
   return {
     title: t('title'),
     description: t('description'),
-    appleWebApp: { capable: true, statusBarStyle: 'black-translucent', title: 'Capital' },
+    appleWebApp: { capable: true, statusBarStyle: 'black-translucent', title: BRAND },
+    // Not Next's apple-icon file convention: the file is named by its artwork (see ICONS).
+    icons: { apple: ICONS.apple },
     // No `manifest` field here — Next's Metadata API only accepts a string/URL
     // for it, with no way to set crossOrigin. See the <link> below instead.
   };
@@ -37,7 +40,10 @@ export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
   viewportFit: 'cover',
-  themeColor: '#ffffff',
+  themeColor: [
+    { media: '(prefers-color-scheme: light)', color: THEME_COLOR.light },
+    { media: '(prefers-color-scheme: dark)', color: THEME_COLOR.dark },
+  ],
 };
 
 /**

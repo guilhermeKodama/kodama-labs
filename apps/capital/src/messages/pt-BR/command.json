@@ -19,7 +19,8 @@
     "trash": "Lixeira",
     "imports": "Importações",
     "settings": "Ajustes",
-    "settingsPage": "Ajustes › {page}"
+    "settingsPage": "Ajustes › {page}",
+    "fire": "Liberdade financeira"
   },
   "settingsPages": {
     "prefs": "Perfil e preferências",
@@ -32,6 +33,7 @@
     "rules": "Regras de categorização",
     "fx": "Moedas e câmbio",
     "imports": "Importações",
+    "pluggy": "Open Finance",
     "api": "Integrações e API"
   },
   "views": {

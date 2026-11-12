@@ -37,6 +37,7 @@ const SAMPLE_KEYS: readonly (readonly unknown[])[] = [
   keys.quotes(["VALE3", "PETR4"]),
   keys.assetSearch("petr"),
   keys.imports(),
+  keys.pluggy(),
   keys.importAnalyze("nubank.ofx:1234"),
   keys.notificationsSettings(),
   keys.devices("https://push.example/1"),

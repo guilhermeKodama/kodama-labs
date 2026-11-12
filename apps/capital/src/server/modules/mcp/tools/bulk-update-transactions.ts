@@ -3,7 +3,8 @@ import type { TransactionType } from "@/generated/prisma";
 import { displayAmount } from "../../ledger/lib/money";
 import { updateEntry, type InternalPatch } from "../../ledger/services/entries";
 import { inTransaction, recordMutation, type MutationRecordInput } from "../../ledger/services/mutations";
-import { categoryResolver, LEGACY_ENTRY_INCLUDE } from "../lib/ledger-adapter";
+import { categoryResolver, entryOperationId, LEGACY_ENTRY_INCLUDE } from "../lib/ledger-adapter";
+import { assertAccountReceives, assertMovableEntry, ownedAccount } from "./account-target";
 import { toPatch } from "./manage-transactions";
 
 export interface BulkUpdateTransactionItem {
@@ -18,10 +19,14 @@ export interface BulkUpdateTransactionItem {
   category?: string;
   date?: string;
   isTaxDeductible?: boolean;
+  /** Expense category this income reimburses. Null clears it. Omit to leave it. */
+  reimbursesCategory?: string | null;
+  /** Move the transaction onto this account of the same entity. Omit to leave it. */
+  accountId?: string;
 }
 
 export interface BulkUpdateResult {
-  updated: Array<{ id: string; description: string; category?: string; amount?: number }>;
+  updated: Array<{ id: string; description: string; category?: string; amount?: number; accountId?: string; operationId: string | null }>;
   errors: Array<{ id: string; error: string }>;
   batchId?: string | null;
 }
@@ -46,6 +51,11 @@ export async function bulkUpdateTransactions(userId: string, updates: BulkUpdate
       continue;
     }
     try {
+      if (u.accountId && u.accountId !== entry.accountId) {
+        const target = await ownedAccount(userId, u.accountId, db);
+        assertAccountReceives(target, entry.entityId);
+        await assertMovableEntry(userId, entry, target, db);
+      }
       const { id, ...fields } = u;
       patches.set(id, toPatch(fields, entry, resolver));
     } catch (err) {
@@ -62,7 +72,14 @@ export async function bulkUpdateTransactions(userId: string, updates: BulkUpdate
       const entry = byId.get(u.id)!;
       // The amount the caller sent is already the signed user-facing one; otherwise show the stored row.
       const amount = u.amount !== undefined ? u.amount : displayAmount(entry.kind, entry.amount);
-      result.updated.push({ id: u.id, description: u.description ?? "(unchanged)", category: p.categoryId ? resolver.nameOf(p.categoryId) ?? undefined : u.category, amount });
+      result.updated.push({
+        id: u.id,
+        description: u.description ?? "(unchanged)",
+        category: p.categoryId ? resolver.nameOf(p.categoryId) ?? undefined : u.category,
+        amount,
+        ...(u.accountId ? { accountId: p.accountId ?? entry.accountId } : {}),
+        operationId: entryOperationId(entry),
+      });
     }
     return result;
   }
@@ -72,7 +89,14 @@ export async function bulkUpdateTransactions(userId: string, updates: BulkUpdate
       const records: MutationRecordInput[] = [];
       for (const u of updates) {
         const { raw } = await updateEntry(userId, u.id, patches.get(u.id)!, tx, { collect: records });
-        result.updated.push({ id: raw.id, description: raw.description, category: resolver.nameOf(raw.categoryId) ?? undefined, amount: displayAmount(raw.kind, raw.amount) });
+        result.updated.push({
+          id: raw.id,
+          description: raw.description,
+          category: resolver.nameOf(raw.categoryId) ?? undefined,
+          amount: displayAmount(raw.kind, raw.amount),
+          ...(u.accountId ? { accountId: raw.accountId } : {}),
+          operationId: entryOperationId(byId.get(u.id)!),
+        });
       }
       return recordMutation(tx, userId, "update", `${updates.length} transactions (MCP)`, records);
     });

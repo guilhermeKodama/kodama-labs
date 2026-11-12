@@ -45,6 +45,7 @@ import {
   INCOME_TYPES,
   isIncome,
   monthlyBars,
+  opBaseValue,
   opsPeriodRange,
   type OpsViewConfig,
 } from "@/lib/invest/ops-view";
@@ -57,7 +58,7 @@ import type {
 } from "@/lib/invest/types";
 import { openAssistant } from "@/lib/shell/assistant-bridge";
 import { cn } from "@/lib/utils";
-import { IncomeChart, NetWorthChart } from "./charts";
+import { CLASS_COLOR, IncomeChart, NetWorthChart } from "./charts";
 import { HoldingsChart, OpsChart } from "./invest-chart";
 import {
   MONO,
@@ -179,33 +180,36 @@ export function PortfolioScreen() {
   return (
     <Page
       crumbs={[ti("crumbs.investments"), ti("crumbs.portfolio")]}
-      actions={
-        <>
-          <Btn disabled={refresh.isPending} onClick={() => refresh.mutate()}>
-            {refresh.isPending ? t("refreshing") : t("refreshPrices")}
-          </Btn>
-          <Btn
-            title={t("importNoteHint")}
-            onClick={() => fileInput.current?.click()}
-          >
-            {t("importNote")}
-          </Btn>
-          <input
-            ref={fileInput}
-            type="file"
-            accept={NOTE_FILE_ACCEPT}
-            className="hidden"
-            onChange={(event) => {
-              const files = [...(event.target.files ?? [])];
-              event.target.value = "";
-              if (files.length)
-                openAssistant({ files, prompt: t("importNotePrompt") });
-            }}
-          />
-          <Btn primary onClick={() => setOpOpen({ holdingId: null })}>
-            {t("newOperation")}
-          </Btn>
-        </>
+      secondary={[
+        {
+          label: refresh.isPending ? t("refreshing") : t("refreshPrices"),
+          onSelect: () => refresh.mutate(),
+          disabled: refresh.isPending,
+        },
+        {
+          label: t("importNote"),
+          title: t("importNoteHint"),
+          onSelect: () => fileInput.current?.click(),
+        },
+      ]}
+      primary={{
+        label: t("newOperation"),
+        onSelect: () => setOpOpen({ holdingId: null }),
+      }}
+      overlay={
+        // Opened by "Importar nota" (a header button, or the ⋯ menu on a phone).
+        <input
+          ref={fileInput}
+          type="file"
+          accept={NOTE_FILE_ACCEPT}
+          className="hidden"
+          onChange={(event) => {
+            const files = [...(event.target.files ?? [])];
+            event.target.value = "";
+            if (files.length)
+              openAssistant({ files, prompt: t("importNotePrompt") });
+          }}
+        />
       }
     >
       <div className="flex items-center gap-2">
@@ -412,8 +416,8 @@ function AllocationPanel({
           </span>
           <span className="relative h-2 rounded-[4px] bg-fill-3">
             <span
-              className="absolute inset-y-0 left-0 rounded-[4px] bg-fg-2"
-              style={{ width: `${bar.barWidth}%` }}
+              className="absolute inset-y-0 left-0 rounded-[4px]"
+              style={{ width: `${bar.barWidth}%`, background: CLASS_COLOR[bar.allocationClass] }}
             />
             {bar.tickLeft !== null ? (
               <span
@@ -425,7 +429,7 @@ function AllocationPanel({
           <span className={cn(MONO, "text-right text-label")}>
             {fmt.pct(bar.share, 0)}
             {bar.diffLabel !== null ? (
-              <span className={bar.highlight ? "text-cat-yellow" : "text-fg-4"}>
+              <span className={bar.highlight ? "text-warn" : "text-fg-4"}>
                 {" "}
                 {bar.diffLabel}
               </span>
@@ -553,8 +557,8 @@ function HoldingsTable({
               !row.result
                 ? "text-fg-3"
                 : row.result > 0
-                  ? "text-cat-green"
-                  : "text-cat-red",
+                  ? "text-pos"
+                  : "text-neg",
             )}
           >
             {!row.result
@@ -565,7 +569,7 @@ function HoldingsTable({
     }
   };
   return (
-    <div className="overflow-hidden rounded-[8px] border border-stroke-3">
+    <div className="overflow-hidden rounded-[8px] border border-stroke-3 bg-panel">
       <div
         className="grid h-(--cap-row-h) items-center gap-2.5 px-3 text-label text-fg-3"
         style={{ gridTemplateColumns: grid }}
@@ -664,8 +668,10 @@ function OpsView({
         holdingId: row.holdingId ?? "",
         ticker: row.ticker,
         name: row.name,
-        assetClass: null,
+        assetClass: row.assetClass,
         allocationClass: row.allocationClass,
+        dividendOrigin: row.dividendOrigin,
+        entityKind: row.entityKind,
         accountId: row.accountId,
         accountName: null,
         entityId: row.entityId,
@@ -677,6 +683,9 @@ function OpsView({
         totalAmount: row.totalAmount,
         fees: 0,
         taxWithheld: row.taxWithheld,
+        amountBase: row.amountBase,
+        grossBase: row.grossBase,
+        taxBase: row.taxBase,
         cashAmount: row.totalAmount - row.taxWithheld,
         date: row.date,
         notes: null,
@@ -722,11 +731,14 @@ function OpsView({
   if (config.layout === "chart") {
     const bars = monthlyBars(rows, config, today, fx.rateFor);
     return (
-      <div className="flex flex-col gap-2 rounded-[8px] border border-stroke-3 p-3">
+      <div className="flex flex-col gap-2 rounded-[8px] border border-stroke-3 bg-panel p-3">
         <IncomeChart
           rows={bars.rows.map((r) => ({
             label: fmt.monthAbbr(Number(String(r.month).slice(5, 7))),
-            values: r as unknown as Record<string, number>,
+            total: r.total,
+            tax: r.tax,
+            values: r.values,
+            taxes: r.taxes,
           }))}
           series={bars.series}
         />
@@ -752,7 +764,7 @@ function OpsView({
   const grid = "64px minmax(0,2fr) 120px 90px 120px 28px";
   const incomeTable = rows.length > 0 && rows.every(isIncome);
   return (
-    <div className="overflow-hidden rounded-[8px] border border-stroke-3">
+    <div className="overflow-hidden rounded-[8px] border border-stroke-3 bg-panel">
       <div
         className="grid h-(--cap-row-h) items-center gap-2.5 px-3 text-label text-fg-3"
         style={{ gridTemplateColumns: grid }}
@@ -839,12 +851,7 @@ function OpsView({
           <span>{t("total")}</span>
           <span className={cn(MONO, "ml-auto")}>
             {fmt.money(
-              rows.reduce(
-                (sum, op) =>
-                  sum +
-                  (op.totalAmount - op.taxWithheld) * fx.rateFor(op.currency),
-                0,
-              ),
+              rows.reduce((sum, op) => sum + opBaseValue(op, fx.rateFor, config.basis), 0),
               fx.base,
             )}
           </span>

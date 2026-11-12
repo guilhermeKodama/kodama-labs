@@ -35,7 +35,7 @@ export function PeriodControl({ period, rangeLabel, onChange }: { period: Period
 
   return (
     <>
-      <span className="inline-flex h-(--cap-control-h) shrink-0 items-center overflow-hidden rounded-[6px] border border-stroke-1 text-button">
+      <span className="inline-flex h-(--cap-control-h) shrink-0 items-center overflow-hidden rounded-[6px] border border-stroke-1 bg-panel text-button">
         {steppable ? (
           <button type="button" title={t("prev")} aria-label={t("prev")} className={cn(step, "border-r border-stroke-3")} onClick={() => onChange(stepPeriod(period, -1))}>
             ‹

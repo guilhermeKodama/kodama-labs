@@ -14,7 +14,7 @@ const parse = (s: string) => fmt.parseNumber(s);
 
 describe("settings navigation", () => {
   it("lists the mockup pages in order and falls back to Perfil", () => {
-    expect(SETTINGS_PAGES).toEqual(["prefs", "notif", "ent", "bank", "card", "broker", "cat", "rules", "fx", "imports", "api"]);
+    expect(SETTINGS_PAGES).toEqual(["prefs", "notif", "ent", "bank", "card", "broker", "cat", "rules", "fx", "imports", "pluggy", "api"]);
     expect(resolveSettingsPage("cat")).toBe("cat");
     expect(resolveSettingsPage("trash")).toBe(DEFAULT_SETTINGS_PAGE);
     expect(resolveSettingsPage(null)).toBe("prefs");
@@ -24,11 +24,11 @@ describe("settings navigation", () => {
 
 describe("palette", () => {
   it("maps stored hex values to theme tokens", () => {
-    expect(paletteName("#2563EB")).toBe("blue");
-    expect(paletteName("blue")).toBe("blue");
+    expect(paletteName("#4F6470")).toBe("ardosia");
+    expect(paletteName("ardosia")).toBe("ardosia");
     expect(paletteName("#123456")).toBeNull();
-    expect(paletteHex("purple")).toBe("#7c3aed");
-    expect(swatchColor("#2563eb")).toBe("var(--cap-cat-blue)");
+    expect(paletteHex("jacaranda")).toBe("#6e4a5e");
+    expect(swatchColor("#4f6470")).toBe("var(--cap-cat-ardosia)");
     expect(swatchColor("#123456")).toBe("#123456");
     expect(swatchColor(null)).toBe("var(--cap-text-4)");
   });

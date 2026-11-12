@@ -96,25 +96,25 @@ const floorTo = (v: number, digits: number) => {
 // Master data
 // ---------------------------------------------------------------------------
 
-/** The settings color picker's palette (settings-screen.tsx COLORS), in the mockup's category order. */
+/** The settings color picker's palette (src/lib/settings/palette.ts), in its order. */
 export const PALETTE = {
-  gray: "#737373",
-  purple: "#7c3aed",
-  green: "#16a34a",
-  yellow: "#ca8a04",
-  cyan: "#0891b2",
-  pink: "#db2777",
-  blue: "#2563eb",
-  orange: "#ea580c",
-  red: "#dc2626",
+  casca: "#8c7b68",
+  jacaranda: "#6e4a5e",
+  musgo: "#3d5a36",
+  ipe: "#c9a227",
+  salvia: "#8a9a7b",
+  argila: "#b07a5a",
+  ardosia: "#4f6470",
+  resina: "#c4862b",
+  urucum: "#7a3b26",
 } as const;
 
 export type EntityKey = "pf" | "ltda" | "llc";
 
 export const DEMO_ENTITIES: Record<EntityKey, { name: string; description: string; currency: string; taxRate: number; color: string }> = {
-  pf: { name: "PF", description: "Finanças pessoais", currency: "BRL", taxRate: 0, color: PALETTE.gray },
-  ltda: { name: "Kodama LTDA", description: "Simples Nacional, anexo III", currency: "BRL", taxRate: 0.06, color: PALETTE.blue },
-  llc: { name: "Kodama LLC", description: "Recebe dos clientes internacionais", currency: "USD", taxRate: 0, color: PALETTE.purple },
+  pf: { name: "PF", description: "Finanças pessoais", currency: "BRL", taxRate: 0, color: PALETTE.casca },
+  ltda: { name: "Kodama LTDA", description: "Simples Nacional, anexo III", currency: "BRL", taxRate: 0.06, color: PALETTE.ardosia },
+  llc: { name: "Kodama LLC", description: "Recebe dos clientes internacionais", currency: "USD", taxRate: 0, color: PALETTE.jacaranda },
 };
 
 export type AccountKey =
@@ -190,26 +190,26 @@ export type CategoryKey =
  * pt-BR); the others are created.
  */
 export const DEMO_CATEGORIES: Record<CategoryKey, { systemKey?: string; name?: string; type?: "income" | "expense" | "investment"; color: string }> = {
-  moradia: { name: "Moradia", type: "expense", color: PALETTE.blue },
-  mercado: { systemKey: "groceries", color: PALETTE.green },
-  restaurantes: { systemKey: "restaurants_dining", color: PALETTE.orange },
-  saude: { systemKey: "health_pharmacy", color: PALETTE.red },
-  software: { systemKey: "software_tools", color: PALETTE.purple },
-  impostos: { systemKey: "taxes", color: PALETTE.gray },
-  delivery: { name: "Delivery", type: "expense", color: PALETTE.pink },
-  receita: { systemKey: "client_payment", color: PALETTE.green },
-  rendimentos: { systemKey: "interest", color: PALETTE.cyan },
-  transporte: { systemKey: "transportation", color: PALETTE.yellow },
-  lazer: { systemKey: "entertainment", color: PALETTE.cyan },
-  contabilidade: { systemKey: "legal_accounting", color: PALETTE.blue },
-  assinaturas: { systemKey: "subscriptions", color: PALETTE.purple },
-  casa: { systemKey: "home", color: PALETTE.orange },
-  eletronicos: { name: "Eletrônicos", type: "expense", color: PALETTE.yellow },
-  pets: { name: "Pets", type: "expense", color: PALETTE.green },
-  investimentos: { name: "Investimentos", type: "investment", color: PALETTE.gray },
-  viagens: { systemKey: "travel_default", color: PALETTE.blue },
-  equipamentos: { systemKey: "hardware", color: PALETTE.gray },
-  ipvaIptu: { name: "IPVA + IPTU", type: "expense", color: PALETTE.red },
+  moradia: { name: "Moradia", type: "expense", color: PALETTE.ardosia },
+  mercado: { systemKey: "groceries", color: PALETTE.musgo },
+  restaurantes: { systemKey: "restaurants_dining", color: PALETTE.resina },
+  saude: { systemKey: "health_pharmacy", color: PALETTE.urucum },
+  software: { systemKey: "software_tools", color: PALETTE.jacaranda },
+  impostos: { systemKey: "taxes", color: PALETTE.casca },
+  delivery: { name: "Delivery", type: "expense", color: PALETTE.argila },
+  receita: { systemKey: "client_payment", color: PALETTE.musgo },
+  rendimentos: { systemKey: "interest", color: PALETTE.salvia },
+  transporte: { systemKey: "transportation", color: PALETTE.ipe },
+  lazer: { systemKey: "entertainment", color: PALETTE.salvia },
+  contabilidade: { systemKey: "legal_accounting", color: PALETTE.ardosia },
+  assinaturas: { systemKey: "subscriptions", color: PALETTE.jacaranda },
+  casa: { systemKey: "home", color: PALETTE.resina },
+  eletronicos: { name: "Eletrônicos", type: "expense", color: PALETTE.ipe },
+  pets: { name: "Pets", type: "expense", color: PALETTE.musgo },
+  investimentos: { name: "Investimentos", type: "investment", color: PALETTE.casca },
+  viagens: { systemKey: "travel_default", color: PALETTE.ardosia },
+  equipamentos: { systemKey: "hardware", color: PALETTE.casca },
+  ipvaIptu: { name: "IPVA + IPTU", type: "expense", color: PALETTE.urucum },
 };
 
 /** Mockup RULES (4154): "contains" rules, as suggestCategory matches them. */
@@ -443,17 +443,20 @@ export function dayToDayPurchases(spec: (typeof DAY_TO_DAY)[number], k: number, 
 // Budgets (mockup BUDGETS 3207-3216, YEARLY_BUDGETS 3233-3237)
 // ---------------------------------------------------------------------------
 
-/** `null` entity = every entity: the mockup's "Software · PJ" row adds LTDA (Figma) and LLC (AWS, Cursor) spend, 1.557 in September. */
-export const MONTHLY_BUDGETS: { category: CategoryKey; entity: EntityKey | null; amount: number }[] = [
-  { category: "moradia", entity: "pf", amount: 4500 },
+/**
+ * `null` entity = every entity: the mockup's "Software · PJ" row adds LTDA (Figma) and LLC (AWS, Cursor) spend, 1.557 in September.
+ * Rent, the software subscriptions and the accountant are fixo, so the month's pace chart has a visible fixed band (the rent alone is R$ 4.200 on day 5). Day-to-day categories and DAS stay variável.
+ */
+export const MONTHLY_BUDGETS: { category: CategoryKey; entity: EntityKey | null; amount: number; kind?: "fixo" | "variavel" }[] = [
+  { category: "moradia", entity: "pf", amount: 4500, kind: "fixo" },
   { category: "mercado", entity: "pf", amount: 2000 },
   { category: "restaurantes", entity: "pf", amount: 800 },
   { category: "saude", entity: "pf", amount: 1800 },
   { category: "lazer", entity: "pf", amount: 1000 },
   { category: "transporte", entity: "pf", amount: 400 },
   { category: "impostos", entity: "ltda", amount: 3500 },
-  { category: "software", entity: null, amount: 2500 },
-  { category: "contabilidade", entity: "ltda", amount: 300 },
+  { category: "software", entity: null, amount: 2500, kind: "fixo" },
+  { category: "contabilidade", entity: "ltda", amount: 300, kind: "fixo" },
 ];
 
 export const YEARLY_BUDGETS: { category: CategoryKey; entity: EntityKey; amount: number; notes: string }[] = [
@@ -538,6 +541,50 @@ const BR_STOCK_ROTATION: HoldingKey[] = ["BOVA11", "ITUB4", "WEGE3"];
 const FII_ROTATION: HoldingKey[] = ["HGLG11", "KNRI11"];
 
 export const OPENING = { k: -12, day: 5 };
+
+/**
+ * The years before the twelve months, for the trunk of Liberdade financeira:
+ * part of each opening position is bought in yearly lots before M-12, each
+ * paid by a deposit into the broker the day before (from the bank that
+ * funds its aportes; Inter Invest from Inter PJ, IBKR from Mercury). The
+ * rest stays at M-12, paid from the broker's opening cash. Every balance
+ * from M-12 on is the same as without the lots.
+ */
+export const HISTORY_LOTS: readonly { k: number; weight: number }[] = [
+  { k: -72, weight: 0.3 },
+  { k: -60, weight: 0.1 },
+  { k: -48, weight: 0.1 },
+  { k: -36, weight: 0.1 },
+  { k: -24, weight: 0.1 },
+];
+const LOT_SOURCE: Partial<Record<AccountKey, AccountKey>> = { xp: "nubank", tesouro: "nubank", avenue: "nubank", binance: "nubank", interInvest: "inter", ibkr: "mercury" };
+
+/**
+ * Market value over cost of the holdings, k months from M0, between these
+ * anchors (and today's prices at M0): the seed turns the cost-valued
+ * monthly snapshots into market values with it, so the history has years
+ * that gained and, three years back, one that lost.
+ */
+export const MARKET_RATIO: readonly { k: number; ratio: number }[] = [
+  { k: -72, ratio: 1 },
+  { k: -60, ratio: 1.06 },
+  { k: -48, ratio: 1.11 },
+  { k: -36, ratio: 0.97 },
+  { k: -24, ratio: 1.06 },
+  { k: -12, ratio: 1.11 },
+];
+
+/** MARKET_RATIO at month k, linear between the anchors; `live` is today's ratio (M0). */
+export function marketRatio(k: number, live: number): number {
+  const anchors = [...MARKET_RATIO, { k: 0, ratio: live }];
+  if (k <= anchors[0].k) return anchors[0].ratio;
+  for (let i = 1; i < anchors.length; i++) {
+    const a = anchors[i - 1];
+    const b = anchors[i];
+    if (k <= b.k) return a.ratio + ((k - a.k) / (b.k - a.k)) * (b.ratio - a.ratio);
+  }
+  return live;
+}
 export const DEPOSIT_DAY = 16;
 export const BUY_DAY = 17;
 
@@ -687,7 +734,7 @@ function planHolding(spec: HoldingSpec, amounts: number[], usdRate: number): Hol
     if (!(q0 > 0)) throw new Error(`${spec.key}: monthly buys exceed the target cost`);
     opening = { holding: spec.key, k: OPENING.k, day: OPENING.day, quantity: q0, price: spec.startPrice, amount: round(q0 * spec.startPrice, 2), opening: true };
   }
-  const all = [opening, ...buys];
+  const all = [...historyLots(opening, spec.qtyDecimals), ...buys];
   const quantity = round(all.reduce((s, b) => s + b.quantity, 0), spec.qtyDecimals);
   return {
     spec,
@@ -697,6 +744,42 @@ function planHolding(spec: HoldingSpec, amounts: number[], usdRate: number): Hol
     value: round(quantity * finalPrice, 2),
     cost: round(all.reduce((s, b) => s + b.amount, 0), 2),
   };
+}
+
+/** The opening position as the yearly HISTORY_LOTS plus what is left at M-12, all at the opening price. */
+function historyLots(opening: PlannedBuy, qtyDecimals: number): PlannedBuy[] {
+  const lots: PlannedBuy[] = [];
+  for (const lot of HISTORY_LOTS) {
+    const quantity = floorTo(opening.quantity * lot.weight, qtyDecimals);
+    if (quantity > 0) lots.push({ ...opening, k: lot.k, quantity, amount: round(quantity * opening.price, 2) });
+  }
+  const rest = round(opening.quantity - lots.reduce((s, b) => s + b.quantity, 0), qtyDecimals);
+  return [...lots, { ...opening, quantity: rest, amount: round(rest * opening.price, 2) }];
+}
+
+/** One deposit per broker and lot, the day before the lots are bought. */
+function lotDeposits(holdings: HoldingPlan[], usdRate: number): PlannedDeposit[] {
+  const deposits: PlannedDeposit[] = [];
+  for (const { k } of HISTORY_LOTS) {
+    const byBroker = new Map<AccountKey, number>();
+    for (const h of holdings) {
+      for (const b of h.buys) if (b.opening && b.k === k) byBroker.set(h.spec.account, (byBroker.get(h.spec.account) ?? 0) + b.amount);
+    }
+    for (const [broker, amount] of byBroker) {
+      const from = LOT_SOURCE[broker];
+      if (!from) throw new Error(`no deposit source for ${broker}`);
+      const sameCurrency = DEMO_ACCOUNTS[from].currency === DEMO_ACCOUNTS[broker].currency;
+      deposits.push({
+        broker,
+        from,
+        k,
+        day: OPENING.day - 1,
+        amount: round(sameCurrency ? amount : amount * usdRate, 2),
+        ...(sameCurrency ? {} : { toAmount: round(amount, 2) }),
+      });
+    }
+  }
+  return deposits;
 }
 
 /** Units held at the start of `day` in month `k` (buys on that day come after). */
@@ -719,7 +802,7 @@ export function planInvestments(usdRate: number): InvestmentPlan {
       income.push({ holding: rule.holding, k, day: rule.day, incomeType: rule.incomeType, gross, taxWithheld: round(gross * rule.tax, 2) });
     }
   }
-  return { holdings, deposits, income };
+  return { holdings, deposits: [...lotDeposits(holdings, usdRate), ...deposits], income };
 }
 
 /** Mockup FIRE card (4086-4100): R$ 12.250/mês at SWR 3,5% (R$ 4,2 mi), R$ 15.000/mês of aportes. */
@@ -735,4 +818,10 @@ export const FIRE_GOAL = {
   includeBusinessInvestments: true,
   currency: "BRL",
   currentAge: 34,
+  /** Marcos no caminho (Liberdade financeira): one passed, two ahead. */
+  milestones: [
+    { id: "demo-primeiro-milhao", name: "Primeiro milhão", type: "net_worth_absolute" as const, value: 1_000_000 },
+    { id: "demo-renda-5-mil", name: "Renda de R$ 5 mil por mês", type: "passive_income_absolute" as const, value: 5_000 },
+    { id: "demo-metade", name: "Metade do caminho", type: "net_worth_absolute" as const, value: 2_100_000 },
+  ],
 };

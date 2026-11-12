@@ -402,7 +402,7 @@ function EditOperationForm({
       }}
     >
       <DialogHead title={t("title")} desc={opLabel(operation)} />
-      <div className="grid grid-cols-4 gap-2.5">
+      <div className="grid grid-cols-2 gap-2.5 md:grid-cols-4">
         <Field label={top("date")}>
           <TextInput type="date" value={date} onChange={setDate} />
         </Field>

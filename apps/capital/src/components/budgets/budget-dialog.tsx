@@ -7,6 +7,7 @@ import { CategoryCombobox } from "@/components/pickers";
 import { apiDelete, apiPatch, apiPost, withQuery } from "@/lib/api/client";
 import { useSession } from "@/lib/api/session";
 import { useAppMutation } from "@/lib/api/use-app-mutation";
+import { budgetKind, type BudgetKindName } from "@/lib/budgets/kind";
 import { compareMonths, monthKey, monthOfDate, monthOptions, type YearMonth } from "@/lib/budgets/period";
 import type { BudgetsScope } from "@/lib/budgets/url";
 import { useFmt } from "@/lib/format/provider";
@@ -25,6 +26,8 @@ export interface EditableBudget {
   /** YYYY-MM-DD: the month this version starts (January for yearly budgets). */
   effectiveFrom: string;
   period: BudgetPeriod;
+  /** Null counts as variável. */
+  kind: BudgetKindName | null;
 }
 
 export type BudgetDialogState =
@@ -37,9 +40,9 @@ interface BatchResult {
   category: string;
 }
 
-/** PATCH body of an edit: the amount in the base currency, the note, and applyFrom (the month the dialog already chose). */
-export function editBudgetBody(amount: number, currency: string, notes: string, applyFrom: string) {
-  return { amount, currency, notes: notes.trim() || null, applyFrom };
+/** PATCH body of an edit: the amount in the base currency, the note, the kind, and applyFrom (the month the dialog already chose). */
+export function editBudgetBody(amount: number, currency: string, notes: string, applyFrom: string, kind: BudgetKindName | null) {
+  return { amount, currency, notes: notes.trim() || null, applyFrom, kind: budgetKind(kind) };
 }
 
 /** "+ Orçamento", "Editar orçamento…" and "Excluir…": one dialog, mounted while open. */
@@ -116,6 +119,7 @@ function CreateForm({ month, scope, onDone }: { month: YearMonth; scope: Budgets
   const [entityId, setEntityId] = useState(() => defaultEntity(scope, me?.entities ?? []));
   const [amount, setAmount] = useState("");
   const [period, setPeriod] = useState<BudgetPeriod>("monthly");
+  const [kind, setKind] = useState<BudgetKindName>("variavel");
   const [from, setFrom] = useState(monthKey(month));
   const [notes, setNotes] = useState("");
   const [showErrors, setShowErrors] = useState(false);
@@ -141,6 +145,7 @@ function CreateForm({ month, scope, onDone }: { month: YearMonth; scope: Budgets
       entityId: entityId || null,
       amount: value,
       period,
+      kind,
       effectiveFrom: period === "yearly" ? `${from.slice(0, 4)}-01` : from,
       notes: notes.trim() || null,
     });
@@ -165,6 +170,18 @@ function CreateForm({ month, scope, onDone }: { month: YearMonth; scope: Budgets
         </Field>
         <Field label={t("dialog.amount")} htmlFor={`${ids}-amount`}>
           <TextInput id={`${ids}-amount`} value={amount} onChange={setAmount} mono inputMode="decimal" placeholder="0" invalid={showErrors && invalidAmount} />
+        </Field>
+        <Field label={t("dialog.kind")}>
+          <Segmented
+            aria-label={t("dialog.kind")}
+            value={kind}
+            options={[
+              { v: "fixo", l: t("kind.fixo") },
+              { v: "variavel", l: t("kind.variavel") },
+            ]}
+            onChange={setKind}
+            className="self-start"
+          />
         </Field>
         <Field label={t("dialog.period")}>
           <Segmented
@@ -226,6 +243,7 @@ export function EditForm({
   const [amount, setAmount] = useState(() => fmt.number(budget.amount, { min: 0, max: 2 }));
   const [from, setFrom] = useState(monthKey(center));
   const [notes, setNotes] = useState(budget.notes ?? "");
+  const [kind, setKind] = useState<BudgetKindName>(() => budgetKind(budget.kind));
   const [showErrors, setShowErrors] = useState(false);
   const value = fmt.parseNumber(amount);
   const invalidAmount = !(value > 0);
@@ -244,7 +262,7 @@ export function EditForm({
       return;
     }
     // The amount shown and typed is in the base currency (the overview converts a budget in another currency), so it is saved in base.
-    if (!update.isPending) update.mutate(editBudgetBody(value, fmt.prefs.baseCurrency, notes, from));
+    if (!update.isPending) update.mutate(editBudgetBody(value, fmt.prefs.baseCurrency, notes, from, kind));
   };
   useShortcut("mod+enter", submit, { allowInInputs: true });
 
@@ -264,6 +282,18 @@ export function EditForm({
       <div className="grid grid-cols-2 gap-2.5">
         <Field label={t("dialog.amount")} htmlFor={`${ids}-amount`}>
           <TextInput ref={amountRef} id={`${ids}-amount`} value={amount} onChange={setAmount} mono inputMode="decimal" autoFocus invalid={showErrors && invalidAmount} />
+        </Field>
+        <Field label={t("dialog.kind")}>
+          <Segmented
+            aria-label={t("dialog.kind")}
+            value={kind}
+            options={[
+              { v: "fixo", l: t("kind.fixo") },
+              { v: "variavel", l: t("kind.variavel") },
+            ]}
+            onChange={setKind}
+            className="self-start"
+          />
         </Field>
         <Field label={t("dialog.from")} htmlFor={`${ids}-from`} hint={t("dialog.fromHint")}>
           <Select id={`${ids}-from`} value={from} onChange={setFrom} options={fromOptions} />

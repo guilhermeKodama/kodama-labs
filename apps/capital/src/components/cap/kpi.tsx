@@ -18,5 +18,5 @@ export function Kpi({ label, value, sub, tone }: { label: ReactNode; value: Reac
 
 /** Row of Kpis in a bordered strip: 28px gap, 12px × 14px padding. */
 export function KpiStrip({ children, className }: { children: ReactNode; className?: string }) {
-  return <div className={cn("flex flex-wrap gap-7 rounded-[8px] border border-stroke-3 px-3.5 py-3", className)}>{children}</div>;
+  return <div className={cn("flex flex-wrap gap-7 rounded-[8px] border border-stroke-3 bg-panel px-3.5 py-3", className)}>{children}</div>;
 }

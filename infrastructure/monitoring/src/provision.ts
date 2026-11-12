@@ -1,6 +1,6 @@
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
-import { connectKuma, provisionMonitors } from "./kuma.js";
+import { connectKuma, provisionMonitors, provisionStatusPage } from "./kuma.js";
 import { buildMonitors } from "./spec.js";
 
 function schedulesDir(): string {
@@ -21,7 +21,14 @@ async function main(): Promise<void> {
   const session = await connectKuma();
   try {
     const dockerOk = await provisionMonitors(session, monitors);
-    if (!dockerOk) process.exitCode = 1;
+    let statusOk = true;
+    try {
+      await provisionStatusPage(session);
+    } catch (error: unknown) {
+      statusOk = false;
+      console.error("[provision] status page:", error instanceof Error ? error.message : error);
+    }
+    if (!dockerOk || !statusOk) process.exitCode = 1;
   } finally {
     session.socket.close();
   }

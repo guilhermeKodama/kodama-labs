@@ -49,7 +49,7 @@ export interface MilestoneEvaluation {
 const clamp01 = (n: number) => Math.max(0, Math.min(1, n));
 
 /** The net-worth level a milestone requires (or the target age, for type 'age'). */
-function thresholdFor(def: MilestoneDef, ctx: MilestoneContext): number {
+export function milestoneThreshold(def: MilestoneDef, ctx: MilestoneContext): number {
   if (def.type === 'net_worth_absolute') return def.value;
   if (def.type === 'net_worth_x_expenses') return def.value * ctx.annualExpenses;
   if (def.type === 'passive_income_absolute') return (def.value * MONTHS_PER_YEAR) / ctx.swr;
@@ -79,7 +79,7 @@ export function evaluateMilestones(
   ctx: MilestoneContext
 ): MilestoneEvaluation[] {
   return defs.map((def) => {
-    const threshold = thresholdFor(def, ctx);
+    const threshold = milestoneThreshold(def, ctx);
 
     let achieved: LifecyclePoint | null = null;
     for (const point of path) {

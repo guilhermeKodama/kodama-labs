@@ -1,6 +1,6 @@
 {
   "meta": {
-    "title": "Capital",
+    "title": "Cerne",
     "description": "Finanças pessoais e das suas empresas num só lugar."
   },
   "nav": {
@@ -13,12 +13,16 @@
     "contributions": "Aportes",
     "settings": "Ajustes",
     "accountHint": "Ajustes · Tema",
-    "railSearch": "Buscar ou executar ({shortcut})"
+    "railSearch": "Buscar ou executar ({shortcut})",
+    "fire": "Liberdade financeira"
   },
   "sidebar": {
     "collapse": "Recolher a barra lateral",
     "expand": "Expandir a barra lateral",
     "openMenu": "Abrir o menu"
+  },
+  "page": {
+    "more": "Mais ações"
   },
   "session": {
     "loadFailed": "Não deu para carregar sua conta."

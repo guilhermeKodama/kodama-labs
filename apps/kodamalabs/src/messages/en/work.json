@@ -1,0 +1,47 @@
+{
+  "capital": {
+    "title": "Capital",
+    "intro": "A private finance workspace. It keeps my money and my companies’ money in one ledger: accounts, cards, investments, several currencies. An assistant reads statements from PDFs and screenshots and proposes how to book them.",
+    "proof": "About 1,870 tests. The October 2026 move to a single ledger took 2,305 lines of migration SQL, rehearsed on a production dump after a 705-line read-only precheck.",
+    "mustNot": "<head>Must not happen.</head> A statement written to the books without anyone approving it.",
+    "rule": "The assistant can read a statement. It cannot import one on its own.",
+    "explain": "Its import plan stays a proposal until I click Confirm import, and that confirmation expires after 30 minutes. Every write to the books can be undone, whoever made it.",
+    "cost": "<head>The cost.</head> No import ever finishes by itself. Each plan waits for me.",
+    "notTaken": "<head>Not taken.</head> Commit first, review later.",
+    "status": {
+      "inProduction": "In production on my own machine",
+      "inProductionSince": "In production on my own machine since {since}",
+      "private": "private: it holds real financial data",
+      "noDemo": "no public demo"
+    }
+  },
+  "sentinel": {
+    "title": "Sentinel",
+    "intro": "Sentinel joins Brazil’s public procurement, company, sanction and election records in one database, and flags prices and relationships for a person to review.",
+    "proof": "7 public sources and 6 analysis engines. Claude reads the tender documents themselves. 24,627 tenders ingested (snapshot, May 2026).",
+    "mustNot": "<head>Must not happen.</head> An alert that reads as an accusation.",
+    "rule": "For prices, statistics propose. An evaluator decides, and its default is to suppress.",
+    "explain": "The evaluator is a language model. If its key is missing, its call fails or its reply cannot be parsed, no price alert is published. The wording rule: a point to check, never an accusation. When I tightened it, a migration deleted 241 model-written alerts so they would be regenerated.",
+    "cost": "<head>The cost.</head> It stays quiet about things that may be real, and I have not yet measured how often.",
+    "notTaken": "<head>Not taken.</head> Publishing every price the statistics flag.",
+    "status": {
+      "site": "Public site: <site>{host}</site>",
+      "moving": "moving to my own machine, October 2026"
+    }
+  },
+  "cosmos": {
+    "title": "Cosmos",
+    "intro": "A production line for software, staffed by coding agents, running on my own machine. I describe a line in YAML: stations in order, each a typed contract with a worker assigned to it. One objective goes in, each station hands its output to the next inside the item’s own git worktree, and a draft pull request comes out.",
+    "proof": "Started on 7 October 2026: about 13,900 lines of TypeScript, 271 tests passing in CI, and a validator with 44 checks that reads a line before any model is called. The engine refuses 48 programs and 15 git subcommands whatever a worker’s list says. On my monorepo it has opened three draft pull requests; none is merged yet.",
+    "mustNot": "<head>Must not happen.</head> An agent doing something nobody gave it the authority to do.",
+    "rule": "Workers don’t ask permission. They have an authority, and the rest is refused.",
+    "explain": "A command outside a worker’s list is refused with the reason, and the worker adapts or escalates with a question. A delivery counts only when the station’s checks pass. The engine, not the model, computes the diff and opens the pull request, always as a draft. The line stops for me in three cases: a check the line asked for, an escalation, an external action it was not authorized to take.",
+    "cost": "<head>The cost.</head> A command I forgot to list stops the whole line until I answer. And it is a policy, not a sandbox: an allowed command still runs with my permissions.",
+    "notTaken": "<head>Not taken.</head> A permission prompt for every command.",
+    "status": {
+      "since": "In development since 7 October 2026",
+      "cli": "command line only",
+      "private": "private repository, one user: me"
+    }
+  }
+}

@@ -5,20 +5,32 @@ description: Uptime Kuma, heartbeats de cron e o watcher de logs do stack kodama
 
 # Monitoramento
 
-O stack de produção é observado por um Uptime Kuma local e por um watcher de logs. Os dois mandam um único POST JSON pra fora. O Kuma escuta só em `127.0.0.1:13020` (ou `UPTIME_KUMA_PORT`) e **não** entra no túnel do `cloudflared`.
+O stack de produção é observado por um Uptime Kuma local e por um watcher de logs. Os dois mandam um único POST JSON pra fora. O painel do Kuma escuta só em `127.0.0.1:13020` (ou `UPTIME_KUMA_PORT`). O túnel publica só `https://status.kodamalabs.ai`, e só os caminhos da página de status.
 
 O runbook em inglês, com o checklist de rollout, está em `infrastructure/monitoring/README.md`.
 
 ## O que é checado
 
 - `GET /api/health` em cada web, na rede `kodama`. Capital e sentinel continuam com `/api/v1/health` (sem banco).
-- Os hosts públicos `capital.kodamalabs.ai/login`, `careers.kodamalabs.ai` e `attentio.dev`, sem seguir redirect (status 200–399). O Access responde 302; falha de origem aparece como 5xx ou 530.
+- Os hosts públicos `capital.kodamalabs.ai/login`, `careers.kodamalabs.ai`, `attentio.dev` e `status.kodamalabs.ai`, sem seguir redirect (status 200–399). O Access responde 302; falha de origem aparece como 5xx ou 530.
 - `sentinel.kodamalabs.ai` e `kodamalabs.ai` só entram se estiverem em `EXTRA_PUBLIC_HOSTS`.
 - `SELECT 1` nos bancos `capital`, `sentinel`, `attention` e `careers`.
 - Containers de longa duração via proxy de socket só de leitura. `*-migrate` fica de fora.
 - Um monitor de push por cron. O runner só manda `status=up` quando o job passa. Uma falha é heartbeat perdido; com `maxretries` 1, só a segunda seguida vira Down. O override por job fica em `CRON_PUSH_OVERRIDES` em `infrastructure/monitoring/src/spec.ts`.
 - Disco do host, via timer systemd, acima de `DISK_ALERT_PERCENT` (85).
 - Ollama e Whisper só com `OLLAMA_HEALTH_URL` / `WHISPER_HEALTH_URL`.
+
+## Página de status
+
+`https://status.kodamalabs.ai/` é a página pública (slug `kodama`). Ela mostra Capital, Careers e Attentio. Postgres, containers, disco e crons ficam de fora. Os monitores que disparam alerta continuam com o prefixo `kodama/`; os nomes amigáveis são outra leva, marcada com `statuspage:` na descrição.
+
+Antes do primeiro deploy desse ingress:
+
+1. No DNS da Cloudflare, CNAME `status.kodamalabs.ai` para `ab16031c-dce9-4a61-a287-36f7da8dcb4e.cfargotunnel.com` (proxied). Isso não entra no repositório.
+2. Confirme que nenhum aplicativo do Cloudflare Access cobre `status.kodamalabs.ai`. Hostname novo é público; um app de Access transforma a página num redirect de login.
+3. Rode `infrastructure/deploy/install.sh` de novo para o smoke do `deploy.sh` ser a cópia que o sshd executa.
+
+Indexação de busca fica desligada na instância inteira (`/robots.txt` com `Disallow: /`). O Kuma 2.5.3 não grava esse flag por página.
 
 ## Janela de manutenção
 

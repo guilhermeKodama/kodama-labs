@@ -14,4 +14,12 @@ ingress:
     service: http://kodamalabs-web:3003
   - hostname: www.kodamalabs.ai
     service: http://kodamalabs-web:3003
+  # Public status page only. `path` is a full-match RE2 regex (cloudflared's
+  # MatchString is unanchored). The pattern lives in status-allowlist.regex.
+  # Everything else on this hostname, including /dashboard and /socket.io, is 404.
+  - hostname: status.kodamalabs.ai
+    path: '^/(?:status/kodama(?:/rss)?|api/status-page/(?:heartbeat/kodama|kodama(?:/(?:manifest\.json|incident-history|badge))?)|api/entry-page|upload/logo[0-9]+\.png|assets/[A-Za-z0-9._-]+|icon\.svg|favicon\.ico|icon\.png|apple-touch-icon\.png|apple-touch-icon-precomposed\.png|icon-192x192\.png|icon-512x512\.png|manifest\.json|serviceWorker\.js|robots\.txt)?$'
+    service: http://uptime-kuma:3001
+  - hostname: status.kodamalabs.ai
+    service: http_status:404
   - service: http_status:404

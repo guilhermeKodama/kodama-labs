@@ -4,6 +4,8 @@ import { useState } from "react";
 import { useTranslations } from "next-intl";
 import { toast } from "sonner";
 import { Btn, Check, Dialog, DialogHead, Kbd } from "@/components/cap";
+import { DIALOG_FOOTER_PHONE } from "@/components/cap/dialog";
+import { cn } from "@/lib/utils";
 import { apiDelete, apiPost } from "@/lib/api/client";
 import { useCategories, type CategoryRecord, type Names } from "@/lib/api/catalog";
 import { pushUndo } from "@/lib/api/undo";
@@ -240,7 +242,7 @@ function CreateForm({ draft, onClose }: { draft: QuickAddDraft; onClose: () => v
           />
         }
       />
-      <div className="flex items-center gap-2 border-t border-stroke-3 pt-3">
+      <div className={cn("flex items-center gap-2 border-t border-stroke-3 pt-3", DIALOG_FOOTER_PHONE)}>
         <Check checked={another} onChange={setAnother} label={t("form.another")} />
         <span className="flex-1" />
         <Btn ghost onClick={onClose}>

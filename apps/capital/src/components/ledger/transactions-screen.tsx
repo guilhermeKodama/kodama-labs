@@ -22,7 +22,7 @@ import { boardColumnQuery, boardKey, calendarQuery, calendarRowsQuery, isPagedLa
 import { planViewUpdate } from "@/lib/ledger/view-update";
 import { BulkBar } from "./bulk-bar";
 import { useImportLabels, useLedgerLabels } from "./fields";
-import { TransactionsHeaderActions } from "./header-actions";
+import { useTransactionsHeader } from "./header-actions";
 import { BoardView, CalendarView, ChartView, PivotView, SankeyView } from "./layouts";
 import { LedgerOverlays, useLedgerOverlays } from "./overlays";
 import type { DisplayRow } from "./rows";
@@ -136,6 +136,7 @@ function ViewScreen({
   const current = selection.key === selectionKey;
   const selected = current ? selection.ids : EMPTY_SELECTION;
   const allInView = current && selection.all;
+  const header = useTransactionsHeader({ selecting: selected.size > 0 || allInView });
   const setSelected = useCallback(
     (ids: ReadonlySet<string>) => setSelection((s) => ({ key: selectionKey, ids, all: s.key === selectionKey && s.all })),
     [selectionKey],
@@ -220,30 +221,33 @@ function ViewScreen({
     <div className="relative flex flex-wrap items-center gap-1.5">
       <PeriodControl period={config.period} rangeLabel={rangeLabel} onChange={(period) => update({ period })} />
       <FilterChips config={config} names={names} labels={labels} onChange={(filters) => update({ filters })} />
-      <span className="flex-1" />
-      <TextInput
-        value={searchText}
-        placeholder={t("search")}
-        aria-label={t("search")}
-        className="w-[170px]"
-        onChange={(text) => {
-          setSearchText(text);
-          void setParams({ q: text || null });
-        }}
-      />
-      <DisplayMenu
-        open={overlays.displayOpen}
-        onOpenChange={overlays.setDisplayOpen}
-        name={view.name}
-        isBuiltin={view.isBuiltin}
-        isFavorite={view.isFavorite}
-        config={config}
-        labels={labels}
-        onRename={(name) => saveView(view.id, { name })}
-        onFavorite={(isFavorite) => saveView(view.id, { isFavorite })}
-        onConfig={update}
-        onDuplicate={() => duplicate.mutate()}
-      />
+      <span className="flex-1 max-md:hidden" />
+      {/* On a phone the search takes a row of its own and fills it, with Exibição at its end. */}
+      <div className="flex min-w-0 items-center gap-1.5 max-md:basis-full">
+        <TextInput
+          value={searchText}
+          placeholder={t("search")}
+          aria-label={t("search")}
+          className="min-w-0 max-md:flex-1 md:w-[170px]"
+          onChange={(text) => {
+            setSearchText(text);
+            void setParams({ q: text || null });
+          }}
+        />
+        <DisplayMenu
+          open={overlays.displayOpen}
+          onOpenChange={overlays.setDisplayOpen}
+          name={view.name}
+          isBuiltin={view.isBuiltin}
+          isFavorite={view.isFavorite}
+          config={config}
+          labels={labels}
+          onRename={(name) => saveView(view.id, { name })}
+          onFavorite={(isFavorite) => saveView(view.id, { isFavorite })}
+          onConfig={update}
+          onDuplicate={() => duplicate.mutate()}
+        />
+      </div>
       {dirty ? (
         <>
           <Btn ghost onClick={() => setDraft(null)}>
@@ -350,7 +354,7 @@ function ViewScreen({
   }
 
   return (
-    <Page crumbs={[t("crumb"), view.name]} subheader={tabs} actions={<TransactionsHeaderActions />} overlay={<LedgerOverlays names={names} rows={rows} />}>
+    <Page crumbs={[t("crumb"), view.name]} subheader={tabs} {...header} overlay={<LedgerOverlays names={names} rows={rows} />}>
       {filterBar}
       {draft?.label ? (
         <p className="text-body-sm text-fg-3">

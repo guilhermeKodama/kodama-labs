@@ -42,7 +42,7 @@
   "push": {
     "notConfigured": "O servidor ainda não está configurado para enviar push.",
     "unsupported": "Este navegador não recebe notificações push.",
-    "iosInstall": "No iPhone, adicione o Capital à tela de início para receber avisos.",
+    "iosInstall": "No iPhone, adicione o Cerne à tela de início para receber avisos.",
     "denied": "As notificações estão bloqueadas neste navegador; libere nas permissões do site.",
     "off": "Este dispositivo ainda não recebe avisos.",
     "error": "Não deu para ativar neste dispositivo: {message}",

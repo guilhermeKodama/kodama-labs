@@ -1,0 +1,35 @@
+{
+  "name": "Guilherme Kodama",
+  "lede": "I build software that puts language models next to things that must not go wrong: a ledger with real money, public spending records, my own repositories. I design each system around what it must never do, and I run it myself.",
+  "facts": {
+    "role": {
+      "label": "role",
+      "value": "Staff software engineer",
+      "valueAt": "Staff software engineer at {employer}"
+    },
+    "based": {
+      "label": "based",
+      "value": "São Paulo (UTC−3), remote with international teams"
+    },
+    "experience": {
+      "label": "experience",
+      "value": "13 years, individual contributor by choice"
+    },
+    "openTo": {
+      "label": "open to",
+      "value": ""
+    },
+    "contact": {
+      "label": "contact",
+      "github": "GitHub",
+      "linkedin": "LinkedIn",
+      "cv": "CV, PDF"
+    }
+  },
+  "sentence": "Three systems, one pattern: in each, the proposal that must not go wrong waits at <line>this line</line>.",
+  "legend": {
+    "proposed": "dashed: proposed, not yet trusted",
+    "committed": "solid: committed",
+    "gate": "the line: where a person, or a check that fails closed, decides"
+  }
+}

@@ -183,7 +183,7 @@ describe("MCP Server End-to-End", () => {
       const result = data.result as {
         serverInfo: { name: string; version: string };
       };
-      expect(result.serverInfo.name).toBe("capital-accounting");
+      expect(result.serverInfo.name).toBe("cerne");
       expect(result.serverInfo.version).toBe("1.0.0");
     });
 
@@ -227,7 +227,7 @@ describe("MCP Server End-to-End", () => {
       expect(data.id).toBe(2);
       expect(data.result).toHaveProperty("tools");
       expect(Array.isArray(data.result.tools)).toBe(true);
-      expect(data.result.tools.length).toBe(36); // 34 previous + get_fire_plan + update_fire_phase_contribution
+      expect(data.result.tools.length).toBe(49); // 47 previous + create_account, archive_account
 
       // Check for expected tools
       const result = data.result as { tools: Array<{ name: string }> };
@@ -240,11 +240,24 @@ describe("MCP Server End-to-End", () => {
       expect(toolNames).toContain("get_credit_card_statement");
       expect(toolNames).toContain("unmark_transaction_as_card_settlement");
       expect(toolNames).toContain("create_category");
+      expect(toolNames).toContain("get_budget_composition");
       expect(toolNames).toContain("list_credit_cards");
       expect(toolNames).toContain("create_credit_card");
       expect(toolNames).toContain("update_credit_card");
       expect(toolNames).toContain("get_fire_plan");
       expect(toolNames).toContain("update_fire_phase_contribution");
+      expect(toolNames).toContain("list_ledger_accounts");
+      expect(toolNames).toContain("create_transfer");
+      expect(toolNames).toContain("list_transfers");
+      expect(toolNames).toContain("record_investment_contribution");
+      expect(toolNames).toContain("record_investment_redemption");
+      expect(toolNames).toContain("update_holding_price");
+      expect(toolNames).toContain("record_dividend");
+      expect(toolNames).toContain("convert_income_to_dividend");
+      expect(toolNames).toContain("list_account_balances");
+      expect(toolNames).toContain("update_dividend");
+      expect(toolNames).toContain("create_account");
+      expect(toolNames).toContain("archive_account");
     });
 
     it("should handle tools/call with bulk_create_transactions in dry-run mode", async () => {
@@ -420,18 +433,31 @@ describe("MCP Server End-to-End", () => {
 
       // List tools
       const tools = await client.listTools();
-      expect(tools.tools.length).toBe(36); // 34 previous + get_fire_plan + update_fire_phase_contribution
+      expect(tools.tools.length).toBe(49); // 47 previous + create_account, archive_account
       const toolNames = tools.tools.map((tool) => tool.name);
       expect(toolNames).toContain("import_credit_card_statement");
       expect(toolNames).toContain("mark_transaction_as_card_settlement");
       expect(toolNames).toContain("get_credit_card_statement");
       expect(toolNames).toContain("unmark_transaction_as_card_settlement");
       expect(toolNames).toContain("create_category");
+      expect(toolNames).toContain("get_budget_composition");
       expect(toolNames).toContain("list_credit_cards");
       expect(toolNames).toContain("create_credit_card");
       expect(toolNames).toContain("update_credit_card");
       expect(toolNames).toContain("get_fire_plan");
       expect(toolNames).toContain("update_fire_phase_contribution");
+      expect(toolNames).toContain("list_ledger_accounts");
+      expect(toolNames).toContain("create_transfer");
+      expect(toolNames).toContain("list_transfers");
+      expect(toolNames).toContain("record_investment_contribution");
+      expect(toolNames).toContain("record_investment_redemption");
+      expect(toolNames).toContain("update_holding_price");
+      expect(toolNames).toContain("record_dividend");
+      expect(toolNames).toContain("convert_income_to_dividend");
+      expect(toolNames).toContain("list_account_balances");
+      expect(toolNames).toContain("update_dividend");
+      expect(toolNames).toContain("create_account");
+      expect(toolNames).toContain("archive_account");
 
       // Call a tool
       const result = await client.callTool({

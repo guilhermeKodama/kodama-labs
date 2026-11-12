@@ -7,7 +7,7 @@
 export const SETTINGS_SECTIONS = [
   { section: "account", pages: ["prefs", "notif"] },
   { section: "finance", pages: ["ent", "bank", "card", "broker", "cat", "rules", "fx"] },
-  { section: "data", pages: ["imports", "api"] },
+  { section: "data", pages: ["imports", "pluggy", "api"] },
 ] as const;
 
 export type SettingsSection = (typeof SETTINGS_SECTIONS)[number]["section"];

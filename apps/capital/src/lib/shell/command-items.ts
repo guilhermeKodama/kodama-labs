@@ -72,6 +72,7 @@ export function commandItems({ t, views, theme, themeLabels, locale, locales }: 
     { id: "go:budgets", group: "goTo", label: t("goTo.budgets"), action: { type: "navigate", href: "/transactions/budgets" } },
     { id: "go:portfolio", group: "goTo", label: t("goTo.portfolio"), action: { type: "navigate", href: "/investments" } },
     { id: "go:contributions", group: "goTo", label: t("goTo.contributions"), action: { type: "navigate", href: "/investments/contributions" } },
+    { id: "go:fire", group: "goTo", label: t("goTo.fire"), action: { type: "navigate", href: "/investments/fire" } },
     { id: "go:trash", group: "goTo", label: t("goTo.trash"), action: { type: "navigate", href: buildTransactionsHref({ trash: true }) } },
     { id: "go:settings", group: "goTo", label: t("goTo.settings"), shortcut: SHELL_SHORTCUTS.settings.combo, action: { type: "settings" } },
     ...SETTINGS_PAGES.map((page): CommandItem =>

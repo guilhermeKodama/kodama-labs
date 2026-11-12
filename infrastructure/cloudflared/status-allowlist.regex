@@ -1,0 +1,1 @@
+^/(?:status/kodama(?:/rss)?|api/status-page/(?:heartbeat/kodama|kodama(?:/(?:manifest\.json|incident-history|badge))?)|api/entry-page|upload/logo[0-9]+\.png|assets/[A-Za-z0-9._-]+|icon\.svg|favicon\.ico|icon\.png|apple-touch-icon\.png|apple-touch-icon-precomposed\.png|icon-192x192\.png|icon-512x512\.png|manifest\.json|serviceWorker\.js|robots\.txt)?$

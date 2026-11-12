@@ -47,6 +47,10 @@
       "title": "Importações",
       "desc": "Histórico de extratos importados; cada um pode ser desfeito."
     },
+    "pluggy": {
+      "title": "Open Finance",
+      "desc": "Meu Pluggy: status, última sync, sincronizar agora e o mapeamento das contas."
+    },
     "api": {
       "title": "Integrações e API",
       "desc": "Servidor MCP, tokens e documentação da API."
@@ -105,15 +109,15 @@
     "initialBalance": "Saldo inicial",
     "color": "Cor",
     "colorName": {
-      "gray": "Cinza",
-      "purple": "Roxo",
-      "green": "Verde",
-      "yellow": "Amarelo",
-      "cyan": "Ciano",
-      "pink": "Rosa",
-      "blue": "Azul",
-      "orange": "Laranja",
-      "red": "Vermelho"
+      "casca": "Casca",
+      "jacaranda": "Jacarandá",
+      "musgo": "Musgo",
+      "ipe": "Ipê",
+      "salvia": "Sálvia",
+      "argila": "Argila",
+      "ardosia": "Ardósia",
+      "resina": "Resina",
+      "urucum": "Urucum"
     },
     "linked": "{count, plural, =0 {Nenhuma conta ou cartão vinculado.} one {# conta ou cartão vinculado.} other {# contas e cartões vinculados.}}",
     "archive": "Arquivar negócio",
@@ -303,9 +307,67 @@
     "empty": "Nenhum cliente conectado. Gere um token e use-o como Bearer no cliente MCP.",
     "revokeDialog": {
       "title": "Revogar o token …{last4}?",
-      "desc": "{count, plural, =0 {Nenhum cliente usa este token ainda.} one {# cliente para de acessar o Capital na hora.} other {# clientes param de acessar o Capital na hora.}}",
+      "desc": "{count, plural, =0 {Nenhum cliente usa este token ainda.} one {# cliente para de acessar o Cerne na hora.} other {# clientes param de acessar o Cerne na hora.}}",
       "confirm": "Revogar token"
     },
     "toastRevoked": "Token …{last4} revogado"
+  },
+  "pluggy": {
+    "disabled": "A sincronização fica desligada até o servidor ter PLUGGY_CLIENT_ID e PLUGGY_CLIENT_SECRET. O resto do Cerne segue igual.",
+    "empty": "Nenhuma conexão. No Dashboard da Pluggy, abra o Demo, conecte MeuPluggy e cole o item id aqui.",
+    "add": "Adicionar conexão",
+    "label": "Nome",
+    "itemId": "Item id",
+    "entity": "Entidade",
+    "personal": "PF",
+    "business": "PJ",
+    "sync": "Sincronizar agora",
+    "syncing": "Sincronizando…",
+    "cutoff": "Importar a partir de",
+    "incomeType": "Tipo do rendimento",
+    "origin": "Origem",
+    "remove": "Remover",
+    "lastSync": "Última sync: {when}",
+    "never": "ainda não",
+    "consent": "Consentimento até {when}",
+    "noConsent": "Sem data de consentimento",
+    "renew": "Para renovar, entre de novo em MeuPluggy no Demo. Se o item id mudar, cole o novo aqui. Os lançamentos já gravados ficam.",
+    "brokerage": "Corretora dos investimentos",
+    "none": "Nenhuma",
+    "incomeCategory": "Categoria do rendimento na PJ",
+    "accounts": "Contas desta conexão",
+    "noAccounts": "As contas aparecem depois da primeira sync.",
+    "reviews": "Para revisar",
+    "emptyReviews": "Nada pendente.",
+    "ignore": "Ignorar",
+    "confirm": "Confirmar classificação",
+    "link": "Vincular ao lançamento",
+    "entryId": "Id do lançamento",
+    "save": "Salvar",
+    "removeTitle": "Remover {label}?",
+    "removeDesc": "Os lançamentos já gravados ficam. A conexão e o mapeamento saem.",
+    "status": {
+      "idle": "Ainda não sincronizou",
+      "ok": "Em dia",
+      "expiring": "Consentimento expira em breve",
+      "expired": "Consentimento expirado",
+      "error": "Erro na última sync"
+    },
+    "reviewKind": {
+      "conflict": "Conflito",
+      "low_confidence": "Classificação incerta",
+      "position": "Posição divergente"
+    },
+    "incomeTypes": {
+      "dividend": "Dividendo",
+      "jcp": "JCP",
+      "fii_income": "Rendimento de FII",
+      "fixed_income_interest": "Renda fixa"
+    },
+    "origins": {
+      "BR": "Brasil",
+      "BDR": "BDR",
+      "EXTERIOR": "Exterior"
+    }
   }
 }

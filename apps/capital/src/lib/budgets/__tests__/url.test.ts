@@ -2,11 +2,11 @@ import { describe, expect, it } from "vitest";
 import { budgetsParams, monthTense, openMonth, parseScope, resolveBudgetsView, stepView, switchMode } from "../url";
 
 const today = { year: 2026, month: 10 };
-const none = { mode: null, m: null, y: null, scope: null };
+const none = { mode: null, m: null, y: null, scope: null, k: null };
 
 describe("resolveBudgetsView", () => {
   it("opens today's month for every entity by default", () => {
-    expect(resolveBudgetsView(none, today)).toEqual({ mode: "month", month: { year: 2026, month: 10 }, year: 2026, scope: "all" });
+    expect(resolveBudgetsView(none, today)).toEqual({ mode: "month", month: { year: 2026, month: 10 }, year: 2026, scope: "all", kind: null });
   });
 
   it("reads mode, month, year and scope", () => {
@@ -15,13 +15,14 @@ describe("resolveBudgetsView", () => {
       month: { year: 2025, month: 3 },
       year: 2024,
       scope: "pj",
+      kind: null,
     });
     // Without y, the year follows m.
     expect(resolveBudgetsView({ ...none, mode: "year", m: "2025-03" }, today).year).toBe(2025);
   });
 
   it("ignores malformed params", () => {
-    expect(resolveBudgetsView({ mode: "week", m: "2026-13", y: "abc", scope: "<script>" }, today)).toEqual(resolveBudgetsView(none, today));
+    expect(resolveBudgetsView({ mode: "week", m: "2026-13", y: "abc", scope: "<script>", k: "nope" }, today)).toEqual(resolveBudgetsView(none, today));
     expect(parseScope("cmabc123")).toBe("cmabc123");
     expect(parseScope("")).toBe("all");
   });
@@ -33,14 +34,14 @@ describe("budgetsParams", () => {
   });
 
   it("keeps what differs from today", () => {
-    const view = { mode: "year" as const, month: { year: 2026, month: 9 }, year: 2025, scope: "pf" };
-    expect(budgetsParams(view, today)).toEqual({ mode: "year", m: "2026-09", y: "2025", scope: "pf" });
+    const view = { mode: "year" as const, month: { year: 2026, month: 9 }, year: 2025, scope: "pf", kind: "fixo" as const };
+    expect(budgetsParams(view, today)).toEqual({ mode: "year", m: "2026-09", y: "2025", scope: "pf", k: "fixo" });
     // The year is only written in Anual.
     expect(budgetsParams({ ...view, mode: "month" }, today).y).toBeNull();
   });
 
   it("round-trips", () => {
-    const view = { mode: "year" as const, month: { year: 2026, month: 2 }, year: 2027, scope: "pj" };
+    const view = { mode: "year" as const, month: { year: 2026, month: 2 }, year: 2027, scope: "pj", kind: null };
     expect(resolveBudgetsView(budgetsParams(view, today), today)).toEqual(view);
   });
 });

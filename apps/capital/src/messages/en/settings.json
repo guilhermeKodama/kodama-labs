@@ -47,6 +47,10 @@
       "title": "Imports",
       "desc": "History of imported statements; each one can be undone."
     },
+    "pluggy": {
+      "title": "Open Finance",
+      "desc": "Meu Pluggy: status, last sync, sync now, and how accounts map into Cerne."
+    },
     "api": {
       "title": "Integrations and API",
       "desc": "MCP server, tokens and API documentation."
@@ -105,15 +109,15 @@
     "initialBalance": "Opening balance",
     "color": "Color",
     "colorName": {
-      "gray": "Gray",
-      "purple": "Purple",
-      "green": "Green",
-      "yellow": "Yellow",
-      "cyan": "Cyan",
-      "pink": "Pink",
-      "blue": "Blue",
-      "orange": "Orange",
-      "red": "Red"
+      "casca": "Bark",
+      "jacaranda": "Jacaranda",
+      "musgo": "Moss",
+      "ipe": "Ipê",
+      "salvia": "Sage",
+      "argila": "Clay",
+      "ardosia": "Slate",
+      "resina": "Resin",
+      "urucum": "Annatto"
     },
     "linked": "{count, plural, =0 {No linked accounts or cards.} one {# linked account or card.} other {# linked accounts and cards.}}",
     "archive": "Archive business",
@@ -303,9 +307,67 @@
     "empty": "No connected clients. Generate a token and use it as the Bearer token in the MCP client.",
     "revokeDialog": {
       "title": "Revoke token …{last4}?",
-      "desc": "{count, plural, =0 {No client uses this token yet.} one {# client loses access to Capital right away.} other {# clients lose access to Capital right away.}}",
+      "desc": "{count, plural, =0 {No client uses this token yet.} one {# client loses access to Cerne right away.} other {# clients lose access to Cerne right away.}}",
       "confirm": "Revoke token"
     },
     "toastRevoked": "Token …{last4} revoked"
+  },
+  "pluggy": {
+    "disabled": "Sync stays off until the server has PLUGGY_CLIENT_ID and PLUGGY_CLIENT_SECRET. The rest of Cerne is unchanged.",
+    "empty": "No connections yet. In the Pluggy Dashboard, open Demo, connect MeuPluggy and paste the item id here.",
+    "add": "Add connection",
+    "label": "Name",
+    "itemId": "Item id",
+    "entity": "Entity",
+    "personal": "Personal",
+    "business": "Business",
+    "sync": "Sync now",
+    "syncing": "Syncing…",
+    "cutoff": "Import from",
+    "incomeType": "Income type",
+    "origin": "Origin",
+    "remove": "Remove",
+    "lastSync": "Last sync: {when}",
+    "never": "not yet",
+    "consent": "Consent until {when}",
+    "noConsent": "No consent date",
+    "renew": "To renew, sign in to MeuPluggy in the Dashboard Demo again. If the item id changes, paste the new one here. Entries already booked stay.",
+    "brokerage": "Brokerage for investments",
+    "none": "None",
+    "incomeCategory": "Business income category",
+    "accounts": "Accounts on this connection",
+    "noAccounts": "Accounts show up after the first sync.",
+    "reviews": "To review",
+    "emptyReviews": "Nothing pending.",
+    "ignore": "Ignore",
+    "confirm": "Confirm classification",
+    "link": "Link to entry",
+    "entryId": "Entry id",
+    "save": "Save",
+    "removeTitle": "Remove {label}?",
+    "removeDesc": "Booked entries stay. The connection and its mapping are removed.",
+    "status": {
+      "idle": "Not synced yet",
+      "ok": "Up to date",
+      "expiring": "Consent expires soon",
+      "expired": "Consent expired",
+      "error": "Last sync failed"
+    },
+    "reviewKind": {
+      "conflict": "Conflict",
+      "low_confidence": "Uncertain classification",
+      "position": "Position mismatch"
+    },
+    "incomeTypes": {
+      "dividend": "Dividend",
+      "jcp": "JCP",
+      "fii_income": "FII income",
+      "fixed_income_interest": "Fixed income"
+    },
+    "origins": {
+      "BR": "Brazil",
+      "BDR": "BDR",
+      "EXTERIOR": "Abroad"
+    }
   }
 }

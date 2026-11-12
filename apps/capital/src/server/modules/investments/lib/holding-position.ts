@@ -42,7 +42,11 @@ const EPS = 1e-9;
  * - A sell with a quantity keeps the average cost and takes the sold share
  *   of the cost basis out; selling more than the position is clamped and
  *   reported in `oversold`. Without a quantity (amount-based assets such as
- *   fixed income) it takes the amount out of the cost basis.
+ *   fixed income) it takes the amount out of the cost basis. A sell with
+ *   quantity exactly 0 and a pricePerUnit keeps the quantity and removes
+ *   that pricePerUnit from the cost basis (a by-value redemption: the
+ *   price is the cost removed, totalAmount is the cash). Amount-based
+ *   sells leave quantity null, so they stay on the amount path.
  * - A split changes the quantity only.
  * - An adjustment carrying quantity and price resets the position when its
  *   mode is absolute or unset (to zero closes it). Mode delta adds the
@@ -85,6 +89,13 @@ export function replayPosition(ops: readonly PositionOperation[]): Position {
             qty = 0;
             cost = 0;
           }
+        } else if (op.quantity === 0 && op.pricePerUnit != null) {
+          // By-value redemption. quantity null is an amount-based sell and
+          // still removes min(cost, totalAmount); explicit 0 plus a price
+          // removes that price (the cost basis taken) and leaves quantity.
+          const taken = Math.min(cost, Math.max(0, op.pricePerUnit));
+          realized += op.totalAmount - fees - taken;
+          cost -= taken;
         } else {
           const taken = Math.min(cost, op.totalAmount);
           realized += op.totalAmount - fees - taken;

@@ -3,7 +3,7 @@
 import { useState, useSyncExternalStore, type FormEvent } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useLocale, useTranslations } from "next-intl";
-import { Btn, Field, TextInput } from "@/components/cap";
+import { Btn, Field, TextInput, Wordmark } from "@/components/cap";
 import { Link, useRouter } from "@/i18n/navigation";
 import { ApiError, apiPost } from "@/lib/api/client";
 import { useAppMutation, useErrorMessage } from "@/lib/api/use-app-mutation";
@@ -27,9 +27,10 @@ const noSubscribe = () => () => {};
  * the chrome background, Field labels, 26px inputs and buttons). After
  * signing in the app returns to `?redirect` when it is a path of this app;
  * the link to the other page keeps it. Errors come from the server's code
- * (errors.<code>), never its English message.
+ * (errors.<code>), never its English message. While sign-up is closed
+ * (SIGNUP_OPEN), the login card does not offer it.
  */
-export function CredentialsForm({ mode }: { mode: AuthMode }) {
+export function CredentialsForm({ mode, signupOpen = true }: { mode: AuthMode; signupOpen?: boolean }) {
   const t = useTranslations("auth");
   const errorText = useErrorMessage();
   const locale = useLocale();
@@ -102,17 +103,13 @@ export function CredentialsForm({ mode }: { mode: AuthMode }) {
     };
   };
 
+  // Centered on a phone (clear of the status bar and home indicator); 12% from the top on a desktop, as in the mockup.
   return (
-    <main className="flex min-h-dvh items-start justify-center bg-chrome px-4 pt-[12vh] pb-10 text-fg-1">
-      <form noValidate onSubmit={onSubmit} aria-busy={pending} className="flex w-full max-w-[360px] flex-col gap-3.5 rounded-[12px] border border-stroke-1 bg-editor p-[18px]">
-        <div className="flex items-center gap-2">
-          <span aria-hidden className="inline-flex size-6 shrink-0 items-center justify-center rounded-[6px] bg-fg-1 text-body-sm font-bold text-editor">
-            C
-          </span>
-          <span className="text-body font-semibold">Capital</span>
-        </div>
+    <main className="flex min-h-dvh items-center justify-center bg-chrome px-4 pt-[calc(2.5rem+var(--safe-top))] pb-[calc(2.5rem+var(--safe-bottom))] text-fg-1 standalone:min-h-screen sm:items-start sm:pt-[12vh]">
+      <form noValidate onSubmit={onSubmit} aria-busy={pending} className="flex w-full max-w-[360px] flex-col gap-3.5 rounded-[12px] border border-stroke-1 bg-panel p-[18px]">
+        <Wordmark className="self-start" markClassName="size-7" />
         <div className="flex flex-col gap-[3px]">
-          <h1 className="text-title font-semibold">{t(`${mode}.title`)}</h1>
+          <h1 className="font-title text-title font-medium">{t(`${mode}.title`)}</h1>
           <p className="text-body-sm text-fg-3">{t(`${mode}.description`)}</p>
         </div>
         {mode === "signup" ? (
@@ -138,12 +135,14 @@ export function CredentialsForm({ mode }: { mode: AuthMode }) {
         <Btn primary type="submit" disabled={pending} className="w-full">
           {pending ? t(`${mode}.pending`) : t(`${mode}.submit`)}
         </Btn>
-        <p className="text-body-sm text-fg-3">
-          {t(`${mode}.switchPrompt`)}{" "}
-          <Link href={authSwitchHref(mode === "login" ? "signup" : "login", search)} className="font-medium text-fg-1 underline-offset-2 hover:underline">
-            {t(`${mode}.switch`)}
-          </Link>
-        </p>
+        {mode === "signup" || signupOpen ? (
+          <p className="text-body-sm text-fg-3">
+            {t(`${mode}.switchPrompt`)}{" "}
+            <Link href={authSwitchHref(mode === "login" ? "signup" : "login", search)} className="font-medium text-fg-1 underline-offset-2 hover:underline">
+              {t(`${mode}.switch`)}
+            </Link>
+          </p>
+        ) : null}
       </form>
     </main>
   );

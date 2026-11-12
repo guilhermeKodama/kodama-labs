@@ -4,9 +4,10 @@
  * income. Mirrors the investment_ops saved-view schema (S1's
  * ledger/contracts/datasets.ts).
  */
-import type { AllocationClass, Operation } from "./types";
+import { incomeBaseValue, passiveIncomeBars, type IncomeBasis, type PassiveSeries } from "./passive-income";
+import type { Operation } from "./types";
 
-export const OPS_GROUP_KEYS = ["month", "type", "allocationClass", "holdingId", "accountId", "none"] as const;
+export const OPS_GROUP_KEYS = ["month", "type", "incomeType", "origin", "allocationClass", "holdingId", "accountId", "none"] as const;
 export type OpsGroupBy = (typeof OPS_GROUP_KEYS)[number];
 export const OPS_FILTER_FIELDS = ["type", "incomeType", "accountId", "holdingId", "entityId", "allocationClass"] as const;
 export type OpsFilterField = (typeof OPS_FILTER_FIELDS)[number];
@@ -31,6 +32,8 @@ export interface OpsViewConfig {
   series: OpsGroupBy;
   columns: string[];
   sort: { field: "date" | "totalAmount"; dir: "asc" | "desc" };
+  /** Net is what landed; gross adds the tax withheld. */
+  basis: IncomeBasis;
   chart?: unknown;
 }
 
@@ -39,9 +42,10 @@ export const INCOME_12M_CONFIG: OpsViewConfig = {
   period: { preset: "last_12m", offset: 0 },
   filters: [{ field: "type", op: "in", values: [...INCOME_TYPES] }],
   groupBy: "month",
-  series: "none",
+  series: "origin",
   columns: [...OPS_COLUMNS],
   sort: { field: "date", dir: "desc" },
+  basis: "net",
 };
 
 export const OPERATIONS_CONFIG: OpsViewConfig = {
@@ -52,6 +56,7 @@ export const OPERATIONS_CONFIG: OpsViewConfig = {
   series: "none",
   columns: [...OPS_COLUMNS],
   sort: { field: "date", dir: "desc" },
+  basis: "net",
 };
 
 export function normalizeOpsConfig(raw: unknown): OpsViewConfig {
@@ -67,6 +72,7 @@ export function normalizeOpsConfig(raw: unknown): OpsViewConfig {
     series: key(c.series),
     columns: Array.isArray(c.columns) ? c.columns : [...OPS_COLUMNS],
     sort: { field: c.sort?.field === "totalAmount" ? "totalAmount" : "date", dir: c.sort?.dir === "asc" ? "asc" : "desc" },
+    basis: c.basis === "gross" ? "gross" : "net",
     ...(c.chart !== undefined && { chart: c.chart }),
   };
 }
@@ -137,10 +143,10 @@ export function filterOps(ops: readonly Operation[], config: OpsViewConfig, toda
 
 export const isIncome = (op: Pick<Operation, "type">) => (INCOME_TYPES as readonly string[]).includes(op.type);
 
-/** What an operation is worth in the base currency: income net of tax withheld, other operations their gross amount. */
-export function opBaseValue(op: Operation, rateFor: (currency: string | null) => number): number {
-  const amount = isIncome(op) ? op.totalAmount - op.taxWithheld : op.totalAmount;
-  return amount * rateFor(op.currency);
+/** What an operation is worth in the base currency. Income uses the stored base amount when the cash leg has one. */
+export function opBaseValue(op: Operation, rateFor: (currency: string | null) => number, basis: IncomeBasis = "net"): number {
+  if (!isIncome(op)) return op.totalAmount * rateFor(op.currency);
+  return incomeBaseValue(op, basis, rateFor);
 }
 
 /** "YYYY-MM" of every month in a range, oldest first. */
@@ -164,39 +170,24 @@ export function monthsBetween(from: string, to: string): string[] {
 export interface MonthlyBars {
   /** "YYYY-MM", oldest first, zero-filled. */
   months: string[];
-  /** Series keys (allocation classes, or "total"), in display order. */
+  /** Series keys in display order. "total" when the view has no series. */
   series: string[];
-  /** One row per month: { month, [series]: value }. */
-  rows: ({ month: string } & Record<string, number | string>)[];
+  rows: { month: string; total: number; tax: number; values: Record<string, number>; taxes: Record<string, number> }[];
   total: number;
+  tax: number;
 }
 
-const CLASS_ORDER: readonly AllocationClass[] = ["fixed_income", "br_stocks", "fii", "international", "crypto", "cash"];
+function seriesMode(series: OpsViewConfig["series"]): PassiveSeries {
+  return series === "incomeType" || series === "origin" || series === "allocationClass" ? series : "none";
+}
 
 /**
  * Monthly bars of the view's operations (Proventos 12m): months of the
- * period zero-filled (the last 12 when the period is open), stacked by
- * allocation class when the view's series says so.
+ * period zero-filled (the last 12 when the period is open). Series stack
+ * by income type, by origin (each FII, then BDR / Exterior / Renda fixa),
+ * or by allocation class. Income with no holding is "unlinked", not cash.
  */
 export function monthlyBars(ops: readonly Operation[], config: OpsViewConfig, today: string, rateFor: (currency: string | null) => number): MonthlyBars {
   const range = opsPeriodRange(config.period, today) ?? opsPeriodRange({ preset: "last_12m" }, today)!;
-  const months = monthsBetween(range.from, range.to);
-  const byClass = config.series === "allocationClass";
-  const series = byClass ? CLASS_ORDER.filter((c) => ops.some((op) => op.allocationClass === c)) : ["total"];
-  const rows = months.map((month) => {
-    const row: { month: string } & Record<string, number | string> = { month };
-    for (const s of series) row[s] = 0;
-    return row;
-  });
-  const index = new Map(months.map((m, i) => [m, i]));
-  let total = 0;
-  for (const op of ops) {
-    const i = index.get(op.date.slice(0, 7));
-    if (i === undefined) continue;
-    const key = byClass ? (op.allocationClass ?? "cash") : "total";
-    const value = opBaseValue(op, rateFor);
-    rows[i][key] = Number(rows[i][key] ?? 0) + value;
-    total += value;
-  }
-  return { months, series, rows, total };
+  return passiveIncomeBars(ops, { from: range.from, to: range.to, series: seriesMode(config.series), basis: config.basis ?? "net", rateFor });
 }

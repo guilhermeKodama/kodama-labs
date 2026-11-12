@@ -1,0 +1,175 @@
+# Push deploy for kodama-ai. This file is the one on main (workflow_run
+# runs the default-branch workflow). It never runs on pull_request.
+# The runner does not check out the commit being deployed. That SHA is only
+# an argument to SSH. github.sha here is the workflow commit, used solely to
+# read render-summary.py.
+name: deploy
+
+on:
+  workflow_run:
+    workflows: [ci]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      command:
+        description: What to run on kodama-ai
+        type: choice
+        default: deploy
+        options:
+          - deploy
+          - rollback
+          - status
+      sha:
+        description: 40 lowercase hex already on main. Empty deploys the current main SHA.
+        required: false
+        type: string
+      app:
+        description: Image to roll back
+        type: choice
+        default: capital
+        options:
+          - capital
+          - careers
+          - attention
+          - sentinel
+          - kodamalabs
+          - monitoring
+
+permissions:
+  contents: read
+  deployments: write
+
+concurrency:
+  group: deploy-prod
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: deploy
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    environment: production
+    if: >-
+      (github.event_name == 'workflow_run'
+        && github.event.workflow_run.event == 'push'
+        && github.event.workflow_run.head_branch == 'main'
+        && github.event.workflow_run.conclusion == 'success'
+        && github.event.workflow_run.head_repository.full_name == github.repository)
+      || (github.event_name == 'workflow_dispatch'
+        && github.ref == 'refs/heads/main')
+    steps:
+      - name: Refuse unless this run is still main
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          REF: ${{ github.ref }}
+          REPO: ${{ github.repository }}
+          HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
+          HEAD_REPO: ${{ github.event.workflow_run.head_repository.full_name }}
+          WORKFLOW_EVENT: ${{ github.event.workflow_run.event }}
+          CONCLUSION: ${{ github.event.workflow_run.conclusion }}
+        run: |
+          set -euo pipefail
+          if [[ "$EVENT_NAME" == "workflow_run" ]]; then
+            [[ "$WORKFLOW_EVENT" == "push" ]] || { echo "not a push"; exit 2; }
+            [[ "$HEAD_BRANCH" == "main" ]] || { echo "not main"; exit 2; }
+            [[ "$CONCLUSION" == "success" ]] || { echo "ci did not succeed"; exit 2; }
+            [[ "$HEAD_REPO" == "$REPO" ]] || { echo "not this repository"; exit 2; }
+          elif [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then
+            [[ "$REF" == "refs/heads/main" ]] || { echo "dispatch is main only"; exit 2; }
+          else
+            echo "event is not allowed"
+            exit 2
+          fi
+
+      - name: Checkout the workflow commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+          fetch-depth: 1
+
+      - name: Tailscale
+        uses: tailscale/github-action@d1b6cd204f8dceda5b3eaad7f1f767be390056cd # v4.2.0
+        with:
+          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
+          tags: tag:ci-deploy
+          version: "1.94.2"
+          ping: "100.109.102.38"
+          hostname: ci-${{ github.run_id }}
+
+      - name: SSH
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          RUN_SHA: ${{ github.sha }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+          INPUT_COMMAND: ${{ inputs.command }}
+          INPUT_SHA: ${{ inputs.sha }}
+          INPUT_APP: ${{ inputs.app }}
+          SSH_KEY: ${{ secrets.KODAMA_AI_SSH_KEY }}
+          KNOWN_HOSTS: ${{ secrets.KODAMA_AI_KNOWN_HOSTS }}
+          DEPLOY_LOG: ${{ runner.temp }}/deploy.log
+        run: |
+          set -euo pipefail
+          set +x
+          remote=""
+          if [[ "$EVENT_NAME" == "workflow_run" ]]; then
+            sha="$HEAD_SHA"
+            [[ "$sha" =~ ^[0-9a-f]{40}$ ]] || { echo "head sha is not 40 hex"; exit 2; }
+            remote="deploy ${sha}"
+          elif [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then
+            case "${INPUT_COMMAND:-deploy}" in
+              deploy)
+                sha="${INPUT_SHA:-$RUN_SHA}"
+                [[ "$sha" =~ ^[0-9a-f]{40}$ ]] || { echo "sha is not 40 hex"; exit 2; }
+                remote="deploy ${sha}"
+                ;;
+              rollback)
+                case "$INPUT_APP" in
+                  capital|careers|attention|sentinel|kodamalabs|monitoring) ;;
+                  *) echo "app is not allowed"; exit 2 ;;
+                esac
+                remote="rollback ${INPUT_APP}"
+                ;;
+              status)
+                remote="status"
+                ;;
+              *)
+                echo "command is not allowed"
+                exit 2
+                ;;
+            esac
+          else
+            echo "event is not allowed"
+            exit 2
+          fi
+          if [[ ! "$remote" =~ ^deploy\ [0-9a-f]{40}$ \
+                && ! "$remote" =~ ^rollback\ (capital|careers|attention|sentinel|kodamalabs|monitoring)$ \
+                && "$remote" != "status" ]]; then
+            echo "refusing remote command"
+            exit 2
+          fi
+          umask 077
+          mkdir -p "$HOME/.ssh"
+          printf '%s\n' "$KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
+          printf '%s\n' "$SSH_KEY" > "$HOME/.ssh/kodama_deploy"
+          chmod 600 "$HOME/.ssh/kodama_deploy" "$HOME/.ssh/known_hosts"
+          unset SSH_KEY KNOWN_HOSTS
+          set +e
+          ssh -i "$HOME/.ssh/kodama_deploy" \
+            -o BatchMode=yes \
+            -o IdentitiesOnly=yes \
+            -o StrictHostKeyChecking=yes \
+            -o UserKnownHostsFile="$HOME/.ssh/known_hosts" \
+            -o ConnectTimeout=20 \
+            kodama@100.109.102.38 \
+            "$remote" 2>&1 | tee "$DEPLOY_LOG"
+          rc=${PIPESTATUS[0]}
+          set -e
+          exit "$rc"
+
+      - name: Record the per-app summary
+        if: always()
+        env:
+          DEPLOY_LOG: ${{ runner.temp }}/deploy.log
+        run: python3 infrastructure/deploy/render-summary.py || echo "summary was not written"

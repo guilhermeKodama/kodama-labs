@@ -9,6 +9,8 @@ import { jsonBody, toHttp, v2Handler, v2Responses } from "@capital/server/lib/v2
 import { DATE_FORMATS, NUMBER_FORMATS, TEXT_SIZES, THEMES, normalizeNumberFormat } from "@capital/server/modules/users/lib/preferences";
 import { getMe, serializeUser, updatePreferences } from "@capital/server/modules/users/services/me";
 import { SESSION_COOKIE_NAME, SESSION_EXPIRY_DAYS } from "../../constants";
+import { clientAddress, loginThrottle } from "../../lib/login-throttle";
+import { signupIsOpen } from "../../lib/signup-gate";
 import { login } from "../../services/login";
 import { createSession, deleteSession } from "../../services/session";
 import { signup } from "../../services/signup";
@@ -40,7 +42,7 @@ const loginRoute = createRoute({
   method: "post",
   path: "/v2/auth/login",
   tags,
-  summary: "Log in with email and password",
+  summary: "Log in with email and password; 429 auth.too_many_attempts after repeated failures",
   request: jsonBody(z.object({ email: z.string().email(), password: z.string().min(1) })),
   responses: v2Responses,
 });
@@ -48,7 +50,7 @@ const signupRoute = createRoute({
   method: "post",
   path: "/v2/auth/signup",
   tags,
-  summary: "Create an account (PF entity, main account, categories, currencies, built-in view)",
+  summary: "Create an account (PF entity, main account, categories, currencies, built-in view); 403 auth.signup_closed unless SIGNUP_OPEN",
   request: jsonBody(
     z.object({
       email: z.string().email(),
@@ -92,16 +94,28 @@ const patchMeRoute = createRoute({
 
 export const v2Auth = createRouter()
   .openapi(loginRoute, async (c) => {
+    const body = c.req.valid("json");
+    const address = clientAddress((name) => c.req.header(name));
+    const now = Date.now();
+    const wait = loginThrottle.retryAfterMs(address, body.email, now);
+    if (wait > 0) {
+      c.header("Retry-After", String(Math.ceil(wait / 1000)));
+      throw new HttpError(429, "Too many failed sign-in attempts", { code: "auth.too_many_attempts", params: { minutes: Math.ceil(wait / 60_000) } });
+    }
+    let user;
     try {
-      const user = await login(c.req.valid("json"), prisma);
-      setSessionCookie(c, await createSession(user.id, prisma));
-      setLocaleCookie(c, user.locale);
-      return c.json(serializeUser(user) as never, 200);
+      user = await login(body, prisma);
     } catch {
+      loginThrottle.recordFailure(address, body.email, now);
       throw new HttpError(401, "Invalid email or password", { code: "auth.invalid_credentials" });
     }
+    loginThrottle.recordSuccess(address, body.email);
+    setSessionCookie(c, await createSession(user.id, prisma));
+    setLocaleCookie(c, user.locale);
+    return c.json(serializeUser(user) as never, 200);
   })
   .openapi(signupRoute, async (c) => {
+    if (!signupIsOpen()) throw new HttpError(403, "Sign-up is closed", { code: "auth.signup_closed" });
     try {
       const body = c.req.valid("json");
       const user = await signup({ ...body, locale: signupLocale(c, body.locale) }, prisma);

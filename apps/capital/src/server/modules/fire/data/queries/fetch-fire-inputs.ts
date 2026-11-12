@@ -1,5 +1,6 @@
 import type { DbClient } from "@capital/server/lib/prisma";
 import { getUserToday } from "@capital/server/lib/date-utils";
+import { PORTFOLIO_BROKERS, PORTFOLIO_HOLDINGS } from "@capital/server/modules/investments/services/portfolio-history";
 import { accountBalances } from "@capital/server/modules/ledger/services/accounts";
 
 export interface FireInputHolding {
@@ -59,7 +60,8 @@ export async function fetchFireInputs(
   // deposit transfers into a brokerage, plus direct investment outflows.
   const [holdings, brokers, currencies, expenseRows, contributionRows, incomeRows] = await Promise.all([
     db.investmentHolding.findMany({
-      where: { account: { userId }, isActive: true },
+      // The Carteira's population: active holdings on brokers that are not archived.
+      where: { ...PORTFOLIO_HOLDINGS, account: { ...PORTFOLIO_HOLDINGS.account, userId } },
       select: {
         currentQuantity: true,
         currentPrice: true,
@@ -69,7 +71,7 @@ export async function fetchFireInputs(
       },
     }),
     db.account.findMany({
-      where: { userId, type: "brokerage", archivedAt: null },
+      where: { userId, ...PORTFOLIO_BROKERS },
       select: { id: true, currency: true, entity: { select: { kind: true } } },
     }),
     db.currency.findMany({ where: { userId }, select: { code: true, manualRate: true } }),

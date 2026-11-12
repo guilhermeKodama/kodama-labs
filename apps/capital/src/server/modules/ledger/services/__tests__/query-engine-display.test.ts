@@ -150,7 +150,7 @@ describe("display rows", () => {
 
   it("counts distinct values the way the table groups them (Únicos)", async () => {
     // September: Salary, Groceries, Software, the neutral transfer (Transferência), the aporte and the buy
-    // leg (Investimentos) and the uncategorized dividend (Sem categoria); entities PJ, PF and PJ→PF.
+    // leg (Investimentos) and the dividend (Dividendos); entities PJ, PF and PJ→PF.
     const r = await display({
       period: sept,
       includeRows: false,
@@ -239,17 +239,21 @@ describe("display rows", () => {
     const p = r.pivot!;
     expect(p.colKeys).toEqual([f.pjId, f.pfId]);
     expect(p.cells[p.rowKeys.indexOf(f.categories.Groceries)]).toEqual([null, -300]);
-    // The uncategorized aporte is Investimentos; Sem categoria keeps the dividend only.
+    // The uncategorized aporte is Investimentos. The dividend is Dividendos, not Sem categoria.
+    const proventos = await prisma.category.findFirstOrThrow({ where: { userId: USER, systemKey: "dividends" } });
     expect(p.cells[p.rowKeys.indexOf(FLOW_CATEGORY_KEYS.invest)]).toEqual([null, -1000]);
-    expect(p.cells[p.rowKeys.indexOf(null)]).toEqual([null, 50]);
+    expect(p.cells[p.rowKeys.indexOf(proventos.id)]).toEqual([null, 50]);
+    expect(p.rowKeys).not.toContain(null);
     expect(p.grandTotal).toBe(8700);
   });
 
   it("groups uncategorized aportes and counted transfers apart from Sem categoria, and filters back to them", async () => {
     const byCategory = await display({ period: sept, rowsScope: "counted", groupBy: [{ field: "categoryId" }], includeRows: false });
+    const proventos = await prisma.category.findFirstOrThrow({ where: { userId: USER, systemKey: "dividends" } });
     const sums = new Map(byCategory.groups.map((g) => [g.key, g.values["sum:amountBase"]]));
     expect(sums.get(FLOW_CATEGORY_KEYS.invest)).toBe(-1000);
-    expect(sums.get(null)).toBe(50);
+    expect(sums.get(proventos.id)).toBe(50);
+    expect(sums.has(null)).toBe(false);
     expect(sums.has(FLOW_CATEGORY_KEYS.transfer)).toBe(false);
 
     // Seen from PF, the profit distribution counts and groups as Transferência.
@@ -262,13 +266,17 @@ describe("display rows", () => {
     expect(invest.rows.map((x) => x.flowKind)).toEqual(["invest", "invest"]);
     expect(invest.summary).toMatchObject({ investment: 1000, count: 2 });
 
-    // Sem categoria (null) is uncategorized income and expenses only; isNull still matches every empty category.
+    // Sem categoria (null) is uncategorized income and expenses only. The dividend is Dividendos.
+    // isNull still matches every stored empty category (the aporte, the buy leg, the transfer).
     const none = await display({ period: sept, filters: [{ field: "categoryId", op: "in", values: [null] }] });
-    expect(none.rows.map((x) => [x.flowKind, x.displayAmount])).toEqual([["in", 50]]);
+    expect(none.rows).toEqual([]);
+    const dividend = await display({ period: sept, filters: [{ field: "categoryId", op: "in", values: [proventos.id] }] });
+    expect(dividend.rows.map((x) => [x.flowKind, x.displayAmount, x.categoryId])).toEqual([["in", 50, proventos.id]]);
+    expect(dividend.summary).toMatchObject({ income: 50, expense: 0, investment: 0 });
     const notNone = await display({ period: sept, includeRows: false, filters: [{ field: "categoryId", op: "nin", values: [null, FLOW_CATEGORY_KEYS.invest] }] });
-    expect(notNone.totals?.count).toBe(4);
+    expect(notNone.totals?.count).toBe(5);
     const empty = await display({ period: sept, includeRows: false, filters: [{ field: "categoryId", op: "isNull" }] });
-    expect(empty.totals?.count).toBe(4);
+    expect(empty.totals?.count).toBe(3);
   });
 
   it("skips totals for a cheap search", async () => {

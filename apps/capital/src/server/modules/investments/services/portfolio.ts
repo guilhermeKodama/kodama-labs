@@ -1,6 +1,6 @@
 import type { DbClient } from "@capital/server/lib/prisma";
 import { Prisma } from "@/generated/prisma";
-import type { Account, AllocationClass, AssetClass, FixedIncomeSubType, IncomeType, InvestmentOperation, InvestmentTransactionType } from "@/generated/prisma";
+import type { Account, AllocationClass, AssetClass, DividendOrigin, FixedIncomeSubType, IncomeType, InvestmentOperation, InvestmentTransactionType } from "@/generated/prisma";
 import { formatDateOnly, parseLocalDate } from "@capital/server/lib/date-utils";
 import { entityScopeWhere } from "@capital/server/lib/entity-scope";
 import { ALLOCATION_CLASSES, dominantEtfCurrency, holdingAllocationClass, toAllocationTargets, type TargetInput } from "@capital/server/modules/investments/lib/allocation-class";
@@ -13,6 +13,7 @@ import { accountBalances, getOwnedAccount } from "@capital/server/modules/ledger
 import { createEntry, softDeleteEntries } from "@capital/server/modules/ledger/services/entries";
 import { getDefaultAccount } from "@capital/server/modules/ledger/services/entities";
 import { inTransaction, recordMutation, snapshot, type MutationRecordInput } from "@capital/server/modules/ledger/services/mutations";
+import { resolveIncomeCashCategory } from "../lib/income-cash-category";
 import { benchmarks12m } from "./benchmarks";
 import { convertAmount, fundBroker, withdrawFromBroker } from "./funding";
 import { PORTFOLIO_BROKERS, portfolioHistory } from "./portfolio-history";
@@ -82,7 +83,7 @@ export async function createHolding(userId: string, input: HoldingInput, db: DbC
 export async function updateHolding(
   userId: string,
   holdingId: string,
-  patch: Partial<Omit<HoldingInput, "accountId">> & { isActive?: boolean },
+  patch: Partial<Omit<HoldingInput, "accountId">> & { isActive?: boolean; /** Calendar day stored as lastPriceUpdate. Omitted, a price change is stamped now. */ priceAsOf?: string | null },
   db: DbClient,
   opts: OperationWriteOptions = {}
 ) {
@@ -98,7 +99,10 @@ export async function updateHolding(
         ...(patch.ticker !== undefined && { ticker: patch.ticker ? patch.ticker.toUpperCase() : null }),
         ...(patch.name !== undefined && { name: patch.name }),
         ...(patch.currency !== undefined && { currency: patch.currency }),
-        ...(patch.currentPrice !== undefined && { currentPrice: patch.currentPrice, lastPriceUpdate: new Date() }),
+        ...(patch.currentPrice !== undefined && {
+          currentPrice: patch.currentPrice,
+          lastPriceUpdate: patch.priceAsOf ? parseLocalDate(patch.priceAsOf) : new Date(),
+        }),
         ...(patch.isActive !== undefined && { isActive: patch.isActive }),
       },
     });
@@ -114,12 +118,30 @@ export interface PortfolioScope {
   entityIds?: string[] | null;
 }
 
-export async function listHoldings(userId: string, db: DbClient, opts: PortfolioScope & { accountId?: string; includeInactive?: boolean; includeArchivedAccounts?: boolean } = {}) {
+export async function listHoldings(
+  userId: string,
+  db: DbClient,
+  opts: PortfolioScope & {
+    accountId?: string;
+    includeInactive?: boolean;
+    includeArchivedAccounts?: boolean;
+    /** Case-insensitive exact ticker. */
+    ticker?: string;
+    /** Case-insensitive contains on ticker or name. */
+    query?: string;
+  } = {},
+) {
+  const ticker = opts.ticker?.trim();
+  const query = opts.query?.trim();
   return db.investmentHolding.findMany({
     where: {
       account: { userId, ...entityScopeWhere(opts.entityIds ?? null), ...(opts.includeArchivedAccounts === false && { archivedAt: null }) },
       ...(opts.accountId && { accountId: opts.accountId }),
       ...(opts.includeInactive ? {} : { isActive: true }),
+      ...(ticker && { ticker: { equals: ticker, mode: "insensitive" } }),
+      ...(query && {
+        OR: [{ ticker: { contains: query, mode: "insensitive" } }, { name: { contains: query, mode: "insensitive" } }],
+      }),
     },
     include: { account: { select: { id: true, name: true, entityId: true, currency: true, institution: true } } },
     orderBy: [{ assetClass: "asc" }, { ticker: "asc" }, { name: "asc" }],
@@ -171,7 +193,7 @@ export function isIncomeOperation(type: InvestmentTransactionType): boolean {
 
 /** The operation type an income type is recorded as (interest is a yield, the rest dividends). */
 export function incomeOperationType(incomeType: IncomeType): InvestmentTransactionType {
-  return incomeType === "interest" ? "yield_payment" : "dividend";
+  return incomeType === "interest" || incomeType === "fixed_income_interest" ? "yield_payment" : "dividend";
 }
 
 /**
@@ -211,6 +233,7 @@ const INCOME_LABEL: Record<IncomeType, string> = {
   jcp: "JCP",
   fii_income: "Rendimento FII",
   interest: "Juros",
+  fixed_income_interest: "Juros",
 };
 
 const opLabel = (type: InvestmentTransactionType, holding: { ticker: string | null; name: string }, incomeType?: IncomeType | null) =>
@@ -231,8 +254,23 @@ export interface OperationInput {
   incomeType?: IncomeType | null;
   /** Income only: tax withheld at source; the cash credited is totalAmount - taxWithheld. */
   taxWithheld?: number;
-  /** Income only: credit the cash to this checking or cash account (an entry in Transações) instead of the broker. */
+  /**
+   * Income only: credit the cash to this checking, cash, or brokerage account
+   * instead of leaving it on the holding's broker. A brokerage is that
+   * broker's cash balance (saldo em conta): the same ledger account buys,
+   * sells and aportes already move.
+   */
   creditToAccountId?: string | null;
+  /** Dividends only. Ignored for every other income type. */
+  dividendOrigin?: DividendOrigin | null;
+  /** Cash-leg text. Defaults to the generated label ("Dividendo PETR4"). */
+  description?: string | null;
+  /**
+   * Net cash credited, in the credit account's currency, at this stored rate
+   * (base per 1 unit of that currency). Set by record_dividend so a past
+   * date keeps the rate of that date instead of today's.
+   */
+  cashCredit?: { amount: number; exchangeRate: number } | null;
   /** Pay a buy from a checking account: books an investment_deposit transfer first (across entities, through the broker entity's main checking; see fundBroker). */
   fundFromAccountId?: string | null;
   /** With fundFromAccountId in another currency: the amount debited from it (default: converted at today's rate). */
@@ -249,12 +287,26 @@ export interface OperationWriteOptions {
 
 type HoldingWithAccount = Awaited<ReturnType<typeof getOwnedHolding>>;
 
-/** The checking or cash account an income operation is credited to. */
-async function creditAccount(userId: string, accountId: string, db: DbClient) {
-  const account = await getOwnedAccount(userId, accountId, db);
-  if (account.type !== "checking" && account.type !== "cash") {
-    throw new LedgerError("Income can only be credited to a checking or cash account", 422, { code: "operation.credit_account_invalid" });
+const INCOME_ACCOUNT_TYPES = new Set(["checking", "cash", "brokerage"]);
+
+/**
+ * A provento is credited to a checking account, a cash account, or a
+ * brokerage. The brokerage already holds cash: its balance is the sum of
+ * its ledger entries (buys debit it, sells and aportes credit it), and
+ * list_account_balances reports that sum. FII rendimentos land in that
+ * balance (saldo em conta). A dedicated cash sub-account would sit beside
+ * those legs and count the same money twice.
+ */
+export function assertIncomeAccountType(account: { type: string }) {
+  if (!INCOME_ACCOUNT_TYPES.has(account.type)) {
+    throw new LedgerError("Income can only be credited to a checking, cash, or brokerage account", 422, { code: "operation.credit_account_invalid" });
   }
+}
+
+/** The account an income operation is credited to. Archived accounts are refused; the type check is assertIncomeAccountType. */
+export async function incomeCreditAccount(userId: string, accountId: string, db: DbClient) {
+  const account = await getOwnedAccount(userId, accountId, db);
+  assertIncomeAccountType(account);
   if (account.archivedAt) throw new LedgerError(`Account "${account.name}" is archived`, 422, { code: "account.archived", params: { name: account.name } });
   return account;
 }
@@ -274,7 +326,7 @@ function assertNoNewOversell(before: Set<string>, after: readonly string[]) {
   if (after.some((id) => !before.has(id))) throw new LedgerError("The sale is larger than the position", 422, { code: "holding.oversell" });
 }
 
-/** The operation's cash leg on `account` (the broker, or the bank an income is credited to), converted at today's rate. */
+/** The operation's cash leg on `account` (the broker, or the bank an income is credited to), converted at today's rate unless `cashCredit` already fixed the amount and the rate. */
 async function createCashLeg(
   tx: DbClient,
   userId: string,
@@ -285,10 +337,12 @@ async function createCashLeg(
   date: Date,
   importId: string | null,
   fx: FxContext,
-  records: MutationRecordInput[]
+  records: MutationRecordInput[],
+  cashCredit?: { amount: number; exchangeRate: number } | null,
+  categoryId?: string | null,
 ) {
-  const rate = fx.rateFor(account.currency);
-  const amount = round(convertAmount(impact, holding.currency, account.currency, fx), 4);
+  const rate = cashCredit?.exchangeRate ?? fx.rateFor(account.currency);
+  const amount = cashCredit ? round(cashCredit.amount, 4) : round(convertAmount(impact, holding.currency, account.currency, fx), 4);
   const leg = await tx.ledgerEntry.create({
     data: {
       userId,
@@ -303,6 +357,7 @@ async function createCashLeg(
       effectiveDate: date,
       description: label,
       importId,
+      categoryId: categoryId ?? null,
       metadata: { holdingId: holding.id },
     },
   });
@@ -316,6 +371,29 @@ async function trashCashLeg(tx: DbClient, userId: string, entryId: string, recor
   if (!leg) return;
   const trashed = await tx.ledgerEntry.update({ where: { id: leg.id }, data: { deletedAt: new Date() } });
   records.push({ model: "LedgerEntry", recordId: leg.id, before: snapshot(leg), after: snapshot(trashed) });
+}
+
+/**
+ * Income adopted by convertIncomeToDividend stays kind "income". Dropping or
+ * editing that operation must not delete it or rewrite its amount: unlink it
+ * and leave a plain income row. A new cash leg here would credit the money twice.
+ */
+async function releaseAdoptedIncome(tx: DbClient, userId: string, entryId: string, records: MutationRecordInput[]) {
+  const leg = await tx.ledgerEntry.findFirst({ where: { id: entryId, userId, deletedAt: null } });
+  if (!leg || leg.kind !== "income") return false;
+  const released = await tx.ledgerEntry.update({ where: { id: leg.id }, data: { metadata: plainIncomeMetadata(leg.metadata) } });
+  records.push({ model: "LedgerEntry", recordId: leg.id, before: snapshot(leg), after: snapshot(released) });
+  return true;
+}
+
+function plainIncomeMetadata(metadata: Prisma.JsonValue | null): Prisma.InputJsonValue | typeof Prisma.DbNull {
+  if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) return Prisma.DbNull;
+  const rest: Record<string, Prisma.JsonValue> = {};
+  for (const [key, value] of Object.entries(metadata)) {
+    if (key === "holdingId" || key === "investmentOperationId" || value === undefined) continue;
+    rest[key] = value;
+  }
+  return Object.keys(rest).length > 0 ? rest : Prisma.DbNull;
 }
 
 export interface RecordOperationOptions extends OperationWriteOptions {
@@ -340,8 +418,8 @@ export async function recordOperation(userId: string, input: OperationInput, db:
     const fx = await loadFx(userId, tx);
     const date = parseLocalDate(input.date);
     const impact = cashImpact(input.type, input.totalAmount, fees, taxWithheld);
-    const legAccount = input.creditToAccountId ? await creditAccount(userId, input.creditToAccountId, tx) : holding.account;
-    const label = opLabel(input.type, holding, incomeType);
+    const legAccount = input.creditToAccountId ? await incomeCreditAccount(userId, input.creditToAccountId, tx) : holding.account;
+    const label = input.description?.trim() || opLabel(input.type, holding, incomeType);
     const oversoldBefore = input.importId ? null : await oversoldOperations(holding.id, tx);
 
     let fundingGroupId: string | null = opts.fundingGroupId ?? null;
@@ -363,7 +441,11 @@ export async function recordOperation(userId: string, input: OperationInput, db:
       fundingGroupId = funded.depositGroupId;
     }
 
-    const cashEntryId = impact !== 0 ? (await createCashLeg(tx, userId, holding, legAccount, label, impact, date, input.importId ?? null, fx, records)).id : null;
+    // Income cash is still kind investment (one leg, linked by cashEntryId).
+    // The category is what Fluxo de Caixa groups: Proventos or Rendimentos,
+    // never "Sem categoria". Buys and sales stay uncategorized.
+    const cashCategory = await resolveIncomeCashCategory(userId, incomeType, input.type, tx);
+    const cashEntryId = impact !== 0 ? (await createCashLeg(tx, userId, holding, legAccount, label, impact, date, input.importId ?? null, fx, records, input.cashCredit, cashCategory?.id ?? null)).id : null;
 
     const op = await tx.investmentOperation.create({
       data: {
@@ -375,6 +457,7 @@ export async function recordOperation(userId: string, input: OperationInput, db:
         fees,
         incomeType,
         taxWithheld,
+        dividendOrigin: incomeType === "dividend" ? input.dividendOrigin ?? null : null,
         date,
         notes: input.notes ?? null,
         externalId: input.externalId ?? null,
@@ -395,8 +478,10 @@ export type OperationPatch = Partial<Omit<OperationInput, "holdingId" | "fundFro
 /**
  * Updates an operation and keeps its cash leg in step: moved (to another
  * amount, date, or account for an income credited elsewhere), created, or
- * trashed when it no longer moves cash. An edit that makes a sale exceed
- * the position is refused (422 holding.oversell).
+ * trashed when it no longer moves cash. Income adopted by
+ * convertIncomeToDividend is unlinked and left as plain income instead of
+ * being rewritten or trashed. An edit that makes a sale exceed the
+ * position is refused (422 holding.oversell).
  */
 export async function updateOperation(userId: string, operationId: string, patch: OperationPatch, db: DbClient, opts: OperationWriteOptions = {}) {
   return inTransaction(db, async (tx) => {
@@ -429,14 +514,17 @@ export async function updateOperation(userId: string, operationId: string, patch
       ? holding.account
       : patch.creditToAccountId !== undefined
         ? patch.creditToAccountId
-          ? await creditAccount(userId, patch.creditToAccountId, tx)
+          ? await incomeCreditAccount(userId, patch.creditToAccountId, tx)
           : holding.account
         : leg && leg.accountId !== holding.accountId
           ? await getOwnedAccount(userId, leg.accountId, tx)
           : holding.account;
 
     let cashEntryId = before.cashEntryId;
-    if (cashEntryId && impact === 0) {
+    if (leg && leg.kind === "income" && !leg.deletedAt) {
+      await releaseAdoptedIncome(tx, userId, leg.id, records);
+      cashEntryId = null;
+    } else if (cashEntryId && impact === 0) {
       await trashCashLeg(tx, userId, cashEntryId, records);
       cashEntryId = null;
     } else if (leg) {
@@ -444,6 +532,9 @@ export async function updateOperation(userId: string, operationId: string, patch
       const currency = moving ? target.currency : leg.currency;
       const rate = moving ? fx.rateFor(target.currency) : toNumber(leg.exchangeRate);
       const amount = round(convertAmount(impact, holding.currency, currency, fx), 4);
+      // Fill a missing category only. A category already on the leg stays,
+      // including one the user chose that is not Proventos.
+      const cashCategory = income && !leg.categoryId ? await resolveIncomeCashCategory(userId, merged.incomeType, merged.type, tx) : null;
       const moved = await tx.ledgerEntry.update({
         where: { id: leg.id },
         data: {
@@ -452,13 +543,15 @@ export async function updateOperation(userId: string, operationId: string, patch
           date: merged.date,
           effectiveDate: merged.date,
           description: label,
+          ...(cashCategory && { categoryId: cashCategory.id }),
           ...(moving && { accountId: target.id, entityId: target.entityId, currency, exchangeRate: rate }),
         },
       });
       records.push({ model: "LedgerEntry", recordId: leg.id, before: snapshot(leg), after: snapshot(moved) });
     } else if (impact !== 0 && cashImpact(before.type, before.totalAmount, before.fees, before.taxWithheld) === 0) {
       // Only an operation that starts moving cash gets a leg; one recorded without a leg stays without.
-      cashEntryId = (await createCashLeg(tx, userId, holding, target, label, impact, merged.date, null, fx, records)).id;
+      const cashCategory = await resolveIncomeCashCategory(userId, merged.incomeType, merged.type, tx);
+      cashEntryId = (await createCashLeg(tx, userId, holding, target, label, impact, merged.date, null, fx, records, null, cashCategory?.id ?? null)).id;
     }
 
     const updated = await tx.investmentOperation.update({
@@ -475,6 +568,8 @@ export async function updateOperation(userId: string, operationId: string, patch
         ...(patch.pricePerUnit !== undefined && { pricePerUnit: patch.pricePerUnit }),
         ...(patch.notes !== undefined && { notes: patch.notes }),
         ...(patch.externalId !== undefined && { externalId: patch.externalId }),
+        // A person's edit wins over the next Pluggy sync.
+        syncLocked: true,
       },
     });
     records.push({ model: "InvestmentOperation", recordId: before.id, before: snapshot(before), after: snapshot(updated) });
@@ -494,7 +589,9 @@ export interface DeleteOperationOptions extends OperationWriteOptions {
  * Deletes an operation in one undo batch: the row is removed (undo
  * re-creates it from its snapshot), its cash leg goes to the trash, and so
  * does its funding transfer with `withFunding` unless that deposit brought
- * more than the operation spends (a larger aporte stays). The holding is
+ * more than the operation spends (a larger aporte stays). Income that
+ * convertIncomeToDividend adopted is not trashed: the link is removed and
+ * the original transaction stays plain income. The holding is
  * recalculated; a standalone delete that would leave a later sale above the
  * position is refused (422 holding.oversell).
  */
@@ -511,7 +608,10 @@ export async function deleteOperation(userId: string, operationId: string, db: D
 
     await tx.investmentOperation.delete({ where: { id: op.id } });
     records.push({ model: "InvestmentOperation", recordId: op.id, before: snapshot(op), after: null });
-    if (op.cashEntryId) await trashCashLeg(tx, userId, op.cashEntryId, records);
+    if (op.cashEntryId) {
+      const released = await releaseAdoptedIncome(tx, userId, op.cashEntryId, records);
+      if (!released) await trashCashLeg(tx, userId, op.cashEntryId, records);
+    }
 
     let fundingGroupId: string | null = null;
     if (opts.withFunding && op.fundingGroupId) {
@@ -538,9 +638,9 @@ export async function deleteOperation(userId: string, operationId: string, db: D
 /** What serializeOperation reads from the holding and the cash leg. */
 export const OPERATION_INCLUDE = {
   holding: {
-    select: { ticker: true, name: true, assetClass: true, allocationClass: true, currency: true, accountId: true, account: { select: { entityId: true, name: true } } },
+    select: { ticker: true, name: true, assetClass: true, allocationClass: true, currency: true, accountId: true, account: { select: { entityId: true, name: true, entity: { select: { kind: true } } } } },
   },
-  cashEntry: { select: { accountId: true } },
+  cashEntry: { select: { accountId: true, amountBase: true, deletedAt: true } },
 } as const satisfies Prisma.InvestmentOperationInclude;
 
 export interface OperationFilters extends PortfolioScope {
@@ -583,14 +683,19 @@ type SerializableOperation = InvestmentOperation & {
     allocationClass?: AllocationClass | null;
     currency?: string;
     accountId: string;
-    account?: { entityId: string; name: string };
+    account?: { entityId: string; name: string; entity?: { kind: "personal" | "business" } | null };
   };
-  cashEntry?: { accountId: string } | null;
+  cashEntry?: { accountId: string; amountBase?: { toString(): string } | number | null; deletedAt?: Date | null } | null;
 };
 
 export function serializeOperation(op: SerializableOperation) {
   const accountId = op.holding?.accountId ?? null;
-  const cashAccountId = op.cashEntry?.accountId ?? null;
+  const cashAccountId = op.cashEntry && !op.cashEntry.deletedAt ? op.cashEntry.accountId : null;
+  const legBase = op.cashEntry && !op.cashEntry.deletedAt && op.cashEntry.amountBase != null ? toNumber(op.cashEntry.amountBase as never) : null;
+  const netNative = op.totalAmount - op.taxWithheld;
+  const amountBase = isIncomeOperation(op.type) && legBase != null ? legBase : null;
+  const grossBase = amountBase != null && Math.abs(netNative) > 1e-9 ? amountBase * (op.totalAmount / netNative) : amountBase;
+  const taxBase = grossBase != null && amountBase != null ? grossBase - amountBase : null;
   return {
     id: op.id,
     holdingId: op.holdingId,
@@ -604,6 +709,12 @@ export function serializeOperation(op: SerializableOperation) {
     currency: op.holding?.currency ?? null,
     type: op.type,
     incomeType: op.incomeType,
+    dividendOrigin: op.dividendOrigin ?? null,
+    entityKind: op.holding?.account?.entity?.kind ?? null,
+    /** Net in the base currency from the cash leg's stored rate. Null when the operation has no leg. */
+    amountBase,
+    grossBase,
+    taxBase,
     quantity: op.quantity,
     pricePerUnit: op.pricePerUnit,
     totalAmount: op.totalAmount,
@@ -615,7 +726,7 @@ export function serializeOperation(op: SerializableOperation) {
     notes: op.notes,
     externalId: op.externalId,
     cashEntryId: op.cashEntryId,
-    /** The checking or cash account an income was credited to; null when the cash is on the broker. */
+    /** A checking, cash, or other brokerage an income was credited to; null when the cash is on the holding's broker. */
     creditToAccountId: cashAccountId && accountId && cashAccountId !== accountId ? cashAccountId : null,
     fundingGroupId: op.fundingGroupId,
   };

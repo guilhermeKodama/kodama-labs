@@ -12,6 +12,8 @@ export interface BulkCreateTransactionItem {
   isTaxDeductible?: boolean;
   businessId?: string;
   personalAccountId?: string;
+  /** Ledger account that receives the cash. Omit for the entity's main account. */
+  accountId?: string;
 }
 
 export interface BulkCreateResult {
@@ -20,6 +22,10 @@ export interface BulkCreateResult {
     description: string;
     amount: number;
     date: string;
+    accountId?: string;
+    accountName?: string;
+    /** Null: a newly created income or expense is not an investment-operation leg. */
+    operationId?: string | null;
   }>;
   duplicates: Array<{
     description: string;
@@ -65,7 +71,11 @@ export interface InvestmentPosition {
   currentValue: number | null;
   unrealizedGain: number | null;
   currency: string;
+  accountId: string;
   accountName: string;
+  entityId: string;
+  /** Date of the last operation when quantity is 0. Null while the position is open. */
+  closedAt: string | null;
 }
 
 export interface AdjustPositionParams {

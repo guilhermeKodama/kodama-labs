@@ -27,6 +27,7 @@ function row(over: Partial<LedgerDisplayRow>): LedgerDisplayRow {
     accountId: "nubank",
     accountType: "checking",
     categoryId: null,
+    reimbursesCategoryId: null,
     isTaxDeductible: false,
     isRecurring: false,
     transferGroupId: "g1",

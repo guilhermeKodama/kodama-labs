@@ -6,7 +6,9 @@ import { EmptyRow, Kpi, KpiStrip, Panel } from "@/components/cap";
 import { apiPatch } from "@/lib/api/client";
 import { useAppMutation, useErrorMessage } from "@/lib/api/use-app-mutation";
 import { budgetDrill, budgetsDrill, monthPeriod } from "@/lib/budgets/drill";
+import { budgetKind, showsBudgetKind } from "@/lib/budgets/kind";
 import { columnTense, flatMonthlyBudget, heatLevel, heatPercent, isClickable, monthlyBars, totalTone, trendOf, type HeatLevel } from "@/lib/budgets/heatmap";
+import { filteredYearFigures } from "@/lib/budgets/slices";
 import { heatmapLegend, insightCopy, trendBasis, yearHeader, yearToDateMonth } from "@/lib/budgets/labels";
 import { percent, projectionVsBudget, usage, yearlyTone } from "@/lib/budgets/pace";
 import { monthKey, type YearMonth } from "@/lib/budgets/period";
@@ -25,7 +27,7 @@ const HEAT_COLS = "grid grid-cols-[minmax(0,1.1fr)_repeat(12,minmax(0,1fr))_92px
 const MONTHS = Array.from({ length: 12 }, (_, i) => i + 1);
 
 const HEAT_CLASS: Record<HeatLevel, string> = {
-  over: "bg-fill-1 font-semibold text-cat-red",
+  over: "bg-fill-1 font-semibold text-neg",
   high: "bg-fill-2 text-fg-2",
   mid: "bg-fill-3 text-fg-2",
   low: "bg-fill-4 text-fg-2",
@@ -38,12 +40,14 @@ export function YearView({
   view,
   today,
   onScope,
+  onKind,
   onOpenMonth,
   actions,
 }: {
   view: BudgetsView;
   today: YearMonth;
   onScope: (scope: BudgetsScope) => void;
+  onKind: (kind: BudgetsView["kind"]) => void;
   onOpenMonth: (month: number) => void;
   actions: BudgetActions;
 }) {
@@ -55,12 +59,12 @@ export function YearView({
   const header = data ? yearHeader(data.period, fmt.monthAbbr) : null;
   return (
     <>
-      <ScopeBar scope={view.scope} onScope={onScope}>
+      <ScopeBar scope={view.scope} onScope={onScope} kind={view.kind} onKind={onKind}>
         {header ? t(header.key, header.values) : null}
       </ScopeBar>
       {data ? (
         <div className={cn("flex flex-col gap-3 transition-opacity", overview.isPlaceholderData && "opacity-60")}>
-          <YearBody data={data} today={today} onOpenMonth={onOpenMonth} actions={actions} />
+          <YearBody data={data} today={today} kind={view.kind} onOpenMonth={onOpenMonth} actions={actions} />
         </div>
       ) : (
         <ViewState error={overview.isError ? errorText(overview.error) : null} onRetry={() => void overview.refetch()} />
@@ -69,11 +73,15 @@ export function YearView({
   );
 }
 
-function YearBody({ data, today, onOpenMonth, actions }: { data: YearOverview; today: YearMonth; onOpenMonth: (month: number) => void; actions: BudgetActions }) {
+function YearBody({ data, today, kind, onOpenMonth, actions }: { data: YearOverview; today: YearMonth; kind: BudgetsView["kind"]; onOpenMonth: (month: number) => void; actions: BudgetActions }) {
   const t = useTranslations("budgets");
   const fmt = useFmt();
   const { kinds } = useEntityNames();
-  const { period, summary } = data;
+  const { period } = data;
+  const figures = filteredYearFigures(data.categories, kind, period.nElapsed);
+  const categories = figures.rows;
+  const { monthTotals, monthBudgets, summary } = figures;
+  const yearlyBudgets = data.yearlyBudgets.filter((row) => showsBudgetKind(row, kind));
   const ytd = yearToDateMonth(period);
   const ytdAbbr = ytd ? fmt.monthAbbr(ytd) : null;
   const projection = projectionVsBudget(summary.projectedYear, summary.budgetYear);
@@ -85,7 +93,7 @@ function YearBody({ data, today, onOpenMonth, actions }: { data: YearOverview; t
     ytdRange ? { label: t("drillLabel", { category, period: String(data.year) }), ...budgetDrill(row, data.scope.entityIds, ytdRange) } : null;
   // KPIs and the Total row: every row of the heatmap at once, over the actual months only (projected months have no entries yet).
   const totals = (label: string, range: { from: string; to: string } | null, periodLabel = String(data.year)): ViewDraft | null => {
-    const found = range ? budgetsDrill(data.categories, data.scope.entityIds, range) : null;
+    const found = range ? budgetsDrill(categories, data.scope.entityIds, range) : null;
     return found ? { label: t("drillLabel", { category: label, period: periodLabel }), ...found } : null;
   };
   // A month of the Total row: complete months whole, the current one through today.
@@ -123,7 +131,7 @@ function YearBody({ data, today, onOpenMonth, actions }: { data: YearOverview; t
         <Kpi label={t("year.kpi.overMonths")} value={<DrillLink draft={totals(totalLabel, ytdRange)}>{String(summary.overBudgetMonths)}</DrillLink>} sub={t("year.kpi.overMonthsSub", { count: summary.budgetedCells })} />
       </KpiStrip>
 
-      <div className="overflow-x-auto rounded-[8px] border border-stroke-3">
+      <div className="overflow-x-auto rounded-[8px] border border-stroke-3 bg-panel">
         <div className="min-w-[860px]">
           <div className={cn(HEAT_COLS, "h-(--cap-row-h) text-label text-fg-3")}>
             <span>{t("year.heatmap.category")}</span>
@@ -136,7 +144,7 @@ function YearBody({ data, today, onOpenMonth, actions }: { data: YearOverview; t
             <span className="text-right">{t("year.heatmap.yearTotal")}</span>
             <span className="text-right">{t("year.heatmap.trend")}</span>
           </div>
-          {data.categories.map((row) => {
+          {categories.map((row) => {
             const category = row.category ?? t("uncategorized");
             const trend = trendOf(row.trend);
             return (
@@ -145,6 +153,7 @@ function YearBody({ data, today, onOpenMonth, actions }: { data: YearOverview; t
                   <DrillLink draft={drill(row, category)} title={category} className="min-w-0 truncate">
                     {category}
                   </DrillLink>
+                  {row.isBudgeted ? <span className="shrink-0 text-caption text-fg-3">{t(`kind.${budgetKind(row.kind)}`)}</span> : null}
                   <BudgetEntityBadge entityId={row.entityId} kinds={kinds} />
                 </span>
                 {row.months.map((cell) => {
@@ -171,7 +180,7 @@ function YearBody({ data, today, onOpenMonth, actions }: { data: YearOverview; t
                 <span
                   className={cn(
                     "text-right font-mono text-label",
-                    trend.kind === "up" ? "text-cat-yellow" : trend.kind === "down" ? "text-cat-green" : trend.kind === "stable" ? "text-fg-3" : "text-fg-4",
+                    trend.kind === "up" ? "text-warn" : trend.kind === "down" ? "text-pos" : trend.kind === "stable" ? "text-fg-3" : "text-fg-4",
                   )}
                 >
                   {trend.kind === "none" ? "—" : t(`year.heatmap.trend_${trend.kind}`, { pct: trend.pct })}
@@ -179,16 +188,16 @@ function YearBody({ data, today, onOpenMonth, actions }: { data: YearOverview; t
               </div>
             );
           })}
-          {data.categories.length ? (
+          {categories.length ? (
             <div className={cn(HEAT_COLS, "h-9 border-t border-stroke-2 bg-fill-4 text-body-sm font-semibold")}>
               <span>{t("year.heatmap.total")}</span>
-              {data.monthTotals.map((total, i) => {
-                const tone = totalTone(total, data.monthBudgets[i] ?? 0, tense(i + 1) === "projected");
+              {monthTotals.map((total, i) => {
+                const tone = totalTone(total, monthBudgets[i] ?? 0, tense(i + 1) === "projected");
                 return (
                   <DrillLink
                     key={i}
                     draft={totals(totalLabel, monthRange(i + 1), fmt.monthLabel({ year: data.year, month: i + 1 }))}
-                    className={cn("text-center font-mono text-hint tabular-nums", tone === "projected" ? "text-fg-4" : tone === "over" ? "text-cat-red" : "text-fg-1")}
+                    className={cn("text-center font-mono text-hint tabular-nums", tone === "projected" ? "text-fg-4" : tone === "over" ? "text-neg" : "text-fg-1")}
                   >
                     {fmt.k(total, { minDigits: 1 })}
                   </DrillLink>
@@ -207,15 +216,16 @@ function YearBody({ data, today, onOpenMonth, actions }: { data: YearOverview; t
       <p className="text-body-sm text-fg-4">{t(legend.key, legend.values)}</p>
 
       <div className="grid items-start gap-3 md:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)]">
-        <MonthlyChart data={data} isProjected={(m) => tense(m) === "projected"} />
-        <Insights data={data} today={today} />
+        <MonthlyChart monthTotals={monthTotals} monthBudgets={monthBudgets} year={data.year} isProjected={(m) => tense(m) === "projected"} />
+        <Insights data={data} today={today} categories={categories} />
       </div>
 
-      {data.yearlyBudgets.length ? (
+      {yearlyBudgets.length ? (
         <Panel title={t("year.yearly.title")} pad={false}>
-          {data.yearlyBudgets.map((b) => {
-            const ratio = usage(b.spent, b.amount);
-            const editable: EditableBudget = { id: b.id, category: b.category, entityId: b.entityId, amount: b.amount, notes: b.notes, effectiveFrom: b.effectiveFrom, period: "yearly" };
+          {yearlyBudgets.map((b) => {
+            const cost = b.net ?? b.spent;
+            const ratio = usage(cost, b.amount);
+            const editable: EditableBudget = { id: b.id, category: b.category, entityId: b.entityId, amount: b.amount, notes: b.notes, effectiveFrom: b.effectiveFrom, period: "yearly", kind: b.kind ?? null };
             return (
               <div key={b.id} className="group grid h-10 grid-cols-[minmax(0,1.2fr)_minmax(0,2fr)_96px_96px] items-center gap-3 border-t border-stroke-3 px-3 text-body first:border-t-0">
                 <span className="flex min-w-0 items-center gap-1.5">
@@ -229,7 +239,7 @@ function YearBody({ data, today, onOpenMonth, actions }: { data: YearOverview; t
                   <span className="w-[34px] shrink-0 text-right font-mono text-caption text-fg-3 tabular-nums">{percent(ratio)}%</span>
                 </span>
                 <DrillLink draft={drill(b, b.category)} className="text-right font-mono tabular-nums">
-                  {fmt.money0(b.spent)}
+                  {fmt.money0(cost)}
                 </DrillLink>
                 <span className="text-right font-mono text-fg-2 tabular-nums">{t("year.yearly.of", { amount: fmt.money0(b.amount) })}</span>
               </div>
@@ -241,17 +251,27 @@ function YearBody({ data, today, onOpenMonth, actions }: { data: YearOverview; t
   );
 }
 
-function MonthlyChart({ data, isProjected }: { data: YearOverview; isProjected: (month: number) => boolean }) {
+function MonthlyChart({
+  monthTotals,
+  monthBudgets,
+  year,
+  isProjected,
+}: {
+  monthTotals: readonly number[];
+  monthBudgets: readonly number[];
+  year: number;
+  isProjected: (month: number) => boolean;
+}) {
   const t = useTranslations("budgets");
   const fmt = useFmt();
   const unit = fmt.kUnit();
-  const flat = flatMonthlyBudget(data.monthBudgets);
+  const flat = flatMonthlyBudget(monthBudgets);
   // Zeros as null: the tooltip leaves out the series a month does not have (realized or projected).
-  const rows = monthlyBars(data.monthTotals, isProjected, (v) => v).map((bar, i) => ({
+  const rows = monthlyBars(monthTotals, isProjected, (v) => v).map((bar, i) => ({
     name: fmt.monthAbbr(bar.month),
     real: bar.real || null,
     proj: bar.proj || null,
-    budget: data.monthBudgets[i] || null,
+    budget: monthBudgets[i] || null,
   }));
   const names = { real: t("year.chart.real", { unit }), proj: t("year.chart.projected", { unit }), budget: t("year.chart.budget") };
   return (
@@ -281,16 +301,16 @@ function MonthlyChart({ data, isProjected }: { data: YearOverview; isProjected: 
         items={[
           { label: names.real, color: CHART.bar },
           { label: names.proj, color: CHART.soft },
-          ...(data.monthBudgets.some((v) => v > 0) ? [{ label: names.budget, color: CHART.muted, dashed: true }] : []),
+          ...(monthBudgets.some((v) => v > 0) ? [{ label: names.budget, color: CHART.muted, dashed: true }] : []),
         ]}
       />
-      <ChartCaption>{t("year.chart.caption", { unit, year: data.year })}</ChartCaption>
+      <ChartCaption>{t("year.chart.caption", { unit, year })}</ChartCaption>
     </Panel>
   );
 }
 
 /** Tendências do ano; an overrun offers "Ajustar para R$ X?", a new version of the budget from this month on. */
-function Insights({ data, today }: { data: YearOverview; today: YearMonth }) {
+function Insights({ data, today, categories }: { data: YearOverview; today: YearMonth; categories: YearOverview["categories"] }) {
   const t = useTranslations("budgets");
   const fmt = useFmt();
   const { kinds } = useEntityNames();
@@ -301,9 +321,11 @@ function Insights({ data, today }: { data: YearOverview; today: YearMonth }) {
       apiPatch<{ batchId: string | null }>(`/api/v2/budgets/${budgetId}`, { amount, currency: fmt.prefs.baseCurrency, applyFrom: from }),
     undo: (_result, { amount, category }) => t("year.insights.adjusted", { category, amount: fmt.money0(amount), month: fmt.monthLabel(today) }),
   });
+  const visible = new Set(categories.map((row) => `${row.entityId ?? ""}:${row.categoryId ?? ""}`));
+  const insights = data.insights.filter((insight) => visible.has(`${insight.entityId ?? ""}:${insight.categoryId ?? ""}`));
   return (
     <Panel title={t("year.insights.title")} pad={false}>
-      {data.insights.map((insight) => {
+      {insights.map((insight) => {
         const category = insight.category ?? t("uncategorized");
         const copy = insightCopy(insight, category, fmt.monthAbbr, (v) => fmt.money0(v), trendBasis(data.period.completeMonths));
         return (
@@ -331,7 +353,7 @@ function Insights({ data, today }: { data: YearOverview; today: YearMonth }) {
           </div>
         );
       })}
-      {!data.insights.length ? <EmptyRow>{t("year.insights.empty")}</EmptyRow> : null}
+      {!insights.length ? <EmptyRow>{t("year.insights.empty")}</EmptyRow> : null}
     </Panel>
   );
 }

@@ -235,6 +235,20 @@ describe("income", () => {
       code: "operation.credit_account_invalid",
     });
   });
+
+  it("credits a provento to the brokerage cash balance", async () => {
+    const h = await petr4();
+    const before = await balance(f.broker);
+    const booked = await recordOperation(
+      USER,
+      { holdingId: h.id, type: "dividend", incomeType: "fii_income", totalAmount: 40, date: "2026-08-10", creditToAccountId: f.broker },
+      prisma,
+    );
+    const leg = await prisma.ledgerEntry.findUniqueOrThrow({ where: { id: booked.cashEntryId! } });
+    expect(leg.accountId).toBe(f.broker);
+    expect(toNumber(leg.amount)).toBe(40);
+    expect(await balance(f.broker)).toBeCloseTo(before + 40, 4);
+  });
 });
 
 describe("summary and rebalance", () => {

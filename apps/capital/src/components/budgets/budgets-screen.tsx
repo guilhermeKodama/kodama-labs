@@ -3,7 +3,7 @@
 import { useCallback, useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
 import { parseAsString, useQueryStates } from "nuqs";
-import { Btn, Segmented } from "@/components/cap";
+import { Segmented } from "@/components/cap";
 import { Page } from "@/components/shell/page";
 import { todayIn } from "@/lib/budgets/period";
 import { budgetsParams, openMonth, resolveBudgetsView, stepView, switchMode, type BudgetsMode, type BudgetsView } from "@/lib/budgets/url";
@@ -14,7 +14,7 @@ import { PeriodNav, type BudgetActions } from "./parts";
 import { RuleDialog, RulesSheet } from "./rule-dialog";
 import { YearView } from "./year-view";
 
-const URL_PARAMS = { mode: parseAsString, m: parseAsString, y: parseAsString, scope: parseAsString };
+const URL_PARAMS = { mode: parseAsString, m: parseAsString, y: parseAsString, scope: parseAsString, k: parseAsString };
 
 /**
  * Transações › Orçamentos (mockup BudgetsScreen / AnnualBudget). Mensal:
@@ -47,7 +47,7 @@ export function BudgetsScreen() {
   return (
     <Page
       crumbs={[t("crumbs.transactions"), t("crumbs.budgets")]}
-      actions={
+      controls={
         <>
           <Segmented<BudgetsMode>
             aria-label={t("mode.label")}
@@ -65,16 +65,14 @@ export function BudgetsScreen() {
             prevLabel={t(isYear ? "nav.prevYear" : "nav.prevMonth")}
             nextLabel={t(isYear ? "nav.nextYear" : "nav.nextMonth")}
           />
-          <Btn primary onClick={() => setDialog({ kind: "create", month: actionMonth, scope: view.scope })}>
-            {t("newBudget")}
-          </Btn>
         </>
       }
+      primary={{ label: t("newBudget"), onSelect: () => setDialog({ kind: "create", month: actionMonth, scope: view.scope }) }}
     >
       {isYear ? (
-        <YearView view={view} today={today} onScope={(scope) => go({ ...view, scope })} onOpenMonth={(month) => go(openMonth(view, month))} actions={actions} />
+        <YearView view={view} today={today} onScope={(scope) => go({ ...view, scope })} onKind={(kind) => go({ ...view, kind })} onOpenMonth={(month) => go(openMonth(view, month))} actions={actions} />
       ) : (
-        <MonthView view={view} onScope={(scope) => go({ ...view, scope })} actions={actions} onOpenRule={setRuleId} onAllRules={() => setRulesOpen(true)} />
+        <MonthView view={view} onScope={(scope) => go({ ...view, scope })} onKind={(kind) => go({ ...view, kind })} actions={actions} onOpenRule={setRuleId} onAllRules={() => setRulesOpen(true)} />
       )}
       <BudgetDialogs state={dialog} onChange={setDialog} />
       <RulesSheet open={rulesOpen} onOpenChange={setRulesOpen} scope={view.scope} onOpenRule={setRuleId} />

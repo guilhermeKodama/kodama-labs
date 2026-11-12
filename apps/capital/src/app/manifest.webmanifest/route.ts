@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { BRAND, ICONS, THEME_COLOR } from "@/lib/brand";
 
 // Not app/manifest.ts (the file-convention route) on purpose: that convention's
 // auto-injected <link rel="manifest"> has no way to set crossOrigin, and
@@ -11,21 +12,20 @@ export function GET() {
   return NextResponse.json(
     {
       id: "/",
-      name: "Capital — gestão financeira",
-      short_name: "Capital",
+      name: `${BRAND} — gestão financeira`,
+      short_name: BRAND,
       description: "Finanças PJ + PF, multi-moeda, investimentos e FIRE.",
       start_url: "/transactions",
       scope: "/",
       display: "standalone",
-      background_color: "#0a0a0a",
-      theme_color: "#0a0a0a",
+      background_color: THEME_COLOR.light,
+      theme_color: THEME_COLOR.light,
       icons: [
-        // ?v=N busts every cache layer (browser HTTP cache, Cloudflare edge)
-        // at once — same-named icon files otherwise get served stale at
-        // reinstall time and the launcher keeps the old artwork. Bump when
-        // the artwork changes.
-        { src: "/icon-192.png?v=2", sizes: "192x192", type: "image/png" },
-        { src: "/icon-512.png?v=2", sizes: "512x512", type: "image/png" },
+        // New artwork gets new file names (see ICONS), so no cache layer can
+        // hand an installed app the old icon under the same URL.
+        { src: ICONS.app192, sizes: "192x192", type: "image/png" },
+        { src: ICONS.app512, sizes: "512x512", type: "image/png" },
+        { src: ICONS.maskable512, sizes: "512x512", type: "image/png", purpose: "maskable" },
       ],
     },
     {

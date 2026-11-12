@@ -5,6 +5,7 @@ import { prisma } from "@capital/server/lib/prisma";
 import { idParams, jsonBody, queryFlag, v2Handler, v2Responses } from "@capital/server/lib/v2";
 import { LedgerError } from "@capital/server/modules/ledger/lib/errors";
 import { createBudget, deactivateBudget, deleteBudgetChain, endBudgetFrom, listBudgets, serializeBudget, updateBudget } from "../../services/budget-crud";
+import { budgetComposition } from "../../services/budget-composition";
 import { monthOverview, yearOverview } from "../../services/budget-overview";
 
 const tags = ["Budgets v2"];
@@ -14,6 +15,7 @@ const withBatch = (b: Parameters<typeof serializeBudget>[0] & { batchId: string 
 const monthOrDay = z.string().regex(/^\d{4}-\d{2}(-\d{2})?$/);
 const yearMonth = z.string().regex(/^\d{4}-\d{2}$/);
 const notes = z.string().trim().max(200).nullish().transform((v) => (v === undefined ? undefined : v || null));
+const budgetKind = z.enum(["fixo", "variavel"]).nullish();
 
 const budgetInput = z.object({
   entityId: z.string().nullish(),
@@ -24,6 +26,7 @@ const budgetInput = z.object({
   effectiveFrom: monthOrDay,
   rollover: z.boolean().optional(),
   notes,
+  kind: budgetKind.describe("fixo or variavel. Omit or null stores null, which counts as variável"),
 });
 
 const budgetPatch = z
@@ -35,6 +38,7 @@ const budgetPatch = z
     rollover: z.boolean().optional(),
     isActive: z.boolean().optional(),
     notes,
+    kind: budgetKind.describe("fixo or variavel. Null stores null (counts as variável). Omit to leave it unchanged"),
     applyFrom: yearMonth.optional().describe("YYYY-MM: keep earlier months and apply the change from this month on (a new version)"),
   })
   .strict()
@@ -70,6 +74,22 @@ const deleteRouteDef = createRoute({
   request: { params: idParams, query: z.object({ from: yearMonth.optional(), all: queryFlag.optional() }) },
   responses: v2Responses,
 });
+const compositionRoute = createRoute({
+  method: "get",
+  path: "/v2/budgets/composition",
+  tags,
+  summary:
+    "Fixed vs variable budget totals per month from `from` to `to` (YYYY-MM, at most 36 months), plus the top variable categories. Null kind counts as variável. Amounts are the full month in the base currency. scope = all | pf | pj | <entityId>",
+  request: {
+    query: z.object({
+      from: yearMonth,
+      to: yearMonth,
+      limit: z.coerce.number().int().min(1).max(20).optional(),
+      ...entityScopeQuery,
+    }),
+  },
+  responses: v2Responses,
+});
 const overviewRoute = createRoute({
   method: "get",
   path: "/v2/budgets/overview",
@@ -84,6 +104,11 @@ const overviewRoute = createRoute({
 
 export const v2Budgets = createRouter()
   .openapi(listRoute, v2Handler(listRoute, async (c, userId) => ({ budgets: (await listBudgets(userId, prisma, c.req.valid("query"))).map(serializeBudget) })))
+  .openapi(compositionRoute, v2Handler(compositionRoute, async (c, userId) => {
+    const q = c.req.valid("query");
+    const entityIds = await resolveScopeQuery(userId, q, prisma);
+    return budgetComposition(userId, q.from, q.to, prisma, { entityIds, limit: q.limit });
+  }))
   .openapi(overviewRoute, v2Handler(overviewRoute, async (c, userId) => {
     const q = c.req.valid("query");
     if (!q.month && !q.year) throw new LedgerError("Pass month=YYYY-MM or year=YYYY", 400, { code: "budget.overview_period_required" });

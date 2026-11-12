@@ -56,6 +56,23 @@ async function assertAssignableCategory(userId: string, categoryId: string, db: 
  * category cannot go on an expense, nor the other way round (single PATCH
  * and bulk). Transfers and investment cash legs are not checked.
  */
+/**
+ * An income may point at an expense category, which then counts as a
+ * negative amount in that category's budget. Anything else is rejected.
+ * Null clears the assignment.
+ */
+async function reimbursementCategory(userId: string, categoryId: string | null, kind: LedgerKind, db: DbClient): Promise<string | null> {
+  if (!categoryId) return null;
+  if (kind !== "income") {
+    throw new LedgerError("Only an income can reimburse an expense category", 422, { code: "entry.reimbursement_income_only" });
+  }
+  const category = await assertAssignableCategory(userId, categoryId, db);
+  if (category.type !== "expense") {
+    throw new LedgerError("A reimbursement points at an expense category", 422, { code: "entry.reimbursement_expense_category" });
+  }
+  return category.id;
+}
+
 function assertCategoryFitsKind(category: Pick<Category, "name" | "type">, kind: LedgerKind) {
   if ((kind === "income" || kind === "expense") && category.type !== kind) {
     throw new LedgerError(`Category "${category.name}" is a ${category.type} category and cannot be assigned to ${kind === "income" ? "an income" : "an expense"}`, 422, {
@@ -75,7 +92,7 @@ async function effectiveDateFor(account: Account, date: Date, db: DbClient, stat
   return { effectiveDate, cardStatementId: statement.id as string | null };
 }
 
-function inferDirection(from: Account & { entity: Entity }, to: Account & { entity: Entity }): TransferDirection {
+export function inferDirection(from: Account & { entity: Entity }, to: Account & { entity: Entity }): TransferDirection {
   if (to.type === "credit_card") return "card_payment";
   if (to.type === "brokerage" && from.type !== "brokerage") return "investment_deposit";
   if (from.type === "brokerage" && to.type !== "brokerage") return "investment_withdrawal";
@@ -156,6 +173,7 @@ async function createSimpleIn(
     records.push({ model: "InstallmentPlan", recordId: plan.id, before: null, after: snapshot(plan) });
   }
 
+  const reimbursesCategoryId = await reimbursementCategory(userId, input.reimbursesCategoryId ?? null, kind, tx);
   const baseMonth = account.type === "credit_card" ? opts.statementMonth ?? statementMonthFor(date, account.closingDay ?? 1) : undefined;
   const entryIds: string[] = [];
   for (let i = 0; i < parts.length; i++) {
@@ -179,6 +197,7 @@ async function createSimpleIn(
         notes: input.notes ?? null,
         merchantName: opts.merchantName ?? null,
         categoryId,
+        reimbursesCategoryId,
         isTaxDeductible: input.isTaxDeductible ?? false,
         isAutoCategorized,
         categorizedByRuleId,
@@ -437,8 +456,12 @@ export async function updateEntry(userId: string, entryId: string, patch: Intern
     const fx = await loadFx(userId, tx);
     const entry = await tx.ledgerEntry.findFirst({ where: { id: entryId, userId, deletedAt: null } });
     if (!entry) throw notFound("Transaction", "entry.not_found");
-    if (entry.transferGroupId) await updateTransferIn(tx, userId, entry, patch, fx, records);
-    else await updateSimpleIn(tx, userId, entry, patch, fx, records, opts.checkCategoryType ?? true);
+    if (entry.transferGroupId) {
+      if (patch.reimbursesCategoryId) {
+        throw new LedgerError("Only an income can reimburse an expense category", 422, { code: "entry.reimbursement_income_only" });
+      }
+      await updateTransferIn(tx, userId, entry, patch, fx, records);
+    } else await updateSimpleIn(tx, userId, entry, patch, fx, records, opts.checkCategoryType ?? true);
     const batchId =
       opts.record === false || opts.collect ? null : await recordMutation(tx, userId, "update", entry.description, records);
     const updated = await tx.ledgerEntry.findUniqueOrThrow({ where: { id: entryId }, include: ENTRY_CONTEXT_INCLUDE });
@@ -497,6 +520,16 @@ async function updateSimpleIn(
     ({ effectiveDate, cardStatementId } = await effectiveDateFor(account, date, tx));
   }
 
+  let reimburses: { reimbursesCategoryId: string | null } | undefined;
+  if (kind !== "income") {
+    if (patch.reimbursesCategoryId) {
+      throw new LedgerError("Only an income can reimburse an expense category", 422, { code: "entry.reimbursement_income_only" });
+    }
+    if (entry.reimbursesCategoryId) reimburses = { reimbursesCategoryId: null };
+  } else if (patch.reimbursesCategoryId !== undefined) {
+    reimburses = { reimbursesCategoryId: await reimbursementCategory(userId, patch.reimbursesCategoryId, kind, tx) };
+  }
+
   let category: { categoryId?: string | null; isAutoCategorized?: boolean; categorizedByRuleId?: null } = {};
   if (patch.categoryId !== undefined && patch.categoryId !== entry.categoryId) {
     category = { categoryId: patch.categoryId, ...MANUAL_CATEGORY };
@@ -522,10 +555,14 @@ async function updateSimpleIn(
       ...(patch.description !== undefined && { description: patch.description }),
       ...(patch.notes !== undefined && { notes: patch.notes }),
       ...category,
+      ...reimburses,
       ...(patch.isTaxDeductible !== undefined && { isTaxDeductible: patch.isTaxDeductible }),
     },
   });
   records.push({ model: "LedgerEntry", recordId: entry.id, before: snapshot(entry), after: snapshot(updated) });
+  // The cash leg of an investment operation: editing it by hand locks the
+  // operation so a later sync does not write over the change.
+  await tx.investmentOperation.updateMany({ where: { cashEntryId: entry.id }, data: { syncLocked: true } });
 }
 
 type AccountWithEntity = Account & { entity: Entity };
@@ -839,6 +876,7 @@ export async function duplicateEntries(userId: string, ids: string[], db: DbClie
           notes: e.notes,
           merchantName: e.merchantName,
           categoryId: e.categoryId,
+          reimbursesCategoryId: e.reimbursesCategoryId,
           isTaxDeductible: e.isTaxDeductible,
           cardStatementId: e.cardStatementId,
           transferGroupId: e.transferGroupId ? groupMap.get(e.transferGroupId) ?? null : null,

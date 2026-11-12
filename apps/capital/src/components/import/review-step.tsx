@@ -254,7 +254,7 @@ const ReviewRow = memo(function ReviewRow({
         className="w-full"
         contentClassName="min-w-[260px]"
       />
-      <span className={cn("text-caption", status === "need" ? "text-cat-yellow" : status === "changed" ? "text-cat-blue" : status === "removed" ? "text-neg" : "text-fg-3")}>
+      <span className={cn("text-caption", status === "need" ? "text-warn" : status === "changed" ? "text-resin-ink" : status === "removed" ? "text-neg" : "text-fg-3")}>
         {t(`status.${status}`)}
       </span>
       <span className="text-right font-mono tabular-nums">{fmt.money(row.amount, currency)}</span>

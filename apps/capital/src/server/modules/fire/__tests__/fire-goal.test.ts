@@ -271,4 +271,22 @@ describe("FIRE base", () => {
       await prisma.transferGroup.deleteMany({ where: { id: deposit.transferGroupId! } });
     }
   });
+
+  it("leaves out the holdings of an archived broker, like the Carteira", async () => {
+    await call("PUT", "/v1/fire/goal", { ...PLAN, planningMode: "by_contribution", targetYear: null });
+    const old = await prisma.account.create({
+      data: { userId: USER, entityId: f.pfId, type: "brokerage", name: "Corretora antiga", currency: "BRL" },
+    });
+    try {
+      await prisma.investmentHolding.create({
+        data: { accountId: old.id, assetClass: "stocks", ticker: "OLD3", name: "Ação antiga", currentQuantity: 100, currentPrice: 30, totalInvested: 3000 },
+      });
+      const open = (await call("GET", "/v1/fire/summary")).data.result.currentInvested;
+      await prisma.account.update({ where: { id: old.id }, data: { archivedAt: new Date() } });
+      const archived = (await call("GET", "/v1/fire/summary")).data.result.currentInvested;
+      expect(open - archived).toBeCloseTo(3000, 6);
+    } finally {
+      await prisma.account.delete({ where: { id: old.id } });
+    }
+  });
 });

@@ -1,6 +1,6 @@
 {
   "meta": {
-    "title": "Capital",
+    "title": "Cerne",
     "description": "Personal and business finances in one place."
   },
   "nav": {
@@ -13,12 +13,16 @@
     "contributions": "Contributions",
     "settings": "Settings",
     "accountHint": "Settings · Theme",
-    "railSearch": "Search or run ({shortcut})"
+    "railSearch": "Search or run ({shortcut})",
+    "fire": "Financial freedom"
   },
   "sidebar": {
     "collapse": "Collapse the sidebar",
     "expand": "Expand the sidebar",
     "openMenu": "Open the menu"
+  },
+  "page": {
+    "more": "More actions"
   },
   "session": {
     "loadFailed": "Your account could not be loaded."

@@ -21,6 +21,12 @@
     "pf": "Personal",
     "pj": "Business"
   },
+  "kind": {
+    "label": "Kind",
+    "all": "All",
+    "fixo": "Fixed",
+    "variavel": "Variable"
+  },
   "loadError": "Could not load.",
   "uncategorized": "Uncategorized",
   "drillLabel": "{category} · {period}",
@@ -36,7 +42,10 @@
     "kpi": {
       "budget": "Budgeted",
       "spent": "Spent",
+      "fixed": "Fixed spending",
+      "variable": "Variable spending",
       "spentSub": "{pct}% of budget",
+      "spentNet": "net · reimbursed {amount}",
       "remaining": "Remaining",
       "projection": "Month-end projection",
       "over": "{amount} over",
@@ -50,6 +59,10 @@
       "editAmount": "Budgeted for {category}, {amount}. Edit",
       "spent": "Spent",
       "remaining": "Remaining",
+      "gross": "gross {amount}",
+      "reimbursed": "reimbursed {amount}",
+      "fixo": "Fixed",
+      "variavel": "Variable",
       "status": "Status",
       "total": "Total",
       "resets": "Budget resets on {month} 1",
@@ -148,6 +161,7 @@
     "allEntities": "All",
     "allEntitiesHint": "“All” adds up personal and business spending in this category",
     "amount": "Amount",
+    "kind": "Kind",
     "period": "Period",
     "monthly": "Monthly",
     "yearly": "Yearly",

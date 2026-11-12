@@ -12,6 +12,7 @@ RUN pnpm install --frozen-lockfile --filter @infrastructure/monitoring... --igno
 FROM node:24-slim
 WORKDIR /app
 COPY --from=build /out /app
+COPY --from=build /repo/infrastructure/monitoring/assets /app/assets
 COPY infrastructure/cronjobs/schedules /app/schedules
 ENV CRON_SCHEDULES_DIR=/app/schedules
 ENV NODE_ENV=production

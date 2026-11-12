@@ -1,0 +1,281 @@
+/*
+ * The drawing vocabulary of the figures. One notation runs through all of
+ * them:
+ *
+ *   dashed stroke   proposed by a machine, not yet trusted
+ *   solid stroke    committed
+ *   accent          a gate, on the spine: where a person or a fail-closed
+ *                   check decides. Nothing else in a figure is accent.
+ *
+ * How the figures move is a separate layer: src/motion.
+ *
+ * Figures are inline SVG in their own units (a 1200- or 792-wide viewBox), so
+ * the sizes here are in those units, not CSS pixels of the page. Components in
+ * src/figures/primitives map their props onto these classes; nothing else
+ * should use them.
+ */
+
+/* Strokes */
+.fig-proposed {
+  fill: none;
+  stroke: var(--kl-ink);
+  stroke-width: 1.5;
+  stroke-dasharray: 5 4;
+}
+
+/* A proposal that will not pass the gate. */
+.fig-candidate {
+  fill: none;
+  stroke: var(--kl-soft);
+  stroke-width: 1.2;
+  stroke-dasharray: 5 4;
+}
+
+.fig-committed {
+  fill: none;
+  stroke: var(--kl-ink);
+  stroke-width: 1.5;
+}
+
+/* The line many committed strands merge into. */
+.fig-trunk {
+  fill: none;
+  stroke: var(--kl-ink);
+  stroke-width: 2;
+}
+
+/* Construction lines: connectors, loops, brackets. */
+.fig-quiet {
+  fill: none;
+  stroke: var(--kl-soft);
+  stroke-width: 1;
+}
+
+.fig-hairline {
+  fill: none;
+  stroke: var(--kl-rule);
+  stroke-width: 1;
+}
+
+.fig-hairline-dashed {
+  fill: none;
+  stroke: var(--kl-rule);
+  stroke-width: 1;
+  stroke-dasharray: 3 2;
+}
+
+/* The spine and the gates on it */
+.fig-spine {
+  stroke: var(--kl-accent);
+  stroke-width: 1;
+}
+
+.fig-gate {
+  fill: var(--kl-accent);
+}
+
+/* A gate that is waiting, or a window with a width. */
+.fig-gate-open {
+  fill: var(--kl-ground);
+  stroke: var(--kl-accent);
+  stroke-width: 1.5;
+}
+
+/* Surfaces: a drawn screen, card or node */
+.fig-panel {
+  fill: var(--kl-panel);
+  stroke: var(--kl-rule);
+  stroke-width: 1;
+}
+
+/* A panel that is only context: a step, a document. */
+.fig-panel-quiet {
+  fill: var(--kl-panel);
+  stroke: var(--kl-soft);
+  stroke-width: 1;
+}
+
+/* A panel that is the subject: committed, or the one node being followed. */
+.fig-panel-ink {
+  fill: var(--kl-panel);
+  stroke: var(--kl-ink);
+  stroke-width: 1;
+}
+
+/* A step that is still a proposal. */
+.fig-panel-dashed {
+  fill: var(--kl-panel);
+  stroke: var(--kl-ink);
+  stroke-width: 1;
+  stroke-dasharray: 3 2;
+}
+
+/* A proposed thing with no surface: a twin, a row the model would act on. */
+.fig-box-dashed {
+  fill: none;
+  stroke: var(--kl-ink);
+  stroke-width: 1;
+  stroke-dasharray: 3 2;
+}
+
+.fig-box-soft {
+  fill: none;
+  stroke: var(--kl-soft);
+  stroke-width: 1;
+  stroke-dasharray: 3 2;
+}
+
+/* A pill or a chip outline. */
+.fig-outline {
+  fill: none;
+  stroke: var(--kl-soft);
+  stroke-width: 1;
+}
+
+/* Fills: a button, a marker, the nodes of a flow, and the wash of its ribbons. */
+.fig-fill-ink {
+  fill: var(--kl-ink);
+}
+
+.fig-fill-muted {
+  fill: var(--kl-muted);
+}
+
+.fig-fill-soft {
+  fill: var(--kl-soft);
+}
+
+.fig-wash {
+  fill: var(--kl-ink);
+  opacity: 0.08;
+}
+
+/* The echo of a press. It keeps its weight while it grows. */
+.fig-echo {
+  fill: none;
+  stroke: var(--kl-accent);
+  stroke-width: 1.5;
+  vector-effect: non-scaling-stroke;
+}
+
+/* Invisible geometry: hit areas, and the box an animated group is clipped to. */
+.fig-pad {
+  fill: none;
+  stroke: none;
+}
+
+/* Text. Mono is the default voice of a figure: the system reporting. */
+.fig-text {
+  font-family: var(--kl-font-mono);
+  font-size: 11.5px;
+  fill: var(--kl-ink);
+}
+
+.fig-text-small {
+  font-size: 10.5px;
+}
+
+/* Text of a drawn interface: the product's own voice, in the UI face. */
+.fig-text-ui {
+  font-family: var(--kl-font-ui);
+  font-size: 12.5px;
+}
+
+.fig-text-ui-small {
+  font-family: var(--kl-font-ui);
+  font-size: 11px;
+}
+
+.fig-text-ui-large {
+  font-family: var(--kl-font-ui);
+  font-size: 14px;
+}
+
+.fig-text-bold {
+  font-weight: 600;
+}
+
+/* Text on an ink fill. */
+.fig-text-inverse {
+  fill: var(--kl-ground);
+}
+
+/* A project name set in the display face, as in the page's headings. */
+.fig-text-name {
+  font-family: var(--kl-font-serif);
+  font-size: 23px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+}
+
+.fig-text-muted {
+  fill: var(--kl-muted);
+}
+
+.fig-text-end {
+  text-anchor: end;
+}
+
+.fig-text-middle {
+  text-anchor: middle;
+}
+
+/* A lane of the first figure is a link to its section. */
+.fig-lane {
+  text-decoration: none;
+  outline: none;
+}
+
+.fig-lane .fig-pad,
+.fig-control .fig-pad {
+  pointer-events: all;
+}
+
+.fig-lane:focus-visible .fig-pad {
+  stroke: var(--kl-ink);
+  stroke-width: 2;
+}
+
+/* Pointing at a lane closes its dashes: the reader commits to the link. The
+   candidates that never pass step back. */
+.fig-lane:focus-visible .fig-proposed {
+  stroke-dasharray: 9 0;
+}
+
+.fig-lane:focus-visible .fig-candidate {
+  opacity: 0.35;
+}
+
+@media (hover: hover) {
+  /* A node of a pipeline, while the reader points at it. */
+  .fig-node:hover .fig-panel {
+    stroke: var(--kl-ink);
+  }
+
+  .fig-lane:hover .fig-proposed {
+    stroke-dasharray: 9 0;
+  }
+
+  .fig-lane:hover .fig-candidate {
+    opacity: 0.35;
+  }
+
+  .fig-lane:hover .fig-text-name {
+    text-decoration: underline;
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .fig-lane .fig-proposed {
+    transition: stroke-dasharray 180ms ease;
+  }
+
+  .fig-lane .fig-candidate {
+    transition: opacity 180ms ease;
+  }
+
+  .fig-quiet[data-lineage],
+  .fig-node .fig-panel {
+    transition: stroke 140ms ease;
+  }
+}

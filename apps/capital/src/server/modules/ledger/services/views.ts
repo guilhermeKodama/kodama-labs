@@ -1,5 +1,5 @@
 import type { DbClient } from "@capital/server/lib/prisma";
-import type { Prisma, SavedView } from "@/generated/prisma";
+import { Prisma, type SavedView } from "@/generated/prisma";
 import { st } from "@capital/server/i18n";
 import { loadUserLocale } from "@capital/server/i18n/user-locale";
 import type { z } from "zod";
@@ -72,20 +72,28 @@ export function serializeView(v: SavedView): SerializedView {
 export async function ensureBuiltinViews(userId: string, db: DbClient) {
   const where = { userId_builtinKey: { userId, builtinKey: BUILTIN_ALL_VIEW_KEY } };
   if (await db.savedView.findUnique({ where, select: { id: true } })) return;
-  await db.savedView.upsert({
-    where,
-    create: {
-      userId,
-      dataset: "ledger",
-      name: st(await loadUserLocale(userId, db), "views.builtin.all"),
-      position: 0,
-      isBuiltin: true,
-      builtinKey: BUILTIN_ALL_VIEW_KEY,
-      isFavorite: true,
-      config: {},
-    },
-    update: {},
-  });
+  try {
+    await db.savedView.upsert({
+      where,
+      create: {
+        userId,
+        dataset: "ledger",
+        name: st(await loadUserLocale(userId, db), "views.builtin.all"),
+        position: 0,
+        isBuiltin: true,
+        builtinKey: BUILTIN_ALL_VIEW_KEY,
+        isFavorite: true,
+        config: {},
+      },
+      update: {},
+    });
+  } catch (error) {
+    // The first page loads ledger, holdings, and operations together. Two of
+    // those can both miss this row; the loser of the unique key reads the
+    // view the other request committed instead of failing the whole list.
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") return;
+    throw error;
+  }
 }
 
 /** The user's views (one dataset, or all), creating "Todas" and the default views on first access. */

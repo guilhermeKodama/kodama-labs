@@ -31,6 +31,7 @@ export const QUERY_ROOTS = [
   "quotes",
   "assets",
   "imports",
+  "pluggy",
   "notifications",
   "tokens",
   "assistant",
@@ -98,6 +99,7 @@ export const keys = {
 
   // Imports
   imports: () => ["imports", "list"] as const,
+  pluggy: () => ["pluggy"] as const,
   /** Analysis of picked files; `fingerprint` identifies the selection (names, sizes, account). */
   importAnalyze: (fingerprint: string) => ["imports", "analyze", fingerprint] as const,
 

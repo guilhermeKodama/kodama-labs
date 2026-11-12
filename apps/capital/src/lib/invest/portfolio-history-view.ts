@@ -22,3 +22,38 @@ export function netWorthChartRows(months: readonly Pick<HistoryMonth, "period" |
   });
   return { rows, hasInitial: rows.some((r) => Math.abs(r.initial) >= 0.005) };
 }
+
+export type NetWorthTooltipKey = "initial" | "aportes" | "netWorth" | "capitalInvested";
+
+export interface NetWorthTooltipRow {
+  key: NetWorthTooltipKey;
+  /** Same scale as the chart point (thousands, after the chart has scaled it). */
+  value: number;
+  /** Capital investido is initial + aportes, the height of the aportes stroke. Not its own series. */
+  derived: boolean;
+}
+
+/**
+ * Tooltip rows in stack order, bottom to top: posições iniciais, the aportes
+ * band, then patrimônio. When the opening book is on the chart, a last row
+ * names capital investido (initial + aportes). That is where the aportes
+ * stroke sits — below the dashed line when net aportes are negative — and
+ * it is not a fourth series.
+ */
+export function netWorthTooltipRows(
+  point: { netWorth: number; aportes: number; initial: number },
+  showInitial: boolean,
+): NetWorthTooltipRow[] {
+  const rows: NetWorthTooltipRow[] = [];
+  if (showInitial) rows.push({ key: "initial", value: point.initial, derived: false });
+  rows.push({ key: "aportes", value: point.aportes, derived: false });
+  rows.push({ key: "netWorth", value: point.netWorth, derived: false });
+  if (showInitial) {
+    rows.push({
+      key: "capitalInvested",
+      value: Math.round((point.initial + point.aportes) * 10) / 10,
+      derived: true,
+    });
+  }
+  return rows;
+}

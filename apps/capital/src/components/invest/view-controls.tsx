@@ -244,7 +244,7 @@ function LayoutCards({
               className={cn(
                 "flex h-14 flex-col items-center justify-center gap-1 rounded-[8px] border text-label outline-none focus-visible:ring-2 focus-visible:ring-fg-3/40",
                 on
-                  ? "border-fg-1 bg-fill-2 font-medium text-fg-1"
+                  ? "border-brand bg-fill-2 font-medium text-fg-1"
                   : "border-stroke-2 text-fg-3 hover:bg-fill-4 hover:text-fg-strong",
               )}
             >
@@ -288,7 +288,7 @@ function ChartOptions<M extends string>({
                 className={cn(
                   "flex items-center gap-1.5 rounded-[6px] border px-2 py-[5px] text-label",
                   chart.type === type
-                    ? "border-fg-1 bg-fill-2 text-fg-1"
+                    ? "border-brand bg-fill-2 text-fg-1"
                     : "border-stroke-2 text-fg-3 hover:text-fg-strong",
                 )}
               >
@@ -490,7 +490,7 @@ export function DisplayPopover({
           </Field>
           {view.config.layout === "chart" ? (
             <>
-              <Field label={t("axis")}>
+              <Field label={t("axisLabel")}>
                 <Select
                   value={opsChartAxis(view.config.groupBy)}
                   onChange={(groupBy) =>
@@ -515,19 +515,40 @@ export function DisplayPopover({
                 }
               />
               <Field label={t("series")}>
-                <Segmented
+                <Select
                   value={
-                    view.config.series === "allocationClass"
-                      ? "allocationClass"
+                    view.config.series === "incomeType" || view.config.series === "origin" || view.config.series === "allocationClass"
+                      ? view.config.series
                       : "none"
                   }
-                  options={[
-                    { v: "none", l: t("seriesTotal") },
-                    { v: "allocationClass", l: t("seriesClass") },
-                  ]}
                   onChange={(series) =>
-                    save({ ...(view.config as OpsViewConfig), series })
+                    save({
+                      ...(view.config as OpsViewConfig),
+                      series: series as OpsViewConfig["series"],
+                    })
                   }
+                  options={[
+                    { value: "none", label: t("seriesTotal") },
+                    { value: "incomeType", label: t("seriesType") },
+                    { value: "origin", label: t("seriesOrigin") },
+                    { value: "allocationClass", label: t("seriesClass") },
+                  ]}
+                />
+              </Field>
+              <Field label={t("basis")}>
+                <Segmented
+                  value={view.config.basis ?? "net"}
+                  options={[
+                    { v: "net", l: t("basisNet") },
+                    { v: "gross", l: t("basisGross") },
+                  ]}
+                  onChange={(basis) =>
+                    save({
+                      ...(view.config as OpsViewConfig),
+                      basis: basis as OpsViewConfig["basis"],
+                    })
+                  }
+                  aria-label={t("basis")}
                 />
               </Field>
             </>
@@ -561,7 +582,7 @@ function InvestViewTab({
       onContextMenu={editable && !renaming ? menu.onContextMenu : undefined}
       className={cn(
         "inline-flex h-(--cap-row-h) shrink-0 items-center gap-0.5 border-b-2",
-        on ? "border-fg-1" : "border-transparent",
+        on ? "border-indicator" : "border-transparent",
       )}
     >
       {renaming ? (

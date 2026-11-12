@@ -5,7 +5,7 @@ import { computeFireNumber } from '../fire-number';
 import { phaseEndingBalance, monthsToFirePhased } from '../phases';
 import { buildLifecycle, type LifecyclePoint } from '../lifecycle';
 import { mulberry32, nextNormal, runMonteCarlo } from '../monte-carlo';
-import { evaluateMilestones, type MilestoneContext } from '../milestones';
+import { evaluateMilestones, milestoneThreshold, type MilestoneContext } from '../milestones';
 
 const base: FireAssumptions = {
   currentInvested: 200_000,
@@ -225,6 +225,14 @@ describe('evaluateMilestones', () => {
     const idx = life.points.findIndex((p) => p.monthIndex === m.achievedMonthIndex);
     expect(life.points[idx].netWorth).toBeGreaterThanOrEqual(500_000);
     if (idx > 0) expect(life.points[idx - 1].netWorth).toBeLessThan(500_000);
+  });
+
+  it('milestoneThreshold gives the net worth each kind needs', () => {
+    const def = (type: 'net_worth_absolute' | 'net_worth_x_expenses' | 'passive_income_absolute' | 'age', value: number) => ({ id: type, name: type, type, value });
+    expect(milestoneThreshold(def('net_worth_absolute', 1_000_000), ctx)).toBe(1_000_000);
+    expect(milestoneThreshold(def('net_worth_x_expenses', 10), ctx)).toBe(1_200_000);
+    expect(milestoneThreshold(def('passive_income_absolute', 3_500), ctx)).toBeCloseTo(1_200_000, 6);
+    expect(milestoneThreshold(def('age', 65), ctx)).toBe(65);
   });
 
   it('age milestone tracks age and progress', () => {

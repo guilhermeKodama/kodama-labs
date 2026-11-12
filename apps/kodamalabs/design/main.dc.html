@@ -1,0 +1,734 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Guilherme Kodama · Kodama Labs</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&amp;family=Schibsted+Grotesk:wght@400;500;600&amp;family=Source+Serif+4:ital,opsz,wght@0,8..60,400..600;1,8..60,400..600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#F4F6F4}
+html:has(.kl-dark) body{background:#0C1714}
+:root,.kl{--ground:#F4F6F4;--panel:#FFFFFF;--ink:#0C1714;--muted:#55605B;--soft:#8A948E;--rule:#D3D9D5;--accent:#0B6B4F;--f-display:'Source Serif 4',Georgia,'Times New Roman',serif;--f-text:'Source Serif 4',Georgia,'Times New Roman',serif;--f-ui:'Schibsted Grotesk','Helvetica Neue',Helvetica,sans-serif;--f-mono:'IBM Plex Mono',ui-monospace,Menlo,monospace;--w-display:400;--w-entry:500;--tr-name:-0.028em;--tr-h:-0.022em}
+.kl.kl-dark{--ground:#0C1714;--panel:#132019;--ink:#E8ECE9;--muted:#9AA5A0;--soft:#6F7F78;--rule:#26332E;--accent:#10B981}
+.kl.kl-amber{--accent:#B45309}
+.kl.kl-dark.kl-amber{--accent:#F5A524}
+.kl.kl-sans{--f-display:'Schibsted Grotesk','Helvetica Neue',Helvetica,sans-serif;--f-text:'Schibsted Grotesk','Helvetica Neue',Helvetica,sans-serif;--w-display:500;--w-entry:600;--tr-name:-0.045em;--tr-h:-0.035em}
+.kl{-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+.kl a{color:inherit;text-decoration:underline;text-decoration-thickness:1px;text-underline-offset:4px}
+.kl a:hover{text-decoration-thickness:2px}
+.kl a:focus-visible{outline:2px solid var(--ink);outline-offset:3px}
+.kl svg a{text-decoration:none}
+.kl svg text{font-family:var(--f-mono);font-size:11.5px;fill:var(--ink)}
+.kl svg .m{fill:var(--muted)}
+.kl svg .s{font-size:10.5px}
+.kl svg .u{font-family:var(--f-ui);font-size:12.5px}
+.kl svg .u2{font-family:var(--f-ui);font-size:11px}
+.kl svg .u3{font-family:var(--f-ui);font-size:14px}
+.kl svg .b{font-weight:600}
+.kl svg .e{text-anchor:end}
+.kl svg .mid{text-anchor:middle}
+.kl svg .nm{font-family:var(--f-display);font-size:23px;font-weight:var(--w-entry);letter-spacing:-0.01em}
+.kl svg .inv{fill:var(--ground)}
+.kl svg .gt{fill:var(--accent);font-weight:500}
+.kl .d{fill:none;stroke:var(--ink);stroke-width:1.5;stroke-dasharray:5 4}
+.kl .dq{fill:none;stroke:var(--soft);stroke-width:1.2;stroke-dasharray:5 4}
+.kl .c{fill:none;stroke:var(--ink);stroke-width:1.5}
+.kl .c2{fill:none;stroke:var(--ink);stroke-width:2}
+.kl .q{fill:none;stroke:var(--soft);stroke-width:1}
+.kl .h{fill:none;stroke:var(--rule);stroke-width:1}
+.kl .hd{fill:none;stroke:var(--rule);stroke-width:1;stroke-dasharray:3 2}
+.kl .sp{stroke:var(--accent);stroke-width:1}
+.kl .g{fill:var(--accent)}
+.kl .go{fill:var(--ground);stroke:var(--accent);stroke-width:1.5}
+.kl .ga{fill:none;stroke:var(--accent);stroke-width:1}
+.kl .p{fill:var(--panel);stroke:var(--rule);stroke-width:1}
+.kl .pq{fill:var(--panel);stroke:var(--soft);stroke-width:1}
+.kl .pi{fill:var(--panel);stroke:var(--ink);stroke-width:1}
+.kl .pd{fill:none;stroke:var(--ink);stroke-width:1;stroke-dasharray:3 2}
+.kl .pdd{fill:var(--panel);stroke:var(--ink);stroke-width:1;stroke-dasharray:3 2}
+.kl .ps{fill:none;stroke:var(--soft);stroke-width:1;stroke-dasharray:3 2}
+.kl .o{fill:none;stroke:var(--soft);stroke-width:1}
+.kl .ink{fill:var(--ink)}
+.kl .dot{fill:var(--ink)}
+.kl .w{fill:var(--ink);opacity:0.08}
+.kl .n1{fill:var(--muted)}
+.kl .n2{fill:var(--ink)}
+.kl .n3{fill:var(--soft)}
+.kl .pad{fill:none;stroke:none}
+@media (hover:hover){
+.kl a.ln:hover .d{stroke-dasharray:none}
+.kl a.ln:hover .nm{text-decoration:underline}
+}
+@keyframes klwipe{
+from{clip-path:inset(0 100% 0 0)}
+to{clip-path:inset(0 0 0 0)}
+}
+@keyframes klfade{
+from{opacity:0}
+to{opacity:1}
+}
+@media (prefers-reduced-motion:no-preference){
+.kl .wl{animation:klwipe 0.65s cubic-bezier(0.2,0.7,0.2,1) both}
+.kl .wg{animation:klfade 0.2s ease-out both}
+.kl .wr{animation:klwipe 0.55s cubic-bezier(0.2,0.7,0.2,1) both}
+}
+@media (max-width:760px){
+.kl .kl-spine{display:none}
+.kl .kl-nav{display:none!important}
+.kl .kl-row{flex-direction:column!important;align-items:stretch!important;gap:24px!important}
+.kl .kl-row>*{flex:1 1 auto!important;max-width:100%!important;margin-left:0!important}
+.kl .kl-fig{overflow-x:auto}
+.kl .kl-fig>svg{min-width:900px}
+.kl .kl-figs{overflow-x:auto}
+.kl .kl-figs>svg{min-width:660px}
+.kl .kl-name{font-size:52px!important;line-height:56px!important}
+.kl .kl-h2{font-size:40px!important;line-height:44px!important;max-width:100%!important}
+.kl .kl-mail{font-size:27px!important;line-height:34px!important}
+.kl .kl-off{margin-left:0!important}
+.kl .kl-lede{font-size:20px!important;line-height:30px!important;padding-right:0!important}
+}
+</style>
+</helmet>
+<div id="top" class="kl {{mode}}" style="background: var(--ground); color: var(--ink); font-family: var(--f-text); font-size: 18px; line-height: 29px; font-optical-sizing: auto">
+<div style="max-width: 1200px; margin: 0 auto; padding: 0 24px">
+
+<header style="display: flex; align-items: center; justify-content: space-between; gap: 24px; height: 72px">
+<a href="#top" style="display: flex; align-items: center; gap: 10px; text-decoration: none; font-family: var(--f-mono); font-size: 13px; line-height: 20px">
+<svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true" style="color: var(--ink); flex: none">
+<path d="M 4 19 Q 12 22.8 20 19" style="fill: none; stroke: currentColor; stroke-width: 0.95; stroke-linecap: round; opacity: 0.55"/>
+<line x1="12" y1="6.2" x2="4.8" y2="20" style="stroke: currentColor; stroke-width: 1.7; stroke-linecap: round"/>
+<line x1="12" y1="6.2" x2="19.2" y2="20" style="stroke: currentColor; stroke-width: 1.7; stroke-linecap: round"/>
+<path d="M 8.6 13 Q 12 11.2 15.4 13" style="fill: none; stroke: currentColor; stroke-width: 0.95; stroke-linecap: round; opacity: 0.7"/>
+<rect x="9.8" y="2.6" width="4.4" height="4" rx="1.1" style="fill: currentColor"/>
+<circle cx="15.2" cy="4.4" r="0.7" style="fill: currentColor; opacity: 0.7"/>
+<path d="M 19.2 20 L 20.6 22.4 L 17.7 21.9 Z" style="fill: currentColor"/>
+<path d="M 4.8 20 L 3.4 22.4 L 6.3 21.9 Z" style="fill: currentColor; opacity: 0.85"/>
+</svg>
+<span>Kodama Labs</span>
+</a>
+<nav class="kl-nav" aria-label="Sections" style="display: flex; align-items: center; gap: 28px; font-family: var(--f-mono); font-size: 13px; line-height: 20px">
+<a href="#capital">Work</a>
+<a href="#lab">Lab</a>
+<a href="#method">Method</a>
+<a href="#about">About</a>
+<a href="https://kodamalabs.ai/pt-BR" lang="pt-BR">Português</a>
+<a href="mailto:contato@kodamalabs.ai">contato@kodamalabs.ai</a>
+</nav>
+</header>
+
+<h1 class="kl-name" style="margin: 44px 0 0; font-family: var(--f-display); font-weight: var(--w-display); font-size: 96px; line-height: 96px; letter-spacing: var(--tr-name)">Guilherme Kodama</h1>
+
+<div class="kl-row" style="display: flex; gap: 2%; align-items: flex-start; margin-top: 28px">
+<p class="kl-lede" style="flex: 0 0 57.5%; max-width: 57.5%; box-sizing: border-box; margin: 0; padding-right: 24px; font-size: 25px; line-height: 36px; letter-spacing: -0.005em; text-wrap: pretty">I build software that puts language models next to things that must not go wrong: a ledger with real money, public spending records, my own repositories. I design each system around what it must never do, and I run it myself.</p>
+<dl style="flex: 0 0 40.5%; max-width: 40.5%; margin: 0; display: flex; flex-direction: column; border-bottom: 1px solid var(--rule)">
+<div style="display: grid; grid-template-columns: 78px minmax(0, 1fr); gap: 12px; align-items: baseline; padding: 8px 0 7px; border-top: 1px solid var(--rule)">
+<dt style="font-family: var(--f-mono); font-size: 11.5px; line-height: 19px; color: var(--muted)">role</dt>
+<dd style="margin: 0; font-size: 15.5px; line-height: 19px">Staff software engineer <span style="font-family: var(--f-mono); font-size: 11.5px; color: var(--muted)">[EMPLOYER, IF NAMED]</span></dd>
+</div>
+<div style="display: grid; grid-template-columns: 78px minmax(0, 1fr); gap: 12px; align-items: baseline; padding: 8px 0 7px; border-top: 1px solid var(--rule)">
+<dt style="font-family: var(--f-mono); font-size: 11.5px; line-height: 19px; color: var(--muted)">based</dt>
+<dd style="margin: 0; font-size: 15.5px; line-height: 19px">São Paulo (UTC−3), remote with international teams</dd>
+</div>
+<div style="display: grid; grid-template-columns: 78px minmax(0, 1fr); gap: 12px; align-items: baseline; padding: 8px 0 7px; border-top: 1px solid var(--rule)">
+<dt style="font-family: var(--f-mono); font-size: 11.5px; line-height: 19px; color: var(--muted)">experience</dt>
+<dd style="margin: 0; font-size: 15.5px; line-height: 19px">13&nbsp;years, individual contributor by choice</dd>
+</div>
+<div style="display: grid; grid-template-columns: 78px minmax(0, 1fr); gap: 12px; align-items: baseline; padding: 8px 0 7px; border-top: 1px solid var(--rule)">
+<dt style="font-family: var(--f-mono); font-size: 11.5px; line-height: 19px; color: var(--muted)">open to</dt>
+<dd style="margin: 0; font-family: var(--f-mono); font-size: 12.5px; line-height: 19px; color: var(--muted)">[WHAT YOU ARE OPEN TO]</dd>
+</div>
+<div style="display: grid; grid-template-columns: 78px minmax(0, 1fr); gap: 12px; align-items: baseline; padding: 8px 0 7px; border-top: 1px solid var(--rule)">
+<dt style="font-family: var(--f-mono); font-size: 11.5px; line-height: 19px; color: var(--muted)">contact</dt>
+<dd style="margin: 0; font-size: 15.5px; line-height: 19px; display: flex; flex-wrap: wrap; gap: 4px 14px"><a href="mailto:contato@kodamalabs.ai">contato@kodamalabs.ai</a><a href="https://github.com/guilhermeKodama">GitHub</a><a href="https://www.linkedin.com/in/guilhermekodama">LinkedIn</a><span style="font-family: var(--f-mono); font-size: 12.5px; color: var(--muted)">[CV, PDF]</span></dd>
+</div>
+</dl>
+</div>
+
+<p style="margin: 40px 0 0; font-size: 21px; line-height: 30px; font-weight: 500; text-wrap: balance">Three systems, one pattern: in each, the proposal that must not go wrong waits at <span style="border-bottom: 1.5px solid var(--accent); padding-bottom: 1px">this line</span>.</p>
+
+<div style="position: relative; margin-top: 18px; padding-bottom: 48px">
+<div class="kl-spine" aria-hidden="true" style="position: absolute; z-index: 0; left: 58.5%; top: 0; bottom: 0; width: 1px; background: var(--accent)"></div>
+<div style="position: relative; z-index: 1">
+
+<div class="kl-fig">
+<svg viewBox="0 0 1200 236" role="group" aria-label="Three systems drawn as rows. In each, a proposal runs dashed up to one vertical line, is held at a gate, and continues solid only after it. Capital: an import plan is held until my click, valid 30 minutes. Sentinel: flagged prices are held by an evaluator that defaults to suppress. Cosmos: a delivery from an agent at a station is held until its contract passes, and a stop waits for me." style="display: block; width: 100%; height: auto">
+<text class="m" x="0" y="20">system</text>
+<text class="m" x="236" y="20">proposes</text>
+<text class="m" x="722" y="20">held until</text>
+<text class="m" x="1012" y="20">becomes</text>
+<line class="h" x1="0" y1="32.5" x2="1200" y2="32.5"/>
+<line class="h" x1="0" y1="100.5" x2="1200" y2="100.5"/>
+<line class="h" x1="0" y1="168.5" x2="1200" y2="168.5"/>
+<line class="h" x1="0" y1="235.5" x2="1200" y2="235.5"/>
+<line class="sp" x1="702.5" y1="0" x2="702.5" y2="236"/>
+<a class="ln" href="#capital">
+<rect class="pad" x="0" y="33" width="1200" height="67" style="pointer-events: all"/>
+<text class="nm" x="0" y="64">Capital</text>
+<text class="m" x="0" y="83">money</text>
+<text x="236" y="54">an import plan, read from a statement</text>
+<g class="wl"><rect class="pad" x="236" y="54" width="460" height="40"/><line class="d" x1="236" y1="74" x2="695" y2="74"/></g>
+<circle class="g wg" cx="702.5" cy="74" r="6.5" style="animation-delay: 0.6s"/>
+<text x="722" y="54">my click · valid 30 min</text>
+<g class="wr" style="animation-delay: 0.75s"><rect class="pad" x="708" y="54" width="294" height="40"/><line class="c" x1="710" y1="74" x2="1000" y2="74"/></g>
+<text x="1012" y="78">ledger rows, undoable</text>
+</a>
+<a class="ln" href="#sentinel">
+<rect class="pad" x="0" y="101" width="1200" height="67" style="pointer-events: all"/>
+<text class="nm" x="0" y="132">Sentinel</text>
+<text class="m" x="0" y="151">public spending</text>
+<text x="236" y="118">a price flagged by statistics</text>
+<g class="wl" style="animation-delay: 0.08s"><rect class="pad" x="236" y="122" width="460" height="40"/><line class="dq" x1="236" y1="128" x2="696" y2="135"/><line class="dq" x1="236" y1="135" x2="696" y2="138.5"/><line class="dq" x1="236" y1="149" x2="696" y2="145.5"/><line class="dq" x1="236" y1="156" x2="696" y2="149"/><line class="d" x1="236" y1="142" x2="696" y2="142"/></g>
+<rect class="g wg" x="699.5" y="129" width="6" height="26" rx="3" style="animation-delay: 0.68s"/>
+<text x="722" y="122">an evaluator approves · default: suppress</text>
+<g class="wr" style="animation-delay: 0.83s"><rect class="pad" x="706" y="122" width="296" height="40"/><line class="c" x1="707" y1="142" x2="1000" y2="142"/></g>
+<text x="1012" y="146">an alert to review</text>
+</a>
+<a class="ln" href="#cosmos">
+<rect class="pad" x="0" y="169" width="1200" height="66" style="pointer-events: all"/>
+<text class="nm" x="0" y="200">Cosmos</text>
+<text class="m" x="0" y="219">software built by agents</text>
+<text x="236" y="190">a delivery from an agent at a station</text>
+<g class="wl" style="animation-delay: 0.16s"><rect class="pad" x="236" y="190" width="460" height="40"/><line class="d" x1="236" y1="210" x2="695" y2="210"/></g>
+<circle class="g wg" cx="702.5" cy="210" r="6.5" style="animation-delay: 0.76s"/>
+<text x="722" y="190">its contract passes · a stop waits for me</text>
+<g class="wr" style="animation-delay: 0.91s"><rect class="pad" x="708" y="190" width="294" height="40"/><line class="c" x1="710" y1="210" x2="1000" y2="210"/></g>
+<text x="1012" y="214">a draft pull request</text>
+</a>
+</svg>
+</div>
+
+<div class="kl-row" style="display: flex; gap: 2%; margin-top: 14px; font-family: var(--f-mono); font-size: 11.5px; line-height: 20px; color: var(--muted)">
+<div style="flex: 0 0 57.5%; max-width: 57.5%; display: flex; flex-wrap: wrap; gap: 4px 28px">
+<span style="display: flex; align-items: center; gap: 10px"><svg width="28" height="8" viewBox="0 0 28 8" aria-hidden="true" style="flex: none"><line class="d" x1="0" y1="4" x2="28" y2="4"/></svg>dashed: proposed, not yet trusted</span>
+<span style="display: flex; align-items: center; gap: 10px"><svg width="28" height="8" viewBox="0 0 28 8" aria-hidden="true" style="flex: none"><line class="c" x1="0" y1="4" x2="28" y2="4"/></svg>solid: committed</span>
+</div>
+<div style="flex: 0 0 40.5%; max-width: 40.5%; display: flex; align-items: center; gap: 10px">
+<svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true" style="flex: none"><circle class="g" cx="7" cy="7" r="5"/></svg>
+<span>the line: where a person, or a check that fails closed, decides</span>
+</div>
+</div>
+
+<section id="capital" style="padding-top: 150px">
+<div class="kl-row" style="display: flex; gap: 2%; align-items: flex-start">
+<div style="flex: 0 0 57.5%; max-width: 57.5%">
+<h2 class="kl-h2" style="margin: 0; font-family: var(--f-display); font-weight: var(--w-display); font-size: 60px; line-height: 62px; letter-spacing: var(--tr-h)">Capital</h2>
+<p style="margin: 20px 0 0; max-width: 580px; text-wrap: pretty">A private finance workspace. It keeps my money and my companies’ money in one ledger: accounts, cards, investments, several currencies. An assistant reads statements from PDFs and screenshots and proposes how to book them.</p>
+<p style="margin: 16px 0 0; max-width: 580px; font-size: 16px; line-height: 26px; text-wrap: pretty">About 1,870 tests. The October 2026 move to a single ledger took 2,305 lines of migration SQL, rehearsed on a production dump after a 705-line read-only precheck.</p>
+</div>
+<div style="flex: 0 0 40.5%; max-width: 40.5%; display: flex; flex-direction: column; gap: 14px; padding-top: 10px">
+<p style="margin: 0; font-size: 16px; line-height: 26px"><b style="font-weight: 600">Must not happen.</b> A statement written to the books without anyone approving it.</p>
+<p style="margin: 0; font-family: var(--f-display); font-size: 25px; line-height: 33px; font-weight: 500; letter-spacing: -0.01em; text-wrap: balance">The assistant can read a statement. It cannot import one on its own.</p>
+<p style="margin: 0; font-size: 16px; line-height: 26px; text-wrap: pretty">Its import plan stays a proposal until I click Confirm import, and that confirmation expires after 30&nbsp;minutes. Every write to the books can be undone, whoever made it.</p>
+<p style="margin: 0; font-size: 16px; line-height: 26px"><b style="font-weight: 600">The cost.</b> No import ever finishes by itself. Each plan waits for me.</p>
+<p style="margin: 0; font-size: 16px; line-height: 26px"><b style="font-weight: 600">Not taken.</b> Commit first, review later.</p>
+</div>
+</div>
+
+<div class="kl-fig" style="margin-top: 48px">
+<svg viewBox="0 0 1200 368" role="img" aria-label="Capital. Left of the line, an import plan proposed by the assistant: five rows separated by dashed rules, 37 more below, a note that it is waiting for my click, and a Confirm import button. On the line, one gate: my click, valid 30 minutes. Right of the line, 42 ledger rows, and above them the same ledger drawn as a cash-flow diagram from income, through two companies and the person, to spending, investments and surplus. All rows and amounts are invented." style="display: block; width: 100%; height: auto">
+<line class="sp" x1="702.5" y1="0" x2="702.5" y2="368"/>
+<rect class="p" x="0.5" y="8.5" width="600" height="322" rx="8"/>
+<text class="u b" x="16" y="34">Import plan</text>
+<text class="m" x="104" y="34">proposed · nothing written</text>
+<text class="m e" x="584" y="34">42 rows</text>
+<line class="h" x1="0.5" y1="48.5" x2="600.5" y2="48.5"/>
+<text class="m" x="16" y="72">02 Sep</text><text class="u m" x="84" y="72">Grocery store</text><text class="u m" x="300" y="72">Checking</text><text class="u m" x="420" y="72">Food</text><text class="m e" x="584" y="72">−186.40</text>
+<line class="hd" x1="16" y1="85.5" x2="584" y2="85.5"/>
+<text class="m" x="16" y="109">03 Sep</text><text class="u m" x="84" y="109">Client invoice 0142</text><text class="u m" x="300" y="109">Company A</text><text class="u m" x="420" y="109">Consulting</text><text class="m e" x="584" y="109">+12,400.00</text>
+<line class="hd" x1="16" y1="122.5" x2="584" y2="122.5"/>
+<text class="m" x="16" y="146">05 Sep</text><text class="u m" x="84" y="146">Electricity</text><text class="u m" x="300" y="146">Checking</text><text class="u m" x="420" y="146">Housing</text><text class="m e" x="584" y="146">−212.75</text>
+<line class="hd" x1="16" y1="159.5" x2="584" y2="159.5"/>
+<text class="m" x="16" y="183">07 Sep</text><text class="u m" x="84" y="183">Card payment</text><text class="u m" x="300" y="183">Checking → Card</text><text class="u m" x="420" y="183">Transfer</text><text class="m e" x="584" y="183">3,950.00</text>
+<line class="hd" x1="16" y1="196.5" x2="584" y2="196.5"/>
+<text class="m" x="16" y="220">09 Sep</text><text class="u m" x="84" y="220">Pharmacy</text><text class="u m" x="300" y="220">Card</text><text class="u m" x="420" y="220">Health</text><text class="m e" x="584" y="220">−64.90</text>
+<line class="hd" x1="16" y1="233.5" x2="584" y2="233.5"/>
+<text class="m" x="16" y="257">+ 37 more rows</text>
+<line class="h" x1="0.5" y1="270.5" x2="600.5" y2="270.5"/>
+<text class="m" x="16" y="305">waiting for my click</text>
+<rect class="ink" x="468" y="286" width="116" height="28" rx="6"/>
+<text class="u b inv mid" x="526" y="304.5">Confirm import</text>
+<line class="d" x1="584" y1="300" x2="695" y2="300"/>
+<circle class="g" cx="702.5" cy="300" r="6.5"/>
+<text x="722" y="288">my click · valid 30 min</text>
+<line class="c" x1="710" y1="300" x2="934" y2="300"/>
+<text x="946" y="304">42 ledger rows</text>
+<path class="q" d="M 900 300 C 900 314 888 320 868 320 L 607 320"/>
+<polyline class="q" points="613,315 607,320 613,325"/>
+<text class="m" x="722" y="340">⌘Z undoes the whole batch</text>
+<text class="m e" x="1200" y="340">rows and amounts invented</text>
+<text class="m" x="0" y="354">the assistant: 26 tools · capped at US$0.50 and 12 tool iterations a turn</text>
+<text class="u m" x="726" y="28">Table</text><text class="u m" x="774" y="28">Pivot</text><text class="u" x="820" y="28">Chart</text><text class="u m" x="868" y="28">Board</text><text class="u m" x="918" y="28">Calendar</text>
+<line class="h" x1="726" y1="36.5" x2="1200" y2="36.5"/>
+<line class="c2" x1="820" y1="36" x2="853" y2="36"/>
+<path class="w" d="M 736 52 L 842 52 L 842 176.8 L 736 176.8 Z"/>
+<path class="w" d="M 736 186.8 L 842 186.8 L 842 233.6 L 736 233.6 Z"/>
+<path class="w" d="M 736 247.6 L 852 247.6 C 905 247.6 905 227.2 958 227.2 L 958 237.6 C 905 237.6 905 258 852 258 L 736 258 Z"/>
+<path class="w" d="M 852 52 C 963 52 963 44 1074 44 L 1074 59.6 C 963 59.6 963 67.6 852 67.6 Z"/>
+<path class="w" d="M 852 67.6 C 963 67.6 963 65.6 1074 65.6 L 1074 86.4 C 963 86.4 963 88.4 852 88.4 Z"/>
+<path class="w" d="M 852 88.4 C 905 88.4 905 92 958 92 L 958 180.4 C 905 180.4 905 176.8 852 176.8 Z"/>
+<path class="w" d="M 852 186.8 C 905 186.8 905 180.4 958 180.4 L 958 227.2 C 905 227.2 905 233.6 852 233.6 Z"/>
+<path class="w" d="M 968 92 C 1021 92 1021 92.4 1074 92.4 L 1074 126.2 C 1021 126.2 1021 125.8 968 125.8 Z"/>
+<path class="w" d="M 968 125.8 C 1021 125.8 1021 132.2 1074 132.2 L 1074 150.4 C 1021 150.4 1021 144 968 144 Z"/>
+<path class="w" d="M 968 144 C 1021 144 1021 156.4 1074 156.4 L 1074 166.8 C 1021 166.8 1021 154.4 968 154.4 Z"/>
+<path class="w" d="M 968 154.4 C 1021 154.4 1021 172.8 1074 172.8 L 1074 193.6 C 1021 193.6 1021 175.2 968 175.2 Z"/>
+<path class="w" d="M 968 175.2 C 1021 175.2 1021 199.6 1074 199.6 L 1074 241.2 C 1021 241.2 1021 216.8 968 216.8 Z"/>
+<path class="w" d="M 968 216.8 C 1021 216.8 1021 247.2 1074 247.2 L 1074 268 C 1021 268 1021 237.6 968 237.6 Z"/>
+<rect class="n1" x="726" y="52" width="10" height="124.8" rx="2"/>
+<rect class="n1" x="726" y="186.8" width="10" height="46.8" rx="2"/>
+<rect class="n1" x="726" y="247.6" width="10" height="10.4" rx="2"/>
+<rect class="n2" x="842" y="52" width="10" height="124.8" rx="2"/>
+<rect class="n2" x="842" y="186.8" width="10" height="46.8" rx="2"/>
+<rect class="n2" x="958" y="92" width="10" height="145.6" rx="2"/>
+<rect class="n3" x="1074" y="44" width="10" height="15.6" rx="2"/>
+<rect class="n3" x="1074" y="65.6" width="10" height="20.8" rx="2"/>
+<rect class="n3" x="1074" y="92.4" width="10" height="33.8" rx="2"/>
+<rect class="n3" x="1074" y="132.2" width="10" height="18.2" rx="2"/>
+<rect class="n3" x="1074" y="156.4" width="10" height="10.4" rx="2"/>
+<rect class="n3" x="1074" y="172.8" width="10" height="20.8" rx="2"/>
+<rect class="n3" x="1074" y="199.6" width="10" height="41.6" rx="2"/>
+<rect class="n1" x="1074" y="247.2" width="10" height="20.8" rx="2"/>
+<text class="u2 mid" x="789" y="118">Consulting 24,000</text>
+<text class="u2" x="742" y="214">Products 9,000</text>
+<text class="u2" x="742" y="256.5">Dividends 2,000</text>
+<text class="u2" x="858" y="118">Company A</text>
+<text class="u2" x="858" y="214">Company B</text>
+<text class="u2" x="974" y="168">Personal 28,000</text>
+<text class="u2" x="1090" y="56">Costs 3,000</text>
+<text class="u2" x="1090" y="80">Taxes 4,000</text>
+<text class="u2" x="1090" y="113">Housing 6,500</text>
+<text class="u2" x="1090" y="145">Food 3,500</text>
+<text class="u2" x="1090" y="165.5">Transport 2,000</text>
+<text class="u2" x="1090" y="187">Other 4,000</text>
+<text class="u2" x="1090" y="224">Investments 8,000</text>
+<text class="u2" x="1090" y="261.5">Surplus 4,000</text>
+</svg>
+</div>
+
+<div class="kl-row" style="display: flex; gap: 2%; align-items: flex-start; margin-top: 20px">
+<p class="kl-off" style="flex: 0 0 40.5%; max-width: 40.5%; margin: 0 0 0 59.5%; font-family: var(--f-mono); font-size: 12.5px; line-height: 20px; color: var(--muted)">In production on my own machine since [MONTH YEAR] · private: it holds real financial data · no public demo</p>
+</div>
+</section>
+
+<section id="sentinel" style="padding-top: 150px">
+<div class="kl-row" style="display: flex; gap: 2%; align-items: flex-start">
+<div style="flex: 0 0 57.5%; max-width: 57.5%">
+<h2 class="kl-h2" style="margin: 0; font-family: var(--f-display); font-weight: var(--w-display); font-size: 60px; line-height: 62px; letter-spacing: var(--tr-h)">Sentinel</h2>
+<p style="margin: 20px 0 0; max-width: 580px; text-wrap: pretty">Sentinel joins Brazil’s public procurement, company, sanction and election records in one database, and flags prices and relationships for a person to review.</p>
+<p style="margin: 16px 0 0; max-width: 580px; font-size: 16px; line-height: 26px; text-wrap: pretty">7 public sources and 6 analysis engines. Claude reads the tender documents themselves. 24,627 tenders ingested (snapshot, May 2026).</p>
+</div>
+<div style="flex: 0 0 40.5%; max-width: 40.5%; display: flex; flex-direction: column; gap: 14px; padding-top: 10px">
+<p style="margin: 0; font-size: 16px; line-height: 26px"><b style="font-weight: 600">Must not happen.</b> An alert that reads as an accusation.</p>
+<p style="margin: 0; font-family: var(--f-display); font-size: 25px; line-height: 33px; font-weight: 500; letter-spacing: -0.01em; text-wrap: balance">For prices, statistics propose. An evaluator decides, and its default is to suppress.</p>
+<p style="margin: 0; font-size: 16px; line-height: 26px; text-wrap: pretty">The evaluator is a language model. If its key is missing, its call fails or its reply cannot be parsed, no price alert is published. The wording rule: a point to check, never an accusation. When I tightened it, a migration deleted 241 model-written alerts so they would be regenerated.</p>
+<p style="margin: 0; font-size: 16px; line-height: 26px"><b style="font-weight: 600">The cost.</b> It stays quiet about things that may be real, and I have not yet measured how often.</p>
+<p style="margin: 0; font-size: 16px; line-height: 26px"><b style="font-weight: 600">Not taken.</b> Publishing every price the statistics flag.</p>
+</div>
+</div>
+
+<div class="kl-fig" style="margin-top: 48px">
+<svg viewBox="0 0 1200 270" role="img" aria-label="Sentinel. Left of the line, the data pipeline: seven kinds of public record, five of the processing steps and the six analysis engines, with one job running from tenders to price ranges. The price engine sends dashed candidates to the line. On the line, an evaluator whose default is to suppress: the candidates it does not confirm stop there. One continues, solid, to an alert written as a point to review. Invented example, no real tender, company or person." style="display: block; width: 100%; height: auto">
+<line class="sp" x1="702.5" y1="0" x2="702.5" y2="270"/>
+<text class="m" x="0" y="18">public records</text>
+<text class="m" x="214" y="18">processing</text>
+<text class="m" x="428" y="18">analysis</text>
+<g transform="translate(0 0.5)">
+<path class="q" d="M 170 80 C 192 80 192 80 214 80"/>
+<path class="q" d="M 170 112 C 192 112 192 80 214 80"/>
+<path class="q" d="M 170 144 C 192 144 192 80 214 80"/>
+<path class="q" d="M 170 176 C 192 176 192 112 214 112"/>
+<path class="q" d="M 170 176 C 192 176 192 144 214 144"/>
+<path class="q" d="M 170 208 C 192 208 192 176 214 176"/>
+<path class="q" d="M 170 240 C 192 240 192 208 214 208"/>
+<path class="q" d="M 384 80 C 406 80 406 224 428 224"/>
+<path class="q" d="M 384 112 C 406 112 406 64 428 64"/>
+<path class="q" d="M 384 112 C 406 112 406 192 428 192"/>
+<path class="q" d="M 384 144 C 406 144 406 160 428 160"/>
+<path class="q" d="M 384 176 C 406 176 406 96 428 96"/>
+<path class="q" d="M 384 208 C 406 208 406 192 428 192"/>
+<path class="c" d="M 170 48 C 192 48 192 80 214 80"/>
+<path class="c" d="M 384 80 C 406 80 406 128 428 128"/>
+</g>
+<rect class="p" x="0.5" y="36.5" width="170" height="24" rx="6"/><text class="u2" x="10" y="52.5">Tenders</text>
+<rect class="p" x="0.5" y="68.5" width="170" height="24" rx="6"/><text class="u2" x="10" y="84.5">Contracts</text>
+<rect class="p" x="0.5" y="100.5" width="170" height="24" rx="6"/><text class="u2" x="10" y="116.5">Items and bids</text>
+<rect class="p" x="0.5" y="132.5" width="170" height="24" rx="6"/><text class="u2" x="10" y="148.5">Tender documents</text>
+<rect class="p" x="0.5" y="164.5" width="170" height="24" rx="6"/><text class="u2" x="10" y="180.5">Companies and shareholders</text>
+<rect class="p" x="0.5" y="196.5" width="170" height="24" rx="6"/><text class="u2" x="10" y="212.5">Sanction lists</text>
+<rect class="p" x="0.5" y="228.5" width="170" height="24" rx="6"/><text class="u2" x="10" y="244.5">Election records</text>
+<rect class="p" x="214.5" y="68.5" width="170" height="24" rx="6"/><text class="u2" x="224" y="84.5">Normalise tenders</text>
+<rect class="p" x="214.5" y="100.5" width="170" height="24" rx="6"/><text class="u2" x="224" y="116.5">Link companies</text>
+<rect class="p" x="214.5" y="132.5" width="170" height="24" rx="6"/><text class="u2" x="224" y="148.5">Match shareholders</text>
+<rect class="p" x="214.5" y="164.5" width="170" height="24" rx="6"/><text class="u2" x="224" y="180.5">Match sanctions</text>
+<rect class="p" x="214.5" y="196.5" width="170" height="24" rx="6"/><text class="u2" x="224" y="212.5">Match donations</text>
+<rect class="p" x="428.5" y="52.5" width="170" height="24" rx="6"/><text class="u2" x="438" y="68.5">Company indicators</text>
+<rect class="p" x="428.5" y="84.5" width="170" height="24" rx="6"/><text class="u2" x="438" y="100.5">Sanctioned suppliers</text>
+<rect class="pi" x="428.5" y="116.5" width="170" height="24" rx="6"/><text class="u2 b" x="438" y="132.5">Price ranges</text>
+<rect class="p" x="428.5" y="148.5" width="170" height="24" rx="6"/><text class="u2" x="438" y="164.5">Shared shareholders</text>
+<rect class="p" x="428.5" y="180.5" width="170" height="24" rx="6"/><text class="u2" x="438" y="196.5">Political links</text>
+<rect class="p" x="428.5" y="212.5" width="170" height="24" rx="6"/><text class="u2" x="438" y="228.5">Document review</text>
+<circle class="dot" cx="192" cy="64.5" r="2.4"/>
+<circle class="dot" cx="406" cy="104.5" r="2.4"/>
+<path class="d" d="M 599 128 C 640 128 652 104 696 104"/>
+<path class="d" d="M 599 128 C 640 128 652 116 696 116"/>
+<path class="d" d="M 599 128 L 696 128"/>
+<path class="d" d="M 599 128 C 640 128 652 140 696 140"/>
+<path class="d" d="M 599 128 C 640 128 652 152 696 152"/>
+<rect class="go" x="696.5" y="92" width="12" height="72" rx="6"/>
+<text x="722" y="78">an evaluator · default: suppress</text>
+<line class="c" x1="709" y1="128" x2="760" y2="128"/>
+<rect class="p" x="760.5" y="92.5" width="439" height="110" rx="10"/>
+<rect class="o" x="776.5" y="106.5" width="58" height="20" rx="10"/><text class="u2 mid" x="805.5" y="120.5">Medium</text>
+<rect class="w" x="842" y="106" width="100" height="21" rx="4"/><text class="u2 mid" x="892" y="120.5">Price to review</text>
+<text class="u3 b" x="776" y="151">Unit price above the reference range</text>
+<text class="u m" x="776" y="172">Awarded at 1.8 times the median of 23 comparable purchases.</text>
+<text class="u m" x="776" y="190">Worth checking the item specification first.</text>
+<text class="m" x="760" y="226">no key, failed call or unreadable reply: suppress</text>
+<text class="m" x="760" y="244">this gate covers price alerts only</text>
+<text class="m" x="760" y="262">invented example · no real tender, company or person</text>
+</svg>
+</div>
+
+<div class="kl-row" style="display: flex; gap: 2%; align-items: flex-start; margin-top: 20px">
+<p class="kl-off" style="flex: 0 0 40.5%; max-width: 40.5%; margin: 0 0 0 59.5%; font-family: var(--f-mono); font-size: 12.5px; line-height: 20px; color: var(--muted)">Public site: [LINK, ONCE IT ANSWERS] · moving to my own machine, October 2026</p>
+</div>
+</section>
+
+<section id="cosmos" style="padding-top: 150px">
+<div class="kl-row" style="display: flex; gap: 2%; align-items: flex-start">
+<div style="flex: 0 0 57.5%; max-width: 57.5%">
+<h2 class="kl-h2" style="margin: 0; font-family: var(--f-display); font-weight: var(--w-display); font-size: 60px; line-height: 62px; letter-spacing: var(--tr-h)">Cosmos</h2>
+<p style="margin: 20px 0 0; max-width: 580px; text-wrap: pretty">A production line for software, staffed by coding agents, running on my own machine. I describe a line in YAML: stations in order, each a typed contract with a worker assigned to it. One objective goes in, each station hands its output to the next inside the item’s own git worktree, and a draft pull request comes out.</p>
+<p style="margin: 16px 0 0; max-width: 580px; font-size: 16px; line-height: 26px; text-wrap: pretty">Started on 7 October 2026: about 13,900 lines of TypeScript, 271 tests passing in CI, and a validator with 44 checks that reads a line before any model is called. The engine refuses 48 programs and 15 git subcommands whatever a worker’s list says. On my monorepo it has opened three draft pull requests; none is merged yet.</p>
+</div>
+<div style="flex: 0 0 40.5%; max-width: 40.5%; display: flex; flex-direction: column; gap: 14px; padding-top: 10px">
+<p style="margin: 0; font-size: 16px; line-height: 26px"><b style="font-weight: 600">Must not happen.</b> An agent doing something nobody gave it the authority to do.</p>
+<p style="margin: 0; font-family: var(--f-display); font-size: 25px; line-height: 33px; font-weight: 500; letter-spacing: -0.01em; text-wrap: balance">Workers don’t ask permission. They have an authority, and the rest is refused.</p>
+<p style="margin: 0; font-size: 16px; line-height: 26px; text-wrap: pretty">A command outside a worker’s list is refused with the reason, and the worker adapts or escalates with a question. A delivery counts only when the station’s checks pass. The engine, not the model, computes the diff and opens the pull request, always as a draft. The line stops for me in three cases: a check the line asked for, an escalation, an external action it was not authorized to take.</p>
+<p style="margin: 0; font-size: 16px; line-height: 26px"><b style="font-weight: 600">The cost.</b> A command I forgot to list stops the whole line until I answer. And it is a policy, not a sandbox: an allowed command still runs with my permissions.</p>
+<p style="margin: 0; font-size: 16px; line-height: 26px"><b style="font-weight: 600">Not taken.</b> A permission prompt for every command.</p>
+</div>
+</div>
+
+<div class="kl-fig" style="margin-top: 48px">
+<svg viewBox="0 0 1200 372" role="img" aria-label="Cosmos. Top: the example line. Three stations left of the line, each a typed contract with a worker: plan with Pietra the planner, implement with Caio the implementer, review with Vera the reviewer, joined by dashed deliveries, with a return loop from review to implement at most twice. On the line, one gate: every contract passed and the pull request action is pre-authorized. Right of the line: a draft pull request, opened by the line and merged by a person. Bottom: a real run from 11 October 2026, translated from the command line. The implementer is refused a command outside its authority and escalates with a question. The line stops and waits for me, then resumes with my answer and opens the draft pull request." style="display: block; width: 100%; height: auto">
+<line class="sp" x1="702.5" y1="0" x2="702.5" y2="372"/>
+<text class="m" x="0" y="14">the example line: one objective in, one draft pull request out</text>
+<text x="722" y="14">every contract passed · open_pr pre-authorized</text>
+<rect class="p" x="0.5" y="24.5" width="190" height="96" rx="8"/>
+<text class="u b" x="14" y="47">plan</text><text class="m s e" x="176" y="47">read</text>
+<text class="s" x="14" y="65">Pietra · planner</text>
+<line class="h" x1="0.5" y1="76.5" x2="190.5" y2="76.5"/>
+<text class="m s" x="14" y="94">delivers plan, tasks</text>
+<text class="m s" x="14" y="109">sections · JSON schema</text>
+<rect class="p" x="244.5" y="24.5" width="190" height="96" rx="8"/>
+<text class="u b" x="258" y="47">implement</text><text class="m s e" x="420" y="47">write</text>
+<text class="s" x="258" y="65">Caio · implementer</text>
+<line class="h" x1="244.5" y1="76.5" x2="434.5" y2="76.5"/>
+<text class="m s" x="258" y="94">delivers a summary</text>
+<text class="m s" x="258" y="109">engine diff · typecheck</text>
+<rect class="p" x="488.5" y="24.5" width="190" height="96" rx="8"/>
+<text class="u b" x="502" y="47">review</text><text class="m s e" x="664" y="47">read</text>
+<text class="s" x="502" y="65">Vera · reviewer</text>
+<line class="h" x1="488.5" y1="76.5" x2="678.5" y2="76.5"/>
+<text class="m s" x="502" y="94">delivers verdict, review</text>
+<text class="m s" x="502" y="109">approve or return</text>
+<line class="d" x1="191" y1="72.5" x2="244" y2="72.5"/>
+<line class="d" x1="435" y1="72.5" x2="488" y2="72.5"/>
+<line class="d" x1="679" y1="72.5" x2="695" y2="72.5"/>
+<circle class="g" cx="702.5" cy="72.5" r="6.5"/>
+<line class="c" x1="710" y1="72.5" x2="760" y2="72.5"/>
+<path class="q" d="M 583 121 C 583 141 571 148 551 148 L 371 148 C 351 148 339 141 339 123"/>
+<polyline class="q" points="334,129 339,123 344,129"/>
+<text class="m s mid" x="461" y="165">returns with a note, at most 2 times</text>
+<rect class="p" x="760.5" y="24.5" width="439" height="96" rx="8"/>
+<text class="u b" x="776" y="47">Draft pull request</text>
+<rect class="o" x="1136.5" y="33.5" width="48" height="20" rx="10"/><text class="u2 mid" x="1160.5" y="47.5">draft</text>
+<text class="s" x="776" y="65">open_pr · GitHub, a machine worker</text>
+<line class="h" x1="760.5" y1="76.5" x2="1199.5" y2="76.5"/>
+<text class="m s" x="776" y="94">its own branch, pushed by the line</text>
+<text class="m s" x="776" y="109">marked ready and merged by a person</text>
+<text class="m" x="0" y="196">a real run, 11 Oct 2026 · translated: the command line speaks Portuguese</text>
+<rect class="p" x="0.5" y="206.5" width="640" height="150" rx="8"/>
+<text class="m" x="16" y="231">── 2/4 · implement</text>
+<text x="16" y="250">⚙ run_command npx vitest run src/lib/__tests__/money.test.ts</text>
+<text x="30" y="269">✗ outside the worker’s authority</text>
+<text x="16" y="288">⚑ Caio escalated · 26 s · 6 turns</text>
+<text x="16" y="307">⚑ needs you: May I run vitest in apps/capital? If not,</text>
+<text x="30" y="326">which command should I use to run the tests?</text>
+<text class="m" x="16" y="345">item stopped in implement, waiting for your answer</text>
+<line class="d" x1="641" y1="281.5" x2="695" y2="281.5"/>
+<circle class="go" cx="702.5" cy="281.5" r="6"/>
+<text x="722" y="269">stopped: it needs a person</text>
+<line class="c" x1="709" y1="281.5" x2="880" y2="281.5"/>
+<text x="892" y="285.5">resumed with my answer</text>
+<text class="m" x="722" y="317">then round 2, review, and the draft pull request</text>
+<text class="m" x="722" y="335">three draft pull requests so far, none merged yet</text>
+</svg>
+</div>
+
+<div class="kl-row" style="display: flex; gap: 2%; align-items: flex-start; margin-top: 20px">
+<p class="kl-off" style="flex: 0 0 40.5%; max-width: 40.5%; margin: 0 0 0 59.5%; font-family: var(--f-mono); font-size: 12.5px; line-height: 20px; color: var(--muted)">In development since 7 October 2026 · command line only · private repository, one user: me</p>
+</div>
+</section>
+
+<section id="lab" style="padding-top: 150px">
+<h2 class="kl-h2" style="margin: 0; max-width: 57.5%; font-family: var(--f-display); font-weight: var(--w-display); font-size: 40px; line-height: 44px; letter-spacing: var(--tr-h)">Smaller systems, same line.</h2>
+
+<sc-if value="{{showTriage}}" hint-placeholder-val="{{ true }}">
+<div id="triage" class="kl-row" style="display: flex; gap: 2%; align-items: flex-start; margin-top: 56px; padding-top: 32px; border-top: 1px solid var(--rule)">
+<div style="flex: 0 0 32%; max-width: 32%; display: flex; flex-direction: column; gap: 10px">
+<h3 style="margin: 0; font-family: var(--f-display); font-size: 24px; line-height: 28px; font-weight: var(--w-entry); letter-spacing: -0.01em">A filter that learns from my decisions</h3>
+<p style="margin: 0; font-size: 16px; line-height: 26px; text-wrap: pretty">Four layers sort a daily stream: fixed filters, a logistic regression with no ML library, Claude scoring, and weekly rule proposals I accept or reject. The day I switched the model on, it discarded 46 items in minutes. I restored all 46 from the audit trail. I added a threshold cap and a daily circuit breaker, and wrote the post-mortem.</p>
+<p style="margin: 2px 0 0; font-family: var(--f-mono); font-size: 12.5px; line-height: 20px; color: var(--muted)">Private, one user · built August 2026 · [SHADOW MODE OR ACTIVE TODAY]</p>
+</div>
+<div class="kl-figs" style="flex: 0 0 66%; max-width: 66%">
+<svg viewBox="0 0 792 214" role="img" aria-label="The learning filter. Left of the line, four dashed rows in shadow mode: what the model would discard. On the line, one gate: 95 percent cross-validated precision, then my switch. Right of the line, three solid rows really discarded, each with Revert. A loop runs back across the line: 46 restored from the audit trail. Items are numbered, never named." style="display: block; width: 100%; height: auto">
+<line class="sp" x1="294.5" y1="0" x2="294.5" y2="214"/>
+<text class="m" x="0" y="18">shadow mode: the model would discard</text>
+<rect class="ps" x="0.5" y="30.5" width="270" height="28" rx="6"/><text x="12" y="49">0.03</text><text class="u m" x="56" y="49">Item 1182</text><text class="m s e" x="258" y="49">would discard</text>
+<rect class="ps" x="0.5" y="64.5" width="270" height="28" rx="6"/><text x="12" y="83">0.05</text><text class="u m" x="56" y="83">Item 1175</text><text class="m s e" x="258" y="83">would discard</text>
+<rect class="ps" x="0.5" y="98.5" width="270" height="28" rx="6"/><text x="12" y="117">0.08</text><text class="u m" x="56" y="117">Item 1169</text><text class="m s e" x="258" y="117">would discard</text>
+<rect class="ps" x="0.5" y="132.5" width="270" height="28" rx="6"/><text x="12" y="151">0.11</text><text class="u m" x="56" y="151">Item 1160</text><text class="m s e" x="258" y="151">would discard</text>
+<line class="d" x1="271" y1="78.5" x2="287" y2="78.5"/>
+<circle class="g" cx="294.5" cy="78.5" r="6.5"/>
+<line class="c" x1="302" y1="78.5" x2="318" y2="78.5"/>
+<text x="318" y="18">95% cross-validated precision, then my switch</text>
+<rect class="pi" x="318.5" y="30.5" width="473" height="28" rx="6"/><text x="330" y="49">0.02</text><text class="u" x="374" y="49">Item 1067</text><text class="s e" x="780" y="49">discarded · Revert</text>
+<rect class="pi" x="318.5" y="64.5" width="473" height="28" rx="6"/><text x="330" y="83">0.02</text><text class="u" x="374" y="83">Item 1041</text><text class="s e" x="780" y="83">discarded · Revert</text>
+<rect class="pi" x="318.5" y="98.5" width="473" height="28" rx="6"/><text x="330" y="117">0.04</text><text class="u" x="374" y="117">Item 1033</text><text class="s e" x="780" y="117">discarded · Revert</text>
+<text class="m" x="318" y="148">discard threshold capped at 0.15</text>
+<text class="m" x="318" y="164">at most 15 discards a day</text>
+<path class="q" d="M 600 127 C 600 172 585 184 557 184 L 160 184 C 144 184 135 176 135 162"/>
+<polyline class="q" points="130,168 135,162 140,168"/>
+<text class="m" x="318" y="204">46 restored from the audit trail</text>
+</svg>
+</div>
+</div>
+</sc-if>
+
+<div id="playbook" class="kl-row" style="display: flex; gap: 2%; align-items: flex-start; margin-top: 56px; padding-top: 32px; border-top: 1px solid var(--rule)">
+<div style="flex: 0 0 32%; max-width: 32%; display: flex; flex-direction: column; gap: 10px">
+<h3 style="margin: 0; font-family: var(--f-display); font-size: 24px; line-height: 28px; font-weight: var(--w-entry); letter-spacing: -0.01em">Deciding what not to build</h3>
+<p style="margin: 0; font-size: 16px; line-height: 26px; text-wrap: pretty">Borrowed from four books: one page naming the riskiest assumption, a 5-day prototype, two paid channels, kill criteria written before I spend, a verdict at week&nbsp;4.</p>
+<p style="margin: 0; font-size: 16px; line-height: 26px; text-wrap: pretty"><b style="font-weight: 600">MilhasGrupo.</b> Alerts for families when 3 to 6 award seats open on the same flight to Orlando. Ads were live in about 3&nbsp;days, and I ran the service by hand.</p>
+<p style="margin: 0; font-size: 16px; line-height: 26px; text-wrap: pretty"><b style="font-weight: 600">FIRE-BR.</b> A one-page hypothesis for a Brazilian financial-independence planner.</p>
+</div>
+<div style="flex: 0 0 66%; max-width: 66%; display: flex; flex-direction: column; gap: 24px">
+<div class="kl-figs">
+<svg viewBox="0 0 792 164" role="img" aria-label="The validation playbook on a time axis from day 0 to week 4, where the line is the go, pivot or kill decision. MilhasGrupo runs dashed from one page, through a prototype and paid traffic, and ends on the line in a hollow ring: its verdict is not recorded yet. FIRE-BR is a short dashed stroke: one page, June 2026." style="display: block; width: 100%; height: auto">
+<line class="sp" x1="294.5" y1="0" x2="294.5" y2="164"/>
+<text x="318" y="18">kill criteria, written before I spend</text>
+<text class="m" x="0" y="42">one page</text>
+<text class="m" x="110" y="42">prototype</text>
+<text class="m" x="190" y="42">paid traffic</text>
+<line class="q" x1="0.5" y1="50" x2="0.5" y2="62"/>
+<line class="q" x1="110.5" y1="50" x2="110.5" y2="62"/>
+<line class="q" x1="190.5" y1="50" x2="190.5" y2="62"/>
+<line class="d" x1="0" y1="56" x2="287" y2="56"/>
+<circle class="go" cx="294.5" cy="56" r="6"/>
+<text x="318" y="60">MilhasGrupo · verdict [GO / PIVOT / KILL], [DATE]</text>
+<line class="d" x1="0" y1="104" x2="60" y2="104"/>
+<text x="72" y="108">FIRE-BR · one page, June 2026</text>
+<line class="q" x1="0" y1="140.5" x2="294" y2="140.5"/>
+<line class="q" x1="0.5" y1="136" x2="0.5" y2="145"/>
+<line class="q" x1="110.5" y1="136" x2="110.5" y2="145"/>
+<text class="m" x="0" y="160">day 0</text>
+<text class="m" x="110" y="160">day 5, the cap</text>
+<text class="m" x="318" y="144.5">week 4: go, pivot or kill</text>
+</svg>
+</div>
+<p class="kl-off" style="margin: 0 0 0 40.2%; font-family: var(--f-display); font-size: 22px; line-height: 30px; font-weight: 500; letter-spacing: -0.01em; text-wrap: balance">If you can’t articulate the riskiest assumption in one sentence, the idea isn’t ready.</p>
+</div>
+</div>
+</section>
+
+<section id="method" style="padding-top: 150px">
+<div class="kl-row" style="display: flex; gap: 2%; align-items: flex-start">
+<h2 class="kl-h2" style="flex: 0 0 57.5%; max-width: 57.5%; box-sizing: border-box; margin: 0; padding-right: 24px; font-family: var(--f-display); font-weight: var(--w-display); font-size: 40px; line-height: 44px; letter-spacing: var(--tr-h); text-wrap: balance">How I build it and keep it running.</h2>
+<div style="flex: 0 0 40.5%; max-width: 40.5%; display: flex; flex-direction: column; gap: 2px; padding-top: 6px; font-family: var(--f-display); font-size: 20px; line-height: 30px; font-weight: 500; letter-spacing: -0.005em">
+<span>I write incidents down with their root cause.</span>
+<span>I rehearse risky migrations on a production dump.</span>
+<span>I turn each convention into a test.</span>
+</div>
+</div>
+
+<div id="agents" class="kl-row" style="display: flex; gap: 2%; align-items: flex-start; margin-top: 56px; padding-top: 32px; border-top: 1px solid var(--rule)">
+<div style="flex: 0 0 32%; max-width: 32%; display: flex; flex-direction: column; gap: 10px">
+<h3 style="margin: 0; font-family: var(--f-display); font-size: 24px; line-height: 28px; font-weight: var(--w-entry); letter-spacing: -0.01em">With coding agents</h3>
+<p style="margin: 0; font-size: 16px; line-height: 26px; text-wrap: pretty">Agents write most first drafts. I set the plan, the data model and the rules, and I answer for what runs. They work in parallel git worktrees and have opened 64 of the 85 pull requests so far. A written contract comes first, then a local gate of lint, typecheck and tests, then my merge. What is missing: a CI server and a second reviewer.</p>
+</div>
+<div style="flex: 0 0 66%; max-width: 66%; display: flex; flex-direction: column; gap: 20px">
+<div class="kl-figs">
+<svg viewBox="0 0 792 234" role="img" aria-label="Working with coding agents. Left of the line, six dashed branches fan out from a written contract, CLAUDE.md, read first since August 2026. On the line, one gate: lint, typecheck and tests, then my merge. Five branches pass and merge, solid, into main, 80 merged. One stops at the gate: closed, not merged." style="display: block; width: 100%; height: auto">
+<line class="sp" x1="294.5" y1="0" x2="294.5" y2="234"/>
+<path class="pq" d="M 0.5 100.5 L 20.5 100.5 L 28.5 108.5 L 28.5 138.5 L 0.5 138.5 Z"/>
+<path class="q" d="M 20.5 100.5 L 20.5 108.5 L 28.5 108.5"/>
+<line class="q" x1="6" y1="117.5" x2="22" y2="117.5"/>
+<line class="q" x1="6" y1="123.5" x2="22" y2="123.5"/>
+<line class="q" x1="6" y1="129.5" x2="16" y2="129.5"/>
+<text class="m" x="0" y="158">CLAUDE.md,</text>
+<text class="m" x="0" y="174">read first</text>
+<text class="m" x="0" y="190">since Aug 2026</text>
+<line class="q" x1="29" y1="120" x2="44" y2="120"/>
+<path class="d" d="M 44 120 C 150 120 170 45 291 45"/>
+<path class="d" d="M 44 120 C 150 120 170 75 291 75"/>
+<path class="d" d="M 44 120 C 150 120 170 105 291 105"/>
+<path class="d" d="M 44 120 C 150 120 170 135 291 135"/>
+<path class="d" d="M 44 120 C 150 120 170 165 291 165"/>
+<path class="d" d="M 44 120 C 150 120 170 195 291 195"/>
+<text class="m s" x="150" y="34">claude/… worktrees</text>
+<text class="m s" x="150" y="220">cursor/… worktrees</text>
+<rect class="g" x="291.5" y="33" width="6" height="174" rx="3"/>
+<text x="318" y="18">lint · typecheck · tests, then my merge</text>
+<path class="c" d="M 298 45 C 360 45 380 120 440 120"/>
+<path class="c" d="M 298 75 C 360 75 380 120 440 120"/>
+<path class="c" d="M 298 105 C 360 105 380 120 440 120"/>
+<path class="c" d="M 298 135 C 360 135 380 120 440 120"/>
+<path class="c" d="M 298 165 C 360 165 380 120 440 120"/>
+<line class="c2" x1="440" y1="120" x2="700" y2="120"/>
+<line class="c" x1="470" y1="115" x2="470" y2="125"/>
+<line class="c" x1="500" y1="115" x2="500" y2="125"/>
+<line class="c" x1="530" y1="115" x2="530" y2="125"/>
+<line class="c" x1="560" y1="115" x2="560" y2="125"/>
+<line class="c" x1="590" y1="115" x2="590" y2="125"/>
+<line class="c" x1="620" y1="115" x2="620" y2="125"/>
+<line class="c" x1="650" y1="115" x2="650" y2="125"/>
+<line class="c" x1="680" y1="115" x2="680" y2="125"/>
+<text x="712" y="124">main</text>
+<text class="m" x="712" y="140">80 merged</text>
+<text class="m" x="318" y="199">closed, not merged</text>
+</svg>
+</div>
+<div class="kl-off" style="margin-left: 40.2%; display: flex; flex-direction: column; gap: 4px; font-family: var(--f-mono); font-size: 11.5px; line-height: 18px">
+<div style="color: var(--muted)">recently merged</div>
+<div style="display: grid; grid-template-columns: 52px 30px minmax(0, 1fr); gap: 10px"><span style="color: var(--muted)">10 Oct</span><span style="color: var(--muted)">#85</span><span>Fix the monthly budget view on a phone and keep the wide pace bar on desktop</span></div>
+<div style="display: grid; grid-template-columns: 52px 30px minmax(0, 1fr); gap: 10px"><span style="color: var(--muted)">06 Oct</span><span style="color: var(--muted)">#67</span><span>Move accounting onto a single ledger</span></div>
+<div style="display: grid; grid-template-columns: 52px 30px minmax(0, 1fr); gap: 10px"><span style="color: var(--muted)">05 Oct</span><span style="color: var(--muted)">#68</span><span>Add self-hosted Uptime Kuma monitoring and a log watcher</span></div>
+<div style="display: grid; grid-template-columns: 52px 30px minmax(0, 1fr); gap: 10px"><span style="color: var(--muted)">04 Oct</span><span style="color: var(--muted)">#65</span><span>Remove Vercel and run the stack on the home server</span></div>
+<div style="display: grid; grid-template-columns: 52px 30px minmax(0, 1fr); gap: 10px"><span style="color: var(--muted)">29 Sep</span><span style="color: var(--muted)">#57</span><span>Add MCP server for remote AI accounting access</span></div>
+</div>
+</div>
+</div>
+
+<div id="production" class="kl-row" style="display: flex; gap: 2%; align-items: flex-start; margin-top: 56px; padding-top: 32px; border-top: 1px solid var(--rule)">
+<div style="flex: 0 0 32%; max-width: 32%; display: flex; flex-direction: column; gap: 10px">
+<h3 style="margin: 0; font-family: var(--f-display); font-size: 24px; line-height: 28px; font-weight: var(--w-entry); letter-spacing: -0.01em">On my own machine</h3>
+<p style="margin: 0; font-size: 16px; line-height: 26px; text-wrap: pretty">I am moving everything I run from Vercel onto one machine at home: 21 Docker Compose services behind a Cloudflare Tunnel, with no inbound ports. A new version starts only if its migration succeeds; otherwise the old one keeps running. One TypeScript spec generates the 53 uptime monitors.</p>
+<p style="margin: 2px 0 0; font-family: var(--f-mono); font-size: 12.5px; line-height: 20px; color: var(--muted)">Limits: one machine, no failover</p>
+</div>
+<div class="kl-figs" style="flex: 0 0 66%; max-width: 66%">
+<svg viewBox="0 0 792 214" role="img" aria-label="Deploys. Left of the line: git pull and build, then a migrate step drawn dashed because the new version is still a proposal. On the line, one gate: the migration exits zero. Right of the line, one machine at home with 21 services behind a tunnel with no inbound ports, four databases each with a dev twin, and 53 uptime monitors generated from one spec. A second dashed path stops at the line: if the migration fails, the old version keeps running." style="display: block; width: 100%; height: auto">
+<line class="sp" x1="294.5" y1="0" x2="294.5" y2="214"/>
+<rect class="pq" x="0.5" y="57.5" width="64" height="26" rx="5"/><text class="u2 mid" x="32.5" y="74.5">git pull</text>
+<line class="q" x1="65" y1="70.5" x2="84" y2="70.5"/>
+<rect class="pq" x="84.5" y="57.5" width="64" height="26" rx="5"/><text class="u2 mid" x="116.5" y="74.5">build</text>
+<line class="q" x1="149" y1="70.5" x2="168" y2="70.5"/>
+<rect class="pdd" x="168.5" y="57.5" width="64" height="26" rx="5"/><text class="u2 mid" x="200.5" y="74.5">migrate</text>
+<line class="d" x1="233" y1="70.5" x2="287" y2="70.5"/>
+<circle class="g" cx="294.5" cy="70.5" r="6.5"/>
+<text x="318" y="18">its migration exits 0</text>
+<line class="c" x1="302" y1="70.5" x2="372" y2="70.5"/>
+<path class="d" d="M 200.5 84 L 200.5 150.5 L 286 150.5"/>
+<line class="c" x1="287.5" y1="144" x2="287.5" y2="157"/>
+<text class="m" x="0" y="174">migration fails:</text>
+<text class="m" x="0" y="190">the old version keeps running</text>
+<path class="q" d="M 366 36.5 L 352.5 36.5 L 352.5 200.5 L 366 200.5"/>
+<path class="q" d="M 778 36.5 L 791.5 36.5 L 791.5 200.5 L 778 200.5"/>
+<text class="m mid" x="572" y="26">one machine at home</text>
+<line class="q" x1="668.5" y1="36.5" x2="668.5" y2="60"/>
+<polyline class="q" points="664,55 668.5,60 673,55"/>
+<text class="m s e" x="658" y="54">Cloudflare Tunnel · no inbound ports</text>
+<rect class="pi" x="372.5" y="64.5" width="12" height="12"/><rect class="pi" x="388.5" y="64.5" width="12" height="12"/><rect class="pi" x="404.5" y="64.5" width="12" height="12"/><rect class="pi" x="420.5" y="64.5" width="12" height="12"/><rect class="pi" x="436.5" y="64.5" width="12" height="12"/>
+<rect class="pi" x="462.5" y="64.5" width="12" height="12"/><rect class="pi" x="478.5" y="64.5" width="12" height="12"/><rect class="pi" x="494.5" y="64.5" width="12" height="12"/><rect class="pi" x="510.5" y="64.5" width="12" height="12"/><rect class="pi" x="526.5" y="64.5" width="12" height="12"/>
+<rect class="pi" x="552.5" y="64.5" width="12" height="12"/><rect class="pi" x="568.5" y="64.5" width="12" height="12"/>
+<rect class="pi" x="594.5" y="64.5" width="12" height="12"/><rect class="pi" x="610.5" y="64.5" width="12" height="12"/>
+<rect class="pi" x="636.5" y="64.5" width="12" height="12"/>
+<rect class="pi" x="662.5" y="64.5" width="12" height="12"/>
+<rect class="pi" x="688.5" y="64.5" width="12" height="12"/>
+<rect class="pi" x="714.5" y="64.5" width="12" height="12"/><rect class="pi" x="730.5" y="64.5" width="12" height="12"/><rect class="pi" x="746.5" y="64.5" width="12" height="12"/><rect class="pi" x="762.5" y="64.5" width="12" height="12"/>
+<text class="m s" x="372" y="94">15 app services</text>
+<text class="m s" x="660" y="94">tunnel</text>
+<text class="m s" x="660" y="108">and cron</text>
+<text class="m s" x="714" y="94">monitoring</text>
+<rect class="pi" x="372.5" y="128.5" width="12" height="12"/><rect class="pd" x="390.5" y="128.5" width="12" height="12"/>
+<rect class="pi" x="420.5" y="128.5" width="12" height="12"/><rect class="pd" x="438.5" y="128.5" width="12" height="12"/>
+<rect class="pi" x="468.5" y="128.5" width="12" height="12"/><rect class="pd" x="486.5" y="128.5" width="12" height="12"/>
+<rect class="pi" x="516.5" y="128.5" width="12" height="12"/><rect class="pd" x="534.5" y="128.5" width="12" height="12"/>
+<text class="m s" x="372" y="158">Postgres: 4 databases, each with a dev twin</text>
+<text class="m s" x="372" y="186">53 uptime monitors, generated from one spec</text>
+</svg>
+</div>
+</div>
+</section>
+
+</div>
+</div>
+
+<section id="about" style="padding-top: 110px">
+<div class="kl-row" style="display: flex; gap: 2%; align-items: flex-start">
+<div style="flex: 0 0 57.5%; max-width: 57.5%; display: flex; flex-direction: column; gap: 18px">
+<h2 class="kl-h2" style="margin: 0 0 6px; font-family: var(--f-display); font-weight: var(--w-display); font-size: 40px; line-height: 44px; letter-spacing: var(--tr-h)">About</h2>
+<p style="margin: 0; max-width: 600px; text-wrap: pretty">I have been a software engineer for 13&nbsp;years and chose to stay an individual contributor. I build core systems; I don’t manage people. <span style="font-family: var(--f-mono); font-size: 12.5px; color: var(--muted)">[CURRENT ROLE AND EMPLOYER, IF YOU WANT IT NAMED]</span></p>
+<p style="margin: 0; max-width: 600px; text-wrap: pretty">I started in 2013 with Android games, moved to iOS apps, spent 2015 to 2020 in applied machine learning, and now build full-stack TypeScript products around language models. Kodama Labs is my one-person company and the name I ship under.</p>
+</div>
+<div style="flex: 0 0 40.5%; max-width: 40.5%; display: flex; flex-direction: column; padding-top: 12px; border-bottom: 1px solid var(--rule)">
+<div style="font-family: var(--f-mono); font-size: 11.5px; line-height: 20px; color: var(--muted); padding-bottom: 10px">earlier work</div>
+<div style="display: grid; grid-template-columns: 88px minmax(0, 1fr); gap: 12px; align-items: baseline; padding: 10px 0; border-top: 1px solid var(--rule)"><span style="font-family: var(--f-mono); font-size: 12.5px; line-height: 24px; color: var(--muted)">2017–2019</span><span style="font-size: 16px; line-height: 24px"><b style="font-weight: 600">Closetinn.</b> Weekly fashion recommendations by email: scrapers, recommenders, Kubernetes.</span></div>
+<div style="display: grid; grid-template-columns: 88px minmax(0, 1fr); gap: 12px; align-items: baseline; padding: 10px 0; border-top: 1px solid var(--rule)"><span style="font-family: var(--f-mono); font-size: 12.5px; line-height: 24px; color: var(--muted)">2015</span><span style="font-size: 16px; line-height: 24px"><b style="font-weight: 600">Pandora.</b> An ECG arrhythmia-detection MVP for ICU monitors, built with two co-creators.</span></div>
+<div style="display: grid; grid-template-columns: 88px minmax(0, 1fr); gap: 12px; align-items: baseline; padding: 10px 0; border-top: 1px solid var(--rule)"><span style="font-family: var(--f-mono); font-size: 12.5px; line-height: 24px; color: var(--muted)">2015</span><span style="font-size: 16px; line-height: 24px"><b style="font-weight: 600">Wigic.</b> An augmented-reality iPad app for children with cancer, built with two co-creators.</span></div>
+<div style="display: grid; grid-template-columns: 88px minmax(0, 1fr); gap: 12px; align-items: baseline; padding: 10px 0; border-top: 1px solid var(--rule)"><span style="font-family: var(--f-mono); font-size: 12.5px; line-height: 24px; color: var(--muted)">2013</span><span style="font-size: 16px; line-height: 24px">Android games.</span></div>
+</div>
+</div>
+</section>
+
+<section id="contact" style="padding-top: 130px">
+<div class="kl-row" style="display: flex; gap: 2%; align-items: flex-end">
+<div style="flex: 0 0 57.5%; max-width: 57.5%; display: flex; flex-direction: column; gap: 18px">
+<h2 class="kl-h2" style="margin: 0; font-family: var(--f-display); font-weight: var(--w-display); font-size: 40px; line-height: 44px; letter-spacing: var(--tr-h)">Write to me.</h2>
+<a class="kl-mail" href="mailto:contato@kodamalabs.ai" style="align-self: flex-start; font-family: var(--f-display); font-weight: var(--w-display); font-size: 52px; line-height: 60px; letter-spacing: var(--tr-h); text-underline-offset: 8px">contato@kodamalabs.ai</a>
+</div>
+<div style="flex: 0 0 40.5%; max-width: 40.5%; display: flex; flex-direction: column; gap: 14px; padding-bottom: 8px">
+<p style="margin: 0; text-wrap: pretty">About <span style="font-family: var(--f-mono); font-size: 12.5px; color: var(--muted)">[WHAT YOU ARE OPEN TO]</span>, or to tell me that something on this page is wrong. In English or Portuguese. <span style="font-family: var(--f-mono); font-size: 12.5px; color: var(--muted)">[CONFIRM ADDRESS]</span></p>
+<div style="display: flex; flex-wrap: wrap; gap: 6px 24px"><a href="https://github.com/guilhermeKodama">GitHub</a><a href="https://www.linkedin.com/in/guilhermekodama">LinkedIn</a><span style="font-family: var(--f-mono); font-size: 12.5px; color: var(--muted)">[CV, PDF]</span></div>
+</div>
+</div>
+</section>
+
+<footer class="kl-row" style="display: flex; gap: 2%; align-items: flex-start; margin-top: 120px; padding: 24px 0 56px; border-top: 1px solid var(--rule); font-family: var(--f-mono); font-size: 12px; line-height: 20px; color: var(--muted)">
+<div style="flex: 0 0 23.5%; max-width: 23.5%; display: flex; align-items: center; gap: 10px">
+<svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true" style="color: var(--muted); flex: none">
+<path d="M 4 19 Q 12 22.8 20 19" style="fill: none; stroke: currentColor; stroke-width: 0.95; stroke-linecap: round; opacity: 0.55"/>
+<line x1="12" y1="6.2" x2="4.8" y2="20" style="stroke: currentColor; stroke-width: 1.7; stroke-linecap: round"/>
+<line x1="12" y1="6.2" x2="19.2" y2="20" style="stroke: currentColor; stroke-width: 1.7; stroke-linecap: round"/>
+<path d="M 8.6 13 Q 12 11.2 15.4 13" style="fill: none; stroke: currentColor; stroke-width: 0.95; stroke-linecap: round; opacity: 0.7"/>
+<rect x="9.8" y="2.6" width="4.4" height="4" rx="1.1" style="fill: currentColor"/>
+<path d="M 19.2 20 L 20.6 22.4 L 17.7 21.9 Z" style="fill: currentColor"/>
+<path d="M 4.8 20 L 3.4 22.4 L 6.3 21.9 Z" style="fill: currentColor"/>
+</svg>
+<span>Kodama Labs · São Paulo</span>
+</div>
+<p style="flex: 0 0 32%; max-width: 32%; margin: 0">The drawings on this page use invented rows, names and amounts, because the real screens show real ones. The limits and counts are real.</p>
+<div style="flex: 0 0 40.5%; max-width: 40.5%; display: flex; flex-wrap: wrap; gap: 4px 18px"><span>main @ [COMMIT]</span><span>updated [DATE]</span><a href="https://kodamalabs.ai/pt-BR" lang="pt-BR">Português</a></div>
+</footer>
+
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","options":["Light","Dark"],"default":"Light","section":"Look"},"typeface":{"editor":"enum","options":["Serif","Grotesque"],"default":"Serif","section":"Look"},"gate":{"editor":"enum","options":["Green","Amber"],"default":"Green","section":"Look"},"showTriage":{"editor":"boolean","default":true,"section":"Content"},"$preview":{"width":1440,"height":6790}}'>
+class Component extends DCLogic {
+renderVals() {
+var p = this.props || {};
+var mode = [];
+if ((p.theme ?? 'Light') === 'Dark') mode.push('kl-dark');
+if ((p.typeface ?? 'Serif') === 'Grotesque') mode.push('kl-sans');
+if ((p.gate ?? 'Green') === 'Amber') mode.push('kl-amber');
+return { mode: mode.join(' '), showTriage: p.showTriage ?? true };
+}
+}
+</script>
+</body>
+</html>

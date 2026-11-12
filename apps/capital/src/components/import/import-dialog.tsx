@@ -257,7 +257,7 @@ function Stepper({ step }: { step: Step }) {
           <span
             className={cn(
               "inline-flex size-[18px] items-center justify-center rounded-full border font-mono text-micro",
-              i <= step ? "border-fg-1 bg-fg-1 text-editor" : "border-stroke-1 text-fg-3",
+              i <= step ? "border-brand bg-brand text-on-brand" : "border-stroke-1 text-fg-3",
             )}
           >
             {i < step ? "✓" : i + 1}

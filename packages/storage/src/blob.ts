@@ -98,45 +98,27 @@ export async function headObject(
   url: string,
   opts?: StorageOptions,
 ): Promise<{ size: number } | null> {
-  if (isLocalUrl(url)) {
-    const filePath = resolveLocalPathFromUrl(url, opts);
-    if (!filePath) return null;
-    try {
-      const stat = await fs.stat(filePath);
-      return { size: stat.size };
-    } catch {
-      return null;
-    }
+  const filePath = resolveLocalPathFromUrl(url, opts);
+  if (!filePath) return null;
+  try {
+    const stat = await fs.stat(filePath);
+    return { size: stat.size };
+  } catch {
+    return null;
   }
-  const response = await fetch(url, { method: "HEAD" });
-  if (response.status === 404) return null;
-  if (!response.ok) {
-    throw new Error(`Blob head failed: ${response.status} for ${url}`);
-  }
-  const length = response.headers.get("content-length");
-  return { size: length ? Number(length) : 0 };
 }
 
 export async function getObjectBuffer(
   url: string,
   opts?: StorageOptions,
 ): Promise<Buffer | null> {
-  if (isLocalUrl(url)) {
-    const filePath = resolveLocalPathFromUrl(url, opts);
-    if (!filePath) return null;
-    try {
-      return await fs.readFile(filePath);
-    } catch {
-      return null;
-    }
+  const filePath = resolveLocalPathFromUrl(url, opts);
+  if (!filePath) return null;
+  try {
+    return await fs.readFile(filePath);
+  } catch {
+    return null;
   }
-  const response = await fetch(url);
-  if (!response.ok) {
-    if (response.status === 404) return null;
-    throw new Error(`Blob fetch failed: ${response.status} for ${url}`);
-  }
-  const arrayBuffer = await response.arrayBuffer();
-  return Buffer.from(arrayBuffer);
 }
 
 export async function deleteObject(url: string, opts?: StorageOptions): Promise<void> {

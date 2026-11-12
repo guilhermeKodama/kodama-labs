@@ -70,46 +70,15 @@ describe("local blob storage", () => {
     expect(fallback.url).toBe("https://build.example/api/blob/capital/user/other.pdf");
   });
 
-  it("fetches a legacy remote url without deleting it", async () => {
-    const calls: Array<{ url: string; method: string }> = [];
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async (url: string, init?: RequestInit) => {
-        calls.push({ url: String(url), method: init?.method ?? "GET" });
-        if ((init?.method ?? "GET") === "HEAD") {
-          return new Response(null, {
-            status: 200,
-            headers: { "content-length": "4" },
-          });
-        }
-        return new Response(Buffer.from("remote"));
-      }),
-    );
+  it("does not fetch a url that is not a local blob", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    const url = "https://files.example/capital/user/file.pdf";
 
-    const url = "https://abc.public.blob.vercel-storage.com/capital/user/file.pdf";
-    await expect(headObject(url)).resolves.toEqual({ size: 4 });
-    await expect(getObjectBuffer(url)).resolves.toEqual(Buffer.from("remote"));
+    await expect(headObject(url)).resolves.toBeNull();
+    await expect(getObjectBuffer(url)).resolves.toBeNull();
     await deleteObject(url);
 
-    expect(calls.map((call) => call.method)).toEqual(["HEAD", "GET"]);
-    expect(calls.every((call) => call.url === url)).toBe(true);
-  });
-
-  it("returns null for a missing legacy object and throws on other HTTP errors", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async () => new Response("missing", { status: 404 })),
-    );
-    await expect(
-      getObjectBuffer("https://abc.public.blob.vercel-storage.com/missing.pdf"),
-    ).resolves.toBeNull();
-
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async () => new Response("nope", { status: 500 })),
-    );
-    await expect(
-      getObjectBuffer("https://abc.public.blob.vercel-storage.com/missing.pdf"),
-    ).rejects.toThrow(/500/);
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 });

@@ -177,6 +177,20 @@ describe("default views", () => {
     expect((await prisma.user.findUniqueOrThrow({ where: { id: USER } })).viewsSeedVersion).toBe(VIEWS_SEED_VERSION);
   });
 
+  it("creates Todas once when the first three loads arrive together", async () => {
+    const id = "test-user-ledger-views-parallel-001";
+    await freshUser(id);
+    try {
+      const runs = await Promise.all([listViews(id, prisma), listViews(id, prisma), listViews(id, prisma)]);
+      for (const views of runs) {
+        expect(views.some((view) => view.builtinKey === "all")).toBe(true);
+        expect(views.some((view) => view.seedKey === "subs")).toBe(true);
+      }
+    } finally {
+      await prisma.user.deleteMany({ where: { id } });
+    }
+  });
+
   it("is idempotent, also under concurrent calls, and never brings back a deleted default", async () => {
     const before = await prisma.savedView.count({ where: { userId: USER } });
     await Promise.all([ensureDefaultViews(USER, prisma), ensureDefaultViews(USER, prisma), listViews(USER, prisma)]);

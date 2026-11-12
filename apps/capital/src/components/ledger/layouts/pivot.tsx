@@ -52,7 +52,7 @@ export function PivotView({
     return (
       <div className="flex flex-col gap-2">
         {caption}
-        <div className="rounded-[8px] border border-stroke-3">
+        <div className="rounded-[8px] border border-stroke-3 bg-panel">
           <EmptyRow>{t("empty")}</EmptyRow>
         </div>
       </div>

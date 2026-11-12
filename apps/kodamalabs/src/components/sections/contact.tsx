@@ -1,88 +1,46 @@
-'use client';
-
 import { useTranslations } from 'next-intl';
-import { Github, Linkedin, Mail } from 'lucide-react';
 
-import { FadeInSection } from '@/components/animated/fade-in-section';
-import { SectionHeader } from './section-header';
+import { CopyButton } from '@/components/controls/copy-button';
+import { SplitRow } from '@/components/layout/split-row';
+import type { Facts } from '@/content/facts';
+import { EMAIL, LINKS, SECTIONS } from '@/content/links';
 
-const EMAIL = 'contato@kodamalabs.ai';
-
-const SOCIALS = [
-  { href: 'https://github.com/guilhermekodama', label: 'GitHub', Icon: Github },
-  {
-    href: 'https://www.linkedin.com/in/guilhermekodama',
-    label: 'LinkedIn',
-    Icon: Linkedin,
-  },
-  { href: 'https://x.com/guilhermekodama', label: 'X', Icon: XIcon },
-];
-
-function XIcon(props: React.SVGProps<SVGSVGElement>) {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      fill="currentColor"
-      aria-hidden="true"
-      {...props}
-    >
-      <path d="M18.244 2H21.5l-7.5 8.572L23 22h-6.844l-5.36-7.014L4.7 22H1.443l8.02-9.17L1 2h7.014l4.85 6.412L18.244 2zm-1.2 18h1.86L7.04 4H5.082l11.962 16z" />
-    </svg>
-  );
-}
-
-export function Contact() {
+/** The page ends on a plain address. No form. */
+export function Contact({ facts }: { facts: Facts }) {
   const t = useTranslations('contact');
+  const hero = useTranslations('hero.facts');
+  const controls = useTranslations('site.controls');
 
   return (
-    <section
-      id="contact"
-      className="relative border-t border-border/40 bg-muted/10 px-6 py-32"
-    >
-      <div className="mx-auto max-w-4xl">
-        <FadeInSection>
-          <SectionHeader
-            eyebrow={t('eyebrow')}
-            title={t('title')}
-            subtitle={t('subtitle')}
-          />
-        </FadeInSection>
-
-        <FadeInSection delay={0.15} className="flex flex-col gap-10">
-          <div>
-            <p className="mb-3 font-mono text-[10px] uppercase tracking-widest text-muted-foreground/70">
-              {t('emailLabel')}
-            </p>
-            <a
-              href={`mailto:${EMAIL}`}
-              className="group inline-flex items-center gap-3 text-2xl font-medium tracking-tight transition-colors hover:text-emerald-300 sm:text-3xl md:text-4xl"
-            >
-              <Mail className="size-6 text-muted-foreground transition-colors group-hover:text-emerald-300 sm:size-7" />
-              {EMAIL}
-            </a>
-          </div>
-
-          <div>
-            <p className="mb-4 font-mono text-[10px] uppercase tracking-widest text-muted-foreground/70">
-              {t('socialsLabel')}
-            </p>
-            <div className="flex items-center gap-3">
-              {SOCIALS.map(({ href, label, Icon }) => (
-                <a
-                  key={label}
-                  href={href}
-                  target="_blank"
-                  rel="noreferrer"
-                  aria-label={label}
-                  className="flex size-11 items-center justify-center rounded-full border border-border/60 bg-background/40 text-muted-foreground backdrop-blur-sm transition-all hover:-translate-y-0.5 hover:border-emerald-400/40 hover:text-foreground"
-                >
-                  <Icon className="size-4" />
-                </a>
-              ))}
+    <section id={SECTIONS.contact} aria-labelledby="contact-title" className="pt-32.5">
+      <SplitRow
+        align="end"
+        main={
+          <div className="flex flex-col gap-4.5">
+            <h2 id="contact-title" className="font-display text-h2-sm font-normal">
+              {t('title')}
+            </h2>
+            <div className="flex flex-wrap items-baseline gap-x-5 self-start">
+              <a href={LINKS.email} className="font-display text-mail-sm font-normal underline-offset-8 wide:text-mail">
+                {EMAIL}
+              </a>
+              <CopyButton text={EMAIL} label={controls('copy')} done={controls('copied')} />
             </div>
           </div>
-        </FadeInSection>
-      </div>
+        }
+        side={
+          <div className="flex flex-col gap-3.5 wide:pb-2">
+            <p className="text-pretty">
+              {facts.openTo.known ? t('noteOpenTo', { openTo: hero('openTo.value') }) : t('note')}
+            </p>
+            <div className="flex flex-wrap gap-x-6 gap-y-1.5">
+              <a href={LINKS.github}>{t('github')}</a>
+              <a href={LINKS.linkedin}>{t('linkedin')}</a>
+              {facts.cvUrl.known ? <a href={facts.cvUrl.value}>{t('cv')}</a> : null}
+            </div>
+          </div>
+        }
+      />
     </section>
   );
 }

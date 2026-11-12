@@ -1,0 +1,108 @@
+/*
+ * What Tailwind is allowed to know. The default palette, type scale, font
+ * stacks and breakpoints are cleared first, so the only colour, size and font
+ * utilities that exist are the ones named here.
+ *
+ * The type scale is named after its role in the approved mockup
+ * (design/main.dc.html); the px value of each size is noted beside it.
+ */
+@theme inline {
+  --color-*: initial;
+  --color-ground: var(--kl-ground);
+  --color-panel: var(--kl-panel);
+  --color-ink: var(--kl-ink);
+  --color-muted: var(--kl-muted);
+  --color-soft: var(--kl-soft);
+  --color-rule: var(--kl-rule);
+  --color-accent: var(--kl-accent);
+
+  /* --kl-font-* are set on <html> by next/font (src/app/fonts.ts). */
+  --font-*: initial;
+  --font-display: var(--kl-font-serif);
+  --font-text: var(--kl-font-serif);
+  --font-mono: var(--kl-font-mono);
+  --font-ui: var(--kl-font-ui);
+
+  --breakpoint-*: initial;
+  /* The header nav appears. */
+  --breakpoint-nav: 47.5rem;
+  /* Split rows, the spine and the wide figures appear. */
+  --breakpoint-wide: 66rem;
+
+  --text-*: initial;
+  /* 96/96, the name */
+  --text-name: 6rem;
+  --text-name--line-height: 6rem;
+  --text-name--letter-spacing: -0.028em;
+  /* 52/56, the name on a phone */
+  --text-name-sm: 3.25rem;
+  --text-name-sm--line-height: 3.5rem;
+  --text-name-sm--letter-spacing: -0.028em;
+  /* 60/62, a flagship project */
+  --text-h2: 3.75rem;
+  --text-h2--line-height: 3.875rem;
+  --text-h2--letter-spacing: -0.022em;
+  /* 40/44, a group heading; also a flagship on a phone */
+  --text-h2-sm: 2.5rem;
+  --text-h2-sm--line-height: 2.75rem;
+  --text-h2-sm--letter-spacing: -0.022em;
+  /* 52/60, the address in the contact block */
+  --text-mail: 3.25rem;
+  --text-mail--line-height: 3.75rem;
+  --text-mail--letter-spacing: -0.022em;
+  /* 27/34, the address on a phone */
+  --text-mail-sm: 1.6875rem;
+  --text-mail-sm--line-height: 2.125rem;
+  --text-mail-sm--letter-spacing: -0.022em;
+  /* 25/36, the lede */
+  --text-lede: 1.5625rem;
+  --text-lede--line-height: 2.25rem;
+  --text-lede--letter-spacing: -0.005em;
+  /* 20/30, the lede on a phone */
+  --text-lede-sm: 1.25rem;
+  --text-lede-sm--line-height: 1.875rem;
+  /* 25/33, the rule sentence of a project. Not named "rule": text-rule would
+     be read as the colour of that name. */
+  --text-statement: 1.5625rem;
+  --text-statement--line-height: 2.0625rem;
+  --text-statement--letter-spacing: -0.01em;
+  /* 24/28, an entry name */
+  --text-h3: 1.5rem;
+  --text-h3--line-height: 1.75rem;
+  --text-h3--letter-spacing: -0.01em;
+  /* 22/30, the playbook quote */
+  --text-quote: 1.375rem;
+  --text-quote--line-height: 1.875rem;
+  --text-quote--letter-spacing: -0.01em;
+  /* 21/30, the sentence above the first figure */
+  --text-sentence: 1.3125rem;
+  --text-sentence--line-height: 1.875rem;
+  /* 20/30, the three habits */
+  --text-habit: 1.25rem;
+  --text-habit--line-height: 1.875rem;
+  --text-habit--letter-spacing: -0.005em;
+  /* 18/29, body */
+  --text-body: 1.125rem;
+  --text-body--line-height: 1.8125rem;
+  /* 16/26, secondary body */
+  --text-small: 1rem;
+  --text-small--line-height: 1.625rem;
+  /* 16/24, ruled lists */
+  --text-list: 1rem;
+  --text-list--line-height: 1.5rem;
+  /* 15.5/19, values in the facts table */
+  --text-fact: 0.96875rem;
+  --text-fact--line-height: 1.1875rem;
+  /* 13/20, header (mono) */
+  --text-nav: 0.8125rem;
+  --text-nav--line-height: 1.25rem;
+  /* 12.5/20, status lines and placeholders (mono) */
+  --text-status: 0.78125rem;
+  --text-status--line-height: 1.25rem;
+  /* 12/20, footer (mono) */
+  --text-foot: 0.75rem;
+  --text-foot--line-height: 1.25rem;
+  /* 11.5/19, labels (mono) */
+  --text-label: 0.71875rem;
+  --text-label--line-height: 1.1875rem;
+}

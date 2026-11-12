@@ -1,19 +1,22 @@
 /**
- * The nine colors of categories and entities (mockup palette, in order).
+ * The nine colors of categories and entities: Cerne hues (canvas board
+ * CerneCharts), in the order of the Tailwind colors they replaced (gray,
+ * purple, green, yellow, cyan, pink, blue, orange, red), so
+ * scripts/remap-brand-colors.ts can move stored values one to one.
  * Category.color and Entity.color store the light hex, which other screens
  * paint as is; swatchColor maps a stored palette hex to its theme token so
  * it follows the dark theme too.
  */
 export const PALETTE = [
-  { name: "gray", hex: "#737373" },
-  { name: "purple", hex: "#7c3aed" },
-  { name: "green", hex: "#16a34a" },
-  { name: "yellow", hex: "#ca8a04" },
-  { name: "cyan", hex: "#0891b2" },
-  { name: "pink", hex: "#db2777" },
-  { name: "blue", hex: "#2563eb" },
-  { name: "orange", hex: "#ea580c" },
-  { name: "red", hex: "#dc2626" },
+  { name: "casca", hex: "#8c7b68" },
+  { name: "jacaranda", hex: "#6e4a5e" },
+  { name: "musgo", hex: "#3d5a36" },
+  { name: "ipe", hex: "#c9a227" },
+  { name: "salvia", hex: "#8a9a7b" },
+  { name: "argila", hex: "#b07a5a" },
+  { name: "ardosia", hex: "#4f6470" },
+  { name: "resina", hex: "#c4862b" },
+  { name: "urucum", hex: "#7a3b26" },
 ] as const;
 
 export type PaletteName = (typeof PALETTE)[number]["name"];

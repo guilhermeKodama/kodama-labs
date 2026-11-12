@@ -1,6 +1,7 @@
 import type { DbClient } from "@capital/server/lib/prisma";
 import type { Budget, Category } from "@/generated/prisma";
 import { createBudget as createBudgetService, deactivateBudget, listBudgets as listBudgetsService, updateBudget as updateBudgetService } from "../../budgets/services/budget-crud";
+import { budgetComposition } from "../../budgets/services/budget-composition";
 import { monthOverview } from "../../budgets/services/budget-overview";
 import { getPersonalEntity } from "../../ledger/services/entities";
 import { toNumber } from "../../ledger/lib/money";
@@ -18,6 +19,8 @@ export interface CreateBudgetParams {
   amount: number;
   currency: string;
   effectiveFrom: string; // YYYY-MM-DD
+  /** Omit to store null, which counts as variável. */
+  kind?: "fixo" | "variavel" | null;
 }
 
 export interface UpdateBudgetParams {
@@ -28,6 +31,8 @@ export interface UpdateBudgetParams {
   isActive?: boolean;
   /** YYYY-MM: keep earlier months and apply the change from this month on. Omit to edit the version in place. */
   applyFrom?: string;
+  /** Null stores null (counts as variável). Omit to leave the kind unchanged. */
+  kind?: "fixo" | "variavel" | null;
 }
 
 export interface DeleteBudgetParams {
@@ -37,6 +42,14 @@ export interface DeleteBudgetParams {
 export interface GetBudgetStatusParams {
   month: string; // YYYY-MM
   accountId?: string;
+}
+
+export interface GetBudgetCompositionParams {
+  from: string; // YYYY-MM
+  to: string; // YYYY-MM
+  accountId?: string;
+  /** Variable categories per month. Default 5. */
+  limit?: number;
 }
 
 /** accountId is the personal entity (the MCP's "personal account"); defaults to it. */
@@ -58,6 +71,7 @@ function toMcpBudget(b: Budget & { category: Category }) {
     year: b.year,
     month: b.month,
     isActive: b.isActive,
+    kind: b.kind,
   };
 }
 
@@ -73,7 +87,18 @@ export async function listBudgets(userId: string, params: ListBudgetsParams, db:
 export async function createBudget(userId: string, params: CreateBudgetParams, db: DbClient) {
   const entity = await resolveEntity(userId, params.accountId, db);
   const category = (await categoryResolver(userId, db)).resolve(params.category, "expense");
-  const budget = await createBudgetService(userId, { entityId: entity.id, categoryId: category.id, amount: params.amount, currency: params.currency, effectiveFrom: params.effectiveFrom }, db);
+  const budget = await createBudgetService(
+    userId,
+    {
+      entityId: entity.id,
+      categoryId: category.id,
+      amount: params.amount,
+      currency: params.currency,
+      effectiveFrom: params.effectiveFrom,
+      ...(params.kind !== undefined && { kind: params.kind }),
+    },
+    db,
+  );
   const { isActive: _isActive, ...rest } = toMcpBudget(budget);
   void _isActive;
   return rest;
@@ -112,8 +137,12 @@ export async function getBudgetStatus(userId: string, params: GetBudgetStatusPar
   const categories = overview.budgets
     .map((b) => ({
       category: b.category,
+      kind: b.kind,
       budgeted: b.amount,
       actual: b.committed,
+      gross: b.committed,
+      reimbursed: b.reimbursedCommitted,
+      net: b.netCommitted,
       remaining: Math.round((b.amount - b.committed) * 100) / 100,
       percentUsed: b.amount > 0 ? Math.round((b.committed / b.amount) * 10000) / 100 : 0,
       isOverBudget: b.committed > b.amount,
@@ -133,4 +162,14 @@ export async function getBudgetStatus(userId: string, params: GetBudgetStatusPar
     },
     categories,
   };
+}
+
+/**
+ * Fixed vs variable totals per month, and the top variable categories.
+ * A budget with no kind counts as variável. `actual` on get_budget_status
+ * stays the gross committed spend; net here is after reimbursements.
+ */
+export async function getBudgetComposition(userId: string, params: GetBudgetCompositionParams, db: DbClient) {
+  const entity = await resolveEntity(userId, params.accountId, db);
+  return budgetComposition(userId, params.from, params.to, db, { entityIds: [entity.id], limit: params.limit });
 }

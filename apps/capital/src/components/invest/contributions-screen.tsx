@@ -27,7 +27,6 @@ import {
   useRebalance,
 } from "@/lib/invest/api";
 import {
-  alternativeContribution,
   clampEnd,
   contributionSeries,
   purchaseSeries,
@@ -48,9 +47,9 @@ import { buildTransactionsHref } from "@/lib/ledger/view-draft";
 import { cn } from "@/lib/utils";
 import { AllContributions } from "./all-contributions";
 import { ContributionsChart, PurchasesChart } from "./charts";
+import { FireRingsCard } from "./fire/fire-rings-card";
 import {
   MONO,
-  useCompactMoney,
   useMonthRange,
   useMonthShort,
   useScopeParam,
@@ -71,9 +70,13 @@ function transfersHref(transferGroupIds: string[]): string {
   return buildTransactionsHref({ draft });
 }
 
-/** Histórico de aportes: Mês · Aportes · Resgates · Líquido · Origem. */
+/**
+ * Histórico de aportes: Mês · Aportes · Resgates · Líquido · Origem.
+ * Below md the origin wraps onto its own line so it stays readable at 390px.
+ */
 const HISTORY_GRID =
-  "grid grid-cols-[46px_88px_88px_88px_minmax(0,1fr)] items-center gap-2.5 px-3";
+  "grid grid-cols-[46px_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)] items-center gap-x-2 gap-y-0.5 px-3 md:grid-cols-[46px_88px_88px_88px_minmax(0,1fr)] md:gap-2.5";
+const ORIGIN_CELL = "col-span-4 min-w-0 md:col-span-1";
 
 /** Investimentos › Aportes (mockup ContributionsScreen): trailing 12 months ending at ?end=YYYY-MM. */
 export function ContributionsScreen() {
@@ -89,7 +92,6 @@ export function ContributionsScreen() {
   const end = clampEnd(endParam, thisMonth);
   const short = useMonthShort();
   const range = useMonthRange();
-  const compact = useCompactMoney();
   const fx = useFxRates();
 
   const flows = useContributions(end, scope);
@@ -99,11 +101,8 @@ export function ContributionsScreen() {
     null | "aporte" | "goal" | "targets" | "orders"
   >(null);
 
-  const fireBase = useFireSummary(null);
-  const goal = fireBase.data?.currentMonthContribution ?? null;
-  const alt = alternativeContribution(goal);
-  const fireAlt = useFireSummary(alt);
-  const fire = fireAlt.data ?? fireBase.data;
+  const fire = useFireSummary(null).data;
+  const goal = fire?.currentMonthContribution ?? null;
 
   // "Vou aportar R$": prefilled with the month's goal until the user types.
   const amount =
@@ -118,13 +117,13 @@ export function ContributionsScreen() {
   const savings = savingsRateKpi(data?.savingsRate.rate);
   const series = contributionSeries(months);
   const purchases = purchaseSeries(months);
-  const history = historyRows(months, goal);
+  const history = historyRows(months, goal, (asset) => t("history.brokeragePurchase", { asset }));
   const year = parseMonth(end).year;
 
   return (
     <Page
       crumbs={[ti("crumbs.investments"), ti("crumbs.contributions")]}
-      actions={
+      controls={
         <>
           <Segmented
             value={scope}
@@ -157,11 +156,9 @@ export function ContributionsScreen() {
               ›
             </button>
           </span>
-          <Btn primary onClick={() => setDialog("aporte")}>
-            {t("register")}
-          </Btn>
         </>
       }
+      primary={{ label: t("register"), onSelect: () => setDialog("aporte") }}
     >
       <KpiStrip>
         <Kpi
@@ -248,7 +245,7 @@ export function ContributionsScreen() {
             className={cn(
               "inline-flex h-(--cap-row-h) items-center border-b-2 px-2 text-control",
               tab === key
-                ? "border-fg-1 font-medium text-fg-1"
+                ? "border-indicator font-medium text-fg-1"
                 : "border-transparent text-fg-3 hover:text-fg-strong",
             )}
           >
@@ -358,7 +355,7 @@ export function ContributionsScreen() {
                 <div
                   className={cn(
                     HISTORY_GRID,
-                    "h-[30px] text-caption text-fg-3",
+                    "h-auto py-1 text-caption text-fg-3 md:h-[30px] md:py-0",
                   )}
                 >
                   <span>{t("history.columns.month")}</span>
@@ -369,7 +366,7 @@ export function ContributionsScreen() {
                     {t("history.columns.withdrawals")}
                   </span>
                   <span className="text-right">{t("history.columns.net")}</span>
-                  <span>{t("history.columns.origin")}</span>
+                  <span className={ORIGIN_CELL}>{t("history.columns.origin")}</span>
                 </div>
               ) : null}
               {history.map((row) => (
@@ -416,32 +413,43 @@ export function ContributionsScreen() {
                   >
                     {fmt.money0(row.net, cur)}
                   </span>
-                  <span className="flex min-w-0 items-center gap-2">
-                    <Link
-                      href={transfersHref(row.transferGroupIds)}
-                      className="flex min-w-0 flex-col text-fg-2 hover:text-fg-1"
-                    >
-                      {row.origins.deposits ? (
-                        <span className="truncate">
-                          {t("history.originIn", {
-                            origin: row.origins.deposits,
-                          })}
-                        </span>
-                      ) : null}
-                      {row.origins.withdrawals ? (
-                        <span className="truncate">
-                          {t("history.originOut", {
-                            origin: row.origins.withdrawals,
-                          })}
-                        </span>
-                      ) : null}
-                    </Link>
+                  <span className={cn(ORIGIN_CELL, "flex min-w-0 items-center gap-2")}>
+                    {row.transferGroupIds.length ? (
+                      <Link
+                        href={transfersHref(row.transferGroupIds)}
+                        className="flex min-w-0 flex-col text-fg-2 hover:text-fg-1"
+                      >
+                        {row.origins.deposits ? (
+                          <span className="min-w-0 whitespace-normal break-words">
+                            {t("history.originIn", { origin: row.origins.deposits })}
+                          </span>
+                        ) : null}
+                        {row.origins.withdrawals ? (
+                          <span className="min-w-0 whitespace-normal break-words">
+                            {t("history.originOut", { origin: row.origins.withdrawals })}
+                          </span>
+                        ) : null}
+                      </Link>
+                    ) : (
+                      <span className="flex min-w-0 flex-col text-fg-2">
+                        {row.origins.deposits ? (
+                          <span className="min-w-0 whitespace-normal break-words">
+                            {t("history.originIn", { origin: row.origins.deposits })}
+                          </span>
+                        ) : null}
+                        {row.origins.withdrawals ? (
+                          <span className="min-w-0 whitespace-normal break-words">
+                            {t("history.originOut", { origin: row.origins.withdrawals })}
+                          </span>
+                        ) : null}
+                      </span>
+                    )}
                     {row.status ? (
                       <span
                         className={cn(
                           "ml-auto shrink-0 text-body-sm",
                           row.status === "below"
-                            ? "text-cat-yellow"
+                            ? "text-warn"
                             : "text-fg-3",
                         )}
                       >
@@ -453,7 +461,10 @@ export function ContributionsScreen() {
               ))}
               {history.length ? (
                 <div className="border-t border-stroke-3 px-3 py-1.5 text-caption text-fg-4">
-                  {t("history.caption")}
+                  <span className="block">{t("history.caption")}</span>
+                  {history.some((row) => row.brokerageCash) ? (
+                    <span className="mt-0.5 block">{t("history.brokerageNote")}</span>
+                  ) : null}
                 </div>
               ) : null}
               {!history.length ? (
@@ -462,80 +473,7 @@ export function ContributionsScreen() {
                 </EmptyRow>
               ) : null}
             </Panel>
-            <Panel
-              title={t("fire.title")}
-              trailing={
-                fire ? (
-                  <Btn ghost onClick={() => setDialog("goal")}>
-                    {fire.goal ? t("fire.edit") : t("fire.define")}
-                  </Btn>
-                ) : null
-              }
-            >
-              {fire?.result && fire.goal ? (
-                <div className="flex flex-col gap-2.5">
-                  <div className="flex gap-6">
-                    <Kpi
-                      label={t("fire.number")}
-                      value={compact(fire.result.fireNumber, cur)}
-                      sub={t("fire.numberSub", {
-                        income: fmt.money0(fire.goal.targetMonthlyIncome, cur),
-                        swr: fmt.pct(fire.goal.safeWithdrawalRate, 1),
-                      })}
-                    />
-                    <Kpi
-                      label={t("fire.progress")}
-                      value={fmt.pct(fire.result.progress, 1)}
-                    />
-                  </div>
-                  <span className="relative h-1.5 rounded-[3px] bg-fill-3">
-                    <span
-                      className="absolute inset-y-0 left-0 rounded-[3px] bg-fg-1"
-                      style={{
-                        width: `${Math.min(Math.max(fire.result.progress, 0), 1) * 100}%`,
-                      }}
-                    />
-                  </span>
-                  <span className="text-caption text-fg-3">
-                    {fire.result.reached
-                      ? t("fire.reached")
-                      : fire.result.projectedFireDate
-                        ? t("fire.projection", {
-                            date: fmt.monthLabel(
-                              fire.result.projectedFireDate.slice(0, 10),
-                            ),
-                            amount: fmt.money0(goal ?? 0, cur),
-                          })
-                        : t("fire.unreachable")}
-                    {!fire.result.reached && alt !== null && fire.altProjection
-                      ? fire.altProjection.projectedFireDate
-                        ? t("fire.alt", {
-                            amount: fmt.money0(alt, cur),
-                            date: fmt.monthLabel(
-                              fire.altProjection.projectedFireDate.slice(0, 10),
-                            ),
-                          })
-                        : t("fire.altUnreachable", {
-                            amount: fmt.money0(alt, cur),
-                          })
-                      : null}
-                  </span>
-                </div>
-              ) : (
-                <span className="text-body text-fg-2">
-                  {t("fire.noPlan", {
-                    invested: fmt.money0(
-                      fire?.suggestedDefaults.currentInvested ?? 0,
-                      cur,
-                    ),
-                    expenses: fmt.money0(
-                      fire?.suggestedDefaults.currentMonthlyExpenses ?? 0,
-                      cur,
-                    ),
-                  })}
-                </span>
-              )}
-            </Panel>
+            <FireRingsCard onEditGoal={() => setDialog("goal")} />
           </div>
         </>
       )}

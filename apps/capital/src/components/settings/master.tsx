@@ -14,7 +14,7 @@ export function ListDetail({ list, detail }: { list: ReactNode; detail: ReactNod
   return (
     <div className="grid items-start gap-3.5 md:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)]">
       <div className="flex flex-col gap-0.5">{list}</div>
-      <div className="flex flex-col gap-3 rounded-[10px] border border-stroke-3 p-3.5">{detail}</div>
+      <div className="flex flex-col gap-3 rounded-[10px] border border-stroke-3 bg-panel p-3.5">{detail}</div>
     </div>
   );
 }

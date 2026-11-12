@@ -237,6 +237,9 @@ export async function findOrphanTransactions(userId: string, db: DbClient) {
       amount: displayAmount(t.kind, t.amount),
       date: t.date.toISOString(),
       type: t.kind,
+      accountId: t.accountId,
+      accountName: t.account.name,
+      operationId: t.investmentOperation?.id ?? null,
     })),
   };
 }

@@ -61,6 +61,11 @@ describe("monitors", () => {
     });
     expect(byName.get("kodama/public-attention")?.maxredirects).toBe(0);
     expect(byName.get("kodama/public-careers")?.accepted_statuscodes).toEqual(["200-399"]);
+    expect(byName.get("kodama/public-status")).toMatchObject({
+      url: "https://status.kodamalabs.ai/",
+      maxredirects: 0,
+      accepted_statuscodes: ["200-399"],
+    });
     expect(byName.has("kodama/public-sentinel.kodamalabs.ai")).toBe(false);
     expect(byName.has("kodama/capital-mcp")).toBe(false);
     expect(byName.has("kodama/ollama")).toBe(false);
@@ -76,7 +81,7 @@ describe("monitors", () => {
 
   it("gives every scheduled cron a push monitor that requires two misses", () => {
     const crons = cronPushMonitors(schedules);
-    expect(crons).toHaveLength(25);
+    expect(crons).toHaveLength(26);
     for (const monitor of crons) {
       expect(monitor.type).toBe("push");
       expect(monitor.maxretries).toBe(1);

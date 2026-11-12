@@ -15,8 +15,8 @@ import { cn } from "@/lib/utils";
 import type { EditableBudget } from "./budget-dialog";
 
 /** Text color of a pace tone (mockup: category red / yellow, else tertiary). */
-export const TONE_TEXT: Record<PaceTone, string> = { over: "text-cat-red", ahead: "text-cat-yellow", normal: "text-fg-3" };
-const TONE_FILL: Record<PaceTone | "warn", string> = { over: "bg-cat-red", ahead: "bg-cat-yellow", warn: "bg-cat-yellow", normal: "bg-fg-2" };
+export const TONE_TEXT: Record<PaceTone, string> = { over: "text-neg", ahead: "text-warn", normal: "text-fg-3" };
+const TONE_FILL: Record<PaceTone | "warn", string> = { over: "bg-neg", ahead: "bg-warn-solid", warn: "bg-warn-solid", normal: "bg-brand" };
 
 /**
  * 6px bar of spent / budget with a 1px mark (today, or where the year
@@ -67,8 +67,20 @@ export function useEntityNames(): { names: Map<string, string>; kinds: Map<strin
   };
 }
 
-/** First row of both views: Todas / PF / PJ, then the period text on the right. */
-export function ScopeBar({ scope, onScope, children }: { scope: BudgetsScope; onScope: (scope: BudgetsScope) => void; children?: ReactNode }) {
+/** First row of both views: Todas / PF / PJ, then Fixo / Variável / Todos, then the period text on the right. */
+export function ScopeBar({
+  scope,
+  onScope,
+  kind,
+  onKind,
+  children,
+}: {
+  scope: BudgetsScope;
+  onScope: (scope: BudgetsScope) => void;
+  kind?: "fixo" | "variavel" | null;
+  onKind?: (kind: "fixo" | "variavel" | null) => void;
+  children?: ReactNode;
+}) {
   const t = useTranslations("budgets");
   const { names, hasBusiness } = useEntityNames();
   const options: { v: BudgetsScope; l: string }[] = [
@@ -81,6 +93,18 @@ export function ScopeBar({ scope, onScope, children }: { scope: BudgetsScope; on
   return (
     <div className="flex min-h-(--cap-menu-row-h) flex-wrap items-center gap-2">
       <Segmented aria-label={t("scope.label")} value={scope} options={options} onChange={onScope} />
+      {onKind ? (
+        <Segmented
+          aria-label={t("kind.label")}
+          value={kind ?? "all"}
+          options={[
+            { v: "all" as const, l: t("kind.all") },
+            { v: "fixo" as const, l: t("kind.fixo") },
+            { v: "variavel" as const, l: t("kind.variavel") },
+          ]}
+          onChange={(next) => onKind(next === "all" ? null : next)}
+        />
+      ) : null}
       <span className="ml-auto text-body-sm text-fg-3">{children}</span>
     </div>
   );
@@ -90,7 +114,7 @@ export function ScopeBar({ scope, onScope, children }: { scope: BudgetsScope; on
 export function PeriodNav({ label, onPrev, onNext, prevLabel, nextLabel }: { label: string; onPrev: () => void; onNext: () => void; prevLabel: string; nextLabel: string }) {
   const arrow = "inline-flex h-full items-center px-1.5 text-fg-2 outline-none hover:text-fg-1 focus-visible:text-fg-1";
   return (
-    <span className="inline-flex h-(--cap-control-h) shrink-0 items-center rounded-[6px] border border-stroke-1 text-button font-medium whitespace-nowrap">
+    <span className="inline-flex h-(--cap-control-h) shrink-0 items-center rounded-[6px] border border-stroke-1 bg-panel text-button font-medium whitespace-nowrap">
       <button type="button" aria-label={prevLabel} title={prevLabel} onClick={onPrev} className={cn(arrow, "pl-2.5")}>
         ‹
       </button>
@@ -102,15 +126,22 @@ export function PeriodNav({ label, onPrev, onNext, prevLabel, nextLabel }: { lab
   );
 }
 
+/** The short mark a chart legend and a matching summary card share. */
+export function SeriesMark({ color, dashed }: { color: string; dashed?: boolean }) {
+  return (
+    <svg width="14" height="8" aria-hidden className="shrink-0">
+      <line x1="0" y1="4" x2="14" y2="4" stroke={color} strokeWidth="2" strokeDasharray={dashed ? "3 2" : undefined} />
+    </svg>
+  );
+}
+
 /** Series names under a chart: a short swatch (solid or dashed) and the name. */
 export function ChartLegend({ items }: { items: { label: string; color: string; dashed?: boolean }[] }) {
   return (
-    <div className="flex flex-wrap items-center gap-x-3.5 gap-y-1 text-caption text-fg-3">
+    <div data-budget-legend className="flex flex-wrap items-center gap-x-3.5 gap-y-1 text-caption text-fg-3">
       {items.map((item) => (
         <span key={item.label} className="inline-flex items-center gap-1.5">
-          <svg width="14" height="8" aria-hidden className="shrink-0">
-            <line x1="0" y1="4" x2="14" y2="4" stroke={item.color} strokeWidth="2" strokeDasharray={item.dashed ? "3 2" : undefined} />
-          </svg>
+          <SeriesMark color={item.color} dashed={item.dashed} />
           {item.label}
         </span>
       ))}
@@ -144,7 +175,7 @@ export interface BudgetActions {
 
 /** Recharts tooltip in the theme tokens. */
 export const TOOLTIP_STYLE = {
-  contentStyle: { background: "var(--cap-bg-editor)", border: "1px solid var(--cap-stroke-1)", borderRadius: 6, fontSize: textRole("body-sm"), padding: "6px 8px" },
+  contentStyle: { background: "var(--cap-bg-panel)", border: "1px solid var(--cap-stroke-1)", borderRadius: 6, fontSize: textRole("body-sm"), padding: "6px 8px" },
   labelStyle: { color: "var(--cap-text-3)", marginBottom: 2 },
   itemStyle: { color: "var(--cap-text-1)", padding: 0 },
 } as const;

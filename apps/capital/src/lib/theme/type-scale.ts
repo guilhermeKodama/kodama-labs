@@ -19,6 +19,7 @@ export const TEXT_ROLES = [
   "heading",
   "kpi",
   "display",
+  "hero",
 ] as const;
 
 export type TextRole = (typeof TEXT_ROLES)[number];

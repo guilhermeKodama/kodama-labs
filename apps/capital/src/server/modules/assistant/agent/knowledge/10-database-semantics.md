@@ -1,4 +1,4 @@
-# Como o Capital estrutura os dados
+# Como o Cerne estrutura os dados
 
 ## Entidades e contas
 
@@ -55,4 +55,4 @@ Reenviar a mesma fatura não duplica nada: as linhas são comparadas como multic
 
 ## Categorias e moeda
 
-O Capital mantém uma lista de categorias por usuário e **regras de categorização** aprendidas (descrição normalizada → categoria, com `source: "manual" | "ai" | "bulk"`). A categoria final tem que ser uma das que já existem em `get_context_snapshot.categories` - nunca invente uma categoria nova. Para a sequência completa de como decidir a categoria antes de deixar um lançamento sem categoria, ver `25-categorization.md` - categorizar é o padrão em toda importação, não algo que espera o usuário pedir.
+O Cerne mantém uma lista de categorias por usuário e **regras de categorização** aprendidas (descrição normalizada → categoria, com `source: "manual" | "ai" | "bulk"`). A categoria final tem que ser uma das que já existem em `get_context_snapshot.categories` - nunca invente uma categoria nova. Para a sequência completa de como decidir a categoria antes de deixar um lançamento sem categoria, ver `25-categorization.md` - categorizar é o padrão em toda importação, não algo que espera o usuário pedir.

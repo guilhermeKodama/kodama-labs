@@ -1,6 +1,6 @@
 # Monitoring
 
-Uptime Kuma and a log watcher for the `kodama-prod` stack. Alerts leave the box as one JSON POST. Nothing here is published through `cloudflared`.
+Uptime Kuma and a log watcher for the `kodama-prod` stack. Alerts leave the box as one JSON POST. The dashboard stays on loopback. The only public hostname is `status.kodamalabs.ai`, and cloudflared allows only the status-page paths in `infrastructure/cloudflared/status-allowlist.regex`.
 
 The slim image has no embedded MariaDB. Compose sets `UPTIME_KUMA_DB_TYPE=sqlite`, which writes `db-config.json` and starts the main server. Without that variable a fresh data directory stays on the database setup page, the image healthcheck can still pass, and the provisioner has no socket to talk to.
 
@@ -15,7 +15,7 @@ Then browse `http://127.0.0.1:13020`.
 ## What is checked
 
 - `GET /api/health` on each web container over the `kodama` network. Capital and sentinel also keep `/api/v1/health` (no database). Kodamalabs has no database, so its health route reports `db: "skipped"`.
-- Public `https://capital.kodamalabs.ai/login`, `https://careers.kodamalabs.ai/` and `https://attentio.dev/` with redirects **not** followed and statuses 200–399 accepted. Cloudflare Access answers 302; an origin failure shows up as 5xx or 530.
+- Public `https://capital.kodamalabs.ai/login`, `https://careers.kodamalabs.ai/`, `https://attentio.dev/` and `https://status.kodamalabs.ai/` with redirects **not** followed and statuses 200–399 accepted. Cloudflare Access answers 302; an origin failure shows up as 5xx or 530.
 - `EXTRA_PUBLIC_HOSTS` (comma-separated) for hostnames that are not on our DNS yet, such as `https://sentinel.kodamalabs.ai/` and `https://kodamalabs.ai/`.
 - `SELECT 1` against `capital`, `sentinel`, `attention` and `careers` on `postgres:5432`.
 - Docker "must be running" for the long-running compose services, via a GET-only socket proxy. One-shot `*-migrate` containers are not in that list.
@@ -34,6 +34,24 @@ If `ALERT_WEBHOOK_URL` is empty, monitors still run and nothing is sent. The wat
 `ALERT_WEBHOOK_HEADER` is the header name (default `Authorization`). `ALERT_WEBHOOK_HEADER_VALUE` is sent verbatim. `ALERT_WEBHOOK_KEY` is used only when the value is empty, as `Bearer <key>`.
 
 Kuma's body is a Liquid template. String fields go through the `json` filter so quotes and newlines cannot break the JSON. The template never interpolates `monitorJSON` as a whole (that object holds the Postgres URL).
+
+## Public status page
+
+`https://status.kodamalabs.ai/` is a Kuma status page, slug `kodama`, provisioned with the monitors. The page shows Capital, Careers and Attentio. Those rows are separate HTTP monitors whose names are the public labels. Their description starts with `statuspage:`. The alerting monitors stay `kodama/public-capital-login`, `kodama/public-careers` and `kodama/public-attention`, and `kodama/public-status` checks the page itself. Postgres, Docker, host disk and cron monitors are not on the page. Cron jobs are not grouped there either: Kuma 2.5.3 shows `monitor.name`, and the push-monitor names are internal paths.
+
+Kuma 2.5.3 blanks heartbeat `msg` on `/api/status-page/heartbeat/:slug`. The display monitors are saved with `sendUrl` off, so the public JSON has no URL. Re-running the provisioner updates the same slug and the same display names. A name that already exists without the `statuspage:` description fails the status-page step and leaves the `kodama/` monitors in place.
+
+Search indexing is discouraged for the whole Kuma instance (`searchEngineIndex` false), which makes `/robots.txt` `Disallow: /`. Per-page `search_engine_index` is not writable in 2.5.3. `showPoweredBy` is false. The logo is the Kodama compass on `#0c1714`.
+
+`/` on that hostname calls `/api/entry-page`. On this host the JSON is the public slug (`statusPageMatchedDomain`). That one path is on the allowlist. `/dashboard`, `/socket.io`, `/api/push`, `/metrics` and `/api/badge` are not.
+
+Before the first deploy of this ingress:
+
+1. In Cloudflare DNS, CNAME `status.kodamalabs.ai` to `ab16031c-dce9-4a61-a287-36f7da8dcb4e.cfargotunnel.com` (proxied). This is not in the repo.
+2. Confirm no Cloudflare Access application covers `status.kodamalabs.ai`. A new hostname is public by default; an Access app would turn the page into a login redirect.
+3. Re-run `infrastructure/deploy/install.sh` so the status smoke in `deploy.sh` is the copy sshd runs. The ingress file itself is bind-mounted and applies on recreate either way.
+
+A failed status smoke writes the previous `infrastructure/cloudflared/config.yml` back and recreates cloudflared. The checkout then has that tracked change on purpose, and the next deploy refuses a dirty tree until the file is checked out again.
 
 ## Add a monitor
 
@@ -122,4 +140,4 @@ On the main checkout, context `desktop-linux`:
 7. `uptime-kuma-provision` should exit 0. Exit 1 with a docker host error means step 6 failed; HTTP monitors may already be saved.
 8. Open a maintenance window, rebuild the app images so `/api/health` exists, then `compose up -d` and clear the window.
 9. Install the disk timer. Curl the push URL Down and Up and confirm the webhook body.
-10. Do not add Kuma to `infrastructure/cloudflared/config.yml`.
+10. The status hostname is already in `infrastructure/cloudflared/config.yml`. Do not add the dashboard, `/socket.io`, or any other Kuma path.

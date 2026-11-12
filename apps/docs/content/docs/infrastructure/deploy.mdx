@@ -5,16 +5,45 @@ description: Como publicar mudanças de careers, attention, capital e sentinel n
 
 # Deploy
 
-Só funciona a partir do **checkout principal** do repo no servidor (`/home/kodama/Documents/Github/kodama-labs`) — nunca de um worktree. É de lá que o `docker compose` lê o `docker-compose.yml`, o `Dockerfile` e os `.env.production` de cada app.
+Um merge em `main` publica sozinho. O workflow `ci` roda no GitHub. Quando ele fica verde num push para `main`, o workflow `deploy` entra na tailnet e manda um único comando SSH para o kodama-ai. A chave de deploy não abre shell.
+
+O runbook com o que configurar no GitHub e no Tailscale está em `infrastructure/deploy/README.md` no repo. No servidor, como `kodama`:
+
+```bash
+ssh-keygen -t ed25519 -f deploy_key -N ''   # na sua máquina, não no servidor
+infrastructure/deploy/install.sh \
+  --authorize-key deploy_key.pub \
+  --seed-sha c0e48d2212d5259c466edaea3bf8ea291114b585
+```
+
+O `install.sh` não gera chave. O comando forçado fica em `~/.local/lib/kodama-deploy/`, fora do checkout. Um deploy não copia esses scripts de volta. Se eles divergirem do commit, o log mostra `WARNING: tooling drift` e `~/deploys/status.json` ganha `"tooling_drift": true`. Aí se roda o `install.sh` de novo.
+
+A ACL do Tailscale para o runner é só esta rota (junte ao policy existente, não substitua o arquivo):
+
+```json
+{
+  "tagOwners": {
+    "tag:ci-deploy": ["autogroup:admin"]
+  },
+  "acls": [
+    {
+      "action": "accept",
+      "src": ["tag:ci-deploy"],
+      "dst": ["100.109.102.38:22"]
+    }
+  ]
+}
+```
+
+O OAuth client precisa do escopo `auth_keys` (devices:core write) limitado à tag `tag:ci-deploy`.
+
+Build de produção não roda no contexto `desktop-linux` (a VM do Docker Desktop fica sem memória). O deployer builda em `docker --context default` e faz `docker save | docker --context desktop-linux load`. O contexto `default` tem um stack antigo que não pode ser iniciado nem parado. `infrastructure/postgres` não é aplicado pelo deploy.
+
+Os comandos manuais abaixo são o caminho de emergência, a partir do checkout principal (`/home/kodama/Documents/Github/kodama-labs`), nunca de um worktree.
 
 ## Deploy completo (código mudou)
 
-```bash
-git pull
-
-docker --context desktop-linux compose build      # reconstrói as imagens (careers, attention, capital, sentinel, kodamalabs)
-docker --context desktop-linux compose up -d       # recria migrate → depois web/workers
-```
+Preferir o workflow. Um build manual usa o contexto `default` (com os mesmos `--build-arg` que o serviço `-migrate` declara no compose), `docker save | docker --context desktop-linux load`, e só então o `up` no `desktop-linux` com `--no-build`. Sem `--no-build` o compose tenta buildar dentro da VM.
 
 O que acontece em `up -d`:
 
@@ -24,14 +53,11 @@ O que acontece em `up -d`:
 
 Isso significa que **nunca é preciso rodar migration manualmente em produção** — faz parte do próprio `up -d`. E se uma migration falhar, os serviços dependentes simplesmente não são recriados (ficam na versão anterior rodando), em vez de subir num estado inconsistente.
 
-Buildar todas as imagens de uma vez é o padrão simples. Pra buildar só uma (mudança isolada num app):
+O deployer rebuilda só o app cujo path mudou. O alvo de build de cada app é o serviço `-migrate`: é ele que declara o `build:` no compose, e os outros serviços do mesmo app reusam a imagem. Numa emergência, depois da imagem nova estar carregada no `desktop-linux`:
 
 ```bash
-docker --context desktop-linux compose build careers-migrate
-docker --context desktop-linux compose up -d careers-web careers-jobs careers-sources careers-maintenance
+docker --context desktop-linux compose -p kodama-prod up -d --no-build careers-web careers-jobs careers-sources careers-maintenance
 ```
-
-(o alvo de build é sempre o `-migrate` de cada app — é o serviço que declara o `build:` no compose; os outros serviços do mesmo app reusam a mesma imagem)
 
 ## Reiniciar sem rebuildar
 

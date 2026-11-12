@@ -28,17 +28,51 @@ export async function listCategoriesForMcp(userId: string, type: TransactionType
 }
 
 /**
- * Entities that can receive transactions: the businesses and the personal
- * entity. Their ids are the businessId / personalAccountId the other tools take.
+ * Entities that can receive transactions, each with its ledger accounts.
+ * Entity ids are the businessId / personalAccountId the other tools take.
+ * Account ids are the accountId bulk_create_transactions and the update
+ * tools take. Archived accounts are hidden unless includeArchived is set;
+ * every returned account carries archived.
  */
-export async function listAccounts(userId: string, db: DbClient) {
+export async function listAccounts(userId: string, db: DbClient, opts: { includeArchived?: boolean } = {}) {
   const entities = await db.entity.findMany({ where: { userId, archivedAt: null }, orderBy: { createdAt: "asc" } });
+  const accounts = entities.length
+    ? await db.account.findMany({
+        where: { userId, entityId: { in: entities.map((entity) => entity.id) }, ...(opts.includeArchived ? {} : { archivedAt: null }) },
+        orderBy: [{ isDefault: "desc" }, { name: "asc" }],
+      })
+    : [];
+  const byEntity = new Map<string, typeof accounts>();
+  for (const account of accounts) {
+    const rows = byEntity.get(account.entityId) ?? [];
+    rows.push(account);
+    byEntity.set(account.entityId, rows);
+  }
+  const rowsOf = (entityId: string) =>
+    (byEntity.get(entityId) ?? []).map((account) => ({
+      id: account.id,
+      name: account.name,
+      type: account.type,
+      currency: account.currency,
+      isDefault: account.isDefault,
+      archived: account.archivedAt !== null,
+    }));
   const personal = entities.find((e) => e.kind === "personal");
   return {
     businesses: entities
       .filter((e) => e.kind === "business")
-      .map((b) => ({ id: b.id, name: b.name, description: b.description, defaultCurrency: b.defaultCurrency, color: b.color, entityType: "business" as const })),
-    personalAccount: personal ? { id: personal.id, name: "Personal", defaultCurrency: personal.defaultCurrency, entityType: "personal" as const } : null,
+      .map((b) => ({
+        id: b.id,
+        name: b.name,
+        description: b.description,
+        defaultCurrency: b.defaultCurrency,
+        color: b.color,
+        entityType: "business" as const,
+        accounts: rowsOf(b.id),
+      })),
+    personalAccount: personal
+      ? { id: personal.id, name: "Personal", defaultCurrency: personal.defaultCurrency, entityType: "personal" as const, accounts: rowsOf(personal.id) }
+      : null,
   };
 }
 

@@ -168,10 +168,18 @@ export async function setAccountBalance(userId: string, accountId: string, balan
   });
 }
 
-/** Balance in the account's currency: initial balance + every live entry. */
-export async function accountBalances(userId: string, db: DbClient, accountIds?: string[]): Promise<Map<string, number>> {
+/**
+ * Balance in the account's currency: initial balance + every live entry.
+ * This is the number the accounts screen shows. `asOf` keeps entries whose
+ * date is on or before that instant (the screen omits it and counts them all).
+ * Callers, including the MCP balance tool, share this query.
+ */
+export async function accountBalances(userId: string, db: DbClient, accountIds?: string[], asOf?: Date): Promise<Map<string, number>> {
+  const live = asOf
+    ? Prisma.sql`le."deletedAt" IS NULL AND le."date" <= ${asOf}`
+    : Prisma.sql`le."deletedAt" IS NULL`;
   const rows = await db.$queryRaw<{ id: string; balance: Prisma.Decimal }[]>`
-    SELECT a.id, a."initialBalance" + coalesce(sum(le.amount) FILTER (WHERE le."deletedAt" IS NULL), 0) AS balance
+    SELECT a.id, a."initialBalance" + coalesce(sum(le.amount) FILTER (WHERE ${live}), 0) AS balance
     FROM accounts a
     LEFT JOIN ledger_entries le ON le."accountId" = a.id
     WHERE a."userId" = ${userId}

@@ -1,0 +1,153 @@
+{
+  "meta": {
+    "title": "Cerne — finanças pessoais e da sua empresa",
+    "description": "Suas finanças pessoais e as da sua empresa consolidadas num livro só, para controlar melhor o dinheiro e chegar à liberdade financeira."
+  },
+  "nav": {
+    "label": "Seções",
+    "together": "PF + PJ",
+    "how": "Como funciona",
+    "features": "Recursos",
+    "freedom": "Liberdade financeira",
+    "control": "Controle",
+    "signIn": "Entrar",
+    "access": "Pedir acesso"
+  },
+  "hero": {
+    "eyebrow": "Finanças pessoais e da sua empresa",
+    "title": "Patrimônio se faz em anéis.",
+    "lead": "Sua empresa e sua vida pessoal num livro só. Com tudo consolidado, você enxerga quanto realmente sobra, controla melhor e vê em que ano chega à liberdade financeira.",
+    "primary": "Pedir acesso antecipado",
+    "secondary": "Ver como funciona",
+    "shot": "A tela de Liberdade financeira do Cerne: um anel de patrimônio por ano, até a meta"
+  },
+  "together": {
+    "eyebrow": "Por que juntar",
+    "title": "Duas contas, um patrimônio.",
+    "apart": {
+      "title": "Separado, o dinheiro some no caminho",
+      "text": "Pró-labore, distribuição de lucros e despesas que a empresa paga por você ficam em lugares diferentes. Nenhum deles mostra quanto você poupa de verdade."
+    },
+    "joined": {
+      "title": "Junto, tudo fecha",
+      "text": "Cada transferência da empresa para você tem os dois lados anotados. Você vê um patrimônio e uma taxa de poupança, e ainda pode olhar só PF ou só PJ."
+    },
+    "plan": {
+      "title": "E o plano usa o todo",
+      "text": "A liberdade financeira é calculada sobre o patrimônio inteiro, não só sobre a conta pessoal."
+    },
+    "shot": "A tela de transações do Cerne, com lançamentos da pessoa física e da empresa, e uma distribuição de lucros da empresa para a PF"
+  },
+  "who": {
+    "eyebrow": "Para quem",
+    "title": "Para quem tem empresa e vida no mesmo bolso.",
+    "abroad": {
+      "tag": "US$ → R$",
+      "title": "Recebe de fora",
+      "text": "O cliente paga em dólar na conta da empresa. O Cerne guarda o valor original e quanto ele valia em reais no dia."
+    },
+    "business": {
+      "tag": "PJ → PF",
+      "title": "Tem empresa e conta pessoal",
+      "text": "A distribuição de lucros sai da empresa e entra em você, com os dois lados anotados. Nada some no meio do caminho."
+    },
+    "goal": {
+      "tag": "2037",
+      "title": "Quer chegar lá",
+      "text": "Aportes, carteira e uma meta de renda para a liberdade financeira, no mesmo lugar onde estão os gastos do mês."
+    }
+  },
+  "how": {
+    "eyebrow": "Como funciona",
+    "title": "Conecte, confira, cresça.",
+    "connect": {
+      "title": "Conecte",
+      "text": "Sincronize suas contas pelo Open Finance, ou mande o extrato em PDF ou um print da tela."
+    },
+    "check": {
+      "title": "Confira",
+      "text": "O assistente lê e propõe os lançamentos. Nada entra no seu livro sem a sua confirmação, e tudo pode ser desfeito depois."
+    },
+    "grow": {
+      "title": "Cresça",
+      "text": "Veja a sobra de cada mês virar patrimônio. Um anel por ano, mais grosso nos anos bons, mas sempre um anel."
+    },
+    "proposal": {
+      "label": "Proposta do assistente, com dados ilustrativos",
+      "source": "proposta do assistente · extrato de outubro",
+      "status": "nada gravado · vale 30 min",
+      "rows": {
+        "pharmacy": "Farmácia · Saúde",
+        "restaurant": "Restaurante · Alimentação",
+        "pix": "Pix recebido · Serviços"
+      },
+      "more": "+ 39 lançamentos",
+      "confirm": "Confirmar importação",
+      "illustrative": "Dados ilustrativos."
+    }
+  },
+  "features": {
+    "eyebrow": "Recursos",
+    "title": "Tudo o que o dinheiro faz, anotado do jeito certo.",
+    "ledger": {
+      "title": "Um livro só",
+      "text": "Você e suas empresas, com contas, cartões, corretora e dinheiro em espécie no mesmo lugar."
+    },
+    "currencies": {
+      "title": "Várias moedas",
+      "text": "Cada lançamento guarda o valor original e o valor em reais, fixado no dia em que entrou."
+    },
+    "cards": {
+      "title": "Cartão na data certa",
+      "text": "A compra conta no fechamento da fatura, e pagar a fatura é uma transferência, não um gasto em dobro."
+    },
+    "investments": {
+      "title": "Investimentos",
+      "text": "Carteira por classe de ativo, aportes e proventos, ao lado do resto das suas contas."
+    },
+    "budgets": {
+      "title": "Orçamentos e views",
+      "text": "Metas por categoria no mês e no ano. Tabela, pivô, gráfico, board e calendário, com filtros salvos."
+    },
+    "claude": {
+      "title": "Funciona com o Claude",
+      "text": "Pergunte e lance pelo Claude: o Cerne tem um servidor MCP com as mesmas regras do app."
+    }
+  },
+  "freedom": {
+    "eyebrow": "Liberdade financeira",
+    "title": "Um plano, não só um gráfico.",
+    "text": "Diga quanto quer de renda por mês. O Cerne calcula quanto falta, simula milhares de cenários de mercado e mostra em que ano, no ritmo atual, você chega lá. E quanto um aporte a mais adianta.",
+    "shot": "O painel da Liberdade financeira: o patrimônio de hoje, o ano previsto de chegada e quanto um aporte maior adianta",
+    "demo": "Tela real, com dados de demonstração."
+  },
+  "control": {
+    "eyebrow": "Controle",
+    "title": "Quem decide é você.",
+    "confirm": {
+      "title": "Nada entra sem você",
+      "text": "O assistente pode ler um extrato, mas não importa sozinho. A proposta espera o seu clique e expira em 30 minutos."
+    },
+    "undo": {
+      "title": "Tudo tem volta",
+      "text": "Qualquer alteração pode ser desfeita, venha de quem vier. O que você apaga fica 30 dias na lixeira."
+    },
+    "export": {
+      "title": "Seus dados saem com você",
+      "text": "Exporte qualquer view em CSV quando quiser. O livro é seu."
+    }
+  },
+  "access": {
+    "title": "Comece o primeiro anel.",
+    "text": "O Cerne está abrindo aos poucos. Escreva para nós e avisamos quando chegar a sua vez.",
+    "button": "Pedir acesso antecipado",
+    "subject": "Acesso antecipado ao Cerne",
+    "or": "ou escreva para"
+  },
+  "footer": {
+    "label": "Rodapé",
+    "tagline": "Uma ferramenta Kodama Labs",
+    "signIn": "Entrar",
+    "labs": "kodamalabs.ai"
+  }
+}

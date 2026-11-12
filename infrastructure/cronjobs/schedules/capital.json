@@ -8,6 +8,7 @@
     { "path": "/api/cron/fire-snapshot", "schedule": "0 3 1 * *" },
     { "path": "/api/cron/notify", "schedule": "*/15 * * * *" },
     { "path": "/api/cron/portfolio-snapshot", "schedule": "30 23 * * *" },
-    { "path": "/api/cron/benchmarks", "schedule": "0 10 * * *" }
+    { "path": "/api/cron/benchmarks", "schedule": "0 10 * * *" },
+    { "path": "/api/cron/pluggy-sync", "schedule": "0 8 * * *" }
   ]
 }

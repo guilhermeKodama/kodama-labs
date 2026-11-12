@@ -60,6 +60,7 @@ const INCOME_TYPES: IncomeType[] = [
   "jcp",
   "fii_income",
   "interest",
+  "fixed_income_interest",
 ];
 
 /** The asset of a buy/sell/income: one of the user's holdings, a market result or a new asset typed by hand. */
@@ -495,11 +496,11 @@ function OperationForm({
         "/api/v2/investment-operations",
         {
           holdingId: target!.id,
-          type: incomeType === "interest" ? "yield_payment" : "dividend",
+          type: incomeType === "interest" || incomeType === "fixed_income_interest" ? "yield_payment" : "dividend",
           incomeType,
           totalAmount: grossValue,
           taxWithheld: taxValue,
-          creditToAccountId: creditTo === "cash" ? null : creditTo,
+          creditToAccountId: creditTo === "cash" ? target!.accountId : creditTo,
           date,
         },
       );
@@ -645,7 +646,7 @@ function OperationForm({
 
       {isTrade ? (
         <>
-          <div className="grid grid-cols-4 gap-2.5">
+          <div className="grid grid-cols-2 gap-2.5 md:grid-cols-4">
             <Field label={t("quantity")}>
               <TextInput
                 value={qty}
@@ -760,7 +761,7 @@ function OperationForm({
       ) : null}
 
       {kind === "income" ? (
-        <div className="grid grid-cols-3 gap-2.5">
+        <div className="grid grid-cols-2 gap-2.5 md:grid-cols-3">
           <Field label={t("income.type")}>
             <Select
               value={incomeType}
@@ -782,7 +783,11 @@ function OperationForm({
           <Field
             label={t("income.tax")}
             hint={
-              incomeType === "jcp" ? t("income.taxJcp") : t("income.taxExempt")
+              incomeType === "jcp"
+                ? t("income.taxJcp")
+                : incomeType === "interest" || incomeType === "fixed_income_interest"
+                  ? t("income.taxWithheld")
+                  : t("income.taxExempt")
             }
           >
             <TextInput
@@ -797,13 +802,26 @@ function OperationForm({
               value={creditTo}
               onChange={setCreditTo}
               options={[
-                { value: "cash", label: t("income.creditCash") },
-                ...cashAccounts.map((a) => ({
-                  value: a.id,
-                  label: t("income.creditAccount", {
-                    account: accountLabel(a),
-                  }),
-                })),
+                {
+                  value: "cash",
+                  label: broker
+                    ? t("income.creditCashOn", { account: broker.name })
+                    : t("income.creditCash"),
+                },
+                ...accounts
+                  .filter((a) => {
+                    if (a.archivedAt) return false;
+                    // The cash leg and the holding have to share an entity.
+                    if (broker && a.entityId !== broker.entityId) return false;
+                    if (a.type === "checking" || a.type === "cash") return true;
+                    return a.type === "brokerage" && a.id !== brokerId;
+                  })
+                  .map((a) => ({
+                    value: a.id,
+                    label: t("income.creditAccount", {
+                      account: accountLabel(a),
+                    }),
+                  })),
               ]}
             />
           </Field>
@@ -819,7 +837,7 @@ function OperationForm({
       ) : null}
 
       {kind === "deposit" || kind === "withdraw" ? (
-        <div className="grid grid-cols-3 gap-2.5">
+        <div className="grid grid-cols-2 gap-2.5 md:grid-cols-3">
           <Field
             label={
               cashCurrencyLabel

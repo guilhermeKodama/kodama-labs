@@ -32,6 +32,9 @@
     "transferType": "Type:",
     "detected": "detected from the accounts",
     "reimbursement": "This is a reimbursement",
+    "reimburses": "Reimburses",
+    "reimbursesHint": "An income in this expense category reduces that budget. Blank does not reduce any budget.",
+    "reimbursesClear": "Clear",
     "direction": {
       "profit_distribution": "Profit distribution",
       "capital_injection": "Capital injection",
@@ -238,6 +241,7 @@
     "duplicate": "Duplicate",
     "export": "Export",
     "delete": "Delete",
+    "more": "More actions",
     "categoryTitle": "Change the category of {count}",
     "categoryGroup": {
       "expense": "Expenses",
