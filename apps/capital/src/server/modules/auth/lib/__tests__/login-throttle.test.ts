@@ -31,6 +31,30 @@ describe("LoginThrottle", () => {
   });
 });
 
+describe("LoginThrottle memory", () => {
+  const sizeOf = (throttle: LoginThrottle) => (throttle as unknown as { failures: Map<string, number[]> }).failures.size;
+
+  it("drops the keys whose failures all left the window once the map holds a thousand, keeping the recent ones", () => {
+    const throttle = new LoginThrottle();
+    // 500 addresses, each failing once for one account: an account key and an address key apiece.
+    for (let i = 0; i < 500; i++) throttle.recordFailure(`10.0.${Math.floor(i / 250)}.${i % 250}`, "a@x.com", T0);
+    expect(sizeOf(throttle)).toBe(1000);
+
+    const later = T0 + LOGIN_WINDOW_MS + 1;
+    throttle.recordFailure("9.9.9.9", "b@x.com", later);
+    // Only the two keys of the failure just recorded are left.
+    expect(sizeOf(throttle)).toBe(2);
+    expect(throttle.retryAfterMs("10.0.0.1", "a@x.com", later)).toBe(0);
+  });
+
+  it("keeps everything while the map is small, even keys that expired", () => {
+    const throttle = new LoginThrottle();
+    throttle.recordFailure("1.1.1.1", "a@x.com", T0);
+    throttle.recordFailure("2.2.2.2", "b@x.com", T0 + LOGIN_WINDOW_MS + 1);
+    expect(sizeOf(throttle)).toBe(4);
+  });
+});
+
 describe("clientAddress", () => {
   const headers = (h: Record<string, string>) => (name: string) => h[name];
   it("prefers Cloudflare's header, then the first forwarded hop", () => {

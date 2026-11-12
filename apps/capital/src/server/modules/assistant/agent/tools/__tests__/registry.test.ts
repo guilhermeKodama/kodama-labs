@@ -128,6 +128,41 @@ describe("executeTool", () => {
   });
 });
 
+describe("executeTool - failures that are not Errors", () => {
+  it("reports a thrown non-Error as an unknown error, for a read tool without auditing it", async () => {
+    const throwsString = defineTool({
+      name: "throws_string",
+      description: "Throws something that is not an Error object.",
+      inputSchema: z.object({}),
+      access: "read",
+      handler: async () => {
+        throw "plain string";
+      },
+    });
+    const create = vi.fn();
+    const result = await executeTool([throwsString], fakeCtx({ agentAction: { create } }), "call_1", "throws_string", {});
+    expect(result.isError).toBe(true);
+    expect(result.output).toEqual({ error: "Unknown error" });
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  it("audits a thrown non-Error from a write tool as an unknown error", async () => {
+    const throwsNumber = defineTool({
+      name: "throws_number",
+      description: "Throws a number from a write tool.",
+      inputSchema: z.object({ n: z.number() }),
+      access: "write_domain",
+      handler: async () => {
+        throw 42;
+      },
+    });
+    const create = vi.fn().mockResolvedValue({});
+    const result = await executeTool([throwsNumber], fakeCtx({ agentAction: { create } }), "call_1", "throws_number", { n: 1 });
+    expect(result.output).toEqual({ error: "Unknown error" });
+    expect(create.mock.calls[0]![0].data).toMatchObject({ status: "error", error: "Unknown error", input: { n: 1 }, toolName: "throws_number" });
+  });
+});
+
 describe("toAnthropicTools", () => {
   it("preserves declaration order (stable prompt-cache prefix)", () => {
     const tools = toAnthropicTools([writeTool, echoTool, throwingTool]);
@@ -254,6 +289,22 @@ describe("executeTool - media escape hatch", () => {
     const audited = create.mock.calls[0]![0].data.output;
     expect(audited).toEqual({ loadedCount: 1 });
     expect(JSON.stringify(audited)).not.toContain(TOOL_MEDIA_KEY);
+  });
+
+  it("drops a __media value that is not a list instead of passing it on", async () => {
+    const brokenMedia = defineTool({
+      name: "broken_media",
+      description: "Sets the media key to something that is not a list of files.",
+      inputSchema: z.object({}),
+      access: "write_domain",
+      handler: async () => ({ loadedCount: 0, [TOOL_MEDIA_KEY]: "recibo.png" }),
+    });
+    const create = vi.fn();
+    const result = await executeTool([brokenMedia], fakeCtx({ agentAction: { create } }), "call_1", "broken_media", {});
+    expect(result.isError).toBe(false);
+    expect(result.media).toBeUndefined();
+    expect(result.output).toEqual({ loadedCount: 0 });
+    expect(create.mock.calls[0]![0].data.output).toEqual({ loadedCount: 0 });
   });
 
   it("leaves media undefined for a tool that returns none", async () => {
