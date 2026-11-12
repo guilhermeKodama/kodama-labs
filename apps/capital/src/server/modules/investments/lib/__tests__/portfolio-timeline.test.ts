@@ -41,6 +41,9 @@ describe("periods", () => {
     expect(periodLabel(202601)).toBe("2026-01");
     expect(parsePeriod("2026-01")).toBe(202601);
     expect(parsePeriod("2026-13")).toBeNull();
+    expect(parsePeriod("2026-00")).toBeNull();
+    expect(parsePeriod("2026-1")).toBeNull();
+    expect(parsePeriod("")).toBeNull();
     expect(periodOf(d("2026-03-31"))).toBe(202603);
     // A date stored at noon UTC on the last day belongs to its month.
     expect(d("2026-01-31") < monthEnd(202601)).toBe(true);
@@ -277,3 +280,116 @@ describe("buildTimeline", () => {
     expect(t.value(s, "cost").marketValue).toBe(5000);
   });
 });
+
+describe("buildTimeline edge cases", () => {
+  it("counts yield payments credited to a bank like dividends: money out of the month's flow, not out of Total aportado", () => {
+    const t = buildTimeline(
+      input({
+        entries: [{ accountId: "xp", date: d("2026-01-02"), amount: 1000, amountBase: 1000, isTransfer: true }],
+        holdings: [
+          holding({
+            id: "cdb",
+            assetClass: "fixed_income",
+            allocationClass: "fixed_income",
+            operations: [
+              op("b", "2026-01-02", { type: "buy", totalAmount: 1000 }),
+              op("y", "2026-02-15", { type: "yield_payment", totalAmount: 40, cash: "outside", outsideAmountBase: 40 }),
+            ],
+          }),
+        ],
+      }),
+    );
+    expect(t.state("pf", 202602)).toMatchObject({ contributed: 1000, netFlow: -40 });
+  });
+
+  it("books a buy whose cash left a bank account as money coming into the portfolio", () => {
+    const t = buildTimeline(
+      input({
+        holdings: [holding({ id: "h", operations: [op("b", "2026-01-02", { type: "buy", quantity: 1, pricePerUnit: 100, totalAmount: 100, cash: "outside", outsideAmountBase: -100 })] })],
+      }),
+    );
+    // outsideAmountBase is the leg's signed amount: a debit of 100 is -100, so the buy brings 100 in.
+    expect(t.state("pf", 202601)).toMatchObject({ contributed: 100, netFlow: 100, costBasis: 100 });
+  });
+
+  it("treats a first deposit as an opening lot and a withdrawal without cash as proceeds going out", () => {
+    const t = buildTimeline(
+      input({
+        holdings: [
+          holding({
+            id: "caixinha",
+            assetClass: "fixed_income",
+            allocationClass: "fixed_income",
+            operations: [
+              op("d", "2026-01-02", { type: "deposit", totalAmount: 1000, cash: "none" }),
+              op("w", "2026-02-02", { type: "withdrawal", totalAmount: 400, cash: "none" }),
+            ],
+          }),
+        ],
+      }),
+    );
+    expect(t.state("pf", 202601)).toMatchObject({ contributed: 1000, initialPositions: 1000, costBasis: 1000 });
+    expect(t.state("pf", 202602)).toMatchObject({ contributed: 600, initialPositions: 1000, netFlow: -400, costBasis: 600 });
+  });
+
+  it("ignores entries on an account that is not in the input", () => {
+    const t = buildTimeline(input({ entries: [{ accountId: "ghost", date: d("2026-01-02"), amount: 1000, amountBase: 1000, isTransfer: true }] }));
+    expect(t.state("pf", 202601)).toMatchObject({ cash: 0, contributed: 0, netFlow: 0 });
+    expect(t.firstPeriod("pf")).toBeNull();
+  });
+
+  it("lists an entity that only has holdings, and answers an empty month for an entity it does not know", () => {
+    const t = buildTimeline(
+      input({
+        holdings: [holding({ id: "h", entityId: "pj", currentQuantity: 2, totalInvested: 80, currentPrice: 50, operations: [] })],
+      }),
+    );
+    expect(t.entityIds.sort()).toEqual(["pf", "pj"]);
+    expect(t.state("pj", 202601)).toMatchObject({ cash: 0, costBasis: 80, contributed: 80, initialPositions: 80 });
+    expect(t.state("nobody", 202601)).toEqual({ entityId: "nobody", period: 202601, cash: 0, costBasis: 0, contributed: 0, initialPositions: 0, netFlow: 0, positions: [] });
+    expect(t.firstPeriod("nobody")).toBeNull();
+  });
+
+  it("takes a deactivated holding out no earlier than its last operation", () => {
+    const t = buildTimeline(
+      input({
+        holdings: [
+          holding({
+            id: "h",
+            // Flagged removed on 03-01, but its last operation is dated 03-20: it leaves on the 20th.
+            removedAt: d("2026-03-01"),
+            operations: [
+              op("b", "2026-01-05", { type: "buy", quantity: 10, pricePerUnit: 10, totalAmount: 100, cash: "none" }),
+              op("a", "2026-03-20", { type: "adjustment", quantity: 10, pricePerUnit: 10, totalAmount: 100, cash: "none" }),
+            ],
+          }),
+        ],
+      }),
+    );
+    expect(t.state("pf", 202603)).toMatchObject({ contributed: 0, costBasis: 0, positions: [] });
+    expect(t.state("pf", 202602)).toMatchObject({ contributed: 100, costBasis: 100 });
+  });
+
+  it("takes an opening lot of a deactivated holding out at the rate on the opening day", () => {
+    const t = buildTimeline(
+      input({
+        rateFor: () => 6,
+        rateOn: (_currency, date) => (date.toISOString().slice(0, 10) < "2026-06-01" ? 5 : 6),
+        accounts: [{ id: "av", entityId: "pf", currency: "USD", initialBalance: 0, openedAt: d("2026-02-08") }],
+        holdings: [
+          holding({
+            id: "btc",
+            currency: "USD",
+            openedAt: d("2026-02-08"),
+            removedAt: d("2026-09-01"),
+            operations: [op("b", "2026-03-01", { type: "buy", quantity: 1, pricePerUnit: 10, totalAmount: 10, cash: "none" })],
+          }),
+        ],
+      }),
+    );
+    // In at 5 as an opening lot, out at the same 5 (not today's 6): it cancels.
+    expect(t.state("pf", 202603)).toMatchObject({ contributed: 50, initialPositions: 50 });
+    expect(t.state("pf", 202609)).toMatchObject({ contributed: 0, initialPositions: 0, netFlow: -50 });
+  });
+});
+

@@ -18,6 +18,20 @@ describe("acceptPrice", () => {
     expect(acceptPrice({ point: { date: "2026-11-10", close: -5, currency: "BRL" }, asset: stock }).status).toBe("rejected");
   });
 
+  it("rejects a date that is not a calendar date, naming it", () => {
+    const verdict = acceptPrice({ point: { date: "10/11/2026", close: 38.2, currency: "BRL" }, asset: stock });
+    expect(verdict).toEqual({ status: "rejected", reason: "data inválida: 10/11/2026" });
+  });
+
+  it("rejects a close that is not a finite number", () => {
+    expect(acceptPrice({ point: { date: "2026-11-10", close: Number.NaN, currency: "BRL" }, asset: stock })).toEqual({ status: "rejected", reason: "fechamento inválido: NaN" });
+    expect(acceptPrice({ point: { date: "2026-11-10", close: Infinity, currency: "BRL" }, asset: stock }).status).toBe("rejected");
+  });
+
+  it("compares currencies ignoring case", () => {
+    expect(acceptPrice({ point: { date: "2026-11-10", close: 38.2, currency: "brl" }, asset: stock })).toEqual({ status: "ok" });
+  });
+
   it("rejects a future date", () => {
     const verdict = acceptPrice({ point: { date: "2026-11-20", close: 38.2, currency: "BRL" }, asset: stock, now: new Date("2026-11-10T12:00:00Z") });
     expect(verdict.status).toBe("rejected");

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { planPlainProventoLinks, type PlainProventoHolding, type PlainProventoIncome } from "../link-plain-proventos";
+import { incomeTypeForPlainProvento, isPlainProventoCategory, planPlainProventoLinks, tickerInDescription, type PlainProventoHolding, type PlainProventoIncome } from "../link-plain-proventos";
 
 const pf = "entity-pf";
 const xp = "account-xp";
@@ -86,5 +86,61 @@ describe("planPlainProventoLinks", () => {
       "category is not Proventos or Rendimentos",
       "no ticker in the description",
     ]);
+  });
+});
+
+describe("planPlainProventoLinks matching", () => {
+  it("links to the only holding of the ticker in the entity even when it sits on another account", () => {
+    const plan = planPlainProventoLinks(
+      [income({ id: "tx-1", description: "Dividendo VALE3", accountId: "account-bank" })],
+      [holding({ id: "h-vale", ticker: "VALE3", accountId: xp }), holding({ id: "h-vale-pj", ticker: "VALE3", entityId: "entity-pj" })],
+    );
+    expect(plan.skipped).toEqual([]);
+    expect(plan.links.map((l) => [l.holdingId, l.incomeType])).toEqual([["h-vale", "dividend"]]);
+  });
+
+  it("skips a ticker the entity does not hold, saying so", () => {
+    const plan = planPlainProventoLinks([income({ id: "tx-2", description: "Dividendo ITUB4" })], [holding({ id: "h", ticker: "VALE3" })]);
+    expect(plan.links).toEqual([]);
+    expect(plan.skipped).toEqual([{ transactionId: "tx-2", description: "Dividendo ITUB4", reason: "no holding ITUB4 in this entity" }]);
+  });
+
+  it("matches the ticker ignoring case, taking it from the description's upper-cased form", () => {
+    const plan = planPlainProventoLinks([income({ id: "tx-3", description: "rendimento hglg11 setembro" })], [holding({ id: "h", ticker: "hglg11" })]);
+    expect(plan.links).toEqual([expect.objectContaining({ holdingId: "h", ticker: "HGLG11", incomeType: "fii_income" })]);
+  });
+
+  it("takes a row with no category as outside the Proventos bucket, unless a system key says otherwise", () => {
+    const plan = planPlainProventoLinks(
+      [
+        income({ id: "tx-4", description: "Dividendo PETR4", categoryName: null }),
+        income({ id: "tx-5", description: "Dividendo PETR4", categoryName: null, categorySystemKey: "dividends" }),
+      ],
+      [holding({ id: "h", ticker: "PETR4" })],
+    );
+    expect(plan.skipped.map((s) => s.transactionId)).toEqual(["tx-4"]);
+    expect(plan.links.map((l) => [l.transactionId, l.incomeType])).toEqual([["tx-5", "dividend"]]);
+  });
+});
+
+describe("tickerInDescription and incomeTypeForPlainProvento", () => {
+  it("finds the first four-letters-and-digits code, upper-cased, or null", () => {
+    expect(tickerInDescription("JCP petr4 setembro")).toBe("PETR4");
+    expect(tickerInDescription("HGLG11 e KNRI11")).toBe("HGLG11");
+    expect(tickerInDescription("Proventos de setembro")).toBeNull();
+  });
+
+  it("types interest by the category name or key, FIIs by the 11 suffix and everything else as a dividend", () => {
+    expect(incomeTypeForPlainProvento({ categoryName: " RENDIMENTOS ", categorySystemKey: null }, "PETR4")).toBe("fixed_income_interest");
+    expect(incomeTypeForPlainProvento({ categoryName: null, categorySystemKey: "interest" }, "PETR4")).toBe("fixed_income_interest");
+    expect(incomeTypeForPlainProvento({ categoryName: null, categorySystemKey: null }, "KNRI11")).toBe("fii_income");
+    expect(incomeTypeForPlainProvento({ categoryName: "Proventos", categorySystemKey: null }, "PETR4")).toBe("dividend");
+  });
+
+  it("recognises the plain-provento categories by name or system key", () => {
+    expect(isPlainProventoCategory({ categoryName: " proventos ", categorySystemKey: null })).toBe(true);
+    expect(isPlainProventoCategory({ categoryName: null, categorySystemKey: "dividends" })).toBe(true);
+    expect(isPlainProventoCategory({ categoryName: null, categorySystemKey: null })).toBe(false);
+    expect(isPlainProventoCategory({ categoryName: "Salário", categorySystemKey: "salary" })).toBe(false);
   });
 });
