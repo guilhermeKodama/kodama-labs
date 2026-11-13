@@ -46,12 +46,9 @@ flow("Saúde dos dados: per-class coverage, and the backfill script linking a ho
 
   await page.goto("/settings");
   await settingsNav(page, "Saúde dos dados").click();
-  await check("B3 is brapi even without a token; international listings are Alpha Vantage; classes with no source say so", async () => {
+  await check("B3 is brapi even without a token, and a class with no source says so", async () => {
     await expect(row(page, "Ações").getByRole("cell", { name: "brapi.dev" })).toBeVisible();
     await expect(row(page, "FIIs").getByRole("cell", { name: "brapi.dev" })).toBeVisible();
-    await expect(row(page, "Ações internacionais").getByRole("cell", { name: "Alpha Vantage" })).toBeVisible();
-    await expect(row(page, "ETFs internacionais").getByRole("cell", { name: "Alpha Vantage" })).toBeVisible();
-    await expect(row(page, "Cripto").getByRole("cell", { name: "CoinGecko" })).toBeVisible();
     await expect(row(page, "Renda fixa").getByRole("cell", { name: "—", exact: true })).toBeVisible();
   });
   await check("The panel says why: brapi has no token here, so only its demo tickers answer", async () => {
@@ -60,6 +57,14 @@ flow("Saúde dos dados: per-class coverage, and the backfill script linking a ho
   await check("Every stage of the daily market-close pipeline is listed: sync-prices, update-prices and the portfolio snapshot", async () => {
     await expect(row(page, "Sincronizar cotações").getByRole("cell", { name: "Ok" })).toBeVisible();
     await expect(row(page, "Snapshot da carteira").getByRole("cell", { name: "Ok" })).toBeVisible();
+  });
+  // The class table continues below the jobs. Scroll the international rows
+  // into the frame: a check can pass on a row the recording never shows.
+  await row(page, "ETFs internacionais").scrollIntoViewIfNeeded();
+  await check("International stocks and ETFs are Alpha Vantage; crypto is CoinGecko", async () => {
+    await expect(row(page, "Ações internacionais").getByRole("cell", { name: "Alpha Vantage" })).toBeVisible();
+    await expect(row(page, "ETFs internacionais").getByRole("cell", { name: "Alpha Vantage" })).toBeVisible();
+    await expect(row(page, "Cripto").getByRole("cell", { name: "CoinGecko" })).toBeVisible();
   });
 
   await scene("A FII goes stale", `${STALE_FII}'s cotação is set back ${STALE_DAYS} days, two or more missed B3 closes`);
