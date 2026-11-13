@@ -8,18 +8,10 @@ flow("Alpha Vantage prices a non-B3 ETF and stays inside the daily cap", async (
   await scene("Quota, freshness and the ETF chain", "Nothing new on screen, so the proof is the commands and their result");
   await say("These tests fail if a non-B3 ETF is left unpriced, if a fresh close is fetched again, or if a 23rd call of the day gets through");
   const tests = await terminal(
-    "pnpm",
+    "bash",
     [
-      "exec",
-      "vitest",
-      "run",
-      "--reporter=verbose",
-      "src/server/modules/market-data/lib/__tests__/alpha-vantage-budget.test.ts",
-      "src/server/modules/market-data/lib/__tests__/registry.test.ts",
-      "src/server/modules/market-data/services/__tests__/resolve-asset.test.ts",
-      "src/server/modules/market-data/services/__tests__/sync-prices.test.ts",
-      "src/server/modules/market-data/services/__tests__/alpha-vantage-migration.test.ts",
-      "src/server/modules/market-data/providers/__tests__/alpha-vantage.test.ts",
+      "-c",
+      "set -o pipefail; pnpm exec vitest run --reporter=verbose src/server/modules/market-data/lib/__tests__/alpha-vantage-budget.test.ts src/server/modules/market-data/lib/__tests__/registry.test.ts src/server/modules/market-data/services/__tests__/resolve-asset.test.ts src/server/modules/market-data/services/__tests__/sync-prices.test.ts src/server/modules/market-data/services/__tests__/alpha-vantage-migration.test.ts src/server/modules/market-data/providers/__tests__/alpha-vantage.test.ts > /tmp/av-quota-proof.txt; status=$?; grep -E 'offers brapi then Alpha Vantage for etf|routes a plain .etf. holding|prices an etf whose only ref|does not call Alpha Vantage when the expected|converts a GBP LSE quote|allows 22 calls on a UTC day|does not call Alpha Vantage once the day|Test Files|Tests ' /tmp/av-quota-proof.txt; exit $status",
     ],
     { timeoutMs: 180_000 },
   );
