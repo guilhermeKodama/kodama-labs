@@ -83,7 +83,6 @@ describe("alpha vantage source migration", () => {
         const petrHolding = await tx.investmentHolding.create({
           data: { accountId: f.broker, assetClass: "stocks", ticker: "ZZAVPETR4", name: "PETR", currency: "BRL", assetId: petr.id },
         });
-
         await tx.$executeRawUnsafe(migrationSql);
 
         expect(await tx.asset.findUniqueOrThrow({ where: { id: vuaa.id } })).toMatchObject({ assetClass: "international_etf", market: "US" });

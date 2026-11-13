@@ -17,8 +17,8 @@ vi.mock("@capital/server/modules/market-data/services/sync-prices", () => ({ syn
 import { prisma } from "@capital/server/lib/prisma";
 import { createLedgerFixture, deleteLedgerFixture, type LedgerFixture } from "@/test/ledger-fixtures";
 import { createHolding, updateHolding } from "../portfolio";
-import { marketFor } from "@capital/server/modules/market-data/lib/calendar";
-import { refreshPricesLive, updateAllPrices } from "../update-prices";
+import { expectedLatestSession, marketFor } from "@capital/server/modules/market-data/lib/calendar";
+import { MANUAL_ALPHA_VANTAGE_LIMIT, refreshPricesLive, updateAllPrices } from "../update-prices";
 
 const USER = "test-user-update-prices-001";
 let f: LedgerFixture;
@@ -66,7 +66,7 @@ describe("refreshPricesLive", () => {
     await refreshPricesLive(prisma, USER);
 
     expect(syncPricesMock).toHaveBeenCalledOnce();
-    expect(syncPricesMock.mock.calls[0]?.[1]).toEqual({ assetIds: [asset.id] });
+    expect(syncPricesMock.mock.calls[0]?.[1]).toEqual({ assetIds: [asset.id], alphaVantageLimit: MANUAL_ALPHA_VANTAGE_LIMIT });
     expect((await prisma.investmentHolding.findUniqueOrThrow({ where: { id: stock.id } })).currentPrice).toBe(13.5);
     // The button's live fetch is on record, as a manual run the health panel's daily-job status ignores.
     const run = await prisma.integrationRun.findFirstOrThrow({ where: { job: "sync-prices", trigger: "manual", startedAt: { gte: startedAt } } });
@@ -84,7 +84,57 @@ describe("refreshPricesLive", () => {
     expect(after).toMatchObject({ priceSource: "auto" });
     expect(after.assetId).not.toBeNull();
     expect(syncPricesMock).toHaveBeenCalledOnce();
-    expect(syncPricesMock.mock.calls[0]?.[1]).toEqual({ assetIds: [after.assetId] });
+    expect(syncPricesMock.mock.calls[0]?.[1]).toEqual({ assetIds: [after.assetId], alphaVantageLimit: MANUAL_ALPHA_VANTAGE_LIMIT });
+  });
+
+  it("skips Alpha Vantage when the expected close is already cached, and still fetches B3", async () => {
+    const session = expectedLatestSession("US");
+    const voo = await holding({ assetClass: "international_etf", ticker: "ZZUPDVOO", name: "VOO", currency: "USD" });
+    const asset = await linkAndPrice(voo.id, "ZZUPDVOO", "international_etf", "USD", 500, session, "alpha_vantage");
+    await prisma.assetSourceRef.create({ data: { assetId: asset.id, source: "alpha_vantage", externalId: "ZZUPDVOO" } });
+
+    const petr = await holding({ assetClass: "stocks", ticker: "ZZUPDPETR4", name: "Petrobras", currency: "BRL" });
+    const br = await linkAndPrice(petr.id, "ZZUPDPETR4", "stocks", "BRL", 38, expectedLatestSession("B3"), "brapi");
+    await prisma.assetSourceRef.create({ data: { assetId: br.id, source: "brapi", externalId: "ZZUPDPETR4" } });
+
+    await refreshPricesLive(prisma, USER);
+
+    expect(syncPricesMock).toHaveBeenCalledOnce();
+    expect(syncPricesMock.mock.calls[0]?.[1]).toEqual({ assetIds: [br.id], alphaVantageLimit: MANUAL_ALPHA_VANTAGE_LIMIT });
+  });
+
+  it("still asks Alpha Vantage when the session's only ok row is an intraday quote", async () => {
+    const session = expectedLatestSession("US");
+    const voo = await holding({ assetClass: "international_etf", ticker: "ZZUPDINTRA", name: "VOO", currency: "USD" });
+    const asset = await linkAndPrice(voo.id, "ZZUPDINTRA", "international_etf", "USD", 500, session, "alpha_vantage");
+    await prisma.assetPrice.update({
+      where: { assetId_date: { assetId: asset.id, date: new Date(`${session}T00:00:00Z`) } },
+      data: { kind: "intraday", asOf: new Date(`${session}T15:00:00Z`) },
+    });
+    await prisma.assetSourceRef.create({ data: { assetId: asset.id, source: "alpha_vantage", externalId: "ZZUPDINTRA" } });
+
+    await refreshPricesLive(prisma, USER);
+
+    expect(syncPricesMock.mock.calls[0]?.[1]).toEqual({ assetIds: [asset.id], alphaVantageLimit: MANUAL_ALPHA_VANTAGE_LIMIT });
+  });
+
+  it("asks Alpha Vantage for at most three stale names, oldest first", async () => {
+    const dates = ["2020-01-02", "2020-02-03", "2020-03-04", "2020-04-06"];
+    const ids: string[] = [];
+    for (const [i, date] of dates.entries()) {
+      const row = await holding({ assetClass: "international_etf", ticker: `ZZUPDAV${i}`, name: `AV ${i}`, currency: "USD" });
+      const asset = await linkAndPrice(row.id, `ZZUPDAV${i}`, "international_etf", "USD", 10 + i, date, "alpha_vantage");
+      await prisma.assetSourceRef.create({ data: { assetId: asset.id, source: "alpha_vantage", externalId: `ZZUPDAV${i}` } });
+      ids.push(asset.id);
+    }
+
+    await refreshPricesLive(prisma, USER);
+
+    expect(syncPricesMock).toHaveBeenCalledOnce();
+    expect(syncPricesMock.mock.calls[0]?.[1]).toEqual({
+      assetIds: [ids[0], ids[1], ids[2]],
+      alphaVantageLimit: MANUAL_ALPHA_VANTAGE_LIMIT,
+    });
   });
 
   it("skips the live fetch entirely when nothing can be linked (no ticker, or a class with no source)", async () => {

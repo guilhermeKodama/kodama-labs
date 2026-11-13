@@ -89,7 +89,10 @@ export async function resolveAsset(db: Db, input: ResolveAssetInput): Promise<Re
     const usListing = !ticker.includes(".");
     if (usListing && holdingCurrency && holdingCurrency !== "USD") return { linked: false, reason: "currency_mismatch", marketCurrency: "USD" };
     const currency = holdingCurrency || "USD";
-    const assetId = await upsertAsset(db, "US", ticker, input.assetClass, currency, [{ source: ALPHA_VANTAGE_SOURCE, externalId: alphaVantageExternalId(ticker) }]);
+    // A non-B3 "etf" holding is an international listing. Storing it as etf
+    // would put it on brapi's chain with no brapi ref, so it would never be priced.
+    const assetClass: AssetClass = input.assetClass === "etf" ? "international_etf" : input.assetClass;
+    const assetId = await upsertAsset(db, "US", ticker, assetClass, currency, [{ source: ALPHA_VANTAGE_SOURCE, externalId: alphaVantageExternalId(ticker) }]);
     return { linked: true, assetId };
   }
 

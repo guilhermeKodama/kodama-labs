@@ -1,8 +1,45 @@
 import type { DbClient } from "@capital/server/lib/prisma";
 import type { AllocationClass, AssetClass } from "@/generated/prisma";
 import { env } from "@/env";
+import { ALPHA_VANTAGE_SOURCE } from "@capital/server/modules/market-data/providers/alpha-vantage";
 import { allocationClassOf, holdingAllocationClass } from "../lib/allocation-class";
-import { fetchQuotes, searchAssets, type Quote, type QuoteSource } from "../lib/quotes";
+import { fetchQuotes, quoteSourceFor, searchAssets, type Quote, type QuoteSource } from "../lib/quotes";
+
+/** Latest cached close for an international ticker. GET /v2/quotes must not spend an Alpha Vantage call. */
+async function cachedAlphaVantageQuotes(db: DbClient, tickers: string[]): Promise<Record<string, Quote>> {
+  if (!tickers.length) return {};
+  const assets = await db.asset.findMany({
+    where: {
+      symbol: { in: tickers },
+      isActive: true,
+      OR: [{ sourceRefs: { some: { source: ALPHA_VANTAGE_SOURCE } } }, { market: "US" }],
+    },
+    select: {
+      symbol: true,
+      currency: true,
+      prices: { where: { status: "ok" }, orderBy: { date: "desc" }, take: 1, select: { close: true, asOf: true } },
+      sourceRefs: { select: { source: true } },
+    },
+  });
+  assets.sort((a, b) => {
+    const rank = (source: { source: string }[]) => (source.some((r) => r.source === ALPHA_VANTAGE_SOURCE) ? 0 : 1);
+    return rank(a.sourceRefs) - rank(b.sourceRefs);
+  });
+  const quotes: Record<string, Quote> = {};
+  for (const asset of assets) {
+    if (quotes[asset.symbol]) continue;
+    const price = asset.prices[0];
+    if (!price) continue;
+    quotes[asset.symbol] = {
+      ticker: asset.symbol,
+      price: Number(price.close),
+      currency: asset.currency,
+      source: ALPHA_VANTAGE_SOURCE,
+      asOf: price.asOf?.toISOString() ?? null,
+    };
+  }
+  return quotes;
+}
 
 async function baseCurrency(userId: string, db: DbClient) {
   const user = await db.user.findUnique({ where: { id: userId }, select: { baseCurrency: true } });
@@ -13,7 +50,9 @@ async function baseCurrency(userId: string, db: DbClient) {
  * Current quotes for `tickers` (GET /v2/quotes). A ticker the user holds is
  * priced the way the price refresh prices that holding (its asset class
  * and, for crypto, its currency); any other is routed by its shape, crypto
- * in the user's base currency.
+ * in the user's base currency. International tickers come from the cached
+ * close. A missing cache is "not found"; this request does not call Alpha
+ * Vantage.
  */
 export async function quotesFor(userId: string, tickers: string[], db: DbClient) {
   const wanted = [...new Set(tickers.map((t) => t.trim().toUpperCase()).filter(Boolean))];
@@ -27,12 +66,16 @@ export async function quotesFor(userId: string, tickers: string[], db: DbClient)
   ]);
   const held = new Map<string, { assetClass: AssetClass; currency: string }>();
   for (const h of holdings) if (h.ticker && !held.has(h.ticker.toUpperCase())) held.set(h.ticker.toUpperCase(), h);
+  const international = wanted.filter((ticker) => quoteSourceFor(ticker, held.get(ticker)?.assetClass ?? null) === ALPHA_VANTAGE_SOURCE);
+  const cached = await cachedAlphaVantageQuotes(db, international);
   const found = await fetchQuotes(
-    wanted.map((ticker) => ({ ticker, assetClass: held.get(ticker)?.assetClass ?? null, currency: held.get(ticker)?.currency ?? base })),
-    { brapiToken: env.BRAPI_TOKEN, cryptoCurrency: base }
+    wanted
+      .filter((ticker) => !international.includes(ticker))
+      .map((ticker) => ({ ticker, assetClass: held.get(ticker)?.assetClass ?? null, currency: held.get(ticker)?.currency ?? base })),
+    { brapiToken: env.BRAPI_TOKEN, cryptoCurrency: base },
   );
-  const quotes: Quote[] = wanted.filter((t) => found[t]).map((t) => found[t]);
-  return { quotes, missing: wanted.filter((t) => !found[t]) };
+  const quotes: Quote[] = wanted.filter((t) => cached[t] || found[t]).map((t) => cached[t] ?? found[t]);
+  return { quotes, missing: wanted.filter((t) => !cached[t] && !found[t]) };
 }
 
 export interface AssetSearchItem {

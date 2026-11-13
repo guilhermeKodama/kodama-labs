@@ -15,7 +15,11 @@ import type { MarketDataProvider } from "./provider";
  * brapi.dev answers only its demo tickers (401 for the rest) — the health
  * panel says so. Alpha Vantage prices international stocks and ETFs.
  * CoinGecko prices crypto. Each class only sees the providers whose
- * `markets` include it, so Alpha Vantage is never asked for a B3 ticker.
+ * `markets` include it, so a B3 stock, FII or BDR is never asked of Alpha
+ * Vantage. An ETF is brapi first, then Alpha Vantage: sync only calls a
+ * provider the asset has a ref for, so a B3 ETF stays on brapi and an ETF
+ * whose only ref is Alpha Vantage still gets a price. Fonte ativa for ETF
+ * stays brapi.
  */
 const PROVIDERS: readonly MarketDataProvider[] = [brapiProvider, alphaVantageProvider, coingeckoProvider];
 

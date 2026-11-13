@@ -12,7 +12,7 @@ Never `down`, never `-v`, never `prune`. Do not print any secret.
 
 ## What applies itself
 
-- **Migrations.** `capital-migrate` runs `prisma migrate deploy` on `up`: `20261110130000_add_integration_run`, `20261111120000_add_asset_market_data`, `20261111150000_add_asset_stale_notification`, `20261112120000_market_data_sessions`, `20261113120000_alpha_vantage_source` (Yahoo source refs become Alpha Vantage; Yahoo-only `etf` holdings become `international_etf`).
+- **Migrations.** `capital-migrate` runs `prisma migrate deploy` on `up`: `20261110130000_add_integration_run`, `20261111120000_add_asset_market_data`, `20261111150000_add_asset_stale_notification`, `20261112120000_market_data_sessions`, `20261113120000_alpha_vantage_source` (Yahoo source refs become Alpha Vantage; a Yahoo-only `etf` becomes `international_etf`), `20261113150000_alpha_vantage_call_budget` (one row per UTC day counting Alpha Vantage calls; the provider stops at 22).
 - **Schedule.** `infrastructure/cronjobs/schedules/capital.json` now calls `/api/cron/market-close` at 22:30 UTC (19:30 in São Paulo), which runs `sync-prices`, `update-prices` and `portfolio-snapshot` in that order. The three old entries are gone; their routes still answer for a manual rerun.
 - **Monitoring.** The provisioner adds the `kodama/cron-capital-api-cron-market-close` push monitor and deletes the three old ones (it owns every `kodama/` name).
 

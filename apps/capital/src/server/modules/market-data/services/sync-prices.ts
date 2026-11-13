@@ -1,9 +1,10 @@
 import type { Asset, AssetClass, AssetSourceRef, Prisma, PrismaClient } from "@/generated/prisma";
 import { mapWithConcurrency } from "@capital/server/lib/concurrency";
 import { acceptPrice } from "../lib/accept-price";
-import { quoteKind, type Market } from "../lib/calendar";
+import { okPriceForExpectedSession, quoteKind, type Market } from "../lib/calendar";
 import type { PricePoint } from "../lib/provider";
 import { chainFor } from "../lib/registry";
+import { ALPHA_VANTAGE_SOURCE, applyAlphaVantageCurrency } from "../providers/alpha-vantage";
 
 /**
  * Prices every Asset the scope covers, writing one AssetPrice row per asset
@@ -27,16 +28,28 @@ import { chainFor } from "../lib/registry";
  * currency, bad date, non-positive — see accept-price.ts) is not written
  * at all and shows up only as an issue, same as a provider that came back
  * not_found or down.
+ *
+ * Alpha Vantage is skipped when the asset already has an ok close for the
+ * expected session, and a manual refresh can cap how many of those calls
+ * this request makes (`alphaVantageLimit`). A name left out by that cap is
+ * not a failure: the cached close is what the holding still shows.
  */
 
 type Db = PrismaClient | Prisma.TransactionClient;
-type AssetWithRefs = Asset & { sourceRefs: AssetSourceRef[] };
+type CachedPrice = { date: Date; status: string; kind: string; asOf: Date | null };
+type AssetWithRefs = Asset & { sourceRefs: AssetSourceRef[]; prices: CachedPrice[] };
 
 export interface SyncPricesScope {
   /** Limits the sync to these Asset ids. Omitted syncs every active Asset with a source ref. */
   assetIds?: string[];
   /** The clock: decides whether a quote is the day's close or intraday. Tests pin it. */
   now?: Date;
+  /**
+   * How many Alpha Vantage calls this run may start. The manual refresh
+   * sets it so the HTTP request returns inside a minute. Omitted, the run
+   * asks for every stale name and the daily counter is the only cap.
+   */
+  alphaVantageLimit?: number;
 }
 
 export type SyncIssueOutcome = "not_found" | "unauthorized" | "rate_limited" | "provider_down" | "schema_changed" | "rejected" | "no_source";
@@ -101,24 +114,55 @@ async function writePoint(db: Db, asset: AssetWithRefs, source: string, point: P
   return { status: verdict.status, date };
 }
 
-type AssetOutcome = { status: "ok" | "suspect"; source: string; date: Date } | { status: "missing"; issue: SyncPricesIssue };
+type AssetOutcome =
+  | { status: "ok" | "suspect"; source: string; date: Date }
+  | { status: "fresh"; date: Date }
+  | { status: "deferred" }
+  | { status: "missing"; issue: SyncPricesIssue };
 
-async function syncOneAsset(db: Db, asset: AssetWithRefs, range: { from: string; to: string }, now: Date): Promise<AssetOutcome> {
+interface AlphaVantageBudget {
+  limit: number;
+  n: number;
+}
+
+async function syncOneAsset(db: Db, asset: AssetWithRefs, range: { from: string; to: string }, now: Date, avBudget: AlphaVantageBudget | null): Promise<AssetOutcome> {
   const refsBySource = new Map(asset.sourceRefs.map((r) => [r.source, r.externalId]));
   let lastIssue: SyncPricesIssue | undefined;
+  let lastFresh: Date | null = null;
+  let deferred = false;
   for (const provider of chainFor(asset.assetClass)) {
     if (!provider.fetchPrices) continue;
     const externalId = refsBySource.get(provider.id);
     if (!externalId) continue;
+    if (provider.id === ALPHA_VANTAGE_SOURCE) {
+      const current = okPriceForExpectedSession(asset.market, asset.prices, now);
+      if (current) {
+        lastFresh = current.date;
+        continue;
+      }
+      if (avBudget && avBudget.n >= avBudget.limit) {
+        deferred = true;
+        continue;
+      }
+      if (avBudget) avBudget.n += 1;
+    }
     const result = await provider.fetchPrices(externalId, range);
     if (result.outcome !== "ok") {
       lastIssue = { assetId: asset.id, symbol: asset.symbol, outcome: result.outcome, source: provider.id, error: "error" in result ? result.error : undefined };
       continue;
     }
-    const point = result.data[0];
+    let point = result.data[0];
     if (!point) {
       lastIssue = { assetId: asset.id, symbol: asset.symbol, outcome: "not_found", source: provider.id };
       continue;
+    }
+    if (provider.id === ALPHA_VANTAGE_SOURCE) {
+      const priced = applyAlphaVantageCurrency(externalId, point, asset.currency);
+      if (!priced) {
+        lastIssue = { assetId: asset.id, symbol: asset.symbol, outcome: "rejected", source: provider.id, error: "moeda desconhecida" };
+        continue;
+      }
+      point = priced;
     }
     const written = await writePoint(db, asset, provider.id, point, now);
     if (written.status === "rejected") {
@@ -127,10 +171,21 @@ async function syncOneAsset(db: Db, asset: AssetWithRefs, range: { from: string;
     }
     return { status: written.status, source: provider.id, date: written.date };
   }
+  if (lastFresh) return { status: "fresh", date: lastFresh };
+  if (deferred && !lastIssue) return { status: "deferred" };
   return { status: "missing", issue: lastIssue ?? { assetId: asset.id, symbol: asset.symbol, outcome: "no_source", source: null } };
 }
 
 function record(result: SyncPricesResult, outcome: AssetOutcome): void {
+  if (outcome.status === "deferred") {
+    result.requested--;
+    return;
+  }
+  if (outcome.status === "fresh") {
+    result.priced++;
+    if (!result.providerLatestDate || outcome.date > result.providerLatestDate) result.providerLatestDate = outcome.date;
+    return;
+  }
   if (outcome.status === "missing") {
     result.missing++;
     result.issues.push(outcome.issue);
@@ -144,7 +199,7 @@ function record(result: SyncPricesResult, outcome: AssetOutcome): void {
 export async function syncPrices(db: Db, scope: SyncPricesScope = {}): Promise<SyncPricesResult> {
   const assets = (await db.asset.findMany({
     where: { isActive: true, ...(scope.assetIds ? { id: { in: scope.assetIds } } : {}) },
-    include: { sourceRefs: true },
+    include: { sourceRefs: true, prices: { where: { status: "ok" }, orderBy: { date: "desc" }, take: 10, select: { date: true, status: true, kind: true, asOf: true } } },
   })) as AssetWithRefs[];
 
   const result: SyncPricesResult = { requested: assets.length, priced: 0, suspect: 0, missing: 0, bySource: {}, providerLatestDate: null, issues: [] };
@@ -181,7 +236,11 @@ export async function syncPrices(db: Db, scope: SyncPricesScope = {}): Promise<S
     }
   }
 
-  const outcomes = await mapWithConcurrency(remaining, CONCURRENCY, (asset) => syncOneAsset(db, asset, range, now));
+  if (scope.alphaVantageLimit !== undefined) {
+    remaining.sort((a, b) => (a.prices[0]?.date.getTime() ?? 0) - (b.prices[0]?.date.getTime() ?? 0));
+  }
+  const avBudget = scope.alphaVantageLimit === undefined ? null : { limit: scope.alphaVantageLimit, n: 0 };
+  const outcomes = await mapWithConcurrency(remaining, CONCURRENCY, (asset) => syncOneAsset(db, asset, range, now, avBudget));
   for (const outcome of outcomes) record(result, outcome);
 
   return result;

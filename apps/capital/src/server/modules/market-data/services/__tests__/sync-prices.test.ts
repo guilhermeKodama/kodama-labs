@@ -278,6 +278,87 @@ describe("syncPrices", () => {
     expect(await prisma.assetPrice.count({ where: { assetId: asset.id } })).toBe(0);
   });
 
+  it("prices an etf whose only ref is Alpha Vantage, and does not ask brapi", async () => {
+    const brapi = stubProvider("brapi", ["etf"], { fetchPrices: vi.fn(async () => ok({ date: "2026-11-10", close: 1, currency: "BRL" })) });
+    const alpha = stubProvider("alpha_vantage", ["etf"], { fetchPrices: vi.fn(async () => ok({ date: "2026-11-10", close: 50, currency: "USD" })) });
+    registryMock.chainFor.mockReturnValue([brapi, alpha]);
+
+    const asset = await createAsset(`${SYMBOL_PREFIX}ETF`, "etf", "USD", [{ source: "alpha_vantage", externalId: `${SYMBOL_PREFIX}ETF` }]);
+    const result = await syncPrices(prisma, { assetIds: [asset.id], now: new Date("2026-11-13T22:30:00Z") });
+
+    expect(brapi.fetchPrices).not.toHaveBeenCalled();
+    expect(alpha.fetchPrices).toHaveBeenCalledOnce();
+    expect(result).toMatchObject({ priced: 1, missing: 0, bySource: { alpha_vantage: 1 } });
+  });
+
+  it("does not call Alpha Vantage when the expected session already has an ok close", async () => {
+    const fetchPrices = vi.fn(async () => ok({ date: "2026-11-13", close: 11, currency: "USD" }));
+    registryMock.chainFor.mockReturnValue([stubProvider("alpha_vantage", ["international_etf"], { fetchPrices })]);
+    const asset = await createAsset(`${SYMBOL_PREFIX}FRESH`, "international_etf", "USD", [{ source: "alpha_vantage", externalId: `${SYMBOL_PREFIX}FRESH` }]);
+    await prisma.assetPrice.create({ data: { assetId: asset.id, date: new Date("2026-11-13T00:00:00Z"), close: 10, source: "alpha_vantage", status: "ok" } });
+
+    const result = await syncPrices(prisma, { assetIds: [asset.id], now: new Date("2026-11-13T22:30:00Z") });
+
+    expect(fetchPrices).not.toHaveBeenCalled();
+    expect(result).toMatchObject({ requested: 1, priced: 1, missing: 0, bySource: {} });
+    expect(await prisma.assetPrice.count({ where: { assetId: asset.id } })).toBe(1);
+  });
+
+  it("still calls Alpha Vantage when the session's only ok row is an intraday quote", async () => {
+    const fetchPrices = vi.fn(async () => ok({ date: "2026-11-13", close: 11, currency: "USD" }));
+    registryMock.chainFor.mockReturnValue([stubProvider("alpha_vantage", ["international_etf"], { fetchPrices })]);
+    const asset = await createAsset(`${SYMBOL_PREFIX}INTRA`, "international_etf", "USD", [{ source: "alpha_vantage", externalId: `${SYMBOL_PREFIX}INTRA` }]);
+    await prisma.assetPrice.create({
+      data: { assetId: asset.id, date: new Date("2026-11-13T00:00:00Z"), close: 10, source: "alpha_vantage", status: "ok", kind: "intraday", asOf: new Date("2026-11-13T15:00:00Z") },
+    });
+
+    const result = await syncPrices(prisma, { assetIds: [asset.id], now: new Date("2026-11-13T22:30:00Z") });
+
+    expect(fetchPrices).toHaveBeenCalledOnce();
+    expect(result).toMatchObject({ priced: 1, bySource: { alpha_vantage: 1 } });
+  });
+
+  it("still asks another source when the close is already cached", async () => {
+    const fetchPrices = vi.fn(async () => ok({ date: "2026-11-13", close: 12, currency: "BRL" }));
+    registryMock.chainFor.mockReturnValue([stubProvider("fixtureA", ["stocks"], { fetchPrices })]);
+    const asset = await createAsset(`${SYMBOL_PREFIX}LIVE`, "stocks", "BRL", [{ source: "fixtureA", externalId: "x" }]);
+    await prisma.assetPrice.create({ data: { assetId: asset.id, date: new Date("2026-11-13T00:00:00Z"), close: 10, source: "fixtureA", status: "ok" } });
+
+    await syncPrices(prisma, { assetIds: [asset.id], now: new Date("2026-11-13T22:30:00Z") });
+    expect(fetchPrices).toHaveBeenCalledOnce();
+  });
+
+  it("stops Alpha Vantage after the request cap, oldest first, and does not count the rest as missing", async () => {
+    const fetchPrices = vi.fn<(externalId: string) => Promise<ReturnType<typeof ok>>>(async () => ok({ date: "2026-11-10", close: 1, currency: "USD" }));
+    registryMock.chainFor.mockReturnValue([stubProvider("alpha_vantage", ["international_etf"], { fetchPrices })]);
+    const made: { id: string; externalId: string }[] = [];
+    for (const [i, date] of ["2020-01-02", "2020-03-02", "2020-02-02"].entries()) {
+      const externalId = `${SYMBOL_PREFIX}LIM${i}`;
+      const asset = await createAsset(externalId, "international_etf", "USD", [{ source: "alpha_vantage", externalId }]);
+      await prisma.assetPrice.create({ data: { assetId: asset.id, date: new Date(`${date}T00:00:00Z`), close: 1, source: "alpha_vantage", status: "ok" } });
+      made.push({ id: asset.id, externalId });
+    }
+
+    const result = await syncPrices(prisma, { assetIds: made.map((m) => m.id), alphaVantageLimit: 2, now: new Date("2026-11-13T22:30:00Z") });
+
+    expect(fetchPrices).toHaveBeenCalledTimes(2);
+    expect(fetchPrices.mock.calls.map((c) => c[0]).sort()).toEqual([`${SYMBOL_PREFIX}LIM0`, `${SYMBOL_PREFIX}LIM2`].sort());
+    expect(result).toMatchObject({ requested: 2, priced: 2, missing: 0, issues: [] });
+  });
+
+  it("converts a GBP LSE quote from pence and rejects an LSE quote in an unknown currency", async () => {
+    const fetchPrices = vi.fn(async () => ok({ date: "2026-11-10", close: 10000, currency: "" }));
+    registryMock.chainFor.mockReturnValue([stubProvider("alpha_vantage", ["international_etf"], { fetchPrices })]);
+    const gbp = await createAsset(`${SYMBOL_PREFIX}GBP.L`, "international_etf", "GBP", [{ source: "alpha_vantage", externalId: `${SYMBOL_PREFIX}GBP.LON` }]);
+    const eur = await createAsset(`${SYMBOL_PREFIX}EUR.L`, "international_etf", "EUR", [{ source: "alpha_vantage", externalId: `${SYMBOL_PREFIX}EUR.LON` }]);
+
+    const result = await syncPrices(prisma, { assetIds: [gbp.id, eur.id], now: new Date("2026-11-13T22:30:00Z") });
+
+    expect(Number((await prisma.assetPrice.findFirstOrThrow({ where: { assetId: gbp.id } })).close)).toBe(100);
+    expect(await prisma.assetPrice.count({ where: { assetId: eur.id } })).toBe(0);
+    expect(result.issues).toEqual([expect.objectContaining({ assetId: eur.id, outcome: "rejected", error: "moeda desconhecida" })]);
+  });
+
   it("tracks the newest date it priced across assets as the provider's latest", async () => {
     const dates = ["2026-11-09", "2026-11-10"];
     const fetchPrices = vi.fn(async () => ok({ date: dates.shift() ?? "2026-11-10", close: 10, currency: "BRL" }));

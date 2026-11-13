@@ -9,10 +9,23 @@ import {
   alphaVantageCurrency,
   alphaVantageExternalId,
   alphaVantageProvider,
+  applyAlphaVantageCurrency,
   resetAlphaVantagePacing,
 } from "../alpha-vantage";
 
 const RANGE = { from: "2026-11-12", to: "2026-11-12" };
+
+/** Bodies Alpha Vantage actually returns. The rate-limit ones also say "premium" and link /premium/. */
+const DAILY_LIMIT =
+  "Thank you for using Alpha Vantage! Our standard API rate limit is 25 requests per day. Please subscribe to any of the premium plans at https://www.alphavantage.co/premium/ to instantly remove all daily rate limits.";
+const CALL_FREQUENCY =
+  "Thank you for using Alpha Vantage! Our standard API call frequency is 5 calls per minute and 500 calls per day. Please visit https://www.alphavantage.co/premium/ if you would like to target a higher API call frequency.";
+const PER_SECOND =
+  "Thank you for using Alpha Vantage! Please consider spreading out your free API requests more sparingly (1 request per second). You may subscribe to any of the premium plans at https://www.alphavantage.co/premium/ to lift the free key rate limit (25 requests per day), raise the per-second burst limit, and instantly unlock all premium endpoints";
+const PREMIUM_ENDPOINT =
+  "Thank you for using Alpha Vantage! This is a premium endpoint. You may subscribe to any of the premium plans at https://www.alphavantage.co/premium/ to instantly unlock all premium endpoints";
+const INVALID_KEY =
+  "the parameter apikey is invalid or missing. Please claim your free API key on (https://www.alphavantage.co/support/#api-key). It should take less than 20 seconds.";
 
 function json(body: unknown, status = 200, headers?: HeadersInit) {
   return new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json", ...headers } });
@@ -27,7 +40,7 @@ let scenario: Scenario = "ok";
 
 const fetchMock = vi.fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>(async () => {
   if (scenario === "provider_down") throw new Error("getaddrinfo EAI_AGAIN");
-  if (scenario === "rate_limited") return json({ Note: "Thank you for using Alpha Vantage! Our standard API call frequency is 5 calls per minute and 25 calls per day." });
+  if (scenario === "rate_limited") return json({ Note: DAILY_LIMIT });
   if (scenario === "schema_changed") return json({ unexpected: true });
   if (scenario === "not_found") return json({ "Global Quote": {} });
   return json(globalQuote("500.5000"));
@@ -40,7 +53,7 @@ beforeEach(() => {
   fetchMock.mockReset();
   fetchMock.mockImplementation(async () => {
     if (scenario === "provider_down") throw new Error("getaddrinfo EAI_AGAIN");
-    if (scenario === "rate_limited") return json({ Note: "Thank you for using Alpha Vantage! Our standard API call frequency is 5 calls per minute and 25 calls per day." });
+    if (scenario === "rate_limited") return json({ Note: DAILY_LIMIT });
     if (scenario === "schema_changed") return json({ unexpected: true });
     if (scenario === "not_found") return json({ "Global Quote": {} });
     return json(globalQuote("500.5000"));
@@ -78,11 +91,33 @@ describe("alphaVantageExternalId", () => {
 });
 
 describe("alphaVantageCurrency", () => {
-  it("prices US listings and the USD LSE UCITS symbols in USD", () => {
+  it("prices US listings and the USD LSE UCITS symbols in USD, and leaves any other dotted symbol unknown", () => {
     expect(alphaVantageCurrency("SPY")).toBe("USD");
     expect(alphaVantageCurrency("VUAA")).toBe("USD");
     expect(alphaVantageCurrency("CNDX.L")).toBe("USD");
     expect(alphaVantageCurrency("VUAA.LON")).toBe("USD");
+    expect(alphaVantageCurrency("VWRL.LON")).toBeNull();
+    expect(alphaVantageCurrency("SHOP.TO")).toBeNull();
+  });
+});
+
+describe("applyAlphaVantageCurrency", () => {
+  const point = (close: number, currency = "") => ({ date: "2026-11-12", close, currency });
+
+  it("keeps a currency the quote already named", () => {
+    expect(applyAlphaVantageCurrency("SPY", point(500, "USD"), "GBP")).toEqual(point(500, "USD"));
+  });
+
+  it("treats a GBP LSE quote as pence, leaves GBX and USD alone, and refuses anything else", () => {
+    expect(applyAlphaVantageCurrency("VWRL.LON", point(10000), "GBP")).toEqual(point(100, "GBP"));
+    expect(applyAlphaVantageCurrency("VWRL.L", point(10000), "gbx")).toEqual(point(10000, "GBX"));
+    expect(applyAlphaVantageCurrency("VWRL.LON", point(100), "USD")).toEqual(point(100, "USD"));
+    expect(applyAlphaVantageCurrency("VWRL.LON", point(100), "EUR")).toBeNull();
+  });
+
+  it("stamps any other unknown suffix with the asset's currency", () => {
+    expect(applyAlphaVantageCurrency("SHOP.TO", point(80), "CAD")).toEqual(point(80, "CAD"));
+    expect(applyAlphaVantageCurrency("SHOP.TO", point(80), "  ")).toBeNull();
   });
 });
 
@@ -112,12 +147,14 @@ describe("alphaVantage fetchPrices", () => {
     expect(fetchMock).toHaveBeenCalledTimes(3);
   });
 
-  it("treats a Note or Information body as rate_limited and does not retry it", async () => {
-    fetchMock.mockResolvedValueOnce(json({ Note: "Thank you for using Alpha Vantage! frequency is 5 calls per minute." }));
+  it("treats the real rate-limit notices as rate_limited, including the ones that mention premium, and does not retry", async () => {
+    fetchMock.mockResolvedValueOnce(json({ Information: DAILY_LIMIT }));
     expect(await alphaVantageProvider.fetchPrices!("SPY", RANGE)).toEqual({ outcome: "rate_limited", status: 200, retryAfterMs: null });
-    fetchMock.mockResolvedValueOnce(json({ Information: "Thank you for using Alpha Vantage! Our standard API rate limit is 25 requests per day." }));
+    fetchMock.mockResolvedValueOnce(json({ Note: CALL_FREQUENCY }));
     expect(await alphaVantageProvider.fetchPrices!("SPY", RANGE)).toEqual({ outcome: "rate_limited", status: 200, retryAfterMs: null });
-    expect(fetchMock).toHaveBeenCalledTimes(2);
+    fetchMock.mockResolvedValueOnce(json({ Information: PER_SECOND }));
+    expect(await alphaVantageProvider.fetchPrices!("SPY", RANGE)).toEqual({ outcome: "rate_limited", status: 200, retryAfterMs: null });
+    expect(fetchMock).toHaveBeenCalledTimes(3);
     expect(JSON.stringify((console.warn as unknown as { mock: { calls: unknown[] } }).mock.calls)).not.toContain("test-key");
   });
 
@@ -132,33 +169,43 @@ describe("alphaVantage fetchPrices", () => {
     expect((await alphaVantageProvider.fetchPrices!("SPY", RANGE)).outcome).toBe("schema_changed");
   });
 
-  it("retries once on a network error or a 5xx, then returns the quote", async () => {
+  it("does not retry a timeout, a 5xx, or a 429", async () => {
     fetchMock.mockRejectedValueOnce(new Error("getaddrinfo EAI_AGAIN"));
-    fetchMock.mockResolvedValueOnce(json(globalQuote("1634.0000", "2026-11-12")));
-    const recovered = await alphaVantageProvider.fetchPrices!("CNDX.LON", RANGE);
-    expect(recovered).toEqual({ outcome: "ok", status: 200, data: [{ date: "2026-11-12", close: 1634, currency: "USD" }] });
+    expect(await alphaVantageProvider.fetchPrices!("CNDX.LON", RANGE)).toEqual({ outcome: "provider_down", status: null, error: "getaddrinfo EAI_AGAIN" });
 
     fetchMock.mockResolvedValueOnce(new Response("down", { status: 503 }));
-    fetchMock.mockResolvedValueOnce(json(globalQuote("500.0000")));
-    expect((await alphaVantageProvider.fetchPrices!("SPY", RANGE)).outcome).toBe("ok");
-    expect(fetchMock).toHaveBeenCalledTimes(4);
-  });
+    expect(await alphaVantageProvider.fetchPrices!("SPY", RANGE)).toEqual({ outcome: "provider_down", status: 503, error: "HTTP 503" });
 
-  it("retries a non-Error rejection once and then reports provider_down", async () => {
-    fetchMock.mockRejectedValueOnce("ECONNRESET");
-    fetchMock.mockRejectedValueOnce("ECONNRESET");
-    expect(await alphaVantageProvider.fetchPrices!("SPY", RANGE)).toEqual({ outcome: "provider_down", status: null, error: "ECONNRESET" });
-    expect(fetchMock).toHaveBeenCalledTimes(2);
-  });
-
-  it("is provider_down after two 5xx responses and rate_limited after two 429s", async () => {
-    fetchMock.mockResolvedValueOnce(new Response("down", { status: 500 }));
     fetchMock.mockResolvedValueOnce(new Response("down", { status: 500 }));
     expect(await alphaVantageProvider.fetchPrices!("SPY", RANGE)).toEqual({ outcome: "provider_down", status: 500, error: "HTTP 500" });
 
     fetchMock.mockResolvedValueOnce(new Response("", { status: 429, headers: { "retry-after": "13" } }));
-    fetchMock.mockResolvedValueOnce(new Response("", { status: 429, headers: { "retry-after": "13" } }));
     expect(await alphaVantageProvider.fetchPrices!("SPY", RANGE)).toEqual({ outcome: "rate_limited", status: 429, retryAfterMs: 13_000 });
+    expect(fetchMock).toHaveBeenCalledTimes(4);
+  });
+
+  it("reports a non-Error rejection as provider_down after the one attempt", async () => {
+    fetchMock.mockRejectedValueOnce("ECONNRESET");
+    expect(await alphaVantageProvider.fetchPrices!("SPY", RANGE)).toEqual({ outcome: "provider_down", status: null, error: "ECONNRESET" });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("treats an invalid key or a premium endpoint as unauthorized, once", async () => {
+    fetchMock.mockResolvedValueOnce(json({ "Error Message": INVALID_KEY }));
+    expect(await alphaVantageProvider.fetchPrices!("SPY", RANGE)).toEqual({ outcome: "unauthorized", status: 200 });
+    fetchMock.mockResolvedValueOnce(json({ Information: PREMIUM_ENDPOINT }));
+    expect(await alphaVantageProvider.fetchPrices!("SPY", RANGE)).toEqual({ outcome: "unauthorized", status: 200 });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(JSON.stringify((console.warn as unknown as { mock: { calls: unknown[] } }).mock.calls)).not.toContain("test-key");
+  });
+
+  it("leaves the currency blank for an LSE symbol that is not a known USD listing", async () => {
+    fetchMock.mockResolvedValueOnce(json(globalQuote("10000.0000")));
+    expect(await alphaVantageProvider.fetchPrices!("VWRL.LON", RANGE)).toEqual({
+      outcome: "ok",
+      status: 200,
+      data: [{ date: "2026-11-12", close: 10000, currency: "" }],
+    });
   });
 
   it("does not call the network without a key, and does not retry a 401 or a 400", async () => {

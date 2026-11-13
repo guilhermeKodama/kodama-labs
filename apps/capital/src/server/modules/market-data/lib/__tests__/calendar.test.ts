@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { closeReadyAt, expectedLatestSession, isSession, marketDate, marketFor, quoteKind, sessionsBehind } from "../calendar";
+import { closeReadyAt, expectedLatestSession, isSession, marketDate, marketFor, okPriceForExpectedSession, quoteKind, sessionsBehind } from "../calendar";
 
 describe("isSession", () => {
   it("skips weekends on B3 and US, never for crypto", () => {
@@ -110,6 +110,22 @@ describe("quoteKind", () => {
     expect(quoteKind("B3", "2026-11-10", new Date("2026-11-10T22:30:00Z"))).toBe("close");
     // Before the open, the quote is yesterday's close.
     expect(quoteKind("B3", "2026-11-09", new Date("2026-11-10T12:00:00Z"))).toBe("close");
+  });
+});
+
+describe("okPriceForExpectedSession", () => {
+  const now = new Date("2026-11-13T22:30:00Z");
+  const session = new Date("2026-11-13T00:00:00Z");
+  const row = (kind: string, asOf: string | null) => ({ date: session, status: "ok", kind, asOf: asOf ? new Date(asOf) : null });
+
+  it("accepts an ok close for the expected session, and an intraday row only once its timestamp is the close", () => {
+    expect(okPriceForExpectedSession("US", [row("close", "2026-11-13T15:00:00Z")], now)?.kind).toBe("close");
+    expect(okPriceForExpectedSession("US", [row("intraday", "2026-11-13T15:00:00Z")], now)).toBeNull();
+    expect(okPriceForExpectedSession("US", [row("intraday", "2026-11-13T22:00:00Z")], now)?.asOf?.toISOString()).toBe("2026-11-13T22:00:00.000Z");
+  });
+
+  it("ignores an ok close for an earlier session", () => {
+    expect(okPriceForExpectedSession("US", [{ date: new Date("2026-11-12T00:00:00Z"), status: "ok", kind: "close", asOf: null }], now)).toBeNull();
   });
 });
 

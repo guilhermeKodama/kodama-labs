@@ -245,15 +245,32 @@ describe("market data", () => {
     await prisma.asset.deleteMany({ where: { symbol: "PETR4" } });
   });
 
-  it("GET /v2/quotes prices B3, international and crypto tickers (crypto in the base currency)", async () => {
-    const r = await json("GET", "/v2/quotes?tickers=PETR4,voo,BTC,NOPE3");
-    expect(r.quotes.map((q: { ticker: string; price: number; currency: string; source: string }) => [q.ticker, q.price, q.currency, q.source])).toEqual([
-      ["PETR4", 38.2, "BRL", "brapi"],
-      ["VOO", 500.5, "USD", "alpha_vantage"],
-      ["BTC", 342100, "BRL", "coingecko"],
-    ]);
-    expect(r.missing).toEqual(["NOPE3"]);
-    expect((await call("GET", `/v2/quotes?tickers=${Array.from({ length: 21 }, (_, i) => `T${i}`).join(",")}`)).status).toBe(422);
+  it("GET /v2/quotes prices B3 and crypto live, and an international ticker from the cache, without calling Alpha Vantage", async () => {
+    const asset = await prisma.asset.create({
+      data: {
+        symbol: "ZZQVOO",
+        assetClass: "international_etf",
+        market: "US",
+        currency: "USD",
+        sourceRefs: { create: { source: "alpha_vantage", externalId: "ZZQVOO" } },
+        prices: { create: { date: new Date("2026-10-05T00:00:00Z"), close: 500.5, source: "alpha_vantage", status: "ok" } },
+      },
+    });
+    try {
+      fetchMock.mockClear();
+      const r = await json("GET", "/v2/quotes?tickers=PETR4,ZZQVOO,BTC,NOPE3,ZZQMISS");
+      expect(r.quotes.map((q: { ticker: string; price: number; currency: string; source: string }) => [q.ticker, q.price, q.currency, q.source])).toEqual([
+        ["PETR4", 38.2, "BRL", "brapi"],
+        ["ZZQVOO", 500.5, "USD", "alpha_vantage"],
+        ["BTC", 342100, "BRL", "coingecko"],
+      ]);
+      expect(r.missing).toEqual(["NOPE3", "ZZQMISS"]);
+      const urls = fetchMock.mock.calls.map((c) => String(c[0] instanceof Request ? c[0].url : c[0]));
+      expect(urls.some((u) => u.includes("alphavantage.co"))).toBe(false);
+      expect((await call("GET", `/v2/quotes?tickers=${Array.from({ length: 21 }, (_, i) => `T${i}`).join(",")}`)).status).toBe(422);
+    } finally {
+      await prisma.asset.delete({ where: { id: asset.id } });
+    }
   });
 
   it("GET /v2/assets/search lists the user's holdings first, then market results it does not hold", async () => {
