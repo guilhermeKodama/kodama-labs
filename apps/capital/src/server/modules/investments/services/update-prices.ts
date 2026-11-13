@@ -1,11 +1,15 @@
 import type { AssetClass } from "@/generated/prisma";
 import type { DbClient } from "@capital/server/lib/prisma";
-import { closeReadyAt, type Market } from "@capital/server/modules/market-data/lib/calendar";
+import { closeReadyAt, okPriceForExpectedSession, type Market } from "@capital/server/modules/market-data/lib/calendar";
 import { resolveAsset, type ResolveAssetResult } from "@capital/server/modules/market-data/services/resolve-asset";
 import { runStage } from "@capital/server/lib/cron";
 import { syncRunResult } from "@capital/server/modules/market-data/lib/sync-run-result";
 import { syncPrices } from "@capital/server/modules/market-data/services/sync-prices";
+import { ALPHA_VANTAGE_SOURCE } from "@capital/server/modules/market-data/providers/alpha-vantage";
 import { quoteSourceFor } from "../lib/quotes";
+
+/** International names a single "Atualizar cotações" click may ask Alpha Vantage for. Three calls at the 13s pace stay inside a minute. */
+export const MANUAL_ALPHA_VANTAGE_LIMIT = 3;
 
 /**
  * Links a holding that isn't linked to an Asset yet (createHolding/
@@ -174,7 +178,44 @@ export async function refreshPricesLive(db: DbClient, userId: string): Promise<P
     if (assetId) assetIds.add(assetId);
   }
 
-  // Recorded like the scheduled run (job "sync-prices"), but trigger "manual": the health panel's job status reads cron runs only, so a user's partial refresh never masks or fakes the daily one.
-  if (assetIds.size) await runStage("sync-prices", async () => syncRunResult(await syncPrices(db, { assetIds: [...assetIds] })), { trigger: "manual" });
+  // B3 and crypto are always fetched live. Alpha Vantage is only asked for a
+  // name whose close is missing, oldest first, and only a few of them: the
+  // free tier is 25/day and the click has to answer inside a minute. A name
+  // left out keeps the cached close (updateAllPrices below) and is not a miss.
+  if (assetIds.size) {
+    const now = new Date();
+    const assets = await db.asset.findMany({
+      where: { id: { in: [...assetIds] } },
+      include: {
+        sourceRefs: { select: { source: true } },
+        prices: { where: { status: "ok" }, orderBy: { date: "desc" }, take: 10, select: { date: true, status: true } },
+      },
+    });
+    const live: string[] = [];
+    const staleAv: { id: string; date: number }[] = [];
+    for (const asset of assets) {
+      const hasAv = asset.sourceRefs.some((r) => r.source === ALPHA_VANTAGE_SOURCE);
+      const hasOther = asset.sourceRefs.some((r) => r.source !== ALPHA_VANTAGE_SOURCE);
+      if (hasOther || !hasAv) live.push(asset.id);
+      if (!hasAv || okPriceForExpectedSession(asset.market, asset.prices, now)) continue;
+      staleAv.push({ id: asset.id, date: asset.prices[0]?.date.getTime() ?? 0 });
+    }
+    staleAv.sort((a, b) => a.date - b.date || a.id.localeCompare(b.id));
+    const ids = [...live];
+    let avOnly = 0;
+    for (const row of staleAv) {
+      if (ids.includes(row.id)) continue;
+      if (avOnly >= MANUAL_ALPHA_VANTAGE_LIMIT) break;
+      ids.push(row.id);
+      avOnly++;
+    }
+    if (ids.length) {
+      await runStage(
+        "sync-prices",
+        async () => syncRunResult(await syncPrices(db, { assetIds: ids, alphaVantageLimit: MANUAL_ALPHA_VANTAGE_LIMIT })),
+        { trigger: "manual" },
+      );
+    }
+  }
   return updateAllPrices(db, { userId });
 }

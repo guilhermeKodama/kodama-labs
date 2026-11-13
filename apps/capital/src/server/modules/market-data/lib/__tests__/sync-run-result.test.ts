@@ -14,6 +14,12 @@ describe("syncRunResult", () => {
     expect(syncRunResult({ ...base, requested: 2, priced: 0, suspect: 1, missing: 1 }).status).toBe("partial");
   });
 
+  it("names the run rate_limited when every miss is the daily cap and nothing was priced", () => {
+    const issue = { assetId: "a", symbol: "A", outcome: "rate_limited" as const, source: "alpha_vantage" };
+    expect(syncRunResult({ ...base, requested: 2, priced: 0, suspect: 0, missing: 2, issues: [issue, { ...issue, assetId: "b" }] }).error).toBe("rate_limited");
+    expect(syncRunResult({ ...base, issues: [issue] }).error).toBeUndefined();
+  });
+
   it("is partial while some are missing and ok when none are", () => {
     expect(syncRunResult(base).status).toBe("partial");
     expect(syncRunResult({ ...base, requested: 3, missing: 0 }).status).toBe("ok");

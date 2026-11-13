@@ -50,14 +50,14 @@ describe("resolveAsset", () => {
     const br = await resolveAsset(prisma, { ticker: brTicker, assetClass: "etf", currency: "BRL" });
     expect(br).toMatchObject({ linked: true });
     if (!br.linked) throw new Error("expected linked");
-    expect(await prisma.asset.findUniqueOrThrow({ where: { id: br.assetId } })).toMatchObject({ currency: "BRL" });
+    expect(await prisma.asset.findUniqueOrThrow({ where: { id: br.assetId } })).toMatchObject({ assetClass: "etf", market: "B3", currency: "BRL" });
 
     const usTicker = `${SYMBOL_PREFIX}VOO`;
     const intl = await resolveAsset(prisma, { ticker: usTicker, assetClass: "etf", currency: "USD" });
     expect(intl).toMatchObject({ linked: true });
     if (!intl.linked) throw new Error("expected linked");
     const asset = await prisma.asset.findUniqueOrThrow({ where: { id: intl.assetId }, include: { sourceRefs: true } });
-    expect(asset).toMatchObject({ currency: "USD" });
+    expect(asset).toMatchObject({ assetClass: "international_etf", market: "US", currency: "USD" });
     expect(asset.sourceRefs).toEqual([expect.objectContaining({ source: "alpha_vantage", externalId: usTicker })]);
   });
 

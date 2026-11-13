@@ -1012,6 +1012,16 @@ model AssetPrice {
   @@map("asset_prices")
 }
 
+// How many Alpha Vantage HTTP calls have already been made on this UTC day.
+// The free tier allows 25; callers stop at 22 so the daily close keeps a few.
+// One row per day. The next UTC day is a new row, which is the reset.
+model AlphaVantageCallDay {
+  day   DateTime @id @db.Date
+  calls Int
+
+  @@map("alpha_vantage_call_days")
+}
+
 // ============================================
 // OPEN FINANCE (MEU PLUGGY)
 // ============================================

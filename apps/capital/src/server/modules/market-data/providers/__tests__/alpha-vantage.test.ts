@@ -9,6 +9,7 @@ import {
   alphaVantageCurrency,
   alphaVantageExternalId,
   alphaVantageProvider,
+  applyAlphaVantageCurrency,
   resetAlphaVantagePacing,
 } from "../alpha-vantage";
 
@@ -78,11 +79,33 @@ describe("alphaVantageExternalId", () => {
 });
 
 describe("alphaVantageCurrency", () => {
-  it("prices US listings and the USD LSE UCITS symbols in USD", () => {
+  it("prices US listings and the USD LSE UCITS symbols in USD, and leaves any other dotted symbol unknown", () => {
     expect(alphaVantageCurrency("SPY")).toBe("USD");
     expect(alphaVantageCurrency("VUAA")).toBe("USD");
     expect(alphaVantageCurrency("CNDX.L")).toBe("USD");
     expect(alphaVantageCurrency("VUAA.LON")).toBe("USD");
+    expect(alphaVantageCurrency("VWRL.LON")).toBeNull();
+    expect(alphaVantageCurrency("SHOP.TO")).toBeNull();
+  });
+});
+
+describe("applyAlphaVantageCurrency", () => {
+  const point = (close: number, currency = "") => ({ date: "2026-11-12", close, currency });
+
+  it("keeps a currency the quote already named", () => {
+    expect(applyAlphaVantageCurrency("SPY", point(500, "USD"), "GBP")).toEqual(point(500, "USD"));
+  });
+
+  it("treats a GBP LSE quote as pence, leaves GBX and USD alone, and refuses anything else", () => {
+    expect(applyAlphaVantageCurrency("VWRL.LON", point(10000), "GBP")).toEqual(point(100, "GBP"));
+    expect(applyAlphaVantageCurrency("VWRL.L", point(10000), "gbx")).toEqual(point(10000, "GBX"));
+    expect(applyAlphaVantageCurrency("VWRL.LON", point(100), "USD")).toEqual(point(100, "USD"));
+    expect(applyAlphaVantageCurrency("VWRL.LON", point(100), "EUR")).toBeNull();
+  });
+
+  it("stamps any other unknown suffix with the asset's currency", () => {
+    expect(applyAlphaVantageCurrency("SHOP.TO", point(80), "CAD")).toEqual(point(80, "CAD"));
+    expect(applyAlphaVantageCurrency("SHOP.TO", point(80), "  ")).toBeNull();
   });
 });
 
@@ -132,33 +155,43 @@ describe("alphaVantage fetchPrices", () => {
     expect((await alphaVantageProvider.fetchPrices!("SPY", RANGE)).outcome).toBe("schema_changed");
   });
 
-  it("retries once on a network error or a 5xx, then returns the quote", async () => {
+  it("does not retry a timeout, a 5xx, or a 429", async () => {
     fetchMock.mockRejectedValueOnce(new Error("getaddrinfo EAI_AGAIN"));
-    fetchMock.mockResolvedValueOnce(json(globalQuote("1634.0000", "2026-11-12")));
-    const recovered = await alphaVantageProvider.fetchPrices!("CNDX.LON", RANGE);
-    expect(recovered).toEqual({ outcome: "ok", status: 200, data: [{ date: "2026-11-12", close: 1634, currency: "USD" }] });
+    expect(await alphaVantageProvider.fetchPrices!("CNDX.LON", RANGE)).toEqual({ outcome: "provider_down", status: null, error: "getaddrinfo EAI_AGAIN" });
 
     fetchMock.mockResolvedValueOnce(new Response("down", { status: 503 }));
-    fetchMock.mockResolvedValueOnce(json(globalQuote("500.0000")));
-    expect((await alphaVantageProvider.fetchPrices!("SPY", RANGE)).outcome).toBe("ok");
-    expect(fetchMock).toHaveBeenCalledTimes(4);
-  });
+    expect(await alphaVantageProvider.fetchPrices!("SPY", RANGE)).toEqual({ outcome: "provider_down", status: 503, error: "HTTP 503" });
 
-  it("retries a non-Error rejection once and then reports provider_down", async () => {
-    fetchMock.mockRejectedValueOnce("ECONNRESET");
-    fetchMock.mockRejectedValueOnce("ECONNRESET");
-    expect(await alphaVantageProvider.fetchPrices!("SPY", RANGE)).toEqual({ outcome: "provider_down", status: null, error: "ECONNRESET" });
-    expect(fetchMock).toHaveBeenCalledTimes(2);
-  });
-
-  it("is provider_down after two 5xx responses and rate_limited after two 429s", async () => {
-    fetchMock.mockResolvedValueOnce(new Response("down", { status: 500 }));
     fetchMock.mockResolvedValueOnce(new Response("down", { status: 500 }));
     expect(await alphaVantageProvider.fetchPrices!("SPY", RANGE)).toEqual({ outcome: "provider_down", status: 500, error: "HTTP 500" });
 
     fetchMock.mockResolvedValueOnce(new Response("", { status: 429, headers: { "retry-after": "13" } }));
-    fetchMock.mockResolvedValueOnce(new Response("", { status: 429, headers: { "retry-after": "13" } }));
     expect(await alphaVantageProvider.fetchPrices!("SPY", RANGE)).toEqual({ outcome: "rate_limited", status: 429, retryAfterMs: 13_000 });
+    expect(fetchMock).toHaveBeenCalledTimes(4);
+  });
+
+  it("reports a non-Error rejection as provider_down after the one attempt", async () => {
+    fetchMock.mockRejectedValueOnce("ECONNRESET");
+    expect(await alphaVantageProvider.fetchPrices!("SPY", RANGE)).toEqual({ outcome: "provider_down", status: null, error: "ECONNRESET" });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("treats a Note or Information that names an invalid key or a premium plan as unauthorized, once", async () => {
+    fetchMock.mockResolvedValueOnce(json({ Information: "Invalid API key. Please claim your free API key at alphavantage.co." }));
+    expect(await alphaVantageProvider.fetchPrices!("SPY", RANGE)).toEqual({ outcome: "unauthorized", status: 200 });
+    fetchMock.mockResolvedValueOnce(json({ Note: "This is a premium endpoint. Subscribe to any premium plan to instantly unlock." }));
+    expect(await alphaVantageProvider.fetchPrices!("SPY", RANGE)).toEqual({ outcome: "unauthorized", status: 200 });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(JSON.stringify((console.warn as unknown as { mock: { calls: unknown[] } }).mock.calls)).not.toContain("test-key");
+  });
+
+  it("leaves the currency blank for an LSE symbol that is not a known USD listing", async () => {
+    fetchMock.mockResolvedValueOnce(json(globalQuote("10000.0000")));
+    expect(await alphaVantageProvider.fetchPrices!("VWRL.LON", RANGE)).toEqual({
+      outcome: "ok",
+      status: 200,
+      data: [{ date: "2026-11-12", close: 10000, currency: "" }],
+    });
   });
 
   it("does not call the network without a key, and does not retry a 401 or a 400", async () => {

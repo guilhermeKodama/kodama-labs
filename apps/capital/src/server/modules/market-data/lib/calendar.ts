@@ -236,6 +236,13 @@ export function expectedLatestSession(market: Market, now: Date = new Date()): s
   return previousSession(market, today);
 }
 
+/** An ok close whose trading date is the session we should already have. Sync skips another Alpha Vantage call when this exists. */
+export function okPriceForExpectedSession<T extends { date: Date; status: string }>(market: string, prices: readonly T[], now: Date): T | null {
+  if (market !== "B3" && market !== "US" && market !== "CRYPTO") return null;
+  const expected = expectedLatestSession(market, now);
+  return prices.find((p) => p.status === "ok" && p.date.toISOString().slice(0, 10) === expected) ?? null;
+}
+
 /** Sessions after `priceDate` up to and including `expected` — how many closes the price has missed. 0 when the price is that recent or newer. */
 export function sessionsBehind(market: Market, priceDate: string, expected: string): number {
   let count = 0;

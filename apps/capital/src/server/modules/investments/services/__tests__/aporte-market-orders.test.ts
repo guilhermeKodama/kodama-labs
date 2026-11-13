@@ -2,7 +2,10 @@ import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Quote } from "../../lib/quotes";
 
 const quotes = vi.hoisted(() => ({ fetchQuotes: vi.fn(), searchAssets: vi.fn() }));
-vi.mock("../../lib/quotes", () => ({ fetchQuotes: quotes.fetchQuotes, searchAssets: quotes.searchAssets }));
+vi.mock("../../lib/quotes", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../lib/quotes")>();
+  return { ...actual, fetchQuotes: quotes.fetchQuotes, searchAssets: quotes.searchAssets };
+});
 
 import { prisma } from "@capital/server/lib/prisma";
 import { createLedgerFixture, deleteLedgerFixture, type LedgerFixture } from "@/test/ledger-fixtures";
@@ -144,9 +147,9 @@ describe("quotesFor", () => {
     const other = await prisma.account.create({ data: { userId: USER, entityId: f.pfId, type: "brokerage", name: "Rico", currency: "USD" } });
     const stale = await createHolding(USER, { accountId: f.broker, assetClass: "stocks", ticker: "ABCD3", name: "Antigo" }, prisma);
     await prisma.investmentHolding.update({ where: { id: stale.id }, data: { isActive: false } });
-    await createHolding(USER, { accountId: other.id, assetClass: "international_stocks", ticker: "ABCD3", name: "Novo", currency: "USD" }, prisma);
+    await createHolding(USER, { accountId: other.id, assetClass: "stocks", ticker: "ABCD3", name: "Novo", currency: "USD" }, prisma);
     await quotesFor(USER, ["abcd3"], prisma);
-    expect(quotes.fetchQuotes.mock.calls[0][0]).toEqual([{ ticker: "ABCD3", assetClass: "international_stocks", currency: "USD" }]);
+    expect(quotes.fetchQuotes.mock.calls[0][0]).toEqual([{ ticker: "ABCD3", assetClass: "stocks", currency: "USD" }]);
   });
 
   it("falls back to BRL as the base currency for an unknown user", async () => {

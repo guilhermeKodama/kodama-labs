@@ -57,9 +57,14 @@ describe("activeProviders", () => {
 describe("chainFor", () => {
   it("offers only brapi for a B3 class, with or without a token", () => {
     expect(chainFor("stocks").map((p) => p.id)).toEqual(["brapi"]);
-    expect(chainFor("etf").map((p) => p.id)).toEqual(["brapi"]);
+    expect(chainFor("fii").map((p) => p.id)).toEqual(["brapi"]);
     envMock.BRAPI_TOKEN = "tok";
     expect(chainFor("stocks").map((p) => p.id)).toEqual(["brapi"]);
+  });
+
+  it("offers brapi then Alpha Vantage for etf, and keeps brapi as the active source", () => {
+    expect(chainFor("etf").map((p) => p.id)).toEqual(["brapi", "alpha_vantage"]);
+    expect(activeProviderFor("etf")?.id).toBe("brapi");
   });
 
   it("offers only coingecko for crypto", () => {
