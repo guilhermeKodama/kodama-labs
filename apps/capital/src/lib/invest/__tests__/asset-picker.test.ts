@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { assetPickerState, clearedPick, pickKeptFor, type PickedAsset } from "../asset-picker";
 
 const holding: PickedAsset = { type: "holding", holding: { id: "h1", ticker: "PETR4", name: "Petrobras PN", currentPrice: 38.5, currency: "BRL" } };
-const market: PickedAsset = { type: "market", item: { ticker: "VOO", name: "Vanguard S&P 500", price: 512.3, currency: "USD", source: "yahoo" } as Extract<PickedAsset, { type: "market" }>["item"] };
+const market: PickedAsset = { type: "market", item: { ticker: "VOO", name: "Vanguard S&P 500", price: 512.3, currency: "USD", source: "alpha_vantage" } as Extract<PickedAsset, { type: "market" }>["item"] };
 
 describe("assetPickerState", () => {
   it("lists (and searches only with text) while nothing is picked", () => {

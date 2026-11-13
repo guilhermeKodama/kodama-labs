@@ -20,8 +20,12 @@ export const env = createEnv({
     CRON_SECRET: z.string().optional(),
     ANTHROPIC_API_KEY: z.string().optional(),
     BRAPI_TOKEN: z.string().optional(),
+    // International stocks and ETFs (Alpha Vantage GLOBAL_QUOTE). Optional:
+    // without it those quotes come back unauthorized and nothing is called.
+    // Free tier is 25 requests/day and 5/minute; the provider paces itself.
+    ALPHA_VANTAGE_API_KEY: z.string().optional(),
     // market-data registry overrides (src/server/modules/market-data/lib/registry.ts):
-    // comma-separated provider ids, e.g. "yahoo,brapi". Reorders or disables a
+    // comma-separated provider ids, e.g. "brapi,alpha_vantage". Reorders or disables a
     // source with one restart, no deploy — see the F1 plan's "agnóstica de
     // fonte" requirement. Unknown ids in MARKET_DATA_CHAIN are ignored.
     MARKET_DATA_CHAIN: z.string().optional(),
@@ -59,6 +63,7 @@ export const env = createEnv({
     CRON_SECRET: process.env.CRON_SECRET,
     ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY,
     BRAPI_TOKEN: process.env.BRAPI_TOKEN,
+    ALPHA_VANTAGE_API_KEY: process.env.ALPHA_VANTAGE_API_KEY,
     MARKET_DATA_CHAIN: process.env.MARKET_DATA_CHAIN,
     MARKET_DATA_DISABLED: process.env.MARKET_DATA_DISABLED,
     PLUGGY_CLIENT_ID: process.env.PLUGGY_CLIENT_ID,

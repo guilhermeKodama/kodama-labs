@@ -76,7 +76,6 @@
     "tailwind-merge": "^3.4.0",
     "vaul": "^1.1.2",
     "web-push": "^3.6.7",
-    "yahoo-finance2": "^3.13.0",
     "zod": "^3.23.8",
     "zod-to-json-schema": "^3"
   },

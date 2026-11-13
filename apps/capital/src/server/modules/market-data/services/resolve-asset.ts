@@ -1,6 +1,7 @@
 import type { AssetClass, Prisma, PrismaClient } from "@/generated/prisma";
 import type { Market } from "../lib/calendar";
 import { isBrazilianTicker } from "../lib/ticker";
+import { ALPHA_VANTAGE_SOURCE, alphaVantageExternalId } from "../providers/alpha-vantage";
 import { CRYPTO_SYMBOL_TO_COINGECKO_ID } from "../providers/coingecko";
 
 /**
@@ -78,20 +79,17 @@ export async function resolveAsset(db: Db, input: ResolveAssetInput): Promise<Re
   const holdingCurrency = input.currency.trim().toUpperCase();
   if (isBrazilian) {
     if (holdingCurrency && holdingCurrency !== "BRL") return { linked: false, reason: "currency_mismatch", marketCurrency: "BRL" };
-    const assetId = await upsertAsset(db, "B3", ticker, input.assetClass, "BRL", [
-      { source: "brapi", externalId: ticker },
-      { source: "yahoo", externalId: `${ticker}.SA` },
-    ]);
+    const assetId = await upsertAsset(db, "B3", ticker, input.assetClass, "BRL", [{ source: "brapi", externalId: ticker }]);
     return { linked: true, assetId };
   }
 
   const isInternational = INTERNATIONAL_CLASSES.includes(input.assetClass) || input.assetClass === "etf";
   if (isInternational) {
-    // A plain ticker is a US listing, quoted in USD. One with an exchange suffix (VWRL.L, SHOP.TO) quotes in its own exchange's currency, which only the provider knows: the holding's is trusted, and acceptPrice rejects a mismatch per quote.
+    // A plain ticker is a US listing, quoted in USD. One with an exchange suffix (VWRL.L, SHOP.TO) quotes in its own exchange's currency, which GLOBAL_QUOTE does not report: the holding's is trusted, and acceptPrice rejects a mismatch per quote.
     const usListing = !ticker.includes(".");
     if (usListing && holdingCurrency && holdingCurrency !== "USD") return { linked: false, reason: "currency_mismatch", marketCurrency: "USD" };
     const currency = holdingCurrency || "USD";
-    const assetId = await upsertAsset(db, "US", ticker, input.assetClass, currency, [{ source: "yahoo", externalId: ticker }]);
+    const assetId = await upsertAsset(db, "US", ticker, input.assetClass, currency, [{ source: ALPHA_VANTAGE_SOURCE, externalId: alphaVantageExternalId(ticker) }]);
     return { linked: true, assetId };
   }
 

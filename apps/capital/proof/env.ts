@@ -66,6 +66,7 @@ export function proofEnv(): ProofEnv {
       // Empty wins over .env: no assistant, no AI suggestions, no paid quote API, no push.
       ANTHROPIC_API_KEY: "",
       BRAPI_TOKEN: "",
+      ALPHA_VANTAGE_API_KEY: "",
       APP_URL: "",
       VAPID_PRIVATE_KEY: "",
       NEXT_PUBLIC_VAPID_PUBLIC_KEY: "",

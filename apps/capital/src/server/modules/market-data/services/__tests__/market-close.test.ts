@@ -30,7 +30,7 @@ function priceUpdate(patch: Partial<PriceUpdateResult>): PriceUpdateResult {
 
 describe("syncPricesStage", () => {
   it("turns the service's result into the run result and hands the client to the service", async () => {
-    const sync: SyncPricesResult = { requested: 2, priced: 1, suspect: 0, missing: 1, bySource: { yahoo: 1 }, providerLatestDate: new Date("2026-11-10T00:00:00Z"), issues: [] };
+    const sync: SyncPricesResult = { requested: 2, priced: 1, suspect: 0, missing: 1, bySource: { alpha_vantage: 1 }, providerLatestDate: new Date("2026-11-10T00:00:00Z"), issues: [] };
     services.syncPrices.mockResolvedValueOnce(sync);
     const run = await syncPricesStage(db);
     expect(services.syncPrices).toHaveBeenCalledWith(db);
@@ -77,10 +77,10 @@ describe("updatePricesStage", () => {
 
   it("is ok when every attempted holding updated, and puts the service's result in the body", async () => {
     services.updateAllPrices.mockResolvedValueOnce(
-      priceUpdate({ totalHoldings: 3, updated: 2, bySource: { yahoo: 2 }, issues: [{ holdingId: "h3", ticker: null, reason: "no_ticker" }] }),
+      priceUpdate({ totalHoldings: 3, updated: 2, bySource: { alpha_vantage: 2 }, issues: [{ holdingId: "h3", ticker: null, reason: "no_ticker" }] }),
     );
     const run = await updatePricesStage(db);
-    expect(run).toMatchObject({ status: "ok", requested: 2, succeeded: 2, stats: { bySource: { yahoo: 2 } } });
+    expect(run).toMatchObject({ status: "ok", requested: 2, succeeded: 2, stats: { bySource: { alpha_vantage: 2 } } });
     expect(run.body).toMatchObject({ message: "Updated prices for 2/3 holdings", updated: 2, totalHoldings: 3 });
   });
 });

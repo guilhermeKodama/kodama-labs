@@ -16,8 +16,8 @@ import { chainFor } from "../lib/registry";
  *   update-prices.ts, which reads this instead of calling a provider
  *   itself).
  *
- * Per asset class, a bulk leader (fetchAllPrices — none of brapi/Yahoo/
- * CoinGecko has one yet; this is the hook a future COTAHIST-style source
+ * Per asset class, a bulk leader (fetchAllPrices — none of brapi/Alpha
+ * Vantage/CoinGecko has one yet; this is the hook a future COTAHIST-style source
  * would plug into) prices every asset of that class in one call; anything
  * it misses, or any class with no bulk leader, falls through to the normal
  * per-asset chain walk, trying each provider the asset has a source ref

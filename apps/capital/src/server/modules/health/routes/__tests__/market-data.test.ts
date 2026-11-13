@@ -70,10 +70,11 @@ describe("GET /api/health/market-data", () => {
   it("breaks holdings down by asset class, with the registry's active provider for each", async () => {
     const res = await app.request("/api/health/market-data");
     const body = await res.json();
-    // B3 leads with brapi only when BRAPI_TOKEN is set (registry.ts); the panel says so when it isn't.
+    // B3 is brapi even without a token (demo tickers only); the panel says so. International listings are Alpha Vantage.
     expect(body.holdings.byAssetClass).toMatchObject({
-      stocks: { activeProvider: brapiHasToken() ? "brapi" : "yahoo" },
-      international_stocks: { activeProvider: "yahoo" },
+      stocks: { activeProvider: "brapi" },
+      international_stocks: { activeProvider: "alpha_vantage" },
+      international_etf: { activeProvider: "alpha_vantage" },
       crypto: { activeProvider: "coingecko" },
       fixed_income: { activeProvider: null },
       savings: { activeProvider: null },

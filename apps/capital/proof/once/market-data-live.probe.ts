@@ -7,7 +7,6 @@ import { chainFor, brapiHasToken } from "../../src/server/modules/market-data/li
 import { quoteKind } from "../../src/server/modules/market-data/lib/calendar";
 
 const TICKERS = ["ITUB4", "WEGE3"];
-const externalId = (provider: string, ticker: string) => (provider === "yahoo" ? `${ticker}.SA` : ticker);
 
 const requests = new Map<string, number>();
 const realFetch = globalThis.fetch;
@@ -25,7 +24,7 @@ async function main() {
     let winner: string | null = null;
     for (const provider of chain) {
       requests.clear();
-      const result = await provider.fetchPrices!(externalId(provider.id, ticker), { from: today, to: today });
+      const result = await provider.fetchPrices!(ticker, { from: today, to: today });
       const calls = [...requests.values()].reduce((a, b) => a + b, 0);
       if (result.outcome === "ok") {
         const point = result.data.at(-1)!;

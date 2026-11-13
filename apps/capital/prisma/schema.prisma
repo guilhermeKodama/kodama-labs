@@ -965,10 +965,10 @@ model AssetSourceRef {
   id         String   @id @default(uuid())
   assetId    String
   asset      Asset    @relation(fields: [assetId], references: [id], onDelete: Cascade)
-  // "brapi" | "yahoo" | "coingecko" - free text, like IntegrationRun.provider,
+  // "brapi" | "alpha_vantage" | "coingecko" - free text, like IntegrationRun.provider,
   // so a new provider needs no enum migration.
   source     String
-  // The vendor's own id/symbol: brapi "PETR4", yahoo "PETR4.SA" or "VOO",
+  // The vendor's own id/symbol: brapi "PETR4", alpha_vantage "VOO" or "VUAA.LON",
   // coingecko "bitcoin".
   externalId String
   createdAt  DateTime @default(now())
@@ -1252,7 +1252,7 @@ model IntegrationRun {
   // Stable key for the job, e.g. "update-prices", "update-rates", "benchmarks", "pluggy-sync".
   job       String
   // Provider within the job, when the job fans out to more than one
-  // (e.g. "brapi", "yahoo", "coingecko" inside update-prices). Null when
+  // (e.g. "brapi", "alpha_vantage", "coingecko" inside update-prices). Null when
   // the job has a single source or reports an aggregate.
   provider  String?
   // cron | manual (the "Atualizar agora" button or similar)

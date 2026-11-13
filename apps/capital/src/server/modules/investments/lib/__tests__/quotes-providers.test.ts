@@ -10,7 +10,7 @@ import {
   fetchCryptoQuotes,
   fetchQuotes,
   fetchQuotesDetailed,
-  fetchYahooQuotes,
+  fetchAlphaVantageQuotes,
   holdingPriceStatus,
   quoteRequestKey,
   searchAssets,
@@ -85,23 +85,23 @@ describe("when the sources are turned off in the registry", () => {
     expect(attempts).toEqual(
       expect.arrayContaining([
         { ticker: "BTC", source: "coingecko", outcome: "provider_down", error: "coingecko disabled via MARKET_DATA_DISABLED" },
-        { ticker: "VOO", source: "yahoo", outcome: "provider_down", error: "yahoo disabled via MARKET_DATA_DISABLED" },
-        // brapi was off too, so the .SA retry on Yahoo is what speaks for PETR4.
-        { ticker: "PETR4", source: "yahoo", outcome: "provider_down", error: "yahoo disabled via MARKET_DATA_DISABLED" },
+        { ticker: "VOO", source: "alpha_vantage", outcome: "provider_down", error: "alpha_vantage disabled via MARKET_DATA_DISABLED" },
+        { ticker: "PETR4", source: "brapi", outcome: "provider_down", error: "brapi disabled via MARKET_DATA_DISABLED" },
       ]),
     );
     expect(attempts).toHaveLength(3);
   });
 
-  it("reports brapi as disabled when Yahoo is the only source left, then lets Yahoo's .SA answer", async () => {
-    const yahoo = provider("yahoo", (externalId) => (externalId === "PETR4.SA" ? ok(point(38.2, { asOf: "2026-11-10T20:00:00.000Z" })) : { outcome: "not_found", status: 404 }));
-    registry.activeProviders.mockReturnValue([yahoo]);
+  it("reports brapi as disabled and does not ask Alpha Vantage for a B3 ticker", async () => {
+    const alpha = provider("alpha_vantage", () => ok(point(38.2)));
+    registry.activeProviders.mockReturnValue([alpha]);
     const { quotes, attempts } = await fetchQuotesDetailed([{ ticker: "PETR4" }]);
-    expect(quotes.PETR4).toEqual({ ticker: "PETR4", price: 38.2, currency: "BRL", source: "yahoo", asOf: "2026-11-10T20:00:00.000Z" });
-    expect(attempts).toEqual([{ ticker: "PETR4", source: "yahoo", outcome: "ok", error: undefined }]);
+    expect(quotes).toEqual({});
+    expect(attempts).toEqual([{ ticker: "PETR4", source: "brapi", outcome: "provider_down", error: "brapi disabled via MARKET_DATA_DISABLED" }]);
+    expect(alpha.fetchPrices).not.toHaveBeenCalled();
   });
 
-  it("returns no search matches from a disabled brapi or Yahoo, only the supported coins unpriced", async () => {
+  it("returns no search matches from a disabled brapi, only the supported coins unpriced", async () => {
     const results = await searchAssets("doge");
     expect(results).toEqual([{ ticker: "DOGE", name: "Dogecoin", assetClass: "crypto", currency: "USD", price: null, source: "coingecko" }]);
   });
@@ -120,30 +120,30 @@ describe("a source answering badly", () => {
     expect(withoutError.attempts).toEqual([{ ticker: "BTC", source: "coingecko", outcome: "rate_limited", error: undefined }]);
   });
 
-  it("is not_found when an ok answer has no points, for crypto, brapi and Yahoo alike", async () => {
+  it("is not_found when an ok answer has no points, for crypto, brapi and Alpha Vantage alike", async () => {
     const empty: Prices = () => ok();
-    registry.activeProviders.mockReturnValue([provider("coingecko", empty), provider("brapi", empty), provider("yahoo", empty)]);
+    registry.activeProviders.mockReturnValue([provider("coingecko", empty), provider("brapi", empty), provider("alpha_vantage", empty)]);
     const { quotes, attempts } = await fetchQuotesDetailed([{ ticker: "BTC", assetClass: "crypto" }, { ticker: "PETR4" }, { ticker: "VOO" }]);
     expect(quotes).toEqual({});
     expect(attempts).toEqual(
       expect.arrayContaining([
         { ticker: "BTC", source: "coingecko", outcome: "not_found", error: undefined },
-        { ticker: "VOO", source: "yahoo", outcome: "not_found", error: undefined },
-        { ticker: "PETR4", source: "yahoo", outcome: "not_found", error: undefined },
+        { ticker: "VOO", source: "alpha_vantage", outcome: "not_found", error: undefined },
+        { ticker: "PETR4", source: "brapi", outcome: "not_found", error: undefined },
       ]),
     );
   });
 
-  it("carries a down provider's error for brapi and Yahoo", async () => {
+  it("carries a down provider's error for brapi and Alpha Vantage", async () => {
     registry.activeProviders.mockReturnValue([
       provider("brapi", () => ({ outcome: "provider_down", status: 500, error: "HTTP 500" })),
-      provider("yahoo", () => ({ outcome: "provider_down", status: null, error: "timeout" })),
+      provider("alpha_vantage", () => ({ outcome: "provider_down", status: null, error: "timeout" })),
     ]);
     const { attempts } = await fetchQuotesDetailed([{ ticker: "PETR4" }, { ticker: "VOO" }]);
     expect(attempts).toEqual(
       expect.arrayContaining([
-        { ticker: "VOO", source: "yahoo", outcome: "provider_down", error: "timeout" },
-        { ticker: "PETR4", source: "yahoo", outcome: "provider_down", error: "timeout" },
+        { ticker: "VOO", source: "alpha_vantage", outcome: "provider_down", error: "timeout" },
+        { ticker: "PETR4", source: "brapi", outcome: "provider_down", error: "HTTP 500" },
       ]),
     );
   });
@@ -186,15 +186,15 @@ describe("batching", () => {
   it("returns empty results for no tickers and for tickers nothing prices, without calling a provider", async () => {
     const coingecko = provider("coingecko", () => ok(point(1)));
     const brapi = provider("brapi", () => ok(point(1)));
-    const yahoo = provider("yahoo", () => ok(point(1)));
-    registry.activeProviders.mockReturnValue([coingecko, brapi, yahoo]);
+    const alpha = provider("alpha_vantage", () => ok(point(1)));
+    registry.activeProviders.mockReturnValue([coingecko, brapi, alpha]);
     expect(await fetchBrazilianQuotes([])).toEqual({});
-    expect(await fetchYahooQuotes([])).toEqual({});
+    expect(await fetchAlphaVantageQuotes([])).toEqual({});
     expect(await fetchCryptoQuotes(["SHIB"])).toEqual({});
     expect(await fetchQuotes([])).toEqual({});
     expect(coingecko.fetchPrices).not.toHaveBeenCalled();
     expect(brapi.fetchPrices).not.toHaveBeenCalled();
-    expect(yahoo.fetchPrices).not.toHaveBeenCalled();
+    expect(alpha.fetchPrices).not.toHaveBeenCalled();
   });
 });
 
@@ -208,10 +208,10 @@ describe("the exported single-source fetchers", () => {
     expect(brapi.fetchPrices).toHaveBeenCalledTimes(2);
   });
 
-  it("fetchYahooQuotes prices through Yahoo and leaves out what it cannot find", async () => {
-    const yahoo = provider("yahoo", (id) => (id === "VOO" ? ok(point(500.5, { currency: "USD" })) : { outcome: "not_found", status: 200 }));
-    registry.activeProviders.mockReturnValue([yahoo]);
-    expect(await fetchYahooQuotes(["voo", "nope"])).toEqual({ VOO: { ticker: "VOO", price: 500.5, currency: "USD", source: "yahoo", asOf: null } });
+  it("fetchAlphaVantageQuotes prices through Alpha Vantage and leaves out what it cannot find", async () => {
+    const alpha = provider("alpha_vantage", (id) => (id === "VOO" ? ok(point(500.5, { currency: "USD" })) : { outcome: "not_found", status: 200 }));
+    registry.activeProviders.mockReturnValue([alpha]);
+    expect(await fetchAlphaVantageQuotes(["voo", "nope"])).toEqual({ VOO: { ticker: "VOO", price: 500.5, currency: "USD", source: "alpha_vantage", asOf: null } });
   });
 
   it("fetchCryptoQuotes prices supported symbols in the currency given and drops unsupported ones", async () => {
@@ -235,35 +235,34 @@ describe("searchAssets with sources", () => {
 
   it("maps matches without a price to null, and ignores a source whose lookup is not ok", async () => {
     const brapi = provider("brapi", undefined, () => ({ outcome: "ok", status: 200, data: [match("PETR4"), match("PETZ3", { price: 12 })] }));
-    const yahoo = provider("yahoo", undefined, () => ({ outcome: "provider_down", status: null, error: "down" }));
-    registry.activeProviders.mockReturnValue([brapi, yahoo]);
+    const alpha = provider("alpha_vantage", undefined, () => ({ outcome: "provider_down", status: null, error: "down" }));
+    registry.activeProviders.mockReturnValue([brapi, alpha]);
     const results = await searchAssets("pet");
     expect(results).toEqual([
       { ticker: "PETR4", name: "PETR4 name", assetClass: "stocks", currency: "BRL", price: null, source: "brapi" },
       { ticker: "PETZ3", name: "PETZ3 name", assetClass: "stocks", currency: "BRL", price: 12, source: "brapi" },
     ]);
+    expect(alpha.lookup).not.toHaveBeenCalled();
   });
 
-  it("ignores a brapi lookup that is not ok while the other sources answer", async () => {
+  it("returns nothing from the market when brapi lookup is not ok", async () => {
     const brapi = provider("brapi", undefined, () => ({ outcome: "rate_limited", status: 429, retryAfterMs: null }));
-    const yahoo = provider("yahoo", undefined, () => ({ outcome: "ok", status: 200, data: [match("VOO", { assetClass: "international_etf", currency: "USD", price: 500 })] }));
-    registry.activeProviders.mockReturnValue([brapi, yahoo]);
-    const results = await searchAssets("voo");
-    expect(results.map((r) => [r.ticker, r.source])).toEqual([["VOO", "yahoo"]]);
+    registry.activeProviders.mockReturnValue([brapi]);
+    expect(await searchAssets("voo")).toEqual([]);
   });
 
-  it("maps Yahoo matches, skips a provider with no lookup and puts the exact ticker first", async () => {
-    const brapi = provider("brapi", () => ok());
-    const yahoo = provider("yahoo", undefined, () => ({
+  it("skips a provider with no lookup and puts the exact ticker first", async () => {
+    const alpha = provider("alpha_vantage");
+    const brapi = provider("brapi", undefined, () => ({
       outcome: "ok",
       status: 200,
-      data: [match("VOOG", { assetClass: "international_etf", currency: "USD" }), match("VOO", { assetClass: "international_etf", currency: "USD", price: 500 })],
+      data: [match("VOOG"), match("VOO", { price: 500 })],
     }));
-    registry.activeProviders.mockReturnValue([brapi, yahoo]);
+    registry.activeProviders.mockReturnValue([alpha, brapi]);
     const results = await searchAssets(" voo ");
     expect(results.map((r) => [r.ticker, r.source, r.price])).toEqual([
-      ["VOO", "yahoo", 500],
-      ["VOOG", "yahoo", null],
+      ["VOO", "brapi", 500],
+      ["VOOG", "brapi", null],
     ]);
   });
 

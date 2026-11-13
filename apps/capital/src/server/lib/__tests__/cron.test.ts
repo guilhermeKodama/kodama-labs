@@ -102,14 +102,14 @@ describe("runStage", () => {
       `${JOB_PREFIX}full`,
       async () => ({
         status: "partial",
-        provider: "yahoo",
+        provider: "alpha_vantage",
         requested: 10,
         succeeded: 7,
         missing: 2,
         rejected: 1,
         providerLatestDate,
         error: "3 tickers failed",
-        stats: { bySource: { yahoo: 7 } },
+        stats: { bySource: { alpha_vantage: 7 } },
       }),
       { trigger: "manual" },
     );
@@ -119,7 +119,7 @@ describe("runStage", () => {
     expect(finishedAt.getTime()).toBeGreaterThanOrEqual(startedAt.getTime());
     const run = await prisma.integrationRun.findFirstOrThrow({ where: { job: `${JOB_PREFIX}full` } });
     expect(run).toMatchObject({
-      provider: "yahoo",
+      provider: "alpha_vantage",
       trigger: "manual",
       status: "partial",
       requested: 10,
@@ -128,7 +128,7 @@ describe("runStage", () => {
       rejected: 1,
       error: "3 tickers failed",
       providerLatestDate,
-      stats: { bySource: { yahoo: 7 } },
+      stats: { bySource: { alpha_vantage: 7 } },
     });
     expect(run.startedAt).toEqual(startedAt);
     expect(run.finishedAt).toEqual(finishedAt);

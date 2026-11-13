@@ -53,7 +53,7 @@ export interface AssetSearchItem {
 /**
  * The operation dialog's asset picker (GET /v2/assets/search): the user's
  * holdings matching `q` by ticker or name first, then market results from
- * brapi, Yahoo and the supported coins (unless `remote` is false) for
+ * brapi and the supported coins (unless `remote` is false) for
  * tickers the user does not hold yet.
  */
 export async function searchAssetsFor(userId: string, q: string, db: DbClient, opts: { limit?: number; remote?: boolean } = {}) {

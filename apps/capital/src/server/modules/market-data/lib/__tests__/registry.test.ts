@@ -12,61 +12,63 @@ afterEach(() => {
 });
 
 describe("activeProviders", () => {
-  it("puts Yahoo first when brapi has no token, brapi first when it has one", () => {
-    expect(activeProviders().map((p) => p.id)).toEqual(["yahoo", "brapi", "coingecko"]);
+  it("lists brapi, Alpha Vantage and CoinGecko, whether or not brapi has a token", () => {
+    expect(activeProviders().map((p) => p.id)).toEqual(["brapi", "alpha_vantage", "coingecko"]);
     envMock.BRAPI_TOKEN = "  ";
-    expect(activeProviders().map((p) => p.id)).toEqual(["yahoo", "brapi", "coingecko"]);
+    expect(activeProviders().map((p) => p.id)).toEqual(["brapi", "alpha_vantage", "coingecko"]);
     envMock.BRAPI_TOKEN = "tok";
-    expect(activeProviders().map((p) => p.id)).toEqual(["brapi", "yahoo", "coingecko"]);
+    expect(activeProviders().map((p) => p.id)).toEqual(["brapi", "alpha_vantage", "coingecko"]);
   });
 
   it("drops a provider named in MARKET_DATA_DISABLED", () => {
-    envMock.MARKET_DATA_DISABLED = "yahoo";
+    envMock.MARKET_DATA_DISABLED = "alpha_vantage";
     expect(activeProviders().map((p) => p.id)).toEqual(["brapi", "coingecko"]);
   });
 
   it("reorders providers named in MARKET_DATA_CHAIN, keeping the rest after", () => {
     envMock.BRAPI_TOKEN = "tok";
-    envMock.MARKET_DATA_CHAIN = "yahoo,brapi";
-    expect(activeProviders().map((p) => p.id)).toEqual(["yahoo", "brapi", "coingecko"]);
+    envMock.MARKET_DATA_CHAIN = "alpha_vantage,brapi";
+    expect(activeProviders().map((p) => p.id)).toEqual(["alpha_vantage", "brapi", "coingecko"]);
   });
 
   it("ignores an unknown id in MARKET_DATA_CHAIN instead of failing", () => {
-    envMock.MARKET_DATA_CHAIN = "nope,yahoo";
-    expect(activeProviders().map((p) => p.id)).toEqual(["yahoo", "brapi", "coingecko"]);
+    envMock.MARKET_DATA_CHAIN = "nope,alpha_vantage";
+    expect(activeProviders().map((p) => p.id)).toEqual(["alpha_vantage", "brapi", "coingecko"]);
   });
 
   it("treats a MARKET_DATA_CHAIN or MARKET_DATA_DISABLED made only of separators and blanks as unset", () => {
     envMock.MARKET_DATA_CHAIN = " , ,";
     envMock.MARKET_DATA_DISABLED = ",  ,";
-    expect(activeProviders().map((p) => p.id)).toEqual(["yahoo", "brapi", "coingecko"]);
+    expect(activeProviders().map((p) => p.id)).toEqual(["brapi", "alpha_vantage", "coingecko"]);
   });
 
   it("trims the ids of a comma-separated list", () => {
-    envMock.MARKET_DATA_DISABLED = " yahoo , coingecko ";
+    envMock.MARKET_DATA_DISABLED = " alpha_vantage , coingecko ";
     expect(activeProviders().map((p) => p.id)).toEqual(["brapi"]);
   });
 
   it("applies MARKET_DATA_DISABLED before MARKET_DATA_CHAIN's reorder", () => {
     envMock.MARKET_DATA_DISABLED = "brapi";
-    envMock.MARKET_DATA_CHAIN = "brapi,yahoo,coingecko";
-    expect(activeProviders().map((p) => p.id)).toEqual(["yahoo", "coingecko"]);
+    envMock.MARKET_DATA_CHAIN = "brapi,alpha_vantage,coingecko";
+    expect(activeProviders().map((p) => p.id)).toEqual(["alpha_vantage", "coingecko"]);
   });
 });
 
 describe("chainFor", () => {
-  it("offers yahoo then brapi for a B3 class without a brapi token, brapi then yahoo with one", () => {
-    expect(chainFor("stocks").map((p) => p.id)).toEqual(["yahoo", "brapi"]);
+  it("offers only brapi for a B3 class, with or without a token", () => {
+    expect(chainFor("stocks").map((p) => p.id)).toEqual(["brapi"]);
+    expect(chainFor("etf").map((p) => p.id)).toEqual(["brapi"]);
     envMock.BRAPI_TOKEN = "tok";
-    expect(chainFor("stocks").map((p) => p.id)).toEqual(["brapi", "yahoo"]);
+    expect(chainFor("stocks").map((p) => p.id)).toEqual(["brapi"]);
   });
 
   it("offers only coingecko for crypto", () => {
     expect(chainFor("crypto").map((p) => p.id)).toEqual(["coingecko"]);
   });
 
-  it("offers only yahoo for international stocks", () => {
-    expect(chainFor("international_stocks").map((p) => p.id)).toEqual(["yahoo"]);
+  it("offers only Alpha Vantage for international stocks and ETFs", () => {
+    expect(chainFor("international_stocks").map((p) => p.id)).toEqual(["alpha_vantage"]);
+    expect(chainFor("international_etf").map((p) => p.id)).toEqual(["alpha_vantage"]);
   });
 
   it("offers nothing for a class with no automatic source", () => {
@@ -79,12 +81,13 @@ describe("activeProviderFor", () => {
   it("is the chain's first entry", () => {
     envMock.BRAPI_TOKEN = "tok";
     expect(activeProviderFor("stocks")?.id).toBe("brapi");
+    expect(activeProviderFor("international_etf")?.id).toBe("alpha_vantage");
     expect(activeProviderFor("fixed_income")).toBeNull();
   });
 
-  it("follows MARKET_DATA_CHAIN", () => {
-    envMock.BRAPI_TOKEN = "tok";
-    envMock.MARKET_DATA_CHAIN = "yahoo";
-    expect(activeProviderFor("stocks")?.id).toBe("yahoo");
+  it("follows MARKET_DATA_CHAIN for the classes that provider covers", () => {
+    envMock.MARKET_DATA_CHAIN = "alpha_vantage";
+    expect(activeProviderFor("international_stocks")?.id).toBe("alpha_vantage");
+    expect(activeProviderFor("stocks")?.id).toBe("brapi");
   });
 });

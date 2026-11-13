@@ -92,8 +92,8 @@ export interface AssetClassHealth {
 /**
  * Configuration facts worth a line on the panel, not a degraded status: a
  * source running without its credential still prices through the rest of the
- * chain. "brapi_no_token": brapi is in the chain without BRAPI_TOKEN, so B3
- * goes to Yahoo first and brapi only answers its demo tickers.
+ * chain. "brapi_no_token": brapi is in the chain without BRAPI_TOKEN, so it
+ * only answers its demo tickers. B3 has no other source.
  */
 export type MarketDataNotice = "brapi_no_token";
 

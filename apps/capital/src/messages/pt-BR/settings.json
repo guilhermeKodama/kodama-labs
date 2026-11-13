@@ -412,7 +412,7 @@
       "skipped": "Nada a fazer"
     },
     "notice": {
-      "brapi_no_token": "brapi sem token: a B3 é cotada pelo Yahoo, com a brapi de reserva"
+      "brapi_no_token": "brapi sem token: a brapi só responde os tickers de demonstração"
     },
     "classesTitle": "Cobertura por classe",
     "classesHeaders": {
@@ -425,7 +425,7 @@
     },
     "source": {
       "brapi": "brapi.dev",
-      "yahoo": "Yahoo Finance",
+      "alpha_vantage": "Alpha Vantage",
       "coingecko": "CoinGecko"
     },
     "staleBadge": "{count, plural, one {# posição desatualizada} other {# posições desatualizadas}} ({sessions} pregões ou mais sem preço)",

@@ -1,6 +1,7 @@
 import type { AssetClass } from "@/generated/prisma";
 import { mapWithConcurrency } from "@capital/server/lib/concurrency";
 import { activeProviders } from "@capital/server/modules/market-data/lib/registry";
+import { ALPHA_VANTAGE_SOURCE } from "@capital/server/modules/market-data/providers/alpha-vantage";
 import { brapiAssetClass } from "@capital/server/modules/market-data/providers/brapi";
 import { CRYPTO_NAMES, CRYPTO_SYMBOL_TO_COINGECKO_ID } from "@capital/server/modules/market-data/providers/coingecko";
 import { isBrazilianTicker } from "@capital/server/modules/market-data/lib/ticker";
@@ -11,13 +12,12 @@ import { expectedLatestSession, marketDate, marketFor, sessionsBehind } from "@c
  * Market data fetchers shared by the price-refresh cron (services/update-prices.ts),
  * GET /v2/quotes and GET /v2/assets/search.
  *
- * The actual HTTP calls to brapi, Yahoo and CoinGecko live in
+ * The actual HTTP calls to brapi, Alpha Vantage and CoinGecko live in
  * src/server/modules/market-data/providers/*.ts — one implementation per
  * source, shared with sync-prices.ts's global AssetPrice sync. This file is
  * what's left: routing a raw ticker to a source (quoteSourceFor, unchanged —
  * it decides by the holding's asset class or, failing that, the ticker's
- * own shape, which a resolved Asset doesn't need), the B3→Yahoo ".SA"
- * fallback and batching, and translating a PricePoint/InstrumentMatch into
+ * own shape, which a resolved Asset doesn't need), batching, and translating a PricePoint/InstrumentMatch into
  * this module's Quote/AssetSearchResult shape. providerById() reads the
  * registry (respecting MARKET_DATA_CHAIN/MARKET_DATA_DISABLED) rather than
  * importing a provider module directly, so disabling a source for
@@ -28,7 +28,7 @@ import { expectedLatestSession, marketDate, marketFor, sessionsBehind } from "@c
  * wants to know *why* can ask fetchQuotesDetailed instead of fetchQuotes.
  */
 
-export type QuoteSource = "coingecko" | "brapi" | "yahoo";
+export type QuoteSource = "coingecko" | "brapi" | typeof ALPHA_VANTAGE_SOURCE;
 
 export interface Quote {
   ticker: string;
@@ -96,9 +96,9 @@ export function quoteSourceFor(ticker: string, assetClass?: AssetClass | null): 
   if (assetClass === "crypto") return CRYPTO_SYMBOL_TO_COINGECKO_ID[t] ? "coingecko" : null;
   if (assetClass === "fixed_income" || assetClass === "savings") return null;
   if (assetClass && BRAZILIAN_ASSET_CLASSES.includes(assetClass)) return "brapi";
-  if (assetClass && INTERNATIONAL_ASSET_CLASSES.includes(assetClass)) return "yahoo";
+  if (assetClass && INTERNATIONAL_ASSET_CLASSES.includes(assetClass)) return ALPHA_VANTAGE_SOURCE;
   if (!assetClass && CRYPTO_SYMBOL_TO_COINGECKO_ID[t]) return "coingecko";
-  return isBrazilianTicker(t) ? "brapi" : "yahoo";
+  return isBrazilianTicker(t) ? "brapi" : ALPHA_VANTAGE_SOURCE;
 }
 
 /** The registry's instance for a source, or undefined when it's off (MARKET_DATA_DISABLED). Reading the registry each call, not a module-level provider import, is what lets one env var turn a source off for this file too. */
@@ -229,41 +229,34 @@ async function searchBrapi(q: string): Promise<AssetSearchResult[]> {
 }
 
 // ---------------------------------------------------------------------------
-// Yahoo Finance
+// Alpha Vantage
 // ---------------------------------------------------------------------------
 
-const YAHOO_CONCURRENCY = 20;
+/** One at a time. The provider's own queue also keeps the free tier's 5/minute, including callers that fan out. */
+const ALPHA_VANTAGE_CONCURRENCY = 1;
 
-async function fetchOneYahooQuote(ticker: string): Promise<QuoteAttempt & { quote?: Quote }> {
-  const provider = providerById("yahoo");
-  if (!provider?.fetchPrices) return { ticker, source: "yahoo", outcome: "provider_down", error: "yahoo disabled via MARKET_DATA_DISABLED" };
+async function fetchOneAlphaVantageQuote(ticker: string): Promise<QuoteAttempt & { quote?: Quote }> {
+  const provider = providerById(ALPHA_VANTAGE_SOURCE);
+  if (!provider?.fetchPrices) return { ticker, source: ALPHA_VANTAGE_SOURCE, outcome: "provider_down", error: "alpha_vantage disabled via MARKET_DATA_DISABLED" };
   const result = await provider.fetchPrices(ticker, today());
-  if (result.outcome !== "ok") return { ticker, source: "yahoo", outcome: result.outcome, error: "error" in result ? result.error : undefined };
+  if (result.outcome !== "ok") return { ticker, source: ALPHA_VANTAGE_SOURCE, outcome: result.outcome, error: "error" in result ? result.error : undefined };
   const point = result.data[0];
-  if (!point) return { ticker, source: "yahoo", outcome: "not_found" };
-  return { ticker, source: "yahoo", outcome: "ok", quote: { ticker, price: point.close, currency: point.currency, source: "yahoo", asOf: point.asOf ?? null } };
+  if (!point) return { ticker, source: ALPHA_VANTAGE_SOURCE, outcome: "not_found" };
+  return { ticker, source: ALPHA_VANTAGE_SOURCE, outcome: "ok", quote: { ticker, price: point.close, currency: point.currency, source: ALPHA_VANTAGE_SOURCE, asOf: point.asOf ?? null } };
 }
 
-async function fetchYahooQuotesDetailed(tickers: string[]): Promise<QuoteBatchResult> {
+async function fetchAlphaVantageQuotesDetailed(tickers: string[]): Promise<QuoteBatchResult> {
   const list = [...new Set(tickers.map((t) => t.toUpperCase()))];
   if (!list.length) return { quotes: {}, attempts: [] };
-  const attempts = await mapWithConcurrency(list, YAHOO_CONCURRENCY, (ticker) => fetchOneYahooQuote(ticker));
+  const attempts = await mapWithConcurrency(list, ALPHA_VANTAGE_CONCURRENCY, (ticker) => fetchOneAlphaVantageQuote(ticker));
   const quotes: Record<string, Quote> = {};
   for (const a of attempts) if (a.quote) quotes[a.ticker] = a.quote;
   return { quotes, attempts: attempts.map((a): QuoteAttempt => ({ ticker: a.ticker, source: a.source, outcome: a.outcome, error: a.error })) };
 }
 
-/** Yahoo quotes keyed by upper-case ticker as requested (e.g. "VOO", "PETR4.SA"). */
-export async function fetchYahooQuotes(tickers: string[]): Promise<Record<string, Quote>> {
-  return (await fetchYahooQuotesDetailed(tickers)).quotes;
-}
-
-async function searchYahoo(q: string): Promise<AssetSearchResult[]> {
-  const provider = providerById("yahoo");
-  if (!provider?.lookup) return [];
-  const result = await provider.lookup(q);
-  if (result.outcome !== "ok") return [];
-  return result.data.map((m) => ({ ticker: m.symbol, name: m.name, assetClass: m.assetClass, currency: m.currency, price: m.price ?? null, source: "yahoo" as const }));
+/** Alpha Vantage quotes keyed by upper-case ticker as requested (e.g. "VOO", "VUAA.LON"). */
+export async function fetchAlphaVantageQuotes(tickers: string[]): Promise<Record<string, Quote>> {
+  return (await fetchAlphaVantageQuotesDetailed(tickers)).quotes;
 }
 
 // ---------------------------------------------------------------------------
@@ -282,10 +275,8 @@ function mergeAttempts(...batches: QuoteAttempt[][]): QuoteAttempt[] {
 
 /**
  * Quotes for the requested tickers, keyed by upper-case ticker, plus one
- * attempt per ticker recording why it does or doesn't have a price. B3
- * tickers brapi misses are retried on Yahoo as "<ticker>.SA" (that retry's
- * attempt is reported as "yahoo", since that's the source whose result
- * actually decided the outcome). Crypto is priced per requested currency.
+ * attempt per ticker recording why it does or doesn't have a price. Crypto
+ * is priced per requested currency.
  */
 export async function fetchQuotesDetailed(requests: QuoteRequest[], opts: QuoteOptions = {}): Promise<QuoteBatchResult> {
   const brazilian = new Set<string>();
@@ -297,7 +288,7 @@ export async function fetchQuotesDetailed(requests: QuoteRequest[], opts: QuoteO
     if (!ticker) continue;
     const source = quoteSourceFor(ticker, r.assetClass);
     if (source === "brapi") brazilian.add(ticker);
-    else if (source === "yahoo") international.add(ticker);
+    else if (source === ALPHA_VANTAGE_SOURCE) international.add(ticker);
     else if (source === "coingecko") {
       const cur = (r.currency ?? opts.cryptoCurrency ?? "USD").toUpperCase();
       cryptoByCurrency.set(cur, (cryptoByCurrency.get(cur) ?? new Set()).add(ticker));
@@ -307,42 +298,28 @@ export async function fetchQuotesDetailed(requests: QuoteRequest[], opts: QuoteO
   }
   const [br, intl, ...crypto] = await Promise.all([
     fetchBrazilianQuotesDetailed([...brazilian]),
-    fetchYahooQuotesDetailed([...international]),
+    fetchAlphaVantageQuotesDetailed([...international]),
     ...[...cryptoByCurrency].map(([cur, tickers]) => fetchCryptoQuotesDetailed([...tickers], cur)),
   ]);
-  const missing = [...brazilian].filter((t) => !br.quotes[t]);
-  let fallback: QuoteBatchResult = { quotes: {}, attempts: [] };
-  if (missing.length) {
-    const sa = await fetchYahooQuotesDetailed(missing.map((t) => `${t}.SA`));
-    const quotes: Record<string, Quote> = {};
-    for (const [key, quote] of Object.entries(sa.quotes)) {
-      const ticker = key.replace(/\.SA$/i, "");
-      quotes[ticker] = { ...quote, ticker };
-    }
-    const attempts = sa.attempts.map((a) => ({ ...a, ticker: a.ticker.replace(/\.SA$/i, "") }));
-    fallback = { quotes, attempts };
-  }
-  // The B3 attempt for a ticker brapi missed is replaced by the fallback's, so one attempt speaks for each ticker.
-  const fallbackTickers = new Set(fallback.attempts.map((a) => a.ticker));
-  const brAttempts = br.attempts.filter((a) => !fallbackTickers.has(a.ticker));
   return {
-    quotes: { ...Object.fromEntries(crypto.flatMap((c) => Object.entries(c.quotes))), ...br.quotes, ...fallback.quotes, ...intl.quotes },
-    attempts: mergeAttempts(noSource, crypto.flatMap((c) => c.attempts), brAttempts, fallback.attempts, intl.attempts),
+    quotes: { ...Object.fromEntries(crypto.flatMap((c) => Object.entries(c.quotes))), ...br.quotes, ...intl.quotes },
+    attempts: mergeAttempts(noSource, crypto.flatMap((c) => c.attempts), br.attempts, intl.attempts),
   };
 }
 
 /**
- * Quotes for the requested tickers, keyed by upper-case ticker. B3 tickers
- * brapi misses are retried on Yahoo as "<ticker>.SA". Crypto is priced per
- * requested currency. See fetchQuotesDetailed for *why* a ticker is missing.
+ * Quotes for the requested tickers, keyed by upper-case ticker. Crypto is
+ * priced per requested currency. See fetchQuotesDetailed for *why* a ticker
+ * is missing.
  */
 export async function fetchQuotes(requests: QuoteRequest[], opts: QuoteOptions = {}): Promise<Record<string, Quote>> {
   return (await fetchQuotesDetailed(requests, opts)).quotes;
 }
 
 /**
- * Assets matching `q` from brapi (B3), Yahoo (international stocks and ETFs)
- * and the supported coins, de-duplicated by ticker, at most `limit`.
+ * Assets matching `q` from brapi (B3) and the supported coins, de-duplicated
+ * by ticker, at most `limit`. Alpha Vantage has no search call: a lookup
+ * would spend the free tier's 25 requests/day that the daily close needs.
  */
 export async function searchAssets(q: string, opts: QuoteOptions & { limit?: number } = {}): Promise<AssetSearchResult[]> {
   const query = q.trim();
@@ -352,7 +329,7 @@ export async function searchAssets(q: string, opts: QuoteOptions & { limit?: num
     (s) => s.startsWith(upper) || CRYPTO_NAMES[s]!.toUpperCase().includes(upper) || CRYPTO_SYMBOL_TO_COINGECKO_ID[s]!.toUpperCase().includes(upper),
   );
   const cryptoCurrency = (opts.cryptoCurrency ?? "USD").toUpperCase();
-  const [b3, intl, coinPrices] = await Promise.all([searchBrapi(query), searchYahoo(query), fetchCryptoQuotes(coins, cryptoCurrency)]);
+  const [b3, coinPrices] = await Promise.all([searchBrapi(query), fetchCryptoQuotes(coins, cryptoCurrency)]);
   const crypto: AssetSearchResult[] = coins.map((s) => ({
     ticker: s,
     name: CRYPTO_NAMES[s]!,
@@ -364,7 +341,7 @@ export async function searchAssets(q: string, opts: QuoteOptions & { limit?: num
   const seen = new Set<string>();
   const out: AssetSearchResult[] = [];
   // Exact ticker matches first, then each source's own order.
-  const all = [...b3, ...intl, ...crypto];
+  const all = [...b3, ...crypto];
   for (const r of [...all.filter((r) => r.ticker === upper), ...all]) {
     if (seen.has(r.ticker)) continue;
     seen.add(r.ticker);

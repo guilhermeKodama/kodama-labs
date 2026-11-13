@@ -48,7 +48,7 @@ describe("update-prices cron", () => {
       updated: 0,
       failed: 0,
       missing: [],
-      bySource: { coingecko: 0, brapi: 0, yahoo: 0 },
+      bySource: { coingecko: 0, brapi: 0, alpha_vantage: 0 },
       issues: [
         { holdingId: "h1", ticker: null, reason: "no_ticker" },
         { holdingId: "h2", ticker: "CDB", reason: "no_source" },
@@ -68,7 +68,7 @@ describe("update-prices cron", () => {
       updated: 0,
       failed: 0,
       missing: ["ZZZZ9"],
-      bySource: { coingecko: 0, brapi: 0, yahoo: 0 },
+      bySource: { coingecko: 0, brapi: 0, alpha_vantage: 0 },
       issues: [{ holdingId: "h1", ticker: "ZZZZ9", reason: "not_found" }],
       latestQuoteAt: null,
     });
@@ -83,7 +83,7 @@ describe("update-prices cron", () => {
       updated: 1,
       failed: 0,
       missing: ["ZZZZ9"],
-      bySource: { coingecko: 0, brapi: 1, yahoo: 0 },
+      bySource: { coingecko: 0, brapi: 1, alpha_vantage: 0 },
       issues: [{ holdingId: "h2", ticker: "ZZZZ9", reason: "not_found" }],
       latestQuoteAt: "2026-10-05T17:32:00.000Z",
     });
@@ -99,7 +99,7 @@ describe("update-prices cron", () => {
       updated: 1,
       failed: 0,
       missing: [],
-      bySource: { coingecko: 0, brapi: 1, yahoo: 0 },
+      bySource: { coingecko: 0, brapi: 1, alpha_vantage: 0 },
       issues: [],
       latestQuoteAt: "2026-10-05T17:32:00.000Z",
     });
@@ -198,7 +198,7 @@ describe("sync-prices cron", () => {
       priced: 1,
       suspect: 1,
       missing: 0,
-      bySource: { brapi: 1, yahoo: 1 },
+      bySource: { brapi: 1, alpha_vantage: 1 },
       providerLatestDate: new Date("2026-11-10T00:00:00Z"),
       issues: [],
     });
@@ -224,8 +224,8 @@ describe("portfolio-snapshot cron", () => {
 });
 
 describe("market-close pipeline", () => {
-  const syncOk = { requested: 2, priced: 2, suspect: 0, missing: 0, bySource: { yahoo: 2 }, providerLatestDate: new Date("2026-11-10T00:00:00Z"), issues: [] };
-  const updateOk = { totalHoldings: 2, updated: 2, failed: 0, missing: [], bySource: { yahoo: 2 }, issues: [], latestQuoteAt: "2026-11-10T20:07:00.000Z" };
+  const syncOk = { requested: 2, priced: 2, suspect: 0, missing: 0, bySource: { alpha_vantage: 2 }, providerLatestDate: new Date("2026-11-10T00:00:00Z"), issues: [] };
+  const updateOk = { totalHoldings: 2, updated: 2, failed: 0, missing: [], bySource: { alpha_vantage: 2 }, issues: [], latestQuoteAt: "2026-11-10T20:07:00.000Z" };
 
   it("refuses a request without the secret, running no stage", async () => {
     services.syncPrices.mockClear();
@@ -253,7 +253,7 @@ describe("market-close pipeline", () => {
   });
 
   it("keeps going after a failed stage and answers 503 with the worst status", async () => {
-    services.syncPrices.mockResolvedValueOnce({ ...syncOk, priced: 0, missing: 2, issues: [{ assetId: "a", symbol: "X", outcome: "provider_down", source: "yahoo" }] });
+    services.syncPrices.mockResolvedValueOnce({ ...syncOk, priced: 0, missing: 2, issues: [{ assetId: "a", symbol: "X", outcome: "provider_down", source: "alpha_vantage" }] });
     services.updateAllPrices.mockResolvedValueOnce(updateOk);
     const res = await marketClose(request("market-close", env.CRON_SECRET));
     expect(res.status).toBe(503);

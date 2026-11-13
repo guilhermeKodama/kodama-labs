@@ -12,7 +12,7 @@ Never `down`, never `-v`, never `prune`. Do not print any secret.
 
 ## What applies itself
 
-- **Migrations.** `capital-migrate` runs `prisma migrate deploy` on `up`: `20261110130000_add_integration_run`, `20261111120000_add_asset_market_data`, `20261111150000_add_asset_stale_notification`, `20261112120000_market_data_sessions`.
+- **Migrations.** `capital-migrate` runs `prisma migrate deploy` on `up`: `20261110130000_add_integration_run`, `20261111120000_add_asset_market_data`, `20261111150000_add_asset_stale_notification`, `20261112120000_market_data_sessions`, `20261113120000_alpha_vantage_source` (Yahoo source refs become Alpha Vantage; Yahoo-only `etf` holdings become `international_etf`).
 - **Schedule.** `infrastructure/cronjobs/schedules/capital.json` now calls `/api/cron/market-close` at 22:30 UTC (19:30 in São Paulo), which runs `sync-prices`, `update-prices` and `portfolio-snapshot` in that order. The three old entries are gone; their routes still answer for a manual rerun.
 - **Monitoring.** The provisioner adds the `kodama/cron-capital-api-cron-market-close` push monitor and deletes the three old ones (it owns every `kodama/` name).
 
@@ -42,7 +42,9 @@ Never `down`, never `-v`, never `prune`. Do not print any secret.
 
 ## Optional: brapi token
 
-Without `BRAPI_TOKEN`, B3 is priced by Yahoo (`<ticker>.SA`) and brapi.dev is the fallback; Ajustes › Dados › Saúde dos dados shows "brapi sem token". With a free token (https://brapi.dev/dashboard), brapi leads for B3.
+Without `BRAPI_TOKEN`, brapi.dev only answers its demo tickers and Ajustes › Dados › Saúde dos dados shows "brapi sem token". B3 has no other source. With a free token (https://brapi.dev/dashboard), the same brapi source prices the rest of B3.
+
+International stocks and ETFs are Alpha Vantage (`ALPHA_VANTAGE_API_KEY` in this same file). `capital-web` loads it through `env_file: apps/capital/.env.production`, the same way it loads `BRAPI_TOKEN`. The cron runner only calls `capital-web` over HTTP and does not receive either key. Replacing Yahoo does not change the cron schedule: after `capital-migrate` applies `20261113120000_alpha_vantage_source`, recreate `capital-web` so it reloads `.env.production`. `cronjobs` does not need a restart for that change.
 
 1. On `kodama-ai`, add the line `BRAPI_TOKEN=<token>` to `~/Documents/Github/kodama-labs/apps/capital/.env.production`. Do not paste the token anywhere else.
 2. Recreate the web container so it reads the new environment. `restart` keeps the old environment and is not enough:
