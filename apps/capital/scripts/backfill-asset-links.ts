@@ -1,7 +1,7 @@
 /**
  * One-off backfill linking existing holdings to the global Asset/AssetPrice
  * layer (F1a): for every unlinked holding with a ticker, resolveAsset()
- * finds or creates its Asset (and the brapi/Yahoo/CoinGecko source refs
+ * finds or creates its Asset (and the brapi/Alpha Vantage/CoinGecko source refs
  * that price it) and the holding gets assetId + priceSource="auto".
  *
  *   pnpm exec tsx --env-file=.env scripts/backfill-asset-links.ts [--dry-run] [--user <userId>]

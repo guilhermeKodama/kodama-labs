@@ -1,16 +1,5 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
-const yahoo = vi.hoisted(() => ({
-  quote: vi.fn(async (ticker: string) => (ticker === "VOO" ? { regularMarketPrice: 500.5, currency: "USD", regularMarketTime: new Date("2026-10-05T17:32:00Z") } : undefined)),
-  search: vi.fn(async () => ({ quotes: [] })),
-}));
-vi.mock("yahoo-finance2", () => ({
-  default: class {
-    quote = yahoo.quote;
-    search = yahoo.search;
-  },
-}));
-
 import { prisma } from "@capital/server/lib/prisma";
 import { createApp } from "@capital/server/lib/create-app";
 import { accountBalances } from "@capital/server/modules/ledger/services/accounts";
@@ -244,7 +233,9 @@ describe("market data", () => {
         ? { results: [{ symbol: "PETR4", regularMarketPrice: 38.2, currency: "BRL", regularMarketTime: "2026-10-05T17:32:00.000Z" }] }
         : url.startsWith("https://api.coingecko.com/")
           ? { bitcoin: { brl: 342100, last_updated_at: 1791222720 } }
-          : {};
+          : url.startsWith("https://www.alphavantage.co/query")
+            ? { "Global Quote": { "05. price": "500.5000", "07. latest trading day": "2026-10-05" } }
+            : {};
     return new Response(JSON.stringify(body), { status: 200, headers: { "content-type": "application/json" } });
   });
   beforeEach(() => vi.stubGlobal("fetch", fetchMock));
@@ -258,7 +249,7 @@ describe("market data", () => {
     const r = await json("GET", "/v2/quotes?tickers=PETR4,voo,BTC,NOPE3");
     expect(r.quotes.map((q: { ticker: string; price: number; currency: string; source: string }) => [q.ticker, q.price, q.currency, q.source])).toEqual([
       ["PETR4", 38.2, "BRL", "brapi"],
-      ["VOO", 500.5, "USD", "yahoo"],
+      ["VOO", 500.5, "USD", "alpha_vantage"],
       ["BTC", 342100, "BRL", "coingecko"],
     ]);
     expect(r.missing).toEqual(["NOPE3"]);

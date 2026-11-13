@@ -173,14 +173,14 @@ describe("searchAssetsFor", () => {
     quotes.searchAssets.mockResolvedValue([
       { ticker: "PETR4", name: "Petrobras PN", assetClass: "stocks", currency: "BRL", price: 40, source: "brapi" },
       { ticker: "PETZ3", name: "Petz", assetClass: "stocks", currency: "BRL", price: 12, source: "brapi" },
-      { ticker: "VOO", name: "Vanguard", assetClass: "international_etf", currency: "USD", price: 500, source: "yahoo" },
+      { ticker: "VOO", name: "Vanguard", assetClass: "international_etf", currency: "USD", price: 500, source: "alpha_vantage" },
     ]);
     const { results } = await searchAssetsFor(USER, "pe", prisma, { limit: 3 });
     expect(quotes.searchAssets).toHaveBeenCalledWith("pe", expect.objectContaining({ cryptoCurrency: "BRL", limit: 3 }));
     expect(results.map((r) => [r.ticker, r.source, r.allocationClass, r.holdingId === null])).toEqual([
       ["PETR4", "holding", "br_stocks", false],
       ["PETZ3", "brapi", "br_stocks", true],
-      ["VOO", "yahoo", "international", true],
+      ["VOO", "alpha_vantage", "international", true],
     ]);
     expect(results[1]).toMatchObject({ price: 12, priceAsOf: null, accountId: null, accountName: null });
   });

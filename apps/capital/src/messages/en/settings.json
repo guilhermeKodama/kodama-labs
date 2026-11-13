@@ -412,7 +412,7 @@
       "skipped": "Nothing to do"
     },
     "notice": {
-      "brapi_no_token": "brapi has no token: B3 is priced by Yahoo, with brapi as the fallback"
+      "brapi_no_token": "brapi has no token: brapi only answers its demo tickers"
     },
     "classesTitle": "Coverage by class",
     "classesHeaders": {
@@ -425,7 +425,7 @@
     },
     "source": {
       "brapi": "brapi.dev",
-      "yahoo": "Yahoo Finance",
+      "alpha_vantage": "Alpha Vantage",
       "coingecko": "CoinGecko"
     },
     "staleBadge": "{count, plural, one {# stale position} other {# stale positions}} ({sessions} or more missed closes)",

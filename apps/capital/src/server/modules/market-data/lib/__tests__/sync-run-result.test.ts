@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { SyncPricesResult } from "../../services/sync-prices";
 import { syncRunResult } from "../sync-run-result";
 
-const base: SyncPricesResult = { requested: 4, priced: 3, suspect: 0, missing: 1, bySource: { yahoo: 3 }, providerLatestDate: new Date("2026-11-10T00:00:00Z"), issues: [] };
+const base: SyncPricesResult = { requested: 4, priced: 3, suspect: 0, missing: 1, bySource: { alpha_vantage: 3 }, providerLatestDate: new Date("2026-11-10T00:00:00Z"), issues: [] };
 
 describe("syncRunResult", () => {
   it("is skipped when nothing was requested", () => {
@@ -27,8 +27,8 @@ describe("syncRunResult", () => {
       suspect: 1,
       missing: 2,
       issues: [
-        { assetId: "a", symbol: "A", outcome: "rejected", source: "yahoo", error: "moeda" },
-        { assetId: "b", symbol: "B", outcome: "not_found", source: "yahoo" },
+        { assetId: "a", symbol: "A", outcome: "rejected", source: "alpha_vantage", error: "moeda" },
+        { assetId: "b", symbol: "B", outcome: "not_found", source: "alpha_vantage" },
       ],
     });
     expect(result).toMatchObject({
@@ -37,7 +37,7 @@ describe("syncRunResult", () => {
       missing: 2,
       rejected: 1,
       providerLatestDate: new Date("2026-11-10T00:00:00Z"),
-      stats: { bySource: { yahoo: 3 }, suspect: 1 },
+      stats: { bySource: { alpha_vantage: 3 }, suspect: 1 },
     });
     expect(result.body).toMatchObject({ message: "Synced prices for 3/5 assets", priced: 2, suspect: 1 });
   });

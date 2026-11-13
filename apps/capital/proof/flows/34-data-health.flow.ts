@@ -3,8 +3,8 @@ import { settingsNav } from "../helpers";
 
 /**
  * F1: the global Asset/AssetPrice layer behind each holding's price, the
- * "Saúde dos dados" panel that shows per-class coverage (brapi/Yahoo/
- * CoinGecko, none of this hand-picked — chainFor() reads the registry),
+ * "Saúde dos dados" panel that shows per-class coverage (brapi/Alpha
+ * Vantage/CoinGecko, none of this hand-picked — chainFor() reads the registry),
  * and scripts/backfill-asset-links.ts, the tool that actually links a
  * holding to its Asset.
  *
@@ -17,7 +17,7 @@ import { settingsNav } from "../helpers";
 const STALE_FII = "KNRI11";
 // Ten calendar days back is always at least two missed B3 sessions, whatever day the flow runs.
 const STALE_DAYS = 10;
-// A B3 stock: the backfill script should link it to brapi/Yahoo.
+// A B3 stock: the backfill script should link it to brapi.
 const LINKABLE = "WEGE3";
 // Fixed income has no automatic source yet — the backfill script must leave it alone.
 const UNLINKABLE = "LCA";
@@ -46,15 +46,16 @@ flow("Saúde dos dados: per-class coverage, and the backfill script linking a ho
 
   await page.goto("/settings");
   await settingsNav(page, "Saúde dos dados").click();
-  await check("Without BRAPI_TOKEN, Yahoo leads for B3 (brapi stays as the fallback); every other class names its source, or none", async () => {
-    await expect(row(page, "Ações").getByRole("cell", { name: "Yahoo Finance" })).toBeVisible();
-    await expect(row(page, "FIIs").getByRole("cell", { name: "Yahoo Finance" })).toBeVisible();
-    await expect(row(page, "Ações internacionais").getByRole("cell", { name: "Yahoo Finance" })).toBeVisible();
+  await check("B3 is brapi even without a token; international listings are Alpha Vantage; classes with no source say so", async () => {
+    await expect(row(page, "Ações").getByRole("cell", { name: "brapi.dev" })).toBeVisible();
+    await expect(row(page, "FIIs").getByRole("cell", { name: "brapi.dev" })).toBeVisible();
+    await expect(row(page, "Ações internacionais").getByRole("cell", { name: "Alpha Vantage" })).toBeVisible();
+    await expect(row(page, "ETFs internacionais").getByRole("cell", { name: "Alpha Vantage" })).toBeVisible();
     await expect(row(page, "Cripto").getByRole("cell", { name: "CoinGecko" })).toBeVisible();
     await expect(row(page, "Renda fixa").getByRole("cell", { name: "—", exact: true })).toBeVisible();
   });
-  await check("The panel says why: brapi has no token here", async () => {
-    await expect(page.getByText("brapi sem token: a B3 é cotada pelo Yahoo, com a brapi de reserva")).toBeVisible();
+  await check("The panel says why: brapi has no token here, so only its demo tickers answer", async () => {
+    await expect(page.getByText("brapi sem token: a brapi só responde os tickers de demonstração")).toBeVisible();
   });
   await check("Every stage of the daily market-close pipeline is listed: sync-prices, update-prices and the portfolio snapshot", async () => {
     await expect(row(page, "Sincronizar cotações").getByRole("cell", { name: "Ok" })).toBeVisible();
@@ -92,7 +93,7 @@ flow("Saúde dos dados: per-class coverage, and the backfill script linking a ho
     expect(dryRun.output).toContain("dry run, nothing written");
   });
 
-  await say("For real: it creates the Asset (and its brapi/Yahoo source refs) and links the holding");
+  await say("For real: it creates the Asset and its brapi source ref, and links the holding");
   const run = await terminal("bash", ["-c", `set -o pipefail; pnpm exec tsx scripts/backfill-asset-links.ts | grep -v '^prisma:'`]);
   await check("It reports linking for real this time", async () => {
     expect(run.code).toBe(0);
@@ -111,9 +112,8 @@ flow("Saúde dos dados: per-class coverage, and the backfill script linking a ho
     "-c",
     `psql "$DATABASE_URL" -t -A -F'|' -c "SELECT source, \\"externalId\\" FROM asset_source_refs r JOIN assets a ON a.id = r.\\"assetId\\" WHERE a.symbol = '${LINKABLE}' ORDER BY source;"`,
   ]);
-  await check(`${LINKABLE} got both the brapi and the Yahoo ".SA" fallback source refs, in one script run`, async () => {
-    expect(refs.output).toContain(`brapi|${LINKABLE}`);
-    expect(refs.output).toContain(`yahoo|${LINKABLE}.SA`);
+  await check(`${LINKABLE} got the brapi source ref, and no other, in one script run`, async () => {
+    expect(refs.output.trim()).toBe(`brapi|${LINKABLE}`);
   });
 
   // IntegrationRun has no per-test namespace (same reason market-data-crons.test.ts

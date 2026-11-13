@@ -106,7 +106,7 @@ describe("updateAllPrices", () => {
 
     await linkAndPrice(stock.id, `ZZUPDPETR4`, "stocks", "BRL", 40.5, "2026-11-09", "brapi");
     await linkAndPrice(crypto.id, "ZZUPDBTC", "crypto", "BRL", 342100, "2026-11-10", "coingecko");
-    await linkAndPrice(mismatched.id, "ZZUPDFOO", "international_stocks", "EUR", 10, "2026-11-10", "yahoo");
+    await linkAndPrice(mismatched.id, "ZZUPDFOO", "international_stocks", "EUR", 10, "2026-11-10", "alpha_vantage");
 
     const result = await updateAllPrices(prisma, { userId: USER });
 

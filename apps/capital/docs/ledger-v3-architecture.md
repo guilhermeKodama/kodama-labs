@@ -62,7 +62,7 @@ Referências seguidas: os guias de ledger da Modern Treasury (contas, transaçõ
 enum EntityKind  { personal business }
 enum AccountType { asset liability equity income expense }
 enum AccountKind { bank cash credit_card brokerage savings other }   // só contas patrimoniais
-enum PriceSource { manual ptax ecb brapi yahoo coingecko }
+enum PriceSource { manual ptax ecb brapi alpha_vantage coingecko }
 
 model Entity {
   id        String     @id @default(uuid())
@@ -321,7 +321,7 @@ erDiagram
 | `AccountType` | ~ passa a ser asset, liability, equity, income, expense |
 | `AccountKind` | + bank, cash, credit_card, brokerage, savings, other |
 | `EntityKind` | + personal, business |
-| `PriceSource` | + manual, ptax, ecb, brapi, yahoo, coingecko |
+| `PriceSource` | + manual, ptax, ecb, brapi, alpha_vantage, coingecko |
 | `LedgerKind`, `TransferDirection`, `InvestmentTransactionType`, `AdjustmentMode`, `CategoryType` | − saem |
 
 **Também saem:**

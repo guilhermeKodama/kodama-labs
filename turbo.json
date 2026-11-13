@@ -13,6 +13,7 @@
         "ANTHROPIC_API_KEY",
         "TRANSPARENCIA_API_KEY",
         "BRAPI_TOKEN",
+        "ALPHA_VANTAGE_API_KEY",
         "NEXT_PUBLIC_APP_URL",
         "APP_URL",
         "CAPITAL_BLOB_DIR",

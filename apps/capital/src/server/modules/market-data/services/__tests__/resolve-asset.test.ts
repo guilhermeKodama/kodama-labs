@@ -11,17 +11,14 @@ afterEach(async () => {
 });
 
 describe("resolveAsset", () => {
-  it("links a B3 stock to brapi and Yahoo's .SA fallback, in BRL", async () => {
+  it("links a B3 stock to brapi, in BRL", async () => {
     const ticker = `${SYMBOL_PREFIX}PETR4`;
     const result = await resolveAsset(prisma, { ticker, assetClass: "stocks", currency: "BRL" });
     expect(result).toMatchObject({ linked: true });
     if (!result.linked) throw new Error("expected linked");
     const asset = await prisma.asset.findUniqueOrThrow({ where: { id: result.assetId }, include: { sourceRefs: true } });
     expect(asset).toMatchObject({ symbol: ticker, assetClass: "stocks", market: "B3", currency: "BRL" });
-    expect(asset.sourceRefs.map((r) => [r.source, r.externalId]).sort()).toEqual([
-      ["brapi", ticker],
-      ["yahoo", `${ticker}.SA`],
-    ]);
+    expect(asset.sourceRefs.map((r) => [r.source, r.externalId]).sort()).toEqual([["brapi", ticker]]);
   });
 
   it("never links across currencies: a B3 ticker held in USD, a US ticker held in BRL", async () => {
@@ -30,10 +27,14 @@ describe("resolveAsset", () => {
     expect(await prisma.asset.count({ where: { symbol: { in: [`${SYMBOL_PREFIX}VALE3`, `${SYMBOL_PREFIX}AAPL`] } } })).toBe(0);
   });
 
-  it("trusts the holding's currency for a non-US listing (exchange suffix)", async () => {
+  it("trusts the holding's currency for a non-US listing and stores Alpha Vantage's .LON symbol", async () => {
     const ticker = `${SYMBOL_PREFIX}VWRL.L`;
     const result = await resolveAsset(prisma, { ticker, assetClass: "international_etf", currency: "GBP" });
     expect(result).toMatchObject({ linked: true });
+    if (!result.linked) throw new Error("expected linked");
+    const asset = await prisma.asset.findUniqueOrThrow({ where: { id: result.assetId }, include: { sourceRefs: true } });
+    expect(asset).toMatchObject({ currency: "GBP" });
+    expect(asset.sourceRefs).toEqual([expect.objectContaining({ source: "alpha_vantage", externalId: `${SYMBOL_PREFIX}VWRL.LON` })]);
   });
 
   it("links one instrument held under two classes to a single Asset", async () => {
@@ -57,7 +58,7 @@ describe("resolveAsset", () => {
     if (!intl.linked) throw new Error("expected linked");
     const asset = await prisma.asset.findUniqueOrThrow({ where: { id: intl.assetId }, include: { sourceRefs: true } });
     expect(asset).toMatchObject({ currency: "USD" });
-    expect(asset.sourceRefs).toEqual([expect.objectContaining({ source: "yahoo", externalId: usTicker })]);
+    expect(asset.sourceRefs).toEqual([expect.objectContaining({ source: "alpha_vantage", externalId: usTicker })]);
   });
 
   it("links a supported crypto to coingecko, keyed by the holding's currency", async () => {
@@ -127,9 +128,9 @@ describe("resolveAsset", () => {
     const ticker = `${SYMBOL_PREFIX}WEGE3`;
     const first = await resolveAsset(prisma, { ticker, assetClass: "stocks", currency: "BRL" });
     if (!first.linked) throw new Error("expected linked");
-    await prisma.assetSourceRef.update({ where: { assetId_source: { assetId: first.assetId, source: "yahoo" } }, data: { externalId: "stale" } });
+    await prisma.assetSourceRef.update({ where: { assetId_source: { assetId: first.assetId, source: "brapi" } }, data: { externalId: "stale" } });
     await resolveAsset(prisma, { ticker, assetClass: "stocks", currency: "BRL" });
-    expect(await prisma.assetSourceRef.findUniqueOrThrow({ where: { assetId_source: { assetId: first.assetId, source: "yahoo" } } })).toMatchObject({ externalId: `${ticker}.SA` });
+    expect(await prisma.assetSourceRef.findUniqueOrThrow({ where: { assetId_source: { assetId: first.assetId, source: "brapi" } } })).toMatchObject({ externalId: ticker });
   });
 
   it("leaves a class this resolver does not know unmatched", async () => {

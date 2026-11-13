@@ -2,8 +2,8 @@ import type { AssetClass } from "@/generated/prisma";
 import type { FetchOutcome } from "@capital/server/lib/http";
 
 /**
- * The contract every market-data source implements (brapi, Yahoo, CoinGecko
- * today; a B3 bulk file or anything else later). The domain — sync-prices,
+ * The contract every market-data source implements (brapi, Alpha Vantage,
+ * CoinGecko today; a B3 bulk file or anything else later). The domain — sync-prices,
  * resolve-asset, the asset search — only ever calls through this, via
  * registry.ts's chainFor(); a vendor name shows up nowhere outside
  * providers/*.ts and the `source` column on AssetSourceRef/AssetPrice.

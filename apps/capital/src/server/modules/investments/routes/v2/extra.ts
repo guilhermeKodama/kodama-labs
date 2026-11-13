@@ -92,7 +92,7 @@ const quotesRoute = createRoute({
   method: "get",
   path: "/v2/quotes",
   tags,
-  summary: "Current market quotes (brapi, Yahoo Finance, CoinGecko) for up to 20 comma-separated tickers",
+  summary: "Current market quotes (brapi, Alpha Vantage, CoinGecko) for up to 20 comma-separated tickers",
   request: {
     query: z.object({
       tickers: z

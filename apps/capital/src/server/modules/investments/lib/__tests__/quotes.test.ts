@@ -1,30 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const yahoo = vi.hoisted(() => ({
-  quote: vi.fn(async (ticker: string) => {
-    const prices: Record<string, { regularMarketPrice: number; currency: string }> = {
-      VOO: { regularMarketPrice: 500.5, currency: "USD" },
-      "KNRI11.SA": { regularMarketPrice: 141.6, currency: "BRL" },
-      QQQM: { regularMarketPrice: 210, currency: "USD" },
-    };
-    return prices[ticker] ? { ...prices[ticker], regularMarketTime: new Date("2026-10-05T17:32:00Z") } : undefined;
-  }),
-  search: vi.fn(async () => ({
-    quotes: [
-      { symbol: "QQQM", shortname: "Invesco NASDAQ 100 ETF", quoteType: "ETF" },
-      { symbol: "QQQ.SA", shortname: "Something on B3", quoteType: "EQUITY" },
-      { symbol: "QQQX", shortname: "A fund", quoteType: "MUTUALFUND" },
-    ],
-  })),
-}));
-
-vi.mock("yahoo-finance2", () => ({
-  default: class {
-    quote = yahoo.quote;
-    search = yahoo.search;
-  },
-}));
-
 import { brapiAssetClass, fetchQuotes, fetchQuotesDetailed, quoteSourceFor, searchAssets } from "../quotes";
 
 function json(body: unknown, status = 200) {
@@ -43,12 +18,17 @@ async function defaultFetchImpl(input: string | URL | Request): Promise<Response
     });
   }
   if (url.startsWith("https://brapi.dev/api/quote/")) {
-    // KNRI11 is missing on brapi: Yahoo ".SA" fills it in.
+    // Only PETR4 is in this fixture. Anything else is not_found.
     return json({ results: [{ symbol: "PETR4", regularMarketPrice: 38.2, currency: "BRL", regularMarketTime: "2026-10-05T17:32:00.000Z" }] });
   }
   if (url.startsWith("https://api.coingecko.com/api/v3/simple/price")) {
     expect(url).toContain("vs_currencies=brl");
     return json({ bitcoin: { brl: 342100, last_updated_at: 1791222720 } });
+  }
+  if (url.startsWith("https://www.alphavantage.co/query")) {
+    const symbol = new URL(url).searchParams.get("symbol");
+    if (symbol === "VOO") return json({ "Global Quote": { "05. price": "500.5000", "07. latest trading day": "2026-10-05" } });
+    return json({ "Global Quote": {} });
   }
   return json({}, 404);
 }
@@ -71,23 +51,23 @@ describe("quoteSourceFor", () => {
   it("follows the holding's asset class, else the ticker's shape", () => {
     expect(quoteSourceFor("BTC")).toBe("coingecko");
     expect(quoteSourceFor("PETR4")).toBe("brapi");
-    expect(quoteSourceFor("VOO")).toBe("yahoo");
+    expect(quoteSourceFor("VOO")).toBe("alpha_vantage");
     expect(quoteSourceFor("IVVB11", "etf")).toBe("brapi");
-    expect(quoteSourceFor("AAPL", "international_stocks")).toBe("yahoo");
+    expect(quoteSourceFor("AAPL", "international_stocks")).toBe("alpha_vantage");
     expect(quoteSourceFor("CDB", "fixed_income")).toBeNull();
     expect(quoteSourceFor("SHIB", "crypto")).toBeNull();
   });
 });
 
 describe("fetchQuotes", () => {
-  it("prices B3, international and crypto tickers, with Yahoo .SA as the B3 fallback", async () => {
+  it("prices B3, international and crypto tickers", async () => {
     const quotes = await fetchQuotes(
       [{ ticker: "petr4" }, { ticker: "KNRI11", assetClass: "fii" }, { ticker: "VOO" }, { ticker: "BTC", currency: "BRL" }, { ticker: "NOPE3" }],
       { cryptoCurrency: "BRL" }
     );
     expect(quotes.PETR4).toEqual({ ticker: "PETR4", price: 38.2, currency: "BRL", source: "brapi", asOf: "2026-10-05T17:32:00.000Z" });
-    expect(quotes.KNRI11).toMatchObject({ ticker: "KNRI11", price: 141.6, currency: "BRL", source: "yahoo" });
-    expect(quotes.VOO).toMatchObject({ price: 500.5, currency: "USD", source: "yahoo", asOf: "2026-10-05T17:32:00.000Z" });
+    expect(quotes.KNRI11).toBeUndefined();
+    expect(quotes.VOO).toMatchObject({ price: 500.5, currency: "USD", source: "alpha_vantage", asOf: null });
     expect(quotes.BTC).toMatchObject({ price: 342100, currency: "BRL", source: "coingecko" });
     expect(quotes.BTC.asOf).not.toBeNull();
     expect(quotes.NOPE3).toBeUndefined();
@@ -97,11 +77,12 @@ describe("fetchQuotes", () => {
     fetchMock.mockImplementation(async (input) => {
       const url = String(input instanceof Request ? input.url : input);
       if (url.startsWith("https://brapi.dev/api/quote/")) throw new Error("network down");
+      if (url.startsWith("https://www.alphavantage.co/query")) return json({ "Global Quote": { "05. price": "500.5000", "07. latest trading day": "2026-10-05" } });
       return json({}, 404);
     });
     const quotes = await fetchQuotes([{ ticker: "PETR4" }, { ticker: "VOO" }]);
     expect(quotes.PETR4).toBeUndefined();
-    expect(quotes.VOO).toMatchObject({ price: 500.5 });
+    expect(quotes.VOO).toMatchObject({ price: 500.5, source: "alpha_vantage" });
   });
 
   it("retries a one-off failure and still prices the ticker", async () => {
@@ -125,7 +106,7 @@ describe("fetchQuotesDetailed", () => {
     expect(attempts).toEqual(
       expect.arrayContaining([
         { ticker: "CDB", source: null, outcome: "no_source" },
-        expect.objectContaining({ ticker: "PETR4", source: "yahoo", outcome: "not_found" }),
+        expect.objectContaining({ ticker: "PETR4", source: "brapi", outcome: "provider_down" }),
       ]),
     );
   });
@@ -138,7 +119,6 @@ describe("searchAssets", () => {
       ["BOVA11", "etf", 128.4],
       ["BOVV11", "etf", 120.1],
       ["HGLG11", "fii", 158.2],
-      ["QQQM", "international_etf", 210],
     ]);
   });
 

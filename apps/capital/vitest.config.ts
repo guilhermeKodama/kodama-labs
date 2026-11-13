@@ -30,6 +30,10 @@ process.env.SIGNUP_OPEN = 'true';
 // real secret, so tests always run with a fixed one of their own.
 process.env.CRON_SECRET = 'test-cron-secret';
 
+// A fixed key so a quote test never uses a real Alpha Vantage credential
+// from .env, and so a missing key is not the reason a mocked call fails.
+process.env.ALPHA_VANTAGE_API_KEY = 'test-alpha-vantage-key';
+
 export default defineConfig({
   test: {
     globals: true,

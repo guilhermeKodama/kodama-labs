@@ -13,8 +13,8 @@ import type { MarketDataProvider } from "../provider";
  * client, …) into that state for the next call only; what "down" or
  * "malformed" means is the adapter's own test file's business, not this
  * helper's. `arrangeRateLimited` and `arrangeSchemaChanged` are optional:
- * not every provider's transport can produce every outcome (yahoo-finance2's
- * client has no 429 of its own, say) — the matching sub-test is skipped,
+ * not every provider's transport can produce every outcome — the matching
+ * sub-test is skipped,
  * never faked.
  */
 export interface ProviderContractFixtures {
