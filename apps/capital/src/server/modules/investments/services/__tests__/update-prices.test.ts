@@ -103,6 +103,21 @@ describe("refreshPricesLive", () => {
     expect(syncPricesMock.mock.calls[0]?.[1]).toEqual({ assetIds: [br.id], alphaVantageLimit: MANUAL_ALPHA_VANTAGE_LIMIT });
   });
 
+  it("still asks Alpha Vantage when the session's only ok row is an intraday quote", async () => {
+    const session = expectedLatestSession("US");
+    const voo = await holding({ assetClass: "international_etf", ticker: "ZZUPDINTRA", name: "VOO", currency: "USD" });
+    const asset = await linkAndPrice(voo.id, "ZZUPDINTRA", "international_etf", "USD", 500, session, "alpha_vantage");
+    await prisma.assetPrice.update({
+      where: { assetId_date: { assetId: asset.id, date: new Date(`${session}T00:00:00Z`) } },
+      data: { kind: "intraday", asOf: new Date(`${session}T15:00:00Z`) },
+    });
+    await prisma.assetSourceRef.create({ data: { assetId: asset.id, source: "alpha_vantage", externalId: "ZZUPDINTRA" } });
+
+    await refreshPricesLive(prisma, USER);
+
+    expect(syncPricesMock.mock.calls[0]?.[1]).toEqual({ assetIds: [asset.id], alphaVantageLimit: MANUAL_ALPHA_VANTAGE_LIMIT });
+  });
+
   it("asks Alpha Vantage for at most three stale names, oldest first", async () => {
     const dates = ["2020-01-02", "2020-02-03", "2020-03-04", "2020-04-06"];
     const ids: string[] = [];

@@ -18,9 +18,9 @@ import type { MarketDataProvider, PricePoint } from "../lib/provider";
  * alpha-vantage-budget.ts, which stops at 22. There is no retry: a second
  * attempt would spend another of the 25 and, for a dozen names, push the
  * cron past its runtime. A timeout is 5s. A 200 body with "Note" or
- * "Information" is Alpha Vantage's rate-limit signal — rate_limited, and
- * not retried — unless the text says the key is invalid or the endpoint
- * needs a premium subscription, which is unauthorized.
+ * "Information" is rate_limited, and not retried. Rate-limit wording is
+ * checked first, because the real notices also say "premium" and link
+ * /premium/. Only "invalid API key" or "premium endpoint" is unauthorized.
  *
  * GLOBAL_QUOTE has no currency. A bare US symbol, and the two USD-quoted
  * LSE UCITS listings (VUAA.LON, CNDX.LON), are USD. Any other dotted symbol
@@ -126,23 +126,36 @@ function textField(body: Record<string, unknown>, key: string): string | null {
   return typeof value === "string" && value.trim() ? value : null;
 }
 
-/** Alpha Vantage says this in a 200 body when the key is bad or the call needs a paid plan. */
+/**
+ * A throttle. Checked before the credential phrases: the real notices
+ * advertise the premium plans and link /premium/, and the per-second one
+ * also says "premium endpoints".
+ */
+function isRateLimitMessage(text: string): boolean {
+  return /rate limit|requests per day|sparingly|call frequency|per second/i.test(text);
+}
+
+/** A bad key, or a function the free key cannot call. Not the word "premium" on its own. */
 function isCredentialMessage(text: string): boolean {
-  return /api\s*key|apikey|premium/i.test(text);
+  return /invalid api key|apikey is invalid|premium endpoint/i.test(text);
 }
 
 function classifyQuote(body: unknown, status: number, symbol: string): FetchOutcome<PricePoint[]> {
   if (!isRecord(body)) return { outcome: "schema_changed", status, error: "unexpected response shape" };
   const note = textField(body, "Note") ?? textField(body, "Information");
   if (note) {
-    if (isCredentialMessage(note)) {
+    if (!isRateLimitMessage(note) && isCredentialMessage(note)) {
       console.warn(`[http] Alpha Vantage ${symbol}: rejected the key (${note.slice(0, 120)})`);
       return { outcome: "unauthorized", status };
     }
     console.warn(`[http] Alpha Vantage ${symbol}: rate limited (${note.slice(0, 120)})`);
     return { outcome: "rate_limited", status, retryAfterMs: null };
   }
-  if (textField(body, "Error Message")) return { outcome: "not_found", status };
+  const errorMessage = textField(body, "Error Message");
+  if (errorMessage) {
+    if (isCredentialMessage(errorMessage)) return { outcome: "unauthorized", status };
+    return { outcome: "not_found", status };
+  }
   if (!("Global Quote" in body)) return { outcome: "schema_changed", status, error: "missing Global Quote" };
   const quote = body["Global Quote"];
   if (!isRecord(quote)) return { outcome: "schema_changed", status, error: "Global Quote is not an object" };

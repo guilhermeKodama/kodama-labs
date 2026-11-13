@@ -236,11 +236,24 @@ export function expectedLatestSession(market: Market, now: Date = new Date()): s
   return previousSession(market, today);
 }
 
-/** An ok close whose trading date is the session we should already have. Sync skips another Alpha Vantage call when this exists. */
-export function okPriceForExpectedSession<T extends { date: Date; status: string }>(market: string, prices: readonly T[], now: Date): T | null {
+/**
+ * An ok close for the session we should already have. An intraday row for
+ * that date does not count: a refresh during the session must not make the
+ * later close job skip the asset and keep the intraday price. A row counts
+ * when its kind is "close", or when its own timestamp is already at or
+ * after the session's close.
+ */
+export function okPriceForExpectedSession<T extends { date: Date; status: string; kind?: string | null; asOf?: Date | null }>(market: string, prices: readonly T[], now: Date): T | null {
   if (market !== "B3" && market !== "US" && market !== "CRYPTO") return null;
   const expected = expectedLatestSession(market, now);
-  return prices.find((p) => p.status === "ok" && p.date.toISOString().slice(0, 10) === expected) ?? null;
+  const readyAt = closeReadyAt(market, expected).getTime();
+  return (
+    prices.find((p) => {
+      if (p.status !== "ok" || p.date.toISOString().slice(0, 10) !== expected) return false;
+      if (p.kind === "close") return true;
+      return !!p.asOf && p.asOf.getTime() >= readyAt;
+    }) ?? null
+  );
 }
 
 /** Sessions after `priceDate` up to and including `expected` — how many closes the price has missed. 0 when the price is that recent or newer. */

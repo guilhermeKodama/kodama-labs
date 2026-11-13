@@ -11,7 +11,7 @@ flow("Alpha Vantage prices a non-B3 ETF and stays inside the daily cap", async (
     "bash",
     [
       "-c",
-      "export NODE_ENV=test; pnpm exec vitest run --reporter=verbose src/server/modules/market-data/lib/__tests__/alpha-vantage-budget.test.ts src/server/modules/market-data/lib/__tests__/registry.test.ts src/server/modules/market-data/services/__tests__/resolve-asset.test.ts src/server/modules/market-data/services/__tests__/sync-prices.test.ts src/server/modules/market-data/services/__tests__/alpha-vantage-migration.test.ts src/server/modules/market-data/providers/__tests__/alpha-vantage.test.ts > /tmp/av-quota-proof.txt; status=$?; grep -E '✓|Test Files|^[[:space:]]+Tests ' /tmp/av-quota-proof.txt | grep -E 'offers brapi then Alpha Vantage for etf|routes a plain .etf. holding|prices an etf whose only ref is Alpha|does not call Alpha Vantage when the expected|converts a GBP LSE quote from pence|allows 22 calls on a UTC day|does not call Alpha Vantage once the day|Test Files|^[[:space:]]+Tests '; exit $status",
+      "export NODE_ENV=test; pnpm exec vitest run --reporter=verbose src/server/modules/market-data/lib/__tests__/alpha-vantage-budget.test.ts src/server/modules/market-data/lib/__tests__/registry.test.ts src/server/modules/market-data/services/__tests__/resolve-asset.test.ts src/server/modules/market-data/services/__tests__/sync-prices.test.ts src/server/modules/market-data/services/__tests__/alpha-vantage-migration.test.ts src/server/modules/market-data/providers/__tests__/alpha-vantage.test.ts > /tmp/av-quota-proof.txt; status=$?; grep -E '✓|Test Files|^[[:space:]]+Tests ' /tmp/av-quota-proof.txt | grep -E 'offers brapi then Alpha Vantage for etf|routes a plain .etf. holding|prices an etf whose only ref is Alpha|does not call Alpha Vantage when the expected|still calls Alpha Vantage when the session|treats the real rate-limit notices|converts a GBP LSE quote from pence|allows 22 calls on a UTC day|does not call Alpha Vantage once the day|Test Files|^[[:space:]]+Tests '; exit $status",
     ],
     { timeoutMs: 180_000 },
   );
@@ -23,8 +23,10 @@ flow("Alpha Vantage prices a non-B3 ETF and stays inside the daily cap", async (
     expect(tests.output).toContain("prices an etf whose only ref is Alpha Vantage, and does not ask brapi");
   });
 
-  await check("A fresh close is not fetched, a London quote in pounds is converted from pence, and the 23rd call of the day is refused", async () => {
+  await check("A fresh close is not fetched, an intraday quote is, a premium rate-limit notice stays rate-limited, a London quote in pounds is converted from pence, and the 23rd call of the day is refused", async () => {
     expect(tests.output).toContain("does not call Alpha Vantage when the expected session already has an ok close");
+    expect(tests.output).toContain("still calls Alpha Vantage when the session's only ok row is an intraday quote");
+    expect(tests.output).toContain("treats the real rate-limit notices as rate_limited, including the ones that mention premium, and does not retry");
     expect(tests.output).toContain("converts a GBP LSE quote from pence and rejects an LSE quote in an unknown currency");
     expect(tests.output).toContain("allows 22 calls on a UTC day and refuses the 23rd, then starts again the next day");
     expect(tests.output).toContain("does not call Alpha Vantage once the day's row is already full");

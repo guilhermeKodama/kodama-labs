@@ -36,7 +36,7 @@ import { ALPHA_VANTAGE_SOURCE, applyAlphaVantageCurrency } from "../providers/al
  */
 
 type Db = PrismaClient | Prisma.TransactionClient;
-type CachedPrice = { date: Date; status: string };
+type CachedPrice = { date: Date; status: string; kind: string; asOf: Date | null };
 type AssetWithRefs = Asset & { sourceRefs: AssetSourceRef[]; prices: CachedPrice[] };
 
 export interface SyncPricesScope {
@@ -199,7 +199,7 @@ function record(result: SyncPricesResult, outcome: AssetOutcome): void {
 export async function syncPrices(db: Db, scope: SyncPricesScope = {}): Promise<SyncPricesResult> {
   const assets = (await db.asset.findMany({
     where: { isActive: true, ...(scope.assetIds ? { id: { in: scope.assetIds } } : {}) },
-    include: { sourceRefs: true, prices: { where: { status: "ok" }, orderBy: { date: "desc" }, take: 10, select: { date: true, status: true } } },
+    include: { sourceRefs: true, prices: { where: { status: "ok" }, orderBy: { date: "desc" }, take: 10, select: { date: true, status: true, kind: true, asOf: true } } },
   })) as AssetWithRefs[];
 
   const result: SyncPricesResult = { requested: assets.length, priced: 0, suspect: 0, missing: 0, bySource: {}, providerLatestDate: null, issues: [] };

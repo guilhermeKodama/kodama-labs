@@ -12,9 +12,7 @@
 DO $$
 BEGIN
   -- An "etf" whose only vendor ref is Yahoo is an international listing
-  -- (US or UCITS). A Yahoo ".SA" ref is the old B3 fallback, not an
-  -- international listing, so it does not count. Brazilian ETFs that also
-  -- have a brapi ref stay "etf".
+  -- (US or UCITS). Brazilian ETFs also have a brapi ref and stay "etf".
   UPDATE assets a
   SET "assetClass" = 'international_etf',
       market = 'US',
@@ -22,7 +20,7 @@ BEGIN
   WHERE a."assetClass" = 'etf'
     AND EXISTS (
       SELECT 1 FROM asset_source_refs r
-      WHERE r."assetId" = a.id AND r.source = 'yahoo' AND r."externalId" !~* '\.SA$'
+      WHERE r."assetId" = a.id AND r.source = 'yahoo'
     )
     AND NOT EXISTS (
       SELECT 1 FROM asset_source_refs r
@@ -37,7 +35,7 @@ BEGIN
     AND a."assetClass" = 'international_etf'
     AND EXISTS (
       SELECT 1 FROM asset_source_refs r
-      WHERE r."assetId" = a.id AND r.source = 'yahoo' AND r."externalId" !~* '\.SA$'
+      WHERE r."assetId" = a.id AND r.source = 'yahoo'
     )
     AND NOT EXISTS (
       SELECT 1 FROM asset_source_refs r

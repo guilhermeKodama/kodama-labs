@@ -188,7 +188,7 @@ export async function refreshPricesLive(db: DbClient, userId: string): Promise<P
       where: { id: { in: [...assetIds] } },
       include: {
         sourceRefs: { select: { source: true } },
-        prices: { where: { status: "ok" }, orderBy: { date: "desc" }, take: 10, select: { date: true, status: true } },
+        prices: { where: { status: "ok" }, orderBy: { date: "desc" }, take: 10, select: { date: true, status: true, kind: true, asOf: true } },
       },
     });
     const live: string[] = [];

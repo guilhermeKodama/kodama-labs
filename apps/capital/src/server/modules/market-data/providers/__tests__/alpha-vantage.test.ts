@@ -15,6 +15,18 @@ import {
 
 const RANGE = { from: "2026-11-12", to: "2026-11-12" };
 
+/** Bodies Alpha Vantage actually returns. The rate-limit ones also say "premium" and link /premium/. */
+const DAILY_LIMIT =
+  "Thank you for using Alpha Vantage! Our standard API rate limit is 25 requests per day. Please subscribe to any of the premium plans at https://www.alphavantage.co/premium/ to instantly remove all daily rate limits.";
+const CALL_FREQUENCY =
+  "Thank you for using Alpha Vantage! Our standard API call frequency is 5 calls per minute and 500 calls per day. Please visit https://www.alphavantage.co/premium/ if you would like to target a higher API call frequency.";
+const PER_SECOND =
+  "Thank you for using Alpha Vantage! Please consider spreading out your free API requests more sparingly (1 request per second). You may subscribe to any of the premium plans at https://www.alphavantage.co/premium/ to lift the free key rate limit (25 requests per day), raise the per-second burst limit, and instantly unlock all premium endpoints";
+const PREMIUM_ENDPOINT =
+  "Thank you for using Alpha Vantage! This is a premium endpoint. You may subscribe to any of the premium plans at https://www.alphavantage.co/premium/ to instantly unlock all premium endpoints";
+const INVALID_KEY =
+  "the parameter apikey is invalid or missing. Please claim your free API key on (https://www.alphavantage.co/support/#api-key). It should take less than 20 seconds.";
+
 function json(body: unknown, status = 200, headers?: HeadersInit) {
   return new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json", ...headers } });
 }
@@ -28,7 +40,7 @@ let scenario: Scenario = "ok";
 
 const fetchMock = vi.fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>(async () => {
   if (scenario === "provider_down") throw new Error("getaddrinfo EAI_AGAIN");
-  if (scenario === "rate_limited") return json({ Note: "Thank you for using Alpha Vantage! Our standard API call frequency is 5 calls per minute and 25 calls per day." });
+  if (scenario === "rate_limited") return json({ Note: DAILY_LIMIT });
   if (scenario === "schema_changed") return json({ unexpected: true });
   if (scenario === "not_found") return json({ "Global Quote": {} });
   return json(globalQuote("500.5000"));
@@ -41,7 +53,7 @@ beforeEach(() => {
   fetchMock.mockReset();
   fetchMock.mockImplementation(async () => {
     if (scenario === "provider_down") throw new Error("getaddrinfo EAI_AGAIN");
-    if (scenario === "rate_limited") return json({ Note: "Thank you for using Alpha Vantage! Our standard API call frequency is 5 calls per minute and 25 calls per day." });
+    if (scenario === "rate_limited") return json({ Note: DAILY_LIMIT });
     if (scenario === "schema_changed") return json({ unexpected: true });
     if (scenario === "not_found") return json({ "Global Quote": {} });
     return json(globalQuote("500.5000"));
@@ -135,12 +147,14 @@ describe("alphaVantage fetchPrices", () => {
     expect(fetchMock).toHaveBeenCalledTimes(3);
   });
 
-  it("treats a Note or Information body as rate_limited and does not retry it", async () => {
-    fetchMock.mockResolvedValueOnce(json({ Note: "Thank you for using Alpha Vantage! frequency is 5 calls per minute." }));
+  it("treats the real rate-limit notices as rate_limited, including the ones that mention premium, and does not retry", async () => {
+    fetchMock.mockResolvedValueOnce(json({ Information: DAILY_LIMIT }));
     expect(await alphaVantageProvider.fetchPrices!("SPY", RANGE)).toEqual({ outcome: "rate_limited", status: 200, retryAfterMs: null });
-    fetchMock.mockResolvedValueOnce(json({ Information: "Thank you for using Alpha Vantage! Our standard API rate limit is 25 requests per day." }));
+    fetchMock.mockResolvedValueOnce(json({ Note: CALL_FREQUENCY }));
     expect(await alphaVantageProvider.fetchPrices!("SPY", RANGE)).toEqual({ outcome: "rate_limited", status: 200, retryAfterMs: null });
-    expect(fetchMock).toHaveBeenCalledTimes(2);
+    fetchMock.mockResolvedValueOnce(json({ Information: PER_SECOND }));
+    expect(await alphaVantageProvider.fetchPrices!("SPY", RANGE)).toEqual({ outcome: "rate_limited", status: 200, retryAfterMs: null });
+    expect(fetchMock).toHaveBeenCalledTimes(3);
     expect(JSON.stringify((console.warn as unknown as { mock: { calls: unknown[] } }).mock.calls)).not.toContain("test-key");
   });
 
@@ -176,10 +190,10 @@ describe("alphaVantage fetchPrices", () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
-  it("treats a Note or Information that names an invalid key or a premium plan as unauthorized, once", async () => {
-    fetchMock.mockResolvedValueOnce(json({ Information: "Invalid API key. Please claim your free API key at alphavantage.co." }));
+  it("treats an invalid key or a premium endpoint as unauthorized, once", async () => {
+    fetchMock.mockResolvedValueOnce(json({ "Error Message": INVALID_KEY }));
     expect(await alphaVantageProvider.fetchPrices!("SPY", RANGE)).toEqual({ outcome: "unauthorized", status: 200 });
-    fetchMock.mockResolvedValueOnce(json({ Note: "This is a premium endpoint. Subscribe to any premium plan to instantly unlock." }));
+    fetchMock.mockResolvedValueOnce(json({ Information: PREMIUM_ENDPOINT }));
     expect(await alphaVantageProvider.fetchPrices!("SPY", RANGE)).toEqual({ outcome: "unauthorized", status: 200 });
     expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(JSON.stringify((console.warn as unknown as { mock: { calls: unknown[] } }).mock.calls)).not.toContain("test-key");

@@ -304,6 +304,20 @@ describe("syncPrices", () => {
     expect(await prisma.assetPrice.count({ where: { assetId: asset.id } })).toBe(1);
   });
 
+  it("still calls Alpha Vantage when the session's only ok row is an intraday quote", async () => {
+    const fetchPrices = vi.fn(async () => ok({ date: "2026-11-13", close: 11, currency: "USD" }));
+    registryMock.chainFor.mockReturnValue([stubProvider("alpha_vantage", ["international_etf"], { fetchPrices })]);
+    const asset = await createAsset(`${SYMBOL_PREFIX}INTRA`, "international_etf", "USD", [{ source: "alpha_vantage", externalId: `${SYMBOL_PREFIX}INTRA` }]);
+    await prisma.assetPrice.create({
+      data: { assetId: asset.id, date: new Date("2026-11-13T00:00:00Z"), close: 10, source: "alpha_vantage", status: "ok", kind: "intraday", asOf: new Date("2026-11-13T15:00:00Z") },
+    });
+
+    const result = await syncPrices(prisma, { assetIds: [asset.id], now: new Date("2026-11-13T22:30:00Z") });
+
+    expect(fetchPrices).toHaveBeenCalledOnce();
+    expect(result).toMatchObject({ priced: 1, bySource: { alpha_vantage: 1 } });
+  });
+
   it("still asks another source when the close is already cached", async () => {
     const fetchPrices = vi.fn(async () => ok({ date: "2026-11-13", close: 12, currency: "BRL" }));
     registryMock.chainFor.mockReturnValue([stubProvider("fixtureA", ["stocks"], { fetchPrices })]);

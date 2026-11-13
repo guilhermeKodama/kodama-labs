@@ -69,15 +69,6 @@ describe("alpha vantage source migration", () => {
             sourceRefs: { create: [{ source: "alpha_vantage", externalId: "OLD" }, { source: "yahoo", externalId: "VOO" }] },
           },
         });
-        const saOnly = await tx.asset.create({
-          data: {
-            symbol: "ZZAVSA11",
-            assetClass: "etf",
-            market: "B3",
-            currency: "BRL",
-            sourceRefs: { create: { source: "yahoo", externalId: "ZZAVSA11.SA" } },
-          },
-        });
         await tx.assetPrice.create({ data: { assetId: vuaa.id, date: new Date("2026-11-10T00:00:00Z"), close: 140, source: "yahoo", status: "ok" } });
 
         const vuaaHolding = await tx.investmentHolding.create({
@@ -92,10 +83,6 @@ describe("alpha vantage source migration", () => {
         const petrHolding = await tx.investmentHolding.create({
           data: { accountId: f.broker, assetClass: "stocks", ticker: "ZZAVPETR4", name: "PETR", currency: "BRL", assetId: petr.id },
         });
-        const saHolding = await tx.investmentHolding.create({
-          data: { accountId: f.broker, assetClass: "etf", ticker: "ZZAVSA11", name: "SA", currency: "BRL", assetId: saOnly.id },
-        });
-
         await tx.$executeRawUnsafe(migrationSql);
 
         expect(await tx.asset.findUniqueOrThrow({ where: { id: vuaa.id } })).toMatchObject({ assetClass: "international_etf", market: "US" });
@@ -107,8 +94,6 @@ describe("alpha vantage source migration", () => {
         expect(await tx.asset.findUniqueOrThrow({ where: { id: bova.id } })).toMatchObject({ assetClass: "etf", market: "B3" });
         expect(await tx.assetSourceRef.findMany({ where: { assetId: bova.id } })).toEqual([expect.objectContaining({ source: "brapi", externalId: "ZZAVBOVA11" })]);
         expect(await tx.assetSourceRef.findMany({ where: { assetId: folded.id } })).toEqual([expect.objectContaining({ source: "alpha_vantage", externalId: "VOO" })]);
-        expect(await tx.asset.findUniqueOrThrow({ where: { id: saOnly.id } })).toMatchObject({ assetClass: "etf", market: "B3" });
-        expect(await tx.assetSourceRef.count({ where: { assetId: saOnly.id } })).toBe(0);
         expect(await tx.assetPrice.findFirstOrThrow({ where: { assetId: vuaa.id } })).toMatchObject({ source: "alpha_vantage" });
 
         const vuaaAfter = await tx.investmentHolding.findUniqueOrThrow({ where: { id: vuaaHolding.id } });
@@ -117,13 +102,10 @@ describe("alpha vantage source migration", () => {
         expect((await tx.investmentHolding.findUniqueOrThrow({ where: { id: spyHolding.id } })).assetClass).toBe("international_etf");
         expect((await tx.investmentHolding.findUniqueOrThrow({ where: { id: bovaHolding.id } })).assetClass).toBe("etf");
         expect((await tx.investmentHolding.findUniqueOrThrow({ where: { id: petrHolding.id } })).assetClass).toBe("stocks");
-        const saAfter = await tx.investmentHolding.findUniqueOrThrow({ where: { id: saHolding.id } });
-        expect(saAfter.assetClass).toBe("etf");
-        expect(saAfter.updatedAt).toEqual(saHolding.updatedAt);
 
         await tx.$executeRawUnsafe(migrationSql);
         expect(await tx.assetSourceRef.findMany({ where: { assetId: vuaa.id } })).toEqual([expect.objectContaining({ source: "alpha_vantage", externalId: "VUAA.LON" })]);
-        expect(await tx.assetSourceRef.count({ where: { assetId: { in: [vuaa.id, cndx.id, spy.id, petr.id, bova.id, folded.id, saOnly.id] }, source: "yahoo" } })).toBe(0);
+        expect(await tx.assetSourceRef.count({ where: { assetId: { in: [vuaa.id, cndx.id, spy.id, petr.id, bova.id, folded.id] }, source: "yahoo" } })).toBe(0);
         expect((await tx.investmentHolding.findUniqueOrThrow({ where: { id: vuaaHolding.id } })).updatedAt).toEqual(vuaaHolding.updatedAt);
 
         throw new Rollback();
