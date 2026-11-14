@@ -220,17 +220,17 @@ describe("fixo and variável in the month summary", () => {
     expect(legend).toContain(">Gastos fixos<");
     expect(legend).toContain(">Gastos variáveis<");
     expect(legend).toContain("Gasto acumulado");
-    // Musgo, resina, heartwood ink, jacarandá, ipê. Five tokens, none repeated, and the cards use the same two.
+    // Cerne, resina, heartwood ink, jacarandá, ipê. Five tokens, none repeated, and the cards use the same two.
     // The month is running, so the two dashed projections follow, in the colors of what they continue (fixo and the cumulative line).
     const strokes = [...legend.matchAll(/stroke="([^"]+)"/g)].map((match) => match[1]);
-    expect(strokes.slice(0, 5)).toEqual(["var(--cap-chart-3)", "var(--cap-chart-2)", "var(--cap-chart-ink)", "var(--cap-chart-5)", "var(--cap-chart-warn)"]);
+    expect(strokes.slice(0, 5)).toEqual(["var(--cap-chart-1)", "var(--cap-chart-2)", "var(--cap-chart-ink)", "var(--cap-chart-5)", "var(--cap-chart-warn)"]);
     expect(new Set(strokes.slice(0, 5)).size).toBe(5);
-    expect(strokes.slice(5)).toEqual(["var(--cap-chart-3)", "var(--cap-chart-ink)"]);
+    expect(strokes.slice(5)).toEqual(["var(--cap-chart-1)", "var(--cap-chart-ink)"]);
     expect(legend).toContain(">Projeção fixo (R$ mil)<");
     expect(legend).toContain(">Projeção (R$ mil)<");
     // The projection card splits the month-end number into fixo and variável.
     expect(html.slice(html.indexOf('data-budget-kpi="projection"'))).toContain("fixo R$ 1.085 · variável R$ 900");
-    expect(html.slice(html.indexOf('data-budget-kpi="fixo"'), html.indexOf('data-budget-kpi="variavel"'))).toContain('stroke="var(--cap-chart-3)"');
+    expect(html.slice(html.indexOf('data-budget-kpi="fixo"'), html.indexOf('data-budget-kpi="variavel"'))).toContain('stroke="var(--cap-chart-1)"');
     expect(html.slice(html.indexOf('data-budget-kpi="variavel"'), html.indexOf('data-budget-kpi="remaining"'))).toContain('stroke="var(--cap-chart-2)"');
     const fixoAt = html.indexOf('data-budget-subtotal="fixo"');
     const variavelAt = html.indexOf('data-budget-subtotal="variavel"');
@@ -269,7 +269,7 @@ describe("fixo and variável in the month summary", () => {
     expect(fixoLegend).toContain(">Gastos fixos<");
     expect(fixoLegend).not.toContain(">Gastos variáveis<");
     expect(fixoLegend).toContain("Gasto acumulado");
-    expect(fixoLegend).toContain('stroke="var(--cap-chart-3)"');
+    expect(fixoLegend).toContain('stroke="var(--cap-chart-1)"');
     expect(fixoLegend).not.toContain('stroke="var(--cap-chart-2)"');
     expect(fixoLegend).toContain('stroke="var(--cap-chart-ink)"');
     const variavelAt = fixo.html.indexOf('data-budget-subtotal="variavel"');

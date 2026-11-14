@@ -77,63 +77,52 @@ const overview = {
   yearlyBudgets: [],
 } as YearOverview;
 
-function render(kind: "fixo" | "variavel" | null, variant: "a" | "b" | "c" | null): string {
+function render(kind: "fixo" | "variavel" | null): string {
   const client = new QueryClient();
-  const element: ReactElement = createElement(YearBody, { data: overview, today: { year: 2026, month: 11 }, kind, onKind: noop, onOpenMonth: noop, actions, variant });
+  const element: ReactElement = createElement(YearBody, { data: overview, today: { year: 2026, month: 11 }, kind, onKind: noop, onOpenMonth: noop, actions });
   return renderToStaticMarkup(createElement(QueryClientProvider, { client }, createElement(NextIntlClientProvider, intl, element)));
 }
 
 const count = (html: string, needle: string) => html.split(needle).length - 1;
 
-describe("the desktop alternatives behind ?dv=", () => {
-  it("leave the shipped view alone without a variant", () => {
-    const html = render(null, null);
-    expect(html).not.toContain("data-kind-cards");
-    expect(html).not.toContain("data-kind-split-inline");
-    expect(html).not.toContain("data-heat-section");
-    expect(html).not.toContain("data-stacked-chart");
-    expect(count(html, ">Gasto mensal vs orçado<")).toBe(1);
-  });
-
-  it("a: fixo and variável cards across the page, each a filter button", () => {
-    const html = render(null, "a");
-    expect(html).toContain("data-kind-cards=\"row\"");
-    expect(html).toContain("data-kind-card=\"fixo\"");
-    expect(html).toContain("data-kind-card=\"variavel\"");
+describe("the year on a desktop", () => {
+  it("puts the fixo and variável cards above a table grouped by kind, and keeps the single chart", () => {
+    const html = render(null);
+    expect(html).toContain('data-kind-cards="row"');
+    expect(html).toContain('data-kind-card="fixo"');
+    expect(html).toContain('data-kind-card="variavel"');
     expect(count(html, "50% do gasto")).toBe(2);
     expect(html).toContain("data-mini-bars");
     expect(html).toContain("var(--cap-chart-1)");
     expect(html).toContain("var(--cap-chart-2)");
-    const filtered = render("fixo", "a");
-    expect(/data-kind-card="fixo"[^>]*aria-pressed="true"/.test(filtered)).toBe(true);
-    expect(/data-kind-card="variavel"[^>]*aria-pressed="false"[^>]*opacity-50/.test(filtered)).toBe(true);
-  });
+    expect(html).not.toContain("data-kind-split-inline");
+    expect(html).not.toContain("data-stacked-chart");
+    expect(count(html, ">Gasto mensal vs orçado<")).toBe(1);
 
-  it("b: the table grouped by kind with a subtotal header, and the split in the KPI strip", () => {
-    const html = render(null, "b");
-    expect(html).toContain("data-kind-split-inline");
     expect(html).toContain("data-heat-grouped");
-    const fixo = html.indexOf("data-heat-section=\"fixo\"");
-    const variavel = html.indexOf("data-heat-section=\"variavel\"");
-    expect(fixo).toBeGreaterThan(-1);
-    expect(fixo).toBeLessThan(html.indexOf("data-budget-category=\"Moradia\""));
-    expect(html.indexOf("data-budget-category=\"Moradia\"")).toBeLessThan(variavel);
-    expect(variavel).toBeLessThan(html.indexOf("data-budget-category=\"Transporte\""));
+    const fixo = html.indexOf('data-heat-section="fixo"');
+    const variavel = html.indexOf('data-heat-section="variavel"');
+    const cards = html.indexOf('data-kind-cards="row"');
+    expect(cards).toBeGreaterThan(-1);
+    expect(cards).toBeLessThan(fixo);
+    expect(fixo).toBeLessThan(html.indexOf('data-budget-category="Moradia"'));
+    expect(html.indexOf('data-budget-category="Moradia"')).toBeLessThan(variavel);
+    expect(variavel).toBeLessThan(html.indexOf('data-budget-category="Transporte"'));
     expect(count(html, "1 categoria<")).toBe(2);
-    const head = html.slice(fixo, html.indexOf("data-budget-category=\"Moradia\""));
+    const head = html.slice(fixo, html.indexOf('data-budget-category="Moradia"'));
     expect(head).toContain("18,3k");
     expect(head).toContain("R$ 18.300");
-    const only = render("variavel", "b");
-    expect(only).not.toContain("data-heat-section=\"fixo\"");
-    expect(only).toContain("data-heat-section=\"variavel\"");
+    // The section names the kind, so the row does not repeat it.
+    const row = html.slice(html.indexOf('data-budget-category="Moradia"'), html.indexOf('data-budget-category="Transporte"'));
+    expect(row).not.toContain(">Fixo<");
   });
 
-  it("c: the chart stacked by kind beside the cards, replacing the single-series chart", () => {
-    const html = render(null, "c");
-    expect(html).toContain("data-stacked-chart");
-    expect(html).toContain("data-kind-cards=\"stack\"");
-    expect(count(html, ">Gasto mensal vs orçado<")).toBe(1);
-    const stack = html.slice(html.indexOf("data-kind-cards=\"stack\""));
-    expect(stack.slice(0, stack.indexOf("</section>"))).not.toContain("data-mini-bars");
+  it("presses the card of the active kind and hides the other section", () => {
+    const filtered = render("fixo");
+    expect(/data-kind-card="fixo"[^>]*aria-pressed="true"/.test(filtered)).toBe(true);
+    expect(/data-kind-card="variavel"[^>]*aria-pressed="false"[^>]*opacity-50/.test(filtered)).toBe(true);
+    expect(filtered).toContain('data-heat-section="fixo"');
+    expect(filtered).not.toContain('data-heat-section="variavel"');
+    expect(filtered).not.toContain('data-budget-category="Transporte"');
   });
 });

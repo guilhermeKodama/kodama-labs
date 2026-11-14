@@ -183,9 +183,7 @@
         "none": "No budget"
       },
       "sectionCount": "{count, plural, one {# category} other {# categories}}",
-      "pctOfBudget": "{pct}% of the month budget",
-      "projectedOf": "{kind} projected",
-      "chartCaption": "Month × {unit} · {year} · lighter = projection"
+      "pctOfBudget": "{pct}% of the month budget"
     }
   },
   "dialog": {

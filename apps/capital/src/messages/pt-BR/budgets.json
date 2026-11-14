@@ -183,9 +183,7 @@
         "none": "Sem orçamento"
       },
       "sectionCount": "{count, plural, one {# categoria} other {# categorias}}",
-      "pctOfBudget": "{pct}% do orçado no mês",
-      "projectedOf": "{kind} projetado",
-      "chartCaption": "Mês × {unit} · {year} · tom claro = projeção"
+      "pctOfBudget": "{pct}% do orçado no mês"
     }
   },
   "dialog": {
