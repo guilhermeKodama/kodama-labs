@@ -3,6 +3,7 @@
  * Colors come only from the theme tokens in src/app/globals.css.
  */
 export { Badge } from "./badge";
+export { BottomSheet } from "./bottom-sheet";
 export { Btn, type BtnProps } from "./btn";
 export { Callout, type CalloutTone } from "./callout";
 export { Check } from "./check";
