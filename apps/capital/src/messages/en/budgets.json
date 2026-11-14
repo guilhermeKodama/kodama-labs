@@ -172,6 +172,18 @@
       "spentTo": "Spent through {month}",
       "budgetYear": "Budgeted this year",
       "projectionYear": "Year projection"
+    },
+    "desktop": {
+      "share": "{pct}% of spend",
+      "filter": "Show only {kind}",
+      "clearFilter": "Show every type",
+      "over": "{amount} over",
+      "overMonthsSub": "of {count} category·months",
+      "section": {
+        "none": "No budget"
+      },
+      "sectionCount": "{count, plural, one {# category} other {# categories}}",
+      "pctOfBudget": "{pct}% of the month budget"
     }
   },
   "dialog": {

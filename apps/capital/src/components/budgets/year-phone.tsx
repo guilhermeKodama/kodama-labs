@@ -100,15 +100,16 @@ const BAR_FILL: Record<"actual" | "over" | "projected", CSSProperties> = {
 };
 
 /** Twelve bars of a category's months, each with a tick at its budget. The sheet says the same in words. */
-function MiniBars({ months, current }: { months: readonly PhoneMonth[]; current: number }) {
+export function MiniBars({ months, current, color }: { months: readonly PhoneMonth[]; current: number; color?: string }) {
   const fmt = useFmt();
   const bars = miniBars(months);
+  const fill = (tone: keyof typeof BAR_FILL) => (color && tone === "actual" ? { background: color } : BAR_FILL[tone]);
   return (
     <span aria-hidden data-mini-bars="" className="flex flex-col gap-1">
       <span className="grid h-9 grid-cols-12 items-end gap-[3px]">
         {bars.map((bar) => (
           <span key={bar.month} data-bar-tone={bar.tone} className="relative flex h-full items-end">
-            <span className="w-full rounded-t-[2px]" style={{ ...BAR_FILL[bar.tone], height: bar.height > 0 ? `max(2px, ${bar.height * 100}%)` : 0 }} />
+            <span className="w-full rounded-t-[2px]" style={{ ...fill(bar.tone), height: bar.height > 0 ? `max(2px, ${bar.height * 100}%)` : 0 }} />
             {bar.budgetAt !== null ? <span className="absolute inset-x-[-1px] border-t border-dashed border-fg-3" style={{ bottom: `${bar.budgetAt * 100}%` }} /> : null}
           </span>
         ))}

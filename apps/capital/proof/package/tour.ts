@@ -97,7 +97,7 @@ export const SCREENS: Screen[] = [
     open: async (page) => {
       await page.getByRole("radio", { name: "Anual" }).click();
     },
-    ready: (page) => page.locator("[data-budget-heat]"),
+    ready: (page) => page.locator("[data-kind-cards='row']"),
   },
   {
     group: "Orçamentos",
