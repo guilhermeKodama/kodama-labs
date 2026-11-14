@@ -95,7 +95,7 @@ const overviewRoute = createRoute({
   path: "/v2/budgets/overview",
   tags,
   summary:
-    "Monthly (?month=YYYY-MM: pace, projection, upcoming bills) or yearly (?year=YYYY: budget x month matrix with trends and insights) overview; scope = all | pf | pj | <entityId>; onlyBudgeted=false adds unbudgeted rows to the matrix",
+    "Monthly (?month=YYYY-MM: pace, month-end projection per row in pace.projectedTotal with pace.projectionMethod, summary.byKind.*.projected, upcoming bills) or yearly (?year=YYYY: budget x month matrix, net of reimbursements, with months[].projected, monthProjected, trends and insights; summary.spentInBudgetedMonths and budgetedMonths compare spend and budget over the same months) overview; scope = all | pf | pj | <entityId>; onlyBudgeted=false adds unbudgeted rows to the matrix",
   request: {
     query: z.object({ month: yearMonth.optional(), year: z.string().regex(/^\d{4}$/).optional(), onlyBudgeted: queryFlag.optional(), ...entityScopeQuery }),
   },

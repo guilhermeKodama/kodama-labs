@@ -1169,6 +1169,9 @@ export function createCapitalMcpServer(userId: string, db: DbClient, opts: { rea
         "(most recent budget with effectiveFrom <= month start) and compares it to actual spending. " +
         "Categories are sorted by percentUsed descending (most over-budget first). " +
         "actual and gross are the committed expense total. reimbursed is income assigned to that expense category, and net is gross minus reimbursed. " +
+        "projected is the month-end forecast, net of reimbursements, the same number the app shows: a fixed category ends at max(booked plus recurring charges still due, its expected month) " +
+        "and is never scaled by the day; a variable one adds what usually arrives after today, or the rest of its budget without history. projectionMethod says which applied. " +
+        "summary.projectedTotal and summary.projectedByKind (fixo, variavel) add them up. " +
         "kind is fixo, variavel, or null (null counts as variável).",
       inputSchema: GetBudgetStatusInputSchema,
     },

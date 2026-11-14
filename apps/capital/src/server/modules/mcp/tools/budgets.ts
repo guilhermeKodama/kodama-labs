@@ -143,6 +143,8 @@ export async function getBudgetStatus(userId: string, params: GetBudgetStatusPar
       gross: b.committed,
       reimbursed: b.reimbursedCommitted,
       net: b.netCommitted,
+      projected: b.pace.projectedTotal,
+      projectionMethod: b.pace.projectionMethod,
       remaining: Math.round((b.amount - b.committed) * 100) / 100,
       percentUsed: b.amount > 0 ? Math.round((b.committed / b.amount) * 10000) / 100 : 0,
       isOverBudget: b.committed > b.amount,
@@ -159,6 +161,8 @@ export async function getBudgetStatus(userId: string, params: GetBudgetStatusPar
       totalBudgeted: Math.round(totalBudgeted * 100) / 100,
       totalActual: Math.round(totalActual * 100) / 100,
       totalRemaining: Math.round((totalBudgeted - totalActual) * 100) / 100,
+      projectedTotal: overview.summary.projectedTotal,
+      projectedByKind: { fixo: overview.summary.byKind.fixo.projected, variavel: overview.summary.byKind.variavel.projected },
     },
     categories,
   };

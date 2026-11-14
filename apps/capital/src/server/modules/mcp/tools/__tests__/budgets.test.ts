@@ -168,6 +168,10 @@ describe("get_budget_status", () => {
     expect(r.categories.find((c) => c.category === "Shopping")?.actual).toBe(6400);
     const overview = await monthOverview(USER, 2026, 10, prisma, { entityIds: [f.pfId] });
     expect(overview.budgets.find((b) => b.category === "Shopping")?.committed).toBe(6400);
+    expect(r.categories.find((c) => c.category === "Shopping")?.projected).toBe(overview.budgets.find((b) => b.category === "Shopping")?.pace.projectedTotal);
+    expect(r.summary.projectedTotal).toBe(overview.summary.projectedTotal);
+    expect(r.summary.projectedByKind.variavel).toBe(overview.summary.byKind.variavel.projected);
+    expect(r.categories.find((c) => c.category === "Shopping")?.projectionMethod).toBe(overview.budgets.find((b) => b.category === "Shopping")?.pace.projectionMethod);
   });
 
   it("stores, lists and updates kind, and returns fixed versus variable totals", async () => {
