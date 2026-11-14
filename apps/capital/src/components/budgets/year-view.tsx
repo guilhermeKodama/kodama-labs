@@ -21,12 +21,13 @@ import { cn } from "@/lib/utils";
 import type { EditableBudget } from "./budget-dialog";
 import { BudgetEntityBadge, ChartCaption, ChartLegend, DrillLink, PaceBar, RowMenu, ScopeBar, TOOLTIP_STYLE, useEntityNames, ViewState, type BudgetActions } from "./parts";
 import { useYearOverview, type YearOverview } from "./use-budgets";
+import { KindSplit, YearCards } from "./year-phone";
 
 /**
- * Categoria | jan…dez | Ano (proj.) | Tendência.
+ * Categoria | jan…dez | Ano (proj.) | Tendência, on a wide window.
  * The category track is at least 11rem, so the name survives next to
- * "Variável" and the entity badge. Below md it is exactly 11rem, the name
- * sits above "Variável · PF", and the column sticks while the months scroll.
+ * "Variável" and the entity badge. Below md the table is not shown: the
+ * cards in year-phone.tsx take its place.
  */
 const HEAT_COLS =
   "grid grid-cols-[minmax(11rem,1.1fr)_repeat(12,minmax(3rem,1fr))_92px_76px] items-center gap-1 px-3 max-md:grid-cols-[11rem_repeat(12,minmax(3rem,1fr))_92px_76px] max-md:items-stretch max-md:px-0";
@@ -117,7 +118,7 @@ export function YearBody({ data, today, kind, onOpenMonth, actions }: { data: Ye
 
   return (
     <>
-      <KpiStrip>
+      <KpiStrip className="max-md:grid max-md:grid-cols-2 max-md:gap-x-4 max-md:gap-y-3">
         <Kpi
           label={ytdAbbr ? t("year.kpi.spent", { year: data.year, month: ytdAbbr }) : t("year.kpi.spentNoMonth", { year: data.year })}
           value={<DrillLink draft={totals(totalLabel, ytdRange)}>{fmt.money0(summary.spentToDate)}</DrillLink>}
@@ -142,7 +143,10 @@ export function YearBody({ data, today, kind, onOpenMonth, actions }: { data: Ye
         <Kpi label={t("year.kpi.overMonths")} value={<DrillLink draft={totals(totalLabel, ytdRange)}>{String(summary.overBudgetMonths)}</DrillLink>} sub={t("year.kpi.overMonthsSub", { count: summary.budgetedCells })} />
       </KpiStrip>
 
-      <div data-budget-heat="" className="overflow-x-auto rounded-[8px] border border-stroke-3 bg-panel">
+      <KindSplit data={data} kind={kind} />
+      <YearCards data={data} categories={categories} tense={tense} drill={drill} onOpenMonth={onOpenMonth} />
+
+      <div data-budget-heat="" className="overflow-x-auto rounded-[8px] border border-stroke-3 bg-panel max-md:hidden">
         <div className="min-w-[1004px] max-md:min-w-[980px]">
           <div className={cn(HEAT_COLS, "h-(--cap-row-h) text-label text-fg-3")}>
             <span className={cn(STICKY_CAT, STICKY_PANEL, "max-md:flex max-md:items-center")}>{t("year.heatmap.category")}</span>
@@ -241,7 +245,7 @@ export function YearBody({ data, today, kind, onOpenMonth, actions }: { data: Ye
           )}
         </div>
       </div>
-      <p className="text-body-sm text-fg-4">{t(legend.key, legend.values)}</p>
+      <p className="text-body-sm text-fg-4 max-md:hidden">{t(legend.key, legend.values)}</p>
 
       <div className="grid items-start gap-3 md:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)]">
         <MonthlyChart monthTotals={monthTotals} monthBudgets={monthBudgets} year={data.year} isProjected={(m) => tense(m) === "projected"} />

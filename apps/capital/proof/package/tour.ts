@@ -97,7 +97,28 @@ export const SCREENS: Screen[] = [
     open: async (page) => {
       await page.getByRole("radio", { name: "Anual" }).click();
     },
-    ready: (page) => page.getByRole("radio", { name: "Anual" }),
+    ready: (page) => page.locator("[data-budget-heat]"),
+  },
+  {
+    group: "Orçamentos",
+    name: "Orçamentos · ano no telefone",
+    open: async (page) => {
+      await page.setViewportSize({ width: 390, height: 844 });
+      await page.goto("/transactions/budgets?mode=year");
+    },
+    ready: (page) => page.locator("[data-phone-layout=cards]"),
+  },
+  {
+    group: "Orçamentos",
+    name: "Orçamentos · ano no telefone · detalhe",
+    open: async (page) => {
+      await page.locator("[data-budget-card='Transporte']").getByRole("button").click();
+    },
+    ready: (page) => dialog(page, "Transporte"),
+    close: async (page) => {
+      await page.keyboard.press("Escape");
+      await page.setViewportSize({ width: 1280, height: 720 });
+    },
   },
   {
     group: "Investimentos",
