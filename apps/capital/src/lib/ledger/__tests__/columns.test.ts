@@ -6,6 +6,7 @@ import {
   calcAggregation,
   calcOf,
   displayFields,
+  compactColumns,
   gridTemplate,
   groupByOf,
   groupIdOf,
@@ -33,6 +34,16 @@ describe("properties", () => {
 
   it("builds the grid with the checkbox and the ⋯ column around the mockup widths", () => {
     expect(gridTemplate(["date", "description", "isTaxDeductible", "amountBase"])).toBe("28px 52px minmax(0, 2.2fr) 86px 150px 28px");
+  });
+
+  it("puts the description on the first line of a narrow row and the other columns under it", () => {
+    expect(compactColumns(["amountBase", "categoryId", "date", "description", "accountId"])).toEqual({
+      title: "description",
+      meta: ["date", "accountId", "categoryId"],
+      showAmount: true,
+    });
+    expect(compactColumns(["date", "accountId", "amountBase"])).toEqual({ title: "date", meta: ["accountId"], showAmount: true });
+    expect(compactColumns(["amountBase"])).toEqual({ title: null, meta: [], showAmount: true });
   });
 
   it("keys dates by bucket like the server", () => {

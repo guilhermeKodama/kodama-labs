@@ -22,8 +22,19 @@ import type { EditableBudget } from "./budget-dialog";
 import { BudgetEntityBadge, ChartCaption, ChartLegend, DrillLink, PaceBar, RowMenu, ScopeBar, TOOLTIP_STYLE, useEntityNames, ViewState, type BudgetActions } from "./parts";
 import { useYearOverview, type YearOverview } from "./use-budgets";
 
-/** Mockup AnnualBudget heatmap: Categoria | jan…dez | Ano (proj.) | Tendência. */
-const HEAT_COLS = "grid grid-cols-[minmax(0,1.1fr)_repeat(12,minmax(0,1fr))_92px_76px] items-center gap-1 px-3";
+/**
+ * Categoria | jan…dez | Ano (proj.) | Tendência.
+ * The category track is at least 11rem, so the name survives next to
+ * "Variável" and the entity badge. Below md it is exactly 11rem, the name
+ * sits above "Variável · PF", and the column sticks while the months scroll.
+ */
+const HEAT_COLS =
+  "grid grid-cols-[minmax(11rem,1.1fr)_repeat(12,minmax(3rem,1fr))_92px_76px] items-center gap-1 px-3 max-md:grid-cols-[11rem_repeat(12,minmax(3rem,1fr))_92px_76px] max-md:items-stretch max-md:px-0";
+/** Covers the grid gap so a scrolled month paints under the name, not beside it. */
+const STICKY_CAT = "max-md:sticky max-md:left-0 max-md:z-10 max-md:-mr-1 max-md:self-stretch max-md:overflow-hidden max-md:py-1 max-md:pr-2 max-md:pl-3";
+const STICKY_PANEL = "max-md:bg-panel";
+/** fill-4 is translucent in the dark theme, so the panel sits behind it. */
+const STICKY_TOTAL = "max-md:[background:linear-gradient(var(--cap-fill-4),var(--cap-fill-4)),var(--cap-bg-panel)]";
 const MONTHS = Array.from({ length: 12 }, (_, i) => i + 1);
 
 const HEAT_CLASS: Record<HeatLevel, string> = {
@@ -73,7 +84,7 @@ export function YearView({
   );
 }
 
-function YearBody({ data, today, kind, onOpenMonth, actions }: { data: YearOverview; today: YearMonth; kind: BudgetsView["kind"]; onOpenMonth: (month: number) => void; actions: BudgetActions }) {
+export function YearBody({ data, today, kind, onOpenMonth, actions }: { data: YearOverview; today: YearMonth; kind: BudgetsView["kind"]; onOpenMonth: (month: number) => void; actions: BudgetActions }) {
   const t = useTranslations("budgets");
   const fmt = useFmt();
   const { kinds } = useEntityNames();
@@ -131,41 +142,58 @@ function YearBody({ data, today, kind, onOpenMonth, actions }: { data: YearOverv
         <Kpi label={t("year.kpi.overMonths")} value={<DrillLink draft={totals(totalLabel, ytdRange)}>{String(summary.overBudgetMonths)}</DrillLink>} sub={t("year.kpi.overMonthsSub", { count: summary.budgetedCells })} />
       </KpiStrip>
 
-      <div className="overflow-x-auto rounded-[8px] border border-stroke-3 bg-panel">
-        <div className="min-w-[860px]">
+      <div data-budget-heat="" className="overflow-x-auto rounded-[8px] border border-stroke-3 bg-panel">
+        <div className="min-w-[1004px] max-md:min-w-[980px]">
           <div className={cn(HEAT_COLS, "h-(--cap-row-h) text-label text-fg-3")}>
-            <span>{t("year.heatmap.category")}</span>
+            <span className={cn(STICKY_CAT, STICKY_PANEL, "max-md:flex max-md:items-center")}>{t("year.heatmap.category")}</span>
             {MONTHS.map((m) => (
-              <span key={m} className={cn("text-center", tense(m) === "projected" && "text-fg-4", tense(m) === "current" && "text-fg-1")}>
+              <span key={m} className={cn("text-center max-md:self-center", tense(m) === "projected" && "text-fg-4", tense(m) === "current" && "text-fg-1")}>
                 {fmt.monthAbbr(m)}
                 {tense(m) === "current" ? "*" : ""}
               </span>
             ))}
-            <span className="text-right">{t("year.heatmap.yearTotal")}</span>
-            <span className="text-right">{t("year.heatmap.trend")}</span>
+            <span className="text-right max-md:self-center max-md:pr-1">{t("year.heatmap.yearTotal")}</span>
+            <span className="text-right max-md:self-center max-md:pr-3">{t("year.heatmap.trend")}</span>
           </div>
           {categories.map((row) => {
             const category = row.category ?? t("uncategorized");
             const trend = trendOf(row.trend);
+            const kindLabel = row.isBudgeted ? t(`kind.${budgetKind(row.kind)}`) : null;
             return (
-              <div key={`${row.entityId}:${row.categoryId}`} className={cn(HEAT_COLS, "h-(--cap-row-h) border-t border-stroke-3 text-body")}>
-                <span className="flex min-w-0 items-center gap-1.5">
-                  <DrillLink draft={drill(row, category)} title={category} className="min-w-0 truncate">
+              <div key={`${row.entityId}:${row.categoryId}`} className={cn(HEAT_COLS, "h-(--cap-row-h) border-t border-stroke-3 text-body max-md:h-auto max-md:min-h-14")}>
+                <span data-budget-category={category} className={cn(STICKY_CAT, STICKY_PANEL, "flex min-w-0 items-center gap-1.5 max-md:flex-col max-md:items-start max-md:justify-center max-md:gap-0.5")}>
+                  <DrillLink draft={drill(row, category)} title={category} className="min-w-0 max-w-full truncate max-md:font-medium">
                     {category}
                   </DrillLink>
-                  {row.isBudgeted ? <span className="shrink-0 text-caption text-fg-3">{t(`kind.${budgetKind(row.kind)}`)}</span> : null}
-                  <BudgetEntityBadge entityId={row.entityId} kinds={kinds} />
+                  {kindLabel ? <span className="shrink-0 text-caption text-fg-3 max-md:hidden">{kindLabel}</span> : null}
+                  <span className="max-md:hidden">
+                    <BudgetEntityBadge entityId={row.entityId} kinds={kinds} />
+                  </span>
+                  <span className="hidden max-w-full min-w-0 items-center gap-1 truncate text-caption font-normal text-fg-3 max-md:flex">
+                    {kindLabel ? (
+                      <>
+                        <span className="shrink-0">{kindLabel}</span>
+                        <span aria-hidden>·</span>
+                      </>
+                    ) : null}
+                    <BudgetEntityBadge entityId={row.entityId} kinds={kinds} />
+                  </span>
                 </span>
                 {row.months.map((cell) => {
                   const level = heatLevel(cell);
                   const pct = heatPercent(cell);
                   const text = pct !== null ? `${pct}%` : cell.spent > 0 ? fmt.k(cell.spent, { minDigits: 1 }) : "·";
-                  const className = cn("inline-flex h-(--cap-control-h) min-w-0 items-center justify-center rounded border border-transparent font-mono text-caption tabular-nums", HEAT_CLASS[level]);
-                  if (!isClickable(cell)) return <span key={cell.month} className={className}>{text}</span>;
+                  const className = cn("inline-flex h-(--cap-control-h) min-w-0 items-center justify-center rounded border border-transparent font-mono text-caption tabular-nums max-md:self-center", HEAT_CLASS[level]);
+                  if (!isClickable(cell)) return (
+                    <span key={cell.month} data-budget-month={cell.month} className={className}>
+                      {text}
+                    </span>
+                  );
                   return (
                     <button
                       key={cell.month}
                       type="button"
+                      data-budget-month={cell.month}
                       title={t("year.heatmap.open", { month: fmt.monthLabel({ year: data.year, month: cell.month }) })}
                       onClick={() => onOpenMonth(cell.month)}
                       className={cn(className, "outline-none hover:border-stroke-1 focus-visible:border-fg-3")}
@@ -174,12 +202,12 @@ function YearBody({ data, today, kind, onOpenMonth, actions }: { data: YearOverv
                     </button>
                   );
                 })}
-                <DrillLink draft={drill(row, category)} className="text-right font-mono text-body-sm tabular-nums">
+                <DrillLink draft={drill(row, category)} className="text-right font-mono text-body-sm tabular-nums max-md:self-center max-md:pr-1">
                   {fmt.money0(row.yearTotal)}
                 </DrillLink>
                 <span
                   className={cn(
-                    "text-right font-mono text-label",
+                    "text-right font-mono text-label max-md:self-center max-md:pr-3",
                     trend.kind === "up" ? "text-warn" : trend.kind === "down" ? "text-pos" : trend.kind === "stable" ? "text-fg-3" : "text-fg-4",
                   )}
                 >
@@ -190,20 +218,20 @@ function YearBody({ data, today, kind, onOpenMonth, actions }: { data: YearOverv
           })}
           {categories.length ? (
             <div className={cn(HEAT_COLS, "h-9 border-t border-stroke-2 bg-fill-4 text-body-sm font-semibold")}>
-              <span>{t("year.heatmap.total")}</span>
+              <span className={cn(STICKY_CAT, STICKY_TOTAL, "max-md:flex max-md:items-center")}>{t("year.heatmap.total")}</span>
               {monthTotals.map((total, i) => {
                 const tone = totalTone(total, monthBudgets[i] ?? 0, tense(i + 1) === "projected");
                 return (
                   <DrillLink
                     key={i}
                     draft={totals(totalLabel, monthRange(i + 1), fmt.monthLabel({ year: data.year, month: i + 1 }))}
-                    className={cn("text-center font-mono text-hint tabular-nums", tone === "projected" ? "text-fg-4" : tone === "over" ? "text-neg" : "text-fg-1")}
+                    className={cn("text-center font-mono text-hint tabular-nums max-md:self-center", tone === "projected" ? "text-fg-4" : tone === "over" ? "text-neg" : "text-fg-1")}
                   >
                     {fmt.k(total, { minDigits: 1 })}
                   </DrillLink>
                 );
               })}
-              <DrillLink draft={totals(totalLabel, ytdRange)} className="text-right font-mono tabular-nums">
+              <DrillLink draft={totals(totalLabel, ytdRange)} className="text-right font-mono tabular-nums max-md:self-center max-md:pr-1">
                 {fmt.money0(summary.projectedYear)}
               </DrillLink>
               <span />
@@ -227,9 +255,9 @@ function YearBody({ data, today, kind, onOpenMonth, actions }: { data: YearOverv
             const ratio = usage(cost, b.amount);
             const editable: EditableBudget = { id: b.id, category: b.category, entityId: b.entityId, amount: b.amount, notes: b.notes, effectiveFrom: b.effectiveFrom, period: "yearly", kind: b.kind ?? null };
             return (
-              <div key={b.id} className="group grid h-10 grid-cols-[minmax(0,1.2fr)_minmax(0,2fr)_96px_96px] items-center gap-3 border-t border-stroke-3 px-3 text-body first:border-t-0">
+              <div key={b.id} className="group grid h-10 grid-cols-[minmax(0,1.2fr)_minmax(0,2fr)_96px_96px] items-center gap-3 border-t border-stroke-3 px-3 text-body first:border-t-0 max-md:h-auto max-md:grid-cols-1 max-md:gap-1.5 max-md:py-2">
                 <span className="flex min-w-0 items-center gap-1.5">
-                  <span className="shrink-0">{b.category}</span>
+                  <span className="shrink-0 max-md:min-w-0 max-md:shrink max-md:truncate">{b.category}</span>
                   <BudgetEntityBadge entityId={b.entityId} kinds={kinds} />
                   {b.notes ? <span className="min-w-0 truncate text-caption text-fg-4">{b.notes}</span> : null}
                   <RowMenu category={b.category} onEdit={() => actions.onEdit(editable)} onDelete={() => actions.onDelete(editable)} />

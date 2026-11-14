@@ -1,13 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type MouseEvent } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { useTranslations } from "next-intl";
 import type { LedgerGroup, ViewConfig } from "@capital/server/modules/ledger/contracts";
 import { Badge, Check } from "@/components/cap";
 import type { Names } from "@/lib/api/catalog";
 import { useFmt } from "@/lib/format/provider";
-import { aggKey, calcAggregation, calcOf, gridTemplate, nextCalc, PROP_META, SORTS, sortIdOf, SUM_KEY, visibleColumns, type CalcFn, type PropId } from "@/lib/ledger/columns";
+import { aggKey, calcAggregation, calcOf, compactColumns, gridTemplate, nextCalc, PROP_META, SORTS, sortIdOf, SUM_KEY, visibleColumns, type CalcFn, type PropId } from "@/lib/ledger/columns";
 import { nextEditableCell, type CellNavDirection } from "@/lib/ledger/cell-nav";
 import { allVisibleSelected, applySelectionClick, moveFocus } from "@/lib/ledger/selection";
 import { tableItems, visualRowIds, type GroupItem } from "@/lib/ledger/table-items";
@@ -21,7 +21,25 @@ import type { DisplayRow } from "../rows";
 
 /** Row height at Médio; the rows are --cap-row-h (theme.css), this times the text scale. */
 const ROW_H = 34;
+/** Two-line row at Médio (description, then date · category · account). Matches the compact row's height. */
+const COMPACT_ROW_H = 56;
 const GROUP_H = 32;
+/** Phones and a narrow window: the column grid collapses, so each transaction is two lines. */
+const NARROW_LEDGER_QUERY = "(max-width: 640px)";
+
+function subscribeNarrow(onChange: () => void) {
+  const query = window.matchMedia(NARROW_LEDGER_QUERY);
+  query.addEventListener("change", onChange);
+  return () => query.removeEventListener("change", onChange);
+}
+
+/**
+ * True at 640px and below. The server snapshot is the wide table, same as
+ * useIsMobile: hydration matches, then the client reads the viewport.
+ */
+function useNarrowLedger(): boolean {
+  return useSyncExternalStore(subscribeNarrow, () => window.matchMedia(NARROW_LEDGER_QUERY).matches, () => false);
+}
 const EDITABLE: Partial<Record<PropId, EditableField>> = {
   date: "date",
   description: "description",
@@ -63,6 +81,11 @@ export interface LedgerTableProps {
   allInView: boolean;
   onAllInView: (on: boolean) => void;
   onConfig: (patch: Partial<ViewConfig>) => void;
+  /**
+   * Two-line rows. The screen leaves this unset and the table follows the
+   * viewport (640px and below); tests pass it because a static render has no window.
+   */
+  narrow?: boolean;
 }
 
 /**
@@ -75,12 +98,15 @@ export interface LedgerTableProps {
  * Esc clears the selection, ⌫ and ⌘D act on the focused row.
  */
 export function LedgerTable(props: LedgerTableProps) {
-  const { rows, groups, config, totals, totalCount, names, labels, periodLabel, loading, hasMore, onLoadMore, selected, onSelected, allInView, onAllInView, onConfig } = props;
+  const { rows, groups, config, totals, totalCount, names, labels, periodLabel, loading, hasMore, onLoadMore, selected, onSelected, allInView, onAllInView, onConfig, narrow } = props;
   const t = useTranslations("ledger.table");
   const fmt = useFmt();
   const actions = useRowActions();
   const columns = visibleColumns(config);
   const template = gridTemplate(columns);
+  const detectedNarrow = useNarrowLedger();
+  const compact = narrow ?? detectedNarrow;
+  const compactLayout = compactColumns(columns);
   const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(new Set());
   const [focused, setFocused] = useState<string | null>(null);
   const last = useRef<string | null>(null);
@@ -105,7 +131,7 @@ export function LedgerTable(props: LedgerTableProps) {
     return () => observer.disconnect();
   }, [scrollEl, listEl]);
   const textScale = useTextScale();
-  const rowH = ROW_H * textScale;
+  const rowH = (compact ? COMPACT_ROW_H : ROW_H) * textScale;
   const virtualizer = useVirtualizer({
     count: items.length,
     getScrollElement: () => scrollEl,
@@ -212,8 +238,8 @@ export function LedgerTable(props: LedgerTableProps) {
         return <span className="font-mono text-label text-fg-3 tabular-nums">{fmt.date(row.date)}</span>;
       case "description":
         return (
-          <button type="button" className="flex min-w-0 items-center gap-1.5 text-left" onClick={() => actions.open(row)}>
-            <span className="truncate">{row.description}</span>
+          <button type="button" className={cn("flex min-w-0 items-center gap-1.5 text-left", compact && "w-full")} onClick={() => actions.open(row)}>
+            <span className={cn("min-w-0 truncate", compact && "font-semibold")}>{row.description}</span>
             {row.installmentNumber && row.installmentTotal ? (
               <span className="shrink-0 font-mono text-caption text-fg-4">{t("installment", { n: row.installmentNumber, total: row.installmentTotal })}</span>
             ) : null}
@@ -250,23 +276,55 @@ export function LedgerTable(props: LedgerTableProps) {
     );
   };
 
+  const selectRow = (row: DisplayRow) => (
+    <Check
+      checked={allInView || selected.has(row.id)}
+      aria-label={t("selectRow")}
+      onClick={(event: MouseEvent<HTMLButtonElement>) => {
+        event.preventDefault();
+        click(row.id, !selected.has(row.id), event.shiftKey);
+      }}
+      onChange={() => undefined}
+    />
+  );
+
   const rowEl = (row: DisplayRow) => {
     const isSel = allInView || selected.has(row.id);
+    const tone = isSel ? "bg-fill-3" : focused === row.id && "bg-fill-4";
+    if (compact) {
+      const meta = compactLayout.meta.map((id) => labels.cell(id, row, config.dateField));
+      return (
+        <div
+          data-ledger-row=""
+          className={cn(
+            "grid h-[calc(56px*var(--cap-text-scale))] grid-cols-[28px_minmax(0,1fr)_auto_28px] items-center gap-x-2 gap-y-0.5 overflow-hidden border-t border-stroke-3 px-2.5 text-body",
+            meta.length ? "grid-rows-2" : "grid-rows-1",
+            tone,
+          )}
+          onMouseDown={() => setFocused(row.id)}
+        >
+          <span className="col-start-1 row-span-2 flex justify-center">{selectRow(row)}</span>
+          <div className="col-start-2 row-start-1 flex min-w-0 items-center overflow-hidden">{compactLayout.title ? cellContent(row, compactLayout.title) : null}</div>
+          <span className="col-start-3 row-span-2 flex items-center justify-end">{compactLayout.showAmount ? amount(row) : null}</span>
+          <span className="col-start-4 row-span-2 flex items-center justify-center">
+            <RowActionsMenu row={row} />
+          </span>
+          {meta.length ? (
+            <div data-ledger-meta="" className="col-start-2 row-start-2 truncate text-label font-normal text-fg-3">
+              {meta.join(" · ")}
+            </div>
+          ) : null}
+        </div>
+      );
+    }
     return (
       <div
-        className={cn("relative grid h-(--cap-row-h) items-center gap-2 border-t border-stroke-3 px-2.5 text-body", isSel ? "bg-fill-3" : focused === row.id && "bg-fill-4")}
+        data-ledger-row=""
+        className={cn("relative grid h-(--cap-row-h) items-center gap-2 border-t border-stroke-3 px-2.5 text-body", tone)}
         style={{ gridTemplateColumns: template }}
         onMouseDown={() => setFocused(row.id)}
       >
-        <Check
-          checked={isSel}
-          aria-label={t("selectRow")}
-          onClick={(event: MouseEvent<HTMLButtonElement>) => {
-            event.preventDefault();
-            click(row.id, !selected.has(row.id), event.shiftKey);
-          }}
-          onChange={() => undefined}
-        />
+        {selectRow(row)}
         {columns.map((id) => cell(row, id))}
         <span className="flex justify-center">
           <RowActionsMenu row={row} />
@@ -321,20 +379,49 @@ export function LedgerTable(props: LedgerTableProps) {
     return calc === "count" || calc === "countDistinct" ? fmt.number(value, 0) : fmt.money(value);
   };
 
+  const selectVisible = (
+    <Check
+      checked={hasRows && everyVisible}
+      aria-label={t("selectVisible")}
+      onChange={(on) => {
+        onAllInView(false);
+        onSelected(on ? new Set(visibleIds) : new Set());
+      }}
+    />
+  );
+
+  const footerCell = (id: PropId, labeled: boolean) => {
+    const calc = calcOf(config, id);
+    return (
+      <button
+        key={id}
+        type="button"
+        onClick={() => onConfig({ calcs: { ...config.calcs, [id]: nextCalc(id, calc) } })}
+        className={cn("flex items-baseline gap-1.5", labeled ? "max-w-full" : "min-w-0 overflow-hidden", !labeled && (PROP_META[id].label === "amount" ? "justify-end" : "justify-start"))}
+      >
+        {labeled ? <span className="text-micro tracking-[0.4px] text-fg-4 uppercase">{labels.prop(id)}</span> : null}
+        <span className={cn("text-micro tracking-[0.4px] uppercase", !labeled && "whitespace-nowrap", calc === "none" ? "text-fg-4" : "text-fg-3")}>{t(`calc.${calc}`)}</span>
+        {calc !== "none" ? <span className={cn("font-mono text-body-sm font-semibold tabular-nums", !labeled && "truncate")}>{calcText(id, calc)}</span> : null}
+      </button>
+    );
+  };
+
   return (
-    <div ref={rootRef} className="rounded-[8px] border border-stroke-3 bg-panel">
-      <div className="grid h-(--cap-row-h) items-center gap-2 px-2.5 text-label text-fg-3" style={{ gridTemplateColumns: template }}>
-        <Check
-          checked={hasRows && everyVisible}
-          aria-label={t("selectVisible")}
-          onChange={(on) => {
-            onAllInView(false);
-            onSelected(on ? new Set(visibleIds) : new Set());
-          }}
-        />
-        {columns.map(header)}
-        <span />
-      </div>
+    <div ref={rootRef} data-ledger-layout={compact ? "compact" : "grid"} className="rounded-[8px] border border-stroke-3 bg-panel">
+      {compact ? (
+        <div data-ledger-header="" className="grid h-(--cap-row-h) grid-cols-[28px_minmax(0,1fr)_auto_28px] items-center gap-2 px-2.5 text-label text-fg-3">
+          {selectVisible}
+          {columns.includes("date") ? header("date") : <span />}
+          {columns.includes("amountBase") ? header("amountBase") : <span />}
+          <span />
+        </div>
+      ) : (
+        <div data-ledger-header="" className="grid h-(--cap-row-h) items-center gap-2 px-2.5 text-label text-fg-3" style={{ gridTemplateColumns: template }}>
+          {selectVisible}
+          {columns.map(header)}
+          <span />
+        </div>
+      )}
       {hasRows && everyVisible ? (
         <div className="flex flex-wrap justify-center gap-1.5 border-t border-stroke-3 bg-fill-4 px-3 py-[7px] text-body-sm">
           {allInView ? (
@@ -376,24 +463,17 @@ export function LedgerTable(props: LedgerTableProps) {
         })}
       </div>
       {hasRows && hasMore ? <div className="border-t border-stroke-3 px-3 py-2 text-center text-body-sm text-fg-3">{t("loading")}</div> : null}
-      <div className="grid h-(--cap-row-h) items-center gap-2 rounded-b-[8px] border-t border-stroke-2 bg-fill-4 px-2.5" style={{ gridTemplateColumns: template }}>
-        <span />
-        {columns.map((id) => {
-          const calc = calcOf(config, id);
-          return (
-            <button
-              key={id}
-              type="button"
-              onClick={() => onConfig({ calcs: { ...config.calcs, [id]: nextCalc(id, calc) } })}
-              className={cn("flex min-w-0 items-baseline gap-1.5 overflow-hidden", PROP_META[id].label === "amount" ? "justify-end" : "justify-start")}
-            >
-              <span className={cn("text-micro tracking-[0.4px] whitespace-nowrap uppercase", calc === "none" ? "text-fg-4" : "text-fg-3")}>{t(`calc.${calc}`)}</span>
-              {calc !== "none" ? <span className="truncate font-mono text-body-sm font-semibold tabular-nums">{calcText(id, calc)}</span> : null}
-            </button>
-          );
-        })}
-        <span />
-      </div>
+      {compact ? (
+        <div data-ledger-footer="" className="flex flex-wrap items-baseline gap-x-3 gap-y-1.5 rounded-b-[8px] border-t border-stroke-2 bg-fill-4 px-2.5 py-2">
+          {columns.map((id) => footerCell(id, true))}
+        </div>
+      ) : (
+        <div data-ledger-footer="" className="grid h-(--cap-row-h) items-center gap-2 rounded-b-[8px] border-t border-stroke-2 bg-fill-4 px-2.5" style={{ gridTemplateColumns: template }}>
+          <span />
+          {columns.map((id) => footerCell(id, false))}
+          <span />
+        </div>
+      )}
       {actions.dialogs}
     </div>
   );

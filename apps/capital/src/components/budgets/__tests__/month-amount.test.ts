@@ -190,6 +190,9 @@ describe("the Orçado column", () => {
     expect(menuAt).toBeGreaterThan(badgeAt);
     expect(html.slice(titleAt, badgeAt)).toContain("shrink-0");
 
+    expect(html).toContain("max-md:basis-full");
+    expect(html).toContain("md:contents");
+
     const status = /<span[^>]*>Acima do ritmo<\/span>/.exec(html);
     expect(status).not.toBeNull();
     expect(status![0]).toContain("whitespace-nowrap");

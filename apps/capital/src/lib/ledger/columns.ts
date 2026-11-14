@@ -209,6 +209,20 @@ export function visibleColumns(config: Pick<ViewConfig, "columns">): PropId[] {
   return PROP_IDS.filter((id) => config.columns.includes(id));
 }
 
+/**
+ * A narrow transactions row: the description is the title (the first
+ * non-amount column when description is hidden), the amount stays on the
+ * right, and every other visible column is the muted second line, in
+ * PROP_ORDER, so it reads "01/11 · Transporte · Nubank".
+ */
+export function compactColumns(columns: readonly string[]): { title: PropId | null; meta: PropId[]; showAmount: boolean } {
+  const visible = visibleColumns({ columns: [...columns] });
+  const showAmount = visible.includes("amountBase");
+  const rest = visible.filter((id) => id !== "amountBase");
+  const title = rest.includes("description") ? "description" : (rest[0] ?? null);
+  return { title, meta: rest.filter((id) => id !== title), showAmount };
+}
+
 /** Toggles a property in "Propriedades visíveis", keeping PROP_ORDER. */
 export function toggleColumn(columns: readonly string[], id: PropId): PropId[] {
   const on = columns.includes(id);

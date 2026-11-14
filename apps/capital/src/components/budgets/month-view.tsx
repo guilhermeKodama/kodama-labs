@@ -29,7 +29,7 @@ import { useMonthOverview, type BudgetRow, type MonthOverview, type UpcomingItem
  */
 const COLS =
   "grid-cols-4 gap-x-2 gap-y-1 px-2.5 md:grid-cols-[minmax(0,2.2fr)_minmax(0,1.8fr)_80px_80px_80px_110px_28px] md:items-center md:gap-2";
-const NAME_CELL = "order-1 col-span-3 flex min-w-0 items-center gap-1.5 overflow-hidden md:order-0 md:col-span-1";
+const NAME_CELL = "order-1 col-span-3 flex min-w-0 items-center gap-1.5 overflow-hidden max-md:flex-wrap max-md:content-start md:order-0 md:col-span-1";
 const BAR_CELL = "order-3 col-span-4 flex min-w-0 items-center gap-2 md:order-0 md:col-span-1";
 const MENU_CELL = "order-2 col-span-1 flex items-center justify-end md:order-0 md:col-span-1 md:justify-center";
 const STAT_CELL = "col-span-2 flex flex-col items-start gap-0.5 text-left md:col-span-1 md:block md:text-right";
@@ -204,11 +204,17 @@ export function MonthBody({
             return (
               <div key={row.id} className={cn("grid", COLS, "group border-t border-stroke-3 py-2 text-body md:py-0", showOffset ? "md:h-auto md:min-h-10 md:py-1" : "md:h-10")}>
                 <span className={cn(NAME_CELL, showOffset && "md:flex-wrap md:py-1")}>
-                  <DrillLink draft={drill(row, wholeMonth)} title={row.category} className="min-w-0 truncate">
+                  <DrillLink draft={drill(row, wholeMonth)} title={row.category} className="min-w-0 truncate max-md:basis-full max-md:font-medium">
                     {row.category}
                   </DrillLink>
-                  <span className="shrink-0 text-caption text-fg-3">{t(`kind.${budgetKind(row.kind)}`)}</span>
-                  <BudgetEntityBadge entityId={row.entityId} kinds={kinds} />
+                  {/* On a phone the name takes the whole line; kind and entity sit under it, so neither can squeeze the name to nothing. md:contents keeps them beside the name. */}
+                  <span className="flex min-w-0 shrink-0 items-center gap-1 max-md:max-w-full md:contents">
+                    <span className="shrink-0 text-caption text-fg-3">{t(`kind.${budgetKind(row.kind)}`)}</span>
+                    <span className="text-caption text-fg-3 md:hidden" aria-hidden>
+                      ·
+                    </span>
+                    <BudgetEntityBadge entityId={row.entityId} kinds={kinds} />
+                  </span>
                   {showOffset ? (
                     <span className="hidden basis-full text-caption font-normal text-fg-3 md:block">
                       <DrillLink draft={spent}>{t("month.table.gross", { amount: fmt.money0(row.spent) })}</DrillLink>
