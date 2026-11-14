@@ -172,6 +172,20 @@
       "spentTo": "Gasto até {month}",
       "budgetYear": "Orçado no ano",
       "projectionYear": "Projeção do ano"
+    },
+    "desktop": {
+      "share": "{pct}% do gasto",
+      "filter": "Mostrar só {kind}",
+      "clearFilter": "Mostrar todos os tipos",
+      "over": "{amount} acima",
+      "overMonthsSub": "de {count} categoria·mês",
+      "section": {
+        "none": "Sem orçamento"
+      },
+      "sectionCount": "{count, plural, one {# categoria} other {# categorias}}",
+      "pctOfBudget": "{pct}% do orçado no mês",
+      "projectedOf": "{kind} projetado",
+      "chartCaption": "Mês × {unit} · {year} · tom claro = projeção"
     }
   },
   "dialog": {
