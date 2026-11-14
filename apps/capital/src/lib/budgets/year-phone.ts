@@ -2,18 +2,10 @@ import { toneOf, usage, type PaceTone } from "./pace";
 
 /**
  * The Anual view below md, where twelve month columns do not fit: the
- * figures each phone layout shows, read from the same rows as the
- * heatmap. Nothing here projects: projected months arrive from the
- * server already filled in.
+ * figures a category card shows, read from the same rows as the heatmap.
+ * Nothing here projects: projected months arrive from the server already
+ * filled in.
  */
-
-/** The layouts the phone can show, picked with ?mv= while the owner compares them. "table" is the heatmap. */
-export const PHONE_LAYOUTS = ["table", "cards", "months", "map"] as const;
-export type PhoneLayout = (typeof PHONE_LAYOUTS)[number];
-
-export function parsePhoneLayout(value: string | null | undefined): PhoneLayout {
-  return PHONE_LAYOUTS.includes(value as PhoneLayout) ? (value as PhoneLayout) : "table";
-}
 
 export interface PhoneMonth {
   month: number;
@@ -76,37 +68,4 @@ export function miniBars(months: readonly PhoneMonth[]): MiniBar[] {
       tone: cell.isProjected ? "projected" : over ? "over" : "actual",
     };
   });
-}
-
-export interface MonthTile {
-  month: number;
-  spent: number;
-  budget: number;
-  /** Whole percent of the month's budget, null without one. */
-  pct: number | null;
-  tense: "actual" | "current" | "projected";
-  over: boolean;
-}
-
-/** The twelve tiles of the month picker, from the Total row's figures. */
-export function monthTiles(monthTotals: readonly number[], monthBudgets: readonly number[], tense: (month: number) => MonthTile["tense"]): MonthTile[] {
-  return Array.from({ length: 12 }, (_, i) => {
-    const spent = monthTotals[i] ?? 0;
-    const budget = monthBudgets[i] ?? 0;
-    const tensed = tense(i + 1);
-    return {
-      month: i + 1,
-      spent,
-      budget,
-      pct: budget > 0 ? Math.round((spent / budget) * 100) : null,
-      tense: tensed,
-      over: tensed !== "projected" && budget > 0 && spent > budget,
-    };
-  });
-}
-
-/** The month a phone layout opens on: today's month in the current year, December in a past one, January in a future one. */
-export function defaultMonth(currentMonth: number, isPast: boolean): number {
-  if (isPast) return 12;
-  return currentMonth >= 1 && currentMonth <= 12 ? currentMonth : 1;
 }

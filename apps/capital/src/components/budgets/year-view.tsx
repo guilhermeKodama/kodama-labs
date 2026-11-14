@@ -1,7 +1,6 @@
 "use client";
 
 import { useTranslations } from "next-intl";
-import { useQueryState } from "nuqs";
 import { Bar, CartesianGrid, ComposedChart, Line, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { EmptyRow, Kpi, KpiStrip, Panel } from "@/components/cap";
 import { apiPatch } from "@/lib/api/client";
@@ -14,7 +13,6 @@ import { heatmapLegend, insightCopy, trendBasis, yearHeader, yearToDateMonth } f
 import { percent, projectionVsBudget, usage, yearlyTone } from "@/lib/budgets/pace";
 import { monthKey, type YearMonth } from "@/lib/budgets/period";
 import type { BudgetsScope, BudgetsView } from "@/lib/budgets/url";
-import { parsePhoneLayout, type PhoneLayout } from "@/lib/budgets/year-phone";
 import { useFmt } from "@/lib/format/provider";
 import type { ViewDraft } from "@/lib/ledger/view-draft";
 import { CHART, CHART_AXIS } from "@/lib/theme/chart-colors";
@@ -22,14 +20,14 @@ import { textRole } from "@/lib/theme/type-scale";
 import { cn } from "@/lib/utils";
 import type { EditableBudget } from "./budget-dialog";
 import { BudgetEntityBadge, ChartCaption, ChartLegend, DrillLink, PaceBar, RowMenu, ScopeBar, TOOLTIP_STYLE, useEntityNames, ViewState, type BudgetActions } from "./parts";
-import { useYearOverview, type HeatmapRow, type YearOverview } from "./use-budgets";
-import { KindSplit, PhoneYear } from "./year-phone";
+import { useYearOverview, type YearOverview } from "./use-budgets";
+import { KindSplit, YearCards } from "./year-phone";
 
 /**
- * Categoria | jan…dez | Ano (proj.) | Tendência.
+ * Categoria | jan…dez | Ano (proj.) | Tendência, on a wide window.
  * The category track is at least 11rem, so the name survives next to
- * "Variável" and the entity badge. Below md it is exactly 11rem, the name
- * sits above "Variável · PF", and the column sticks while the months scroll.
+ * "Variável" and the entity badge. Below md the table is not shown: the
+ * cards in year-phone.tsx take its place.
  */
 const HEAT_COLS =
   "grid grid-cols-[minmax(11rem,1.1fr)_repeat(12,minmax(3rem,1fr))_92px_76px] items-center gap-1 px-3 max-md:grid-cols-[11rem_repeat(12,minmax(3rem,1fr))_92px_76px] max-md:items-stretch max-md:px-0";
@@ -70,7 +68,6 @@ export function YearView({
   const errorText = useErrorMessage();
   const overview = useYearOverview(view.year, view.scope);
   const data = overview.data;
-  const [mv] = useQueryState("mv");
   const header = data ? yearHeader(data.period, fmt.monthAbbr) : null;
   return (
     <>
@@ -79,7 +76,7 @@ export function YearView({
       </ScopeBar>
       {data ? (
         <div className={cn("flex flex-col gap-3 transition-opacity", overview.isPlaceholderData && "opacity-60")}>
-          <YearBody data={data} today={today} kind={view.kind} onOpenMonth={onOpenMonth} actions={actions} phone={parsePhoneLayout(mv)} />
+          <YearBody data={data} today={today} kind={view.kind} onOpenMonth={onOpenMonth} actions={actions} />
         </div>
       ) : (
         <ViewState error={overview.isError ? errorText(overview.error) : null} onRetry={() => void overview.refetch()} />
@@ -88,22 +85,7 @@ export function YearView({
   );
 }
 
-export function YearBody({
-  data,
-  today,
-  kind,
-  onOpenMonth,
-  actions,
-  phone = "table",
-}: {
-  data: YearOverview;
-  today: YearMonth;
-  kind: BudgetsView["kind"];
-  onOpenMonth: (month: number) => void;
-  actions: BudgetActions;
-  /** Below md: the heatmap, or one of the phone layouts being compared. */
-  phone?: PhoneLayout;
-}) {
+export function YearBody({ data, today, kind, onOpenMonth, actions }: { data: YearOverview; today: YearMonth; kind: BudgetsView["kind"]; onOpenMonth: (month: number) => void; actions: BudgetActions }) {
   const t = useTranslations("budgets");
   const fmt = useFmt();
   const { kinds } = useEntityNames();
@@ -133,15 +115,10 @@ export function YearBody({
     return tensed === "current" ? monthPeriod(data.year, month, Number(period.today.slice(8, 10))) : monthPeriod(data.year, month);
   };
   const totalLabel = t("year.heatmap.total");
-  const monthDrill = (row: HeatmapRow, category: string, month: number): ViewDraft | null => {
-    const range = monthRange(month);
-    return range ? { label: t("drillLabel", { category, period: fmt.monthLabel({ year: data.year, month }) }), ...budgetDrill(row, data.scope.entityIds, range) } : null;
-  };
-  const onPhone = phone !== "table";
 
   return (
     <>
-      <KpiStrip className={cn(onPhone && "max-md:grid max-md:grid-cols-2 max-md:gap-x-4 max-md:gap-y-3")}>
+      <KpiStrip className="max-md:grid max-md:grid-cols-2 max-md:gap-x-4 max-md:gap-y-3">
         <Kpi
           label={ytdAbbr ? t("year.kpi.spent", { year: data.year, month: ytdAbbr }) : t("year.kpi.spentNoMonth", { year: data.year })}
           value={<DrillLink draft={totals(totalLabel, ytdRange)}>{fmt.money0(summary.spentToDate)}</DrillLink>}
@@ -166,24 +143,10 @@ export function YearBody({
         <Kpi label={t("year.kpi.overMonths")} value={<DrillLink draft={totals(totalLabel, ytdRange)}>{String(summary.overBudgetMonths)}</DrillLink>} sub={t("year.kpi.overMonthsSub", { count: summary.budgetedCells })} />
       </KpiStrip>
 
-      {onPhone ? (
-        <>
-          <KindSplit data={data} kind={kind} />
-          <PhoneYear
-            layout={phone}
-            data={data}
-            categories={categories}
-            monthTotals={monthTotals}
-            monthBudgets={monthBudgets}
-            tense={tense}
-            drill={drill}
-            monthDrill={monthDrill}
-            onOpenMonth={onOpenMonth}
-          />
-        </>
-      ) : null}
+      <KindSplit data={data} kind={kind} />
+      <YearCards data={data} categories={categories} tense={tense} drill={drill} onOpenMonth={onOpenMonth} />
 
-      <div data-budget-heat="" className={cn("overflow-x-auto rounded-[8px] border border-stroke-3 bg-panel", onPhone && "max-md:hidden")}>
+      <div data-budget-heat="" className="overflow-x-auto rounded-[8px] border border-stroke-3 bg-panel max-md:hidden">
         <div className="min-w-[1004px] max-md:min-w-[980px]">
           <div className={cn(HEAT_COLS, "h-(--cap-row-h) text-label text-fg-3")}>
             <span className={cn(STICKY_CAT, STICKY_PANEL, "max-md:flex max-md:items-center")}>{t("year.heatmap.category")}</span>
@@ -282,7 +245,7 @@ export function YearBody({
           )}
         </div>
       </div>
-      <p className={cn("text-body-sm text-fg-4", onPhone && "max-md:hidden")}>{t(legend.key, legend.values)}</p>
+      <p className="text-body-sm text-fg-4 max-md:hidden">{t(legend.key, legend.values)}</p>
 
       <div className="grid items-start gap-3 md:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)]">
         <MonthlyChart monthTotals={monthTotals} monthBudgets={monthBudgets} year={data.year} isProjected={(m) => tense(m) === "projected"} />

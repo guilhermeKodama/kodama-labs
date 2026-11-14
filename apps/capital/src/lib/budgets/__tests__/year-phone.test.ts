@@ -1,17 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { defaultMonth, miniBars, monthTiles, parsePhoneLayout, rowYear, yearBar, type PhoneMonth } from "../year-phone";
+import { miniBars, rowYear, yearBar, type PhoneMonth } from "../year-phone";
 
 const month = (m: number, spent: number, budget: number | null, isProjected = false): PhoneMonth => ({ month: m, spent, budget, isProjected });
-
-describe("parsePhoneLayout", () => {
-  it("keeps the heatmap unless a known layout is asked for", () => {
-    expect(parsePhoneLayout(null)).toBe("table");
-    expect(parsePhoneLayout("cards")).toBe("cards");
-    expect(parsePhoneLayout("months")).toBe("months");
-    expect(parsePhoneLayout("map")).toBe("map");
-    expect(parsePhoneLayout("carousel")).toBe("table");
-  });
-});
 
 describe("rowYear", () => {
   it("counts the lived months and budgets the whole year", () => {
@@ -47,25 +37,5 @@ describe("miniBars", () => {
 
   it("is flat when nothing was spent or budgeted", () => {
     expect(miniBars([month(1, 0, null)])).toEqual([{ month: 1, height: 0, budgetAt: null, tone: "actual" }]);
-  });
-});
-
-describe("monthTiles", () => {
-  it("gives each month its share of the budget and marks overruns that happened", () => {
-    const totals = [1200, 900, 1500, ...Array(9).fill(0)];
-    const budgets = [1000, 1000, 1000, ...Array(9).fill(0)];
-    const tiles = monthTiles(totals, budgets, (m) => (m < 2 ? "actual" : m === 2 ? "current" : "projected"));
-    expect(tiles[0]).toMatchObject({ pct: 120, over: true, tense: "actual" });
-    expect(tiles[1]).toMatchObject({ pct: 90, over: false, tense: "current" });
-    expect(tiles[2]).toMatchObject({ pct: 150, over: false, tense: "projected" });
-    expect(tiles[3].pct).toBeNull();
-  });
-});
-
-describe("defaultMonth", () => {
-  it("opens on today's month, December of a past year, January of a future one", () => {
-    expect(defaultMonth(11, false)).toBe(11);
-    expect(defaultMonth(12, true)).toBe(12);
-    expect(defaultMonth(0, false)).toBe(1);
   });
 });
