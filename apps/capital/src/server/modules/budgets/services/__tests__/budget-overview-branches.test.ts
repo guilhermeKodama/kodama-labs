@@ -294,6 +294,26 @@ describe("yearOverview", () => {
     expect(future[0].spent).toBe(50);
   });
 
+  it("projects the running month against the budget plus carry, the same number as Mensal", async () => {
+    setNow("2026-02-14T15:00:00Z");
+    await budget(c.Mercado, 500, { rollover: true, effectiveFrom: "2026-01" });
+    // January had the budget and no spend, so the whole 500 carries, and there is no history to blend.
+    const month = await monthOverview(USER, 2026, 2, prisma);
+    const year = await yearOverview(USER, 2026, prisma);
+    expect(month.budgets[0]).toMatchObject({ carry: 500, available: 1000 });
+    expect(month.budgets[0].pace.projectedTotal).toBe(1000);
+    expect(year.categories[0].months[1].projected).toBe(1000);
+  });
+
+  it("in January carries December of the previous year into the running month", async () => {
+    setNow("2026-01-20T15:00:00Z");
+    await budget(c.Mercado, 500, { rollover: true, effectiveFrom: "2025-12" });
+    const month = await monthOverview(USER, 2026, 1, prisma);
+    const year = await yearOverview(USER, 2026, prisma);
+    expect(month.budgets[0]).toMatchObject({ carry: 500, available: 1000 });
+    expect(year.categories[0].months[0].projected).toBe(1000);
+  });
+
   it("is net of reimbursements like Mensal, ends the running month at its projection, and compares spend and budget over the same months", async () => {
     // Budget only from July; spend since January. Today is 22/set.
     await budget(c.Moradia, 1000, { effectiveFrom: "2026-07", kind: "fixo" });

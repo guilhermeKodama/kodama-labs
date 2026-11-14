@@ -1,4 +1,3 @@
-import { addDays, addMonths } from "date-fns";
 import type { DbClient } from "@capital/server/lib/prisma";
 import { Prisma } from "@/generated/prisma";
 import { entityScopeSql, entityScopeWhere } from "@capital/server/lib/entity-scope";
@@ -7,10 +6,12 @@ import { toNumber } from "@capital/server/modules/ledger/lib/money";
 import { monthDaySql } from "@capital/server/modules/ledger/lib/spend-as-of";
 import {
   detectRecurring,
+  dueRuleOccurrences,
   merchantKey,
   projectMonth,
   recurringExpectation,
   type ChargeObservation,
+  type DueRule,
   type HistoryMonth,
   type MonthProjection,
   type RuleOccurrence,
@@ -100,30 +101,47 @@ async function charges(db: DbClient, userId: string, year: number, month: number
   });
 }
 
-/** Dates of a rule's occurrences from its next due date through the end of the month. */
-export function occurrencesIn(next: Date, frequency: string, monthStart: Date, monthEnd: Date, endDate: Date | null): number {
-  let count = 0;
-  let at = next;
-  for (let i = 0; i < 40 && at <= monthEnd && (!endDate || at <= endDate); i++) {
-    if (at >= monthStart) count += 1;
-    at = frequency === "daily" ? addDays(at, 1) : frequency === "weekly" ? addDays(at, 7) : frequency === "yearly" ? addMonths(at, 12) : addMonths(at, 1);
-  }
-  return count;
-}
-
-/** Expense rules (recurring bills) still due this month, one entry per rule, in base currency. */
+/**
+ * Expense rules still due this month, one entry per rule, in base currency.
+ * A nextDueDate before this month is a missed occurrence, not a pending
+ * bill, unless the rule booked an entry in this month or the two before it.
+ */
 async function dueRules(db: DbClient, userId: string, year: number, month: number, entityIds: string[] | null, fx: FxContext) {
   const monthStart = new Date(Date.UTC(year, month - 1, 1));
   const monthEnd = new Date(Date.UTC(year, month, 0, 23, 59, 59, 999));
+  const recentFrom = new Date(Date.UTC(year, month - 1 - 2, 1));
   const rules = await db.recurringRule.findMany({
     where: { userId, isActive: true, kind: "expense", categoryId: { not: null }, nextDueDate: { lte: monthEnd }, ...entityScopeWhere(entityIds) },
     select: { id: true, entityId: true, categoryId: true, amount: true, currency: true, exchangeRate: true, frequency: true, nextDueDate: true, endDate: true },
   });
-  return rules.flatMap((r) => {
-    const count = occurrencesIn(r.nextDueDate, r.frequency, monthStart, monthEnd, r.endDate);
-    if (!count) return [];
+  if (!rules.length) return [];
+  const booked = await db.ledgerEntry.findMany({
+    where: {
+      userId,
+      deletedAt: null,
+      kind: "expense",
+      recurringRuleId: { in: rules.map((r) => r.id) },
+      effectiveDate: { gte: recentFrom, lte: monthEnd },
+    },
+    select: { recurringRuleId: true },
+    distinct: ["recurringRuleId"],
+  });
+  const recent = new Set(booked.map((row) => row.recurringRuleId));
+  const due: DueRule[] = rules.map((r) => {
     const rate = r.exchangeRate ? toNumber(r.exchangeRate) : fx.rateFor(r.currency);
-    return [{ entityId: r.entityId, categoryId: r.categoryId, key: `rule:${r.id}`, amount: toNumber(r.amount) * rate * count }];
+    return {
+      key: `rule:${r.id}`,
+      amount: toNumber(r.amount) * rate,
+      nextDue: r.nextDueDate,
+      frequency: r.frequency,
+      endDate: r.endDate,
+      bookedRecently: recent.has(r.id),
+    };
+  });
+  const byId = new Map(rules.map((r) => [`rule:${r.id}`, r]));
+  return dueRuleOccurrences(due, monthStart, monthEnd).flatMap((occ) => {
+    const rule = byId.get(occ.key);
+    return rule ? [{ entityId: rule.entityId, categoryId: rule.categoryId, key: occ.key, amount: occ.amount }] : [];
   });
 }
 
@@ -157,8 +175,10 @@ export async function projectRunningMonth(
       slot.rest += row.rest;
       byMonth.set(row.month, slot);
     }
-    const bills = group.kind === "fixo" ? detectRecurring(chargeRows.filter((c) => group.owns(c.entityId, c.categoryId)), ym) : [];
+    const ownCharges = chargeRows.filter((c) => group.owns(c.entityId, c.categoryId));
+    const bills = group.kind === "fixo" ? detectRecurring(ownCharges, ym) : [];
     const due: RuleOccurrence[] = rules.filter((r) => group.owns(r.entityId, r.categoryId)).map((r) => ({ key: r.key, amount: r.amount }));
+    const booked = ownCharges.filter((c) => c.month === ym).map((c) => ({ key: c.key, amount: c.amount }));
     out.set(
       group.key,
       projectMonth({
@@ -168,7 +188,7 @@ export async function projectRunningMonth(
         budget: group.budget,
         elapsed: day / new Date(Date.UTC(year, month, 0)).getUTCDate(),
         history: [...byMonth.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([, value]) => value),
-        recurring: recurringExpectation(bills, due),
+        recurring: recurringExpectation(bills, due, booked),
       }),
     );
   }

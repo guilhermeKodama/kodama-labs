@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   budgetedSpan,
   detectRecurring,
+  dueRuleOccurrences,
   dropHighOutlier,
   legacyFutureMonth,
   legacyMonthProjection,
@@ -9,6 +10,7 @@ import {
   legacyTrend,
   median,
   merchantKey,
+  occurrencesIn,
   projectFutureMonth,
   projectMonth,
   recurringExpectation,
@@ -85,6 +87,16 @@ describe("fixed month", () => {
   it("does not trust one anomalous month", () => {
     expect(project({ kind: "fixo", spent: 0, history: [month(150000, 0)], budget: 5000 }).total).toBe(5000);
     expect(project({ kind: "fixo", spent: 0, history: [month(6000, 0)], budget: 5000 }).total).toBe(6000);
+  });
+
+  it("projects the net of a bill that is reimbursed every month, not the gross charge", () => {
+    const history = Array.from({ length: 6 }, () => month(888, 0));
+    // The charge is 6,408 and the credit is 5,520; the month nets about 888.
+    expect(project({ kind: "fixo", spent: 888, history, recurring: { expected: 6408, pending: 0 } })).toMatchObject({ total: 888, method: "fixed_booked" });
+    expect(project({ kind: "fixo", spent: 0, history, recurring: { expected: 6408, pending: 6408 } }).total).toBe(888);
+    // One cheap month is not a reimbursement pattern.
+    const mixed = [6408, 6408, 6300, 6408, 888, 6408].map((total) => month(total, 0));
+    expect(project({ kind: "fixo", spent: 0, history: mixed, recurring: { expected: 6408, pending: 6408 } }).total).toBe(6408);
   });
 
   it("uses the recurring charges with thin history, and a higher median when the rent went up", () => {
@@ -222,6 +234,36 @@ describe("recurring charges", () => {
   it("adds a rule that is due and has no history, but not one already detected", () => {
     const bills = [{ key: "rule:a", amount: 1000, day: 5, seen: 4, posted: true, postedAmount: 1000 }, { key: "luz", amount: 200, day: 9, seen: 3, posted: false, postedAmount: 50 }];
     expect(recurringExpectation(bills, [{ key: "rule:a", amount: 1000 }, { key: "rule:b", amount: 90 }])).toEqual({ expected: 1290, pending: 240 });
+  });
+
+  it("treats a same-sized charge under another key as the bill, and does not stack a rule on a bill of the same size", () => {
+    const rent = { key: "rule:rent", amount: 14732, day: 10, seen: 4, posted: false, postedAmount: 0 };
+    const booked = [{ key: "aluguel", amount: 14732 }];
+    expect(recurringExpectation([rent], [], booked)).toEqual({ expected: 14732, pending: 0 });
+    // The detected bill already is this rule.
+    expect(recurringExpectation([rent], [{ key: "rule:other", amount: 15000 }], booked)).toEqual({ expected: 14732, pending: 0 });
+    // Nothing posted yet: the rule is the whole month.
+    expect(recurringExpectation([], [{ key: "rule:rent", amount: 14732 }], [])).toEqual({ expected: 14732, pending: 14732 });
+  });
+
+  it("reduces what is still pending by booked spend no bill claimed", () => {
+    // 40 is not within a third of 90, so it is not that bill, but it still is not added on top.
+    expect(recurringExpectation([], [{ key: "rule:soft", amount: 90 }], [{ key: "compra", amount: 40 }])).toEqual({ expected: 90, pending: 50 });
+  });
+
+  it("does not count a rule that missed its last occurrence, unless it booked recently", () => {
+    const start = new Date("2026-11-01T00:00:00Z");
+    const end = new Date("2026-11-30T23:59:59.999Z");
+    const stale = { key: "rule:rent", amount: 14732, nextDue: new Date("2026-09-30T00:00:00Z"), frequency: "monthly", endDate: null, bookedRecently: false };
+    expect(dueRuleOccurrences([stale], start, end)).toEqual([]);
+    // Booked in the last two months: one occurrence this month, not one per missed month.
+    expect(dueRuleOccurrences([{ ...stale, bookedRecently: true }], start, end)).toEqual([{ key: "rule:rent", amount: 14732 }]);
+    expect(dueRuleOccurrences([{ ...stale, nextDue: new Date("2026-11-10T00:00:00Z") }], start, end)).toEqual([{ key: "rule:rent", amount: 14732 }]);
+    expect(dueRuleOccurrences([{ ...stale, nextDue: new Date("2026-11-10T00:00:00Z"), endDate: new Date("2026-10-01T00:00:00Z") }], start, end)).toEqual([]);
+    expect(occurrencesIn(new Date("2026-10-20T00:00:00Z"), "monthly", start, end, null)).toBe(1);
+    expect(occurrencesIn(new Date("2026-11-10T00:00:00Z"), "weekly", start, end, null)).toBe(3);
+    expect(occurrencesIn(new Date("2026-11-28T00:00:00Z"), "daily", start, end, new Date("2026-11-29T00:00:00Z"))).toBe(2);
+    expect(occurrencesIn(new Date("2026-01-15T00:00:00Z"), "yearly", start, end, null)).toBe(0);
   });
 });
 

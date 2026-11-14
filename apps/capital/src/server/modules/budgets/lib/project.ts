@@ -9,9 +9,13 @@
  *   max(booked + recurring charges still due, expected month)
  *   The expected month is the recurring charges (the app's recurring rules
  *   and merchants seen in at least three of the last six months), else a
- *   robust level of recent months, else the budget. Once the recurring
- *   charges have all posted and the month already holds a typical amount,
- *   it stops at what is booked. It is never scaled by the day.
+ *   robust level of recent months, else the budget. A charge already booked
+ *   this month, within about a third of a pending bill and not claimed by
+ *   another bill, is that bill even under a different key. When the last
+ *   three months sit well below the gross recurring total, the expected
+ *   month is that net level (a bill reimbursed every month). Once the
+ *   recurring charges have all posted and the month already holds a typical
+ *   amount, it stops at what is booked. It is never scaled by the day.
  *
  * Variable (spend spread through the month):
  *   booked + what usually still arrives after today (median of the last
@@ -28,6 +32,8 @@
  * before them; null ("—") when there is too little data or the change is
  * past +200%.
  */
+
+import { addDays, addMonths } from "date-fns";
 
 export interface HistoryMonth {
   /** Net spend of the whole month. May be negative (refunds). */
@@ -149,12 +155,27 @@ function shrinkSingle(value: number, budget: number): number {
   return budget > 0 && value > budget * 2 ? budget : value;
 }
 
+/**
+ * recurring.expected is the gross charge. When the last three complete
+ * months are all well below it, the gap is the reimbursement that arrives
+ * with the bill, and the expected month is that net level.
+ */
+function netOfReimbursements(recurring: RecurringExpectation, history: readonly HistoryMonth[]): RecurringExpectation | null {
+  const recent = history.slice(-3).map((h) => h.total).filter((v) => v >= 0);
+  if (recent.length < 3 || !(recurring.expected > 0)) return null;
+  const level = median(recent);
+  if (!(level < recurring.expected * 0.7) || !recent.every((v) => v < recurring.expected * 0.85)) return null;
+  return { expected: cents(level), pending: cents(Math.max(0, recurring.pending - (recurring.expected - level))) };
+}
+
 function projectFixed(input: MonthProjectionInput): MonthProjection {
   const budget = Math.max(0, input.budget);
   const level = robustCenter(input.history.map((h) => h.total), "level");
   const n = input.history.length;
   const fromHistory = level == null ? null : n >= 2 ? level.value : shrinkSingle(level.value, budget);
-  const recurring = input.recurring ?? { expected: 0, pending: 0 };
+  const gross = input.recurring ?? { expected: 0, pending: 0 };
+  const netted = netOfReimbursements(gross, input.history);
+  const recurring = netted ?? gross;
   const bookedAfter = Math.max(0, input.committed - input.spent);
   const floor = input.committed + Math.max(0, recurring.pending - bookedAfter);
 
@@ -162,7 +183,9 @@ function projectFixed(input: MonthProjectionInput): MonthProjection {
   let method: ProjectionMethod;
   if (recurring.expected > 0) {
     // A median well above the known charges is a real level (another bill nobody named); otherwise the charges are the month.
-    expected = fromHistory != null && n >= 3 ? Math.max(recurring.expected, fromHistory > recurring.expected * 1.5 ? fromHistory : recurring.expected) : recurring.expected;
+    // A net level already replaced the gross expected, so it is not lifted back up.
+    const lifted = !netted && fromHistory != null && n >= 3 && fromHistory > recurring.expected * 1.5;
+    expected = lifted && fromHistory != null ? fromHistory : recurring.expected;
     method = "fixed_recurring";
     // Every known charge already posted and the month already looks complete: stop at what is booked.
     if (recurring.pending <= 0 && input.committed >= expected * 0.9) return { total: cents(Math.max(0, input.committed)), method: "fixed_booked", outlierMonths: level?.dropped ? 1 : 0 };
@@ -293,7 +316,7 @@ export function detectRecurring(charges: readonly ChargeObservation[], currentMo
       thisMonth.set(charge.key, (thisMonth.get(charge.key) ?? 0) + charge.amount);
       continue;
     }
-    if (age < 1 || age > 6) continue;
+    if (age > 6) continue;
     const months = byKey.get(charge.key) ?? new Map<string, { amount: number; day: number }>();
     const prev = months.get(charge.month);
     months.set(charge.month, prev ? { amount: prev.amount + charge.amount, day: charge.amount > prev.amount ? charge.day : prev.day } : { amount: charge.amount, day: charge.day });
@@ -322,25 +345,102 @@ export interface RuleOccurrence {
   amount: number;
 }
 
+/** A positive expense already booked this month, in the category being projected. */
+export interface BookedCharge {
+  key: string;
+  amount: number;
+}
+
+/** A recurring expense rule, as the overview and the backtest both see it. */
+export interface DueRule {
+  key: string;
+  /** Base-currency amount of one occurrence. */
+  amount: number;
+  nextDue: Date;
+  frequency: string;
+  endDate: Date | null;
+  /**
+   * An entry with this rule was booked in this month or the two before it.
+   * A nextDueDate before the month is not a pending bill without this.
+   */
+  bookedRecently: boolean;
+}
+
+/** Dates of a rule's occurrences from its next due date through the end of the month. */
+export function occurrencesIn(next: Date, frequency: string, monthStart: Date, monthEnd: Date, endDate: Date | null): number {
+  let count = 0;
+  let at = next;
+  for (let i = 0; i < 40 && at <= monthEnd && (!endDate || at <= endDate); i++) {
+    if (at >= monthStart) count += 1;
+    at = frequency === "daily" ? addDays(at, 1) : frequency === "weekly" ? addDays(at, 7) : frequency === "yearly" ? addMonths(at, 12) : addMonths(at, 1);
+  }
+  return count;
+}
+
+/**
+ * Rules that are still a bill this month. A nextDueDate before the month
+ * means the rule missed its last occurrence: it is not pending, unless it
+ * actually booked in this month or the two before it. Stepping a stale date
+ * still counts only the occurrences that land in this month.
+ */
+export function dueRuleOccurrences(rules: readonly DueRule[], monthStart: Date, monthEnd: Date): RuleOccurrence[] {
+  return rules.flatMap((rule) => {
+    if (rule.nextDue < monthStart && !rule.bookedRecently) return [];
+    const count = occurrencesIn(rule.nextDue, rule.frequency, monthStart, monthEnd, rule.endDate);
+    if (!count || !(rule.amount > 0)) return [];
+    return [{ key: rule.key, amount: cents(rule.amount * count) }];
+  });
+}
+
+/** About a third: the same band detectRecurring uses for a stable bill. */
+const AMOUNT_BAND = 0.35;
+
+function withinBand(charge: number, bill: number): boolean {
+  if (!(charge > 0) || !(bill > 0)) return false;
+  const gap = Math.abs(charge - bill);
+  return gap <= bill * AMOUNT_BAND || gap <= charge * AMOUNT_BAND;
+}
+
 /**
  * Known charges for the month: detected bills plus the recurring rules due
  * this month that have not booked an entry yet (a rule with no history is
- * still a bill the user told us about).
+ * still a bill the user told us about). A booked charge within about ±35%
+ * of an open bill, claimed by no other bill, marks that bill posted — the
+ * key is not the only way to recognise it. Whatever is still booked and
+ * unclaimed then reduces what is left pending, so a bill is not added on
+ * top of spend that may already be it.
  */
-export function recurringExpectation(bills: readonly RecurringBill[], dueRules: readonly RuleOccurrence[]): RecurringExpectation {
-  const known = new Set(bills.map((b) => b.key));
+export function recurringExpectation(bills: readonly RecurringBill[], dueRules: readonly RuleOccurrence[], booked: readonly BookedCharge[] = []): RecurringExpectation {
   let expected = 0;
-  let pending = 0;
+  const open: { amount: number; claimed: boolean }[] = [];
   for (const bill of bills) {
     expected += bill.amount;
-    if (!bill.posted) pending += Math.max(0, bill.amount - bill.postedAmount);
+    if (!bill.posted) {
+      const left = Math.max(0, bill.amount - bill.postedAmount);
+      if (left > 0) open.push({ amount: left, claimed: false });
+    }
   }
+  const known = new Set(bills.map((b) => b.key));
+  const free = booked.filter((c) => c.amount > 0 && !known.has(c.key)).map((c) => ({ amount: c.amount, claimed: false }));
+  free.sort((a, b) => b.amount - a.amount);
+  const claim = (amount: number) => {
+    const idx = free.findIndex((c) => !c.claimed && withinBand(c.amount, amount));
+    if (idx < 0) return false;
+    free[idx]!.claimed = true;
+    return true;
+  };
+  open.sort((a, b) => b.amount - a.amount);
+  for (const item of open) if (claim(item.amount)) item.claimed = true;
   for (const rule of dueRules) {
     if (known.has(rule.key)) continue;
+    // A detected bill of about the same amount is this rule, already counted.
+    if (bills.some((b) => withinBand(b.amount, rule.amount))) continue;
     expected += rule.amount;
-    pending += rule.amount;
+    if (!claim(rule.amount)) open.push({ amount: rule.amount, claimed: false });
   }
-  return { expected: cents(expected), pending: cents(pending) };
+  const pending = open.reduce((sum, item) => sum + (item.claimed ? 0 : item.amount), 0);
+  const unmatched = free.reduce((sum, c) => sum + (c.claimed ? 0 : c.amount), 0);
+  return { expected: cents(expected), pending: cents(Math.max(0, pending - unmatched)) };
 }
 
 /**

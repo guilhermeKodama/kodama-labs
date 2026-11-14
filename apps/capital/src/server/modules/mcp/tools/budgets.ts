@@ -170,8 +170,9 @@ export async function getBudgetStatus(userId: string, params: GetBudgetStatusPar
 
 /**
  * Fixed vs variable totals per month, and the top variable categories.
- * A budget with no kind counts as variável. `actual` on get_budget_status
- * stays the gross committed spend; net here is after reimbursements.
+ * A budget with no kind counts as variável. On get_budget_status, `actual`,
+ * `remaining`, `percentUsed` and `isOverBudget` stay on the gross committed
+ * spend; `projected` is net of reimbursements, the same number the app shows.
  */
 export async function getBudgetComposition(userId: string, params: GetBudgetCompositionParams, db: DbClient) {
   const entity = await resolveEntity(userId, params.accountId, db);

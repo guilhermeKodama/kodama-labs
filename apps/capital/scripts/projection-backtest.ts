@@ -18,8 +18,8 @@
 import { PrismaClient } from "../src/generated/prisma";
 import { budgetKind } from "../src/lib/budgets/kind";
 import { assertNonProductionDatabase } from "../src/server/lib/db-guard";
-import { merchantKey } from "../src/server/modules/budgets/lib/project";
-import { formatReport, runBacktest, syntheticSeries, type Charge, type Series } from "../src/server/modules/budgets/lib/projection-backtest";
+import { median, merchantKey } from "../src/server/modules/budgets/lib/project";
+import { formatReport, runBacktest, syntheticSeries, type Charge, type Series, type SeriesRule } from "../src/server/modules/budgets/lib/projection-backtest";
 
 interface EntryRow {
   user_id: string;
@@ -42,16 +42,38 @@ interface BudgetRow {
   amount: unknown;
 }
 
+interface RuleRow {
+  id: string;
+  user_id: string;
+  entity_id: string;
+  category_id: string;
+  amount: unknown;
+  frequency: string;
+  next_due: string;
+}
+
 const monthIndex = (ym: string) => Number(ym.slice(0, 4)) * 12 + Number(ym.slice(5, 7)) - 1;
 
-/** Series of the latest monthly budget of each slot, over the closed months. Spend of an entity goes to its own budget, else to the one for every entity. */
-function seriesFrom(entries: readonly EntryRow[], budgets: readonly BudgetRow[], currentYm: string) {
+/**
+ * Series of the latest monthly budget of each slot, over the closed months.
+ * Spend of an entity goes to its own budget, else to the one for every entity.
+ * `rules` is the active expense rules: `due` is derived from nextDueDate the
+ * way the app does, not from whether a later charge carries the rule key.
+ */
+function seriesFrom(entries: readonly EntryRow[], budgets: readonly BudgetRow[], rules: readonly RuleRow[], currentYm: string) {
   const own = new Map<string, BudgetRow>();
   for (const b of budgets) own.set(`${b.user_id}|${b.entity_id ?? "*"}|${b.category_id}`, b);
   const closed = entries.filter((e) => e.ym < currentYm);
   if (!closed.length) return { series: [] as Series[], months: 0 };
   const first = Math.min(...closed.map((e) => monthIndex(e.ym)));
   const months = monthIndex(currentYm) - first;
+  const originYear = Math.floor(first / 12);
+  const originMonth = (first % 12) + 1;
+  const origin = `${originYear}-${String(originMonth).padStart(2, "0")}`;
+  const slotOf = (userId: string, entityId: string, categoryId: string) => {
+    const budget = own.get(`${userId}|${entityId}|${categoryId}`) ?? own.get(`${userId}|*|${categoryId}`);
+    return budget ? `${budget.user_id}|${budget.entity_id ?? "*"}|${budget.category_id}` : null;
+  };
   const bySlot = new Map<string, { budget: BudgetRow; months: Charge[][]; ruleKeys: Set<string> }>();
   for (const e of closed) {
     const budget = own.get(`${e.user_id}|${e.entity_id}|${e.category_id}`) ?? own.get(`${e.user_id}|*|${e.category_id}`);
@@ -69,13 +91,49 @@ function seriesFrom(entries: readonly EntryRow[], budgets: readonly BudgetRow[],
     }
     s.months[monthIndex(e.ym) - first]?.push({ day: Number(e.day), rawDay: Number(e.raw_day), amount, key });
   }
+  const bookedByRule = new Map<string, Set<string>>();
+  const amountsByRule = new Map<string, number[]>();
+  for (const e of entries) {
+    if (e.kind !== "expense" || !e.rule_id || !(Number(e.amount) > 0)) continue;
+    const monthsBooked = bookedByRule.get(e.rule_id) ?? new Set<string>();
+    monthsBooked.add(e.ym);
+    bookedByRule.set(e.rule_id, monthsBooked);
+    const amounts = amountsByRule.get(e.rule_id) ?? [];
+    amounts.push(Number(e.amount));
+    amountsByRule.set(e.rule_id, amounts);
+  }
+  const rulesBySlot = new Map<string, SeriesRule[]>();
+  for (const rule of rules) {
+    const slot = slotOf(rule.user_id, rule.entity_id, rule.category_id);
+    if (!slot) continue;
+    const samples = amountsByRule.get(rule.id) ?? [];
+    const list = rulesBySlot.get(slot) ?? [];
+    list.push({
+      key: `r${rule.id}`,
+      amount: samples.length ? median(samples) : Number(rule.amount),
+      nextDue: String(rule.next_due).slice(0, 10),
+      frequency: rule.frequency,
+      bookedMonths: [...(bookedByRule.get(rule.id) ?? [])],
+    });
+    rulesBySlot.set(slot, list);
+  }
   const users = new Map<string, number>();
   const series: Series[] = [];
   for (const s of bySlot.values()) {
     const start = s.months.findIndex((m) => m.length > 0);
     if (start < 0) continue;
     if (!users.has(s.budget.user_id)) users.set(s.budget.user_id, users.size);
-    series.push({ household: users.get(s.budget.user_id) ?? 0, kind: budgetKind(s.budget.kind), budget: Number(s.budget.amount), start, months: s.months, ruleKeys: s.ruleKeys });
+    const slot = `${s.budget.user_id}|${s.budget.entity_id ?? "*"}|${s.budget.category_id}`;
+    series.push({
+      household: users.get(s.budget.user_id) ?? 0,
+      kind: budgetKind(s.budget.kind),
+      budget: Number(s.budget.amount),
+      start,
+      months: s.months,
+      ruleKeys: s.ruleKeys,
+      rules: rulesBySlot.get(slot) ?? [],
+      origin,
+    });
   }
   return { series, months };
 }
@@ -105,6 +163,12 @@ async function fromDatabase() {
           FROM ledger_entries le
           WHERE le."deletedAt" IS NULL AND le."transferGroupId" IS NULL
             AND ((le.kind = 'expense' AND le."categoryId" IS NOT NULL) OR (le.kind = 'income' AND le."reimbursesCategoryId" IS NOT NULL))`);
+        const rules = await tx.$queryRawUnsafe<RuleRow[]>(`
+          SELECT id, "userId" AS user_id, "entityId" AS entity_id, "categoryId" AS category_id,
+                 amount, frequency::text AS frequency,
+                 to_char("nextDueDate" AT TIME ZONE 'UTC', 'YYYY-MM-DD') AS next_due
+          FROM recurring_rules
+          WHERE "isActive" AND kind = 'expense' AND "categoryId" IS NOT NULL`);
         const budgets = await tx.$queryRawUnsafe<BudgetRow[]>(`
           SELECT DISTINCT ON ("userId", coalesce("entityId", '*'), "categoryId")
                  "userId" AS user_id, "entityId" AS entity_id, "categoryId" AS category_id, kind::text AS kind, amount
@@ -130,15 +194,18 @@ async function fromDatabase() {
             (SELECT count(*) FROM ledger_entries le JOIN categories c ON c.id = le."categoryId"
               WHERE le."deletedAt" IS NULL AND le.kind = 'expense' AND le."transferGroupId" IS NULL AND c."systemKey" = 'credit_card' AND le."cardStatementId" IS NULL)::int AS bill_payments_as_expense,
             (SELECT count(*) FROM recurring_rules r WHERE r."isActive" AND r.kind = 'expense' AND r."categoryId" IS NOT NULL)::int AS active_expense_rules`);
-        return { entries, budgets, diagnostics: diagnostics[0] ?? {} };
+        return { entries, budgets, rules, diagnostics: diagnostics[0] ?? {} };
       },
       { timeout: 300_000, maxWait: 30_000 },
     );
     const now = new Date();
     const currentYm = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}`;
-    const { series, months } = seriesFrom(result.entries, result.budgets, currentYm);
+    const { series, months } = seriesFrom(result.entries, result.budgets, result.rules, currentYm);
     console.log(`Read-only backtest: ${series.length} budget series, ${months} closed months. Errors and counts only.\n`);
     console.log(formatReport(runBacktest(series)));
+    console.log(
+      "\nDue in the database mode follows the app: a rule whose nextDueDate is before the month is not a pending bill unless it booked an entry in that month or the two before it. A charge within about 35% of a pending bill, under another key, counts as that bill.",
+    );
     console.log("\n| Diagnóstico (contagens) | valor |\n|---|---:|");
     for (const [key, value] of Object.entries(result.diagnostics)) console.log(`| ${key} | ${String(value)} |`);
   } finally {

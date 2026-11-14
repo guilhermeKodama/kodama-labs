@@ -191,8 +191,71 @@ describe("month-end projection", () => {
     const by = (id: string) => o.budgets.find((b) => b.categoryId === id)!.pace;
     // 1,800 in 14 of 30 days is 3,857 at the daily rate.
     expect(by(c.Moradia)).toMatchObject({ projectedTotal: 2000, projectionMethod: "fixed_budget" });
-    // The rule (90 on the 25th) has not booked yet: what is booked plus that charge. The known bill wins over the budget.
-    expect(by(c.Software)).toMatchObject({ projectedTotal: 130, projectionMethod: "fixed_booked" });
+    // The 40 already booked is not close enough to be the 90 rule, but it is not stacked on top of the rule either.
+    expect(by(c.Software)).toMatchObject({ projectedTotal: 90, projectionMethod: "fixed_recurring" });
+  });
+
+  it("does not add a stale recurring rule on top of the same bill already booked without the rule", async () => {
+    vi.setSystemTime(new Date("2026-11-14T15:00:00Z"));
+    await createBudget(USER, { entityId: f.pfId, categoryId: c.Moradia, amount: 16685, effectiveFrom: "2026-05", kind: "fixo" }, prisma);
+    for (const m of ["05", "06", "07", "08", "09", "10"]) await spend(f.pfChecking, c.Moradia, 14732, `2026-${m}-10`);
+    await spend(f.pfChecking, c.Moradia, 14732, "2026-11-01");
+    // Active, but nextDueDate stuck in September, and nothing since has been booked under either rule.
+    const stale = (description: string, amount: number) =>
+      prisma.recurringRule.create({
+        data: {
+          userId: USER,
+          entityId: f.pfId,
+          accountId: f.pfChecking,
+          kind: "expense",
+          amount,
+          currency: "BRL",
+          description,
+          categoryId: c.Moradia,
+          frequency: "monthly",
+          isActive: true,
+          startDate: new Date("2026-01-10T12:00:00Z"),
+          nextDueDate: new Date("2026-09-30T12:00:00Z"),
+        },
+      });
+    await stale("Aluguel", 14732);
+    await stale("Condomínio", 5000);
+
+    const row = (await monthOverview(USER, 2026, 11, prisma)).budgets.find((b) => b.categoryId === c.Moradia)!;
+    // The rent already booked, not the rent again and not the stale condomínio on top.
+    expect(row.netCommitted).toBe(14732);
+    expect(row.pace.projectedTotal).toBe(14732);
+  });
+
+  it("counts a same-amount charge without the rule as the bill a recently booked rule still expects", async () => {
+    vi.setSystemTime(new Date("2026-11-14T15:00:00Z"));
+    await createBudget(USER, { entityId: f.pfId, categoryId: c.Moradia, amount: 2000, effectiveFrom: "2026-05", kind: "fixo" }, prisma);
+    const rule = await prisma.recurringRule.create({
+      data: {
+        userId: USER,
+        entityId: f.pfId,
+        accountId: f.pfChecking,
+        kind: "expense",
+        amount: 1000,
+        currency: "BRL",
+        description: "Aluguel",
+        categoryId: c.Moradia,
+        frequency: "monthly",
+        isActive: true,
+        startDate: new Date("2026-01-10T12:00:00Z"),
+        nextDueDate: new Date("2026-10-10T12:00:00Z"),
+      },
+    });
+    for (const m of ["05", "06", "07", "08", "09", "10"]) {
+      const wrote = await spend(f.pfChecking, c.Moradia, 1000, `2026-${m}-10`);
+      await prisma.ledgerEntry.update({ where: { id: wrote.entryIds[0] }, data: { recurringRuleId: rule.id } });
+    }
+    await spend(f.pfChecking, c.Moradia, 1000, "2026-11-02");
+
+    const row = (await monthOverview(USER, 2026, 11, prisma)).budgets.find((b) => b.categoryId === c.Moradia)!;
+    expect(row.netCommitted).toBe(1000);
+    expect(row.pace.projectedTotal).toBe(1000);
+    expect(row.pace.projectedTotal).toBeLessThan(row.netCommitted + 1000);
   });
 
   it("puts a card purchase from the previous cycle on day 1 of its month, not on its own day", async () => {

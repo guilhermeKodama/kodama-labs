@@ -13,6 +13,7 @@
 
 import {
   detectRecurring,
+  dueRuleOccurrences,
   legacyFutureMonth,
   legacyMonthProjection,
   legacyTrend,
@@ -44,8 +45,29 @@ export interface Series {
   /** Index of the first month with data; earlier months do not exist. */
   start: number;
   months: Charge[][];
-  /** Keys that a recurring rule in the app books (`rule:` keys). */
+  /** Keys that a recurring rule in the app books (`rule:` keys). Synthetic series only. */
   ruleKeys?: ReadonlySet<string>;
+  /**
+   * Rule state, the way dueRules reads it. Set by the database backtest
+   * (possibly empty). Absent on synthetic series, which still treat a rule
+   * as due only when its own charge has not posted yet.
+   */
+  rules?: readonly SeriesRule[];
+  /** YYYY-MM of month index 0. Synthetic series start at 2025-01. */
+  origin?: string;
+}
+
+/** One active expense rule, in the calendar of `origin`. */
+export interface SeriesRule {
+  /** Charge key without the `rule:` prefix (`r<id>` in the database mode). */
+  key: string;
+  /** Base-currency amount of one occurrence. */
+  amount: number;
+  /** nextDueDate, YYYY-MM-DD. May sit months before the month being scored. */
+  nextDue: string;
+  frequency: string;
+  /** YYYY-MM months that booked an entry under this rule. */
+  bookedMonths: readonly string[];
 }
 
 export const BACKTEST_DAYS = [5, 10, 15, 20, 25] as const;
@@ -178,8 +200,41 @@ export function syntheticSeries(households = 300, months = 14, seed = 20261114):
 /* ------------------------------ scoring ------------------------------ */
 
 const sum = (charges: readonly Charge[], pick: (c: Charge) => boolean = () => true) => charges.filter(pick).reduce((s, c) => s + c.amount, 0);
-/** Month index 0 → 2025-01, 12 → 2026-01. */
-const ym = (index: number) => `${2025 + Math.floor(index / 12)}-${String((index % 12) + 1).padStart(2, "0")}`;
+/** Month index 0 is `origin` (synthetic series: 2025-01). Negative indexes step back. */
+function monthYm(origin: string, index: number): string {
+  const base = Number(origin.slice(0, 4)) * 12 + Number(origin.slice(5, 7)) - 1;
+  const abs = base + index;
+  const year = Math.floor(abs / 12);
+  const month = (abs % 12) + 1;
+  return `${year}-${String(month).padStart(2, "0")}`;
+}
+
+/**
+ * Rules due in month `t`, from the rule's nextDueDate the way the app's
+ * dueRules does. A nextDueDate before the month is not pending unless the
+ * rule booked in that month or the two before it.
+ */
+function dueFromRules(series: Series, t: number): RuleOccurrence[] {
+  const origin = series.origin ?? "2025-01";
+  const month = monthYm(origin, t);
+  const year = Number(month.slice(0, 4));
+  const m = Number(month.slice(5, 7));
+  const monthStart = new Date(Date.UTC(year, m - 1, 1));
+  const monthEnd = new Date(Date.UTC(year, m, 0, 23, 59, 59, 999));
+  const recent = new Set([month, monthYm(origin, t - 1), monthYm(origin, t - 2)]);
+  return dueRuleOccurrences(
+    (series.rules ?? []).map((rule) => ({
+      key: `rule:${rule.key}`,
+      amount: rule.amount,
+      nextDue: new Date(`${rule.nextDue}T12:00:00Z`),
+      frequency: rule.frequency,
+      endDate: null,
+      bookedRecently: rule.bookedMonths.some((booked) => recent.has(booked)),
+    })),
+    monthStart,
+    monthEnd,
+  );
+}
 
 export interface Point {
   household: number;
@@ -205,22 +260,26 @@ function pointsFor(series: Series, t: number, day: number): Point | null {
   const old = legacyMonthProjection({ spent, committed: spent, daysElapsed: day, daysInMonth: DAYS_IN_MONTH, totals: oldHistory.map((h) => h.total), tails: oldHistory.map((h) => h.rest) });
 
   const history: HistoryMonth[] = priorIdx.map((i) => ({ total: sum(series.months[i] ?? []), rest: sum(series.months[i] ?? [], (c) => c.day > day) }));
+  const origin = series.origin ?? "2025-01";
   const observations: ChargeObservation[] = [];
   for (const i of [...priorIdx, t]) {
     for (const c of series.months[i] ?? []) {
       if (!c.key || c.amount <= 0 || (i === t && c.day > day)) continue;
       const key = series.ruleKeys?.has(c.key) ? `rule:${c.key}` : c.key;
-      observations.push({ month: ym(i), key, day: c.day, amount: c.amount });
+      observations.push({ month: monthYm(origin, i), key, day: c.day, amount: c.amount });
     }
   }
-  const bills = series.kind === "fixo" ? detectRecurring(observations, ym(t)) : [];
-  // A rule the app knows about is still due when its charge has not posted yet.
-  const due: RuleOccurrence[] = [];
-  for (const key of series.ruleKeys ?? []) {
-    const charge = month.find((c) => c.key === key);
-    if (charge && charge.day > day) due.push({ key: `rule:${key}`, amount: charge.amount });
-  }
-  const neu = projectMonth({ kind: series.kind, spent, committed: spent, budget: series.budget, elapsed: day / DAYS_IN_MONTH, history, recurring: recurringExpectation(bills, due) }).total;
+  const bills = series.kind === "fixo" ? detectRecurring(observations, monthYm(origin, t)) : [];
+  // Database mode replays rule state (a stale nextDueDate included). Synthetic
+  // series have no rule state: a rule is due when its own charge posts later.
+  const due: RuleOccurrence[] = series.rules
+    ? dueFromRules(series, t)
+    : [...(series.ruleKeys ?? [])].flatMap((key) => {
+        const charge = month.find((c) => c.key === key);
+        return charge && charge.day > day ? [{ key: `rule:${key}`, amount: charge.amount }] : [];
+      });
+  const booked = observations.filter((c) => c.month === monthYm(origin, t)).map((c) => ({ key: c.key, amount: c.amount }));
+  const neu = projectMonth({ kind: series.kind, spent, committed: spent, budget: series.budget, elapsed: day / DAYS_IN_MONTH, history, recurring: recurringExpectation(bills, due, booked) }).total;
   return { household: series.household, month: t, kind: series.kind, day, depth: priorIdx.length, actual, old, neu };
 }
 
@@ -335,6 +394,8 @@ export interface Report {
   byDay: ErrorRow[];
   byDepth: ErrorRow[];
   future: ErrorRow[];
+  /** Months whose net spend is negative. Left out of the tables above: a large credit (a fee reversal) dominates MAPE. */
+  negativeActual: ErrorRow;
   counts: TrendCount;
   series: number;
 }
@@ -343,14 +404,17 @@ export function runBacktest(all: readonly Series[], monthPoints?: readonly Point
   const points = monthPoints ?? intraMonthPoints(all);
   const future = futurePoints(all);
   const depthLabel = (d: number) => (d === 0 ? "0 meses" : d <= 2 ? "1–2 meses" : "3–6 meses");
-  const cards = kpiPoints(points);
+  // A month that nets negative (a fee reversal, a refund larger than the spend) is not a forecast of the usual month.
+  const scored = points.filter((p) => p.actual >= 0);
+  const cards = kpiPoints(scored);
   return {
     series: all.length,
     byCard: [errors("Fixo", cards.fixo), errors("Variável", cards.variavel), errors("Total", cards.total)],
-    byKind: [errors("Fixo", points.filter((p) => p.kind === "fixo")), errors("Variável", points.filter((p) => p.kind === "variavel")), errors("Todas", points)],
-    byDay: BACKTEST_DAYS.map((d) => errors(`dia ${d}`, points.filter((p) => p.day === d))),
-    byDepth: ["0 meses", "1–2 meses", "3–6 meses"].map((label) => errors(label, points.filter((p) => depthLabel(p.depth) === label))),
-    future: [errors("Fixo", future.filter((p) => p.kind === "fixo")), errors("Variável", future.filter((p) => p.kind === "variavel")), errors("Todas", future)],
+    byKind: [errors("Fixo", scored.filter((p) => p.kind === "fixo")), errors("Variável", scored.filter((p) => p.kind === "variavel")), errors("Todas", scored)],
+    byDay: BACKTEST_DAYS.map((d) => errors(`dia ${d}`, scored.filter((p) => p.day === d))),
+    byDepth: ["0 meses", "1–2 meses", "3–6 meses"].map((label) => errors(label, scored.filter((p) => depthLabel(p.depth) === label))),
+    future: [errors("Fixo", future.filter((p) => p.kind === "fixo" && p.actual >= 0)), errors("Variável", future.filter((p) => p.kind === "variavel" && p.actual >= 0)), errors("Todas", future.filter((p) => p.actual >= 0))],
+    negativeActual: errors("Gasto líquido negativo", points.filter((p) => p.actual < 0)),
     counts: trendCounts(all, future),
   };
 }
@@ -372,6 +436,7 @@ export function formatReport(report: Report): string {
     table("Fim do mês, por dia", report.byDay),
     table("Fim do mês, por histórico", report.byDepth),
     table("Meses futuros (Anual)", report.future),
+    table("Fora das tabelas: mês com gasto líquido negativo", [report.negativeActual]),
     `| Contagens | antigo | novo |\n|---|---:|---:|\n| Tendência exibida | ${c.shownOld} | ${c.shownNew} |\n| Tendência acima de ±200% | ${c.wildOld} | ${c.wildNew} |\n| Mês futuro negativo | ${c.negativeFutureOld} | ${c.negativeFutureNew} |`,
   ].join("\n\n");
 }

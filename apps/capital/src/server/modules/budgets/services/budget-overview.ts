@@ -95,6 +95,18 @@ function assigned(list: readonly Spend[], budgets: readonly Budget[], b: Budget,
   return list.filter((s) => budgetFor(budgets, s.entityId, s.categoryId)?.id === b.id).reduce((sum, s) => sum + s[key], 0);
 }
 
+/**
+ * Unused budget carried into this month (amount plus this is what Mensal
+ * calls available). Anual projects the running month against the same number.
+ */
+function carryInto(current: Pick<Budget, "rollover" | "categoryId" | "entityId">, prevBudgets: readonly Budget[], prevSpend: readonly Spend[], prevOffsets: readonly Offset[], fx: FxContext): number {
+  if (!current.rollover) return 0;
+  const prev = prevBudgets.find((p) => p.categoryId === current.categoryId && p.entityId === current.entityId);
+  if (!prev) return 0;
+  const prevNet = assigned(prevSpend, prevBudgets, prev, "spent") - assignedOffset(prevOffsets, prevBudgets, prev, "amount");
+  return Math.max(0, baseAmount(fx, prev) - prevNet);
+}
+
 interface Offset {
   entityId: string;
   categoryId: string;
@@ -324,14 +336,7 @@ export async function monthOverview(userId: string, year: number, month: number,
   const base = budgets
     .map((b) => {
       const amount = baseAmount(fx, b);
-      let carry = 0;
-      if (b.rollover) {
-        const prev = prevBudgets.find((p) => p.categoryId === b.categoryId && p.entityId === b.entityId);
-        if (prev) {
-          const prevNet = assigned(prevSpend, prevBudgets, prev, "spent") - assignedOffset(prevOffsets, prevBudgets, prev, "amount");
-          carry = Math.max(0, baseAmount(fx, prev) - prevNet);
-        }
-      }
+      const carry = carryInto(b, prevBudgets, prevSpend, prevOffsets, fx);
       const available = amount + carry;
       const committed = round(assigned(spend, budgets, b, "spent"), 2);
       const spent = round(assigned(spend, budgets, b, "spentToDate"), 2);
@@ -596,6 +601,39 @@ export type YearInsightKind = (typeof INSIGHT_KINDS)[number];
 export const INSIGHT_RULES = { overrunMonths: 3, growth: 0.12, seasonalPeak: 1.4 } as const;
 
 /**
+ * The month before the one in progress, so Anual can add the same carry
+ * Mensal does. January reads December of the previous year, and only when
+ * a budget actually rolls over.
+ */
+async function previousMonthForCarry(
+  db: DbClient,
+  userId: string,
+  year: number,
+  currentMonth: number,
+  entityIds: string[] | null,
+  monthly: readonly Budget[][],
+  spend: readonly Spend[],
+  offsets: readonly Offset[],
+): Promise<{ budgets: Budget[]; spend: Spend[]; offsets: Offset[] } | null> {
+  if (currentMonth > 1) {
+    const prev = currentMonth - 1;
+    return { budgets: monthly[prev - 1] ?? [], spend: spend.filter((s) => s.month === prev), offsets: offsets.filter((o) => o.month === prev) };
+  }
+  if (!monthly[0]?.some((b) => b.rollover)) return null;
+  const prevBounds = monthBounds(year - 1, 12);
+  const [prevSpend, prevOffsets, prevBudgets] = await Promise.all([
+    spendBySlot(db, userId, prevBounds, prevBounds.to, entityIds),
+    offsetsBySlot(db, userId, prevBounds, prevBounds.to, entityIds),
+    getEffectiveBudgetsForMonth(db, userId, new Date(Date.UTC(year - 1, 11, 1, 12))),
+  ]);
+  return {
+    budgets: prevBudgets.filter(budgetInScope(entityIds)).filter((b) => b.period === "monthly"),
+    spend: prevSpend,
+    offsets: prevOffsets,
+  };
+}
+
+/**
  * Category x month matrix of a year, one row per monthly budget slot
  * (entity or every entity, category), in líquido (net of reimbursements),
  * the same basis as Mensal. Months before the current one are actuals;
@@ -669,8 +707,10 @@ export async function yearOverview(userId: string, year: number, db: DbClient, o
   // The month in progress ends at its month-end projection, the same number as Mensal.
   const cm = currentMonth - 1;
   const daysInCurrent = currentMonth >= 1 && currentMonth <= 12 ? new Date(Date.UTC(year, currentMonth, 0)).getUTCDate() : 0;
+  const projectingYear = currentMonth >= 1 && currentMonth <= 12 && today.d < daysInCurrent;
+  const prevForCarry = projectingYear ? await previousMonthForCarry(db, userId, year, currentMonth, entityIds, monthly, spend, offsets) : null;
   const running =
-    currentMonth >= 1 && currentMonth <= 12 && today.d < daysInCurrent
+    projectingYear
       ? await projectRunningMonth(
           db,
           userId,
@@ -683,7 +723,7 @@ export async function yearOverview(userId: string, year: number, db: DbClient, o
             return {
               key,
               kind: budgetKind(slot.budgeted ? inForce?.kind : null),
-              budget: inForce ? baseAmount(fx, inForce) : 0,
+              budget: inForce ? baseAmount(fx, inForce) + (prevForCarry ? carryInto(inForce, prevForCarry.budgets, prevForCarry.spend, prevForCarry.offsets, fx) : 0) : 0,
               owns: (entityId, categoryId) => slotFor(entityId, categoryId, cm, false) === key,
               spent: c?.actual[cm] ?? 0,
               committed: c?.committed[cm] ?? 0,
