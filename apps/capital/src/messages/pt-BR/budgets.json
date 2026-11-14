@@ -150,6 +150,32 @@
     "yearly": {
       "title": "Orçamentos anuais",
       "of": "de {amount}"
+    },
+    "phone": {
+      "split": "Fixo e variável até {month}",
+      "splitYear": "Fixo e variável em {year}",
+      "of": "de {amount}",
+      "ofYear": "de {amount} no ano",
+      "projection": "Proj. {amount}",
+      "overMonths": "{count, plural, one {# mês acima} other {# meses acima}}",
+      "transactions": "Ver lançamentos de {year}",
+      "projected": "proj.",
+      "pickMonth": "Mês",
+      "inProgress": "em andamento",
+      "closed": "fechado",
+      "future": "projeção",
+      "openMonth": "Abrir no Mensal",
+      "yearLine": "Ano {pct}% · proj. {amount}",
+      "noBudget": "sem orçamento",
+      "barsLegend": "Barra = gasto do mês · traço = orçado · vermelho = passou · claro = projeção · toque para ver mês a mês",
+      "mapHint": "Toque numa categoria para ver os meses",
+      "legendLow": "longe do limite",
+      "legendHigh": "perto",
+      "legendOver": "passou",
+      "legendProjected": "projeção",
+      "spentTo": "Gasto até {month}",
+      "budgetYear": "Orçado no ano",
+      "projectionYear": "Projeção do ano"
     }
   },
   "dialog": {

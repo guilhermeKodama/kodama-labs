@@ -150,6 +150,32 @@
     "yearly": {
       "title": "Yearly budgets",
       "of": "of {amount}"
+    },
+    "phone": {
+      "split": "Fixed and variable through {month}",
+      "splitYear": "Fixed and variable in {year}",
+      "of": "of {amount}",
+      "ofYear": "of {amount} this year",
+      "projection": "Proj. {amount}",
+      "overMonths": "{count, plural, one {# month over} other {# months over}}",
+      "transactions": "See {year} transactions",
+      "projected": "proj.",
+      "pickMonth": "Month",
+      "inProgress": "in progress",
+      "closed": "closed",
+      "future": "projection",
+      "openMonth": "Open in Monthly",
+      "yearLine": "Year {pct}% · proj. {amount}",
+      "noBudget": "no budget",
+      "barsLegend": "Bar = month's spend · tick = budget · red = over · light = projection · tap for month by month",
+      "mapHint": "Tap a category to see its months",
+      "legendLow": "far from the limit",
+      "legendHigh": "close",
+      "legendOver": "over",
+      "legendProjected": "projection",
+      "spentTo": "Spent through {month}",
+      "budgetYear": "Budgeted this year",
+      "projectionYear": "Year projection"
     }
   },
   "dialog": {
