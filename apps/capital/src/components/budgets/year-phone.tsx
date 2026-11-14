@@ -171,12 +171,8 @@ function CategoryCard({ row, data, onOpen }: { row: HeatmapRow; data: YearOvervi
         <MiniBars months={row.months} current={data.period.isPast ? 0 : data.currentMonth} />
         <span className="flex items-center gap-1.5 text-caption text-fg-3">
           <span className="tabular-nums">{t("year.phone.projection", { amount: fmt.money0(row.yearTotal) })}</span>
-          {labels.trend(row) ? (
-            <>
-              <span aria-hidden>·</span>
-              {labels.trend(row)}
-            </>
-          ) : null}
+          <span aria-hidden>·</span>
+          {labels.trend(row) ?? <span className="font-mono text-fg-4">—</span>}
           {year.overMonths > 0 ? (
             <>
               <span aria-hidden>·</span>

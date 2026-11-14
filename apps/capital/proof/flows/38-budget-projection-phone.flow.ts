@@ -8,7 +8,8 @@ flow.setTimeout(120_000);
 
 async function openYear(page: Page) {
   await page.getByRole("radiogroup", { name: "Visão" }).getByRole("radio", { name: "Anual" }).click();
-  await expect(page.getByText("Ano (proj.)")).toBeVisible();
+  // Below md the heatmap is hidden and the year is the category cards. "Ano (proj.)" is that table's header.
+  await expect(page.locator("[data-phone-layout=cards]")).toBeVisible();
 }
 
 async function setTheme(page: Page, theme: "Claro" | "Escuro") {
