@@ -5,8 +5,11 @@ import { formatDateOnly } from "@capital/server/lib/date-utils";
 import { entityScopeSql, entityScopeWhere, inEntityScope } from "@capital/server/lib/entity-scope";
 import { loadFx, type FxContext } from "@capital/server/modules/ledger/lib/fx";
 import { round, toNumber } from "@capital/server/modules/ledger/lib/money";
-import { economicDateSql, paceDaySql, spentToDateSql } from "@capital/server/modules/ledger/lib/spend-as-of";
-import { budgetFor, excludedEntities, mean, slotKey, stillToCome, suggestedBudget, typical } from "../lib/assign";
+import { paceDaySql, spentToDateSql } from "@capital/server/modules/ledger/lib/spend-as-of";
+import { budgetKind } from "@/lib/budgets/kind";
+import { budgetFor, excludedEntities, mean, slotKey, suggestedBudget } from "../lib/assign";
+import { budgetedSpan, median, projectFutureMonth, robustTrend, sameMonthHistory, type MonthProjection } from "../lib/project";
+import { HISTORY_MONTHS, projectRunningMonth, type ProjectionGroup } from "./month-projection";
 import { getEffectiveBudgetsByMonth, getEffectiveBudgetsForMonth } from "../lib/effective-budgets";
 import { DAY_MS, todayIn, type UserToday } from "../lib/today";
 
@@ -95,6 +98,8 @@ function assigned(list: readonly Spend[], budgets: readonly Budget[], b: Budget,
 interface Offset {
   entityId: string;
   categoryId: string;
+  /** 1-12; 0 when the query was not grouped by month. */
+  month: number;
   amount: number;
   toDate: number;
 }
@@ -104,9 +109,10 @@ interface Offset {
  * category alone picks the budget, the same way an expense does. The sum
  * is positive (income amountBase); a budget's net is spent minus this.
  */
-async function offsetsBySlot(db: DbClient, userId: string, range: { from: Date; to: Date }, asOf: Date, entityIds: string[] | null): Promise<Offset[]> {
-  const rows = await db.$queryRaw<{ entity_id: string; category_id: string; amount: Prisma.Decimal; to_date: Prisma.Decimal }[]>`
-    SELECT le."entityId" AS entity_id, le."reimbursesCategoryId" AS category_id,
+async function offsetsBySlot(db: DbClient, userId: string, range: { from: Date; to: Date }, asOf: Date, entityIds: string[] | null, byMonth = false): Promise<Offset[]> {
+  const month = byMonth ? Prisma.sql`extract(month FROM le."effectiveDate")::int` : Prisma.sql`0`;
+  const rows = await db.$queryRaw<{ entity_id: string; category_id: string; m: number; amount: Prisma.Decimal; to_date: Prisma.Decimal }[]>`
+    SELECT le."entityId" AS entity_id, le."reimbursesCategoryId" AS category_id, ${month} AS m,
            coalesce(sum(le."amountBase"), 0) AS amount,
            coalesce(sum(le."amountBase") FILTER (WHERE ${spentToDateSql("le", asOf)}), 0) AS to_date
     FROM ledger_entries le
@@ -114,8 +120,8 @@ async function offsetsBySlot(db: DbClient, userId: string, range: { from: Date; 
       AND le."reimbursesCategoryId" IS NOT NULL AND le."transferGroupId" IS NULL
       AND le."effectiveDate" BETWEEN ${range.from} AND ${range.to}
       AND ${entityScopeSql(Prisma.sql`le."entityId"`, entityIds)}
-    GROUP BY 1, 2`;
-  return rows.map((row) => ({ entityId: row.entity_id, categoryId: row.category_id, amount: toNumber(row.amount), toDate: toNumber(row.to_date) }));
+    GROUP BY 1, 2, 3`;
+  return rows.map((row) => ({ entityId: row.entity_id, categoryId: row.category_id, month: row.m, amount: toNumber(row.amount), toDate: toNumber(row.to_date) }));
 }
 
 function assignedOffset(list: readonly Offset[], budgets: readonly Budget[], b: Budget, key: "amount" | "toDate") {
@@ -186,58 +192,6 @@ function yearlyRows(
       excludeEntityIds: excludedEntities(yearly, b).filter((id) => inEntityScope(entityIds, id)),
     };
   });
-}
-
-/** Complete months before the current one whose spend shapes a projection. */
-const HISTORY_MONTHS = 6;
-
-/**
- * What each (entity, category) spent in a month, and how much of it fell
- * after day `day`, one row per month, from up to HISTORY_MONTHS complete
- * months before `year`/`month`. The day is the economic date (purchase
- * date for a card, effective date otherwise), so a card bill is not one
- * lump on its closing day. A month with spend but nothing after that day
- * counts as rest 0: rent paid on the 5th leaves nothing for the rest of
- * the month. A month with no spend for that series is absent and must not
- * be treated as zero. `total` and `rest` come from this one query.
- */
-async function restOfMonthHistory(db: DbClient, userId: string, year: number, month: number, day: number, entityIds: string[] | null) {
-  const from = new Date(Date.UTC(year, month - 1 - HISTORY_MONTHS, 1));
-  const to = new Date(Date.UTC(year, month - 1, 1) - 1);
-  const rows = await db.$queryRaw<{ entity_id: string; category_id: string | null; total: Prisma.Decimal; rest: Prisma.Decimal }[]>`
-    SELECT le."entityId" AS entity_id, le."categoryId" AS category_id,
-           coalesce(-sum(le."amountBase"), 0) AS total,
-           coalesce(-sum(le."amountBase") FILTER (WHERE extract(day FROM ${economicDateSql("le")}) > ${day}), 0) AS rest
-    FROM ledger_entries le
-    WHERE le."userId" = ${userId} AND le."deletedAt" IS NULL AND le.kind = 'expense' AND le."transferGroupId" IS NULL
-      AND le."effectiveDate" BETWEEN ${from} AND ${to}
-      AND ${entityScopeSql(Prisma.sql`le."entityId"`, entityIds)}
-    GROUP BY 1, 2, date_trunc('month', le."effectiveDate")`;
-  return rows.map((r) => ({ entityId: r.entity_id, categoryId: r.category_id, total: toNumber(r.total), rest: toNumber(r.rest) }));
-}
-
-/** Bounded tail of each (entity, category) series, summed onto one budget. */
-function restFromHistory(
-  rows: readonly { entityId: string; categoryId: string | null; total: number; rest: number }[],
-  current: readonly { entityId: string; categoryId: string | null; spentToDate: number }[],
-) {
-  const spentToDate = new Map<string, number>();
-  for (const row of current) {
-    const key = slotKey(row.entityId, row.categoryId);
-    spentToDate.set(key, (spentToDate.get(key) ?? 0) + row.spentToDate);
-  }
-  const bySeries = new Map<string, { totals: number[]; tails: number[] }>();
-  for (const row of rows) {
-    const key = slotKey(row.entityId, row.categoryId);
-    const series = bySeries.get(key);
-    if (series) {
-      series.totals.push(row.total);
-      series.tails.push(row.rest);
-    } else bySeries.set(key, { totals: [row.total], tails: [row.rest] });
-  }
-  let sum = 0;
-  for (const [key, series] of bySeries) sum += stillToCome(series.totals, series.tails, spentToDate.get(key) ?? 0);
-  return sum;
 }
 
 /**
@@ -367,10 +321,7 @@ export async function monthOverview(userId: string, year: number, month: number,
     .filter(budgetInScope(entityIds))
     .filter((b) => b.period === "monthly");
 
-  // The rest of a running month is projected from what each budget's spend usually does after today (else at today's daily rate).
-  const history = isCurrent && daysElapsed < daysInMonth ? await restOfMonthHistory(db, userId, year, month, daysElapsed, entityIds) : [];
-
-  const rows = budgets
+  const base = budgets
     .map((b) => {
       const amount = baseAmount(fx, b);
       let carry = 0;
@@ -390,21 +341,6 @@ export async function monthOverview(userId: string, year: number, month: number,
       const netCommitted = round(committed - reimbursedCommitted, 2);
       const dailySpendRate = daysElapsed > 0 ? spent / daysElapsed : 0;
       const allowedDailyRate = available / daysInMonth;
-      const past = history.filter((h) => budgetFor(budgets, h.entityId, h.categoryId)?.id === b.id);
-      // Still to come is the typical post-today tail, capped by a typical full
-      // month (`stillToCome`) so a bill that already landed is not added again.
-      // With no history, the daily rate of what is already spent.
-      const restOfMonth = past.length
-        ? restFromHistory(
-            past,
-            spend.filter((s) => budgetFor(budgets, s.entityId, s.categoryId)?.id === b.id),
-          )
-        : dailySpendRate * (daysInMonth - daysElapsed);
-      // Already booked, but not yet spent (a swipe dated later this month, a future installment).
-      // projected = committed + max(0, stillToCome − that booked tail), so a card bill
-      // already imported is not forecast a second time off its closing day.
-      const bookedAfterToday = Math.max(0, committed - spent);
-      const projectedTotal = daysElapsed > 0 ? committed + Math.max(0, restOfMonth - bookedAfterToday) : committed;
       const percentUsed = available > 0 ? (net / available) * 100 : 0;
       const pacePercent = (daysElapsed / daysInMonth) * 100;
       const status = net > available ? "over" : percentUsed > pacePercent + 12 ? "ahead_of_pace" : "on_track";
@@ -436,11 +372,47 @@ export async function monthOverview(userId: string, year: number, month: number,
         pace: {
           dailySpendRate: round(dailySpendRate, 2),
           allowedDailyRate: round(allowedDailyRate, 2),
-          projectedTotal: round(projectedTotal, 2),
           isOverPace: dailySpendRate > allowedDailyRate,
           daysElapsed,
           daysRemaining: daysInMonth - daysElapsed,
           daysInPeriod: daysInMonth,
+        },
+      };
+    });
+
+  // The month in progress is projected (lib/project.ts) on the líquido, the
+  // same number as Gasto. A closed month is what it spent; a month that has
+  // not started is what is already booked.
+  const projecting = isCurrent && daysElapsed < daysInMonth;
+  const projections = projecting
+    ? await projectRunningMonth(
+        db,
+        userId,
+        { year, month, day: daysElapsed, asOf },
+        entityIds,
+        fx,
+        base.map(
+          (row): ProjectionGroup => ({
+            key: row.id,
+            kind: budgetKind(row.kind),
+            budget: row.available,
+            owns: (entityId, categoryId) => budgetFor(budgets, entityId, categoryId)?.id === row.id,
+            spent: row.net,
+            committed: row.netCommitted,
+          }),
+        ),
+      )
+    : new Map<string, MonthProjection>();
+  const rows = base
+    .map((row) => {
+      const projection = projections.get(row.id);
+      return {
+        ...row,
+        pace: {
+          ...row.pace,
+          projectedTotal: round(projection?.total ?? row.netCommitted, 2),
+          projectionMethod: projection?.method ?? (isPast ? ("closed" as const) : ("booked" as const)),
+          outlierMonths: projection?.outlierMonths ?? 0,
         },
       };
     })
@@ -560,7 +532,8 @@ export async function monthOverview(userId: string, year: number, month: number,
     const reimbursed = round(list.reduce((s, row) => s + row.reimbursed, 0), 2);
     const net = round(list.reduce((s, row) => s + row.net, 0), 2);
     const available = list.reduce((s, row) => s + row.available, 0);
-    return { budget, spent, reimbursed, net, remaining: round(available - net, 2) };
+    const projected = round(list.reduce((s, row) => s + row.pace.projectedTotal, 0), 2);
+    return { budget, spent, reimbursed, net, remaining: round(available - net, 2), projected };
   };
   return {
     period: { year, month, daysElapsed, daysInMonth, today: today.iso, isCurrent, isPast },
@@ -592,6 +565,29 @@ export interface YearOverviewOptions extends BudgetScope {
   onlyBudgeted?: boolean;
 }
 
+/**
+ * Net spend of the two calendar years before `year`, by entity, category
+ * and month. Same-month history is only used when at least two years exist
+ * (projectFutureMonth). Transfers and investments are not included.
+ */
+async function seasonalNets(db: DbClient, userId: string, year: number, entityIds: string[] | null) {
+  const from = new Date(Date.UTC(year - 2, 0, 1));
+  const to = new Date(Date.UTC(year, 0, 1) - 1);
+  const category = Prisma.sql`(CASE WHEN le.kind = 'expense' THEN le."categoryId" ELSE le."reimbursesCategoryId" END)`;
+  const rows = await db.$queryRaw<{ entity_id: string; category_id: string | null; y: number; m: number; total: Prisma.Decimal }[]>`
+    SELECT le."entityId" AS entity_id, ${category} AS category_id,
+           extract(year FROM le."effectiveDate")::int AS y,
+           extract(month FROM le."effectiveDate")::int AS m,
+           coalesce(sum(-le."amountBase"), 0) AS total
+    FROM ledger_entries le
+    WHERE le."userId" = ${userId} AND le."deletedAt" IS NULL AND le."transferGroupId" IS NULL
+      AND ((le.kind = 'expense' AND le."categoryId" IS NOT NULL) OR (le.kind = 'income' AND le."reimbursesCategoryId" IS NOT NULL))
+      AND le."effectiveDate" BETWEEN ${from} AND ${to}
+      AND ${entityScopeSql(Prisma.sql`le."entityId"`, entityIds)}
+    GROUP BY 1, 2, 3, 4`;
+  return rows.flatMap((r) => (r.category_id ? [{ entityId: r.entity_id, categoryId: r.category_id, year: r.y, month: r.m, total: toNumber(r.total) }] : []));
+}
+
 /** Order the year's insights are listed in, and the precedence when a row qualifies for several. */
 export const INSIGHT_KINDS = ["overrun", "growth", "seasonal"] as const;
 export type YearInsightKind = (typeof INSIGHT_KINDS)[number];
@@ -601,11 +597,13 @@ export const INSIGHT_RULES = { overrunMonths: 3, growth: 0.12, seasonalPeak: 1.4
 
 /**
  * Category x month matrix of a year, one row per monthly budget slot
- * (entity or every entity, category). Months before the current one are
- * actuals; the current month is month-to-date; later months are projected
- * from the median of up to six complete months (`typical`, the same
- * estimator as the month view). Committed entries such as future
- * installments are added on top.
+ * (entity or every entity, category), in líquido (net of reimbursements),
+ * the same basis as Mensal. Months before the current one are actuals;
+ * the current month shows month-to-date in `spent` and its month-end
+ * projection in `projected`; later months are a robust level of the
+ * complete months (lib/project.ts), never negative and never one
+ * anomalous month copied forward. An installment already booked in a
+ * later month is kept when it is larger than that level.
  */
 export async function yearOverview(userId: string, year: number, db: DbClient, opts: YearOverviewOptions = {}) {
   const entityIds = opts.entityIds ?? null;
@@ -620,6 +618,8 @@ export async function yearOverview(userId: string, year: number, db: DbClient, o
   const completeMonths = Math.max(0, Math.min(currentMonth - 1, 12));
 
   const spend = await spendBySlot(db, userId, yearBounds, today.end, entityIds, true);
+  const offsets = await offsetsBySlot(db, userId, yearBounds, today.end, entityIds, true);
+  const seasonalRows = await seasonalNets(db, userId, year, entityIds);
   const byMonth = (await getEffectiveBudgetsByMonth(db, userId, year)).map((bs) => bs.filter(budgetInScope(entityIds)));
   const monthly = byMonth.map((bs) => bs.filter((b) => b.period === "monthly"));
   const yearly = byMonth[11].filter((b) => b.period === "yearly");
@@ -636,24 +636,61 @@ export async function yearOverview(userId: string, year: number, db: DbClient, o
     if (!c) cells.set(key, (c = { actual: Array(12).fill(0), committed: Array(12).fill(0) }));
     return c;
   };
-  for (const s of spend) {
-    const i = s.month - 1;
-    const inForce = budgetFor(monthly[i], s.entityId, s.categoryId);
-    let key: string | null = inForce ? slotKey(inForce.entityId, inForce.categoryId) : null;
+  /** The row spend of (entity, category) lands on in month index `i`, or null when it has none. */
+  const slotFor = (entityId: string, categoryId: string | null, i: number, create: boolean): string | null => {
+    const inForce = budgetFor(monthly[i] ?? [], entityId, categoryId);
+    if (inForce) return slotKey(inForce.entityId, inForce.categoryId);
     // A month without a budget in force still lands on the row of its slot (own entity first, then every entity).
-    if (!key && slots.has(slotKey(s.entityId, s.categoryId))) key = slotKey(s.entityId, s.categoryId);
-    if (!key && s.categoryId && slots.has(slotKey(null, s.categoryId))) key = slotKey(null, s.categoryId);
-    if (!key) {
-      if (onlyBudgeted || budgetFor(yearly, s.entityId, s.categoryId)) continue;
-      key = slotKey(s.entityId, s.categoryId);
-      if (!slots.has(key)) slots.set(key, { entityId: s.entityId, categoryId: s.categoryId, budgeted: false });
-    }
+    if (slots.has(slotKey(entityId, categoryId))) return slotKey(entityId, categoryId);
+    if (categoryId && slots.has(slotKey(null, categoryId))) return slotKey(null, categoryId);
+    if (onlyBudgeted || budgetFor(yearly, entityId, categoryId)) return null;
+    const key = slotKey(entityId, categoryId);
+    if (create && !slots.has(key)) slots.set(key, { entityId, categoryId, budgeted: false });
+    return slots.has(key) ? key : null;
+  };
+  // Cells are líquido, like Mensal: expenses minus income that reimburses the category.
+  // Complete months count everything. The month in progress (and a future one) counts
+  // to date: the same economic-date cutoff as Gasto (spentToDateSql).
+  for (const s of spend) {
+    const key = slotFor(s.entityId, s.categoryId, s.month - 1, true);
+    if (!key) continue;
     const c = cellsOf(key);
-    // Complete months count everything. The month in progress (and a future one) counts
-    // spent to date: the same economic-date cutoff as Gasto (spentToDateSql, via spendBySlot).
-    c.actual[i] += s.month < currentMonth ? s.spent : s.spentToDate;
-    c.committed[i] += s.spent;
+    c.actual[s.month - 1] += s.month < currentMonth ? s.spent : s.spentToDate;
+    c.committed[s.month - 1] += s.spent;
   }
+  for (const o of offsets) {
+    const key = slotFor(o.entityId, o.categoryId, o.month - 1, false);
+    if (!key) continue;
+    const c = cellsOf(key);
+    c.actual[o.month - 1] -= o.month < currentMonth ? o.amount : o.toDate;
+    c.committed[o.month - 1] -= o.amount;
+  }
+
+  // The month in progress ends at its month-end projection, the same number as Mensal.
+  const cm = currentMonth - 1;
+  const daysInCurrent = currentMonth >= 1 && currentMonth <= 12 ? new Date(Date.UTC(year, currentMonth, 0)).getUTCDate() : 0;
+  const running =
+    currentMonth >= 1 && currentMonth <= 12 && today.d < daysInCurrent
+      ? await projectRunningMonth(
+          db,
+          userId,
+          { year, month: currentMonth, day: today.d, asOf: today.end },
+          entityIds,
+          fx,
+          [...slots.entries()].map(([key, slot]): ProjectionGroup => {
+            const inForce = monthly[cm]?.find((b) => b.entityId === slot.entityId && b.categoryId === slot.categoryId) ?? null;
+            const c = cells.get(key);
+            return {
+              key,
+              kind: budgetKind(slot.budgeted ? inForce?.kind : null),
+              budget: inForce ? baseAmount(fx, inForce) : 0,
+              owns: (entityId, categoryId) => slotFor(entityId, categoryId, cm, false) === key,
+              spent: c?.actual[cm] ?? 0,
+              committed: c?.committed[cm] ?? 0,
+            };
+          }),
+        )
+      : new Map<string, MonthProjection>();
 
   type YearInsight = {
     kind: YearInsightKind;
@@ -679,17 +716,29 @@ export async function yearOverview(userId: string, year: number, db: DbClient, o
     const budgetAt = (i: number) => monthly[i].find((b) => b.entityId === slot.entityId && b.categoryId === slot.categoryId) ?? null;
     const complete = actual.slice(0, completeMonths);
     const lastThree = complete.slice(-3);
-    const firstThree = complete.slice(0, 3);
-    const projectionBase = typical(projectionSample(complete));
+    const priorThree = complete.slice(-6, -3);
+    const windowMedian = (values: readonly number[]) => (values.length === 3 ? round(median(values.map((v) => Math.max(0, v))), 2) : null);
+    const ownEntities = [...slots.values()].filter((other) => other.categoryId === slot.categoryId && other.entityId).map((other) => other.entityId as string);
     const months = Array.from({ length: 12 }, (_, i) => {
       const m = i + 1;
       const budget = budgetAt(i);
       const isProjected = m > currentMonth;
-      const value = isProjected ? Math.max(projectionBase, committed[i]) : actual[i];
-      const budgetAmount = budget ? baseAmount(fx, budget) : null;
+      const budgetAmountForMonth = budget ? baseAmount(fx, budget) : null;
+      const value = isProjected
+        ? projectFutureMonth({
+            history: projectionSample(complete),
+            seasonal: sameMonthHistory(seasonalRows, slot, m, ownEntities),
+            budget: budgetAmountForMonth,
+            committed: committed[i] ?? 0,
+          })
+        : actual[i];
+      const budgetAmount = budgetAmountForMonth;
+      // What the month is expected to close at: the actual for a closed month, the month-end projection for the running one.
+      const projected = isProjected ? value : m === currentMonth ? (running.get(key)?.total ?? committed[i] ?? value) : value;
       return {
         month: m,
         spent: round(value, 2),
+        projected: round(projected, 2),
         isProjected,
         isPartial: m === currentMonth,
         budget: budgetAmount,
@@ -697,7 +746,7 @@ export async function yearOverview(userId: string, year: number, db: DbClient, o
         percentUsed: budgetAmount ? round((value / budgetAmount) * 100, 1) : null,
       };
     });
-    const trend = complete.length >= 6 && mean(firstThree) > 0 ? round(mean(lastThree) / mean(firstThree) - 1, 4) : null;
+    const trend = robustTrend(complete);
     const elapsed = months.slice(0, nElapsed);
     const overMonths = elapsed.filter((x) => x.budget !== null && x.spent > x.budget).length;
     const budgetedMonths = elapsed.filter((x) => x.budget !== null).length;
@@ -732,8 +781,8 @@ export async function yearOverview(userId: string, year: number, db: DbClient, o
           avg: round(avg, 2),
           budget,
           suggested: suggestedBudget(avg),
-          first3: firstThree.length ? round(mean(firstThree), 2) : null,
-          last3: lastThree.length ? round(mean(lastThree), 2) : null,
+          first3: windowMedian(priorThree),
+          last3: windowMedian(lastThree),
           growth,
           peakMonth: values.indexOf(peakValue) + 1,
           peakValue: round(peakValue, 2),
@@ -751,7 +800,7 @@ export async function yearOverview(userId: string, year: number, db: DbClient, o
       budget: ref ? baseAmount(fx, ref) : null,
       excludeEntityIds: ref && refIndex !== undefined ? excludedEntities(monthly[refIndex], ref) : [],
       months,
-      yearTotal: round(months.reduce((s, x) => s + x.spent, 0), 2),
+      yearTotal: round(months.reduce((s, x) => s + x.projected, 0), 2),
       trend,
       overMonths,
       budgetedMonths,
@@ -763,7 +812,14 @@ export async function yearOverview(userId: string, year: number, db: DbClient, o
   const insights = INSIGHT_KINDS.flatMap((kind) => rowInsights.filter((i) => i.kind === kind));
 
   const monthTotals = Array.from({ length: 12 }, (_, i) => round(matrix.reduce((s, r) => s + r.months[i].spent, 0), 2));
+  const monthProjected = Array.from({ length: 12 }, (_, i) => round(matrix.reduce((s, r) => s + r.months[i].projected, 0), 2));
   const monthBudgets = monthly.map((bs) => round(bs.reduce((s, b) => s + baseAmount(fx, b), 0), 2));
+  // "% do orçado" compares spend and budget over the same row-months: those that had a budget.
+  const budgetedMonths = [...Array(nElapsed).keys()].filter((i) => (monthBudgets[i] ?? 0) > 0).map((i) => i + 1);
+  const spentInBudgetedMonths = round(
+    matrix.reduce((s, r) => s + r.months.slice(0, nElapsed).reduce((t, cell) => t + (cell.budget !== null ? cell.spent : 0), 0), 0),
+    2,
+  );
   const yearPace = yearPaceOf(year, today);
   const yearOffsets = yearly.length ? await offsetsBySlot(db, userId, yearBounds, today.end, entityIds) : [];
   const yearlyBudgets = yearlyRows(yearly, spend, yearOffsets, name, yearPace, entityIds, fx).sort(order);
@@ -785,11 +841,18 @@ export async function yearOverview(userId: string, year: number, db: DbClient, o
     scope: { entityIds },
     categories: matrix,
     monthTotals,
+    /** Each month's expected close: actuals, the running month's projection, then the projected months. */
+    monthProjected,
     monthBudgets,
     summary: {
       spentToDate: round(monthTotals.slice(0, nElapsed).reduce((s, v) => s + v, 0), 2),
       budgetToDate: round(monthBudgets.slice(0, nElapsed).reduce((s, v) => s + v, 0), 2),
-      projectedYear: round(monthTotals.reduce((s, v) => s + v, 0), 2),
+      /** Spend of the elapsed row-months that had a budget, the numerator of "% do orçado". */
+      spentInBudgetedMonths,
+      /** Elapsed months (1-12) with a budget in force, e.g. [9, 10, 11]. */
+      budgetedMonths,
+      budgetedSpan: budgetedSpan(budgetedMonths),
+      projectedYear: round(monthProjected.reduce((s, v) => s + v, 0), 2),
       budgetYear: round(monthBudgets.reduce((s, v) => s + v, 0), 2),
       overBudgetMonths: matrix.reduce((s, r) => s + r.overMonths, 0),
       budgetedCells: matrix.reduce((s, r) => s + r.budgetedMonths, 0),

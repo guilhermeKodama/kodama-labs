@@ -9,7 +9,7 @@ import { Prisma } from "@/generated/prisma";
  * stops waiting for the closing day before Orçamentos calls it spent.
  *
  * Callers (keep them on these helpers so the cutoff cannot drift):
- * spendBySlot and the pace series and the year cell (budget-overview.ts),
+ * spendBySlot, the pace series, the projection history and the year cell (budget-overview.ts),
  * the Transações drill (`{ field: "spentToDate", op: "asOf" }` in
  * query-engine.ts), and the budget push (notify.ts).
  */
@@ -38,4 +38,15 @@ export function spentToDateSql(table: string, asOf: Date): Prisma.Sql {
 export function paceDaySql(table: string, monthStart: Date): Prisma.Sql {
   const economic = economicDateSql(table);
   return Prisma.sql`(CASE WHEN ${economic} < ${monthStart} THEN 1 ELSE extract(day FROM ${economic})::int END)`;
+}
+
+/**
+ * The same day as paceDaySql, for rows of many months at once: the month
+ * is the row's own effective month. A card purchase from the previous
+ * cycle is day 1 of the month it counts in, not the 28th.
+ */
+export function monthDaySql(table: string): Prisma.Sql {
+  const a = alias(table);
+  const economic = economicDateSql(table);
+  return Prisma.sql`(CASE WHEN ${economic} < date_trunc('month', ${a}."effectiveDate") THEN 1 ELSE extract(day FROM ${economic})::int END)`;
 }
