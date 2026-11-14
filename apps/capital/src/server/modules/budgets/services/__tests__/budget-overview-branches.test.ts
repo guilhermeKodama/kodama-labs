@@ -274,13 +274,70 @@ describe("yearOverview", () => {
     // The median of the last six complete months, 150..200, is 175.
     expect(row.months[9].spent).toBe(175);
     expect(row.overMonths).toBe(6); // March to August
-    expect(row.trend).toBe(1.1923); // (180+190+200)/3 over (50+60+150)/3, less one
-    expect(y.insights[0]).toMatchObject({ kind: "overrun", category: "Mercado", overMonths: 6, avg: 145, suggested: 150, first3: 86.67, last3: 190 });
+    // Median of Jun–Aug (190) over the median of Mar–May (160). The old mean of Jan–Mar against Jun–Aug was +119%.
+    expect(row.trend).toBe(0.1875);
+    expect(y.insights[0]).toMatchObject({ kind: "overrun", category: "Mercado", overMonths: 6, avg: 145, suggested: 150, first3: 160, last3: 190 });
     expect(y.period.projectionBasis).toEqual([3, 8]);
     expect(y.summary.overBudgetMonths).toBe(row.overMonths);
   });
 
-  it("reports growth when the last three months outrun the first three, without overruns", async () => {
+  it("does not project a negative month from a run of refunds", async () => {
+    await budget(c.Mercado, 500);
+    for (const month of ["01", "02", "03", "04"]) await spend(c.Mercado, -2000, `2026-${month}-10`);
+    await spend(c.Mercado, 100, "2026-05-10");
+    await spend(c.Mercado, 120, "2026-06-10");
+    const y = await yearOverview(USER, 2026, prisma);
+    const future = y.categories[0].months.filter((m) => m.isProjected);
+    expect(future.length).toBeGreaterThan(0);
+    expect(future.every((m) => m.spent >= 0)).toBe(true);
+    // May and June were 100 and 120; July and August were quiet. The median of that window is 50, not the refunds.
+    expect(future[0].spent).toBe(50);
+  });
+
+  it("projects the running month against the budget plus carry, the same number as Mensal", async () => {
+    setNow("2026-02-14T15:00:00Z");
+    await budget(c.Mercado, 500, { rollover: true, effectiveFrom: "2026-01" });
+    // January had the budget and no spend, so the whole 500 carries, and there is no history to blend.
+    const month = await monthOverview(USER, 2026, 2, prisma);
+    const year = await yearOverview(USER, 2026, prisma);
+    expect(month.budgets[0]).toMatchObject({ carry: 500, available: 1000 });
+    expect(month.budgets[0].pace.projectedTotal).toBe(1000);
+    expect(year.categories[0].months[1].projected).toBe(1000);
+  });
+
+  it("in January carries December of the previous year into the running month", async () => {
+    setNow("2026-01-20T15:00:00Z");
+    await budget(c.Mercado, 500, { rollover: true, effectiveFrom: "2025-12" });
+    const month = await monthOverview(USER, 2026, 1, prisma);
+    const year = await yearOverview(USER, 2026, prisma);
+    expect(month.budgets[0]).toMatchObject({ carry: 500, available: 1000 });
+    expect(year.categories[0].months[0].projected).toBe(1000);
+  });
+
+  it("is net of reimbursements like Mensal, ends the running month at its projection, and compares spend and budget over the same months", async () => {
+    // Budget only from July; spend since January. Today is 22/set.
+    await budget(c.Moradia, 1000, { effectiveFrom: "2026-07", kind: "fixo" });
+    for (const month of ["01", "02", "03", "04", "05", "06", "07", "08"]) await spend(c.Moradia, 1000, `2026-${month}-20`);
+    await createEntry(USER, { kind: "income", accountId: f.pfChecking, amount: 300, date: "2026-08-21", description: "Reembolso", categoryId: c.Salario, reimbursesCategoryId: c.Moradia }, prisma, { skipRules: true });
+    await spend(c.Moradia, 200, "2026-09-03");
+
+    const y = await yearOverview(USER, 2026, prisma);
+    const row = y.categories[0];
+    const month = await monthOverview(USER, 2026, 9, prisma);
+    // August is líquido: 1,000 spent, 300 reimbursed.
+    expect(row.months[7]).toMatchObject({ spent: 700, projected: 700 });
+    // September shows 200 to date and ends where Mensal says it will.
+    expect(row.months[8]).toMatchObject({ spent: 200, isPartial: true });
+    expect(row.months[8].projected).toBe(month.budgets[0].pace.projectedTotal);
+    expect(row.months[8].projected).toBe(1000);
+    expect(y.monthProjected[8]).toBe(1000);
+    expect(row.yearTotal).toBe(y.summary.projectedYear);
+    // Spend of jul–set (1,000 + 700 + 200) against the budget of jul–set (3,000); January to June had no budget.
+    expect(y.summary).toMatchObject({ budgetedMonths: [7, 8, 9], spentInBudgetedMonths: 1900, budgetToDate: 3000, budgetedSpan: { from: 7, to: 9, contiguous: true, count: 3 } });
+    expect(y.summary.spentToDate).toBe(7 * 1000 + 700 + 200);
+  });
+
+  it("reports growth when the last three months outrun the three before them, without overruns", async () => {
     await budget(c.Mercado, 2000);
     for (const [month, amount] of [["01", 100], ["02", 100], ["03", 100], ["04", 120], ["05", 130], ["06", 140], ["07", 150], ["08", 160]] as const) await spend(c.Mercado, amount, `2026-${month}-10`);
     const y = await yearOverview(USER, 2026, prisma);

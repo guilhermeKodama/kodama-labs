@@ -143,6 +143,8 @@ export async function getBudgetStatus(userId: string, params: GetBudgetStatusPar
       gross: b.committed,
       reimbursed: b.reimbursedCommitted,
       net: b.netCommitted,
+      projected: b.pace.projectedTotal,
+      projectionMethod: b.pace.projectionMethod,
       remaining: Math.round((b.amount - b.committed) * 100) / 100,
       percentUsed: b.amount > 0 ? Math.round((b.committed / b.amount) * 10000) / 100 : 0,
       isOverBudget: b.committed > b.amount,
@@ -159,6 +161,8 @@ export async function getBudgetStatus(userId: string, params: GetBudgetStatusPar
       totalBudgeted: Math.round(totalBudgeted * 100) / 100,
       totalActual: Math.round(totalActual * 100) / 100,
       totalRemaining: Math.round((totalBudgeted - totalActual) * 100) / 100,
+      projectedTotal: overview.summary.projectedTotal,
+      projectedByKind: { fixo: overview.summary.byKind.fixo.projected, variavel: overview.summary.byKind.variavel.projected },
     },
     categories,
   };
@@ -166,8 +170,9 @@ export async function getBudgetStatus(userId: string, params: GetBudgetStatusPar
 
 /**
  * Fixed vs variable totals per month, and the top variable categories.
- * A budget with no kind counts as variável. `actual` on get_budget_status
- * stays the gross committed spend; net here is after reimbursements.
+ * A budget with no kind counts as variável. On get_budget_status, `actual`,
+ * `remaining`, `percentUsed` and `isOverBudget` stay on the gross committed
+ * spend; `projected` is net of reimbursements, the same number the app shows.
  */
 export async function getBudgetComposition(userId: string, params: GetBudgetCompositionParams, db: DbClient) {
   const entity = await resolveEntity(userId, params.accountId, db);

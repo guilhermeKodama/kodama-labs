@@ -100,13 +100,14 @@ describe("month-end projection", () => {
     }
     await spend(f.pfChecking, c.Moradia, 4200, "2026-09-05");
     await spend(f.pfChecking, c.Mercado, 600, "2026-09-10");
-    await spend(f.pfChecking, c.Lazer, 220, "2026-09-12"); // no history: 10/day for the 8 days left
+    await spend(f.pfChecking, c.Lazer, 220, "2026-09-12"); // no history: the forecast shrinks to the budget, not 10/day
 
     const o = await monthOverview(USER, 2026, 9, prisma);
     const projected = Object.fromEntries(o.budgets.map((b) => [b.categoryId, b.pace.projectedTotal]));
     // At 4200 in 22 days, a straight line would say 5727 for the rent.
-    expect(projected).toEqual({ [c.Moradia]: 4200, [c.Mercado]: 1200, [c.Lazer]: 300 });
-    expect(o.summary.projectedTotal).toBe(5700);
+    // Lazer has no earlier month, so the daily rate (300) is not used; the budget is the prior.
+    expect(projected).toEqual({ [c.Moradia]: 4200, [c.Mercado]: 1200, [c.Lazer]: 5000 });
+    expect(o.summary.projectedTotal).toBe(10400);
 
     // A closed month projects what it spent.
     const aug = await monthOverview(USER, 2026, 8, prisma);
@@ -158,6 +159,119 @@ describe("month-end projection", () => {
     expect(row.committed).toBe(15000);
     expect(row.pace.projectedTotal).toBe(15000);
     expect(o.summary.projectedTotal).toBe(15000);
+  });
+
+  it("does not extrapolate a fixed bill that already posted, even when it usually posts later in the month", async () => {
+    vi.setSystemTime(new Date("2026-11-14T15:00:00Z"));
+    await createBudget(USER, { entityId: f.pfId, categoryId: c.Moradia, amount: 16685, effectiveFrom: "2026-05", kind: "fixo" }, prisma);
+    for (const m of ["05", "06", "07", "08", "09", "10"]) await spend(f.pfChecking, c.Moradia, 16000, `2026-${m}-20`);
+    await spend(f.pfChecking, c.Moradia, 15921, "2026-11-08");
+    // A transfer and an aporte in the same category must not count as spend.
+    await createEntry(USER, { kind: "transfer", fromAccountId: f.pfChecking, toAccountId: f.broker, amount: 8000, date: "2026-11-09", direction: "investment_deposit", description: "Aporte" }, prisma);
+
+    const o = await monthOverview(USER, 2026, 11, prisma);
+    const row = o.budgets.find((b) => b.categoryId === c.Moradia)!;
+    expect(row.spent).toBe(15921);
+    // Day 14 of 30 at this pace would say about 34,116. The old tail added the 16,000 again, because the bill usually posts on the 20th.
+    // The same charge every month is the recurring bill; it posted, so the month stops at what is booked.
+    expect(row.pace).toMatchObject({ projectedTotal: 15921, projectionMethod: "fixed_booked" });
+    expect(o.summary.projectedTotal).toBe(15921);
+    expect(o.summary.byKind.fixo.projected).toBe(15921);
+  });
+
+  it("adds a recurring rule that is still due this month, and a fixed budget with no history is its budget, not a daily rate", async () => {
+    vi.setSystemTime(new Date("2026-11-14T15:00:00Z"));
+    await createBudget(USER, { entityId: f.pfId, categoryId: c.Moradia, amount: 2000, effectiveFrom: "2026-11", kind: "fixo" }, prisma);
+    await createBudget(USER, { entityId: f.pfId, categoryId: c.Software, amount: 500, effectiveFrom: "2026-11", kind: "fixo" }, prisma);
+    await spend(f.pfChecking, c.Moradia, 1800, "2026-11-03");
+    await createRecurringRule(USER, { kind: "expense", accountId: f.pfChecking, amount: 90, description: "Antivírus", categoryId: c.Software, frequency: "monthly", startDate: "2026-11-25", autoGenerate: false }, prisma);
+    await spend(f.pfChecking, c.Software, 40, "2026-11-02");
+
+    const o = await monthOverview(USER, 2026, 11, prisma);
+    const by = (id: string) => o.budgets.find((b) => b.categoryId === id)!.pace;
+    // 1,800 in 14 of 30 days is 3,857 at the daily rate.
+    expect(by(c.Moradia)).toMatchObject({ projectedTotal: 2000, projectionMethod: "fixed_budget" });
+    // The 40 already booked is not close enough to be the 90 rule, but it is not stacked on top of the rule either.
+    expect(by(c.Software)).toMatchObject({ projectedTotal: 90, projectionMethod: "fixed_recurring" });
+  });
+
+  it("does not add a stale recurring rule on top of the same bill already booked without the rule", async () => {
+    vi.setSystemTime(new Date("2026-11-14T15:00:00Z"));
+    await createBudget(USER, { entityId: f.pfId, categoryId: c.Moradia, amount: 16685, effectiveFrom: "2026-05", kind: "fixo" }, prisma);
+    for (const m of ["05", "06", "07", "08", "09", "10"]) await spend(f.pfChecking, c.Moradia, 14732, `2026-${m}-10`);
+    await spend(f.pfChecking, c.Moradia, 14732, "2026-11-01");
+    // Active, but nextDueDate stuck in September, and nothing since has been booked under either rule.
+    const stale = (description: string, amount: number) =>
+      prisma.recurringRule.create({
+        data: {
+          userId: USER,
+          entityId: f.pfId,
+          accountId: f.pfChecking,
+          kind: "expense",
+          amount,
+          currency: "BRL",
+          description,
+          categoryId: c.Moradia,
+          frequency: "monthly",
+          isActive: true,
+          startDate: new Date("2026-01-10T12:00:00Z"),
+          nextDueDate: new Date("2026-09-30T12:00:00Z"),
+        },
+      });
+    await stale("Aluguel", 14732);
+    await stale("Condomínio", 5000);
+
+    const row = (await monthOverview(USER, 2026, 11, prisma)).budgets.find((b) => b.categoryId === c.Moradia)!;
+    // The rent already booked, not the rent again and not the stale condomínio on top.
+    expect(row.netCommitted).toBe(14732);
+    expect(row.pace.projectedTotal).toBe(14732);
+  });
+
+  it("counts a same-amount charge without the rule as the bill a recently booked rule still expects", async () => {
+    vi.setSystemTime(new Date("2026-11-14T15:00:00Z"));
+    await createBudget(USER, { entityId: f.pfId, categoryId: c.Moradia, amount: 2000, effectiveFrom: "2026-05", kind: "fixo" }, prisma);
+    const rule = await prisma.recurringRule.create({
+      data: {
+        userId: USER,
+        entityId: f.pfId,
+        accountId: f.pfChecking,
+        kind: "expense",
+        amount: 1000,
+        currency: "BRL",
+        description: "Aluguel",
+        categoryId: c.Moradia,
+        frequency: "monthly",
+        isActive: true,
+        startDate: new Date("2026-01-10T12:00:00Z"),
+        nextDueDate: new Date("2026-10-10T12:00:00Z"),
+      },
+    });
+    for (const m of ["05", "06", "07", "08", "09", "10"]) {
+      const wrote = await spend(f.pfChecking, c.Moradia, 1000, `2026-${m}-10`);
+      await prisma.ledgerEntry.update({ where: { id: wrote.entryIds[0] }, data: { recurringRuleId: rule.id } });
+    }
+    await spend(f.pfChecking, c.Moradia, 1000, "2026-11-02");
+
+    const row = (await monthOverview(USER, 2026, 11, prisma)).budgets.find((b) => b.categoryId === c.Moradia)!;
+    expect(row.netCommitted).toBe(1000);
+    expect(row.pace.projectedTotal).toBe(1000);
+    expect(row.pace.projectedTotal).toBeLessThan(row.netCommitted + 1000);
+  });
+
+  it("puts a card purchase from the previous cycle on day 1 of its month, not on its own day", async () => {
+    // 14/out/2026. The card closes on the 5th: a purchase on the 28th counts in the next month.
+    vi.setSystemTime(new Date("2026-10-14T15:00:00Z"));
+    await createBudget(USER, { entityId: f.pfId, categoryId: c.Lazer, amount: 5000, effectiveFrom: "2026-06" }, prisma);
+    for (const [m, prev] of [["07", "06"], ["08", "07"], ["09", "08"]]) {
+      await importCardStatement(USER, { accountId: f.card, month: `2026-${m}`, closingDate: `2026-${m}-05`, rows: [{ date: `2026-${prev}-28`, description: "Show", amount: 600, categoryId: c.Lazer }] }, prisma);
+    }
+    await importCardStatement(USER, { accountId: f.card, month: "2026-10", closingDate: "2026-10-05", rows: [{ date: "2026-09-28", description: "Show", amount: 600, categoryId: c.Lazer }] }, prisma);
+
+    const o = await monthOverview(USER, 2026, 10, prisma, { entityIds: [f.pfId] });
+    const row = o.budgets.find((b) => b.categoryId === c.Lazer)!;
+    expect(row.spent).toBe(600);
+    // Read on the 28th, every month had 600 "after the 14th" and the old tail added it again (1,200).
+    expect(row.pace.projectedTotal).toBe(600);
   });
 });
 
@@ -227,15 +341,14 @@ describe("year matrix", () => {
     expect(y.insights.map((i) => [i.kind, i.categoryId])).toEqual([
       ["overrun", c.Mercado],
       ["growth", c.Lazer],
-      ["growth", c.Software],
       ["seasonal", c["Saúde"]],
     ]);
-    const [mercado, lazer, software, saude] = y.insights;
+    const [mercado, lazer, saude] = y.insights;
     // The average covers January to August: September is still running (its 1.640 would pull it down).
     expect(mercado).toMatchObject({ overMonths: 4, nElapsed: 9, avg: 2033.75, budget: 2000, suggested: 2050, entityId: f.pfId });
     expect(mercado.budgetId).toBe(y.categories.find((r) => r.categoryId === c.Mercado)!.budgetId);
-    expect(lazer).toMatchObject({ first3: 790, last3: 1083.33, growth: 0.3713 });
-    expect(software).toMatchObject({ first3: 1220, last3: 1436.67, growth: 0.1776, avg: 1328.75, suggested: 1350 });
+    // Last three complete months against the three before them, by median. June's 1,900 no longer sets the recent side.
+    expect(lazer).toMatchObject({ first3: 600, last3: 710, growth: 0.1833 });
     expect(saude).toMatchObject({ peakMonth: 3, peakValue: 2600, budget: 1800 });
 
     const mercadoRow = y.categories.find((r) => r.categoryId === c.Mercado)!;

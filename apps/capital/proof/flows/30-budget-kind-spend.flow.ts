@@ -79,7 +79,9 @@ flow("Gastos fixos and Gastos variáveis follow the filter, and the pace chart s
   const surface = chart.locator(".recharts-surface");
   const box = await surface.boundingBox();
   if (!box) throw new Error("The pace chart has no surface");
-  await page.mouse.move(box.x + box.width * 0.72, box.y + box.height * 0.45);
+  // The axis runs to the end of the month (the dashed projection); hover a day that already happened.
+  const monthGone = readNumber((await page.getByText(/^Hoje: .* do mês$/).innerText()).split("·")[1] ?? "100") / 100;
+  await page.mouse.move(box.x + box.width * 0.72 * monthGone, box.y + box.height * 0.45);
   await check("The pace chart stacks Gastos fixos and Gastos variáveis", async () => {
     await expect(legend.getByText("Gastos fixos", { exact: true })).toBeVisible();
     await expect(legend.getByText("Gastos variáveis", { exact: true })).toBeVisible();

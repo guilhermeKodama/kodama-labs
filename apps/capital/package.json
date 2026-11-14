@@ -18,6 +18,7 @@
     "db:reset": "node scripts/assert-dev-db.mjs 'prisma migrate reset' && prisma migrate reset --force",
     "db:drop-legacy": "node scripts/drop-legacy.mjs",
     "db:reconcile-ledger": "tsx scripts/ledger-reconcile.ts",
+    "projection:backtest": "tsx scripts/projection-backtest.ts",
     "test": "vitest run && vitest run --config vitest.fx.config.ts",
     "test:coverage": "vitest run --coverage && vitest run --config vitest.fx.config.ts --coverage --coverage.reportsDirectory=coverage/fx && node scripts/check-coverage.mjs",
     "coverage:check": "node scripts/check-coverage.mjs",

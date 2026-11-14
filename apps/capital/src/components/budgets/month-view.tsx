@@ -6,7 +6,7 @@ import { EmptyRow, Kpi, KpiStrip, Panel } from "@/components/cap";
 import { useErrorMessage } from "@/lib/api/use-app-mutation";
 import { budgetDrill, budgetsDrill, monthPeriod } from "@/lib/budgets/drill";
 import { budgetKind } from "@/lib/budgets/kind";
-import { filteredKindTotals, paceForKind } from "@/lib/budgets/slices";
+import { filteredKindTotals, paceForKind, withProjection } from "@/lib/budgets/slices";
 import { barHeader, monthHeader, resetsLabel } from "@/lib/budgets/labels";
 import { monthPace, paceTone, percent, projectionVsBudget, STATUS_KEY, usage } from "@/lib/budgets/pace";
 import type { BudgetsScope, BudgetsView } from "@/lib/budgets/url";
@@ -164,9 +164,18 @@ export function MonthBody({
         </div>
         <div data-budget-kpi="projection">
           <Kpi
-            label={t("month.kpi.projection")}
+            label={<span title={t("month.kpi.projectionHint")}>{t("month.kpi.projection")}</span>}
             value={<DrillLink draft={totals(t("month.kpi.projection"), wholeMonth, budgets)}>{fmt.money0(total.projected)}</DrillLink>}
-            sub={projection ? t(`month.kpi.${projection.kind}`, { amount: fmt.money0(projection.amount) }) : undefined}
+            sub={
+              <>
+                {projection ? <span className="block">{t(`month.kpi.${projection.kind}`, { amount: fmt.money0(projection.amount) })}</span> : null}
+                {!kind ? (
+                  <span data-budget-projection-split="" className="block">
+                    {t("month.kpi.projectionSplit", { fixo: fmt.money0(slices.fixo.projected), variavel: fmt.money0(slices.variavel.projected) })}
+                  </span>
+                ) : null}
+              </>
+            }
             tone={projection?.kind === "over" ? "warn" : undefined}
           />
         </div>
@@ -318,8 +327,12 @@ function PaceChart({ data, budgets, monthLabel, kind }: { data: MonthOverview; b
   const fmt = useFmt();
   const unit = fmt.kUnit();
   const { series, period } = data;
-  const points = paceForKind(series, budgets, kind, period.daysInMonth);
-  const available = filteredKindTotals(budgets, kind).total.available;
+  const slices = filteredKindTotals(budgets, kind);
+  const available = slices.total.available;
+  const realized = paceForKind(series, budgets, kind, period.daysInMonth);
+  // While the month runs, a dashed segment goes from today to the month-end projection (and to the fixed one when both kinds are on the chart).
+  const projecting = period.isCurrent && (realized.at(-1)?.day ?? period.daysInMonth) < period.daysInMonth;
+  const points = projecting ? withProjection(realized, period.daysInMonth, available, { total: slices.total.projected, fixo: kind ? null : slices.fixo.projected }) : realized;
   const empty = !budgets.length ? t("month.chart.empty") : !series.length ? t("month.chart.notStarted") : null;
   const showFixo = kind !== "variavel";
   const showVariavel = kind !== "fixo";
@@ -329,6 +342,8 @@ function PaceChart({ data, budgets, monthLabel, kind }: { data: MonthOverview; b
     cumulative: t("month.chart.cumulative", { unit }),
     ideal: t("month.chart.ideal", { unit }),
     budget: t("month.chart.budget"),
+    projected: t("month.chart.projected", { unit }),
+    projectedFixo: t("month.chart.projectedFixed", { unit }),
   };
   return (
     <Panel title={t("month.chart.title")} className="budget-pace-chart">
@@ -360,6 +375,10 @@ function PaceChart({ data, budgets, monthLabel, kind }: { data: MonthOverview; b
                 {showVariavel ? <Area type="monotone" dataKey="variavel" name={names.variable} stackId="kind" stroke={PACE_COLOR.variavel} fill={PACE_COLOR.variavel} fillOpacity={0.8} strokeWidth={1.5} dot={false} isAnimationActive={false} /> : null}
                 <Line dataKey="ideal" name={names.ideal} stroke={PACE_COLOR.ideal} strokeWidth={2} dot={false} isAnimationActive={false} />
                 <Line dataKey="cumulative" name={names.cumulative} stroke={PACE_COLOR.cumulative} strokeWidth={2} dot={false} isAnimationActive={false} />
+                {projecting && !kind ? (
+                  <Line dataKey="projectedFixo" name={names.projectedFixo} stroke={PACE_COLOR.fixo} strokeWidth={1.5} strokeDasharray="4 3" dot={false} connectNulls isAnimationActive={false} />
+                ) : null}
+                {projecting ? <Line dataKey="projected" name={names.projected} stroke={PACE_COLOR.cumulative} strokeWidth={1.5} strokeDasharray="4 3" dot={false} connectNulls isAnimationActive={false} /> : null}
               </ComposedChart>
             </ResponsiveContainer>
           </div>
@@ -370,6 +389,8 @@ function PaceChart({ data, budgets, monthLabel, kind }: { data: MonthOverview; b
               { label: names.cumulative, color: PACE_COLOR.cumulative },
               { label: names.ideal, color: PACE_COLOR.ideal },
               { label: names.budget, color: PACE_COLOR.budget, dashed: true },
+              ...(projecting && !kind ? [{ label: names.projectedFixo, color: PACE_COLOR.fixo, dashed: true }] : []),
+              ...(projecting ? [{ label: names.projected, color: PACE_COLOR.cumulative, dashed: true }] : []),
             ]}
           />
           <ChartCaption>{t("month.chart.caption", { unit, month: monthLabel })}</ChartCaption>

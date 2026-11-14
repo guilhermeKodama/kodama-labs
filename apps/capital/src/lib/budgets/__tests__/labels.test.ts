@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { barHeader, entityBadgeKey, heatmapLegend, insightCopy, monthHeader, monthSpan, resetsLabel, trendBasis, yearHeader, yearToDateMonth, type YearInsight } from "../labels";
+import { barHeader, budgetedMonthsLabel, entityBadgeKey, heatmapLegend, insightCopy, monthHeader, monthSpan, priorTrendBasis, resetsLabel, trendBasis, yearHeader, yearToDateMonth, type YearInsight } from "../labels";
 
 const ABBR = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
 const abbr = (m: number) => ABBR[m - 1];
@@ -39,6 +39,13 @@ describe("year labels", () => {
     expect(yearHeader({ nElapsed: 0, completeMonths: 0, isPast: false, projectionBasis: null }, abbr)).toEqual({ key: "year.header.future" });
   });
 
+  it("names the months that had a budget", () => {
+    expect(budgetedMonthsLabel([9, 10, 11], abbr)).toBe("set–nov");
+    expect(budgetedMonthsLabel([1, 3, 5], abbr)).toBe("jan, mar, mai");
+    expect(budgetedMonthsLabel([4], abbr)).toBe("abr");
+    expect(budgetedMonthsLabel([], abbr)).toBeNull();
+  });
+
   it("runs the KPIs up to the current month", () => {
     expect(yearToDateMonth({ nElapsed: 9, isPast: false })).toBe(9);
     expect(yearToDateMonth({ nElapsed: 12, isPast: true })).toBe(12);
@@ -69,16 +76,18 @@ describe("insightCopy", () => {
     expect(insightCopy({ ...base, avg: 1884, suggested: 1900 }, "Mercado", abbr, money, [6, 8]).adjust).toBeNull();
   });
 
-  it("names the last three complete months, separate from the projection window", () => {
+  it("names the last three complete months, and the three before them, separate from the projection window", () => {
     expect(trendBasis(8)).toEqual([6, 8]);
     expect(trendBasis(2)).toEqual([1, 2]);
     expect(trendBasis(0)).toBeNull();
+    expect(priorTrendBasis(8)).toEqual([3, 5]);
+    expect(priorTrendBasis(5)).toBeNull();
   });
 
-  it("growth: first three months against the last three complete ones", () => {
-    const copy = insightCopy({ ...base, kind: "growth", growth: 0.178, first3: 1220, last3: 1437 }, "Software", abbr, money, [6, 8]);
+  it("growth: the previous three months against the last three complete ones", () => {
+    const copy = insightCopy({ ...base, kind: "growth", growth: 0.178, first3: 1220, last3: 1437 }, "Software", abbr, money, [6, 8], [3, 5]);
     expect(copy.title).toEqual({ key: "year.insights.growthTitle", values: { category: "Software", pct: 18 } });
-    expect(copy.body.values).toEqual({ first: "jan–mar", firstAvg: "R$ 1.220", last: "jun–ago", lastAvg: "R$ 1.437" });
+    expect(copy.body.values).toEqual({ first: "mar–mai", firstAvg: "R$ 1.220", last: "jun–ago", lastAvg: "R$ 1.437" });
     expect(copy.adjust).toBeNull();
   });
 

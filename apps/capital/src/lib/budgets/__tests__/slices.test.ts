@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { filteredKindTotals, filteredYearFigures, paceForKind, type SliceRow, type YearFilterRow } from "../slices";
+import { filteredKindTotals, filteredYearFigures, paceForKind, withProjection, type SliceRow, type YearFilterRow } from "../slices";
 
 function row(partial: {
   kind: SliceRow["kind"];
@@ -86,6 +86,41 @@ describe("filtered year figures", () => {
     expect(variavel.monthTotals.slice(0, 2)).toEqual([50, 80]);
     expect(variavel.summary.spentToDate).toBe(130);
     expect(variavel.summary.budgetToDate).toBe(400);
+  });
+});
+
+describe("months with a budget", () => {
+  it("compares spend and budget over the same row-months, and projects the year from each month's expected close", () => {
+    const cell = (spent: number, budget: number | null, projected?: number) => ({ spent, budget, projected });
+    const rows: YearFilterRow[] = [
+      // No budget in January; a budget from February; February is running (300 so far, 900 expected); March projected.
+      { kind: "fixo", isBudgeted: true, months: [cell(5000, null), cell(300, 1000, 900), cell(1000, 1000), ...Array.from({ length: 9 }, () => cell(0, null))], overMonths: 0, budgetedMonths: 2 },
+    ];
+    const figures = filteredYearFigures(rows, null, 2);
+    expect(figures.summary).toMatchObject({ spentToDate: 5300, budgetToDate: 1000, spentInBudgetedMonths: 300, budgetedMonths: [2], projectedInBudgetedMonths: 1900, projectedYear: 6900 });
+    expect(figures.monthProjected.slice(0, 3)).toEqual([5000, 900, 1000]);
+  });
+});
+
+describe("the dashed projection on the pace chart", () => {
+  const points = paceForKind(
+    [
+      { day: 1, cumulative: 30, fixo: 20, variavel: 10, ideal: 0 },
+      { day: 2, cumulative: 80, fixo: 50, variavel: 30, ideal: 0 },
+    ],
+    rows,
+    null,
+    4,
+  );
+
+  it("runs the ideal pace to the end of the month and joins today to each month-end projection", () => {
+    const out = withProjection(points, 4, 1500, { total: 200, fixo: 120 });
+    expect(out.map((p) => p.day)).toEqual([1, 2, 3, 4]);
+    expect(out[1]).toMatchObject({ projected: 80, projectedFixo: 50 });
+    expect(out[2]).toEqual({ day: 3, ideal: 1125 });
+    expect(out[3]).toEqual({ day: 4, ideal: 1500, projected: 200, projectedFixo: 120 });
+    expect(withProjection(points, 4, 1500, { total: 200, fixo: null })[3]).toEqual({ day: 4, ideal: 1500, projected: 200 });
+    expect(withProjection(points, 2, 1500, { total: 200, fixo: null })).toHaveLength(2);
   });
 });
 

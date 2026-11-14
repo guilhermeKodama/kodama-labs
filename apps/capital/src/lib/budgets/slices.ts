@@ -60,7 +60,8 @@ const cents = (n: number) => Math.round(n * 100) / 100;
 export interface YearFilterRow {
   kind: string | null | undefined;
   isBudgeted?: boolean;
-  months: readonly { spent: number; budget: number | null }[];
+  /** `projected` is where the month is expected to close (the running month's month-end projection); absent means `spent`. */
+  months: readonly { spent: number; budget: number | null; projected?: number }[];
   overMonths: number;
   budgetedMonths: number;
 }
@@ -69,23 +70,38 @@ export interface YearFilterRow {
  * Year KPIs, the heatmap Total and the monthly chart, from the rows that
  * survive the kind filter. Scope and year are already applied to `rows`.
  * Null kind counts as variável. A null filter is Todos.
+ * "% do orçado" compares spend and budget over the same row-months: the
+ * elapsed ones that had a budget (`spentInBudgetedMonths`, `budgetedMonths`).
  */
 export function filteredYearFigures<T extends YearFilterRow>(rows: readonly T[], filter: BudgetKindName | null, nElapsed: number) {
   const visible = rows.filter((row) => showsBudgetKind(row, filter));
   const sumMonth = (pick: (cell: YearFilterRow["months"][number] | undefined) => number) =>
     Array.from({ length: 12 }, (_, index) => cents(visible.reduce((sum, row) => sum + pick(row.months[index]), 0)));
   const monthTotals = sumMonth((cell) => cell?.spent ?? 0);
+  const monthProjected = sumMonth((cell) => cell?.projected ?? cell?.spent ?? 0);
   const monthBudgets = sumMonth((cell) => cell?.budget ?? 0);
   const elapsed = Math.max(0, Math.min(12, nElapsed));
   const add = (list: readonly number[]) => cents(list.reduce((sum, value) => sum + value, 0));
+  const budgetedMonths = Array.from({ length: elapsed }, (_, index) => index + 1).filter((month) => (monthBudgets[month - 1] ?? 0) > 0);
+  const spentInBudgetedMonths = cents(
+    visible.reduce((sum, row) => sum + row.months.slice(0, elapsed).reduce((inner, cell) => inner + (cell.budget !== null ? cell.spent : 0), 0), 0),
+  );
+  const projectedInBudgetedMonths = cents(
+    visible.reduce((sum, row) => sum + row.months.reduce((inner, cell) => inner + (cell.budget !== null ? (cell.projected ?? cell.spent) : 0), 0), 0),
+  );
   return {
     rows: visible,
     monthTotals,
+    monthProjected,
     monthBudgets,
     summary: {
       spentToDate: add(monthTotals.slice(0, elapsed)),
       budgetToDate: add(monthBudgets.slice(0, elapsed)),
-      projectedYear: add(monthTotals),
+      spentInBudgetedMonths,
+      budgetedMonths,
+      /** Projected spend of the row-months that have a budget, compared with budgetYear. */
+      projectedInBudgetedMonths,
+      projectedYear: add(monthProjected),
       budgetYear: add(monthBudgets),
       overBudgetMonths: visible.reduce((sum, row) => sum + row.overMonths, 0),
       budgetedCells: visible.reduce((sum, row) => sum + row.budgetedMonths, 0),
@@ -117,4 +133,41 @@ export function paceForKind<T extends { kind: string | null | undefined; isBudge
       ideal: daysInMonth > 0 ? cents((available * point.day) / daysInMonth) : 0,
     };
   });
+}
+
+export interface ProjectedPacePoint {
+  day: number;
+  fixo?: number;
+  variavel?: number;
+  cumulative?: number;
+  ideal: number;
+  /** Dashed line from today's cumulative to the month-end projection. */
+  projected?: number;
+  /** Dashed line from today's fixo to the fixed projection; only when both kinds are on the chart. */
+  projectedFixo?: number;
+}
+
+/**
+ * The pace chart through the end of a running month: the realized points,
+ * then the ideal pace for the days left, with a dashed segment from today
+ * to each month-end projection. The segment joins two points; it does not
+ * claim the days between them are linear.
+ */
+export function withProjection(
+  points: readonly ReturnType<typeof paceForKind>[number][],
+  daysInMonth: number,
+  available: number,
+  projection: { total: number; fixo: number | null },
+): ProjectedPacePoint[] {
+  const last = points.at(-1);
+  if (!last || last.day >= daysInMonth) return [...points];
+  const out: ProjectedPacePoint[] = points.map((point) => ({ ...point }));
+  const today = out[out.length - 1];
+  today.projected = today.cumulative;
+  if (projection.fixo != null) today.projectedFixo = today.fixo;
+  for (let day = last.day + 1; day <= daysInMonth; day++) out.push({ day, ideal: cents((available * day) / daysInMonth) });
+  const end = out[out.length - 1];
+  end.projected = cents(projection.total);
+  if (projection.fixo != null) end.projectedFixo = cents(projection.fixo);
+  return out;
 }
