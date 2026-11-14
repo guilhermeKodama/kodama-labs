@@ -5,8 +5,8 @@ import { setTheme } from "../package/tour";
 
 /**
  * Phone width where the transactions table used to collapse every column
- * but the date and the amount, and where the year heatmap's category
- * column used to show only "Variável" and a PF badge.
+ * but the date and the amount. The year view is cards here; the heatmap
+ * stays on a wide window.
  */
 const PHONE = { width: 390, height: 844 };
 const DESKTOP = { width: 1280, height: 800 };
@@ -152,54 +152,33 @@ flow("Budget categories stay readable on a phone", async ({ page, scene, say, ch
   const name = () => category().getByRole("link", { name: "Transporte", exact: true });
   const kind = () => category().getByText("Variável", { exact: true });
 
+  const card = () => page.locator("[data-budget-card='Transporte']");
+
   await scene("Orçamentos anual no telefone", "2026, at 390px");
-  await say("The category name stays in a column of its own");
+  await say("Each category is a card, and the month table is not here");
   await page.goto("/transactions/budgets?mode=year");
-  await expect(category()).toBeVisible();
-  await show(category());
+  await expect(card()).toBeVisible();
+  await card().scrollIntoViewIfNeeded();
 
-  await check("Transporte sits above Variável and PF", async () => {
-    const nameBox = (await name().boundingBox())!;
-    const kindBox = (await visibleBox(kind()))!;
+  await check("Transporte is a card, above its kind", async () => {
+    await expect(card()).toBeInViewport();
+    await expect(card()).toContainText("Variável");
+    await expect(card()).toContainText("PF");
+    await expect(page.locator("[data-budget-heat]")).toBeHidden();
+    const nameBox = (await card().getByText("Transporte", { exact: true }).boundingBox())!;
+    const kindBox = (await card().getByText("Variável", { exact: true }).boundingBox())!;
     expect(nameBox.width).toBeGreaterThan(60);
-    expect(await hitInside(name())).toBe(true);
     expect(kindBox.y).toBeGreaterThan(nameBox.y + nameBox.height - 2);
-    await expect(category()).toContainText("PF");
   });
 
-  await check("January sits beside the name", async () => {
-    const january = category().locator("xpath=..").locator("[data-budget-month='1']");
-    await expect(january).toBeVisible();
-    expect(await hitInside(january)).toBe(true);
-    const nameBox = (await name().boundingBox())!;
-    const monthBox = (await january.boundingBox())!;
-    expect(monthBox.x).toBeGreaterThanOrEqual(nameBox.x + nameBox.width - 1);
-  });
-
-  await say("Scrolling the months leaves the name where it is");
-  const heat = page.locator("[data-budget-heat]");
-  await heat.evaluate((el) => {
-    el.scrollLeft = 240;
-  });
-  await check("The name stays put as the months scroll", async () => {
-    const heatBox = (await heat.boundingBox())!;
-    const nameBox = (await category().boundingBox())!;
-    expect(Math.abs(nameBox.x - heatBox.x)).toBeLessThan(8);
-    expect(await hitInside(name())).toBe(true);
-    expect(await heat.evaluate((el) => el.scrollLeft)).toBeGreaterThan(200);
-  });
-
-  await say("Fixo and variável still split the table");
-  await heat.evaluate((el) => {
-    el.scrollLeft = 0;
-  });
+  await say("Fixo and variável still filter the list");
   await page.getByRole("radiogroup", { name: "Tipo" }).getByRole("radio", { name: "Variável" }).click();
   await check("Variável keeps Transporte and hides Moradia", async () => {
-    await expect(category()).toBeVisible();
-    await expect(page.locator("[data-budget-category='Moradia']")).toHaveCount(0);
+    await expect(card()).toBeVisible();
+    await expect(page.locator("[data-budget-card='Moradia']")).toHaveCount(0);
   });
   await page.getByRole("radiogroup", { name: "Tipo" }).getByRole("radio", { name: "Todos" }).click();
-  await expect(page.locator("[data-budget-category='Moradia']")).toBeVisible();
+  await expect(page.locator("[data-budget-card='Moradia']")).toBeVisible();
 
   await scene("Mensal, e o detalhe");
   await say("Mensal gives the category its own line");
@@ -264,17 +243,15 @@ flow("Budget categories stay readable on a phone", async ({ page, scene, say, ch
   await scene("Escuro");
   await setTheme(page, "Escuro");
   await page.setViewportSize(PHONE);
-  await say("The year table on a phone, in the dark");
+  await say("The year cards on a phone, in the dark");
   await page.goto("/transactions/budgets?mode=year");
-  await expect(category()).toBeVisible();
-  await show(category());
-  await check("Dark phone: the year name stays", async () => {
+  await expect(card()).toBeVisible();
+  await card().scrollIntoViewIfNeeded();
+  await check("Dark phone: Transporte stays a card", async () => {
     await expect(page.locator("html")).toHaveClass(/\bdark\b/);
-    const nameBox = (await name().boundingBox())!;
-    const kindBox = (await visibleBox(kind()))!;
-    expect(nameBox.width).toBeGreaterThan(60);
-    expect(kindBox.y).toBeGreaterThan(nameBox.y + nameBox.height - 2);
-    expect(await hitInside(name())).toBe(true);
+    await expect(card()).toBeInViewport();
+    await expect(card()).toContainText("Variável");
+    await expect(page.locator("[data-budget-heat]")).toBeHidden();
   });
 
   await page.getByRole("radiogroup", { name: "Visão" }).getByRole("radio", { name: "Mensal" }).click();
