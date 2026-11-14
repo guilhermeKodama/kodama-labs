@@ -51,9 +51,7 @@ export function toast(page: Page, text: string | RegExp): Locator {
  * far down.
  */
 export function ledgerRow(page: Page, description: string) {
-  const row = page
-    .locator('div.grid:has(> span > [data-cell-edit][data-field="description"])')
-    .filter({ has: page.locator('[data-field="description"]', { hasText: description }) });
+  const row = page.locator("[data-ledger-row]").filter({ has: page.getByRole("button", { name: description }) });
   return {
     row,
     /** An editable cell: "description", "amount", "date", "categoryId", "accountId", "entityId". */
@@ -65,7 +63,7 @@ export function ledgerRow(page: Page, description: string) {
 /** Waits until Transações has loaded its rows. */
 export async function openTransactions(page: Page): Promise<void> {
   await page.goto("/transactions");
-  await expect(page.locator("[data-cell-edit]").first()).toBeVisible();
+  await expect(page.locator("[data-ledger-row]").first()).toBeVisible();
 }
 
 /**
@@ -73,7 +71,7 @@ export async function openTransactions(page: Page): Promise<void> {
  * filter to prove the table narrowed; `ledgerRow` finds one by name.
  */
 export function ledgerRows(page: Page): Locator {
-  return page.locator('div.grid:has(> span > [data-cell-edit][data-field="description"])');
+  return page.locator("[data-ledger-row]");
 }
 
 /**
