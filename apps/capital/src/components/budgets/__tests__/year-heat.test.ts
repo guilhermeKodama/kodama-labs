@@ -42,7 +42,7 @@ const noop = () => undefined;
 const actions: BudgetActions = { onEdit: noop, onDelete: noop };
 
 function month(n: number, spent = 0) {
-  return { month: n, spent, isProjected: n > 11, isPartial: n === 11, budget: null, budgetId: null, percentUsed: null };
+  return { month: n, spent, projected: spent, isProjected: n > 11, isPartial: n === 11, budget: null, budgetId: null, percentUsed: null };
 }
 
 function category(name: string, kind: "fixo" | "variavel") {
@@ -70,8 +70,9 @@ const overview = {
   scope: { entityIds: ["pf"] },
   categories: [category("Transporte", "variavel"), category("Moradia", "fixo")],
   monthTotals: Array(12).fill(0),
+  monthProjected: Array(12).fill(0),
   monthBudgets: Array(12).fill(0),
-  summary: { spentToDate: 0, budgetToDate: 0, projectedYear: 0, budgetYear: 0, overBudgetMonths: 0, budgetedCells: 0 },
+  summary: { spentToDate: 0, budgetToDate: 0, spentInBudgetedMonths: 0, budgetedMonths: [], budgetedSpan: null, projectedYear: 0, budgetYear: 0, overBudgetMonths: 0, budgetedCells: 0 },
   insights: [],
   yearlyBudgets: [],
 } as YearOverview;

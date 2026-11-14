@@ -59,4 +59,13 @@ describe("totals and trend", () => {
       { month: 3, real: 0, proj: 3 },
     ]);
   });
+
+  it("stacks the running month's remaining projection on top of what it spent", () => {
+    const bars = monthlyBars([1000, 400, 3000], (m) => m > 2, (v) => v, [1000, 1200, 3000]);
+    expect(bars).toEqual([
+      { month: 1, real: 1000, proj: 0 },
+      { month: 2, real: 400, proj: 800 },
+      { month: 3, real: 0, proj: 3000 },
+    ]);
+  });
 });

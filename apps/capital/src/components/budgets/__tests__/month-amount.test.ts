@@ -62,8 +62,8 @@ const overview = {
     totalRoom: 1400,
     projectedTotal: 900,
     byKind: {
-      fixo: { budget: 0, spent: 0, reimbursed: 0, net: 0, remaining: 0 },
-      variavel: { budget: 1800, spent: 400, reimbursed: 0, net: 400, remaining: 1400 },
+      fixo: { budget: 0, spent: 0, reimbursed: 0, net: 0, remaining: 0, projected: 0 },
+      variavel: { budget: 1800, spent: 400, reimbursed: 0, net: 400, remaining: 1400, projected: 900 },
     },
   },
   budgets: [
@@ -92,7 +92,7 @@ const overview = {
       percentUsed: 22,
       isOverBudget: false,
       status: "on_track",
-      pace: { dailySpendRate: 40, allowedDailyRate: 60, projectedTotal: 900, isOverPace: false, daysElapsed: 10, daysRemaining: 21, daysInPeriod: 31 },
+      pace: { dailySpendRate: 40, allowedDailyRate: 60, projectedTotal: 900, projectionMethod: "variable_history" as const, outlierMonths: 0, isOverPace: false, daysElapsed: 10, daysRemaining: 21, daysInPeriod: 31 },
     },
     {
       id: "b2",
@@ -119,7 +119,7 @@ const overview = {
       percentUsed: 88,
       isOverBudget: false,
       status: "ahead_of_pace",
-      pace: { dailySpendRate: 35, allowedDailyRate: 13, projectedTotal: 1085, isOverPace: true, daysElapsed: 10, daysRemaining: 21, daysInPeriod: 31 },
+      pace: { dailySpendRate: 35, allowedDailyRate: 13, projectedTotal: 1085, projectionMethod: "fixed_booked" as const, outlierMonths: 0, isOverPace: true, daysElapsed: 10, daysRemaining: 21, daysInPeriod: 31 },
     },
   ],
   yearlyBudgets: [],
@@ -221,9 +221,15 @@ describe("fixo and variável in the month summary", () => {
     expect(legend).toContain(">Gastos variáveis<");
     expect(legend).toContain("Gasto acumulado");
     // Musgo, resina, heartwood ink, jacarandá, ipê. Five tokens, none repeated, and the cards use the same two.
+    // The month is running, so the two dashed projections follow, in the colors of what they continue (fixo and the cumulative line).
     const strokes = [...legend.matchAll(/stroke="([^"]+)"/g)].map((match) => match[1]);
-    expect(strokes).toEqual(["var(--cap-chart-3)", "var(--cap-chart-2)", "var(--cap-chart-ink)", "var(--cap-chart-5)", "var(--cap-chart-warn)"]);
-    expect(new Set(strokes).size).toBe(strokes.length);
+    expect(strokes.slice(0, 5)).toEqual(["var(--cap-chart-3)", "var(--cap-chart-2)", "var(--cap-chart-ink)", "var(--cap-chart-5)", "var(--cap-chart-warn)"]);
+    expect(new Set(strokes.slice(0, 5)).size).toBe(5);
+    expect(strokes.slice(5)).toEqual(["var(--cap-chart-3)", "var(--cap-chart-ink)"]);
+    expect(legend).toContain(">Projeção fixo (R$ mil)<");
+    expect(legend).toContain(">Projeção (R$ mil)<");
+    // The projection card splits the month-end number into fixo and variável.
+    expect(html.slice(html.indexOf('data-budget-kpi="projection"'))).toContain("fixo R$ 1.085 · variável R$ 900");
     expect(html.slice(html.indexOf('data-budget-kpi="fixo"'), html.indexOf('data-budget-kpi="variavel"'))).toContain('stroke="var(--cap-chart-3)"');
     expect(html.slice(html.indexOf('data-budget-kpi="variavel"'), html.indexOf('data-budget-kpi="remaining"'))).toContain('stroke="var(--cap-chart-2)"');
     const fixoAt = html.indexOf('data-budget-subtotal="fixo"');

@@ -9,7 +9,7 @@ import { budgetDrill, budgetsDrill, monthPeriod } from "@/lib/budgets/drill";
 import { budgetKind, showsBudgetKind } from "@/lib/budgets/kind";
 import { columnTense, flatMonthlyBudget, heatLevel, heatPercent, isClickable, monthlyBars, totalTone, trendOf, type HeatLevel } from "@/lib/budgets/heatmap";
 import { filteredYearFigures } from "@/lib/budgets/slices";
-import { heatmapLegend, insightCopy, trendBasis, yearHeader, yearToDateMonth } from "@/lib/budgets/labels";
+import { budgetedMonthsLabel, heatmapLegend, insightCopy, priorTrendBasis, trendBasis, yearHeader, yearToDateMonth } from "@/lib/budgets/labels";
 import { percent, projectionVsBudget, usage, yearlyTone } from "@/lib/budgets/pace";
 import { monthKey, type YearMonth } from "@/lib/budgets/period";
 import type { BudgetsScope, BudgetsView } from "@/lib/budgets/url";
@@ -91,11 +91,13 @@ export function YearBody({ data, today, kind, onOpenMonth, actions }: { data: Ye
   const { period } = data;
   const figures = filteredYearFigures(data.categories, kind, period.nElapsed);
   const categories = figures.rows;
-  const { monthTotals, monthBudgets, summary } = figures;
+  const { monthTotals, monthProjected, monthBudgets, summary } = figures;
   const yearlyBudgets = data.yearlyBudgets.filter((row) => showsBudgetKind(row, kind));
   const ytd = yearToDateMonth(period);
   const ytdAbbr = ytd ? fmt.monthAbbr(ytd) : null;
-  const projection = projectionVsBudget(summary.projectedYear, summary.budgetYear);
+  // Spend and budget over the same months: only the ones that had a budget.
+  const span = budgetedMonthsLabel(summary.budgetedMonths, fmt.monthAbbr);
+  const projection = projectionVsBudget(summary.projectedInBudgetedMonths, summary.budgetYear);
   const legend = heatmapLegend(data.currentMonth, period.isPast, fmt.monthAbbr);
   const tense = (month: number) => columnTense(month, data.currentMonth, period.isPast);
   // The year so far: through today in the current year, the whole year once it is over.
@@ -121,14 +123,22 @@ export function YearBody({ data, today, kind, onOpenMonth, actions }: { data: Ye
         <Kpi
           label={ytdAbbr ? t("year.kpi.spent", { year: data.year, month: ytdAbbr }) : t("year.kpi.spentNoMonth", { year: data.year })}
           value={<DrillLink draft={totals(totalLabel, ytdRange)}>{fmt.money0(summary.spentToDate)}</DrillLink>}
-          sub={ytdAbbr && summary.budgetToDate > 0 ? t("year.kpi.spentSub", { pct: percent(summary.spentToDate / summary.budgetToDate), month: ytdAbbr }) : undefined}
+          sub={span && summary.budgetToDate > 0 ? t("year.kpi.spentSubSpan", { pct: percent(summary.spentInBudgetedMonths / summary.budgetToDate), span }) : undefined}
         />
         <Kpi
-          label={ytdAbbr ? t("year.kpi.budget", { month: ytdAbbr }) : t("year.kpi.budgetYear", { year: data.year })}
-          value={<DrillLink draft={totals(totalLabel, ytdRange)}>{fmt.money0(ytdAbbr ? summary.budgetToDate : summary.budgetYear)}</DrillLink>}
+          label={
+            span ? (
+              <span data-budget-kpi-span="" title={t("year.kpi.budgetHint", { span, spent: fmt.money0(summary.spentInBudgetedMonths), budget: fmt.money0(summary.budgetToDate) })}>
+                {t("year.kpi.budgetSpan", { span })}
+              </span>
+            ) : (
+              t("year.kpi.budgetYear", { year: data.year })
+            )
+          }
+          value={<DrillLink draft={totals(totalLabel, ytdRange)}>{fmt.money0(span ? summary.budgetToDate : summary.budgetYear)}</DrillLink>}
         />
         <Kpi
-          label={t("year.kpi.projection")}
+          label={<span title={t("year.kpi.projectionHint", { budget: fmt.money0(summary.budgetYear), projected: fmt.money0(summary.projectedInBudgetedMonths) })}>{t("year.kpi.projection")}</span>}
           value={<DrillLink draft={totals(totalLabel, ytdRange)}>{fmt.money0(summary.projectedYear)}</DrillLink>}
           sub={
             projection
@@ -153,7 +163,7 @@ export function YearBody({ data, today, kind, onOpenMonth, actions }: { data: Ye
               </span>
             ))}
             <span className="text-right max-md:self-center max-md:pr-1">{t("year.heatmap.yearTotal")}</span>
-            <span className="text-right max-md:self-center max-md:pr-3">{t("year.heatmap.trend")}</span>
+            <span className="text-right max-md:self-center max-md:pr-3" title={t("year.heatmap.trendHint")}>{t("year.heatmap.trend")}</span>
           </div>
           {categories.map((row) => {
             const category = row.category ?? t("uncategorized");
@@ -244,7 +254,7 @@ export function YearBody({ data, today, kind, onOpenMonth, actions }: { data: Ye
       <p className="text-body-sm text-fg-4">{t(legend.key, legend.values)}</p>
 
       <div className="grid items-start gap-3 md:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)]">
-        <MonthlyChart monthTotals={monthTotals} monthBudgets={monthBudgets} year={data.year} isProjected={(m) => tense(m) === "projected"} />
+        <MonthlyChart monthTotals={monthTotals} monthProjected={monthProjected} monthBudgets={monthBudgets} year={data.year} isProjected={(m) => tense(m) === "projected"} />
         <Insights data={data} today={today} categories={categories} />
       </div>
 
@@ -281,11 +291,13 @@ export function YearBody({ data, today, kind, onOpenMonth, actions }: { data: Ye
 
 function MonthlyChart({
   monthTotals,
+  monthProjected,
   monthBudgets,
   year,
   isProjected,
 }: {
   monthTotals: readonly number[];
+  monthProjected: readonly number[];
   monthBudgets: readonly number[];
   year: number;
   isProjected: (month: number) => boolean;
@@ -295,7 +307,7 @@ function MonthlyChart({
   const unit = fmt.kUnit();
   const flat = flatMonthlyBudget(monthBudgets);
   // Zeros as null: the tooltip leaves out the series a month does not have (realized or projected).
-  const rows = monthlyBars(monthTotals, isProjected, (v) => v).map((bar, i) => ({
+  const rows = monthlyBars(monthTotals, isProjected, (v) => v, monthProjected).map((bar, i) => ({
     name: fmt.monthAbbr(bar.month),
     real: bar.real || null,
     proj: bar.proj || null,
@@ -355,7 +367,7 @@ function Insights({ data, today, categories }: { data: YearOverview; today: Year
     <Panel title={t("year.insights.title")} pad={false}>
       {insights.map((insight) => {
         const category = insight.category ?? t("uncategorized");
-        const copy = insightCopy(insight, category, fmt.monthAbbr, (v) => fmt.money0(v), trendBasis(data.period.completeMonths));
+        const copy = insightCopy(insight, category, fmt.monthAbbr, (v) => fmt.money0(v), trendBasis(data.period.completeMonths), priorTrendBasis(data.period.completeMonths));
         return (
           <div key={`${insight.budgetId}:${insight.kind}`} className="flex flex-col gap-0.5 border-t border-stroke-3 px-3 py-2.5 first:border-t-0">
             <span className="flex min-w-0 items-center gap-1.5 text-body font-medium">

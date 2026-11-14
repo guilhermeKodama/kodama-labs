@@ -68,13 +68,14 @@ export function flatMonthlyBudget(monthBudgets: readonly number[]): number | nul
 }
 
 /**
- * Bars of "Gasto mensal vs orçado": realized months in one series,
- * projected ones in the other (stacked, so each month has one bar), in
- * thousands rounded to one decimal.
+ * Bars of "Gasto mensal vs orçado": realized spend in one series and
+ * projected spend in the other, stacked, so each month has one bar. The
+ * running month is its spend so far plus what its month-end projection
+ * still expects (`monthProjected`). In thousands rounded to one decimal.
  */
-export function monthlyBars(monthTotals: readonly number[], isProjected: (month: number) => boolean, thousands: (v: number) => number) {
+export function monthlyBars(monthTotals: readonly number[], isProjected: (month: number) => boolean, thousands: (v: number) => number, monthProjected?: readonly number[]) {
   return monthTotals.map((total, i) => {
-    const projected = isProjected(i + 1);
-    return { month: i + 1, real: projected ? 0 : thousands(total), proj: projected ? thousands(total) : 0 };
+    if (isProjected(i + 1)) return { month: i + 1, real: 0, proj: thousands(monthProjected?.[i] ?? total) };
+    return { month: i + 1, real: thousands(total), proj: thousands(Math.max(0, (monthProjected?.[i] ?? total) - total)) };
   });
 }

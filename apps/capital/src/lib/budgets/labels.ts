@@ -73,6 +73,22 @@ export function trendBasis(completeMonths: number): readonly [number, number] | 
   return [Math.max(1, completeMonths - 2), completeMonths];
 }
 
+/** The three complete months before those, when both windows exist. */
+export function priorTrendBasis(completeMonths: number): readonly [number, number] | null {
+  if (completeMonths < 6) return null;
+  return [completeMonths - 5, completeMonths - 3];
+}
+
+/** Months that had a budget: "set–nov" when they run in a row, else "jan, mar, mai". Null when none. */
+export function budgetedMonthsLabel(months: readonly number[], abbr: Abbr): string | null {
+  if (!months.length) return null;
+  const sorted = [...months].sort((a, b) => a - b);
+  const first = sorted[0] ?? 1;
+  const last = sorted[sorted.length - 1] ?? first;
+  if (last - first + 1 === sorted.length) return monthSpan(first, last, abbr);
+  return sorted.map(abbr).join(", ");
+}
+
 /** The month the Anual KPIs run up to ("até set"), or null for a year that has not started. */
 export function yearToDateMonth(period: Pick<YearPeriod, "nElapsed" | "isPast">): number | null {
   if (period.isPast) return 12;
@@ -108,12 +124,19 @@ export interface InsightCopy {
 /**
  * Tendências do ano, per kind (mockup AnnualBudget):
  * - overrun: "Mercado: passou do orçado em 5 de 9 meses" · "Média de R$ 1.990/mês contra R$ 2.000 orçados. Ajustar para R$ 2.000?"
- * - growth: "Software: subiu 18% no ano" · "Média de jan–mar R$ 1.220 → jun–ago R$ 1.437."
+ * - growth: "Software: subiu 18% no ano" · "Mediana de mar–mai R$ 1.220 → jun–ago R$ 1.437."
  * - seasonal: "Lazer: sazonal" · "Pico em jun (R$ 1.900). Talvez vire um orçamento anual."
  * `basis` is the span named in a growth insight (the last three complete months).
  * It is not the year projection window (`yearOverview.period.projectionBasis`).
  */
-export function insightCopy(insight: YearInsight, category: string, abbr: Abbr, money: Money, basis: readonly [number, number] | null): InsightCopy {
+export function insightCopy(
+  insight: YearInsight,
+  category: string,
+  abbr: Abbr,
+  money: Money,
+  basis: readonly [number, number] | null,
+  priorBasis: readonly [number, number] | null = null,
+): InsightCopy {
   if (insight.kind === "overrun") {
     return {
       title: { key: "year.insights.overrunTitle", values: { category, count: insight.overMonths, total: insight.nElapsed } },
@@ -124,11 +147,12 @@ export function insightCopy(insight: YearInsight, category: string, abbr: Abbr, 
   }
   if (insight.kind === "growth") {
     const last = basis ? monthSpan(basis[0], basis[1], abbr) : "";
+    const first = priorBasis ? monthSpan(priorBasis[0], priorBasis[1], abbr) : monthSpan(1, 3, abbr);
     return {
       title: { key: "year.insights.growthTitle", values: { category, pct: Math.round((insight.growth ?? 0) * 100) } },
       body: {
         key: "year.insights.growthBody",
-        values: { first: monthSpan(1, 3, abbr), firstAvg: money(insight.first3 ?? 0), last, lastAvg: money(insight.last3 ?? 0) },
+        values: { first, firstAvg: money(insight.first3 ?? 0), last, lastAvg: money(insight.last3 ?? 0) },
       },
       adjust: null,
     };

@@ -62,8 +62,10 @@ function seriesFrom(entries: readonly EntryRow[], budgets: readonly BudgetRow[],
     const amount = Number(e.amount);
     let key: string | undefined;
     if (e.kind === "expense" && amount > 0) {
-      key = e.rule_id ? `r${e.rule_id}` : merchantKey(e.label ?? "") || undefined;
-      if (e.rule_id) s.ruleKeys.add(key);
+      if (e.rule_id) {
+        key = `r${e.rule_id}`;
+        s.ruleKeys.add(key);
+      } else key = merchantKey(e.label ?? "") || undefined;
     }
     s.months[monthIndex(e.ym) - first]?.push({ day: Number(e.day), rawDay: Number(e.raw_day), amount, key });
   }
